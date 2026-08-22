@@ -19,12 +19,19 @@ async function json(route: Route, body: unknown, status = 200) {
 type FinanceCapture = {
   txListUrls: string[];
   txPosts: Array<Record<string, unknown>>;
+  categoryPosts: Array<Record<string, unknown>>;
+  catalogListUrls: string[];
 };
 
 async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
   let txStatus: "NEEDS_REVIEW" | "CLASSIFIED" | "VERIFIED" = "NEEDS_REVIEW";
   let publication: "PRIVATE" | "DETAIL_PUBLIC" = "PRIVATE";
-  const capture: FinanceCapture = { txListUrls: [], txPosts: [] };
+  const capture: FinanceCapture = {
+    txListUrls: [],
+    txPosts: [],
+    categoryPosts: [],
+    catalogListUrls: [],
+  };
 
   await page.route("**/api/admin/treasury/**", async (route) => {
     const url = new URL(route.request().url());
@@ -137,6 +144,26 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
     }
 
     if (pathname.endsWith("/counterparties") && method === "GET") {
+      capture.catalogListUrls.push(url.toString());
+      if (url.searchParams.get("id")) {
+        await json(route, {
+          counterparty: {
+            id: "cp-1",
+            organizationId: ORG_A,
+            displayName: "WAIA Patron",
+            waiaUserId: null,
+            waiaUsername: "patron",
+            websiteUrl: "https://example.com",
+            email: "patron@example.com",
+            phone: "+1 555 0100",
+            paymentInstructions: "USDT TRC-20",
+            isActive: true,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        });
+        return;
+      }
       await json(route, {
         counterparties: [
           { id: "cp-1", displayName: "WAIA Patron", waiaUsername: "patron", isActive: true },
@@ -147,6 +174,26 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
     }
 
     if (pathname.endsWith("/accounts") && method === "GET") {
+      capture.catalogListUrls.push(url.toString());
+      if (url.searchParams.get("id")) {
+        await json(route, {
+          account: {
+            id: "account-1",
+            organizationId: ORG_A,
+            displayName: "USDT TRC-20",
+            kind: "CRYPTO_WALLET",
+            currency: "USDT",
+            network: "TRC-20",
+            address: "TWalkthrough",
+            maskedRequisites: null,
+            watchedAddressId: null,
+            isActive: true,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        });
+        return;
+      }
       await json(route, {
         accounts: [
           {
@@ -179,6 +226,7 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
             organizationId: ORG_A,
             code: "OPS",
             name: "Operations",
+            groupName: "Office",
             description: null,
             monthlyBudgetMicros: "5000000",
             currency: "USD",
@@ -193,20 +241,24 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
     }
 
     if (pathname.endsWith("/projects") && method === "GET") {
+      capture.catalogListUrls.push(url.toString());
+      const project = {
+        id: "project-1",
+        organizationId: ORG_A,
+        name: "WAIA Core",
+        description: "Core module",
+        startsOn: "2026-01-01",
+        endsOn: null,
+        isActive: true,
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      };
+      if (url.searchParams.get("id")) {
+        await json(route, { project });
+        return;
+      }
       await json(route, {
-        projects: [
-          {
-            id: "project-1",
-            organizationId: ORG_A,
-            name: "WAIA Core",
-            description: "Core module",
-            startsOn: "2026-01-01",
-            endsOn: null,
-            isActive: true,
-            createdAt: "2026-08-01T00:00:00.000Z",
-            updatedAt: "2026-08-01T00:00:00.000Z",
-          },
-        ],
+        projects: [project],
         next: null,
       });
       return;
@@ -331,6 +383,75 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
       return;
     }
 
+    if (pathname.endsWith("/category-budgets") && method === "GET") {
+      const month = {
+        month: "2026-08",
+        categories: [
+          {
+            categoryId: "category-1",
+            code: "OPS",
+            name: "Operations",
+            groupName: "Office",
+            currency: "USD",
+            budgetMicros: "5000000",
+            spentMicros: "6000000",
+            remainingMicros: "-1000000",
+            isActive: true,
+          },
+        ],
+        groups: [
+          {
+            groupName: "Office",
+            currency: "USD",
+            budgetMicros: "5000000",
+            spentMicros: "6000000",
+            remainingMicros: "-1000000",
+          },
+        ],
+        totals: [
+          {
+            currency: "USD",
+            budgetMicros: "5000000",
+            spentMicros: "6000000",
+            remainingMicros: "-1000000",
+          },
+        ],
+      };
+      if (url.searchParams.get("year")) {
+        await json(route, {
+          annual: {
+            year: Number(url.searchParams.get("year")),
+            totals: month.totals,
+            months: [month],
+          },
+        });
+      } else {
+        await json(route, { month });
+      }
+      return;
+    }
+
+    if (pathname.endsWith("/categories") && method === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      capture.categoryPosts.push(body);
+      await json(route, {
+        category: {
+          id: "category-new",
+          organizationId: ORG_A,
+          code: "DEVELOPMENT",
+          name: body.name,
+          groupName: body.group_name,
+          description: body.description,
+          monthlyBudgetMicros: body.monthly_budget_micros,
+          currency: body.currency,
+          isActive: true,
+          createdAt: "2026-08-22T00:00:00.000Z",
+          updatedAt: "2026-08-22T00:00:00.000Z",
+        },
+      });
+      return;
+    }
+
     if (pathname.endsWith("/budgets") && method === "GET") {
       await json(route, {
         budgets: [
@@ -433,6 +554,19 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
       return;
     }
 
+    if (
+      ["/counterparties", "/accounts", "/projects"].some((suffix) =>
+        pathname.endsWith(suffix),
+      ) && (method === "POST" || method === "PATCH")
+    ) {
+      const singular = pathname.split("/").pop()!.replace(/ies$/, "y").replace(/s$/, "");
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      await json(route, {
+        [singular]: { id: String(body.id ?? `${singular}-new`), ...body, isActive: true },
+      });
+      return;
+    }
+
     await json(route, { error: { code: "NOT_MOCKED", message: pathname } }, 500);
   });
   return capture;
@@ -465,7 +599,7 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(page.getByTestId("finance-unavailable")).toContainText("Postgres");
   });
 
-  test("complete Human workflow against DEE-619 central-ledger contracts", async ({ page }) => {
+  test("complete Human workflow against DEE-672 Finance contracts", async ({ page }) => {
     const email = `e2e-finance-flow-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);
     grantPlatformAdminByUserEmail(email);
@@ -482,19 +616,31 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(page.getByTestId("watcher-dark")).toBeVisible();
 
     const financeNav = page.getByTestId("finance-nav");
-    await expect(financeNav.getByRole("link")).toHaveCount(3);
+    await expect(financeNav.getByRole("link")).toHaveCount(6);
     await expect(financeNav).toContainText("Overview");
     await expect(financeNav).toContainText("Transactions");
     await expect(financeNav).toContainText("Budget");
+    await expect(financeNav).toContainText("Counterparties");
+    await expect(financeNav).toContainText("Accounts");
+    await expect(financeNav).toContainText("Projects");
 
     await page.getByRole("link", { name: "Transactions", exact: true }).click();
     await expect(page.getByTestId("finance-transaction-table")).toBeVisible();
     await expect(page.getByTestId("add-manual-transaction")).toBeVisible();
     await expect(page.getByTestId("tx-filter-status")).toBeVisible();
     await expect(page.getByText("Direction", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("columnheader", { name: "Counterparty" })).toBeVisible();
+    await expect(page.getByTestId("finance-transaction-table").locator("thead th")).toHaveText([
+      "Counterparty",
+      "Category",
+      "Amount",
+      "Status",
+      "Date & time",
+      "Project",
+      "Notes",
+      "Review",
+    ]);
+    await expect(page.getByRole("columnheader", { name: "Account" })).toHaveCount(0);
     await expect(page.getByRole("cell", { name: /WAIA Patron/ })).toBeVisible();
-    await expect(page.getByRole("cell", { name: /USDT TRC-20/ })).toBeVisible();
     await page.getByTestId("tx-filter-advanced").locator("summary").click();
     await page.getByTestId("tx-filter-status").selectOption("NEEDS_REVIEW");
     await page.getByTestId("tx-filter-panel").getByRole("button", { name: "Apply" }).click();
@@ -571,21 +717,57 @@ test.describe("WAIA Admin Finance Console", () => {
 
     await page.getByRole("link", { name: "Budget", exact: true }).click();
     await expect(page.getByTestId("finance-category-budgets")).toContainText("Operations");
+    await expect(page.getByTestId("budget-groups")).toContainText("Office");
+    await expect(page.getByTestId("finance-category-budgets")).toContainText("Remaining");
+    await expect(page.getByTestId("finance-category-budgets").getByTestId("money-negative").first()).toBeVisible();
+    await expect(page.getByLabel("Category code")).toHaveCount(0);
+    await page.getByLabel("Name", { exact: true }).last().fill("Development");
+    await page.getByLabel("Group", { exact: true }).last().fill("Development");
+    await page.getByLabel("Monthly limit", { exact: true }).last().fill("25");
+    await page.getByRole("button", { name: "Add category" }).click();
+    await page.getByTestId("finance-confirm-reason").fill("Add development budget");
+    await page.getByTestId("finance-confirm-submit").click();
+    await expect.poll(() => capture.categoryPosts.length).toBe(1);
+    expect(capture.categoryPosts[0]).toMatchObject({
+      organization_id: ORG_A,
+      name: "Development",
+      group_name: "Development",
+      monthly_budget_micros: "25000000",
+      currency: "USD",
+    });
+    expect(capture.categoryPosts[0]).not.toHaveProperty("code");
     await page.getByRole("tab", { name: "Annual budget" }).click();
-    await expect(page.getByTestId("money-negative")).toBeVisible();
-    await page.getByRole("tab", { name: "Funding needs" }).click();
-    await expect(page.getByTestId("finance-funding-needs")).toBeVisible();
-    await page.getByRole("tab", { name: "Commitments" }).click();
+    await expect(page.getByTestId("annual-budget-history")).toContainText("2026-08");
+    await expect(page.getByTestId("annual-budget-history").getByTestId("money-negative")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Funding needs" })).toHaveCount(0);
+    await expect(page.getByText("Create planned budget")).toHaveCount(0);
+    await page.getByText("Advanced operational tools").click();
     await expect(page.getByTestId("finance-commitments")).toContainText(
       "Reduces current free funds",
     );
-    await page.getByText("Publication and evidence tools").click();
     await page.getByRole("link", { name: "Evidence library" }).click();
     await page.getByRole("button", { name: "Open private content" }).click();
     await expect(page.getByTestId("evidence-storage-unavailable")).toBeVisible();
 
+    await page.getByRole("link", { name: "Counterparties", exact: true }).click();
+    await expect(page.getByTestId("finance-counterparties")).toBeVisible();
+    await page.getByLabel("Search counterparties").fill("Patron");
+    await expect.poll(() => capture.catalogListUrls.some((value) => value.includes("q=Patron"))).toBe(true);
+    await page.getByRole("button", { name: /WAIA Patron/ }).click();
+    await expect(page.getByTestId("catalog-editor-counterparties")).toContainText("Payment details");
+
+    await page.getByRole("link", { name: "Accounts", exact: true }).click();
+    await expect(page.getByTestId("finance-accounts")).toBeVisible();
+    await page.getByRole("button", { name: /USDT TRC-20/ }).click();
+    await expect(page.getByTestId("catalog-editor-accounts")).toContainText("Never enter private keys");
+
+    await page.getByRole("link", { name: "Projects", exact: true }).click();
+    await expect(page.getByTestId("finance-projects")).toBeVisible();
+    await page.getByRole("button", { name: /WAIA Core/ }).click();
+    await expect(page.getByTestId("catalog-editor-projects")).toContainText("Core module");
+
     await page.getByTestId("finance-org-select").selectOption(ORG_B);
-    await expect(page.getByTestId("finance-unavailable")).toContainText(
+    await expect(page.getByTestId("finance-unavailable").first()).toContainText(
       "Admin permission required",
     );
   });
