@@ -266,6 +266,7 @@ export type ExecutionV2NetworkSubmitter<T> = (
     executionAttemptId: string;
     effectIdentityDigestHex: string;
     venue: string;
+    timeoutMs: number;
   }>,
 ) => Promise<T>;
 
@@ -370,7 +371,11 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       rawObservation: { effectIdentityDigestHex: projection.attempt.effectIdentityDigestHex },
       observedAtUtc: durableAt.toISOString(),
     });
-    return { status: "READY" as const, attempt: projection.attempt };
+    return {
+      status: "READY" as const,
+      attempt: projection.attempt,
+      timeoutMs: policy.timeoutMs,
+    };
   });
   if (ready.status !== "READY") return ready;
   try {
@@ -378,6 +383,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       executionAttemptId: ready.attempt.executionAttemptId,
       effectIdentityDigestHex: ready.attempt.effectIdentityDigestHex,
       venue: ready.attempt.venue,
+      timeoutMs: ready.timeoutMs,
     });
     return Object.freeze({ status: "SUBMITTED", attempt: ready.attempt, rawResult });
   } catch (error) {

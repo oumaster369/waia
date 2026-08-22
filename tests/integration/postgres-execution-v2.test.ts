@@ -584,9 +584,10 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       db,
       { organizationId: orgA },
       outcomes[0]!.attempt.executionAttemptId,
-      async (payload) => {
+      async (payload, submittedAuthority) => {
         networkCalls += 1;
         expect(payload).toEqual(outcomes[0]!.attempt.exactRequestPayload);
+        expect(submittedAuthority.timeoutMs).toBe(input.policy.timeoutMs);
         return { accepted: true };
       },
     );
