@@ -24,11 +24,11 @@ includedIssues:
   - id: DEE-676
     role: A-contracts-identities-validators
     completionPolicy: manual-at-integration-ready
-    status: in-progress
+    status: completed
   - id: DEE-677
     role: B-postgres-substrate-repository
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-678
     role: C-ingest-projection-replay
     completionPolicy: manual-at-integration-ready
@@ -43,15 +43,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: DEE-676
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-676, DEE-677, DEE-678, DEE-679]
+  currentWorkPackage: DEE-677
+  completedWorkPackages: [DEE-676]
+  remainingWorkPackages: [DEE-677, DEE-678, DEE-679]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Commit the admitted manifest, then freeze A contracts and validators before B begins."
+  nextAction: "Implement the single DEE-677 PostgreSQL migration and repository on the frozen A API."
 provenance:
   createdFrom: chat
   gapRegistry: null
