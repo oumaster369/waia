@@ -91,7 +91,10 @@ export async function ingestRealitySourceReportV2FromWriter(
     });
   }
 
-  const existingTruths = await listTruthRecordsV2(executor, context);
+  const [existingTruths, existingEvents] = await Promise.all([
+    listTruthRecordsV2(executor, context),
+    listRealityEventsV2(executor, context),
+  ]);
   if (source.structuralVerification !== "VERIFIED" || source.primitiveAssertion === null ||
     source.sourceNativeIdentity === null) {
     await appendUnverifiableRealityQuarantineV2FromWriter(
@@ -126,8 +129,12 @@ export async function ingestRealitySourceReportV2FromWriter(
       const native = truth.sourceNativeIdentity;
       return native !== null && source.sourceNativeIdentity !== null &&
         truth.markers.length === 0 &&
-        !existingTruths.some((candidate) =>
-          candidate.supersedesTruthRecordId === truth.truthRecordId) &&
+        existingEvents.some((event) =>
+          event.truthRecordId === truth.truthRecordId &&
+          (event.eventType === "OBSERVED" || event.eventType === "SUPERSEDED")) &&
+        !existingEvents.some((event) =>
+          event.relatedTruthRecordId === truth.truthRecordId &&
+          event.eventType === "SUPERSEDED") &&
         truth.sourceKind === source.sourceKind &&
         native.identityKind === source.sourceNativeIdentity.identityKind &&
         native.nativeId === source.sourceNativeIdentity.nativeId &&

@@ -31,6 +31,7 @@ import {
   appendRealitySourceObservationV2FromWriter,
   appendRealitySourceReportV2Postgres,
   appendSupersededRealityTruthV2FromWriter,
+  appendUnverifiableRealityQuarantineV2FromWriter,
   listRealityEventsV2,
   listRealitySourceReportsV2,
   listTruthRecordsV2,
@@ -929,6 +930,29 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
   });
 
   it("preserves a missing correction target as a source-only quarantine and replays it exactly", async () => {
+    const siblingRaw = await capture(db, orgA, SOURCE_A, "missing-correction-sibling");
+    const siblingDraft = fillInput(siblingRaw.receipt, "missing-revision", null);
+    const sibling = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      {
+        ...siblingDraft,
+        sourceNativeIdentity: {
+          ...siblingDraft.sourceNativeIdentity,
+          nativeId: "htx-trade-reality-missing-sibling",
+        },
+        subject: {
+          subjectClass: "FILL" as const,
+          subjectKey: "HTX:spot:htx-trade-reality-missing-sibling",
+        },
+        primitiveAssertion: {
+          ...siblingDraft.primitiveAssertion,
+          venueTradeId: "htx-trade-reality-missing-sibling",
+        },
+      },
+    );
+    expect(sibling.classification).toBe("NEW_FACT");
+
     const raw = await capture(db, orgA, SOURCE_A, "missing-correction-target");
     const result = await ingestRealitySourceReportV2Postgres(
       db,
@@ -938,33 +962,175 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
 
     expect(result.classification).toBe("QUARANTINED");
     expect(result.truthRecord).toBeNull();
-    expect(result.projection?.stableEntries).toEqual([]);
+    expect(result.projection?.stableEntries.map((entry) => entry.truthRecordId))
+      .toEqual([sibling.truthRecord!.truthRecordId]);
     expect(result.projection?.uncertainties).toMatchObject([{
       sourceReportId: result.sourceReport.sourceReportId,
       marker: "SOURCE_CONTRADICTION",
       reasonCodes: ["CORRECTION_TARGET_NOT_FOUND"],
     }]);
-    expect(await listTruthRecordsV2(
+    const truths = await listTruthRecordsV2(
       db,
       { organizationId: orgA, accountId: ACCOUNT },
-    )).toEqual([]);
+    );
+    expect(truths).toHaveLength(1);
+    expect(truths.every((truth) => truth.sourceReportId !== result.sourceReport.sourceReportId))
+      .toBe(true);
     const events = await listRealityEventsV2(
       db,
       { organizationId: orgA, accountId: ACCOUNT },
     );
-    expect(events).toMatchObject([{
+    expect(events.at(-1)).toMatchObject({
       eventType: "QUARANTINED",
       sourceReportId: result.sourceReport.sourceReportId,
       truthRecordId: null,
       relatedTruthRecordId: null,
       quarantineEventId: null,
       reasonCodes: ["CORRECTION_TARGET_NOT_FOUND"],
-    }]);
+    });
     expect(await replayRealityProjectionV2Postgres(
       db,
       { organizationId: orgA, accountId: ACCOUNT },
       result.projection!.knowledgeAsOfUtc,
     )).toEqual(result.projection);
+  });
+
+  it("rejects false missing-target quarantine at repository, SQL, and serialized race boundaries", async () => {
+    const baseRaw = await capture(db, orgA, SOURCE_A, "false-missing-base");
+    const base = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(baseRaw.receipt, "1", null),
+    );
+    const correctionRaw = await capture(db, orgA, SOURCE_A, "false-missing-correction");
+    const correction = await appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(correctionRaw.receipt, "2", "1"),
+    );
+
+    await expect(runWaiaPostgresTransaction(db, (tx) =>
+      appendUnverifiableRealityQuarantineV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        correction.report,
+        ["CORRECTION_TARGET_NOT_FOUND"],
+      ))).rejects.toThrow(/correction target exists in the exact source\/truth identity scope/);
+
+    const appendDirectMissingTarget = async (
+      sourceReportId: string,
+      previousEventDigestHex: string,
+      eventSequence: string,
+    ) => sqlClient.begin(async (transaction) => {
+      const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+        SELECT reservation_id::text, knowledge_at
+        FROM public.waia_reality_v2_allocate_knowledge_at(${orgA}::uuid, ${ACCOUNT}::text)
+      `;
+      const event = createRealityEventV2({
+        organizationId: orgA,
+        accountId: ACCOUNT,
+        eventSequence,
+        eventType: "QUARANTINED",
+        sourceReportId,
+        truthRecordId: null,
+        relatedTruthRecordId: null,
+        quarantineEventId: null,
+        reasonCodes: ["CORRECTION_TARGET_NOT_FOUND"],
+        knowledgeAtUtc: new Date(reserved[0]!.knowledge_at).toISOString(),
+        previousEventDigestHex,
+      });
+      await transaction`
+        INSERT INTO trader_reality_events_v2 (
+          id, organization_id, account_id, event_sequence, event_type, source_report_id,
+          truth_record_id, related_truth_record_id, quarantine_event_id, reason_codes,
+          knowledge_at, knowledge_reservation_id, previous_event_digest, content_digest,
+          schema_version
+        ) VALUES (
+          ${event.realityEventId}, ${orgA}::uuid, ${ACCOUNT}, ${event.eventSequence}::bigint,
+          ${event.eventType}, ${event.sourceReportId}, NULL, NULL, NULL,
+          ${JSON.stringify(event.reasonCodes)}::jsonb, ${event.knowledgeAtUtc},
+          ${reserved[0]!.reservation_id}::uuid, ${event.previousEventDigestHex},
+          ${event.contentDigestHex}, ${event.schemaVersion}
+        )
+      `;
+    });
+    const baseHead = (await listRealityEventsV2(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+    )).at(-1)!;
+    await expect(appendDirectMissingTarget(
+      correction.report.sourceReportId,
+      baseHead.contentDigestHex,
+      "2",
+    )).rejects.toThrow(/absent correction target/);
+    expect(base.truthRecord).not.toBeNull();
+
+    const raceTargetRaw = await capture(db, orgA, SOURCE_A, "false-missing-race-target");
+    const raceTargetDraft = fillInput(raceTargetRaw.receipt, "race-1", null);
+    const raceTarget = await appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      {
+        ...raceTargetDraft,
+        sourceNativeIdentity: {
+          ...raceTargetDraft.sourceNativeIdentity,
+          nativeId: "htx-trade-reality-race",
+        },
+        subject: { subjectClass: "FILL", subjectKey: "HTX:spot:htx-trade-reality-race" },
+        primitiveAssertion: {
+          ...raceTargetDraft.primitiveAssertion,
+          venueTradeId: "htx-trade-reality-race",
+        },
+      },
+    );
+    const raceCorrectionRaw = await capture(db, orgA, SOURCE_A, "false-missing-race-correction");
+    const raceCorrectionDraft = fillInput(raceCorrectionRaw.receipt, "race-2", "race-1");
+    const raceCorrection = await appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      {
+        ...raceCorrectionDraft,
+        sourceNativeIdentity: {
+          ...raceCorrectionDraft.sourceNativeIdentity,
+          nativeId: "htx-trade-reality-race",
+        },
+        subject: { subjectClass: "FILL", subjectKey: "HTX:spot:htx-trade-reality-race" },
+        primitiveAssertion: {
+          ...raceCorrectionDraft.primitiveAssertion,
+          venueTradeId: "htx-trade-reality-race",
+        },
+      },
+    );
+    let releaseTarget!: () => void;
+    let targetWritten!: () => void;
+    const targetIsWritten = new Promise<void>((resolve) => { targetWritten = resolve; });
+    const targetMayCommit = new Promise<void>((resolve) => { releaseTarget = resolve; });
+    const targetTransaction = runWaiaPostgresTransaction(db, async (tx) => {
+      const truth = await appendObservedRealityTruthV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        raceTarget.report,
+      );
+      targetWritten();
+      await targetMayCommit;
+      return truth;
+    });
+    await targetIsWritten;
+    let quarantineStarted!: () => void;
+    const quarantineIsStarted = new Promise<void>((resolve) => { quarantineStarted = resolve; });
+    const quarantineTransaction = runWaiaPostgresTransaction(db, async (tx) => {
+      quarantineStarted();
+      return appendUnverifiableRealityQuarantineV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        raceCorrection.report,
+        ["CORRECTION_TARGET_NOT_FOUND"],
+      );
+    });
+    await quarantineIsStarted;
+    releaseTarget();
+    await expect(targetTransaction).resolves.toBeDefined();
+    await expect(quarantineTransaction).rejects.toThrow(/correction target exists/);
   });
 
   it("authors a strict scope frontier after lock despite reversed transaction start order", async () => {
