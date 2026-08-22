@@ -28,6 +28,7 @@ import {
   resolveHtxRestHost,
 } from "@/lib/trader/connectors/htx/config";
 import { buildSignedPostQueryString } from "@/lib/trader/connectors/htx/signing";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
   HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
@@ -64,6 +65,36 @@ async function readRawHtxResponse(response: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+const HTX_SENSITIVE_RESPONSE_KEY = /^(?:access[-_]?key(?:id)?|api[-_]?key|secret|signature)$/i;
+
+function redactSensitiveHtxObservation(
+  value: unknown,
+  sensitiveValues: readonly string[],
+): unknown {
+  if (typeof value === "string") {
+    let redacted = value.replace(
+      /((?:AccessKeyId|Signature|api[-_]?key|secret)=)[^&\s"'<>]+/gi,
+      "$1[REDACTED]",
+    );
+    for (const sensitive of sensitiveValues) {
+      if (sensitive !== "") redacted = redacted.split(sensitive).join("[REDACTED]");
+    }
+    return redacted;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactSensitiveHtxObservation(entry, sensitiveValues));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+      key,
+      HTX_SENSITIVE_RESPONSE_KEY.test(key)
+        ? "[REDACTED]"
+        : redactSensitiveHtxObservation(entry, sensitiveValues),
+    ]));
+  }
+  return value;
 }
 
 /**
@@ -243,20 +274,40 @@ export class HtxExchangeConnector implements ExchangeConnector {
       path: HTX_ENDPOINTS.placeOrder,
     });
     const url = `${this.placementRestHost}${HTX_ENDPOINTS.placeOrder}?${query}`;
+    const signedParams = new URLSearchParams(query);
+    const timeoutMs = input.timeoutMs ?? 30_000;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error("[trader] HTX placeOrder requires a positive timeoutMs");
+    }
+    const abortController = new AbortController();
+    let timedOut = false;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     let response: Response;
     try {
       // Execution V2 permits exactly one network submission. The generic HTX
       // client retries POSTs, so this effect path deliberately bypasses it.
-      response = await this.placementFetch(url, {
+      const fetchPromise = this.placementFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: abortController.signal,
       });
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          abortController.abort();
+          reject(new Error("HTX_PLACEMENT_TIMEOUT"));
+        }, timeoutMs);
+      });
+      response = await Promise.race([fetchPromise, timeout]);
     } catch {
       throw new HtxPlacementFailUnknownError("transport result unknown", {
         venueResponseObserved: false,
-        transportFailure: "NETWORK_REQUEST_FAILED",
+        transportFailure: timedOut ? "NETWORK_TIMEOUT" : "NETWORK_REQUEST_FAILED",
+        timeoutMs,
       });
+    } finally {
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     }
     let responseBody: unknown;
     try {
@@ -272,11 +323,19 @@ export class HtxExchangeConnector implements ExchangeConnector {
     // HTX's placement acknowledgement contains only an order id. It cannot
     // prove the exact client identity, mechanics, quantity, price, or fills,
     // and no follow-up lookup is ratified. Preserve it and reconcile.
+    const responseBodyDigestHex = computeStableJsonDigest(responseBody);
+    const safeResponseBody = redactSensitiveHtxObservation(responseBody, [
+      this.placementApiKey,
+      this.placementApiSecret,
+      signedParams.get("Signature") ?? "",
+      encodeURIComponent(signedParams.get("Signature") ?? ""),
+    ]);
     throw new HtxPlacementFailUnknownError("acknowledgement requires reconciliation", {
       venueResponseObserved: true,
       httpStatus: response.status,
       httpOk: response.ok,
-      responseBody,
+      responseBody: safeResponseBody,
+      responseBodyDigestHex,
     });
   }
 

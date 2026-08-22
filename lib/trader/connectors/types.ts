@@ -66,6 +66,8 @@ export type PlaceOrderInput = {
   type: OrderType;
   price?: string;
   quantity: string;
+  /** Exact sealed execution-policy deadline for the single network submission. */
+  timeoutMs?: number;
 };
 
 export type Trade = {

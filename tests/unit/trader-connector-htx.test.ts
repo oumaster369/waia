@@ -43,7 +43,7 @@ function createMockFetch(
 }
 
 function defaultHandlers(
-  overrides: Record<string, (url: URL, init?: RequestInit) => Response> = {},
+  overrides: Record<string, (url: URL, init?: RequestInit) => Response | Promise<Response>> = {},
 ) {
   const canceledOrderIds = new Set<string>();
   const base: Record<string, (url: URL, init?: RequestInit) => Response> = {
@@ -518,6 +518,47 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     expect(orderGets).toBe(0);
   });
 
+  it("redacts echoed signed request credentials while retaining a response digest", async () => {
+    let signature = "";
+    const connector = await validatedHtx(defaultHandlers({
+      "/v1/order/orders/place": (url) => {
+        signature = url.searchParams.get("Signature") ?? "";
+        return jsonResponse({
+          status: "error",
+          message: `proxy echoed ${url.toString()}`,
+          AccessKeyId: VALID_CREDS.apiKey,
+          nested: { Signature: signature, secret: VALID_CREDS.apiSecret },
+        }, 502);
+      },
+    }));
+    let captured: unknown;
+    try {
+      await connector.placeOrder({
+        clientOrderId: "client-echo-redaction",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+      });
+    } catch (error) {
+      captured = error;
+    }
+    const serialized = JSON.stringify(captured);
+    expect(signature).not.toBe("");
+    expect(serialized).not.toContain(VALID_CREDS.apiKey);
+    expect(serialized).not.toContain(VALID_CREDS.apiSecret);
+    expect(serialized).not.toContain(signature);
+    expect(serialized).toContain("[REDACTED]");
+    expect(captured).toMatchObject({
+      rawVenueObservation: {
+        venueResponseObserved: true,
+        httpStatus: 502,
+        responseBodyDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+    });
+  });
+
   it("fails unknown after one transport attempt without claiming a venue response", async () => {
     let placementPosts = 0;
     const connector = await validatedHtx(defaultHandlers({
@@ -579,6 +620,33 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
         httpStatus: 503,
         httpOk: false,
         responseBodyRead: "FAILED",
+      },
+    });
+    expect(placementPosts).toBe(1);
+  });
+
+  it("bounds an unresponsive placement by the sealed timeout and fails unknown", async () => {
+    let placementPosts = 0;
+    const connector = await validatedHtx(defaultHandlers({
+      "/v1/order/orders/place": () => {
+        placementPosts += 1;
+        return new Promise<Response>(() => undefined);
+      },
+    }));
+    await expect(connector.placeOrder({
+      clientOrderId: "client-policy-timeout",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.01",
+      timeoutMs: 10,
+    })).rejects.toMatchObject({
+      name: "HtxPlacementFailUnknownError",
+      rawVenueObservation: {
+        venueResponseObserved: false,
+        transportFailure: "NETWORK_TIMEOUT",
+        timeoutMs: 10,
       },
     });
     expect(placementPosts).toBe(1);

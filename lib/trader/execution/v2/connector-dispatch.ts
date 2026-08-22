@@ -32,6 +32,7 @@ export type ExecutionV2SubmissionResult = Readonly<{
 async function submitCommittedAttemptToConnectorV2(
   connector: ExchangeConnector,
   attempt: ExecutionAttemptV2,
+  timeoutMs: number,
 ): Promise<ExecutionV2VenueObservation> {
   const payload = attempt.exactRequestPayload;
   const order: Order = await connector.placeOrder({
@@ -41,6 +42,7 @@ async function submitCommittedAttemptToConnectorV2(
     type: payload.type,
     price: payload.price ?? undefined,
     quantity: payload.quantity,
+    timeoutMs,
   });
   const { rawVenueObservation, ...normalizedOrder } = order;
   return Object.freeze({
@@ -82,7 +84,11 @@ export function createPostgresExecutionV2Service(input: Readonly<{
           if (submittedAuthority.effectIdentityDigestHex !== authority.attempt.effectIdentityDigestHex) {
             throw new Error("Execution V2 dispatcher authority mismatch");
           }
-          return submitCommittedAttemptToConnectorV2(connector, authority.attempt);
+          return submitCommittedAttemptToConnectorV2(
+            connector,
+            authority.attempt,
+            request.policy.timeoutMs,
+          );
         },
       );
       return Object.freeze({ authority, outcome });
