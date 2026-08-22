@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-675",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -10,7 +10,7 @@
   "includedChildren": [
     {
       "issue": "DEE-676",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Freeze immutable RealitySourceReportV2, TruthRecordV2, RealityEventV2, and RealityProjectionV2 contracts; the five-source HTX/Execution allowlist; subject identities; raw-reference lineage; and default-deny validators.",
       "dependencies": [],
@@ -41,6 +41,27 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "actualFiles": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/contracts.ts",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/source-admission.ts",
+        "tests/unit/trader-reality-v2-contracts.test.ts"
+      ],
+      "integratedCommits": [
+        "196eba055a33d4613cbbb083ff6a8338d216129c"
+      ],
+      "acceptanceEvidence": [
+        "Five and only five source kinds validate; eight broad unratified classes fail explicit admission.",
+        "Primitive assertions are exact-key, content-addressed, raw-reference-only, and secret-bearing metadata is rejected.",
+        "Base source revisions and explicit distinct correction pairs are representable without implicit supersession.",
+        "Status-only order evidence cannot validate as exact fill truth."
+      ],
+      "tests": [
+        "tests/unit/trader-reality-v2-contracts.test.ts: 9/9 pass",
+        "pnpm typecheck: pass",
+        "scoped eslint: pass"
+      ],
       "execution": {
         "wave": 1,
         "mode": "serialized"
@@ -48,7 +69,7 @@
     },
     {
       "issue": "DEE-677",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Add exactly one additive 0160 PostgreSQL migration and organization-scoped Reality repository with append-only bitemporal ledgers, digest-chain/frontier integrity, deny RLS, concurrency, and TOCTOU safety.",
       "dependencies": ["DEE-676"],
@@ -84,6 +105,33 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "actualFiles": [
+        "db/migrations_postgres/0160_trader_reality_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/repository-postgres.ts",
+        "tests/integration/postgres-reality-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/trader-reality-v2-migration-identity.test.ts"
+      ],
+      "integratedCommits": [
+        "10e81fc1fa5e91481497cbaceccede3ee635f466"
+      ],
+      "acceptanceEvidence": [
+        "A fresh empty PostgreSQL database applied exactly one next-numbered 0160 migration successfully.",
+        "Four immutable organization/account-scoped tables have deny RLS, append-only triggers, exact lineage, digest-chain, and projection-frontier guards.",
+        "HTX-only ExecutionReport lineage and multiple distinct facts per immutable source are enforced without reinterpretation.",
+        "Real authenticated/anon CRUD denial, tenant isolation, concurrency, stale-head TOCTOU, and repository smoke proofs pass."
+      ],
+      "tests": [
+        "migration bootstrap from empty database: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 4/4 pass",
+        "Reality/migration focused unit tests: pass",
+        "pnpm db:smoke:postgres: pass",
+        "pnpm typecheck and scoped eslint: pass"
+      ],
       "execution": {
         "wave": 2,
         "mode": "serialized"
@@ -91,7 +139,7 @@
     },
     {
       "issue": "DEE-678",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Implement deterministic ingest, source-native dedup, explicit correction/supersession, contradiction quarantine/release, last-stable fold, current/as-of projection, and restart replay.",
       "dependencies": ["DEE-677"],
@@ -126,6 +174,29 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "actualFiles": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/ingest-postgres.ts",
+        "lib/trader/reality/v2/projection.ts",
+        "lib/trader/reality/v2/replay.ts",
+        "tests/integration/postgres-reality-v2.test.ts",
+        "tests/unit/trader-reality-v2-projection.test.ts"
+      ],
+      "integratedCommits": [
+        "266e4b53f99a2331fc0e117425115d4722064d6c"
+      ],
+      "acceptanceEvidence": [
+        "Duplicate, new fact, explicit correction, contradiction, and quarantine classifications are deterministic.",
+        "Contradiction and release preserve last stable truth; only exact revision-linked SUPERSEDED changes it.",
+        "Current and arbitrary knowledge-time folds seal exact frontier/policy/content digests.",
+        "Identical ledgers replay identically across restart and broken event chains fail closed."
+      ],
+      "tests": [
+        "tests/unit/trader-reality-v2-projection.test.ts: 3/3 pass",
+        "tests/integration/postgres-reality-v2.test.ts lifecycle proof: pass",
+        "pnpm typecheck and scoped eslint: pass"
+      ],
       "execution": {
         "wave": 3,
         "mode": "serialized"
@@ -133,7 +204,7 @@
     },
     {
       "issue": "DEE-679",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Inventory and close every repository connector/source producer and Reality-relevant consumer; admit only DEE-651 ExecutionReportV2 and four HTX spot REST observation classes while every other source fails explicitly or remains uncertain without silent loss.",
       "dependencies": ["DEE-678"],
@@ -173,6 +244,35 @@
         "pnpm typecheck",
         "scoped eslint"
       ],
+      "actualFiles": [
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/connectors/htx/index.ts",
+        "lib/trader/connectors/htx/reality-adapter.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/reality-adapter.ts",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/ingress.ts",
+        "package.json",
+        "scripts/trader/validate-reality-v2-consumer-graph.ts",
+        "tests/integration/trader-reality-v2-htx-ingress.test.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "tests/unit/trader-reality-v2-ingress.test.ts"
+      ],
+      "integratedCommits": [
+        "c2d4afb867a2d585fede0bdc87e5838f57ca3a61"
+      ],
+      "acceptanceEvidence": [
+        "Pinned whole-repository inventory closes 69 source/producer modules and 109 direct consumers with exactly one disposition each.",
+        "Approved ExecutionReportV2 and four raw-captured HTX REST classes route through dedicated adapters; status-only FILLED remains ORDER, never FILL.",
+        "All excluded classes return explicit digest receipts; public market, WebSocket, chain, modelled, synthetic, simulator, and internal expectation paths cannot bypass admission.",
+        "Existing connector consumers remain unchanged and DEE-620/DEE-634 remain explicit separate Todo scope."
+      ],
+      "tests": [
+        "pnpm run validate:reality-v2-consumer-graph: pass (69 sources, 109 consumers)",
+        "D ingress/graph/runtime tests: 6/6 pass",
+        "pnpm typecheck and scoped eslint: pass"
+      ],
       "execution": {
         "wave": 4,
         "mode": "serialized"
@@ -181,9 +281,68 @@
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": {
+    "preImplementationAdmission": {
       "status": "pass",
-      "reviewer": "Human-ratified DEE-652 integration owner after duplicate, dependency, source-allowlist, security, and frozen-base audit on 2026-08-22"
-    }
+      "manifestDigest": "b22680bb01bf72d43523043c7389126e4c15dfd98fc10b591375cab6386fb1bd",
+      "manifestCommit": "45720d6af9e5d2ca33eff557cded8aa61362d177",
+      "manifestPath": "docs/plans/dee-675-reality-v2-htx-spot.integration-train.json",
+      "reviewer": "Human-ratified DEE-652 integration owner after duplicate, dependency, source-allowlist, security, and exact-base audit on 2026-08-22"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-676", "status": "pass",
+        "reviewedCommits": ["196eba055a33d4613cbbb083ff6a8338d216129c"],
+        "reviewedFiles": [
+          "docs/plans/dee-675-reality-v2-htx-spot.md",
+          "lib/trader/reality/v2/contracts.ts", "lib/trader/reality/v2/index.ts",
+          "lib/trader/reality/v2/source-admission.ts", "tests/unit/trader-reality-v2-contracts.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-677", "status": "pass",
+        "reviewedCommits": ["10e81fc1fa5e91481497cbaceccede3ee635f466"],
+        "reviewedFiles": [
+          "db/migrations_postgres/0160_trader_reality_v2.sql", "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts", "docs/migrations/DEE-64-TRACKER.md",
+          "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/repository-postgres.ts",
+          "tests/integration/postgres-reality-v2.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+          "tests/unit/trader-reality-v2-migration-identity.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-678", "status": "pass",
+        "reviewedCommits": ["266e4b53f99a2331fc0e117425115d4722064d6c"],
+        "reviewedFiles": [
+          "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/index.ts",
+          "lib/trader/reality/v2/ingest-postgres.ts", "lib/trader/reality/v2/projection.ts",
+          "lib/trader/reality/v2/replay.ts", "tests/integration/postgres-reality-v2.test.ts",
+          "tests/unit/trader-reality-v2-projection.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-679", "status": "pass",
+        "reviewedCommits": ["c2d4afb867a2d585fede0bdc87e5838f57ca3a61"],
+        "reviewedFiles": [
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/connectors/htx/index.ts",
+          "lib/trader/connectors/htx/reality-adapter.ts", "lib/trader/execution/v2/index.ts",
+          "lib/trader/execution/v2/reality-adapter.ts", "lib/trader/reality/v2/index.ts",
+          "lib/trader/reality/v2/ingress.ts", "package.json",
+          "scripts/trader/validate-reality-v2-consumer-graph.ts",
+          "tests/integration/trader-reality-v2-htx-ingress.test.ts",
+          "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+          "tests/unit/trader-reality-v2-ingress.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      { "afterIssue": "DEE-676", "status": "pass", "commands": ["focused contracts 9/9", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-677", "status": "pass", "commands": ["empty-db migration bootstrap", "PostgreSQL Reality 4/4", "PostgreSQL smoke", "focused unit", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-678", "status": "pass", "commands": ["projection 3/3", "PostgreSQL lifecycle", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-679", "status": "pass", "commands": ["source/consumer graph 69/109", "D runtime tests 6/6", "typecheck", "scoped eslint"] }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   }
 }
