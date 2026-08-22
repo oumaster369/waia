@@ -1,6 +1,8 @@
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { TreasuryLedgerCatalogRepository } from "@/lib/waia-core/treasury/admin/ledger-catalog-repository.types";
 import type {
+  TreasuryCategoryBudgetHistoryRecord,
+  TreasuryCategoryRecord,
   TreasuryCounterpartyRecord,
   TreasuryLedgerCatalogQuery,
   TreasuryLedgerCatalogRecord,
@@ -70,6 +72,9 @@ function methods<T extends TreasuryLedgerCatalogRecord>(entity: string, rows: Ma
 
 export function createMemoryTreasuryLedgerCatalogRepository(): TreasuryLedgerCatalogRepository {
   const counterparties = new Map<string, TreasuryCounterpartyRecord>();
+  const categories = new Map<string, TreasuryCategoryRecord>();
+  const categoryBudgetHistory = new Map<string, TreasuryCategoryBudgetHistoryRecord>();
+  const categoryMethods = methods("category", categories);
   return {
     counterparties: {
       ...methods("counterparty", counterparties),
@@ -83,7 +88,52 @@ export function createMemoryTreasuryLedgerCatalogRepository(): TreasuryLedgerCat
       },
     },
     accounts: methods("account", new Map()),
-    categories: methods("category", new Map()),
+    categories: {
+      ...categoryMethods,
+      async findByCode(context, code) {
+        const org = requireOrgContext(context.organizationId);
+        const row = [...categories.values()].find(
+          (candidate) => candidate.organizationId === org.organizationId && candidate.code === code,
+        );
+        return row ? clone(row) : null;
+      },
+      async insertWithBudget(record, budget) {
+        await categoryMethods.insert(record);
+        categoryBudgetHistory.set(
+          `${budget.organizationId}:${budget.categoryId}:${budget.effectiveMonth}`,
+          clone(budget),
+        );
+      },
+      async updateWithBudget(context, id, patch, budget) {
+        const updated = await categoryMethods.update(context, id, patch);
+        if (budget) {
+          const historyKey = `${budget.organizationId}:${budget.categoryId}:${budget.effectiveMonth}`;
+          const current = categoryBudgetHistory.get(historyKey);
+          categoryBudgetHistory.set(
+            historyKey,
+            clone(
+              current
+                ? { ...current, ...budget, id: current.id, createdAt: current.createdAt }
+                : budget,
+            ),
+          );
+        }
+        return updated;
+      },
+    },
+    categoryBudgetHistory: {
+      async list(context) {
+        const org = requireOrgContext(context.organizationId);
+        return [...categoryBudgetHistory.values()]
+          .filter((row) => row.organizationId === org.organizationId)
+          .sort(
+            (a, b) =>
+              a.effectiveMonth.localeCompare(b.effectiveMonth) ||
+              a.categoryId.localeCompare(b.categoryId),
+          )
+          .map(clone);
+      },
+    },
     projects: methods("project", new Map()),
   };
 }

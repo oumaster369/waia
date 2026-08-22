@@ -8,6 +8,12 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-671** adds Postgres-only Treasury category group text and effective-month budget
+history in migrations `0158`/`0159` (`0157` is reserved by active AI-TRADER PR #477).
+It derives month/year category and group budget truth from verified Treasury transactions;
+it does not change broad runtime routing, apply production/Supabase SQL, touch the walkthrough
+database, or mutate financial rows.
+
 **DEE-650 / R650-C+D** adds the Postgres-only Risk V2 verdict, allowance lifecycle,
 per-account reservation/accounting projection, and append-only digest-chained enforcement ledger
 in migration `0156`, plus the exact order-authority binding seam. It is additive: legacy Risk/order

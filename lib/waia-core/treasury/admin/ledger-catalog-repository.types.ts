@@ -1,6 +1,7 @@
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type {
   TreasuryAccountRecord,
+  TreasuryCategoryBudgetHistoryRecord,
   TreasuryCategoryRecord,
   TreasuryCounterpartyRecord,
   TreasuryLedgerCatalogQuery,
@@ -22,6 +23,21 @@ export type TreasuryLedgerCatalogRepository = {
     ): Promise<TreasuryCounterpartyRecord | null>;
   };
   accounts: CatalogRepositoryMethods<TreasuryAccountRecord>;
-  categories: CatalogRepositoryMethods<TreasuryCategoryRecord>;
+  categories: CatalogRepositoryMethods<TreasuryCategoryRecord> & {
+    findByCode(context: OrgContext, code: string): Promise<TreasuryCategoryRecord | null>;
+    insertWithBudget(
+      record: TreasuryCategoryRecord,
+      budget: TreasuryCategoryBudgetHistoryRecord,
+    ): Promise<void>;
+    updateWithBudget(
+      context: OrgContext,
+      id: string,
+      patch: Partial<TreasuryCategoryRecord>,
+      budget?: TreasuryCategoryBudgetHistoryRecord,
+    ): Promise<TreasuryCategoryRecord>;
+  };
+  categoryBudgetHistory: {
+    list(context: OrgContext): Promise<TreasuryCategoryBudgetHistoryRecord[]>;
+  };
   projects: CatalogRepositoryMethods<TreasuryProjectRecord>;
 };

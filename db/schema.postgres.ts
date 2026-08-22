@@ -4585,6 +4585,7 @@ export const treasuryCategories = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     code: text("code").notNull(),
     name: text("name").notNull(),
+    groupName: text("group_name").notNull().default("Other"),
     description: text("description"),
     monthlyBudgetMicros: bigint("monthly_budget_micros", { mode: "bigint" }).notNull().default(0n),
     currency: text("currency").notNull(),
@@ -4599,8 +4600,63 @@ export const treasuryCategories = pgTable(
     index("treasury_categories_org_active_name_idx").on(t.organizationId, t.isActive, t.name),
     check("treasury_categories_code_nonempty", sql`length(btrim("code")) > 0`),
     check("treasury_categories_name_nonempty", sql`length(btrim("name")) > 0`),
+    check("treasury_categories_group_name_nonempty", sql`length(btrim("group_name")) > 0`),
     check("treasury_categories_monthly_budget_nonneg", sql`"monthly_budget_micros" >= 0`),
     check("treasury_categories_currency_nonempty", sql`length(btrim("currency")) > 0`),
+  ],
+);
+
+/** DEE-671 effective-month category limits; the latest row at/before a month is authoritative. */
+export const treasuryCategoryBudgetHistory = pgTable(
+  "treasury_category_budget_history",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").notNull(),
+    effectiveMonth: date("effective_month").notNull(),
+    groupName: text("group_name").notNull(),
+    monthlyBudgetMicros: bigint("monthly_budget_micros", { mode: "bigint" }).notNull(),
+    currency: text("currency").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_category_budget_history_id_org_unique_fk_source").on(
+      t.id,
+      t.organizationId,
+    ),
+    foreignKey({
+      columns: [t.categoryId, t.organizationId],
+      foreignColumns: [treasuryCategories.id, treasuryCategories.organizationId],
+      name: "treasury_category_budget_history_category_same_org_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("treasury_category_budget_history_org_category_month_unique").on(
+      t.organizationId,
+      t.categoryId,
+      t.effectiveMonth,
+    ),
+    index("treasury_category_budget_history_org_month_idx").on(
+      t.organizationId,
+      t.effectiveMonth,
+    ),
+    check(
+      "treasury_category_budget_history_month_start",
+      sql`"effective_month" = date_trunc('month', "effective_month")::date`,
+    ),
+    check(
+      "treasury_category_budget_history_group_name_nonempty",
+      sql`length(btrim("group_name")) > 0`,
+    ),
+    check(
+      "treasury_category_budget_history_monthly_nonneg",
+      sql`"monthly_budget_micros" >= 0`,
+    ),
+    check(
+      "treasury_category_budget_history_currency_nonempty",
+      sql`length(btrim("currency")) > 0`,
+    ),
   ],
 );
 
