@@ -62,7 +62,8 @@ provenance:
 
 ## Ratified base and ownership
 
-- Authoritative base: `b68290c3eb9e3a1f27b6e67219959ce033d7f1dc`.
+- Authoritative base: `5f0fc2ad86b4c5a961ee8f117df0dbfc91762b76`.
+- Base refresh: Human-authorized on 2026-08-22 after a read-only overlap audit proved DEE-674 is a Treasury-only semantic change. The unpublished train was mechanically rebased with an identical cumulative patch ID; all DEE-674 paths remain byte-identical to `origin/main`.
 - Parent Step-16 authority: DEE-652.
 - Integration owner: one owner across DEE-676 → DEE-677 → DEE-678 → DEE-679.
 - Integration boundary: one branch, one admitted/frozen manifest, one migration, one PR to `main`, one squash merge, one revert-PR rollback path.
@@ -108,7 +109,7 @@ Frozen implementation surfaces:
 - DEE-676: `lib/trader/reality/v2/contracts.ts`, `source-admission.ts`, `index.ts`, and `tests/unit/trader-reality-v2-contracts.test.ts`.
 - DEE-677: `db/schema.postgres.ts`, `db/migrations_postgres/0160_trader_reality_v2.sql`, `db/migrations_postgres/meta/_journal.json`, `lib/trader/reality/v2/repository-postgres.ts`, PostgreSQL/migration identity tests, and the migration tracker.
 - DEE-678: deterministic ingest, projection, replay modules and their focused unit/PostgreSQL tests. B and C are serialized.
-- DEE-679: the pre-enumerated HTX/Execution ingress adapters, machine-readable repository inventory, static consumer-graph validator, package command, and closure tests. D must not create a new source class or child PR.
+- DEE-679: the pre-enumerated HTX/Execution ingress adapters, machine-readable repository inventory, static consumer-graph validator, package command, and closure tests. D binds all current connector, Execution V2, and market-data source surfaces—including historical, fixture, scenario, synthetic/modelled, holdout, research, and barrel paths—to an explicit disposition. D must not create a new source class or child PR.
 
 ## Acceptance
 
