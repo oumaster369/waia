@@ -222,5 +222,35 @@ describe("DEE-671 category budget truth", () => {
         ],
       },
     });
+
+    const annual = await handleTreasuryCategoryBudgetsGet(
+      getRequest(`/api/admin/treasury/category-budgets?organization_id=${ORG_A}&year=2026`),
+      deps,
+    );
+    expect(annual.status).toBe(200);
+    expect(annual.body).toMatchObject({
+      annual: {
+        year: 2026,
+        totals: [
+          {
+            currency: "USD",
+            budgetMicros: "5000000",
+            spentMicros: "0",
+            remainingMicros: "5000000",
+          },
+        ],
+      },
+    });
+
+    for (const year of ["not-a-year", "2026.5", "2026.0", "2e3", "1999", "2201"]) {
+      const invalid = await handleTreasuryCategoryBudgetsGet(
+        getRequest(
+          `/api/admin/treasury/category-budgets?organization_id=${ORG_A}&year=${year}`,
+        ),
+        deps,
+      );
+      expect(invalid.status).toBe(400);
+      expect(errorCode(invalid)).toBe("INVALID_BODY");
+    }
   });
 });
