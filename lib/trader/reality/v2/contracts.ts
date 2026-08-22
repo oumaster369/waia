@@ -1,5 +1,9 @@
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import {
+  EXECUTION_REPORT_TYPES_V2,
+  type ExecutionReportTypeV2,
+} from "@/lib/trader/execution/v2/contracts";
 
 export const REALITY_SOURCE_REPORT_V2_SCHEMA_VERSION = "reality-source-report/v2" as const;
 export const TRUTH_RECORD_V2_SCHEMA_VERSION = "truth-record/v2" as const;
@@ -74,19 +78,28 @@ export type RealitySourceLineageV2 =
   | RealityExecutionReportLineageV2
   | RealityRawCaptureLineageV2;
 
-export type RealitySourceMetadataEntryV2 = Readonly<{
-  key: string;
-  value: string | number | boolean | null;
-}>;
+export type RealityExecutionSourceMetadataV2 = readonly [
+  Readonly<{ key: "reportSequence"; value: string }>,
+  Readonly<{ key: "reportType"; value: ExecutionReportTypeV2 }>,
+];
 
-export type RealitySourceProvenanceV2 = Readonly<{
+type RealitySourceProvenanceBaseV2 = Readonly<{
   venue: "HTX";
-  transport: "INTERNAL_APPEND_ONLY" | "REST";
   connectorId: string;
   connectorVersion: string;
   adapterVersion: string;
-  sourceFinalityMetadata: readonly RealitySourceMetadataEntryV2[];
 }>;
+
+export type RealitySourceProvenanceV2 = RealitySourceProvenanceBaseV2 & (
+  | Readonly<{
+      transport: "INTERNAL_APPEND_ONLY";
+      sourceFinalityMetadata: RealityExecutionSourceMetadataV2;
+    }>
+  | Readonly<{
+      transport: "REST";
+      sourceFinalityMetadata: readonly [];
+    }>
+);
 
 export type RealityPrimitiveAssertionV2 =
   | Readonly<{
@@ -254,7 +267,10 @@ const DIGEST = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const REASON_CODE = /^[A-Z][A-Z0-9_]{2,63}$/;
 const SAFE_KEY = /^[A-Za-z0-9._:/=-]{1,256}$/;
+const SAFE_PROVENANCE_COMPONENT = /^[A-Za-z0-9._:/=-]{1,128}$/;
 const SECRET_KEY = /(?:access[-_]?key|api[-_]?key|authorization|cookie|credential|password|secret|signature|token)/i;
+const EXECUTION_SEQUENCE = /^[1-9][0-9]{0,18}$/;
+const MAX_POSTGRES_BIGINT = "9223372036854775807";
 
 function requireText(value: string, field: string): string {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} is required`);
@@ -379,23 +395,42 @@ function canonicalProvenance(value: RealitySourceProvenanceV2): RealitySourcePro
     "provenance",
   );
   if (value.venue !== "HTX") throw new Error("Reality V2 MVP venue must be HTX");
-  requireText(value.connectorId, "connectorId");
-  requireText(value.connectorVersion, "connectorVersion");
-  requireText(value.adapterVersion, "adapterVersion");
-  const metadata = value.sourceFinalityMetadata.map((entry) => {
-    exactKeys(entry, ["key", "value"], "sourceFinalityMetadata entry");
-    if (!SAFE_KEY.test(entry.key) || SECRET_KEY.test(entry.key) ||
-      !["string", "number", "boolean"].includes(typeof entry.value) && entry.value !== null ||
-      typeof entry.value === "number" && !Number.isFinite(entry.value)) {
-      throw new Error("invalid or secret-bearing source finality metadata");
+  for (const [field, component] of [
+    ["connectorId", value.connectorId],
+    ["connectorVersion", value.connectorVersion],
+    ["adapterVersion", value.adapterVersion],
+  ] as const) {
+    if (!SAFE_PROVENANCE_COMPONENT.test(component) || SECRET_KEY.test(component)) {
+      throw new Error(`${field} must be a bounded non-secret provenance identifier`);
     }
-    return Object.freeze({ ...entry });
-  });
-  if (new Set(metadata.map((entry) => entry.key)).size !== metadata.length ||
-    metadata.some((entry, index) => index > 0 && metadata[index - 1]!.key >= entry.key)) {
-    throw new Error("source finality metadata keys must be unique and sorted");
   }
-  return Object.freeze({ ...value, sourceFinalityMetadata: Object.freeze(metadata) });
+  if (value.transport === "REST") {
+    if (value.sourceFinalityMetadata.length !== 0) {
+      throw new Error("REST Reality provenance metadata must be empty");
+    }
+    return Object.freeze({ ...value, sourceFinalityMetadata: Object.freeze([] as const) });
+  }
+  if (value.transport !== "INTERNAL_APPEND_ONLY" || value.sourceFinalityMetadata.length !== 2) {
+    throw new Error("Execution Reality provenance requires exact typed metadata");
+  }
+  const [sequence, reportType] = value.sourceFinalityMetadata;
+  exactKeys(sequence, ["key", "value"], "reportSequence metadata");
+  exactKeys(reportType, ["key", "value"], "reportType metadata");
+  if (sequence.key !== "reportSequence" || typeof sequence.value !== "string" ||
+    !EXECUTION_SEQUENCE.test(sequence.value) ||
+    (sequence.value.length === MAX_POSTGRES_BIGINT.length &&
+      sequence.value.localeCompare(MAX_POSTGRES_BIGINT) > 0) ||
+    reportType.key !== "reportType" || typeof reportType.value !== "string" ||
+    !EXECUTION_REPORT_TYPES_V2.includes(reportType.value as ExecutionReportTypeV2)) {
+    throw new Error("Execution Reality provenance metadata is outside its canonical domain");
+  }
+  return Object.freeze({
+    ...value,
+    sourceFinalityMetadata: Object.freeze([
+      Object.freeze({ key: "reportSequence" as const, value: sequence.value }),
+      Object.freeze({ key: "reportType" as const, value: reportType.value as ExecutionReportTypeV2 }),
+    ]) as RealityExecutionSourceMetadataV2,
+  });
 }
 
 function canonicalAssertion(value: RealityPrimitiveAssertionV2): RealityPrimitiveAssertionV2 {
@@ -498,6 +533,10 @@ export function createRealitySourceReportV2(
     validAtUtc: requireTimestamp(draft.validAtUtc, "validAtUtc"),
     knowledgeAtUtc: requireTimestamp(draft.knowledgeAtUtc, "knowledgeAtUtc"),
   };
+  if ((draft.sourceKind === "EXECUTION_REPORT_V2") !==
+    (payload.provenance.transport === "INTERNAL_APPEND_ONLY")) {
+    throw new Error("Reality source kind and transport metadata boundary disagree");
+  }
   if (new Date(payload.knowledgeAtUtc).getTime() < new Date(payload.validAtUtc).getTime()) {
     throw new Error("knowledge time cannot precede source-asserted valid time");
   }

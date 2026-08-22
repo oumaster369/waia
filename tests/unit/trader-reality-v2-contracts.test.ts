@@ -66,7 +66,7 @@ function rawFillDraft(
       connectorId: "htx-exchange-connector",
       connectorVersion: "v1",
       adapterVersion: "reality-htx-spot-v1",
-      sourceFinalityMetadata: [{ key: "settlement", value: "observed" }],
+      sourceFinalityMetadata: [],
     },
     structuralVerification: "VERIFIED",
     verificationReasonCodes: [],
@@ -119,10 +119,6 @@ describe("Reality V2 A contracts and source admission (DEE-676)", () => {
         executionReportId: "00000000-0000-4000-8000-000000000676",
         executionReportDigestHex: DIGEST_A,
       },
-      provenance: {
-        ...rawFillDraft().provenance,
-        transport: "INTERNAL_APPEND_ONLY",
-      },
     }));
 
     expect(() => assertRealitySourceReportAdmissionV2(wrongLineage)).toThrow(
@@ -130,13 +126,60 @@ describe("Reality V2 A contracts and source admission (DEE-676)", () => {
     );
   });
 
-  it("rejects raw payload fields and secret-bearing metadata from Reality contracts", () => {
+  it("rejects raw payload fields and all non-allowlisted transport metadata", () => {
     expect(() => createRealitySourceReportV2(rawFillDraft({
       provenance: {
         ...rawFillDraft().provenance,
         sourceFinalityMetadata: [{ key: "apiSecret", value: "must-not-copy" }],
+      } as never,
+    }))).toThrow("REST Reality provenance metadata must be empty");
+
+    const executionDraft = rawFillDraft({
+      sourceKind: "EXECUTION_REPORT_V2",
+      sourceNativeIdentity: {
+        identityKind: "EXECUTION_REPORT_ID",
+        nativeId: "00000000-0000-4000-8000-000000000676:fill:htx-trade-1",
+        nativeRevision: null,
+        supersedesNativeRevision: null,
       },
-    }))).toThrow("invalid or secret-bearing source finality metadata");
+      lineage: {
+        lineageKind: "EXECUTION_REPORT_V2",
+        executionReportId: "00000000-0000-4000-8000-000000000676",
+        executionReportDigestHex: DIGEST_A,
+      },
+      provenance: {
+        venue: "HTX",
+        transport: "INTERNAL_APPEND_ONLY",
+        connectorId: "execution-v2",
+        connectorVersion: "execution-report/v2",
+        adapterVersion: "reality-execution-v2-v1",
+        sourceFinalityMetadata: [
+          { key: "reportSequence", value: "1" },
+          { key: "reportType", value: "FILL_REPORT_OBSERVED" },
+        ],
+      },
+    });
+    expect(() => createRealitySourceReportV2(executionDraft)).not.toThrow();
+    for (const sourceFinalityMetadata of [
+      [{ key: "details", value: "Bearer secret raw body" }],
+      [
+        { key: "reportSequence", value: "9223372036854775808" },
+        { key: "reportType", value: "FILL_REPORT_OBSERVED" },
+      ],
+      [
+        { key: "reportSequence", value: "1" },
+        { key: "reportType", value: "OPAQUE_JSON" },
+      ],
+      [
+        { key: "reportSequence", value: { rawBody: "secret" } },
+        { key: "reportType", value: "FILL_REPORT_OBSERVED" },
+      ],
+    ]) {
+      expect(() => createRealitySourceReportV2({
+        ...executionDraft,
+        provenance: { ...executionDraft.provenance, sourceFinalityMetadata } as never,
+      })).toThrow(/exact typed metadata|canonical domain/);
+    }
 
     expect(() => createRealitySourceReportV2(rawFillDraft({
       primitiveAssertion: {
