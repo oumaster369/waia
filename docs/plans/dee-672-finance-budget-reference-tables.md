@@ -98,6 +98,7 @@ Hard exclusions: database/schema/API changes, public homepage or Breath pages, p
 - `lib/treasury-admin/types.ts`
 - `components/treasury/admin/{finance-shell,transaction-table,ledger-catalog-select,category-budget-panel,budgets-panel,budget-workspace,ledger-catalog-workspace}.tsx`
 - `app/(treasury-admin)/finance/{counterparties,accounts,projects}/page.tsx`
+- `wrangler.jsonc` (bounded shared packaging correction only; no deployment)
 - focused `tests/unit/**` and `tests/e2e/treasury-admin-finance.spec.ts`
 
 ## Validation
@@ -131,3 +132,9 @@ T3 Human squash-merge only. AI-TRADER worktrees/PRs and the Execution Server rem
 - Source walkthrough DB on 54339 remains unchanged at 4 transactions, 1 budget, 1 commitment, and 1 funding need. Review uses a local cloned database on the same container/port with only Treasury 0158/0159 applied; no source financial mutation and no AI-TRADER migration.
 - No form submit, financial-row mutation, Execution Server access, deployment, main mutation, or AI-TRADER worktree mutation.
 - Rebased the unpublished DEE-672 branch onto `origin/main@5f0fc2ad86b4c5a961ee8f117df0dbfc91762b76`; the merged DEE-674 annual query fix is now part of the real branch history. Repeated focused tests, lint, typecheck, production build, Finance E2E, canon, and PR-governance validation successfully on code HEAD `89cecd2f829dddf64ab5f00a792b976fc800e669`.
+
+## PR #480 CI correction — 2026-08-22
+
+- The native Cloudflare Workers build compiled the OpenNext application, then failed its upload validation with Cloudflare error `10027`: `3086.48 KiB` gzip exceeded the account's `3072 KiB` Worker limit.
+- The bounded correction enables Wrangler's supported top-level `minify` option. This is a shared packaging setting, not a Finance runtime or AI-TRADER source change; it does not alter bindings, variables, routes, cron configuration, or product behavior.
+- Workflow-equivalent dry runs must remain below the Cloudflare limit without a CLI-only `--minify` override. No real deployment is permitted as part of this correction; PR #480 remains Human squash-merge only.
