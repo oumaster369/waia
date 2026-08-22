@@ -21,7 +21,13 @@ import {
   HtxRestClient,
   type HtxClientConfig,
 } from "@/lib/trader/connectors/htx/client";
-import { HTX_TRADE_HISTORY_MAX_WINDOW_MS } from "@/lib/trader/connectors/htx/config";
+import {
+  HTX_ENDPOINTS,
+  HTX_TRADE_HISTORY_MAX_WINDOW_MS,
+  htxHostFromUrl,
+  resolveHtxRestHost,
+} from "@/lib/trader/connectors/htx/config";
+import { buildSignedPostQueryString } from "@/lib/trader/connectors/htx/signing";
 import {
   HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
@@ -35,9 +41,30 @@ import {
   mapHtxPermissionsToAccountScopes,
   permissionIncludesTrade,
   permissionIncludesWithdraw,
+  placeOrderInputToHtxType,
 } from "@/lib/trader/connectors/htx/mappers";
 
 export type HtxExchangeConnectorConfig = HtxClientConfig;
+
+class HtxPlacementFailUnknownError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(message: string, rawVenueObservation: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX placement is fail-unknown: ${message}`);
+    this.name = "HtxPlacementFailUnknownError";
+    this.rawVenueObservation = Object.freeze({ ...rawVenueObservation });
+  }
+}
+
+async function readRawHtxResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text === "") return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
 
 /**
  * HTX spot connector (DEE-195 read path, DEE-211 write foundation).
@@ -49,12 +76,22 @@ export class HtxExchangeConnector implements ExchangeConnector {
   readonly marketType = "spot" as const;
 
   private readonly client: HtxRestClient;
+  private readonly placementApiKey: string;
+  private readonly placementApiSecret: string;
+  private readonly placementRestHost: string;
+  private readonly placementHost: string;
+  private readonly placementFetch: typeof fetch;
   private validated = false;
   private spotAccountId: string | null = null;
   private permissionString: string | null = null;
 
   constructor(config: HtxExchangeConnectorConfig) {
     this.client = new HtxRestClient(config);
+    this.placementApiKey = config.apiKey;
+    this.placementApiSecret = config.apiSecret;
+    this.placementRestHost = resolveHtxRestHost(config.restHost);
+    this.placementHost = htxHostFromUrl(this.placementRestHost);
+    this.placementFetch = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   async validateCredentials(input: ConnectorCredentialInput): Promise<CredentialValidationResult> {
@@ -190,20 +227,49 @@ export class HtxExchangeConnector implements ExchangeConnector {
       throw new Error("[trader] HTX placeOrder requires clientOrderId");
     }
 
-    const row = await this.client.placeOrder({
-      accountId: this.spotAccountId!,
+    const body: Record<string, string | number> = {
+      "account-id": this.spotAccountId!,
       symbol: internalSymbolToHtx(input.symbol),
-      side: input.side,
-      type: input.type,
-      quantity: input.quantity,
-      price: input.price,
-      clientOrderId: input.clientOrderId,
+      type: placeOrderInputToHtxType(input),
+      amount: input.quantity,
+      source: "spot-api",
+      "client-order-id": input.clientOrderId,
+    };
+    if (input.type === "limit") body.price = input.price!;
+    const query = buildSignedPostQueryString({
+      accessKeyId: this.placementApiKey,
+      secret: this.placementApiSecret,
+      host: this.placementHost,
+      path: HTX_ENDPOINTS.placeOrder,
     });
-    const order = mapHtxOrder(row);
-    if (!order.rawVenueObservation) {
-      throw new Error("[trader] HTX placeOrder raw venue observation is required");
+    const url = `${this.placementRestHost}${HTX_ENDPOINTS.placeOrder}?${query}`;
+    let response: Response;
+    try {
+      // Execution V2 permits exactly one network submission. The generic HTX
+      // client retries POSTs, so this effect path deliberately bypasses it.
+      response = await this.placementFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      throw new HtxPlacementFailUnknownError("transport result unknown", {
+        venueResponseObserved: false,
+        transportError: error instanceof Error
+          ? Object.freeze({ name: error.name, message: error.message })
+          : String(error),
+      });
     }
-    return order;
+    const responseBody = await readRawHtxResponse(response);
+    // HTX's placement acknowledgement contains only an order id. It cannot
+    // prove the exact client identity, mechanics, quantity, price, or fills,
+    // and no follow-up lookup is ratified. Preserve it and reconcile.
+    throw new HtxPlacementFailUnknownError("acknowledgement requires reconciliation", {
+      venueResponseObserved: true,
+      httpStatus: response.status,
+      httpOk: response.ok,
+      responseBody,
+    });
   }
 
   async cancelOrder(orderId: string): Promise<Order> {

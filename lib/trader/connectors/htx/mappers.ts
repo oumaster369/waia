@@ -194,6 +194,40 @@ class HtxUnknownOrderStateError extends Error {
   }
 }
 
+class HtxUnknownVenueIdentityError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(field: string, row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX ${field} identity is fail-unknown`);
+    this.name = "HtxUnknownVenueIdentityError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+class HtxUnknownTradeEvidenceError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(field: string, row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX trade ${field} is fail-unknown`);
+    this.name = "HtxUnknownTradeEvidenceError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+function requireHtxVenueIdentity(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return String(value);
+  }
+  if (typeof value === "string" && /^[1-9]\d*$/.test(value)) {
+    return value;
+  }
+  throw new HtxUnknownVenueIdentityError(field, row);
+}
+
 function mapHtxOrderStatus(row: HtxOrderRow): OrderStatus {
   switch (row.state) {
     case "submitted":
@@ -220,12 +254,13 @@ function msToIso(ms?: number): string {
 
 export function mapHtxOrder(row: HtxOrderRow): Order {
   const { side, type } = parseHtxOrderSideAndType(row.type, row);
+  const orderId = requireHtxVenueIdentity(row.id, "order", row);
   const createdAt = msToIso(row["created-at"]);
   const quantity = row.amount ?? row["filled-amount"] ?? "0";
   const filledQuantity = row["filled-amount"] ?? "0";
 
   return {
-    orderId: String(row.id),
+    orderId,
     clientOrderId: row["client-order-id"] ?? "",
     symbol: htxSymbolToInternal(row.symbol),
     side,
@@ -242,16 +277,24 @@ export function mapHtxOrder(row: HtxOrderRow): Order {
 
 export function mapHtxMatchResult(row: HtxMatchResultRow): Trade {
   const { side } = parseHtxOrderSideAndType(row.type, row);
+  const tradeId = requireHtxVenueIdentity(row["trade-id"], "trade", row);
+  const orderId = requireHtxVenueIdentity(row["order-id"], "order", row);
+  if (typeof row["filled-fees"] !== "string" || row["filled-fees"].trim() === "") {
+    throw new HtxUnknownTradeEvidenceError("fee", row);
+  }
+  if (typeof row["fee-currency"] !== "string" || row["fee-currency"].trim() === "") {
+    throw new HtxUnknownTradeEvidenceError("fee currency", row);
+  }
   return {
-    tradeId: String(row["trade-id"]),
-    orderId: String(row["order-id"]),
+    tradeId,
+    orderId,
     clientOrderId: "",
     symbol: htxSymbolToInternal(row.symbol),
     side,
     price: row.price,
     quantity: row["filled-amount"],
-    fee: row["filled-fees"] ?? "0",
-    feeAsset: (row["fee-currency"] ?? "USDT").toUpperCase(),
+    fee: row["filled-fees"],
+    feeAsset: row["fee-currency"].toUpperCase(),
     executedAt: msToIso(row["created-at"]),
   };
 }
