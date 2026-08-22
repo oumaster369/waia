@@ -87,12 +87,15 @@ function redactSensitiveHtxObservation(
     return value.map((entry) => redactSensitiveHtxObservation(entry, sensitiveValues));
   }
   if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
-      key,
-      HTX_SENSITIVE_RESPONSE_KEY.test(key)
-        ? "[REDACTED]"
-        : redactSensitiveHtxObservation(entry, sensitiveValues),
-    ]));
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+      const safeKey = redactSensitiveHtxObservation(key, sensitiveValues) as string;
+      return [
+        safeKey,
+        HTX_SENSITIVE_RESPONSE_KEY.test(key)
+          ? "[REDACTED]"
+          : redactSensitiveHtxObservation(entry, sensitiveValues),
+      ];
+    }));
   }
   return value;
 }
@@ -282,16 +285,26 @@ export class HtxExchangeConnector implements ExchangeConnector {
     const abortController = new AbortController();
     let timedOut = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    let response: Response;
+    let response: Response | undefined;
+    let responseBody: unknown;
+    let responseBodyReadFailed = false;
     try {
       // Execution V2 permits exactly one network submission. The generic HTX
       // client retries POSTs, so this effect path deliberately bypasses it.
-      const fetchPromise = this.placementFetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: abortController.signal,
-      });
+      const fetchAndReadPromise = (async () => {
+        response = await this.placementFetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+        try {
+          responseBody = await readRawHtxResponse(response);
+        } catch {
+          responseBodyReadFailed = true;
+          throw new Error("HTX_RESPONSE_BODY_READ_FAILED");
+        }
+      })();
       const timeout = new Promise<never>((_resolve, reject) => {
         timeoutHandle = setTimeout(() => {
           timedOut = true;
@@ -299,27 +312,37 @@ export class HtxExchangeConnector implements ExchangeConnector {
           reject(new Error("HTX_PLACEMENT_TIMEOUT"));
         }, timeoutMs);
       });
-      response = await Promise.race([fetchPromise, timeout]);
+      await Promise.race([fetchAndReadPromise, timeout]);
     } catch {
+      if (timedOut) {
+        throw new HtxPlacementFailUnknownError("transport result unknown", {
+          venueResponseObserved: response !== undefined,
+          ...(response === undefined ? {} : {
+            httpStatus: response.status,
+            httpOk: response.ok,
+            responseBodyRead: "TIMED_OUT",
+          }),
+          transportFailure: "NETWORK_TIMEOUT",
+          timeoutMs,
+        });
+      }
+      if (responseBodyReadFailed && response !== undefined) {
+        throw new HtxPlacementFailUnknownError("response body requires reconciliation", {
+          venueResponseObserved: true,
+          httpStatus: response.status,
+          httpOk: response.ok,
+          responseBodyRead: "FAILED",
+        });
+      }
       throw new HtxPlacementFailUnknownError("transport result unknown", {
         venueResponseObserved: false,
-        transportFailure: timedOut ? "NETWORK_TIMEOUT" : "NETWORK_REQUEST_FAILED",
+        transportFailure: "NETWORK_REQUEST_FAILED",
         timeoutMs,
       });
     } finally {
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     }
-    let responseBody: unknown;
-    try {
-      responseBody = await readRawHtxResponse(response);
-    } catch {
-      throw new HtxPlacementFailUnknownError("response body requires reconciliation", {
-        venueResponseObserved: true,
-        httpStatus: response.status,
-        httpOk: response.ok,
-        responseBodyRead: "FAILED",
-      });
-    }
+    if (response === undefined) throw new Error("HTX placement response missing after completed request");
     // HTX's placement acknowledgement contains only an order id. It cannot
     // prove the exact client identity, mechanics, quantity, price, or fills,
     // and no follow-up lookup is ratified. Preserve it and reconcile.

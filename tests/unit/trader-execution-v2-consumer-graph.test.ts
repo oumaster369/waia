@@ -144,5 +144,12 @@ describe("Execution V2 whole-repository consumer graph (DEE-670 / E651-D)", () =
     );
     expect(boundary).toContain("LEGACY_ORDER_SUBMISSION_DISABLED");
     expect(boundary).not.toContain("connector.placeOrder(");
+
+    const v2Dispatch = readFileSync(
+      resolve(process.cwd(), "lib/trader/execution/v2/connector-dispatch.ts"),
+      "utf8",
+    );
+    expect(v2Dispatch).toContain("submittedAuthority.timeoutMs");
+    expect(v2Dispatch).not.toContain("request.policy.timeoutMs");
   });
 });

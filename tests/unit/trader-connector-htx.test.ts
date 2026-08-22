@@ -527,7 +527,11 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
           status: "error",
           message: `proxy echoed ${url.toString()}`,
           AccessKeyId: VALID_CREDS.apiKey,
-          nested: { Signature: signature, secret: VALID_CREDS.apiSecret },
+          nested: {
+            Signature: signature,
+            secret: VALID_CREDS.apiSecret,
+            [`echo-${VALID_CREDS.apiKey}-${signature}`]: "credential-bearing property name",
+          },
         }, 502);
       },
     }));
@@ -645,6 +649,40 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
       name: "HtxPlacementFailUnknownError",
       rawVenueObservation: {
         venueResponseObserved: false,
+        transportFailure: "NETWORK_TIMEOUT",
+        timeoutMs: 10,
+      },
+    });
+    expect(placementPosts).toBe(1);
+  });
+
+  it("bounds an unresponsive response body by the same sealed timeout", async () => {
+    let placementPosts = 0;
+    const connector = await validatedHtx(defaultHandlers({
+      "/v1/order/orders/place": () => {
+        placementPosts += 1;
+        return {
+          status: 202,
+          ok: true,
+          text: () => new Promise<string>(() => undefined),
+        } as unknown as Response;
+      },
+    }));
+    await expect(connector.placeOrder({
+      clientOrderId: "client-policy-body-timeout",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "65000",
+      quantity: "0.01",
+      timeoutMs: 10,
+    })).rejects.toMatchObject({
+      name: "HtxPlacementFailUnknownError",
+      rawVenueObservation: {
+        venueResponseObserved: true,
+        httpStatus: 202,
+        httpOk: true,
+        responseBodyRead: "TIMED_OUT",
         transportFailure: "NETWORK_TIMEOUT",
         timeoutMs: 10,
       },

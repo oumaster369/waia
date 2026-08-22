@@ -87,7 +87,7 @@ export function createPostgresExecutionV2Service(input: Readonly<{
           return submitCommittedAttemptToConnectorV2(
             connector,
             authority.attempt,
-            request.policy.timeoutMs,
+            submittedAuthority.timeoutMs,
           );
         },
       );
