@@ -16,6 +16,14 @@ import { persistPreparedRawCaptureV1Postgres } from "@/lib/trader/mi/raw-capture
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { createRealityEventV2, createRealityProjectionV2 } from "@/lib/trader/reality/v2/contracts";
 import {
+  ingestRealitySourceReportV2Postgres,
+  releaseRealityQuarantineV2Postgres,
+} from "@/lib/trader/reality/v2/ingest-postgres";
+import {
+  readCurrentRealityProjectionV2Postgres,
+  replayRealityProjectionV2Postgres,
+} from "@/lib/trader/reality/v2/replay";
+import {
   appendRealityEventV2FromWriter,
   appendRealitySourceReportV2Postgres,
   createTruthFromVerifiedSourceV2,
@@ -385,6 +393,77 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       .toEqual(projection);
     expect(await readLatestRealityProjectionV2(db, { organizationId: orgB, accountId: ACCOUNT }))
       .toBeNull();
+  });
+
+  it("deduplicates, quarantines contradictions, preserves stable truth, and replays exact as-of state", async () => {
+    const baseRaw = await capture(db, orgA, SOURCE_A, "ingest-base");
+    const base = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(baseRaw.receipt, "1", null),
+    );
+    expect(base.classification).toBe("NEW_FACT");
+    expect(base.projection?.stableEntries[0]?.truthRecordId).toBe(base.truthRecord?.truthRecordId);
+
+    const duplicateRaw = await capture(db, orgA, SOURCE_A, "ingest-duplicate");
+    const duplicate = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(duplicateRaw.receipt, "1", null),
+    );
+    expect(duplicate.classification).toBe("DUPLICATE");
+    expect(await listTruthRecordsV2(db, { organizationId: orgA, accountId: ACCOUNT }))
+      .toHaveLength(1);
+    expect(await listRealityEventsV2(db, { organizationId: orgA, accountId: ACCOUNT }))
+      .toHaveLength(1);
+
+    const disputedRaw = await capture(db, orgA, SOURCE_A, "ingest-disputed");
+    const disputed = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(disputedRaw.receipt, "1", null, "0.002"),
+    );
+    expect(disputed.classification).toBe("SOURCE_CONTRADICTION");
+    expect(disputed.projection?.stableEntries[0]?.truthRecordId)
+      .toBe(base.truthRecord?.truthRecordId);
+    expect(disputed.projection?.uncertainties).toHaveLength(1);
+
+    const contradictionAsOf = disputed.projection!.knowledgeAsOfUtc;
+    const replayedContradiction = await replayRealityProjectionV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      contradictionAsOf,
+    );
+    expect(replayedContradiction).toEqual(disputed.projection);
+
+    const released = await releaseRealityQuarantineV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      disputed.sourceReport.sourceReportId,
+    );
+    expect(released.stableEntries[0]?.truthRecordId).toBe(base.truthRecord?.truthRecordId);
+    expect(released.uncertainties).toEqual([]);
+
+    const correctionRaw = await capture(db, orgA, SOURCE_A, "ingest-correction");
+    const correction = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(correctionRaw.receipt, "2", "1", "0.003"),
+    );
+    expect(correction.classification).toBe("EXPLICIT_CORRECTION");
+    expect(correction.truthRecord?.supersedesTruthRecordId).toBe(base.truthRecord?.truthRecordId);
+    expect(correction.projection?.stableEntries[0]?.truthRecordId)
+      .toBe(correction.truthRecord?.truthRecordId);
+
+    const restarted = await readCurrentRealityProjectionV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+    );
+    expect(restarted).toEqual(correction.projection);
+    expect(await readCurrentRealityProjectionV2Postgres(
+      db,
+      { organizationId: orgB, accountId: ACCOUNT },
+    )).toBeNull();
   });
 
   it("enforces deny RLS for authenticated and anon across real CRUD paths", async () => {

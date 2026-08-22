@@ -32,26 +32,26 @@ includedIssues:
   - id: DEE-678
     role: C-ingest-projection-replay
     completionPolicy: manual-at-integration-ready
-    status: in-progress
+    status: completed
   - id: DEE-679
     role: D-consumer-cutover-closure
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: DEE-678
-  completedWorkPackages: [DEE-676, DEE-677]
-  remainingWorkPackages: [DEE-678, DEE-679]
+  currentWorkPackage: DEE-679
+  completedWorkPackages: [DEE-676, DEE-677, DEE-678]
+  remainingWorkPackages: [DEE-679]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement deterministic DEE-678 ingest, contradiction semantics, projection, and replay on the frozen B substrate."
+  nextAction: "Complete the pre-enumerated DEE-679 repository-wide source/consumer inventory, adapters, and closure proof."
 provenance:
   createdFrom: chat
   gapRegistry: null
