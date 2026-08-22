@@ -65,7 +65,6 @@ import {
 import {
   CHECKPOINT_EVERY_CYCLES,
   LAST_COMMITTED_CYCLE_INDEX,
-  TARGET_CYCLE_COUNT,
 } from "./fhv-official-scale-constants";
 
 export const FHV_OFFICIAL_SCALE_METRICS_FILENAME = "fhv-official-scale-metrics.v1.json";
