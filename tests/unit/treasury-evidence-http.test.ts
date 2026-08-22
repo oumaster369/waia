@@ -108,7 +108,7 @@ describe("DEE-606 WP-5 HTTP isolation without R2", () => {
 });
 
 describe("DEE-606 WP-5 auth, privacy, and publication non-equivalence", () => {
-  it("26-35, 43-44 permission split, no public URL, ADMIN_ONLY default", async () => {
+  it("26-35, 43-44 permission split, no public evidence URL, ADMIN_ONLY default", async () => {
     const { services, bucket } = createWp5Bundle();
     const all = wp5Deps(services);
     const unsigned = await handleTreasuryEvidencePost(
@@ -211,8 +211,14 @@ describe("DEE-606 WP-5 auth, privacy, and publication non-equivalence", () => {
     );
     expect(otherOrg.status).toBe(404);
 
-    expect(existsSync(path.join(ROOT, "app/api/public/treasury"))).toBe(false);
+    expect(existsSync(path.join(ROOT, "app/api/public/treasury"))).toBe(true);
     expect(existsSync(path.join(ROOT, "app/api/treasury"))).toBe(false);
+    const publicRoute = readFileSync(
+      path.join(ROOT, "app/api/public/treasury/route.ts"),
+      "utf8",
+    );
+    expect(publicRoute).not.toMatch(/evidence|presign|object[_-]?key/i);
+    expect(publicRoute).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);
     const contentRoute = readFileSync(
       path.join(ROOT, "app/api/admin/treasury/evidence/[id]/content/route.ts"),
       "utf8",

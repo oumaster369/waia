@@ -113,6 +113,8 @@ Baseline: `origin/main@d45bb9b11b21c7217eed5957eecdb629d309f4c6` after the Human
 - `tests/unit/helpers/treasury-public.ts`
 - `tests/unit/treasury-breath-boundary.test.ts`
 - `tests/unit/treasury-contribution-share-privacy.test.ts`
+- `tests/unit/treasury-admin-http.test.ts`
+- `tests/unit/treasury-evidence-http.test.ts`
 
 No `db/**` file is in scope.
 
