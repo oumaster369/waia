@@ -5,12 +5,15 @@
 DEE-64 is not merely “replace SQLite client”. It is a **staged migration** to disentangle SQLite-specific assumptions from WAIA’s runtime and persistence architecture, while keeping production behavior honest until Postgres-backed paths are genuinely supported (async transactions, rollback, schema-bound repositories).
 
 **DEE-675 / R675-B** adds the Postgres-only Reality V2 source-reference, truth,
-event, and projection ledgers in the single additive migration `0160`. The four
-tables are organization-scoped, append-only, service-only/deny-RLS, bitemporal,
-and content-addressed. Raw bytes and secrets remain exclusively in the existing
-encrypted raw-capture storage; `0160` stores only immutable lineage digests and
-references. This does not apply production SQL, change retention/security policy,
-or enable new connector/source classes.
+event, and projection ledgers in the single additive migration `0160`, together
+with one immutable raw-source admission relation and one protected knowledge-frontier
+state relation. All six relations are organization/account-scoped and service-only
+behind deny RLS. The four canonical ledgers and admission relation are append-only,
+bitemporal/content-addressed where applicable; the frontier relation is mutable only
+through its narrow protected allocator/consumer functions. Raw bytes and secrets
+remain exclusively in the existing encrypted raw-capture storage; `0160` stores only
+immutable lineage digests and references. This does not apply production SQL, change
+retention/security policy, or enable new connector/source classes.
 
 This tracker records **what shipped**, **what must not regress**, and **what remains** so future agents and contributors do not collapse the program into fake backend-neutral abstractions or premature SQLite removal.
 

@@ -81,6 +81,9 @@ describe("Reality V2 migration identity (DEE-677)", () => {
     expect(sql).toContain("Reality event sequence/digest head mismatch");
     expect(sql).toContain("OBSERVED must introduce exactly one unsuperseding stable truth");
     expect(sql).toContain("SUPERSEDED must exactly link a source-native correction");
+    expect(sql).toContain("'[\"CORRECTION_TARGET_NOT_FOUND\"]'::jsonb");
+    expect(sql).toContain("QUARANTINED must exactly preserve one source-only causal episode");
+    expect(sql).toContain("SOURCE_CONTRADICTION must exactly link disputed and current stable truth");
     expect(sql).toContain("RELEASED must exactly resolve one causally linked truth-bearing quarantine");
     expect(sql).toContain("Reality causal episode already has an unresolved quarantine");
     expect(sql).toContain("trader_reality_events_v2_one_release_per_quarantine");

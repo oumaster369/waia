@@ -571,20 +571,52 @@ export async function appendContradictoryRealityTruthV2FromWriter(
   executor: RealityV2Executor,
   context: RealityAccountContext,
   source: RealitySourceReportV2,
-  related: TruthRecordV2 | null,
+  related: TruthRecordV2,
   reasonCodes: readonly string[],
 ): Promise<TruthRecordV2> {
-  await lockRealityScopeV2(executor, context);
+  const scoped = requireScope(context);
+  await lockRealityScopeV2(executor, scoped);
+  const currentRows = await executor.execute<{ current: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM public.trader_reality_truth_records_v2 related_truth
+      WHERE related_truth.id = ${related.truthRecordId}
+        AND related_truth.content_digest = ${related.contentDigestHex}
+        AND related_truth.organization_id = ${scoped.organizationId}::uuid
+        AND related_truth.account_id = ${scoped.accountId}
+        AND related_truth.markers = '[]'::jsonb
+        AND EXISTS (
+          SELECT 1 FROM public.trader_reality_events_v2 stable_event
+          WHERE stable_event.organization_id = related_truth.organization_id
+            AND stable_event.account_id = related_truth.account_id
+            AND stable_event.truth_record_id = related_truth.id
+            AND stable_event.event_type IN ('OBSERVED', 'SUPERSEDED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM public.trader_reality_events_v2 later_correction
+          WHERE later_correction.organization_id = related_truth.organization_id
+            AND later_correction.account_id = related_truth.account_id
+            AND later_correction.related_truth_record_id = related_truth.id
+            AND later_correction.event_type = 'SUPERSEDED'
+        )
+    ) AS current
+  `);
+  if (currentRows[0]?.current !== true ||
+    related.subject.subjectClass !== source.subject.subjectClass ||
+    related.subject.subjectKey !== source.subject.subjectKey) {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] Reality contradiction requires exact current stable truth",
+    );
+  }
   const truth = createTruthFromVerifiedSourceV2(source, {
     supersedesTruthRecordId: null,
     markers: ["SOURCE_CONTRADICTION"],
   });
   const stored = (await insertTruthRecordV2FromWriter(executor, context, truth)).truth;
   await appendRealityEventV2FromWriter(executor, context, {
-    eventType: related === null ? "QUARANTINED" : "SOURCE_CONTRADICTION",
+    eventType: "SOURCE_CONTRADICTION",
     sourceReportId: source.sourceReportId,
     truthRecordId: stored.truthRecordId,
-    relatedTruthRecordId: related?.truthRecordId ?? null,
+    relatedTruthRecordId: related.truthRecordId,
     quarantineEventId: null,
     reasonCodes,
   });

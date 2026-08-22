@@ -756,9 +756,17 @@ BEGIN
     IF source_row.id IS NULL OR NEW.truth_record_id IS NOT NULL
       OR NEW.related_truth_record_id IS NOT NULL
       OR jsonb_array_length(NEW.reason_codes) = 0
-      OR source_row.structural_verification <> 'UNVERIFIABLE'
+      OR NOT (
+        source_row.structural_verification = 'UNVERIFIABLE'
+        OR (
+          source_row.structural_verification = 'VERIFIED'
+          AND source_row.source_native_revision IS NOT NULL
+          AND source_row.supersedes_native_revision IS NOT NULL
+          AND NEW.reason_codes = '["CORRECTION_TARGET_NOT_FOUND"]'::jsonb
+        )
+      )
     THEN
-      RAISE EXCEPTION 'QUARANTINED must exactly preserve one unverifiable source-owned causal episode'
+      RAISE EXCEPTION 'QUARANTINED must exactly preserve one source-only causal episode'
         USING ERRCODE = 'check_violation';
     END IF;
   ELSIF NEW.event_type = 'SOURCE_CONTRADICTION' THEN
@@ -775,8 +783,15 @@ BEGIN
           AND stable_event.truth_record_id = related_row.id
           AND stable_event.event_type IN ('OBSERVED', 'SUPERSEDED')
       )
+      OR EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 later_correction
+        WHERE later_correction.organization_id = NEW.organization_id
+          AND later_correction.account_id = NEW.account_id
+          AND later_correction.related_truth_record_id = related_row.id
+          AND later_correction.event_type = 'SUPERSEDED'
+      )
     THEN
-      RAISE EXCEPTION 'SOURCE_CONTRADICTION must exactly link disputed and stable truth for one source subject'
+      RAISE EXCEPTION 'SOURCE_CONTRADICTION must exactly link disputed and current stable truth for one source subject'
         USING ERRCODE = 'check_violation';
     END IF;
   ELSIF NEW.event_type = 'RELEASED' THEN
