@@ -51,7 +51,8 @@
       ],
       "integratedCommits": [
         "17931755592fbff14990d35c8b00b720b04043dc",
-        "ffcd17a8a1df33b790f775de192b1a3111c9d4ea"
+        "ffcd17a8a1df33b790f775de192b1a3111c9d4ea",
+        "18d1607b363ce91d6e3d73b89859f47d12b820bc"
       ],
       "acceptanceEvidence": [
         "Five and only five source kinds validate; eight broad unratified classes fail explicit admission.",
@@ -120,17 +121,18 @@
       ],
       "integratedCommits": [
         "f9df8318d7e03c7f670f2002689ccb0145145314",
-        "cdb2f048336e543bb4425c7681ab5c80390f8139"
+        "cdb2f048336e543bb4425c7681ab5c80390f8139",
+        "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67"
       ],
       "acceptanceEvidence": [
         "A fresh empty PostgreSQL database applied exactly one next-numbered 0160 migration successfully.",
-        "Four immutable organization/account-scoped tables have deny RLS, append-only triggers, exact lineage, digest-chain, and projection-frontier guards.",
+        "Four immutable organization/account-scoped ledgers plus two protected admission/frontier relations have deny RLS, exact lineage, digest-chain, and projection-frontier guards.",
         "HTX-only ExecutionReport lineage and multiple distinct facts per immutable source are enforced without reinterpretation.",
         "Real authenticated/anon CRUD denial, tenant isolation, concurrency, stale-head TOCTOU, and repository smoke proofs pass."
       ],
       "tests": [
         "migration bootstrap from empty database: pass",
-        "tests/integration/postgres-reality-v2.test.ts: 4/4 pass",
+        "tests/integration/postgres-reality-v2.test.ts: 6/6 pass on a freshly migrated empty database",
         "Reality/migration focused unit tests: pass",
         "pnpm db:smoke:postgres: pass",
         "pnpm typecheck and scoped eslint: pass"
@@ -188,7 +190,8 @@
       ],
       "integratedCommits": [
         "70387a4a4996514fa718db80c0d7a571b1a18583",
-        "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055"
+        "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
+        "536dc4682fd138fae4e2509c1dbc72e2479a2c2f"
       ],
       "acceptanceEvidence": [
         "Duplicate, new fact, explicit correction, contradiction, and quarantine classifications are deterministic.",
@@ -266,7 +269,8 @@
       "integratedCommits": [
         "50d69656045a81ba6efd943048e50bf76caa9265",
         "78ba19279976e4603316be9d1671c642b0949992",
-        "757c13a89ae35dce8910be5568318744d5a2d1a0"
+        "757c13a89ae35dce8910be5568318744d5a2d1a0",
+        "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb"
       ],
       "acceptanceEvidence": [
         "Pinned whole-repository inventory closes 149 connector, Execution V2, and market-data source surfaces plus 115 direct consumers and 25 connector references with exactly one disposition each and path+content digests.",
@@ -275,7 +279,7 @@
         "Existing connector consumers remain unchanged and DEE-620/DEE-634 remain explicit separate Todo scope."
       ],
       "tests": [
-        "pnpm run validate:reality-v2-consumer-graph: pass (149 sources, 114 consumers; path+content digests)",
+        "pnpm run validate:reality-v2-consumer-graph: pass (149 sources, 115 consumers; path+content digests)",
         "D ingress/graph/runtime plus HTX FAIL-UNKNOWN tests: 9/9 pass",
         "pnpm typecheck and scoped eslint: pass"
       ],
@@ -299,7 +303,8 @@
         "issue": "DEE-676", "status": "pass",
         "reviewedCommits": [
           "17931755592fbff14990d35c8b00b720b04043dc",
-          "ffcd17a8a1df33b790f775de192b1a3111c9d4ea"
+          "ffcd17a8a1df33b790f775de192b1a3111c9d4ea",
+          "18d1607b363ce91d6e3d73b89859f47d12b820bc"
         ],
         "reviewedFiles": [
           "docs/plans/dee-675-reality-v2-htx-spot.md",
@@ -311,7 +316,8 @@
         "issue": "DEE-677", "status": "pass",
         "reviewedCommits": [
           "f9df8318d7e03c7f670f2002689ccb0145145314",
-          "cdb2f048336e543bb4425c7681ab5c80390f8139"
+          "cdb2f048336e543bb4425c7681ab5c80390f8139",
+          "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0160_trader_reality_v2.sql", "db/migrations_postgres/meta/_journal.json",
@@ -326,7 +332,8 @@
         "issue": "DEE-678", "status": "pass",
         "reviewedCommits": [
           "70387a4a4996514fa718db80c0d7a571b1a18583",
-          "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055"
+          "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
+          "536dc4682fd138fae4e2509c1dbc72e2479a2c2f"
         ],
         "reviewedFiles": [
           "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/index.ts",
@@ -340,7 +347,8 @@
         "reviewedCommits": [
           "50d69656045a81ba6efd943048e50bf76caa9265",
           "78ba19279976e4603316be9d1671c642b0949992",
-          "757c13a89ae35dce8910be5568318744d5a2d1a0"
+          "757c13a89ae35dce8910be5568318744d5a2d1a0",
+          "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -374,6 +382,28 @@
         "757c13a89ae35dce8910be5568318744d5a2d1a0"
       ],
       "scope": "Only the four confirmed exact-head findings were remediated within the admitted A/B/C/D surfaces; migration 0160, source allowlist, task/train/branch/PR boundary, DEE-672, DEE-674, DEE-620, and DEE-634 boundaries are unchanged."
+    },
+    "guardRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "3462378d9ad660291ed1aa3002e62734f3579ea6",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb",
+      "remediationCommits": [
+        "18d1607b363ce91d6e3d73b89859f47d12b820bc",
+        "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
+        "536dc4682fd138fae4e2509c1dbc72e2479a2c2f",
+        "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb"
+      ],
+      "authorizedSurfaces": "Existing contracts/schema-postgres/unpublished-0160/repository/projection/ingest/test/inventory/manifest/provenance surfaces only; immutable capture-source/account admission, protected per-scope frontier allocator/consumer, exact quarantineEventId linkage, and DB nonblank account scope are the only new internal surfaces.",
+      "scopePreservation": "No new source class, external API, migration number, task, branch, PR, retention/security policy, live/capital/holdout/production/Execution Server action, DEE-620 implementation, or DEE-634 implementation.",
+      "focusedEvidence": [
+        "affected contract/projection/ingress/migration/consumer-graph tests: 26/26 pass",
+        "pnpm typecheck: pass",
+        "fresh empty PostgreSQL migration through 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 6/6 pass",
+        "AST inventory: 149 sources / 115 consumers / 25 connector references with regenerated digests"
+      ]
     },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
