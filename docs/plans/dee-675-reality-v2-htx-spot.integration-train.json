@@ -122,18 +122,19 @@
       "integratedCommits": [
         "f9df8318d7e03c7f670f2002689ccb0145145314",
         "cdb2f048336e543bb4425c7681ab5c80390f8139",
-        "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67"
+        "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
+        "6aaa0af5b8c56f82434c420032a27e6d0879ad4c"
       ],
       "acceptanceEvidence": [
         "A fresh empty PostgreSQL database applied exactly one next-numbered 0160 migration successfully.",
-        "Four immutable organization/account-scoped ledgers plus two protected admission/frontier relations have deny RLS, exact lineage, digest-chain, and projection-frontier guards.",
+        "Four canonical organization/account-scoped ledgers and the immutable admission relation are append-only; the sixth frontier relation is mutable only through protected allocator/consumer functions, and all six have deny RLS.",
         "HTX-only ExecutionReport lineage and multiple distinct facts per immutable source are enforced without reinterpretation.",
-        "Real authenticated/anon CRUD denial, tenant isolation, concurrency, stale-head TOCTOU, and repository smoke proofs pass."
+        "Real authenticated/anon CRUD denial, tenant isolation, concurrency, stale-head TOCTOU, exact current-stable contradiction guards, and repository smoke proofs pass."
       ],
       "tests": [
         "migration bootstrap from empty database: pass",
-        "tests/integration/postgres-reality-v2.test.ts: 6/6 pass on a freshly migrated empty database",
-        "Reality/migration focused unit tests: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 7/7 pass on a freshly migrated disposable database",
+        "Reality focused unit tests: 25/25 pass",
         "pnpm db:smoke:postgres: pass",
         "pnpm typecheck and scoped eslint: pass"
       ],
@@ -191,10 +192,12 @@
       "integratedCommits": [
         "70387a4a4996514fa718db80c0d7a571b1a18583",
         "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
-        "536dc4682fd138fae4e2509c1dbc72e2479a2c2f"
+        "536dc4682fd138fae4e2509c1dbc72e2479a2c2f",
+        "d58387e844b30ec782e14d299c3493943c2b968f"
       ],
       "acceptanceEvidence": [
         "Duplicate, new fact, explicit correction, contradiction, and quarantine classifications are deterministic.",
+        "A missing source-native correction target persists as a truth-null CORRECTION_TARGET_NOT_FOUND quarantine and replays exactly without synthetic truth.",
         "Contradiction and release preserve last stable truth; only exact revision-linked SUPERSEDED changes it.",
         "Current and arbitrary knowledge-time folds seal exact frontier/policy/content digests.",
         "Identical ledgers replay identically across restart and broken event chains fail closed."
@@ -317,7 +320,8 @@
         "reviewedCommits": [
           "f9df8318d7e03c7f670f2002689ccb0145145314",
           "cdb2f048336e543bb4425c7681ab5c80390f8139",
-          "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67"
+          "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
+          "6aaa0af5b8c56f82434c420032a27e6d0879ad4c"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0160_trader_reality_v2.sql", "db/migrations_postgres/meta/_journal.json",
@@ -333,7 +337,8 @@
         "reviewedCommits": [
           "70387a4a4996514fa718db80c0d7a571b1a18583",
           "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
-          "536dc4682fd138fae4e2509c1dbc72e2479a2c2f"
+          "536dc4682fd138fae4e2509c1dbc72e2479a2c2f",
+          "d58387e844b30ec782e14d299c3493943c2b968f"
         ],
         "reviewedFiles": [
           "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/index.ts",
@@ -365,8 +370,8 @@
     ],
     "cumulativeChecks": [
       { "afterIssue": "DEE-676", "status": "pass", "commands": ["focused contracts 9/9 including typed metadata mutation cases", "typecheck", "scoped eslint"] },
-      { "afterIssue": "DEE-677", "status": "pass", "commands": ["fresh empty-db migration bootstrap through 0160", "PostgreSQL Reality adversarial 5/5", "PostgreSQL smoke", "migration identity 5/5", "typecheck", "scoped eslint"] },
-      { "afterIssue": "DEE-678", "status": "pass", "commands": ["projection 3/3", "PostgreSQL intent lifecycle and exact as-of replay", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-677", "status": "pass", "commands": ["fresh disposable database migration bootstrap through amended 0160", "PostgreSQL Reality adversarial 7/7", "PostgreSQL smoke", "migration identity 5/5", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-678", "status": "pass", "commands": ["Reality focused unit tests 25/25", "source-only missing correction target and superseded contradiction target PostgreSQL regressions", "exact as-of replay", "typecheck", "scoped eslint"] },
       { "afterIssue": "DEE-679", "status": "pass", "commands": ["AST source/consumer graph 149/115 and 25 connector references with path+content digests", "alias/bind/destructure/bracket/optional/direct-client/indirect negative fixtures", "D runtime and HTX FAIL-UNKNOWN tests 9/9", "typecheck", "scoped eslint"] }
     ],
     "changedHeadRemediation": {
@@ -403,6 +408,30 @@
         "fresh empty PostgreSQL migration through 0160: pass",
         "tests/integration/postgres-reality-v2.test.ts: 6/6 pass",
         "AST inventory: 149 sources / 115 consumers / 25 connector references with regenerated digests"
+      ]
+    },
+    "renewedReviewRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "15af6f1321adaeada0697184d716b9558d1d7424",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "d58387e844b30ec782e14d299c3493943c2b968f",
+      "remediationCommits": [
+        "6aaa0af5b8c56f82434c420032a27e6d0879ad4c",
+        "d58387e844b30ec782e14d299c3493943c2b968f"
+      ],
+      "scope": "Only missing-target correction preservation, current-stable SOURCE_CONTRADICTION enforcement, and current-evidence wording were remediated in existing ingest/repository/unpublished-0160/test/provenance surfaces.",
+      "historicalAdmissionWording": {
+        "status": "immutable-historical-text-superseded-for-current-evidence",
+        "note": "The admitted predecessor's four-table expectation remains byte-preserved for governance identity; current evidence records four canonical ledgers, one immutable admission relation, and one protected mutable frontier relation.",
+        "currentRelationEvidence": "All six relations are organization/account-scoped and deny-RLS; the four canonical ledgers plus admission relation are append-only, while frontier mutation is restricted to protected allocator/consumer functions."
+      },
+      "focusedEvidence": [
+        "all five Reality V2 focused unit files: 25/25 pass",
+        "pnpm typecheck and scoped eslint: pass",
+        "fresh disposable PostgreSQL migration through amended 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 7/7 pass",
+        "missing-target quarantine has no truth row and exact replay; superseded contradiction targets fail at repository and direct-SQL boundaries"
       ]
     },
     "fullDiffFrozen": true,
