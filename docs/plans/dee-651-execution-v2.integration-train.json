@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-651",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-667",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "ExecutionPolicy/Binding, ExecutionPlanV2, ExecutionAttemptV2, and raw ExecutionReportV2 contracts plus the single additive four-table PostgreSQL/RLS schema, typed repository substrate, nullable trader_orders V2 projection refs, and tenant/RLS/append-only evidence.",
       "dependencies": [],
@@ -85,7 +85,7 @@
     },
     {
       "issue": "DEE-668",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Atomically compose RiskAllowanceV2 claim and reservation transfer with policy-envelope membership, immutable plan sealing, one durable attempt/exact payload/effect identity, append-only bind events, and a post-commit-only network dispatcher.",
       "dependencies": ["DEE-667"],
@@ -151,7 +151,7 @@
     },
     {
       "issue": "DEE-669",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Remove synthetic fill/trade truth, persist immutable raw venue observations, make HTX timeout/unknown reconciliation-only with no blind resend, and preserve rejection/partial/residual/cancel/pre-sealed-replace semantics and append-only replay.",
       "dependencies": ["DEE-668"],
@@ -222,7 +222,7 @@
     },
     {
       "issue": "DEE-670",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Map and migrate or fail-close every legacy/non-V2 connector caller across paper, live, guardian, replay, observability, research harnesses, and tests; expose only the committed V2 attempt dispatcher to connector order placement; seal genuine TEST_ONLY Decision→RiskAllowance→policy→plan→attempt authority in local PostgreSQL without legacy simulated effects for the nine Human-ratified scientific/FHV/trace tests; preserve the two admitted official-scale fill-density gates by binding every existing historical modeled effect to genuine V2 authority in their test-only harness; and prove whole-repository static/runtime closure without claiming DEE-634 production completion.",
       "dependencies": ["DEE-669"],
@@ -391,7 +391,8 @@
         "476f5e2838c85dececb9c9f03e0f0d339d935bb2",
         "295e79224dc6d05513b82ce6d59ca5cf21afe3b4",
         "d3674607bcd3fe9821bc460b96f4c18b831abe5d",
-        "454ff96e5973293d6df792d671ff46cab8f530ae"
+        "454ff96e5973293d6df792d671ff46cab8f530ae",
+        "06edb1ab2f8c39bb7985da598817e64c2061d3f6"
       ],
       "tests": [
         "pnpm run validate:execution-v2-consumer-graph",
@@ -404,6 +405,9 @@
         "WAIA_DB_BACKEND=postgres WAIA_PG_INTEGRATION=1 tests/integration/postgres-execution-v2.test.ts / 9 tests",
         "remediation-focused Execution V2 and HTX connector unit files / 31 tests",
         "remediation real PostgreSQL authority/reconciliation file / 21 tests",
+        "WP7B representative segment / 5 tests with 806 authority-bound modeled fills",
+        "canonical official-scale probe / 2 tests with nonzero authority-bound modeled fills",
+        "umbrella unit stale-consumer assertion / 3 tests",
         "pnpm lint",
         "pnpm typecheck",
         "pnpm build",
@@ -424,10 +428,10 @@
     },
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "f9c3606d5fb9808c76ce2ff8fe3f2b139784440084277f0b1b20c01c941206d9",
-      "manifestCommit": "f870bbde4067b283dee86361c93c17093e8ad42a",
+      "manifestDigest": "3ffae69cc88cb1834bebc966703df0867517a0000bb2c5e7823a5cf5ddfe35bc",
+      "manifestCommit": "b9f09d838c86ce1e195be4aa458157fe35cc3fa2",
       "manifestPath": "docs/plans/dee-651-execution-v2.integration-train.json",
-      "reviewer": "Human-ratified Step-15 integration owner; Human-authorized 11-file DEE-670 correction, exact nine-test genuine V2 semantic correction, narrow TEST_ONLY DEE-634/PostgreSQL CI boundary, one public-ceremony shell fail-close correction, and exact-head P1/P2 remediation in existing V2 files plus only four named connector surfaces on 2026-08-21"
+      "reviewer": "Human-ratified Step-15 integration owner; Human-authorized PR #477 official-scale TEST_ONLY correction limited to the WP7B representative segment, canonical probe, their shared harness, and the two named CI jobs on 2026-08-22"
     },
     "admissionReviews": [
       {
@@ -511,9 +515,11 @@
           "476f5e2838c85dececb9c9f03e0f0d339d935bb2",
           "295e79224dc6d05513b82ce6d59ca5cf21afe3b4",
           "d3674607bcd3fe9821bc460b96f4c18b831abe5d",
-          "454ff96e5973293d6df792d671ff46cab8f530ae"
+          "454ff96e5973293d6df792d671ff46cab8f530ae",
+          "06edb1ab2f8c39bb7985da598817e64c2061d3f6"
         ],
         "reviewedFiles": [
+          ".github/workflows/ci.yml",
           ".github/workflows/postgres-integration.yml",
           "lib/trader/connectors/htx/htx-exchange-connector.ts",
           "lib/trader/connectors/htx/mappers.ts",
@@ -543,6 +549,9 @@
           "tests/integration/trader-paper-bar-close-loop.test.ts",
           "tests/integration/trader-paper-cycle-runner.test.ts",
           "tests/integration/trader-paper-p5-multi-strategy.test.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-scale-harness.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
           "tests/unit/control-replay-scientific-v2-driver-v1.test.ts",
           "tests/unit/fhv-btc-eth-execution-evidence.test.ts",
           "tests/unit/fhv-control-replay-cli.test.ts",
@@ -581,12 +590,12 @@
       {
         "afterIssue": "DEE-670",
         "status": "pass",
-        "commands": ["focused Execution V2, HTX connector, and consumer tests", "remediation real PostgreSQL authority/reconciliation tests", "nine-file PostgreSQL authority gate", "public-ceremony fail-close test", "eight sandbox-denied file retries", "consumer graph", "lint", "typecheck", "build", "canon", "PR governance"]
+        "commands": ["focused Execution V2, HTX connector, and consumer tests", "remediation real PostgreSQL authority/reconciliation tests", "nine-file PostgreSQL authority gate", "public-ceremony fail-close test", "WP7B representative segment with 806 authority-bound modeled fills", "canonical probe with nonzero authority-bound modeled fills", "umbrella unit stale-consumer assertion", "eight sandbox-denied file retries", "consumer graph", "lint", "typecheck", "build", "canon", "PR governance"]
       }
     ],
     "preFreezeValidation": {
-      "status": "pending",
-      "validatedHead": "454ff96e5973293d6df792d671ff46cab8f530ae",
+      "status": "pass",
+      "validatedHead": "06edb1ab2f8c39bb7985da598817e64c2061d3f6",
       "baseMain": "8aa3d316d407f2f1ded567e8bb44123657972113",
       "semanticConflict": false,
       "productionDatabaseMutated": false,
@@ -603,10 +612,11 @@
         "rebuilt A/D remediation: focused Execution V2, HTX, and consumer graph / 41 tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; static consumer graph zero violations; typecheck PASS; lint 0 errors; build PASS",
         "post-review C/D remediation: secret-safe transport uncertainty, required native quantity/fill evidence, raw mismatched-trade retention, and observed HTTP body-read failure / 44 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS",
         "final D remediation: sealed-timeout propagation, one bounded placement request, and credential-safe response evidence with an exact raw digest / 46 focused tests PASS; typecheck and scoped lint PASS",
-        "exact-head review remediation: durable stored-policy timeout authority, one deadline across fetch and body consumption, and credential-safe response keys and values / 47 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS"
+        "exact-head review remediation: durable stored-policy timeout authority, one deadline across fetch and body consumption, and credential-safe response keys and values / 47 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS",
+        "PR #477 official-scale correction: WP7B representative segment / 5 tests PASS with 806 modeled fills; canonical probe / 2 tests PASS with nonzero modeled fills; umbrella unit stale-consumer assertion / 3 tests PASS; typecheck PASS"
       ]
     },
-    "fullDiffFrozen": false,
+    "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   }
 }
