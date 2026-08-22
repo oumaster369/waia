@@ -38,17 +38,17 @@ state:
   remainingWorkPackages: [WP5]
   prNumber: 477
   prUrl: "https://github.com/oumaster369/waia/pull/477"
-  lastValidatedGitSha: d3c768d064dfbbd7f86ef4d6b4dad41093850cef
-  lastValidationAt: "2026-08-22T12:50:00+03:00"
+  lastValidatedGitSha: fa55fbc01cfdb3f1a25c61ad87fd34276b670baa
+  lastValidationAt: "2026-08-22T13:19:46+03:00"
   blockedReason: null
-  nextAction: "Complete affected manifest/canon/governance validation on the rebuilt frozen head, obtain one fresh exact-head adversarial review, then update PR #477 only if base/head remain unchanged."
+  nextAction: "Validate the Human-authorized 0157→0158/0159 reconciliation, refreeze the new-base manifest, obtain one fresh exact-base/exact-head adversarial review, then safely force-update PR #477 only if the remote lease remains 3e7205f."
 provenance:
   createdFrom: human-ratified-delegation
   gapRegistry: null
   supersedes: null
 humanApproval:
   authorizedAt: "2026-08-21"
-  authorizedBaseMain: 8aa3d316d407f2f1ded567e8bb44123657972113
+  authorizedBaseMain: 9fd25a456bf5f785eb9e5e99760a654fc5a311c2
   dependencyPullRequest: 475
   baseHeadPullRequest: 476
   authority: "Explicit Human ratification of Step 15, the four-child Integration Train, the additive four-table PostgreSQL/RLS substrate, and HTX FAIL-UNKNOWN semantics."
@@ -78,9 +78,12 @@ authority, durable pre-network effect binding, fail-unknown HTX behavior, and a 
 legacy caller cutover. Execution checks mechanical envelope membership only. It never recomputes
 Decision economics, invents post-trade truth, or treats a legacy order state as capital authority.
 
-The verified base is `origin/main@8aa3d316d407f2f1ded567e8bb44123657972113`, which contains the
-Human-merged DEE-650 / PR #475 dependency and the file-disjoint DEE-619 / PR #476 squash. DEE-651
-has no duplicate branch or PR. DEE-634 remains downstream; DEE-620 is separate and excluded.
+The verified base is `origin/main@9fd25a456bf5f785eb9e5e99760a654fc5a311c2`, which contains the
+Human-merged DEE-650 / PR #475 dependency, the file-disjoint DEE-619 / PR #476 squash, and
+DEE-671 / PR #478 Treasury migrations `0158`/`0159` that explicitly reserve Execution `0157` for
+PR #477. The four shared schema/provenance surfaces were mechanically reconciled without changing
+Treasury semantics. DEE-651 has no duplicate branch or PR. DEE-634 remains downstream; DEE-620 is
+separate and excluded.
 
 This is a T3 batch because it joins capital-authority contracts, one additive Postgres migration,
 RLS, transactional row locking, connector effects, and global caller closure. The Human explicitly

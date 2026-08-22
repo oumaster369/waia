@@ -65,12 +65,12 @@
         "Low-level plan persistence independently reconstructs exact stored-policy membership and conservative plan/slice notional, refusing a self-consistent forged effect above its declared ceiling."
       ],
       "integratedCommits": [
-        "15e09c3f8d19da75711b97c48cae69bf167abfef",
-        "75101357561774c286358614f897c8b4366595ee",
-        "8828f52a4306f419599d670c11c69d2e79e8060e",
-        "f5ef76e79cd37992e9774f9769b5a1631ca86c9b",
-        "bc35eba8da9213ed28df55497a07f31cd9d785d7",
-        "8e857e1ab4ed30bc4ec032d97ff8a1aa78954836"
+        "39ef4ca09544d8da53d28bfba54ab344e902196e",
+        "bc3de05b74822577a31be2d8d92be23c8b714844",
+        "8f29e18bbaf6eab547a2039af934b9e59f2be764",
+        "df12a4efd6a47b615ff5f3f3edd3a3b85fed9fec",
+        "65018261adfe820c8347fb6ef283635c4bafd9b3",
+        "2438375900fa097f213f7f1f58d7e4bea5c887c1"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
@@ -132,11 +132,11 @@
         "The final submit gate reconstructs stored policy/plan/attempt/order/allowance authority under lock, reads wall-clock time only after lock acquisition, and passes the timeout reloaded from the durable stored policy to the network callback; expiry during contention performs zero network callbacks."
       ],
       "integratedCommits": [
-        "262d78a5ed97c9c40e706c667a7b71b68953c35d",
-        "8268e796ff5011484e4d6777ab7df61b61b70c44",
-        "321f907315154527d0d25a486b5ce77d72b929df",
-        "d09c493243fdbf844ec51b87dae919b16ba909f5",
-        "6df44503fc7c1d56fab90993052a9c8d5e868023"
+        "085fa936363a8f1282a64b62a57c18504eb4cfcc",
+        "2d6d0cd4ec246a25df8a10c97ad6f027df30a2bf",
+        "3cdebef8f3b0f76e998a8a4f1acb8410bf0137ff",
+        "addb2f1d15b0801fec784cc64c0fe3911407e47b",
+        "9bc44118a096414c264b58e174eaed24cd8cbc01"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/trader-execution-v2-authority.test.ts",
@@ -202,12 +202,12 @@
         "Focused reject, partial/residual, cancel/pre-sealed-replace, append-only replay, restart, and post-network-timeout proofs passed."
       ],
       "integratedCommits": [
-        "809d8100b3c4414799768a48ae68a517b8be5c9d",
-        "15a5a0db5de8f9322ef11cbc4bba39fd69ea446f",
-        "a42f31fe4f83e68bff57758af40a13609b5b4840",
-        "0453363205d82b8ff7862f4fcfc5a5fee2a9c9e2",
-        "313f879cebb4622dd22bd2994e24655069f0745f",
-        "0f2b6d38a3b37b4351d200a9c1b1f01dfb03c900"
+        "cb0fd17d963625eefb300836875a9bc7ba63cdd1",
+        "86e4422b564a0204dd025410a3d031610e3dd625",
+        "aceb5f4c343c8aef089abeb85c5eaaf042db7299",
+        "2153807f7e3e4365cf30706efcf6833a0a18cee3",
+        "f7617e496a889fc7092fa9bf6eab8296e0965a42",
+        "9fddb5ddf015c65a790b03ec680c5fd985e00a58"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-execution-v2-fail-unknown.test.ts tests/unit/trader-order-execution-service.test.ts tests/unit/trader-order-reconciliation-service.test.ts",
@@ -379,21 +379,21 @@
         "The Human-authorized official-scale correction preserves the existing fill-density/accounting workload through a test-only PostgreSQL authority adapter; each historical modeled placement occurs only inside the committed V2 dispatcher callback, and no production execution path is changed."
       ],
       "integratedCommits": [
-        "d2e1eee7cc805e2900de7b5dd8f452b11ce8c549",
-        "752e26a4f77a384b5d092bc306d4bc8a2358b1fa",
-        "3ed1b447f5591a9287d1e64d11178e83cf735688",
-        "6f938fe47392fad5ada46533216f6fd46814ce87",
-        "8ee00892cdc47d62871d652ab467fc20a113d8f8",
-        "85b94eca1ac30fc2ef3855570fe3c6c00b275469",
-        "f7b2d66c78710142829c9a4f1e5dd6859c758af9",
-        "e3fb3f8ba3c81efe0258e0bc89b8711ad32fc003",
-        "f958320b3bf97c2dfecd563469759e3f3a9da9f3",
-        "a2e25224b74a699ef5d7396f712c609c813a25cb",
-        "cb4dab5a38af7408c2aa4a5cadfd4cac33b491f9",
-        "20c005d181ff90b157ae764f3e4168bac22cf33c",
-        "b8306f45f0c316de0519f56eddbe0fde2ff2173c",
-        "e9a53bb9090e5e06b3200dcee607660db52856aa",
-        "d3c768d064dfbbd7f86ef4d6b4dad41093850cef"
+        "25d7e82d23ab346123fef667b0298c0204c9b6ee",
+        "88b82bf29262429a62f6bb4431a4f085bd370bae",
+        "0758d3778190e557e773c3a478139fdaf1886b4c",
+        "cf08f7476b82bbc1d56cc4d448cbc793ee33a561",
+        "df8e8705a4add043ce807e70d0794b5088203379",
+        "5a398155e904eb5d4739f45a4b36dc6d95fb623e",
+        "d5fd2abf7886955ee794e053b032f25bf7e737df",
+        "7ad36fabb7db60c2c47436f30461f6fa870deabd",
+        "2950881673e9166db1fb07d9d71a66271565f5f9",
+        "26677d2103db22d56a4ab0ca2db80376a9932656",
+        "216becd8001a9f67aceade30767e1cf8c64187c7",
+        "259fe7f331c7f7857f6305c786f921f29af3c60e",
+        "8d14762190a1d9f8a3348f4eba748174fd8ad38b",
+        "239e967a0bcb38acccf475078278e51e903f10e0",
+        "fa55fbc01cfdb3f1a25c61ad87fd34276b670baa"
       ],
       "tests": [
         "pnpm run validate:execution-v2-consumer-graph",
@@ -430,7 +430,7 @@
     "preImplementationAdmission": {
       "status": "pass",
       "manifestDigest": "3ffae69cc88cb1834bebc966703df0867517a0000bb2c5e7823a5cf5ddfe35bc",
-      "manifestCommit": "1a506bf0d7a69200094356efa4ed476f2ae0a9a9",
+      "manifestCommit": "37c46e0c2ed27844f248afed3b7f6ec6bcf43031",
       "manifestPath": "docs/plans/dee-651-execution-v2.integration-train.json",
       "reviewer": "Human-ratified Step-15 integration owner; Human-authorized PR #477 official-scale TEST_ONLY correction limited to the WP7B representative segment, canonical probe, their shared harness, and the two named CI jobs on 2026-08-22"
     },
@@ -439,12 +439,12 @@
         "issue": "DEE-667",
         "status": "pass",
         "reviewedCommits": [
-          "15e09c3f8d19da75711b97c48cae69bf167abfef",
-          "75101357561774c286358614f897c8b4366595ee",
-          "8828f52a4306f419599d670c11c69d2e79e8060e",
-          "f5ef76e79cd37992e9774f9769b5a1631ca86c9b",
-          "bc35eba8da9213ed28df55497a07f31cd9d785d7",
-          "8e857e1ab4ed30bc4ec032d97ff8a1aa78954836"
+          "39ef4ca09544d8da53d28bfba54ab344e902196e",
+          "bc3de05b74822577a31be2d8d92be23c8b714844",
+          "8f29e18bbaf6eab547a2039af934b9e59f2be764",
+          "df12a4efd6a47b615ff5f3f3edd3a3b85fed9fec",
+          "65018261adfe820c8347fb6ef283635c4bafd9b3",
+          "2438375900fa097f213f7f1f58d7e4bea5c887c1"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0157_trader_execution_v2.sql",
@@ -463,11 +463,11 @@
         "issue": "DEE-668",
         "status": "pass",
         "reviewedCommits": [
-          "262d78a5ed97c9c40e706c667a7b71b68953c35d",
-          "8268e796ff5011484e4d6777ab7df61b61b70c44",
-          "321f907315154527d0d25a486b5ce77d72b929df",
-          "d09c493243fdbf844ec51b87dae919b16ba909f5",
-          "6df44503fc7c1d56fab90993052a9c8d5e868023"
+          "085fa936363a8f1282a64b62a57c18504eb4cfcc",
+          "2d6d0cd4ec246a25df8a10c97ad6f027df30a2bf",
+          "3cdebef8f3b0f76e998a8a4f1acb8410bf0137ff",
+          "addb2f1d15b0801fec784cc64c0fe3911407e47b",
+          "9bc44118a096414c264b58e174eaed24cd8cbc01"
         ],
         "reviewedFiles": [
           "lib/trader/execution/v2/authority-postgres.ts",
@@ -483,12 +483,12 @@
         "issue": "DEE-669",
         "status": "pass",
         "reviewedCommits": [
-          "809d8100b3c4414799768a48ae68a517b8be5c9d",
-          "15a5a0db5de8f9322ef11cbc4bba39fd69ea446f",
-          "a42f31fe4f83e68bff57758af40a13609b5b4840",
-          "0453363205d82b8ff7862f4fcfc5a5fee2a9c9e2",
-          "313f879cebb4622dd22bd2994e24655069f0745f",
-          "0f2b6d38a3b37b4351d200a9c1b1f01dfb03c900"
+          "cb0fd17d963625eefb300836875a9bc7ba63cdd1",
+          "86e4422b564a0204dd025410a3d031610e3dd625",
+          "aceb5f4c343c8aef089abeb85c5eaaf042db7299",
+          "2153807f7e3e4365cf30706efcf6833a0a18cee3",
+          "f7617e496a889fc7092fa9bf6eab8296e0965a42",
+          "9fddb5ddf015c65a790b03ec680c5fd985e00a58"
         ],
         "reviewedFiles": [
           "lib/trader/execution/execution-service.ts",
@@ -504,21 +504,21 @@
         "issue": "DEE-670",
         "status": "pass",
         "reviewedCommits": [
-          "d2e1eee7cc805e2900de7b5dd8f452b11ce8c549",
-          "752e26a4f77a384b5d092bc306d4bc8a2358b1fa",
-          "3ed1b447f5591a9287d1e64d11178e83cf735688",
-          "6f938fe47392fad5ada46533216f6fd46814ce87",
-          "8ee00892cdc47d62871d652ab467fc20a113d8f8",
-          "85b94eca1ac30fc2ef3855570fe3c6c00b275469",
-          "f7b2d66c78710142829c9a4f1e5dd6859c758af9",
-          "e3fb3f8ba3c81efe0258e0bc89b8711ad32fc003",
-          "f958320b3bf97c2dfecd563469759e3f3a9da9f3",
-          "a2e25224b74a699ef5d7396f712c609c813a25cb",
-          "cb4dab5a38af7408c2aa4a5cadfd4cac33b491f9",
-          "20c005d181ff90b157ae764f3e4168bac22cf33c",
-          "b8306f45f0c316de0519f56eddbe0fde2ff2173c",
-          "e9a53bb9090e5e06b3200dcee607660db52856aa",
-          "d3c768d064dfbbd7f86ef4d6b4dad41093850cef"
+          "25d7e82d23ab346123fef667b0298c0204c9b6ee",
+          "88b82bf29262429a62f6bb4431a4f085bd370bae",
+          "0758d3778190e557e773c3a478139fdaf1886b4c",
+          "cf08f7476b82bbc1d56cc4d448cbc793ee33a561",
+          "df8e8705a4add043ce807e70d0794b5088203379",
+          "5a398155e904eb5d4739f45a4b36dc6d95fb623e",
+          "d5fd2abf7886955ee794e053b032f25bf7e737df",
+          "7ad36fabb7db60c2c47436f30461f6fa870deabd",
+          "2950881673e9166db1fb07d9d71a66271565f5f9",
+          "26677d2103db22d56a4ab0ca2db80376a9932656",
+          "216becd8001a9f67aceade30767e1cf8c64187c7",
+          "259fe7f331c7f7857f6305c786f921f29af3c60e",
+          "8d14762190a1d9f8a3348f4eba748174fd8ad38b",
+          "239e967a0bcb38acccf475078278e51e903f10e0",
+          "fa55fbc01cfdb3f1a25c61ad87fd34276b670baa"
         ],
         "reviewedFiles": [
           ".github/workflows/ci.yml",
@@ -597,8 +597,8 @@
     ],
     "preFreezeValidation": {
       "status": "pass",
-      "validatedHead": "d3c768d064dfbbd7f86ef4d6b4dad41093850cef",
-      "baseMain": "8aa3d316d407f2f1ded567e8bb44123657972113",
+      "validatedHead": "fa55fbc01cfdb3f1a25c61ad87fd34276b670baa",
+      "baseMain": "9fd25a456bf5f785eb9e5e99760a654fc5a311c2",
       "semanticConflict": false,
       "productionDatabaseMutated": false,
       "commands": [
@@ -615,7 +615,9 @@
         "post-review C/D remediation: secret-safe transport uncertainty, required native quantity/fill evidence, raw mismatched-trade retention, and observed HTTP body-read failure / 44 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS",
         "final D remediation: sealed-timeout propagation, one bounded placement request, and credential-safe response evidence with an exact raw digest / 46 focused tests PASS; typecheck and scoped lint PASS",
         "exact-head review remediation: durable stored-policy timeout authority, one deadline across fetch and body consumption, and credential-safe response keys and values / 47 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS",
-        "PR #477 official-scale correction: WP7B representative segment / 5 tests PASS with 806 modeled fills; canonical probe / 2 tests PASS with nonzero modeled fills; umbrella unit stale-consumer assertion / 3 tests PASS; typecheck PASS"
+        "PR #477 official-scale correction: WP7B representative segment / 5 tests PASS with 806 modeled fills; canonical probe / 2 tests PASS with nonzero modeled fills; umbrella unit stale-consumer assertion / 3 tests PASS; typecheck PASS",
+        "origin/main reconciliation: Execution migration 0157 retained before Treasury 0158/0159; journal, PostgreSQL schema, DEE-64 tracker, and migration-identity expectation mechanically combined without Treasury semantic change",
+        "fresh disposable PostgreSQL 16 full migration apply through 0157/0158/0159 PASS; affected migration/Treasury identity tests 19/19 PASS; real PostgreSQL Execution V2 integration 21/21 PASS; typecheck and canon PASS"
       ]
     },
     "fullDiffFrozen": true,
