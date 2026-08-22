@@ -25,6 +25,7 @@ import {
   replayRealityProjectionV2Postgres,
 } from "@/lib/trader/reality/v2/replay";
 import {
+  appendContradictoryRealityTruthV2FromWriter,
   appendObservedRealityTruthV2FromWriter,
   appendReleasedRealityQuarantineV2FromWriter,
   appendRealitySourceObservationV2FromWriter,
@@ -902,6 +903,20 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     expect(correction.projection?.stableEntries[0]?.truthRecordId)
       .toBe(correction.truthRecord?.truthRecordId);
 
+    await expect(runWaiaPostgresTransaction(db, (tx) =>
+      appendContradictoryRealityTruthV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        disputed.sourceReport,
+        base.truthRecord!,
+        ["SOURCE_ASSERTION_CONTRADICTION"],
+      ))).rejects.toThrow(/exact current stable truth/);
+    await expect(attemptDirectQuarantine(
+      "SOURCE_CONTRADICTION",
+      base.truthRecord!.truthRecordId,
+      "superseded-stable-target",
+    )).rejects.toThrow(/current stable truth/);
+
     const restarted = await readCurrentRealityProjectionV2Postgres(
       db,
       { organizationId: orgA, accountId: ACCOUNT },
@@ -911,6 +926,45 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       db,
       { organizationId: orgB, accountId: ACCOUNT },
     )).toBeNull();
+  });
+
+  it("preserves a missing correction target as a source-only quarantine and replays it exactly", async () => {
+    const raw = await capture(db, orgA, SOURCE_A, "missing-correction-target");
+    const result = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(raw.receipt, "2", "missing-revision"),
+    );
+
+    expect(result.classification).toBe("QUARANTINED");
+    expect(result.truthRecord).toBeNull();
+    expect(result.projection?.stableEntries).toEqual([]);
+    expect(result.projection?.uncertainties).toMatchObject([{
+      sourceReportId: result.sourceReport.sourceReportId,
+      marker: "SOURCE_CONTRADICTION",
+      reasonCodes: ["CORRECTION_TARGET_NOT_FOUND"],
+    }]);
+    expect(await listTruthRecordsV2(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+    )).toEqual([]);
+    const events = await listRealityEventsV2(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+    );
+    expect(events).toMatchObject([{
+      eventType: "QUARANTINED",
+      sourceReportId: result.sourceReport.sourceReportId,
+      truthRecordId: null,
+      relatedTruthRecordId: null,
+      quarantineEventId: null,
+      reasonCodes: ["CORRECTION_TARGET_NOT_FOUND"],
+    }]);
+    expect(await replayRealityProjectionV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      result.projection!.knowledgeAsOfUtc,
+    )).toEqual(result.projection);
   });
 
   it("authors a strict scope frontier after lock despite reversed transaction start order", async () => {

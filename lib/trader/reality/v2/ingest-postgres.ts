@@ -147,21 +147,32 @@ export async function ingestRealitySourceReportV2FromWriter(
         projection: await persistCanonicalRealityProjectionV2FromWriter(executor, context),
       });
     }
+    await appendUnverifiableRealityQuarantineV2FromWriter(
+      executor,
+      context,
+      source,
+      ["CORRECTION_TARGET_NOT_FOUND"],
+    );
+    return Object.freeze({
+      classification: "QUARANTINED",
+      sourceReport: source,
+      truthRecord: null,
+      projection: await persistCanonicalRealityProjectionV2FromWriter(executor, context),
+    });
   }
 
   const stableSubject = existingTruths.find((truth) =>
     sameSubject(source, truth) && truth.markers.length === 0 &&
     !existingTruths.some((candidate) => candidate.supersedesTruthRecordId === truth.truthRecordId));
-  if (sameNative.length > 0 || stableSubject || priorRevision !== null) {
-    const related = stableSubject ?? sameNative.at(-1) ?? null;
+  if (sameNative.length > 0 || stableSubject) {
+    const related = stableSubject ?? sameNative.at(-1);
+    if (!related) throw new Error("Reality contradiction requires current stable truth");
     const candidate = await appendContradictoryRealityTruthV2FromWriter(
       executor,
       context,
       source,
       related,
-      [related && priorRevision === null
-        ? "SOURCE_ASSERTION_CONTRADICTION"
-        : "CORRECTION_TARGET_NOT_FOUND"],
+      ["SOURCE_ASSERTION_CONTRADICTION"],
     );
     return Object.freeze({
       classification: "SOURCE_CONTRADICTION",
