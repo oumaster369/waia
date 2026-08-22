@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: WP-5
   completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
+  prNumber: 480
+  prUrl: "https://github.com/oumaster369/waia/pull/480"
   lastValidatedGitSha: 89cecd2f829dddf64ab5f00a792b976fc800e669
   lastValidationAt: 2026-08-22
   blockedReason: null
-  nextAction: "Open the single DEE-672 PR to main for Human review and squash merge; never merge autonomously."
+  nextAction: "Await green PR #480 CI and Human visual review; Human squash-merges to main. Never merge autonomously."
 provenance:
   createdFrom: chat
   gapRegistry: null
