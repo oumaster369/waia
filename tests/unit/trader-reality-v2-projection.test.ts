@@ -48,6 +48,7 @@ function source(
     },
     lineage: {
       lineageKind: "RAW_CAPTURE_V1",
+      rawCaptureSourceId: "00000000-0000-4000-8000-000000067811",
       rawCaptureReceiptDigestHex: DIGEST_A,
       rawBytesDigestHex: DIGEST_B,
       storageBindingDigestHex: DIGEST_C,
@@ -114,6 +115,7 @@ function ledger() {
     sourceReportId: baseSource.sourceReportId,
     truthRecordId: baseTruth.truthRecordId,
     relatedTruthRecordId: null,
+    quarantineEventId: null,
     reasonCodes: [],
     knowledgeAtUtc: "2026-08-22T10:00:01.000Z",
   });
@@ -122,6 +124,7 @@ function ledger() {
     sourceReportId: disputedSource.sourceReportId,
     truthRecordId: disputedTruth.truthRecordId,
     relatedTruthRecordId: baseTruth.truthRecordId,
+    quarantineEventId: null,
     reasonCodes: ["SOURCE_ASSERTION_CONTRADICTION"],
     knowledgeAtUtc: "2026-08-22T10:00:02.000Z",
   });
@@ -129,7 +132,8 @@ function ledger() {
     eventType: "RELEASED",
     sourceReportId: disputedSource.sourceReportId,
     truthRecordId: disputedTruth.truthRecordId,
-    relatedTruthRecordId: null,
+    relatedTruthRecordId: baseTruth.truthRecordId,
+    quarantineEventId: contradicted.realityEventId,
     reasonCodes: ["QUARANTINE_RESOLVED_WITHOUT_PROMOTION"],
     knowledgeAtUtc: "2026-08-22T10:00:03.000Z",
   });
@@ -138,6 +142,7 @@ function ledger() {
     sourceReportId: correctedSource.sourceReportId,
     truthRecordId: correctedTruth.truthRecordId,
     relatedTruthRecordId: baseTruth.truthRecordId,
+    quarantineEventId: null,
     reasonCodes: ["SOURCE_NATIVE_CORRECTION"],
     knowledgeAtUtc: "2026-08-22T10:00:04.000Z",
   });

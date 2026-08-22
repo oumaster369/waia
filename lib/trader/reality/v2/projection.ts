@@ -49,6 +49,10 @@ export function foldRealityProjectionV2(
   const truthById = new Map(truths.map((truth) => [truth.truthRecordId, truth]));
   const stable = new Map<string, TruthRecordV2>();
   const uncertain = new Map<string, RealityProjectionUncertaintyV2>();
+  const quarantineCausality = new Map<string, Readonly<{
+    truthRecordId: string | null;
+    relatedTruthRecordId: string | null;
+  }>>();
   let prior: RealityEventV2 | null = null;
 
   for (const event of events) {
@@ -84,21 +88,32 @@ export function foldRealityProjectionV2(
         throw new Error("SUPERSEDED target is not the last stable truth");
       }
       stable.set(key, truth);
-      uncertain.delete(related.sourceReportId);
-      uncertain.delete(truth.sourceReportId);
+      for (const [episodeId, episode] of uncertain) {
+        if (episode.sourceReportId === related.sourceReportId ||
+          episode.sourceReportId === truth.sourceReportId) {
+          uncertain.delete(episodeId);
+          quarantineCausality.delete(episodeId);
+        }
+      }
     } else if (event.eventType === "SOURCE_CONTRADICTION") {
       if (!truth || !related || !truth.markers.includes("SOURCE_CONTRADICTION") ||
         stable.get(subjectKey(related.subject))?.truthRecordId !== related.truthRecordId) {
         throw new Error("SOURCE_CONTRADICTION must preserve an exact stable target");
       }
-      uncertain.set(source.sourceReportId, Object.freeze({
+      uncertain.set(event.realityEventId, Object.freeze({
+        quarantineEventId: event.realityEventId,
         sourceReportId: source.sourceReportId,
         subject: source.subject,
         marker: "SOURCE_CONTRADICTION",
         reasonCodes: event.reasonCodes,
       }));
+      quarantineCausality.set(event.realityEventId, Object.freeze({
+        truthRecordId: truth.truthRecordId,
+        relatedTruthRecordId: related.truthRecordId,
+      }));
     } else if (event.eventType === "QUARANTINED") {
-      uncertain.set(source.sourceReportId, Object.freeze({
+      uncertain.set(event.realityEventId, Object.freeze({
+        quarantineEventId: event.realityEventId,
         sourceReportId: source.sourceReportId,
         subject: source.subject,
         marker: source.attributionStatus === "UNATTRIBUTED"
@@ -106,8 +121,25 @@ export function foldRealityProjectionV2(
           : "SOURCE_CONTRADICTION",
         reasonCodes: event.reasonCodes,
       }));
+      quarantineCausality.set(event.realityEventId, Object.freeze({
+        truthRecordId: truth?.truthRecordId ?? null,
+        relatedTruthRecordId: related?.truthRecordId ?? null,
+      }));
     } else if (event.eventType === "RELEASED") {
-      uncertain.delete(source.sourceReportId);
+      if (event.quarantineEventId === null) {
+        throw new Error("RELEASED requires exact quarantine episode identity");
+      }
+      const causal = quarantineCausality.get(event.quarantineEventId);
+      const uncertainty = uncertain.get(event.quarantineEventId);
+      if (!truth || truth.sourceReportId !== source.sourceReportId ||
+        !truth.markers.includes("SOURCE_CONTRADICTION") || !causal || !uncertainty ||
+        uncertainty.sourceReportId !== source.sourceReportId ||
+        causal.truthRecordId !== truth.truthRecordId ||
+        causal.relatedTruthRecordId !== (related?.truthRecordId ?? null)) {
+        throw new Error("RELEASED must resolve the exact causally linked quarantine");
+      }
+      uncertain.delete(event.quarantineEventId);
+      quarantineCausality.delete(event.quarantineEventId);
     }
     prior = event;
   }
