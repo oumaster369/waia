@@ -1,29 +1,15 @@
-import { createHash, randomUUID } from "node:crypto";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-
-import {
-  applyResearchReplaySqlitePragmas,
-  getDb,
-  getRawSqliteDatabase,
-  resetWaiaSqliteSingleton,
-} from "@/db/client";
+import { createHash } from "node:crypto";
 import {
   ACCOUNTING_BASIS_METHOD,
   ACCOUNTING_ENGINE_ID,
   ACCOUNTING_FRONTIER_SCHEMA_VERSION,
   computeAccountingSemanticDigest,
 } from "@/lib/trader/accounting";
-import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import { COST_MODEL_VERSION_V1 } from "@/lib/trader/execution/cost-model";
-import {
-  createOrderExecutionServiceFromDeps,
-  createSqliteOrderRepository,
-} from "@/lib/trader/execution";
-import { closeIdhpsSession, openIdhpsSession } from "@/lib/trader/execution/idhps-session-registry";
+import type {
+  TestOnlyExecutionV2AuthorityPort,
+  TestOnlyExecutionV2AuthorityProof,
+} from "@/lib/trader/execution/v2/test-only-authority-port";
 import {
   buildDecisionEconomicsV2Record,
   buildV2WhyNotCashJson,
@@ -38,7 +24,6 @@ import {
   CONTROL_REPLAY_OFFICIAL_MARKET_AUTHORITY,
   CONTROL_REPLAY_TEST_ONLY_DETERMINISTIC_CORPUS,
 } from "@/lib/trader/observability/control-replay-preholdout-source-corpus-v1";
-import { createLifecycleRecorder, createSqliteLifecycleRepository } from "@/lib/trader/lifecycle";
 import {
   CONTROL_REPLAY_AUTHORITY_IDENTITY,
   assertControlReplayTestOnlyAuthorityV1,
@@ -56,7 +41,6 @@ import { computeStopBasedQuantity } from "@/lib/trader/portfolio/stop-based-sizi
 import { runExecutorReadyEndToEndV1 } from "@/lib/trader/research/challengers/rv-state-conditional-challenger-v1";
 import {
   assertAuthorityChainStageCompleteness,
-  assertExecutionWithinRiskAuthority,
   assertHypothesisConfidenceNonAuthoritative,
   AUTHORITY_CHAIN_STAGES,
   AuthorityChainViolationError,
@@ -64,17 +48,7 @@ import {
   V2_CAPITAL_AUTHORITY_PATH,
   type AuthorityChainStage,
 } from "@/lib/trader/risk/authority-chain";
-import { seedFhvSqliteResearchOrganization } from "@/lib/trader/observability/fhv-sqlite-research-org-seed";
-import {
-  createKillSwitchResolver,
-  createRiskEngineService,
-  createSqliteKillSwitchRepository,
-} from "@/lib/trader/risk";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
-import { createSqliteRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
-import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
-import type { TraderAuditInput } from "@/lib/trader/types";
-import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 export const CONTROL_REPLAY_SCIENTIFIC_V2_DRIVER_VERSION =
   "control-replay-scientific-v2-driver/v1" as const;
@@ -105,6 +79,7 @@ export type ScientificControlReplayV2Result = {
   executionQuantity: string;
   orderId: string | null;
   fillId: string | null;
+  executionV2AuthorityProof: TestOnlyExecutionV2AuthorityProof | null;
   parityDigest: string;
   accountingSemanticDigest: string;
   executablePolicyDigest: typeof EXECUTABLE_POLICY_DIGEST_UNAVAILABLE;
@@ -255,78 +230,6 @@ function expectEscapePrevented(surface: ProductionSurface): void {
   }
 }
 
-/** Real mock Execution service (no historical short-circuit) for TEST_ONLY CR. */
-async function createControlReplayMockExecutionSession(input: { organizationId: string }): Promise<{
-  execution: ReturnType<typeof createOrderExecutionServiceFromDeps>;
-  cleanup: () => void;
-}> {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-cr-v2-"));
-  const dbPath = path.join(tempDir, "control-replay-v2.sqlite");
-  process.env.DATABASE_URL = dbPath;
-  closeIdhpsSession();
-  resetWaiaSqliteSingleton();
-  const db = getDb();
-  migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
-  applyResearchReplaySqlitePragmas(getRawSqliteDatabase());
-  openIdhpsSession(getRawSqliteDatabase(), { enableBans: false });
-
-  seedFhvSqliteResearchOrganization({
-    db,
-    organizationId: input.organizationId,
-    operatorId: "00000000-0000-4000-8000-0000000000cr",
-  });
-  const limitsService = createSqliteRiskLimitsService(db);
-  await limitsService.upsertLimitsForOrg(requireOrgContext(input.organizationId), {
-    ...DEFAULT_ORG_RISK_LIMITS,
-  });
-
-  const nowMs = () => 1_700_000_000_000;
-  const writeAudit = (_input: TraderAuditInput): string => {
-    void _input;
-    return "cr-v2-audit";
-  };
-  const connector = new MockExchangeConnector({ nowMs });
-  await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
-  const orderRepository = createSqliteOrderRepository(db);
-  const killSwitchResolver = createKillSwitchResolver({
-    repository: createSqliteKillSwitchRepository(db),
-    nowMs,
-  });
-  const riskEngine = createRiskEngineService({
-    limitsService,
-    killSwitchResolver,
-    rateStore: createInMemoryOrderRateStore(),
-    writeAudit,
-    nowMs,
-    newDecisionId: () => randomUUID(),
-  });
-  const lifecycleRecorder = createLifecycleRecorder({
-    repository: createSqliteLifecycleRepository(db),
-    nowMs,
-  });
-  const execution = createOrderExecutionServiceFromDeps({
-    riskEngine,
-    orderRepository,
-    killSwitchResolver,
-    connectorForMode: () => connector,
-    writeAudit,
-    nowMs,
-    lifecycleRecorder,
-  });
-  return {
-    execution,
-    cleanup: () => {
-      closeIdhpsSession();
-      resetWaiaSqliteSingleton();
-      try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch {
-        // best-effort
-      }
-    },
-  };
-}
-
 export type ControlReplayMarketAuthorityV1 =
   | { class: typeof CONTROL_REPLAY_TEST_ONLY_DETERMINISTIC_CORPUS }
   | {
@@ -352,6 +255,8 @@ export type RunScientificControlReplayV2Input = {
   omitStages?: readonly AuthorityChainStage[];
   skipExecutionSubmit?: boolean;
   convictionValue?: number;
+  /** Injected only by the nine Human-admitted PostgreSQL test surfaces. */
+  testOnlyExecutionV2Authority?: TestOnlyExecutionV2AuthorityPort;
 };
 
 /**
@@ -559,154 +464,133 @@ export async function runScientificControlReplayV2Ceremony(
   let riskApprovedQuantity = desiredQuantity;
   let executionQuantity = "0";
   let orderId: string | null = null;
-  let fillId: string | null = null;
+  const fillId: string | null = null;
+  let executionV2AuthorityProof: TestOnlyExecutionV2AuthorityProof | null = null;
   let orderCount = 0;
-  let fillCount = 0;
+  const fillCount = 0;
 
-  const session = await createControlReplayMockExecutionSession({ organizationId });
-  try {
-    const orgContext = requireOrgContext(organizationId);
-    if (!omit.has("RISK") && !omit.has("EXECUTION") && !input.skipExecutionSubmit) {
-      if (evRange.decisionActionable) {
-        const submitted = await session.execution.submitOrder(orgContext, {
-          clientOrderId: `cr-v2-${forecastId.slice(0, 8)}`,
-          idempotencyKey: `cr-v2-idem-${forecastId}`,
-          executionMode: "mock",
-          symbol: "BTC/USDT",
-          side: "buy",
-          type: "market",
-          quantity: desiredQuantity,
-          referencePrice: entryPrice,
-          accountKey: "default",
-          accountState: {
-            positions: [],
-            openOrderCount: 0,
-            dailyPnl: "0",
-            drawdown: "0",
-            quoteExposureByCurrency: {},
-            availableBalanceUsdt: account.availableBalanceUsdt,
-            equityUsdt: account.equityUsdt,
-            openRiskUsdt: account.openRiskUsdt,
-            openPositionCount: account.openPositionCount,
-          },
-          stopDistanceUsdt: sizing.stopDistanceUsdt,
-        });
-        if (submitted.status !== "submitted") {
-          throw new AuthorityChainViolationError(
-            `execution submit not submitted: status=${submitted.status}`,
-          );
-        }
-        riskApprovedQuantity = submitted.order.quantity;
-        const filledOrApproved =
-          submitted.order.filledQuantity && submitted.order.filledQuantity !== "0"
-            ? submitted.order.filledQuantity
-            : riskApprovedQuantity;
-        assertExecutionWithinRiskAuthority({
-          proposedQuantity: desiredQuantity,
-          riskApprovedQuantity,
-          executionQuantity: filledOrApproved,
-        });
-        executionQuantity = filledOrApproved;
-        orderId = submitted.order.id;
-        fillId = submitted.order.id;
-        orderCount = 1;
-        fillCount = executionQuantity !== "0" ? 1 : 0;
-      } else {
-        riskApprovedQuantity = "0";
-        executionQuantity = "0";
-      }
-      completedStages.push("RISK");
-      completedStages.push("EXECUTION");
-    } else {
-      if (!omit.has("RISK")) {
-        completedStages.push("RISK");
-      }
-      if (!omit.has("EXECUTION") && !input.skipExecutionSubmit) {
-        completedStages.push("EXECUTION");
-      }
-    }
-
+  if (omit.size > 0 || input.skipExecutionSubmit) {
+    if (!omit.has("RISK")) completedStages.push("RISK");
+    if (!omit.has("EXECUTION") && !input.skipExecutionSubmit) completedStages.push("EXECUTION");
     assertAuthorityChainStageCompleteness(completedStages, AUTHORITY_CHAIN_STAGES);
-
-    const accountingSemanticDigest = computeAccountingSemanticDigest({
-      schemaVersion: ACCOUNTING_FRONTIER_SCHEMA_VERSION,
-      engineId: ACCOUNTING_ENGINE_ID,
-      basisMethod: ACCOUNTING_BASIS_METHOD,
-      organizationId,
-      accountKey: "default",
-      runId: "control-replay-scientific-v2",
-      accountingSequence: 1,
-      frontierAsOf: "2024-01-01T00:00:00.000Z",
-      monthKey: "2024-01",
-      cash: account.availableBalanceUsdt,
-      positions: {},
-      grossRealizedPnl: "0",
-      netRealizedPnl: "0",
-      marks: { "BTC/USDT": { price: entryPrice, barCloseTime: "2024-01-01T00:00:00.000Z" } },
-      markedPositionValue: "0",
-      equity: account.equityUsdt,
-      equityHwm: account.equityUsdt,
-      accountDrawdownBps: 0,
-      consumedFillIds: fillId ? [fillId] : [],
-    });
-
-    const parityDigest = computeControlReplayParityDigest({
-      executionPurpose: CONTROL_REPLAY_AUTHORITY_IDENTITY.executionPurpose,
-      executionMode: CONTROL_REPLAY_AUTHORITY_IDENTITY.executionMode,
-      authorityClass: CONTROL_REPLAY_AUTHORITY_IDENTITY.authorityClass,
-      capitalEligible: false,
-      decisionActionable: evRange.decisionActionable,
-      evLowerScale8: evRange.evLowerScale8,
-      evBaseScale8: evRange.evBaseScale8,
-      evUpperScale8: evRange.evUpperScale8,
-      orderCount,
-      fillCount,
-      checkpointDigest: sha256Hex(
-        `${packageContentDigestHex}:${distributionSemanticDigestExec}:${desiredQuantity}`,
-      ),
-      semanticParityDigest: `${economics.contentDigest}:${accountingSemanticDigest}`,
-    });
-
-    return {
-      driverVersion: CONTROL_REPLAY_SCIENTIFIC_V2_DRIVER_VERSION,
-      authority: CONTROL_REPLAY_AUTHORITY_IDENTITY,
-      capitalAuthorityPath: V2_CAPITAL_AUTHORITY_PATH,
-      completedStages,
-      packageContentDigestHex,
-      packageGenerationDigestHex,
-      distributionSemanticDigestExec,
-      distributionSemanticDigestTerminal,
-      forecastId,
-      scientificAdmissionReceiptDigest: admissionDigest ?? "",
-      decisionActionable: evRange.decisionActionable,
-      evLowerScale8: evRange.evLowerScale8,
-      evBaseScale8: evRange.evBaseScale8,
-      evUpperScale8: evRange.evUpperScale8,
-      desiredQuantity,
-      riskApprovedQuantity,
-      executionQuantity,
-      orderId,
-      fillId,
-      parityDigest,
-      accountingSemanticDigest,
-      executablePolicyDigest: resolveExecutablePolicyDigestOrUnavailable(),
-      marketAuthorityClass: marketAuthority.class,
-      codeReleaseSha: family.codeReleaseSha,
-      developmentDatasetDigestHex: family.developmentDatasetDigestHex,
-      sourceAnchorCount: corpus.length,
-      firstSourceAnchorClosedBarEpochMs: corpus[0]!.closedBarEpochMs,
-      lastSourceAnchorBarContentDigest: corpus[corpus.length - 1]!.barContentDigest,
-      legacyStrategyDiagnostics,
-      whyNotCashJson,
-    };
-  } finally {
-    session.cleanup();
+  } else {
+    if (evRange.decisionActionable) {
+      if (!input.testOnlyExecutionV2Authority) {
+        throw new AuthorityChainViolationError("TEST_ONLY_EXECUTION_V2_AUTHORITY_REQUIRED");
+      }
+      const economicSizeSetDigestHex = sha256Hex(
+        `control-replay-qualified-size:${economics.contentDigest}:${desiredQuantity}`,
+      );
+      executionV2AuthorityProof = await input.testOnlyExecutionV2Authority({
+        authority: CONTROL_REPLAY_AUTHORITY_IDENTITY,
+        organizationId,
+        accountId: "control-replay-scientific-v2",
+        decision: {
+          decisionId: economics.id,
+          semanticDigestHex: economics.contentDigest,
+          contentDigestHex: economics.contentDigest,
+          executionPolicyDigestHex: sha256Hex(
+            `control-replay-execution-policy:${economics.contentDigest}:HTX:limit:GTC:MAKER`,
+          ),
+          economicSizeSetId: `control-replay-size-${economics.id}`,
+          economicSizeSetDigestHex,
+        },
+        symbol,
+        baseAsset: symbol.slice(0, -4),
+        qualifiedQuantity: desiredQuantity,
+        referencePrice: entryPrice,
+      });
+      riskApprovedQuantity = executionV2AuthorityProof.qualifiedQuantity;
+      executionQuantity = "0";
+      orderId = executionV2AuthorityProof.orderId;
+      orderCount = 1;
+    } else {
+      riskApprovedQuantity = "0";
+      executionQuantity = "0";
+    }
+    completedStages.push("RISK", "EXECUTION");
+    assertAuthorityChainStageCompleteness(completedStages, AUTHORITY_CHAIN_STAGES);
   }
+
+  const accountingSemanticDigest = computeAccountingSemanticDigest({
+    schemaVersion: ACCOUNTING_FRONTIER_SCHEMA_VERSION,
+    engineId: ACCOUNTING_ENGINE_ID,
+    basisMethod: ACCOUNTING_BASIS_METHOD,
+    organizationId,
+    accountKey: "default",
+    runId: "control-replay-scientific-v2",
+    accountingSequence: 1,
+    frontierAsOf: "2024-01-01T00:00:00.000Z",
+    monthKey: "2024-01",
+    cash: account.availableBalanceUsdt,
+    positions: {},
+    grossRealizedPnl: "0",
+    netRealizedPnl: "0",
+    marks: { "BTC/USDT": { price: entryPrice, barCloseTime: "2024-01-01T00:00:00.000Z" } },
+    markedPositionValue: "0",
+    equity: account.equityUsdt,
+    equityHwm: account.equityUsdt,
+    accountDrawdownBps: 0,
+    consumedFillIds: [],
+  });
+
+  const parityDigest = computeControlReplayParityDigest({
+    executionPurpose: CONTROL_REPLAY_AUTHORITY_IDENTITY.executionPurpose,
+    executionMode: CONTROL_REPLAY_AUTHORITY_IDENTITY.executionMode,
+    authorityClass: CONTROL_REPLAY_AUTHORITY_IDENTITY.authorityClass,
+    capitalEligible: false,
+    decisionActionable: evRange.decisionActionable,
+    evLowerScale8: evRange.evLowerScale8,
+    evBaseScale8: evRange.evBaseScale8,
+    evUpperScale8: evRange.evUpperScale8,
+    orderCount,
+    fillCount,
+    checkpointDigest: sha256Hex(
+      `${packageContentDigestHex}:${distributionSemanticDigestExec}:${desiredQuantity}`,
+    ),
+    semanticParityDigest: `${economics.contentDigest}:${accountingSemanticDigest}`,
+  });
+
+  return {
+    driverVersion: CONTROL_REPLAY_SCIENTIFIC_V2_DRIVER_VERSION,
+    authority: CONTROL_REPLAY_AUTHORITY_IDENTITY,
+    capitalAuthorityPath: V2_CAPITAL_AUTHORITY_PATH,
+    completedStages,
+    packageContentDigestHex,
+    packageGenerationDigestHex,
+    distributionSemanticDigestExec,
+    distributionSemanticDigestTerminal,
+    forecastId,
+    scientificAdmissionReceiptDigest: admissionDigest ?? "",
+    decisionActionable: evRange.decisionActionable,
+    evLowerScale8: evRange.evLowerScale8,
+    evBaseScale8: evRange.evBaseScale8,
+    evUpperScale8: evRange.evUpperScale8,
+    desiredQuantity,
+    riskApprovedQuantity,
+    executionQuantity,
+    orderId,
+    fillId,
+    executionV2AuthorityProof,
+    parityDigest,
+    accountingSemanticDigest,
+    executablePolicyDigest: resolveExecutablePolicyDigestOrUnavailable(),
+    marketAuthorityClass: marketAuthority.class,
+    codeReleaseSha: family.codeReleaseSha,
+    developmentDatasetDigestHex: family.developmentDatasetDigestHex,
+    sourceAnchorCount: corpus.length,
+    firstSourceAnchorClosedBarEpochMs: corpus[0]!.closedBarEpochMs,
+    lastSourceAnchorBarContentDigest: corpus[corpus.length - 1]!.barContentDigest,
+    legacyStrategyDiagnostics,
+    whyNotCashJson,
+  };
 }
 
-export async function assertScientificControlReplayV2TwoRunParity(): Promise<void> {
-  const runOne = await runScientificControlReplayV2Ceremony();
-  const runTwo = await runScientificControlReplayV2Ceremony();
+export async function assertScientificControlReplayV2TwoRunParity(
+  testOnlyExecutionV2Authority: TestOnlyExecutionV2AuthorityPort,
+): Promise<void> {
+  const runOne = await runScientificControlReplayV2Ceremony({ testOnlyExecutionV2Authority });
+  const runTwo = await runScientificControlReplayV2Ceremony({ testOnlyExecutionV2Authority });
   assertControlReplayParityEqual(runOne.parityDigest, runTwo.parityDigest);
   if (runOne.desiredQuantity !== runTwo.desiredQuantity) {
     throw new Error("V2 desired-size non-deterministic across replay runs");

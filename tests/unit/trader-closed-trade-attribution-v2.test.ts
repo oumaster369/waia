@@ -355,7 +355,7 @@ describe("M0 closed-trade attribution v2 (DEE-372 Phase 2)", () => {
       });
     }
 
-    it("buy-only window yields closedTrades=0, markToCloseTrades>0, and stamped semantics versions", async () => {
+    it("legacy buy-only window fails closed with zero fabricated trades and stamped semantics", async () => {
       let idCounter = 0;
       const metrics = await runBuyOnlyV2Backtest(() => `id-v2-${++idCounter}`);
 
@@ -369,10 +369,10 @@ describe("M0 closed-trade attribution v2 (DEE-372 Phase 2)", () => {
       expect(metrics.tradeLifecycleSemanticsVersion).toBe(TRADE_LIFECYCLE_SEMANTICS_VERSION);
       expect(metrics.costModelVersion).toBe(COST_MODEL_VERSION_V1);
       expect(metrics.closedTrades).toBe(0);
-      expect(metrics.markToCloseTrades).toBeGreaterThan(0);
-      expect(metrics.closedTrades + metrics.markToCloseTrades).toBeGreaterThan(0);
-      expect(metrics.submittedOrders).toBeGreaterThan(0);
-      expect(metrics.openPositions).toBeGreaterThan(0);
+      expect(metrics.markToCloseTrades).toBe(0);
+      expect(metrics.closedTrades + metrics.markToCloseTrades).toBe(0);
+      expect(metrics.submittedOrders).toBe(0);
+      expect(metrics.openPositions).toBe(0);
       assertResearchValidationMetricsV2Coherence(metrics);
     });
 

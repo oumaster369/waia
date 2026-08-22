@@ -119,7 +119,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
     deps = buildPaperCycleDeps(db, connector, writeAudit);
   });
 
-  it("produces round-trip closed trades for both registered strategies", async () => {
+  it("fails legacy multi-strategy submissions closed without fabricated trades", async () => {
     const context = requireOrgContext(orgA);
     const fixtureRuns = [
       {
@@ -169,19 +169,17 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
         newId: () => crypto.randomUUID(),
       });
 
-      expect(result.submitBlocked).toBe(false);
-      const submitted = result.strategyExecutions.filter(
-        (entry) => entry.execution?.status === "submitted",
-      );
-      expect(submitted.length).toBeGreaterThan(0);
-      for (const entry of submitted) {
+      expect(result.submitBlocked).toBe(true);
+      expect(result.strategyExecutions.length).toBeGreaterThan(0);
+      for (const entry of result.strategyExecutions) {
+        expect(entry.execution?.status).toBe("execution_v2_required");
         strategySignalIds.push(entry.signal.strategySignalId);
       }
     }
 
     const orders = await orderRepository.listOrders(context, { executionMode: "mock" });
     const filled = orders.filter((order) => order.state === "FILLED");
-    expect(filled.length).toBeGreaterThanOrEqual(4);
+    expect(filled).toHaveLength(0);
 
     const book = await derivePaperBook({ context, orderRepository, executionMode: "mock" });
     expect(book.positions).toHaveLength(0);
@@ -202,7 +200,7 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
     const submittedStrategies = new Set(
       filled.map((order) => order.strategySignalId).filter((id): id is string => Boolean(id)),
     );
-    expect(submittedStrategies.size).toBeGreaterThanOrEqual(2);
+    expect(submittedStrategies.size).toBe(0);
     expect(MEAN_REVERSION_V0).toBe("mean_reversion_v0");
     expect(LIQUIDITY_SWEEP_REVERSAL_V0).toBe("liquidity_sweep_reversal_v0");
   });

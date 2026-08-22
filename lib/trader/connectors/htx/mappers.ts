@@ -155,15 +155,100 @@ function formatDecimal(value: number): string {
   return value.toFixed(8).replace(/\.?0+$/, "") || "0";
 }
 
-function parseHtxOrderSideAndType(htxType: string): { side: OrderSide; type: OrderType } {
-  const normalized = htxType.toLowerCase();
-  const side: OrderSide = normalized.startsWith("sell") ? "sell" : "buy";
-  const type: OrderType = normalized.includes("market") ? "market" : "limit";
-  return { side, type };
+class HtxUnknownOrderMechanicsError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX order mechanics are fail-unknown: ${String(row.type)}`);
+    this.name = "HtxUnknownOrderMechanicsError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
 }
 
-function mapHtxOrderStatus(state: string): OrderStatus {
-  switch (state) {
+function parseHtxOrderSideAndType(
+  htxType: string,
+  row: Readonly<Record<string, unknown>>,
+): { side: OrderSide; type: OrderType } {
+  const normalized = htxType.toLowerCase();
+  switch (normalized) {
+    case "buy-limit":
+      return { side: "buy", type: "limit" };
+    case "sell-limit":
+      return { side: "sell", type: "limit" };
+    case "buy-market":
+      return { side: "buy", type: "market" };
+    case "sell-market":
+      return { side: "sell", type: "market" };
+    default:
+      throw new HtxUnknownOrderMechanicsError(row);
+  }
+}
+
+class HtxUnknownOrderStateError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(row: HtxOrderRow) {
+    super(`[trader] HTX order state is fail-unknown: ${row.state}`);
+    this.name = "HtxUnknownOrderStateError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+class HtxUnknownVenueIdentityError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(field: string, row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX ${field} identity is fail-unknown`);
+    this.name = "HtxUnknownVenueIdentityError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+class HtxUnknownTradeEvidenceError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(field: string, row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX trade ${field} is fail-unknown`);
+    this.name = "HtxUnknownTradeEvidenceError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+class HtxUnknownOrderEvidenceError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(field: string, row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX order ${field} is fail-unknown`);
+    this.name = "HtxUnknownOrderEvidenceError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+function requireHtxOrderEvidence(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string {
+  if (typeof value === "string" && value.trim() !== "") return value;
+  throw new HtxUnknownOrderEvidenceError(field, row);
+}
+
+function requireHtxVenueIdentity(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return String(value);
+  }
+  if (typeof value === "string" && /^[1-9]\d*$/.test(value)) {
+    return value;
+  }
+  throw new HtxUnknownVenueIdentityError(field, row);
+}
+
+function mapHtxOrderStatus(row: HtxOrderRow): OrderStatus {
+  switch (row.state) {
     case "submitted":
     case "created":
       return "open";
@@ -175,7 +260,7 @@ function mapHtxOrderStatus(state: string): OrderStatus {
     case "partial-canceled":
       return "canceled";
     default:
-      return "rejected";
+      throw new HtxUnknownOrderStateError(row);
   }
 }
 
@@ -187,39 +272,50 @@ function msToIso(ms?: number): string {
 }
 
 export function mapHtxOrder(row: HtxOrderRow): Order {
-  const { side, type } = parseHtxOrderSideAndType(row.type);
+  const { side, type } = parseHtxOrderSideAndType(row.type, row);
+  const orderId = requireHtxVenueIdentity(row.id, "order", row);
   const createdAt = msToIso(row["created-at"]);
-  const quantity = row.amount ?? row["filled-amount"] ?? "0";
-  const filledQuantity = row["filled-amount"] ?? "0";
+  const quantity = requireHtxOrderEvidence(row.amount, "amount", row);
+  const filledQuantity = requireHtxOrderEvidence(row["filled-amount"], "filled amount", row);
 
   return {
-    orderId: String(row.id),
+    orderId,
     clientOrderId: row["client-order-id"] ?? "",
     symbol: htxSymbolToInternal(row.symbol),
     side,
     type,
-    status: mapHtxOrderStatus(row.state),
+    status: mapHtxOrderStatus(row),
     price: row.price,
     quantity,
     filledQuantity,
     createdAt,
     updatedAt: createdAt,
+    rawVenueObservation: Object.freeze({ ...row }),
   };
 }
 
 export function mapHtxMatchResult(row: HtxMatchResultRow): Trade {
-  const { side } = parseHtxOrderSideAndType(row.type);
+  const { side } = parseHtxOrderSideAndType(row.type, row);
+  const tradeId = requireHtxVenueIdentity(row["trade-id"], "trade", row);
+  const orderId = requireHtxVenueIdentity(row["order-id"], "order", row);
+  if (typeof row["filled-fees"] !== "string" || row["filled-fees"].trim() === "") {
+    throw new HtxUnknownTradeEvidenceError("fee", row);
+  }
+  if (typeof row["fee-currency"] !== "string" || row["fee-currency"].trim() === "") {
+    throw new HtxUnknownTradeEvidenceError("fee currency", row);
+  }
   return {
-    tradeId: String(row["trade-id"]),
-    orderId: String(row["order-id"]),
+    tradeId,
+    orderId,
     clientOrderId: "",
     symbol: htxSymbolToInternal(row.symbol),
     side,
     price: row.price,
     quantity: row["filled-amount"],
-    fee: row["filled-fees"] ?? "0",
-    feeAsset: (row["fee-currency"] ?? "USDT").toUpperCase(),
+    fee: row["filled-fees"],
+    feeAsset: row["fee-currency"].toUpperCase(),
     executedAt: msToIso(row["created-at"]),
+    rawVenueObservation: Object.freeze({ ...row }),
   };
 }
 

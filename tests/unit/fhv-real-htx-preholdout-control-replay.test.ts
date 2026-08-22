@@ -52,6 +52,7 @@ import {
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
 import { runScientificControlReplayV2Ceremony } from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
+import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 import { AuthorityChainViolationError } from "@/lib/trader/risk/authority-chain";
 import { resolveFhvFullHistoricalTerminalClassification } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { FhvFullHistoricalLaunchError } from "@/lib/trader/observability/fhv-full-historical-launch";
@@ -555,7 +556,15 @@ describe("pre-holdout qualification and holdout firewall", () => {
   });
 });
 
-describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
+const pgEnabled =
+  process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
+const runScientific = (input: Parameters<typeof runScientificControlReplayV2Ceremony>[0] = {}) =>
+  runScientificControlReplayV2Ceremony({
+    ...input,
+    testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
+  });
+
+describe.skipIf(!pgEnabled)("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
   it("FULL_HISTORICAL rejects pre-holdout authority", () => {
     expect(() =>
       resolveFhvFullHistoricalTerminalClassification({
@@ -595,7 +604,7 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
       );
     }
     const digest = computeStableJsonDigest(bars.map((bar) => computeBarContentDigest(bar)));
-    const official = await runScientificControlReplayV2Ceremony({
+    const official = await runScientific({
       marketAuthority: {
         class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
         bars,
@@ -609,13 +618,13 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
     expect(official.authority.capitalEligible).toBe(false);
     expect(official.authority).toEqual(CONTROL_REPLAY_AUTHORITY_IDENTITY);
     expect(official.sourceAnchorCount).toBeGreaterThanOrEqual(30);
-    const fixture = await runScientificControlReplayV2Ceremony();
+    const fixture = await runScientific();
     expect(fixture.marketAuthorityClass).toBe("TEST_ONLY_DETERMINISTIC_CORPUS");
     expect(official.packageContentDigestHex).not.toBe(fixture.packageContentDigestHex);
     const mutated = bars.map((bar, index) =>
       index === 50 ? { ...bar, close: "99999", high: "99999" } : bar,
     );
-    const mutatedRun = await runScientificControlReplayV2Ceremony({
+    const mutatedRun = await runScientific({
       marketAuthority: {
         class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
         bars: mutated,
@@ -624,7 +633,7 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
       },
     });
     expect(mutatedRun.parityDigest).not.toBe(official.parityDigest);
-    const runTwo = await runScientificControlReplayV2Ceremony({
+    const runTwo = await runScientific({
       marketAuthority: {
         class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
         bars,
@@ -634,7 +643,7 @@ describe("official pre-holdout Control Replay vs FULL_HISTORICAL", () => {
     });
     expect(runTwo.parityDigest).toBe(official.parityDigest);
     await expect(
-      runScientificControlReplayV2Ceremony({
+      runScientific({
         marketAuthority: {
           class: "OFFICIAL_PRE_HOLDOUT_REAL_DATA",
           bars,

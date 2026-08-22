@@ -123,6 +123,20 @@ function placeOrderInputFromOrder(order: OrderRow): PlaceOrderInput {
   };
 }
 
+function legacyOrderSubmissionDisabled(): boolean {
+  return true;
+}
+
+async function refuseLegacyConnectorSubmission(input?: unknown): Promise<never> {
+  void input;
+  throw new Error("LEGACY_ORDER_SUBMISSION_DISABLED: Execution V2 authority is required");
+}
+
+async function refuseLegacyConnectorCancellation(orderId?: unknown): Promise<never> {
+  void orderId;
+  throw new Error("LEGACY_ORDER_CANCELLATION_DISABLED: Execution V2 evidence is required");
+}
+
 function hasExactConsumedRiskV2Proof(
   context: OrgContext,
   input: SubmitOrderInput,
@@ -239,14 +253,8 @@ function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConne
       await ensureValidated();
       return inner.getOrder(orderId);
     },
-    placeOrder: async (input) => {
-      await ensureValidated();
-      return inner.placeOrder(input);
-    },
-    cancelOrder: async (orderId) => {
-      await ensureValidated();
-      return inner.cancelOrder(orderId);
-    },
+    placeOrder: refuseLegacyConnectorSubmission,
+    cancelOrder: refuseLegacyConnectorCancellation,
     getTradeHistory: async (filter) => {
       await ensureValidated();
       return inner.getTradeHistory(filter);
@@ -255,7 +263,7 @@ function lazyValidatedMockConnector(inner: MockExchangeConnector): ExchangeConne
     streamUserData: () => inner.streamUserData(),
     getFuturesBalances: () => inner.getFuturesBalances(),
     getFuturesPositions: () => inner.getFuturesPositions(),
-    placeFuturesOrder: (input) => inner.placeFuturesOrder(input),
+    placeFuturesOrder: refuseLegacyConnectorSubmission,
   };
 }
 
@@ -446,21 +454,6 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       return byOrder;
     }
 
-    if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
-      return {
-        tradeId: `synthetic-${connectorOrder.orderId}`,
-        orderId: connectorOrder.orderId,
-        clientOrderId: connectorOrder.clientOrderId,
-        symbol: connectorOrder.symbol,
-        side: connectorOrder.side,
-        price: connectorOrder.price ?? "0",
-        quantity: connectorOrder.filledQuantity,
-        fee: "0",
-        feeAsset: "USDT",
-        executedAt: connectorOrder.updatedAt,
-      };
-    }
-
     return null;
   }
 
@@ -522,7 +515,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     let connectorOrder: Order;
     try {
-      connectorOrder = await connector.placeOrder(placeInput);
+      connectorOrder = await refuseLegacyConnectorSubmission(placeInput);
     } catch {
       const uncertain = await transitionOrConflict(context, sent.order, "RECONCILIATION_REQUIRED");
       if ("conflict" in uncertain) {
@@ -584,23 +577,34 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
 
     if (connectorOrder.status === "filled" || connectorOrder.status === "partially_filled") {
       const trade = await resolveTradeForOrder(connector, current, connectorOrder);
-      if (trade) {
-        const fillRow = await orderRepository.recordFill(context, {
-          orderId: current.id,
-          exchangeTradeId: trade.tradeId,
-          price: trade.price,
-          quantity: trade.quantity,
-          fee: trade.fee,
-          feeAsset: trade.feeAsset,
-          executedAt: new Date(trade.executedAt),
+      if (!trade) {
+        const uncertain = await transitionOrConflict(context, current, "RECONCILIATION_REQUIRED", {
+          eventPayload: JSON.stringify({
+            reason: "connector_status_without_exact_trade_evidence",
+            connectorStatus: connectorOrder.status,
+            exchangeOrderId: connectorOrder.orderId,
+          }),
         });
-        await recordLifecycleForFill(context, current, input, fillRow.id);
+        if ("conflict" in uncertain) {
+          return { status: "conflict", orderId: uncertain.orderId };
+        }
+        return { status: "connector_uncertain", order: uncertain.order };
       }
+      const fillRow = await orderRepository.recordFill(context, {
+        orderId: current.id,
+        exchangeTradeId: trade.tradeId,
+        price: trade.price,
+        quantity: trade.quantity,
+        fee: trade.fee,
+        feeAsset: trade.feeAsset,
+        executedAt: new Date(trade.executedAt),
+      });
+      await recordLifecycleForFill(context, current, input, fillRow.id);
 
       const fillTarget = mapConnectorStatusToOrderState(connectorOrder.status);
       const filled = await transitionOrConflict(context, current, fillTarget, {
-        filledQuantity: connectorOrder.filledQuantity,
-        avgFillPrice: trade?.price ?? connectorOrder.price ?? null,
+        filledQuantity: trade.quantity,
+        avgFillPrice: trade.price,
       });
       if ("conflict" in filled) {
         return { status: "conflict", orderId: filled.orderId };
@@ -704,6 +708,9 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     if ("conflict" in cancelRequested) {
       throw new OrderVersionConflictError(cancelRequested.orderId, order.stateVersion);
     }
+    if (!historicalExecution?.enabled || order.executionMode !== "mock") {
+      return cancelRequested.order;
+    }
     const cancelled = await transitionOrConflict(context, cancelRequested.order, "CANCELLED");
     if ("conflict" in cancelled) {
       throw new OrderVersionConflictError(cancelled.orderId, cancelRequested.order.stateVersion);
@@ -734,8 +741,10 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     }
 
     try {
-      const cancelled = await transitionOrderCancelled(context, order);
-      return { status: "cancelled", order: cancelled };
+      const cancellation = await transitionOrderCancelled(context, order);
+      return cancellation.state === "CANCELLED"
+        ? { status: "cancelled", order: cancellation }
+        : { status: "cancel_requested", order: cancellation };
     } catch {
       return { status: "failed", order };
     }
@@ -759,6 +768,14 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
         input.executionMode !== "live"
       ) {
         throw new UnsupportedExecutionModeError(input.executionMode);
+      }
+
+      if (legacyOrderSubmissionDisabled()) {
+        return finishSubmitOrder(orgContext, input, startedMs, {
+          status: "execution_v2_required",
+          order: null,
+          reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
+        });
       }
 
       if (input.riskAllowanceV2) {

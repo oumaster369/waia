@@ -42,6 +42,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0154_treasury_central_ledger_catalogs",
       "0155_treasury_central_ledger_catalogs_rls",
       "0156_trader_risk_v2",
+      "0157_trader_execution_v2",
       "0158_treasury_category_budget_history",
       "0159_treasury_category_budget_history_rls",
     ]);

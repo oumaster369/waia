@@ -81,6 +81,11 @@ export type SubmitOrderInput = {
 };
 
 export type SubmitOrderResult =
+  | {
+      status: "execution_v2_required";
+      order: null;
+      reason: "LEGACY_ORDER_SUBMISSION_DISABLED";
+    }
   | { status: "risk_rejected"; riskDecision: RiskEngineDecision; order: null }
   | {
       status: "submitted";

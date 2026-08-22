@@ -1,9 +1,25 @@
+import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+
+import * as pgSchema from "@/db/schema.postgres";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+
 import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
+import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
+import {
+  createExecutionPolicyBindingV2,
+  deterministicExecutionUuidV2,
+} from "@/lib/trader/execution/v2/contracts";
+import { bindExecutionAuthorityV2Postgres } from "@/lib/trader/execution/v2/authority-postgres";
+import { dispatchAndRecordExecutionAttemptV2 } from "@/lib/trader/execution/v2/recovery-postgres";
+import type { SubmitOrderInput, SubmitOrderResult } from "@/lib/trader/execution/execution-service.types";
+import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import { resolveFhvDatasetManifestV2Path } from "@/lib/trader/market-data/fhv-dataset-manifest-v2";
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
@@ -19,6 +35,7 @@ import {
 } from "@/lib/trader/observability/fhv-execution-checkpoint-bundle";
 import type { FhvFullHistoricalLaunchInput } from "@/lib/trader/observability/fhv-full-historical-launch";
 import { resolveFhvFullLaunchRunDirectory } from "@/lib/trader/observability/fhv-full-historical-launch";
+import type { FhvHistoricalExecutionSession } from "@/lib/trader/observability/fhv-historical-execution-session";
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import {
   buildFhvSyntheticScaleAuthority,
@@ -27,6 +44,11 @@ import {
   type FhvSyntheticScaleAuthorityV1,
 } from "@/lib/trader/observability/fhv-synthetic-scale-authority";
 import { measureBoundedDirectoryBytes } from "@/lib/trader/observability/fhv-telemetry-probes";
+import { multiplyExecutionNotionalConservativelyV2 } from "@/lib/trader/execution/v2/contracts";
+import {
+  admitRiskAllowanceV2Postgres,
+  initializeRiskAccountStateV2Postgres,
+} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import {
   buildFhvOfficialV2ScaleDataset,
   FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
@@ -43,7 +65,6 @@ import {
 import {
   CHECKPOINT_EVERY_CYCLES,
   LAST_COMMITTED_CYCLE_INDEX,
-  TARGET_CYCLE_COUNT,
 } from "./fhv-official-scale-constants";
 
 export const FHV_OFFICIAL_SCALE_METRICS_FILENAME = "fhv-official-scale-metrics.v1.json";
@@ -57,6 +78,389 @@ export const DEFAULT_PROBE_TARGET_CPS = 1000;
 /** @deprecated Alias of {@link DEFAULT_PROBE_TARGET_CPS}; do not treat as blocking floor. */
 export const DEFAULT_PROBE_MIN_THROUGHPUT_CPS = DEFAULT_PROBE_TARGET_CPS;
 export const MAX_PROJECTED_FULL_CORPUS_RUNTIME_S = 7200;
+
+export type FhvTestOnlyExecutionV2AuthorityMetrics = Readonly<{
+  allowanceClaims: number;
+  boundAttempts: number;
+  modeledPlacements: number;
+  venueAcceptedReports: number;
+  legacySubmissions: 0;
+}>;
+
+let testOnlyV2Metrics: FhvTestOnlyExecutionV2AuthorityMetrics = Object.freeze({
+  allowanceClaims: 0,
+  boundAttempts: 0,
+  modeledPlacements: 0,
+  venueAcceptedReports: 0,
+  legacySubmissions: 0,
+});
+
+function updateTestOnlyV2Metrics(
+  values: Partial<Omit<FhvTestOnlyExecutionV2AuthorityMetrics, "legacySubmissions">>,
+): void {
+  testOnlyV2Metrics = Object.freeze({ ...testOnlyV2Metrics, ...values, legacySubmissions: 0 });
+}
+
+export function getFhvTestOnlyExecutionV2AuthorityMetrics(): FhvTestOnlyExecutionV2AuthorityMetrics {
+  return testOnlyV2Metrics;
+}
+
+function resetFhvTestOnlyExecutionV2AuthorityMetrics(): void {
+  testOnlyV2Metrics = Object.freeze({
+    allowanceClaims: 0,
+    boundAttempts: 0,
+    modeledPlacements: 0,
+    venueAcceptedReports: 0,
+    legacySubmissions: 0,
+  });
+}
+
+function digestHex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function requireLoopbackTestOnlyPostgresUrl(): string {
+  if (
+    process.env.WAIA_PG_INTEGRATION !== "1" ||
+    process.env.FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY !== "1"
+  ) {
+    throw new Error("FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY_REQUIRED");
+  }
+  const value = process.env.DATABASE_URL_POSTGRES?.trim();
+  if (!value) throw new Error("DATABASE_URL_POSTGRES is required for FHV TEST_ONLY Execution V2");
+  const hostname = new URL(value).hostname;
+  if (!new Set(["localhost", "127.0.0.1", "::1"]).has(hostname)) {
+    throw new Error("FHV TEST_ONLY Execution V2 requires loopback PostgreSQL");
+  }
+  return value;
+}
+
+async function seedFhvTestOnlyV2Tenant(
+  sqlClient: postgres.Sql,
+  db: WaiaPostgresDb,
+  organizationId: string,
+): Promise<void> {
+  const ownerUserId = deterministicExecutionUuidV2("order", {
+    purpose: "fhv-official-scale-test-only-owner",
+    organizationId,
+  });
+  await sqlClient`insert into auth.users (id) values (${ownerUserId}::uuid) on conflict (id) do nothing`;
+  await db.insert(pgSchema.users).values({
+    id: ownerUserId,
+    identityLabel: "DEE-651 FHV TEST_ONLY Execution V2",
+    email: `${ownerUserId}@fhv-execution-v2.invalid`,
+    passwordHash: null,
+  }).onConflictDoNothing();
+  await db.insert(pgSchema.organizations).values({
+    id: organizationId,
+    ownerUserId,
+    kind: "personal",
+    name: "DEE-651 FHV TEST_ONLY Execution V2",
+  }).onConflictDoNothing();
+  await db.insert(pgSchema.organizationMembers).values({
+    id: deterministicExecutionUuidV2("order", {
+      purpose: "fhv-official-scale-test-only-membership",
+      organizationId,
+    }),
+    organizationId,
+    userId: ownerUserId,
+    memberRole: "owner",
+  }).onConflictDoNothing();
+}
+
+async function transitionHistoricalProjection(
+  seeded: FhvHistoricalExecutionSession,
+  order: Awaited<ReturnType<FhvHistoricalExecutionSession["session"]["orderRepository"]["createOrder"]>>,
+  toState: "RISK_APPROVED" | "SENT_TO_EXCHANGE" | "ACCEPTED",
+  exchangeOrderId?: string,
+) {
+  return seeded.session.orderRepository.transitionOrder(seeded.context, {
+    orderId: order.id,
+    expectedStateVersion: order.stateVersion,
+    toState,
+    ...(exchangeOrderId ? { exchangeOrderId } : {}),
+  });
+}
+
+/**
+ * Authorized only for the two official-scale Vitest gates. The production runtime remains
+ * fail-closed; this adapter binds genuine PostgreSQL V2 authority before exposing the existing
+ * historical modeled placement to the SQLite evidence/accounting harness.
+ */
+export async function bindFhvTestOnlyExecutionV2HistoricalSession(
+  seeded: FhvHistoricalExecutionSession,
+): Promise<FhvHistoricalExecutionSession> {
+  const url = requireLoopbackTestOnlyPostgresUrl();
+  resetFhvTestOnlyExecutionV2AuthorityMetrics();
+  const invocationId = randomUUID();
+  const sqlClient = postgres(url, { max: 4 });
+  const pgDb = drizzle(sqlClient, { schema: pgSchema }) as WaiaPostgresDb;
+  await seedFhvTestOnlyV2Tenant(sqlClient, pgDb, seeded.context.organizationId);
+  const originalExecution = seeded.session.deps.execution;
+  const submissions = new Map<string, Promise<SubmitOrderResult>>();
+
+  const submitWithAuthority = async (input: SubmitOrderInput): Promise<SubmitOrderResult> => {
+    if (input.executionMode !== "mock" || input.type !== "market") {
+      throw new Error("FHV TEST_ONLY Execution V2 permits modeled mock market orders only");
+    }
+    const symbol = normalizeSymbolForHistoricalExecution(input.symbol);
+    const baseAsset = symbol.slice(0, -4);
+    const referencePrice = input.referencePrice;
+    const identity = `${invocationId}:${input.idempotencyKey}`;
+    const accountId = `fhv-v2-${digestHex(identity).slice(0, 24)}`;
+    const instrumentDigest = digestHex(`${symbol}:SPOT`);
+    const isEntry = input.side === "buy";
+    const action = isEntry ? "ENTER_LONG" as const : "CLOSE" as const;
+    const reservationNotional = isEntry
+      ? multiplyExecutionNotionalConservativelyV2(input.quantity, referencePrice)
+      : "0";
+    const now = Date.now();
+    const realitySnapshotId = `fhv-v2-reality-${digestHex(identity).slice(0, 24)}`;
+
+    await initializeRiskAccountStateV2Postgres(pgDb, seeded.context, {
+      accountId,
+      posture: isEntry ? "NORMAL" : "CLOSE_ONLY",
+      killState: "CLEAR",
+      reconciliationStatus: "RECONCILED",
+      realitySnapshotId,
+      realityContentDigestHex: digestHex(`${identity}:reality`),
+      reconciliationAuthorityDigestHex: digestHex(`${identity}:reconciliation`),
+      reconciledInstrumentExposures: [{
+        instrumentIdentityDigestHex: instrumentDigest,
+        symbol,
+        baseQuantity: isEntry ? "0" : input.quantity,
+      }],
+      accounting: {
+        reconciledExposureNotional: isEntry ? "0" : multiplyExecutionNotionalConservativelyV2(
+          input.quantity,
+          referencePrice,
+        ),
+        worstCasePendingExposureNotional: "0",
+        outstandingReservationNotional: "0",
+        exposureLimitNotional: "1000000000000",
+      },
+    });
+
+    const decisionId = `fhv-test-only-decision-${digestHex(identity).slice(0, 24)}`;
+    const admitted = await admitRiskAllowanceV2Postgres(pgDb, seeded.context, {
+      accountId,
+      riskVerdictId: deterministicExecutionUuidV2("order", { identity, purpose: "risk-verdict" }),
+      riskAllowanceId: deterministicExecutionUuidV2("order", { identity, purpose: "allowance" }),
+      issuanceEventId: deterministicExecutionUuidV2("risk-event", { identity, purpose: "issuance" }),
+      nonce: deterministicExecutionUuidV2("order", { identity, purpose: "nonce" }),
+      validForMs: 300_000,
+      verdict: {
+        venue: "HTX",
+        market: "SPOT",
+        symbol,
+        baseAsset,
+        quoteAsset: "USDT",
+        instrumentIdentityDigestHex: instrumentDigest,
+        decision: {
+          decisionId,
+          semanticDigestHex: digestHex(`${identity}:decision-semantic`),
+          contentDigestHex: digestHex(`${identity}:decision-content`),
+          action,
+          economicSizeSetId: `fhv-test-only-size-${digestHex(identity).slice(0, 24)}`,
+          economicSizeSetDigestHex: digestHex(`${identity}:economic-size-set`),
+        },
+        riskPolicyVersion: "dee-651-fhv-test-only-risk-v2",
+        riskPolicyDigestHex: digestHex("dee-651-fhv-test-only-risk-v2"),
+        limitVersions: [{
+          layer: "L2",
+          version: "fhv-test-only-position-v1",
+          digestHex: digestHex("fhv-test-only-position-v1"),
+        }],
+        reality: {
+          snapshotId: realitySnapshotId,
+          contentDigestHex: digestHex(`${identity}:reality`),
+          asOfUtc: new Date(now).toISOString(),
+          reconciliationAuthorityDigestHex: digestHex(`${identity}:reconciliation`),
+          reconciliationStatus: "RECONCILED",
+        },
+        referencePrice: {
+          authorityId: "fhv-test-only-closed-bar",
+          authorityVersion: "v1",
+          contentDigestHex: digestHex(`${identity}:reference-price:${referencePrice}`),
+          price: referencePrice,
+        },
+        verdict: isEntry ? "APPROVE_CLAMPED" : "CLOSE_ONLY",
+        approvedQualifiedQuantity: input.quantity,
+        bindingLayers: ["L2"],
+        reasonCodes: ["POSITION_LIMIT_BINDING"],
+      },
+    });
+    updateTestOnlyV2Metrics({ allowanceClaims: testOnlyV2Metrics.allowanceClaims + 1 });
+
+    const policy = createExecutionPolicyBindingV2({
+      executionPolicyId: deterministicExecutionUuidV2("order", { identity, purpose: "policy" }),
+      organizationId: seeded.context.organizationId,
+      policyVersion: "dee-651-fhv-test-only-historical-v1",
+      decisionId,
+      decisionContentDigestHex: admitted.allowance.decision.contentDigestHex,
+      decisionExecutionPolicyDigestHex: digestHex(`${identity}:execution-policy`),
+      economicSizeSetDigestHex: admitted.allowance.decision.economicSizeSetDigestHex,
+      venue: "HTX",
+      market: "SPOT",
+      instrumentIdentityDigestHex: instrumentDigest,
+      allowedOrderTypes: ["market"],
+      allowedTimeInForce: ["GTC"],
+      allowedLiquidityRoles: ["TAKER"],
+      priceCollar: {
+        minimumPrice: referencePrice,
+        maximumPrice: referencePrice,
+        authorityDigestHex: digestHex(`${identity}:price-collar`),
+      },
+      quantityRules: {
+        minimumQuantity: input.quantity,
+        quantityStep: input.quantity,
+        roundingMode: "EXACT",
+        economicQualifiedQuantities: [input.quantity],
+      },
+      slicingPolicy: { maximumSlices: 1, completePlanRequired: true },
+      retryPolicy: {
+        maximumNetworkSubmissions: 1,
+        sameIdentityRetryAllowed: false,
+        venueIdempotencyProven: false,
+      },
+      cancelPolicy: {
+        protectiveCancelAllowed: true,
+        replacementRequiresPresealedOrFreshAuthority: true,
+      },
+      timeoutMs: 5_000,
+      uncertaintyHandling: "RECONCILIATION_REQUIRED",
+      effectiveFromUtc: new Date(now - 300_000).toISOString(),
+      effectiveUntilUtc: new Date(now + 7_200_000).toISOString(),
+    });
+    const plan = {
+      approvedNotionalCeiling: reservationNotional,
+      plannedQuantity: input.quantity,
+      orderType: "market" as const,
+      liquidityRole: "TAKER" as const,
+      limitPrice: null,
+      timeInForce: "GTC" as const,
+      timingWindow: {
+        opensAtUtc: new Date(now - 60_000).toISOString(),
+        closesAtUtc: new Date(now + 3_600_000).toISOString(),
+      },
+      childSlices: [{ sequence: 1, quantity: input.quantity, limitPrice: null }],
+      sealedAtUtc: new Date(now - 120_000).toISOString(),
+    };
+    const authority = await bindExecutionAuthorityV2Postgres(pgDb, seeded.context, {
+      allowance: admitted.allowance,
+      policy,
+      plan,
+      executionMode: "mock",
+      credentialId: null,
+      strategySignalId: input.strategySignalId ?? null,
+      allocationDecisionId: input.allocationDecisionId ?? null,
+    });
+    updateTestOnlyV2Metrics({ boundAttempts: testOnlyV2Metrics.boundAttempts + 1 });
+
+    let modeledProjection: OrderRow | null = null;
+    const outcome = await dispatchAndRecordExecutionAttemptV2(
+      pgDb,
+      seeded.context,
+      authority.attempt.executionAttemptId,
+      async (payload, submittedAuthority) => {
+        if (
+          submittedAuthority.executionAttemptId !== authority.attempt.executionAttemptId ||
+          submittedAuthority.effectIdentityDigestHex !== authority.attempt.effectIdentityDigestHex
+        ) {
+          throw new Error("FHV TEST_ONLY Execution V2 dispatcher authority mismatch");
+        }
+        const created = await seeded.session.orderRepository.createOrder(seeded.context, {
+          id: authority.order.id,
+          venue: authority.order.venue,
+          executionMode: "mock",
+          symbol: input.symbol,
+          side: payload.side,
+          type: payload.type,
+          price: payload.price,
+          quantity: payload.quantity,
+          clientOrderId: payload.clientOrderId,
+          idempotencyKey: authority.order.idempotencyKey,
+          riskDecisionId: authority.order.riskDecisionId,
+          riskAllowanceId: authority.order.riskAllowanceId,
+          riskAllowanceBindingDigest: authority.order.riskAllowanceBindingDigest,
+          strategySignalId: authority.order.strategySignalId,
+          allocationDecisionId: authority.order.allocationDecisionId,
+          credentialId: null,
+        });
+        const approved = await transitionHistoricalProjection(seeded, created, "RISK_APPROVED");
+        const sent = await transitionHistoricalProjection(seeded, approved, "SENT_TO_EXCHANGE");
+        const venueOrderId = `fhv-model-${authority.attempt.effectIdentityDigestHex.slice(0, 24)}`;
+        const accepted = await transitionHistoricalProjection(
+          seeded,
+          sent,
+          "ACCEPTED",
+          venueOrderId,
+        );
+        modeledProjection = accepted;
+        seeded.session.historicalExecutionProfile.exchange.registerOrder(
+          { ...accepted, symbol: normalizeSymbolForHistoricalExecution(accepted.symbol) },
+          seeded.session.deps.researchReplayDeterminism?.getDecisionBarIndex?.() ?? 0,
+          seeded.session.replayClock.nowMs(),
+        );
+        updateTestOnlyV2Metrics({ modeledPlacements: testOnlyV2Metrics.modeledPlacements + 1 });
+        const createdAt = new Date(seeded.session.replayClock.nowMs()).toISOString();
+        return Object.freeze({
+          order: Object.freeze({
+            orderId: venueOrderId,
+            clientOrderId: payload.clientOrderId,
+            symbol: payload.symbol,
+            side: payload.side,
+            type: payload.type,
+            status: "open" as const,
+            ...(payload.price === null ? {} : { price: payload.price }),
+            quantity: payload.quantity,
+            filledQuantity: "0",
+            createdAt,
+            updatedAt: createdAt,
+          }),
+          trades: Object.freeze([]),
+          raw: Object.freeze({
+            testOnlyHistoricalModel: true,
+            executionAttemptId: authority.attempt.executionAttemptId,
+            effectIdentityDigestHex: authority.attempt.effectIdentityDigestHex,
+            venueOrderId,
+          }),
+        });
+      },
+    );
+    if (outcome.status !== "VENUE_ACCEPTED") {
+      throw new Error(`FHV TEST_ONLY Execution V2 modeled placement failed: ${outcome.status}`);
+    }
+    updateTestOnlyV2Metrics({ venueAcceptedReports: testOnlyV2Metrics.venueAcceptedReports + 1 });
+    if (!modeledProjection) throw new Error("FHV TEST_ONLY Execution V2 projection missing");
+    return { status: "submitted", order: modeledProjection };
+  };
+
+  const execution = {
+    ...originalExecution,
+    submitOrder: (context: Parameters<typeof originalExecution.submitOrder>[0], input: SubmitOrderInput) => {
+      if (context.organizationId !== seeded.context.organizationId) {
+        throw new Error("FHV TEST_ONLY Execution V2 tenant mismatch");
+      }
+      const existing = submissions.get(input.idempotencyKey);
+      if (existing) return existing;
+      const pending = submitWithAuthority(input);
+      submissions.set(input.idempotencyKey, pending);
+      return pending;
+    },
+  };
+  return {
+    ...seeded,
+    session: {
+      ...seeded.session,
+      deps: { ...seeded.session.deps, execution },
+    },
+    cleanup: () => {
+      seeded.cleanup();
+      void sqlClient.end({ timeout: 5 });
+    },
+  };
+}
 
 /**
  * Resolve the visible Phase-10 probe headroom target.

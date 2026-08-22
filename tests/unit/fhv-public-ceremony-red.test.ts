@@ -35,9 +35,12 @@ import {
   setupFhvBoundedLaunchArtifacts,
   setupFhvOfficialSchemaLaunchArtifacts,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
+import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 const OPERATOR_ID = "fhv-public-ceremony-operator";
+const pgEnabled =
+  process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
 
 function spawnAuthConsumeWorker(receiptPath: string, label: string): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
@@ -58,7 +61,7 @@ function spawnAuthConsumeWorker(receiptPath: string, label: string): Promise<Chi
   });
 }
 
-describe("DEE-436 FHV public ceremony RED-1..RED-9", () => {
+describe.skipIf(!pgEnabled)("DEE-436 FHV public ceremony RED-1..RED-9", () => {
   it("RED-1: official full-run CLI requires control-replay-receipt-path", () => {
     expect(() =>
       resolveFhvFullRunCliConfig(
@@ -164,6 +167,7 @@ describe("DEE-436 FHV public ceremony RED-1..RED-9", () => {
         boundedFixture: true,
         executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
         maxCycles: 5,
+        testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
       });
       expect(dedicated.semanticReproDigest).toMatch(/^[a-f0-9]{64}$/);
     } finally {
@@ -309,14 +313,17 @@ describe("DEE-436 FHV public ceremony RED-1..RED-9", () => {
   });
 });
 
-describe("DEE-436 FHV dataset qualification OFFICIAL_MULTI_YEAR negatives", () => {
-  it("rejects schema integration fixture under OFFICIAL_MULTI_YEAR coverage rules", () => {
-    expect(() =>
-      qualifyFhvOfficialDataset({
-        datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
-        manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
-        qualificationMode: "OFFICIAL_MULTI_YEAR",
-      }),
-    ).toThrow(/PARTITION_INCOMPLETE|PARTITION_COVERAGE_END_MISMATCH|must close at/i);
-  });
-});
+describe.skipIf(!pgEnabled)(
+  "DEE-436 FHV dataset qualification OFFICIAL_MULTI_YEAR negatives",
+  () => {
+    it("rejects schema integration fixture under OFFICIAL_MULTI_YEAR coverage rules", () => {
+      expect(() =>
+        qualifyFhvOfficialDataset({
+          datasetRoot: FHV_OFFICIAL_REAL_SCHEMA_ROOT,
+          manifestPath: FHV_OFFICIAL_REAL_SCHEMA_MANIFEST,
+          qualificationMode: "OFFICIAL_MULTI_YEAR",
+        }),
+      ).toThrow(/PARTITION_INCOMPLETE|PARTITION_COVERAGE_END_MISMATCH|must close at/i);
+    });
+  },
+);

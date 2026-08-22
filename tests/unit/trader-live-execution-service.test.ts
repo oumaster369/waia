@@ -145,7 +145,7 @@ describe("live execution service gate wiring (DEE-212 / BP-7)", () => {
     ).rejects.toThrow(LiveExecutionNotSupportedError);
   });
 
-  it("allows gated live execution when hook is injected", async () => {
+  it("keeps the legacy live surface closed even when its former hook is injected", async () => {
     const { service, connector } = makeService(true);
     const result = await service.submitOrder(requireOrgContext(orgA), {
       clientOrderId: "live-gated",
@@ -163,11 +163,11 @@ describe("live execution service gate wiring (DEE-212 / BP-7)", () => {
       accountState: EMPTY_STATE,
     });
 
-    expect(result.status).toBe("submitted");
-    expect(connector.placeOrder).toHaveBeenCalled();
-    if (result.status === "submitted") {
-      expect(result.order.venue).toBe("htx");
-      expect(result.order.executionMode).toBe("live");
-    }
+    expect(result).toEqual({
+      status: "execution_v2_required",
+      order: null,
+      reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
+    });
+    expect(connector.placeOrder).not.toHaveBeenCalled();
   });
 });

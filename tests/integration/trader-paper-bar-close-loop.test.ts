@@ -118,7 +118,7 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-bar-close-264");
   });
 
-  it("runs one mocked HTX bar-close cycle via runPaperBarCloseLoop → SIGNAL → FILLED → IN_SYNC", async () => {
+  it("fails a legacy mocked HTX bar-close cycle closed before reconciliation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -144,20 +144,9 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
 
     expect(result).toEqual({ cyclesRun: 1, aborted: false });
     expect(submitSpy).toHaveBeenCalledTimes(1);
-    expect(reconcileSpy).toHaveBeenCalledTimes(1);
+    expect(reconcileSpy).not.toHaveBeenCalled();
 
     const submitResult = await submitSpy.mock.results[0]?.value;
-    expect(submitResult?.status).toBe("submitted");
-    if (submitResult?.status !== "submitted") {
-      return;
-    }
-
-    expect(submitResult.order.clientOrderId).toBe(
-      "client-paper-cycle-test-paper-loop-0-mean_reversion_v0",
-    );
-    expect(submitResult.order.state).toBe("FILLED");
-
-    const reconcileResult = await reconcileSpy.mock.results[0]?.value;
-    expect(reconcileResult?.outcomes[0]?.classification).toBe("IN_SYNC");
+    expect(submitResult?.status).toBe("execution_v2_required");
   });
 });

@@ -105,7 +105,7 @@ describe("trader intelligence loop integration (DEE-257)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-intel-loop");
   });
 
-  it("runs fixture → intelligence → risk → mock execution → reconciliation", async () => {
+  it("fails the legacy intelligence loop closed before Risk V2 or reconciliation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -127,14 +127,8 @@ describe("trader intelligence loop integration (DEE-257)", () => {
     });
 
     expect(result.evaluation.signal.outcome).toBe("SIGNAL");
-    expect(result.submitBlocked).toBe(false);
-    expect(result.execution?.status).toBe("submitted");
-    if (result.execution?.status !== "submitted") {
-      return;
-    }
-
-    expect(result.execution.order.strategySignalId).toBe(result.evaluation.signal.strategySignalId);
-    expect(result.execution.order.state).toBe("FILLED");
-    expect(result.reconciliation?.outcomes[0]?.classification).toBe("IN_SYNC");
+    expect(result.submitBlocked).toBe(true);
+    expect(result.execution?.status).toBe("execution_v2_required");
+    expect(result.reconciliation).toBeNull();
   });
 });

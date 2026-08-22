@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -970,7 +970,10 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
     const submitArg = submitSpy.mock.calls[0]?.[1];
     expect(submitArg?.side).toBe("sell");
     expect(submitArg?.strategySignalId).toBe("signal-m3-open");
-    expect(result.guardianExecutions?.[0]?.submitBlocked).toBe(false);
+    expect(result.guardianExecutions?.[0]).toMatchObject({
+      submitBlocked: true,
+      execution: { status: "execution_v2_required" },
+    });
 
     expect(exitIntentSpy).toHaveBeenCalledTimes(1);
     expect(exitIntentSpy.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -1000,13 +1003,13 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
       entityType: "TRADE",
       entityId: tradeId,
     });
-    expect(tradeEvents.some((event) => event.phase === "TRADE_CLOSED")).toBe(true);
+    expect(tradeEvents.some((event) => event.phase === "TRADE_CLOSED")).toBe(false);
 
     const trade = await harness.lifecycleRepository.getTradeById(context, tradeId);
-    expect(trade?.state).toBe("CLOSED");
+    expect(trade?.state).toBe("OPEN");
 
     const openLots = await harness.lifecycleRepository.listOpenPositionLots(context, {});
-    expect(openLots).toHaveLength(0);
+    expect(openLots).toHaveLength(1);
   });
 
   it("emits HOLD guardian evaluation without submit when permission allows trading", async () => {
@@ -1096,7 +1099,10 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
       guardianReasonCodes.maxHoldBars,
     );
     expect(result.guardian?.exitIntents).toHaveLength(1);
-    expect(result.guardianExecutions?.[0]?.submitBlocked).toBe(false);
+    expect(result.guardianExecutions?.[0]).toMatchObject({
+      submitBlocked: true,
+      execution: { status: "execution_v2_required" },
+    });
 
     const context = requireOrgContext(harness.orgM3);
     const lotEvents = await harness.lifecycleRepository.listLifecycleEvents(context, {
@@ -1109,7 +1115,7 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
     ]);
 
     const trade = await harness.lifecycleRepository.getTradeById(context, tradeId);
-    expect(trade?.state).toBe("CLOSED");
+    expect(trade?.state).toBe("OPEN");
   });
 
   it("attaches exitIntelligenceContext on HOLD without adding exit intents (M5)", async () => {
@@ -1343,12 +1349,16 @@ describe("paper cycle runner — M4 dynamic SL/TP (DEE-379)", () => {
     expect(result.guardian?.evaluations[0]?.reason.reasonCode).toBe(exitReasonCodes.stopLossHit);
     expect(result.guardian?.evaluations[0]?.reason.slTpLevels).not.toBeNull();
     expect(submitSpy).toHaveBeenCalledTimes(1);
+    expect(result.guardianExecutions?.[0]).toMatchObject({
+      submitBlocked: true,
+      execution: { status: "execution_v2_required" },
+    });
 
     const trade = await harness.lifecycleRepository.getTradeById(
       requireOrgContext(harness.orgM3),
       tradeId,
     );
-    expect(trade?.state).toBe("CLOSED");
+    expect(trade?.state).toBe("OPEN");
   });
 
   it("holds without ExitIntent when ATR bars are insufficient", async () => {

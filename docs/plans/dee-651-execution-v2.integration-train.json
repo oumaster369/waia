@@ -1,0 +1,626 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-651",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Exactly four Human-ratified children implement one Step-15 external-effect authority invariant, one additive PostgreSQL migration, one global caller cutover, one rollback boundary, and one PR. The expected multi-thousand-line diff exceeds the ordinary review target because contracts, schema, locking, connector uncertainty, and every caller must agree atomically; four dependency-ordered child commits, reviews, and cumulative checks preserve reviewability.",
+  "includedChildren": [
+    {
+      "issue": "DEE-667",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "ExecutionPolicy/Binding, ExecutionPlanV2, ExecutionAttemptV2, and raw ExecutionReportV2 contracts plus the single additive four-table PostgreSQL/RLS schema, typed repository substrate, nullable trader_orders V2 projection refs, and tenant/RLS/append-only evidence.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-650 / PR #475 is Human-merged on the verified base and supplies RiskAllowanceV2.",
+        "The Human explicitly ratified the additive four-table PostgreSQL/RLS substrate and no-production-mutation boundary on 2026-08-21."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/execution/v2",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/0157_trader_execution_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "tests/unit/trader-execution-v2-contracts.test.ts",
+        "tests/integration/postgres-execution-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "docs/migrations/DEE-64-TRACKER.md"
+      ],
+      "actualFiles": [
+        "db/migrations_postgres/0157_trader_execution_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "lib/trader/execution/v2/contracts.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/repository-postgres.ts",
+        "tests/integration/postgres-execution-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/trader-execution-v2-contracts.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human Step-15 ratification dated 2026-08-21 authorizes these exact contracts and the additive four-table PostgreSQL/RLS substrate."
+      },
+      "expectedAcceptanceEvidence": [
+        "Contracts deterministically seal required authority/mechanics/raw-report fields and reject malformed values.",
+        "One additive migration creates exactly four V2 tables plus necessary nullable order refs without editing 0156 or Treasury history.",
+        "Tenant-scoped composite identities/FKs, one allowance to one attempt, indexes, RLS denial, organization integrity, and append-only digest-chain reports are proven.",
+        "Privileged service repository CRUD, real temporary-role client denial, migration identity, and bounded rollback evidence pass."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "Postgres clean-history apply and pnpm test --run tests/integration/postgres-execution-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "acceptanceEvidence": [
+        "The additive 0157 migration creates exactly the four ratified V2 tables, tenant-scoped composite identities, one-allowance/one-attempt uniqueness, nullable order projections, deny-by-default RLS, and an append-only report digest chain without modifying 0156 or Treasury history.",
+        "Typed contracts and the privileged repository seal policy, plan, attempt, exact payload, and raw report identities; malformed and cross-tenant inputs fail closed.",
+        "Contract, migration-identity, and real PostgreSQL tenant/RLS/CRUD/append-only tests passed on a disposable local database; no production SQL or Supabase mutation occurred.",
+        "Low-level plan persistence independently reconstructs exact stored-policy membership and conservative plan/slice notional, refusing a self-consistent forged effect above its declared ceiling."
+      ],
+      "integratedCommits": [
+        "39ef4ca09544d8da53d28bfba54ab344e902196e",
+        "bc3de05b74822577a31be2d8d92be23c8b714844",
+        "8f29e18bbaf6eab547a2039af934b9e59f2be764",
+        "df12a4efd6a47b615ff5f3f3edd3a3b85fed9fec",
+        "65018261adfe820c8347fb6ef283635c4bafd9b3",
+        "2438375900fa097f213f7f1f58d7e4bea5c887c1"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "WAIA_DB_BACKEND=postgres WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-execution-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-668",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Atomically compose RiskAllowanceV2 claim and reservation transfer with policy-envelope membership, immutable plan sealing, one durable attempt/exact payload/effect identity, append-only bind events, and a post-commit-only network dispatcher.",
+      "dependencies": ["DEE-667"],
+      "dependencyEvidence": [
+        "DEE-668 consumes the frozen V2 contract/repository API established by DEE-667.",
+        "The Human required B to remain strictly serialized after A and before every network effect."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/execution/v2",
+        "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+        "tests/unit/trader-execution-v2-authority.test.ts",
+        "tests/integration/postgres-execution-v2.test.ts"
+      ],
+      "actualFiles": [
+        "lib/trader/execution/v2/authority-postgres.ts",
+        "lib/trader/execution/v2/contracts.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/repository-postgres.ts",
+        "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+        "tests/integration/postgres-execution-v2.test.ts",
+        "tests/unit/trader-execution-v2-authority.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human Step-15 ratification dated 2026-08-21 authorizes atomic allowance→policy→plan→attempt→effect binding while preserving reservation→pending transfer."
+      },
+      "expectedAcceptanceEvidence": [
+        "No connector call occurs without exact claimed allowance, compatible sealed plan, durable bound attempt, exact payload, and committed transaction.",
+        "Venue/order type/TIF/collar/discrete size/rounding/slicing/retry/cancel membership is checked without Decision-economic recomputation.",
+        "One allowance cannot create two independent attempts under concurrency, restart, or TOCTOU.",
+        "Pre-bind and post-bind/pre-network crash proofs preserve durable state and zero network effects."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/trader-execution-v2-authority.test.ts",
+        "pnpm test --run tests/integration/postgres-execution-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "acceptanceEvidence": [
+        "A single locked PostgreSQL transaction claims the exact RiskAllowanceV2, checks the policy envelope, seals the plan, persists one attempt/exact payload, transfers reservation to pending, and appends bind evidence before any dispatcher can run.",
+        "Deterministic effect identity, exact replay, restart, pre-bind and post-bind/pre-network crash behavior, double-attempt prevention, and current-authority TOCTOU checks are executable and fail closed.",
+        "Cumulative authority unit tests and real PostgreSQL locking/concurrency tests passed while preserving Risk V2 reservation-to-pending accounting.",
+        "The final submit gate reconstructs stored policy/plan/attempt/order/allowance authority under lock, reads wall-clock time only after lock acquisition, and passes the timeout reloaded from the durable stored policy to the network callback; expiry during contention performs zero network callbacks."
+      ],
+      "integratedCommits": [
+        "085fa936363a8f1282a64b62a57c18504eb4cfcc",
+        "2d6d0cd4ec246a25df8a10c97ad6f027df30a2bf",
+        "3cdebef8f3b0f76e998a8a4f1acb8410bf0137ff",
+        "addb2f1d15b0801fec784cc64c0fe3911407e47b",
+        "9bc44118a096414c264b58e174eaed24cd8cbc01"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/trader-execution-v2-authority.test.ts",
+        "WAIA_DB_BACKEND=postgres WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-execution-v2.test.ts tests/integration/postgres-risk-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-669",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Remove synthetic fill/trade truth, persist immutable raw venue observations, make HTX timeout/unknown reconciliation-only with no blind resend, and preserve rejection/partial/residual/cancel/pre-sealed-replace semantics and append-only replay.",
+      "dependencies": ["DEE-668"],
+      "dependencyEvidence": [
+        "DEE-669 reports and recovers only attempts durably bound by DEE-668.",
+        "The Human explicitly fixed HTX at FAIL-UNKNOWN with no same-identity retry or lookup assumption until venue idempotency is documented and proven."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/execution/v2",
+        "lib/trader/execution/execution-service.ts",
+        "lib/trader/execution/execution-service.types.ts",
+        "lib/trader/execution/connector-status-map.ts",
+        "lib/trader/execution/reconciliation-service.ts",
+        "tests/unit/trader-execution-v2-fail-unknown.test.ts",
+        "tests/unit/trader-order-execution-service.test.ts",
+        "tests/unit/trader-order-reconciliation-service.test.ts",
+        "tests/integration/postgres-execution-v2.test.ts"
+      ],
+      "actualFiles": [
+        "lib/trader/execution/execution-service.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/recovery-postgres.ts",
+        "lib/trader/execution/v2/repository-postgres.ts",
+        "tests/integration/postgres-execution-v2.test.ts",
+        "tests/unit/trader-execution-v2-fail-unknown.test.ts",
+        "tests/unit/trader-order-execution-service.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human Step-15 ratification dated 2026-08-21 authorizes raw report/reconciliation behavior and mandates HTX FAIL-UNKNOWN/no blind resend."
+      },
+      "expectedAcceptanceEvidence": [
+        "FILLED/PARTIALLY_FILLED without exact trade evidence creates no synthetic trade, fill, price, quantity, fee, fee asset, or canonical truth.",
+        "HTX timeout/unknown appends raw uncertainty and reconciliation-required reports without retry or freeing authority.",
+        "Reject, partial-fill, residual, cancel, and pre-sealed replace semantics do not create hidden second-order authority.",
+        "Digest-chain replay reconstructs the exact attempt lifecycle and post-network-timeout restart remains fail-unknown."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-execution-v2-fail-unknown.test.ts tests/unit/trader-order-execution-service.test.ts tests/unit/trader-order-reconciliation-service.test.ts",
+        "pnpm test --run tests/integration/postgres-execution-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "acceptanceEvidence": [
+        "Connector observations are retained as immutable raw reports; exact trade evidence is required before canonical fill truth, so no trade id, fill, price, quantity, fee, or fee asset is fabricated.",
+        "HTX timeout and unknown outcomes remain FAIL-UNKNOWN, append RECONCILIATION_REQUIRED evidence, preserve bound authority, and never trigger same-identity resend or an undocumented lookup assumption.",
+        "Focused reject, partial/residual, cancel/pre-sealed-replace, append-only replay, restart, and post-network-timeout proofs passed."
+      ],
+      "integratedCommits": [
+        "cb0fd17d963625eefb300836875a9bc7ba63cdd1",
+        "86e4422b564a0204dd025410a3d031610e3dd625",
+        "aceb5f4c343c8aef089abeb85c5eaaf042db7299",
+        "2153807f7e3e4365cf30706efcf6833a0a18cee3",
+        "f7617e496a889fc7092fa9bf6eab8296e0965a42",
+        "9fddb5ddf015c65a790b03ec680c5fd985e00a58"
+      ],
+      "tests": [
+        "pnpm test --run tests/unit/trader-execution-v2-fail-unknown.test.ts tests/unit/trader-order-execution-service.test.ts tests/unit/trader-order-reconciliation-service.test.ts",
+        "WAIA_DB_BACKEND=postgres WAIA_PG_INTEGRATION=1 pnpm test --run tests/integration/postgres-execution-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-670",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Map and migrate or fail-close every legacy/non-V2 connector caller across paper, live, guardian, replay, observability, research harnesses, and tests; expose only the committed V2 attempt dispatcher to connector order placement; seal genuine TEST_ONLY Decision→RiskAllowance→policy→plan→attempt authority in local PostgreSQL without legacy simulated effects for the nine Human-ratified scientific/FHV/trace tests; preserve the two admitted official-scale fill-density gates by binding every existing historical modeled effect to genuine V2 authority in their test-only harness; and prove whole-repository static/runtime closure without claiming DEE-634 production completion.",
+      "dependencies": ["DEE-669"],
+      "dependencyEvidence": [
+        "DEE-670 requires the complete A→B→C authority and uncertainty boundary before callers migrate.",
+        "DEE-650 explicitly delegated global legacy connector-caller cutover and consumer-graph closure to DEE-651."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/execution/execution-service.ts",
+        "lib/trader/execution/execution-service.types.ts",
+        "lib/trader/execution/index.ts",
+        "lib/trader/execution/v2",
+        "lib/trader/execution/v2/test-only-authority-port.ts",
+        "lib/trader/execution/v2/authority-postgres.ts",
+        "lib/trader/connectors/exchange-connector.ts",
+        "lib/trader/connectors/htx/mappers.ts",
+        "lib/trader/connectors/htx/htx-exchange-connector.ts",
+        "lib/trader/connectors/types.ts",
+        "lib/trader/live",
+        "lib/trader/paper",
+        "lib/trader/guardian",
+        "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts",
+        "lib/trader/observability/fhv-control-replay-execution.ts",
+        "lib/trader/research/capital-path-trace-harness.ts",
+        "lib/trader/index.ts",
+        "scripts/trader/fhv-control-replay-cli.ts",
+        "scripts/trader/validate-execution-v2-consumer-graph.ts",
+        "tests/helpers/execution-v2-test-only-postgres.ts",
+        ".github/workflows/postgres-integration.yml",
+        ".github/workflows/ci.yml",
+        "package.json",
+        "tests/unit/trader-execution-v2-consumer-graph.test.ts",
+        "tests/unit/trader-live-execution-service.test.ts",
+        "tests/unit/trader-paper-cycle-runner.test.ts",
+        "tests/unit/trader-paper-bar-close-loop.test.ts",
+        "tests/unit/trader-guardian-exit-intent-mapper.test.ts",
+        "tests/unit/v2-legacy-signal-mapping-firewall.test.ts",
+        "tests/unit/trader-risk-v2-execution-consumption.test.ts",
+        "tests/unit/trader-connector-htx.test.ts",
+        "tests/unit/trader-order-execution-tenant-isolation.test.ts",
+        "tests/unit/trader-closed-trade-attribution-forensics-m0.test.ts",
+        "tests/unit/trader-closed-trade-attribution-v2.test.ts",
+        "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+        "tests/integration/trader-intelligence-loop.test.ts",
+        "tests/integration/trader-live-cycle.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-telemetry.test.ts",
+        "tests/integration/trader-paper-bar-close-loop.test.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "tests/integration/trader-paper-p5-multi-strategy.test.ts",
+        "tests/integration/postgres-order-execution-parity.test.ts",
+        "tests/unit/control-replay-scientific-v2-driver-v1.test.ts",
+        "tests/unit/fhv-control-replay-cli.test.ts",
+        "tests/unit/fhv-final-parity-red.test.ts",
+        "tests/unit/fhv-official-path-blockers-red.test.ts",
+        "tests/unit/fhv-official-streaming-red.test.ts",
+        "tests/unit/fhv-public-ceremony-red.test.ts",
+        "tests/unit/fhv-real-htx-preholdout-control-replay.test.ts",
+        "tests/unit/fhv-btc-eth-execution-evidence.test.ts",
+        "tests/integration/trader-capital-path-trace-evidence.test.ts",
+        "tests/integration/fhv-public-ceremony-shell.test.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-scale-harness.ts"
+      ],
+      "actualFiles": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/postgres-integration.yml",
+        "lib/trader/connectors/htx/htx-exchange-connector.ts",
+        "lib/trader/connectors/htx/mappers.ts",
+        "lib/trader/connectors/types.ts",
+        "lib/trader/execution/execution-service.ts",
+        "lib/trader/execution/execution-service.types.ts",
+        "lib/trader/execution/index.ts",
+        "lib/trader/execution/v2/authority-postgres.ts",
+        "lib/trader/execution/v2/connector-dispatch.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/test-only-authority-port.ts",
+        "lib/trader/index.ts",
+        "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts",
+        "lib/trader/observability/fhv-control-replay-execution.ts",
+        "package.json",
+        "scripts/trader/fhv-control-replay-cli.ts",
+        "scripts/trader/validate-execution-v2-consumer-graph.ts",
+        "tests/helpers/execution-v2-test-only-postgres.ts",
+        "tests/integration/fhv-public-ceremony-shell.test.ts",
+        "tests/integration/postgres-order-execution-parity.test.ts",
+        "tests/integration/trader-capital-path-trace-evidence.test.ts",
+        "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+        "tests/integration/trader-intelligence-loop.test.ts",
+        "tests/integration/trader-live-cycle.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-telemetry.test.ts",
+        "tests/integration/trader-paper-bar-close-loop.test.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "tests/integration/trader-paper-p5-multi-strategy.test.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-scale-harness.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
+        "tests/unit/control-replay-scientific-v2-driver-v1.test.ts",
+        "tests/unit/fhv-btc-eth-execution-evidence.test.ts",
+        "tests/unit/fhv-control-replay-cli.test.ts",
+        "tests/unit/fhv-final-parity-red.test.ts",
+        "tests/unit/fhv-official-path-blockers-red.test.ts",
+        "tests/unit/fhv-official-streaming-red.test.ts",
+        "tests/unit/fhv-public-ceremony-red.test.ts",
+        "tests/unit/fhv-real-htx-preholdout-control-replay.test.ts",
+        "tests/unit/trader-closed-trade-attribution-forensics-m0.test.ts",
+        "tests/unit/trader-closed-trade-attribution-v2.test.ts",
+        "tests/unit/trader-connector-htx.test.ts",
+        "tests/unit/trader-execution-v2-consumer-graph.test.ts",
+        "tests/unit/trader-live-execution-service.test.ts",
+        "tests/unit/trader-order-execution-tenant-isolation.test.ts",
+        "tests/unit/trader-paper-cycle-runner.test.ts",
+        "tests/unit/trader-risk-v2-execution-consumption.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Explicit Human Step-15 ratification and DEE-650 handoff dated 2026-08-21 authorize the global caller cutover; the Human additionally ratified exactly nine scientific/FHV/trace tests for genuine test-only Execution V2 authority, the single public-ceremony shell fail-closure, and exact-head review remediation in existing admitted V2 files plus only four named HTX connector/type/test surfaces. On 2026-08-22 the Human admitted exactly the WP7B representative-segment test, canonical throughput-probe test, their shared official-scale harness, and .github/workflows/ci.yml limited to loopback PostgreSQL/Test-Only V2 setup in those two jobs, preserving modeled fill/accounting floors through genuine allowance→policy→plan→attempt authority. No production runtime, other CI job, legacy bypass, HTX change, DEE-620/DEE-634 production, or Execution Server work is authorized."
+      },
+      "expectedAcceptanceEvidence": [
+        "Static proof enumerates every connector submission primitive and only the committed V2 dispatcher may call it.",
+        "Runtime regressions prove raw orders, StrategySignal, Forecast, AI, guardian, paper, live, replay, and harness paths cannot bypass allowance→plan→attempt authority.",
+        "Every legitimate caller migrates to the frozen V2 contract or fails closed before network.",
+        "Historical/paper/live-equivalent authority and DEE-520 execution/accounting/symbol/resume invariants remain green.",
+        "The nine Human-ratified scientific Control Replay, official FHV, and capital-trace tests prove genuine deterministic allowance→policy→plan→attempt identity while recording zero legacy simulated submissions or fills.",
+        "The TEST_ONLY PostgreSQL port proves Risk reservation→pending transfer, durable exact effect binding, same-effect restart, one zero-effect timeout, raw uncertainty/reconciliation reports, and no second callback or blind resend; DEE-634 remains Todo.",
+        "The separate-process public ceremony fails closed at Control Replay with TEST_ONLY_EXECUTION_V2_AUTHORITY_REQUIRED and never reaches authorize-full/full-run; no production CLI PostgreSQL wiring is added.",
+        "Planned and exact effect notional cannot exceed RiskAllowanceV2.reservedExposureNotional; exact venue identity/price/quantity/fill totals/cancel identity mismatches reconcile instead of promoting truth.",
+        "Unknown HTX states remain fail-unknown, report type determines lifecycle projection, and the underlying immutable raw HTX observation is retained without fabricated fields.",
+        "The WP7B and canonical-probe historical modeled-effect paths retain their nonzero fill/accounting floors only after each modeled order is durably bound to one genuine TEST_ONLY RiskAllowanceV2, policy, plan, and attempt; the original legacy submit path remains disabled."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-execution-v2-consumer-graph.test.ts tests/unit/trader-live-execution-service.test.ts tests/unit/trader-paper-cycle-runner.test.ts tests/unit/trader-paper-bar-close-loop.test.ts tests/unit/trader-guardian-exit-intent-mapper.test.ts tests/unit/v2-legacy-signal-mapping-firewall.test.ts tests/unit/trader-risk-v2-execution-consumption.test.ts",
+        "pnpm test --run tests/unit/trader-order-execution-tenant-isolation.test.ts tests/unit/trader-closed-trade-attribution-forensics-m0.test.ts tests/unit/trader-closed-trade-attribution-v2.test.ts tests/integration/trader-htx-bar-poll-cycle.test.ts tests/integration/trader-intelligence-loop.test.ts tests/integration/trader-live-cycle.test.ts tests/integration/trader-paper-bar-close-loop-account-state.test.ts tests/integration/trader-paper-bar-close-loop-telemetry.test.ts tests/integration/trader-paper-bar-close-loop.test.ts tests/integration/trader-paper-cycle-runner.test.ts tests/integration/trader-paper-p5-multi-strategy.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<local-ci-postgres> pnpm test --run --no-file-parallelism tests/unit/control-replay-scientific-v2-driver-v1.test.ts tests/unit/fhv-control-replay-cli.test.ts tests/unit/fhv-final-parity-red.test.ts tests/unit/fhv-official-path-blockers-red.test.ts tests/unit/fhv-official-streaming-red.test.ts tests/unit/fhv-public-ceremony-red.test.ts tests/unit/fhv-real-htx-preholdout-control-replay.test.ts tests/unit/fhv-btc-eth-execution-evidence.test.ts tests/integration/trader-capital-path-trace-evidence.test.ts",
+        "pnpm test --run tests/integration/fhv-public-ceremony-shell.test.ts",
+        "pnpm test --run tests/unit/trader-connector-htx.test.ts tests/unit/trader-execution-v2-contracts.test.ts tests/unit/trader-execution-v2-authority.test.ts tests/unit/trader-execution-v2-fail-unknown.test.ts",
+        "pnpm test --run tests/integration/postgres-order-execution-parity.test.ts tests/integration/postgres-execution-v2.test.ts",
+        "WAIA_PG_INTEGRATION=1 FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY=1 DATABASE_URL_POSTGRES=<loopback> pnpm test:fhv:wp7b:representative-segment",
+        "WAIA_PG_INTEGRATION=1 FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY=1 DATABASE_URL_POSTGRES=<loopback> pnpm test:fhv:official-scale:probe",
+        "pnpm run validate:execution-v2-consumer-graph",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "acceptanceEvidence": [
+        "The whole-repository static graph finds connector placement only inside the HTX connector implementation and the committed-attempt V2 dispatcher; the remaining legacy callers are enumerated and fail closed before Risk, persistence, or network.",
+        "Legacy paper, live, replay, guardian-adjacent, attribution, and harness consumers now migrate to V2 or return execution_v2_required before reconciliation, accounting, or network effects.",
+        "The Human-authorized nine scientific/FHV/trace surfaces now record zero legacy simulated fills and use a loopback-only PostgreSQL port to claim a real allowance, transfer reservation to pending, durably bind one exact effect, and prove fail-unknown restart without resend.",
+        "The PostgreSQL nine-file gate passed 65 tests; consumer graph validation reported zero violations; DEE-634 remains Todo and no production Decision→Risk→Execution closure is claimed.",
+        "The public ceremony shell now proves the separate-process CLI fails closed with TEST_ONLY_EXECUTION_V2_AUTHORITY_REQUIRED and stops before authorize-full/full-run, without production CLI PostgreSQL wiring.",
+        "The Human-authorized remediation binds planned/effect notional to the locked allowance reservation, rejects mismatched venue mechanics and fill totals, derives lifecycle from report type, retains secret-safe immutable raw HTX observations for fail-unknown reconciliation, and enforces the sealed timeout around the single placement request.",
+        "The Human-authorized official-scale correction preserves the existing fill-density/accounting workload through a test-only PostgreSQL authority adapter; each historical modeled placement occurs only inside the committed V2 dispatcher callback, and no production execution path is changed."
+      ],
+      "integratedCommits": [
+        "25d7e82d23ab346123fef667b0298c0204c9b6ee",
+        "88b82bf29262429a62f6bb4431a4f085bd370bae",
+        "0758d3778190e557e773c3a478139fdaf1886b4c",
+        "cf08f7476b82bbc1d56cc4d448cbc793ee33a561",
+        "df8e8705a4add043ce807e70d0794b5088203379",
+        "5a398155e904eb5d4739f45a4b36dc6d95fb623e",
+        "d5fd2abf7886955ee794e053b032f25bf7e737df",
+        "7ad36fabb7db60c2c47436f30461f6fa870deabd",
+        "2950881673e9166db1fb07d9d71a66271565f5f9",
+        "26677d2103db22d56a4ab0ca2db80376a9932656",
+        "216becd8001a9f67aceade30767e1cf8c64187c7",
+        "259fe7f331c7f7857f6305c786f921f29af3c60e",
+        "8d14762190a1d9f8a3348f4eba748174fd8ad38b",
+        "239e967a0bcb38acccf475078278e51e903f10e0",
+        "fa55fbc01cfdb3f1a25c61ad87fd34276b670baa"
+      ],
+      "tests": [
+        "pnpm run validate:execution-v2-consumer-graph",
+        "24 focused Execution V2 and consumer files / 84 tests",
+        "11 Human-authorized expanded consumer files / 17 tests",
+        "WAIA_PG_INTEGRATION=1 nine admitted scientific/FHV/trace files / 65 tests",
+        "tests/integration/fhv-public-ceremony-shell.test.ts / 1 test",
+        "official-chain discovery marker plus local-migrated health baseline / 13 tests; one PostgreSQL-gated evidence test skipped locally",
+        "eight sandbox-denied files retried with local permission / 35 tests",
+        "WAIA_DB_BACKEND=postgres WAIA_PG_INTEGRATION=1 tests/integration/postgres-execution-v2.test.ts / 9 tests",
+        "remediation-focused Execution V2 and HTX connector unit files / 31 tests",
+        "remediation real PostgreSQL authority/reconciliation file / 21 tests",
+        "WP7B representative segment / 5 tests with 806 authority-bound modeled fills",
+        "canonical official-scale probe / 2 tests with nonzero authority-bound modeled fills",
+        "umbrella unit stale-consumer assertion / 3 tests",
+        "pnpm lint",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:pr-governance"
+      ],
+      "execution": {
+        "wave": 4,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human-ratified Step-15 integration owner; Human-authorized PR #477 official-scale TEST_ONLY correction limited to the WP7B representative segment, canonical probe, their shared harness, and the two named CI jobs on 2026-08-22"
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "3ffae69cc88cb1834bebc966703df0867517a0000bb2c5e7823a5cf5ddfe35bc",
+      "manifestCommit": "37c46e0c2ed27844f248afed3b7f6ec6bcf43031",
+      "manifestPath": "docs/plans/dee-651-execution-v2.integration-train.json",
+      "reviewer": "Human-ratified Step-15 integration owner; Human-authorized PR #477 official-scale TEST_ONLY correction limited to the WP7B representative segment, canonical probe, their shared harness, and the two named CI jobs on 2026-08-22"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-667",
+        "status": "pass",
+        "reviewedCommits": [
+          "39ef4ca09544d8da53d28bfba54ab344e902196e",
+          "bc3de05b74822577a31be2d8d92be23c8b714844",
+          "8f29e18bbaf6eab547a2039af934b9e59f2be764",
+          "df12a4efd6a47b615ff5f3f3edd3a3b85fed9fec",
+          "65018261adfe820c8347fb6ef283635c4bafd9b3",
+          "2438375900fa097f213f7f1f58d7e4bea5c887c1"
+        ],
+        "reviewedFiles": [
+          "db/migrations_postgres/0157_trader_execution_v2.sql",
+          "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts",
+          "docs/migrations/DEE-64-TRACKER.md",
+          "lib/trader/execution/v2/contracts.ts",
+          "lib/trader/execution/v2/index.ts",
+          "lib/trader/execution/v2/repository-postgres.ts",
+          "tests/integration/postgres-execution-v2.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+          "tests/unit/trader-execution-v2-contracts.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-668",
+        "status": "pass",
+        "reviewedCommits": [
+          "085fa936363a8f1282a64b62a57c18504eb4cfcc",
+          "2d6d0cd4ec246a25df8a10c97ad6f027df30a2bf",
+          "3cdebef8f3b0f76e998a8a4f1acb8410bf0137ff",
+          "addb2f1d15b0801fec784cc64c0fe3911407e47b",
+          "9bc44118a096414c264b58e174eaed24cd8cbc01"
+        ],
+        "reviewedFiles": [
+          "lib/trader/execution/v2/authority-postgres.ts",
+          "lib/trader/execution/v2/contracts.ts",
+          "lib/trader/execution/v2/index.ts",
+          "lib/trader/execution/v2/repository-postgres.ts",
+          "lib/trader/risk/v2/risk-allowance-repository-postgres.ts",
+          "tests/integration/postgres-execution-v2.test.ts",
+          "tests/unit/trader-execution-v2-authority.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-669",
+        "status": "pass",
+        "reviewedCommits": [
+          "cb0fd17d963625eefb300836875a9bc7ba63cdd1",
+          "86e4422b564a0204dd025410a3d031610e3dd625",
+          "aceb5f4c343c8aef089abeb85c5eaaf042db7299",
+          "2153807f7e3e4365cf30706efcf6833a0a18cee3",
+          "f7617e496a889fc7092fa9bf6eab8296e0965a42",
+          "9fddb5ddf015c65a790b03ec680c5fd985e00a58"
+        ],
+        "reviewedFiles": [
+          "lib/trader/execution/execution-service.ts",
+          "lib/trader/execution/v2/index.ts",
+          "lib/trader/execution/v2/recovery-postgres.ts",
+          "lib/trader/execution/v2/repository-postgres.ts",
+          "tests/integration/postgres-execution-v2.test.ts",
+          "tests/unit/trader-execution-v2-fail-unknown.test.ts",
+          "tests/unit/trader-order-execution-service.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-670",
+        "status": "pass",
+        "reviewedCommits": [
+          "25d7e82d23ab346123fef667b0298c0204c9b6ee",
+          "88b82bf29262429a62f6bb4431a4f085bd370bae",
+          "0758d3778190e557e773c3a478139fdaf1886b4c",
+          "cf08f7476b82bbc1d56cc4d448cbc793ee33a561",
+          "df8e8705a4add043ce807e70d0794b5088203379",
+          "5a398155e904eb5d4739f45a4b36dc6d95fb623e",
+          "d5fd2abf7886955ee794e053b032f25bf7e737df",
+          "7ad36fabb7db60c2c47436f30461f6fa870deabd",
+          "2950881673e9166db1fb07d9d71a66271565f5f9",
+          "26677d2103db22d56a4ab0ca2db80376a9932656",
+          "216becd8001a9f67aceade30767e1cf8c64187c7",
+          "259fe7f331c7f7857f6305c786f921f29af3c60e",
+          "8d14762190a1d9f8a3348f4eba748174fd8ad38b",
+          "239e967a0bcb38acccf475078278e51e903f10e0",
+          "fa55fbc01cfdb3f1a25c61ad87fd34276b670baa"
+        ],
+        "reviewedFiles": [
+          ".github/workflows/ci.yml",
+          ".github/workflows/postgres-integration.yml",
+          "lib/trader/connectors/htx/htx-exchange-connector.ts",
+          "lib/trader/connectors/htx/mappers.ts",
+          "lib/trader/connectors/types.ts",
+          "lib/trader/execution/execution-service.ts",
+          "lib/trader/execution/execution-service.types.ts",
+          "lib/trader/execution/index.ts",
+          "lib/trader/execution/v2/authority-postgres.ts",
+          "lib/trader/execution/v2/connector-dispatch.ts",
+          "lib/trader/execution/v2/index.ts",
+          "lib/trader/execution/v2/test-only-authority-port.ts",
+          "lib/trader/index.ts",
+          "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts",
+          "lib/trader/observability/fhv-control-replay-execution.ts",
+          "package.json",
+          "scripts/trader/fhv-control-replay-cli.ts",
+          "scripts/trader/validate-execution-v2-consumer-graph.ts",
+          "tests/helpers/execution-v2-test-only-postgres.ts",
+          "tests/integration/fhv-public-ceremony-shell.test.ts",
+          "tests/integration/postgres-order-execution-parity.test.ts",
+          "tests/integration/trader-capital-path-trace-evidence.test.ts",
+          "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+          "tests/integration/trader-intelligence-loop.test.ts",
+          "tests/integration/trader-live-cycle.test.ts",
+          "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+          "tests/integration/trader-paper-bar-close-loop-telemetry.test.ts",
+          "tests/integration/trader-paper-bar-close-loop.test.ts",
+          "tests/integration/trader-paper-cycle-runner.test.ts",
+          "tests/integration/trader-paper-p5-multi-strategy.test.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-scale-harness.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
+          "tests/unit/control-replay-scientific-v2-driver-v1.test.ts",
+          "tests/unit/fhv-btc-eth-execution-evidence.test.ts",
+          "tests/unit/fhv-control-replay-cli.test.ts",
+          "tests/unit/fhv-final-parity-red.test.ts",
+          "tests/unit/fhv-official-path-blockers-red.test.ts",
+          "tests/unit/fhv-official-streaming-red.test.ts",
+          "tests/unit/fhv-public-ceremony-red.test.ts",
+          "tests/unit/fhv-real-htx-preholdout-control-replay.test.ts",
+          "tests/unit/trader-closed-trade-attribution-forensics-m0.test.ts",
+          "tests/unit/trader-closed-trade-attribution-v2.test.ts",
+          "tests/unit/trader-connector-htx.test.ts",
+          "tests/unit/trader-execution-v2-consumer-graph.test.ts",
+          "tests/unit/trader-live-execution-service.test.ts",
+          "tests/unit/trader-order-execution-tenant-isolation.test.ts",
+          "tests/unit/trader-paper-cycle-runner.test.ts",
+          "tests/unit/trader-risk-v2-execution-consumption.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-667",
+        "status": "pass",
+        "commands": ["contract and migration-identity tests", "real PostgreSQL substrate/RLS tests", "remediation reservation/effect ceiling tests", "stored-policy membership and exact conservative effect-notional proof", "typecheck", "scoped eslint"]
+      },
+      {
+        "afterIssue": "DEE-668",
+        "status": "pass",
+        "commands": ["cumulative atomic-authority tests", "PostgreSQL locking/concurrency/TOCTOU and locked-reservation recheck tests", "post-lock wall-clock execution-window refusal", "typecheck", "scoped eslint"]
+      },
+      {
+        "afterIssue": "DEE-669",
+        "status": "pass",
+        "commands": ["fail-unknown/recovery/raw-report tests", "exact venue mechanics/fill/cancel reconciliation tests", "PostgreSQL restart/crash tests", "typecheck", "scoped eslint"]
+      },
+      {
+        "afterIssue": "DEE-670",
+        "status": "pass",
+        "commands": ["focused Execution V2, HTX connector, and consumer tests", "remediation real PostgreSQL authority/reconciliation tests", "nine-file PostgreSQL authority gate", "public-ceremony fail-close test", "WP7B representative segment with 806 authority-bound modeled fills", "canonical probe with nonzero authority-bound modeled fills", "umbrella unit stale-consumer assertion", "eight sandbox-denied file retries", "consumer graph", "lint", "typecheck", "build", "canon", "PR governance"]
+      }
+    ],
+    "preFreezeValidation": {
+      "status": "pass",
+      "validatedHead": "fa55fbc01cfdb3f1a25c61ad87fd34276b670baa",
+      "baseMain": "9fd25a456bf5f785eb9e5e99760a654fc5a311c2",
+      "semanticConflict": false,
+      "productionDatabaseMutated": false,
+      "commands": [
+        "nine Human-authorized PostgreSQL scientific/FHV/trace files / 65 tests",
+        "focused Execution V2 tests and real PostgreSQL substrate / PASS",
+        "remediation-focused Execution V2 and HTX connector unit files / 31 tests",
+        "remediation real PostgreSQL authority/reconciliation file / 21 tests, including forged low-level plan refusal, stored-policy and conservative effect-notional reconstruction, exact durable binding reconstruction, post-lock wall-clock timing-window recheck, and zero network callbacks",
+        "cancel acknowledgement decision/read/append serialized under one attempt lock; legacy non-historical cancellation stops at CANCEL_REQUESTED and the static graph inventories cancellation callers",
+        "public-ceremony shell fail-close / 1 test",
+        "official-chain marker compatibility and migrated local SQLite health baseline / PASS",
+        "eight sandbox-denied files retried with local permission / 35 tests",
+        "consumer graph, lint, typecheck, build, canon, PR governance / PASS",
+        "rebuilt A/D remediation: focused Execution V2, HTX, and consumer graph / 41 tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; static consumer graph zero violations; typecheck PASS; lint 0 errors; build PASS",
+        "post-review C/D remediation: secret-safe transport uncertainty, required native quantity/fill evidence, raw mismatched-trade retention, and observed HTTP body-read failure / 44 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS",
+        "final D remediation: sealed-timeout propagation, one bounded placement request, and credential-safe response evidence with an exact raw digest / 46 focused tests PASS; typecheck and scoped lint PASS",
+        "exact-head review remediation: durable stored-policy timeout authority, one deadline across fetch and body consumption, and credential-safe response keys and values / 47 focused tests PASS; real PostgreSQL authority/recovery / 21 tests PASS; typecheck and scoped lint PASS",
+        "PR #477 official-scale correction: WP7B representative segment / 5 tests PASS with 806 modeled fills; canonical probe / 2 tests PASS with nonzero modeled fills; umbrella unit stale-consumer assertion / 3 tests PASS; typecheck PASS",
+        "origin/main reconciliation: Execution migration 0157 retained before Treasury 0158/0159; journal, PostgreSQL schema, DEE-64 tracker, and migration-identity expectation mechanically combined without Treasury semantic change",
+        "fresh disposable PostgreSQL 16 full migration apply through 0157/0158/0159 PASS; affected migration/Treasury identity tests 19/19 PASS; real PostgreSQL Execution V2 integration 21/21 PASS; typecheck and canon PASS"
+      ]
+    },
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  }
+}

@@ -17,6 +17,20 @@ on:
       - "db/migrations_postgres/**"
       - "db/schema.postgres.ts"
       - "scripts/postgres-validation/**"
+      - "lib/trader/execution/v2/**"
+      - "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts"
+      - "lib/trader/observability/fhv-control-replay-execution.ts"
+      - "scripts/trader/fhv-control-replay-cli.ts"
+      - "tests/helpers/execution-v2-test-only-postgres.ts"
+      - "tests/unit/control-replay-scientific-v2-driver-v1.test.ts"
+      - "tests/unit/fhv-control-replay-cli.test.ts"
+      - "tests/unit/fhv-final-parity-red.test.ts"
+      - "tests/unit/fhv-official-path-blockers-red.test.ts"
+      - "tests/unit/fhv-official-streaming-red.test.ts"
+      - "tests/unit/fhv-public-ceremony-red.test.ts"
+      - "tests/unit/fhv-real-htx-preholdout-control-replay.test.ts"
+      - "tests/unit/fhv-btc-eth-execution-evidence.test.ts"
+      - "tests/integration/trader-capital-path-trace-evidence.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
 
@@ -56,10 +70,17 @@ jobs:
         run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
       - name: Drizzle + postgres-js smoke (insert/select/delete, FK-safe)
         run: pnpm db:smoke:postgres
-      # NOTE: the opt-in `WAIA_PG_INTEGRATION=1` parity suite
-      # (tests/integration/postgres-*.test.ts) is intentionally NOT run here.
-      # It has pre-existing, DEE-287-unrelated fixture-parity failures (SQLite-style
-      # non-canonical UUID literals rejected by Postgres `uuid`, tests not seeding
-      # `auth.users` before `public.users`, `text = uuid` comparisons). DEE-287 scopes
-      # this workflow to migration-apply + driver smoke; the parity-fixture cleanup is
-      # tracked separately (see docs/migrations/DEE-287-POSTGRES-VALIDATION-PRELUDE.md).
+      - name: DEE-651 TEST_ONLY Decision → Risk → Execution V2 proof
+        env:
+          WAIA_PG_INTEGRATION: "1"
+        run: >-
+          pnpm test --run --no-file-parallelism
+          tests/unit/control-replay-scientific-v2-driver-v1.test.ts
+          tests/unit/fhv-control-replay-cli.test.ts
+          tests/unit/fhv-final-parity-red.test.ts
+          tests/unit/fhv-official-path-blockers-red.test.ts
+          tests/unit/fhv-official-streaming-red.test.ts
+          tests/unit/fhv-public-ceremony-red.test.ts
+          tests/unit/fhv-real-htx-preholdout-control-replay.test.ts
+          tests/unit/fhv-btc-eth-execution-evidence.test.ts
+          tests/integration/trader-capital-path-trace-evidence.test.ts

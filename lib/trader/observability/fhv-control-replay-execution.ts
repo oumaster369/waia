@@ -44,11 +44,14 @@ import {
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
 import { V2_CAPITAL_AUTHORITY_PATH } from "@/lib/trader/risk/authority-chain";
+import type { TestOnlyExecutionV2AuthorityPort } from "@/lib/trader/execution/v2/test-only-authority-port";
 
 export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
 
 export type FhvControlReplayLaunchInput = FhvFullHistoricalLaunchInput & {
   executionPurpose: typeof FHV_CONTROL_REPLAY_EXECUTION_PURPOSE;
+  /** Human-authorized only for the nine admitted PostgreSQL test surfaces. */
+  testOnlyExecutionV2Authority?: TestOnlyExecutionV2AuthorityPort;
 };
 
 /**
@@ -168,6 +171,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
 
   const scientific = await runScientificControlReplayV2Ceremony({
     organizationId: input.launchInput.organizationId,
+    testOnlyExecutionV2Authority: input.launchInput.testOnlyExecutionV2Authority,
   });
 
   const scientificEvidencePath = join(input.runDir, "control-replay-scientific-v2-result.v1.json");

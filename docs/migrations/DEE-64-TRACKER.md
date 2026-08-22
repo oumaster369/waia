@@ -14,6 +14,11 @@ It derives month/year category and group budget truth from verified Treasury tra
 it does not change broad runtime routing, apply production/Supabase SQL, touch the walkthrough
 database, or mutate financial rows.
 
+**DEE-651 / E651-A** adds the Postgres-only Execution V2 policy, plan, attempt, and raw
+report substrate in migration `0157`, plus nullable V2 projection identities on
+`trader_orders`. It is additive, service-only behind deny-by-default RLS, and does not
+apply production SQL or change the staged runtime backend policy.
+
 **DEE-650 / R650-C+D** adds the Postgres-only Risk V2 verdict, allowance lifecycle,
 per-account reservation/accounting projection, and append-only digest-chained enforcement ledger
 in migration `0156`, plus the exact order-authority binding seam. It is additive: legacy Risk/order

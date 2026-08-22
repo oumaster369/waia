@@ -16,6 +16,7 @@ import type {
   OrderRow,
 } from "@/lib/trader/execution/order-repository.types";
 import {
+  compareDecimal,
   DECIMAL_SCALE_FACTOR,
   formatDecimal,
   parseDecimal,
@@ -101,6 +102,8 @@ export type AdmitRiskAllowanceV2Result = Readonly<{
 export type ConsumeRiskAllowanceForOrderV2Input = Readonly<{
   accountId: string;
   riskAllowanceId: string;
+  riskAllowanceContentDigestHex?: string;
+  effectNotionalCeiling?: string;
   nonce: string;
   consumptionEventId: string;
   order: Omit<
@@ -833,6 +836,7 @@ export function computeRiskAllowanceOrderBindingDigestV2(input: {
     | "exactQualifiedQuantity"
     | "decision"
   >;
+  effectNotionalCeiling?: string;
   order: ConsumeRiskAllowanceForOrderV2Input["order"] & { venue: string };
 }): string {
   return computeStableJsonDigest({
@@ -847,6 +851,9 @@ export function computeRiskAllowanceOrderBindingDigestV2(input: {
     decisionId: input.allowance.decision.decisionId,
     decisionContentDigestHex: input.allowance.decision.contentDigestHex,
     instrumentIdentityDigestHex: input.allowance.instrumentIdentityDigestHex,
+    ...(input.effectNotionalCeiling === undefined ? {} : {
+      effectNotionalCeiling: formatDecimal(parseDecimal(input.effectNotionalCeiling)),
+    }),
     order: {
       id: input.order.id,
       venue: input.order.venue,
@@ -926,12 +933,23 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
 function requireOrderMatchesAllowanceV2(input: {
   state: RiskAccountStateV2;
   allowance: RiskAllowanceV2;
+  riskAllowanceContentDigestHex?: string;
+  effectNotionalCeiling?: string;
   order: ConsumeRiskAllowanceForOrderV2Input["order"];
   nonce: string;
   durableAt: Date;
 }): void {
   if (input.nonce !== input.allowance.nonce) {
     throw new RiskV2AdmissionRefusedError("ALLOWANCE_NONCE_MISMATCH");
+  }
+  if (input.riskAllowanceContentDigestHex !== undefined &&
+    input.riskAllowanceContentDigestHex !== input.allowance.contentDigestHex) {
+    throw new RiskV2AdmissionRefusedError("ALLOWANCE_CONTENT_DIGEST_MISMATCH");
+  }
+  if (input.effectNotionalCeiling !== undefined &&
+    input.allowance.decision.action === "ENTER_LONG" &&
+    compareDecimal(input.effectNotionalCeiling, input.allowance.reservedExposureNotional) > 0) {
+    throw new RiskV2AdmissionRefusedError("EFFECT_NOTIONAL_EXCEEDS_ALLOWANCE_RESERVATION");
   }
   if (input.durableAt.getTime() >= new Date(input.allowance.validUntilUtc).getTime()) {
     throw new RiskV2AdmissionRefusedError("ALLOWANCE_EXPIRED");
@@ -985,14 +1003,13 @@ function requireOrderMatchesAllowanceV2(input: {
  * Consumption boundary: locks current Risk state + allowance, durably creates the exact order,
  * consumes the allowance, and moves reservation to worst-case pending exposure in one transaction.
  */
-export async function consumeRiskAllowanceForOrderV2Postgres(
-  db: WaiaPostgresDb,
+export async function consumeRiskAllowanceForOrderV2FromTransaction(
+  tx: RiskTx,
   context: OrgContext,
   input: ConsumeRiskAllowanceForOrderV2Input,
 ): Promise<ConsumeRiskAllowanceForOrderV2Result> {
   const scoped = requireOrgContext(context.organizationId);
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
     const rows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
       eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
       eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
@@ -1016,6 +1033,7 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
           organizationId: scoped.organizationId,
           accountId: input.accountId,
           allowance,
+          effectNotionalCeiling: input.effectNotionalCeiling,
           order: { ...input.order, venue: allowance.venue },
         });
       } catch {
@@ -1040,6 +1058,8 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
         requireOrderMatchesAllowanceV2({
           state,
           allowance,
+          riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+          effectNotionalCeiling: input.effectNotionalCeiling,
           order: input.order,
           nonce: input.nonce,
           durableAt,
@@ -1066,6 +1086,8 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
       requireOrderMatchesAllowanceV2({
         state,
         allowance,
+        riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+        effectNotionalCeiling: input.effectNotionalCeiling,
         order: input.order,
         nonce: input.nonce,
         durableAt,
@@ -1074,6 +1096,7 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
         organizationId: scoped.organizationId,
         accountId: input.accountId,
         allowance,
+        effectNotionalCeiling: input.effectNotionalCeiling,
         order: { ...input.order, venue: allowance.venue },
       });
     } catch (error) {
@@ -1146,12 +1169,21 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
           parseDecimal(allowance.reservedExposureNotional),
       ),
     });
-    return {
-      status: "CONSUMED",
-      order,
-      riskAllowanceId: allowance.riskAllowanceId,
-      orderBindingDigestHex: bindingDigest,
-      consumedNow: true,
-    };
-  });
+  return {
+    status: "CONSUMED",
+    order,
+    riskAllowanceId: allowance.riskAllowanceId,
+    orderBindingDigestHex: bindingDigest,
+    consumedNow: true,
+  };
+}
+
+/** Backwards-compatible transaction-owning Risk V2 consumption boundary. */
+export async function consumeRiskAllowanceForOrderV2Postgres(
+  db: WaiaPostgresDb,
+  context: OrgContext,
+  input: ConsumeRiskAllowanceForOrderV2Input,
+): Promise<ConsumeRiskAllowanceForOrderV2Result> {
+  return runWaiaPostgresTransaction(db, (tx) =>
+    consumeRiskAllowanceForOrderV2FromTransaction(tx, context, input));
 }

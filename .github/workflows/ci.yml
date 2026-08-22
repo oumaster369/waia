@@ -145,9 +145,26 @@ jobs:
     name: fhv wp7b deep-state representative gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_it
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_it"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
     env:
       DATABASE_URL: file:./.data/ci-fhv-wp7b.sqlite
+      DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY: "1"
+      WAIA_PG_INTEGRATION: "1"
       # The bounded-hot-state growth ceiling is only meaningful with the architecture enabled.
       FHV_BOUNDED_HOT_STATE: "1"
     steps:
@@ -161,6 +178,8 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Apply TEST_ONLY Execution V2 PostgreSQL authority substrate
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
       - name: Run blocking deep-state representative segment
         run: corepack pnpm@10 test:fhv:wp7b:representative-segment
       - if: always()
@@ -260,9 +279,26 @@ jobs:
     runs-on: ubuntu-24.04-arm
     needs: [fhv-idhps-stability-gate]
     timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_it
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_it"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
     env:
       DATABASE_URL: file:./.data/ci-fhv-official-scale.sqlite
+      DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
       FHV_OFFICIAL_SCALE_ARTIFACT_ROOT: ${{ github.workspace }}/.artifacts/fhv-official-scale
+      FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY: "1"
+      WAIA_PG_INTEGRATION: "1"
       # Phase-10 visible headroom target only (default 1000). Blocking gate remains cps≥877 / ≤7200s.
       FHV_IDHPS_PROBE_MIN_BARS_PER_SECOND: "1000"
       FHV_IDHPS_SKIP_REGIME_TIMELINE: "1"
@@ -282,6 +318,8 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data .artifacts/fhv-official-scale && pnpm db:migrate
+      - name: Apply TEST_ONLY Execution V2 PostgreSQL authority substrate
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
       - name: Run canonical probe (blocking ≥877 cps / ≤7200s; report ≥1000 target)
         run: corepack pnpm@10 test:fhv:official-scale:probe
       - if: always()

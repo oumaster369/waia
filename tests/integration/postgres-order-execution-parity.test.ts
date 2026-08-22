@@ -75,7 +75,7 @@ describe.skipIf(!integrationEnabled || !url)("postgres order execution parity (D
     resetPostgresSingletonForTests();
   });
 
-  it("submits limit order through postgres stack", async () => {
+  it("fail-closes the legacy Postgres order stack before persistence", async () => {
     const context = requireOrgContext(orgA);
     const result = await service.submitOrder(context, {
       clientOrderId: "pg-exec-limit-249",
@@ -91,9 +91,22 @@ describe.skipIf(!integrationEnabled || !url)("postgres order execution parity (D
       accountState: EMPTY_STATE,
     });
 
-    expect(result.status).toBe("submitted");
-    if (result.status === "submitted") {
-      expect(result.order.state).toBe("ACCEPTED");
+    expect(result).toEqual({
+      status: "execution_v2_required",
+      order: null,
+      reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
+    });
+
+    const sql = postgres(url!, { max: 1 });
+    try {
+      const rows = await sql<{ count: string }[]>`
+        SELECT count(*)::text AS count
+        FROM trader_orders
+        WHERE organization_id = ${orgA}
+      `;
+      expect(rows[0]?.count).toBe("0");
+    } finally {
+      await sql.end({ timeout: 5 });
     }
   });
 });

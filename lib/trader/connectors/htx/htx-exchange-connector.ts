@@ -21,7 +21,14 @@ import {
   HtxRestClient,
   type HtxClientConfig,
 } from "@/lib/trader/connectors/htx/client";
-import { HTX_TRADE_HISTORY_MAX_WINDOW_MS } from "@/lib/trader/connectors/htx/config";
+import {
+  HTX_ENDPOINTS,
+  HTX_TRADE_HISTORY_MAX_WINDOW_MS,
+  htxHostFromUrl,
+  resolveHtxRestHost,
+} from "@/lib/trader/connectors/htx/config";
+import { buildSignedPostQueryString } from "@/lib/trader/connectors/htx/signing";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
   HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
@@ -35,9 +42,63 @@ import {
   mapHtxPermissionsToAccountScopes,
   permissionIncludesTrade,
   permissionIncludesWithdraw,
+  placeOrderInputToHtxType,
 } from "@/lib/trader/connectors/htx/mappers";
 
 export type HtxExchangeConnectorConfig = HtxClientConfig;
+
+class HtxPlacementFailUnknownError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(message: string, rawVenueObservation: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX placement is fail-unknown: ${message}`);
+    this.name = "HtxPlacementFailUnknownError";
+    this.rawVenueObservation = Object.freeze({ ...rawVenueObservation });
+  }
+}
+
+async function readRawHtxResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text === "") return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+const HTX_SENSITIVE_RESPONSE_KEY = /^(?:access[-_]?key(?:id)?|api[-_]?key|secret|signature)$/i;
+
+function redactSensitiveHtxObservation(
+  value: unknown,
+  sensitiveValues: readonly string[],
+): unknown {
+  if (typeof value === "string") {
+    let redacted = value.replace(
+      /((?:AccessKeyId|Signature|api[-_]?key|secret)=)[^&\s"'<>]+/gi,
+      "$1[REDACTED]",
+    );
+    for (const sensitive of sensitiveValues) {
+      if (sensitive !== "") redacted = redacted.split(sensitive).join("[REDACTED]");
+    }
+    return redacted;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactSensitiveHtxObservation(entry, sensitiveValues));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+      const safeKey = redactSensitiveHtxObservation(key, sensitiveValues) as string;
+      return [
+        safeKey,
+        HTX_SENSITIVE_RESPONSE_KEY.test(key)
+          ? "[REDACTED]"
+          : redactSensitiveHtxObservation(entry, sensitiveValues),
+      ];
+    }));
+  }
+  return value;
+}
 
 /**
  * HTX spot connector (DEE-195 read path, DEE-211 write foundation).
@@ -49,12 +110,22 @@ export class HtxExchangeConnector implements ExchangeConnector {
   readonly marketType = "spot" as const;
 
   private readonly client: HtxRestClient;
+  private readonly placementApiKey: string;
+  private readonly placementApiSecret: string;
+  private readonly placementRestHost: string;
+  private readonly placementHost: string;
+  private readonly placementFetch: typeof fetch;
   private validated = false;
   private spotAccountId: string | null = null;
   private permissionString: string | null = null;
 
   constructor(config: HtxExchangeConnectorConfig) {
     this.client = new HtxRestClient(config);
+    this.placementApiKey = config.apiKey;
+    this.placementApiSecret = config.apiSecret;
+    this.placementRestHost = resolveHtxRestHost(config.restHost);
+    this.placementHost = htxHostFromUrl(this.placementRestHost);
+    this.placementFetch = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   async validateCredentials(input: ConnectorCredentialInput): Promise<CredentialValidationResult> {
@@ -190,16 +261,105 @@ export class HtxExchangeConnector implements ExchangeConnector {
       throw new Error("[trader] HTX placeOrder requires clientOrderId");
     }
 
-    const row = await this.client.placeOrder({
-      accountId: this.spotAccountId!,
+    const body: Record<string, string | number> = {
+      "account-id": this.spotAccountId!,
       symbol: internalSymbolToHtx(input.symbol),
-      side: input.side,
-      type: input.type,
-      quantity: input.quantity,
-      price: input.price,
-      clientOrderId: input.clientOrderId,
+      type: placeOrderInputToHtxType(input),
+      amount: input.quantity,
+      source: "spot-api",
+      "client-order-id": input.clientOrderId,
+    };
+    if (input.type === "limit") body.price = input.price!;
+    const query = buildSignedPostQueryString({
+      accessKeyId: this.placementApiKey,
+      secret: this.placementApiSecret,
+      host: this.placementHost,
+      path: HTX_ENDPOINTS.placeOrder,
     });
-    return mapHtxOrder(row);
+    const url = `${this.placementRestHost}${HTX_ENDPOINTS.placeOrder}?${query}`;
+    const signedParams = new URLSearchParams(query);
+    const timeoutMs = input.timeoutMs ?? 30_000;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error("[trader] HTX placeOrder requires a positive timeoutMs");
+    }
+    const abortController = new AbortController();
+    let timedOut = false;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let response: Response | undefined;
+    let responseBody: unknown;
+    let responseBodyReadFailed = false;
+    try {
+      // Execution V2 permits exactly one network submission. The generic HTX
+      // client retries POSTs, so this effect path deliberately bypasses it.
+      const fetchAndReadPromise = (async () => {
+        response = await this.placementFetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+        try {
+          responseBody = await readRawHtxResponse(response);
+        } catch {
+          responseBodyReadFailed = true;
+          throw new Error("HTX_RESPONSE_BODY_READ_FAILED");
+        }
+      })();
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          abortController.abort();
+          reject(new Error("HTX_PLACEMENT_TIMEOUT"));
+        }, timeoutMs);
+      });
+      await Promise.race([fetchAndReadPromise, timeout]);
+    } catch {
+      if (timedOut) {
+        throw new HtxPlacementFailUnknownError("transport result unknown", {
+          venueResponseObserved: response !== undefined,
+          ...(response === undefined ? {} : {
+            httpStatus: response.status,
+            httpOk: response.ok,
+            responseBodyRead: "TIMED_OUT",
+          }),
+          transportFailure: "NETWORK_TIMEOUT",
+          timeoutMs,
+        });
+      }
+      if (responseBodyReadFailed && response !== undefined) {
+        throw new HtxPlacementFailUnknownError("response body requires reconciliation", {
+          venueResponseObserved: true,
+          httpStatus: response.status,
+          httpOk: response.ok,
+          responseBodyRead: "FAILED",
+        });
+      }
+      throw new HtxPlacementFailUnknownError("transport result unknown", {
+        venueResponseObserved: false,
+        transportFailure: "NETWORK_REQUEST_FAILED",
+        timeoutMs,
+      });
+    } finally {
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    }
+    if (response === undefined) throw new Error("HTX placement response missing after completed request");
+    // HTX's placement acknowledgement contains only an order id. It cannot
+    // prove the exact client identity, mechanics, quantity, price, or fills,
+    // and no follow-up lookup is ratified. Preserve it and reconcile.
+    const responseBodyDigestHex = computeStableJsonDigest(responseBody);
+    const safeResponseBody = redactSensitiveHtxObservation(responseBody, [
+      this.placementApiKey,
+      this.placementApiSecret,
+      signedParams.get("Signature") ?? "",
+      encodeURIComponent(signedParams.get("Signature") ?? ""),
+    ]);
+    throw new HtxPlacementFailUnknownError("acknowledgement requires reconciliation", {
+      venueResponseObserved: true,
+      httpStatus: response.status,
+      httpOk: response.ok,
+      responseBody: safeResponseBody,
+      responseBodyDigestHex,
+    });
   }
 
   async cancelOrder(orderId: string): Promise<Order> {
