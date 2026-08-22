@@ -65,12 +65,12 @@
         "Low-level plan persistence independently reconstructs exact stored-policy membership and conservative plan/slice notional, refusing a self-consistent forged effect above its declared ceiling."
       ],
       "integratedCommits": [
-        "7c6f1d4df7c16fb77479888e9d27f3b8647ab368",
-        "8065711e7189338b1472a787cbdc2a5f6d05cde5",
-        "305bf19e13088d146af97f4236fb4523ac09b09c",
-        "ecd039d2792f006d5f0c70767407dceff3c7d863",
-        "7d1667ec5d539f4f8f849901b764d4df7397de92",
-        "8642540deea24cdac23a929878d68b7df5aa31b0"
+        "15e09c3f8d19da75711b97c48cae69bf167abfef",
+        "75101357561774c286358614f897c8b4366595ee",
+        "8828f52a4306f419599d670c11c69d2e79e8060e",
+        "f5ef76e79cd37992e9774f9769b5a1631ca86c9b",
+        "bc35eba8da9213ed28df55497a07f31cd9d785d7",
+        "8e857e1ab4ed30bc4ec032d97ff8a1aa78954836"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
@@ -132,11 +132,11 @@
         "The final submit gate reconstructs stored policy/plan/attempt/order/allowance authority under lock, reads wall-clock time only after lock acquisition, and passes the timeout reloaded from the durable stored policy to the network callback; expiry during contention performs zero network callbacks."
       ],
       "integratedCommits": [
-        "06b997fd0f8fc1d782293ae48f503993b383c76a",
-        "af61b09032fa031d9e205be9a47f213d7ec53832",
-        "2dd64d353ea412597396204ad635cf6915380c26",
-        "04b8f0067416a7f9959506af28f925bde4533486",
-        "b1868a0c900637b9d00d5a91d645e40f9f68a9fd"
+        "262d78a5ed97c9c40e706c667a7b71b68953c35d",
+        "8268e796ff5011484e4d6777ab7df61b61b70c44",
+        "321f907315154527d0d25a486b5ce77d72b929df",
+        "d09c493243fdbf844ec51b87dae919b16ba909f5",
+        "6df44503fc7c1d56fab90993052a9c8d5e868023"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-execution-v2-contracts.test.ts tests/unit/trader-execution-v2-authority.test.ts",
@@ -202,12 +202,12 @@
         "Focused reject, partial/residual, cancel/pre-sealed-replace, append-only replay, restart, and post-network-timeout proofs passed."
       ],
       "integratedCommits": [
-        "32b4c593c0a302538e6eed59cbc90cb8613a654a",
-        "627fe3ef4274c9d75751c0f81214d34b1628977f",
-        "164fbe2638bb88c1d794af1b0c58d4021765f165",
-        "8550837c52ad6b9aa9c191d6009663d16b2e79fa",
-        "dfee6d2ea65c0f7eb5c90ced08801a281717704f",
-        "4745ed5430a97c1884fac6ceaefb91bc6ac19da7"
+        "809d8100b3c4414799768a48ae68a517b8be5c9d",
+        "15a5a0db5de8f9322ef11cbc4bba39fd69ea446f",
+        "a42f31fe4f83e68bff57758af40a13609b5b4840",
+        "0453363205d82b8ff7862f4fcfc5a5fee2a9c9e2",
+        "313f879cebb4622dd22bd2994e24655069f0745f",
+        "0f2b6d38a3b37b4351d200a9c1b1f01dfb03c900"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-execution-v2-fail-unknown.test.ts tests/unit/trader-order-execution-service.test.ts tests/unit/trader-order-reconciliation-service.test.ts",
@@ -379,20 +379,20 @@
         "The Human-authorized official-scale correction preserves the existing fill-density/accounting workload through a test-only PostgreSQL authority adapter; each historical modeled placement occurs only inside the committed V2 dispatcher callback, and no production execution path is changed."
       ],
       "integratedCommits": [
-        "f56f4f286311a9f859d9e81a7e7da8ae49f4731a",
-        "0c1f9326b2150a0ceb5cb87869ce33ebf3af9a26",
-        "4b95e88edac9fcdc04b9da8d6a8cb82899654ba6",
-        "79da4c746e4fcba5271e430a08f8b36af85791fe",
-        "6213891fdf6c71f97a9344bb52c57b0bd280ff80",
-        "f9714fb7884c35ad2fc4a91b93c777829e6ae293",
-        "47d196ae45d6a71c351caf3bd96ac57091f1d2bd",
-        "d542e4930487a8a3afeb30ed0fd68e2ee52126d5",
-        "b2b00e2b9cb2ab3037e9ad85fe6e293fc93c7b0b",
-        "476f5e2838c85dececb9c9f03e0f0d339d935bb2",
-        "295e79224dc6d05513b82ce6d59ca5cf21afe3b4",
-        "d3674607bcd3fe9821bc460b96f4c18b831abe5d",
-        "454ff96e5973293d6df792d671ff46cab8f530ae",
-        "06edb1ab2f8c39bb7985da598817e64c2061d3f6"
+        "d2e1eee7cc805e2900de7b5dd8f452b11ce8c549",
+        "752e26a4f77a384b5d092bc306d4bc8a2358b1fa",
+        "3ed1b447f5591a9287d1e64d11178e83cf735688",
+        "6f938fe47392fad5ada46533216f6fd46814ce87",
+        "8ee00892cdc47d62871d652ab467fc20a113d8f8",
+        "85b94eca1ac30fc2ef3855570fe3c6c00b275469",
+        "f7b2d66c78710142829c9a4f1e5dd6859c758af9",
+        "e3fb3f8ba3c81efe0258e0bc89b8711ad32fc003",
+        "f958320b3bf97c2dfecd563469759e3f3a9da9f3",
+        "a2e25224b74a699ef5d7396f712c609c813a25cb",
+        "cb4dab5a38af7408c2aa4a5cadfd4cac33b491f9",
+        "20c005d181ff90b157ae764f3e4168bac22cf33c",
+        "b8306f45f0c316de0519f56eddbe0fde2ff2173c",
+        "e9a53bb9090e5e06b3200dcee607660db52856aa"
       ],
       "tests": [
         "pnpm run validate:execution-v2-consumer-graph",
@@ -429,7 +429,7 @@
     "preImplementationAdmission": {
       "status": "pass",
       "manifestDigest": "3ffae69cc88cb1834bebc966703df0867517a0000bb2c5e7823a5cf5ddfe35bc",
-      "manifestCommit": "b9f09d838c86ce1e195be4aa458157fe35cc3fa2",
+      "manifestCommit": "1a506bf0d7a69200094356efa4ed476f2ae0a9a9",
       "manifestPath": "docs/plans/dee-651-execution-v2.integration-train.json",
       "reviewer": "Human-ratified Step-15 integration owner; Human-authorized PR #477 official-scale TEST_ONLY correction limited to the WP7B representative segment, canonical probe, their shared harness, and the two named CI jobs on 2026-08-22"
     },
@@ -438,12 +438,12 @@
         "issue": "DEE-667",
         "status": "pass",
         "reviewedCommits": [
-          "7c6f1d4df7c16fb77479888e9d27f3b8647ab368",
-          "8065711e7189338b1472a787cbdc2a5f6d05cde5",
-          "305bf19e13088d146af97f4236fb4523ac09b09c",
-          "ecd039d2792f006d5f0c70767407dceff3c7d863",
-          "7d1667ec5d539f4f8f849901b764d4df7397de92",
-          "8642540deea24cdac23a929878d68b7df5aa31b0"
+          "15e09c3f8d19da75711b97c48cae69bf167abfef",
+          "75101357561774c286358614f897c8b4366595ee",
+          "8828f52a4306f419599d670c11c69d2e79e8060e",
+          "f5ef76e79cd37992e9774f9769b5a1631ca86c9b",
+          "bc35eba8da9213ed28df55497a07f31cd9d785d7",
+          "8e857e1ab4ed30bc4ec032d97ff8a1aa78954836"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0157_trader_execution_v2.sql",
@@ -462,11 +462,11 @@
         "issue": "DEE-668",
         "status": "pass",
         "reviewedCommits": [
-          "06b997fd0f8fc1d782293ae48f503993b383c76a",
-          "af61b09032fa031d9e205be9a47f213d7ec53832",
-          "2dd64d353ea412597396204ad635cf6915380c26",
-          "04b8f0067416a7f9959506af28f925bde4533486",
-          "b1868a0c900637b9d00d5a91d645e40f9f68a9fd"
+          "262d78a5ed97c9c40e706c667a7b71b68953c35d",
+          "8268e796ff5011484e4d6777ab7df61b61b70c44",
+          "321f907315154527d0d25a486b5ce77d72b929df",
+          "d09c493243fdbf844ec51b87dae919b16ba909f5",
+          "6df44503fc7c1d56fab90993052a9c8d5e868023"
         ],
         "reviewedFiles": [
           "lib/trader/execution/v2/authority-postgres.ts",
@@ -482,12 +482,12 @@
         "issue": "DEE-669",
         "status": "pass",
         "reviewedCommits": [
-          "32b4c593c0a302538e6eed59cbc90cb8613a654a",
-          "627fe3ef4274c9d75751c0f81214d34b1628977f",
-          "164fbe2638bb88c1d794af1b0c58d4021765f165",
-          "8550837c52ad6b9aa9c191d6009663d16b2e79fa",
-          "dfee6d2ea65c0f7eb5c90ced08801a281717704f",
-          "4745ed5430a97c1884fac6ceaefb91bc6ac19da7"
+          "809d8100b3c4414799768a48ae68a517b8be5c9d",
+          "15a5a0db5de8f9322ef11cbc4bba39fd69ea446f",
+          "a42f31fe4f83e68bff57758af40a13609b5b4840",
+          "0453363205d82b8ff7862f4fcfc5a5fee2a9c9e2",
+          "313f879cebb4622dd22bd2994e24655069f0745f",
+          "0f2b6d38a3b37b4351d200a9c1b1f01dfb03c900"
         ],
         "reviewedFiles": [
           "lib/trader/execution/execution-service.ts",
@@ -503,20 +503,20 @@
         "issue": "DEE-670",
         "status": "pass",
         "reviewedCommits": [
-          "f56f4f286311a9f859d9e81a7e7da8ae49f4731a",
-          "0c1f9326b2150a0ceb5cb87869ce33ebf3af9a26",
-          "4b95e88edac9fcdc04b9da8d6a8cb82899654ba6",
-          "79da4c746e4fcba5271e430a08f8b36af85791fe",
-          "6213891fdf6c71f97a9344bb52c57b0bd280ff80",
-          "f9714fb7884c35ad2fc4a91b93c777829e6ae293",
-          "47d196ae45d6a71c351caf3bd96ac57091f1d2bd",
-          "d542e4930487a8a3afeb30ed0fd68e2ee52126d5",
-          "b2b00e2b9cb2ab3037e9ad85fe6e293fc93c7b0b",
-          "476f5e2838c85dececb9c9f03e0f0d339d935bb2",
-          "295e79224dc6d05513b82ce6d59ca5cf21afe3b4",
-          "d3674607bcd3fe9821bc460b96f4c18b831abe5d",
-          "454ff96e5973293d6df792d671ff46cab8f530ae",
-          "06edb1ab2f8c39bb7985da598817e64c2061d3f6"
+          "d2e1eee7cc805e2900de7b5dd8f452b11ce8c549",
+          "752e26a4f77a384b5d092bc306d4bc8a2358b1fa",
+          "3ed1b447f5591a9287d1e64d11178e83cf735688",
+          "6f938fe47392fad5ada46533216f6fd46814ce87",
+          "8ee00892cdc47d62871d652ab467fc20a113d8f8",
+          "85b94eca1ac30fc2ef3855570fe3c6c00b275469",
+          "f7b2d66c78710142829c9a4f1e5dd6859c758af9",
+          "e3fb3f8ba3c81efe0258e0bc89b8711ad32fc003",
+          "f958320b3bf97c2dfecd563469759e3f3a9da9f3",
+          "a2e25224b74a699ef5d7396f712c609c813a25cb",
+          "cb4dab5a38af7408c2aa4a5cadfd4cac33b491f9",
+          "20c005d181ff90b157ae764f3e4168bac22cf33c",
+          "b8306f45f0c316de0519f56eddbe0fde2ff2173c",
+          "e9a53bb9090e5e06b3200dcee607660db52856aa"
         ],
         "reviewedFiles": [
           ".github/workflows/ci.yml",
@@ -595,7 +595,7 @@
     ],
     "preFreezeValidation": {
       "status": "pass",
-      "validatedHead": "06edb1ab2f8c39bb7985da598817e64c2061d3f6",
+      "validatedHead": "e9a53bb9090e5e06b3200dcee607660db52856aa",
       "baseMain": "8aa3d316d407f2f1ded567e8bb44123657972113",
       "semanticConflict": false,
       "productionDatabaseMutated": false,
