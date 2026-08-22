@@ -1,0 +1,189 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-675",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-676",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Freeze immutable RealitySourceReportV2, TruthRecordV2, RealityEventV2, and RealityProjectionV2 contracts; the five-source HTX/Execution allowlist; subject identities; raw-reference lineage; and default-deny validators.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-651 and DEE-653 are Done and authoritative origin/main was verified at b68290c3eb9e3a1f27b6e67219959ce033d7f1dc.",
+        "The Human explicitly ratified the exact first-release source allowlist and correction/contradiction policy on 2026-08-22."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/contracts.ts",
+        "lib/trader/reality/v2/source-admission.ts",
+        "lib/trader/reality/v2/index.ts",
+        "tests/unit/trader-reality-v2-contracts.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes these exact contracts, identities, validators, and source exclusions."
+      },
+      "expectedAcceptanceEvidence": [
+        "Only ExecutionReportV2 and the four named HTX spot REST observation classes can validate for canonical admission.",
+        "Raw HTX lineage is receipt/digest/reference only and exact primitive assertion schemas cannot carry raw payloads or secrets.",
+        "Source/subject compatibility is exhaustive and status-only FILLED/PARTIALLY_FILLED cannot become exact fill truth.",
+        "Reality uncertainty markers are limited to SOURCE_CONTRADICTION and UNATTRIBUTED."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-reality-v2-contracts.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-677",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Add exactly one additive 0160 PostgreSQL migration and organization-scoped Reality repository with append-only bitemporal ledgers, digest-chain/frontier integrity, deny RLS, concurrency, and TOCTOU safety.",
+      "dependencies": ["DEE-676"],
+      "dependencyEvidence": [
+        "DEE-677 consumes only the frozen DEE-676 API and starts after A is committed and reviewed.",
+        "The Human explicitly ratified one additive next-numbered PostgreSQL migration and service-only deny-RLS tables."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/0160_trader_reality_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "lib/trader/reality/v2/repository-postgres.ts",
+        "tests/unit/trader-reality-v2-migration-identity.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/integration/postgres-reality-v2.test.ts",
+        "docs/migrations/DEE-64-TRACKER.md"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes exactly one additive Reality migration, repository, and tenant/security proofs."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exactly one next-numbered migration creates four append-only Reality tables and changes no existing retention/security policy.",
+        "Every table is organization-scoped, service-only, deny-RLS, and immutable except no mutable canonical projection row is introduced.",
+        "Database-authored knowledge time, source-native dedup, supersession scope, event digest chain, and projection frontier are transactionally enforced.",
+        "Real-role CRUD denial, two-tenant isolation, concurrency, and TOCTOU tests pass."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-reality-v2-migration-identity.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<loopback> pnpm test --run --no-file-parallelism tests/integration/postgres-reality-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-678",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Implement deterministic ingest, source-native dedup, explicit correction/supersession, contradiction quarantine/release, last-stable fold, current/as-of projection, and restart replay.",
+      "dependencies": ["DEE-677"],
+      "dependencyEvidence": [
+        "DEE-678 starts only after the DEE-677 migration and repository invariants are frozen.",
+        "The Human requires B and C to serialize and forbids confidence/finality merit arbitration."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/repository-postgres.ts",
+        "lib/trader/reality/v2/ingest-postgres.ts",
+        "lib/trader/reality/v2/projection.ts",
+        "lib/trader/reality/v2/replay.ts",
+        "tests/unit/trader-reality-v2-projection.test.ts",
+        "tests/integration/postgres-reality-v2.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes deterministic construction/replay and last-stable contradiction semantics only."
+      },
+      "expectedAcceptanceEvidence": [
+        "Duplicate, new fact, explicit correction, and contradiction classifications are distinct and deterministic.",
+        "Only source-native correction/supersession changes canonical truth; contradictions remain quarantined and preserve the last stable projection.",
+        "Current and arbitrary knowledge-time as-of projections carry exact policy/frontier/content digests.",
+        "Identical ledgers reproduce identical projections across restart/replay and status-only fills never fabricate truth."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-reality-v2-projection.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<loopback> pnpm test --run --no-file-parallelism tests/integration/postgres-reality-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-679",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Inventory and close every repository connector/source producer and Reality-relevant consumer; admit only DEE-651 ExecutionReportV2 and four HTX spot REST observation classes while every other source fails explicitly or remains uncertain without silent loss.",
+      "dependencies": ["DEE-678"],
+      "dependencyEvidence": [
+        "DEE-679 uses the complete frozen A→B→C boundary and begins only after deterministic projection is available.",
+        "The Human requires whole-repository compatibility verification while keeping DEE-634 and DEE-620 separate."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/connectors/htx/index.ts",
+        "lib/trader/reality/v2/ingress.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/reality-adapter.ts",
+        "lib/trader/connectors/htx/reality-adapter.ts",
+        "lib/trader/reality/v2/index.ts",
+        "scripts/trader/validate-reality-v2-consumer-graph.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "tests/unit/trader-reality-v2-ingress.test.ts",
+        "tests/integration/trader-reality-v2-htx-ingress.test.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "package.json"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes exactly this repository-wide inventory/cutover closure without new source classes."
+      },
+      "expectedAcceptanceEvidence": [
+        "A checked-in inventory names every connector/source and relevant consumer with admitted or excluded/fail-uncertain disposition.",
+        "Static proof shows no connector bypass, no Reality import of Risk Expected State, and no unlisted source adapter.",
+        "Runtime proof admits the five approved source kinds through existing boundaries and explicitly rejects/quarantines every excluded class.",
+        "Existing consumers remain compatible, no source is silently lost, and DEE-634/DEE-620 implementation remains absent."
+      ],
+      "expectedTests": [
+        "pnpm run validate:reality-v2-consumer-graph",
+        "pnpm test --run tests/unit/trader-reality-v2-consumer-graph.test.ts tests/unit/trader-reality-v2-ingress.test.ts tests/integration/trader-reality-v2-htx-ingress.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "execution": {
+        "wave": 4,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human-ratified DEE-652 integration owner after duplicate, dependency, source-allowlist, security, and frozen-base audit on 2026-08-22"
+    }
+  }
+}
