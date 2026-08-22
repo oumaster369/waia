@@ -20,7 +20,7 @@ state:
   remainingWorkPackages: []
   prNumber: 481
   prUrl: https://github.com/oumaster369/waia/pull/481
-  lastValidatedGitSha: a3f2caa81f8ff21457aece1cf0a8e77d3e960118
+  lastValidatedGitSha: 98be92cebe1396b12607fe7b8c196a64772cb879
   lastValidationAt: 2026-08-22
   blockedReason: null
   nextAction: "Await green authoritative PR CI on the exact final head, then stop for Human squash-merge."
