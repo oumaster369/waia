@@ -68,6 +68,7 @@ export type WaiaRuntimeRouteKey =
   | "admin_treasury_counterparties"
   | "admin_treasury_accounts"
   | "admin_treasury_categories"
+  | "admin_treasury_category_budgets"
   | "admin_treasury_projects"
   | "admin_treasury_budgets"
   | "admin_treasury_funding_needs"

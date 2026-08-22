@@ -224,6 +224,7 @@ describe("DEE-661 Treasury ledger catalogs", () => {
       organizationId: ORG_A,
       code: "x",
       name: "x",
+      groupName: "Other",
       description: null,
       monthlyBudgetMicros: 1n,
       isActive: true,

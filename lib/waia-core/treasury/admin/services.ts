@@ -61,6 +61,7 @@ export function openProductionTreasuryAdmin(
   const ledgerCatalogRepo = createPostgresTreasuryLedgerCatalogRepository(runtime.db);
   const ledgerCatalog = createTreasuryLedgerCatalogService({
     repository: ledgerCatalogRepo,
+    listTransactions: (context) => domain.repository.listTransactions(context),
     writeAudit: (input) => writeAuditLogPostgres(runtime.db, input),
     watchedAddressExists: async (context, id) =>
       (await catalogRepo.getWatchedAddress(context, id)) !== null,
@@ -112,6 +113,7 @@ export function createMemoryTreasuryAdminServices(
   });
   const ledgerCatalog = createTreasuryLedgerCatalogService({
     repository: ledgerCatalogRepo,
+    listTransactions: (context) => domain.repository.listTransactions(context),
     writeAudit: writeAuditAndIndex,
     watchedAddressExists: async (context, id) =>
       (await catalogRepo.getWatchedAddress(context, id)) !== null,

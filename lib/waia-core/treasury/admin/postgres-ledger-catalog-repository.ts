@@ -4,10 +4,35 @@ import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { orgScopedWhere, requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import type { TreasuryLedgerCatalogRepository } from "@/lib/waia-core/treasury/admin/ledger-catalog-repository.types";
-import type { TreasuryLedgerCatalogQuery } from "@/lib/waia-core/treasury/admin/ledger-catalog-types";
+import type {
+  TreasuryCategoryBudgetHistoryRecord,
+  TreasuryLedgerCatalogQuery,
+} from "@/lib/waia-core/treasury/admin/ledger-catalog-types";
 import { TreasuryNotFoundError } from "@/lib/waia-core/treasury/errors";
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "transaction">;
+
+async function upsertCategoryBudget(
+  ex: Pick<WaiaPostgresDb, "insert">,
+  record: TreasuryCategoryBudgetHistoryRecord,
+): Promise<void> {
+  await ex
+    .insert(pgSchema.treasuryCategoryBudgetHistory)
+    .values(record)
+    .onConflictDoUpdate({
+      target: [
+        pgSchema.treasuryCategoryBudgetHistory.organizationId,
+        pgSchema.treasuryCategoryBudgetHistory.categoryId,
+        pgSchema.treasuryCategoryBudgetHistory.effectiveMonth,
+      ],
+      set: {
+        groupName: record.groupName,
+        monthlyBudgetMicros: record.monthlyBudgetMicros,
+        currency: record.currency,
+        updatedAt: record.updatedAt,
+      },
+    });
+}
 
 function boundedLimit(query: TreasuryLedgerCatalogQuery): number {
   return Math.min(Math.max(query.limit ?? 50, 1), 100) + 1;
@@ -218,9 +243,30 @@ export function createPostgresTreasuryLedgerCatalogRepository(
           .limit(1);
         return rows[0] ?? null;
       },
+      async findByCode(context, code) {
+        const org = requireOrgContext(context.organizationId);
+        const rows = await ex
+          .select()
+          .from(pgSchema.treasuryCategories)
+          .where(
+            and(
+              eq(pgSchema.treasuryCategories.code, code),
+              orgScopedWhere(pgSchema.treasuryCategories.organizationId, org),
+            ),
+          )
+          .limit(1);
+        return rows[0] ?? null;
+      },
       async insert(record) {
         requireOrgContext(record.organizationId);
         await ex.insert(pgSchema.treasuryCategories).values(record);
+      },
+      async insertWithBudget(record, budget) {
+        requireOrgContext(record.organizationId);
+        await ex.transaction(async (tx) => {
+          await tx.insert(pgSchema.treasuryCategories).values(record);
+          await upsertCategoryBudget(tx, budget);
+        });
       },
       async update(context, id, patch) {
         const org = requireOrgContext(context.organizationId);
@@ -242,6 +288,43 @@ export function createPostgresTreasuryLedgerCatalogRepository(
           .returning();
         if (!rows[0]) throw new TreasuryNotFoundError("category", id);
         return rows[0];
+      },
+      async updateWithBudget(context, id, patch, budget) {
+        const org = requireOrgContext(context.organizationId);
+        return ex.transaction(async (tx) => {
+          const rows = await tx
+            .update(pgSchema.treasuryCategories)
+            .set({
+              ...patch,
+              id: undefined,
+              organizationId: undefined,
+              createdAt: undefined,
+              updatedAt: patch.updatedAt ?? new Date(),
+            })
+            .where(
+              and(
+                eq(pgSchema.treasuryCategories.id, id),
+                orgScopedWhere(pgSchema.treasuryCategories.organizationId, org),
+              ),
+            )
+            .returning();
+          if (!rows[0]) throw new TreasuryNotFoundError("category", id);
+          if (budget) await upsertCategoryBudget(tx, budget);
+          return rows[0];
+        });
+      },
+    },
+    categoryBudgetHistory: {
+      async list(context) {
+        const org = requireOrgContext(context.organizationId);
+        return ex
+          .select()
+          .from(pgSchema.treasuryCategoryBudgetHistory)
+          .where(orgScopedWhere(pgSchema.treasuryCategoryBudgetHistory.organizationId, org))
+          .orderBy(
+            asc(pgSchema.treasuryCategoryBudgetHistory.effectiveMonth),
+            asc(pgSchema.treasuryCategoryBudgetHistory.categoryId),
+          );
       },
     },
     projects: {

@@ -45,10 +45,23 @@ export type TreasuryCategoryRecord = {
   organizationId: string;
   code: string;
   name: string;
+  groupName: string;
   description: string | null;
   monthlyBudgetMicros: bigint;
   currency: string;
   isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type TreasuryCategoryBudgetHistoryRecord = {
+  id: string;
+  organizationId: string;
+  categoryId: string;
+  effectiveMonth: string;
+  groupName: string;
+  monthlyBudgetMicros: bigint;
+  currency: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -97,9 +110,11 @@ export type TreasuryAccountInput = Pick<
 
 export type TreasuryCategoryInput = Pick<
   TreasuryCategoryRecord,
-  "code" | "name" | "monthlyBudgetMicros" | "currency"
+  "name" | "monthlyBudgetMicros" | "currency"
 > &
-  Partial<Pick<TreasuryCategoryRecord, "description" | "isActive">>;
+  Partial<Pick<TreasuryCategoryRecord, "code" | "groupName" | "description" | "isActive">> & {
+    effectiveMonth?: string;
+  };
 
 export type TreasuryProjectInput = Pick<TreasuryProjectRecord, "name"> &
   Partial<Pick<TreasuryProjectRecord, "description" | "startsOn" | "endsOn" | "isActive">>;
