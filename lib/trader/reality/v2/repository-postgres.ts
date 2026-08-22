@@ -5,6 +5,7 @@ enforceServerOnly();
 import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
+import { canonicalJsonString } from "@/lib/trader/research/digest";
 import {
   runWaiaPostgresTransaction,
   type WaiaPostgresDb,
@@ -12,7 +13,6 @@ import {
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   createRealityEventV2,
-  createRealityProjectionV2,
   createRealitySourceReportV2,
   createTruthRecordV2,
   validateRealityEventV2,
@@ -24,7 +24,6 @@ import {
   type RealityMarkerV2,
   type RealityPrimitiveAssertionV2,
   type RealityProjectionV2,
-  type RealityProjectionV2Draft,
   type RealitySourceLineageV2,
   type RealitySourceNativeIdentityV2,
   type RealitySourceProvenanceV2,
@@ -33,6 +32,7 @@ import {
   type RealitySubjectIdentityV2,
   type TruthRecordV2,
 } from "./contracts";
+import { foldRealityProjectionV2 } from "./projection";
 import { assertRealitySourceReportAdmissionV2 } from "./source-admission";
 
 type RealityTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
@@ -67,9 +67,16 @@ function iso(value: Date): string {
   return value.toISOString();
 }
 
-async function durableTransactionTime(executor: RealityV2Executor): Promise<Date> {
+async function reserveRealityKnowledgeAtV2(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+): Promise<Date> {
+  const scoped = requireScope(context);
   const rows = await executor.execute<{ durable_time: Date | string }>(sql`
-    SELECT date_trunc('milliseconds', transaction_timestamp()) AS durable_time
+    SELECT public.waia_reality_v2_reserve_knowledge_at(
+      ${scoped.organizationId}::uuid,
+      ${scoped.accountId}::text
+    ) AS durable_time
   `);
   const value = rows[0]?.durable_time;
   if (value === undefined) throw new RealityV2PersistenceConflictError();
@@ -250,12 +257,13 @@ export async function readRealitySourceReportV2(
   return rows[0] ? mapSource(rows[0]) : null;
 }
 
-export async function appendRealitySourceReportV2FromWriter(
+export async function appendRealitySourceObservationV2FromWriter(
   executor: RealityV2Executor,
   context: RealityAccountContext,
   input: AppendRealitySourceReportV2Input,
 ): Promise<{ report: RealitySourceReportV2; insertedNew: boolean }> {
   const scoped = requireScope(context);
+  await lockRealityScopeV2(executor, scoped);
   const lineageRows = await executor.select().from(pgSchema.traderRealitySourceReportsV2).where(and(
     eq(pgSchema.traderRealitySourceReportsV2.organizationId, scoped.organizationId),
     eq(pgSchema.traderRealitySourceReportsV2.accountId, scoped.accountId),
@@ -290,7 +298,7 @@ export async function appendRealitySourceReportV2FromWriter(
     ...input,
     organizationId: scoped.organizationId,
     accountId: scoped.accountId,
-    knowledgeAtUtc: iso(await durableTransactionTime(executor)),
+    knowledgeAtUtc: iso(await reserveRealityKnowledgeAtV2(executor, scoped)),
   });
   assertRealitySourceReportAdmissionV2(report);
   const native = report.sourceNativeIdentity;
@@ -339,11 +347,11 @@ export function appendRealitySourceReportV2Postgres(
 ): Promise<{ report: RealitySourceReportV2; insertedNew: boolean }> {
   return runWaiaPostgresTransaction(db, async (tx) => {
     await lockRealityScopeV2(tx, context);
-    return appendRealitySourceReportV2FromWriter(tx, context, input);
+    return appendRealitySourceObservationV2FromWriter(tx, context, input);
   });
 }
 
-export async function insertTruthRecordV2FromWriter(
+async function insertTruthRecordV2FromWriter(
   executor: RealityV2Executor,
   context: RealityAccountContext,
   truth: TruthRecordV2,
@@ -388,7 +396,7 @@ export async function insertTruthRecordV2FromWriter(
   return { truth: stored, insertedNew: inserted.length === 1 };
 }
 
-export async function appendRealityEventV2FromWriter(
+async function appendRealityEventV2FromWriter(
   executor: RealityV2Executor,
   context: RealityAccountContext,
   input: Readonly<{
@@ -415,7 +423,7 @@ export async function appendRealityEventV2FromWriter(
     truthRecordId: input.truthRecordId,
     relatedTruthRecordId: input.relatedTruthRecordId,
     reasonCodes: input.reasonCodes,
-    knowledgeAtUtc: iso(await durableTransactionTime(executor)),
+    knowledgeAtUtc: iso(await reserveRealityKnowledgeAtV2(executor, scoped)),
     previousEventDigestHex: prior?.contentDigest ?? null,
   });
   await executor.insert(pgSchema.traderRealityEventsV2).values({
@@ -434,6 +442,104 @@ export async function appendRealityEventV2FromWriter(
     schemaVersion: event.schemaVersion,
   });
   return event;
+}
+
+export async function appendObservedRealityTruthV2FromWriter(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+  source: RealitySourceReportV2,
+): Promise<TruthRecordV2> {
+  await lockRealityScopeV2(executor, context);
+  const truth = createTruthFromVerifiedSourceV2(source, {
+    supersedesTruthRecordId: null,
+    markers: [],
+  });
+  const stored = (await insertTruthRecordV2FromWriter(executor, context, truth)).truth;
+  await appendRealityEventV2FromWriter(executor, context, {
+    eventType: "OBSERVED",
+    sourceReportId: source.sourceReportId,
+    truthRecordId: stored.truthRecordId,
+    relatedTruthRecordId: null,
+    reasonCodes: [],
+  });
+  return stored;
+}
+
+export async function appendSupersededRealityTruthV2FromWriter(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+  source: RealitySourceReportV2,
+  correctionTarget: TruthRecordV2,
+): Promise<TruthRecordV2> {
+  await lockRealityScopeV2(executor, context);
+  const truth = createTruthFromVerifiedSourceV2(source, {
+    supersedesTruthRecordId: correctionTarget.truthRecordId,
+    markers: [],
+  });
+  const stored = (await insertTruthRecordV2FromWriter(executor, context, truth)).truth;
+  await appendRealityEventV2FromWriter(executor, context, {
+    eventType: "SUPERSEDED",
+    sourceReportId: source.sourceReportId,
+    truthRecordId: stored.truthRecordId,
+    relatedTruthRecordId: correctionTarget.truthRecordId,
+    reasonCodes: ["SOURCE_NATIVE_CORRECTION"],
+  });
+  return stored;
+}
+
+export async function appendUnverifiableRealityQuarantineV2FromWriter(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+  source: RealitySourceReportV2,
+  reasonCodes: readonly string[],
+): Promise<void> {
+  await lockRealityScopeV2(executor, context);
+  await appendRealityEventV2FromWriter(executor, context, {
+    eventType: "QUARANTINED",
+    sourceReportId: source.sourceReportId,
+    truthRecordId: null,
+    relatedTruthRecordId: null,
+    reasonCodes,
+  });
+}
+
+export async function appendContradictoryRealityTruthV2FromWriter(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+  source: RealitySourceReportV2,
+  related: TruthRecordV2 | null,
+  reasonCodes: readonly string[],
+): Promise<TruthRecordV2> {
+  await lockRealityScopeV2(executor, context);
+  const truth = createTruthFromVerifiedSourceV2(source, {
+    supersedesTruthRecordId: null,
+    markers: ["SOURCE_CONTRADICTION"],
+  });
+  const stored = (await insertTruthRecordV2FromWriter(executor, context, truth)).truth;
+  await appendRealityEventV2FromWriter(executor, context, {
+    eventType: related === null ? "QUARANTINED" : "SOURCE_CONTRADICTION",
+    sourceReportId: source.sourceReportId,
+    truthRecordId: stored.truthRecordId,
+    relatedTruthRecordId: related?.truthRecordId ?? null,
+    reasonCodes,
+  });
+  return stored;
+}
+
+export async function appendReleasedRealityQuarantineV2FromWriter(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+  source: RealitySourceReportV2,
+  truth: TruthRecordV2,
+): Promise<void> {
+  await lockRealityScopeV2(executor, context);
+  await appendRealityEventV2FromWriter(executor, context, {
+    eventType: "RELEASED",
+    sourceReportId: source.sourceReportId,
+    truthRecordId: truth.truthRecordId,
+    relatedTruthRecordId: null,
+    reasonCodes: ["QUARANTINE_RESOLVED_WITHOUT_PROMOTION"],
+  });
 }
 
 export async function listRealitySourceReportsV2(
@@ -492,7 +598,7 @@ export async function listRealityEventsV2(
   return Object.freeze(rows.map(mapEvent));
 }
 
-export async function insertRealityProjectionV2FromWriter(
+async function insertRealityProjectionV2FromWriter(
   executor: RealityV2Executor,
   context: RealityAccountContext,
   projection: RealityProjectionV2,
@@ -521,7 +627,13 @@ export async function insertRealityProjectionV2FromWriter(
     eq(pgSchema.traderRealityProjectionsV2.id, projection.projectionId),
   )).limit(1);
   if (!rows[0]) throw new RealityV2PersistenceConflictError();
-  return { projection: mapProjection(rows[0]), insertedNew: inserted.length === 1 };
+  const stored = mapProjection(rows[0]);
+  if (canonicalJsonString(stored) !== canonicalJsonString(projection)) {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] persisted Reality projection differs from canonical ledger fold",
+    );
+  }
+  return { projection: stored, insertedNew: inserted.length === 1 };
 }
 
 export async function readLatestRealityProjectionV2(
@@ -544,21 +656,36 @@ export async function readLatestRealityProjectionV2(
   return rows[0] ? mapProjection(rows[0]) : null;
 }
 
-export async function buildAndInsertEmptyRealityProjectionV2(
+export async function persistCanonicalRealityProjectionV2FromWriter(
   executor: RealityV2Executor,
   context: RealityAccountContext,
-  knowledgeAsOfUtc: string,
-): Promise<RealityProjectionV2> {
+  expectedProjection?: RealityProjectionV2,
+): Promise<RealityProjectionV2 | null> {
   const scoped = requireScope(context);
-  const projection = createRealityProjectionV2({
-    organizationId: scoped.organizationId,
-    accountId: scoped.accountId,
-    knowledgeAsOfUtc,
-    frontierSequence: "0",
-    frontierEventDigestHex: null,
-    stableEntries: [],
-    uncertainties: [],
-  } satisfies RealityProjectionV2Draft);
+  await lockRealityScopeV2(executor, scoped);
+  const sources = await listRealitySourceReportsV2(executor, scoped);
+  const truths = await listTruthRecordsV2(executor, scoped);
+  const events = await listRealityEventsV2(executor, scoped);
+  const head = events.at(-1);
+  if (!head) {
+    if (expectedProjection !== undefined) {
+      throw new RealityV2PersistenceConflictError(
+        "[trader] caller projection cannot exist without a canonical Reality frontier",
+      );
+    }
+    return null;
+  }
+  const projection = foldRealityProjectionV2(scoped, head.knowledgeAtUtc, {
+    sources,
+    truths,
+    events,
+  });
+  if (expectedProjection !== undefined &&
+    canonicalJsonString(expectedProjection) !== canonicalJsonString(projection)) {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] caller projection is not exactly equal to the canonical Reality ledger fold",
+    );
+  }
   return (await insertRealityProjectionV2FromWriter(executor, scoped, projection)).projection;
 }
 

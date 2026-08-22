@@ -47,6 +47,62 @@ CREATE TABLE public.trader_reality_source_reports_v2 (
     AND jsonb_typeof(verification_reason_codes) = 'array'
     AND valid_at <= knowledge_at
   ),
+  CONSTRAINT trader_reality_source_reports_v2_provenance CHECK (
+    provenance ?& ARRAY[
+      'venue', 'transport', 'connectorId', 'connectorVersion',
+      'adapterVersion', 'sourceFinalityMetadata'
+    ]
+    AND provenance - ARRAY[
+      'venue', 'transport', 'connectorId', 'connectorVersion',
+      'adapterVersion', 'sourceFinalityMetadata'
+    ] = '{}'::jsonb
+    AND provenance->>'venue' = 'HTX'
+    AND jsonb_typeof(provenance->'connectorId') = 'string'
+    AND jsonb_typeof(provenance->'connectorVersion') = 'string'
+    AND jsonb_typeof(provenance->'adapterVersion') = 'string'
+    AND provenance->>'connectorId' ~ '^[A-Za-z0-9._:/=-]{1,128}$'
+    AND provenance->>'connectorVersion' ~ '^[A-Za-z0-9._:/=-]{1,128}$'
+    AND provenance->>'adapterVersion' ~ '^[A-Za-z0-9._:/=-]{1,128}$'
+    AND provenance->>'connectorId' !~* '(access[-_]?key|api[-_]?key|authorization|cookie|credential|password|secret|signature|token)'
+    AND provenance->>'connectorVersion' !~* '(access[-_]?key|api[-_]?key|authorization|cookie|credential|password|secret|signature|token)'
+    AND provenance->>'adapterVersion' !~* '(access[-_]?key|api[-_]?key|authorization|cookie|credential|password|secret|signature|token)'
+    AND jsonb_typeof(provenance->'sourceFinalityMetadata') = 'array'
+    AND (
+      (source_kind = 'EXECUTION_REPORT_V2'
+        AND provenance->>'transport' = 'INTERNAL_APPEND_ONLY'
+        AND provenance->>'connectorId' = 'execution-v2'
+        AND provenance->>'connectorVersion' = 'execution-report/v2'
+        AND provenance->>'adapterVersion' = 'reality-execution-v2-v1'
+        AND jsonb_array_length(provenance->'sourceFinalityMetadata') = 2
+        AND jsonb_typeof(provenance #> '{sourceFinalityMetadata,0}') = 'object'
+        AND (provenance #> '{sourceFinalityMetadata,0}') ?& ARRAY['key', 'value']
+        AND (provenance #> '{sourceFinalityMetadata,0}') - ARRAY['key', 'value'] = '{}'::jsonb
+        AND provenance #>> '{sourceFinalityMetadata,0,key}' = 'reportSequence'
+        AND jsonb_typeof(provenance #> '{sourceFinalityMetadata,0,value}') = 'string'
+        AND provenance #>> '{sourceFinalityMetadata,0,value}' ~ '^[1-9][0-9]{0,18}$'
+        AND (
+          length(provenance #>> '{sourceFinalityMetadata,0,value}') < 19
+          OR provenance #>> '{sourceFinalityMetadata,0,value}' <= '9223372036854775807'
+        )
+        AND jsonb_typeof(provenance #> '{sourceFinalityMetadata,1}') = 'object'
+        AND (provenance #> '{sourceFinalityMetadata,1}') ?& ARRAY['key', 'value']
+        AND (provenance #> '{sourceFinalityMetadata,1}') - ARRAY['key', 'value'] = '{}'::jsonb
+        AND provenance #>> '{sourceFinalityMetadata,1,key}' = 'reportType'
+        AND jsonb_typeof(provenance #> '{sourceFinalityMetadata,1,value}') = 'string'
+        AND provenance #>> '{sourceFinalityMetadata,1,value}' IN (
+          'PLAN_SEALED', 'ALLOWANCE_CLAIMED', 'ATTEMPT_BOUND', 'SUBMIT_STARTED',
+          'VENUE_ACCEPTED', 'VENUE_REJECTED', 'VENUE_STATUS_OBSERVED',
+          'CANCEL_REQUESTED', 'CANCEL_ACKNOWLEDGED', 'FILL_REPORT_OBSERVED',
+          'CONNECTOR_UNCERTAIN', 'RECONCILIATION_REQUIRED'
+        ))
+      OR
+      (source_kind <> 'EXECUTION_REPORT_V2'
+        AND provenance->>'transport' = 'REST'
+        AND provenance->>'connectorId' = 'htx-exchange-connector'
+        AND provenance->>'adapterVersion' = 'reality-htx-spot-v1'
+        AND provenance->'sourceFinalityMetadata' = '[]'::jsonb)
+    )
+  ),
   CONSTRAINT trader_reality_source_reports_v2_attribution CHECK (
     (attribution_status = 'ATTRIBUTED' AND source_native_identity_kind IS NOT NULL
       AND source_native_id IS NOT NULL)
@@ -262,10 +318,58 @@ BEGIN
 END;
 $$;
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_reality_v2_reserve_knowledge_at(
+  scope_organization_id uuid,
+  scope_account_id text
+)
+RETURNS timestamptz LANGUAGE plpgsql AS $$
+DECLARE
+  last_knowledge_at timestamptz;
+  next_knowledge_at timestamptz;
+  scope_key text;
+BEGIN
+  scope_key := scope_organization_id::text || ':' || scope_account_id;
+  PERFORM pg_advisory_xact_lock(hashtextextended(scope_key, 675));
+  SELECT max(candidate.knowledge_at) INTO last_knowledge_at
+  FROM (
+    SELECT knowledge_at FROM public.trader_reality_source_reports_v2
+      WHERE organization_id = scope_organization_id AND account_id = scope_account_id
+    UNION ALL
+    SELECT knowledge_at FROM public.trader_reality_events_v2
+      WHERE organization_id = scope_organization_id AND account_id = scope_account_id
+  ) candidate;
+  next_knowledge_at := date_trunc('milliseconds', clock_timestamp());
+  IF last_knowledge_at IS NOT NULL AND next_knowledge_at <= last_knowledge_at THEN
+    next_knowledge_at := last_knowledge_at + interval '1 millisecond';
+  END IF;
+  PERFORM set_config('waia.reality_v2_reserved_scope', scope_key, true);
+  PERFORM set_config('waia.reality_v2_reserved_knowledge_at', next_knowledge_at::text, true);
+  RETURN next_knowledge_at;
+END;
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_reality_v2_guard_source_report_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  reserved_scope text;
+  reserved_knowledge_at timestamptz;
 BEGIN
-  NEW.knowledge_at := date_trunc('milliseconds', transaction_timestamp());
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    NEW.organization_id::text || ':' || NEW.account_id, 675
+  ));
+  reserved_scope := current_setting('waia.reality_v2_reserved_scope', true);
+  reserved_knowledge_at := nullif(
+    current_setting('waia.reality_v2_reserved_knowledge_at', true), ''
+  )::timestamptz;
+  IF reserved_scope IS DISTINCT FROM (NEW.organization_id::text || ':' || NEW.account_id)
+    OR reserved_knowledge_at IS NULL
+    OR NEW.knowledge_at IS DISTINCT FROM reserved_knowledge_at
+  THEN
+    RAISE EXCEPTION 'Reality knowledge time requires an exact database-authored scope reservation'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  PERFORM set_config('waia.reality_v2_reserved_scope', '', true);
+  PERFORM set_config('waia.reality_v2_reserved_knowledge_at', '', true);
   NEW.created_at := NEW.knowledge_at;
   IF NEW.valid_at > NEW.knowledge_at THEN
     RAISE EXCEPTION 'Reality valid time cannot follow database-authored knowledge time'
@@ -282,6 +386,9 @@ BEGIN
         AND report.organization_id = NEW.organization_id
         AND report.account_id = NEW.account_id
         AND report.content_digest = NEW.execution_report_digest
+        AND report.report_sequence::text =
+          NEW.provenance #>> '{sourceFinalityMetadata,0,value}'
+        AND report.report_type = NEW.provenance #>> '{sourceFinalityMetadata,1,value}'
         AND upper(attempt.venue) = 'HTX'
     ) THEN
       RAISE EXCEPTION 'ExecutionReportV2 lineage does not match scoped immutable HTX source'
@@ -362,6 +469,10 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   prior_sequence bigint;
   prior_digest text;
+  reserved_scope text;
+  reserved_knowledge_at timestamptz;
+  truth_row public.trader_reality_truth_records_v2%ROWTYPE;
+  related_row public.trader_reality_truth_records_v2%ROWTYPE;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(
     NEW.organization_id::text || ':' || NEW.account_id, 675
@@ -381,7 +492,73 @@ BEGIN
     RAISE EXCEPTION 'Reality event sequence/digest head mismatch'
       USING ERRCODE = 'serialization_failure';
   END IF;
-  NEW.knowledge_at := date_trunc('milliseconds', transaction_timestamp());
+  reserved_scope := current_setting('waia.reality_v2_reserved_scope', true);
+  reserved_knowledge_at := nullif(
+    current_setting('waia.reality_v2_reserved_knowledge_at', true), ''
+  )::timestamptz;
+  IF reserved_scope IS DISTINCT FROM (NEW.organization_id::text || ':' || NEW.account_id)
+    OR reserved_knowledge_at IS NULL
+    OR NEW.knowledge_at IS DISTINCT FROM reserved_knowledge_at
+  THEN
+    RAISE EXCEPTION 'Reality event knowledge time requires an exact database-authored scope reservation'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  PERFORM set_config('waia.reality_v2_reserved_scope', '', true);
+  PERFORM set_config('waia.reality_v2_reserved_knowledge_at', '', true);
+  IF NEW.truth_record_id IS NOT NULL THEN
+    SELECT * INTO truth_row FROM public.trader_reality_truth_records_v2
+      WHERE id = NEW.truth_record_id AND organization_id = NEW.organization_id
+        AND account_id = NEW.account_id;
+  END IF;
+  IF NEW.related_truth_record_id IS NOT NULL THEN
+    SELECT * INTO related_row FROM public.trader_reality_truth_records_v2
+      WHERE id = NEW.related_truth_record_id AND organization_id = NEW.organization_id
+        AND account_id = NEW.account_id;
+  END IF;
+  IF NEW.event_type = 'OBSERVED' THEN
+    IF truth_row.id IS NULL OR NEW.related_truth_record_id IS NOT NULL
+      OR truth_row.source_report_id <> NEW.source_report_id
+      OR truth_row.supersedes_truth_record_id IS NOT NULL
+      OR truth_row.markers <> '[]'::jsonb
+      OR EXISTS (
+        SELECT 1 FROM public.trader_reality_truth_records_v2 prior_truth
+        WHERE prior_truth.organization_id = NEW.organization_id
+          AND prior_truth.account_id = NEW.account_id
+          AND prior_truth.subject_class = truth_row.subject_class
+          AND prior_truth.subject_key = truth_row.subject_key
+          AND prior_truth.id <> truth_row.id
+          AND prior_truth.markers = '[]'::jsonb
+      )
+    THEN
+      RAISE EXCEPTION 'OBSERVED must introduce exactly one unsuperseding stable truth from its source'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF NEW.event_type = 'SUPERSEDED' THEN
+    IF truth_row.id IS NULL OR related_row.id IS NULL
+      OR truth_row.source_report_id <> NEW.source_report_id
+      OR truth_row.supersedes_truth_record_id IS DISTINCT FROM related_row.id
+      OR truth_row.markers <> '[]'::jsonb OR related_row.markers <> '[]'::jsonb
+      OR truth_row.subject_class <> related_row.subject_class
+      OR truth_row.subject_key <> related_row.subject_key
+      OR NOT EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 stable_event
+        WHERE stable_event.organization_id = NEW.organization_id
+          AND stable_event.account_id = NEW.account_id
+          AND stable_event.truth_record_id = related_row.id
+          AND stable_event.event_type IN ('OBSERVED', 'SUPERSEDED')
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 later_correction
+        WHERE later_correction.organization_id = NEW.organization_id
+          AND later_correction.account_id = NEW.account_id
+          AND later_correction.related_truth_record_id = related_row.id
+          AND later_correction.event_type = 'SUPERSEDED'
+      )
+    THEN
+      RAISE EXCEPTION 'SUPERSEDED must exactly link a source-native correction to current stable truth'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
   NEW.created_at := NEW.knowledge_at;
   RETURN NEW;
 END;
@@ -396,17 +573,26 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   frontier_row public.trader_reality_events_v2%ROWTYPE;
 BEGIN
-  NEW.created_at := date_trunc('milliseconds', transaction_timestamp());
-  IF NEW.knowledge_as_of > NEW.created_at THEN
-    RAISE EXCEPTION 'Reality projection as-of cannot be in the future'
-      USING ERRCODE = 'check_violation';
-  END IF;
-  IF NEW.frontier_sequence > 0 THEN
-    SELECT * INTO frontier_row FROM public.trader_reality_events_v2
-    WHERE id = NEW.frontier_event_digest AND organization_id = NEW.organization_id
-      AND account_id = NEW.account_id;
-    IF frontier_row.id IS NULL OR frontier_row.event_sequence <> NEW.frontier_sequence
-      OR frontier_row.knowledge_at > NEW.knowledge_as_of
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    NEW.organization_id::text || ':' || NEW.account_id, 675
+  ));
+  NEW.created_at := greatest(
+    date_trunc('milliseconds', clock_timestamp()),
+    NEW.knowledge_as_of
+  );
+  SELECT * INTO frontier_row FROM public.trader_reality_events_v2
+  WHERE organization_id = NEW.organization_id AND account_id = NEW.account_id
+    AND knowledge_at <= NEW.knowledge_as_of
+  ORDER BY knowledge_at DESC, event_sequence DESC LIMIT 1;
+  IF frontier_row.id IS NULL THEN
+    IF NEW.frontier_sequence <> 0 OR NEW.frontier_event_digest IS NOT NULL THEN
+      RAISE EXCEPTION 'Reality projection zero frontier is not exact at requested as-of time'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSE
+    IF frontier_row.id IS DISTINCT FROM NEW.frontier_event_digest
+      OR frontier_row.event_sequence <> NEW.frontier_sequence
+      OR frontier_row.knowledge_at <> NEW.knowledge_as_of
     THEN
       RAISE EXCEPTION 'Reality projection frontier is not exact at requested as-of time'
         USING ERRCODE = 'check_violation';
@@ -483,3 +669,6 @@ REVOKE ALL ON TABLE public.trader_reality_truth_records_v2 FROM authenticated, a
 REVOKE ALL ON TABLE public.trader_reality_events_v2 FROM authenticated, anon;
 --> statement-breakpoint
 REVOKE ALL ON TABLE public.trader_reality_projections_v2 FROM authenticated, anon;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION public.waia_reality_v2_reserve_knowledge_at(uuid, text)
+  FROM PUBLIC, authenticated, anon;

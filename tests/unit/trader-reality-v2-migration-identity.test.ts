@@ -7,6 +7,7 @@ const ROOT = process.cwd();
 const MIGRATION_TAG = "0160_trader_reality_v2";
 const MIGRATION_PATH = join(ROOT, "db/migrations_postgres", `${MIGRATION_TAG}.sql`);
 const JOURNAL_PATH = join(ROOT, "db/migrations_postgres/meta/_journal.json");
+const REPOSITORY_PATH = join(ROOT, "lib/trader/reality/v2/repository-postgres.ts");
 
 describe("Reality V2 migration identity (DEE-677)", () => {
   it("owns exactly one next-numbered 0160 PostgreSQL migration", () => {
@@ -48,13 +49,42 @@ describe("Reality V2 migration identity (DEE-677)", () => {
 
   it("pins database-authored knowledge time, scoped lineage, correction, and event-head guards", () => {
     const sql = readFileSync(MIGRATION_PATH, "utf8");
-    expect(sql).toContain("NEW.knowledge_at := date_trunc('milliseconds', transaction_timestamp())");
+    expect(sql).toContain("waia_reality_v2_reserve_knowledge_at");
+    expect(sql).toContain("date_trunc('milliseconds', clock_timestamp())");
+    expect(sql).toContain("last_knowledge_at + interval '1 millisecond'");
+    expect(sql).toContain("exact database-authored scope reservation");
     expect(sql).toContain("ExecutionReportV2 lineage does not match scoped immutable HTX source");
+    expect(sql).toContain("report.report_sequence::text");
+    expect(sql).toContain("report.report_type = NEW.provenance");
     expect(sql).toContain("upper(attempt.venue) = 'HTX'");
     expect(sql).toContain("raw HTX lineage does not match encrypted scoped capture receipt");
     expect(sql).toContain("Only explicit source-native correction may supersede scoped truth");
     expect(sql).toContain("pg_advisory_xact_lock");
     expect(sql).toContain("Reality event sequence/digest head mismatch");
+    expect(sql).toContain("OBSERVED must introduce exactly one unsuperseding stable truth");
+    expect(sql).toContain("SUPERSEDED must exactly link a source-native correction");
     expect(sql).toContain("Reality projection frontier is not exact at requested as-of time");
+    expect(sql).toContain("frontier_row.knowledge_at <> NEW.knowledge_as_of");
+  });
+
+  it("pins strict transport metadata domains for TypeScript-bypass/direct SQL writes", () => {
+    const sql = readFileSync(MIGRATION_PATH, "utf8");
+    expect(sql).toContain("trader_reality_source_reports_v2_provenance");
+    expect(sql).toContain("provenance->'sourceFinalityMetadata' = '[]'::jsonb");
+    expect(sql).toContain("'{sourceFinalityMetadata,0,value}'");
+    expect(sql).toContain("'{sourceFinalityMetadata,1,value}'");
+    expect(sql).toContain("'9223372036854775807'");
+    expect(sql).toContain("'FILL_REPORT_OBSERVED'");
+    expect(sql).toContain("provenance - ARRAY[");
+  });
+
+  it("keeps generic event/projection persistence private behind intent-specific writes", () => {
+    const repository = readFileSync(REPOSITORY_PATH, "utf8");
+    expect(repository).not.toMatch(/export async function appendRealityEventV2FromWriter/);
+    expect(repository).not.toMatch(/export async function insertRealityProjectionV2FromWriter/);
+    expect(repository).toContain("export async function appendObservedRealityTruthV2FromWriter");
+    expect(repository).toContain("export async function appendSupersededRealityTruthV2FromWriter");
+    expect(repository).toContain("export async function persistCanonicalRealityProjectionV2FromWriter");
+    expect(repository).toContain("canonicalJsonString(expectedProjection)");
   });
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { drizzle } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -24,14 +25,14 @@ import {
   replayRealityProjectionV2Postgres,
 } from "@/lib/trader/reality/v2/replay";
 import {
-  appendRealityEventV2FromWriter,
+  appendObservedRealityTruthV2FromWriter,
+  appendRealitySourceObservationV2FromWriter,
   appendRealitySourceReportV2Postgres,
-  createTruthFromVerifiedSourceV2,
-  insertRealityProjectionV2FromWriter,
-  insertTruthRecordV2FromWriter,
+  appendSupersededRealityTruthV2FromWriter,
   listRealityEventsV2,
   listRealitySourceReportsV2,
   listTruthRecordsV2,
+  persistCanonicalRealityProjectionV2FromWriter,
   readLatestRealityProjectionV2,
   readRealitySourceReportV2,
 } from "@/lib/trader/reality/v2/repository-postgres";
@@ -167,10 +168,10 @@ function fillInput(
     provenance: {
       venue: "HTX" as const,
       transport: "REST" as const,
-      connectorId: "htx-existing-boundary",
+      connectorId: "htx-exchange-connector",
       connectorVersion: "test-v1",
       adapterVersion: "reality-htx-spot-v1",
-      sourceFinalityMetadata: [{ key: "settlement", value: "observed" }] as const,
+      sourceFinalityMetadata: [] as const,
     },
     structuralVerification: "VERIFIED" as const,
     verificationReasonCodes: [] as const,
@@ -279,13 +280,56 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     `;
     expect(forbidden).toEqual([]);
 
-    const truth = createTruthFromVerifiedSourceV2(stored.report, {
-      supersedesTruthRecordId: null,
-      markers: [],
-    });
-    await runWaiaPostgresTransaction(db, async (tx) => {
-      await insertTruthRecordV2FromWriter(tx, { organizationId: orgA, accountId: ACCOUNT }, truth);
-    });
+    for (const [caseName, provenance] of [
+      ["raw-secret", {
+        ...stored.report.provenance,
+        sourceFinalityMetadata: [{ key: "details", value: "Bearer secret raw body" }],
+      }],
+      ["oversized", {
+        ...stored.report.provenance,
+        connectorVersion: "x".repeat(129),
+      }],
+      ["opaque-json", {
+        ...stored.report.provenance,
+        sourceFinalityMetadata: [{ key: "reportSequence", value: { rawBody: "secret" } }],
+      }],
+    ] as const) {
+      const rejectedId = hex64(`direct-sql-${caseName}`);
+      await expect(sqlClient.begin(async (transaction) => {
+        const reserved = await transaction<{ knowledge_at: string }[]>`
+          SELECT public.waia_reality_v2_reserve_knowledge_at(
+            ${orgA}::uuid, ${ACCOUNT}::text
+          ) AS knowledge_at
+        `;
+        await transaction`
+          INSERT INTO trader_reality_source_reports_v2 (
+            id, organization_id, account_id, source_kind, source_native_identity_kind,
+            source_native_id, source_native_revision, supersedes_native_revision,
+            attribution_status, subject_class, subject_key, primitive_assertion, lineage_kind,
+            execution_report_id, execution_report_digest, raw_capture_receipt_digest,
+            raw_bytes_digest, storage_binding_digest, provenance, structural_verification,
+            verification_reason_codes, valid_at, knowledge_at, content_digest, schema_version
+          )
+          SELECT
+            ${rejectedId}, organization_id, account_id, source_kind,
+            source_native_identity_kind, source_native_id || ${`-${caseName}`},
+            source_native_revision, supersedes_native_revision, attribution_status,
+            subject_class, subject_key || ${`-${caseName}`}, primitive_assertion, lineage_kind,
+            execution_report_id, execution_report_digest, raw_capture_receipt_digest,
+            raw_bytes_digest, storage_binding_digest, ${JSON.stringify(provenance)}::jsonb,
+            structural_verification, verification_reason_codes, valid_at,
+            ${new Date(reserved[0]!.knowledge_at).toISOString()}, ${rejectedId}, schema_version
+          FROM trader_reality_source_reports_v2 WHERE id = ${stored.report.sourceReportId}
+        `;
+      })).rejects.toThrow(/provenance|check constraint/);
+    }
+
+    const truth = await runWaiaPostgresTransaction(db, (tx) =>
+      appendObservedRealityTruthV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        stored.report,
+      ));
     expect(await listTruthRecordsV2(db, { organizationId: orgA, accountId: ACCOUNT }))
       .toEqual([truth]);
     expect(await listTruthRecordsV2(db, { organizationId: orgB, accountId: ACCOUNT }))
@@ -300,7 +344,7 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     `).rejects.toThrow(/append-only/);
   });
 
-  it("accepts only explicit source-native correction and preserves a serialized digest frontier", async () => {
+  it("accepts only exact intent writes and rejects forged events/projections", async () => {
     const baseRaw = await capture(db, orgA, SOURCE_A, "revision-1");
     const correctionRaw = await capture(db, orgA, SOURCE_A, "revision-2");
     const baseSource = (await appendRealitySourceReportV2Postgres(
@@ -313,33 +357,25 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       { organizationId: orgA, accountId: ACCOUNT },
       fillInput(correctionRaw.receipt, "2", "1", "0.002"),
     )).report;
-    const baseTruth = createTruthFromVerifiedSourceV2(baseSource, {
-      supersedesTruthRecordId: null,
-      markers: [],
-    });
-    const correctedTruth = createTruthFromVerifiedSourceV2(correctedSource, {
-      supersedesTruthRecordId: baseTruth.truthRecordId,
-      markers: [],
-    });
-    await runWaiaPostgresTransaction(db, async (tx) => {
-      await insertTruthRecordV2FromWriter(tx, { organizationId: orgA, accountId: ACCOUNT }, baseTruth);
-      await insertTruthRecordV2FromWriter(tx, { organizationId: orgA, accountId: ACCOUNT }, correctedTruth);
-    });
-
-    const eventInputs = [
-      { sourceReportId: baseSource.sourceReportId, truthRecordId: baseTruth.truthRecordId },
-      { sourceReportId: correctedSource.sourceReportId, truthRecordId: correctedTruth.truthRecordId },
-    ];
-    await Promise.all(eventInputs.map((input) => runWaiaPostgresTransaction(db, async (tx) =>
-      appendRealityEventV2FromWriter(tx, { organizationId: orgA, accountId: ACCOUNT }, {
-        eventType: "OBSERVED",
-        ...input,
-        relatedTruthRecordId: null,
-        reasonCodes: [],
-      }))));
+    const baseTruth = await runWaiaPostgresTransaction(db, (tx) =>
+      appendObservedRealityTruthV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        baseSource,
+      ));
+    const correctedTruth = await runWaiaPostgresTransaction(db, (tx) =>
+      appendSupersededRealityTruthV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        correctedSource,
+        baseTruth,
+      ));
     const events = await listRealityEventsV2(db, { organizationId: orgA, accountId: ACCOUNT });
     expect(events.map((event) => event.eventSequence)).toEqual(["1", "2"]);
+    expect(events.map((event) => event.eventType)).toEqual(["OBSERVED", "SUPERSEDED"]);
     expect(events[1]!.previousEventDigestHex).toBe(events[0]!.contentDigestHex);
+    expect(new Date(events[1]!.knowledgeAtUtc).getTime())
+      .toBeGreaterThan(new Date(events[0]!.knowledgeAtUtc).getTime());
 
     const stale = createRealityEventV2({
       organizationId: orgA,
@@ -366,33 +402,88 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     `).rejects.toThrow(/sequence\/digest head mismatch/);
 
     const head = events[1]!;
-    const projection = createRealityProjectionV2({
+    const forgedProjection = createRealityProjectionV2({
       organizationId: orgA,
       accountId: ACCOUNT,
       knowledgeAsOfUtc: head.knowledgeAtUtc,
       frontierSequence: head.eventSequence,
       frontierEventDigestHex: head.contentDigestHex,
       stableEntries: [{
-        subject: correctedTruth.subject,
-        truthRecordId: correctedTruth.truthRecordId,
-        sourceReportId: correctedTruth.sourceReportId,
-        validAtUtc: correctedTruth.validAtUtc,
-        knowledgeAtUtc: correctedTruth.knowledgeAtUtc,
-        primitiveAssertion: correctedTruth.primitiveAssertion,
+        subject: baseTruth.subject,
+        truthRecordId: baseTruth.truthRecordId,
+        sourceReportId: baseTruth.sourceReportId,
+        validAtUtc: baseTruth.validAtUtc,
+        knowledgeAtUtc: baseTruth.knowledgeAtUtc,
+        primitiveAssertion: baseTruth.primitiveAssertion,
       }],
       uncertainties: [],
     });
-    await runWaiaPostgresTransaction(db, async (tx) => {
-      await insertRealityProjectionV2FromWriter(
+    await expect(runWaiaPostgresTransaction(db, (tx) =>
+      persistCanonicalRealityProjectionV2FromWriter(
         tx,
         { organizationId: orgA, accountId: ACCOUNT },
-        projection,
-      );
-    });
+        forgedProjection,
+      ))).rejects.toThrow(/not exactly equal to the canonical Reality ledger fold/);
+    const projection = await runWaiaPostgresTransaction(db, (tx) =>
+      persistCanonicalRealityProjectionV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+      ));
+    expect(projection?.stableEntries[0]?.truthRecordId).toBe(correctedTruth.truthRecordId);
     expect(await readLatestRealityProjectionV2(db, { organizationId: orgA, accountId: ACCOUNT }))
       .toEqual(projection);
     expect(await readLatestRealityProjectionV2(db, { organizationId: orgB, accountId: ACCOUNT }))
       .toBeNull();
+
+    const attemptInvalidEvent = async (
+      eventType: "OBSERVED" | "SUPERSEDED",
+      sourceReportId: string,
+      truthRecordId: string,
+      relatedTruthRecordId: string | null,
+    ) => sqlClient.begin(async (transaction) => {
+      const reserved = await transaction<{ knowledge_at: string }[]>`
+        SELECT public.waia_reality_v2_reserve_knowledge_at(
+          ${orgA}::uuid, ${ACCOUNT}::text
+        ) AS knowledge_at
+      `;
+      const event = createRealityEventV2({
+        organizationId: orgA,
+        accountId: ACCOUNT,
+        eventSequence: "3",
+        eventType,
+        sourceReportId,
+        truthRecordId,
+        relatedTruthRecordId,
+        reasonCodes: eventType === "SUPERSEDED" ? ["SOURCE_NATIVE_CORRECTION"] : [],
+        knowledgeAtUtc: new Date(reserved[0]!.knowledge_at).toISOString(),
+        previousEventDigestHex: head.contentDigestHex,
+      });
+      await transaction`
+        INSERT INTO trader_reality_events_v2 (
+          id, organization_id, account_id, event_sequence, event_type, source_report_id,
+          truth_record_id, related_truth_record_id, reason_codes, knowledge_at,
+          previous_event_digest, content_digest, schema_version
+        ) VALUES (
+          ${event.realityEventId}, ${orgA}::uuid, ${ACCOUNT}, ${event.eventSequence}::bigint,
+          ${event.eventType}, ${event.sourceReportId}, ${event.truthRecordId},
+          ${event.relatedTruthRecordId}, ${JSON.stringify(event.reasonCodes)}::jsonb,
+          ${event.knowledgeAtUtc}, ${event.previousEventDigestHex},
+          ${event.contentDigestHex}, ${event.schemaVersion}
+        )
+      `;
+    });
+    await expect(attemptInvalidEvent(
+      "OBSERVED",
+      correctedSource.sourceReportId,
+      correctedTruth.truthRecordId,
+      null,
+    )).rejects.toThrow(/OBSERVED must introduce exactly one unsuperseding stable truth/);
+    await expect(attemptInvalidEvent(
+      "SUPERSEDED",
+      baseSource.sourceReportId,
+      baseTruth.truthRecordId,
+      correctedTruth.truthRecordId,
+    )).rejects.toThrow(/SUPERSEDED must exactly link/);
   });
 
   it("deduplicates, quarantines contradictions, preserves stable truth, and replays exact as-of state", async () => {
@@ -464,6 +555,84 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       db,
       { organizationId: orgB, accountId: ACCOUNT },
     )).toBeNull();
+  });
+
+  it("authors a strict scope frontier after lock despite reversed transaction start order", async () => {
+    const olderRaw = await capture(db, orgA, SOURCE_A, "older-transaction");
+    const newerRaw = await capture(db, orgA, SOURCE_A, "newer-transaction");
+    const olderInput = fillInput(olderRaw.receipt, "10", null);
+    const newerInput = {
+      ...fillInput(newerRaw.receipt, "20", null),
+      sourceNativeIdentity: {
+        identityKind: "HTX_TRADE_ID" as const,
+        nativeId: "htx-trade-reality-newer",
+        nativeRevision: "20",
+        supersedesNativeRevision: null,
+      },
+      subject: {
+        subjectClass: "FILL" as const,
+        subjectKey: "HTX:spot:htx-trade-reality-newer",
+      },
+      primitiveAssertion: {
+        ...fillInput(newerRaw.receipt, "20", null).primitiveAssertion,
+        venueTradeId: "htx-trade-reality-newer",
+      },
+    };
+    let releaseOlder!: () => void;
+    let markOlderStarted!: () => void;
+    const olderStarted = new Promise<void>((resolve) => { markOlderStarted = resolve; });
+    const olderMayProceed = new Promise<void>((resolve) => { releaseOlder = resolve; });
+    const olderTransaction = runWaiaPostgresTransaction(db, async (tx) => {
+      await tx.execute(sql`SELECT transaction_timestamp()`);
+      markOlderStarted();
+      await olderMayProceed;
+      return appendRealitySourceObservationV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        olderInput,
+      );
+    });
+    await olderStarted;
+    const newer = await appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      newerInput,
+    );
+    releaseOlder();
+    const older = await olderTransaction;
+    expect(new Date(older.report.knowledgeAtUtc).getTime())
+      .toBeGreaterThan(new Date(newer.report.knowledgeAtUtc).getTime());
+
+    await runWaiaPostgresTransaction(db, (tx) => appendObservedRealityTruthV2FromWriter(
+      tx,
+      { organizationId: orgA, accountId: ACCOUNT },
+      newer.report,
+    ));
+    await runWaiaPostgresTransaction(db, (tx) => appendObservedRealityTruthV2FromWriter(
+      tx,
+      { organizationId: orgA, accountId: ACCOUNT },
+      older.report,
+    ));
+    const sources = await listRealitySourceReportsV2(db, {
+      organizationId: orgA,
+      accountId: ACCOUNT,
+    });
+    const events = await listRealityEventsV2(db, { organizationId: orgA, accountId: ACCOUNT });
+    const frontierTimes = [
+      ...sources.map((source) => new Date(source.knowledgeAtUtc).getTime()),
+      ...events.map((event) => new Date(event.knowledgeAtUtc).getTime()),
+    ].sort((left, right) => left - right);
+    expect(new Set(frontierTimes).size).toBe(frontierTimes.length);
+    expect(frontierTimes.every((value, index) => index === 0 || value > frontierTimes[index - 1]!))
+      .toBe(true);
+    const firstAsOf = await replayRealityProjectionV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      events[0]!.knowledgeAtUtc,
+    );
+    expect(firstAsOf.frontierSequence).toBe("1");
+    expect(firstAsOf.frontierEventDigestHex).toBe(events[0]!.contentDigestHex);
+    expect(firstAsOf.stableEntries).toHaveLength(1);
   });
 
   it("enforces deny RLS for authenticated and anon across real CRUD paths", async () => {
