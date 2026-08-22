@@ -995,6 +995,105 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     )).toEqual(result.projection);
   });
 
+  it("reserves missing-target quarantine for one complete verified correction", async () => {
+    const unverifiableRaw = await capture(db, orgA, SOURCE_A, "reserved-reason-unverifiable");
+    const unverifiableDraft = fillInput(unverifiableRaw.receipt, "unverifiable", null);
+    const unverifiable = await appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      {
+        ...unverifiableDraft,
+        sourceNativeIdentity: null,
+        attributionStatus: "UNATTRIBUTED" as const,
+        primitiveAssertion: null,
+        structuralVerification: "UNVERIFIABLE" as const,
+        verificationReasonCodes: ["MISSING_SOURCE_NATIVE_ID"],
+      },
+    );
+    const nonCorrectionRaw = await capture(db, orgA, SOURCE_A, "reserved-reason-non-correction");
+    const nonCorrection = await appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(nonCorrectionRaw.receipt, "base-only", null),
+    );
+
+    const appendRepositoryQuarantine = (
+      sourceReport: typeof unverifiable.report,
+      reasonCodes: readonly string[],
+    ) => runWaiaPostgresTransaction(db, (tx) =>
+      appendUnverifiableRealityQuarantineV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        sourceReport,
+        reasonCodes,
+      ));
+    await expect(appendRepositoryQuarantine(
+      unverifiable.report,
+      ["CORRECTION_TARGET_NOT_FOUND"],
+    )).rejects.toThrow(/requires one complete verified correction identity/);
+    await expect(appendRepositoryQuarantine(
+      nonCorrection.report,
+      ["CORRECTION_TARGET_NOT_FOUND"],
+    )).rejects.toThrow(/requires one complete verified correction identity/);
+    await expect(appendRepositoryQuarantine(
+      unverifiable.report,
+      ["CORRECTION_TARGET_NOT_FOUND", "MISSING_SOURCE_NATIVE_ID"],
+    )).rejects.toThrow(/requires one complete verified correction identity/);
+
+    const appendDirectQuarantine = async (
+      sourceReportId: string,
+      reasonCodes: readonly string[],
+    ) => sqlClient.begin(async (transaction) => {
+      const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+        SELECT reservation_id::text, knowledge_at
+        FROM public.waia_reality_v2_allocate_knowledge_at(${orgA}::uuid, ${ACCOUNT}::text)
+      `;
+      const event = createRealityEventV2({
+        organizationId: orgA,
+        accountId: ACCOUNT,
+        eventSequence: "1",
+        eventType: "QUARANTINED",
+        sourceReportId,
+        truthRecordId: null,
+        relatedTruthRecordId: null,
+        quarantineEventId: null,
+        reasonCodes,
+        knowledgeAtUtc: new Date(reserved[0]!.knowledge_at).toISOString(),
+        previousEventDigestHex: null,
+      });
+      await transaction`
+        INSERT INTO trader_reality_events_v2 (
+          id, organization_id, account_id, event_sequence, event_type, source_report_id,
+          truth_record_id, related_truth_record_id, quarantine_event_id, reason_codes,
+          knowledge_at, knowledge_reservation_id, previous_event_digest, content_digest,
+          schema_version
+        ) VALUES (
+          ${event.realityEventId}, ${orgA}::uuid, ${ACCOUNT}, ${event.eventSequence}::bigint,
+          ${event.eventType}, ${event.sourceReportId}, NULL, NULL, NULL,
+          ${JSON.stringify(event.reasonCodes)}::jsonb, ${event.knowledgeAtUtc},
+          ${reserved[0]!.reservation_id}::uuid, NULL, ${event.contentDigestHex},
+          ${event.schemaVersion}
+        )
+      `;
+    });
+    await expect(appendDirectQuarantine(
+      unverifiable.report.sourceReportId,
+      ["CORRECTION_TARGET_NOT_FOUND"],
+    )).rejects.toThrow(/absent correction target/);
+    await expect(appendDirectQuarantine(
+      nonCorrection.report.sourceReportId,
+      ["CORRECTION_TARGET_NOT_FOUND"],
+    )).rejects.toThrow(/absent correction target/);
+    await expect(appendDirectQuarantine(
+      unverifiable.report.sourceReportId,
+      ["CORRECTION_TARGET_NOT_FOUND", "MISSING_SOURCE_NATIVE_ID"],
+    )).rejects.toThrow(/absent correction target/);
+    expect(await listRealityEventsV2(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+    )).toEqual([]);
+  });
+
   it("rejects false missing-target quarantine at repository, SQL, and serialized race boundaries", async () => {
     const baseRaw = await capture(db, orgA, SOURCE_A, "false-missing-base");
     const base = await ingestRealitySourceReportV2Postgres(

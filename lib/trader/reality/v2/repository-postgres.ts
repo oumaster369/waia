@@ -558,27 +558,34 @@ export async function appendUnverifiableRealityQuarantineV2FromWriter(
 ): Promise<void> {
   const scoped = requireScope(context);
   await lockRealityScopeV2(executor, scoped);
-  if (reasonCodes.length === 1 && reasonCodes[0] === "CORRECTION_TARGET_NOT_FOUND") {
-    const targetRows = await executor.execute<{ target_exists: boolean }>(sql`
-      SELECT EXISTS (
+  const sourceRows = await executor.execute<{
+    structural_verification: "VERIFIED" | "UNVERIFIABLE";
+    eligible_correction: boolean;
+    target_exists: boolean;
+  }>(sql`
+    SELECT correction_source.structural_verification,
+      (
+        correction_source.structural_verification = 'VERIFIED'
+        AND correction_source.attribution_status = 'ATTRIBUTED'
+        AND correction_source.source_native_identity_kind IS NOT NULL
+        AND correction_source.source_native_id IS NOT NULL
+        AND correction_source.source_native_revision IS NOT NULL
+        AND correction_source.supersedes_native_revision IS NOT NULL
+      ) AS eligible_correction,
+      EXISTS (
         SELECT 1
-        FROM public.trader_reality_source_reports_v2 correction_source
-        JOIN public.trader_reality_truth_records_v2 target_truth
-          ON target_truth.organization_id = correction_source.organization_id
-         AND target_truth.account_id = correction_source.account_id
-         AND target_truth.source_kind = correction_source.source_kind
-         AND target_truth.source_native_identity_kind IS NOT DISTINCT FROM
-           correction_source.source_native_identity_kind
-         AND target_truth.source_native_id IS NOT DISTINCT FROM correction_source.source_native_id
-         AND target_truth.source_native_revision IS NOT DISTINCT FROM
-           correction_source.supersedes_native_revision
-         AND target_truth.subject_class = correction_source.subject_class
-         AND target_truth.subject_key = correction_source.subject_key
-         AND target_truth.markers = '[]'::jsonb
-        WHERE correction_source.id = ${source.sourceReportId}
-          AND correction_source.content_digest = ${source.contentDigestHex}
-          AND correction_source.organization_id = ${scoped.organizationId}::uuid
-          AND correction_source.account_id = ${scoped.accountId}
+        FROM public.trader_reality_truth_records_v2 target_truth
+        WHERE target_truth.organization_id = correction_source.organization_id
+          AND target_truth.account_id = correction_source.account_id
+          AND target_truth.source_kind = correction_source.source_kind
+          AND target_truth.source_native_identity_kind IS NOT DISTINCT FROM
+            correction_source.source_native_identity_kind
+          AND target_truth.source_native_id IS NOT DISTINCT FROM correction_source.source_native_id
+          AND target_truth.source_native_revision IS NOT DISTINCT FROM
+            correction_source.supersedes_native_revision
+          AND target_truth.subject_class = correction_source.subject_class
+          AND target_truth.subject_key = correction_source.subject_key
+          AND target_truth.markers = '[]'::jsonb
           AND EXISTS (
             SELECT 1 FROM public.trader_reality_events_v2 stable_event
             WHERE stable_event.organization_id = target_truth.organization_id
@@ -594,12 +601,30 @@ export async function appendUnverifiableRealityQuarantineV2FromWriter(
               AND later_correction.event_type = 'SUPERSEDED'
           )
       ) AS target_exists
-    `);
-    if (targetRows[0]?.target_exists === true) {
+    FROM public.trader_reality_source_reports_v2 correction_source
+    WHERE correction_source.id = ${source.sourceReportId}
+      AND correction_source.content_digest = ${source.contentDigestHex}
+      AND correction_source.organization_id = ${scoped.organizationId}::uuid
+      AND correction_source.account_id = ${scoped.accountId}
+  `);
+  const persistedSource = sourceRows[0];
+  if (!persistedSource) throw new RealityV2PersistenceConflictError();
+  const hasReservedCorrectionReason = reasonCodes.includes("CORRECTION_TARGET_NOT_FOUND");
+  if (hasReservedCorrectionReason) {
+    if (reasonCodes.length !== 1 || !persistedSource.eligible_correction) {
+      throw new RealityV2PersistenceConflictError(
+        "[trader] CORRECTION_TARGET_NOT_FOUND requires one complete verified correction identity",
+      );
+    }
+    if (persistedSource.target_exists) {
       throw new RealityV2PersistenceConflictError(
         "[trader] Reality correction target exists in the exact source/truth identity scope",
       );
     }
+  } else if (persistedSource.structural_verification !== "UNVERIFIABLE") {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] generic Reality quarantine requires an unverifiable source",
+    );
   }
   await appendRealityEventV2FromWriter(executor, context, {
     eventType: "QUARANTINED",

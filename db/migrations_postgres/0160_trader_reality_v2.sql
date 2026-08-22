@@ -760,9 +760,15 @@ BEGIN
       OR NEW.related_truth_record_id IS NOT NULL
       OR jsonb_array_length(NEW.reason_codes) = 0
       OR NOT (
-        source_row.structural_verification = 'UNVERIFIABLE'
+        (
+          source_row.structural_verification = 'UNVERIFIABLE'
+          AND NOT (NEW.reason_codes ? 'CORRECTION_TARGET_NOT_FOUND')
+        )
         OR (
           source_row.structural_verification = 'VERIFIED'
+          AND source_row.attribution_status = 'ATTRIBUTED'
+          AND source_row.source_native_identity_kind IS NOT NULL
+          AND source_row.source_native_id IS NOT NULL
           AND source_row.source_native_revision IS NOT NULL
           AND source_row.supersedes_native_revision IS NOT NULL
           AND NEW.reason_codes = '["CORRECTION_TARGET_NOT_FOUND"]'::jsonb

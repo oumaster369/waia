@@ -82,6 +82,9 @@ describe("Reality V2 migration identity (DEE-677)", () => {
     expect(sql).toContain("OBSERVED must introduce exactly one unsuperseding stable truth");
     expect(sql).toContain("SUPERSEDED must exactly link a source-native correction");
     expect(sql).toContain("'[\"CORRECTION_TARGET_NOT_FOUND\"]'::jsonb");
+    expect(sql).toContain("NOT (NEW.reason_codes ? 'CORRECTION_TARGET_NOT_FOUND')");
+    expect(sql).toContain("source_row.attribution_status = 'ATTRIBUTED'");
+    expect(sql).toContain("source_row.source_native_identity_kind IS NOT NULL");
     expect(sql).toContain(
       "QUARANTINED must exactly preserve one source-only causal episode with an absent correction target",
     );
