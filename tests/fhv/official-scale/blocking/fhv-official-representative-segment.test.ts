@@ -12,7 +12,25 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/trader/observability/fhv-historical-execution-session", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/lib/trader/observability/fhv-historical-execution-session")
+  >();
+  return {
+    ...actual,
+    seedFhvHistoricalExecutionSession: async (
+      input: Parameters<typeof actual.seedFhvHistoricalExecutionSession>[0],
+    ) => {
+      const seeded = await actual.seedFhvHistoricalExecutionSession(input);
+      const { bindFhvTestOnlyExecutionV2HistoricalSession } = await import(
+        "./fhv-official-scale-harness"
+      );
+      return bindFhvTestOnlyExecutionV2HistoricalSession(seeded);
+    },
+  };
+});
 
 import { isFhvBoundedHotStateEnabled } from "@/lib/trader/execution/fhv-hot-state-pruner";
 import { getIdhpsHotPathCounters } from "@/lib/trader/execution/idhps-hot-path-counters";
@@ -29,6 +47,7 @@ import {
 import { TARGET_CYCLE_COUNT } from "./fhv-official-scale-constants";
 import {
   buildFhvOfficialScaleHarnessContext,
+  getFhvTestOnlyExecutionV2AuthorityMetrics,
   resolveBarsProcessed,
   resolveWp17OpenCount,
   setupFhvOfficialScaleLaunchPaths,
@@ -80,6 +99,7 @@ type SegmentReport = {
     reconciliationCalls: number;
     progressSamples: number;
   };
+  executionV2Authority: ReturnType<typeof getFhvTestOnlyExecutionV2AuthorityMetrics>;
   growth: {
     sessionDatabaseBytesFirst: number | null;
     sessionDatabaseBytesLast: number | null;
@@ -249,6 +269,7 @@ describe("FHV deep-state representative segment", () => {
           reconciliationCalls: getIdhpsHotPathCounters().reconciliationCalls,
           progressSamples: series.length,
         },
+        executionV2Authority: getFhvTestOnlyExecutionV2AuthorityMetrics(),
         growth: {
           sessionDatabaseBytesFirst: first?.sqliteDatabaseBytes ?? null,
           sessionDatabaseBytesLast: last?.sqliteDatabaseBytes ?? null,
@@ -321,6 +342,14 @@ describe("FHV deep-state representative segment", () => {
     expect(workload!.evidenceChunkCount).toBeGreaterThan(0);
     // GS-07 runs three independent phases per cycle; a segment must exercise them.
     expect(workload!.reconciliationCalls).toBeGreaterThanOrEqual(3);
+    expect(report!.executionV2Authority.allowanceClaims).toBeGreaterThan(0);
+    expect(report!.executionV2Authority.boundAttempts).toBe(
+      report!.executionV2Authority.modeledPlacements,
+    );
+    expect(report!.executionV2Authority.venueAcceptedReports).toBe(
+      report!.executionV2Authority.modeledPlacements,
+    );
+    expect(report!.executionV2Authority.legacySubmissions).toBe(0);
   });
 
   it("produces a usable growth-law series", () => {

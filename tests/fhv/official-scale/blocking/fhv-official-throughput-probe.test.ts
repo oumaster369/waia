@@ -4,7 +4,25 @@
 
 import { existsSync } from "node:fs";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/trader/observability/fhv-historical-execution-session", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/lib/trader/observability/fhv-historical-execution-session")
+  >();
+  return {
+    ...actual,
+    seedFhvHistoricalExecutionSession: async (
+      input: Parameters<typeof actual.seedFhvHistoricalExecutionSession>[0],
+    ) => {
+      const seeded = await actual.seedFhvHistoricalExecutionSession(input);
+      const { bindFhvTestOnlyExecutionV2HistoricalSession } = await import(
+        "./fhv-official-scale-harness"
+      );
+      return bindFhvTestOnlyExecutionV2HistoricalSession(seeded);
+    },
+  };
+});
 
 import { executeFhvFullHistoricalLaunch } from "@/lib/trader/observability/fhv-full-historical-launch";
 
@@ -18,6 +36,7 @@ import {
   assertFhvOfficialScaleProbeNonTrivialCheckpoint,
   buildFhvOfficialScaleHarnessContext,
   buildFhvOfficialScaleMetrics,
+  getFhvTestOnlyExecutionV2AuthorityMetrics,
   resolveBarsProcessed,
   resolveFhvOfficialScaleCheckpointBytes,
   resolveWp17OpenCount,
@@ -68,6 +87,13 @@ describe("FHV official-scale throughput probe (Phase 10 blocking)", () => {
     const result = await executeFhvFullHistoricalLaunch(
       toFhvOfficialScaleLaunchInput(paths, { maxCycles: TARGET_CYCLE_COUNT }),
     );
+    const executionV2Authority = getFhvTestOnlyExecutionV2AuthorityMetrics();
+    expect(executionV2Authority.allowanceClaims).toBeGreaterThan(0);
+    expect(executionV2Authority.boundAttempts).toBe(executionV2Authority.modeledPlacements);
+    expect(executionV2Authority.venueAcceptedReports).toBe(
+      executionV2Authority.modeledPlacements,
+    );
+    expect(executionV2Authority.legacySubmissions).toBe(0);
     // Feasibility uses pure hot-path wall (runBacktest), not seed/receipt setup tax.
     const wallTimeMs = result.hotPathWallTimeMs ?? Date.now() - startedAt;
 

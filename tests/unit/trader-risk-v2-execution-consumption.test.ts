@@ -126,7 +126,7 @@ describe("Risk V2 execution consumption boundary", () => {
     expect(dispatcherSource).toContain("await bindExecutionAuthorityV2Postgres");
     expect(dispatcherSource).toContain("await dispatchAndRecordExecutionAttemptV2");
     expect(dispatcherSource).toContain(
-      "submitCommittedAttemptToConnectorV2(connector, authority.attempt)",
+      "submitCommittedAttemptToConnectorV2(\n            connector,\n            authority.attempt,\n            submittedAuthority.timeoutMs,\n          )",
     );
   });
 });
