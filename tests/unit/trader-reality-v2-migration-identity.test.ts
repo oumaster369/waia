@@ -28,20 +28,27 @@ describe("Reality V2 migration identity (DEE-677)", () => {
     expect(journal.entries.filter((entry) => entry.tag === MIGRATION_TAG)).toHaveLength(1);
   });
 
-  it("creates exactly four append-only, deny-RLS Reality tables without raw payload storage", () => {
+  it("creates exactly four ledger and two protected deny-RLS tables without raw payload storage", () => {
     const sql = readFileSync(MIGRATION_PATH, "utf8");
     const createdTables = [...sql.matchAll(/CREATE TABLE public\.(trader_reality_[a-z_]+_v2)/g)]
       .map((match) => match[1]);
     expect(createdTables).toEqual([
+      "trader_reality_raw_source_admissions_v2",
+      "trader_reality_knowledge_frontiers_v2",
       "trader_reality_source_reports_v2",
       "trader_reality_truth_records_v2",
       "trader_reality_events_v2",
       "trader_reality_projections_v2",
     ]);
     expect(sql).not.toMatch(/raw_payload|raw_body|body_bytes|api_secret|access_key|signature text/i);
+    expect(sql.match(/account_id text NOT NULL CHECK \(account_id ~ '\[\^\[:space:\]\]'\)/g))
+      .toHaveLength(6);
     for (const table of createdTables) {
       expect(sql).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
-      expect(sql).toContain(`REVOKE ALL ON TABLE public.${table} FROM authenticated, anon`);
+      expect(sql).toContain(`CREATE POLICY ${table}_deny_client_all`);
+    }
+    for (const table of createdTables.filter((table) =>
+      table !== "trader_reality_knowledge_frontiers_v2")) {
       expect(sql).toContain(`${table}_block_update`);
       expect(sql).toContain(`${table}_block_delete`);
     }
@@ -49,20 +56,34 @@ describe("Reality V2 migration identity (DEE-677)", () => {
 
   it("pins database-authored knowledge time, scoped lineage, correction, and event-head guards", () => {
     const sql = readFileSync(MIGRATION_PATH, "utf8");
-    expect(sql).toContain("waia_reality_v2_reserve_knowledge_at");
-    expect(sql).toContain("date_trunc('milliseconds', clock_timestamp())");
+    expect(sql).toContain("waia_reality_v2_allocate_knowledge_at");
+    expect(sql).toContain("waia_reality_v2_consume_knowledge_reservation");
+    expect(sql).toContain("SECURITY DEFINER");
+    expect(sql).toContain("pending_transaction_id = txid_current()");
+    expect(sql).toContain("Reality knowledge allocation requires a nonblank account scope");
+    expect(sql).toContain("reservation consumption requires a nonblank account scope");
+    expect(sql).toContain("date_trunc('milliseconds', transaction_timestamp())");
     expect(sql).toContain("last_knowledge_at + interval '1 millisecond'");
-    expect(sql).toContain("exact database-authored scope reservation");
+    expect(sql).toContain("forged, stale, reused, or cross-scope");
+    expect(sql).not.toContain("current_setting('waia.reality_v2_reserved");
+    expect(sql).not.toContain("set_config('waia.reality_v2_reserved");
     expect(sql).toContain("ExecutionReportV2 lineage does not match scoped immutable HTX source");
     expect(sql).toContain("report.report_sequence::text");
     expect(sql).toContain("report.report_type = NEW.provenance");
     expect(sql).toContain("upper(attempt.venue) = 'HTX'");
-    expect(sql).toContain("raw HTX lineage does not match encrypted scoped capture receipt");
+    expect(sql).toContain("registered private REST source class");
+    expect(sql).toContain("feed_class = 'raw-foundation'");
+    expect(sql).not.toMatch(/htx_private_spot_.*_rest_v1/);
+    expect(sql).toContain("source_account_unique");
+    expect(sql).toContain("admitted Reality capture-source identity is immutable");
     expect(sql).toContain("Only explicit source-native correction may supersede scoped truth");
     expect(sql).toContain("pg_advisory_xact_lock");
     expect(sql).toContain("Reality event sequence/digest head mismatch");
     expect(sql).toContain("OBSERVED must introduce exactly one unsuperseding stable truth");
     expect(sql).toContain("SUPERSEDED must exactly link a source-native correction");
+    expect(sql).toContain("RELEASED must exactly resolve one causally linked truth-bearing quarantine");
+    expect(sql).toContain("Reality causal episode already has an unresolved quarantine");
+    expect(sql).toContain("trader_reality_events_v2_one_release_per_quarantine");
     expect(sql).toContain("Reality projection frontier is not exact at requested as-of time");
     expect(sql).toContain("frontier_row.knowledge_at <> NEW.knowledge_as_of");
   });
@@ -86,5 +107,8 @@ describe("Reality V2 migration identity (DEE-677)", () => {
     expect(repository).toContain("export async function appendSupersededRealityTruthV2FromWriter");
     expect(repository).toContain("export async function persistCanonicalRealityProjectionV2FromWriter");
     expect(repository).toContain("canonicalJsonString(expectedProjection)");
+    expect(repository).toContain("waia_reality_v2_allocate_knowledge_at");
+    expect(repository).toContain("knowledgeReservationId: allocation.reservationId");
+    expect(repository).toContain("quarantineEventId: causal.id");
   });
 });

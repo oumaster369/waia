@@ -26,6 +26,7 @@ import {
 } from "@/lib/trader/reality/v2/replay";
 import {
   appendObservedRealityTruthV2FromWriter,
+  appendReleasedRealityQuarantineV2FromWriter,
   appendRealitySourceObservationV2FromWriter,
   appendRealitySourceReportV2Postgres,
   appendSupersededRealityTruthV2FromWriter,
@@ -44,12 +45,25 @@ const USER_A = "00000000-0000-4000-8000-000000067701";
 const USER_B = "00000000-0000-4000-8000-000000067702";
 const SOURCE_A = "00000000-0000-4000-8000-000000067711";
 const SOURCE_B = "00000000-0000-4000-8000-000000067712";
+const SOURCE_PUBLIC = "00000000-0000-4000-8000-000000067713";
+const SOURCE_OTHER_ACCOUNT = "00000000-0000-4000-8000-000000067714";
 const ACCOUNT = "htx-spot-reality-b";
-const realityTables = [
+const OTHER_ACCOUNT = "htx-spot-reality-other";
+const FRONTIER_SERVICE_ROLE = "reality_v2_frontier_test_service";
+const realityLedgerTables = [
   "trader_reality_source_reports_v2",
   "trader_reality_truth_records_v2",
   "trader_reality_events_v2",
   "trader_reality_projections_v2",
+] as const;
+const realityProtectedTables = [
+  "trader_reality_raw_source_admissions_v2",
+  "trader_reality_knowledge_frontiers_v2",
+] as const;
+const realityTables = [...realityLedgerTables, ...realityProtectedTables] as const;
+const realityAppendOnlyTables = [
+  ...realityLedgerTables,
+  "trader_reality_raw_source_admissions_v2",
 ] as const;
 const rawTables = [
   "trader_mi_raw_validation_receipt_v1",
@@ -62,19 +76,27 @@ function hex64(seed: string): string {
 }
 
 async function clearOrg(sqlClient: postgres.Sql, organizationId: string): Promise<void> {
-  for (const table of [...realityTables, ...rawTables]) {
+  for (const table of [...realityAppendOnlyTables, ...rawTables]) {
     await sqlClient.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
   }
   try {
-    for (const table of [...realityTables].reverse()) {
+    for (const table of [...realityLedgerTables].reverse()) {
       await sqlClient.unsafe(`DELETE FROM ${table} WHERE organization_id = $1::uuid`, [organizationId]);
     }
+    await sqlClient.unsafe(
+      "DELETE FROM trader_reality_knowledge_frontiers_v2 WHERE organization_id = $1::uuid",
+      [organizationId],
+    );
+    await sqlClient.unsafe(
+      "DELETE FROM trader_reality_raw_source_admissions_v2 WHERE organization_id = $1::uuid",
+      [organizationId],
+    );
     for (const table of rawTables) {
       await sqlClient.unsafe(`DELETE FROM ${table} WHERE organization_id = $1::uuid`, [organizationId]);
     }
     await sqlClient.unsafe("DELETE FROM trader_mi_source WHERE organization_id = $1::uuid", [organizationId]);
   } finally {
-    for (const table of [...realityTables, ...rawTables].reverse()) {
+    for (const table of [...realityAppendOnlyTables, ...rawTables].reverse()) {
       await sqlClient.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`);
     }
   }
@@ -161,6 +183,7 @@ function fillInput(
     },
     lineage: {
       lineageKind: "RAW_CAPTURE_V1" as const,
+      rawCaptureSourceId: receipt.sourceId,
       rawCaptureReceiptDigestHex: receipt.contentDigest,
       rawBytesDigestHex: receipt.rawBytesDigest,
       storageBindingDigestHex: receipt.storageBindingDigest,
@@ -192,25 +215,68 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     orgB = await seedWp13User(url!, USER_B, "DEE-677 Reality Org B");
     sqlClient = postgres(url!, { max: 4 });
     db = drizzle(sqlClient, { schema: pgSchema }) as WaiaPostgresDb;
+    await sqlClient.unsafe(`DO $role$
+      BEGIN
+        CREATE ROLE ${FRONTIER_SERVICE_ROLE} NOLOGIN BYPASSRLS;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END
+    $role$`);
   }, 120_000);
 
   beforeEach(async () => {
     await clearOrg(sqlClient, orgA);
     await clearOrg(sqlClient, orgB);
+    await sqlClient`INSERT INTO trader_mi_source (
+      id, organization_id, venue, feed_kind, symbol, status
+    ) VALUES (
+      ${SOURCE_A}::uuid, ${orgA}::uuid, 'HTX', 'raw-foundation', 'reality-account-a', 'active'
+    )`;
+    await sqlClient`INSERT INTO trader_mi_source (
+      id, organization_id, venue, feed_kind, symbol, status
+    ) VALUES (
+      ${SOURCE_B}::uuid, ${orgB}::uuid, 'HTX', 'raw-foundation', 'reality-account-b', 'active'
+    )`;
     await sqlClient`INSERT INTO trader_mi_source (id, organization_id, venue, feed_kind, status)
-      VALUES (${SOURCE_A}::uuid, ${orgA}::uuid, 'htx', 'raw-foundation', 'active')`;
-    await sqlClient`INSERT INTO trader_mi_source (id, organization_id, venue, feed_kind, status)
-      VALUES (${SOURCE_B}::uuid, ${orgB}::uuid, 'htx', 'raw-foundation', 'active')`;
+      VALUES (${SOURCE_PUBLIC}::uuid, ${orgA}::uuid, 'HTX', 'spot_ohlcv', 'active')`;
+    await sqlClient`INSERT INTO trader_mi_source (
+      id, organization_id, venue, feed_kind, symbol, status
+    ) VALUES (
+      ${SOURCE_OTHER_ACCOUNT}::uuid, ${orgA}::uuid, 'HTX', 'raw-foundation',
+      'reality-account-other', 'active'
+    )`;
+    await sqlClient`INSERT INTO trader_reality_raw_source_admissions_v2 (
+      organization_id, account_id, capture_source_id, reality_source_kind,
+      provider, feed_class, transport
+    ) VALUES
+      (${orgA}::uuid, ${ACCOUNT}, ${SOURCE_A}::uuid, 'HTX_SPOT_FILL_REST',
+        'HTX', 'raw-foundation', 'REST'),
+      (${orgA}::uuid, ${OTHER_ACCOUNT}, ${SOURCE_OTHER_ACCOUNT}::uuid, 'HTX_SPOT_FILL_REST',
+        'HTX', 'raw-foundation', 'REST'),
+      (${orgB}::uuid, ${ACCOUNT}, ${SOURCE_B}::uuid, 'HTX_SPOT_FILL_REST',
+        'HTX', 'raw-foundation', 'REST')`;
   });
 
   afterAll(async () => {
     if (sqlClient) {
       await clearOrg(sqlClient, orgA);
       await clearOrg(sqlClient, orgB);
+      await sqlClient.unsafe(`DROP ROLE IF EXISTS ${FRONTIER_SERVICE_ROLE}`);
       await sqlClient.end({ timeout: 10 });
     }
     await cleanupWp13Org(url!, USER_A);
     await cleanupWp13Org(url!, USER_B);
+  });
+
+  it("rejects blank account scopes at direct-SQL table and allocator boundaries", async () => {
+    await expect(sqlClient`
+      SELECT * FROM public.waia_reality_v2_allocate_knowledge_at(
+        ${orgA}::uuid, ${"   "}::text
+      )
+    `).rejects.toThrow(/nonblank account scope/);
+    await expect(sqlClient`
+      INSERT INTO trader_reality_knowledge_frontiers_v2 (organization_id, account_id)
+      VALUES (${orgA}::uuid, ${"\t"})
+    `).rejects.toThrow(/account_id|check constraint/);
   });
 
   it("stores only immutable scoped digest/reference lineage and exact verified truth", async () => {
@@ -280,6 +346,91 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     `;
     expect(forbidden).toEqual([]);
 
+    await expect(sqlClient`
+      UPDATE trader_mi_source SET feed_kind = 'spot_ohlcv'
+      WHERE id = ${SOURCE_A}::uuid AND organization_id = ${orgA}::uuid
+    `).rejects.toThrow(/capture-source identity is immutable/);
+    await expect(sqlClient.begin(async (transaction) => {
+      await transaction`
+        UPDATE trader_mi_source SET status = 'deprecated'
+        WHERE id = ${SOURCE_A}::uuid AND organization_id = ${orgA}::uuid
+      `;
+      await transaction`
+        UPDATE trader_mi_source SET status = 'active'
+        WHERE id = ${SOURCE_A}::uuid AND organization_id = ${orgA}::uuid
+      `;
+    })).rejects.toThrow(/cannot be reactivated/);
+
+    const publicRaw = await capture(db, orgA, SOURCE_PUBLIC, "public-source-class");
+    const crossOrgRaw = await capture(db, orgB, SOURCE_B, "cross-org-source");
+    const crossAccountRaw = await capture(
+      db,
+      orgA,
+      SOURCE_OTHER_ACCOUNT,
+      "same-org-cross-account-source",
+    );
+    await expect(appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(publicRaw.receipt, "public", null),
+    )).rejects.toThrow(/not bound to the admitted HTX private REST source class/);
+    await expect(appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(crossAccountRaw.receipt, "cross-account", null),
+    )).rejects.toThrow(/not bound to the admitted HTX private REST source class/);
+    await expect(appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      fillInput(crossOrgRaw.receipt, "cross-org", null),
+    )).rejects.toThrow(/not bound to the admitted HTX private REST source class/);
+    await expect(appendRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      {
+        ...input,
+        lineage: {
+          ...input.lineage,
+          rawCaptureReceiptDigestHex: hex64("guessed-receipt"),
+        },
+      },
+    )).rejects.toThrow(/not bound to the admitted HTX private REST source class/);
+
+    const directRelabelId = hex64("direct-cross-account-source-relabel");
+    await expect(sqlClient.begin(async (transaction) => {
+      const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+        SELECT reservation_id::text, knowledge_at
+        FROM public.waia_reality_v2_allocate_knowledge_at(
+          ${orgA}::uuid, ${ACCOUNT}::text
+        )
+      `;
+      await transaction`
+        INSERT INTO trader_reality_source_reports_v2 (
+          id, organization_id, account_id, source_kind, source_native_identity_kind,
+          source_native_id, source_native_revision, supersedes_native_revision,
+          attribution_status, subject_class, subject_key, primitive_assertion, lineage_kind,
+          execution_report_id, execution_report_digest, raw_capture_source_id,
+          raw_capture_receipt_digest,
+          raw_bytes_digest, storage_binding_digest, provenance, structural_verification,
+          verification_reason_codes, valid_at, knowledge_at, knowledge_reservation_id,
+          content_digest, schema_version
+        )
+        SELECT
+          ${directRelabelId}, organization_id, account_id, source_kind,
+          source_native_identity_kind, source_native_id || '-cross-account-relabel',
+          source_native_revision, supersedes_native_revision, attribution_status,
+          subject_class, subject_key || '-cross-account-relabel', primitive_assertion, lineage_kind,
+          execution_report_id, execution_report_digest, ${crossAccountRaw.receipt.sourceId}::uuid,
+          ${crossAccountRaw.receipt.contentDigest},
+          ${crossAccountRaw.receipt.rawBytesDigest},
+          ${crossAccountRaw.receipt.storageBindingDigest}, provenance,
+          structural_verification, verification_reason_codes, valid_at,
+          ${new Date(reserved[0]!.knowledge_at).toISOString()},
+          ${reserved[0]!.reservation_id}::uuid, ${directRelabelId}, schema_version
+        FROM trader_reality_source_reports_v2 WHERE id = ${stored.report.sourceReportId}
+      `;
+    })).rejects.toThrow(/registered private REST source class/);
+
     for (const [caseName, provenance] of [
       ["raw-secret", {
         ...stored.report.provenance,
@@ -296,29 +447,34 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     ] as const) {
       const rejectedId = hex64(`direct-sql-${caseName}`);
       await expect(sqlClient.begin(async (transaction) => {
-        const reserved = await transaction<{ knowledge_at: string }[]>`
-          SELECT public.waia_reality_v2_reserve_knowledge_at(
+        const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+          SELECT reservation_id::text, knowledge_at
+          FROM public.waia_reality_v2_allocate_knowledge_at(
             ${orgA}::uuid, ${ACCOUNT}::text
-          ) AS knowledge_at
+          )
         `;
         await transaction`
           INSERT INTO trader_reality_source_reports_v2 (
             id, organization_id, account_id, source_kind, source_native_identity_kind,
             source_native_id, source_native_revision, supersedes_native_revision,
             attribution_status, subject_class, subject_key, primitive_assertion, lineage_kind,
-            execution_report_id, execution_report_digest, raw_capture_receipt_digest,
+            execution_report_id, execution_report_digest, raw_capture_source_id,
+            raw_capture_receipt_digest,
             raw_bytes_digest, storage_binding_digest, provenance, structural_verification,
-            verification_reason_codes, valid_at, knowledge_at, content_digest, schema_version
+            verification_reason_codes, valid_at, knowledge_at, knowledge_reservation_id,
+            content_digest, schema_version
           )
           SELECT
             ${rejectedId}, organization_id, account_id, source_kind,
             source_native_identity_kind, source_native_id || ${`-${caseName}`},
             source_native_revision, supersedes_native_revision, attribution_status,
             subject_class, subject_key || ${`-${caseName}`}, primitive_assertion, lineage_kind,
-            execution_report_id, execution_report_digest, raw_capture_receipt_digest,
+            execution_report_id, execution_report_digest, raw_capture_source_id,
+            raw_capture_receipt_digest,
             raw_bytes_digest, storage_binding_digest, ${JSON.stringify(provenance)}::jsonb,
             structural_verification, verification_reason_codes, valid_at,
-            ${new Date(reserved[0]!.knowledge_at).toISOString()}, ${rejectedId}, schema_version
+            ${new Date(reserved[0]!.knowledge_at).toISOString()},
+            ${reserved[0]!.reservation_id}::uuid, ${rejectedId}, schema_version
           FROM trader_reality_source_reports_v2 WHERE id = ${stored.report.sourceReportId}
         `;
       })).rejects.toThrow(/provenance|check constraint/);
@@ -385,6 +541,7 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       sourceReportId: baseSource.sourceReportId,
       truthRecordId: baseTruth.truthRecordId,
       relatedTruthRecordId: null,
+      quarantineEventId: null,
       reasonCodes: [],
       knowledgeAtUtc: new Date().toISOString(),
       previousEventDigestHex: null,
@@ -392,12 +549,13 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     await expect(sqlClient`
       INSERT INTO trader_reality_events_v2 (
         id, organization_id, account_id, event_sequence, event_type, source_report_id,
-        truth_record_id, related_truth_record_id, reason_codes, knowledge_at,
-        previous_event_digest, content_digest, schema_version
+        truth_record_id, related_truth_record_id, quarantine_event_id, reason_codes, knowledge_at,
+        knowledge_reservation_id, previous_event_digest, content_digest, schema_version
       ) VALUES (
         ${stale.realityEventId}, ${orgA}::uuid, ${ACCOUNT}, 1, 'OBSERVED',
-        ${baseSource.sourceReportId}, ${baseTruth.truthRecordId}, NULL, '[]'::jsonb,
-        ${stale.knowledgeAtUtc}, NULL, ${stale.contentDigestHex}, ${stale.schemaVersion}
+        ${baseSource.sourceReportId}, ${baseTruth.truthRecordId}, NULL, NULL, '[]'::jsonb,
+        ${stale.knowledgeAtUtc}, ${SOURCE_A}::uuid, NULL,
+        ${stale.contentDigestHex}, ${stale.schemaVersion}
       )
     `).rejects.toThrow(/sequence\/digest head mismatch/);
 
@@ -441,10 +599,11 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       truthRecordId: string,
       relatedTruthRecordId: string | null,
     ) => sqlClient.begin(async (transaction) => {
-      const reserved = await transaction<{ knowledge_at: string }[]>`
-        SELECT public.waia_reality_v2_reserve_knowledge_at(
+      const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+        SELECT reservation_id::text, knowledge_at
+        FROM public.waia_reality_v2_allocate_knowledge_at(
           ${orgA}::uuid, ${ACCOUNT}::text
-        ) AS knowledge_at
+        )
       `;
       const event = createRealityEventV2({
         organizationId: orgA,
@@ -454,6 +613,7 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
         sourceReportId,
         truthRecordId,
         relatedTruthRecordId,
+        quarantineEventId: null,
         reasonCodes: eventType === "SUPERSEDED" ? ["SOURCE_NATIVE_CORRECTION"] : [],
         knowledgeAtUtc: new Date(reserved[0]!.knowledge_at).toISOString(),
         previousEventDigestHex: head.contentDigestHex,
@@ -461,13 +621,14 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       await transaction`
         INSERT INTO trader_reality_events_v2 (
           id, organization_id, account_id, event_sequence, event_type, source_report_id,
-          truth_record_id, related_truth_record_id, reason_codes, knowledge_at,
-          previous_event_digest, content_digest, schema_version
+          truth_record_id, related_truth_record_id, quarantine_event_id, reason_codes, knowledge_at,
+          knowledge_reservation_id, previous_event_digest, content_digest, schema_version
         ) VALUES (
           ${event.realityEventId}, ${orgA}::uuid, ${ACCOUNT}, ${event.eventSequence}::bigint,
           ${event.eventType}, ${event.sourceReportId}, ${event.truthRecordId},
-          ${event.relatedTruthRecordId}, ${JSON.stringify(event.reasonCodes)}::jsonb,
-          ${event.knowledgeAtUtc}, ${event.previousEventDigestHex},
+          ${event.relatedTruthRecordId}, NULL, ${JSON.stringify(event.reasonCodes)}::jsonb,
+          ${event.knowledgeAtUtc}, ${reserved[0]!.reservation_id}::uuid,
+          ${event.previousEventDigestHex},
           ${event.contentDigestHex}, ${event.schemaVersion}
         )
       `;
@@ -518,6 +679,14 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     expect(disputed.projection?.stableEntries[0]?.truthRecordId)
       .toBe(base.truthRecord?.truthRecordId);
     expect(disputed.projection?.uncertainties).toHaveLength(1);
+    const contradictionEvent = (await listRealityEventsV2(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+    )).find((event) =>
+      event.eventType === "SOURCE_CONTRADICTION" &&
+      event.sourceReportId === disputed.sourceReport.sourceReportId
+    );
+    expect(contradictionEvent).toBeDefined();
 
     const contradictionAsOf = disputed.projection!.knowledgeAsOfUtc;
     const replayedContradiction = await replayRealityProjectionV2Postgres(
@@ -527,6 +696,185 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     );
     expect(replayedContradiction).toEqual(disputed.projection);
 
+    await expect(runWaiaPostgresTransaction(db, (tx) =>
+      appendReleasedRealityQuarantineV2FromWriter(
+        tx,
+        { organizationId: orgA, accountId: ACCOUNT },
+        disputed.sourceReport,
+        base.truthRecord!,
+      ))).rejects.toThrow(/exact unresolved causally linked quarantine/);
+
+    const unrelatedRaw = await capture(db, orgA, SOURCE_A, "release-unrelated-subject");
+    const unrelatedBase = fillInput(unrelatedRaw.receipt, "unrelated", null);
+    const unrelated = await ingestRealitySourceReportV2Postgres(
+      db,
+      { organizationId: orgA, accountId: ACCOUNT },
+      {
+        ...unrelatedBase,
+        sourceNativeIdentity: {
+          ...unrelatedBase.sourceNativeIdentity,
+          nativeId: "htx-trade-reality-unrelated",
+        },
+        subject: {
+          subjectClass: "FILL" as const,
+          subjectKey: "HTX:spot:htx-trade-reality-unrelated",
+        },
+        primitiveAssertion: {
+          ...unrelatedBase.primitiveAssertion,
+          venueTradeId: "htx-trade-reality-unrelated",
+        },
+      },
+    );
+    expect(unrelated.classification).toBe("NEW_FACT");
+
+    const attemptDirectRelease = async (input: Readonly<{
+      organizationId: string;
+      sourceReportId: string;
+      truthRecordId: string;
+      relatedTruthRecordId: string | null;
+      quarantineEventId: string;
+      seed: string;
+    }>) => sqlClient.begin(async (transaction) => {
+      const headRows = await transaction<{
+        event_sequence: string;
+        content_digest: string;
+      }[]>`
+        SELECT event_sequence::text, content_digest
+        FROM trader_reality_events_v2
+        WHERE organization_id = ${input.organizationId}::uuid AND account_id = ${ACCOUNT}
+        ORDER BY event_sequence DESC LIMIT 1
+      `;
+      const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+        SELECT reservation_id::text, knowledge_at
+        FROM public.waia_reality_v2_allocate_knowledge_at(
+          ${input.organizationId}::uuid, ${ACCOUNT}::text
+        )
+      `;
+      const headRow = headRows[0];
+      const event = createRealityEventV2({
+        organizationId: input.organizationId,
+        accountId: ACCOUNT,
+        eventSequence: headRow ? (BigInt(headRow.event_sequence) + 1n).toString() : "1",
+        eventType: "RELEASED",
+        sourceReportId: input.sourceReportId,
+        truthRecordId: input.truthRecordId,
+        relatedTruthRecordId: input.relatedTruthRecordId,
+        quarantineEventId: input.quarantineEventId,
+        reasonCodes: [
+          "QUARANTINE_RESOLVED_WITHOUT_PROMOTION",
+          input.seed.toUpperCase().replaceAll("-", "_"),
+        ].sort(),
+        knowledgeAtUtc: new Date(reserved[0]!.knowledge_at).toISOString(),
+        previousEventDigestHex: headRow?.content_digest ?? null,
+      });
+      await transaction`
+        INSERT INTO trader_reality_events_v2 (
+          id, organization_id, account_id, event_sequence, event_type, source_report_id,
+          truth_record_id, related_truth_record_id, quarantine_event_id, reason_codes, knowledge_at,
+          knowledge_reservation_id, previous_event_digest, content_digest, schema_version
+        ) VALUES (
+          ${event.realityEventId}, ${event.organizationId}::uuid, ${event.accountId},
+          ${event.eventSequence}::bigint, ${event.eventType}, ${event.sourceReportId},
+          ${event.truthRecordId}, ${event.relatedTruthRecordId}, ${event.quarantineEventId},
+          ${JSON.stringify(event.reasonCodes)}::jsonb, ${event.knowledgeAtUtc},
+          ${reserved[0]!.reservation_id}::uuid, ${event.previousEventDigestHex},
+          ${event.contentDigestHex}, ${event.schemaVersion}
+        )
+      `;
+    });
+
+    const attemptDirectQuarantine = async (
+      eventType: "QUARANTINED" | "SOURCE_CONTRADICTION",
+      relatedTruthRecordId: string | null,
+      seed: string,
+    ) => sqlClient.begin(async (transaction) => {
+      const headRows = await transaction<{
+        event_sequence: string;
+        content_digest: string;
+      }[]>`
+        SELECT event_sequence::text, content_digest
+        FROM trader_reality_events_v2
+        WHERE organization_id = ${orgA}::uuid AND account_id = ${ACCOUNT}
+        ORDER BY event_sequence DESC LIMIT 1
+      `;
+      const reserved = await transaction<{ reservation_id: string; knowledge_at: string }[]>`
+        SELECT reservation_id::text, knowledge_at
+        FROM public.waia_reality_v2_allocate_knowledge_at(${orgA}::uuid, ${ACCOUNT}::text)
+      `;
+      const headRow = headRows[0]!;
+      const event = createRealityEventV2({
+        organizationId: orgA,
+        accountId: ACCOUNT,
+        eventSequence: (BigInt(headRow.event_sequence) + 1n).toString(),
+        eventType,
+        sourceReportId: disputed.sourceReport.sourceReportId,
+        truthRecordId: disputed.truthRecord!.truthRecordId,
+        relatedTruthRecordId,
+        quarantineEventId: null,
+        reasonCodes: [seed.toUpperCase().replaceAll("-", "_")],
+        knowledgeAtUtc: new Date(reserved[0]!.knowledge_at).toISOString(),
+        previousEventDigestHex: headRow.content_digest,
+      });
+      await transaction`
+        INSERT INTO trader_reality_events_v2 (
+          id, organization_id, account_id, event_sequence, event_type, source_report_id,
+          truth_record_id, related_truth_record_id, quarantine_event_id, reason_codes,
+          knowledge_at, knowledge_reservation_id, previous_event_digest, content_digest,
+          schema_version
+        ) VALUES (
+          ${event.realityEventId}, ${orgA}::uuid, ${ACCOUNT}, ${event.eventSequence}::bigint,
+          ${event.eventType}, ${event.sourceReportId}, ${event.truthRecordId},
+          ${event.relatedTruthRecordId}, NULL, ${JSON.stringify(event.reasonCodes)}::jsonb,
+          ${event.knowledgeAtUtc}, ${reserved[0]!.reservation_id}::uuid,
+          ${event.previousEventDigestHex}, ${event.contentDigestHex}, ${event.schemaVersion}
+        )
+      `;
+    });
+
+    await expect(attemptDirectQuarantine(
+      "QUARANTINED",
+      null,
+      "forged-intervening-quarantine",
+    )).rejects.toThrow(/already has an unresolved quarantine/);
+    await expect(attemptDirectQuarantine(
+      "SOURCE_CONTRADICTION",
+      base.truthRecord!.truthRecordId,
+      "double-unresolved",
+    )).rejects.toThrow(/already has an unresolved quarantine/);
+
+    await expect(attemptDirectRelease({
+      organizationId: orgA,
+      sourceReportId: disputed.sourceReport.sourceReportId,
+      truthRecordId: base.truthRecord!.truthRecordId,
+      relatedTruthRecordId: null,
+      quarantineEventId: contradictionEvent!.realityEventId,
+      seed: "unrelated-truth",
+    })).rejects.toThrow(/RELEASED must exactly resolve/);
+    await expect(attemptDirectRelease({
+      organizationId: orgA,
+      sourceReportId: disputed.sourceReport.sourceReportId,
+      truthRecordId: disputed.truthRecord!.truthRecordId,
+      relatedTruthRecordId: unrelated.truthRecord!.truthRecordId,
+      quarantineEventId: contradictionEvent!.realityEventId,
+      seed: "cross-subject",
+    })).rejects.toThrow(/RELEASED must exactly resolve/);
+    await expect(attemptDirectRelease({
+      organizationId: orgA,
+      sourceReportId: base.sourceReport.sourceReportId,
+      truthRecordId: disputed.truthRecord!.truthRecordId,
+      relatedTruthRecordId: base.truthRecord!.truthRecordId,
+      quarantineEventId: contradictionEvent!.realityEventId,
+      seed: "cross-source",
+    })).rejects.toThrow(/RELEASED must exactly resolve/);
+    await expect(attemptDirectRelease({
+      organizationId: orgB,
+      sourceReportId: disputed.sourceReport.sourceReportId,
+      truthRecordId: disputed.truthRecord!.truthRecordId,
+      relatedTruthRecordId: base.truthRecord!.truthRecordId,
+      quarantineEventId: contradictionEvent!.realityEventId,
+      seed: "cross-org",
+    })).rejects.toThrow(/RELEASED must exactly resolve|foreign key/);
+
     const released = await releaseRealityQuarantineV2Postgres(
       db,
       { organizationId: orgA, accountId: ACCOUNT },
@@ -534,6 +882,14 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     );
     expect(released.stableEntries[0]?.truthRecordId).toBe(base.truthRecord?.truthRecordId);
     expect(released.uncertainties).toEqual([]);
+    await expect(attemptDirectRelease({
+      organizationId: orgA,
+      sourceReportId: disputed.sourceReport.sourceReportId,
+      truthRecordId: disputed.truthRecord!.truthRecordId,
+      relatedTruthRecordId: base.truthRecord!.truthRecordId,
+      quarantineEventId: contradictionEvent!.realityEventId,
+      seed: "double-release",
+    })).rejects.toThrow(/exactly resolve|one_release_per_quarantine|duplicate key/);
 
     const correctionRaw = await capture(db, orgA, SOURCE_A, "ingest-correction");
     const correction = await ingestRealitySourceReportV2Postgres(
@@ -603,6 +959,89 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
     expect(new Date(older.report.knowledgeAtUtc).getTime())
       .toBeGreaterThan(new Date(newer.report.knowledgeAtUtc).getTime());
 
+    const forgedKnowledgeId = hex64("forged-guc-knowledge-frontier");
+    const forgedKnowledgeAt = new Date(Date.now() + 86_400_000).toISOString();
+    await expect(sqlClient.begin(async (transaction) => {
+      await transaction`SELECT set_config(
+        'waia.reality_v2_reserved_scope', ${`${orgA}:${ACCOUNT}`}, true
+      )`;
+      await transaction`SELECT set_config(
+        'waia.reality_v2_reserved_knowledge_at', ${forgedKnowledgeAt}, true
+      )`;
+      await transaction`
+        INSERT INTO trader_reality_source_reports_v2 (
+          id, organization_id, account_id, source_kind, source_native_identity_kind,
+          source_native_id, source_native_revision, supersedes_native_revision,
+          attribution_status, subject_class, subject_key, primitive_assertion, lineage_kind,
+          execution_report_id, execution_report_digest, raw_capture_source_id,
+          raw_capture_receipt_digest,
+          raw_bytes_digest, storage_binding_digest, provenance, structural_verification,
+          verification_reason_codes, valid_at, knowledge_at, knowledge_reservation_id,
+          content_digest, schema_version
+        )
+        SELECT
+          ${forgedKnowledgeId}, organization_id, account_id, source_kind,
+          source_native_identity_kind, source_native_id || '-forged-frontier',
+          source_native_revision, supersedes_native_revision, attribution_status,
+          subject_class, subject_key || '-forged-frontier', primitive_assertion, lineage_kind,
+          execution_report_id, execution_report_digest, raw_capture_source_id,
+          raw_capture_receipt_digest,
+          raw_bytes_digest, storage_binding_digest, provenance, structural_verification,
+          verification_reason_codes, valid_at, ${forgedKnowledgeAt},
+          ${SOURCE_A}::uuid, ${forgedKnowledgeId}, schema_version
+        FROM trader_reality_source_reports_v2 WHERE id = ${newer.report.sourceReportId}
+      `;
+    })).rejects.toThrow(/forged, stale, reused, or cross-scope/);
+
+    await expect(sqlClient.begin(async (transaction) => {
+      await transaction`
+        SELECT * FROM public.waia_reality_v2_allocate_knowledge_at(
+          ${orgA}::uuid, ${ACCOUNT}::text
+        )
+      `;
+      await transaction`
+        SELECT * FROM public.waia_reality_v2_allocate_knowledge_at(
+          ${orgA}::uuid, ${ACCOUNT}::text
+        )
+      `;
+    })).rejects.toThrow(/already owns an unconsumed knowledge reservation/);
+
+    await sqlClient.unsafe(
+      `GRANT USAGE ON SCHEMA public TO ${FRONTIER_SERVICE_ROLE}`,
+    );
+    await sqlClient.unsafe(
+      `GRANT EXECUTE ON FUNCTION public.waia_reality_v2_allocate_knowledge_at(uuid, text) ` +
+      `TO ${FRONTIER_SERVICE_ROLE}`,
+    );
+    const serviceSql = postgres(url!, { max: 1 });
+    try {
+      await serviceSql.unsafe(`SET ROLE ${FRONTIER_SERVICE_ROLE}`);
+      await expect(serviceSql`
+        SELECT * FROM public.waia_reality_v2_allocate_knowledge_at(
+          ${orgA}::uuid, ${ACCOUNT}::text
+        )
+      `).resolves.toHaveLength(1);
+      await expect(serviceSql`
+        UPDATE trader_reality_knowledge_frontiers_v2
+        SET last_knowledge_at = ${forgedKnowledgeAt}
+        WHERE organization_id = ${orgA}::uuid AND account_id = ${ACCOUNT}
+      `).rejects.toThrow(/permission denied/);
+      await expect(serviceSql`
+        SELECT public.waia_reality_v2_consume_knowledge_reservation(
+          ${orgA}::uuid, ${ACCOUNT}::text, ${SOURCE_A}::uuid, ${forgedKnowledgeAt}
+        )
+      `).rejects.toThrow(/permission denied/);
+    } finally {
+      try { await serviceSql.unsafe("RESET ROLE"); } catch {}
+      await serviceSql.end({ timeout: 5 });
+      await sqlClient.unsafe(
+        `REVOKE EXECUTE ON FUNCTION ` +
+        `public.waia_reality_v2_allocate_knowledge_at(uuid, text) ` +
+        `FROM ${FRONTIER_SERVICE_ROLE}`,
+      );
+      await sqlClient.unsafe(`REVOKE USAGE ON SCHEMA public FROM ${FRONTIER_SERVICE_ROLE}`);
+    }
+
     await runWaiaPostgresTransaction(db, (tx) => appendObservedRealityTruthV2FromWriter(
       tx,
       { organizationId: orgA, accountId: ACCOUNT },
@@ -642,7 +1081,7 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       WHERE n.nspname = 'public' AND c.relname = ANY(${realityTables as unknown as string[]})
       ORDER BY c.relname
     `;
-    expect(metadata).toHaveLength(4);
+    expect(metadata).toHaveLength(6);
     expect(metadata.every((row) => row.relrowsecurity)).toBe(true);
     const policies = await sqlClient<{
       tablename: string; roles: string[]; cmd: string; qual: string; with_check: string;
@@ -651,7 +1090,7 @@ describe.skipIf(!enabled || !url)("PostgreSQL Reality V2 substrate (DEE-677)", (
       WHERE schemaname = 'public' AND tablename = ANY(${realityTables as unknown as string[]})
       ORDER BY tablename
     `;
-    expect(policies).toHaveLength(4);
+    expect(policies).toHaveLength(6);
     expect(policies.every((policy) =>
       policy.cmd === "ALL" && policy.qual === "false" && policy.with_check === "false" &&
       policy.roles.includes("authenticated") && policy.roles.includes("anon")

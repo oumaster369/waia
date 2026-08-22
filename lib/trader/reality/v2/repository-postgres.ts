@@ -67,22 +67,72 @@ function iso(value: Date): string {
   return value.toISOString();
 }
 
-async function reserveRealityKnowledgeAtV2(
+async function allocateRealityKnowledgeAtV2(
   executor: RealityV2Executor,
   context: RealityAccountContext,
-): Promise<Date> {
+): Promise<Readonly<{ reservationId: string; knowledgeAt: Date }>> {
   const scoped = requireScope(context);
-  const rows = await executor.execute<{ durable_time: Date | string }>(sql`
-    SELECT public.waia_reality_v2_reserve_knowledge_at(
-      ${scoped.organizationId}::uuid,
-      ${scoped.accountId}::text
-    ) AS durable_time
+  const rows = await executor.execute<{
+    reservation_id: string;
+    knowledge_at: Date | string;
+  }>(sql`
+    SELECT reservation_id, knowledge_at
+    FROM public.waia_reality_v2_allocate_knowledge_at(
+      ${scoped.organizationId}::uuid, ${scoped.accountId}::text
+    )
   `);
-  const value = rows[0]?.durable_time;
-  if (value === undefined) throw new RealityV2PersistenceConflictError();
+  const value = rows[0]?.knowledge_at;
+  const reservationId = rows[0]?.reservation_id;
+  if (value === undefined || reservationId === undefined) {
+    throw new RealityV2PersistenceConflictError();
+  }
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) throw new RealityV2PersistenceConflictError();
-  return date;
+  return Object.freeze({ reservationId, knowledgeAt: date });
+}
+
+async function assertRawCaptureSourceBindingV2(
+  executor: RealityV2Executor,
+  context: RealityAccountContext,
+  input: AppendRealitySourceReportV2Input,
+): Promise<void> {
+  if (input.lineage.lineageKind !== "RAW_CAPTURE_V1") return;
+  if (input.sourceKind === "EXECUTION_REPORT_V2") {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] raw capture lineage cannot be relabeled as ExecutionReportV2",
+    );
+  }
+  const scoped = requireScope(context);
+  const rows = await executor.execute<{ admitted: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.trader_mi_raw_capture_receipt_v1 capture
+      JOIN public.trader_reality_raw_source_admissions_v2 admission
+        ON admission.organization_id = capture.organization_id
+       AND admission.account_id = ${scoped.accountId}
+       AND admission.capture_source_id = capture.source_id
+       AND admission.reality_source_kind = ${input.sourceKind}
+      JOIN public.trader_mi_source source
+        ON source.id = capture.source_id
+       AND source.organization_id = capture.organization_id
+      WHERE capture.id = ${input.lineage.rawCaptureReceiptDigestHex}
+        AND capture.organization_id = ${scoped.organizationId}::uuid
+        AND capture.source_id = ${input.lineage.rawCaptureSourceId}::uuid
+        AND capture.raw_bytes_digest = ${input.lineage.rawBytesDigestHex}
+        AND capture.storage_binding_digest = ${input.lineage.storageBindingDigestHex}
+        AND source.status = 'active'
+        AND upper(source.venue) = admission.provider
+        AND source.feed_kind = admission.feed_class
+        AND admission.provider = 'HTX'
+        AND admission.feed_class = 'raw-foundation'
+        AND admission.transport = 'REST'
+    ) AS admitted
+  `);
+  if (rows[0]?.admitted !== true) {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] raw capture receipt is not bound to the admitted HTX private REST source class",
+    );
+  }
 }
 
 /** Serializes source-native classification and event-frontier mutation for one tenant/account. */
@@ -125,12 +175,13 @@ function mapLineage(row: SourceRow): RealitySourceLineageV2 {
       executionReportDigestHex: row.executionReportDigest,
     };
   }
-  if (row.rawCaptureReceiptDigest === null || row.rawBytesDigest === null ||
+  if (row.rawCaptureSourceId === null || row.rawCaptureReceiptDigest === null || row.rawBytesDigest === null ||
     row.storageBindingDigest === null) {
     throw new RealityV2PersistenceConflictError();
   }
   return {
     lineageKind: "RAW_CAPTURE_V1",
+    rawCaptureSourceId: row.rawCaptureSourceId,
     rawCaptureReceiptDigestHex: row.rawCaptureReceiptDigest,
     rawBytesDigestHex: row.rawBytesDigest,
     storageBindingDigestHex: row.storageBindingDigest,
@@ -215,6 +266,7 @@ function mapEvent(row: EventRow): RealityEventV2 {
     sourceReportId: row.sourceReportId,
     truthRecordId: row.truthRecordId,
     relatedTruthRecordId: row.relatedTruthRecordId,
+    quarantineEventId: row.quarantineEventId,
     reasonCodes: row.reasonCodes as readonly string[],
     knowledgeAtUtc: iso(row.knowledgeAt),
     previousEventDigestHex: row.previousEventDigest,
@@ -264,6 +316,7 @@ export async function appendRealitySourceObservationV2FromWriter(
 ): Promise<{ report: RealitySourceReportV2; insertedNew: boolean }> {
   const scoped = requireScope(context);
   await lockRealityScopeV2(executor, scoped);
+  await assertRawCaptureSourceBindingV2(executor, scoped, input);
   const lineageRows = await executor.select().from(pgSchema.traderRealitySourceReportsV2).where(and(
     eq(pgSchema.traderRealitySourceReportsV2.organizationId, scoped.organizationId),
     eq(pgSchema.traderRealitySourceReportsV2.accountId, scoped.accountId),
@@ -294,11 +347,12 @@ export async function appendRealitySourceObservationV2FromWriter(
       );
     }
   }
+  const allocation = await allocateRealityKnowledgeAtV2(executor, scoped);
   const report = createRealitySourceReportV2({
     ...input,
     organizationId: scoped.organizationId,
     accountId: scoped.accountId,
-    knowledgeAtUtc: iso(await reserveRealityKnowledgeAtV2(executor, scoped)),
+    knowledgeAtUtc: iso(allocation.knowledgeAt),
   });
   assertRealitySourceReportAdmissionV2(report);
   const native = report.sourceNativeIdentity;
@@ -322,6 +376,7 @@ export async function appendRealitySourceObservationV2FromWriter(
     lineageKind: report.lineage.lineageKind,
     executionReportId: executionLineage?.executionReportId ?? null,
     executionReportDigest: executionLineage?.executionReportDigestHex ?? null,
+    rawCaptureSourceId: rawLineage?.rawCaptureSourceId ?? null,
     rawCaptureReceiptDigest: rawLineage?.rawCaptureReceiptDigestHex ?? null,
     rawBytesDigest: rawLineage?.rawBytesDigestHex ?? null,
     storageBindingDigest: rawLineage?.storageBindingDigestHex ?? null,
@@ -330,6 +385,7 @@ export async function appendRealitySourceObservationV2FromWriter(
     verificationReasonCodes: [...report.verificationReasonCodes],
     validAt: new Date(report.validAtUtc),
     knowledgeAt: new Date(report.knowledgeAtUtc),
+    knowledgeReservationId: allocation.reservationId,
     contentDigest: report.contentDigestHex,
     schemaVersion: report.schemaVersion,
   }).onConflictDoNothing().returning({ id: pgSchema.traderRealitySourceReportsV2.id });
@@ -404,6 +460,7 @@ async function appendRealityEventV2FromWriter(
     sourceReportId: string;
     truthRecordId: string | null;
     relatedTruthRecordId: string | null;
+    quarantineEventId: string | null;
     reasonCodes: readonly string[];
   }>,
 ): Promise<RealityEventV2> {
@@ -414,6 +471,7 @@ async function appendRealityEventV2FromWriter(
     eq(pgSchema.traderRealityEventsV2.accountId, scoped.accountId),
   )).orderBy(desc(pgSchema.traderRealityEventsV2.eventSequence)).limit(1);
   const prior = priorRows[0];
+  const allocation = await allocateRealityKnowledgeAtV2(executor, scoped);
   const event = createRealityEventV2({
     organizationId: scoped.organizationId,
     accountId: scoped.accountId,
@@ -422,8 +480,9 @@ async function appendRealityEventV2FromWriter(
     sourceReportId: input.sourceReportId,
     truthRecordId: input.truthRecordId,
     relatedTruthRecordId: input.relatedTruthRecordId,
+    quarantineEventId: input.quarantineEventId,
     reasonCodes: input.reasonCodes,
-    knowledgeAtUtc: iso(await reserveRealityKnowledgeAtV2(executor, scoped)),
+    knowledgeAtUtc: iso(allocation.knowledgeAt),
     previousEventDigestHex: prior?.contentDigest ?? null,
   });
   await executor.insert(pgSchema.traderRealityEventsV2).values({
@@ -435,8 +494,10 @@ async function appendRealityEventV2FromWriter(
     sourceReportId: event.sourceReportId,
     truthRecordId: event.truthRecordId,
     relatedTruthRecordId: event.relatedTruthRecordId,
+    quarantineEventId: event.quarantineEventId,
     reasonCodes: [...event.reasonCodes],
     knowledgeAt: new Date(event.knowledgeAtUtc),
+    knowledgeReservationId: allocation.reservationId,
     previousEventDigest: event.previousEventDigestHex,
     contentDigest: event.contentDigestHex,
     schemaVersion: event.schemaVersion,
@@ -460,6 +521,7 @@ export async function appendObservedRealityTruthV2FromWriter(
     sourceReportId: source.sourceReportId,
     truthRecordId: stored.truthRecordId,
     relatedTruthRecordId: null,
+    quarantineEventId: null,
     reasonCodes: [],
   });
   return stored;
@@ -482,6 +544,7 @@ export async function appendSupersededRealityTruthV2FromWriter(
     sourceReportId: source.sourceReportId,
     truthRecordId: stored.truthRecordId,
     relatedTruthRecordId: correctionTarget.truthRecordId,
+    quarantineEventId: null,
     reasonCodes: ["SOURCE_NATIVE_CORRECTION"],
   });
   return stored;
@@ -499,6 +562,7 @@ export async function appendUnverifiableRealityQuarantineV2FromWriter(
     sourceReportId: source.sourceReportId,
     truthRecordId: null,
     relatedTruthRecordId: null,
+    quarantineEventId: null,
     reasonCodes,
   });
 }
@@ -521,6 +585,7 @@ export async function appendContradictoryRealityTruthV2FromWriter(
     sourceReportId: source.sourceReportId,
     truthRecordId: stored.truthRecordId,
     relatedTruthRecordId: related?.truthRecordId ?? null,
+    quarantineEventId: null,
     reasonCodes,
   });
   return stored;
@@ -532,12 +597,54 @@ export async function appendReleasedRealityQuarantineV2FromWriter(
   source: RealitySourceReportV2,
   truth: TruthRecordV2,
 ): Promise<void> {
-  await lockRealityScopeV2(executor, context);
+  const scoped = requireScope(context);
+  await lockRealityScopeV2(executor, scoped);
+  const [storedSource, storedTruthRows, causalRows] = await Promise.all([
+    readRealitySourceReportV2(executor, scoped, source.sourceReportId),
+    executor.select().from(pgSchema.traderRealityTruthRecordsV2).where(and(
+      eq(pgSchema.traderRealityTruthRecordsV2.organizationId, scoped.organizationId),
+      eq(pgSchema.traderRealityTruthRecordsV2.accountId, scoped.accountId),
+      eq(pgSchema.traderRealityTruthRecordsV2.id, truth.truthRecordId),
+      eq(pgSchema.traderRealityTruthRecordsV2.sourceReportId, source.sourceReportId),
+    )).limit(1),
+    executor.select().from(pgSchema.traderRealityEventsV2).where(and(
+      eq(pgSchema.traderRealityEventsV2.organizationId, scoped.organizationId),
+      eq(pgSchema.traderRealityEventsV2.accountId, scoped.accountId),
+      eq(pgSchema.traderRealityEventsV2.sourceReportId, source.sourceReportId),
+      eq(pgSchema.traderRealityEventsV2.truthRecordId, truth.truthRecordId),
+      sql`${pgSchema.traderRealityEventsV2.eventType} IN ('QUARANTINED', 'SOURCE_CONTRADICTION')`,
+      sql`NOT EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 release_event
+        WHERE release_event.organization_id = ${scoped.organizationId}::uuid
+          AND release_event.account_id = ${scoped.accountId}
+          AND release_event.event_type = 'RELEASED'
+          AND release_event.quarantine_event_id = ${pgSchema.traderRealityEventsV2.id}
+      )`,
+    )).orderBy(desc(pgSchema.traderRealityEventsV2.eventSequence)).limit(1),
+  ]);
+  const storedTruth = storedTruthRows[0] ? mapTruth(storedTruthRows[0]) : null;
+  const causal = causalRows[0];
+  const releasedRows = causal ? await executor.select()
+    .from(pgSchema.traderRealityEventsV2).where(and(
+      eq(pgSchema.traderRealityEventsV2.organizationId, scoped.organizationId),
+      eq(pgSchema.traderRealityEventsV2.accountId, scoped.accountId),
+      eq(pgSchema.traderRealityEventsV2.eventType, "RELEASED"),
+      eq(pgSchema.traderRealityEventsV2.quarantineEventId, causal.id),
+    )).limit(1) : [];
+  if (!storedSource || storedSource.contentDigestHex !== source.contentDigestHex ||
+    !storedTruth || storedTruth.contentDigestHex !== truth.contentDigestHex ||
+    !storedTruth.markers.includes("SOURCE_CONTRADICTION") || !causal ||
+    releasedRows.length > 0) {
+    throw new RealityV2PersistenceConflictError(
+      "[trader] Reality release requires the exact unresolved causally linked quarantine",
+    );
+  }
   await appendRealityEventV2FromWriter(executor, context, {
     eventType: "RELEASED",
     sourceReportId: source.sourceReportId,
     truthRecordId: truth.truthRecordId,
-    relatedTruthRecordId: null,
+    relatedTruthRecordId: causal.relatedTruthRecordId,
+    quarantineEventId: causal.id,
     reasonCodes: ["QUARANTINE_RESOLVED_WITHOUT_PROMOTION"],
   });
 }

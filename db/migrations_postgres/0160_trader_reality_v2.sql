@@ -1,10 +1,56 @@
 -- DEE-677 / R675-B: Reality V2 bitemporal truth substrate for the ratified HTX spot MVP.
 -- Additive PostgreSQL only. Raw bytes remain in the existing encrypted raw-capture storage.
 
+CREATE TABLE public.trader_reality_raw_source_admissions_v2 (
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  account_id text NOT NULL CHECK (account_id ~ '[^[:space:]]'),
+  capture_source_id uuid NOT NULL,
+  reality_source_kind text NOT NULL,
+  provider text NOT NULL,
+  feed_class text NOT NULL,
+  transport text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT date_trunc('milliseconds', transaction_timestamp()),
+  CONSTRAINT trader_reality_raw_source_admissions_v2_pk PRIMARY KEY (
+    organization_id, account_id, capture_source_id, reality_source_kind
+  ),
+  CONSTRAINT trader_reality_raw_source_admissions_v2_source_account_unique UNIQUE (
+    organization_id, capture_source_id
+  ),
+  CONSTRAINT trader_reality_raw_source_admissions_v2_source_fk FOREIGN KEY (
+    capture_source_id, organization_id
+  ) REFERENCES public.trader_mi_source(id, organization_id),
+  CONSTRAINT trader_reality_raw_source_admissions_v2_exact_class CHECK (
+    provider = 'HTX' AND transport = 'REST' AND feed_class = 'raw-foundation'
+    AND reality_source_kind IN (
+      'HTX_SPOT_ORDER_REST', 'HTX_SPOT_FILL_REST',
+      'HTX_SPOT_BALANCE_REST', 'HTX_SPOT_ACCOUNT_REST'
+    )
+  )
+);
+--> statement-breakpoint
+CREATE TABLE public.trader_reality_knowledge_frontiers_v2 (
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  account_id text NOT NULL CHECK (account_id ~ '[^[:space:]]'),
+  last_knowledge_at timestamptz,
+  pending_reservation_id uuid,
+  pending_transaction_id bigint,
+  pending_knowledge_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT date_trunc('milliseconds', transaction_timestamp()),
+  CONSTRAINT trader_reality_knowledge_frontiers_v2_pk PRIMARY KEY (
+    organization_id, account_id
+  ),
+  CONSTRAINT trader_reality_knowledge_frontiers_v2_pending_shape CHECK (
+    (pending_reservation_id IS NULL AND pending_transaction_id IS NULL
+      AND pending_knowledge_at IS NULL)
+    OR (pending_reservation_id IS NOT NULL AND pending_transaction_id IS NOT NULL
+      AND pending_knowledge_at IS NOT NULL)
+  )
+);
+--> statement-breakpoint
 CREATE TABLE public.trader_reality_source_reports_v2 (
   id text PRIMARY KEY,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  account_id text NOT NULL,
+  account_id text NOT NULL CHECK (account_id ~ '[^[:space:]]'),
   source_kind text NOT NULL,
   source_native_identity_kind text,
   source_native_id text,
@@ -17,7 +63,8 @@ CREATE TABLE public.trader_reality_source_reports_v2 (
   lineage_kind text NOT NULL,
   execution_report_id uuid REFERENCES public.trader_execution_reports_v2(id),
   execution_report_digest text,
-  raw_capture_receipt_digest text REFERENCES public.trader_mi_raw_capture_receipt_v1(id),
+  raw_capture_source_id uuid,
+  raw_capture_receipt_digest text,
   raw_bytes_digest text,
   storage_binding_digest text,
   provenance jsonb NOT NULL,
@@ -25,11 +72,20 @@ CREATE TABLE public.trader_reality_source_reports_v2 (
   verification_reason_codes jsonb NOT NULL,
   valid_at timestamptz NOT NULL,
   knowledge_at timestamptz NOT NULL,
+  knowledge_reservation_id uuid NOT NULL,
   content_digest text NOT NULL,
   schema_version text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT date_trunc('milliseconds', transaction_timestamp()),
   CONSTRAINT trader_reality_source_reports_v2_id_scope_unique
     UNIQUE (id, organization_id, account_id),
+  CONSTRAINT trader_reality_source_reports_v2_capture_source_fk FOREIGN KEY (
+    raw_capture_receipt_digest, organization_id, raw_capture_source_id
+  ) REFERENCES public.trader_mi_raw_capture_receipt_v1(id, organization_id, source_id),
+  CONSTRAINT trader_reality_source_reports_v2_raw_admission_fk FOREIGN KEY (
+    organization_id, account_id, raw_capture_source_id, source_kind
+  ) REFERENCES public.trader_reality_raw_source_admissions_v2(
+    organization_id, account_id, capture_source_id, reality_source_kind
+  ),
   CONSTRAINT trader_reality_source_reports_v2_id_digest CHECK (
     id = content_digest AND id ~ '^[0-9a-f]{64}$'
   ),
@@ -124,11 +180,13 @@ CREATE TABLE public.trader_reality_source_reports_v2 (
   CONSTRAINT trader_reality_source_reports_v2_lineage CHECK (
     (source_kind = 'EXECUTION_REPORT_V2' AND lineage_kind = 'EXECUTION_REPORT_V2'
       AND execution_report_id IS NOT NULL AND execution_report_digest IS NOT NULL
+      AND raw_capture_source_id IS NULL
       AND raw_capture_receipt_digest IS NULL AND raw_bytes_digest IS NULL
       AND storage_binding_digest IS NULL)
     OR (source_kind <> 'EXECUTION_REPORT_V2' AND lineage_kind = 'RAW_CAPTURE_V1'
       AND execution_report_id IS NULL AND execution_report_digest IS NULL
-      AND raw_capture_receipt_digest IS NOT NULL AND raw_bytes_digest IS NOT NULL
+      AND raw_capture_source_id IS NOT NULL AND raw_capture_receipt_digest IS NOT NULL
+      AND raw_bytes_digest IS NOT NULL
       AND storage_binding_digest IS NOT NULL)
   ),
   CONSTRAINT trader_reality_source_reports_v2_lineage_digests CHECK (
@@ -153,7 +211,7 @@ CREATE INDEX trader_reality_source_reports_v2_scope_knowledge_idx
 CREATE TABLE public.trader_reality_truth_records_v2 (
   id text PRIMARY KEY,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  account_id text NOT NULL,
+  account_id text NOT NULL CHECK (account_id ~ '[^[:space:]]'),
   source_report_id text NOT NULL,
   source_report_digest text NOT NULL,
   source_kind text NOT NULL,
@@ -207,14 +265,16 @@ CREATE INDEX trader_reality_truth_records_v2_subject_knowledge_idx
 CREATE TABLE public.trader_reality_events_v2 (
   id text PRIMARY KEY,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  account_id text NOT NULL,
+  account_id text NOT NULL CHECK (account_id ~ '[^[:space:]]'),
   event_sequence bigint NOT NULL,
   event_type text NOT NULL,
   source_report_id text NOT NULL,
   truth_record_id text,
   related_truth_record_id text,
+  quarantine_event_id text,
   reason_codes jsonb NOT NULL,
   knowledge_at timestamptz NOT NULL,
+  knowledge_reservation_id uuid NOT NULL,
   previous_event_digest text,
   content_digest text NOT NULL,
   schema_version text NOT NULL,
@@ -235,6 +295,9 @@ CREATE TABLE public.trader_reality_events_v2 (
   CONSTRAINT trader_reality_events_v2_previous_fk FOREIGN KEY (
     previous_event_digest, organization_id, account_id
   ) REFERENCES public.trader_reality_events_v2(id, organization_id, account_id),
+  CONSTRAINT trader_reality_events_v2_quarantine_fk FOREIGN KEY (
+    quarantine_event_id, organization_id, account_id
+  ) REFERENCES public.trader_reality_events_v2(id, organization_id, account_id),
   CONSTRAINT trader_reality_events_v2_id_digest CHECK (
     id = content_digest AND id ~ '^[0-9a-f]{64}$'
   ),
@@ -245,14 +308,15 @@ CREATE TABLE public.trader_reality_events_v2 (
       'OBSERVED', 'QUARANTINED', 'RELEASED', 'SUPERSEDED', 'SOURCE_CONTRADICTION'
     )
     AND jsonb_typeof(reason_codes) = 'array'
+    AND ((event_type = 'RELEASED' AND quarantine_event_id IS NOT NULL)
+      OR (event_type <> 'RELEASED' AND quarantine_event_id IS NULL))
     AND ((event_sequence = 1 AND previous_event_digest IS NULL)
       OR (event_sequence > 1 AND previous_event_digest IS NOT NULL))
   ),
   CONSTRAINT trader_reality_events_v2_semantics CHECK (
     (event_type = 'OBSERVED' AND related_truth_record_id IS NULL)
     OR (event_type = 'QUARANTINED' AND jsonb_array_length(reason_codes) > 0)
-    OR (event_type = 'RELEASED' AND truth_record_id IS NOT NULL
-      AND related_truth_record_id IS NULL)
+    OR (event_type = 'RELEASED' AND truth_record_id IS NOT NULL)
     OR (event_type = 'SUPERSEDED' AND truth_record_id IS NOT NULL
       AND related_truth_record_id IS NOT NULL
       AND truth_record_id <> related_truth_record_id)
@@ -268,10 +332,15 @@ CREATE INDEX trader_reality_events_v2_scope_knowledge_idx
     organization_id, account_id, knowledge_at, event_sequence
   );
 --> statement-breakpoint
+CREATE UNIQUE INDEX trader_reality_events_v2_one_release_per_quarantine
+  ON public.trader_reality_events_v2 (
+    organization_id, account_id, quarantine_event_id
+  ) WHERE event_type = 'RELEASED';
+--> statement-breakpoint
 CREATE TABLE public.trader_reality_projections_v2 (
   id text PRIMARY KEY,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  account_id text NOT NULL,
+  account_id text NOT NULL CHECK (account_id ~ '[^[:space:]]'),
   projection_policy_version text NOT NULL,
   knowledge_as_of timestamptz NOT NULL,
   frontier_sequence bigint NOT NULL,
@@ -318,58 +387,154 @@ BEGIN
 END;
 $$;
 --> statement-breakpoint
-CREATE OR REPLACE FUNCTION public.waia_reality_v2_reserve_knowledge_at(
+CREATE OR REPLACE FUNCTION public.waia_reality_v2_guard_raw_source_admission_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.trader_mi_source source
+    WHERE source.id = NEW.capture_source_id
+      AND source.organization_id = NEW.organization_id
+      AND source.status = 'active'
+      AND upper(source.venue) = NEW.provider
+      AND source.feed_kind = NEW.feed_class
+      AND NEW.transport = 'REST'
+  ) THEN
+    RAISE EXCEPTION 'Reality raw-source admission requires an active exact provider/feed registry identity'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  NEW.created_at := date_trunc('milliseconds', transaction_timestamp());
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trader_reality_raw_source_admissions_v2_guard_insert
+  BEFORE INSERT ON public.trader_reality_raw_source_admissions_v2
+  FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_guard_raw_source_admission_insert();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_reality_v2_guard_admitted_source_identity_update()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.trader_reality_raw_source_admissions_v2 admission
+    WHERE admission.organization_id = OLD.organization_id
+      AND admission.capture_source_id = OLD.id
+  ) AND (
+    NEW.organization_id IS DISTINCT FROM OLD.organization_id
+    OR NEW.venue IS DISTINCT FROM OLD.venue
+    OR NEW.feed_kind IS DISTINCT FROM OLD.feed_kind
+    OR NEW.symbol IS DISTINCT FROM OLD.symbol
+    OR (OLD.status = 'deprecated' AND NEW.status = 'active')
+  ) THEN
+    RAISE EXCEPTION 'admitted Reality capture-source identity is immutable and cannot be reactivated'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trader_mi_source_reality_admission_identity_guard
+  BEFORE UPDATE ON public.trader_mi_source
+  FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_guard_admitted_source_identity_update();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_reality_v2_allocate_knowledge_at(
   scope_organization_id uuid,
   scope_account_id text
 )
-RETURNS timestamptz LANGUAGE plpgsql AS $$
+RETURNS TABLE(reservation_id uuid, knowledge_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $$
 DECLARE
-  last_knowledge_at timestamptz;
+  frontier public.trader_reality_knowledge_frontiers_v2%ROWTYPE;
+  allocated_reservation_id uuid;
   next_knowledge_at timestamptz;
-  scope_key text;
 BEGIN
-  scope_key := scope_organization_id::text || ':' || scope_account_id;
-  PERFORM pg_advisory_xact_lock(hashtextextended(scope_key, 675));
-  SELECT max(candidate.knowledge_at) INTO last_knowledge_at
-  FROM (
-    SELECT knowledge_at FROM public.trader_reality_source_reports_v2
-      WHERE organization_id = scope_organization_id AND account_id = scope_account_id
-    UNION ALL
-    SELECT knowledge_at FROM public.trader_reality_events_v2
-      WHERE organization_id = scope_organization_id AND account_id = scope_account_id
-  ) candidate;
-  next_knowledge_at := date_trunc('milliseconds', clock_timestamp());
-  IF last_knowledge_at IS NOT NULL AND next_knowledge_at <= last_knowledge_at THEN
-    next_knowledge_at := last_knowledge_at + interval '1 millisecond';
+  IF scope_organization_id IS NULL OR scope_account_id IS NULL
+    OR scope_account_id !~ '[^[:space:]]'
+  THEN
+    RAISE EXCEPTION 'Reality knowledge allocation requires a nonblank account scope'
+      USING ERRCODE = 'check_violation';
   END IF;
-  PERFORM set_config('waia.reality_v2_reserved_scope', scope_key, true);
-  PERFORM set_config('waia.reality_v2_reserved_knowledge_at', next_knowledge_at::text, true);
-  RETURN next_knowledge_at;
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    scope_organization_id::text || ':' || scope_account_id, 675
+  ));
+  INSERT INTO public.trader_reality_knowledge_frontiers_v2 (
+    organization_id, account_id
+  ) VALUES (scope_organization_id, scope_account_id)
+  ON CONFLICT (organization_id, account_id) DO NOTHING;
+  SELECT * INTO frontier
+  FROM public.trader_reality_knowledge_frontiers_v2
+  WHERE organization_id = scope_organization_id AND account_id = scope_account_id
+  FOR UPDATE;
+  IF frontier.pending_transaction_id = txid_current() THEN
+    RAISE EXCEPTION 'Reality transaction already owns an unconsumed knowledge reservation'
+      USING ERRCODE = 'object_not_in_prerequisite_state';
+  END IF;
+  next_knowledge_at := date_trunc('milliseconds', transaction_timestamp());
+  IF frontier.last_knowledge_at IS NOT NULL
+    AND next_knowledge_at <= frontier.last_knowledge_at
+  THEN
+    next_knowledge_at := frontier.last_knowledge_at + interval '1 millisecond';
+  END IF;
+  allocated_reservation_id := gen_random_uuid();
+  UPDATE public.trader_reality_knowledge_frontiers_v2 SET
+    pending_reservation_id = allocated_reservation_id,
+    pending_transaction_id = txid_current(),
+    pending_knowledge_at = next_knowledge_at,
+    updated_at = date_trunc('milliseconds', clock_timestamp())
+  WHERE organization_id = scope_organization_id AND account_id = scope_account_id;
+  RETURN QUERY SELECT allocated_reservation_id, next_knowledge_at;
+END;
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_reality_v2_consume_knowledge_reservation(
+  scope_organization_id uuid,
+  scope_account_id text,
+  supplied_reservation_id uuid,
+  supplied_knowledge_at timestamptz
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $$
+DECLARE
+  consumed_rows integer;
+BEGIN
+  IF scope_organization_id IS NULL OR scope_account_id IS NULL
+    OR scope_account_id !~ '[^[:space:]]'
+  THEN
+    RAISE EXCEPTION 'Reality knowledge reservation consumption requires a nonblank account scope'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    scope_organization_id::text || ':' || scope_account_id, 675
+  ));
+  UPDATE public.trader_reality_knowledge_frontiers_v2 SET
+    last_knowledge_at = supplied_knowledge_at,
+    pending_reservation_id = NULL,
+    pending_transaction_id = NULL,
+    pending_knowledge_at = NULL,
+    updated_at = date_trunc('milliseconds', clock_timestamp())
+  WHERE organization_id = scope_organization_id
+    AND account_id = scope_account_id
+    AND pending_reservation_id = supplied_reservation_id
+    AND pending_transaction_id = txid_current()
+    AND pending_knowledge_at = supplied_knowledge_at
+    AND (last_knowledge_at IS NULL OR supplied_knowledge_at > last_knowledge_at);
+  GET DIAGNOSTICS consumed_rows = ROW_COUNT;
+  IF consumed_rows <> 1 THEN
+    RAISE EXCEPTION 'Reality knowledge reservation is forged, stale, reused, or cross-scope'
+      USING ERRCODE = 'check_violation';
+  END IF;
 END;
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_reality_v2_guard_source_report_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-  reserved_scope text;
-  reserved_knowledge_at timestamptz;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(
     NEW.organization_id::text || ':' || NEW.account_id, 675
   ));
-  reserved_scope := current_setting('waia.reality_v2_reserved_scope', true);
-  reserved_knowledge_at := nullif(
-    current_setting('waia.reality_v2_reserved_knowledge_at', true), ''
-  )::timestamptz;
-  IF reserved_scope IS DISTINCT FROM (NEW.organization_id::text || ':' || NEW.account_id)
-    OR reserved_knowledge_at IS NULL
-    OR NEW.knowledge_at IS DISTINCT FROM reserved_knowledge_at
-  THEN
-    RAISE EXCEPTION 'Reality knowledge time requires an exact database-authored scope reservation'
-      USING ERRCODE = 'check_violation';
-  END IF;
-  PERFORM set_config('waia.reality_v2_reserved_scope', '', true);
-  PERFORM set_config('waia.reality_v2_reserved_knowledge_at', '', true);
+  PERFORM public.waia_reality_v2_consume_knowledge_reservation(
+    NEW.organization_id, NEW.account_id, NEW.knowledge_reservation_id, NEW.knowledge_at
+  );
   NEW.created_at := NEW.knowledge_at;
   IF NEW.valid_at > NEW.knowledge_at THEN
     RAISE EXCEPTION 'Reality valid time cannot follow database-authored knowledge time'
@@ -397,12 +562,25 @@ BEGIN
   ELSE
     IF NOT EXISTS (
       SELECT 1 FROM public.trader_mi_raw_capture_receipt_v1 capture
+      JOIN public.trader_reality_raw_source_admissions_v2 admission
+        ON admission.organization_id = capture.organization_id
+       AND admission.account_id = NEW.account_id
+       AND admission.capture_source_id = capture.source_id
+       AND admission.reality_source_kind = NEW.source_kind
+      JOIN public.trader_mi_source source
+        ON source.id = capture.source_id
+       AND source.organization_id = capture.organization_id
       WHERE capture.id = NEW.raw_capture_receipt_digest
         AND capture.organization_id = NEW.organization_id
+        AND capture.source_id = NEW.raw_capture_source_id
         AND capture.raw_bytes_digest = NEW.raw_bytes_digest
         AND capture.storage_binding_digest = NEW.storage_binding_digest
+        AND source.status = 'active'
+        AND upper(source.venue) = admission.provider
+        AND source.feed_kind = admission.feed_class
+        AND admission.transport = 'REST'
     ) THEN
-      RAISE EXCEPTION 'raw HTX lineage does not match encrypted scoped capture receipt'
+      RAISE EXCEPTION 'raw HTX lineage does not match the encrypted scoped capture receipt and registered private REST source class'
         USING ERRCODE = 'foreign_key_violation';
     END IF;
   END IF;
@@ -469,10 +647,10 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   prior_sequence bigint;
   prior_digest text;
-  reserved_scope text;
-  reserved_knowledge_at timestamptz;
   truth_row public.trader_reality_truth_records_v2%ROWTYPE;
   related_row public.trader_reality_truth_records_v2%ROWTYPE;
+  quarantine_row public.trader_reality_events_v2%ROWTYPE;
+  source_row public.trader_reality_source_reports_v2%ROWTYPE;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(
     NEW.organization_id::text || ':' || NEW.account_id, 675
@@ -492,19 +670,12 @@ BEGIN
     RAISE EXCEPTION 'Reality event sequence/digest head mismatch'
       USING ERRCODE = 'serialization_failure';
   END IF;
-  reserved_scope := current_setting('waia.reality_v2_reserved_scope', true);
-  reserved_knowledge_at := nullif(
-    current_setting('waia.reality_v2_reserved_knowledge_at', true), ''
-  )::timestamptz;
-  IF reserved_scope IS DISTINCT FROM (NEW.organization_id::text || ':' || NEW.account_id)
-    OR reserved_knowledge_at IS NULL
-    OR NEW.knowledge_at IS DISTINCT FROM reserved_knowledge_at
-  THEN
-    RAISE EXCEPTION 'Reality event knowledge time requires an exact database-authored scope reservation'
-      USING ERRCODE = 'check_violation';
-  END IF;
-  PERFORM set_config('waia.reality_v2_reserved_scope', '', true);
-  PERFORM set_config('waia.reality_v2_reserved_knowledge_at', '', true);
+  PERFORM public.waia_reality_v2_consume_knowledge_reservation(
+    NEW.organization_id, NEW.account_id, NEW.knowledge_reservation_id, NEW.knowledge_at
+  );
+  SELECT * INTO source_row FROM public.trader_reality_source_reports_v2
+    WHERE id = NEW.source_report_id AND organization_id = NEW.organization_id
+      AND account_id = NEW.account_id;
   IF NEW.truth_record_id IS NOT NULL THEN
     SELECT * INTO truth_row FROM public.trader_reality_truth_records_v2
       WHERE id = NEW.truth_record_id AND organization_id = NEW.organization_id
@@ -514,6 +685,29 @@ BEGIN
     SELECT * INTO related_row FROM public.trader_reality_truth_records_v2
       WHERE id = NEW.related_truth_record_id AND organization_id = NEW.organization_id
         AND account_id = NEW.account_id;
+  END IF;
+  IF NEW.quarantine_event_id IS NOT NULL THEN
+    SELECT * INTO quarantine_row FROM public.trader_reality_events_v2
+      WHERE id = NEW.quarantine_event_id AND organization_id = NEW.organization_id
+        AND account_id = NEW.account_id;
+  END IF;
+  IF NEW.event_type IN ('QUARANTINED', 'SOURCE_CONTRADICTION') AND EXISTS (
+    SELECT 1 FROM public.trader_reality_events_v2 prior_quarantine
+    WHERE prior_quarantine.organization_id = NEW.organization_id
+      AND prior_quarantine.account_id = NEW.account_id
+      AND prior_quarantine.source_report_id = NEW.source_report_id
+      AND prior_quarantine.truth_record_id IS NOT DISTINCT FROM NEW.truth_record_id
+      AND prior_quarantine.event_type IN ('QUARANTINED', 'SOURCE_CONTRADICTION')
+      AND NOT EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 release_event
+        WHERE release_event.organization_id = NEW.organization_id
+          AND release_event.account_id = NEW.account_id
+          AND release_event.event_type = 'RELEASED'
+          AND release_event.quarantine_event_id = prior_quarantine.id
+      )
+  ) THEN
+    RAISE EXCEPTION 'Reality causal episode already has an unresolved quarantine'
+      USING ERRCODE = 'unique_violation';
   END IF;
   IF NEW.event_type = 'OBSERVED' THEN
     IF truth_row.id IS NULL OR NEW.related_truth_record_id IS NOT NULL
@@ -556,6 +750,57 @@ BEGIN
       )
     THEN
       RAISE EXCEPTION 'SUPERSEDED must exactly link a source-native correction to current stable truth'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF NEW.event_type = 'QUARANTINED' THEN
+    IF source_row.id IS NULL OR NEW.truth_record_id IS NOT NULL
+      OR NEW.related_truth_record_id IS NOT NULL
+      OR jsonb_array_length(NEW.reason_codes) = 0
+      OR source_row.structural_verification <> 'UNVERIFIABLE'
+    THEN
+      RAISE EXCEPTION 'QUARANTINED must exactly preserve one unverifiable source-owned causal episode'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF NEW.event_type = 'SOURCE_CONTRADICTION' THEN
+    IF truth_row.id IS NULL OR related_row.id IS NULL
+      OR truth_row.source_report_id <> NEW.source_report_id
+      OR truth_row.markers <> '["SOURCE_CONTRADICTION"]'::jsonb
+      OR related_row.markers <> '[]'::jsonb
+      OR truth_row.subject_class <> related_row.subject_class
+      OR truth_row.subject_key <> related_row.subject_key
+      OR NOT EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 stable_event
+        WHERE stable_event.organization_id = NEW.organization_id
+          AND stable_event.account_id = NEW.account_id
+          AND stable_event.truth_record_id = related_row.id
+          AND stable_event.event_type IN ('OBSERVED', 'SUPERSEDED')
+      )
+    THEN
+      RAISE EXCEPTION 'SOURCE_CONTRADICTION must exactly link disputed and stable truth for one source subject'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF NEW.event_type = 'RELEASED' THEN
+    IF quarantine_row.id IS NULL OR truth_row.id IS NULL
+      OR quarantine_row.event_type NOT IN ('QUARANTINED', 'SOURCE_CONTRADICTION')
+      OR quarantine_row.source_report_id <> NEW.source_report_id
+      OR quarantine_row.truth_record_id IS DISTINCT FROM truth_row.id
+      OR quarantine_row.related_truth_record_id IS DISTINCT FROM NEW.related_truth_record_id
+      OR truth_row.source_report_id <> NEW.source_report_id
+      OR truth_row.markers <> '["SOURCE_CONTRADICTION"]'::jsonb
+      OR (related_row.id IS NOT NULL AND (
+        related_row.markers <> '[]'::jsonb
+        OR truth_row.subject_class <> related_row.subject_class
+        OR truth_row.subject_key <> related_row.subject_key
+      ))
+      OR EXISTS (
+        SELECT 1 FROM public.trader_reality_events_v2 prior_release
+        WHERE prior_release.organization_id = NEW.organization_id
+          AND prior_release.account_id = NEW.account_id
+          AND prior_release.quarantine_event_id = quarantine_row.id
+          AND prior_release.event_type = 'RELEASED'
+      )
+    THEN
+      RAISE EXCEPTION 'RELEASED must exactly resolve one causally linked truth-bearing quarantine'
         USING ERRCODE = 'check_violation';
     END IF;
   END IF;
@@ -606,6 +851,14 @@ CREATE TRIGGER trader_reality_projections_v2_guard_insert
   BEFORE INSERT ON public.trader_reality_projections_v2
   FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_guard_projection_insert();
 --> statement-breakpoint
+CREATE TRIGGER trader_reality_raw_source_admissions_v2_block_update
+  BEFORE UPDATE ON public.trader_reality_raw_source_admissions_v2
+  FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_block_append_only_mutation();
+--> statement-breakpoint
+CREATE TRIGGER trader_reality_raw_source_admissions_v2_block_delete
+  BEFORE DELETE ON public.trader_reality_raw_source_admissions_v2
+  FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_block_append_only_mutation();
+--> statement-breakpoint
 CREATE TRIGGER trader_reality_source_reports_v2_block_update
   BEFORE UPDATE ON public.trader_reality_source_reports_v2
   FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_block_append_only_mutation();
@@ -638,6 +891,10 @@ CREATE TRIGGER trader_reality_projections_v2_block_delete
   BEFORE DELETE ON public.trader_reality_projections_v2
   FOR EACH ROW EXECUTE FUNCTION public.waia_reality_v2_block_append_only_mutation();
 --> statement-breakpoint
+ALTER TABLE public.trader_reality_raw_source_admissions_v2 ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE public.trader_reality_knowledge_frontiers_v2 ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE public.trader_reality_source_reports_v2 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE public.trader_reality_truth_records_v2 ENABLE ROW LEVEL SECURITY;
@@ -645,6 +902,14 @@ ALTER TABLE public.trader_reality_truth_records_v2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trader_reality_events_v2 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE public.trader_reality_projections_v2 ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+CREATE POLICY trader_reality_raw_source_admissions_v2_deny_client_all
+  ON public.trader_reality_raw_source_admissions_v2 FOR ALL TO authenticated, anon
+  USING (false) WITH CHECK (false);
+--> statement-breakpoint
+CREATE POLICY trader_reality_knowledge_frontiers_v2_deny_client_all
+  ON public.trader_reality_knowledge_frontiers_v2 FOR ALL TO authenticated, anon
+  USING (false) WITH CHECK (false);
 --> statement-breakpoint
 CREATE POLICY trader_reality_source_reports_v2_deny_client_all
   ON public.trader_reality_source_reports_v2 FOR ALL TO authenticated, anon
@@ -662,6 +927,12 @@ CREATE POLICY trader_reality_projections_v2_deny_client_all
   ON public.trader_reality_projections_v2 FOR ALL TO authenticated, anon
   USING (false) WITH CHECK (false);
 --> statement-breakpoint
+REVOKE ALL ON TABLE public.trader_reality_raw_source_admissions_v2
+  FROM PUBLIC, authenticated, anon;
+--> statement-breakpoint
+REVOKE ALL ON TABLE public.trader_reality_knowledge_frontiers_v2
+  FROM PUBLIC, authenticated, anon;
+--> statement-breakpoint
 REVOKE ALL ON TABLE public.trader_reality_source_reports_v2 FROM authenticated, anon;
 --> statement-breakpoint
 REVOKE ALL ON TABLE public.trader_reality_truth_records_v2 FROM authenticated, anon;
@@ -670,5 +941,10 @@ REVOKE ALL ON TABLE public.trader_reality_events_v2 FROM authenticated, anon;
 --> statement-breakpoint
 REVOKE ALL ON TABLE public.trader_reality_projections_v2 FROM authenticated, anon;
 --> statement-breakpoint
-REVOKE ALL ON FUNCTION public.waia_reality_v2_reserve_knowledge_at(uuid, text)
+REVOKE ALL ON FUNCTION public.waia_reality_v2_allocate_knowledge_at(uuid, text)
+  FROM PUBLIC, authenticated, anon;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION public.waia_reality_v2_consume_knowledge_reservation(
+  uuid, text, uuid, timestamptz
+)
   FROM PUBLIC, authenticated, anon;

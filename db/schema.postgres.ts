@@ -3018,6 +3018,68 @@ export const traderExecutionReportsV2 = pgTable(
   ],
 );
 
+/** DEE-677: immutable admission of one raw-capture source into one Reality account/class. */
+export const traderRealityRawSourceAdmissionsV2 = pgTable(
+  "trader_reality_raw_source_admissions_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    captureSourceId: uuid("capture_source_id").notNull(),
+    realitySourceKind: text("reality_source_kind").notNull(),
+    provider: text("provider").notNull(),
+    feedClass: text("feed_class").notNull(),
+    transport: text("transport").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "trader_reality_raw_source_admissions_v2_account_nonblank",
+      sql`${t.accountId} ~ '[^[:space:]]'`,
+    ),
+    primaryKey({
+      columns: [t.organizationId, t.accountId, t.captureSourceId, t.realitySourceKind],
+      name: "trader_reality_raw_source_admissions_v2_pk",
+    }),
+    unique("trader_reality_raw_source_admissions_v2_source_account_unique").on(
+      t.organizationId,
+      t.captureSourceId,
+    ),
+    foreignKey({
+      columns: [t.captureSourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+      name: "trader_reality_raw_source_admissions_v2_source_fk",
+    }),
+  ],
+);
+
+/** DEE-677: protected mutable allocator state; never part of canonical truth. */
+export const traderRealityKnowledgeFrontiersV2 = pgTable(
+  "trader_reality_knowledge_frontiers_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    lastKnowledgeAt: timestamp("last_knowledge_at", { withTimezone: true, mode: "date" }),
+    pendingReservationId: uuid("pending_reservation_id"),
+    pendingTransactionId: bigint("pending_transaction_id", { mode: "bigint" }),
+    pendingKnowledgeAt: timestamp("pending_knowledge_at", { withTimezone: true, mode: "date" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "trader_reality_knowledge_frontiers_v2_account_nonblank",
+      sql`${t.accountId} ~ '[^[:space:]]'`,
+    ),
+    primaryKey({
+      columns: [t.organizationId, t.accountId],
+      name: "trader_reality_knowledge_frontiers_v2_pk",
+    }),
+  ],
+);
+
 /** DEE-677 / R675-B: immutable raw-reference Reality source reports; never raw bytes. */
 export const traderRealitySourceReportsV2 = pgTable(
   "trader_reality_source_reports_v2",
@@ -3039,6 +3101,7 @@ export const traderRealitySourceReportsV2 = pgTable(
     lineageKind: text("lineage_kind").notNull(),
     executionReportId: uuid("execution_report_id").references(() => traderExecutionReportsV2.id),
     executionReportDigest: text("execution_report_digest"),
+    rawCaptureSourceId: uuid("raw_capture_source_id"),
     rawCaptureReceiptDigest: text("raw_capture_receipt_digest")
       .references(() => traderMiRawCaptureReceiptV1.id),
     rawBytesDigest: text("raw_bytes_digest"),
@@ -3048,16 +3111,40 @@ export const traderRealitySourceReportsV2 = pgTable(
     verificationReasonCodes: jsonb("verification_reason_codes").notNull(),
     validAt: timestamp("valid_at", { withTimezone: true, mode: "date" }).notNull(),
     knowledgeAt: timestamp("knowledge_at", { withTimezone: true, mode: "date" }).notNull(),
+    knowledgeReservationId: uuid("knowledge_reservation_id").notNull(),
     contentDigest: text("content_digest").notNull(),
     schemaVersion: text("schema_version").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "trader_reality_source_reports_v2_account_nonblank",
+      sql`${t.accountId} ~ '[^[:space:]]'`,
+    ),
     unique("trader_reality_source_reports_v2_id_scope_unique").on(
       t.id,
       t.organizationId,
       t.accountId,
     ),
+    foreignKey({
+      columns: [t.rawCaptureReceiptDigest, t.organizationId, t.rawCaptureSourceId],
+      foreignColumns: [
+        traderMiRawCaptureReceiptV1.id,
+        traderMiRawCaptureReceiptV1.organizationId,
+        traderMiRawCaptureReceiptV1.sourceId,
+      ],
+      name: "trader_reality_source_reports_v2_capture_source_fk",
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.accountId, t.rawCaptureSourceId, t.sourceKind],
+      foreignColumns: [
+        traderRealityRawSourceAdmissionsV2.organizationId,
+        traderRealityRawSourceAdmissionsV2.accountId,
+        traderRealityRawSourceAdmissionsV2.captureSourceId,
+        traderRealityRawSourceAdmissionsV2.realitySourceKind,
+      ],
+      name: "trader_reality_source_reports_v2_raw_admission_fk",
+    }),
     index("trader_reality_source_reports_v2_native_revision_idx")
       .on(
         t.organizationId,
@@ -3108,6 +3195,10 @@ export const traderRealityTruthRecordsV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "trader_reality_truth_records_v2_account_nonblank",
+      sql`${t.accountId} ~ '[^[:space:]]'`,
+    ),
     unique("trader_reality_truth_records_v2_id_scope_unique").on(
       t.id,
       t.organizationId,
@@ -3158,14 +3249,20 @@ export const traderRealityEventsV2 = pgTable(
     sourceReportId: text("source_report_id").notNull(),
     truthRecordId: text("truth_record_id"),
     relatedTruthRecordId: text("related_truth_record_id"),
+    quarantineEventId: text("quarantine_event_id"),
     reasonCodes: jsonb("reason_codes").notNull(),
     knowledgeAt: timestamp("knowledge_at", { withTimezone: true, mode: "date" }).notNull(),
+    knowledgeReservationId: uuid("knowledge_reservation_id").notNull(),
     previousEventDigest: text("previous_event_digest"),
     contentDigest: text("content_digest").notNull(),
     schemaVersion: text("schema_version").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "trader_reality_events_v2_account_nonblank",
+      sql`${t.accountId} ~ '[^[:space:]]'`,
+    ),
     unique("trader_reality_events_v2_id_scope_unique").on(t.id, t.organizationId, t.accountId),
     unique("trader_reality_events_v2_scope_sequence_unique").on(
       t.organizationId,
@@ -3204,6 +3301,14 @@ export const traderRealityEventsV2 = pgTable(
       foreignColumns: [t.id, t.organizationId, t.accountId],
       name: "trader_reality_events_v2_previous_fk",
     }),
+    foreignKey({
+      columns: [t.quarantineEventId, t.organizationId, t.accountId],
+      foreignColumns: [t.id, t.organizationId, t.accountId],
+      name: "trader_reality_events_v2_quarantine_fk",
+    }),
+    uniqueIndex("trader_reality_events_v2_one_release_per_quarantine")
+      .on(t.organizationId, t.accountId, t.quarantineEventId)
+      .where(sql`${t.eventType} = 'RELEASED'`),
     index("trader_reality_events_v2_scope_knowledge_idx").on(
       t.organizationId,
       t.accountId,
@@ -3234,6 +3339,10 @@ export const traderRealityProjectionsV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "trader_reality_projections_v2_account_nonblank",
+      sql`${t.accountId} ~ '[^[:space:]]'`,
+    ),
     unique("trader_reality_projections_v2_id_scope_unique").on(
       t.id,
       t.organizationId,
