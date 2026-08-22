@@ -330,6 +330,31 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
     });
   });
 
+  it.each(["amount", "filled-amount"])(
+    "fails unknown rather than inventing missing order %s evidence",
+    async (missingField) => {
+      const row: Record<string, unknown> = {
+        id: 357630527817871,
+        symbol: "btcusdt",
+        price: "65000",
+        amount: "0.01",
+        "created-at": 1630633835224,
+        type: "buy-limit",
+        "filled-amount": "0",
+        state: "submitted",
+        "client-order-id": "client-1",
+      };
+      delete row[missingField];
+      const connector = await validatedHtx(defaultHandlers({
+        "/v1/order/orders/": () => jsonResponse({ status: "ok", data: row }),
+      }));
+      await expect(connector.getOrder("357630527817871")).rejects.toMatchObject({
+        name: "HtxUnknownOrderEvidenceError",
+        rawVenueObservation: { id: 357630527817871, state: "submitted" },
+      });
+    },
+  );
+
   it("maps trade history within 48h window", async () => {
     const connector = await validatedHtx(defaultHandlers());
     await expect(connector.getTradeHistory()).rejects.toThrow(/requires filter.symbol/);
@@ -498,11 +523,50 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     const connector = await validatedHtx(defaultHandlers({
       "/v1/order/orders/place": () => {
         placementPosts += 1;
-        throw new TypeError("simulated socket timeout");
+        throw new TypeError(
+          "https://api.huobi.pro/v1/order/orders/place?AccessKeyId=secret&Signature=secret",
+        );
+      },
+    }));
+    let captured: unknown;
+    try {
+      await connector.placeOrder({
+        clientOrderId: "client-timeout",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+      });
+    } catch (error) {
+      captured = error;
+    }
+    expect(captured).toMatchObject({
+      name: "HtxPlacementFailUnknownError",
+      rawVenueObservation: {
+        venueResponseObserved: false,
+        transportFailure: "NETWORK_REQUEST_FAILED",
+      },
+    });
+    expect(placementPosts).toBe(1);
+    expect(JSON.stringify(captured)).not.toContain("AccessKeyId");
+    expect(JSON.stringify(captured)).not.toContain("Signature");
+  });
+
+  it("preserves observed HTTP status when response body reading fails", async () => {
+    let placementPosts = 0;
+    const connector = await validatedHtx(defaultHandlers({
+      "/v1/order/orders/place": () => {
+        placementPosts += 1;
+        return {
+          status: 503,
+          ok: false,
+          text: async () => { throw new Error("body stream failed"); },
+        } as unknown as Response;
       },
     }));
     await expect(connector.placeOrder({
-      clientOrderId: "client-timeout",
+      clientOrderId: "client-body-read-failure",
       symbol: "BTC/USDT",
       side: "buy",
       type: "limit",
@@ -511,8 +575,10 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     })).rejects.toMatchObject({
       name: "HtxPlacementFailUnknownError",
       rawVenueObservation: {
-        venueResponseObserved: false,
-        transportError: { name: "TypeError", message: "simulated socket timeout" },
+        venueResponseObserved: true,
+        httpStatus: 503,
+        httpOk: false,
+        responseBodyRead: "FAILED",
       },
     });
     expect(placementPosts).toBe(1);

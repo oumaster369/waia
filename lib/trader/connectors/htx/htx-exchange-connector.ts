@@ -252,15 +252,23 @@ export class HtxExchangeConnector implements ExchangeConnector {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-    } catch (error) {
+    } catch {
       throw new HtxPlacementFailUnknownError("transport result unknown", {
         venueResponseObserved: false,
-        transportError: error instanceof Error
-          ? Object.freeze({ name: error.name, message: error.message })
-          : String(error),
+        transportFailure: "NETWORK_REQUEST_FAILED",
       });
     }
-    const responseBody = await readRawHtxResponse(response);
+    let responseBody: unknown;
+    try {
+      responseBody = await readRawHtxResponse(response);
+    } catch {
+      throw new HtxPlacementFailUnknownError("response body requires reconciliation", {
+        venueResponseObserved: true,
+        httpStatus: response.status,
+        httpOk: response.ok,
+        responseBodyRead: "FAILED",
+      });
+    }
     // HTX's placement acknowledgement contains only an order id. It cannot
     // prove the exact client identity, mechanics, quantity, price, or fills,
     // and no follow-up lookup is ratified. Preserve it and reconcile.

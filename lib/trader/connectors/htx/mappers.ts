@@ -214,6 +214,25 @@ class HtxUnknownTradeEvidenceError extends Error {
   }
 }
 
+class HtxUnknownOrderEvidenceError extends Error {
+  readonly rawVenueObservation: Readonly<Record<string, unknown>>;
+
+  constructor(field: string, row: Readonly<Record<string, unknown>>) {
+    super(`[trader] HTX order ${field} is fail-unknown`);
+    this.name = "HtxUnknownOrderEvidenceError";
+    this.rawVenueObservation = Object.freeze({ ...row });
+  }
+}
+
+function requireHtxOrderEvidence(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string {
+  if (typeof value === "string" && value.trim() !== "") return value;
+  throw new HtxUnknownOrderEvidenceError(field, row);
+}
+
 function requireHtxVenueIdentity(
   value: unknown,
   field: string,
@@ -256,8 +275,8 @@ export function mapHtxOrder(row: HtxOrderRow): Order {
   const { side, type } = parseHtxOrderSideAndType(row.type, row);
   const orderId = requireHtxVenueIdentity(row.id, "order", row);
   const createdAt = msToIso(row["created-at"]);
-  const quantity = row.amount ?? row["filled-amount"] ?? "0";
-  const filledQuantity = row["filled-amount"] ?? "0";
+  const quantity = requireHtxOrderEvidence(row.amount, "amount", row);
+  const filledQuantity = requireHtxOrderEvidence(row["filled-amount"], "filled amount", row);
 
   return {
     orderId,
@@ -296,6 +315,7 @@ export function mapHtxMatchResult(row: HtxMatchResultRow): Trade {
     fee: row["filled-fees"],
     feeAsset: row["fee-currency"].toUpperCase(),
     executedAt: msToIso(row["created-at"]),
+    rawVenueObservation: Object.freeze({ ...row }),
   };
 }
 

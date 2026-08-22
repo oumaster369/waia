@@ -79,6 +79,8 @@ export type Trade = {
   fee: string;
   feeAsset: string;
   executedAt: string;
+  /** Immutable venue-native observation when the connector can preserve it. */
+  rawVenueObservation?: Readonly<Record<string, unknown>>;
 };
 
 export type MarketDataEvent = {
