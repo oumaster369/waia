@@ -51,7 +51,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Freeze exact-head integration evidence, run the single full suite and PR-readiness gates, then obtain independent adversarial review."
+  nextAction: "Run exactly one renewed full suite on the clean frozen head, then obtain one fresh independent exact-head adversarial review with zero unresolved P1/P2."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -62,8 +62,8 @@ provenance:
 
 ## Ratified base and ownership
 
-- Authoritative base: `5f0fc2ad86b4c5a961ee8f117df0dbfc91762b76`.
-- Base refresh: Human-authorized on 2026-08-22 after a read-only overlap audit proved DEE-674 is a Treasury-only semantic change. The unpublished train was mechanically rebased with an identical cumulative patch ID; all DEE-674 paths remain byte-identical to `origin/main`.
+- Authoritative base: `d45bb9b11b21c7217eed5957eecdb629d309f4c6`.
+- Base refresh: Human/controller-authorized on 2026-08-22 after a read-only overlap audit proved the sole base advance, DEE-672, is a non-overlapping Finance UI/Wrangler change. The unpublished train was mechanically rebased from clean head `561e003e5428272ff126b295a231a5eae74c8cd3` to `cbb9c6bb41c038101778f03a572561d75419fe98`; its cumulative binary patch SHA-256 remained `4f7e794e2872f439e8c01001eb33b508651546fbbd2dcd6734f644feccdc50a3`. All DEE-672 and DEE-674 paths remain byte-identical to `origin/main`.
 - Parent Step-16 authority: DEE-652.
 - Integration owner: one owner across DEE-676 → DEE-677 → DEE-678 → DEE-679.
 - Integration boundary: one branch, one admitted/frozen manifest, one migration, one PR to `main`, one squash merge, one revert-PR rollback path.
@@ -132,6 +132,12 @@ Inventory every repository connector/source producer and Reality-relevant consum
 ## Validation and exact-head admission
 
 Use focused tests during each work package. After D and the frozen manifest are complete, run one full frozen-head `pnpm test --run`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, migration/PostgreSQL integration, source-consumer closure, canonical/governance validation, and PR preflight. An independent reviewer must inspect the exact immutable head and report zero unresolved P1/P2. The PR must pass authoritative GitHub CI and a fresh unchanged DEE-653 T3 admission against the exact base/head before squash merge.
+
+## Changed-head remediation authorization — 2026-08-22
+
+Human authorization resumes this same train and branch to remediate the four confirmed exact-head findings only: canonical-ledger-derived projection persistence and intent-specific writes; strict source/transport metadata; a database-authored monotonic per-scope knowledge frontier with exact as-of replay; and default fail-uncertain ingress plus whole-repository source/consumer closure. This authorization retains migration `0160`, creates no new API/table/source/task/branch/PR/migration number, and invalidates the earlier frozen-head suite/review evidence. After refreeze, exactly one renewed full frozen-head suite and one fresh independent exact-head adversarial review are required.
+
+The changed-head remediation is complete in four file-disjoint child commits. Focused evidence is green: 36/36 affected unit tests, 5/5 PostgreSQL adversarial tests on a freshly migrated empty database, PostgreSQL smoke, the AST inventory validator at 149 source files / 115 consumers / 25 connector references, typecheck, scoped ESLint, repository lint with zero errors, and the production build in a localhost-permitted context. The integration diff is now frozen; no code or provenance mutation is permitted before the renewed full suite and review.
 
 ## Rollback and STOP conditions
 

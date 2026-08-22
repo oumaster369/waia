@@ -50,7 +50,8 @@
         "tests/unit/trader-reality-v2-contracts.test.ts"
       ],
       "integratedCommits": [
-        "f662e377173c614dc954f03df9040f3fe7d126ce"
+        "17931755592fbff14990d35c8b00b720b04043dc",
+        "ffcd17a8a1df33b790f775de192b1a3111c9d4ea"
       ],
       "acceptanceEvidence": [
         "Five and only five source kinds validate; eight broad unratified classes fail explicit admission.",
@@ -118,7 +119,8 @@
         "tests/unit/trader-reality-v2-migration-identity.test.ts"
       ],
       "integratedCommits": [
-        "d3738c0232fcefa235d1e9dad7c4ba437599f833"
+        "f9df8318d7e03c7f670f2002689ccb0145145314",
+        "cdb2f048336e543bb4425c7681ab5c80390f8139"
       ],
       "acceptanceEvidence": [
         "A fresh empty PostgreSQL database applied exactly one next-numbered 0160 migration successfully.",
@@ -185,7 +187,8 @@
         "tests/unit/trader-reality-v2-projection.test.ts"
       ],
       "integratedCommits": [
-        "c25aeacfb9dbcb36c099a43dbe5df4a067875682"
+        "70387a4a4996514fa718db80c0d7a571b1a18583",
+        "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055"
       ],
       "acceptanceEvidence": [
         "Duplicate, new fact, explicit correction, contradiction, and quarantine classifications are deterministic.",
@@ -261,11 +264,12 @@
         "tests/unit/trader-reality-v2-ingress.test.ts"
       ],
       "integratedCommits": [
-        "fea845738ff4dfd6fafe26b74781f74d5bf6bd92",
-        "39f338166c14f055dfe731d45697500c44cd0631"
+        "50d69656045a81ba6efd943048e50bf76caa9265",
+        "78ba19279976e4603316be9d1671c642b0949992",
+        "757c13a89ae35dce8910be5568318744d5a2d1a0"
       ],
       "acceptanceEvidence": [
-        "Pinned whole-repository inventory closes 149 connector, Execution V2, and market-data source surfaces plus 114 direct consumers with exactly one disposition each and path+content digests.",
+        "Pinned whole-repository inventory closes 149 connector, Execution V2, and market-data source surfaces plus 115 direct consumers and 25 connector references with exactly one disposition each and path+content digests.",
         "Approved ExecutionReportV2 and four raw-captured HTX REST classes route through dedicated adapters; status-only FILLED remains ORDER, never FILL.",
         "All excluded classes return explicit digest receipts; public market, WebSocket, chain, modelled, synthetic, simulator, and internal expectation paths cannot bypass admission.",
         "Existing connector consumers remain unchanged and DEE-620/DEE-634 remain explicit separate Todo scope."
@@ -286,14 +290,17 @@
     "preImplementationAdmission": {
       "status": "pass",
       "manifestDigest": "b22680bb01bf72d43523043c7389126e4c15dfd98fc10b591375cab6386fb1bd",
-      "manifestCommit": "8a44ff85717caa1a8b5d006a9615f56ae06c9abe",
+      "manifestCommit": "01b99c87d6c4b49c3b04eec49506ccd392b460c2",
       "manifestPath": "docs/plans/dee-675-reality-v2-htx-spot.integration-train.json",
       "reviewer": "Human-ratified DEE-652 integration owner after duplicate, dependency, source-allowlist, security, and exact-base audit on 2026-08-22"
     },
     "admissionReviews": [
       {
         "issue": "DEE-676", "status": "pass",
-        "reviewedCommits": ["f662e377173c614dc954f03df9040f3fe7d126ce"],
+        "reviewedCommits": [
+          "17931755592fbff14990d35c8b00b720b04043dc",
+          "ffcd17a8a1df33b790f775de192b1a3111c9d4ea"
+        ],
         "reviewedFiles": [
           "docs/plans/dee-675-reality-v2-htx-spot.md",
           "lib/trader/reality/v2/contracts.ts", "lib/trader/reality/v2/index.ts",
@@ -302,7 +309,10 @@
       },
       {
         "issue": "DEE-677", "status": "pass",
-        "reviewedCommits": ["d3738c0232fcefa235d1e9dad7c4ba437599f833"],
+        "reviewedCommits": [
+          "f9df8318d7e03c7f670f2002689ccb0145145314",
+          "cdb2f048336e543bb4425c7681ab5c80390f8139"
+        ],
         "reviewedFiles": [
           "db/migrations_postgres/0160_trader_reality_v2.sql", "db/migrations_postgres/meta/_journal.json",
           "db/schema.postgres.ts", "docs/migrations/DEE-64-TRACKER.md",
@@ -314,7 +324,10 @@
       },
       {
         "issue": "DEE-678", "status": "pass",
-        "reviewedCommits": ["c25aeacfb9dbcb36c099a43dbe5df4a067875682"],
+        "reviewedCommits": [
+          "70387a4a4996514fa718db80c0d7a571b1a18583",
+          "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055"
+        ],
         "reviewedFiles": [
           "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/index.ts",
           "lib/trader/reality/v2/ingest-postgres.ts", "lib/trader/reality/v2/projection.ts",
@@ -325,8 +338,9 @@
       {
         "issue": "DEE-679", "status": "pass",
         "reviewedCommits": [
-          "fea845738ff4dfd6fafe26b74781f74d5bf6bd92",
-          "39f338166c14f055dfe731d45697500c44cd0631"
+          "50d69656045a81ba6efd943048e50bf76caa9265",
+          "78ba19279976e4603316be9d1671c642b0949992",
+          "757c13a89ae35dce8910be5568318744d5a2d1a0"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -342,11 +356,25 @@
       }
     ],
     "cumulativeChecks": [
-      { "afterIssue": "DEE-676", "status": "pass", "commands": ["focused contracts 9/9", "typecheck", "scoped eslint"] },
-      { "afterIssue": "DEE-677", "status": "pass", "commands": ["empty-db migration bootstrap", "PostgreSQL Reality 4/4", "PostgreSQL smoke", "focused unit", "typecheck", "scoped eslint"] },
-      { "afterIssue": "DEE-678", "status": "pass", "commands": ["projection 3/3", "PostgreSQL lifecycle", "typecheck", "scoped eslint"] },
-      { "afterIssue": "DEE-679", "status": "pass", "commands": ["source/consumer graph 149/114 with path+content digests", "D runtime and HTX FAIL-UNKNOWN tests 9/9", "typecheck", "scoped eslint"] }
+      { "afterIssue": "DEE-676", "status": "pass", "commands": ["focused contracts 9/9 including typed metadata mutation cases", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-677", "status": "pass", "commands": ["fresh empty-db migration bootstrap through 0160", "PostgreSQL Reality adversarial 5/5", "PostgreSQL smoke", "migration identity 5/5", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-678", "status": "pass", "commands": ["projection 3/3", "PostgreSQL intent lifecycle and exact as-of replay", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-679", "status": "pass", "commands": ["AST source/consumer graph 149/115 and 25 connector references with path+content digests", "alias/bind/destructure/bracket/optional/direct-client/indirect negative fixtures", "D runtime and HTX FAIL-UNKNOWN tests 9/9", "typecheck", "scoped eslint"] }
     ],
+    "changedHeadRemediation": {
+      "status": "implemented-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "561e003e5428272ff126b295a231a5eae74c8cd3",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "mechanicallyRebasedHead": "cbb9c6bb41c038101778f03a572561d75419fe98",
+      "remediationCommits": [
+        "ffcd17a8a1df33b790f775de192b1a3111c9d4ea",
+        "cdb2f048336e543bb4425c7681ab5c80390f8139",
+        "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
+        "757c13a89ae35dce8910be5568318744d5a2d1a0"
+      ],
+      "scope": "Only the four confirmed exact-head findings were remediated within the admitted A/B/C/D surfaces; migration 0160, source allowlist, task/train/branch/PR boundary, DEE-672, DEE-674, DEE-620, and DEE-634 boundaries are unchanged."
+    },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   }
