@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: integration-ready
   currentWorkPackage: WP-5
-  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4]
-  remainingWorkPackages: [WP-5]
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
+  lastValidatedGitSha: 89cecd2f829dddf64ab5f00a792b976fc800e669
   lastValidationAt: 2026-08-22
-  blockedReason: "Merged DEE-671 annual HTTP boundary rejects URL year strings. Correction DEE-674 is in Human review as PR #479."
-  nextAction: "After Human squash-merge of PR #479, rebase on current origin/main, repeat final validation/Human review, and open the DEE-672 PR."
+  blockedReason: null
+  nextAction: "Open the single DEE-672 PR to main for Human review and squash merge; never merge autonomously."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -36,7 +36,7 @@ provenance:
 
 The Human product owner approved the minimal transaction-centred Finance refinement on 2026-08-22. Merged DEE-671 provides server-generated category codes, category groups, effective-month budget history, and server-derived monthly/annual summaries. DEE-672 is the dependent authenticated Finance Console UI only.
 
-Baseline: `origin/main@9fd25a456bf5f785eb9e5e99760a654fc5a311c2`.
+Baseline: `origin/main@5f0fc2ad86b4c5a961ee8f117df0dbfc91762b76` after the Human squash merge of DEE-674 / PR #479.
 
 Hard exclusions: database/schema/API changes, public homepage or Breath pages, public transaction/budget pages, Linear work-plan embedding, production or walkthrough financial-row mutation, watcher/chain execution, AI-TRADER, FHV, Execution Server, deployment, autonomous merge, and direct `main` mutation.
 
@@ -121,12 +121,13 @@ T3 Human squash-merge only. AI-TRADER worktrees/PRs and the Execution Server rem
 ## Validation record — 2026-08-22
 
 - exact Finance E2E workflow: 4/4 pass, including transaction columns, category create without client code, current/annual budget rendering, and three reference workspaces.
-- focused Treasury UI/truth/catalog tests: 30/30 pass.
+- focused Treasury UI/truth/catalog tests: 25/25 pass.
 - `pnpm typecheck`: pass.
-- `pnpm lint`: pass with 305 repository baseline warnings and 0 errors.
+- `pnpm lint`: pass with 302 repository baseline warnings and 0 errors.
 - `pnpm build`: pass.
 - `pnpm validate:canon`: pass.
 - `pnpm validate:pr-governance`: pass.
 - Human walkthrough: Transactions, manual form, existing review, Categories, Counterparties, Accounts, and Projects pass read-only with a clean browser console. Annual UI passes in a local review build containing the exact DEE-674 correction.
 - Source walkthrough DB on 54339 remains unchanged at 4 transactions, 1 budget, 1 commitment, and 1 funding need. Review uses a local cloned database on the same container/port with only Treasury 0158/0159 applied; no source financial mutation and no AI-TRADER migration.
 - No form submit, financial-row mutation, Execution Server access, deployment, main mutation, or AI-TRADER worktree mutation.
+- Rebased the unpublished DEE-672 branch onto `origin/main@5f0fc2ad86b4c5a961ee8f117df0dbfc91762b76`; the merged DEE-674 annual query fix is now part of the real branch history. Repeated focused tests, lint, typecheck, production build, Finance E2E, canon, and PR-governance validation successfully on code HEAD `89cecd2f829dddf64ab5f00a792b976fc800e669`.
