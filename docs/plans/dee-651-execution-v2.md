@@ -38,8 +38,8 @@ state:
   remainingWorkPackages: [WP5]
   prNumber: 477
   prUrl: "https://github.com/oumaster369/waia/pull/477"
-  lastValidatedGitSha: e9a53bb9090e5e06b3200dcee607660db52856aa
-  lastValidationAt: "2026-08-22T12:47:51+03:00"
+  lastValidatedGitSha: d3c768d064dfbbd7f86ef4d6b4dad41093850cef
+  lastValidationAt: "2026-08-22T12:50:00+03:00"
   blockedReason: null
   nextAction: "Complete affected manifest/canon/governance validation on the rebuilt frozen head, obtain one fresh exact-head adversarial review, then update PR #477 only if base/head remain unchanged."
 provenance:

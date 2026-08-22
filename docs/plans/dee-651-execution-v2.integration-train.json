@@ -392,7 +392,8 @@
         "cb4dab5a38af7408c2aa4a5cadfd4cac33b491f9",
         "20c005d181ff90b157ae764f3e4168bac22cf33c",
         "b8306f45f0c316de0519f56eddbe0fde2ff2173c",
-        "e9a53bb9090e5e06b3200dcee607660db52856aa"
+        "e9a53bb9090e5e06b3200dcee607660db52856aa",
+        "d3c768d064dfbbd7f86ef4d6b4dad41093850cef"
       ],
       "tests": [
         "pnpm run validate:execution-v2-consumer-graph",
@@ -516,7 +517,8 @@
           "cb4dab5a38af7408c2aa4a5cadfd4cac33b491f9",
           "20c005d181ff90b157ae764f3e4168bac22cf33c",
           "b8306f45f0c316de0519f56eddbe0fde2ff2173c",
-          "e9a53bb9090e5e06b3200dcee607660db52856aa"
+          "e9a53bb9090e5e06b3200dcee607660db52856aa",
+          "d3c768d064dfbbd7f86ef4d6b4dad41093850cef"
         ],
         "reviewedFiles": [
           ".github/workflows/ci.yml",
@@ -595,7 +597,7 @@
     ],
     "preFreezeValidation": {
       "status": "pass",
-      "validatedHead": "e9a53bb9090e5e06b3200dcee607660db52856aa",
+      "validatedHead": "d3c768d064dfbbd7f86ef4d6b4dad41093850cef",
       "baseMain": "8aa3d316d407f2f1ded567e8bb44123657972113",
       "semanticConflict": false,
       "productionDatabaseMutated": false,
