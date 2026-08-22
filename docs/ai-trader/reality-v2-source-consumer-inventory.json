@@ -15,6 +15,7 @@
     "lib/trader/reality/v2/source-admission.ts"
   ],
   "sourceDiscovery": {
+    "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
     "roots": [
       "lib/trader/connectors",
       "lib/trader/execution/v2",
@@ -34,7 +35,7 @@
     ],
     "expectedFileCount": 149,
     "sortedPathDigestHex": "4a33b21e4505875cce2e70e87fd8d71acee5028d18860b5789082a966dea360d",
-    "sortedContentDigestHex": "bdd1a5816f89fbfb5ad512e43dc9045eb056dcf703a3fa82df004d07740e782b"
+    "sortedContentDigestHex": "b572a74eabc2ab424c05829ccd214ee793380d9a9ebeddcbc1ca59a4a2106bfa"
   },
   "sourceRules": [
     {
@@ -94,6 +95,7 @@
   ],
   "consumerDiscovery": {
     "roots": ["lib", "app", "scripts"],
+    "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
     "additionalFiles": [
       "lib/trader/execution/index.ts",
       "lib/trader/execution/v2/index.ts"
@@ -103,19 +105,18 @@
       "@/lib/trader/execution/v2",
       "@/lib/trader/mi/raw-capture"
     ],
-    "connectorCallRoots": ["lib", "app"],
-    "connectorCallMarkers": [
-      "connector.getAccountInfo(",
-      "connector.getBalances(",
-      "connector.getPositions(",
-      "connector.getOpenOrders(",
-      "connector.getOrder(",
-      "connector.getTradeHistory(",
-      "connector.placeOrder("
+    "connectorMethods": [
+      "getAccountInfo",
+      "getBalances",
+      "getPositions",
+      "getOpenOrders",
+      "getOrder",
+      "getTradeHistory",
+      "placeOrder"
     ],
-    "expectedFileCount": 114,
-    "sortedPathDigestHex": "0259d0deb08ce554f4f5e53fa4ee9317f03ba7ea36880c7ef4e96a9d847b128b",
-    "sortedContentDigestHex": "2a69cdeee019f86090672c9be3deb5665aa64da30b6b0045bec40a5676c75c2d"
+    "expectedFileCount": 115,
+    "sortedPathDigestHex": "a7b975224ea14b26362edac31d602c0828a86323c6ccaa48d86c334b234acd3e",
+    "sortedContentDigestHex": "d6f6ed7445782aa059611ec86e5c451ca20e858f9ae0eed9204bc97e5e4f7c09"
   },
   "consumerRules": [
     {
@@ -161,54 +162,124 @@
   ],
   "explicitCompatibilityChecks": [
     {
-      "file": "lib/trader/credentials/connect-handler.ts",
-      "expectedCall": "connector.getAccountInfo(",
-      "disposition": "preserved; account output requires raw capture before Reality admission"
-    },
-    {
       "file": "lib/trader/balances/sync-handler.ts",
-      "expectedCall": "connector.getBalances(",
-      "disposition": "preserved; current snapshot is explicitly noncanonical until DEE-620 raw lineage exists"
+      "method": "getBalances",
+      "occurrences": 1,
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN until DEE-620 supplies admitted raw-capture lineage"
     },
     {
-      "file": "lib/trader/trade-history/sync-handler.ts",
-      "expectedCall": "connector.getTradeHistory(",
-      "disposition": "preserved; current snapshot is explicitly noncanonical until DEE-620 raw lineage exists"
+      "file": "lib/trader/connectors/htx/client.ts",
+      "method": "getOrder",
+      "occurrences": 2,
+      "disposition": "HTX private REST transport implementation only; canonical admission still requires the raw-capture adapter boundary"
     },
     {
-      "file": "lib/trader/positions/sync-handler.ts",
-      "expectedCall": "connector.getPositions(",
-      "disposition": "preserved; current snapshot is explicitly noncanonical until DEE-620 raw lineage exists"
-    },
-    {
-      "file": "lib/trader/execution/reconciliation-service.ts",
-      "expectedCall": "connector.getOrder(",
-      "disposition": "preserved; DEE-651 emits the only admitted ExecutionReportV2 lineage"
-    },
-    {
-      "file": "lib/trader/execution/reconciliation-service.ts",
-      "expectedCall": "connector.getOpenOrders(",
-      "disposition": "preserved operational reconciliation; it is not canonical Reality construction"
-    },
-    {
-      "file": "lib/trader/execution/reconciliation-service.ts",
-      "expectedCall": "connector.getTradeHistory(",
-      "disposition": "preserved operational reconciliation; it is not canonical Reality construction"
-    },
-    {
-      "file": "lib/trader/execution/execution-service.ts",
-      "expectedCall": "connector.getTradeHistory(",
-      "disposition": "preserved legacy execution reconciliation; no output is promoted into Reality"
-    },
-    {
-      "file": "lib/trader/execution/v2/connector-dispatch.ts",
-      "expectedCall": "connector.placeOrder(",
-      "disposition": "preserved; connector effect itself is not Reality truth"
+      "file": "lib/trader/connectors/htx/client.ts",
+      "method": "placeOrder",
+      "occurrences": 1,
+      "disposition": "HTX endpoint construction/transport only; HTX FAIL-UNKNOWN and no-blind-resend remain unchanged"
     },
     {
       "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
-      "expectedCall": "streamUserData()",
-      "disposition": "private WebSocket remains intentionally empty and excluded"
+      "method": "getBalances",
+      "occurrences": 1,
+      "disposition": "private HTX REST output is conditionally admissible only with an exact encrypted raw-capture receipt"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "getOpenOrders",
+      "occurrences": 1,
+      "disposition": "private HTX REST implementation; no direct Reality persistence or bypass"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "getOrder",
+      "occurrences": 2,
+      "disposition": "private HTX REST implementation and internal lookup; no direct Reality persistence or bypass"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "placeOrder",
+      "occurrences": 2,
+      "disposition": "single admitted Execution V2 connector effect plus endpoint reference; HTX FAIL-UNKNOWN/no blind resend unchanged"
+    },
+    {
+      "file": "lib/trader/credentials/connect-handler.ts",
+      "method": "getAccountInfo",
+      "occurrences": 1,
+      "disposition": "existing account compatibility probe; EXCLUDED_FAIL_UNCERTAIN without admitted raw-capture lineage"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getAccountInfo",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getBalances",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getOpenOrders",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getOrder",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getPositions",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getTradeHistory",
+      "occurrences": 2,
+      "disposition": "legacy wrapper and reconciliation read remain noncanonical"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "method": "getOpenOrders",
+      "occurrences": 2,
+      "disposition": "operational reconciliation only; DEE-651 ExecutionReportV2 is the sole admitted execution lineage"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "method": "getOrder",
+      "occurrences": 1,
+      "disposition": "operational reconciliation only; no direct Reality persistence"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "method": "getTradeHistory",
+      "occurrences": 1,
+      "disposition": "operational reconciliation only; no direct Reality persistence"
+    },
+    {
+      "file": "lib/trader/execution/v2/connector-dispatch.ts",
+      "method": "placeOrder",
+      "occurrences": 1,
+      "disposition": "the sole production connector placement effect; its immutable ExecutionReportV2 result is admitted separately"
+    },
+    {
+      "file": "lib/trader/positions/sync-handler.ts",
+      "method": "getPositions",
+      "occurrences": 1,
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN until DEE-620 supplies admitted raw-capture lineage"
+    },
+    {
+      "file": "lib/trader/trade-history/sync-handler.ts",
+      "method": "getTradeHistory",
+      "occurrences": 1,
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN until DEE-620 supplies admitted raw-capture lineage"
     }
   ],
   "forbiddenRealityImportSegments": [

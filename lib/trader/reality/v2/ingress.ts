@@ -43,6 +43,12 @@ export type RealityIngressRouteV2 =
       sourceClass: string;
       reasonCode: "SOURCE_CLASS_NOT_RATIFIED";
       evidenceDigestHex: string;
+    }>
+  | Readonly<{
+      status: "FAIL_UNCERTAIN";
+      sourceClass: "UNKNOWN_SOURCE_CLASS";
+      reasonCode: "UNKNOWN_SOURCE_CLASS";
+      evidenceDigestHex: string;
     }>;
 
 /** Exhaustive ingress router. Excluded evidence receives a digest receipt and is never silently dropped. */
@@ -85,6 +91,16 @@ export function routeRealityIngressV2(input: RealityIngressV2): RealityIngressRo
         reasonCode: "SOURCE_CLASS_NOT_RATIFIED",
         evidenceDigestHex: computeStableJsonDigest(input.evidence),
       });
+    default:
+      return Object.freeze({
+        status: "FAIL_UNCERTAIN",
+        sourceClass: "UNKNOWN_SOURCE_CLASS",
+        reasonCode: "UNKNOWN_SOURCE_CLASS",
+        evidenceDigestHex: computeStableJsonDigest({
+          sourceClass: "UNKNOWN_SOURCE_CLASS",
+          inputType: typeof input,
+        }),
+      });
   }
 }
 
@@ -94,7 +110,7 @@ export async function ingestRealityIngressV2Postgres(
   input: RealityIngressV2,
 ): Promise<RealityIngressRouteV2 | readonly RealityIngestResultV2[]> {
   const routed = routeRealityIngressV2(input);
-  if (routed.status === "EXCLUDED") return routed;
+  if (routed.status !== "ADMITTED") return routed;
   const results: RealityIngestResultV2[] = [];
   for (const draft of routed.drafts) {
     results.push(await ingestRealitySourceReportV2Postgres(db, context, draft));

@@ -149,4 +149,18 @@ describe("Reality V2 exhaustive ingress routing (DEE-679)", () => {
       receipt.status === "EXCLUDED" && receipt.reasonCode === "SOURCE_CLASS_NOT_RATIFIED" &&
       /^[0-9a-f]{64}$/.test(receipt.evidenceDigestHex))).toBe(true);
   });
+
+  it("fails uncertain for an unknown runtime source class", () => {
+    const route = routeRealityIngressV2({
+      kind: "UNRATIFIED_DYNAMIC_SOURCE",
+      rawBody: "must-not-be-copied",
+    } as never);
+    expect(route).toEqual({
+      status: "FAIL_UNCERTAIN",
+      sourceClass: "UNKNOWN_SOURCE_CLASS",
+      reasonCode: "UNKNOWN_SOURCE_CLASS",
+      evidenceDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(JSON.stringify(route)).not.toContain("must-not-be-copied");
+  });
 });

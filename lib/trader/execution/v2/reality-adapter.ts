@@ -39,7 +39,7 @@ function base(report: ExecutionReportV2) {
     structuralVerification: "VERIFIED" as const,
     verificationReasonCodes: [] as const,
     validAtUtc: report.observedAtUtc,
-  };
+  } as const;
 }
 
 function orderDraft(
