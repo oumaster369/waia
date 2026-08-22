@@ -598,6 +598,9 @@ DECLARE
   source_row public.trader_reality_source_reports_v2%ROWTYPE;
   superseded_row public.trader_reality_truth_records_v2%ROWTYPE;
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    NEW.organization_id::text || ':' || NEW.account_id, 675
+  ));
   SELECT * INTO source_row FROM public.trader_reality_source_reports_v2
   WHERE id = NEW.source_report_id AND organization_id = NEW.organization_id
     AND account_id = NEW.account_id;
@@ -763,10 +766,38 @@ BEGIN
           AND source_row.source_native_revision IS NOT NULL
           AND source_row.supersedes_native_revision IS NOT NULL
           AND NEW.reason_codes = '["CORRECTION_TARGET_NOT_FOUND"]'::jsonb
+          AND NOT EXISTS (
+            SELECT 1 FROM public.trader_reality_truth_records_v2 target_truth
+            WHERE target_truth.organization_id = NEW.organization_id
+              AND target_truth.account_id = NEW.account_id
+              AND target_truth.source_kind = source_row.source_kind
+              AND target_truth.source_native_identity_kind IS NOT DISTINCT FROM
+                source_row.source_native_identity_kind
+              AND target_truth.source_native_id IS NOT DISTINCT FROM source_row.source_native_id
+              AND target_truth.source_native_revision IS NOT DISTINCT FROM
+                source_row.supersedes_native_revision
+              AND target_truth.subject_class = source_row.subject_class
+              AND target_truth.subject_key = source_row.subject_key
+              AND target_truth.markers = '[]'::jsonb
+              AND EXISTS (
+                SELECT 1 FROM public.trader_reality_events_v2 stable_event
+                WHERE stable_event.organization_id = target_truth.organization_id
+                  AND stable_event.account_id = target_truth.account_id
+                  AND stable_event.truth_record_id = target_truth.id
+                  AND stable_event.event_type IN ('OBSERVED', 'SUPERSEDED')
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM public.trader_reality_events_v2 later_correction
+                WHERE later_correction.organization_id = target_truth.organization_id
+                  AND later_correction.account_id = target_truth.account_id
+                  AND later_correction.related_truth_record_id = target_truth.id
+                  AND later_correction.event_type = 'SUPERSEDED'
+              )
+          )
         )
       )
     THEN
-      RAISE EXCEPTION 'QUARANTINED must exactly preserve one source-only causal episode'
+      RAISE EXCEPTION 'QUARANTINED must exactly preserve one source-only causal episode with an absent correction target'
         USING ERRCODE = 'check_violation';
     END IF;
   ELSIF NEW.event_type = 'SOURCE_CONTRADICTION' THEN
