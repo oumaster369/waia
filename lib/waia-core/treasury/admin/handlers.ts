@@ -1959,7 +1959,10 @@ export async function handleTreasuryCategoryBudgetsGet(
         const context = requireOrgContext(organizationId);
         const yearRaw = url.searchParams.get("year");
         if (yearRaw !== null) {
-          const year = requireInt(yearRaw, "year");
+          if (!/^\d{4}$/.test(yearRaw)) {
+            throw new TreasuryValidationError("INVALID_BODY", "year must be a four-digit integer");
+          }
+          const year = requireInt(Number.parseInt(yearRaw, 10), "year");
           return adminSuccess({
             annual: serializeCategoryBudgetAnnual(
               await services.ledgerCatalog.getBudgetAnnualSummary(context, year),
