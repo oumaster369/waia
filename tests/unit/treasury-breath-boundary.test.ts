@@ -18,7 +18,7 @@ import {
 } from "@/tests/unit/helpers/treasury-wp6";
 
 describe("DEE-606 WP-6 server/public boundary", () => {
-  it("105-115 admin preview, server snapshot, no public HTTP, no R2, watcher DARK, WP-7 untouched", async () => {
+  it("105-115 admin preview, DEE-617 public GET, no R2, watcher DARK, WP-7 untouched", async () => {
     const { services } = createWp6Bundle();
     await seedPublishableControl(services);
     await seedTx(services, {
@@ -67,9 +67,16 @@ describe("DEE-606 WP-6 server/public boundary", () => {
 
     const root = process.cwd();
     expect(existsSync(path.join(root, "app/api/treasury"))).toBe(false);
-    expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(false);
+    expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(true);
     expect(existsSync(path.join(root, "app/api/breath"))).toBe(false);
     expect(existsSync(path.join(root, "app/api/admin/treasury/breath-preview"))).toBe(true);
+
+    const publicRoute = readFileSync(
+      path.join(root, "app/api/public/treasury/route.ts"),
+      "utf8",
+    );
+    expect(publicRoute).toContain("export async function GET()");
+    expect(publicRoute).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);
 
     const breathDir = path.join(root, "lib/waia-core/treasury/breath");
     const breathFiles = [
