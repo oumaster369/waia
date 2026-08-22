@@ -12,6 +12,7 @@ describe("Reality V2 HTX ingress boundary integration (DEE-679)", () => {
         accountId: "htx-spot-integration",
         lineage: {
           lineageKind: "RAW_CAPTURE_V1",
+          rawCaptureSourceId: "00000000-0000-4000-8000-000000067911",
           rawCaptureReceiptDigestHex: "a".repeat(64),
           rawBytesDigestHex: "b".repeat(64),
           storageBindingDigestHex: "c".repeat(64),
@@ -37,6 +38,7 @@ describe("Reality V2 HTX ingress boundary integration (DEE-679)", () => {
     expect(() => assertRealitySourceReportAdmissionV2(report)).not.toThrow();
     expect(report.lineage).toEqual({
       lineageKind: "RAW_CAPTURE_V1",
+      rawCaptureSourceId: "00000000-0000-4000-8000-000000067911",
       rawCaptureReceiptDigestHex: "a".repeat(64),
       rawBytesDigestHex: "b".repeat(64),
       storageBindingDigestHex: "c".repeat(64),

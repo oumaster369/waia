@@ -18,6 +18,7 @@ const context = {
   accountId: ACCOUNT,
   lineage: {
     lineageKind: "RAW_CAPTURE_V1" as const,
+    rawCaptureSourceId: "00000000-0000-4000-8000-000000000680",
     rawCaptureReceiptDigestHex: DIGEST_A,
     rawBytesDigestHex: DIGEST_B,
     storageBindingDigestHex: DIGEST_C,
