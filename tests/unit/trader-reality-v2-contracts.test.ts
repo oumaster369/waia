@@ -56,6 +56,7 @@ function rawFillDraft(
     primitiveAssertion: fillAssertion(),
     lineage: {
       lineageKind: "RAW_CAPTURE_V1",
+      rawCaptureSourceId: "00000000-0000-4000-8000-000000067611",
       rawCaptureReceiptDigestHex: DIGEST_A,
       rawBytesDigestHex: DIGEST_B,
       storageBindingDigestHex: DIGEST_C,
@@ -292,6 +293,7 @@ describe("Reality V2 A contracts and source admission (DEE-676)", () => {
       sourceReportId: source.sourceReportId,
       truthRecordId: truth.truthRecordId,
       relatedTruthRecordId: null,
+      quarantineEventId: null,
       reasonCodes: [],
       knowledgeAtUtc: source.knowledgeAtUtc,
       previousEventDigestHex: null,

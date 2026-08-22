@@ -69,6 +69,7 @@ export type RealityExecutionReportLineageV2 = Readonly<{
 
 export type RealityRawCaptureLineageV2 = Readonly<{
   lineageKind: "RAW_CAPTURE_V1";
+  rawCaptureSourceId: string;
   rawCaptureReceiptDigestHex: string;
   rawBytesDigestHex: string;
   storageBindingDigestHex: string;
@@ -217,6 +218,7 @@ export type RealityEventV2 = Readonly<{
   sourceReportId: string;
   truthRecordId: string | null;
   relatedTruthRecordId: string | null;
+  quarantineEventId: string | null;
   reasonCodes: readonly string[];
   knowledgeAtUtc: string;
   previousEventDigestHex: string | null;
@@ -238,6 +240,7 @@ export type RealityProjectionEntryV2 = Readonly<{
 }>;
 
 export type RealityProjectionUncertaintyV2 = Readonly<{
+  quarantineEventId: string;
   sourceReportId: string;
   subject: RealitySubjectIdentityV2;
   marker: RealityMarkerV2;
@@ -377,11 +380,12 @@ function canonicalLineage(value: RealitySourceLineageV2): RealitySourceLineageV2
   }
   exactKeys(
     value,
-    ["lineageKind", "rawCaptureReceiptDigestHex", "rawBytesDigestHex", "storageBindingDigestHex"],
+    ["lineageKind", "rawCaptureSourceId", "rawCaptureReceiptDigestHex", "rawBytesDigestHex", "storageBindingDigestHex"],
     "lineage",
   );
   return Object.freeze({
     lineageKind: value.lineageKind,
+    rawCaptureSourceId: requireUuid(value.rawCaptureSourceId, "rawCaptureSourceId"),
     rawCaptureReceiptDigestHex: requireDigest(value.rawCaptureReceiptDigestHex, "rawCaptureReceiptDigestHex"),
     rawBytesDigestHex: requireDigest(value.rawBytesDigestHex, "rawBytesDigestHex"),
     storageBindingDigestHex: requireDigest(value.storageBindingDigestHex, "storageBindingDigestHex"),
@@ -579,6 +583,12 @@ export function createRealityEventV2(draft: RealityEventV2Draft): RealityEventV2
   if (draft.relatedTruthRecordId !== null) {
     requireDigest(draft.relatedTruthRecordId, "relatedTruthRecordId");
   }
+  if (draft.quarantineEventId !== null) {
+    requireDigest(draft.quarantineEventId, "quarantineEventId");
+  }
+  if ((draft.eventType === "RELEASED") !== (draft.quarantineEventId !== null)) {
+    throw new Error("quarantineEventId is required only for RELEASED");
+  }
   if ((draft.eventSequence === "1") !== (draft.previousEventDigestHex === null)) {
     throw new Error("Reality event chain head mismatch");
   }
@@ -619,13 +629,14 @@ export function createRealityProjectionV2(draft: RealityProjectionV2Draft): Real
     ));
   const uncertainties = draft.uncertainties.map((entry) => Object.freeze({
     ...entry,
+    quarantineEventId: requireDigest(entry.quarantineEventId, "quarantineEventId"),
     sourceReportId: requireDigest(entry.sourceReportId, "sourceReportId"),
     subject: canonicalSubject(entry.subject),
     reasonCodes: canonicalReasons(entry.reasonCodes, "uncertainty reasonCodes"),
   })).sort((left, right) =>
-    `${left.subject.subjectClass}:${left.subject.subjectKey}:${left.sourceReportId}:${left.marker}`
+    `${left.subject.subjectClass}:${left.subject.subjectKey}:${left.sourceReportId}:${left.quarantineEventId}:${left.marker}`
       .localeCompare(
-        `${right.subject.subjectClass}:${right.subject.subjectKey}:${right.sourceReportId}:${right.marker}`,
+        `${right.subject.subjectClass}:${right.subject.subjectKey}:${right.sourceReportId}:${right.quarantineEventId}:${right.marker}`,
       ));
   const payload = {
     ...draft,
