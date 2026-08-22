@@ -48,12 +48,10 @@ function TransactionTableInner() {
   const limit = 50;
 
   const counterparties = useLedgerCatalog(organizationId, "counterparties");
-  const accounts = useLedgerCatalog(organizationId, "accounts");
   const categories = useLedgerCatalog(organizationId, "categories");
   const projects = useLedgerCatalog(organizationId, "projects");
   const labels = {
     counterparties: itemMap(counterparties.items),
-    accounts: itemMap(accounts.items),
     categories: itemMap(categories.items),
     projects: itemMap(projects.items),
   };
@@ -188,20 +186,17 @@ function TransactionTableInner() {
       ) : null}
       {!loading && !error && rows.length > 0 ? (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[1180px] text-left text-sm">
+          <table className="w-full min-w-[1040px] text-left text-sm">
             <thead className="bg-muted/30">
               <tr className="border-b">
-                <th className="p-3">Date & time</th>
-                <th className="p-3">Status</th>
-                <th className="p-3 text-right">Amount</th>
                 <th className="p-3">Counterparty</th>
-                <th className="p-3">Account</th>
                 <th className="p-3">Category</th>
+                <th className="p-3 text-right">Amount</th>
+                <th className="p-3">Status</th>
+                <th className="p-3">Date & time</th>
                 <th className="p-3">Project</th>
                 <th className="p-3">Notes</th>
-                <th className="p-3">
-                  <span className="sr-only">Action</span>
-                </th>
+                <th className="p-3">Review</th>
               </tr>
             </thead>
             <tbody>
@@ -209,12 +204,15 @@ function TransactionTableInner() {
                 const occurred = formatOccurredAt(row.occurredAt);
                 return (
                   <tr key={row.id} className="border-b last:border-b-0">
-                    <td className="p-3 whitespace-nowrap">
-                      <span className="block">{occurred.date}</span>
-                      <span className="text-muted-foreground text-xs">{occurred.time}</span>
+                    <td className="p-3">
+                      {(row.counterpartyId && labels.counterparties.get(row.counterpartyId)) ??
+                        row.counterpartyDisplay ??
+                        "—"}
                     </td>
                     <td className="p-3">
-                      <AccountingStatusPill status={row.status} />
+                      {(row.categoryId && labels.categories.get(row.categoryId)) ??
+                        row.category ??
+                        "—"}
                     </td>
                     <td
                       className={cn(
@@ -230,17 +228,11 @@ function TransactionTableInner() {
                       ) : null}
                     </td>
                     <td className="p-3">
-                      {(row.counterpartyId && labels.counterparties.get(row.counterpartyId)) ??
-                        row.counterpartyDisplay ??
-                        "—"}
+                      <AccountingStatusPill status={row.status} />
                     </td>
-                    <td className="p-3">
-                      {(row.accountId && labels.accounts.get(row.accountId)) ?? "—"}
-                    </td>
-                    <td className="p-3">
-                      {(row.categoryId && labels.categories.get(row.categoryId)) ??
-                        row.category ??
-                        "—"}
+                    <td className="p-3 whitespace-nowrap">
+                      <span className="block">{occurred.date}</span>
+                      <span className="text-muted-foreground text-xs">{occurred.time}</span>
                     </td>
                     <td className="p-3">
                       {(row.projectId && labels.projects.get(row.projectId)) ??

@@ -12,6 +12,9 @@ const NAV = [
   { href: "/finance", label: "Overview" },
   { href: "/finance/transactions", label: "Transactions" },
   { href: "/finance/budgets", label: "Budget" },
+  { href: "/finance/counterparties", label: "Counterparties" },
+  { href: "/finance/accounts", label: "Accounts" },
+  { href: "/finance/projects", label: "Projects" },
 ] as const;
 
 function FinanceNav() {

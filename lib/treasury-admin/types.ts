@@ -63,6 +63,17 @@ export type TreasuryCounterpartySummaryDto = {
   isActive: boolean;
 };
 
+export type TreasuryCounterpartyDto = TreasuryCounterpartySummaryDto & {
+  organizationId: string;
+  waiaUserId: string | null;
+  websiteUrl: string | null;
+  email: string | null;
+  phone: string | null;
+  paymentInstructions: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TreasuryAccountSummaryDto = {
   id: string;
   displayName: string;
@@ -72,17 +83,59 @@ export type TreasuryAccountSummaryDto = {
   isActive: boolean;
 };
 
+export type TreasuryAccountDto = TreasuryAccountSummaryDto & {
+  organizationId: string;
+  address: string | null;
+  maskedRequisites: string | null;
+  watchedAddressId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TreasuryCategoryDto = {
   id: string;
   organizationId: string;
   code: string;
   name: string;
+  groupName: string;
   description: string | null;
   monthlyBudgetMicros: string;
   currency: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TreasuryCategoryBudgetTotalDto = {
+  currency: string;
+  budgetMicros: string;
+  spentMicros: string;
+  remainingMicros: string;
+};
+
+export type TreasuryCategoryBudgetCategoryDto = TreasuryCategoryBudgetTotalDto & {
+  categoryId: string;
+  code: string;
+  name: string;
+  groupName: string;
+  isActive: boolean;
+};
+
+export type TreasuryCategoryBudgetGroupDto = TreasuryCategoryBudgetTotalDto & {
+  groupName: string;
+};
+
+export type TreasuryCategoryBudgetMonthDto = {
+  month: string;
+  categories: TreasuryCategoryBudgetCategoryDto[];
+  groups: TreasuryCategoryBudgetGroupDto[];
+  totals: TreasuryCategoryBudgetTotalDto[];
+};
+
+export type TreasuryCategoryBudgetAnnualDto = {
+  year: number;
+  totals: TreasuryCategoryBudgetTotalDto[];
+  months: TreasuryCategoryBudgetMonthDto[];
 };
 
 export type TreasuryProjectDto = {

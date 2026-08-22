@@ -77,7 +77,7 @@ export function LedgerCatalogSelect({
   const [network, setNetwork] = React.useState("");
   const [address, setAddress] = React.useState("");
   const [maskedRequisites, setMaskedRequisites] = React.useState("");
-  const [code, setCode] = React.useState("");
+  const [groupName, setGroupName] = React.useState("Other");
   const [monthlyBudget, setMonthlyBudget] = React.useState("0");
   const [startsOn, setStartsOn] = React.useState("");
   const [endsOn, setEndsOn] = React.useState("");
@@ -117,19 +117,19 @@ export function LedgerCatalogSelect({
         masked_requisites: maskedRequisites.trim() || null,
       });
     } else if (kind === "categories") {
-      const parsed = parseHumanDecimalToAtomic(monthlyBudget, 6, { requirePositive: false });
+      const parsed = parseHumanDecimalToAtomic(monthlyBudget, 6, { requirePositive: true });
       if (!parsed.ok) {
         setCreateError(parsed.message);
         return;
       }
       Object.assign(body, {
-        code: code.trim(),
+        group_name: groupName.trim(),
         description: description.trim() || null,
         monthly_budget_micros: parsed.atomic,
         currency: currency.trim(),
       });
-      if (!code.trim() || !currency.trim()) {
-        setCreateError("Category code and currency are required.");
+      if (!groupName.trim() || !currency.trim()) {
+        setCreateError("Category group and currency are required.");
         return;
       }
     } else {
@@ -286,12 +286,20 @@ export function LedgerCatalogSelect({
           ) : null}
           {kind === "categories" ? (
             <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                aria-label="Category code"
-                placeholder="Category code"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-              />
+              <div>
+                <Input
+                  aria-label="Category group"
+                  placeholder="Group"
+                  list={`${id}-category-groups`}
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                />
+                <datalist id={`${id}-category-groups`}>
+                  {["Development", "Advertising", "Payroll", "Equipment", "Office"].map(
+                    (group) => <option key={group} value={group} />,
+                  )}
+                </datalist>
+              </div>
               <Input
                 aria-label="Monthly budget"
                 placeholder="Monthly budget"
