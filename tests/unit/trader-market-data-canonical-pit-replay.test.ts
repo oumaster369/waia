@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { prepareCanonicalPitAttemptV1 } from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
 import { OBSERVATION_SCHEMA_VERSION, type NormalizedObservation } from "@/lib/trader/market-data/observation-types";
 import { prepareCanonicalPitReplayBatchV1 } from "@/lib/trader/market-data/replay/canonical-pit-replay";
+import { ensureExplicitAbsentLanes } from "@/lib/trader/market-data/replay/replay-lane-normalizer";
 
 function observation(): NormalizedObservation {
   return {
@@ -56,5 +57,27 @@ describe("DEE-683 canonical PIT replay convergence", () => {
     expect(() =>
       prepareCanonicalPitReplayBatchV1({ evaluatedAtUtc: "invalid", observations: [observation()] }),
     ).toThrow("CANONICAL_PIT_REPLAY_INVALID_CUTOFF");
+  });
+
+  it("keeps an explicit absent news lane UNAVAILABLE under registered provenance", () => {
+    const evaluatedAt = "2026-08-23T09:00:05.000Z";
+    const bundle = ensureExplicitAbsentLanes({
+      bundle: {},
+      instrumentId: "BTC/USDT",
+      evaluatedAt,
+      degradationReasons: [],
+    });
+    const absentHeadline = bundle.newsEvidence.find((entry) => entry.kind === "news_headline");
+
+    expect(absentHeadline?.provenance).toMatchObject({
+      providerId: "coindesk_rss",
+      venue: "coindesk",
+      feedKind: "news_headline",
+    });
+    expect(prepareCanonicalPitAttemptV1(absentHeadline!)).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "SOURCE_UNAVAILABLE",
+      payloadCanonical: null,
+    });
   });
 });
