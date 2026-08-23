@@ -281,7 +281,8 @@
       "integratedCommits": [
         "5670e2557e0c32827d3fa757c3453144bd4c6d56",
         "c215193f60f13dbb9689c9e0f30b648d73c18abc",
-        "a612c76ecae430d2bb7eca2a880e9218024e6fec"
+        "a612c76ecae430d2bb7eca2a880e9218024e6fec",
+        "126c6f8acc64b46a530200163dafa99209bd8822"
       ],
       "tests": [
         "repository-wide source/consumer closure tests (3/3 pass)",
@@ -370,7 +371,8 @@
         "reviewedCommits": [
           "5670e2557e0c32827d3fa757c3453144bd4c6d56",
           "c215193f60f13dbb9689c9e0f30b648d73c18abc",
-          "a612c76ecae430d2bb7eca2a880e9218024e6fec"
+          "a612c76ecae430d2bb7eca2a880e9218024e6fec",
+          "126c6f8acc64b46a530200163dafa99209bd8822"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
