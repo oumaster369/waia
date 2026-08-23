@@ -7,6 +7,7 @@ import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
@@ -26,6 +27,10 @@ export function buildWp14Bundle(
   runId: string,
   cycleId: string,
 ): ForecastDecisionBundle {
+  const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "HTR_WP14_POSTGRES_TEST",
+  });
   const cycle = runEvaluationCycle({
     organizationId,
     bars: wp13Bars(),
@@ -34,6 +39,7 @@ export function buildWp14Bundle(
     cycleId,
     newId: createDeterministicReplayIdFactory(415_140),
     costModel: createCostModelV1("10", "5"),
+    informationSufficiencyAuthority,
   });
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
     organizationId,
@@ -50,6 +56,7 @@ export function buildWp14Bundle(
     msv: cycle.msv,
     signal: cycle.signal,
     costModel: createCostModelV1("10", "5"),
+    informationSufficiencyAuthority,
   });
 }
 

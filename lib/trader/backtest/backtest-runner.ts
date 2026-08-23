@@ -76,6 +76,7 @@ import type {
 } from "@/lib/trader/paper/paper-cycle.types";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
+import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import {
   buildQuoteCurrencyBySymbol,
@@ -229,6 +230,8 @@ export type RunBacktestInput = {
   checkpointRunRoot?: string;
   /** HTR-WP13: explicit historical intelligence profile (never global default). */
   historicalProfile?: HistoricalIntelligenceProfile;
+  /** Explicit research declaration or exact receipt; omission blocks simulated entries. */
+  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
   /** HTR-WP13: optional intelligence records persistence sink. */
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
   /** HTR-WP14: optional forecast-decision persistence sink. */
@@ -908,6 +911,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         reconstruction,
         wp16: input.wp16,
         historicalProfile: input.historicalProfile,
+        informationSufficiencyAuthority: input.informationSufficiencyAuthority,
         runId: input.runId,
         costModel: input.costModel,
         omitIntelligenceArtifacts:
@@ -983,7 +987,11 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         wp13Persisted = true;
       }
 
-      if (result.evaluation.hypothesisSet) {
+      if (
+        result.evaluation.hypothesisSet &&
+        result.evaluation.forecastDecisionBundle &&
+        input.informationSufficiencyAuthority
+      ) {
         const forecastDecisionInput = {
           intelligenceCycleBundle: bundle,
           hypothesisSet: result.evaluation.hypothesisSet,
@@ -991,6 +999,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           msv: result.evaluation.msv,
           signal: result.evaluation.signal,
           costModel: input.costModel,
+          informationSufficiencyAuthority: input.informationSufficiencyAuthority,
           wp13Persisted,
         };
 

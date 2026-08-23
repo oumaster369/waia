@@ -13,6 +13,7 @@ import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/record
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import {
@@ -109,6 +110,10 @@ describe.skipIf(!integrationEnabled || !url)(
         cycleId: "0",
         newId: createDeterministicReplayIdFactory(415_140),
         costModel: createCostModelV1("10", "5"),
+        informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
+          organizationId: orgA,
+          reason: "HTR_WP14_POSTGRES_NO_SINK_TEST",
+        }),
       });
       expect(cycle.forecastDecisionBundle).toBeDefined();
       const counts = await countWp14RowsForRun(url!, orgA, "wp14-no-sink");

@@ -10,6 +10,10 @@ import { assertForecastDecisionChainComplete } from "@/lib/trader/intelligence/f
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
+import {
+  evaluateInformationSufficiencyRuntimeAdmissionV2,
+  type InformationSufficiencyRuntimeAuthorityV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { MsvEnvelope, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -21,11 +25,26 @@ export type BuildForecastDecisionBundleInput = Readonly<{
   msv: MsvEnvelope;
   signal: StrategySignal;
   costModel?: CostModelV1;
+  informationSufficiencyAuthority: InformationSufficiencyRuntimeAuthorityV2;
 }>;
 
 export function buildForecastDecisionBundle(
   input: BuildForecastDecisionBundleInput,
 ): ForecastDecisionBundle {
+  const sufficiencyAdmission = evaluateInformationSufficiencyRuntimeAdmissionV2({
+    authority: input.informationSufficiencyAuthority,
+    organizationId: input.intelligenceCycleBundle.envelope.organizationId,
+    requiredPurpose: "NEW_OPPORTUNITY",
+    allowResearchNonCapital: true,
+    expectedScope: {
+      symbol: input.intelligenceCycleBundle.envelope.symbol,
+      pitAnchor: input.intelligenceCycleBundle.envelope.evaluatedAt,
+    },
+  });
+  if (sufficiencyAdmission.status === "BLOCKED") {
+    throw new Error(`INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:${sufficiencyAdmission.reasonCode}`);
+  }
+
   const hypothesesByType = Object.fromEntries(
     input.hypothesisSet.hypotheses.map((hypothesis) => [hypothesis.hypothesisType, hypothesis]),
   );

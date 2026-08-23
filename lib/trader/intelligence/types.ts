@@ -17,6 +17,7 @@ import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothe
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
@@ -284,6 +285,8 @@ export type EvaluationCycleInput = {
   symbol?: string;
   /** HTR-WP14: cost model for net-economics fail-closed decision records. */
   costModel?: CostModelV1;
+  /** DEE-621: exact receipt authority or explicit research-only declaration. Omission fails closed. */
+  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
   /**
    * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
    * Does not alter MSV/signals/hypothesis economics.

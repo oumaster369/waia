@@ -36,6 +36,7 @@ import {
 } from "@/lib/trader/execution";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { Bar, EvaluationCycleResult, Quote } from "@/lib/trader/intelligence/types";
 import { FixtureBarReplaySource } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import type { BarPollSource } from "@/lib/trader/market-data/types";
@@ -65,6 +66,13 @@ import type { OrgRiskLimitsMetadata, RiskLimitsService } from "@/lib/trader/risk
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const ORG = "00000000-0000-4000-8000-0000000260";
+
+function researchAuthority(organizationId = ORG) {
+  return declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "TRADER_PAPER_CYCLE_UNIT_TEST",
+  });
+}
 
 const EMPTY_STATE: AccountRiskState = {
   positions: [],
@@ -245,6 +253,7 @@ describe("paper cycle runner (DEE-260)", () => {
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
       telemetrySink: sink,
+      informationSufficiencyAuthority: researchAuthority(),
     });
 
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ telemetrySink: sink }));
@@ -274,6 +283,7 @@ describe("paper cycle runner (DEE-260)", () => {
       accountKey: "acct-260",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      informationSufficiencyAuthority: researchAuthority(),
     });
 
     expect(deps.execution.submitOrder).toHaveBeenCalledWith(
@@ -322,6 +332,7 @@ describe("paper cycle runner (DEE-260)", () => {
       accountKey: "acct-260",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      informationSufficiencyAuthority: researchAuthority(),
     });
 
     expect(result.strategyExecutions).toHaveLength(2);
@@ -354,6 +365,7 @@ describe("paper cycle runner (DEE-260)", () => {
       accountKey: "acct-260",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      informationSufficiencyAuthority: researchAuthority(),
     });
 
     expect(result.skipReason).toBe("no_signal");
@@ -374,6 +386,7 @@ describe("paper cycle runner (DEE-260)", () => {
       accountKey: "acct-260",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      informationSufficiencyAuthority: researchAuthority(),
     });
 
     expect(results).toHaveLength(3);
@@ -404,6 +417,7 @@ describe("paper cycle runner (DEE-260)", () => {
       accountKey: "acct-260",
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
+      informationSufficiencyAuthority: researchAuthority(),
     });
 
     expect(results).toHaveLength(3);
@@ -551,6 +565,7 @@ describe("paper cycle runner — M2 portfolio sizing (DEE-377)", () => {
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
       orderRepository,
+      informationSufficiencyAuthority: researchAuthority(),
       portfolio: portfolioContext({
         runConfig: {
           ...DEFAULT_PORTFOLIO_RUN_CONFIG,
@@ -681,6 +696,7 @@ describe("paper cycle runner — M2 portfolio sizing (DEE-377)", () => {
       defaultQuantity: "0.01",
       accountState: EMPTY_STATE,
       orderRepository,
+      informationSufficiencyAuthority: researchAuthority(),
       portfolio: portfolioContext({
         limits: {
           maxRiskPerTradePct: "0.10",
