@@ -107,5 +107,14 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
     );
     expect(gateway).toContain("canonicalPitCandidates");
     expect(gateway).not.toContain("canonical-pit-repository-postgres");
+
+    const legacyReader = readFileSync(
+      join(root, CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.internalMsv.sharedTableReader),
+      "utf8",
+    );
+    expect(
+      CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.internalMsv.sharedTableDisposition,
+    ).toBe("INTERNAL_MSV_ONLY_FILTERED");
+    expect(legacyReader.match(/observationKind, INTERNAL_MSV_KIND/g)).toHaveLength(4);
   });
 });

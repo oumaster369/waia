@@ -43,7 +43,9 @@ export const CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1 = {
   internalMsv: {
     producer: "lib/trader/mi/record-msv-observation-safe.ts",
     consumer: "lib/trader/mi/observation-service.ts",
+    sharedTableReader: "lib/trader/mi/observation-repository-postgres.ts",
     disposition: "CANONICAL_INTERNAL_PRIMITIVE",
+    sharedTableDisposition: "INTERNAL_MSV_ONLY_FILTERED",
   },
   normalizedGateway: {
     producer: "lib/trader/market-data/market-data-gateway.ts",
