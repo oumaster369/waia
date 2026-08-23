@@ -60,9 +60,9 @@
         "Measurement definitions and values are content-addressed inert identity/lineage contracts with no computational evaluator or capital authority."
       ],
       "integratedCommits": [
-        "6d12460d623317ddc8384434c0626be5dd0a7f1b",
-        "a07f60c04180379d7ada7dbb2b93231eee34cd20",
-        "04646dc22d09d12d4eb12da04470385955c895d4"
+        "33a70953ab7551e964d0a982dfdcef7b86b0ce11",
+        "a9cc27705e4f1f902cff142ae382de9590cce1a5",
+        "f4f2513bac16d57fd0d81c13195f9b4c985029bd"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-mi-canonical-contracts.test.ts (5/5 pass)",
@@ -123,22 +123,26 @@
         "lib/trader/mi/canonical-pit-repository-postgres.ts",
         "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
         "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
-        "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
+        "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts",
+        "tests/unit/trader-reality-v2-migration-identity.test.ts"
       ],
       "acceptanceEvidence": [
         "Fresh PostgreSQL migration apply succeeds through the sole next migration 0161 and the Drizzle smoke passes.",
         "External Observations bind exact organization, Source, historical trust receipt/revision/digest, PIT chronology, normalized input, content digest, and append-only revision lineage.",
         "Four service-only relations enforce same-organization foreign keys, append-only mutation denial, and authenticated/anon deny RLS.",
-        "Focused PostgreSQL tests prove deterministic idempotency, cross-tenant rejection, real-role CRUD denial, and inert Measurement lineage completeness."
+        "Focused PostgreSQL tests prove deterministic idempotency, cross-tenant rejection, real-role CRUD denial, and inert Measurement lineage completeness.",
+        "Reality V2 migration identity test retains every exact 0160 assertion and passes with legitimate migration 0161 after changing only journal lookup order dependence."
       ],
       "integratedCommits": [
-        "de84c823357d252f9fba35d74c646f8965c5f461"
+        "d5cbfddd7ad66aaf2785527cdbf9ba68cd6302d8",
+        "2fe986e33968c7ced546d1f4a955bb9199e82e4a"
       ],
       "tests": [
         "fresh pnpm db:migrate:postgres through 0161 (pass)",
         "pnpm db:smoke:postgres (pass)",
         "WAIA_PG_INTEGRATION=1 PostgreSQL canonical PIT suite (5/5 cumulative pass)",
         "migration identity and cumulative contract unit tests (pass)",
+        "Reality V2 exact migration identity/content/uniqueness test (5/5 pass)",
         "pnpm typecheck and scoped eslint (pass)"
       ],
       "execution": {
@@ -199,7 +203,7 @@
         "Eligible gateway and replay inputs reproduce identical Observation and receipt identities while future evidence fails closed."
       ],
       "integratedCommits": [
-        "49f09ff584be037b67ebb94ebf28cebba63b921a"
+        "801e50ec327dde9fe68965b72e24cddc706c5cfb"
       ],
       "tests": [
         "canonical gateway/replay unit tests (7/7 pass)",
@@ -265,7 +269,7 @@
         "PostgreSQL closes representative ohlcv_bar and news_headline Source/trust/PIT Observation/inert Measurement lineage with replay identity and cross-tenant rejection."
       ],
       "integratedCommits": [
-        "9bfef7d96a16dc1590e8e98192ddaa80440d4f4e"
+        "4369e6b46bc16343ad67cb8ca656dd8e9c229a65"
       ],
       "tests": [
         "repository-wide source/consumer closure tests (3/3 pass)",
@@ -294,9 +298,9 @@
         "issue": "DEE-681",
         "status": "pass",
         "reviewedCommits": [
-          "6d12460d623317ddc8384434c0626be5dd0a7f1b",
-          "a07f60c04180379d7ada7dbb2b93231eee34cd20",
-          "04646dc22d09d12d4eb12da04470385955c895d4"
+          "33a70953ab7551e964d0a982dfdcef7b86b0ce11",
+          "a9cc27705e4f1f902cff142ae382de9590cce1a5",
+          "f4f2513bac16d57fd0d81c13195f9b4c985029bd"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/normalization/canonical-pit-contract.ts",
@@ -311,7 +315,10 @@
       {
         "issue": "DEE-682",
         "status": "pass",
-        "reviewedCommits": ["de84c823357d252f9fba35d74c646f8965c5f461"],
+        "reviewedCommits": [
+          "d5cbfddd7ad66aaf2785527cdbf9ba68cd6302d8",
+          "2fe986e33968c7ced546d1f4a955bb9199e82e4a"
+        ],
         "reviewedFiles": [
           "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
           "db/migrations_postgres/meta/_journal.json",
@@ -320,13 +327,14 @@
           "lib/trader/mi/canonical-pit-repository-postgres.ts",
           "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
           "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
-          "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
+          "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts",
+          "tests/unit/trader-reality-v2-migration-identity.test.ts"
         ]
       },
       {
         "issue": "DEE-683",
         "status": "pass",
-        "reviewedCommits": ["49f09ff584be037b67ebb94ebf28cebba63b921a"],
+        "reviewedCommits": ["801e50ec327dde9fe68965b72e24cddc706c5cfb"],
         "reviewedFiles": [
           "lib/trader/market-data/market-data-gateway.ts",
           "lib/trader/market-data/normalization/gateway-to-canonical-pit.ts",
@@ -340,7 +348,7 @@
       {
         "issue": "DEE-684",
         "status": "pass",
-        "reviewedCommits": ["9bfef7d96a16dc1590e8e98192ddaa80440d4f4e"],
+        "reviewedCommits": ["4369e6b46bc16343ad67cb8ca656dd8e9c229a65"],
         "reviewedFiles": [
           "lib/trader/mi/canonical-source-consumer-inventory-v1.ts",
           "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
@@ -396,6 +404,8 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "supersededFrozenHead": "7f9072b1c5bc9b9f752b7a2b660225a5682420cf",
+      "reAdmissionManifestCommit": "bafeae6360e6d88dd81315f9bf1f6d42b326ba59",
+      "reAdmissionManifestDigest": "019dde685618ba7c89bf1cb8fd0750669bdf880b1f4d41fd74a26fecfbc84d89",
       "surface": "tests/unit/trader-reality-v2-migration-identity.test.ts",
       "boundary": "Order-independent exact 0160 journal-entry assertion only; retain all 0160 identity/content/uniqueness assertions and change no Reality implementation or semantics."
     },
