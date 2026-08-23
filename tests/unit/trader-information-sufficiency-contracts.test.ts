@@ -137,6 +137,43 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
     expect(selected.contentDigest).toBe(HEX(postgresParityJson));
   });
 
+  it("uses PostgreSQL C ordering for mixed canonical collection identifiers", () => {
+    const ids = ["a", "é", "A", "~"];
+    const providerIds = ["é", "htx_spot", "~", "a", "A"];
+    const selected = profile(
+      ids.map((id) =>
+        requirement({
+          id,
+          satisfiers: [{ evidenceFamily: "price", providerIds, substitutionRuleId: null }],
+          allowedObservationSchemaVersions: ["é", "~", "a", "A"],
+        }),
+      ),
+    );
+    const receipt = evaluate(selected, [evidence()], { activeContextTriggers: ids });
+
+    expect(selected.requirements.map((entry) => entry.id)).toEqual(["A", "a", "~", "é"]);
+    expect(selected.requirements[0]!.satisfiers[0]!.providerIds).toEqual([
+      "A",
+      "a",
+      "htx_spot",
+      "~",
+      "é",
+    ]);
+    expect(selected.requirements[0]!.allowedObservationSchemaVersions).toEqual([
+      "A",
+      "a",
+      "~",
+      "é",
+    ]);
+    expect(receipt.activeContextTriggers).toEqual(["A", "a", "~", "é"]);
+    expect(receipt.requirementReceipts.map((entry) => entry.requirementId)).toEqual([
+      "A",
+      "a",
+      "~",
+      "é",
+    ]);
+  });
+
   it("authenticates external DEE-620 trust lineage and rejects unknown runtime vocabularies", () => {
     expect(() =>
       evaluate(profile(), [

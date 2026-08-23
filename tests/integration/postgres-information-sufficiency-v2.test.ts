@@ -288,6 +288,57 @@ describe.skipIf(!enabled || !url)("PostgreSQL Information Sufficiency V2 (DEE-68
         smallTrustReceipt,
       ),
     ).resolves.toMatchObject({ insertedNew: true });
+
+    const mixedIds = ["a", "é", "A", "~"];
+    const mixedProfile = defineRequiredInformationProfileV2({
+      organizationId: orgA,
+      accountId: profile.accountId,
+      profileVersion: "mixed-collation-v1",
+      purpose: profile.purpose,
+      symbol: profile.symbol,
+      venue: profile.venue,
+      analyticalTimeframe: profile.analyticalTimeframe,
+      horizon: profile.horizon,
+      forecastPackageId: null,
+      forecastPackageContentDigest: null,
+      inputContractContentDigest: null,
+      requirements: mixedIds.map((id) => ({
+        ...profile.requirements[0]!,
+        id,
+        satisfiers: [
+          {
+            ...profile.requirements[0]!.satisfiers[0]!,
+            providerIds: ["é", "internal-msv", "~", "a", "A"],
+          },
+        ],
+        allowedObservationSchemaVersions: ["é", MI_OBSERVATION_SCHEMA_VERSION, "~", "a", "A"],
+      })),
+      aggregateQualityContract: null,
+    });
+    const mixedReceipt = evaluateInformationSufficiencyV2({
+      profile: mixedProfile,
+      organizationId: orgA,
+      accountId: mixedProfile.accountId,
+      purpose: mixedProfile.purpose,
+      symbol: mixedProfile.symbol,
+      venue: mixedProfile.venue,
+      analyticalTimeframe: mixedProfile.analyticalTimeframe,
+      horizon: mixedProfile.horizon,
+      pitAnchor: PIT,
+      activeContextTriggers: mixedIds,
+      evidence: buildReceipt(profile).evidenceInventory,
+    });
+    expect(mixedProfile.requirements.map((entry) => entry.id)).toEqual(["A", "a", "~", "é"]);
+    await expect(
+      persistRequiredInformationProfileV2Postgres(db, { organizationId: orgA }, mixedProfile),
+    ).resolves.toMatchObject({ insertedNew: true });
+    await expect(
+      persistInformationSufficiencyReceiptV2Postgres(
+        db,
+        { organizationId: orgA },
+        mixedReceipt,
+      ),
+    ).resolves.toMatchObject({ insertedNew: true });
   });
 
   it("rejects hash-correct direct SQL that diverges from the Wave A nested contract", async () => {

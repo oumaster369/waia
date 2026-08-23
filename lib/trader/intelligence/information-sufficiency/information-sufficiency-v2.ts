@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
 
 import {
   CANONICAL_PRIMITIVE_OBSERVATION_KINDS_V1,
@@ -208,6 +209,11 @@ export type InformationSufficiencyReceiptV2 = Readonly<{
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 
+/** Matches PostgreSQL text ordering under COLLATE "C" for canonical collection identities. */
+function postgresCanonicalTextCompare(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
 function sha256Canonical(value: unknown): string {
   return createHash("sha256").update(postgresCanonicalJsonString(value), "utf8").digest("hex");
 }
@@ -247,7 +253,7 @@ function postgresCanonicalJsonString(value: unknown): string {
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
     return `{${Object.keys(record)
-      .sort()
+      .sort(postgresCanonicalTextCompare)
       .map((key) => `${JSON.stringify(key)}:${postgresCanonicalJsonString(record[key])}`)
       .join(",")}}`;
   }
@@ -273,7 +279,9 @@ function requireOptionalDigest(value: string | null, field: string): void {
 }
 
 function sortUniqueStrings(values: readonly string[], field: string): string[] {
-  const sorted = [...values].map((value) => requireNonEmpty(value, field)).sort();
+  const sorted = [...values]
+    .map((value) => requireNonEmpty(value, field))
+    .sort(postgresCanonicalTextCompare);
   if (new Set(sorted).size !== sorted.length) {
     throw new Error(`INFORMATION_SUFFICIENCY_INVALID:duplicate_${field}`);
   }
@@ -323,7 +331,8 @@ function normalizeRequirement(
     ...normalizedSatisfiers
       .slice(1)
       .sort((left, right) =>
-        `${left.evidenceFamily}:${left.substitutionRuleId ?? ""}`.localeCompare(
+        postgresCanonicalTextCompare(
+          `${left.evidenceFamily}:${left.substitutionRuleId ?? ""}`,
           `${right.evidenceFamily}:${right.substitutionRuleId ?? ""}`,
         ),
       ),
@@ -363,7 +372,9 @@ function normalizeRequirement(
       throw new Error(`INFORMATION_SUFFICIENCY_INVALID:${field}`);
     }
   }
-  const allowedObservationKinds = [...requirement.allowedObservationKinds].sort();
+  const allowedObservationKinds = [...requirement.allowedObservationKinds].sort(
+    postgresCanonicalTextCompare,
+  );
   if (
     allowedObservationKinds.length === 0 ||
     new Set(allowedObservationKinds).size !== allowedObservationKinds.length ||
@@ -442,7 +453,7 @@ export function defineRequiredInformationProfileV2(input: {
   }
   const requirements = [...input.requirements]
     .map(normalizeRequirement)
-    .sort((left, right) => left.id.localeCompare(right.id));
+    .sort((left, right) => postgresCanonicalTextCompare(left.id, right.id));
   if (new Set(requirements.map((entry) => entry.id)).size !== requirements.length) {
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:duplicateRequirementId");
   }
@@ -752,7 +763,7 @@ function checkCandidate(
   return {
     evidence,
     substitutionRuleId,
-    reasonCodes: [...new Set(reasonCodes)].sort(),
+    reasonCodes: [...new Set(reasonCodes)].sort(postgresCanonicalTextCompare),
     unavailable,
   };
 }
@@ -809,7 +820,7 @@ function evaluateRequirement(input: {
     );
   }
   candidates.sort((left, right) =>
-    evidenceSortKey(left.evidence).localeCompare(evidenceSortKey(right.evidence)),
+    postgresCanonicalTextCompare(evidenceSortKey(left.evidence), evidenceSortKey(right.evidence)),
   );
   const accepted = candidates.filter((candidate) => candidate.reasonCodes.length === 0);
   const effectiveAccepted = accepted.filter(
@@ -822,8 +833,10 @@ function evaluateRequirement(input: {
   );
   const groups = [
     ...new Set(effectiveAccepted.map((candidate) => candidate.evidence.dependenceGroup)),
-  ].sort();
-  const reasonCodes = [...new Set(candidates.flatMap((candidate) => candidate.reasonCodes))].sort();
+  ].sort(postgresCanonicalTextCompare);
+  const reasonCodes = [...new Set(candidates.flatMap((candidate) => candidate.reasonCodes))].sort(
+    postgresCanonicalTextCompare,
+  );
   if (groups.length < requirement.minimumIndependentGroups) {
     reasonCodes.push("EFFECTIVE_INDEPENDENT_INFORMATION_BELOW_PROFILE_FLOOR");
   }
@@ -871,7 +884,7 @@ function evaluateRequirement(input: {
         evidenceId: candidate.evidence.evidenceId,
         substitutionRuleId: candidate.substitutionRuleId!,
       })),
-    reasonCodes: [...new Set(reasonCodes)].sort(),
+    reasonCodes: [...new Set(reasonCodes)].sort(postgresCanonicalTextCompare),
   };
 }
 
@@ -900,7 +913,9 @@ export function evaluateInformationSufficiencyV2(input: {
   );
   const evidenceInventory = [...input.evidence]
     .map(validateEvidence)
-    .sort((left, right) => evidenceSortKey(left).localeCompare(evidenceSortKey(right)));
+    .sort((left, right) =>
+      postgresCanonicalTextCompare(evidenceSortKey(left), evidenceSortKey(right)),
+    );
   if (
     new Set(evidenceInventory.map((entry) => entry.evidenceId)).size !== evidenceInventory.length
   ) {
@@ -954,7 +969,9 @@ export function evaluateInformationSufficiencyV2(input: {
           componentId: requireNonEmpty(component.componentId, "aggregateComponentId"),
           valueDigest: requireDigest(component.valueDigest, "aggregateComponentValueDigest"),
         }))
-        .sort((left, right) => left.componentId.localeCompare(right.componentId));
+        .sort((left, right) =>
+          postgresCanonicalTextCompare(left.componentId, right.componentId),
+        );
       if (
         new Set(componentReceipts.map((entry) => entry.componentId)).size !==
         componentReceipts.length
@@ -1018,7 +1035,7 @@ export function evaluateInformationSufficiencyV2(input: {
     requirementReceipts,
     aggregateQualityEvaluation,
     status,
-    reasonCodes: [...new Set(reasonCodes)].sort(),
+    reasonCodes: [...new Set(reasonCodes)].sort(postgresCanonicalTextCompare),
     authority: "EPISTEMIC_PREREQUISITE_ONLY" as const,
   };
   const contentDigest = sha256Canonical(body);
