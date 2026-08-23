@@ -8,7 +8,7 @@ import type {
   ForecastDecisionBundleRepository,
   ForecastDecisionPersistenceAuthorizationV2,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
-import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
+import { admitForecastDecisionPersistence } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import {
   sortDecisionForecastLinks,
   sortForecastsByKeyDigestCodePoint,
@@ -21,18 +21,11 @@ export async function persistForecastDecisionBundle(
   db: WaiaPostgresDb,
   authorization: ForecastDecisionPersistenceAuthorizationV2,
 ): Promise<ForecastDecisionBundle> {
-  admitForecastDecisionConstruction({
+  const persistencePermit = admitForecastDecisionPersistence({
     authority: authorization.authority,
     organizationId: context.organizationId,
-    scope: authorization.scope,
+    bundle,
   });
-  if (
-    bundle.decision.organizationId !== context.organizationId ||
-    bundle.decision.symbol !== authorization.scope.symbol ||
-    bundle.decision.evaluatedAt !== authorization.scope.pitAnchor
-  ) {
-    throw new Error("INFORMATION_SUFFICIENCY_PERSISTENCE_BLOCKED:BUNDLE_SCOPE_MISMATCH");
-  }
   const normalizedBundle: ForecastDecisionBundle = {
     forecasts: sortForecastsByKeyDigestCodePoint(bundle.forecasts),
     decision: bundle.decision,
@@ -47,17 +40,17 @@ export async function persistForecastDecisionBundle(
     const entryPurposeRepo = createEntryPurposeRecordRepositoryPostgres(tx);
 
     for (const forecast of normalizedBundle.forecasts) {
-      await forecastRepo.insert(context, forecast);
+      await forecastRepo.insert(context, forecast, persistencePermit);
     }
 
-    await decisionRepo.insert(context, normalizedBundle.decision);
+    await decisionRepo.insert(context, normalizedBundle.decision, persistencePermit);
 
     for (const link of normalizedBundle.links) {
-      await linkRepo.insert(context, link);
+      await linkRepo.insert(context, link, persistencePermit);
     }
 
     if (normalizedBundle.entryPurpose) {
-      await entryPurposeRepo.insert(context, normalizedBundle.entryPurpose);
+      await entryPurposeRepo.insert(context, normalizedBundle.entryPurpose, persistencePermit);
     }
 
     return normalizedBundle;

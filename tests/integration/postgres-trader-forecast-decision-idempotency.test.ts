@@ -15,6 +15,7 @@ import {
   cleanupWp14Org,
   countWp14RowsForRun,
   seedWp14User,
+  sealWp14PersistenceConflictFixture,
   WP14_PG_USER_A,
 } from "./wp14-forecast-decision-test-helpers";
 import { buildWp13Bundle } from "./wp13-intelligence-test-helpers";
@@ -78,14 +79,14 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("fails closed on same key with changed decision digest", async () => {
       await persistWp13AndWp14("wp14-conflict-decision", "1");
-      const divergent = {
+      const divergent = sealWp14PersistenceConflictFixture(orgA, {
         ...buildWp14Bundle(orgA, "wp14-conflict-decision", "1"),
         decision: {
           ...buildWp14Bundle(orgA, "wp14-conflict-decision", "1").decision,
           decisionClass: "TRADE" as const,
           contentDigest: "0".repeat(64),
         },
-      };
+      });
       const db = getPostgresDrizzle();
       await expect(
         persistForecastDecisionBundle(

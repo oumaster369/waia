@@ -209,6 +209,8 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           runId: input.runId,
           cycleId: input.cycleId,
           symbol: input.symbol ?? input.bars[0]?.symbol ?? "BTC/USDT",
+          accountId: input.accountId ?? null,
+          analyticalTimeframe: input.bars[0]?.interval ?? "",
           marketStateSnapshot,
           decisionChain,
           profile: input.historicalProfile,
@@ -243,12 +245,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           signal,
           costModel: input.costModel,
           informationSufficiencyAuthority: input.informationSufficiencyAuthority,
-          informationSufficiencyScope: {
-            accountId: input.accountId ?? null,
-            symbol: intelligenceCycleBundle.envelope.symbol,
-            analyticalTimeframe: input.bars[0]?.interval ?? "",
-            pitAnchor: intelligenceCycleBundle.envelope.evaluatedAt,
-          },
         })
       : undefined;
 

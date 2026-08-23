@@ -65,6 +65,8 @@ function buildSnapshotFromCycle(
     runId,
     cycleId,
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: bars[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
@@ -77,12 +79,6 @@ function buildSnapshotFromCycle(
     signal: cycle.signal,
     costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
     informationSufficiencyAuthority,
-    informationSufficiencyScope: {
-      accountId: null,
-      symbol: intelligenceCycleBundle.envelope.symbol,
-      analyticalTimeframe: bars[0]!.interval,
-      pitAnchor: intelligenceCycleBundle.envelope.evaluatedAt,
-    },
   });
 
   return {

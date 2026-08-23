@@ -91,6 +91,8 @@ export function buildWp15Snapshot(
     runId,
     cycleId,
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: wp14Bars()[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
@@ -103,12 +105,6 @@ export function buildWp15Snapshot(
     signal: cycle.signal,
     costModel: createCostModelV1("10", "5"),
     informationSufficiencyAuthority,
-    informationSufficiencyScope: {
-      accountId: null,
-      symbol: intelligenceCycleBundle.envelope.symbol,
-      analyticalTimeframe: wp14Bars()[0]!.interval,
-      pitAnchor: intelligenceCycleBundle.envelope.evaluatedAt,
-    },
   });
 
   const knowledgeSeed = buildWp15KnowledgeSeedArtifacts(organizationId);

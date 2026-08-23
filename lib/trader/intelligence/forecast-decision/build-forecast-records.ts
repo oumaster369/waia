@@ -123,8 +123,12 @@ function buildForecastForHypothesis(
 export function buildForecastRecords(
   input: BuildForecastRecordsInput,
   constructionPermit: ForecastDecisionConstructionPermit,
+  sourceBundle: IntelligenceCycleBundle,
 ): TraderIntelligenceForecastRecord[] {
-  assertForecastDecisionConstructionPermit(constructionPermit);
+  assertForecastDecisionConstructionPermit(constructionPermit, sourceBundle);
+  if (input.intelligenceCycleBundle !== sourceBundle) {
+    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
+  }
   const bundle = input.intelligenceCycleBundle;
   if (bundle.conviction.convictionScope === "NONE") {
     return [];

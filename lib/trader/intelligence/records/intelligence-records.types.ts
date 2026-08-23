@@ -64,4 +64,8 @@ export type IntelligenceCycleBundle = Readonly<{
   envelope: TraderIntelligenceCycleEnvelopeRecord;
   hypotheses: readonly TraderIntelligenceHypothesisRecord[];
   conviction: TraderIntelligenceConvictionRecord;
+  informationSufficiencyProvenance: Readonly<{
+    accountId: string | null;
+    analyticalTimeframe: string;
+  }>;
 }>;

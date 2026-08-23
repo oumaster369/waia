@@ -9,12 +9,12 @@ import { persistForecastDecisionBundle } from "@/lib/trader/intelligence/forecas
 import { assertForecastDecisionChainComplete } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-completeness";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
-import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
+import {
+  admitForecastDecisionConstruction,
+  sealForecastDecisionBundleConstruction,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
-import type {
-  InformationSufficiencyRuntimeAuthorityV2,
-  InformationSufficiencyRuntimeScopeV2,
-} from "@/lib/trader/intelligence/information-sufficiency";
+import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { MsvEnvelope, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -27,7 +27,6 @@ export type BuildForecastDecisionBundleInput = Readonly<{
   signal: StrategySignal;
   costModel?: CostModelV1;
   informationSufficiencyAuthority: InformationSufficiencyRuntimeAuthorityV2;
-  informationSufficiencyScope: InformationSufficiencyRuntimeScopeV2;
 }>;
 
 export function buildForecastDecisionBundle(
@@ -35,16 +34,8 @@ export function buildForecastDecisionBundle(
 ): ForecastDecisionBundle {
   const constructionPermit = admitForecastDecisionConstruction({
     authority: input.informationSufficiencyAuthority,
-    organizationId: input.intelligenceCycleBundle.envelope.organizationId,
-    scope: input.informationSufficiencyScope,
+    sourceBundle: input.intelligenceCycleBundle,
   });
-  if (
-    input.informationSufficiencyScope.symbol !== input.intelligenceCycleBundle.envelope.symbol ||
-    input.informationSufficiencyScope.pitAnchor !==
-      input.intelligenceCycleBundle.envelope.evaluatedAt
-  ) {
-    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
-  }
 
   const hypothesesByType = Object.fromEntries(
     input.hypothesisSet.hypotheses.map((hypothesis) => [hypothesis.hypothesisType, hypothesis]),
@@ -56,6 +47,7 @@ export function buildForecastDecisionBundle(
       hypothesesByType,
     },
     constructionPermit,
+    input.intelligenceCycleBundle,
   );
 
   const decision = buildDecisionRecord(
@@ -67,6 +59,7 @@ export function buildForecastDecisionBundle(
       costModel: input.costModel,
     },
     constructionPermit,
+    input.intelligenceCycleBundle,
   );
 
   const links = buildDecisionForecastLinks(
@@ -76,6 +69,7 @@ export function buildForecastDecisionBundle(
       activeHypothesisRecordId: input.intelligenceCycleBundle.conviction.activeHypothesisRecordId,
     },
     constructionPermit,
+    input.intelligenceCycleBundle,
   );
 
   const entryPurpose = buildEntryPurposeRecord(
@@ -86,14 +80,19 @@ export function buildForecastDecisionBundle(
       activeHypothesis: input.hypothesisSet.activeHypothesis,
     },
     constructionPermit,
+    input.intelligenceCycleBundle,
   );
 
-  return {
-    forecasts,
-    decision,
-    links,
-    entryPurpose,
-  };
+  return sealForecastDecisionBundleConstruction(
+    {
+      forecasts,
+      decision,
+      links,
+      entryPurpose,
+    },
+    constructionPermit,
+    input.intelligenceCycleBundle,
+  );
 }
 
 export type PersistForecastDecisionBundleInput = BuildForecastDecisionBundleInput & {
@@ -115,7 +114,6 @@ export async function persistForecastDecisionBundleForCycle(
   if (deps.bundleRepository) {
     const persisted = await deps.bundleRepository.persist(context, bundle, {
       authority: input.informationSufficiencyAuthority,
-      scope: input.informationSufficiencyScope,
     });
     await assertForecastDecisionChainComplete(
       context,
@@ -137,7 +135,6 @@ export async function persistForecastDecisionBundleForCycle(
 
   const persisted = await persistForecastDecisionBundle(context, bundle, deps.db, {
     authority: input.informationSufficiencyAuthority,
-    scope: input.informationSufficiencyScope,
   });
   await assertForecastDecisionChainComplete(
     context,

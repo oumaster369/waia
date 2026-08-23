@@ -311,8 +311,12 @@ function buildWhyCashOrAbstainJson(
 export function buildDecisionRecord(
   input: BuildDecisionRecordInput,
   constructionPermit: ForecastDecisionConstructionPermit,
+  sourceBundle: IntelligenceCycleBundle,
 ): TraderIntelligenceDecisionRecord {
-  assertForecastDecisionConstructionPermit(constructionPermit);
+  assertForecastDecisionConstructionPermit(constructionPermit, sourceBundle);
+  if (input.intelligenceCycleBundle !== sourceBundle) {
+    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
+  }
   const envelope = input.intelligenceCycleBundle.envelope;
   const conviction = input.intelligenceCycleBundle.conviction;
   assertHypothesisConfidenceNonAuthoritative({

@@ -10,6 +10,7 @@ import {
   type TraderIntelligenceEntryPurposeRecord,
   type TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import {
   assertForecastDecisionConstructionPermit,
   type ForecastDecisionConstructionPermit,
@@ -31,8 +32,12 @@ function addHorizon(isoTimestamp: string, horizonMs: number): string {
 export function buildEntryPurposeRecord(
   input: BuildEntryPurposeRecordInput,
   constructionPermit: ForecastDecisionConstructionPermit,
+  sourceBundle: IntelligenceCycleBundle,
 ): TraderIntelligenceEntryPurposeRecord | null {
-  assertForecastDecisionConstructionPermit(constructionPermit);
+  assertForecastDecisionConstructionPermit(constructionPermit, sourceBundle);
+  if (input.decision.cycleEnvelopeId !== sourceBundle.envelope.id) {
+    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
+  }
   const decisionClass: DecisionClass = input.decision.decisionClass;
   if (decisionClass !== "TRADE" && decisionClass !== "REDUCED_RISK") {
     return null;

@@ -5,6 +5,7 @@ import * as pgSchema from "@/db/schema.postgres";
 import { ForecastDecisionIdempotencyConflictError } from "@/lib/trader/intelligence/forecast-decision/errors";
 import type { TraderIntelligenceForecastRecord } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { ForecastRecordRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import { assertForecastDecisionPersistencePermit } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import { runIdempotentInsertWithSavepoint } from "@/lib/trader/intelligence/records/postgres-idempotent-insert";
 import { orgScopedWhere, requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -83,7 +84,8 @@ export function createForecastRecordRepositoryPostgres(ex: PgExecutor): Forecast
       return rows[0] ? mapRow(rows[0]) : null;
     },
 
-    async insert(context, record) {
+    async insert(context, record, permit) {
+      assertForecastDecisionPersistencePermit(permit, "FORECAST", record);
       const scoped = requireOrgContext(context.organizationId);
       const existing = await this.findByBusinessKey(context, {
         runId: record.runId,

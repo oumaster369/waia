@@ -4,6 +4,8 @@ import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cyc
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { persistForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { buildDecisionRecord } from "@/lib/trader/intelligence/forecast-decision/build-decision-record";
+import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
+import { createDecisionRecordRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/decision-record-repository-postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   bindInformationSufficiencyReceiptAuthorityV2,
@@ -242,12 +244,6 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
         signal: admittedCycle.signal,
         informationSufficiencyAuthority:
           undefined as unknown as InformationSufficiencyRuntimeAuthorityV2,
-        informationSufficiencyScope: {
-          accountId: null,
-          symbol: admittedCycle.intelligenceCycleBundle!.envelope.symbol,
-          analyticalTimeframe: "1m",
-          pitAnchor: admittedCycle.intelligenceCycleBundle!.envelope.evaluatedAt,
-        },
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:MISSING_AUTHORITY");
   });
@@ -268,30 +264,36 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
       signal: admittedCycle.signal,
       informationSufficiencyAuthority: sufficient.authority,
     };
-    const exactScope = {
-      accountId: sufficient.profile.accountId,
-      symbol: sufficient.profile.symbol,
-      analyticalTimeframe: sufficient.profile.analyticalTimeframe,
-      pitAnchor: PIT,
-    } as const;
+    const exactSourceBundle = admittedCycle.intelligenceCycleBundle!;
+    const wrongAccountBundle = {
+      ...exactSourceBundle,
+      informationSufficiencyProvenance: {
+        ...exactSourceBundle.informationSufficiencyProvenance,
+        accountId: "wrong-account",
+      },
+    };
+    const wrongTimeframeBundle = {
+      ...exactSourceBundle,
+      informationSufficiencyProvenance: {
+        ...exactSourceBundle.informationSufficiencyProvenance,
+        analyticalTimeframe: "5m",
+      },
+    };
 
     expect(() =>
       buildForecastDecisionBundle({
         ...bundleInput,
-        informationSufficiencyScope: { ...exactScope, accountId: "wrong-account" },
+        intelligenceCycleBundle: wrongAccountBundle,
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:SCOPE_MISMATCH");
     expect(() =>
       buildForecastDecisionBundle({
         ...bundleInput,
-        informationSufficiencyScope: { ...exactScope, analyticalTimeframe: "5m" },
+        intelligenceCycleBundle: wrongTimeframeBundle,
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:SCOPE_MISMATCH");
 
-    const bundle = buildForecastDecisionBundle({
-      ...bundleInput,
-      informationSufficiencyScope: exactScope,
-    });
+    const bundle = buildForecastDecisionBundle(bundleInput);
     expect(() =>
       buildDecisionRecord(
         {
@@ -301,14 +303,43 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
           signal: admittedCycle.signal,
         },
         undefined as never,
+        exactSourceBundle,
+      ),
+    ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:INVALID_CONSTRUCTION_PERMIT");
+
+    const exactPermit = admitForecastDecisionConstruction({
+      authority: sufficient.authority,
+      sourceBundle: exactSourceBundle,
+    });
+    expect(() =>
+      buildDecisionRecord(
+        {
+          intelligenceCycleBundle: wrongAccountBundle,
+          decisionChain: admittedCycle.decisionChain!,
+          msv: admittedCycle.msv,
+          signal: admittedCycle.signal,
+        },
+        exactPermit,
+        wrongAccountBundle,
       ),
     ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:INVALID_CONSTRUCTION_PERMIT");
     await expect(
       persistForecastDecisionBundle({ organizationId: ORG }, bundle, {} as WaiaPostgresDb, {
         authority: undefined as unknown as InformationSufficiencyRuntimeAuthorityV2,
-        scope: exactScope,
       }),
     ).rejects.toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:MISSING_AUTHORITY");
+    await expect(
+      persistForecastDecisionBundle({ organizationId: ORG }, { ...bundle }, {} as WaiaPostgresDb, {
+        authority: sufficient.authority,
+      }),
+    ).rejects.toThrow("INFORMATION_SUFFICIENCY_PERSISTENCE_BLOCKED:UNSEALED_BUNDLE");
+    await expect(
+      createDecisionRecordRepositoryPostgres({} as never).insert(
+        { organizationId: ORG },
+        bundle.decision,
+        undefined as never,
+      ),
+    ).rejects.toThrow("INFORMATION_SUFFICIENCY_PERSISTENCE_BLOCKED:INVALID_PERSISTENCE_PERMIT");
   });
 
   it("blocks new-entry dispatch on omission and permits only explicit research simulation", async () => {

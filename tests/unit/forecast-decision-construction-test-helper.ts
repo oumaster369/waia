@@ -1,22 +1,13 @@
 import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 
-export function admitResearchForecastDecisionConstruction(input: {
-  organizationId: string;
-  symbol: string;
-  pitAnchor: string;
-}) {
+export function admitResearchForecastDecisionConstruction(sourceBundle: IntelligenceCycleBundle) {
   return admitForecastDecisionConstruction({
     authority: declareResearchNonCapitalInformationAuthorityV2({
-      organizationId: input.organizationId,
+      organizationId: sourceBundle.envelope.organizationId,
       reason: "FORECAST_DECISION_COMPONENT_UNIT_TEST",
     }),
-    organizationId: input.organizationId,
-    scope: {
-      accountId: null,
-      symbol: input.symbol,
-      analyticalTimeframe: "1m",
-      pitAnchor: input.pitAnchor,
-    },
+    sourceBundle,
   });
 }

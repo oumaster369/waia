@@ -41,6 +41,8 @@ export type BuildIntelligenceCycleBundleInput = Readonly<{
   runId: string;
   cycleId: string;
   symbol: string;
+  accountId: string | null;
+  analyticalTimeframe: string;
   marketStateSnapshot: MarketStateSnapshot;
   decisionChain: DecisionChain;
   profile?: HistoricalIntelligenceProfile;
@@ -81,6 +83,12 @@ function resolveHypothesisStatus(hypothesis: MarketHypothesis, activeType: strin
 export function buildIntelligenceCycleBundle(
   input: BuildIntelligenceCycleBundleInput,
 ): IntelligenceCycleBundle {
+  if (input.accountId !== null && input.accountId.trim().length === 0) {
+    throw new Error("buildIntelligenceCycleBundle: accountId must be null or non-empty");
+  }
+  if (input.analyticalTimeframe.trim().length === 0) {
+    throw new Error("buildIntelligenceCycleBundle: analyticalTimeframe is required");
+  }
   const profile = input.profile ?? HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1;
   const matrixDigest = input.matrixDigest ?? TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1_DIGEST;
   const snapshot = input.marketStateSnapshot;
@@ -218,6 +226,10 @@ export function buildIntelligenceCycleBundle(
     envelope,
     hypotheses: sortedHypotheses,
     conviction,
+    informationSufficiencyProvenance: {
+      accountId: input.accountId,
+      analyticalTimeframe: input.analyticalTimeframe,
+    },
   };
 }
 

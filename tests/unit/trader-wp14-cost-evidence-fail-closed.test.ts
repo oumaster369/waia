@@ -15,6 +15,8 @@ describe("trader wp14 cost evidence fail closed", () => {
       runId: "wp14-run",
       cycleId: "0",
       symbol: "BTC/USDT",
+      accountId: null,
+      analyticalTimeframe: "1m",
       marketStateSnapshot: cycle.marketStateSnapshot!,
       decisionChain: cycle.decisionChain!,
     });
@@ -26,11 +28,8 @@ describe("trader wp14 cost evidence fail closed", () => {
         signal: cycle.signal,
         costModel: undefined,
       },
-      admitResearchForecastDecisionConstruction({
-        organizationId: bundle.envelope.organizationId,
-        symbol: bundle.envelope.symbol,
-        pitAnchor: bundle.envelope.evaluatedAt,
-      }),
+      admitResearchForecastDecisionConstruction(bundle),
+      bundle,
     );
     expect(decision.decisionClass).toBe("NO_TRADE");
     expect(decision.costEvidenceState).toBe("UNAVAILABLE");

@@ -960,6 +960,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         runId: input.runId,
         cycleId: intelligenceCycleId,
         symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+        accountId: input.accountKey,
+        analyticalTimeframe: snapshot.bars[0]?.interval ?? "",
         marketStateSnapshot: result.evaluation.marketStateSnapshot,
         decisionChain: result.evaluation.decisionChain,
         profile: input.historicalProfile,
@@ -978,6 +980,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
             runId: input.runId,
             cycleId: intelligenceCycleId,
             symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+            accountId: input.accountKey,
+            analyticalTimeframe: snapshot.bars[0]?.interval ?? "",
             marketStateSnapshot: result.evaluation.marketStateSnapshot,
             decisionChain: result.evaluation.decisionChain,
             profile: input.historicalProfile,
@@ -1000,12 +1004,6 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           signal: result.evaluation.signal,
           costModel: input.costModel,
           informationSufficiencyAuthority: input.informationSufficiencyAuthority,
-          informationSufficiencyScope: {
-            accountId: input.accountKey,
-            symbol: bundle.envelope.symbol,
-            analyticalTimeframe: snapshot.bars[0]?.interval ?? "",
-            pitAnchor: bundle.envelope.evaluatedAt,
-          },
           wp13Persisted,
         };
 
