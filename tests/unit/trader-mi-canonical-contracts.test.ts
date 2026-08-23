@@ -9,6 +9,7 @@ import {
   DOWNSTREAM_MEASUREMENT_CATEGORIES_V1,
   EXCLUDED_UNMODELED_GATEWAY_KINDS_V1,
   GATEWAY_PRIMITIVE_DISPOSITION_V1,
+  type CanonicalGatewayRejectionReasonV1,
 } from "@/lib/trader/mi/canonical-observation-v1";
 import {
   defineCanonicalMeasurementV1,
@@ -51,6 +52,11 @@ function quote(overrides: Partial<NormalizedObservation> = {}): NormalizedObserv
 }
 
 describe("DEE-681 canonical PIT contracts", () => {
+  it("keeps a missing canonical source explicit", () => {
+    const reason: CanonicalGatewayRejectionReasonV1 = "SOURCE_UNKNOWN";
+    expect(reason).toBe("SOURCE_UNKNOWN");
+  });
+
   it("closes the seven admitted and eleven excluded primitive vocabularies", () => {
     expect(CANONICAL_PRIMITIVE_OBSERVATION_KINDS_V1).toHaveLength(7);
     expect(CANONICAL_EXTERNAL_OBSERVATION_KINDS_V1).toHaveLength(6);
