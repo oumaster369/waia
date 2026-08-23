@@ -61,10 +61,10 @@
         "Every definition identity is recomputed from its exact inert body, and the admitted internal msv_envelope binds its existing mi-observation-v1 schema with explicit null external-trust lineage."
       ],
       "integratedCommits": [
-        "329bf66c3471094f993768f43d45c9ca6ef203d4",
-        "0a137f858b00291722872d9e1f3a9f26ea97a665",
-        "bbef1b369a66d766dece542f3d7e6540cad7220c",
-        "aec8b410fb2db7db6682ca374bb99be004955fef"
+        "c33f61eea2dd191fd89cad60aea5be02ad329711",
+        "1159a378d87576df53299040b2d31104625c402c",
+        "72e2ea88da450fedb37f31d459981563a4813289",
+        "32c7b305bdd8d73df8edde854a61cb1b3a030662"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-mi-canonical-contracts.test.ts (6/6 pass, including stale-definition rejection and internal MSV lineage)",
@@ -140,10 +140,10 @@
         "Database guards also require exact admitted kind/schema input contracts in unique canonical order and reject relational value inputs not declared by their inert definition."
       ],
       "integratedCommits": [
-        "a07fe02991292ef9d9fad7d0c2812a1a103471b4",
-        "efb30bd004e66c82cee897ca0619f046c84b6e45",
-        "d773de3b27d632df8e5300e92743889268ab0514",
-        "3652b73ed4144ebcf1e5b6b4867e4f426fd7b732"
+        "b0cee1630346398bcdace71df6ca4456d72eb866",
+        "abd7a83edf21c9d00f88d6f1afb82b144534a42c",
+        "26c670635b124758931bff0b63ded246425eab4a",
+        "7550d9fb7807c32ad81dc88fcd13598adc283160"
       ],
       "tests": [
         "fresh pnpm db:migrate:postgres through 0161 (pass)",
@@ -216,9 +216,9 @@
         "Persisted explicit unavailability remains UNAVAILABLE without requiring or fabricating a historical trust revision."
       ],
       "integratedCommits": [
-        "efbf0377b42460b8969f9de8b09114fcc0ab2bed",
-        "83d0c3757966054443f5745daff61527a077b226",
-        "158781c803e800097a0266503d4a3db9a6dd5bf7"
+        "e8382bfd898f306b7f83e51e57bd552779c42cba",
+        "69122548985ff26a35c00a04c783b9e321541370",
+        "312b3c34d5f6b87e43517588684b0536668b3c14"
       ],
       "tests": [
         "canonical gateway/replay unit tests (8/8 pass, including explicit unavailable news provenance)",
@@ -293,12 +293,12 @@
         "The aligned-trend golden fixture records coindesk_rss for the explicit unavailable news_headline lane, matching the registered headline provider while retaining gdelt only for the downstream news_event_cluster category; no Market Understanding implementation, value, or verdict changed."
       ],
       "integratedCommits": [
-        "ca307135f0ee15120e3e76032856b3dc5e6564d7",
-        "91967f9565ace4cb5f64ecd3176586655e1d7769",
-        "c493ee4c668dfe14f79ecb4b72d8cf560fde43c9",
-        "3d72ebf302865dd8e3d27910b8ebf2236e26f711",
-        "aee497588f224b502d9305744c973098cb84453d",
-        "06fd0256dab2649416bbf244f51f5d6076610302"
+        "9db4b4738a16bdb2c443deceb4fd8ea092175360",
+        "86dfdd5328a661e6099a54a1abb90aac1c271c5e",
+        "f5c34b246ef126f6eff532fdd6cf1fbd34143a27",
+        "c7eeebad0ae2005ee9344174e549ee2cfdcf1705",
+        "fcafbbc41d17aaceb5242a06133a702d13d8965e",
+        "e66a89cc223695c2cab55823280163631b35fb56"
       ],
       "tests": [
         "repository-wide source/consumer closure tests (3/3 pass)",
@@ -320,8 +320,8 @@
   "integrationEvidence": {
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "ff246880f03f02536267034f630216ed9692eaab69dc535af5fa78c210f87fd7",
-      "manifestCommit": "abfa95fc67442778fb35c9e010c81e198086855b",
+      "manifestDigest": "163ecc3c46090253058987962c3b3869725dfb6e42cebae5bcdf4268ade19fca",
+      "manifestCommit": "c2ae35531b1860b5e0353488d4e4fa5eb74137b0",
       "manifestPath": "docs/plans/dee-680-canonical-pit-measurement-lineage.integration-train.json",
       "reviewer": "Human-ratified DEE-620 integration owner after exact-base, duplicate, dependency, migration-identity, vocabulary, boundary, and allowed-surface audit on 2026-08-23; re-admitted with the exact DEE-682 test amendment and DEE-684 Reality inventory identity amendment authorized in Codex task 01a019c0-8940-7272-bc9c-6b330e6bf0f2 and recorded on Linear DEE-680/DEE-682/DEE-684; CI provenance fixture surface admitted under the Human standing mechanical provenance authority before its repair commit"
     },
@@ -330,10 +330,10 @@
         "issue": "DEE-681",
         "status": "pass",
         "reviewedCommits": [
-          "329bf66c3471094f993768f43d45c9ca6ef203d4",
-          "0a137f858b00291722872d9e1f3a9f26ea97a665",
-          "bbef1b369a66d766dece542f3d7e6540cad7220c",
-          "aec8b410fb2db7db6682ca374bb99be004955fef"
+          "c33f61eea2dd191fd89cad60aea5be02ad329711",
+          "1159a378d87576df53299040b2d31104625c402c",
+          "72e2ea88da450fedb37f31d459981563a4813289",
+          "32c7b305bdd8d73df8edde854a61cb1b3a030662"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/normalization/canonical-pit-contract.ts",
@@ -348,10 +348,10 @@
         "issue": "DEE-682",
         "status": "pass",
         "reviewedCommits": [
-          "a07fe02991292ef9d9fad7d0c2812a1a103471b4",
-          "efb30bd004e66c82cee897ca0619f046c84b6e45",
-          "d773de3b27d632df8e5300e92743889268ab0514",
-          "3652b73ed4144ebcf1e5b6b4867e4f426fd7b732"
+          "b0cee1630346398bcdace71df6ca4456d72eb866",
+          "abd7a83edf21c9d00f88d6f1afb82b144534a42c",
+          "26c670635b124758931bff0b63ded246425eab4a",
+          "7550d9fb7807c32ad81dc88fcd13598adc283160"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -369,9 +369,9 @@
         "issue": "DEE-683",
         "status": "pass",
         "reviewedCommits": [
-          "efbf0377b42460b8969f9de8b09114fcc0ab2bed",
-          "83d0c3757966054443f5745daff61527a077b226",
-          "158781c803e800097a0266503d4a3db9a6dd5bf7"
+          "e8382bfd898f306b7f83e51e57bd552779c42cba",
+          "69122548985ff26a35c00a04c783b9e321541370",
+          "312b3c34d5f6b87e43517588684b0536668b3c14"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/market-data-gateway.ts",
@@ -388,12 +388,12 @@
         "issue": "DEE-684",
         "status": "pass",
         "reviewedCommits": [
-          "ca307135f0ee15120e3e76032856b3dc5e6564d7",
-          "91967f9565ace4cb5f64ecd3176586655e1d7769",
-          "c493ee4c668dfe14f79ecb4b72d8cf560fde43c9",
-          "3d72ebf302865dd8e3d27910b8ebf2236e26f711",
-          "aee497588f224b502d9305744c973098cb84453d",
-          "06fd0256dab2649416bbf244f51f5d6076610302"
+          "9db4b4738a16bdb2c443deceb4fd8ea092175360",
+          "86dfdd5328a661e6099a54a1abb90aac1c271c5e",
+          "f5c34b246ef126f6eff532fdd6cf1fbd34143a27",
+          "c7eeebad0ae2005ee9344174e549ee2cfdcf1705",
+          "fcafbbc41d17aaceb5242a06133a702d13d8965e",
+          "e66a89cc223695c2cab55823280163631b35fb56"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -456,8 +456,8 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "supersededFrozenHead": "7f9072b1c5bc9b9f752b7a2b660225a5682420cf",
-      "reAdmissionManifestCommit": "abfa95fc67442778fb35c9e010c81e198086855b",
-      "reAdmissionManifestDigest": "ff246880f03f02536267034f630216ed9692eaab69dc535af5fa78c210f87fd7",
+      "reAdmissionManifestCommit": "c2ae35531b1860b5e0353488d4e4fa5eb74137b0",
+      "reAdmissionManifestDigest": "163ecc3c46090253058987962c3b3869725dfb6e42cebae5bcdf4268ade19fca",
       "surface": "tests/unit/trader-reality-v2-migration-identity.test.ts",
       "boundary": "Order-independent exact 0160 journal-entry assertion only; retain all 0160 identity/content/uniqueness assertions and change no Reality implementation or semantics."
     },
@@ -467,8 +467,8 @@
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "authorizedBase": "a4242a4b50da6415836ba1a83cd53c6073c556a2",
       "supersededFrozenHead": "c2b8a220421a1c7df910a3db1dbc57dd02f255fb",
-      "reAdmissionManifestCommit": "abfa95fc67442778fb35c9e010c81e198086855b",
-      "reAdmissionManifestDigest": "ff246880f03f02536267034f630216ed9692eaab69dc535af5fa78c210f87fd7",
+      "reAdmissionManifestCommit": "c2ae35531b1860b5e0353488d4e4fa5eb74137b0",
+      "reAdmissionManifestDigest": "163ecc3c46090253058987962c3b3869725dfb6e42cebae5bcdf4268ade19fca",
       "surfaces": [
         "docs/ai-trader/reality-v2-source-consumer-inventory.json",
         "tests/unit/trader-reality-v2-consumer-graph.test.ts"
@@ -479,7 +479,7 @@
       "status": "human-standing-authority",
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
-      "failedHead": "19469224739edb5dd54c4f7aafcfe02cdc380b92",
+      "failedHead": "7ffb35815da41f6e05f8eb4d2085b9247f49ed05",
       "failedCheck": "GitHub ci/unit tests: 1 failed, 4805 passed; tests/unit/trader-market-understanding-golden.test.ts",
       "surface": "tests/fixtures/trader/market-understanding-aligned-trend.json",
       "boundary": "Mechanical exact-provider provenance refresh only: replace stale gdelt news_headline fixture identities with the already-admitted coindesk_rss headline identity while preserving gdelt news_event_cluster, every Market Understanding value/verdict, implementation semantic, formula, and capital boundary."
@@ -489,8 +489,8 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "reviewedHead": "f734d44196b48e2f1759a426faf6fc6520ee2dad",
-      "reAdmissionManifestCommit": "abfa95fc67442778fb35c9e010c81e198086855b",
-      "reAdmissionManifestDigest": "ff246880f03f02536267034f630216ed9692eaab69dc535af5fa78c210f87fd7",
+      "reAdmissionManifestCommit": "c2ae35531b1860b5e0353488d4e4fa5eb74137b0",
+      "reAdmissionManifestDigest": "163ecc3c46090253058987962c3b3869725dfb6e42cebae5bcdf4268ade19fca",
       "surfaces": [
         "lib/trader/mi/measurement-lineage-v1.ts",
         "lib/trader/mi/canonical-pit-repository-postgres.ts",
@@ -507,12 +507,12 @@
       "status": "human-standing-authority",
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
-      "reviewedHead": "069f19f0eae35d1928efbb87eb5decae33d9b546",
+      "reviewedHead": "5c162db4737249eba5b4b100e8d1f7579f848657",
       "remediationCommits": {
-        "DEE-681": "aec8b410fb2db7db6682ca374bb99be004955fef",
-        "DEE-682": "3652b73ed4144ebcf1e5b6b4867e4f426fd7b732",
-        "DEE-683": "158781c803e800097a0266503d4a3db9a6dd5bf7",
-        "DEE-684": "aee497588f224b502d9305744c973098cb84453d"
+        "DEE-681": "32c7b305bdd8d73df8edde854a61cb1b3a030662",
+        "DEE-682": "7550d9fb7807c32ad81dc88fcd13598adc283160",
+        "DEE-683": "312b3c34d5f6b87e43517588684b0536668b3c14",
+        "DEE-684": "fcafbbc41d17aaceb5242a06133a702d13d8965e"
       },
       "surfaces": [
         "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -533,9 +533,9 @@
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "failedPublishedHead": "8cfde14ab44726de81571d3aa0974134f4c482cd",
       "failedCheck": "GitHub ci/unit tests: 1 failed, 4805 passed; tests/unit/trader-market-understanding-golden.test.ts",
-      "admissionCommit": "abfa95fc67442778fb35c9e010c81e198086855b",
-      "admissionManifestDigest": "ff246880f03f02536267034f630216ed9692eaab69dc535af5fa78c210f87fd7",
-      "remediationCommit": "06fd0256dab2649416bbf244f51f5d6076610302",
+      "admissionCommit": "c2ae35531b1860b5e0353488d4e4fa5eb74137b0",
+      "admissionManifestDigest": "163ecc3c46090253058987962c3b3869725dfb6e42cebae5bcdf4268ade19fca",
+      "remediationCommit": "e66a89cc223695c2cab55823280163631b35fb56",
       "surface": "tests/fixtures/trader/market-understanding-aligned-trend.json",
       "boundary": "Mechanical exact-provider provenance refresh only: six stale gdelt news_headline identities become the already-admitted coindesk_rss headline identity; gdelt news_event_cluster and every Market Understanding implementation/value/verdict/formula/authority boundary remain unchanged."
     }
