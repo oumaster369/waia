@@ -25,34 +25,34 @@ includedIssues:
   - id: DEE-681
     role: A-contracts-vocabulary-source-mapping-validators
     completionPolicy: manual-at-integration-ready
-    status: in-progress
+    status: integration-ready
   - id: DEE-682
     role: B-postgres-pit-trust-measurement-lineage
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: integration-ready
   - id: DEE-683
     role: C-gateway-pit-replay-bridge
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: integration-ready
   - id: DEE-684
     role: D-source-consumer-bypass-closure
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: integration-ready
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: DEE-681
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-681, DEE-682, DEE-683, DEE-684]
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-681, DEE-682, DEE-683, DEE-684]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Commit the admitted manifest, then implement and validate DEE-681 contracts."
+  nextAction: "Run the immutable frozen-head gates and independent adversarial review, then publish one governed PR."
 provenance:
   createdFrom: chat
   gapRegistry: null
