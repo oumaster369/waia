@@ -6,6 +6,7 @@ import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildModuleUrl, isModuleHost } from "@/lib/hosts/resolve";
 import { OAUTH_ERROR_QUERY } from "@/lib/oauth/oauth-error-codes";
 import { hasTraderAccessForUser } from "@/lib/trader/access-gate";
+import { readPublicTreasuryForView } from "@/lib/landing/public-data";
 
 export default async function LandingPage({
   searchParams,
@@ -31,6 +32,12 @@ export default async function LandingPage({
   const raw = resolved[OAUTH_ERROR_QUERY];
   const initialOauthErrorCode =
     typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  const publicTreasury = await readPublicTreasuryForView();
 
-  return <LandingPageContent initialOauthErrorCode={initialOauthErrorCode ?? null} />;
+  return (
+    <LandingPageContent
+      initialOauthErrorCode={initialOauthErrorCode ?? null}
+      publicTreasury={publicTreasury}
+    />
+  );
 }

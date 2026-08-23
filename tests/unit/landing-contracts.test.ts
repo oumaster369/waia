@@ -122,6 +122,15 @@ describe("breath public copy hygiene", () => {
   it("exposes no internal Linear issue IDs in homepage Breath strings", () => {
     const breathBlob = JSON.stringify(HOMEPAGE_COPY.breath);
     expect(breathBlob).not.toMatch(/DEE-\d+/i);
+    expect(HOMEPAGE_COPY.breath.lead).toBe(
+      "How long WAIA can keep working with the resources it has.",
+    );
+    expect(HOMEPAGE_COPY.breath.availableLabel).toBe("Available now");
+    expect(HOMEPAGE_COPY.breath.runwayLabel).toBe("Runway");
+    expect(HOMEPAGE_COPY.breath.annualBudgetLabel).toBe("Annual budget");
+    expect(HOMEPAGE_COPY.breath.budgetLink).toBe("Transactions & budget");
+    expect(HOMEPAGE_COPY.breath.patronsLink).toBe("Patrons");
+    expect(HOMEPAGE_COPY.breath.workPlanLink).toBe("Work plan");
     expect(HOMEPAGE_COPY.breath.updatedPending).toBe("Awaiting first ledger publication");
     expect(HOMEPAGE_COPY.breath.supportCta).toBe("KEEP WAIA BREATHING");
     expect(HOMEPAGE_COPY.breath.supportFullyFunded).toBe("WAIA IS FULLY FUNDED");

@@ -17,10 +17,12 @@ import { SocietySection } from "@/components/landing/SocietySection";
 import { WaiaCoreSection } from "@/components/landing/WaiaCoreSection";
 import { WaiaDevOsSection } from "@/components/landing/WaiaDevOsSection";
 import { REGISTER_ANCHOR_ID } from "@/lib/landing/homepage-links";
+import type { PublicTreasuryProjection } from "@/lib/waia-core/treasury/public/types";
 
 type LandingPageContentProps = {
   /** From server `searchParams` so OAuth redirect errors render without relying on client-only URL reads. */
   initialOauthErrorCode?: string | null;
+  publicTreasury?: PublicTreasuryProjection | null;
 };
 
 /**
@@ -32,7 +34,10 @@ type LandingPageContentProps = {
  * - Auth → Breath: ~80 / 96 / 128px responsive
  * - major narrative separation vs tighter bridge clusters
  */
-export function LandingPageContent({ initialOauthErrorCode = null }: LandingPageContentProps = {}) {
+export function LandingPageContent({
+  initialOauthErrorCode = null,
+  publicTreasury = null,
+}: LandingPageContentProps = {}) {
   return (
     <main
       data-testid="landing"
@@ -58,7 +63,7 @@ export function LandingPageContent({ initialOauthErrorCode = null }: LandingPage
         data-testid="landing-narrative-stack"
         className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-4 pb-28 sm:gap-20 sm:px-8 lg:gap-24 xl:gap-28"
       >
-        <BreathOfWaiaSection />
+        <BreathOfWaiaSection projection={publicTreasury} />
 
         <div
           data-testid="landing-cluster-human-twin"
