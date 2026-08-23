@@ -1,11 +1,14 @@
-import type { MarketDataProviderId } from "@/lib/trader/market-data/observation-types";
+import type {
+  MarketDataProviderId,
+  NormalizedObservationKind,
+} from "@/lib/trader/market-data/observation-types";
 
 export type MarketDataProviderDescriptor = {
   id: MarketDataProviderId;
   venue: string;
   label: string;
   required: boolean;
-  kinds: readonly string[];
+  kinds: readonly NormalizedObservationKind[];
 };
 
 const PROVIDER_DESCRIPTORS: Record<MarketDataProviderId, MarketDataProviderDescriptor> = {
