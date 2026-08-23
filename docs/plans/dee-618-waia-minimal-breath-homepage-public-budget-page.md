@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: ready-for-pr
+  status: in-review
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  prNumber: 485
+  prUrl: https://github.com/oumaster369/waia/pull/485
+  lastValidatedGitSha: 814fb1bd292f56665116deb778b30f9e85c0e310
+  lastValidationAt: 2026-08-23
   blockedReason: null
-  nextAction: "Commit, push, open the Human squash-merge PR, then await authoritative CI."
+  nextAction: "Await green authoritative PR CI on the exact final head, then stop for Human squash-merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
