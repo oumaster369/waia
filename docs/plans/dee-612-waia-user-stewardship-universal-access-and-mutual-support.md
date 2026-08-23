@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: null
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
+  prNumber: 486
+  prUrl: "https://github.com/oumaster369/waia/pull/486"
+  lastValidatedGitSha: 7161944a783cf2d4b65b96c912ca594106a57cb0
   lastValidationAt: "2026-08-23T14:05:42Z"
   blockedReason: null
-  nextAction: "Commit, push and open the Human-only squash-merge PR to main."
+  nextAction: "Human Architect reviews the doctrine and squash-merges PR #486 to main; agents never merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
