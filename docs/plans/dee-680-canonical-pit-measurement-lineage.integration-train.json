@@ -57,15 +57,17 @@
         "The canonical primitive vocabulary is exactly seven kinds and the gateway disposition is exhaustive across all 17 normalized kinds.",
         "All 11 excluded kinds reject as EXCLUDED_UNMODELED; cross_exchange_confirmation and news_event_cluster remain Measurement-only categories.",
         "Provider/source logical identities reuse the existing trader_mi_source venue/feed/symbol namespace and fail closed on mismatches or missing sources.",
-        "Measurement definitions and values are content-addressed inert identity/lineage contracts with no computational evaluator or capital authority."
+        "Measurement definitions and values are content-addressed inert identity/lineage contracts with no computational evaluator or capital authority.",
+        "Every definition identity is recomputed from its exact inert body, and the admitted internal msv_envelope binds its existing mi-observation-v1 schema with explicit null external-trust lineage."
       ],
       "integratedCommits": [
-        "3dc0064350a5d12c7a2d6290829c29d644656157",
-        "2020c40079f3936603b9db3bdd2c63f5c923ae42",
-        "5f60f8b7f378fa27b9c02be8afa418254659f5b3"
+        "d894ad92bf20d26cc0c43fe2b7121b31ad2ccf0d",
+        "077707807ffafa8f835cf8212920754931842284",
+        "89322bd65f6fc7140f42aa2ff48285f9c466de02",
+        "497236ce452262f775ff8b1a694466b9611bf535"
       ],
       "tests": [
-        "pnpm test --run tests/unit/trader-mi-canonical-contracts.test.ts (5/5 pass)",
+        "pnpm test --run tests/unit/trader-mi-canonical-contracts.test.ts (6/6 pass, including stale-definition rejection and internal MSV lineage)",
         "legacy observation tests (17/17 pass)",
         "pnpm typecheck (pass)",
         "scoped eslint (pass)"
@@ -131,16 +133,18 @@
         "External Observations bind exact organization, Source, historical trust receipt/revision/digest, PIT chronology, normalized input, content digest, and append-only revision lineage.",
         "Four service-only relations enforce same-organization foreign keys, append-only mutation denial, and authenticated/anon deny RLS.",
         "Focused PostgreSQL tests prove deterministic idempotency, cross-tenant rejection, real-role CRUD denial, and inert Measurement lineage completeness.",
-        "Reality V2 migration identity test retains every exact 0160 assertion and passes with legitimate migration 0161 after changing only journal lookup order dependence."
+        "Reality V2 migration identity test retains every exact 0160 assertion and passes with legitimate migration 0161 after changing only journal lookup order dependence.",
+        "Repository and PostgreSQL insert guards independently recompute definition/value SHA-256 identities; stale objects and direct forged SQL identities fail, while internal MSV lineage persists without fabricated trust."
       ],
       "integratedCommits": [
-        "17a67568d9534e2f3a9309fa54c21288f19971b2",
-        "5603b3631a20cea697d20020eaefa70774cb41da"
+        "f983bd36ab5f7cd6fa10a2095c42f51d2f27db9b",
+        "b583fc8dd265761490aa871bb79c16452abd81df",
+        "9695e76630c95f4b94547f976403cb695d7c05b4"
       ],
       "tests": [
         "fresh pnpm db:migrate:postgres through 0161 (pass)",
         "pnpm db:smoke:postgres (pass)",
-        "WAIA_PG_INTEGRATION=1 PostgreSQL canonical PIT suite (5/5 cumulative pass)",
+        "WAIA_PG_INTEGRATION=1 PostgreSQL canonical PIT suite (6/6 cumulative pass, including repository/database forgery denial and internal MSV lineage)",
         "migration identity and cumulative contract unit tests (pass)",
         "Reality V2 exact migration identity/content/uniqueness test (5/5 pass)",
         "pnpm typecheck and scoped eslint (pass)"
@@ -191,6 +195,7 @@
         "lib/trader/market-data/market-data-gateway.ts",
         "lib/trader/market-data/normalization/gateway-to-canonical-pit.ts",
         "lib/trader/market-data/replay/canonical-pit-replay.ts",
+        "lib/trader/market-data/replay/replay-lane-normalizer.ts",
         "lib/trader/mi/canonical-pit-service-postgres.ts",
         "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
         "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
@@ -200,13 +205,15 @@
         "One pure content-addressed canonicalizer feeds both gateway and replay persistence paths.",
         "Each attempt produces AVAILABLE, UNAVAILABLE, or REJECTED with explicit excluded, stale, chronology, unavailable, missing-source, and trust-unknown reasons.",
         "Availability is the recorded ingestion timestamp and replay adds only an exact PIT cutoff; no inferred freshness window or substitute datum exists.",
-        "Eligible gateway and replay inputs reproduce identical Observation and receipt identities while future evidence fails closed."
+        "Eligible gateway and replay inputs reproduce identical Observation and receipt identities while future evidence fails closed.",
+        "The explicit absent news_headline replay lane uses the existing CoinDesk headline provider identity and remains UNAVAILABLE rather than being misclassified as a provider mismatch."
       ],
       "integratedCommits": [
-        "2c7bc425f4f385202d6afd0cf2f7c25fbccb3e22"
+        "ae67a3fef191e487ac4a0d76a55c97bd4402d4d9",
+        "ea827d81de6ee79c5e9188f1e9bbf7e692db6a40"
       ],
       "tests": [
-        "canonical gateway/replay unit tests (7/7 pass)",
+        "canonical gateway/replay unit tests (8/8 pass, including explicit unavailable news provenance)",
         "existing market-data gateway regression tests (21/21 pass)",
         "WAIA_PG_INTEGRATION=1 cumulative PostgreSQL suite (4/4 at wave C)",
         "pnpm typecheck and scoped eslint (pass)"
@@ -272,9 +279,9 @@
         "Reality V2 inventory identity now accounts for exactly 152 source files, including the three admitted DEE-620 market-data sources, while all dispositions and fail-uncertain rules remain unchanged; its focused consumer-graph proof reports the same exact count."
       ],
       "integratedCommits": [
-        "64eaff76cc4a40387258653e7cd02e0279f11672",
-        "dd84b87810e6877b17af556e48d483de14ef35d9",
-        "d396e96334bad1ca14d5912b32d0798d6e6d795c"
+        "5670e2557e0c32827d3fa757c3453144bd4c6d56",
+        "c215193f60f13dbb9689c9e0f30b648d73c18abc",
+        "a612c76ecae430d2bb7eca2a880e9218024e6fec"
       ],
       "tests": [
         "repository-wide source/consumer closure tests (3/3 pass)",
@@ -294,8 +301,8 @@
   "integrationEvidence": {
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "266be2204e59dc5e2895970e710383479d4124f6800fd608d8b1c3c5139272c4",
-      "manifestCommit": "9ab15339db2c4bf04a22f533f994ef6af3a39e9e",
+      "manifestDigest": "85ff8e425d7ee0867a3a88912f9946d618b258172c27c3e0efdd153530a6b063",
+      "manifestCommit": "55439d910cb5d61b82296898298d32584cf99513",
       "manifestPath": "docs/plans/dee-680-canonical-pit-measurement-lineage.integration-train.json",
       "reviewer": "Human-ratified DEE-620 integration owner after exact-base, duplicate, dependency, migration-identity, vocabulary, boundary, and allowed-surface audit on 2026-08-23; re-admitted with the exact DEE-682 test amendment and DEE-684 Reality inventory identity amendment authorized in Codex task 01a019c0-8940-7272-bc9c-6b330e6bf0f2 and recorded on Linear DEE-680/DEE-682/DEE-684"
     },
@@ -304,9 +311,10 @@
         "issue": "DEE-681",
         "status": "pass",
         "reviewedCommits": [
-          "3dc0064350a5d12c7a2d6290829c29d644656157",
-          "2020c40079f3936603b9db3bdd2c63f5c923ae42",
-          "5f60f8b7f378fa27b9c02be8afa418254659f5b3"
+          "d894ad92bf20d26cc0c43fe2b7121b31ad2ccf0d",
+          "077707807ffafa8f835cf8212920754931842284",
+          "89322bd65f6fc7140f42aa2ff48285f9c466de02",
+          "497236ce452262f775ff8b1a694466b9611bf535"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/normalization/canonical-pit-contract.ts",
@@ -322,8 +330,9 @@
         "issue": "DEE-682",
         "status": "pass",
         "reviewedCommits": [
-          "17a67568d9534e2f3a9309fa54c21288f19971b2",
-          "5603b3631a20cea697d20020eaefa70774cb41da"
+          "f983bd36ab5f7cd6fa10a2095c42f51d2f27db9b",
+          "b583fc8dd265761490aa871bb79c16452abd81df",
+          "9695e76630c95f4b94547f976403cb695d7c05b4"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -340,11 +349,15 @@
       {
         "issue": "DEE-683",
         "status": "pass",
-        "reviewedCommits": ["2c7bc425f4f385202d6afd0cf2f7c25fbccb3e22"],
+        "reviewedCommits": [
+          "ae67a3fef191e487ac4a0d76a55c97bd4402d4d9",
+          "ea827d81de6ee79c5e9188f1e9bbf7e692db6a40"
+        ],
         "reviewedFiles": [
           "lib/trader/market-data/market-data-gateway.ts",
           "lib/trader/market-data/normalization/gateway-to-canonical-pit.ts",
           "lib/trader/market-data/replay/canonical-pit-replay.ts",
+          "lib/trader/market-data/replay/replay-lane-normalizer.ts",
           "lib/trader/mi/canonical-pit-service-postgres.ts",
           "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
           "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
@@ -355,9 +368,9 @@
         "issue": "DEE-684",
         "status": "pass",
         "reviewedCommits": [
-          "64eaff76cc4a40387258653e7cd02e0279f11672",
-          "dd84b87810e6877b17af556e48d483de14ef35d9",
-          "d396e96334bad1ca14d5912b32d0798d6e6d795c"
+          "5670e2557e0c32827d3fa757c3453144bd4c6d56",
+          "c215193f60f13dbb9689c9e0f30b648d73c18abc",
+          "a612c76ecae430d2bb7eca2a880e9218024e6fec"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -417,8 +430,8 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "supersededFrozenHead": "7f9072b1c5bc9b9f752b7a2b660225a5682420cf",
-      "reAdmissionManifestCommit": "9ab15339db2c4bf04a22f533f994ef6af3a39e9e",
-      "reAdmissionManifestDigest": "266be2204e59dc5e2895970e710383479d4124f6800fd608d8b1c3c5139272c4",
+      "reAdmissionManifestCommit": "55439d910cb5d61b82296898298d32584cf99513",
+      "reAdmissionManifestDigest": "85ff8e425d7ee0867a3a88912f9946d618b258172c27c3e0efdd153530a6b063",
       "surface": "tests/unit/trader-reality-v2-migration-identity.test.ts",
       "boundary": "Order-independent exact 0160 journal-entry assertion only; retain all 0160 identity/content/uniqueness assertions and change no Reality implementation or semantics."
     },
@@ -428,8 +441,8 @@
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "authorizedBase": "a4242a4b50da6415836ba1a83cd53c6073c556a2",
       "supersededFrozenHead": "c2b8a220421a1c7df910a3db1dbc57dd02f255fb",
-      "reAdmissionManifestCommit": "9ab15339db2c4bf04a22f533f994ef6af3a39e9e",
-      "reAdmissionManifestDigest": "266be2204e59dc5e2895970e710383479d4124f6800fd608d8b1c3c5139272c4",
+      "reAdmissionManifestCommit": "55439d910cb5d61b82296898298d32584cf99513",
+      "reAdmissionManifestDigest": "85ff8e425d7ee0867a3a88912f9946d618b258172c27c3e0efdd153530a6b063",
       "surfaces": [
         "docs/ai-trader/reality-v2-source-consumer-inventory.json",
         "tests/unit/trader-reality-v2-consumer-graph.test.ts"
@@ -450,6 +463,8 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "reviewedHead": "f734d44196b48e2f1759a426faf6fc6520ee2dad",
+      "reAdmissionManifestCommit": "55439d910cb5d61b82296898298d32584cf99513",
+      "reAdmissionManifestDigest": "85ff8e425d7ee0867a3a88912f9946d618b258172c27c3e0efdd153530a6b063",
       "surfaces": [
         "lib/trader/mi/measurement-lineage-v1.ts",
         "lib/trader/mi/canonical-pit-repository-postgres.ts",
