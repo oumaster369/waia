@@ -57,6 +57,7 @@ WAIA’s direction **includes** purposeful **AI-Twin agency** inside the product
 | Dashboard regions & states | [`ai-twin-dashboard-shell.md`](ai-twin-dashboard-shell.md) |
 | Twin dialogue *training modes* | [`../DIALOGUE_MODES_V1.md`](../DIALOGUE_MODES_V1.md) |
 | Landing (if differentiated) | [`waia-landing.md`](waia-landing.md) |
+| User stewardship, universal access & mutual support | [`waia-user-stewardship-doctrine.md`](waia-user-stewardship-doctrine.md) |
 
 **Privacy invariant (Diary literal text never leaks to Society feeds)** — documented in [`ai-twin-user-flow.md`](ai-twin-user-flow.md) §8.
 
