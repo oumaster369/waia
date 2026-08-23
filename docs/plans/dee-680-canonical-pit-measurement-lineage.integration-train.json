@@ -457,7 +457,7 @@
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "supersededFrozenHead": "7f9072b1c5bc9b9f752b7a2b660225a5682420cf",
       "reAdmissionManifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
-      "reAdmissionManifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
+      "reAdmissionManifestDigest": "c98b8cda5ecc58cd4fde7fd492c9daee29649bee432c5a2ce5dffc11b847abd1",
       "surface": "tests/unit/trader-reality-v2-migration-identity.test.ts",
       "boundary": "Order-independent exact 0160 journal-entry assertion only; retain all 0160 identity/content/uniqueness assertions and change no Reality implementation or semantics."
     },
@@ -468,7 +468,7 @@
       "authorizedBase": "a4242a4b50da6415836ba1a83cd53c6073c556a2",
       "supersededFrozenHead": "c2b8a220421a1c7df910a3db1dbc57dd02f255fb",
       "reAdmissionManifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
-      "reAdmissionManifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
+      "reAdmissionManifestDigest": "c98b8cda5ecc58cd4fde7fd492c9daee29649bee432c5a2ce5dffc11b847abd1",
       "surfaces": [
         "docs/ai-trader/reality-v2-source-consumer-inventory.json",
         "tests/unit/trader-reality-v2-consumer-graph.test.ts"
@@ -490,7 +490,7 @@
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "reviewedHead": "f734d44196b48e2f1759a426faf6fc6520ee2dad",
       "reAdmissionManifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
-      "reAdmissionManifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
+      "reAdmissionManifestDigest": "c98b8cda5ecc58cd4fde7fd492c9daee29649bee432c5a2ce5dffc11b847abd1",
       "surfaces": [
         "lib/trader/mi/measurement-lineage-v1.ts",
         "lib/trader/mi/canonical-pit-repository-postgres.ts",
