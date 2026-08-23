@@ -1,0 +1,486 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-675",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "The Human ratified one four-child A→B→C→D rollback boundary. The diff exceeds the normal size target because the immutable contracts, one additive migration/repository, deterministic lifecycle, and repository-wide closure proof share canonical identities and cannot be truthfully split without an intermediate incomplete authority surface or duplicate migration/PR boundary.",
+  "includedChildren": [
+    {
+      "issue": "DEE-676",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Freeze immutable RealitySourceReportV2, TruthRecordV2, RealityEventV2, and RealityProjectionV2 contracts; the five-source HTX/Execution allowlist; subject identities; raw-reference lineage; and default-deny validators.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-651 and DEE-653 are Done and authoritative origin/main was verified at b68290c3eb9e3a1f27b6e67219959ce033d7f1dc.",
+        "The Human explicitly ratified the exact first-release source allowlist and correction/contradiction policy on 2026-08-22."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/contracts.ts",
+        "lib/trader/reality/v2/source-admission.ts",
+        "lib/trader/reality/v2/index.ts",
+        "tests/unit/trader-reality-v2-contracts.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes these exact contracts, identities, validators, and source exclusions."
+      },
+      "expectedAcceptanceEvidence": [
+        "Only ExecutionReportV2 and the four named HTX spot REST observation classes can validate for canonical admission.",
+        "Raw HTX lineage is receipt/digest/reference only and exact primitive assertion schemas cannot carry raw payloads or secrets.",
+        "Source/subject compatibility is exhaustive and status-only FILLED/PARTIALLY_FILLED cannot become exact fill truth.",
+        "Reality uncertainty markers are limited to SOURCE_CONTRADICTION and UNATTRIBUTED."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-reality-v2-contracts.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "actualFiles": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/contracts.ts",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/source-admission.ts",
+        "tests/unit/trader-reality-v2-contracts.test.ts"
+      ],
+      "integratedCommits": [
+        "17931755592fbff14990d35c8b00b720b04043dc",
+        "ffcd17a8a1df33b790f775de192b1a3111c9d4ea",
+        "18d1607b363ce91d6e3d73b89859f47d12b820bc"
+      ],
+      "acceptanceEvidence": [
+        "Five and only five source kinds validate; eight broad unratified classes fail explicit admission.",
+        "Primitive assertions are exact-key, content-addressed, raw-reference-only, and secret-bearing metadata is rejected.",
+        "Base source revisions and explicit distinct correction pairs are representable without implicit supersession.",
+        "Status-only order evidence cannot validate as exact fill truth."
+      ],
+      "tests": [
+        "tests/unit/trader-reality-v2-contracts.test.ts: 9/9 pass",
+        "pnpm typecheck: pass",
+        "scoped eslint: pass"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-677",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Add exactly one additive 0160 PostgreSQL migration and organization-scoped Reality repository with append-only bitemporal ledgers, digest-chain/frontier integrity, deny RLS, concurrency, and TOCTOU safety.",
+      "dependencies": ["DEE-676"],
+      "dependencyEvidence": [
+        "DEE-677 consumes only the frozen DEE-676 API and starts after A is committed and reviewed.",
+        "The Human explicitly ratified one additive next-numbered PostgreSQL migration and service-only deny-RLS tables."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/0160_trader_reality_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "lib/trader/reality/v2/repository-postgres.ts",
+        "tests/unit/trader-reality-v2-migration-identity.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/integration/postgres-reality-v2.test.ts",
+        "docs/migrations/DEE-64-TRACKER.md"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes exactly one additive Reality migration, repository, and tenant/security proofs."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exactly one next-numbered migration creates four append-only Reality tables and changes no existing retention/security policy.",
+        "Every table is organization-scoped, service-only, deny-RLS, and immutable except no mutable canonical projection row is introduced.",
+        "Database-authored knowledge time, source-native dedup, supersession scope, event digest chain, and projection frontier are transactionally enforced.",
+        "Real-role CRUD denial, two-tenant isolation, concurrency, and TOCTOU tests pass."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-reality-v2-migration-identity.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<loopback> pnpm test --run --no-file-parallelism tests/integration/postgres-reality-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "actualFiles": [
+        "db/migrations_postgres/0160_trader_reality_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/repository-postgres.ts",
+        "tests/integration/postgres-reality-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/trader-reality-v2-migration-identity.test.ts"
+      ],
+      "integratedCommits": [
+        "f9df8318d7e03c7f670f2002689ccb0145145314",
+        "cdb2f048336e543bb4425c7681ab5c80390f8139",
+        "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
+        "6aaa0af5b8c56f82434c420032a27e6d0879ad4c",
+        "91d424e8e00f6246cdfdf058334166444cb11a9b",
+        "2eb37ecba162251627046e19ebb26cb258334304"
+      ],
+      "acceptanceEvidence": [
+        "A fresh empty PostgreSQL database applied exactly one next-numbered 0160 migration successfully.",
+        "Four canonical organization/account-scoped ledgers and the immutable admission relation are append-only; the sixth frontier relation is mutable only through protected allocator/consumer functions, and all six have deny RLS.",
+        "HTX-only ExecutionReport lineage and multiple distinct facts per immutable source are enforced without reinterpretation.",
+        "Real authenticated/anon CRUD denial, tenant isolation, concurrency, stale-head TOCTOU, exact current-stable contradiction guards, race-safe correction-target absence, and repository smoke proofs pass."
+      ],
+      "tests": [
+        "migration bootstrap from empty database: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 9/9 pass on a freshly migrated disposable database",
+        "Reality focused unit tests: 25/25 pass",
+        "pnpm db:smoke:postgres: pass",
+        "pnpm typecheck and scoped eslint: pass"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-678",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Implement deterministic ingest, source-native dedup, explicit correction/supersession, contradiction quarantine/release, last-stable fold, current/as-of projection, and restart replay.",
+      "dependencies": ["DEE-677"],
+      "dependencyEvidence": [
+        "DEE-678 starts only after the DEE-677 migration and repository invariants are frozen.",
+        "The Human requires B and C to serialize and forbids confidence/finality merit arbitration."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/repository-postgres.ts",
+        "lib/trader/reality/v2/ingest-postgres.ts",
+        "lib/trader/reality/v2/projection.ts",
+        "lib/trader/reality/v2/replay.ts",
+        "tests/unit/trader-reality-v2-projection.test.ts",
+        "tests/integration/postgres-reality-v2.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes deterministic construction/replay and last-stable contradiction semantics only."
+      },
+      "expectedAcceptanceEvidence": [
+        "Duplicate, new fact, explicit correction, and contradiction classifications are distinct and deterministic.",
+        "Only source-native correction/supersession changes canonical truth; contradictions remain quarantined and preserve the last stable projection.",
+        "Current and arbitrary knowledge-time as-of projections carry exact policy/frontier/content digests.",
+        "Identical ledgers reproduce identical projections across restart/replay and status-only fills never fabricate truth."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-reality-v2-projection.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<loopback> pnpm test --run --no-file-parallelism tests/integration/postgres-reality-v2.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "actualFiles": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/ingest-postgres.ts",
+        "lib/trader/reality/v2/projection.ts",
+        "lib/trader/reality/v2/replay.ts",
+        "tests/integration/postgres-reality-v2.test.ts",
+        "tests/unit/trader-reality-v2-projection.test.ts"
+      ],
+      "integratedCommits": [
+        "70387a4a4996514fa718db80c0d7a571b1a18583",
+        "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
+        "536dc4682fd138fae4e2509c1dbc72e2479a2c2f",
+        "d58387e844b30ec782e14d299c3493943c2b968f",
+        "d62b34f93ca8809c7d0423b1d5390c8686ed2d83"
+      ],
+      "acceptanceEvidence": [
+        "Duplicate, new fact, explicit correction, contradiction, and quarantine classifications are deterministic.",
+        "A missing source-native correction target persists as a truth-null CORRECTION_TARGET_NOT_FOUND quarantine and replays exactly without synthetic truth.",
+        "Ingest, repository, and 0160 share one event-ledger current-target predicate; an existing exact target rejects false missing-target quarantine at repository, SQL, and serialized race boundaries.",
+        "Contradiction and release preserve last stable truth; only exact revision-linked SUPERSEDED changes it.",
+        "Current and arbitrary knowledge-time folds seal exact frontier/policy/content digests.",
+        "Identical ledgers replay identically across restart and broken event chains fail closed."
+      ],
+      "tests": [
+        "tests/unit/trader-reality-v2-projection.test.ts: 3/3 pass",
+        "tests/integration/postgres-reality-v2.test.ts lifecycle proof: pass",
+        "pnpm typecheck and scoped eslint: pass"
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-679",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Inventory and close every repository connector/source producer and Reality-relevant consumer; admit only DEE-651 ExecutionReportV2 and four HTX spot REST observation classes while every other source fails explicitly or remains uncertain without silent loss.",
+      "dependencies": ["DEE-678"],
+      "dependencyEvidence": [
+        "DEE-679 uses the complete frozen A→B→C boundary and begins only after deterministic projection is available.",
+        "The Human requires whole-repository compatibility verification while keeping DEE-634 and DEE-620 separate."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/connectors/htx/index.ts",
+        "lib/trader/reality/v2/ingress.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/reality-adapter.ts",
+        "lib/trader/connectors/htx/reality-adapter.ts",
+        "lib/trader/reality/v2/index.ts",
+        "scripts/trader/validate-reality-v2-consumer-graph.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "tests/unit/trader-reality-v2-ingress.test.ts",
+        "tests/integration/trader-reality-v2-htx-ingress.test.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "package.json"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-652 delegation dated 2026-08-22 authorizes exactly this repository-wide inventory/cutover closure without new source classes."
+      },
+      "expectedAcceptanceEvidence": [
+        "A checked-in inventory names every connector/source and relevant consumer with admitted or excluded/fail-uncertain disposition.",
+        "Static proof shows no connector bypass, no Reality import of Risk Expected State, and no unlisted source adapter.",
+        "Runtime proof admits the five approved source kinds through existing boundaries and explicitly rejects/quarantines every excluded class.",
+        "Existing consumers remain compatible, no source is silently lost, and DEE-634/DEE-620 implementation remains absent."
+      ],
+      "expectedTests": [
+        "pnpm run validate:reality-v2-consumer-graph",
+        "pnpm test --run tests/unit/trader-reality-v2-consumer-graph.test.ts tests/unit/trader-reality-v2-ingress.test.ts tests/integration/trader-reality-v2-htx-ingress.test.ts",
+        "pnpm typecheck",
+        "scoped eslint"
+      ],
+      "actualFiles": [
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "docs/plans/dee-675-reality-v2-htx-spot.md",
+        "lib/trader/connectors/htx/index.ts",
+        "lib/trader/connectors/htx/reality-adapter.ts",
+        "lib/trader/execution/v2/index.ts",
+        "lib/trader/execution/v2/reality-adapter.ts",
+        "lib/trader/reality/v2/index.ts",
+        "lib/trader/reality/v2/ingress.ts",
+        "package.json",
+        "scripts/trader/validate-reality-v2-consumer-graph.ts",
+        "tests/integration/trader-reality-v2-htx-ingress.test.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "tests/unit/trader-reality-v2-ingress.test.ts"
+      ],
+      "integratedCommits": [
+        "50d69656045a81ba6efd943048e50bf76caa9265",
+        "78ba19279976e4603316be9d1671c642b0949992",
+        "757c13a89ae35dce8910be5568318744d5a2d1a0",
+        "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb"
+      ],
+      "acceptanceEvidence": [
+        "Pinned whole-repository inventory closes 149 connector, Execution V2, and market-data source surfaces plus 115 direct consumers and 25 connector references with exactly one disposition each and path+content digests.",
+        "Approved ExecutionReportV2 and four raw-captured HTX REST classes route through dedicated adapters; status-only FILLED remains ORDER, never FILL.",
+        "All excluded classes return explicit digest receipts; public market, WebSocket, chain, modelled, synthetic, simulator, and internal expectation paths cannot bypass admission.",
+        "Existing connector consumers remain unchanged and DEE-620/DEE-634 remain explicit separate Todo scope."
+      ],
+      "tests": [
+        "pnpm run validate:reality-v2-consumer-graph: pass (149 sources, 115 consumers; path+content digests)",
+        "D ingress/graph/runtime plus HTX FAIL-UNKNOWN tests: 9/9 pass",
+        "pnpm typecheck and scoped eslint: pass"
+      ],
+      "execution": {
+        "wave": 4,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "b22680bb01bf72d43523043c7389126e4c15dfd98fc10b591375cab6386fb1bd",
+      "manifestCommit": "01b99c87d6c4b49c3b04eec49506ccd392b460c2",
+      "manifestPath": "docs/plans/dee-675-reality-v2-htx-spot.integration-train.json",
+      "reviewer": "Human-ratified DEE-652 integration owner after duplicate, dependency, source-allowlist, security, and exact-base audit on 2026-08-22"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-676", "status": "pass",
+        "reviewedCommits": [
+          "17931755592fbff14990d35c8b00b720b04043dc",
+          "ffcd17a8a1df33b790f775de192b1a3111c9d4ea",
+          "18d1607b363ce91d6e3d73b89859f47d12b820bc"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-675-reality-v2-htx-spot.md",
+          "lib/trader/reality/v2/contracts.ts", "lib/trader/reality/v2/index.ts",
+          "lib/trader/reality/v2/source-admission.ts", "tests/unit/trader-reality-v2-contracts.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-677", "status": "pass",
+        "reviewedCommits": [
+          "f9df8318d7e03c7f670f2002689ccb0145145314",
+          "cdb2f048336e543bb4425c7681ab5c80390f8139",
+          "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
+          "6aaa0af5b8c56f82434c420032a27e6d0879ad4c",
+          "91d424e8e00f6246cdfdf058334166444cb11a9b",
+          "2eb37ecba162251627046e19ebb26cb258334304"
+        ],
+        "reviewedFiles": [
+          "db/migrations_postgres/0160_trader_reality_v2.sql", "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts", "docs/migrations/DEE-64-TRACKER.md",
+          "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/repository-postgres.ts",
+          "tests/integration/postgres-reality-v2.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+          "tests/unit/trader-reality-v2-migration-identity.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-678", "status": "pass",
+        "reviewedCommits": [
+          "70387a4a4996514fa718db80c0d7a571b1a18583",
+          "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
+          "536dc4682fd138fae4e2509c1dbc72e2479a2c2f",
+          "d58387e844b30ec782e14d299c3493943c2b968f",
+          "d62b34f93ca8809c7d0423b1d5390c8686ed2d83"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/reality/v2/index.ts",
+          "lib/trader/reality/v2/ingest-postgres.ts", "lib/trader/reality/v2/projection.ts",
+          "lib/trader/reality/v2/replay.ts", "tests/integration/postgres-reality-v2.test.ts",
+          "tests/unit/trader-reality-v2-projection.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-679", "status": "pass",
+        "reviewedCommits": [
+          "50d69656045a81ba6efd943048e50bf76caa9265",
+          "78ba19279976e4603316be9d1671c642b0949992",
+          "757c13a89ae35dce8910be5568318744d5a2d1a0",
+          "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb"
+        ],
+        "reviewedFiles": [
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "docs/plans/dee-675-reality-v2-htx-spot.md", "lib/trader/connectors/htx/index.ts",
+          "lib/trader/connectors/htx/reality-adapter.ts", "lib/trader/execution/v2/index.ts",
+          "lib/trader/execution/v2/reality-adapter.ts", "lib/trader/reality/v2/index.ts",
+          "lib/trader/reality/v2/ingress.ts", "package.json",
+          "scripts/trader/validate-reality-v2-consumer-graph.ts",
+          "tests/integration/trader-reality-v2-htx-ingress.test.ts",
+          "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+          "tests/unit/trader-reality-v2-ingress.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      { "afterIssue": "DEE-676", "status": "pass", "commands": ["focused contracts 9/9 including typed metadata mutation cases", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-677", "status": "pass", "commands": ["fresh disposable database migration bootstrap through amended 0160", "PostgreSQL Reality adversarial 9/9", "repository/direct-SQL/serialized-race correction-target absence proofs", "reserved-reason unverifiable/non-correction/mixed rejection", "PostgreSQL smoke", "migration identity 5/5", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-678", "status": "pass", "commands": ["Reality focused unit tests 25/25", "one exact event-ledger current-target predicate across ingest/repository/0160", "source-only missing correction target and superseded contradiction target PostgreSQL regressions", "exact as-of replay", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-679", "status": "pass", "commands": ["AST source/consumer graph 149/115 and 25 connector references with path+content digests", "alias/bind/destructure/bracket/optional/direct-client/indirect negative fixtures", "D runtime and HTX FAIL-UNKNOWN tests 9/9", "typecheck", "scoped eslint"] }
+    ],
+    "changedHeadRemediation": {
+      "status": "implemented-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "561e003e5428272ff126b295a231a5eae74c8cd3",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "mechanicallyRebasedHead": "cbb9c6bb41c038101778f03a572561d75419fe98",
+      "remediationCommits": [
+        "ffcd17a8a1df33b790f775de192b1a3111c9d4ea",
+        "cdb2f048336e543bb4425c7681ab5c80390f8139",
+        "aadc1f8b4e0a5151b9ca58de8cb3f01bcd66b055",
+        "757c13a89ae35dce8910be5568318744d5a2d1a0"
+      ],
+      "scope": "Only the four confirmed exact-head findings were remediated within the admitted A/B/C/D surfaces; migration 0160, source allowlist, task/train/branch/PR boundary, DEE-672, DEE-674, DEE-620, and DEE-634 boundaries are unchanged."
+    },
+    "guardRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "3462378d9ad660291ed1aa3002e62734f3579ea6",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb",
+      "remediationCommits": [
+        "18d1607b363ce91d6e3d73b89859f47d12b820bc",
+        "d0b686c2a5ac1c8610a7ff1367d226ab42f17e67",
+        "536dc4682fd138fae4e2509c1dbc72e2479a2c2f",
+        "53f8a84c8ce4555c5c9cccbe3e28d8ad32d98fcb"
+      ],
+      "authorizedSurfaces": "Existing contracts/schema-postgres/unpublished-0160/repository/projection/ingest/test/inventory/manifest/provenance surfaces only; immutable capture-source/account admission, protected per-scope frontier allocator/consumer, exact quarantineEventId linkage, and DB nonblank account scope are the only new internal surfaces.",
+      "scopePreservation": "No new source class, external API, migration number, task, branch, PR, retention/security policy, live/capital/holdout/production/Execution Server action, DEE-620 implementation, or DEE-634 implementation.",
+      "focusedEvidence": [
+        "affected contract/projection/ingress/migration/consumer-graph tests: 26/26 pass",
+        "pnpm typecheck: pass",
+        "fresh empty PostgreSQL migration through 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 6/6 pass",
+        "AST inventory: 149 sources / 115 consumers / 25 connector references with regenerated digests"
+      ]
+    },
+    "renewedReviewRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "15af6f1321adaeada0697184d716b9558d1d7424",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "d58387e844b30ec782e14d299c3493943c2b968f",
+      "remediationCommits": [
+        "6aaa0af5b8c56f82434c420032a27e6d0879ad4c",
+        "d58387e844b30ec782e14d299c3493943c2b968f"
+      ],
+      "scope": "Only missing-target correction preservation, current-stable SOURCE_CONTRADICTION enforcement, and current-evidence wording were remediated in existing ingest/repository/unpublished-0160/test/provenance surfaces.",
+      "historicalAdmissionWording": {
+        "status": "immutable-historical-text-superseded-for-current-evidence",
+        "note": "The admitted predecessor's four-table expectation remains byte-preserved for governance identity; current evidence records four canonical ledgers, one immutable admission relation, and one protected mutable frontier relation.",
+        "currentRelationEvidence": "All six relations are organization/account-scoped and deny-RLS; the four canonical ledgers plus admission relation are append-only, while frontier mutation is restricted to protected allocator/consumer functions."
+      },
+      "focusedEvidence": [
+        "all five Reality V2 focused unit files: 25/25 pass",
+        "pnpm typecheck and scoped eslint: pass",
+        "fresh disposable PostgreSQL migration through amended 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 7/7 pass",
+        "missing-target quarantine has no truth row and exact replay; superseded contradiction targets fail at repository and direct-SQL boundaries"
+      ]
+    },
+    "falseMissingTargetRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "b73677c61cf48af2015ef61a4f1494b71001e70d",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "d62b34f93ca8809c7d0423b1d5390c8686ed2d83",
+      "remediationCommits": [
+        "91d424e8e00f6246cdfdf058334166444cb11a9b",
+        "d62b34f93ca8809c7d0423b1d5390c8686ed2d83"
+      ],
+      "scope": "The single review P2 was remediated only in existing repository, ingest, unpublished-0160, focused-test, manifest, and provenance surfaces; no table, API, source class, migration number, task, branch, or PR was added.",
+      "canonicalPredicate": "After the existing organization/account advisory transaction lock, a current correction target matches exact source kind, native identity kind/id, referenced native revision, subject, empty markers, an OBSERVED/SUPERSEDED event, and no later SUPERSEDED event.",
+      "focusedEvidence": [
+        "all five Reality V2 focused unit files: 25/25 pass",
+        "pnpm typecheck and scoped eslint: pass",
+        "fresh disposable PostgreSQL migration through amended 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 8/8 pass",
+        "same-revision/different-identity allowance plus repository, direct-SQL, and serialized-race existing-target rejection"
+      ]
+    },
+    "reservedMissingTargetReasonRemediation": {
+      "status": "sealed-focused-evidence-pass",
+      "authorizationDate": "2026-08-22",
+      "authorizedStartingHead": "b0e42eb4fe3839eb5d1d4a708b479fa737f828a1",
+      "authoritativeBase": "d45bb9b11b21c7217eed5957eecdb629d309f4c6",
+      "implementationHead": "2eb37ecba162251627046e19ebb26cb258334304",
+      "remediationCommits": [
+        "2eb37ecba162251627046e19ebb26cb258334304"
+      ],
+      "scope": "The single exact-head P2 was remediated only in the existing repository, unpublished-0160, focused-test, manifest, and provenance surfaces; no table, API, source class, migration number, task, branch, or PR was added.",
+      "canonicalPredicate": "CORRECTION_TARGET_NOT_FOUND is reserved to a singleton reason on a persisted VERIFIED and ATTRIBUTED source with complete native identity, native revision, supersedes revision, and the existing exact current-target absence predicate. The generic UNVERIFIABLE branch rejects any reason set containing the reserved code.",
+      "focusedEvidence": [
+        "Reality migration/contracts/projection focused unit files: 17/17 pass",
+        "pnpm typecheck and scoped eslint: pass",
+        "fresh disposable PostgreSQL migration through amended 0160: pass",
+        "tests/integration/postgres-reality-v2.test.ts: 9/9 pass",
+        "repository and direct-SQL negative proofs reject unverifiable, non-correction, and mixed reserved-reason attempts"
+      ]
+    },
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  }
+}

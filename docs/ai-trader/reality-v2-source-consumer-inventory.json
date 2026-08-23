@@ -1,0 +1,299 @@
+{
+  "schemaVersion": "reality-v2-source-consumer-inventory/v1",
+  "scope": "whole-repository production TypeScript connector/source and direct connector/ExecutionReport/raw-capture consumers",
+  "canonicalSourceKinds": [
+    "EXECUTION_REPORT_V2",
+    "HTX_SPOT_ORDER_REST",
+    "HTX_SPOT_FILL_REST",
+    "HTX_SPOT_BALANCE_REST",
+    "HTX_SPOT_ACCOUNT_REST"
+  ],
+  "admittedBoundaryFiles": [
+    "lib/trader/execution/v2/reality-adapter.ts",
+    "lib/trader/connectors/htx/reality-adapter.ts",
+    "lib/trader/reality/v2/ingress.ts",
+    "lib/trader/reality/v2/source-admission.ts"
+  ],
+  "sourceDiscovery": {
+    "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+    "roots": [
+      "lib/trader/connectors",
+      "lib/trader/execution/v2",
+      "lib/trader/market-data"
+    ],
+    "additionalFiles": [
+      "lib/trader/execution/index.ts",
+      "lib/trader/mi/raw-capture-v1.ts",
+      "lib/trader/mi/raw-capture-repository-postgres.ts",
+      "lib/trader/balances/sync-handler.ts",
+      "lib/trader/trade-history/sync-handler.ts",
+      "lib/trader/positions/sync-handler.ts",
+      "lib/trader/market-brain/htx-ingestion.ts",
+      "lib/trader/live/live-connector.ts",
+      "lib/trader/execution/historical-simulated-exchange.ts",
+      "lib/trader/connectors/mock-exchange-connector.ts"
+    ],
+    "expectedFileCount": 149,
+    "sortedPathDigestHex": "4a33b21e4505875cce2e70e87fd8d71acee5028d18860b5789082a966dea360d",
+    "sortedContentDigestHex": "b572a74eabc2ab424c05829ccd214ee793380d9a9ebeddcbc1ca59a4a2106bfa"
+  },
+  "sourceRules": [
+    {
+      "id": "HTX_CONNECTOR_MODULES",
+      "pathPattern": "^lib/trader/connectors/htx/",
+      "disposition": "CONDITIONAL_ADMISSION",
+      "reason": "Only private HTX spot REST order/fill/balance/account output paired with an existing encrypted raw-capture receipt is admitted; public market calls and WebSocket are excluded."
+    },
+    {
+      "id": "NON_HTX_CONNECTORS",
+      "pathPattern": "^lib/trader/connectors/(?!htx/)",
+      "disposition": "EXCLUDED",
+      "reason": "Mock, synthetic, public-data, chain, news, macro, and other venue/source classes are not ratified."
+    },
+    {
+      "id": "MARKET_DATA_SURFACES",
+      "pathPattern": "^lib/trader/market-data/",
+      "disposition": "EXCLUDED",
+      "reason": "Public, historical, fixture, scenario, synthetic/modelled, research, holdout, and derived market-data surfaces are explicitly excluded from canonical Reality V2."
+    },
+    {
+      "id": "EXECUTION_V2",
+      "pathPattern": "^lib/trader/execution/v2/",
+      "disposition": "ADMITTED_EXECUTION_REPORT_ONLY",
+      "reason": "Only immutable HTX-scoped ExecutionReportV2 lineage enters through the dedicated adapter; plan, attempt, risk, and expected state do not."
+    },
+    {
+      "id": "EXECUTION_BARREL",
+      "pathPattern": "^lib/trader/execution/index\\.ts$",
+      "disposition": "ADMITTED_EXECUTION_REPORT_ONLY",
+      "reason": "The public Execution barrel re-exports the V2 boundary, but only immutable HTX-scoped ExecutionReportV2 lineage is admissible."
+    },
+    {
+      "id": "RAW_CAPTURE_BOUNDARY",
+      "pathPattern": "^lib/trader/mi/raw-capture",
+      "disposition": "LINEAGE_BOUNDARY_ONLY",
+      "reason": "Raw bytes remain encrypted under the unchanged capture retention/security policy; Reality stores receipts and digests only."
+    },
+    {
+      "id": "CURRENT_NORMALIZED_SYNC",
+      "pathPattern": "^lib/trader/(balances|trade-history|positions)/sync-handler\\.ts$",
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN",
+      "reason": "Existing normalized snapshot handlers lack admitted raw-capture lineage; wiring remains DEE-620 and no output is silently promoted."
+    },
+    {
+      "id": "PUBLIC_OR_LIVE_SOURCE",
+      "pathPattern": "^lib/trader/(market-brain/htx-ingestion|live/live-connector)\\.ts$",
+      "disposition": "EXCLUDED",
+      "reason": "Public market data and live/capital surfaces are outside this canonical admission and remain unchanged."
+    },
+    {
+      "id": "HISTORICAL_SIMULATION",
+      "pathPattern": "^lib/trader/execution/historical-simulated-exchange\\.ts$",
+      "disposition": "EXCLUDED",
+      "reason": "Historical/modelled effects are not actual truth."
+    }
+  ],
+  "consumerDiscovery": {
+    "roots": ["lib", "app", "scripts"],
+    "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+    "additionalFiles": [
+      "lib/trader/execution/index.ts",
+      "lib/trader/execution/v2/index.ts"
+    ],
+    "importMarkers": [
+      "@/lib/trader/connectors",
+      "@/lib/trader/execution/v2",
+      "@/lib/trader/mi/raw-capture"
+    ],
+    "connectorMethods": [
+      "getAccountInfo",
+      "getBalances",
+      "getPositions",
+      "getOpenOrders",
+      "getOrder",
+      "getTradeHistory",
+      "placeOrder"
+    ],
+    "expectedFileCount": 115,
+    "sortedPathDigestHex": "a7b975224ea14b26362edac31d602c0828a86323c6ccaa48d86c334b234acd3e",
+    "sortedContentDigestHex": "2628df63bc565f2d7ed88bfb15c687a36bbf0e41fb603c32fcdf5a976e86778d"
+  },
+  "consumerRules": [
+    {
+      "id": "REALITY_BOUNDARY",
+      "pathPattern": "^lib/trader/reality/",
+      "disposition": "CANONICAL_BOUNDARY"
+    },
+    {
+      "id": "CONNECTOR_IMPLEMENTATION",
+      "pathPattern": "^lib/trader/connectors/",
+      "disposition": "COMPATIBLE_UNCHANGED"
+    },
+    {
+      "id": "CURRENT_OPERATIONAL_CONSUMERS",
+      "pathPattern": "^lib/trader/(credentials|balances|trade-history|positions|execution|live|security|symbols)/",
+      "disposition": "COMPATIBLE_EXISTING_BEHAVIOR_PRESERVED"
+    },
+    {
+      "id": "SEPARATE_PRODUCT_CONSUMERS",
+      "pathPattern": "^lib/trader/(risk|guardian|billing|settlement|paper)/",
+      "disposition": "NOT_CUT_OVER_DEE_634_SEPARATE"
+    },
+    {
+      "id": "EXCLUDED_DATA_RESEARCH_CONSUMERS",
+      "pathPattern": "^lib/trader/(market-data|market-brain|backtest|research|observability|mi)/",
+      "disposition": "EXCLUDED_OR_LINEAGE_ONLY"
+    },
+    {
+      "id": "TRADER_BARREL",
+      "pathPattern": "^lib/trader/index\\.ts$",
+      "disposition": "COMPATIBLE_EXPORT_ONLY"
+    },
+    {
+      "id": "TRADER_SCRIPT",
+      "pathPattern": "^scripts/trader/",
+      "disposition": "EXCLUDED_RESEARCH_OR_OPERATOR_SURFACE"
+    },
+    {
+      "id": "APPLICATION_ROUTE",
+      "pathPattern": "^app/",
+      "disposition": "COMPATIBLE_HANDLER_ONLY"
+    }
+  ],
+  "explicitCompatibilityChecks": [
+    {
+      "file": "lib/trader/balances/sync-handler.ts",
+      "method": "getBalances",
+      "occurrences": 1,
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN until DEE-620 supplies admitted raw-capture lineage"
+    },
+    {
+      "file": "lib/trader/connectors/htx/client.ts",
+      "method": "getOrder",
+      "occurrences": 2,
+      "disposition": "HTX private REST transport implementation only; canonical admission still requires the raw-capture adapter boundary"
+    },
+    {
+      "file": "lib/trader/connectors/htx/client.ts",
+      "method": "placeOrder",
+      "occurrences": 1,
+      "disposition": "HTX endpoint construction/transport only; HTX FAIL-UNKNOWN and no-blind-resend remain unchanged"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "getBalances",
+      "occurrences": 1,
+      "disposition": "private HTX REST output is conditionally admissible only with an exact encrypted raw-capture receipt"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "getOpenOrders",
+      "occurrences": 1,
+      "disposition": "private HTX REST implementation; no direct Reality persistence or bypass"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "getOrder",
+      "occurrences": 2,
+      "disposition": "private HTX REST implementation and internal lookup; no direct Reality persistence or bypass"
+    },
+    {
+      "file": "lib/trader/connectors/htx/htx-exchange-connector.ts",
+      "method": "placeOrder",
+      "occurrences": 2,
+      "disposition": "single admitted Execution V2 connector effect plus endpoint reference; HTX FAIL-UNKNOWN/no blind resend unchanged"
+    },
+    {
+      "file": "lib/trader/credentials/connect-handler.ts",
+      "method": "getAccountInfo",
+      "occurrences": 1,
+      "disposition": "existing account compatibility probe; EXCLUDED_FAIL_UNCERTAIN without admitted raw-capture lineage"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getAccountInfo",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getBalances",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getOpenOrders",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getOrder",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getPositions",
+      "occurrences": 1,
+      "disposition": "legacy wrapper delegates without canonical promotion"
+    },
+    {
+      "file": "lib/trader/execution/execution-service.ts",
+      "method": "getTradeHistory",
+      "occurrences": 2,
+      "disposition": "legacy wrapper and reconciliation read remain noncanonical"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "method": "getOpenOrders",
+      "occurrences": 2,
+      "disposition": "operational reconciliation only; DEE-651 ExecutionReportV2 is the sole admitted execution lineage"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "method": "getOrder",
+      "occurrences": 1,
+      "disposition": "operational reconciliation only; no direct Reality persistence"
+    },
+    {
+      "file": "lib/trader/execution/reconciliation-service.ts",
+      "method": "getTradeHistory",
+      "occurrences": 1,
+      "disposition": "operational reconciliation only; no direct Reality persistence"
+    },
+    {
+      "file": "lib/trader/execution/v2/connector-dispatch.ts",
+      "method": "placeOrder",
+      "occurrences": 1,
+      "disposition": "the sole production connector placement effect; its immutable ExecutionReportV2 result is admitted separately"
+    },
+    {
+      "file": "lib/trader/positions/sync-handler.ts",
+      "method": "getPositions",
+      "occurrences": 1,
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN until DEE-620 supplies admitted raw-capture lineage"
+    },
+    {
+      "file": "lib/trader/trade-history/sync-handler.ts",
+      "method": "getTradeHistory",
+      "occurrences": 1,
+      "disposition": "EXCLUDED_FAIL_UNCERTAIN until DEE-620 supplies admitted raw-capture lineage"
+    }
+  ],
+  "forbiddenRealityImportSegments": [
+    "/market-data/",
+    "/market-brain/",
+    "/guardian/",
+    "/intelligence/",
+    "/paper/",
+    "/backtest/",
+    "/billing/",
+    "/settlement/"
+  ],
+  "separateIssues": {
+    "DEE-620": "external-source raw capture wiring remains Todo and is not implemented here",
+    "DEE-634": "Decision V2 consumer cutover remains Todo and is not implemented here"
+  }
+}
