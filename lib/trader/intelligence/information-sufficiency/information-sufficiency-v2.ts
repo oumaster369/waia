@@ -331,7 +331,10 @@ function normalizeRequirement(
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:allowedObservationKinds");
   }
   return {
-    ...requirement,
+    id: requirement.id,
+    questionId: requirement.questionId,
+    classification: requirement.classification,
+    contextTriggerKey: requirement.contextTriggerKey,
     satisfiers,
     allowedObservationKinds,
     allowedObservationSchemaVersions: sortUniqueStrings(
@@ -342,6 +345,17 @@ function normalizeRequirement(
       requirement.allowedMeasurementDefinitionDigests,
       "measurementDefinitionDigest",
     ).map((digest) => requireDigest(digest, "measurementDefinitionDigest")),
+    maxStalenessMs: requirement.maxStalenessMs,
+    minimumTrustScore: requirement.minimumTrustScore,
+    minimumIndependentGroups: requirement.minimumIndependentGroups,
+    contradictionPolicy: requirement.contradictionPolicy,
+    requirePitQualified: requirement.requirePitQualified,
+    requireReplayEligible: requirement.requireReplayEligible,
+    inquiryBounds: {
+      maxDepth: requirement.inquiryBounds.maxDepth,
+      maxDurationMs: requirement.inquiryBounds.maxDurationMs,
+      maxProviderFanout: requirement.inquiryBounds.maxProviderFanout,
+    },
   };
 }
 
@@ -472,6 +486,29 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
   if (evidence.historyScope === "BLIND_HOLDOUT") {
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:blindHoldoutEvidenceForbidden");
   }
+  if (
+    !(["AVAILABLE", "UNAVAILABLE", "REJECTED"] as readonly string[]).includes(
+      evidence.availability,
+    ) ||
+    !(["TRUSTED", "UNTRUSTED", "UNKNOWN"] as readonly string[]).includes(evidence.trust) ||
+    !(
+      [
+        "PRICE_STATE",
+        "CAUSAL",
+        "CORROBORATING",
+        "EXECUTION_LIQUIDITY",
+        "HISTORICAL_ANALOGUE",
+      ] as readonly string[]
+    ).includes(evidence.epistemicRole) ||
+    !(
+      ["NOT_HISTORICAL", "DEVELOPMENT", "ADMISSIBLE_PATTERN_KNOWLEDGE"] as readonly string[]
+    ).includes(evidence.historyScope) ||
+    !(["NONE", "SUPPORTS", "CONTRADICTS", "UNRESOLVED"] as readonly string[]).includes(
+      evidence.contradiction,
+    )
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:evidenceVocabulary");
+  }
   requireOptionalDigest(evidence.trustAsOfReceiptId, "trustAsOfReceiptId");
   requireOptionalDigest(evidence.trustRevisionContentDigest, "trustRevisionContentDigest");
   requireOptionalDigest(
@@ -485,8 +522,62 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
   ) {
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:trustScore");
   }
+  if (evidence.observationKind === "msv_envelope") {
+    if (
+      evidence.trustAsOfReceiptId !== null ||
+      evidence.trustRevisionId !== null ||
+      evidence.trustRevisionContentDigest !== null
+    ) {
+      throw new Error("INFORMATION_SUFFICIENCY_INVALID:internalTrustLineage");
+    }
+  } else if (
+    evidence.trustAsOfReceiptId === null ||
+    evidence.trustRevisionId === null ||
+    evidence.trustRevisionContentDigest === null
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:externalTrustLineage");
+  } else {
+    requireNonEmpty(evidence.trustRevisionId, "trustRevisionId");
+  }
+  const measurementIdentity = [
+    evidence.measurementDefinitionId,
+    evidence.measurementDefinitionContentDigest,
+    evidence.measurementValueId,
+    evidence.measurementValueContentDigest,
+  ];
+  if (
+    measurementIdentity.some((value) => value !== null) &&
+    measurementIdentity.some((value) => value === null)
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:measurementLineage");
+  }
   return {
-    ...evidence,
+    evidenceId: evidence.evidenceId,
+    evidenceFamily: evidence.evidenceFamily,
+    providerId: evidence.providerId,
+    sourceId: evidence.sourceId,
+    observationId: evidence.observationId,
+    observationKind: evidence.observationKind,
+    observationSchemaVersion: evidence.observationSchemaVersion,
+    observationContentDigest: evidence.observationContentDigest,
+    trustAsOfReceiptId: evidence.trustAsOfReceiptId,
+    trustRevisionId: evidence.trustRevisionId,
+    trustRevisionContentDigest: evidence.trustRevisionContentDigest,
+    measurementDefinitionId: evidence.measurementDefinitionId,
+    measurementDefinitionContentDigest: evidence.measurementDefinitionContentDigest,
+    measurementValueId: evidence.measurementValueId,
+    measurementValueContentDigest: evidence.measurementValueContentDigest,
+    availability: evidence.availability,
+    availableAt: new Date(evidence.availableAt).toISOString(),
+    trust: evidence.trust,
+    trustScore: evidence.trustScore,
+    pitQualified: evidence.pitQualified,
+    replayEligible: evidence.replayEligible,
+    dependenceGroup: evidence.dependenceGroup,
+    contradictionGroup: evidence.contradictionGroup,
+    contradiction: evidence.contradiction,
+    epistemicRole: evidence.epistemicRole,
+    historyScope: evidence.historyScope,
     degradationReasonCodes: sortUniqueStrings(
       evidence.degradationReasonCodes,
       "degradationReasonCode",
@@ -521,6 +612,9 @@ function checkCandidate(
   if (evidence.availability !== "AVAILABLE") {
     reasonCodes.push(`EVIDENCE_${evidence.availability}`);
     unavailable = true;
+  }
+  if (evidence.degradationReasonCodes.includes("SOURCE_REVISION_MISMATCH")) {
+    reasonCodes.push("EVIDENCE_SOURCE_REVISION_MISMATCH");
   }
   const availableAtMs = Date.parse(evidence.availableAt);
   if (availableAtMs > pitAnchorMs) reasonCodes.push("EVIDENCE_FUTURE_AT_PIT");
@@ -659,22 +753,41 @@ function evaluateRequirement(input: {
     evidenceSortKey(left.evidence).localeCompare(evidenceSortKey(right.evidence)),
   );
   const accepted = candidates.filter((candidate) => candidate.reasonCodes.length === 0);
+  const effectiveAccepted = accepted.filter(
+    (candidate, index, all) =>
+      all.findIndex(
+        (other) =>
+          other.evidence.observationId === candidate.evidence.observationId &&
+          other.evidence.observationContentDigest === candidate.evidence.observationContentDigest,
+      ) === index,
+  );
   const groups = [
-    ...new Set(accepted.map((candidate) => candidate.evidence.dependenceGroup)),
+    ...new Set(effectiveAccepted.map((candidate) => candidate.evidence.dependenceGroup)),
   ].sort();
   const reasonCodes = [...new Set(candidates.flatMap((candidate) => candidate.reasonCodes))].sort();
   if (groups.length < requirement.minimumIndependentGroups) {
     reasonCodes.push("EFFECTIVE_INDEPENDENT_INFORMATION_BELOW_PROFILE_FLOOR");
   }
   if (candidates.length === 0) reasonCodes.push("EVIDENCE_MISSING");
-  const passed = accepted.length > 0 && groups.length >= requirement.minimumIndependentGroups;
+  const agreementFailure =
+    requirement.contradictionPolicy === "REQUIRE_AGREEMENT" &&
+    candidates.some((candidate) =>
+      ["CONTRADICTS", "UNRESOLVED"].includes(candidate.evidence.contradiction),
+    );
+  if (agreementFailure) reasonCodes.push("EVIDENCE_AGREEMENT_REQUIRED");
+  const passed =
+    effectiveAccepted.length > 0 &&
+    groups.length >= requirement.minimumIndependentGroups &&
+    !agreementFailure;
   const blocking = active && requirement.classification !== "OPTIONAL_ENRICHMENT";
   let terminalStatus: InformationRequirementTerminalStatusV2;
   if (passed) {
     terminalStatus = "ANSWERED_SUFFICIENTLY";
   } else if (
-    candidates.some((candidate) =>
-      candidate.reasonCodes.includes("EVIDENCE_CONTRADICTION_UNRESOLVED"),
+    candidates.some(
+      (candidate) =>
+        candidate.reasonCodes.includes("EVIDENCE_CONTRADICTION_UNRESOLVED") ||
+        candidate.reasonCodes.includes("EVIDENCE_AGREEMENT_REQUIRED"),
     )
   ) {
     terminalStatus = "UNRESOLVED_CONTRADICTION";
@@ -770,15 +883,31 @@ export function evaluateInformationSufficiencyV2(input: {
     ) {
       aggregateReasons.push("AGGREGATE_QUALITY_CONTRACT_UNAVAILABLE_OR_MISMATCHED");
     } else {
+      if (!(["PASS", "FAIL", "UNAVAILABLE"] as readonly string[]).includes(supplied.status)) {
+        throw new Error("INFORMATION_SUFFICIENCY_INVALID:aggregateStatus");
+      }
       requireDigest(supplied.evaluatorContentDigest, "aggregateEvaluatorContentDigest");
       if (supplied.aggregateValueDigest !== null) {
         requireDigest(supplied.aggregateValueDigest, "aggregateValueDigest");
       }
+      const componentReceipts = [...supplied.componentReceipts]
+        .map((component) => ({
+          componentId: requireNonEmpty(component.componentId, "aggregateComponentId"),
+          valueDigest: requireDigest(component.valueDigest, "aggregateComponentValueDigest"),
+        }))
+        .sort((left, right) => left.componentId.localeCompare(right.componentId));
+      if (
+        new Set(componentReceipts.map((entry) => entry.componentId)).size !==
+        componentReceipts.length
+      ) {
+        throw new Error("INFORMATION_SUFFICIENCY_INVALID:duplicateAggregateComponentId");
+      }
       aggregateQualityEvaluation = {
-        ...supplied,
-        componentReceipts: [...supplied.componentReceipts].sort((left, right) =>
-          left.componentId.localeCompare(right.componentId),
-        ),
+        evaluatorVersion: supplied.evaluatorVersion,
+        evaluatorContentDigest: supplied.evaluatorContentDigest,
+        status: supplied.status,
+        componentReceipts,
+        aggregateValueDigest: supplied.aggregateValueDigest,
         reasonCodes: sortUniqueStrings(supplied.reasonCodes, "aggregateReasonCode"),
       };
     }

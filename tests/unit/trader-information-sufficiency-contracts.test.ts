@@ -125,6 +125,45 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
     expect(first).not.toHaveProperty("riskApproval");
   });
 
+  it("authenticates external DEE-620 trust lineage and rejects unknown runtime vocabularies", () => {
+    expect(() =>
+      evaluate(profile(), [
+        evidence({
+          trustAsOfReceiptId: null,
+          trustRevisionId: null,
+          trustRevisionContentDigest: null,
+        }),
+      ]),
+    ).toThrow("externalTrustLineage");
+    expect(() =>
+      evaluate(profile(), [evidence({ trust: "TRUSTISH" as InformationEvidenceV2["trust"] })]),
+    ).toThrow("evidenceVocabulary");
+    expect(
+      evaluate(profile(), [evidence({ degradationReasonCodes: ["SOURCE_REVISION_MISMATCH"] })]),
+    ).toMatchObject({
+      status: "INSUFFICIENT",
+      reasonCodes: expect.arrayContaining(["EVIDENCE_SOURCE_REVISION_MISMATCH"]),
+    });
+  });
+
+  it("strips undeclared nested semantics from every canonical contract", () => {
+    const selected = profile([
+      {
+        ...requirement(),
+        formula: "BUY",
+      } as InformationQuestionRequirementV2,
+    ]);
+    const selectedRequirement = selected.requirements[0] as unknown as Record<string, unknown>;
+    const selectedEvidence = {
+      ...evidence(),
+      capitalAuthority: "BUY",
+    } as InformationEvidenceV2;
+    const receipt = evaluate(selected, [selectedEvidence]);
+
+    expect(selectedRequirement).not.toHaveProperty("formula");
+    expect(receipt.evidenceInventory[0]).not.toHaveProperty("capitalAuthority");
+  });
+
   it("does not let healthy optional evidence compensate for a missing mandatory hard floor", () => {
     const selected = profile([
       requirement(),
@@ -254,6 +293,17 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
     expect(receipt.reasonCodes).toContain("EFFECTIVE_INDEPENDENT_INFORMATION_BELOW_PROFILE_FLOOR");
   });
 
+  it("cannot relabel one exact Observation lineage into multiple independent groups", () => {
+    const selected = profile([requirement({ minimumIndependentGroups: 2 })]);
+    const receipt = evaluate(selected, [
+      evidence(),
+      evidence({ evidenceId: "same-lineage-alias", dependenceGroup: "fabricated-independent" }),
+    ]);
+
+    expect(receipt.status).toBe("INSUFFICIENT");
+    expect(receipt.requirementReceipts[0]?.effectiveIndependentGroups).toHaveLength(1);
+  });
+
   it("enforces a profile-declared agreement policy without collapsing contradiction into trust", () => {
     const selected = profile([requirement({ contradictionPolicy: "REQUIRE_AGREEMENT" })]);
     const receipt = evaluate(selected, [
@@ -262,6 +312,24 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
 
     expect(receipt.status).toBe("INSUFFICIENT");
     expect(receipt.reasonCodes).toContain("EVIDENCE_AGREEMENT_REQUIRED");
+  });
+
+  it("fails agreement candidate-wide even when another source supports", () => {
+    const selected = profile([requirement({ contradictionPolicy: "REQUIRE_AGREEMENT" })]);
+    const receipt = evaluate(selected, [
+      evidence({ contradiction: "SUPPORTS" }),
+      evidence({
+        evidenceId: "contradicting-source",
+        observationId: "00000000-0000-4000-8000-000000000099",
+        observationContentDigest: HEX("contradicting-observation"),
+        dependenceGroup: "independent-contradictor",
+        contradiction: "CONTRADICTS",
+        contradictionGroup: "venue-disagreement",
+      }),
+    ]);
+
+    expect(receipt.status).toBe("INSUFFICIENT");
+    expect(receipt.requirementReceipts[0]?.terminalStatus).toBe("UNRESOLVED_CONTRADICTION");
   });
 
   it("does not answer WHY with price-only evidence and admits only non-holdout historical analogues", () => {
@@ -336,5 +404,30 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
         },
       }).status,
     ).toBe("SUFFICIENT");
+    expect(() =>
+      evaluate(selected, [evidence()], {
+        aggregateQualityEvaluation: {
+          evaluatorVersion: "later-qualified-v1",
+          evaluatorContentDigest: HEX("later-qualified-contract"),
+          status: "BOGUS" as "PASS",
+          componentReceipts: [{ componentId: "opaque", valueDigest: "not-a-digest" }],
+          aggregateValueDigest: null,
+          reasonCodes: [],
+        },
+      }),
+    ).toThrow("aggregateStatus");
+    const stripped = evaluate(selected, [evidence()], {
+      aggregateQualityEvaluation: {
+        evaluatorVersion: "later-qualified-v1",
+        evaluatorContentDigest: HEX("later-qualified-contract"),
+        status: "PASS",
+        componentReceipts: [{ componentId: "opaque", valueDigest: HEX("value"), formula: "BUY" }],
+        aggregateValueDigest: HEX("aggregate"),
+        reasonCodes: [],
+        formula: "BUY",
+      } as never,
+    });
+    expect(stripped.aggregateQualityEvaluation).not.toHaveProperty("formula");
+    expect(stripped.aggregateQualityEvaluation?.componentReceipts[0]).not.toHaveProperty("formula");
   });
 });
