@@ -310,6 +310,9 @@ describe.skipIf(!enabled || !url)("PostgreSQL Information Sufficiency V2 (DEE-68
             ...profile.requirements[0]!.satisfiers[0]!,
             providerIds: ["é", "internal-msv", "~", "a", "A"],
           },
+          { evidenceFamily: "é", providerIds: [], substitutionRuleId: "é-rule" },
+          { evidenceFamily: "~", providerIds: [], substitutionRuleId: "~-rule" },
+          { evidenceFamily: "A", providerIds: [], substitutionRuleId: "A-rule" },
         ],
         allowedObservationSchemaVersions: ["é", MI_OBSERVATION_SCHEMA_VERSION, "~", "a", "A"],
       })),
@@ -329,6 +332,12 @@ describe.skipIf(!enabled || !url)("PostgreSQL Information Sufficiency V2 (DEE-68
       evidence: buildReceipt(profile).evidenceInventory,
     });
     expect(mixedProfile.requirements.map((entry) => entry.id)).toEqual(["A", "a", "~", "é"]);
+    expect(mixedProfile.requirements[0]!.satisfiers.map((entry) => entry.evidenceFamily)).toEqual([
+      "price",
+      "A",
+      "~",
+      "é",
+    ]);
     await expect(
       persistRequiredInformationProfileV2Postgres(db, { organizationId: orgA }, mixedProfile),
     ).resolves.toMatchObject({ insertedNew: true });

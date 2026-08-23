@@ -287,18 +287,18 @@ BEGIN
           AND concat(
             satisfier.value ->> 'evidenceFamily', ':',
             satisfier.value ->> 'substitutionRuleId'
-          ) < (
+          ) COLLATE "C" < (
             SELECT concat(
               previous.value ->> 'evidenceFamily', ':',
               previous.value ->> 'substitutionRuleId'
-            )
+            ) COLLATE "C"
             FROM jsonb_array_elements(requirement.value -> 'satisfiers')
               WITH ORDINALITY AS previous(value, ordinality)
             WHERE previous.ordinality = satisfier.ordinality - 1
           )
         )
         OR (
-          SELECT count(DISTINCT family.value ->> 'evidenceFamily')
+          SELECT count(DISTINCT (family.value ->> 'evidenceFamily') COLLATE "C")
           FROM jsonb_array_elements(requirement.value -> 'satisfiers') AS family(value)
         ) <> jsonb_array_length(requirement.value -> 'satisfiers')
     )
