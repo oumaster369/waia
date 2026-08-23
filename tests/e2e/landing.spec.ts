@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "../../lib/landing/homepage-links";
+import { LEGCO_RESEARCH_URL } from "../../lib/landing/homepage-links";
 
 test.describe("WAIA landing page", () => {
   test("renders DEE-605 narrative landmarks and English hero definition", async ({ page }) => {
@@ -42,67 +42,28 @@ test.describe("WAIA landing page", () => {
     expect(currentSrc).toContain("/brand/head_mobile_1.webp");
   });
 
-  test("exposes Breath pending state and GitHub work-transparency links", async ({ page }) => {
+  test("keeps pending Breath minimal and exposes public detail links", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("landing-breath-stage")).toHaveAttribute(
+    await expect(page.getByTestId("landing-breath-pending")).toHaveAttribute(
       "data-publication-status",
       "pending",
     );
-    await expect(page.getByTestId("landing-breath-resource-entered")).toContainText(
-      /Not yet published/i,
+    await expect(page.getByTestId("landing-breath-pending")).toContainText(
+      /first public financial snapshot has not been published/i,
     );
-    await expect(page.getByTestId("landing-breath-stage-value")).toContainText(
-      /Not yet published/i,
-    );
-    await expect(page.getByTestId("landing-breath-budget-planned")).toContainText(
-      /Not yet published/i,
-    );
-    await expect(page.getByTestId("landing-breath-runway")).toHaveAttribute(
-      "data-runway-state",
-      "pending",
-    );
-    await expect(page.getByTestId("landing-breath-runway-now")).toHaveText(/^0$/);
-    await expect(page.getByTestId("landing-breath-runway-end")).toContainText(
-      /Ideal annual budget/i,
-    );
-    await expect(page.getByTestId("landing-breath-runway-pulse")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-runway-svg")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-runway-wave")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-funding-marker")).toHaveCount(0);
-    await expect(page.getByTestId("landing-breath-funding-pending")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
-      "data-countdown-region",
-      "pending-lower",
-    );
-    await expect(page.getByTestId("landing-breath-countdown")).toHaveAttribute(
-      "data-countdown-state",
-      "pending",
-    );
-    // Countdown lives under the scale, not as a pre-scale header.
-    const svgBox = await page.getByTestId("landing-breath-runway-svg").boundingBox();
-    const countdownBox = await page.getByTestId("landing-breath-countdown").boundingBox();
-    expect(svgBox).toBeTruthy();
-    expect(countdownBox).toBeTruthy();
-    expect(countdownBox!.y).toBeGreaterThan(svgBox!.y);
-    await expect(page.getByTestId("landing-breath-updated-value")).toContainText(
-      /Awaiting first ledger publication/i,
-    );
+    await expect(page.getByTestId("landing-breath-facts")).toHaveCount(0);
     await expect(page.getByTestId("landing-breath")).not.toContainText(/DEE-\d+/i);
-    await expect(page.getByTestId("landing-breath")).not.toContainText(
-      /Treasury figures pending publication/i,
-    );
-    await expect(page.getByTestId("landing-breath-support-cta")).toHaveText("KEEP WAIA BREATHING");
-    await expect(page.getByTestId("landing-breath-support-cta")).toBeDisabled();
-    await expect(page.getByTestId("landing-breath-support")).toHaveAttribute(
-      "data-support-status",
-      "pending",
-    );
-    await expect(page.getByTestId("landing-breath-support-pending")).toBeVisible();
-    await expect(page.getByTestId("landing-breath-github-primary")).toHaveAttribute(
+    await expect(page.getByTestId("landing-breath")).not.toContainText(/Resource transparency/i);
+    await expect(page.getByTestId("landing-breath-media")).toHaveCount(0);
+    await expect(page.getByTestId("landing-breath-budget-link")).toHaveAttribute("href", "/budget");
+    await expect(page.getByTestId("landing-breath-patrons-link")).toHaveAttribute(
       "href",
-      WAIA_PUBLIC_GITHUB_URL,
+      "/patrons",
     );
-    await expect(page.getByTestId("landing-breath-media")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-work-plan-link")).toHaveAttribute(
+      "href",
+      "/work-plan",
+    );
     await expect(page.getByTestId("landing-how-built-legco-cta")).toHaveAttribute(
       "href",
       LEGCO_RESEARCH_URL,
@@ -308,16 +269,13 @@ test.describe("WAIA landing page", () => {
     );
   });
 
-  test("DEE-608 B1 diagrams and final-art-ready slots without empty removed slots", async ({
+  test("remaining B1 diagrams and final-art-ready slots have no empty removed slots", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
 
-    await expect(page.getByTestId("landing-breath-media")).toHaveAttribute(
-      "data-media-slot",
-      "diagram",
-    );
+    await expect(page.getByTestId("landing-breath-media")).toHaveCount(0);
     await expect(page.getByTestId("landing-society-media")).toHaveAttribute(
       "data-media-slot",
       "diagram",
@@ -375,10 +333,10 @@ test.describe("WAIA landing page", () => {
     );
   });
 
-  test("DEE-608 B1 mobile: diagrams present without horizontal overflow", async ({ page }) => {
+  test("mobile public visuals remain present without horizontal overflow", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
-    await expect(page.getByTestId("landing-breath-media")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-media")).toHaveCount(0);
     await expect(page.getByTestId("landing-ai-marketplace-diagram")).toBeVisible();
     await expect(page.getByTestId("landing-ai-trader-media")).toContainText(/NO TRADE/);
     await expect(page.getByTestId("landing-ai-twin-media-image")).toBeVisible();

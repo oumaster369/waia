@@ -7,9 +7,9 @@ import { AuthBlock } from "@/components/landing/AuthBlock";
 import { BreathSupportCta } from "@/components/landing/BreathSupportCta";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
 import { BreathFundingGauge } from "@/components/landing/visuals/breath-runway-pulse";
-import { getBreathPublicSnapshot } from "@/lib/landing/breath-public";
 import { LEGCO_RESEARCH_URL, WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 import { getModuleReadiness } from "@/lib/landing/module-readiness";
+import type { PublicTreasuryProjection } from "@/lib/waia-core/treasury/public/types";
 
 const { mockReplace, mockLocationAssign, routerStub } = vi.hoisted(() => {
   const mockReplace = vi.fn();
@@ -102,29 +102,24 @@ describe("LandingPage", () => {
     expect(mobileSource).toHaveAttribute("srcset", "/brand/head_mobile_1.webp");
   });
 
-  it("exposes Breath pending contract without invented financial figures", async () => {
+  it("renders one calm Breath pending state without invented financial figures", async () => {
     await renderLandingPage();
-    const snapshot = getBreathPublicSnapshot();
-    expect(snapshot.status).toBe("pending");
-    expect(snapshot.resources.entered).toBeNull();
-    expect(snapshot.idealAnnualBudget.amount).toBeNull();
-    expect(snapshot.currentFreeFunds.amount).toBeNull();
-    expect(snapshot.runway.endsAt).toBeNull();
-    expect(screen.getByTestId("landing-breath-stage")).toHaveAttribute(
+    expect(screen.getByTestId("landing-breath-pending")).toHaveAttribute(
       "data-publication-status",
       "pending",
     );
-    expect(screen.queryByTestId("landing-breath-status")).not.toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-resource-entered")).toHaveTextContent(
-      /Not yet published/i,
+    expect(screen.getByTestId("landing-breath-pending")).toHaveTextContent(
+      /first public financial snapshot has not been published/i,
     );
-    expect(screen.getByTestId("landing-breath-github-primary")).toHaveAttribute(
+    expect(screen.queryByTestId("landing-breath-facts")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-budget-link")).toHaveAttribute("href", "/budget");
+    expect(screen.getByTestId("landing-breath-patrons-link")).toHaveAttribute("href", "/patrons");
+    expect(screen.getByTestId("landing-breath-work-plan-link")).toHaveAttribute(
       "href",
-      WAIA_PUBLIC_GITHUB_URL,
+      "/work-plan",
     );
-    expect(screen.getByTestId("landing-breath-github-secondary")).toHaveAttribute(
-      "href",
-      WAIA_PUBLIC_GITHUB_URL,
+    expect(screen.getByTestId("landing-breath")).not.toHaveTextContent(
+      /\b0(?:\.0+)?\s+(?:USD|EUR)\b/,
     );
   });
 
@@ -179,98 +174,74 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-ai-twin-purpose")).toHaveTextContent(/co-researcher/i);
   });
 
-  it("renders corrected 3P, Marketplace, and Breath contract surfaces", async () => {
+  it("keeps Breath minimal while preserving the surrounding public narrative", async () => {
     await renderLandingPage();
     expect(screen.getByTestId("landing-business-3p-provision")).toHaveTextContent(
       /Market research/i,
     );
-    expect(screen.getByTestId("landing-business-3p-promotion")).toHaveTextContent(
-      /Marketing strategy/i,
-    );
-    expect(screen.getByTestId("landing-business-3p-production")).toHaveTextContent(
-      /Product and service creation/i,
-    );
     expect(screen.getByTestId("landing-ai-marketplace-waia-path")).toHaveTextContent(/Need →/i);
-    expect(screen.getByTestId("landing-breath-stage")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-stage")).toHaveAttribute(
-      "data-publication-status",
-      "pending",
-    );
-    expect(screen.queryByTestId("landing-breath-status")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Treasury figures pending publication/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-budget")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-runway")).toHaveAttribute(
-      "data-runway-state",
-      "pending",
-    );
-    expect(screen.getByTestId("landing-breath-runway-now")).toHaveTextContent(/^0$/);
-    expect(screen.getByTestId("landing-breath-runway-end")).toHaveTextContent(
-      /Ideal annual budget/i,
-    );
-    expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent(
-      /Not yet published/i,
-    );
-    expect(screen.getByTestId("landing-breath-runway-pulse")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-runway-svg")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-runway-wave")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-runway-wave").getAttribute("d")).toMatch(/c /i);
-    expect(screen.getByTestId("landing-breath-runway-wave").getAttribute("d")).toContain(
-      "c 20 0 28 -7 40 -7",
-    );
-    expect(screen.queryByTestId("landing-breath-funding-marker")).not.toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-funding-pending")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
-      "data-countdown-region",
-      "pending-lower",
-    );
-    expect(screen.getByTestId("landing-breath-runway-pulse")).toContainElement(
-      screen.getByTestId("landing-breath-countdown"),
-    );
-    const label = screen.getByTestId("landing-breath-runway-label");
-    const countdown = screen.getByTestId("landing-breath-countdown");
-    expect(
-      label.compareDocumentPosition(countdown) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen.getByTestId("landing-breath-runway-svg").compareDocumentPosition(countdown) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
-      "data-countdown-state",
-      "pending",
-    );
-    expect(screen.getByTestId("landing-breath-countdown-value")).toHaveTextContent(
-      /Awaiting first ledger publication/i,
-    );
-    expect(screen.getByTestId("landing-breath-updated-value")).toHaveTextContent(
-      /Awaiting first ledger publication/i,
-    );
-    expect(screen.getByTestId("landing-breath-methodology").textContent ?? "").not.toMatch(
-      /DEE-\d+/i,
+    expect(screen.getByTestId("landing-breath-lead")).toHaveTextContent(
+      /How long WAIA can keep working/i,
     );
     expect(screen.getByTestId("landing-breath").textContent ?? "").not.toMatch(/DEE-\d+/i);
-    expect(screen.getByTestId("landing-breath-support-cta")).toHaveTextContent(
-      "KEEP WAIA BREATHING",
-    );
-    expect(screen.getByTestId("landing-breath-support-cta")).toBeDisabled();
-    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
-      "data-support-status",
-      "pending",
-    );
-    expect(screen.getByTestId("landing-breath-support")).toHaveAttribute(
-      "data-support-clickable",
-      "false",
-    );
-    expect(screen.getByTestId("landing-breath-support-pending")).toHaveTextContent(
-      /Support channel will open/i,
-    );
-    expect(screen.getByTestId("landing-breath-github-primary").className).toContain("rounded-xl");
-    expect(screen.getByTestId("landing-breath-github-primary").className).toContain("dcc065");
-    expect(screen.getByTestId("landing-final-cta-register").className).toContain("dcc065");
-    expect(screen.getByTestId("landing-final-cta-research").className).not.toContain("dcc065");
-    expect(screen.getByTestId("landing-breath-inflows-empty")).toBeInTheDocument();
-    expect(screen.getByTestId("landing-breath-outflows-empty")).toBeInTheDocument();
+    expect(screen.queryByText(/Resource transparency/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Recent activity/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Work transparency/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-breath-media")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-breath-support")).not.toBeInTheDocument();
     expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
+  });
+
+  it("renders exactly three primary Breath facts from the public Treasury projection", async () => {
+    const now = Date.now();
+    const asOf = new Date(now).toISOString();
+    const endsAt = new Date(now + 30 * 24 * 60 * 60_000).toISOString();
+    const projection: PublicTreasuryProjection = {
+      schemaVersion: "waia-public-treasury/v1",
+      breath: {
+        status: "published",
+        pendingReasons: [],
+        availableAmountMicros: "42000000000",
+        availableCurrency: "USD",
+        runway: {
+          status: "published",
+          asOf,
+          endsAt,
+        },
+        annualBudgetAmountMicros: "100000000000",
+        annualBudgetCurrency: "USD",
+        lastUpdatedAt: asOf,
+      },
+      budget: {
+        status: "published",
+        year: 2026,
+        currency: "USD",
+        annualBudgetAmountMicros: "100000000000",
+        months: [],
+      },
+      transactions: [],
+      fundingNeeds: [],
+      patrons: {
+        status: "pending",
+        totalContributedAmountMicros: null,
+        currency: null,
+        patrons: [],
+        privateSupport: null,
+        lastUpdatedAt: null,
+      },
+    };
+
+    render(<LandingPageContent publicTreasury={projection} />);
+    await waitFor(() => expect(screen.getByTestId("landing-auth-divider")).toBeInTheDocument());
+
+    expect(screen.getByTestId("landing-breath-facts")).toHaveAttribute(
+      "data-publication-status",
+      "published",
+    );
+    expect(screen.getByTestId("landing-breath-available-value")).toHaveTextContent("42,000 USD");
+    expect(screen.getByTestId("landing-breath-runway-value")).toHaveTextContent("30d 0h");
+    expect(screen.getByTestId("landing-breath-annual-value")).toHaveTextContent("100,000 USD");
+    expect(screen.queryByTestId("landing-breath-pending")).not.toBeInTheDocument();
   });
 
   it("renders published funding marker and fully-funded CTA from authoritative values only", () => {
@@ -372,13 +343,10 @@ describe("LandingPage", () => {
     expect(text).not.toMatch(/0\.92|0\.95|90%|92%|95%|nearFull/);
   });
 
-  it("renders B1 diagrams and B2 Twin/Legacy final artwork without scaffold language", async () => {
+  it("renders remaining B1 diagrams and B2 Twin/Legacy artwork without scaffold language", async () => {
     await renderLandingPage();
 
-    expect(screen.getByTestId("landing-breath-media")).toHaveAttribute(
-      "data-media-slot",
-      "diagram",
-    );
+    expect(screen.queryByTestId("landing-breath-media")).not.toBeInTheDocument();
     expect(screen.getByTestId("landing-society-media")).toHaveAttribute(
       "data-media-slot",
       "diagram",
