@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/canonical-observation-v1";
+import { processCanonicalPitObservationV1Postgres } from "@/lib/trader/mi/canonical-pit-service-postgres";
 import {
   persistCanonicalAvailableGatewayV1Postgres,
   persistCanonicalMeasurementDefinitionV1Postgres,
@@ -17,6 +18,8 @@ import {
   identifyCanonicalMeasurementValueV1,
 } from "@/lib/trader/mi/measurement-lineage-v1";
 import { resolveAndPersistTrustAsOfV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
+import { OBSERVATION_SCHEMA_VERSION, type NormalizedObservation } from "@/lib/trader/market-data/observation-types";
+import { persistCanonicalPitReplayBatchV1Postgres } from "@/lib/trader/market-data/replay/canonical-pit-replay";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
@@ -273,6 +276,84 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
     await expect(sqlClient`
       DELETE FROM trader_mi_observation WHERE id = ${stored.observation.id}::uuid
     `).rejects.toThrow(/append-only/);
+  });
+
+  it("converges gateway and replay and persists every failure without fallback", async () => {
+    const normalized: NormalizedObservation = {
+      schemaVersion: OBSERVATION_SCHEMA_VERSION,
+      kind: "quote_l1",
+      sessionPhase: "US",
+      provenance: {
+        providerId: "htx_spot",
+        venue: "htx",
+        feedKind: "quote_l1",
+        symbol: "BTC/USDT",
+        eventTimeUtc: "2026-08-23T09:59:59.000Z",
+        ingestTimeUtc: ANCHOR.toISOString(),
+      },
+      health: "HEALTHY",
+      freshnessMs: 1_000,
+      latencyMs: 10,
+      confidence: 0.9,
+      payload: {
+        bid: "100",
+        ask: "101",
+        last: "100.5",
+        timestamp: "2026-08-23T09:59:59.000Z",
+      },
+    };
+    const gateway = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgA },
+      normalized,
+    );
+    const [replay] = await persistCanonicalPitReplayBatchV1Postgres(
+      db,
+      { organizationId: orgA },
+      { evaluatedAtUtc: ANCHOR.toISOString(), observations: [normalized] },
+    );
+    expect(gateway).toMatchObject({
+      receipt: { status: "AVAILABLE" },
+      observationInsertedNew: true,
+      receiptInsertedNew: true,
+    });
+    expect(replay).toMatchObject({
+      observationInsertedNew: false,
+      receiptInsertedNew: false,
+    });
+    expect(replay?.observation).toEqual(gateway.observation);
+    expect(replay?.receipt).toEqual(gateway.receipt);
+
+    const stale = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgA },
+      { ...normalized, health: "STALE" },
+    );
+    expect(stale).toMatchObject({
+      receipt: { status: "REJECTED", reason: "STALE_INPUT" },
+      observation: null,
+    });
+
+    const trustUnknown = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgA },
+      {
+        ...normalized,
+        provenance: {
+          ...normalized.provenance,
+          eventTimeUtc: "2026-08-23T09:03:00.000Z",
+          ingestTimeUtc: "2026-08-23T09:04:00.000Z",
+        },
+        payload: {
+          ...normalized.payload,
+          timestamp: "2026-08-23T09:03:00.000Z",
+        },
+      },
+    );
+    expect(trustUnknown).toMatchObject({
+      receipt: { status: "REJECTED", reason: "TRUST_AS_OF_UNKNOWN" },
+      observation: null,
+    });
   });
 
   it("denies authenticated and anon real-role CRUD on every new relation", async () => {
