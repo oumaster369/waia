@@ -61,10 +61,10 @@
         "Every definition identity is recomputed from its exact inert body, and the admitted internal msv_envelope binds its existing mi-observation-v1 schema with explicit null external-trust lineage."
       ],
       "integratedCommits": [
-        "4ff100895dc7007c354bba7bc00ee70817a0a885",
-        "278ea9476acc59af001ce6253ced03340879f2ab",
-        "b149178541d1ccd42e9d0cbc936112b9a98d33d8",
-        "886bb854fe410e4b725446a2b72495d6413c63aa"
+        "6f2cd97de1d6a220e7c6f7a726db84b54720b5eb",
+        "0c338beaa28d6b0b7b9ea028a1ab6e659edaa940",
+        "587308cf29b3811e747ca23f3697f33bb099e69e",
+        "465e70c1c1bbbefb5e6e2ef45e1c1c0c0182c8ee"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-mi-canonical-contracts.test.ts (6/6 pass, including stale-definition rejection and internal MSV lineage)",
@@ -82,7 +82,9 @@
       "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Add exactly one additive 0161 PostgreSQL migration plus schema/repository support for canonical PIT admission, exact trust-as-of binding, append-only revisions, inert MeasurementValue lineage, service-only deny RLS, and real-role tenant proofs; mechanically preserve Reality V2 0160 migration identity/content/uniqueness proof while replacing only its obsolete journal-tail lookup with an order-independent exact-entry lookup.",
-      "dependencies": ["DEE-681"],
+      "dependencies": [
+        "DEE-681"
+      ],
       "dependencyEvidence": [
         "DEE-682 consumes the immutable DEE-681 vocabulary and lineage contracts and starts only after wave A is committed, reviewed, and cumulatively green.",
         "Migration 0161 is the next free PostgreSQL identity after authoritative origin/main migration 0160."
@@ -138,10 +140,10 @@
         "Database guards also require exact admitted kind/schema input contracts in unique canonical order and reject relational value inputs not declared by their inert definition."
       ],
       "integratedCommits": [
-        "2f3b2902cd6c7b0ac4acd05fbeb8d25508243657",
-        "b263bddd571f257614a580c9c6ad72d105e17f3d",
-        "56ab5cfb7168464780568d398f6591fc55d944ff",
-        "13900a8b1b4b289071ed26ade2abd738710d8558"
+        "4d8d0cd9741ca37c90b8c35577630238312e05c8",
+        "8d063aed23283db3b91a00d6720c0999651c2844",
+        "5790a485681e236e9fa376d716bbf631886c197a",
+        "aaead109fe97ad7139ba3ed0f6c77aa592a5b88e"
       ],
       "tests": [
         "fresh pnpm db:migrate:postgres through 0161 (pass)",
@@ -161,7 +163,9 @@
       "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Implement one deterministic normalized gateway-to-canonical PIT service and replay bridge with explicit AVAILABLE/UNAVAILABLE/REJECTED receipts, exact trust-as-of resolution, and no zero/stale/synthetic/current-trust fallback; Measurement definitions remain inert.",
-      "dependencies": ["DEE-682"],
+      "dependencies": [
+        "DEE-682"
+      ],
       "dependencyEvidence": [
         "DEE-683 starts only after the DEE-682 migration and repository invariants are committed, reviewed, and cumulatively green.",
         "The Human requires the same canonicalization path for gateway-shaped live inputs and historical replay and forbids fallback fabrication."
@@ -212,9 +216,9 @@
         "Persisted explicit unavailability remains UNAVAILABLE without requiring or fabricating a historical trust revision."
       ],
       "integratedCommits": [
-        "ae309a1638951e542de024004ab9312216a693da",
-        "9369c7a6d887f0519885bbcb7ef9c8bfdec4228a",
-        "d51a2789a6a5a8ff9e68c882d6b8bba42eb380d5"
+        "b264e1762de8c5be8bbca5fbcc322c581b5e0e0f",
+        "99fbb3232e1853519e56d3b1b35df466a736e877",
+        "b97b5893eb94692bb7a1a52e0c2448b26ad1bad2"
       ],
       "tests": [
         "canonical gateway/replay unit tests (8/8 pass, including explicit unavailable news provenance)",
@@ -232,7 +236,9 @@
       "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Inventory and prove repository-wide normalized source producers, gateway/replay paths, MI consumers, and bypasses; close all admitted/excluded dispositions and representative market/non-price end-to-end tenant/replay lineage without touching downstream authority systems; mechanically refresh pinned provenance and inventory test fixtures made stale by already-admitted DEE-620 files or provider identities.",
-      "dependencies": ["DEE-683"],
+      "dependencies": [
+        "DEE-683"
+      ],
       "dependencyEvidence": [
         "DEE-684 uses the complete A→B→C boundary and begins only after the bridge and replay behavior are committed, reviewed, and cumulatively green.",
         "The Human requires whole-repository closure while preserving Formula/Forecast/Decision/Risk/Execution/Reality/holdout/capital boundaries."
@@ -274,7 +280,8 @@
         "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
         "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
         "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
-        "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "tests/fixtures/trader/market-understanding-aligned-trend.json"
       ],
       "acceptanceEvidence": [
         "Checked inventory covers all 20 registered providers, their producer files, all 17 normalized kinds, gateway/replay aggregation, internal MSV, persistence consumers, and known fused/raw non-persistence paths.",
@@ -282,22 +289,26 @@
         "All six external primitive shapes prepare AVAILABLE while all 11 excluded dispositions and both Measurement-only categories remain closed at the primitive boundary.",
         "PostgreSQL closes representative ohlcv_bar and news_headline Source/trust/PIT Observation/inert Measurement lineage with replay identity and cross-tenant rejection.",
         "Reality V2 inventory identity now accounts for exactly 152 source files, including the three admitted DEE-620 market-data sources, while all dispositions and fail-uncertain rules remain unchanged; its focused consumer-graph proof reports the same exact count.",
-        "The shared Observation table's legacy reader is explicitly inventoried and filters every read path to internal msv_envelope rows, so external PIT rows cannot escape through a lossy legacy type."
+        "The shared Observation table's legacy reader is explicitly inventoried and filters every read path to internal msv_envelope rows, so external PIT rows cannot escape through a lossy legacy type.",
+        "The aligned-trend golden fixture records coindesk_rss for the explicit unavailable news_headline lane, matching the registered headline provider while retaining gdelt only for the downstream news_event_cluster category; no Market Understanding implementation, value, or verdict changed."
       ],
       "integratedCommits": [
-        "5674c6ee832aa447e3117e211a60b430145206af",
-        "754dcdca74178f4fbc3f31d9ba22a480cb21d488",
-        "c21ad9d762c02231f4dbb74af9a373768beb7f95",
-        "81994a0eb64014b29c79bf59fb73652ed7171157",
-        "b9db4adf2d0cf3547c4ec4c9d7d844176de0688a"
+        "7db9190e395409be1be133324425a464057088de",
+        "df40b3078855525722b33738a45603036c702ead",
+        "ca5ff9177015a55213317afbe20188d51a4c7741",
+        "233ce251091fd51d0f4821ad5756e7063fe1bd30",
+        "9a9f012fd2a69d72a2ce72e443e5f070e99ac132",
+        "7a0593a23493303e4634fba0763801b50d26c9e9"
       ],
       "tests": [
         "repository-wide source/consumer closure tests (3/3 pass)",
         "six-kind gateway bridge closure tests (pass)",
-        "WAIA_PG_INTEGRATION=1 cumulative PostgreSQL suite (5/5 pass)",
+        "WAIA_PG_INTEGRATION=1 cumulative PostgreSQL suite (6/6 pass on migrated loopback validation database)",
         "cumulative focused unit tests (50/50 pass)",
         "Reality V2 consumer-graph inventory proof (4/4 pass)",
-        "pnpm typecheck and scoped eslint (pass)"
+        "pnpm typecheck and scoped eslint (pass)",
+        "Market Understanding golden provenance plus canonical replay/bridge/consumer closure proofs (15/15 pass)",
+        "post-CI focused DEE-620 unit gate (9 files, 41/41 pass)"
       ],
       "execution": {
         "wave": 4,
@@ -309,20 +320,20 @@
   "integrationEvidence": {
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
-      "manifestCommit": "bc15205bc84a3f07fff214fcd1eb0bc05356ffb1",
+      "manifestDigest": "c98b8cda5ecc58cd4fde7fd492c9daee29649bee432c5a2ce5dffc11b847abd1",
+      "manifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
       "manifestPath": "docs/plans/dee-680-canonical-pit-measurement-lineage.integration-train.json",
-      "reviewer": "Human-ratified DEE-620 integration owner after exact-base, duplicate, dependency, migration-identity, vocabulary, boundary, and allowed-surface audit on 2026-08-23; re-admitted with the exact DEE-682 test amendment and DEE-684 Reality inventory identity amendment authorized in Codex task 01a019c0-8940-7272-bc9c-6b330e6bf0f2 and recorded on Linear DEE-680/DEE-682/DEE-684"
+      "reviewer": "Human-ratified DEE-620 integration owner after exact-base, duplicate, dependency, migration-identity, vocabulary, boundary, and allowed-surface audit on 2026-08-23; re-admitted with the exact DEE-682 test amendment and DEE-684 Reality inventory identity amendment authorized in Codex task 01a019c0-8940-7272-bc9c-6b330e6bf0f2 and recorded on Linear DEE-680/DEE-682/DEE-684; CI provenance fixture surface admitted under the Human standing mechanical provenance authority before its repair commit"
     },
     "admissionReviews": [
       {
         "issue": "DEE-681",
         "status": "pass",
         "reviewedCommits": [
-          "4ff100895dc7007c354bba7bc00ee70817a0a885",
-          "278ea9476acc59af001ce6253ced03340879f2ab",
-          "b149178541d1ccd42e9d0cbc936112b9a98d33d8",
-          "886bb854fe410e4b725446a2b72495d6413c63aa"
+          "6f2cd97de1d6a220e7c6f7a726db84b54720b5eb",
+          "0c338beaa28d6b0b7b9ea028a1ab6e659edaa940",
+          "587308cf29b3811e747ca23f3697f33bb099e69e",
+          "465e70c1c1bbbefb5e6e2ef45e1c1c0c0182c8ee"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/normalization/canonical-pit-contract.ts",
@@ -337,10 +348,10 @@
         "issue": "DEE-682",
         "status": "pass",
         "reviewedCommits": [
-          "2f3b2902cd6c7b0ac4acd05fbeb8d25508243657",
-          "b263bddd571f257614a580c9c6ad72d105e17f3d",
-          "56ab5cfb7168464780568d398f6591fc55d944ff",
-          "13900a8b1b4b289071ed26ade2abd738710d8558"
+          "4d8d0cd9741ca37c90b8c35577630238312e05c8",
+          "8d063aed23283db3b91a00d6720c0999651c2844",
+          "5790a485681e236e9fa376d716bbf631886c197a",
+          "aaead109fe97ad7139ba3ed0f6c77aa592a5b88e"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -358,9 +369,9 @@
         "issue": "DEE-683",
         "status": "pass",
         "reviewedCommits": [
-          "ae309a1638951e542de024004ab9312216a693da",
-          "9369c7a6d887f0519885bbcb7ef9c8bfdec4228a",
-          "d51a2789a6a5a8ff9e68c882d6b8bba42eb380d5"
+          "b264e1762de8c5be8bbca5fbcc322c581b5e0e0f",
+          "99fbb3232e1853519e56d3b1b35df466a736e877",
+          "b97b5893eb94692bb7a1a52e0c2448b26ad1bad2"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/market-data-gateway.ts",
@@ -377,11 +388,12 @@
         "issue": "DEE-684",
         "status": "pass",
         "reviewedCommits": [
-          "5674c6ee832aa447e3117e211a60b430145206af",
-          "754dcdca74178f4fbc3f31d9ba22a480cb21d488",
-          "c21ad9d762c02231f4dbb74af9a373768beb7f95",
-          "81994a0eb64014b29c79bf59fb73652ed7171157",
-          "b9db4adf2d0cf3547c4ec4c9d7d844176de0688a"
+          "7db9190e395409be1be133324425a464057088de",
+          "df40b3078855525722b33738a45603036c702ead",
+          "ca5ff9177015a55213317afbe20188d51a4c7741",
+          "233ce251091fd51d0f4821ad5756e7063fe1bd30",
+          "9a9f012fd2a69d72a2ce72e443e5f070e99ac132",
+          "7a0593a23493303e4634fba0763801b50d26c9e9"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -390,7 +402,8 @@
           "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
           "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
           "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
-          "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+          "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+          "tests/fixtures/trader/market-understanding-aligned-trend.json"
         ]
       }
     ],
@@ -431,7 +444,8 @@
           "Reality V2 source-inventory identity and consumer-graph exact-count proof",
           "cumulative PostgreSQL market/non-price/tenant/replay tests",
           "cumulative focused unit tests",
-          "pnpm typecheck and scoped eslint"
+          "pnpm typecheck and scoped eslint",
+          "Market Understanding golden provenance plus canonical replay/bridge/consumer closure proofs"
         ]
       }
     ],
@@ -442,7 +456,7 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "supersededFrozenHead": "7f9072b1c5bc9b9f752b7a2b660225a5682420cf",
-      "reAdmissionManifestCommit": "bc15205bc84a3f07fff214fcd1eb0bc05356ffb1",
+      "reAdmissionManifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
       "reAdmissionManifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
       "surface": "tests/unit/trader-reality-v2-migration-identity.test.ts",
       "boundary": "Order-independent exact 0160 journal-entry assertion only; retain all 0160 identity/content/uniqueness assertions and change no Reality implementation or semantics."
@@ -453,7 +467,7 @@
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "authorizedBase": "a4242a4b50da6415836ba1a83cd53c6073c556a2",
       "supersededFrozenHead": "c2b8a220421a1c7df910a3db1dbc57dd02f255fb",
-      "reAdmissionManifestCommit": "bc15205bc84a3f07fff214fcd1eb0bc05356ffb1",
+      "reAdmissionManifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
       "reAdmissionManifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
       "surfaces": [
         "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -465,7 +479,7 @@
       "status": "human-standing-authority",
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
-      "failedHead": "8cfde14ab44726de81571d3aa0974134f4c482cd",
+      "failedHead": "6d71a269f1ede174725ab3d75697dad0c0c81a52",
       "failedCheck": "GitHub ci/unit tests: 1 failed, 4805 passed; tests/unit/trader-market-understanding-golden.test.ts",
       "surface": "tests/fixtures/trader/market-understanding-aligned-trend.json",
       "boundary": "Mechanical exact-provider provenance refresh only: replace stale gdelt news_headline fixture identities with the already-admitted coindesk_rss headline identity while preserving gdelt news_event_cluster, every Market Understanding value/verdict, implementation semantic, formula, and capital boundary."
@@ -475,7 +489,7 @@
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
       "reviewedHead": "f734d44196b48e2f1759a426faf6fc6520ee2dad",
-      "reAdmissionManifestCommit": "bc15205bc84a3f07fff214fcd1eb0bc05356ffb1",
+      "reAdmissionManifestCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
       "reAdmissionManifestDigest": "b1362b83baa4e273531858071cd6e0269f9f82515801514f0c87d78dae0bd5d3",
       "surfaces": [
         "lib/trader/mi/measurement-lineage-v1.ts",
@@ -493,12 +507,12 @@
       "status": "human-standing-authority",
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
-      "reviewedHead": "7368160e4dc64f727d353fba8f11bf98416bf801",
+      "reviewedHead": "0353c5df76b33808aeae6268213d5b8c81a37179",
       "remediationCommits": {
-        "DEE-681": "886bb854fe410e4b725446a2b72495d6413c63aa",
-        "DEE-682": "13900a8b1b4b289071ed26ade2abd738710d8558",
-        "DEE-683": "d51a2789a6a5a8ff9e68c882d6b8bba42eb380d5",
-        "DEE-684": "b9db4adf2d0cf3547c4ec4c9d7d844176de0688a"
+        "DEE-681": "465e70c1c1bbbefb5e6e2ef45e1c1c0c0182c8ee",
+        "DEE-682": "aaead109fe97ad7139ba3ed0f6c77aa592a5b88e",
+        "DEE-683": "b97b5893eb94692bb7a1a52e0c2448b26ad1bad2",
+        "DEE-684": "9a9f012fd2a69d72a2ce72e443e5f070e99ac132"
       },
       "surfaces": [
         "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -512,6 +526,18 @@
         "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts"
       ],
       "boundary": "Smallest fail-closed corrections for exact PostgreSQL inert-contract parity and declared-input membership, explicit persisted unavailability, runtime unknown-provider rejection, and internal-only legacy reads from the shared Observation table; no new vocabulary, formula, scientific semantic, or authority."
+    },
+    "ciProvenanceRemediation": {
+      "status": "human-standing-authority",
+      "authorizedAt": "2026-08-23",
+      "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
+      "failedPublishedHead": "8cfde14ab44726de81571d3aa0974134f4c482cd",
+      "failedCheck": "GitHub ci/unit tests: 1 failed, 4805 passed; tests/unit/trader-market-understanding-golden.test.ts",
+      "admissionCommit": "ce2e7ae2b902c13e9b210e67a85adce91165aa82",
+      "admissionManifestDigest": "c98b8cda5ecc58cd4fde7fd492c9daee29649bee432c5a2ce5dffc11b847abd1",
+      "remediationCommit": "7a0593a23493303e4634fba0763801b50d26c9e9",
+      "surface": "tests/fixtures/trader/market-understanding-aligned-trend.json",
+      "boundary": "Mechanical exact-provider provenance refresh only: six stale gdelt news_headline identities become the already-admitted coindesk_rss headline identity; gdelt news_event_cluster and every Market Understanding implementation/value/verdict/formula/authority boundary remain unchanged."
     }
   }
 }
