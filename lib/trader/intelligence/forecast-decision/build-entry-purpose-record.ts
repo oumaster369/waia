@@ -10,6 +10,10 @@ import {
   type TraderIntelligenceEntryPurposeRecord,
   type TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import {
+  assertForecastDecisionConstructionPermit,
+  type ForecastDecisionConstructionPermit,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 const ENTRY_PURPOSE_HORIZON_MS = 4 * 60 * 60 * 1000;
 
@@ -26,7 +30,9 @@ function addHorizon(isoTimestamp: string, horizonMs: number): string {
 
 export function buildEntryPurposeRecord(
   input: BuildEntryPurposeRecordInput,
+  constructionPermit: ForecastDecisionConstructionPermit,
 ): TraderIntelligenceEntryPurposeRecord | null {
+  assertForecastDecisionConstructionPermit(constructionPermit);
   const decisionClass: DecisionClass = input.decision.decisionClass;
   if (decisionClass !== "TRADE" && decisionClass !== "REDUCED_RISK") {
     return null;

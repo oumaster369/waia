@@ -506,6 +506,7 @@ export async function runPaperCycleOnce(
 
   const evaluation = runEvaluationCycle({
     organizationId: context.organizationId,
+    accountId: input.accountKey,
     bars: snapshot.bars,
     quote: snapshot.quote,
     evaluatedAt: snapshot.evaluatedAt,

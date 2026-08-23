@@ -11,6 +11,7 @@ import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/in
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { ForecastDecisionPersistenceAuthorizationV2 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
 import { WP13_PG_USER_A } from "./wp13-intelligence-test-helpers";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import {
@@ -57,7 +58,31 @@ export function buildWp14Bundle(
     signal: cycle.signal,
     costModel: createCostModelV1("10", "5"),
     informationSufficiencyAuthority,
+    informationSufficiencyScope: {
+      accountId: null,
+      symbol: intelligenceCycleBundle.envelope.symbol,
+      analyticalTimeframe: wp13Bars()[0]!.interval,
+      pitAnchor: intelligenceCycleBundle.envelope.evaluatedAt,
+    },
   });
+}
+
+export function buildWp14PersistenceAuthorization(
+  organizationId: string,
+  bundle: ForecastDecisionBundle,
+): ForecastDecisionPersistenceAuthorizationV2 {
+  return {
+    authority: declareResearchNonCapitalInformationAuthorityV2({
+      organizationId,
+      reason: "HTR_WP14_POSTGRES_PERSISTENCE_TEST",
+    }),
+    scope: {
+      accountId: null,
+      symbol: bundle.decision.symbol,
+      analyticalTimeframe: "1m",
+      pitAnchor: bundle.decision.evaluatedAt,
+    },
+  };
 }
 
 export async function cleanupWp14ForecastDecisionRows(

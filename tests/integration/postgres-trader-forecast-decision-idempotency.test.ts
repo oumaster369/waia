@@ -10,6 +10,7 @@ import { ForecastDecisionIdempotencyConflictError } from "@/lib/trader/intellige
 import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import {
   buildWp14Bundle,
+  buildWp14PersistenceAuthorization,
   cleanupWp14AllRows,
   cleanupWp14Org,
   countWp14RowsForRun,
@@ -45,7 +46,12 @@ describe.skipIf(!integrationEnabled || !url)(
       const wp13 = buildWp13Bundle(orgA, runId, cycleId);
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
       const bundle = buildWp14Bundle(orgA, runId, cycleId);
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
       return bundle;
     }
 
@@ -54,8 +60,18 @@ describe.skipIf(!integrationEnabled || !url)(
       const db = getPostgresDrizzle();
       const wp13 = buildWp13Bundle(orgA, "wp14-idem-run", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
       const counts = await countWp14RowsForRun(url!, orgA, "wp14-idem-run");
       expect(counts.decisions).toBe(1);
     });
@@ -72,7 +88,12 @@ describe.skipIf(!integrationEnabled || !url)(
       };
       const db = getPostgresDrizzle();
       await expect(
-        persistForecastDecisionBundle({ organizationId: orgA }, divergent, db),
+        persistForecastDecisionBundle(
+          { organizationId: orgA },
+          divergent,
+          db,
+          buildWp14PersistenceAuthorization(orgA, divergent),
+        ),
       ).rejects.toBeInstanceOf(ForecastDecisionIdempotencyConflictError);
     });
 
@@ -83,8 +104,18 @@ describe.skipIf(!integrationEnabled || !url)(
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
       const context = { organizationId: orgA };
       const results = await Promise.allSettled([
-        persistForecastDecisionBundle(context, bundle, db),
-        persistForecastDecisionBundle(context, bundle, db),
+        persistForecastDecisionBundle(
+          context,
+          bundle,
+          db,
+          buildWp14PersistenceAuthorization(orgA, bundle),
+        ),
+        persistForecastDecisionBundle(
+          context,
+          bundle,
+          db,
+          buildWp14PersistenceAuthorization(orgA, bundle),
+        ),
       ]);
       expect(results.every((result) => result.status === "fulfilled")).toBe(true);
       const counts = await countWp14RowsForRun(url!, orgA, "wp14-concurrent-identical");

@@ -34,8 +34,17 @@ import {
 } from "@/lib/trader/risk/kill-switch/kill-fold";
 import { mapKillFoldToDecision } from "@/lib/trader/risk/kill-switch-enforcement";
 import { runWp14EvaluationCycle } from "./wp14-test-helpers";
+import { admitResearchForecastDecisionConstruction } from "./forecast-decision-construction-test-helper";
 
 const EVALUATED_AT = "2026-08-10T12:00:00.000Z";
+
+function decisionConstructionPermit() {
+  return admitResearchForecastDecisionConstruction({
+    organizationId: "org-wp14",
+    symbol: "BTC/USDT",
+    pitAnchor: EVALUATED_AT,
+  });
+}
 
 const ORDER: PlaceOrderInput = {
   clientOrderId: "coid-auth",
@@ -195,7 +204,7 @@ describe("trader authority chain (DEE-521)", () => {
   describe("strategy mutation non-effect on V2 EV and decision", () => {
     it("ignores legacy strategy confidence/expectedEdge/maxRisk for V2 decision record", () => {
       const baselineInput = buildV2DecisionInput();
-      const baseline = buildDecisionRecord(baselineInput);
+      const baseline = buildDecisionRecord(baselineInput, decisionConstructionPermit());
       const mutated = buildDecisionRecord(
         buildV2DecisionInput({
           signal: mutateSignal(baselineInput.signal, {
@@ -204,6 +213,7 @@ describe("trader authority chain (DEE-521)", () => {
             maxRisk: "1.00",
           }),
         }),
+        decisionConstructionPermit(),
       );
 
       expect(mutated.decisionClass).toBe(baseline.decisionClass);
@@ -231,7 +241,10 @@ describe("trader authority chain (DEE-521)", () => {
         scientificAdmissionVerified: true,
       });
 
-      const baselineDecision = buildDecisionRecord(buildV2DecisionInput({ decisionEvRange }));
+      const baselineDecision = buildDecisionRecord(
+        buildV2DecisionInput({ decisionEvRange }),
+        decisionConstructionPermit(),
+      );
 
       const cycle = runWp14EvaluationCycle();
       const highConvictionBundle = buildIntelligenceCycleBundle({
@@ -255,6 +268,7 @@ describe("trader authority chain (DEE-521)", () => {
           intelligenceCycleBundle: lowConvictionBundle,
           decisionEvRange,
         }),
+        decisionConstructionPermit(),
       );
 
       expect(mutatedDecision.decisionClass).toBe(baselineDecision.decisionClass);

@@ -15,7 +15,11 @@ import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/record
 import { seedWp21ProofUser } from "@/tests/helpers/wp21-proof-postgres";
 import { assertWp21MandatoryPostgresProofEnvironment } from "@/tests/helpers/wp21-proof-postgres";
 import { wp21Bars, wp21Provenance } from "@/tests/unit/wp21-test-helpers";
-import { buildWp14Bundle, cleanupWp14AllRows } from "./wp14-forecast-decision-test-helpers";
+import {
+  buildWp14Bundle,
+  buildWp14PersistenceAuthorization,
+  cleanupWp14AllRows,
+} from "./wp14-forecast-decision-test-helpers";
 import { buildWp13Bundle } from "./wp13-intelligence-test-helpers";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -96,7 +100,12 @@ describe.skipIf(!integrationEnabled || !url)(
         db,
       );
       const wp14 = buildWp14Bundle(orgA, runId, cycleId);
-      await persistForecastDecisionBundle({ organizationId: orgA }, wp14, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        wp14,
+        db,
+        buildWp14PersistenceAuthorization(orgA, wp14),
+      );
       const forecast = wp14.forecasts[0]!;
       const startMs = Date.parse(forecast.issuedAt);
       const horizonMs = Date.parse(forecast.targetWindowEndAt);

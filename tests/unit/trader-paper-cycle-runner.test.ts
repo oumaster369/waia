@@ -938,7 +938,7 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
     });
   }
 
-  it("runs guardian on no-signal bar when open lots exist and submits close-only exit", async () => {
+  it("runs guardian before the missing new-entry sufficiency gate and submits close-only exit", async () => {
     const lotId = "lot-m3";
     const tradeId = "trade-m3";
 
@@ -982,6 +982,7 @@ describe("paper cycle runner — M3 position guardian (DEE-378)", () => {
 
     expect(result.guardian?.exitIntents).toHaveLength(1);
     expect(result.guardian?.evaluations).toHaveLength(1);
+    expect(result.skipReason).not.toBe("information_sufficiency_blocked");
     expect(submitSpy).toHaveBeenCalledTimes(1);
     const submitArg = submitSpy.mock.calls[0]?.[1];
     expect(submitArg?.side).toBe("sell");

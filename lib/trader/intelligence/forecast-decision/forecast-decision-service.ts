@@ -9,10 +9,11 @@ import { persistForecastDecisionBundle } from "@/lib/trader/intelligence/forecas
 import { assertForecastDecisionChainComplete } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-completeness";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
-import {
-  evaluateInformationSufficiencyRuntimeAdmissionV2,
-  type InformationSufficiencyRuntimeAuthorityV2,
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  InformationSufficiencyRuntimeScopeV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { MsvEnvelope, StrategySignal } from "@/lib/trader/intelligence/types";
@@ -26,54 +27,66 @@ export type BuildForecastDecisionBundleInput = Readonly<{
   signal: StrategySignal;
   costModel?: CostModelV1;
   informationSufficiencyAuthority: InformationSufficiencyRuntimeAuthorityV2;
+  informationSufficiencyScope: InformationSufficiencyRuntimeScopeV2;
 }>;
 
 export function buildForecastDecisionBundle(
   input: BuildForecastDecisionBundleInput,
 ): ForecastDecisionBundle {
-  const sufficiencyAdmission = evaluateInformationSufficiencyRuntimeAdmissionV2({
+  const constructionPermit = admitForecastDecisionConstruction({
     authority: input.informationSufficiencyAuthority,
     organizationId: input.intelligenceCycleBundle.envelope.organizationId,
-    requiredPurpose: "NEW_OPPORTUNITY",
-    allowResearchNonCapital: true,
-    expectedScope: {
-      symbol: input.intelligenceCycleBundle.envelope.symbol,
-      pitAnchor: input.intelligenceCycleBundle.envelope.evaluatedAt,
-    },
+    scope: input.informationSufficiencyScope,
   });
-  if (sufficiencyAdmission.status === "BLOCKED") {
-    throw new Error(`INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:${sufficiencyAdmission.reasonCode}`);
+  if (
+    input.informationSufficiencyScope.symbol !== input.intelligenceCycleBundle.envelope.symbol ||
+    input.informationSufficiencyScope.pitAnchor !==
+      input.intelligenceCycleBundle.envelope.evaluatedAt
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
   }
 
   const hypothesesByType = Object.fromEntries(
     input.hypothesisSet.hypotheses.map((hypothesis) => [hypothesis.hypothesisType, hypothesis]),
   );
 
-  const forecasts = buildForecastRecords({
-    intelligenceCycleBundle: input.intelligenceCycleBundle,
-    hypothesesByType,
-  });
+  const forecasts = buildForecastRecords(
+    {
+      intelligenceCycleBundle: input.intelligenceCycleBundle,
+      hypothesesByType,
+    },
+    constructionPermit,
+  );
 
-  const decision = buildDecisionRecord({
-    intelligenceCycleBundle: input.intelligenceCycleBundle,
-    decisionChain: input.decisionChain,
-    msv: input.msv,
-    signal: input.signal,
-    costModel: input.costModel,
-  });
+  const decision = buildDecisionRecord(
+    {
+      intelligenceCycleBundle: input.intelligenceCycleBundle,
+      decisionChain: input.decisionChain,
+      msv: input.msv,
+      signal: input.signal,
+      costModel: input.costModel,
+    },
+    constructionPermit,
+  );
 
-  const links = buildDecisionForecastLinks({
-    decision,
-    forecasts,
-    activeHypothesisRecordId: input.intelligenceCycleBundle.conviction.activeHypothesisRecordId,
-  });
+  const links = buildDecisionForecastLinks(
+    {
+      decision,
+      forecasts,
+      activeHypothesisRecordId: input.intelligenceCycleBundle.conviction.activeHypothesisRecordId,
+    },
+    constructionPermit,
+  );
 
-  const entryPurpose = buildEntryPurposeRecord({
-    decision,
-    forecasts,
-    links,
-    activeHypothesis: input.hypothesisSet.activeHypothesis,
-  });
+  const entryPurpose = buildEntryPurposeRecord(
+    {
+      decision,
+      forecasts,
+      links,
+      activeHypothesis: input.hypothesisSet.activeHypothesis,
+    },
+    constructionPermit,
+  );
 
   return {
     forecasts,
@@ -100,7 +113,10 @@ export async function persistForecastDecisionBundleForCycle(
   const bundle = buildForecastDecisionBundle(input);
 
   if (deps.bundleRepository) {
-    const persisted = await deps.bundleRepository.persist(context, bundle);
+    const persisted = await deps.bundleRepository.persist(context, bundle, {
+      authority: input.informationSufficiencyAuthority,
+      scope: input.informationSufficiencyScope,
+    });
     await assertForecastDecisionChainComplete(
       context,
       {
@@ -119,7 +135,10 @@ export async function persistForecastDecisionBundleForCycle(
     return bundle;
   }
 
-  const persisted = await persistForecastDecisionBundle(context, bundle, deps.db);
+  const persisted = await persistForecastDecisionBundle(context, bundle, deps.db, {
+    authority: input.informationSufficiencyAuthority,
+    scope: input.informationSufficiencyScope,
+  });
   await assertForecastDecisionChainComplete(
     context,
     {

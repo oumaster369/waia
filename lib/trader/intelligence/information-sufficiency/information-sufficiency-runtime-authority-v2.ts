@@ -29,6 +29,13 @@ export type InformationSufficiencyRuntimeAuthorityV2 =
       authority: "NON_CAPITAL_ONLY";
     }>;
 
+export type InformationSufficiencyRuntimeScopeV2 = Readonly<{
+  accountId: string | null;
+  symbol: string;
+  analyticalTimeframe: string;
+  pitAnchor: string;
+}>;
+
 export type InformationSufficiencyRuntimeBlockReasonV2 =
   | "MISSING_AUTHORITY"
   | "INVALID_AUTHORITY"
@@ -101,7 +108,7 @@ export function evaluateInformationSufficiencyRuntimeAdmissionV2(input: {
   requiredPurpose: "NEW_OPPORTUNITY";
   allowResearchNonCapital: boolean;
   expectedScope?: Readonly<{
-    accountId?: string;
+    accountId?: string | null;
     symbol?: string;
     analyticalTimeframe?: string;
     pitAnchor?: string;

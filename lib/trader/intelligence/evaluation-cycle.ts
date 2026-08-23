@@ -221,6 +221,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     requiredPurpose: "NEW_OPPORTUNITY",
     allowResearchNonCapital: true,
     expectedScope: {
+      accountId: input.accountId ?? null,
       symbol: input.symbol ?? input.bars[0]?.symbol,
       analyticalTimeframe: input.bars[0]?.interval,
       pitAnchor: evaluatedAt,
@@ -242,6 +243,12 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           signal,
           costModel: input.costModel,
           informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+          informationSufficiencyScope: {
+            accountId: input.accountId ?? null,
+            symbol: intelligenceCycleBundle.envelope.symbol,
+            analyticalTimeframe: input.bars[0]?.interval ?? "",
+            pitAnchor: intelligenceCycleBundle.envelope.evaluatedAt,
+          },
         })
       : undefined;
 

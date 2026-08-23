@@ -16,6 +16,10 @@ import {
   type TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import {
+  assertForecastDecisionConstructionPermit,
+  type ForecastDecisionConstructionPermit,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 const SUPPORTING_CONFIDENCE_THRESHOLD = 0.45;
 const FORECAST_HORIZON_MS = 60 * 60 * 1000;
@@ -118,7 +122,9 @@ function buildForecastForHypothesis(
 
 export function buildForecastRecords(
   input: BuildForecastRecordsInput,
+  constructionPermit: ForecastDecisionConstructionPermit,
 ): TraderIntelligenceForecastRecord[] {
+  assertForecastDecisionConstructionPermit(constructionPermit);
   const bundle = input.intelligenceCycleBundle;
   if (bundle.conviction.convictionScope === "NONE") {
     return [];

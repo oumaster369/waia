@@ -18,6 +18,7 @@ import { createDeterministicReplayIdFactory } from "@/lib/trader/research/determ
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import {
   buildWp14Bundle,
+  buildWp14PersistenceAuthorization,
   cleanupWp14AllRows,
   cleanupWp14Org,
   countWp14RowsForRun,
@@ -54,7 +55,12 @@ describe.skipIf(!integrationEnabled || !url)(
       const wp13 = buildWp13Bundle(orgA, "wp14-parity-run", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
       const bundle = buildWp14Bundle(orgA, "wp14-parity-run", "0");
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
 
       const forecasts = await db
         .select()
@@ -125,7 +131,12 @@ describe.skipIf(!integrationEnabled || !url)(
       const wp13 = buildWp13Bundle(orgA, "wp14-append-only", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
       const bundle = buildWp14Bundle(orgA, "wp14-append-only", "0");
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
       const sql = postgres(url!, { max: 1 });
       try {
         await expect(

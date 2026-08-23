@@ -263,6 +263,8 @@ export type StrategySignal = {
 
 export type EvaluationCycleInput = {
   organizationId: string;
+  /** Account scope authenticated by the DEE-621 information-sufficiency receipt. */
+  accountId?: string | null;
   bars: readonly Bar[];
   quote?: Quote;
   evaluatedAt?: string;

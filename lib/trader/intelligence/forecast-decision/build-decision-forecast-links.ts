@@ -7,6 +7,10 @@ import {
   type TraderIntelligenceDecisionRecord,
   type TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import {
+  assertForecastDecisionConstructionPermit,
+  type ForecastDecisionConstructionPermit,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 export type BuildDecisionForecastLinksInput = Readonly<{
   decision: TraderIntelligenceDecisionRecord;
@@ -22,7 +26,9 @@ function assertTradeLinksRequired(decisionClass: DecisionClass, linkCount: numbe
 
 export function buildDecisionForecastLinks(
   input: BuildDecisionForecastLinksInput,
+  constructionPermit: ForecastDecisionConstructionPermit,
 ): TraderIntelligenceDecisionForecastLink[] {
+  assertForecastDecisionConstructionPermit(constructionPermit);
   if (input.decision.decisionClass === "NO_TRADE") {
     return [];
   }

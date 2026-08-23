@@ -4,7 +4,11 @@ import { createDecisionRecordRepositoryPostgres } from "@/lib/trader/intelligenc
 import { createEntryPurposeRecordRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/entry-purpose-record-repository-postgres";
 import { createForecastRecordRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
-import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import type {
+  ForecastDecisionBundleRepository,
+  ForecastDecisionPersistenceAuthorizationV2,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import {
   sortDecisionForecastLinks,
   sortForecastsByKeyDigestCodePoint,
@@ -15,7 +19,20 @@ export async function persistForecastDecisionBundle(
   context: OrgContext,
   bundle: ForecastDecisionBundle,
   db: WaiaPostgresDb,
+  authorization: ForecastDecisionPersistenceAuthorizationV2,
 ): Promise<ForecastDecisionBundle> {
+  admitForecastDecisionConstruction({
+    authority: authorization.authority,
+    organizationId: context.organizationId,
+    scope: authorization.scope,
+  });
+  if (
+    bundle.decision.organizationId !== context.organizationId ||
+    bundle.decision.symbol !== authorization.scope.symbol ||
+    bundle.decision.evaluatedAt !== authorization.scope.pitAnchor
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_PERSISTENCE_BLOCKED:BUNDLE_SCOPE_MISMATCH");
+  }
   const normalizedBundle: ForecastDecisionBundle = {
     forecasts: sortForecastsByKeyDigestCodePoint(bundle.forecasts),
     decision: bundle.decision,
@@ -51,8 +68,8 @@ export function createForecastDecisionBundleRepositoryPostgres(
   db: WaiaPostgresDb,
 ): ForecastDecisionBundleRepository {
   return {
-    persist(context, bundle) {
-      return persistForecastDecisionBundle(context, bundle, db);
+    persist(context, bundle, authorization) {
+      return persistForecastDecisionBundle(context, bundle, db, authorization);
     },
   };
 }

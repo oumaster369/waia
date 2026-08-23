@@ -6,6 +6,10 @@ import type {
   TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  InformationSufficiencyRuntimeScopeV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 
 export type ForecastRecordRepository = {
   findByBusinessKey(
@@ -45,8 +49,17 @@ export type EntryPurposeRecordRepository = {
 };
 
 export type ForecastDecisionBundleRepository = {
-  persist(context: OrgContext, bundle: ForecastDecisionBundle): Promise<ForecastDecisionBundle>;
+  persist(
+    context: OrgContext,
+    bundle: ForecastDecisionBundle,
+    authorization: ForecastDecisionPersistenceAuthorizationV2,
+  ): Promise<ForecastDecisionBundle>;
 };
+
+export type ForecastDecisionPersistenceAuthorizationV2 = Readonly<{
+  authority: InformationSufficiencyRuntimeAuthorityV2;
+  scope: InformationSufficiencyRuntimeScopeV2;
+}>;
 
 export type ForecastDecisionRuntime = {
   forecastRecordRepository: ForecastRecordRepository;
