@@ -88,6 +88,33 @@ AS $$
     AND value - expected_keys = '{}'::jsonb
 $$;
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_jsonb_canonical_string_array_v2(
+  value jsonb,
+  allow_empty boolean DEFAULT true
+)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+STRICT
+AS $$
+  SELECT jsonb_typeof(value) = 'array'
+    AND (allow_empty OR jsonb_array_length(value) > 0)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(value) AS item(value)
+      WHERE jsonb_typeof(item.value) <> 'string'
+        OR length(btrim(item.value #>> '{}')) = 0
+    )
+    AND jsonb_array_length(value) = (
+      SELECT count(DISTINCT item.value #>> '{}')
+      FROM jsonb_array_elements(value) AS item(value)
+    )
+    AND value = COALESCE((
+      SELECT jsonb_agg(item.value ORDER BY item.value #>> '{}' COLLATE "C")
+      FROM jsonb_array_elements(value) AS item(value)
+    ), '[]'::jsonb)
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_required_information_profile_v2_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -120,8 +147,35 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
-  IF jsonb_typeof(NEW.profile_json -> 'requirements') <> 'array'
+  IF NOT (
+      (
+        jsonb_typeof(NEW.profile_json -> 'forecastPackageId') = 'null'
+        AND jsonb_typeof(NEW.profile_json -> 'forecastPackageContentDigest') = 'null'
+      )
+      OR (
+        jsonb_typeof(NEW.profile_json -> 'forecastPackageId') = 'string'
+        AND length(btrim(NEW.profile_json ->> 'forecastPackageId')) > 0
+        AND jsonb_typeof(NEW.profile_json -> 'forecastPackageContentDigest') = 'string'
+        AND NEW.profile_json ->> 'forecastPackageContentDigest' ~ '^[0-9a-f]{64}$'
+      )
+    )
+    OR NOT (
+      jsonb_typeof(NEW.profile_json -> 'inputContractContentDigest') = 'null'
+      OR (
+        jsonb_typeof(NEW.profile_json -> 'inputContractContentDigest') = 'string'
+        AND NEW.profile_json ->> 'inputContractContentDigest' ~ '^[0-9a-f]{64}$'
+      )
+    )
+    OR jsonb_typeof(NEW.profile_json -> 'requirements') <> 'array'
     OR jsonb_array_length(NEW.profile_json -> 'requirements') = 0
+    OR NEW.profile_json -> 'requirements' <> (
+      SELECT jsonb_agg(requirement.value ORDER BY requirement.value ->> 'id' COLLATE "C")
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+    )
+    OR jsonb_array_length(NEW.profile_json -> 'requirements') <> (
+      SELECT count(DISTINCT requirement.value ->> 'id')
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+    )
     OR EXISTS (
       SELECT 1
       FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
@@ -154,13 +208,18 @@ BEGIN
         )
         OR jsonb_typeof(requirement.value -> 'satisfiers') <> 'array'
         OR jsonb_array_length(requirement.value -> 'satisfiers') = 0
-        OR jsonb_typeof(requirement.value -> 'allowedObservationKinds') <> 'array'
-        OR jsonb_array_length(requirement.value -> 'allowedObservationKinds') = 0
-        OR jsonb_typeof(requirement.value -> 'allowedObservationSchemaVersions') <> 'array'
-        OR jsonb_array_length(requirement.value -> 'allowedObservationSchemaVersions') = 0
-        OR jsonb_typeof(requirement.value -> 'allowedMeasurementDefinitionDigests') <> 'array'
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          requirement.value -> 'allowedObservationKinds', false
+        )
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          requirement.value -> 'allowedObservationSchemaVersions', false
+        )
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          requirement.value -> 'allowedMeasurementDefinitionDigests'
+        )
         OR jsonb_typeof(requirement.value -> 'minimumIndependentGroups') <> 'number'
         OR (requirement.value ->> 'minimumIndependentGroups')::numeric < 1
+        OR (requirement.value ->> 'minimumIndependentGroups')::numeric > 9007199254740991
         OR trunc((requirement.value ->> 'minimumIndependentGroups')::numeric)
           <> (requirement.value ->> 'minimumIndependentGroups')::numeric
         OR jsonb_typeof(requirement.value -> 'contradictionPolicy') <> 'string'
@@ -178,6 +237,7 @@ BEGIN
           FROM jsonb_each(requirement.value -> 'inquiryBounds') AS bound(key, value)
           WHERE jsonb_typeof(bound.value) <> 'number'
             OR (bound.value #>> '{}')::numeric < 0
+            OR (bound.value #>> '{}')::numeric > 9007199254740991
             OR trunc((bound.value #>> '{}')::numeric) <> (bound.value #>> '{}')::numeric
         )
         OR (
@@ -186,6 +246,7 @@ BEGIN
             jsonb_typeof(requirement.value -> 'maxStalenessMs') = 'number'
             AND (
               (requirement.value ->> 'maxStalenessMs')::numeric < 0
+              OR (requirement.value ->> 'maxStalenessMs')::numeric > 9007199254740991
               OR trunc((requirement.value ->> 'maxStalenessMs')::numeric)
                 <> (requirement.value ->> 'maxStalenessMs')::numeric
             )
@@ -209,7 +270,7 @@ BEGIN
         )
         OR jsonb_typeof(satisfier.value -> 'evidenceFamily') <> 'string'
         OR length(btrim(satisfier.value ->> 'evidenceFamily')) = 0
-        OR jsonb_typeof(satisfier.value -> 'providerIds') <> 'array'
+        OR NOT public.waia_jsonb_canonical_string_array_v2(satisfier.value -> 'providerIds')
         OR (
           satisfier.ordinality = 1
           AND jsonb_typeof(satisfier.value -> 'substitutionRuleId') <> 'null'
@@ -221,11 +282,25 @@ BEGIN
             OR length(btrim(satisfier.value ->> 'substitutionRuleId')) = 0
           )
         )
-        OR EXISTS (
-          SELECT 1 FROM jsonb_array_elements(satisfier.value -> 'providerIds') AS provider(value)
-          WHERE jsonb_typeof(provider.value) <> 'string'
-            OR length(btrim(provider.value #>> '{}')) = 0
+        OR (
+          satisfier.ordinality > 2
+          AND concat(
+            satisfier.value ->> 'evidenceFamily', ':',
+            satisfier.value ->> 'substitutionRuleId'
+          ) < (
+            SELECT concat(
+              previous.value ->> 'evidenceFamily', ':',
+              previous.value ->> 'substitutionRuleId'
+            )
+            FROM jsonb_array_elements(requirement.value -> 'satisfiers')
+              WITH ORDINALITY AS previous(value, ordinality)
+            WHERE previous.ordinality = satisfier.ordinality - 1
+          )
         )
+        OR (
+          SELECT count(DISTINCT family.value ->> 'evidenceFamily')
+          FROM jsonb_array_elements(requirement.value -> 'satisfiers') AS family(value)
+        ) <> jsonb_array_length(requirement.value -> 'satisfiers')
     )
     OR EXISTS (
       SELECT 1
@@ -359,23 +434,41 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
-  IF jsonb_typeof(NEW.receipt_json -> 'activeContextTriggers') <> 'array'
+  IF NEW.receipt_json ->> 'pitAnchor' !~
+      '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$'
+    OR to_char(
+      (NEW.receipt_json ->> 'pitAnchor')::timestamptz AT TIME ZONE 'UTC',
+      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+    ) IS DISTINCT FROM NEW.receipt_json ->> 'pitAnchor'
+    OR NOT public.waia_jsonb_canonical_string_array_v2(
+      NEW.receipt_json -> 'activeContextTriggers'
+    )
     OR jsonb_typeof(NEW.receipt_json -> 'evidenceInventory') <> 'array'
     OR jsonb_typeof(NEW.receipt_json -> 'requirementReceipts') <> 'array'
     OR jsonb_array_length(NEW.receipt_json -> 'requirementReceipts')
       <> jsonb_array_length(profile_row.profile_json -> 'requirements')
-    OR jsonb_typeof(NEW.receipt_json -> 'reasonCodes') <> 'array'
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(NEW.receipt_json -> 'activeContextTriggers') AS trigger_key(value)
-      WHERE jsonb_typeof(trigger_key.value) <> 'string'
-        OR length(btrim(trigger_key.value #>> '{}')) = 0
+    OR NOT public.waia_jsonb_canonical_string_array_v2(NEW.receipt_json -> 'reasonCodes')
+    OR NEW.receipt_json -> 'evidenceInventory' <> COALESCE((
+      SELECT jsonb_agg(
+        evidence.value ORDER BY concat(
+          evidence.value ->> 'evidenceId', ':',
+          evidence.value ->> 'observationContentDigest', ':',
+          COALESCE(evidence.value ->> 'measurementValueContentDigest', '')
+        ) COLLATE "C"
+      )
+      FROM jsonb_array_elements(NEW.receipt_json -> 'evidenceInventory') AS evidence(value)
+    ), '[]'::jsonb)
+    OR jsonb_array_length(NEW.receipt_json -> 'evidenceInventory') <> (
+      SELECT count(DISTINCT evidence.value ->> 'evidenceId')
+      FROM jsonb_array_elements(NEW.receipt_json -> 'evidenceInventory') AS evidence(value)
     )
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(NEW.receipt_json -> 'reasonCodes') AS reason(value)
-      WHERE jsonb_typeof(reason.value) <> 'string'
-        OR length(btrim(reason.value #>> '{}')) = 0
+    OR NEW.receipt_json -> 'requirementReceipts' <> COALESCE((
+      SELECT jsonb_agg(result.value ORDER BY result.value ->> 'requirementId' COLLATE "C")
+      FROM jsonb_array_elements(NEW.receipt_json -> 'requirementReceipts') AS result(value)
+    ), '[]'::jsonb)
+    OR jsonb_array_length(NEW.receipt_json -> 'requirementReceipts') <> (
+      SELECT count(DISTINCT result.value ->> 'requirementId')
+      FROM jsonb_array_elements(NEW.receipt_json -> 'requirementReceipts') AS result(value)
     )
     OR EXISTS (
       SELECT 1
@@ -421,14 +514,16 @@ BEGIN
           'NOT_HISTORICAL', 'DEVELOPMENT', 'ADMISSIBLE_PATTERN_KNOWLEDGE'
         )
         OR evidence.value ->> 'observationContentDigest' !~ '^[0-9a-f]{64}$'
+        OR evidence.value ->> 'availableAt' !~
+          '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$'
+        OR to_char(
+          (evidence.value ->> 'availableAt')::timestamptz AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+        ) IS DISTINCT FROM evidence.value ->> 'availableAt'
         OR jsonb_typeof(evidence.value -> 'pitQualified') <> 'boolean'
         OR jsonb_typeof(evidence.value -> 'replayEligible') <> 'boolean'
-        OR jsonb_typeof(evidence.value -> 'degradationReasonCodes') <> 'array'
-        OR EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(evidence.value -> 'degradationReasonCodes') AS reason(value)
-          WHERE jsonb_typeof(reason.value) <> 'string'
-            OR length(btrim(reason.value #>> '{}')) = 0
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          evidence.value -> 'degradationReasonCodes'
         )
         OR (
           jsonb_typeof(evidence.value -> 'trustScore') NOT IN ('null', 'number')
@@ -494,15 +589,17 @@ BEGIN
         )
         OR jsonb_typeof(result.value -> 'active') <> 'boolean'
         OR jsonb_typeof(result.value -> 'blocking') <> 'boolean'
-        OR EXISTS (
-          SELECT 1
-          FROM jsonb_each(result.value) AS result_field(key, value)
-          WHERE result_field.key IN (
-            'matchedEvidenceIds', 'acceptedEvidenceIds', 'effectiveIndependentGroups',
-            'substitutionsUsed', 'reasonCodes'
-          )
-            AND jsonb_typeof(result_field.value) <> 'array'
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          result.value -> 'matchedEvidenceIds'
         )
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          result.value -> 'acceptedEvidenceIds'
+        )
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          result.value -> 'effectiveIndependentGroups'
+        )
+        OR jsonb_typeof(result.value -> 'substitutionsUsed') <> 'array'
+        OR NOT public.waia_jsonb_canonical_string_array_v2(result.value -> 'reasonCodes')
         OR EXISTS (
           SELECT 1
           FROM jsonb_array_elements(result.value -> 'substitutionsUsed') AS substitution(value)
@@ -514,32 +611,25 @@ BEGIN
             OR jsonb_typeof(substitution.value -> 'substitutionRuleId') <> 'string'
             OR length(btrim(substitution.value ->> 'substitutionRuleId')) = 0
         )
+        OR result.value -> 'substitutionsUsed' <> COALESCE((
+          SELECT jsonb_agg(
+            substitution.value ORDER BY concat(
+              substitution.value ->> 'evidenceId', ':',
+              substitution.value ->> 'substitutionRuleId'
+            ) COLLATE "C"
+          )
+          FROM jsonb_array_elements(result.value -> 'substitutionsUsed') AS substitution(value)
+        ), '[]'::jsonb)
+        OR jsonb_array_length(result.value -> 'substitutionsUsed') <> (
+          SELECT count(DISTINCT substitution.value ->> 'evidenceId')
+          FROM jsonb_array_elements(result.value -> 'substitutionsUsed') AS substitution(value)
+        )
         OR NOT EXISTS (
           SELECT 1
           FROM jsonb_array_elements(profile_row.profile_json -> 'requirements') AS requirement(value)
           WHERE requirement.value ->> 'id' = result.value ->> 'requirementId'
             AND requirement.value ->> 'questionId' = result.value ->> 'questionId'
             AND requirement.value ->> 'classification' = result.value ->> 'classification'
-        )
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(NEW.receipt_json -> 'requirementReceipts') AS result(value)
-      CROSS JOIN LATERAL jsonb_each(result.value) AS result_field(key, value)
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE
-          WHEN result_field.key IN (
-            'matchedEvidenceIds', 'acceptedEvidenceIds', 'effectiveIndependentGroups', 'reasonCodes'
-          ) THEN result_field.value
-          ELSE '[]'::jsonb
-        END
-      ) AS item(value)
-      WHERE result_field.key IN (
-        'matchedEvidenceIds', 'acceptedEvidenceIds', 'effectiveIndependentGroups', 'reasonCodes'
-      )
-        AND (
-          jsonb_typeof(item.value) <> 'string'
-          OR length(btrim(item.value #>> '{}')) = 0
         )
     )
     OR (
@@ -567,6 +657,9 @@ BEGIN
         ) <> 'array'
         OR jsonb_typeof(NEW.receipt_json #> '{aggregateQualityEvaluation,reasonCodes}')
           <> 'array'
+        OR NOT public.waia_jsonb_canonical_string_array_v2(
+          NEW.receipt_json #> '{aggregateQualityEvaluation,reasonCodes}'
+        )
         OR jsonb_typeof(NEW.receipt_json #> '{aggregateQualityEvaluation,aggregateValueDigest}')
           NOT IN ('null', 'string')
         OR (
@@ -588,13 +681,19 @@ BEGIN
             OR length(btrim(component.value ->> 'componentId')) = 0
             OR component.value ->> 'valueDigest' !~ '^[0-9a-f]{64}$'
         )
-        OR EXISTS (
-          SELECT 1
+        OR NEW.receipt_json #> '{aggregateQualityEvaluation,componentReceipts}' <> COALESCE((
+          SELECT jsonb_agg(component.value ORDER BY component.value ->> 'componentId' COLLATE "C")
           FROM jsonb_array_elements(
-            NEW.receipt_json #> '{aggregateQualityEvaluation,reasonCodes}'
-          ) AS reason(value)
-          WHERE jsonb_typeof(reason.value) <> 'string'
-            OR length(btrim(reason.value #>> '{}')) = 0
+            NEW.receipt_json #> '{aggregateQualityEvaluation,componentReceipts}'
+          ) AS component(value)
+        ), '[]'::jsonb)
+        OR jsonb_array_length(
+          NEW.receipt_json #> '{aggregateQualityEvaluation,componentReceipts}'
+        ) <> (
+          SELECT count(DISTINCT component.value ->> 'componentId')
+          FROM jsonb_array_elements(
+            NEW.receipt_json #> '{aggregateQualityEvaluation,componentReceipts}'
+          ) AS component(value)
         )
       )
     )

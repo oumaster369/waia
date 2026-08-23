@@ -9,6 +9,8 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   defineRequiredInformationProfileV2,
   evaluateInformationSufficiencyV2,
+  type InformationSufficiencyReceiptV2,
+  type RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import {
   findInformationSufficiencyReceiptV2Postgres,
@@ -157,6 +159,42 @@ function buildReceipt(profile: ReturnType<typeof buildProfile>) {
   });
 }
 
+async function insertProfileDirect(
+  sqlClient: postgres.Sql,
+  organizationId: string,
+  profile: RequiredInformationProfileV2,
+): Promise<void> {
+  await sqlClient`
+    INSERT INTO trader_required_information_profile_v2 (
+      id, organization_id, account_id, profile_version, purpose, symbol, venue,
+      analytical_timeframe, horizon, profile_json, content_digest, schema_version, authority
+    ) VALUES (
+      ${profile.id}, ${organizationId}::uuid, ${profile.accountId},
+      ${profile.profileVersion}, ${profile.purpose}, ${profile.symbol}, ${profile.venue},
+      ${profile.analyticalTimeframe}, ${profile.horizon}, ${JSON.stringify(profile)}::jsonb,
+      ${profile.contentDigest}, ${profile.schemaVersion}, ${profile.authority}
+    )
+  `;
+}
+
+async function insertReceiptDirect(
+  sqlClient: postgres.Sql,
+  organizationId: string,
+  receipt: InformationSufficiencyReceiptV2,
+): Promise<void> {
+  await sqlClient`
+    INSERT INTO trader_information_sufficiency_receipt_v2 (
+      id, organization_id, account_id, profile_id, profile_content_digest, purpose,
+      status, pit_anchor, receipt_json, content_digest, schema_version, authority
+    ) VALUES (
+      ${receipt.id}, ${organizationId}::uuid, ${receipt.accountId}, ${receipt.profileId},
+      ${receipt.profileContentDigest}, ${receipt.purpose}, ${receipt.status},
+      ${receipt.pitAnchor}::timestamptz, ${JSON.stringify(receipt)}::jsonb,
+      ${receipt.contentDigest}, ${receipt.schemaVersion}, ${receipt.authority}
+    )
+  `;
+}
+
 describe.skipIf(!enabled || !url)("PostgreSQL Information Sufficiency V2 (DEE-687)", () => {
   let sqlClient: postgres.Sql;
   let db: WaiaPostgresDb;
@@ -260,18 +298,76 @@ describe.skipIf(!enabled || !url)("PostgreSQL Information Sufficiency V2 (DEE-68
       profileVersion: "forged-profile-v1",
       requirements: [{ ...profile.requirements[0]!, formula: "BUY" }],
     });
-    await expect(sqlClient`
-      INSERT INTO trader_required_information_profile_v2 (
-        id, organization_id, account_id, profile_version, purpose, symbol, venue,
-        analytical_timeframe, horizon, profile_json, content_digest, schema_version, authority
-      ) VALUES (
-        ${forgedProfile.id}, ${orgA}::uuid, ${forgedProfile.accountId},
-        ${forgedProfile.profileVersion}, ${forgedProfile.purpose}, ${forgedProfile.symbol},
-        ${forgedProfile.venue}, ${forgedProfile.analyticalTimeframe}, ${forgedProfile.horizon},
-        ${JSON.stringify(forgedProfile)}::jsonb, ${forgedProfile.contentDigest},
-        ${forgedProfile.schemaVersion}, ${forgedProfile.authority}
-      )
-    `).rejects.toThrow(/nested contract mismatch/);
+    await expect(insertProfileDirect(sqlClient, orgA, forgedProfile)).rejects.toThrow(
+      /nested contract mismatch/,
+    );
+
+    const brokenPackageIdentity = reidentify({
+      ...profile,
+      profileVersion: "forged-package-identity-v1",
+      forecastPackageId: "forecast-package",
+      forecastPackageContentDigest: null,
+    });
+    await expect(insertProfileDirect(sqlClient, orgA, brokenPackageIdentity)).rejects.toThrow(
+      /nested contract mismatch/,
+    );
+
+    const malformedInputDigest = reidentify({
+      ...profile,
+      profileVersion: "forged-input-digest-v1",
+      inputContractContentDigest: "not-a-digest",
+    });
+    await expect(insertProfileDirect(sqlClient, orgA, malformedInputDigest)).rejects.toThrow(
+      /nested contract mismatch/,
+    );
+
+    const duplicateProviderProfile = reidentify({
+      ...profile,
+      profileVersion: "forged-provider-order-v1",
+      requirements: [
+        {
+          ...profile.requirements[0]!,
+          satisfiers: [
+            {
+              ...profile.requirements[0]!.satisfiers[0]!,
+              providerIds: ["provider-z", "provider-a", "provider-a"],
+            },
+          ],
+        },
+      ],
+    });
+    await expect(insertProfileDirect(sqlClient, orgA, duplicateProviderProfile)).rejects.toThrow(
+      /nested contract mismatch/,
+    );
+
+    const duplicateRequirementProfile = reidentify({
+      ...profile,
+      profileVersion: "forged-requirement-order-v1",
+      requirements: [profile.requirements[0]!, profile.requirements[0]!],
+    });
+    await expect(
+      insertProfileDirect(sqlClient, orgA, duplicateRequirementProfile),
+    ).rejects.toThrow(/nested contract mismatch/);
+
+    const noncanonicalAllowlistsProfile = reidentify({
+      ...profile,
+      profileVersion: "forged-allowlist-order-v1",
+      requirements: [
+        {
+          ...profile.requirements[0]!,
+          allowedObservationKinds: ["quote_l1", "msv_envelope"],
+          allowedObservationSchemaVersions: ["schema-z", "schema-a"],
+          allowedMeasurementDefinitionDigests: ["f".repeat(64), "a".repeat(64)],
+        },
+      ],
+    });
+    await expect(
+      insertProfileDirect(
+        sqlClient,
+        orgA,
+        noncanonicalAllowlistsProfile as unknown as RequiredInformationProfileV2,
+      ),
+    ).rejects.toThrow(/nested contract mismatch/);
 
     const receipt = buildReceipt(profile);
     const wrongProfileLineage = reidentify({
@@ -279,39 +375,56 @@ describe.skipIf(!enabled || !url)("PostgreSQL Information Sufficiency V2 (DEE-68
       forecastPackageId: "forged-package",
       forecastPackageContentDigest: hex("forged-package"),
     });
-    await expect(sqlClient`
-      INSERT INTO trader_information_sufficiency_receipt_v2 (
-        id, organization_id, account_id, profile_id, profile_content_digest, purpose,
-        status, pit_anchor, receipt_json, content_digest, schema_version, authority
-      ) VALUES (
-        ${wrongProfileLineage.id}, ${orgA}::uuid, ${wrongProfileLineage.accountId},
-        ${wrongProfileLineage.profileId}, ${wrongProfileLineage.profileContentDigest},
-        ${wrongProfileLineage.purpose}, ${wrongProfileLineage.status},
-        ${wrongProfileLineage.pitAnchor}::timestamptz,
-        ${JSON.stringify(wrongProfileLineage)}::jsonb,
-        ${wrongProfileLineage.contentDigest}, ${wrongProfileLineage.schemaVersion},
-        ${wrongProfileLineage.authority}
-      )
-    `).rejects.toThrow(/row\/JSON\/profile mismatch/);
+    await expect(insertReceiptDirect(sqlClient, orgA, wrongProfileLineage)).rejects.toThrow(
+      /row\/JSON\/profile mismatch/,
+    );
 
     const forbiddenHistory = reidentify({
       ...receipt,
       evidenceInventory: [{ ...receipt.evidenceInventory[0]!, historyScope: "BLIND_HOLDOUT" }],
     });
-    await expect(sqlClient`
-      INSERT INTO trader_information_sufficiency_receipt_v2 (
-        id, organization_id, account_id, profile_id, profile_content_digest, purpose,
-        status, pit_anchor, receipt_json, content_digest, schema_version, authority
-      ) VALUES (
-        ${forbiddenHistory.id}, ${orgA}::uuid, ${forbiddenHistory.accountId},
-        ${forbiddenHistory.profileId}, ${forbiddenHistory.profileContentDigest},
-        ${forbiddenHistory.purpose}, ${forbiddenHistory.status},
-        ${forbiddenHistory.pitAnchor}::timestamptz,
-        ${JSON.stringify(forbiddenHistory)}::jsonb,
-        ${forbiddenHistory.contentDigest}, ${forbiddenHistory.schemaVersion},
-        ${forbiddenHistory.authority}
-      )
-    `).rejects.toThrow(/nested contract mismatch/);
+    await expect(
+      insertReceiptDirect(
+        sqlClient,
+        orgA,
+        forbiddenHistory as unknown as InformationSufficiencyReceiptV2,
+      ),
+    ).rejects.toThrow(/nested contract mismatch/);
+
+    const noncanonicalReceipts = [
+      reidentify({
+        ...receipt,
+        activeContextTriggers: ["trigger-z", "trigger-a", "trigger-a"],
+      }),
+      reidentify({
+        ...receipt,
+        reasonCodes: ["Z_REASON", "A_REASON", "A_REASON"],
+      }),
+      reidentify({
+        ...receipt,
+        evidenceInventory: [
+          { ...receipt.evidenceInventory[0]!, availableAt: "2026-08-23T11:59:30Z" },
+        ],
+      }),
+      reidentify({
+        ...receipt,
+        evidenceInventory: [receipt.evidenceInventory[0]!, receipt.evidenceInventory[0]!],
+      }),
+      reidentify({
+        ...receipt,
+        evidenceInventory: [
+          {
+            ...receipt.evidenceInventory[0]!,
+            degradationReasonCodes: ["Z_REASON", "A_REASON", "A_REASON"],
+          },
+        ],
+      }),
+    ];
+    for (const noncanonicalReceipt of noncanonicalReceipts) {
+      await expect(
+        insertReceiptDirect(sqlClient, orgA, noncanonicalReceipt),
+      ).rejects.toThrow(/nested contract mismatch/);
+    }
   });
 
   it("rejects forged content, cross-tenant persistence and mutation", async () => {

@@ -55,6 +55,10 @@ describe("Information Sufficiency V2 migration identity (DEE-687)", () => {
     expect(migration).toContain("RequiredInformationProfileV2 nested contract mismatch");
     expect(migration).toContain("InformationSufficiencyReceiptV2 nested contract mismatch");
     expect(migration).toContain("profile_row.profile_json -> 'forecastPackageId'");
+    expect(migration).toContain("waia_jsonb_canonical_string_array_v2");
+    expect(migration).toContain("forecastPackageContentDigest') = 'string'");
+    expect(migration).toContain("count(DISTINCT evidence.value ->> 'evidenceId')");
+    expect(migration).toContain("availableAt')::timestamptz AT TIME ZONE 'UTC'");
     expect(migration).not.toMatch(
       /economic_value|buy_signal|sell_signal|position_size|risk_approval/i,
     );
