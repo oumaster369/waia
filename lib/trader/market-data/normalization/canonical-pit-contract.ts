@@ -8,7 +8,10 @@ import {
   OBSERVATION_SCHEMA_VERSION,
   type NormalizedObservation,
 } from "@/lib/trader/market-data/observation-types";
-import { getMarketDataProvider } from "@/lib/trader/market-data/provider-registry";
+import {
+  getMarketDataProvider,
+  isRegisteredMarketDataProvider,
+} from "@/lib/trader/market-data/provider-registry";
 
 export type CanonicalPrimitiveContractDecisionV1 =
   | {
@@ -101,6 +104,9 @@ function mapSource(
     !isNonEmptyString(provenance.feedKind) ||
     !isNonEmptyString(provenance.symbol)
   ) {
+    return null;
+  }
+  if (!isRegisteredMarketDataProvider(provenance.providerId)) {
     return null;
   }
   const provider = getMarketDataProvider(provenance.providerId);
