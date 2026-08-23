@@ -15,6 +15,19 @@ remain exclusively in the existing encrypted raw-capture storage; `0160` stores 
 immutable lineage digests and references. This does not apply production SQL, change
 retention/security policy, or enable new connector/source classes.
 
+**DEE-680 / M680-B** adds the Postgres-only canonical gateway PIT and inert
+Measurement lineage contract in the single additive migration `0161`. It extends
+the existing MI Observation enum for the six Human-ratified external primitive kinds,
+binds external rows to the existing organization-scoped Source and exact trust-as-of
+revision, and adds append-only gateway admission receipts plus content-addressed inert
+MeasurementDefinition/MeasurementValue lineage. Definition and value digests are
+recomputed at both the repository and database insert boundaries; the already-existing
+internal `msv_envelope` retains its `mi-observation-v1` identity and records null external
+trust fields rather than fabricating provider trust. New relations are service-only behind
+authenticated/anon deny RLS. No formula, unit/window choice, economic evaluator, raw
+bytes, retention/security-policy change, SQLite migration, production SQL apply, live
+or capital authority is included.
+
 This tracker records **what shipped**, **what must not regress**, and **what remains** so future agents and contributors do not collapse the program into fake backend-neutral abstractions or premature SQLite removal.
 
 ## Current Status

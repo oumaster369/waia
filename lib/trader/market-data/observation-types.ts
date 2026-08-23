@@ -32,24 +32,27 @@ export type SessionPhase = "ASIA" | "EUROPE" | "US" | "OVERLAP" | "UNKNOWN";
 
 export type ProviderHealth = "HEALTHY" | "DEGRADED" | "STALE" | "UNAVAILABLE";
 
-export type NormalizedObservationKind =
-  | "ohlcv_bar"
-  | "quote_l1"
-  | "order_book_snapshot"
-  | "market_trades_snapshot"
-  | "fear_greed_index"
-  | "global_market_stats"
-  | "cross_exchange_confirmation"
-  | "macro_series"
-  | "macro_calendar_event"
-  | "macro_probability"
-  | "news_headline"
-  | "news_event_cluster"
-  | "exchange_announcement"
-  | "protocol_release"
-  | "blockchain_network_stats"
-  | "regulatory_filing"
-  | "mempool_stats";
+export const NORMALIZED_OBSERVATION_KINDS = [
+  "ohlcv_bar",
+  "quote_l1",
+  "order_book_snapshot",
+  "market_trades_snapshot",
+  "fear_greed_index",
+  "global_market_stats",
+  "cross_exchange_confirmation",
+  "macro_series",
+  "macro_calendar_event",
+  "macro_probability",
+  "news_headline",
+  "news_event_cluster",
+  "exchange_announcement",
+  "protocol_release",
+  "blockchain_network_stats",
+  "regulatory_filing",
+  "mempool_stats",
+] as const;
+
+export type NormalizedObservationKind = (typeof NORMALIZED_OBSERVATION_KINDS)[number];
 
 export type SourceProvenanceRef = {
   providerId: MarketDataProviderId;

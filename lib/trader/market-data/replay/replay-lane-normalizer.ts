@@ -133,8 +133,8 @@ const ARRAY_ABSENT_LANE_SPECS: LaneAbsentSpec[] = [
   },
   {
     kind: "news_headline",
-    providerId: "gdelt",
-    venue: "gdelt",
+    providerId: "coindesk_rss",
+    venue: "coindesk",
     feedKind: "news_headline",
     symbol: "GLOBAL",
   },

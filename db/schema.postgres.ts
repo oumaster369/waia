@@ -817,6 +817,7 @@ export const traderMiTrustAsOfReceiptV1 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    unique("tmtaor_v1_id_org_source_uq").on(t.id, t.organizationId, t.sourceId),
     foreignKey({
       columns: [t.sourceId, t.organizationId],
       foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
@@ -1039,7 +1040,15 @@ export const traderMiRawValidationReceiptV1 = pgTable(
   ],
 );
 
-export const miObservationKindEnumPg = pgEnum("mi_observation_kind", ["msv_envelope"]);
+export const miObservationKindEnumPg = pgEnum("mi_observation_kind", [
+  "msv_envelope",
+  "ohlcv_bar",
+  "quote_l1",
+  "order_book_snapshot",
+  "market_trades_snapshot",
+  "fear_greed_index",
+  "news_headline",
+]);
 
 /** AI-TRADER MI: append-only PIT observations (DEE-281 / LD-2b). */
 export const traderMiObservation = pgTable(
@@ -1058,6 +1067,11 @@ export const traderMiObservation = pgTable(
     eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
     availableAt: timestamp("available_at", { withTimezone: true, mode: "date" }),
     ingestTime: timestamp("ingest_time", { withTimezone: true, mode: "date" }).notNull(),
+    canonicalProviderId: text("canonical_provider_id"),
+    trustAsOfReceiptId: text("trust_as_of_receipt_id"),
+    sourceTrustRevisionId: uuid("source_trust_revision_id"),
+    sourceTrustContentDigest: text("source_trust_content_digest"),
+    normalizedInputDigest: text("normalized_input_digest"),
     observedBy: text("observed_by").notNull(),
     revisionOf: uuid("revision_of"), // composite self-FK enforced in migration SQL (Drizzle circular-ref limit)
     revisionSeq: integer("revision_seq").notNull(),
@@ -1066,10 +1080,32 @@ export const traderMiObservation = pgTable(
   },
   (t) => [
     unique("trader_mi_observation_id_organization_unique").on(t.id, t.organizationId),
+    unique("trader_mi_observation_exact_lineage_unique").on(
+      t.id,
+      t.organizationId,
+      t.sourceId,
+      t.contentDigest,
+    ),
     foreignKey({
       columns: [t.sourceId, t.organizationId],
       foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.trustAsOfReceiptId, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiTrustAsOfReceiptV1.id,
+        traderMiTrustAsOfReceiptV1.organizationId,
+        traderMiTrustAsOfReceiptV1.sourceId,
+      ],
+    }),
+    foreignKey({
+      columns: [t.sourceTrustRevisionId, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiSourceTrust.id,
+        traderMiSourceTrust.organizationId,
+        traderMiSourceTrust.sourceId,
+      ],
+    }),
     uniqueIndex("trader_mi_observation_org_key_seq_unique").on(
       t.organizationId,
       t.observationKey,
@@ -1086,6 +1122,278 @@ export const traderMiObservation = pgTable(
       t.revisionSeq,
     ),
     index("trader_mi_observation_org_event_time_idx").on(t.organizationId, t.eventTime),
+    check(
+      "trader_mi_observation_canonical_external_check",
+      sql`(
+        ${t.observationKind} = 'msv_envelope'
+        AND ${t.canonicalProviderId} IS NULL
+        AND ${t.trustAsOfReceiptId} IS NULL
+        AND ${t.sourceTrustRevisionId} IS NULL
+        AND ${t.sourceTrustContentDigest} IS NULL
+        AND ${t.normalizedInputDigest} IS NULL
+      ) OR (
+        ${t.observationKind} <> 'msv_envelope'
+        AND ${t.schemaVersion} = 'mi-canonical-pit-observation-v1'
+        AND ${t.availableAt} IS NOT NULL
+        AND ${t.canonicalProviderId} IS NOT NULL
+        AND length(btrim(${t.canonicalProviderId})) > 0
+        AND ${t.trustAsOfReceiptId} ~ '^[0-9a-f]{64}$'
+        AND ${t.sourceTrustRevisionId} IS NOT NULL
+        AND ${t.sourceTrustContentDigest} ~ '^[0-9a-f]{64}$'
+        AND ${t.normalizedInputDigest} ~ '^[0-9a-f]{64}$'
+      )`,
+    ),
+  ],
+);
+
+/** DEE-682: append-only explicit gateway admission outcome; only AVAILABLE links an Observation. */
+export const traderMiGatewayPitReceiptV1 = pgTable(
+  "trader_mi_gateway_pit_receipt_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    gatewayKind: text("gateway_kind").notNull(),
+    status: text("status").notNull(),
+    reason: text("reason"),
+    sourceId: uuid("source_id"),
+    trustAsOfReceiptId: text("trust_as_of_receipt_id"),
+    observationId: uuid("observation_id"),
+    observationContentDigest: text("observation_content_digest"),
+    normalizedInputDigest: text("normalized_input_digest").notNull(),
+    receiptJson: jsonb("receipt_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    unique("tm_gateway_pit_receipt_v1_id_org_source_uq").on(
+      t.id,
+      t.organizationId,
+      t.sourceId,
+    ),
+    foreignKey({
+      columns: [t.sourceId, t.organizationId],
+      foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
+    }),
+    foreignKey({
+      columns: [t.trustAsOfReceiptId, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiTrustAsOfReceiptV1.id,
+        traderMiTrustAsOfReceiptV1.organizationId,
+        traderMiTrustAsOfReceiptV1.sourceId,
+      ],
+    }),
+    foreignKey({
+      columns: [t.observationId, t.organizationId, t.sourceId, t.observationContentDigest],
+      foreignColumns: [
+        traderMiObservation.id,
+        traderMiObservation.organizationId,
+        traderMiObservation.sourceId,
+        traderMiObservation.contentDigest,
+      ],
+    }),
+    index("tm_gateway_pit_receipt_v1_org_kind_created_idx").on(
+      t.organizationId,
+      t.gatewayKind,
+      t.createdAt,
+    ),
+    check("tm_gateway_pit_receipt_v1_id_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check("tm_gateway_pit_receipt_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tm_gateway_pit_receipt_v1_input_digest_check",
+      sql`${t.normalizedInputDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "tm_gateway_pit_receipt_v1_status_check",
+      sql`(
+        ${t.status} = 'AVAILABLE'
+        AND ${t.reason} IS NULL
+        AND ${t.sourceId} IS NOT NULL
+        AND ${t.trustAsOfReceiptId} IS NOT NULL
+        AND ${t.observationId} IS NOT NULL
+        AND ${t.observationContentDigest} ~ '^[0-9a-f]{64}$'
+      ) OR (
+        ${t.status} IN ('UNAVAILABLE', 'REJECTED')
+        AND ${t.reason} IS NOT NULL
+        AND ${t.observationId} IS NULL
+        AND ${t.observationContentDigest} IS NULL
+      )`,
+    ),
+  ],
+);
+
+/** DEE-682: inert, content-addressed MeasurementDefinition identity. */
+export const traderMiCanonicalMeasurementDefinitionV1 = pgTable(
+  "trader_mi_canonical_measurement_definition_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    name: text("name").notNull(),
+    inputContractsJson: jsonb("input_contracts_json").notNull(),
+    outputSchemaVersion: text("output_schema_version").notNull(),
+    authority: text("authority").notNull(),
+    definitionJson: jsonb("definition_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    unique("tm_measurement_definition_v1_exact_uq").on(t.id, t.organizationId, t.contentDigest),
+    index("tm_measurement_definition_v1_org_category_idx").on(t.organizationId, t.category),
+    check("tm_measurement_definition_v1_id_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check("tm_measurement_definition_v1_id_hex_check", sql`${t.id} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tm_measurement_definition_v1_contract_check",
+      sql`${t.category} IN ('feature_transform', 'cross_exchange_confirmation', 'news_event_cluster')
+        AND ${t.authority} = 'INERT_DEFINITION_ONLY'
+        AND ${t.schemaVersion} = 'canonical-measurement-definition-v1'
+        AND jsonb_typeof(${t.inputContractsJson}) = 'array'
+        AND jsonb_array_length(${t.inputContractsJson}) > 0`,
+    ),
+  ],
+);
+
+/** DEE-682: opaque output identity plus exact inert backward lineage. */
+export const traderMiCanonicalMeasurementValueV1 = pgTable(
+  "trader_mi_canonical_measurement_value_v1",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    definitionId: text("definition_id").notNull(),
+    definitionContentDigest: text("definition_content_digest").notNull(),
+    outputContentDigest: text("output_content_digest").notNull(),
+    inputCount: integer("input_count").notNull(),
+    inputLineageJson: jsonb("input_lineage_json").notNull(),
+    authority: text("authority").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    unique("tm_measurement_value_v1_id_org_uq").on(t.id, t.organizationId),
+    unique("tm_measurement_value_v1_exact_uq").on(t.id, t.organizationId, t.contentDigest),
+    foreignKey({
+      columns: [t.definitionId, t.organizationId, t.definitionContentDigest],
+      foreignColumns: [
+        traderMiCanonicalMeasurementDefinitionV1.id,
+        traderMiCanonicalMeasurementDefinitionV1.organizationId,
+        traderMiCanonicalMeasurementDefinitionV1.contentDigest,
+      ],
+    }),
+    index("tm_measurement_value_v1_org_definition_idx").on(t.organizationId, t.definitionId),
+    check("tm_measurement_value_v1_id_digest_check", sql`${t.id} = ${t.contentDigest}`),
+    check(
+      "tm_measurement_value_v1_digest_check",
+      sql`${t.id} ~ '^[0-9a-f]{64}$'
+        AND ${t.definitionContentDigest} ~ '^[0-9a-f]{64}$'
+        AND ${t.outputContentDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "tm_measurement_value_v1_contract_check",
+      sql`${t.authority} = 'INERT_LINEAGE_ONLY'
+        AND ${t.schemaVersion} = 'canonical-measurement-value-lineage-v1'
+        AND jsonb_typeof(${t.inputLineageJson}) = 'array'
+        AND ${t.inputCount} = jsonb_array_length(${t.inputLineageJson})
+        AND ${t.inputCount} > 0`,
+    ),
+  ],
+);
+
+/** DEE-682: normalized exact input links for relational tenant/lineage enforcement. */
+export const traderMiCanonicalMeasurementValueInputV1 = pgTable(
+  "trader_mi_canonical_measurement_value_input_v1",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    measurementValueId: text("measurement_value_id").notNull(),
+    inputOrdinal: integer("input_ordinal").notNull(),
+    observationId: uuid("observation_id").notNull(),
+    observationKind: text("observation_kind").notNull(),
+    observationSchemaVersion: text("observation_schema_version").notNull(),
+    observationContentDigest: text("observation_content_digest").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    trustAsOfReceiptId: text("trust_as_of_receipt_id"),
+    trustRevisionId: uuid("trust_revision_id"),
+    trustRevisionContentDigest: text("trust_revision_content_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.measurementValueId, t.inputOrdinal] }),
+    unique("tm_measurement_value_input_v1_observation_uq").on(
+      t.organizationId,
+      t.measurementValueId,
+      t.observationId,
+      t.observationContentDigest,
+    ),
+    foreignKey({
+      columns: [t.measurementValueId, t.organizationId],
+      foreignColumns: [
+        traderMiCanonicalMeasurementValueV1.id,
+        traderMiCanonicalMeasurementValueV1.organizationId,
+      ],
+    }),
+    foreignKey({
+      columns: [t.observationId, t.organizationId, t.sourceId, t.observationContentDigest],
+      foreignColumns: [
+        traderMiObservation.id,
+        traderMiObservation.organizationId,
+        traderMiObservation.sourceId,
+        traderMiObservation.contentDigest,
+      ],
+    }),
+    foreignKey({
+      columns: [t.trustAsOfReceiptId, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiTrustAsOfReceiptV1.id,
+        traderMiTrustAsOfReceiptV1.organizationId,
+        traderMiTrustAsOfReceiptV1.sourceId,
+      ],
+    }),
+    foreignKey({
+      columns: [t.trustRevisionId, t.organizationId, t.sourceId],
+      foreignColumns: [
+        traderMiSourceTrust.id,
+        traderMiSourceTrust.organizationId,
+        traderMiSourceTrust.sourceId,
+      ],
+    }),
+    check("tm_measurement_value_input_v1_ordinal_check", sql`${t.inputOrdinal} >= 0`),
+    check(
+      "tm_measurement_value_input_v1_contract_check",
+      sql`${t.observationContentDigest} ~ '^[0-9a-f]{64}$'
+        AND (
+          (
+            ${t.observationKind} = 'msv_envelope'
+            AND ${t.observationSchemaVersion} = 'mi-observation-v1'
+            AND ${t.trustAsOfReceiptId} IS NULL
+            AND ${t.trustRevisionId} IS NULL
+            AND ${t.trustRevisionContentDigest} IS NULL
+          ) OR (
+            ${t.observationKind} <> 'msv_envelope'
+            AND ${t.observationSchemaVersion} = 'mi-canonical-pit-observation-v1'
+            AND ${t.trustAsOfReceiptId} ~ '^[0-9a-f]{64}$'
+            AND ${t.trustRevisionId} IS NOT NULL
+            AND ${t.trustRevisionContentDigest} ~ '^[0-9a-f]{64}$'
+          )
+        )`,
+    ),
   ],
 );
 

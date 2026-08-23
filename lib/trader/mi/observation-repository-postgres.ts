@@ -16,13 +16,14 @@ import {
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert">;
+const INTERNAL_MSV_KIND: MiObservationKind = "msv_envelope";
 
 function mapObservation(row: typeof pgSchema.traderMiObservation.$inferSelect): PitObservation {
   return {
     id: row.id,
     organizationId: row.organizationId,
     sourceId: row.sourceId,
-    observationKind: row.observationKind,
+    observationKind: INTERNAL_MSV_KIND,
     observationKey: row.observationKey,
     subjectRef: row.subjectRef,
     schemaVersion: row.schemaVersion as PitObservation["schemaVersion"],
@@ -49,6 +50,7 @@ export async function getLatestObservationPostgres(
     .where(
       and(
         eq(pgSchema.traderMiObservation.observationKey, observationKey),
+        eq(pgSchema.traderMiObservation.observationKind, INTERNAL_MSV_KIND),
         orgScopedWhere(pgSchema.traderMiObservation.organizationId, scoped),
       ),
     )
@@ -70,6 +72,7 @@ export async function listObservationHistoryPostgres(
     .where(
       and(
         eq(pgSchema.traderMiObservation.observationKey, observationKey),
+        eq(pgSchema.traderMiObservation.observationKind, INTERNAL_MSV_KIND),
         orgScopedWhere(pgSchema.traderMiObservation.organizationId, scoped),
       ),
     )
@@ -84,7 +87,10 @@ export async function listObservationsPostgres(
   observationKind?: MiObservationKind,
 ): Promise<PitObservation[]> {
   const scoped = requireOrgContext(context.organizationId);
-  const conditions = [orgScopedWhere(pgSchema.traderMiObservation.organizationId, scoped)];
+  const conditions = [
+    orgScopedWhere(pgSchema.traderMiObservation.organizationId, scoped),
+    eq(pgSchema.traderMiObservation.observationKind, INTERNAL_MSV_KIND),
+  ];
   if (observationKind) {
     conditions.push(eq(pgSchema.traderMiObservation.observationKind, observationKind));
   }
@@ -109,6 +115,7 @@ export async function findObservationByIdPostgres(
     .where(
       and(
         eq(pgSchema.traderMiObservation.id, observationId),
+        eq(pgSchema.traderMiObservation.observationKind, INTERNAL_MSV_KIND),
         orgScopedWhere(pgSchema.traderMiObservation.organizationId, scoped),
       ),
     )
