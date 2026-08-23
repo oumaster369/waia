@@ -15,6 +15,7 @@ import {
   defineCanonicalMeasurementV1,
   identifyCanonicalMeasurementValueV1,
 } from "@/lib/trader/mi/measurement-lineage-v1";
+import { MI_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/observation.types";
 import { validateCanonicalPrimitiveContractV1 } from "@/lib/trader/market-data/normalization/canonical-pit-contract";
 import {
   NORMALIZED_OBSERVATION_KINDS,
@@ -160,5 +161,49 @@ describe("DEE-681 canonical PIT contracts", () => {
     expect(definition).not.toHaveProperty("units");
     expect(definition).not.toHaveProperty("window");
     expect(first).not.toHaveProperty("value");
+  });
+
+  it("recomputes definition identity and admits internal MSV lineage without external trust", () => {
+    const definition = defineCanonicalMeasurementV1({
+      organizationId: "org-a",
+      category: "feature_transform",
+      name: "internal MSV identity",
+      inputContracts: [
+        {
+          observationKind: "msv_envelope",
+          observationSchemaVersion: MI_OBSERVATION_SCHEMA_VERSION,
+        },
+      ],
+      outputSchemaVersion: "opaque-msv-output-v1",
+    });
+    const inputs = [
+      {
+        observationId: "00000000-0000-4000-8000-000000000004",
+        observationKind: "msv_envelope" as const,
+        observationSchemaVersion: MI_OBSERVATION_SCHEMA_VERSION,
+        observationContentDigest: HEX("msv-observation"),
+        sourceId: "00000000-0000-4000-8000-000000000005",
+        trustAsOfReceiptId: null,
+        trustRevisionId: null,
+        trustRevisionContentDigest: null,
+      },
+    ];
+
+    const value = identifyCanonicalMeasurementValueV1({
+      organizationId: "org-a",
+      definition,
+      outputContentDigest: HEX("opaque-msv-output"),
+      inputs,
+    });
+    expect(value.inputs).toEqual(inputs);
+
+    expect(() =>
+      identifyCanonicalMeasurementValueV1({
+        organizationId: "org-a",
+        definition: { ...definition, name: "forged after identity" },
+        outputContentDigest: HEX("opaque-msv-output"),
+        inputs,
+      }),
+    ).toThrow("CANONICAL_MEASUREMENT_INVALID:definitionIdentity");
   });
 });
