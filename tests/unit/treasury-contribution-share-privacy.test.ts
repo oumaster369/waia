@@ -110,7 +110,15 @@ describe("DEE-606 WP-7 aggregate/self privacy and isolation", () => {
     expect(existsSync(path.join(root, "app/api/treasury/contributors"))).toBe(false);
     expect(existsSync(path.join(root, "app/api/contribution-share"))).toBe(false);
     expect(existsSync(path.join(root, "app/api/breath/contributors"))).toBe(false);
-    expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(false);
+    expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(true);
+
+    const publicRoute = readFileSync(
+      path.join(root, "app/api/public/treasury/route.ts"),
+      "utf8",
+    );
+    expect(publicRoute).not.toContain("contributors");
+    expect(publicRoute).not.toContain("user_id");
+    expect(publicRoute).not.toContain("userId");
 
     const shareDir = path.join(root, "lib/waia-core/treasury/share");
     const shareSrc = walkTs(shareDir)

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -1005,7 +1005,7 @@ describe("DEE-606 WP-4 evidence, attribution, inception", () => {
 });
 
 describe("DEE-606 WP-4 recon and Breath boundary", () => {
-  it("78-85 recon read-only, Breath unready, no public snapshot or public route", async () => {
+  it("78-85 recon read-only, Breath unready, and DEE-617 public GET-only route", async () => {
     const { services } = createWp4Bundle();
     const readDenied = createWp4Deps({ services, permissions: "none" });
     const all = createWp4Deps({ services });
@@ -1056,7 +1056,14 @@ describe("DEE-606 WP-4 recon and Breath boundary", () => {
     expect("getBreathPublicSnapshot" in treasury).toBe(true);
     const root = process.cwd();
     expect(existsSync(path.join(root, "app/api/treasury"))).toBe(false);
-    expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(false);
+    expect(existsSync(path.join(root, "app/api/public/treasury"))).toBe(true);
     expect(existsSync(path.join(root, "app/api/breath"))).toBe(false);
+
+    const publicRoute = readFileSync(
+      path.join(root, "app/api/public/treasury/route.ts"),
+      "utf8",
+    );
+    expect(publicRoute).toContain("export async function GET()");
+    expect(publicRoute).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);
   });
 });
