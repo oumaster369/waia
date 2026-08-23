@@ -146,6 +146,50 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
     });
   });
 
+  it("rejects empty hard-floor allowlists and forged runtime hard-floor types", () => {
+    expect(() => profile([requirement({ allowedObservationKinds: [] })])).toThrow(
+      "allowedObservationKinds",
+    );
+    expect(() => profile([requirement({ allowedObservationSchemaVersions: [] })])).toThrow(
+      "allowedObservationSchemaVersions",
+    );
+    expect(() =>
+      evaluate(profile(), [
+        evidence({
+          observationKind: "forged" as InformationEvidenceV2["observationKind"],
+          pitQualified: "false" as unknown as boolean,
+          replayEligible: "false" as unknown as boolean,
+        }),
+      ]),
+    ).toThrow("evidenceHardFloorTypes");
+  });
+
+  it("rejects empty Measurement definition and value identities", () => {
+    const measurementLineage = {
+      measurementDefinitionContentDigest: HEX("definition"),
+      measurementValueContentDigest: HEX("value"),
+    };
+
+    expect(() =>
+      evaluate(profile(), [
+        evidence({
+          ...measurementLineage,
+          measurementDefinitionId: "",
+          measurementValueId: "measurement-value-1",
+        }),
+      ]),
+    ).toThrow("measurementDefinitionId");
+    expect(() =>
+      evaluate(profile(), [
+        evidence({
+          ...measurementLineage,
+          measurementDefinitionId: "measurement-definition-1",
+          measurementValueId: "",
+        }),
+      ]),
+    ).toThrow("measurementValueId");
+  });
+
   it("strips undeclared nested semantics from every canonical contract", () => {
     const selected = profile([
       {

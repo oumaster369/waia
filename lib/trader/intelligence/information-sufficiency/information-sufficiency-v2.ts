@@ -323,12 +323,16 @@ function normalizeRequirement(
   }
   const allowedObservationKinds = [...requirement.allowedObservationKinds].sort();
   if (
+    allowedObservationKinds.length === 0 ||
     new Set(allowedObservationKinds).size !== allowedObservationKinds.length ||
     allowedObservationKinds.some(
       (kind) => !(CANONICAL_PRIMITIVE_OBSERVATION_KINDS_V1 as readonly string[]).includes(kind),
     )
   ) {
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:allowedObservationKinds");
+  }
+  if (requirement.allowedObservationSchemaVersions.length === 0) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:allowedObservationSchemaVersions");
   }
   return {
     id: requirement.id,
@@ -509,6 +513,15 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
   ) {
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:evidenceVocabulary");
   }
+  if (
+    !(CANONICAL_PRIMITIVE_OBSERVATION_KINDS_V1 as readonly string[]).includes(
+      evidence.observationKind,
+    ) ||
+    typeof evidence.pitQualified !== "boolean" ||
+    typeof evidence.replayEligible !== "boolean"
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:evidenceHardFloorTypes");
+  }
   requireOptionalDigest(evidence.trustAsOfReceiptId, "trustAsOfReceiptId");
   requireOptionalDigest(evidence.trustRevisionContentDigest, "trustRevisionContentDigest");
   requireOptionalDigest(
@@ -550,6 +563,10 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
     measurementIdentity.some((value) => value === null)
   ) {
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:measurementLineage");
+  }
+  if (evidence.measurementDefinitionId !== null) {
+    requireNonEmpty(evidence.measurementDefinitionId, "measurementDefinitionId");
+    requireNonEmpty(evidence.measurementValueId!, "measurementValueId");
   }
   return {
     evidenceId: evidence.evidenceId,
