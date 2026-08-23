@@ -50,7 +50,6 @@
         "lib/trader/market-data/provider-registry.ts",
         "lib/trader/mi/canonical-observation-v1.ts",
         "lib/trader/mi/measurement-lineage-v1.ts",
-        "lib/trader/mi/observation.types.ts",
         "tests/unit/trader-mi-canonical-contracts.test.ts"
       ],
       "acceptanceEvidence": [
@@ -63,10 +62,9 @@
       ],
       "integratedCommits": [
         "4ff100895dc7007c354bba7bc00ee70817a0a885",
-        "1bbb90c894d90c839f611921e22218fa579458f0",
-        "2d5b8a465c215778e2c655a8ff884264f27d00e1",
-        "88e4e13f3d5dcc0139b4e6e9442ebf369062bbbe",
-        "6f0428436735ce06dc338b9fba108b4d79c4f0fe"
+        "278ea9476acc59af001ce6253ced03340879f2ab",
+        "b149178541d1ccd42e9d0cbc936112b9a98d33d8",
+        "886bb854fe410e4b725446a2b72495d6413c63aa"
       ],
       "tests": [
         "pnpm test --run tests/unit/trader-mi-canonical-contracts.test.ts (6/6 pass, including stale-definition rejection and internal MSV lineage)",
@@ -140,10 +138,10 @@
         "Database guards also require exact admitted kind/schema input contracts in unique canonical order and reject relational value inputs not declared by their inert definition."
       ],
       "integratedCommits": [
-        "9b23e6f9830444486a1136e8d4ec51e943445506",
-        "3bcad96ee7d2532c44ed4f733a2a08dec9046e3c",
-        "424b1bec999895c397fdbc598c75333f2015129c",
-        "6abb9acc1fa3dc9f2a22565fb0d0458c3a62ea41"
+        "2f3b2902cd6c7b0ac4acd05fbeb8d25508243657",
+        "b263bddd571f257614a580c9c6ad72d105e17f3d",
+        "56ab5cfb7168464780568d398f6591fc55d944ff",
+        "13900a8b1b4b289071ed26ade2abd738710d8558"
       ],
       "tests": [
         "fresh pnpm db:migrate:postgres through 0161 (pass)",
@@ -214,9 +212,9 @@
         "Persisted explicit unavailability remains UNAVAILABLE without requiring or fabricating a historical trust revision."
       ],
       "integratedCommits": [
-        "5d48de179095801523b79d1ff310d79030f44e24",
-        "3f20dfcbc24fcffe56ff7620984166b576f6e269",
-        "8773225530c6c563e4f5c6b580f8795c9e7bc83c"
+        "ae309a1638951e542de024004ab9312216a693da",
+        "9369c7a6d887f0519885bbcb7ef9c8bfdec4228a",
+        "d51a2789a6a5a8ff9e68c882d6b8bba42eb380d5"
       ],
       "tests": [
         "canonical gateway/replay unit tests (8/8 pass, including explicit unavailable news provenance)",
@@ -287,11 +285,11 @@
         "The shared Observation table's legacy reader is explicitly inventoried and filters every read path to internal msv_envelope rows, so external PIT rows cannot escape through a lossy legacy type."
       ],
       "integratedCommits": [
-        "c017c55556a88da41d18a5a14e73c810aa009735",
-        "fb1b2ffde0a6745ba04a9d6a7c7961df9efdbfe2",
-        "7d9079b30df9e4000fb97729fb23e460e6ba941e",
-        "228f04572d1df5fd334dc930b22634df92b34a47",
-        "5ac47a9abdfb8c2c27fd1dae2a3ea45096fb0d4a"
+        "5674c6ee832aa447e3117e211a60b430145206af",
+        "754dcdca74178f4fbc3f31d9ba22a480cb21d488",
+        "c21ad9d762c02231f4dbb74af9a373768beb7f95",
+        "81994a0eb64014b29c79bf59fb73652ed7171157",
+        "b9db4adf2d0cf3547c4ec4c9d7d844176de0688a"
       ],
       "tests": [
         "repository-wide source/consumer closure tests (3/3 pass)",
@@ -322,10 +320,9 @@
         "status": "pass",
         "reviewedCommits": [
           "4ff100895dc7007c354bba7bc00ee70817a0a885",
-          "1bbb90c894d90c839f611921e22218fa579458f0",
-          "2d5b8a465c215778e2c655a8ff884264f27d00e1",
-          "88e4e13f3d5dcc0139b4e6e9442ebf369062bbbe",
-          "6f0428436735ce06dc338b9fba108b4d79c4f0fe"
+          "278ea9476acc59af001ce6253ced03340879f2ab",
+          "b149178541d1ccd42e9d0cbc936112b9a98d33d8",
+          "886bb854fe410e4b725446a2b72495d6413c63aa"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/normalization/canonical-pit-contract.ts",
@@ -333,7 +330,6 @@
           "lib/trader/market-data/provider-registry.ts",
           "lib/trader/mi/canonical-observation-v1.ts",
           "lib/trader/mi/measurement-lineage-v1.ts",
-          "lib/trader/mi/observation.types.ts",
           "tests/unit/trader-mi-canonical-contracts.test.ts"
         ]
       },
@@ -341,10 +337,10 @@
         "issue": "DEE-682",
         "status": "pass",
         "reviewedCommits": [
-          "9b23e6f9830444486a1136e8d4ec51e943445506",
-          "3bcad96ee7d2532c44ed4f733a2a08dec9046e3c",
-          "424b1bec999895c397fdbc598c75333f2015129c",
-          "6abb9acc1fa3dc9f2a22565fb0d0458c3a62ea41"
+          "2f3b2902cd6c7b0ac4acd05fbeb8d25508243657",
+          "b263bddd571f257614a580c9c6ad72d105e17f3d",
+          "56ab5cfb7168464780568d398f6591fc55d944ff",
+          "13900a8b1b4b289071ed26ade2abd738710d8558"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -362,9 +358,9 @@
         "issue": "DEE-683",
         "status": "pass",
         "reviewedCommits": [
-          "5d48de179095801523b79d1ff310d79030f44e24",
-          "3f20dfcbc24fcffe56ff7620984166b576f6e269",
-          "8773225530c6c563e4f5c6b580f8795c9e7bc83c"
+          "ae309a1638951e542de024004ab9312216a693da",
+          "9369c7a6d887f0519885bbcb7ef9c8bfdec4228a",
+          "d51a2789a6a5a8ff9e68c882d6b8bba42eb380d5"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/market-data-gateway.ts",
@@ -381,11 +377,11 @@
         "issue": "DEE-684",
         "status": "pass",
         "reviewedCommits": [
-          "c017c55556a88da41d18a5a14e73c810aa009735",
-          "fb1b2ffde0a6745ba04a9d6a7c7961df9efdbfe2",
-          "7d9079b30df9e4000fb97729fb23e460e6ba941e",
-          "228f04572d1df5fd334dc930b22634df92b34a47",
-          "5ac47a9abdfb8c2c27fd1dae2a3ea45096fb0d4a"
+          "5674c6ee832aa447e3117e211a60b430145206af",
+          "754dcdca74178f4fbc3f31d9ba22a480cb21d488",
+          "c21ad9d762c02231f4dbb74af9a373768beb7f95",
+          "81994a0eb64014b29c79bf59fb73652ed7171157",
+          "b9db4adf2d0cf3547c4ec4c9d7d844176de0688a"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -497,12 +493,12 @@
       "status": "human-standing-authority",
       "authorizedAt": "2026-08-23",
       "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
-      "reviewedHead": "0a0c9f3b0cd543a19aa2a5325b0997494cfb02f2",
+      "reviewedHead": "7368160e4dc64f727d353fba8f11bf98416bf801",
       "remediationCommits": {
-        "DEE-681": "6f0428436735ce06dc338b9fba108b4d79c4f0fe",
-        "DEE-682": "6abb9acc1fa3dc9f2a22565fb0d0458c3a62ea41",
-        "DEE-683": "8773225530c6c563e4f5c6b580f8795c9e7bc83c",
-        "DEE-684": "5ac47a9abdfb8c2c27fd1dae2a3ea45096fb0d4a"
+        "DEE-681": "886bb854fe410e4b725446a2b72495d6413c63aa",
+        "DEE-682": "13900a8b1b4b289071ed26ade2abd738710d8558",
+        "DEE-683": "d51a2789a6a5a8ff9e68c882d6b8bba42eb380d5",
+        "DEE-684": "b9db4adf2d0cf3547c4ec4c9d7d844176de0688a"
       },
       "surfaces": [
         "db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql",
@@ -511,7 +507,6 @@
         "lib/trader/mi/canonical-pit-service-postgres.ts",
         "lib/trader/mi/canonical-source-consumer-inventory-v1.ts",
         "lib/trader/mi/observation-repository-postgres.ts",
-        "lib/trader/mi/observation.types.ts",
         "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
         "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
         "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts"
