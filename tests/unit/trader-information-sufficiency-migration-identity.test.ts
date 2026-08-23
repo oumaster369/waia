@@ -52,6 +52,9 @@ describe("Information Sufficiency V2 migration identity (DEE-687)", () => {
     expect(migration).toContain("RequiredInformationProfileV2 content digest mismatch");
     expect(migration).toContain("InformationSufficiencyReceiptV2 content digest mismatch");
     expect(migration).toContain("InformationSufficiencyReceiptV2 profile scope mismatch");
+    expect(migration).toContain("RequiredInformationProfileV2 nested contract mismatch");
+    expect(migration).toContain("InformationSufficiencyReceiptV2 nested contract mismatch");
+    expect(migration).toContain("profile_row.profile_json -> 'forecastPackageId'");
     expect(migration).not.toMatch(
       /economic_value|buy_signal|sell_signal|position_size|risk_approval/i,
     );

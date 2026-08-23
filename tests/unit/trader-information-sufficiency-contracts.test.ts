@@ -9,6 +9,7 @@ import {
   type InformationQuestionRequirementV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/canonical-observation-v1";
+import { canonicalJsonString } from "@/lib/trader/research/digest";
 
 const HEX = (value: string) => createHash("sha256").update(value).digest("hex");
 const PIT = "2026-08-23T12:00:00.000Z";
@@ -123,6 +124,17 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
     expect(first).not.toHaveProperty("forecast");
     expect(first).not.toHaveProperty("decision");
     expect(first).not.toHaveProperty("riskApproval");
+  });
+
+  it("uses PostgreSQL-parity canonical decimal text for scientific-notation inputs", () => {
+    const selected = profile([requirement({ minimumTrustScore: 1e-7 })]);
+    const body = { ...selected } as Record<string, unknown>;
+    delete body.id;
+    delete body.contentDigest;
+    const postgresParityJson = canonicalJsonString(body).replace("1e-7", "0.0000001");
+
+    expect(postgresParityJson).toContain('"minimumTrustScore":0.0000001');
+    expect(selected.contentDigest).toBe(HEX(postgresParityJson));
   });
 
   it("authenticates external DEE-620 trust lineage and rejects unknown runtime vocabularies", () => {

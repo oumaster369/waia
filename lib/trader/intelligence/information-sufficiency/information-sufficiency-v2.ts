@@ -209,7 +209,49 @@ export type InformationSufficiencyReceiptV2 = Readonly<{
 const HEX_64 = /^[0-9a-f]{64}$/;
 
 function sha256Canonical(value: unknown): string {
-  return createHash("sha256").update(canonicalJsonString(value), "utf8").digest("hex");
+  return createHash("sha256").update(postgresCanonicalJsonString(value), "utf8").digest("hex");
+}
+
+function expandFiniteNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:nonFiniteCanonicalNumber");
+  }
+  if (Object.is(value, -0)) return "0";
+  const encoded = String(value).toLowerCase();
+  if (!encoded.includes("e")) return encoded;
+  const [mantissa, exponentText] = encoded.split("e");
+  const exponent = Number(exponentText);
+  const negative = mantissa!.startsWith("-");
+  const unsigned = negative ? mantissa!.slice(1) : mantissa!;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const digits = `${whole}${fraction}`;
+  const decimalIndex = whole!.length + exponent;
+  const expanded =
+    decimalIndex <= 0
+      ? `0.${"0".repeat(-decimalIndex)}${digits}`
+      : decimalIndex >= digits.length
+        ? `${digits}${"0".repeat(decimalIndex - digits.length)}`
+        : `${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+  return negative ? `-${expanded}` : expanded;
+}
+
+/** Matches public.waia_canonical_jsonb_v1, including jsonb's non-exponent numeric text. */
+function postgresCanonicalJsonString(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return expandFiniteNumber(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(postgresCanonicalJsonString).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${postgresCanonicalJsonString(record[key])}`)
+      .join(",")}}`;
+  }
+  throw new Error("INFORMATION_SUFFICIENCY_INVALID:canonicalJsonType");
 }
 
 function requireNonEmpty(value: string, field: string): string {

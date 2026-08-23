@@ -77,6 +77,17 @@ CREATE INDEX trader_information_sufficiency_receipt_v2_scope_idx
     organization_id, account_id, purpose, pit_anchor
   );
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_jsonb_exact_keys_v2(value jsonb, expected_keys text[])
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+STRICT
+AS $$
+  SELECT jsonb_typeof(value) = 'object'
+    AND value ?& expected_keys
+    AND value - expected_keys = '{}'::jsonb
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_required_information_profile_v2_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -106,6 +117,162 @@ BEGIN
   );
   IF NEW.profile_json IS DISTINCT FROM exact_json THEN
     RAISE EXCEPTION 'RequiredInformationProfileV2 row/JSON mismatch or forbidden field'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF jsonb_typeof(NEW.profile_json -> 'requirements') <> 'array'
+    OR jsonb_array_length(NEW.profile_json -> 'requirements') = 0
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+      WHERE NOT public.waia_jsonb_exact_keys_v2(requirement.value, ARRAY[
+        'id', 'questionId', 'classification', 'contextTriggerKey', 'satisfiers',
+        'allowedObservationKinds', 'allowedObservationSchemaVersions',
+        'allowedMeasurementDefinitionDigests', 'maxStalenessMs', 'minimumTrustScore',
+        'minimumIndependentGroups', 'contradictionPolicy', 'requirePitQualified',
+        'requireReplayEligible', 'inquiryBounds'
+      ])
+        OR jsonb_typeof(requirement.value -> 'id') <> 'string'
+        OR length(btrim(requirement.value ->> 'id')) = 0
+        OR requirement.value ->> 'questionId' NOT IN (
+          'Q_WHAT_HAPPENING', 'Q_WHY_HAPPENING', 'Q_CROSS_TIMEFRAME_RELATIONSHIP',
+          'Q_UNKNOWN_OR_CONTRADICTORY', 'Q_EXECUTION_LIQUIDITY', 'Q_HISTORICAL_ANALOGUES'
+        )
+        OR requirement.value ->> 'classification' NOT IN (
+          'MANDATORY', 'CONTEXT_TRIGGERED', 'OPTIONAL_ENRICHMENT'
+        )
+        OR (
+          requirement.value ->> 'classification' = 'CONTEXT_TRIGGERED'
+          AND (
+            jsonb_typeof(requirement.value -> 'contextTriggerKey') <> 'string'
+            OR length(btrim(requirement.value ->> 'contextTriggerKey')) = 0
+          )
+        )
+        OR (
+          requirement.value ->> 'classification' <> 'CONTEXT_TRIGGERED'
+          AND jsonb_typeof(requirement.value -> 'contextTriggerKey') <> 'null'
+        )
+        OR jsonb_typeof(requirement.value -> 'satisfiers') <> 'array'
+        OR jsonb_array_length(requirement.value -> 'satisfiers') = 0
+        OR jsonb_typeof(requirement.value -> 'allowedObservationKinds') <> 'array'
+        OR jsonb_array_length(requirement.value -> 'allowedObservationKinds') = 0
+        OR jsonb_typeof(requirement.value -> 'allowedObservationSchemaVersions') <> 'array'
+        OR jsonb_array_length(requirement.value -> 'allowedObservationSchemaVersions') = 0
+        OR jsonb_typeof(requirement.value -> 'allowedMeasurementDefinitionDigests') <> 'array'
+        OR jsonb_typeof(requirement.value -> 'minimumIndependentGroups') <> 'number'
+        OR (requirement.value ->> 'minimumIndependentGroups')::numeric < 1
+        OR trunc((requirement.value ->> 'minimumIndependentGroups')::numeric)
+          <> (requirement.value ->> 'minimumIndependentGroups')::numeric
+        OR jsonb_typeof(requirement.value -> 'contradictionPolicy') <> 'string'
+        OR requirement.value ->> 'contradictionPolicy' NOT IN (
+          'RECORD_ONLY', 'FAIL_UNRESOLVED', 'REQUIRE_AGREEMENT'
+        )
+        OR jsonb_typeof(requirement.value -> 'requirePitQualified') <> 'boolean'
+        OR jsonb_typeof(requirement.value -> 'requireReplayEligible') <> 'boolean'
+        OR NOT public.waia_jsonb_exact_keys_v2(
+          requirement.value -> 'inquiryBounds',
+          ARRAY['maxDepth', 'maxDurationMs', 'maxProviderFanout']
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_each(requirement.value -> 'inquiryBounds') AS bound(key, value)
+          WHERE jsonb_typeof(bound.value) <> 'number'
+            OR (bound.value #>> '{}')::numeric < 0
+            OR trunc((bound.value #>> '{}')::numeric) <> (bound.value #>> '{}')::numeric
+        )
+        OR (
+          jsonb_typeof(requirement.value -> 'maxStalenessMs') NOT IN ('null', 'number')
+          OR (
+            jsonb_typeof(requirement.value -> 'maxStalenessMs') = 'number'
+            AND (
+              (requirement.value ->> 'maxStalenessMs')::numeric < 0
+              OR trunc((requirement.value ->> 'maxStalenessMs')::numeric)
+                <> (requirement.value ->> 'maxStalenessMs')::numeric
+            )
+          )
+        )
+        OR (
+          jsonb_typeof(requirement.value -> 'minimumTrustScore') NOT IN ('null', 'number')
+          OR (
+            jsonb_typeof(requirement.value -> 'minimumTrustScore') = 'number'
+            AND (requirement.value ->> 'minimumTrustScore')::numeric NOT BETWEEN 0 AND 1
+          )
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+      CROSS JOIN LATERAL jsonb_array_elements(requirement.value -> 'satisfiers')
+        WITH ORDINALITY AS satisfier(value, ordinality)
+      WHERE NOT public.waia_jsonb_exact_keys_v2(
+          satisfier.value, ARRAY['evidenceFamily', 'providerIds', 'substitutionRuleId']
+        )
+        OR jsonb_typeof(satisfier.value -> 'evidenceFamily') <> 'string'
+        OR length(btrim(satisfier.value ->> 'evidenceFamily')) = 0
+        OR jsonb_typeof(satisfier.value -> 'providerIds') <> 'array'
+        OR (
+          satisfier.ordinality = 1
+          AND jsonb_typeof(satisfier.value -> 'substitutionRuleId') <> 'null'
+        )
+        OR (
+          satisfier.ordinality > 1
+          AND (
+            jsonb_typeof(satisfier.value -> 'substitutionRuleId') <> 'string'
+            OR length(btrim(satisfier.value ->> 'substitutionRuleId')) = 0
+          )
+        )
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(satisfier.value -> 'providerIds') AS provider(value)
+          WHERE jsonb_typeof(provider.value) <> 'string'
+            OR length(btrim(provider.value #>> '{}')) = 0
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+      CROSS JOIN LATERAL jsonb_array_elements(
+        requirement.value -> 'allowedObservationKinds'
+      ) AS kind(value)
+      WHERE jsonb_typeof(kind.value) <> 'string'
+        OR kind.value #>> '{}' NOT IN (
+          'msv_envelope', 'ohlcv_bar', 'quote_l1', 'order_book_snapshot',
+          'market_trades_snapshot', 'fear_greed_index', 'news_headline'
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+      CROSS JOIN LATERAL jsonb_array_elements(
+        requirement.value -> 'allowedObservationSchemaVersions'
+      ) AS version(value)
+      WHERE jsonb_typeof(version.value) <> 'string'
+        OR length(btrim(version.value #>> '{}')) = 0
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.profile_json -> 'requirements') AS requirement(value)
+      CROSS JOIN LATERAL jsonb_array_elements(
+        requirement.value -> 'allowedMeasurementDefinitionDigests'
+      ) AS digest(value)
+      WHERE jsonb_typeof(digest.value) <> 'string'
+        OR digest.value #>> '{}' !~ '^[0-9a-f]{64}$'
+    )
+    OR (
+      jsonb_typeof(NEW.profile_json -> 'aggregateQualityContract') <> 'null'
+      AND (
+        NOT public.waia_jsonb_exact_keys_v2(
+          NEW.profile_json -> 'aggregateQualityContract',
+          ARRAY['evaluatorVersion', 'evaluatorContentDigest']
+        )
+        OR jsonb_typeof(NEW.profile_json #> '{aggregateQualityContract,evaluatorVersion}')
+          <> 'string'
+        OR length(btrim(NEW.profile_json #>> '{aggregateQualityContract,evaluatorVersion}')) = 0
+        OR NEW.profile_json #>> '{aggregateQualityContract,evaluatorContentDigest}'
+          !~ '^[0-9a-f]{64}$'
+      )
+    )
+  THEN
+    RAISE EXCEPTION 'RequiredInformationProfileV2 nested contract mismatch'
       USING ERRCODE = 'check_violation';
   END IF;
 
@@ -181,8 +348,272 @@ BEGIN
     OR NEW.receipt_json ->> 'venue' IS DISTINCT FROM profile_row.venue
     OR NEW.receipt_json ->> 'analyticalTimeframe' IS DISTINCT FROM profile_row.analytical_timeframe
     OR NEW.receipt_json ->> 'horizon' IS DISTINCT FROM profile_row.horizon
+    OR NEW.receipt_json -> 'forecastPackageId'
+      IS DISTINCT FROM profile_row.profile_json -> 'forecastPackageId'
+    OR NEW.receipt_json -> 'forecastPackageContentDigest'
+      IS DISTINCT FROM profile_row.profile_json -> 'forecastPackageContentDigest'
+    OR NEW.receipt_json -> 'inputContractContentDigest'
+      IS DISTINCT FROM profile_row.profile_json -> 'inputContractContentDigest'
   THEN
     RAISE EXCEPTION 'InformationSufficiencyReceiptV2 row/JSON/profile mismatch or forbidden field'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF jsonb_typeof(NEW.receipt_json -> 'activeContextTriggers') <> 'array'
+    OR jsonb_typeof(NEW.receipt_json -> 'evidenceInventory') <> 'array'
+    OR jsonb_typeof(NEW.receipt_json -> 'requirementReceipts') <> 'array'
+    OR jsonb_array_length(NEW.receipt_json -> 'requirementReceipts')
+      <> jsonb_array_length(profile_row.profile_json -> 'requirements')
+    OR jsonb_typeof(NEW.receipt_json -> 'reasonCodes') <> 'array'
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.receipt_json -> 'activeContextTriggers') AS trigger_key(value)
+      WHERE jsonb_typeof(trigger_key.value) <> 'string'
+        OR length(btrim(trigger_key.value #>> '{}')) = 0
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.receipt_json -> 'reasonCodes') AS reason(value)
+      WHERE jsonb_typeof(reason.value) <> 'string'
+        OR length(btrim(reason.value #>> '{}')) = 0
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.receipt_json -> 'evidenceInventory') AS evidence(value)
+      WHERE NOT public.waia_jsonb_exact_keys_v2(evidence.value, ARRAY[
+        'evidenceId', 'evidenceFamily', 'providerId', 'sourceId', 'observationId',
+        'observationKind', 'observationSchemaVersion', 'observationContentDigest',
+        'trustAsOfReceiptId', 'trustRevisionId', 'trustRevisionContentDigest',
+        'measurementDefinitionId', 'measurementDefinitionContentDigest',
+        'measurementValueId', 'measurementValueContentDigest', 'availability',
+        'availableAt', 'trust', 'trustScore', 'pitQualified', 'replayEligible',
+        'dependenceGroup', 'contradictionGroup', 'contradiction', 'epistemicRole',
+        'historyScope', 'degradationReasonCodes'
+      ])
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_each(evidence.value) AS field(key, value)
+          WHERE field.key IN (
+            'evidenceId', 'evidenceFamily', 'providerId', 'sourceId', 'observationId',
+            'observationKind', 'observationSchemaVersion', 'observationContentDigest',
+            'availability', 'availableAt', 'trust', 'dependenceGroup', 'contradiction',
+            'epistemicRole', 'historyScope'
+          )
+            AND (
+              jsonb_typeof(field.value) <> 'string'
+              OR length(btrim(field.value #>> '{}')) = 0
+            )
+        )
+        OR evidence.value ->> 'observationKind' NOT IN (
+          'msv_envelope', 'ohlcv_bar', 'quote_l1', 'order_book_snapshot',
+          'market_trades_snapshot', 'fear_greed_index', 'news_headline'
+        )
+        OR evidence.value ->> 'availability' NOT IN ('AVAILABLE', 'UNAVAILABLE', 'REJECTED')
+        OR evidence.value ->> 'trust' NOT IN ('TRUSTED', 'UNTRUSTED', 'UNKNOWN')
+        OR evidence.value ->> 'contradiction' NOT IN (
+          'NONE', 'SUPPORTS', 'CONTRADICTS', 'UNRESOLVED'
+        )
+        OR evidence.value ->> 'epistemicRole' NOT IN (
+          'PRICE_STATE', 'CAUSAL', 'CORROBORATING', 'EXECUTION_LIQUIDITY',
+          'HISTORICAL_ANALOGUE'
+        )
+        OR evidence.value ->> 'historyScope' NOT IN (
+          'NOT_HISTORICAL', 'DEVELOPMENT', 'ADMISSIBLE_PATTERN_KNOWLEDGE'
+        )
+        OR evidence.value ->> 'observationContentDigest' !~ '^[0-9a-f]{64}$'
+        OR jsonb_typeof(evidence.value -> 'pitQualified') <> 'boolean'
+        OR jsonb_typeof(evidence.value -> 'replayEligible') <> 'boolean'
+        OR jsonb_typeof(evidence.value -> 'degradationReasonCodes') <> 'array'
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(evidence.value -> 'degradationReasonCodes') AS reason(value)
+          WHERE jsonb_typeof(reason.value) <> 'string'
+            OR length(btrim(reason.value #>> '{}')) = 0
+        )
+        OR (
+          jsonb_typeof(evidence.value -> 'trustScore') NOT IN ('null', 'number')
+          OR (
+            jsonb_typeof(evidence.value -> 'trustScore') = 'number'
+            AND (evidence.value ->> 'trustScore')::numeric NOT BETWEEN 0 AND 1
+          )
+        )
+        OR (
+          evidence.value ->> 'observationKind' = 'msv_envelope'
+          AND (
+            jsonb_typeof(evidence.value -> 'trustAsOfReceiptId') <> 'null'
+            OR jsonb_typeof(evidence.value -> 'trustRevisionId') <> 'null'
+            OR jsonb_typeof(evidence.value -> 'trustRevisionContentDigest') <> 'null'
+          )
+        )
+        OR (
+          evidence.value ->> 'observationKind' <> 'msv_envelope'
+          AND (
+            evidence.value ->> 'trustAsOfReceiptId' !~ '^[0-9a-f]{64}$'
+            OR jsonb_typeof(evidence.value -> 'trustRevisionId') <> 'string'
+            OR length(btrim(evidence.value ->> 'trustRevisionId')) = 0
+            OR evidence.value ->> 'trustRevisionContentDigest' !~ '^[0-9a-f]{64}$'
+          )
+        )
+        OR NOT (
+          (
+            jsonb_typeof(evidence.value -> 'measurementDefinitionId') = 'null'
+            AND jsonb_typeof(evidence.value -> 'measurementDefinitionContentDigest') = 'null'
+            AND jsonb_typeof(evidence.value -> 'measurementValueId') = 'null'
+            AND jsonb_typeof(evidence.value -> 'measurementValueContentDigest') = 'null'
+          )
+          OR (
+            jsonb_typeof(evidence.value -> 'measurementDefinitionId') = 'string'
+            AND length(btrim(evidence.value ->> 'measurementDefinitionId')) > 0
+            AND evidence.value ->> 'measurementDefinitionContentDigest' ~ '^[0-9a-f]{64}$'
+            AND jsonb_typeof(evidence.value -> 'measurementValueId') = 'string'
+            AND length(btrim(evidence.value ->> 'measurementValueId')) > 0
+            AND evidence.value ->> 'measurementValueContentDigest' ~ '^[0-9a-f]{64}$'
+          )
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.receipt_json -> 'requirementReceipts') AS result(value)
+      WHERE NOT public.waia_jsonb_exact_keys_v2(result.value, ARRAY[
+        'requirementId', 'questionId', 'classification', 'active', 'terminalStatus',
+        'blocking', 'matchedEvidenceIds', 'acceptedEvidenceIds',
+        'effectiveIndependentGroups', 'substitutionsUsed', 'reasonCodes'
+      ])
+        OR jsonb_typeof(result.value -> 'requirementId') <> 'string'
+        OR length(btrim(result.value ->> 'requirementId')) = 0
+        OR result.value ->> 'questionId' NOT IN (
+          'Q_WHAT_HAPPENING', 'Q_WHY_HAPPENING', 'Q_CROSS_TIMEFRAME_RELATIONSHIP',
+          'Q_UNKNOWN_OR_CONTRADICTORY', 'Q_EXECUTION_LIQUIDITY', 'Q_HISTORICAL_ANALOGUES'
+        )
+        OR result.value ->> 'classification' NOT IN (
+          'MANDATORY', 'CONTEXT_TRIGGERED', 'OPTIONAL_ENRICHMENT'
+        )
+        OR result.value ->> 'terminalStatus' NOT IN (
+          'ANSWERED_SUFFICIENTLY', 'INSUFFICIENT_NON_BLOCKING', 'INSUFFICIENT_BLOCKING',
+          'UNRESOLVED_CONTRADICTION', 'UNAVAILABLE', 'NOT_REQUIRED', 'NOT_APPLICABLE'
+        )
+        OR jsonb_typeof(result.value -> 'active') <> 'boolean'
+        OR jsonb_typeof(result.value -> 'blocking') <> 'boolean'
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_each(result.value) AS result_field(key, value)
+          WHERE result_field.key IN (
+            'matchedEvidenceIds', 'acceptedEvidenceIds', 'effectiveIndependentGroups',
+            'substitutionsUsed', 'reasonCodes'
+          )
+            AND jsonb_typeof(result_field.value) <> 'array'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(result.value -> 'substitutionsUsed') AS substitution(value)
+          WHERE NOT public.waia_jsonb_exact_keys_v2(
+              substitution.value, ARRAY['evidenceId', 'substitutionRuleId']
+            )
+            OR jsonb_typeof(substitution.value -> 'evidenceId') <> 'string'
+            OR length(btrim(substitution.value ->> 'evidenceId')) = 0
+            OR jsonb_typeof(substitution.value -> 'substitutionRuleId') <> 'string'
+            OR length(btrim(substitution.value ->> 'substitutionRuleId')) = 0
+        )
+        OR NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(profile_row.profile_json -> 'requirements') AS requirement(value)
+          WHERE requirement.value ->> 'id' = result.value ->> 'requirementId'
+            AND requirement.value ->> 'questionId' = result.value ->> 'questionId'
+            AND requirement.value ->> 'classification' = result.value ->> 'classification'
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(NEW.receipt_json -> 'requirementReceipts') AS result(value)
+      CROSS JOIN LATERAL jsonb_each(result.value) AS result_field(key, value)
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN result_field.key IN (
+            'matchedEvidenceIds', 'acceptedEvidenceIds', 'effectiveIndependentGroups', 'reasonCodes'
+          ) THEN result_field.value
+          ELSE '[]'::jsonb
+        END
+      ) AS item(value)
+      WHERE result_field.key IN (
+        'matchedEvidenceIds', 'acceptedEvidenceIds', 'effectiveIndependentGroups', 'reasonCodes'
+      )
+        AND (
+          jsonb_typeof(item.value) <> 'string'
+          OR length(btrim(item.value #>> '{}')) = 0
+        )
+    )
+    OR (
+      jsonb_typeof(NEW.receipt_json -> 'aggregateQualityEvaluation') <> 'null'
+      AND (
+        NOT public.waia_jsonb_exact_keys_v2(
+          NEW.receipt_json -> 'aggregateQualityEvaluation',
+          ARRAY[
+            'evaluatorVersion', 'evaluatorContentDigest', 'status', 'componentReceipts',
+            'aggregateValueDigest', 'reasonCodes'
+          ]
+        )
+        OR jsonb_typeof(
+          NEW.receipt_json #> '{aggregateQualityEvaluation,evaluatorVersion}'
+        ) <> 'string'
+        OR length(btrim(
+          NEW.receipt_json #>> '{aggregateQualityEvaluation,evaluatorVersion}'
+        )) = 0
+        OR NEW.receipt_json #>> '{aggregateQualityEvaluation,evaluatorContentDigest}'
+          !~ '^[0-9a-f]{64}$'
+        OR NEW.receipt_json #>> '{aggregateQualityEvaluation,status}'
+          NOT IN ('PASS', 'FAIL', 'UNAVAILABLE')
+        OR jsonb_typeof(
+          NEW.receipt_json #> '{aggregateQualityEvaluation,componentReceipts}'
+        ) <> 'array'
+        OR jsonb_typeof(NEW.receipt_json #> '{aggregateQualityEvaluation,reasonCodes}')
+          <> 'array'
+        OR jsonb_typeof(NEW.receipt_json #> '{aggregateQualityEvaluation,aggregateValueDigest}')
+          NOT IN ('null', 'string')
+        OR (
+          jsonb_typeof(
+            NEW.receipt_json #> '{aggregateQualityEvaluation,aggregateValueDigest}'
+          ) = 'string'
+          AND NEW.receipt_json #>> '{aggregateQualityEvaluation,aggregateValueDigest}'
+            !~ '^[0-9a-f]{64}$'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            NEW.receipt_json #> '{aggregateQualityEvaluation,componentReceipts}'
+          ) AS component(value)
+          WHERE NOT public.waia_jsonb_exact_keys_v2(
+              component.value, ARRAY['componentId', 'valueDigest']
+            )
+            OR jsonb_typeof(component.value -> 'componentId') <> 'string'
+            OR length(btrim(component.value ->> 'componentId')) = 0
+            OR component.value ->> 'valueDigest' !~ '^[0-9a-f]{64}$'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            NEW.receipt_json #> '{aggregateQualityEvaluation,reasonCodes}'
+          ) AS reason(value)
+          WHERE jsonb_typeof(reason.value) <> 'string'
+            OR length(btrim(reason.value #>> '{}')) = 0
+        )
+      )
+    )
+    OR (
+      jsonb_typeof(profile_row.profile_json -> 'aggregateQualityContract') = 'null'
+      AND jsonb_typeof(NEW.receipt_json -> 'aggregateQualityEvaluation') <> 'null'
+    )
+    OR (
+      jsonb_typeof(NEW.receipt_json -> 'aggregateQualityEvaluation') <> 'null'
+      AND (
+        NEW.receipt_json #>> '{aggregateQualityEvaluation,evaluatorVersion}'
+          IS DISTINCT FROM profile_row.profile_json #>> '{aggregateQualityContract,evaluatorVersion}'
+        OR NEW.receipt_json #>> '{aggregateQualityEvaluation,evaluatorContentDigest}'
+          IS DISTINCT FROM profile_row.profile_json
+            #>> '{aggregateQualityContract,evaluatorContentDigest}'
+      )
+    )
+  THEN
+    RAISE EXCEPTION 'InformationSufficiencyReceiptV2 nested contract mismatch'
       USING ERRCODE = 'check_violation';
   END IF;
 
