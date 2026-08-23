@@ -119,6 +119,14 @@ export async function processCanonicalPitObservationV1Postgres(
     });
   }
 
+  if (attempt.status === "UNAVAILABLE") {
+    return persistOutcome(db, scoped, attempt, {
+      status: "UNAVAILABLE",
+      reason: attempt.reason ?? "SOURCE_UNAVAILABLE",
+      sourceId: source.id,
+      trustAsOfReceiptId: null,
+    });
+  }
   const trust = await resolveAndPersistTrustAsOfV1Postgres(db, scoped, {
     sourceId: source.id,
     anchorTime: new Date(attempt.availableAtUtc),
@@ -127,14 +135,6 @@ export async function processCanonicalPitObservationV1Postgres(
     return persistOutcome(db, scoped, attempt, {
       status: "REJECTED",
       reason: "TRUST_AS_OF_UNKNOWN",
-      sourceId: source.id,
-      trustAsOfReceiptId: trust.receipt.id,
-    });
-  }
-  if (attempt.status === "UNAVAILABLE") {
-    return persistOutcome(db, scoped, attempt, {
-      status: "UNAVAILABLE",
-      reason: attempt.reason ?? "SOURCE_UNAVAILABLE",
       sourceId: source.id,
       trustAsOfReceiptId: trust.receipt.id,
     });

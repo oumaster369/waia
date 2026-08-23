@@ -161,6 +161,20 @@ describe("DEE-683 gateway to canonical PIT bridge", () => {
       reason: "SOURCE_UNAVAILABLE",
       payloadCanonical: null,
     });
+    expect(
+      prepareCanonicalPitAttemptV1(
+        quote({
+          provenance: {
+            ...quote().provenance,
+            providerId: "not_registered" as "htx_spot",
+          },
+        }),
+      ),
+    ).toMatchObject({
+      status: "REJECTED",
+      reason: "PROVIDER_KIND_MISMATCH",
+      payloadCanonical: null,
+    });
   });
 
   it("exposes each gateway-shaped input once to the persistence boundary", () => {
