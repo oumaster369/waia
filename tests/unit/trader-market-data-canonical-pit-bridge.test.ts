@@ -32,6 +32,77 @@ function quote(overrides: Partial<NormalizedObservation> = {}): NormalizedObserv
 }
 
 describe("DEE-683 gateway to canonical PIT bridge", () => {
+  it("admits exactly each of the six external primitive shapes", () => {
+    const cases: NormalizedObservation[] = [
+      quote({
+        kind: "ohlcv_bar",
+        provenance: { ...quote().provenance, feedKind: "ohlcv_bar" },
+        payload: {
+          barCount: 1,
+          latestClose: "100.5",
+          latestBarCloseTime: "2026-08-23T10:00:00.000Z",
+        },
+      }),
+      quote(),
+      quote({
+        kind: "order_book_snapshot",
+        provenance: { ...quote().provenance, feedKind: "order_book_snapshot" },
+        payload: {
+          symbol: "BTC/USDT",
+          bidLevels: 1,
+          askLevels: 1,
+          bestBid: 100,
+          bestAsk: 101,
+          eventTimeUtc: "2026-08-23T10:00:00.000Z",
+        },
+      }),
+      quote({
+        kind: "market_trades_snapshot",
+        provenance: { ...quote().provenance, feedKind: "market_trades_snapshot" },
+        payload: {
+          symbol: "BTC/USDT",
+          tradeCount: 1,
+          latestPrice: 100.5,
+          latestAmount: 0.25,
+          eventTimeUtc: "2026-08-23T10:00:00.000Z",
+        },
+      }),
+      quote({
+        kind: "fear_greed_index",
+        provenance: {
+          ...quote().provenance,
+          providerId: "alternative_me",
+          venue: "alternative_me",
+          feedKind: "fear_greed_index",
+          symbol: "GLOBAL",
+        },
+        payload: { value: 50, classification: "Neutral" },
+      }),
+      quote({
+        kind: "news_headline",
+        provenance: {
+          ...quote().provenance,
+          providerId: "coindesk_rss",
+          venue: "coindesk",
+          feedKind: "news_headline",
+          symbol: "GLOBAL",
+        },
+        payload: {
+          headline: "Protocol activity update",
+          url: "https://example.invalid/news",
+          source: "CoinDesk",
+          publishedAt: "2026-08-23T10:00:00.000Z",
+        },
+      }),
+    ];
+    expect(cases.map((entry) => prepareCanonicalPitAttemptV1(entry).status)).toEqual(
+      Array.from({ length: 6 }, () => "AVAILABLE"),
+    );
+    expect(cases.map((entry) => prepareCanonicalPitAttemptV1(entry).kind)).toEqual(
+      cases.map((entry) => entry.kind),
+    );
+  });
+
   it("prepares one deterministic AVAILABLE attempt without substitute data", () => {
     const first = prepareCanonicalPitAttemptV1(quote());
     const second = prepareCanonicalPitAttemptV1(quote());

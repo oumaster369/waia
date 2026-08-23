@@ -29,6 +29,8 @@ const USER_A = "00000000-0000-4000-8000-000000068201";
 const USER_B = "00000000-0000-4000-8000-000000068202";
 const SOURCE_A = "00000000-0000-4000-8000-000000068211";
 const SOURCE_B = "00000000-0000-4000-8000-000000068212";
+const SOURCE_A_OHLCV = "00000000-0000-4000-8000-000000068213";
+const SOURCE_A_NEWS = "00000000-0000-4000-8000-000000068214";
 const ANCHOR = new Date("2026-08-23T10:00:00.000Z");
 
 const hex64 = (seed: string): string => createHash("sha256").update(seed).digest("hex");
@@ -103,10 +105,12 @@ async function seedSourceAndTrust(
   organizationId: string,
   sourceId: string,
   venue: string,
+  feedKind = "quote_l1",
+  symbol = "BTC/USDT",
 ): Promise<string> {
   await sqlClient`
     INSERT INTO trader_mi_source (id, organization_id, venue, feed_kind, symbol, status)
-    VALUES (${sourceId}::uuid, ${organizationId}::uuid, ${venue}, 'quote_l1', 'BTC/USDT', 'active')
+    VALUES (${sourceId}::uuid, ${organizationId}::uuid, ${venue}, ${feedKind}, ${symbol}, 'active')
   `;
   const trustId = randomUUID();
   await sqlClient`
@@ -354,6 +358,146 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
       receipt: { status: "REJECTED", reason: "TRUST_AS_OF_UNKNOWN" },
       observation: null,
     });
+  });
+
+  it("closes market and non-price Source to inert Measurement lineage across replay and tenant scope", async () => {
+    await seedSourceAndTrust(sqlClient, orgA, SOURCE_A_OHLCV, "htx", "ohlcv_bar", "BTC/USDT");
+    await seedSourceAndTrust(
+      sqlClient,
+      orgA,
+      SOURCE_A_NEWS,
+      "coindesk",
+      "news_headline",
+      "GLOBAL",
+    );
+    const market: NormalizedObservation = {
+      schemaVersion: OBSERVATION_SCHEMA_VERSION,
+      kind: "ohlcv_bar",
+      interval: "1m",
+      sessionPhase: "US",
+      provenance: {
+        providerId: "htx_spot",
+        venue: "htx",
+        feedKind: "ohlcv_bar",
+        symbol: "BTC/USDT",
+        eventTimeUtc: "2026-08-23T09:59:59.000Z",
+        ingestTimeUtc: ANCHOR.toISOString(),
+      },
+      health: "HEALTHY",
+      freshnessMs: 1_000,
+      latencyMs: 10,
+      confidence: 0.9,
+      payload: {
+        barCount: 1,
+        latestClose: "100.5",
+        latestBarCloseTime: "2026-08-23T09:59:59.000Z",
+      },
+    };
+    const news: NormalizedObservation = {
+      schemaVersion: OBSERVATION_SCHEMA_VERSION,
+      kind: "news_headline",
+      sessionPhase: "US",
+      provenance: {
+        providerId: "coindesk_rss",
+        venue: "coindesk",
+        feedKind: "news_headline",
+        symbol: "GLOBAL",
+        eventTimeUtc: "2026-08-23T09:59:58.000Z",
+        ingestTimeUtc: ANCHOR.toISOString(),
+      },
+      health: "HEALTHY",
+      freshnessMs: 2_000,
+      latencyMs: 20,
+      confidence: 0.8,
+      payload: {
+        headline: "Protocol activity update",
+        url: "https://example.invalid/dee-684",
+        source: "CoinDesk",
+        publishedAt: "2026-08-23T09:59:58.000Z",
+      },
+    };
+
+    const marketStored = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgA },
+      market,
+    );
+    const newsStored = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgA },
+      news,
+    );
+    const replayed = await persistCanonicalPitReplayBatchV1Postgres(
+      db,
+      { organizationId: orgA },
+      { evaluatedAtUtc: ANCHOR.toISOString(), observations: [market, news] },
+    );
+    expect(replayed.map((entry) => entry.receipt.id)).toEqual([
+      marketStored.receipt.id,
+      newsStored.receipt.id,
+    ]);
+    expect(replayed.every((entry) => !entry.observationInsertedNew)).toBe(true);
+    expect(marketStored.observation?.sourceId).toBe(SOURCE_A_OHLCV);
+    expect(newsStored.observation?.sourceId).toBe(SOURCE_A_NEWS);
+
+    const definition = defineCanonicalMeasurementV1({
+      organizationId: orgA,
+      category: "feature_transform",
+      name: "market and news lineage identity",
+      inputContracts: [
+        {
+          observationKind: "ohlcv_bar",
+          observationSchemaVersion: CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION,
+        },
+        {
+          observationKind: "news_headline",
+          observationSchemaVersion: CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION,
+        },
+      ],
+      outputSchemaVersion: "opaque-market-news-output-v1",
+    });
+    await persistCanonicalMeasurementDefinitionV1Postgres(db, { organizationId: orgA }, definition);
+    const observations = [marketStored.observation, newsStored.observation];
+    if (observations.some((observation) => !observation)) {
+      throw new Error("DEE_684_EXPECTED_OBSERVATION");
+    }
+    const value = identifyCanonicalMeasurementValueV1({
+      organizationId: orgA,
+      definition,
+      outputContentDigest: hex64("opaque-market-news-output"),
+      inputs: observations.map((observation) => ({
+        observationId: observation!.id,
+        observationKind: observation!.observationKind,
+        observationSchemaVersion: CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION,
+        observationContentDigest: observation!.contentDigest,
+        sourceId: observation!.sourceId,
+        trustAsOfReceiptId: observation!.trustAsOfReceiptId,
+        trustRevisionId: observation!.sourceTrustRevisionId,
+        trustRevisionContentDigest: observation!.sourceTrustContentDigest,
+      })),
+    });
+    expect(
+      await persistCanonicalMeasurementValueLineageV1Postgres(
+        db,
+        { organizationId: orgA },
+        value,
+      ),
+    ).toEqual({ value, insertedNew: true });
+
+    const crossTenant = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgB },
+      news,
+    );
+    expect(crossTenant).toMatchObject({
+      receipt: { status: "REJECTED", reason: "SOURCE_UNKNOWN" },
+      observation: null,
+    });
+    const orgBObservations = await sqlClient<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM trader_mi_observation
+      WHERE organization_id = ${orgB}::uuid
+    `;
+    expect(orgBObservations[0]?.count).toBe("0");
   });
 
   it("denies authenticated and anon real-role CRUD on every new relation", async () => {
