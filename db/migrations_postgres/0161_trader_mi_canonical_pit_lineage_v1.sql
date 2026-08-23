@@ -362,6 +362,63 @@ AS $$
 DECLARE
   expected_digest text;
 BEGIN
+  IF btrim(NEW.name) = ''
+    OR btrim(NEW.output_schema_version) = ''
+    OR jsonb_typeof(NEW.input_contracts_json) <> 'array'
+    OR jsonb_array_length(NEW.input_contracts_json) = 0
+  THEN
+    RAISE EXCEPTION 'canonical MeasurementDefinition contract shape mismatch'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(NEW.input_contracts_json) AS contract(value)
+    WHERE jsonb_typeof(contract.value) <> 'object'
+      OR contract.value IS DISTINCT FROM jsonb_build_object(
+        'observationKind', contract.value ->> 'observationKind',
+        'observationSchemaVersion', contract.value ->> 'observationSchemaVersion'
+      )
+      OR NOT (
+        (
+          contract.value ->> 'observationKind' = 'msv_envelope'
+          AND contract.value ->> 'observationSchemaVersion' = 'mi-observation-v1'
+        ) OR (
+          contract.value ->> 'observationKind' IN (
+            'ohlcv_bar',
+            'quote_l1',
+            'order_book_snapshot',
+            'market_trades_snapshot',
+            'fear_greed_index',
+            'news_headline'
+          )
+          AND contract.value ->> 'observationSchemaVersion' = 'mi-canonical-pit-observation-v1'
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION 'canonical MeasurementDefinition input contract mismatch'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(NEW.input_contracts_json) WITH ORDINALITY AS current_contract(value, ordinality)
+    JOIN jsonb_array_elements(NEW.input_contracts_json) WITH ORDINALITY AS previous_contract(value, ordinality)
+      ON current_contract.ordinality = previous_contract.ordinality + 1
+    WHERE (
+      (previous_contract.value ->> 'observationKind')
+      || ':' ||
+      (previous_contract.value ->> 'observationSchemaVersion')
+    ) COLLATE "C" >= (
+      (current_contract.value ->> 'observationKind')
+      || ':' ||
+      (current_contract.value ->> 'observationSchemaVersion')
+    ) COLLATE "C"
+  ) THEN
+    RAISE EXCEPTION 'canonical MeasurementDefinition input contracts are not unique canonical order'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
   expected_digest := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(jsonb_build_object(
     'schemaVersion', NEW.schema_version,
     'organizationId', NEW.organization_id::text,
@@ -440,6 +497,7 @@ DECLARE
   value_row public.trader_mi_canonical_measurement_value_v1%ROWTYPE;
   observation_row public.trader_mi_observation%ROWTYPE;
   trust_receipt public.trader_mi_trust_as_of_receipt_v1%ROWTYPE;
+  definition_contracts jsonb;
   expected_input jsonb;
 BEGIN
   SELECT * INTO value_row
@@ -447,6 +505,12 @@ BEGIN
   WHERE value.id = NEW.measurement_value_id
     AND value.organization_id = NEW.organization_id;
   expected_input := value_row.input_lineage_json -> NEW.input_ordinal;
+
+  SELECT definition.input_contracts_json INTO definition_contracts
+  FROM public.trader_mi_canonical_measurement_definition_v1 definition
+  WHERE definition.id = value_row.definition_id
+    AND definition.organization_id = NEW.organization_id
+    AND definition.content_digest = value_row.definition_content_digest;
 
   SELECT * INTO observation_row
   FROM public.trader_mi_observation observation
@@ -467,6 +531,14 @@ BEGIN
     OR observation_row.id IS NULL
     OR observation_row.observation_kind::text <> NEW.observation_kind
     OR observation_row.schema_version IS DISTINCT FROM NEW.observation_schema_version
+    OR NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(definition_contracts) AS contract(value)
+      WHERE contract.value = jsonb_build_object(
+        'observationKind', NEW.observation_kind,
+        'observationSchemaVersion', NEW.observation_schema_version
+      )
+    )
     OR (
       NEW.observation_kind = 'msv_envelope'
       AND (

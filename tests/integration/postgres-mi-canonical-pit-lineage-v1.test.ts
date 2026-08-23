@@ -9,6 +9,10 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/canonical-observation-v1";
 import { processCanonicalPitObservationV1Postgres } from "@/lib/trader/mi/canonical-pit-service-postgres";
 import {
+  findObservationByIdPostgres,
+  listObservationsPostgres,
+} from "@/lib/trader/mi/observation-repository-postgres";
+import {
   persistCanonicalAvailableGatewayV1Postgres,
   persistCanonicalMeasurementDefinitionV1Postgres,
   persistCanonicalMeasurementValueLineageV1Postgres,
@@ -21,6 +25,7 @@ import { MI_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/observation.types
 import { resolveAndPersistTrustAsOfV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
 import { OBSERVATION_SCHEMA_VERSION, type NormalizedObservation } from "@/lib/trader/market-data/observation-types";
 import { persistCanonicalPitReplayBatchV1Postgres } from "@/lib/trader/market-data/replay/canonical-pit-replay";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
@@ -275,6 +280,39 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
       )
     `).rejects.toThrow(/MeasurementDefinition content digest mismatch/);
 
+    const forbiddenDefinitionBody = {
+      schemaVersion: definition.schemaVersion,
+      organizationId: definition.organizationId,
+      category: definition.category,
+      name: "hash-correct forbidden nested contract",
+      inputContracts: [
+        {
+          ...definition.inputContracts[0],
+          formula: "forbidden",
+        },
+      ],
+      outputSchemaVersion: definition.outputSchemaVersion,
+      authority: definition.authority,
+    };
+    const forbiddenDefinitionId = computeStableJsonDigest(forbiddenDefinitionBody);
+    const forbiddenDefinition = {
+      ...forbiddenDefinitionBody,
+      id: forbiddenDefinitionId,
+      contentDigest: forbiddenDefinitionId,
+    };
+    await expect(sqlClient`
+      INSERT INTO trader_mi_canonical_measurement_definition_v1 (
+        id, organization_id, category, name, input_contracts_json, output_schema_version,
+        authority, definition_json, content_digest, schema_version
+      ) VALUES (
+        ${forbiddenDefinition.id}, ${orgA}::uuid, ${forbiddenDefinition.category},
+        ${forbiddenDefinition.name}, ${JSON.stringify(forbiddenDefinition.inputContracts)}::jsonb,
+        ${forbiddenDefinition.outputSchemaVersion}, ${forbiddenDefinition.authority},
+        ${JSON.stringify(forbiddenDefinition)}::jsonb, ${forbiddenDefinition.contentDigest},
+        ${forbiddenDefinition.schemaVersion}
+      )
+    `).rejects.toThrow(/MeasurementDefinition input contract mismatch/);
+
     const forgedValueId = hex64("direct-sql-forged-value");
     await expect(sqlClient`
       INSERT INTO trader_mi_canonical_measurement_value_v1 (
@@ -288,6 +326,66 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
         ${forgedValueId}, ${value.schemaVersion}
       )
     `).rejects.toThrow(/MeasurementValue content digest mismatch/);
+
+    const ohlcvOnlyDefinition = defineCanonicalMeasurementV1({
+      organizationId: orgA,
+      category: "feature_transform",
+      name: "ohlcv-only declaration",
+      inputContracts: [
+        {
+          observationKind: "ohlcv_bar",
+          observationSchemaVersion: CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION,
+        },
+      ],
+      outputSchemaVersion: "opaque-output-v1",
+    });
+    await persistCanonicalMeasurementDefinitionV1Postgres(
+      db,
+      { organizationId: orgA },
+      ohlcvOnlyDefinition,
+    );
+    const undeclaredValueBody = {
+      schemaVersion: value.schemaVersion,
+      organizationId: orgA,
+      definitionId: ohlcvOnlyDefinition.id,
+      definitionContentDigest: ohlcvOnlyDefinition.contentDigest,
+      outputContentDigest: value.outputContentDigest,
+      inputs: value.inputs,
+      authority: value.authority,
+    };
+    const undeclaredValueId = computeStableJsonDigest(undeclaredValueBody);
+    const undeclaredInput = value.inputs[0]!;
+    await expect(
+      sqlClient.begin(async (connection) => {
+        await connection`
+          INSERT INTO trader_mi_canonical_measurement_value_v1 (
+            id, organization_id, definition_id, definition_content_digest,
+            output_content_digest, input_count, input_lineage_json,
+            authority, content_digest, schema_version
+          ) VALUES (
+            ${undeclaredValueId}, ${orgA}::uuid, ${ohlcvOnlyDefinition.id},
+            ${ohlcvOnlyDefinition.contentDigest}, ${value.outputContentDigest},
+            ${value.inputs.length}, ${JSON.stringify(value.inputs)}::jsonb,
+            ${value.authority}, ${undeclaredValueId}, ${value.schemaVersion}
+          )
+        `;
+        await connection`
+          INSERT INTO trader_mi_canonical_measurement_value_input_v1 (
+            organization_id, measurement_value_id, input_ordinal,
+            observation_id, observation_kind, observation_schema_version,
+            observation_content_digest, source_id, trust_as_of_receipt_id,
+            trust_revision_id, trust_revision_content_digest
+          ) VALUES (
+            ${orgA}::uuid, ${undeclaredValueId}, 0,
+            ${undeclaredInput.observationId}::uuid, ${undeclaredInput.observationKind},
+            ${undeclaredInput.observationSchemaVersion},
+            ${undeclaredInput.observationContentDigest}, ${undeclaredInput.sourceId}::uuid,
+            ${undeclaredInput.trustAsOfReceiptId}, ${undeclaredInput.trustRevisionId}::uuid,
+            ${undeclaredInput.trustRevisionContentDigest}
+          )
+        `;
+      }),
+    ).rejects.toThrow(/MeasurementValue input lineage mismatch/);
   });
 
   it("persists inert Measurement lineage for the admitted internal MSV primitive", async () => {
@@ -452,6 +550,14 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
     });
     expect(replay?.observation).toEqual(gateway.observation);
     expect(replay?.receipt).toEqual(gateway.receipt);
+    expect(await listObservationsPostgres(db, { organizationId: orgA })).toEqual([]);
+    expect(
+      await findObservationByIdPostgres(
+        db,
+        { organizationId: orgA },
+        gateway.observation!.id,
+      ),
+    ).toBeNull();
 
     const stale = await processCanonicalPitObservationV1Postgres(
       db,
@@ -481,6 +587,28 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
     );
     expect(trustUnknown).toMatchObject({
       receipt: { status: "REJECTED", reason: "TRUST_AS_OF_UNKNOWN" },
+      observation: null,
+    });
+
+    const unavailableWithoutTrust = await processCanonicalPitObservationV1Postgres(
+      db,
+      { organizationId: orgA },
+      {
+        ...normalized,
+        health: "UNAVAILABLE",
+        provenance: {
+          ...normalized.provenance,
+          eventTimeUtc: "2026-08-23T09:03:00.000Z",
+          ingestTimeUtc: "2026-08-23T09:04:00.000Z",
+        },
+      },
+    );
+    expect(unavailableWithoutTrust).toMatchObject({
+      receipt: {
+        status: "UNAVAILABLE",
+        reason: "SOURCE_UNAVAILABLE",
+        trustAsOfReceiptId: null,
+      },
       observation: null,
     });
   });
