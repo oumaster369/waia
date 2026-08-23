@@ -1128,6 +1128,13 @@
       "when": 1780000000160,
       "tag": "0160_trader_reality_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1780000000161,
+      "tag": "0161_trader_mi_canonical_pit_lineage_v1",
+      "breakpoints": true
     }
   ]
 }

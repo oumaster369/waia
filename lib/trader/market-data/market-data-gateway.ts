@@ -32,6 +32,7 @@ import {
 } from "@/lib/trader/market-data/observation-types";
 import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 export type MarketDataGatewayConfig = {
   internalSymbol?: InstrumentId;
@@ -56,7 +57,44 @@ export type GatewayPollResult = {
     binance?: NormalizedObservation;
     bybit?: NormalizedObservation;
   };
+  canonicalPitCandidates: readonly NormalizedObservation[];
 };
+
+export function listCanonicalPitGatewayCandidates(
+  context: FusedMarketContext,
+  crossExchangeObservations?: GatewayPollResult["crossExchangeObservations"],
+): NormalizedObservation[] {
+  const candidates: NormalizedObservation[] = [];
+  for (const interval of MTF_BAR_INTERVALS) {
+    candidates.push(...(context.mtfBars[interval] ?? []));
+  }
+  for (const observation of [
+    context.primaryQuote,
+    context.orderBookSnapshot,
+    context.marketTradesSnapshot,
+    context.crossExchangeConfirmation,
+    context.fearGreed,
+    context.globalMarket,
+    crossExchangeObservations?.binance,
+    crossExchangeObservations?.bybit,
+  ]) {
+    if (observation) candidates.push(observation);
+  }
+  candidates.push(
+    ...(context.macroEvidence ?? []),
+    ...(context.newsEvidence ?? []),
+    ...(context.blockchainEvidence ?? []),
+    ...(context.regulatoryEvidence ?? []),
+    ...(context.protocolEvidence ?? []),
+  );
+
+  const unique = new Map<string, NormalizedObservation>();
+  for (const observation of candidates) {
+    const digest = computeStableJsonDigest(observation);
+    if (!unique.has(digest)) unique.set(digest, observation);
+  }
+  return [...unique.values()];
+}
 
 async function timed<T>(fn: () => Promise<T>): Promise<{ value: T; latencyMs: number }> {
   const started = Date.now();
@@ -315,14 +353,19 @@ export class MarketDataGateway {
       degradationReasons,
     });
 
+    const crossExchangeObservations = {
+      binance: crossExchangeBinance,
+      bybit: crossExchangeBybit,
+    };
     return {
       snapshot: { ...snapshot, evaluatedAt: snapshot.evaluatedAt ?? evaluatedAt },
       fusedContext,
       mtfBarsByInterval,
-      crossExchangeObservations: {
-        binance: crossExchangeBinance,
-        bybit: crossExchangeBybit,
-      },
+      crossExchangeObservations,
+      canonicalPitCandidates: listCanonicalPitGatewayCandidates(
+        fusedContext,
+        crossExchangeObservations,
+      ),
     };
   }
 
