@@ -103,6 +103,13 @@ export function sealForecastDecisionBundleConstruction(
   ) {
     throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
   }
+  for (const forecast of bundle.forecasts) Object.freeze(forecast);
+  for (const link of bundle.links) Object.freeze(link);
+  Object.freeze(bundle.forecasts);
+  Object.freeze(bundle.decision);
+  Object.freeze(bundle.links);
+  if (bundle.entryPurpose) Object.freeze(bundle.entryPurpose);
+  Object.freeze(bundle);
   sealedBundles.set(bundle, metadata);
   return bundle;
 }

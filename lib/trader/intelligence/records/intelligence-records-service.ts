@@ -222,15 +222,22 @@ export function buildIntelligenceCycleBundle(
     contentDigest: computeConvictionRecordContentDigest(convictionBase),
   };
 
-  return {
-    envelope,
-    hypotheses: sortedHypotheses,
-    conviction,
-    informationSufficiencyProvenance: {
-      accountId: input.accountId,
-      analyticalTimeframe: input.analyticalTimeframe,
-    },
-  };
+  const frozenEnvelope = Object.freeze(envelope);
+  const frozenHypotheses = Object.freeze(
+    sortedHypotheses.map((hypothesis) => Object.freeze(hypothesis)),
+  );
+  const frozenConviction = Object.freeze(conviction);
+  const informationSufficiencyProvenance = Object.freeze({
+    accountId: input.accountId,
+    analyticalTimeframe: input.analyticalTimeframe,
+  });
+
+  return Object.freeze({
+    envelope: frozenEnvelope,
+    hypotheses: frozenHypotheses,
+    conviction: frozenConviction,
+    informationSufficiencyProvenance,
+  });
 }
 
 export type PersistEvaluationCycleRecordsInput = BuildIntelligenceCycleBundleInput;

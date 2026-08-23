@@ -294,6 +294,20 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
     ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:SCOPE_MISMATCH");
 
     const bundle = buildForecastDecisionBundle(bundleInput);
+    expect(Object.isFrozen(exactSourceBundle)).toBe(true);
+    expect(Object.isFrozen(exactSourceBundle.envelope)).toBe(true);
+    expect(Object.isFrozen(exactSourceBundle.informationSufficiencyProvenance)).toBe(true);
+    expect(
+      Reflect.set(exactSourceBundle.informationSufficiencyProvenance, "accountId", "wrong-account"),
+    ).toBe(false);
+    expect(exactSourceBundle.informationSufficiencyProvenance.accountId).toBe("paper-account");
+    expect(Object.isFrozen(bundle)).toBe(true);
+    expect(Object.isFrozen(bundle.decision)).toBe(true);
+    expect(
+      Reflect.set(bundle, "decision", { ...bundle.decision, organizationId: "wrong-org" }),
+    ).toBe(false);
+    expect(Reflect.set(bundle.decision, "organizationId", "wrong-org")).toBe(false);
+    expect(bundle.decision.organizationId).toBe(ORG);
     expect(() =>
       buildDecisionRecord(
         {
