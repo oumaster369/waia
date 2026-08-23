@@ -20,7 +20,10 @@ Measurement lineage contract in the single additive migration `0161`. It extends
 the existing MI Observation enum for the six Human-ratified external primitive kinds,
 binds external rows to the existing organization-scoped Source and exact trust-as-of
 revision, and adds append-only gateway admission receipts plus content-addressed inert
-MeasurementDefinition/MeasurementValue lineage. New relations are service-only behind
+MeasurementDefinition/MeasurementValue lineage. Definition and value digests are
+recomputed at both the repository and database insert boundaries; the already-existing
+internal `msv_envelope` retains its `mi-observation-v1` identity and records null external
+trust fields rather than fabricating provider trust. New relations are service-only behind
 authenticated/anon deny RLS. No formula, unit/window choice, economic evaluator, raw
 bytes, retention/security-policy change, SQLite migration, production SQL apply, live
 or capital authority is included.

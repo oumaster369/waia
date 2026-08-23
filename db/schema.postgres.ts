@@ -1327,9 +1327,9 @@ export const traderMiCanonicalMeasurementValueInputV1 = pgTable(
     observationSchemaVersion: text("observation_schema_version").notNull(),
     observationContentDigest: text("observation_content_digest").notNull(),
     sourceId: uuid("source_id").notNull(),
-    trustAsOfReceiptId: text("trust_as_of_receipt_id").notNull(),
-    trustRevisionId: uuid("trust_revision_id").notNull(),
-    trustRevisionContentDigest: text("trust_revision_content_digest").notNull(),
+    trustAsOfReceiptId: text("trust_as_of_receipt_id"),
+    trustRevisionId: uuid("trust_revision_id"),
+    trustRevisionContentDigest: text("trust_revision_content_digest"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
@@ -1377,10 +1377,22 @@ export const traderMiCanonicalMeasurementValueInputV1 = pgTable(
     check("tm_measurement_value_input_v1_ordinal_check", sql`${t.inputOrdinal} >= 0`),
     check(
       "tm_measurement_value_input_v1_contract_check",
-      sql`${t.observationSchemaVersion} = 'mi-canonical-pit-observation-v1'
-        AND ${t.observationContentDigest} ~ '^[0-9a-f]{64}$'
-        AND ${t.trustAsOfReceiptId} ~ '^[0-9a-f]{64}$'
-        AND ${t.trustRevisionContentDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${t.observationContentDigest} ~ '^[0-9a-f]{64}$'
+        AND (
+          (
+            ${t.observationKind} = 'msv_envelope'
+            AND ${t.observationSchemaVersion} = 'mi-observation-v1'
+            AND ${t.trustAsOfReceiptId} IS NULL
+            AND ${t.trustRevisionId} IS NULL
+            AND ${t.trustRevisionContentDigest} IS NULL
+          ) OR (
+            ${t.observationKind} <> 'msv_envelope'
+            AND ${t.observationSchemaVersion} = 'mi-canonical-pit-observation-v1'
+            AND ${t.trustAsOfReceiptId} ~ '^[0-9a-f]{64}$'
+            AND ${t.trustRevisionId} IS NOT NULL
+            AND ${t.trustRevisionContentDigest} ~ '^[0-9a-f]{64}$'
+          )
+        )`,
     ),
   ],
 );

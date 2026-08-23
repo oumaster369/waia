@@ -263,9 +263,9 @@ CREATE TABLE public.trader_mi_canonical_measurement_value_input_v1 (
   observation_schema_version text NOT NULL,
   observation_content_digest text NOT NULL,
   source_id uuid NOT NULL,
-  trust_as_of_receipt_id text NOT NULL,
-  trust_revision_id uuid NOT NULL,
-  trust_revision_content_digest text NOT NULL,
+  trust_as_of_receipt_id text,
+  trust_revision_id uuid,
+  trust_revision_content_digest text,
   created_at timestamp with time zone
     DEFAULT date_trunc('milliseconds', transaction_timestamp()) NOT NULL,
   CONSTRAINT trader_mi_canonical_measurement_value_input_v1_pk
@@ -274,10 +274,22 @@ CREATE TABLE public.trader_mi_canonical_measurement_value_input_v1 (
     UNIQUE (organization_id, measurement_value_id, observation_id, observation_content_digest),
   CONSTRAINT tm_measurement_value_input_v1_ordinal_check CHECK (input_ordinal >= 0),
   CONSTRAINT tm_measurement_value_input_v1_contract_check CHECK (
-    observation_schema_version = 'mi-canonical-pit-observation-v1'
-    AND observation_content_digest ~ '^[0-9a-f]{64}$'
-    AND trust_as_of_receipt_id ~ '^[0-9a-f]{64}$'
-    AND trust_revision_content_digest ~ '^[0-9a-f]{64}$'
+    observation_content_digest ~ '^[0-9a-f]{64}$'
+    AND (
+      (
+        observation_kind = 'msv_envelope'
+        AND observation_schema_version = 'mi-observation-v1'
+        AND trust_as_of_receipt_id IS NULL
+        AND trust_revision_id IS NULL
+        AND trust_revision_content_digest IS NULL
+      ) OR (
+        observation_kind <> 'msv_envelope'
+        AND observation_schema_version = 'mi-canonical-pit-observation-v1'
+        AND trust_as_of_receipt_id ~ '^[0-9a-f]{64}$'
+        AND trust_revision_id IS NOT NULL
+        AND trust_revision_content_digest ~ '^[0-9a-f]{64}$'
+      )
+    )
   )
 );
 --> statement-breakpoint
@@ -305,11 +317,68 @@ ALTER TABLE public.trader_mi_canonical_measurement_value_input_v1
   FOREIGN KEY (trust_revision_id, organization_id, source_id)
   REFERENCES public.trader_mi_source_trust(id, organization_id, source_id);
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_canonical_jsonb_v1(value jsonb)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+AS $$
+DECLARE
+  result text;
+BEGIN
+  CASE jsonb_typeof(value)
+    WHEN 'object' THEN
+      SELECT '{' || COALESCE(
+        string_agg(
+          to_jsonb(entry.key)::text || ':' || public.waia_canonical_jsonb_v1(entry.value),
+          ',' ORDER BY entry.key COLLATE "C"
+        ),
+        ''
+      ) || '}'
+      INTO result
+      FROM jsonb_each(value) AS entry;
+      RETURN result;
+    WHEN 'array' THEN
+      SELECT '[' || COALESCE(
+        string_agg(
+          public.waia_canonical_jsonb_v1(entry.value),
+          ',' ORDER BY entry.ordinality
+        ),
+        ''
+      ) || ']'
+      INTO result
+      FROM jsonb_array_elements(value) WITH ORDINALITY AS entry(value, ordinality);
+      RETURN result;
+    ELSE
+      RETURN value::text;
+  END CASE;
+END;
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_mi_canonical_measurement_definition_v1_guard()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  expected_digest text;
 BEGIN
+  expected_digest := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(jsonb_build_object(
+    'schemaVersion', NEW.schema_version,
+    'organizationId', NEW.organization_id::text,
+    'category', NEW.category,
+    'name', NEW.name,
+    'inputContracts', NEW.input_contracts_json,
+    'outputSchemaVersion', NEW.output_schema_version,
+    'authority', NEW.authority
+  )), 'UTF8')), 'hex');
+
+  IF NEW.id IS DISTINCT FROM expected_digest
+    OR NEW.content_digest IS DISTINCT FROM expected_digest
+  THEN
+    RAISE EXCEPTION 'canonical MeasurementDefinition content digest mismatch'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
   IF NEW.definition_json IS DISTINCT FROM jsonb_build_object(
     'id', NEW.id,
     'schemaVersion', NEW.schema_version,
@@ -331,6 +400,37 @@ $$;
 CREATE TRIGGER trader_mi_canonical_measurement_definition_v1_guard
   BEFORE INSERT ON public.trader_mi_canonical_measurement_definition_v1
   FOR EACH ROW EXECUTE FUNCTION public.waia_mi_canonical_measurement_definition_v1_guard();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_mi_canonical_measurement_value_v1_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  expected_digest text;
+BEGIN
+  expected_digest := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(jsonb_build_object(
+    'schemaVersion', NEW.schema_version,
+    'organizationId', NEW.organization_id::text,
+    'definitionId', NEW.definition_id,
+    'definitionContentDigest', NEW.definition_content_digest,
+    'outputContentDigest', NEW.output_content_digest,
+    'inputs', NEW.input_lineage_json,
+    'authority', NEW.authority
+  )), 'UTF8')), 'hex');
+
+  IF NEW.id IS DISTINCT FROM expected_digest
+    OR NEW.content_digest IS DISTINCT FROM expected_digest
+  THEN
+    RAISE EXCEPTION 'canonical MeasurementValue content digest mismatch'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trader_mi_canonical_measurement_value_v1_guard
+  BEFORE INSERT ON public.trader_mi_canonical_measurement_value_v1
+  FOR EACH ROW EXECUTE FUNCTION public.waia_mi_canonical_measurement_value_v1_guard();
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.waia_mi_canonical_measurement_value_input_v1_guard()
 RETURNS trigger
@@ -355,23 +455,43 @@ BEGIN
     AND observation.source_id = NEW.source_id
     AND observation.content_digest = NEW.observation_content_digest;
 
-  SELECT * INTO trust_receipt
-  FROM public.trader_mi_trust_as_of_receipt_v1 receipt
-  WHERE receipt.id = NEW.trust_as_of_receipt_id
-    AND receipt.organization_id = NEW.organization_id
-    AND receipt.source_id = NEW.source_id;
+  IF NEW.observation_kind <> 'msv_envelope' THEN
+    SELECT * INTO trust_receipt
+    FROM public.trader_mi_trust_as_of_receipt_v1 receipt
+    WHERE receipt.id = NEW.trust_as_of_receipt_id
+      AND receipt.organization_id = NEW.organization_id
+      AND receipt.source_id = NEW.source_id;
+  END IF;
 
   IF expected_input IS NULL
     OR observation_row.id IS NULL
-    OR trust_receipt.id IS NULL
     OR observation_row.observation_kind::text <> NEW.observation_kind
-    OR observation_row.schema_version <> NEW.observation_schema_version
-    OR observation_row.trust_as_of_receipt_id <> NEW.trust_as_of_receipt_id
-    OR observation_row.source_trust_revision_id <> NEW.trust_revision_id
-    OR observation_row.source_trust_content_digest <> NEW.trust_revision_content_digest
-    OR trust_receipt.status <> 'RESOLVED'
-    OR trust_receipt.selected_trust_revision_id <> NEW.trust_revision_id
-    OR trust_receipt.selected_content_digest <> NEW.trust_revision_content_digest
+    OR observation_row.schema_version IS DISTINCT FROM NEW.observation_schema_version
+    OR (
+      NEW.observation_kind = 'msv_envelope'
+      AND (
+        NEW.observation_schema_version <> 'mi-observation-v1'
+        OR NEW.trust_as_of_receipt_id IS NOT NULL
+        OR NEW.trust_revision_id IS NOT NULL
+        OR NEW.trust_revision_content_digest IS NOT NULL
+        OR observation_row.trust_as_of_receipt_id IS NOT NULL
+        OR observation_row.source_trust_revision_id IS NOT NULL
+        OR observation_row.source_trust_content_digest IS NOT NULL
+      )
+    )
+    OR (
+      NEW.observation_kind <> 'msv_envelope'
+      AND (
+        NEW.observation_schema_version <> 'mi-canonical-pit-observation-v1'
+        OR trust_receipt.id IS NULL
+        OR observation_row.trust_as_of_receipt_id IS DISTINCT FROM NEW.trust_as_of_receipt_id
+        OR observation_row.source_trust_revision_id IS DISTINCT FROM NEW.trust_revision_id
+        OR observation_row.source_trust_content_digest IS DISTINCT FROM NEW.trust_revision_content_digest
+        OR trust_receipt.status <> 'RESOLVED'
+        OR trust_receipt.selected_trust_revision_id IS DISTINCT FROM NEW.trust_revision_id
+        OR trust_receipt.selected_content_digest IS DISTINCT FROM NEW.trust_revision_content_digest
+      )
+    )
     OR expected_input IS DISTINCT FROM jsonb_build_object(
       'observationId', NEW.observation_id::text,
       'observationKind', NEW.observation_kind,

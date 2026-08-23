@@ -18,9 +18,11 @@ import {
   type CanonicalGatewayAvailabilityV1,
   type CanonicalGatewayRejectionReasonV1,
 } from "@/lib/trader/mi/canonical-observation-v1";
-import type {
-  CanonicalMeasurementDefinitionV1,
-  CanonicalMeasurementValueLineageV1,
+import {
+  assertCanonicalMeasurementDefinitionV1,
+  assertCanonicalMeasurementValueLineageV1,
+  type CanonicalMeasurementDefinitionV1,
+  type CanonicalMeasurementValueLineageV1,
 } from "@/lib/trader/mi/measurement-lineage-v1";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -432,6 +434,7 @@ export async function persistCanonicalMeasurementDefinitionV1Postgres(
   if (definition.organizationId !== scoped.organizationId) {
     throw new Error("CANONICAL_MEASUREMENT_SCOPE_MISMATCH");
   }
+  assertCanonicalMeasurementDefinitionV1(definition);
   return runWaiaPostgresTransaction(db, async (tx) => {
     const inserted = await tx
       .insert(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
@@ -477,6 +480,34 @@ export async function persistCanonicalMeasurementValueLineageV1Postgres(
     throw new Error("CANONICAL_MEASUREMENT_SCOPE_MISMATCH");
   }
   return runWaiaPostgresTransaction(db, async (tx) => {
+    const definitionRows = await tx
+      .select({
+        definitionJson: pgSchema.traderMiCanonicalMeasurementDefinitionV1.definitionJson,
+      })
+      .from(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
+      .where(
+        and(
+          eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.id, value.definitionId),
+          eq(
+            pgSchema.traderMiCanonicalMeasurementDefinitionV1.organizationId,
+            scoped.organizationId,
+          ),
+          eq(
+            pgSchema.traderMiCanonicalMeasurementDefinitionV1.contentDigest,
+            value.definitionContentDigest,
+          ),
+        ),
+      )
+      .limit(1);
+    const definition = definitionRows[0]?.definitionJson as
+      | CanonicalMeasurementDefinitionV1
+      | undefined;
+    if (!definition) {
+      throw new Error("CANONICAL_MEASUREMENT_DEFINITION_NOT_FOUND");
+    }
+    assertCanonicalMeasurementDefinitionV1(definition);
+    assertCanonicalMeasurementValueLineageV1(value, definition);
+
     const existing = await tx
       .select()
       .from(pgSchema.traderMiCanonicalMeasurementValueV1)

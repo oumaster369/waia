@@ -17,6 +17,7 @@ import {
   defineCanonicalMeasurementV1,
   identifyCanonicalMeasurementValueV1,
 } from "@/lib/trader/mi/measurement-lineage-v1";
+import { MI_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/observation.types";
 import { resolveAndPersistTrustAsOfV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
 import { OBSERVATION_SCHEMA_VERSION, type NormalizedObservation } from "@/lib/trader/market-data/observation-types";
 import { persistCanonicalPitReplayBatchV1Postgres } from "@/lib/trader/market-data/replay/canonical-pit-replay";
@@ -31,6 +32,7 @@ const SOURCE_A = "00000000-0000-4000-8000-000000068211";
 const SOURCE_B = "00000000-0000-4000-8000-000000068212";
 const SOURCE_A_OHLCV = "00000000-0000-4000-8000-000000068213";
 const SOURCE_A_NEWS = "00000000-0000-4000-8000-000000068214";
+const SOURCE_A_MSV = "00000000-0000-4000-8000-000000068215";
 const ANCHOR = new Date("2026-08-23T10:00:00.000Z");
 
 const hex64 = (seed: string): string => createHash("sha256").update(seed).digest("hex");
@@ -239,6 +241,129 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
     );
     expect(valueStored).toEqual({ value, insertedNew: true });
     expect(valueReplay).toEqual({ value, insertedNew: false });
+
+    await expect(
+      persistCanonicalMeasurementDefinitionV1Postgres(db, { organizationId: orgA }, {
+        ...definition,
+        name: "forged after identity",
+      }),
+    ).rejects.toThrow("CANONICAL_MEASUREMENT_INVALID:definitionIdentity");
+    await expect(
+      persistCanonicalMeasurementValueLineageV1Postgres(db, { organizationId: orgA }, {
+        ...value,
+        outputContentDigest: hex64("forged after identity"),
+      }),
+    ).rejects.toThrow("CANONICAL_MEASUREMENT_INVALID:valueIdentity");
+
+    const forgedDefinitionId = hex64("direct-sql-forged-definition");
+    const forgedDefinition = {
+      ...definition,
+      id: forgedDefinitionId,
+      name: "direct SQL forged definition",
+      contentDigest: forgedDefinitionId,
+    };
+    await expect(sqlClient`
+      INSERT INTO trader_mi_canonical_measurement_definition_v1 (
+        id, organization_id, category, name, input_contracts_json, output_schema_version,
+        authority, definition_json, content_digest, schema_version
+      ) VALUES (
+        ${forgedDefinitionId}, ${orgA}::uuid, ${forgedDefinition.category},
+        ${forgedDefinition.name}, ${JSON.stringify(forgedDefinition.inputContracts)}::jsonb,
+        ${forgedDefinition.outputSchemaVersion}, ${forgedDefinition.authority},
+        ${JSON.stringify(forgedDefinition)}::jsonb, ${forgedDefinitionId},
+        ${forgedDefinition.schemaVersion}
+      )
+    `).rejects.toThrow(/MeasurementDefinition content digest mismatch/);
+
+    const forgedValueId = hex64("direct-sql-forged-value");
+    await expect(sqlClient`
+      INSERT INTO trader_mi_canonical_measurement_value_v1 (
+        id, organization_id, definition_id, definition_content_digest,
+        output_content_digest, input_count, input_lineage_json,
+        authority, content_digest, schema_version
+      ) VALUES (
+        ${forgedValueId}, ${orgA}::uuid, ${definition.id}, ${definition.contentDigest},
+        ${value.outputContentDigest}, ${value.inputs.length},
+        ${JSON.stringify(value.inputs)}::jsonb, ${value.authority},
+        ${forgedValueId}, ${value.schemaVersion}
+      )
+    `).rejects.toThrow(/MeasurementValue content digest mismatch/);
+  });
+
+  it("persists inert Measurement lineage for the admitted internal MSV primitive", async () => {
+    await sqlClient`
+      INSERT INTO trader_mi_source (id, organization_id, venue, feed_kind, symbol, status)
+      VALUES (${SOURCE_A_MSV}::uuid, ${orgA}::uuid, 'internal', 'msv_envelope', NULL, 'active')
+    `;
+    const observationId = randomUUID();
+    const observationDigest = hex64("internal-msv-observation");
+    await sqlClient`
+      INSERT INTO trader_mi_observation (
+        id, organization_id, source_id, observation_kind, observation_key, subject_ref,
+        schema_version, payload_json, event_time, ingest_time, observed_by,
+        revision_of, revision_seq, content_digest
+      ) VALUES (
+        ${observationId}::uuid, ${orgA}::uuid, ${SOURCE_A_MSV}::uuid, 'msv_envelope',
+        'msv:BTC/USDT:2026-08-23T09:59:59.000Z', 'BTC/USDT',
+        ${MI_OBSERVATION_SCHEMA_VERSION}, ${JSON.stringify({ schemaVersion: "msv-envelope-v1" })},
+        '2026-08-23T09:59:59Z', '2026-08-23T10:00:00Z', 'canonical-msv-test',
+        NULL, 1, ${observationDigest}
+      )
+    `;
+
+    const definition = defineCanonicalMeasurementV1({
+      organizationId: orgA,
+      category: "feature_transform",
+      name: "internal MSV lineage identity",
+      inputContracts: [
+        {
+          observationKind: "msv_envelope",
+          observationSchemaVersion: MI_OBSERVATION_SCHEMA_VERSION,
+        },
+      ],
+      outputSchemaVersion: "opaque-msv-output-v1",
+    });
+    await persistCanonicalMeasurementDefinitionV1Postgres(db, { organizationId: orgA }, definition);
+    const value = identifyCanonicalMeasurementValueV1({
+      organizationId: orgA,
+      definition,
+      outputContentDigest: hex64("opaque-msv-output"),
+      inputs: [
+        {
+          observationId,
+          observationKind: "msv_envelope",
+          observationSchemaVersion: MI_OBSERVATION_SCHEMA_VERSION,
+          observationContentDigest: observationDigest,
+          sourceId: SOURCE_A_MSV,
+          trustAsOfReceiptId: null,
+          trustRevisionId: null,
+          trustRevisionContentDigest: null,
+        },
+      ],
+    });
+
+    await expect(
+      persistCanonicalMeasurementValueLineageV1Postgres(db, { organizationId: orgA }, value),
+    ).resolves.toEqual({ value, insertedNew: true });
+    const inputs = await sqlClient<{
+      observationSchemaVersion: string;
+      trustAsOfReceiptId: string | null;
+      trustRevisionId: string | null;
+    }[]>`
+      SELECT
+        observation_schema_version AS "observationSchemaVersion",
+        trust_as_of_receipt_id AS "trustAsOfReceiptId",
+        trust_revision_id::text AS "trustRevisionId"
+      FROM trader_mi_canonical_measurement_value_input_v1
+      WHERE organization_id = ${orgA}::uuid AND measurement_value_id = ${value.id}
+    `;
+    expect(inputs).toEqual([
+      {
+        observationSchemaVersion: MI_OBSERVATION_SCHEMA_VERSION,
+        trustAsOfReceiptId: null,
+        trustRevisionId: null,
+      },
+    ]);
   });
 
   it("rejects cross-tenant lineage and append-only mutation", async () => {
@@ -502,28 +627,20 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
 
   it("denies authenticated and anon real-role CRUD on every new relation", async () => {
     for (const role of ["authenticated", "anon"] as const) {
-      await sqlClient.unsafe(`SET ROLE ${role}`);
-      try {
-        for (const table of canonicalTables) {
+      for (const table of canonicalTables) {
+        for (const statement of [
+          `SELECT * FROM ${table} LIMIT 1`,
+          `INSERT INTO ${table} (organization_id) VALUES ('00000000-0000-4000-8000-000000000000')`,
+          `UPDATE ${table} SET organization_id = organization_id WHERE false`,
+          `DELETE FROM ${table} WHERE false`,
+        ]) {
           await expect(
-            sqlClient.unsafe(`SELECT * FROM ${table} LIMIT 1`),
-          ).rejects.toThrow(/permission denied/);
-          await expect(
-            sqlClient.unsafe(
-              `INSERT INTO ${table} (organization_id) VALUES ('00000000-0000-4000-8000-000000000000')`,
-            ),
-          ).rejects.toThrow(/permission denied/);
-          await expect(
-            sqlClient.unsafe(
-              `UPDATE ${table} SET organization_id = organization_id WHERE false`,
-            ),
-          ).rejects.toThrow(/permission denied/);
-          await expect(
-            sqlClient.unsafe(`DELETE FROM ${table} WHERE false`),
+            sqlClient.begin(async (connection) => {
+              await connection.unsafe(`SET LOCAL ROLE ${role}`);
+              await connection.unsafe(statement);
+            }),
           ).rejects.toThrow(/permission denied/);
         }
-      } finally {
-        await sqlClient.unsafe("RESET ROLE");
       }
     }
   });

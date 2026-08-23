@@ -63,6 +63,9 @@ describe("canonical PIT lineage migration identity (DEE-682)", () => {
       expect(migration).toContain(`${table}_block_delete`);
     }
     expect(migration).toContain("trust-as-of identity mismatch");
+    expect(migration).toContain("canonical MeasurementDefinition content digest mismatch");
+    expect(migration).toContain("canonical MeasurementValue content digest mismatch");
+    expect(migration).toContain("observation_schema_version = 'mi-observation-v1'");
     expect(migration).toContain("relational lineage is incomplete");
     expect(migration).not.toMatch(/formula|economic_value|buy_signal|sell_signal|position_size/i);
     expect(migration).not.toMatch(/raw_body|body_bytes|api_secret|access_key|credential/i);
