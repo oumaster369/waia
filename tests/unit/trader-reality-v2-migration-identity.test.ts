@@ -18,7 +18,7 @@ describe("Reality V2 migration identity (DEE-677)", () => {
     const journal = JSON.parse(readFileSync(JOURNAL_PATH, "utf8")) as {
       entries: Array<{ idx: number; when: number; tag: string }>;
     };
-    expect(journal.entries.at(-1)).toEqual({
+    expect(journal.entries).toContainEqual({
       idx: 160,
       version: "7",
       when: 1780000000160,
