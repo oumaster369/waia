@@ -62,7 +62,10 @@ function selectSourceAtPit(input: {
   source: InformationRequestedSourceV1;
   pitAnchor: string;
   observations: readonly NormalizedObservation[];
-}): InformationAcquisitionOutcomeV1 {
+}): Readonly<{
+  outcome: InformationAcquisitionOutcomeV1;
+  lineageObservations: readonly NormalizedObservation[];
+}> {
   const matching = input.observations
     .filter(
       (observation) =>
@@ -77,14 +80,19 @@ function selectSourceAtPit(input: {
     .sort((left, right) => inquiryCanonicalTextCompare(left.digest, right.digest))
     .filter((entry, index, entries) => index === 0 || entry.digest !== entries[index - 1]?.digest);
 
-  if (matching.length === 0) return unavailableOutcome(input.source);
+  if (matching.length === 0) {
+    return { outcome: unavailableOutcome(input.source), lineageObservations: [] };
+  }
   if (
     matching.some(
       ({ observation }) =>
         (observation.payload as { reason?: unknown }).reason === FUTURE_EVIDENCE_EXCLUDED,
     )
   ) {
-    return rejectedOutcome(input.source, "INVALID_CHRONOLOGY");
+    return {
+      outcome: rejectedOutcome(input.source, "INVALID_CHRONOLOGY"),
+      lineageObservations: [],
+    };
   }
 
   const available = matching.filter((entry) => entry.attempt.status === "AVAILABLE");
@@ -94,12 +102,16 @@ function selectSourceAtPit(input: {
   const status =
     available.length > 0 ? "AVAILABLE" : rejected.length > 0 ? "REJECTED" : "UNAVAILABLE";
   return {
-    requestedSource: input.source,
-    status,
-    reasonCode:
-      status === "AVAILABLE" ? null : (selected[0]?.attempt.reason ?? "SOURCE_UNAVAILABLE"),
-    canonicalPitAttempts: selected.map((entry) => entry.attempt),
-    observationContentDigests: status === "AVAILABLE" ? selected.map((entry) => entry.digest) : [],
+    outcome: {
+      requestedSource: input.source,
+      status,
+      reasonCode:
+        status === "AVAILABLE" ? null : (selected[0]?.attempt.reason ?? "SOURCE_UNAVAILABLE"),
+      canonicalPitAttempts: selected.map((entry) => entry.attempt),
+      observationContentDigests:
+        status === "AVAILABLE" ? selected.map((entry) => entry.digest) : [],
+    },
+    lineageObservations: selected.map((entry) => entry.observation),
   };
 }
 
@@ -116,11 +128,29 @@ export function selectInformationNeedReplayEvidenceV1(input: {
         ? "SELECTION_SCOPE_MISMATCH"
         : null;
   const observations = listReplayObservations(input.context);
-  const outcomes = selection.requestedSources.map((source) => {
-    if (scopeReason) return rejectedOutcome(source, scopeReason);
+  const resolvedOutcomes = selection.requestedSources.map((source) => {
+    if (scopeReason) {
+      return { outcome: rejectedOutcome(source, scopeReason), lineageObservations: [] };
+    }
     const provider = resolveMarketDataProviderSelection(source);
-    if (provider.status === "REJECTED") return rejectedOutcome(source, provider.reasonCode);
+    if (provider.status === "REJECTED") {
+      return {
+        outcome: rejectedOutcome(source, provider.reasonCode),
+        lineageObservations: [],
+      };
+    }
     return selectSourceAtPit({ source, pitAnchor: input.pitAnchor, observations });
   });
-  return defineInformationAcquisitionReceiptV1({ selection, outcomes });
+  const lineageObservations = new Map<string, NormalizedObservation>();
+  for (const observation of resolvedOutcomes.flatMap((resolved) => resolved.lineageObservations)) {
+    const digest = prepareCanonicalPitAttemptV1(observation, {
+      pitCutoffUtc: selection.pitAnchor,
+    }).normalizedInputDigest;
+    if (!lineageObservations.has(digest)) lineageObservations.set(digest, observation);
+  }
+  return defineInformationAcquisitionReceiptV1({
+    selection,
+    outcomes: resolvedOutcomes.map((resolved) => resolved.outcome),
+    observations: [...lineageObservations.values()],
+  });
 }

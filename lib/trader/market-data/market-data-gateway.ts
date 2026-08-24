@@ -114,9 +114,11 @@ function unavailableAcquisitionOutcome(
 function classifyAcquisitionOutcome(input: {
   source: InformationRequestedSourceV1;
   observations: readonly NormalizedObservation[];
+  pitAnchor: string;
 }): Readonly<{
   outcome: InformationAcquisitionOutcomeV1;
   acceptedObservations: readonly NormalizedObservation[];
+  lineageObservations: readonly NormalizedObservation[];
 }> {
   const observations = input.observations
     .filter(
@@ -126,7 +128,7 @@ function classifyAcquisitionOutcome(input: {
     )
     .map((observation) => ({
       observation,
-      attempt: prepareCanonicalPitAttemptV1(observation),
+      attempt: prepareCanonicalPitAttemptV1(observation, { pitCutoffUtc: input.pitAnchor }),
     }))
     .map((entry) => ({ ...entry, digest: entry.attempt.normalizedInputDigest }))
     .sort((left, right) => inquiryCanonicalTextCompare(left.digest, right.digest))
@@ -136,6 +138,7 @@ function classifyAcquisitionOutcome(input: {
     return {
       outcome: rejectedAcquisitionOutcome(input.source, "SOURCE_RETURNED_NO_ADMITTED_OBSERVATION"),
       acceptedObservations: [],
+      lineageObservations: [],
     };
   }
 
@@ -157,6 +160,7 @@ function classifyAcquisitionOutcome(input: {
         status === "AVAILABLE" ? selected.map((entry) => entry.digest) : [],
     },
     acceptedObservations: status === "AVAILABLE" ? selected.map((entry) => entry.observation) : [],
+    lineageObservations: selected.map((entry) => entry.observation),
   };
 }
 
@@ -501,25 +505,46 @@ export class MarketDataGateway {
         return {
           outcome: rejectedAcquisitionOutcome(source, scopeReason),
           acceptedObservations: [],
+          lineageObservations: [],
         };
       }
       if (resolution.status === "REJECTED") {
         return {
           outcome: rejectedAcquisitionOutcome(source, resolution.reasonCode),
           acceptedObservations: [],
+          lineageObservations: [],
         };
       }
       if (unavailableProviders.has(resolution.provider.id)) {
-        return { outcome: unavailableAcquisitionOutcome(source), acceptedObservations: [] };
+        return {
+          outcome: unavailableAcquisitionOutcome(source),
+          acceptedObservations: [],
+          lineageObservations: [],
+        };
       }
       const observations = providerObservations.get(resolution.provider.id);
       if (!observations) {
-        return { outcome: unavailableAcquisitionOutcome(source), acceptedObservations: [] };
+        return {
+          outcome: unavailableAcquisitionOutcome(source),
+          acceptedObservations: [],
+          lineageObservations: [],
+        };
       }
-      return classifyAcquisitionOutcome({ source, observations });
+      return classifyAcquisitionOutcome({ source, observations, pitAnchor: selection.pitAnchor });
     });
     const outcomes = resolvedOutcomes.map((resolved) => resolved.outcome);
-    const informationAcquisition = defineInformationAcquisitionReceiptV1({ selection, outcomes });
+    const lineageObservations = new Map<string, NormalizedObservation>();
+    for (const observation of resolvedOutcomes.flatMap((resolved) => resolved.lineageObservations)) {
+      const digest = prepareCanonicalPitAttemptV1(observation, {
+        pitCutoffUtc: selection.pitAnchor,
+      }).normalizedInputDigest;
+      if (!lineageObservations.has(digest)) lineageObservations.set(digest, observation);
+    }
+    const informationAcquisition = defineInformationAcquisitionReceiptV1({
+      selection,
+      outcomes,
+      observations: [...lineageObservations.values()],
+    });
     const acceptedObservations = resolvedOutcomes.flatMap(
       (resolved) => resolved.acceptedObservations,
     );

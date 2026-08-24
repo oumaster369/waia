@@ -4,15 +4,15 @@ import type {
 } from "@/lib/trader/market-data/observation-types";
 import type { CanonicalPrimitiveObservationKindV1 } from "@/lib/trader/mi/canonical-observation-v1";
 
-export type MarketDataProviderDescriptor = {
+export type MarketDataProviderDescriptor = Readonly<{
   id: MarketDataProviderId;
   venue: string;
   label: string;
   required: boolean;
   kinds: readonly NormalizedObservationKind[];
-};
+}>;
 
-const PROVIDER_DESCRIPTORS: Record<MarketDataProviderId, MarketDataProviderDescriptor> = {
+const RAW_PROVIDER_DESCRIPTORS: Record<MarketDataProviderId, MarketDataProviderDescriptor> = {
   htx_spot: {
     id: "htx_spot",
     venue: "htx",
@@ -25,14 +25,14 @@ const PROVIDER_DESCRIPTORS: Record<MarketDataProviderId, MarketDataProviderDescr
     venue: "binance",
     label: "Binance Public",
     required: false,
-    kinds: ["cross_exchange_confirmation", "quote_l1"],
+    kinds: ["cross_exchange_confirmation"],
   },
   bybit_public: {
     id: "bybit_public",
     venue: "bybit",
     label: "Bybit Public",
     required: false,
-    kinds: ["cross_exchange_confirmation", "quote_l1"],
+    kinds: ["cross_exchange_confirmation"],
   },
   alternative_me: {
     id: "alternative_me",
@@ -155,8 +155,18 @@ const PROVIDER_DESCRIPTORS: Record<MarketDataProviderId, MarketDataProviderDescr
   },
 };
 
+const PROVIDER_DESCRIPTORS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(RAW_PROVIDER_DESCRIPTORS).map(([providerId, descriptor]) => [
+      providerId,
+      Object.freeze({ ...descriptor, kinds: Object.freeze([...descriptor.kinds]) }),
+    ]),
+  ),
+) as Readonly<Record<MarketDataProviderId, MarketDataProviderDescriptor>>;
+const PROVIDER_LIST = Object.freeze(Object.values(PROVIDER_DESCRIPTORS));
+
 export function listMarketDataProviders(): readonly MarketDataProviderDescriptor[] {
-  return Object.values(PROVIDER_DESCRIPTORS);
+  return PROVIDER_LIST;
 }
 
 export function getMarketDataProvider(id: MarketDataProviderId): MarketDataProviderDescriptor {
@@ -183,14 +193,16 @@ export function resolveMarketDataProviderSelection(input: {
   allowedObservationKinds: readonly CanonicalPrimitiveObservationKindV1[];
 }): MarketDataProviderSelectionResolution {
   if (!isRegisteredMarketDataProvider(input.providerId)) {
-    return { status: "REJECTED", reasonCode: "SOURCE_UNKNOWN" };
+    return Object.freeze({ status: "REJECTED", reasonCode: "SOURCE_UNKNOWN" });
   }
   const provider = getMarketDataProvider(input.providerId);
-  const admittedKinds = provider.kinds.filter((kind) =>
-    input.allowedObservationKinds.includes(kind as CanonicalPrimitiveObservationKindV1),
+  const admittedKinds = Object.freeze(
+    provider.kinds.filter((kind) =>
+      input.allowedObservationKinds.includes(kind as CanonicalPrimitiveObservationKindV1),
+    ),
   );
   if (admittedKinds.length === 0) {
-    return { status: "REJECTED", reasonCode: "PROVIDER_KIND_MISMATCH" };
+    return Object.freeze({ status: "REJECTED", reasonCode: "PROVIDER_KIND_MISMATCH" });
   }
-  return { status: "ACCEPTED", provider, admittedKinds };
+  return Object.freeze({ status: "ACCEPTED", provider, admittedKinds });
 }

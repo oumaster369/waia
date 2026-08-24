@@ -55,7 +55,7 @@ describe("DEE-698 selective provider sidecar capture", () => {
     expect(sidecar.lanes.fear_greed_index).toBeUndefined();
   });
 
-  it("captures an optional lane only under the exact asserted selection", async () => {
+  it("rejects a selected optional lane that is later than the exact capture PIT", async () => {
     const optionalUrls: string[] = [];
     const informationSelection = defineInformationAcquisitionSelectionV1({
       planId: "plan-capture-1",
@@ -84,7 +84,7 @@ describe("DEE-698 selective provider sidecar capture", () => {
     });
 
     expect(optionalUrls).toHaveLength(1);
-    expect(sidecar.captureOutcomes?.alternative_me).toBe("CAPTURED_HEALTHY");
-    expect(sidecar.lanes.fear_greed_index).toMatchObject({ value: 51, classification: "Neutral" });
+    expect(sidecar.captureOutcomes?.alternative_me).toBe("UNAVAILABLE");
+    expect(sidecar.lanes.fear_greed_index).toBeUndefined();
   });
 });

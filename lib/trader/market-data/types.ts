@@ -10,7 +10,11 @@ import {
   type InformationRequestedSourceV1,
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
 import type { CanonicalGatewayRejectionReasonV1 } from "@/lib/trader/mi/canonical-observation-v1";
-import type { PreparedCanonicalPitAttemptV1 } from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
+import {
+  prepareCanonicalPitAttemptV1,
+  type PreparedCanonicalPitAttemptV1,
+} from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
+import type { NormalizedObservation } from "@/lib/trader/market-data/observation-types";
 
 export const INFORMATION_ACQUISITION_RECEIPT_V1_SCHEMA_VERSION =
   "information_acquisition_receipt/v1" as const;
@@ -60,8 +64,22 @@ export type InformationAcquisitionReceiptV1 = Readonly<{
 export function defineInformationAcquisitionReceiptV1(input: {
   selection: InformationAcquisitionSelectionV1;
   outcomes: readonly InformationAcquisitionOutcomeV1[];
+  observations: readonly NormalizedObservation[];
 }): InformationAcquisitionReceiptV1 {
   const selection = assertInformationAcquisitionSelectionV1(input.selection);
+  const observationsByDigest = new Map<
+    string,
+    Readonly<{ observation: NormalizedObservation; attempt: PreparedCanonicalPitAttemptV1 }>
+  >();
+  for (const observation of input.observations) {
+    const attempt = prepareCanonicalPitAttemptV1(observation, {
+      pitCutoffUtc: selection.pitAnchor,
+    });
+    if (observationsByDigest.has(attempt.normalizedInputDigest)) {
+      throw new Error("INFORMATION_ACQUISITION_INVALID:duplicateObservationLineage");
+    }
+    observationsByDigest.set(attempt.normalizedInputDigest, { observation, attempt });
+  }
   if (input.outcomes.length !== selection.requestedSources.length) {
     throw new Error("INFORMATION_ACQUISITION_INVALID:outcomeCoverage");
   }
@@ -104,32 +122,41 @@ export function defineInformationAcquisitionReceiptV1(input: {
       throw new Error("INFORMATION_ACQUISITION_INVALID:observationContentDigests");
     }
     const canonicalPitAttempts = outcome.canonicalPitAttempts
-      .map((attempt) => ({
-        gatewayKind: attempt.gatewayKind,
-        providerId: attempt.providerId,
-        normalizedInputDigest: attempt.normalizedInputDigest,
-        status: attempt.status,
-        reason: attempt.reason,
-        kind: attempt.kind,
-        source: attempt.source
-          ? {
-              providerId: attempt.source.providerId,
-              venue: attempt.source.venue,
-              feedKind: attempt.source.feedKind,
-              symbol: attempt.source.symbol,
-            }
-          : null,
-        subjectRef: attempt.subjectRef,
-        payloadCanonical: attempt.payloadCanonical
-          ? (JSON.parse(inquiryCanonicalJsonString(attempt.payloadCanonical)) as Record<
-              string,
-              unknown
-            >)
-          : null,
-        eventTimeUtc: attempt.eventTimeUtc,
-        availableAtUtc: attempt.availableAtUtc,
-        ingestTimeUtc: attempt.ingestTimeUtc,
-      }))
+      .map((attempt) => {
+        const lineage = observationsByDigest.get(attempt.normalizedInputDigest);
+        if (
+          !lineage ||
+          inquiryCanonicalJsonString(attempt) !== inquiryCanonicalJsonString(lineage.attempt)
+        ) {
+          throw new Error("INFORMATION_ACQUISITION_INVALID:attemptLineage");
+        }
+        return {
+          gatewayKind: lineage.attempt.gatewayKind,
+          providerId: lineage.attempt.providerId,
+          normalizedInputDigest: lineage.attempt.normalizedInputDigest,
+          status: lineage.attempt.status,
+          reason: lineage.attempt.reason,
+          kind: lineage.attempt.kind,
+          source: lineage.attempt.source
+            ? {
+                providerId: lineage.attempt.source.providerId,
+                venue: lineage.attempt.source.venue,
+                feedKind: lineage.attempt.source.feedKind,
+                symbol: lineage.attempt.source.symbol,
+              }
+            : null,
+          subjectRef: lineage.attempt.subjectRef,
+          payloadCanonical: lineage.attempt.payloadCanonical
+            ? (JSON.parse(inquiryCanonicalJsonString(lineage.attempt.payloadCanonical)) as Record<
+                string,
+                unknown
+              >)
+            : null,
+          eventTimeUtc: lineage.attempt.eventTimeUtc,
+          availableAtUtc: lineage.attempt.availableAtUtc,
+          ingestTimeUtc: lineage.attempt.ingestTimeUtc,
+        };
+      })
       .sort((left, right) =>
         inquiryCanonicalTextCompare(left.normalizedInputDigest, right.normalizedInputDigest),
       );
