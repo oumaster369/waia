@@ -25,6 +25,7 @@ export async function persistForecastDecisionBundle(
     authority: authorization.authority,
     organizationId: context.organizationId,
     bundle,
+    syntheticResearchBinding: authorization.syntheticResearchBinding,
   });
   const normalizedBundle: ForecastDecisionBundle = {
     forecasts: sortForecastsByKeyDigestCodePoint(bundle.forecasts),

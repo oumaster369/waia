@@ -6,7 +6,10 @@ import type {
   TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
-import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  SyntheticResearchNonCapitalBindingV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 import type { ForecastDecisionPersistencePermit } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 export type ForecastRecordRepository = {
@@ -72,6 +75,7 @@ export type ForecastDecisionBundleRepository = {
 
 export type ForecastDecisionPersistenceAuthorizationV2 = Readonly<{
   authority: InformationSufficiencyRuntimeAuthorityV2;
+  syntheticResearchBinding?: SyntheticResearchNonCapitalBindingV2;
 }>;
 
 export type ForecastDecisionRuntime = {

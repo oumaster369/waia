@@ -350,7 +350,11 @@ export async function runFullHistoricalBacktest(input: {
         ? "fhv-full-historical-bounded"
         : "fhv-full-historical-official",
       runId: input.runId,
-      split: input.includeHoldout ? "blind" : "validation",
+      split: input.informationSufficiencySyntheticResearch
+        ? "validation"
+        : input.includeHoldout
+          ? "blind"
+          : "validation",
       window,
       accountState,
       exportedAt: new Date(window.end),
@@ -374,8 +378,7 @@ export async function runFullHistoricalBacktest(input: {
         : {}),
       historicalExecutionProfile: session.historicalExecutionProfile,
       historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
-      informationSufficiencyAuthority:
-        input.informationSufficiencySyntheticResearch?.authority,
+      informationSufficiencyAuthority: input.informationSufficiencySyntheticResearch?.authority,
       informationSufficiencySyntheticBinding:
         input.informationSufficiencySyntheticResearch?.binding,
       wp16: {

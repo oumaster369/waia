@@ -119,6 +119,7 @@ export async function persistForecastDecisionBundleForCycle(
   if (deps.bundleRepository) {
     const persisted = await deps.bundleRepository.persist(context, bundle, {
       authority: input.informationSufficiencyAuthority,
+      syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
     });
     await assertForecastDecisionChainComplete(
       context,
@@ -140,6 +141,7 @@ export async function persistForecastDecisionBundleForCycle(
 
   const persisted = await persistForecastDecisionBundle(context, bundle, deps.db, {
     authority: input.informationSufficiencyAuthority,
+    syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
   });
   await assertForecastDecisionChainComplete(
     context,

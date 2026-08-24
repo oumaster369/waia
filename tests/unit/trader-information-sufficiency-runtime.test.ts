@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
-import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
+import { assertSyntheticResearchNonCapitalBacktestScopeV2 } from "@/lib/trader/backtest/backtest-runner";
+import {
+  buildForecastDecisionBundle,
+  persistForecastDecisionBundleForCycle,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { persistForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { buildDecisionRecord } from "@/lib/trader/intelligence/forecast-decision/build-decision-record";
-import { admitForecastDecisionConstruction } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
+import {
+  admitForecastDecisionConstruction,
+  admitForecastDecisionPersistence,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import { createDecisionRecordRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/decision-record-repository-postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
@@ -285,6 +292,93 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
         }),
       ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
     }
+  });
+
+  it("rejects synthetic authority reuse across public backtest run, blind, and harness scopes", () => {
+    const synthetic = declareSyntheticResearchNonCapitalInformationAuthorityV2({
+      organizationId: ORG,
+      harness: "CAPITAL_TRACE_SYNTHETIC",
+      runId: "trace-synthetic-proof",
+      provenanceDigest: "b".repeat(64),
+      officialBlindHoldout: false,
+      production: false,
+      live: false,
+      capitalEligible: false,
+      capitalUse: false,
+    });
+    const exact = {
+      context: requireOrgContext(ORG),
+      datasetId: "dataset-trace-synthetic-proof",
+      runId: "trace-synthetic-proof",
+      split: "validation" as const,
+      informationSufficiencyAuthority: synthetic.authority,
+      informationSufficiencySyntheticBinding: synthetic.binding,
+    };
+
+    expect(() => assertSyntheticResearchNonCapitalBacktestScopeV2(exact)).not.toThrow();
+    expect(() =>
+      assertSyntheticResearchNonCapitalBacktestScopeV2({ ...exact, runId: "trace-other-run" }),
+    ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    expect(() =>
+      assertSyntheticResearchNonCapitalBacktestScopeV2({ ...exact, split: "blind" }),
+    ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    expect(() =>
+      assertSyntheticResearchNonCapitalBacktestScopeV2({
+        ...exact,
+        datasetId: "fhv-full-historical-official",
+      }),
+    ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+  });
+
+  it("preserves exact synthetic binding through Forecast/Decision persistence", async () => {
+    const admittedCycle = runWp14EvaluationCycle({ organizationId: ORG });
+    const synthetic = declareSyntheticResearchNonCapitalInformationAuthorityV2({
+      organizationId: ORG,
+      harness: "CAPITAL_TRACE_SYNTHETIC",
+      runId: admittedCycle.intelligenceCycleBundle!.envelope.runId,
+      provenanceDigest: "c".repeat(64),
+      officialBlindHoldout: false,
+      production: false,
+      live: false,
+      capitalEligible: false,
+      capitalUse: false,
+    });
+    const input = {
+      intelligenceCycleBundle: admittedCycle.intelligenceCycleBundle!,
+      hypothesisSet: admittedCycle.hypothesisSet!,
+      decisionChain: admittedCycle.decisionChain!,
+      msv: admittedCycle.msv,
+      signal: admittedCycle.signal,
+      informationSufficiencyAuthority: synthetic.authority,
+      informationSufficiencySyntheticBinding: synthetic.binding,
+    };
+    const bundle = buildForecastDecisionBundle(input);
+
+    expect(() =>
+      admitForecastDecisionPersistence({
+        authority: synthetic.authority,
+        organizationId: ORG,
+        bundle,
+      }),
+    ).toThrow("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:RESEARCH_NON_CAPITAL_SCOPE_MISMATCH");
+
+    const persisted = await persistForecastDecisionBundleForCycle(requireOrgContext(ORG), input, {
+      bundleRepository: {
+        async persist(context, sealedBundle, authorization) {
+          expect(authorization.syntheticResearchBinding).toEqual(synthetic.binding);
+          expect(() =>
+            admitForecastDecisionPersistence({
+              authority: authorization.authority,
+              organizationId: context.organizationId,
+              bundle: sealedBundle,
+              syntheticResearchBinding: authorization.syntheticResearchBinding,
+            }),
+          ).not.toThrow();
+          return sealedBundle;
+        },
+      },
+    });
+    expect(persisted).toStrictEqual(bundle);
   });
 
   it("blocks Forecast/Decision construction when authority is missing", () => {

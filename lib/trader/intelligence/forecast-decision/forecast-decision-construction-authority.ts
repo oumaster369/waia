@@ -127,6 +127,7 @@ export function admitForecastDecisionPersistence(input: {
   authority: InformationSufficiencyRuntimeAuthorityV2;
   organizationId: string;
   bundle: ForecastDecisionBundle;
+  syntheticResearchBinding?: SyntheticResearchNonCapitalBindingV2;
 }): ForecastDecisionPersistencePermit {
   const construction = sealedBundles.get(input.bundle);
   if (!construction || construction.organizationId !== input.organizationId) {
@@ -136,6 +137,7 @@ export function admitForecastDecisionPersistence(input: {
     authority: input.authority,
     organizationId: construction.organizationId,
     scope: construction.scope,
+    syntheticResearchBinding: input.syntheticResearchBinding,
   });
 
   const permit = Object.freeze({});

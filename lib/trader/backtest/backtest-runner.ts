@@ -76,9 +76,10 @@ import type {
 } from "@/lib/trader/paper/paper-cycle.types";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
-import type {
-  InformationSufficiencyRuntimeAuthorityV2,
-  SyntheticResearchNonCapitalBindingV2,
+import {
+  evaluateInformationSufficiencyRuntimeAdmissionV2,
+  type InformationSufficiencyRuntimeAuthorityV2,
+  type SyntheticResearchNonCapitalBindingV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import {
@@ -295,6 +296,52 @@ export type RunBacktestInput = {
   enableCooperativeYield?: boolean;
 };
 
+type SyntheticResearchBacktestScopeInput = Pick<
+  RunBacktestInput,
+  | "context"
+  | "datasetId"
+  | "runId"
+  | "split"
+  | "informationSufficiencyAuthority"
+  | "informationSufficiencySyntheticBinding"
+>;
+
+/** Fail closed at the public replay boundary, where authoritative run and split are known. */
+export function assertSyntheticResearchNonCapitalBacktestScopeV2(
+  input: SyntheticResearchBacktestScopeInput,
+): void {
+  const authorityBinding =
+    input.informationSufficiencyAuthority?.kind === "RESEARCH_NON_CAPITAL"
+      ? input.informationSufficiencyAuthority.syntheticBinding
+      : undefined;
+  const suppliedBinding = input.informationSufficiencySyntheticBinding;
+  if (!authorityBinding && !suppliedBinding) return;
+
+  const admission = evaluateInformationSufficiencyRuntimeAdmissionV2({
+    authority: input.informationSufficiencyAuthority,
+    organizationId: input.context.organizationId,
+    requiredPurpose: "NEW_OPPORTUNITY",
+    allowResearchNonCapital: true,
+    syntheticResearchBinding: suppliedBinding,
+  });
+  const harnessMatchesDataset =
+    suppliedBinding?.harness === "FHV_SYNTHETIC_WP7B"
+      ? input.datasetId === "fhv-full-historical-official"
+      : suppliedBinding?.harness === "CAPITAL_TRACE_SYNTHETIC"
+        ? input.datasetId.startsWith("dataset-trace-")
+        : false;
+  if (
+    admission.status === "BLOCKED" ||
+    !authorityBinding ||
+    !suppliedBinding ||
+    suppliedBinding.runId !== input.runId ||
+    input.split === "blind" ||
+    !harnessMatchesDataset
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+  }
+}
+
 /**
  * STREAM_ONLY fused-context prefix cap: one EXPAND_MIN_BARS window per symbol plus
  * interleave slack for shared-portfolio replay.
@@ -505,6 +552,7 @@ function buildHtrAccountingContext(input: {
  * versioned cost model on fills, and derives strategy metrics for export.
  */
 export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestResult> {
+  assertSyntheticResearchNonCapitalBacktestScopeV2(input);
   const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
   resetFullHistoryRescanCount();
 
@@ -1010,8 +1058,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           signal: result.evaluation.signal,
           costModel: input.costModel,
           informationSufficiencyAuthority: input.informationSufficiencyAuthority,
-          informationSufficiencySyntheticBinding:
-            input.informationSufficiencySyntheticBinding,
+          informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
           wp13Persisted,
         };
 
