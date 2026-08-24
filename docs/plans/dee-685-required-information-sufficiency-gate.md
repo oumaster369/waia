@@ -30,16 +30,20 @@ state:
   remainingWorkPackages: []
   prNumber: 487
   prUrl: https://github.com/oumaster369/waia/pull/487
-  lastValidatedGitSha: 21435e82c0b09d1fb1dffe05e94d156a20095cd2
+  lastValidatedGitSha: c1222c59f634474f8338fcd2f2b70d3974dc1a38
   lastValidationAt: "2026-08-24"
   blockedReason: null
   nextAction: "Refresh exact-head manifest provenance, obtain a fresh zero-P1/P2 review, then require green CI and DEE-653 admission before squash merge."
 provenance:
   createdFrom: human-ratified-delegation
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
-  authoritativeBase: 5cc17ad85e47266eb8f832e16eda093641ba3b54
-  correctedAdmissionCommit: 8ef7f29f168186528c2668a969b62eea3e9186eb
+  authoritativeBase: 2945feba8fe48aa3c197e8a76078b9937f5e1c88
+  correctedAdmissionCommit: 93cd2e1256871b68bb8158858a8275465c46388f
   correctedAdmissionManifestDigest: 3be11c24e6df2a5fe05fd38d2be730ade34e87e71814cf4dc30f110121b96e56
+  mechanicalBaseReconciliation:
+    authorizedAt: "2026-08-24"
+    authority: "Controller authorization under standing mechanical base/provenance authority after a zero-overlap and zero-migration-collision audit."
+    scope: "Reissue the exact byte-identical DEE-621 implementation train on origin/main@2945feba8fe48aa3c197e8a76078b9937f5e1c88; only commit identities and this plan/manifest provenance may change."
   syntheticAuthorityCorrection:
     authorizedAt: "2026-08-24"
     authority: "Human scientific/policy ratification for explicit RESEARCH_NON_CAPITAL authority only in the synthetic WP7B and synthetic capital-trace harnesses."
@@ -55,7 +59,7 @@ provenance:
 ## Admission
 
 - Human-ratified owner: DEE-621, including its 2026-08-18 Step 1, Step 3, and Step 6 addenda.
-- Authoritative base: `origin/main@5cc17ad85e47266eb8f832e16eda093641ba3b54`.
+- Authoritative base: `origin/main@2945feba8fe48aa3c197e8a76078b9937f5e1c88`.
 - Dependencies: DEE-620 and DEE-597 are Done.
 - Duplicate audit: DEE-621 is the unique active implementation owner; no earlier child or Integration Batch exists.
 - Integration boundary: one branch/worktree, one admitted/frozen manifest, one next PostgreSQL migration, one PR, one squash merge, and one revert-PR rollback.

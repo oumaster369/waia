@@ -49,9 +49,9 @@
         "tests/unit/trader-information-sufficiency-contracts.test.ts"
       ],
       "integratedCommits": [
-        "7b73019195e5f6c7ffa658bb7d2908c6e840a3f2",
-        "0faf4c9999599f7e970302cca031c9bea4bc4b0b",
-        "df0c0e6acb62da9a76bfb292118664502ff306d2"
+        "d0993e62ffa2722e499cd8d4dad4bd23497d9d0f",
+        "79c4bff1c2d7be7d04381deb7f49ee008244b92e",
+        "7daf76b307d60e4df76c3f3dbbd45ac558168079"
       ],
       "acceptanceEvidence": [
         "Immutable content-addressed profiles/receipts fail closed on forged lineage and hard-floor inputs.",
@@ -126,11 +126,11 @@
         "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
       ],
       "integratedCommits": [
-        "b0e81a3489857029bc3cfc67e85cbeb2b358949c",
-        "eb284c26eb94d0c36aff0bbf7f179245ad6632df",
-        "84002a986e933ad23e91531bfe68a4e37614d19c",
-        "4c485bce78757e3551dde6ffa56a74a3d5142e37",
-        "4b30f378ec8026dcb5363addb75c381a43e8f321"
+        "584ef2d2983261752f4b64569e389f17cd9c0bed",
+        "5bd038605990bbccb14f838a7a77b5fac7280b7c",
+        "9ce520f8e5e550508683aab037a0c7efa8ae0ee4",
+        "60fa7183c0db4fe7eed60b55bf253338537a3b15",
+        "5d30cd1cfbf2c41903b4c75e7427a41c1057d3d8"
       ],
       "acceptanceEvidence": [
         "One additive 0162 migration persists append-only tenant-scoped profile/receipt identities.",
@@ -272,20 +272,20 @@
         "tests/unit/wp15-test-helpers.ts"
       ],
       "integratedCommits": [
-        "1a3056d3e4a3a0f979fcd343b0bca3f8ebb13e09",
-        "d2f167b8bbbfa5d7e1baf234e6af74d9fbe335cd",
-        "977b86f417d9db5a489a90da7ccadf58d1ff308c",
-        "5b64540167a1fa74c8808fd03e9f4e1af5daa97f",
-        "6580c521dbbd04dcc5ccf20fcf74faae972796f2",
-        "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
-        "a119d203217909214261b21362febf31733ca6cc",
-        "f94477dad65d165ad2594ebaaeed8391daeb4433",
-        "a4e4c101a1c9616ed06f238620e42af217944b15",
-        "fba2277b85632732dc674ba7e70f1df34cf8fbab",
-        "627fe04bd488a3124b09168936149751b8498829",
-        "af870c1f118f317f96717d78c966c0b3cbb67361",
-        "1e3d4fa0a8fe32026f8325b70287614e9966ae60",
-        "21435e82c0b09d1fb1dffe05e94d156a20095cd2"
+        "cc193f6d0652e873b5e3f018a2fce1af8946a211",
+        "16725349589cd6714eaf9b4da853cc9932483178",
+        "3e53c4b75648782e01374547b0cc32fac14162be",
+        "56091670680d9880351f71488dd956b55931e457",
+        "b6299880808f75f14480aee1894ec6b2fc861fbf",
+        "a2a6b00f708085b571e8e63d27810c8cdfb955b3",
+        "a4801a20db6c8f68a84d4a5b1db2784d225353a3",
+        "6e5e17fdada60276bd1cc8b8c9924ae57612b29f",
+        "19257bf8f1eaa270bc5749d7974a41a375daec43",
+        "9157acfc4f00e19b9bda42d5123c62cecee227f4",
+        "42e9512b5d60be52b91ba2ea33f4c57198014abc",
+        "b8dcfb423eff88c99e8914eef55bfa41b02df49f",
+        "df7dd3c92c9fbc5ed00eb383461c3ccf2f1c088c",
+        "c1222c59f634474f8338fcd2f2b70d3974dc1a38"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
@@ -383,10 +383,10 @@
         "tests/unit/trader-market-understanding-golden.test.ts"
       ],
       "integratedCommits": [
-        "d610fa1523bc704bdf6e654138eed82df131537b",
-        "a290689f85048dd45bb3db61d26dbce33b0601e5",
-        "eb5dda34fecfcd5f06e7158f0f7730a66d28cf8d",
-        "e46a3917100f3ed612202d20d53aaf00cf1c4d02"
+        "391f91e64c1ccc2ae7be84d3687838f0d06ec0c9",
+        "70eee568a12adfa03101da7b5ed278652ba79117",
+        "cfb4d8db1ecff6d337b0a8678f08cac82442d560",
+        "d04314c87f70f1e66d61b2429f0705c0ed7ca499"
       ],
       "acceptanceEvidence": [
         "Inventory covers direct/indirect/barrel/persistence/paper/poll/fixture/backtest/read-only/Guardian dispositions.",
@@ -409,7 +409,7 @@
     "preImplementationAdmission": {
       "status": "pass",
       "manifestDigest": "3be11c24e6df2a5fe05fd38d2be730ade34e87e71814cf4dc30f110121b96e56",
-      "manifestCommit": "8ef7f29f168186528c2668a969b62eea3e9186eb",
+      "manifestCommit": "93cd2e1256871b68bb8158858a8275465c46388f",
       "manifestPath": "docs/plans/dee-685-required-information-sufficiency-gate.integration-train.json",
       "reviewer": "Human-authorized corrected readmission; independent exact-base, scope, byte-identity and ordering review"
     },
@@ -418,9 +418,9 @@
         "issue": "DEE-686",
         "status": "pass",
         "reviewedCommits": [
-          "7b73019195e5f6c7ffa658bb7d2908c6e840a3f2",
-          "0faf4c9999599f7e970302cca031c9bea4bc4b0b",
-          "df0c0e6acb62da9a76bfb292118664502ff306d2"
+          "d0993e62ffa2722e499cd8d4dad4bd23497d9d0f",
+          "79c4bff1c2d7be7d04381deb7f49ee008244b92e",
+          "7daf76b307d60e4df76c3f3dbbd45ac558168079"
         ],
         "reviewedFiles": [
           "lib/trader/intelligence/information-sufficiency/index.ts",
@@ -432,11 +432,11 @@
         "issue": "DEE-687",
         "status": "pass",
         "reviewedCommits": [
-          "b0e81a3489857029bc3cfc67e85cbeb2b358949c",
-          "eb284c26eb94d0c36aff0bbf7f179245ad6632df",
-          "84002a986e933ad23e91531bfe68a4e37614d19c",
-          "4c485bce78757e3551dde6ffa56a74a3d5142e37",
-          "4b30f378ec8026dcb5363addb75c381a43e8f321"
+          "584ef2d2983261752f4b64569e389f17cd9c0bed",
+          "5bd038605990bbccb14f838a7a77b5fac7280b7c",
+          "9ce520f8e5e550508683aab037a0c7efa8ae0ee4",
+          "60fa7183c0db4fe7eed60b55bf253338537a3b15",
+          "5d30cd1cfbf2c41903b4c75e7427a41c1057d3d8"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0162_trader_information_sufficiency_v2.sql",
@@ -456,20 +456,20 @@
         "issue": "DEE-688",
         "status": "pass",
         "reviewedCommits": [
-          "1a3056d3e4a3a0f979fcd343b0bca3f8ebb13e09",
-          "d2f167b8bbbfa5d7e1baf234e6af74d9fbe335cd",
-          "977b86f417d9db5a489a90da7ccadf58d1ff308c",
-          "5b64540167a1fa74c8808fd03e9f4e1af5daa97f",
-          "6580c521dbbd04dcc5ccf20fcf74faae972796f2",
-          "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
-          "a119d203217909214261b21362febf31733ca6cc",
-          "f94477dad65d165ad2594ebaaeed8391daeb4433",
-          "a4e4c101a1c9616ed06f238620e42af217944b15",
-          "fba2277b85632732dc674ba7e70f1df34cf8fbab",
-          "627fe04bd488a3124b09168936149751b8498829",
-          "af870c1f118f317f96717d78c966c0b3cbb67361",
-          "1e3d4fa0a8fe32026f8325b70287614e9966ae60",
-          "21435e82c0b09d1fb1dffe05e94d156a20095cd2"
+          "cc193f6d0652e873b5e3f018a2fce1af8946a211",
+          "16725349589cd6714eaf9b4da853cc9932483178",
+          "3e53c4b75648782e01374547b0cc32fac14162be",
+          "56091670680d9880351f71488dd956b55931e457",
+          "b6299880808f75f14480aee1894ec6b2fc861fbf",
+          "a2a6b00f708085b571e8e63d27810c8cdfb955b3",
+          "a4801a20db6c8f68a84d4a5b1db2784d225353a3",
+          "6e5e17fdada60276bd1cc8b8c9924ae57612b29f",
+          "19257bf8f1eaa270bc5749d7974a41a375daec43",
+          "9157acfc4f00e19b9bda42d5123c62cecee227f4",
+          "42e9512b5d60be52b91ba2ea33f4c57198014abc",
+          "b8dcfb423eff88c99e8914eef55bfa41b02df49f",
+          "df7dd3c92c9fbc5ed00eb383461c3ccf2f1c088c",
+          "c1222c59f634474f8338fcd2f2b70d3974dc1a38"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -530,10 +530,10 @@
         "issue": "DEE-689",
         "status": "pass",
         "reviewedCommits": [
-          "d610fa1523bc704bdf6e654138eed82df131537b",
-          "a290689f85048dd45bb3db61d26dbce33b0601e5",
-          "eb5dda34fecfcd5f06e7158f0f7730a66d28cf8d",
-          "e46a3917100f3ed612202d20d53aaf00cf1c4d02"
+          "391f91e64c1ccc2ae7be84d3687838f0d06ec0c9",
+          "70eee568a12adfa03101da7b5ed278652ba79117",
+          "cfb4d8db1ecff6d337b0a8678f08cac82442d560",
+          "d04314c87f70f1e66d61b2429f0705c0ed7ca499"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
