@@ -188,27 +188,26 @@ describe("paper bar-close loop (AT-E9 S5)", () => {
     });
 
     expect(result).toEqual({ cyclesRun: 2, aborted: false });
-    expect(deps.execution.submitOrder).toHaveBeenCalledTimes(2);
-    expect(deps.reconciliation.reconcile).toHaveBeenCalledTimes(2);
+    expect(deps.execution.submitOrder).not.toHaveBeenCalled();
+    expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
   });
 
   it("abortSignal stops loop before a third cycle when maxCycles is unset", async () => {
-    const baseDeps = mockDeps();
+    const deps = mockDeps();
     vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue(mockEvaluation());
-    const poll = mockPollFromReplay("bar-close-abort");
+    const replayPoll = mockPollFromReplay("bar-close-abort");
     const controller = new AbortController();
-
-    const deps: PaperCycleDeps = {
-      execution: {
-        submitOrder: async (...args) => {
-          const result = await baseDeps.execution.submitOrder(...args);
-          if (vi.mocked(baseDeps.execution.submitOrder).mock.calls.length >= 2) {
-            controller.abort();
-          }
-          return result;
-        },
+    let snapshotsFetched = 0;
+    const poll: BarPollSource = {
+      reset: () => replayPoll.reset(),
+      fetchSnapshot: async () => {
+        const snapshot = await replayPoll.fetchSnapshot();
+        snapshotsFetched += 1;
+        if (snapshotsFetched === 2) {
+          controller.abort();
+        }
+        return snapshot;
       },
-      reconciliation: baseDeps.reconciliation,
     };
 
     const result = await runPaperBarCloseLoop({
@@ -225,10 +224,11 @@ describe("paper bar-close loop (AT-E9 S5)", () => {
 
     expect(result.cyclesRun).toBe(2);
     expect(result.aborted).toBe(true);
-    expect(baseDeps.execution.submitOrder).toHaveBeenCalledTimes(2);
+    expect(deps.execution.submitOrder).not.toHaveBeenCalled();
+    expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
   });
 
-  it("passes executionMode mock through runPaperCycleOnce submit path", async () => {
+  it("fails closed before the mock execution submit path", async () => {
     const deps = mockDeps();
     vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue(mockEvaluation());
     const replay = new FixtureBarReplaySource({ mode: "full", cycleIdPrefix: "mock-mode" });
@@ -255,10 +255,8 @@ describe("paper bar-close loop (AT-E9 S5)", () => {
       nowMs: () => 0,
     });
 
-    expect(deps.execution.submitOrder).toHaveBeenCalledWith(
-      requireOrgContext(ORG),
-      expect.objectContaining({ executionMode: "mock" }),
-    );
+    expect(deps.execution.submitOrder).not.toHaveBeenCalled();
+    expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
   });
 
   it("rejects non-positive maxCycles", async () => {
@@ -305,6 +303,7 @@ describe("paper bar-close loop (AT-E9 S5)", () => {
     expect(cycleCompleteLines).toHaveLength(2);
     expect(cycleCompleteLines[0]?.cycles_run).toBe(1);
     expect(cycleCompleteLines[1]?.cycles_run).toBe(2);
-    expect(cycleCompleteLines[0]?.execution_status).toBe("submitted");
+    expect(cycleCompleteLines[0]?.skip_reason).toBe("information_sufficiency_blocked");
+    expect(cycleCompleteLines[0]?.execution_status).toBeNull();
   });
 });
