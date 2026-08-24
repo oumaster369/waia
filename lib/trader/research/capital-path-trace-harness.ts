@@ -16,6 +16,7 @@ import {
 } from "@/lib/trader/execution/htr-historical-cost-model-authority";
 import type { OrderRepository, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareSyntheticResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { MEAN_REVERSION_V0, type Bar } from "@/lib/trader/intelligence/types";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
@@ -151,6 +152,32 @@ type CycleWithBreachCancellation = PaperCycleResult & {
 
 function digestPayload(value: unknown): string {
   return computeSemanticSha256Hex(value);
+}
+
+const CAPITAL_TRACE_SYNTHETIC_ISG_PROVENANCE_DIGEST = digestPayload({
+  schemaVersion: "capital-trace-synthetic-isg-provenance/v1",
+  scenarios: TRACE_SCENARIOS,
+  split: "validation",
+  executionMode: "mock",
+  capitalEligible: false,
+});
+
+function syntheticCapitalTraceInformationAuthority(organizationId: string, runId: string) {
+  const synthetic = declareSyntheticResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    harness: "CAPITAL_TRACE_SYNTHETIC",
+    runId,
+    provenanceDigest: CAPITAL_TRACE_SYNTHETIC_ISG_PROVENANCE_DIGEST,
+    officialBlindHoldout: false,
+    production: false,
+    live: false,
+    capitalEligible: false,
+    capitalUse: false,
+  });
+  return {
+    informationSufficiencyAuthority: synthetic.authority,
+    informationSufficiencySyntheticBinding: synthetic.binding,
+  };
 }
 
 function failedInvariantNames(checks: Record<string, boolean>): string[] {
@@ -369,6 +396,7 @@ async function runInstrumentedBacktest(input: {
     regimeLabel: "AGGREGATE",
     datasetId: `dataset-${input.runId}`,
     runId: input.runId,
+    ...syntheticCapitalTraceInformationAuthority(input.context.organizationId, input.runId),
     split: "validation",
     window,
     accountState: createHtrInitialAccountRiskState(),
@@ -565,6 +593,7 @@ export async function runTraceScenario01(): Promise<TraceScenarioResult> {
       regimeLabel: "AGGREGATE",
       datasetId: "dataset-trace-01",
       runId: "trace-01",
+      ...syntheticCapitalTraceInformationAuthority(context.organizationId, "trace-01"),
       split: "validation",
       window,
       accountState: createHtrInitialAccountRiskState(),
@@ -806,6 +835,7 @@ export async function runTraceScenario04(): Promise<TraceScenarioResult> {
       regimeLabel: "AGGREGATE",
       datasetId: "dataset-trace-04",
       runId: "trace-04",
+      ...syntheticCapitalTraceInformationAuthority(context.organizationId, "trace-04"),
       split: "validation",
       window,
       accountState: createHtrInitialAccountRiskState(),
@@ -1192,6 +1222,10 @@ export async function runTraceScenario07(): Promise<TraceScenarioResult> {
     const uninterrupted = await runBacktest({
       ...idleBacktestBase,
       context: uninterruptedSession.context,
+      ...syntheticCapitalTraceInformationAuthority(
+        uninterruptedSession.context.organizationId,
+        "trace-07",
+      ),
       deps: uninterruptedSession.session.deps,
       orderRepository: uninterruptedSession.session.orderRepository,
       accountKey: "trace-07",
@@ -1215,6 +1249,10 @@ export async function runTraceScenario07(): Promise<TraceScenarioResult> {
     const sharedBacktest = {
       ...idleBacktestBase,
       context: checkpointSession.context,
+      ...syntheticCapitalTraceInformationAuthority(
+        checkpointSession.context.organizationId,
+        "trace-07",
+      ),
       deps: checkpointSession.session.deps,
       orderRepository: checkpointSession.session.orderRepository,
       accountKey: "trace-07",
@@ -1357,6 +1395,7 @@ async function runTrace08CapitalPathRun(input: {
       regimeLabel: "AGGREGATE",
       datasetId: `dataset-${input.runId}`,
       runId: input.runId,
+      ...syntheticCapitalTraceInformationAuthority(context.organizationId, input.runId),
       split: "validation",
       window,
       accountState: createHtrInitialAccountRiskState(),
@@ -1788,6 +1827,10 @@ export async function proveTraceInstrumentationDoesNotAlterEconomics(): Promise<
         regimeLabel: "AGGREGATE",
         datasetId: "dataset-trace-parity",
         runId: "trace-parity",
+        ...syntheticCapitalTraceInformationAuthority(
+          seeded.context.organizationId,
+          "trace-parity",
+        ),
         split: "validation",
         window,
         accountState: createHtrInitialAccountRiskState(),

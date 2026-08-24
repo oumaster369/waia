@@ -10,6 +10,10 @@ import {
   writeFileAtomicExclusive,
 } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  evaluateInformationSufficiencyRuntimeAdmissionV2,
+  type SyntheticResearchNonCapitalAuthorityV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
 import { assertFhvReplayNotLiveExchangePath } from "@/lib/trader/observability/fhv-campaign-semantic-abort";
@@ -65,6 +69,7 @@ import {
 import { resolveFhvGenerationSessionDbPath } from "@/lib/trader/observability/fhv-generation-session-path";
 import {
   assertFhvSyntheticScaleAuthorityForLaunch,
+  FHV_SYNTHETIC_SCALE_AUTHORITY_CLASS,
   readFhvSyntheticScaleAuthority,
   type FhvSyntheticScaleAuthorityV1,
 } from "@/lib/trader/observability/fhv-synthetic-scale-authority";
@@ -136,6 +141,8 @@ export type FhvFullHistoricalLaunchInput = Readonly<{
   runDir?: string;
   /** Path to the Execution Server throughput host-qualification receipt (ADR-0025 AD-6b). */
   throughputHostQualificationReceiptPath?: string;
+  /** Human-ratified synthetic-only ISG declaration; forbidden on every real/eligible surface. */
+  syntheticResearchNonCapitalAuthority?: SyntheticResearchNonCapitalAuthorityV2;
 }>;
 
 export type FhvFullHistoricalLaunchResult = Readonly<{
@@ -798,6 +805,39 @@ export function validateFhvFullHistoricalLaunchInput(
     });
   }
 
+  if (input.syntheticResearchNonCapitalAuthority) {
+    const syntheticResearch = input.syntheticResearchNonCapitalAuthority;
+    const admission = evaluateInformationSufficiencyRuntimeAdmissionV2({
+      authority: syntheticResearch.authority,
+      organizationId: input.organizationId,
+      requiredPurpose: "NEW_OPPORTUNITY",
+      allowResearchNonCapital: true,
+      syntheticResearchBinding: syntheticResearch.binding,
+    });
+    if (
+      !syntheticScaleAuthority ||
+      syntheticScaleAuthority.technicalObservationMode ||
+      resolvedExecutionPurpose !== FHV_EXECUTION_PURPOSE_FULL_HISTORICAL ||
+      input.authorityClass !== FHV_SYNTHETIC_SCALE_AUTHORITY_CLASS ||
+      input.executionMode !== "mock" ||
+      input.capitalEligible !== false ||
+      input.livePathInvoked !== false ||
+      input.holdoutAccessRequested !== false ||
+      process.env.FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY !== "1" ||
+      syntheticResearch.binding.harness !== "FHV_SYNTHETIC_WP7B" ||
+      syntheticResearch.binding.runId !== input.runId ||
+      syntheticResearch.binding.provenanceDigest !== syntheticScaleAuthority.contentDigest ||
+      admission.status !== "ADMITTED" ||
+      admission.purpose !== "RESEARCH_NON_CAPITAL" ||
+      admission.createsCapitalAuthority !== false
+    ) {
+      throw new FhvFullHistoricalLaunchError(
+        "SYNTHETIC_RESEARCH_NON_CAPITAL_SCOPE_FORBIDDEN",
+        "Synthetic RESEARCH_NON_CAPITAL authority is limited to the exact non-live, non-capital WP7B synthetic harness binding.",
+      );
+    }
+  }
+
   if (configurationFreeze.initialCapitalUsdt !== HTR_FHV_RUN_CONTRACT_INITIAL_CASH_USDT) {
     throw new FhvFullHistoricalLaunchError(
       "INITIAL_CAPITAL_MISMATCH",
@@ -970,6 +1010,8 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     claimPath: input.launchExecution.claimPath,
     checkpointConfig: input.launchExecution.checkpointConfig,
     resumeFromCycle: input.launchExecution.resumeFromCycle,
+    informationSufficiencySyntheticResearch:
+      input.launchInput.syntheticResearchNonCapitalAuthority,
   });
   const { hotPathWallTimeMs, ...backtestResult } = backtest;
 

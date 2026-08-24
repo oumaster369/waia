@@ -14,7 +14,10 @@ import {
   sealForecastDecisionBundleConstruction,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
-import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  SyntheticResearchNonCapitalBindingV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { MsvEnvelope, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -27,6 +30,7 @@ export type BuildForecastDecisionBundleInput = Readonly<{
   signal: StrategySignal;
   costModel?: CostModelV1;
   informationSufficiencyAuthority: InformationSufficiencyRuntimeAuthorityV2;
+  informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
 }>;
 
 export function buildForecastDecisionBundle(
@@ -35,6 +39,7 @@ export function buildForecastDecisionBundle(
   const constructionPermit = admitForecastDecisionConstruction({
     authority: input.informationSufficiencyAuthority,
     sourceBundle: input.intelligenceCycleBundle,
+    syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
   });
 
   const hypothesesByType = Object.fromEntries(

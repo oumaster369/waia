@@ -8,6 +8,7 @@ import {
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import type { SyntheticResearchNonCapitalAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
@@ -98,6 +99,7 @@ export async function runFullHistoricalBacktest(input: {
   checkpointConfig?: FhvExecutionCheckpointConfig;
   resumeFromCycle?: number;
   sessionDbPath?: string;
+  informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
 }): Promise<FhvFullHistoricalBacktestResult> {
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const portfolio = buildResearchV2PortfolioContext(costModel);
@@ -372,6 +374,10 @@ export async function runFullHistoricalBacktest(input: {
         : {}),
       historicalExecutionProfile: session.historicalExecutionProfile,
       historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+      informationSufficiencyAuthority:
+        input.informationSufficiencySyntheticResearch?.authority,
+      informationSufficiencySyntheticBinding:
+        input.informationSufficiencySyntheticResearch?.binding,
       wp16: {
         runId: input.runId,
         portfolioId: accountKey,

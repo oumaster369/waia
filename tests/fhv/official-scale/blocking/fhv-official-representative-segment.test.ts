@@ -237,7 +237,10 @@ describe("FHV deep-state representative segment", () => {
       });
 
       const result = await executeFhvFullHistoricalLaunch(
-        toFhvOfficialScaleLaunchInput(paths, { maxCycles: TARGET_CYCLE_COUNT }),
+        toFhvOfficialScaleLaunchInput(paths, {
+          maxCycles: TARGET_CYCLE_COUNT,
+          syntheticResearchNonCapital: true,
+        }),
       );
 
       const series = readProgressSeries(result.runDir);

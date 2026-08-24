@@ -222,6 +222,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     organizationId: input.organizationId,
     requiredPurpose: "NEW_OPPORTUNITY",
     allowResearchNonCapital: true,
+    syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
     expectedScope: {
       accountId: input.accountId ?? null,
       symbol: input.symbol ?? input.bars[0]?.symbol,
@@ -245,6 +246,8 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           signal,
           costModel: input.costModel,
           informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+          informationSufficiencySyntheticBinding:
+            input.informationSufficiencySyntheticBinding,
         })
       : undefined;
 

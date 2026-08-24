@@ -10,6 +10,7 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   bindInformationSufficiencyReceiptAuthorityV2,
   declareResearchNonCapitalInformationAuthorityV2,
+  declareSyntheticResearchNonCapitalInformationAuthorityV2,
   defineRequiredInformationProfileV2,
   evaluateInformationSufficiencyRuntimeAdmissionV2,
   evaluateInformationSufficiencyV2,
@@ -224,6 +225,66 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
         allowResearchNonCapital: false,
       }),
     ).toMatchObject({ status: "BLOCKED", reasonCode: "RESEARCH_NON_CAPITAL_NOT_ALLOWED" });
+  });
+
+  it("binds synthetic research authority to exact provenance and rejects every excluded scope", () => {
+    const allowed = {
+      organizationId: ORG,
+      harness: "CAPITAL_TRACE_SYNTHETIC" as const,
+      runId: "trace-synthetic-proof",
+      provenanceDigest: "a".repeat(64),
+      officialBlindHoldout: false,
+      production: false,
+      live: false,
+      capitalEligible: false,
+      capitalUse: false,
+    };
+    const synthetic = declareSyntheticResearchNonCapitalInformationAuthorityV2(allowed);
+
+    expect(admission(synthetic.authority)).toMatchObject({
+      status: "BLOCKED",
+      reasonCode: "RESEARCH_NON_CAPITAL_SCOPE_MISMATCH",
+    });
+    expect(
+      evaluateInformationSufficiencyRuntimeAdmissionV2({
+        authority: synthetic.authority,
+        organizationId: ORG,
+        requiredPurpose: "NEW_OPPORTUNITY",
+        allowResearchNonCapital: true,
+        syntheticResearchBinding: synthetic.binding,
+      }),
+    ).toMatchObject({
+      status: "ADMITTED",
+      purpose: "RESEARCH_NON_CAPITAL",
+      createsCapitalAuthority: false,
+    });
+    expect(
+      evaluateInformationSufficiencyRuntimeAdmissionV2({
+        authority: synthetic.authority,
+        organizationId: ORG,
+        requiredPurpose: "NEW_OPPORTUNITY",
+        allowResearchNonCapital: true,
+        syntheticResearchBinding: { ...synthetic.binding, runId: "different-run" },
+      }),
+    ).toMatchObject({
+      status: "BLOCKED",
+      reasonCode: "RESEARCH_NON_CAPITAL_SCOPE_MISMATCH",
+    });
+
+    for (const excluded of [
+      "officialBlindHoldout",
+      "production",
+      "live",
+      "capitalEligible",
+      "capitalUse",
+    ] as const) {
+      expect(() =>
+        declareSyntheticResearchNonCapitalInformationAuthorityV2({
+          ...allowed,
+          [excluded]: true,
+        }),
+      ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    }
   });
 
   it("blocks Forecast/Decision construction when authority is missing", () => {

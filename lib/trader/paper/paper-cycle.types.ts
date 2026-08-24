@@ -9,7 +9,10 @@ import type { ReconciliationReport } from "@/lib/trader/execution/reconciliation
 import type { OrderExecutionMode } from "@/lib/trader/execution/types";
 import type { EvaluationCycleResult, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
-import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  SyntheticResearchNonCapitalBindingV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 import type {
   BarPollSource,
   BarReplayMode,
@@ -157,6 +160,8 @@ export type PaperCycleInput = {
   costModel?: CostModelV1;
   /** DEE-621: missing or non-sufficient NEW_OPPORTUNITY authority blocks entry dispatch. */
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
+  informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
   /**
    * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
    */
@@ -217,6 +222,8 @@ export type RunMultiPaperCyclesSharedInput = {
   newId?: () => string;
   /** Explicit receipt or RESEARCH_NON_CAPITAL declaration; omission fails closed. */
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
+  informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
   /** PR-2 MI Core: within-session conviction state seed. */
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override. */

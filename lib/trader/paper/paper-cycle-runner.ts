@@ -522,6 +522,7 @@ export async function runPaperCycleOnce(
     symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
     costModel: input.costModel,
     informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+    informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
     strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
   });
@@ -538,6 +539,7 @@ export async function runPaperCycleOnce(
     organizationId: context.organizationId,
     requiredPurpose: "NEW_OPPORTUNITY",
     allowResearchNonCapital: true,
+    syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
     expectedScope: {
       accountId: input.accountKey,
       symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
@@ -880,6 +882,7 @@ export async function runFixturePaperCycles(
       telemetrySink: input.telemetrySink,
       newId: input.newId,
       informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+      informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
       hypothesisSessionState,
       miCoreEnabled: input.miCoreEnabled,
     });
@@ -919,6 +922,7 @@ export async function runPollPaperCycles(
       telemetrySink: input.telemetrySink,
       newId: input.newId,
       informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+      informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     });
 
     results.push(result);

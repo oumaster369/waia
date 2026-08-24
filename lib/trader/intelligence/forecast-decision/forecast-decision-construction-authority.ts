@@ -3,6 +3,7 @@ import {
   evaluateInformationSufficiencyRuntimeAdmissionV2,
   type InformationSufficiencyRuntimeAuthorityV2,
   type InformationSufficiencyRuntimeScopeV2,
+  type SyntheticResearchNonCapitalBindingV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 
@@ -48,12 +49,14 @@ function admitAuthority(input: {
   authority: InformationSufficiencyRuntimeAuthorityV2;
   organizationId: string;
   scope: InformationSufficiencyRuntimeScopeV2;
+  syntheticResearchBinding?: SyntheticResearchNonCapitalBindingV2;
 }): void {
   const admission = evaluateInformationSufficiencyRuntimeAdmissionV2({
     authority: input.authority,
     organizationId: input.organizationId,
     requiredPurpose: "NEW_OPPORTUNITY",
     allowResearchNonCapital: true,
+    syntheticResearchBinding: input.syntheticResearchBinding,
     expectedScope: input.scope,
   });
   if (admission.status === "BLOCKED") {
@@ -64,10 +67,16 @@ function admitAuthority(input: {
 export function admitForecastDecisionConstruction(input: {
   authority: InformationSufficiencyRuntimeAuthorityV2;
   sourceBundle: IntelligenceCycleBundle;
+  syntheticResearchBinding?: SyntheticResearchNonCapitalBindingV2;
 }): ForecastDecisionConstructionPermit {
   const organizationId = input.sourceBundle.envelope.organizationId;
   const scope = scopeForBundle(input.sourceBundle);
-  admitAuthority({ authority: input.authority, organizationId, scope });
+  admitAuthority({
+    authority: input.authority,
+    organizationId,
+    scope,
+    syntheticResearchBinding: input.syntheticResearchBinding,
+  });
 
   const permit = Object.freeze({});
   constructionPermits.set(permit, { sourceBundle: input.sourceBundle, organizationId, scope });

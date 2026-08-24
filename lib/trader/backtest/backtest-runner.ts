@@ -76,7 +76,10 @@ import type {
 } from "@/lib/trader/paper/paper-cycle.types";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
-import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  SyntheticResearchNonCapitalBindingV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import {
   buildQuoteCurrencyBySymbol,
@@ -232,6 +235,8 @@ export type RunBacktestInput = {
   historicalProfile?: HistoricalIntelligenceProfile;
   /** Explicit research declaration or exact receipt; omission blocks simulated entries. */
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
+  informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
   /** HTR-WP13: optional intelligence records persistence sink. */
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
   /** HTR-WP14: optional forecast-decision persistence sink. */
@@ -912,6 +917,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         wp16: input.wp16,
         historicalProfile: input.historicalProfile,
         informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+        informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
         runId: input.runId,
         costModel: input.costModel,
         omitIntelligenceArtifacts:
@@ -1004,6 +1010,8 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           signal: result.evaluation.signal,
           costModel: input.costModel,
           informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+          informationSufficiencySyntheticBinding:
+            input.informationSufficiencySyntheticBinding,
           wp13Persisted,
         };
 
