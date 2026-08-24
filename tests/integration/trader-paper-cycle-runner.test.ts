@@ -146,7 +146,8 @@ describe("trader paper cycle runner integration (DEE-260)", () => {
     for (const result of results) {
       expect(result.evaluation.signal.outcome).toBe("SIGNAL");
       expect(result.submitBlocked).toBe(true);
-      expect(result.execution?.status).toBe("execution_v2_required");
+      expect(result.skipReason).toBe("information_sufficiency_blocked");
+      expect(result.execution).toBeNull();
       expect(result.reconciliation).toBeNull();
     }
 

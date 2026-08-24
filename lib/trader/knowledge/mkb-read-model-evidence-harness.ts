@@ -9,6 +9,7 @@ import {
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { createInMemoryMkbReadModelSource } from "@/lib/trader/knowledge/mkb-read-model-source";
@@ -44,6 +45,10 @@ function buildSnapshotFromCycle(
   cycleId: string,
 ): MkbReadModelSnapshot {
   const bars = makeBars(80);
+  const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "HTR_WP15_MKB_READ_MODEL_EVIDENCE",
+  });
   const cycle = runEvaluationCycle({
     organizationId,
     bars,
@@ -52,6 +57,7 @@ function buildSnapshotFromCycle(
     cycleId,
     newId: createDeterministicReplayIdFactory(415_150),
     costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
+    informationSufficiencyAuthority,
   });
 
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
@@ -59,6 +65,8 @@ function buildSnapshotFromCycle(
     runId,
     cycleId,
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: bars[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
@@ -70,6 +78,7 @@ function buildSnapshotFromCycle(
     msv: cycle.msv,
     signal: cycle.signal,
     costModel: costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1()),
+    informationSufficiencyAuthority,
   });
 
   return {

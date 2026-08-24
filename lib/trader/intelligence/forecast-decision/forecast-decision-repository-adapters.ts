@@ -6,6 +6,11 @@ import type {
   TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  SyntheticResearchNonCapitalBindingV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
+import type { ForecastDecisionPersistencePermit } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 export type ForecastRecordRepository = {
   findByBusinessKey(
@@ -17,7 +22,11 @@ export type ForecastRecordRepository = {
       forecastKeyDigest: string;
     },
   ): Promise<TraderIntelligenceForecastRecord | null>;
-  insert(context: OrgContext, record: TraderIntelligenceForecastRecord): Promise<void>;
+  insert(
+    context: OrgContext,
+    record: TraderIntelligenceForecastRecord,
+    permit: ForecastDecisionPersistencePermit,
+  ): Promise<void>;
 };
 
 export type DecisionRecordRepository = {
@@ -25,7 +34,11 @@ export type DecisionRecordRepository = {
     context: OrgContext,
     key: { runId: string; cycleId: string; symbol: string },
   ): Promise<TraderIntelligenceDecisionRecord | null>;
-  insert(context: OrgContext, record: TraderIntelligenceDecisionRecord): Promise<void>;
+  insert(
+    context: OrgContext,
+    record: TraderIntelligenceDecisionRecord,
+    permit: ForecastDecisionPersistencePermit,
+  ): Promise<void>;
 };
 
 export type DecisionForecastLinkRepository = {
@@ -33,7 +46,11 @@ export type DecisionForecastLinkRepository = {
     context: OrgContext,
     key: { decisionRecordId: string; forecastRecordId: string },
   ): Promise<TraderIntelligenceDecisionForecastLink | null>;
-  insert(context: OrgContext, record: TraderIntelligenceDecisionForecastLink): Promise<void>;
+  insert(
+    context: OrgContext,
+    record: TraderIntelligenceDecisionForecastLink,
+    permit: ForecastDecisionPersistencePermit,
+  ): Promise<void>;
 };
 
 export type EntryPurposeRecordRepository = {
@@ -41,12 +58,25 @@ export type EntryPurposeRecordRepository = {
     context: OrgContext,
     key: { runId: string; cycleId: string; symbol: string },
   ): Promise<TraderIntelligenceEntryPurposeRecord | null>;
-  insert(context: OrgContext, record: TraderIntelligenceEntryPurposeRecord): Promise<void>;
+  insert(
+    context: OrgContext,
+    record: TraderIntelligenceEntryPurposeRecord,
+    permit: ForecastDecisionPersistencePermit,
+  ): Promise<void>;
 };
 
 export type ForecastDecisionBundleRepository = {
-  persist(context: OrgContext, bundle: ForecastDecisionBundle): Promise<ForecastDecisionBundle>;
+  persist(
+    context: OrgContext,
+    bundle: ForecastDecisionBundle,
+    authorization: ForecastDecisionPersistenceAuthorizationV2,
+  ): Promise<ForecastDecisionBundle>;
 };
+
+export type ForecastDecisionPersistenceAuthorizationV2 = Readonly<{
+  authority: InformationSufficiencyRuntimeAuthorityV2;
+  syntheticResearchBinding?: SyntheticResearchNonCapitalBindingV2;
+}>;
 
 export type ForecastDecisionRuntime = {
   forecastRecordRepository: ForecastRecordRepository;

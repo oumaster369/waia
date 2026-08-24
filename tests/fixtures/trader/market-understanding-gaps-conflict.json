@@ -14,9 +14,9 @@
     },
     {
       "questionId": "Q_WHY_HAPPENING",
-      "status": "PARTIAL",
-      "answerSummary": "mtf_unclear",
-      "confidence": 0.55,
+      "status": "UNKNOWN",
+      "answerSummary": "causal_evidence_not_established",
+      "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": true
@@ -78,8 +78,17 @@
     {
       "questionId": "Q_UNKNOWN",
       "status": "ANSWERED",
-      "answerSummary": "15_gaps",
+      "answerSummary": "14_gaps",
       "confidence": 0.75,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": false
+    },
+    {
+      "questionId": "Q_HISTORICAL_ANALOGUES",
+      "status": "NOT_REQUIRED",
+      "answerSummary": "requires_profile_declared_non_holdout_analogue_evidence",
+      "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": false
@@ -112,11 +121,11 @@
       "reasonCode": "GAP_Q_WHAT_HAPPENING_PARTIAL"
     },
     {
-      "kind": "NEED_MORE_EVIDENCE",
+      "kind": "UNKNOWN",
       "questionId": "Q_WHY_HAPPENING",
-      "description": "Q_WHY_HAPPENING:PARTIAL",
+      "description": "Q_WHY_HAPPENING:UNKNOWN",
       "blocksPermission": false,
-      "reasonCode": "GAP_Q_WHY_HAPPENING_PARTIAL"
+      "reasonCode": "GAP_Q_WHY_HAPPENING_UNKNOWN"
     },
     {
       "kind": "UNAVAILABLE",
@@ -147,18 +156,11 @@
       "reasonCode": "GAP_Q_DATA_TRUST_PARTIAL"
     },
     {
-      "kind": "NEED_MORE_EVIDENCE",
-      "questionId": "Q_DEPLOY_CAPITAL",
-      "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+      "kind": "UNKNOWN",
+      "questionId": "Q_UNKNOWN",
+      "description": "Q_UNKNOWN:UNKNOWN",
       "blocksPermission": false,
-      "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
-    },
-    {
-      "kind": "NEED_MORE_EVIDENCE",
-      "questionId": "Q_PRESERVE_CAPITAL",
-      "description": "Q_PRESERVE_CAPITAL:PARTIAL",
-      "blocksPermission": false,
-      "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+      "reasonCode": "GAP_Q_UNKNOWN_UNKNOWN"
     }
   ],
   "confidenceAttribution": {
@@ -185,8 +187,10 @@
     "evidenceIgnored": [],
     "conflicts": [],
     "unknowns": [
+      "GAP_Q_WHY_HAPPENING_UNKNOWN",
       "GAP_Q_CROSS_VENUE_UNAVAILABLE",
-      "GAP_Q_CROWD_UNAVAILABLE"
+      "GAP_Q_CROWD_UNAVAILABLE",
+      "GAP_Q_UNKNOWN_UNKNOWN"
     ]
   },
   "mtfBackdrop": {},

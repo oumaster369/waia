@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import {
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
@@ -43,6 +44,10 @@ export function runWp13IntelligenceEvidenceHarness() {
   const bars = makeBars(120);
   const runId = "htr-wp13-evidence-run";
   const organizationId = "00000000-0000-4000-8000-0000000415wp";
+  const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "HTR_WP13_INTELLIGENCE_EVIDENCE",
+  });
 
   const generationOne = [];
   const generationTwo = [];
@@ -59,6 +64,7 @@ export function runWp13IntelligenceEvidenceHarness() {
       cycleId: String(cycleIndex),
       symbol: "BTC/USDT",
       miCoreEnabled: true,
+      informationSufficiencyAuthority,
     });
     generationOne.push(result);
     const replay = runEvaluationCycle({
@@ -71,6 +77,7 @@ export function runWp13IntelligenceEvidenceHarness() {
       cycleId: String(cycleIndex),
       symbol: "BTC/USDT",
       miCoreEnabled: true,
+      informationSufficiencyAuthority,
     });
     generationTwo.push(replay);
   }

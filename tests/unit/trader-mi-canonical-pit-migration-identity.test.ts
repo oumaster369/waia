@@ -18,7 +18,7 @@ describe("canonical PIT lineage migration identity (DEE-682)", () => {
     const journal = JSON.parse(readFileSync(JOURNAL_PATH, "utf8")) as {
       entries: Array<{ idx: number; when: number; tag: string }>;
     };
-    expect(journal.entries.at(-1)).toEqual({
+    expect(journal.entries).toContainEqual({
       idx: 161,
       version: "7",
       when: 1780000000161,

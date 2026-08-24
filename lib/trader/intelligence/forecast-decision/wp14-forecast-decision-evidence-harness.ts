@@ -8,6 +8,7 @@ import {
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import {
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
@@ -43,6 +44,10 @@ export function runWp14ForecastDecisionEvidenceHarness() {
   const bars = makeBars(120);
   const runId = "htr-wp14-evidence-run";
   const organizationId = "00000000-0000-4000-8000-0000000415wp";
+  const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "HTR_WP14_FORECAST_DECISION_EVIDENCE",
+  });
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
 
   const generationOne = [];
@@ -61,6 +66,7 @@ export function runWp14ForecastDecisionEvidenceHarness() {
       symbol: "BTC/USDT",
       miCoreEnabled: true,
       costModel,
+      informationSufficiencyAuthority,
     });
     generationOne.push(result);
     const replay = runEvaluationCycle({
@@ -74,6 +80,7 @@ export function runWp14ForecastDecisionEvidenceHarness() {
       symbol: "BTC/USDT",
       miCoreEnabled: true,
       costModel,
+      informationSufficiencyAuthority,
     });
     generationTwo.push(replay);
   }

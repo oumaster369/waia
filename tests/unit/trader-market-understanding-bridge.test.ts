@@ -57,7 +57,7 @@ describe("PR2.6 market understanding bridge", () => {
     expect(first.schemaVersion).toBe("waia.trader.market_understanding.v0");
   });
 
-  it("evaluates all 11 canonical questions", () => {
+  it("evaluates all 12 canonical questions", () => {
     const fixture = loadFixtureBars();
     const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
     const fusedContext = buildReplayFusedContext({
@@ -73,7 +73,7 @@ describe("PR2.6 market understanding bridge", () => {
     });
 
     const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
-    expect(understanding.questionEvaluations).toHaveLength(11);
+    expect(understanding.questionEvaluations).toHaveLength(12);
     expect(understanding.questionEvaluations.map((q) => q.questionId).sort()).toEqual(
       [...CANONICAL_MARKET_QUESTION_IDS].sort(),
     );

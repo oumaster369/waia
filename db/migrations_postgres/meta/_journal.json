@@ -1135,6 +1135,13 @@
       "when": 1780000000161,
       "tag": "0161_trader_mi_canonical_pit_lineage_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1780000000162,
+      "tag": "0162_trader_information_sufficiency_v2",
+      "breakpoints": true
     }
   ]
 }

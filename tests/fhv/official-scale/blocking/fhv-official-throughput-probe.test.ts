@@ -85,7 +85,10 @@ describe("FHV official-scale throughput probe (Phase 10 blocking)", () => {
 
     const startedAt = Date.now();
     const result = await executeFhvFullHistoricalLaunch(
-      toFhvOfficialScaleLaunchInput(paths, { maxCycles: TARGET_CYCLE_COUNT }),
+      toFhvOfficialScaleLaunchInput(paths, {
+        maxCycles: TARGET_CYCLE_COUNT,
+        syntheticResearchNonCapital: true,
+      }),
     );
     const executionV2Authority = getFhvTestOnlyExecutionV2AuthorityMetrics();
     expect(executionV2Authority.allowanceClaims).toBeGreaterThan(0);

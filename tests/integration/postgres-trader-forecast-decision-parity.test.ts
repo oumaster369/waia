@@ -13,10 +13,12 @@ import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/record
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import {
   buildWp14Bundle,
+  buildWp14PersistenceAuthorization,
   cleanupWp14AllRows,
   cleanupWp14Org,
   countWp14RowsForRun,
@@ -53,7 +55,12 @@ describe.skipIf(!integrationEnabled || !url)(
       const wp13 = buildWp13Bundle(orgA, "wp14-parity-run", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
       const bundle = buildWp14Bundle(orgA, "wp14-parity-run", "0");
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
 
       const forecasts = await db
         .select()
@@ -109,6 +116,10 @@ describe.skipIf(!integrationEnabled || !url)(
         cycleId: "0",
         newId: createDeterministicReplayIdFactory(415_140),
         costModel: createCostModelV1("10", "5"),
+        informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
+          organizationId: orgA,
+          reason: "HTR_WP14_POSTGRES_NO_SINK_TEST",
+        }),
       });
       expect(cycle.forecastDecisionBundle).toBeDefined();
       const counts = await countWp14RowsForRun(url!, orgA, "wp14-no-sink");
@@ -120,7 +131,12 @@ describe.skipIf(!integrationEnabled || !url)(
       const wp13 = buildWp13Bundle(orgA, "wp14-append-only", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
       const bundle = buildWp14Bundle(orgA, "wp14-append-only", "0");
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
       const sql = postgres(url!, { max: 1 });
       try {
         await expect(

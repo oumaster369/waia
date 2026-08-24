@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readSync } from "node:fs";
 import { join } from "node:path";
 
 import { runBacktest, type RunBacktestResult } from "@/lib/trader/backtest/backtest-runner";
@@ -8,10 +8,20 @@ import {
   createHtrHistoricalCostModelAuthorityV1,
 } from "@/lib/trader/execution/cost-model";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import type { SyntheticResearchNonCapitalAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { FhvOfficialDatasetReader } from "@/lib/trader/market-data/fhv-official-dataset-reader";
+import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
+import {
+  assertFhvDatasetSealed,
+  computeFhvFileRawSha256,
+} from "@/lib/trader/market-data/fhv-dataset-seal";
+import {
+  fhvBarsV2RecordToBar,
+  parseFhvBarsV2Line,
+} from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
 import type { FhvQualificationMode } from "@/lib/trader/observability/fhv-dataset-qualification";
 import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-data/fhv-official-v2-required";
 import type { BarReplaySource } from "@/lib/trader/market-data/types";
@@ -42,6 +52,11 @@ import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-synthetic-profiling-hook";
 import { createFhvFullHistoricalProgressReporter } from "@/lib/trader/observability/fhv-full-historical-progress";
+import { FHV_EXECUTION_PURPOSE_FULL_HISTORICAL } from "@/lib/trader/observability/fhv-execution-purpose";
+import {
+  assertFhvSyntheticScaleAuthorityForLaunch,
+  type FhvSyntheticScaleAuthorityV1,
+} from "@/lib/trader/observability/fhv-synthetic-scale-authority";
 import {
   isFhvThroughputQualifierSamplingRequired,
   buildFhvThroughputQualifierSamplerContract,
@@ -76,6 +91,126 @@ export type FhvFullHistoricalBacktestResult = RunBacktestResult & {
   hotPathWallTimeMs: number;
 };
 
+export function assertSyntheticResearchNonCapitalFhvScopeV2(input: {
+  includeHoldout: boolean;
+  runId: string;
+  organizationId: string;
+  releaseSha: string;
+  datasetRoot?: string;
+  configurationFreeze: FhvConfigurationFreezeV1;
+  qualificationMode?: FhvQualificationMode;
+  maxCycles?: number;
+  syntheticScaleAuthority?: FhvSyntheticScaleAuthorityV1;
+  informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
+}): void {
+  const syntheticResearch = input.informationSufficiencySyntheticResearch;
+  if (!syntheticResearch) return;
+  try {
+    if (
+      !syntheticResearch ||
+      !input.syntheticScaleAuthority ||
+      syntheticResearch.binding.harness !== "FHV_SYNTHETIC_WP7B" ||
+      syntheticResearch.binding.runId !== input.runId ||
+      syntheticResearch.binding.provenanceDigest !== input.syntheticScaleAuthority.contentDigest ||
+      input.syntheticScaleAuthority.technicalObservationMode ||
+      input.includeHoldout ||
+      !input.datasetRoot?.trim() ||
+      input.qualificationMode !== "OFFICIAL_MULTI_YEAR" ||
+      (process.env.NODE_ENV !== "test" && process.env.FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY !== "1")
+    ) {
+      throw new Error("scope mismatch");
+    }
+    assertFhvSyntheticScaleAuthorityForLaunch({
+      authority: input.syntheticScaleAuthority,
+      executionPurpose: FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
+      runId: input.runId,
+      organizationId: input.organizationId,
+      releaseSha: input.releaseSha,
+      datasetContentDigest: input.configurationFreeze.datasetDigest,
+      manifestSemanticDigest: input.configurationFreeze.manifestDigest,
+      maxCycles: input.maxCycles,
+    });
+  } catch {
+    throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+  }
+}
+
+function readBoundedSyntheticScaleBars(filePath: string, limit: number): Bar[] {
+  const fd = openSync(filePath, "r");
+  const buffer = Buffer.alloc(65_536);
+  const bars: Bar[] = [];
+  let offset = 0;
+  let remainder = "";
+  let lineNumber = 0;
+  try {
+    while (bars.length < limit) {
+      const bytesRead = readSync(fd, buffer, 0, buffer.length, offset);
+      if (bytesRead <= 0) break;
+      offset += bytesRead;
+      remainder += buffer.subarray(0, bytesRead).toString("utf8");
+      let newline = remainder.indexOf("\n");
+      while (newline >= 0 && bars.length < limit) {
+        const line = remainder.slice(0, newline);
+        remainder = remainder.slice(newline + 1);
+        if (line.length > 0) {
+          lineNumber += 1;
+          bars.push(fhvBarsV2RecordToBar(parseFhvBarsV2Line(line, lineNumber)));
+        }
+        newline = remainder.indexOf("\n");
+      }
+    }
+    if (bars.length < limit && remainder.length > 0) {
+      lineNumber += 1;
+      bars.push(fhvBarsV2RecordToBar(parseFhvBarsV2Line(remainder, lineNumber)));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return bars;
+}
+
+function loadAuthorityBoundSyntheticScalePreHoldoutCorpus(input: {
+  datasetRoot: string;
+  syntheticScaleAuthority: FhvSyntheticScaleAuthorityV1;
+}): Bar[] {
+  const sealed = assertFhvDatasetSealed(input.datasetRoot);
+  if (
+    sealed.manifest.datasetContentDigest !== input.syntheticScaleAuthority.datasetContentDigest ||
+    sealed.manifest.manifestSemanticDigest !== input.syntheticScaleAuthority.manifestSemanticDigest
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+  }
+  const warmupPerSymbol = EXPAND_MIN_BARS - 1;
+  const limits = new Map([
+    ["BTCUSDT", Math.ceil(input.syntheticScaleAuthority.targetCycleCount / 2) + warmupPerSymbol],
+    ["ETHUSDT", Math.floor(input.syntheticScaleAuthority.targetCycleCount / 2) + warmupPerSymbol],
+  ]);
+  const loaded = new Map<string, number>();
+  const bars: Bar[] = [];
+  for (const entry of sealed.manifest.partitions) {
+    if (entry.partition === "blind-holdout") continue;
+    const limit = limits.get(entry.symbol) ?? 0;
+    const remaining = limit - (loaded.get(entry.symbol) ?? 0);
+    if (remaining <= 0) continue;
+    const partitionPath = join(input.datasetRoot, entry.filePath);
+    if (computeFhvFileRawSha256(partitionPath) !== entry.rawSha256) {
+      throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    }
+    const partitionBars = readBoundedSyntheticScaleBars(
+      partitionPath,
+      remaining,
+    );
+    bars.push(...partitionBars);
+    loaded.set(entry.symbol, (loaded.get(entry.symbol) ?? 0) + partitionBars.length);
+  }
+  for (const [symbol, limit] of limits) {
+    if ((loaded.get(symbol) ?? 0) !== limit) {
+      throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    }
+  }
+  return bars;
+}
+
 export async function runFullHistoricalBacktest(input: {
   runDir: string;
   runId: string;
@@ -98,7 +233,16 @@ export async function runFullHistoricalBacktest(input: {
   checkpointConfig?: FhvExecutionCheckpointConfig;
   resumeFromCycle?: number;
   sessionDbPath?: string;
+  syntheticScaleAuthority?: FhvSyntheticScaleAuthorityV1;
+  informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
 }): Promise<FhvFullHistoricalBacktestResult> {
+  assertSyntheticResearchNonCapitalFhvScopeV2(input);
+  const syntheticScaleBars = input.informationSufficiencySyntheticResearch
+    ? loadAuthorityBoundSyntheticScalePreHoldoutCorpus({
+        datasetRoot: input.datasetRoot!,
+        syntheticScaleAuthority: input.syntheticScaleAuthority!,
+      })
+    : undefined;
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const portfolio = buildResearchV2PortfolioContext(costModel);
   const accountKey = "fhv-full-historical";
@@ -176,10 +320,11 @@ export async function runFullHistoricalBacktest(input: {
       initialPortfolioDigest: HTR_INITIAL_PORTFOLIO_STARTING_BALANCE_USDT,
     },
   });
-  const window = input.bars
+  const windowBars = syntheticScaleBars ?? input.bars;
+  const window = windowBars
     ? {
-        start: new Date(input.bars[0]!.barOpenTime),
-        end: new Date(input.bars.at(-1)!.barCloseTime),
+        start: new Date(windowBars[0]!.barOpenTime),
+        end: new Date(windowBars.at(-1)!.barCloseTime),
       }
     : {
         start: new Date("2020-01-01T00:00:00.000Z"),
@@ -190,7 +335,9 @@ export async function runFullHistoricalBacktest(input: {
   const cycleIdPrefix = buildResearchValidationCycleIdPrefix(input.runId);
   let barSource: BarReplaySource;
   let officialReader: FhvOfficialDatasetReader | undefined;
-  if (input.boundedFixture) {
+  if (syntheticScaleBars) {
+    barSource = new FhvSharedPortfolioBarReplaySource(syntheticScaleBars, cycleIdPrefix);
+  } else if (input.boundedFixture) {
     if (!input.bars) {
       throw new Error("[fhv] bounded fixture requires bars");
     }
@@ -372,6 +519,9 @@ export async function runFullHistoricalBacktest(input: {
         : {}),
       historicalExecutionProfile: session.historicalExecutionProfile,
       historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+      informationSufficiencyAuthority: input.informationSufficiencySyntheticResearch?.authority,
+      informationSufficiencySyntheticBinding:
+        input.informationSufficiencySyntheticResearch?.binding,
       wp16: {
         runId: input.runId,
         portfolioId: accountKey,

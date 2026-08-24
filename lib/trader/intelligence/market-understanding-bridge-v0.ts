@@ -279,7 +279,11 @@ function buildKnowledgeGaps(
 ): KnowledgeGapSnapshot[] {
   const gaps: KnowledgeGapSnapshot[] = [];
   for (const evaluation of evaluations) {
-    if (evaluation.status === "ANSWERED") {
+    if (
+      evaluation.status === "ANSWERED" ||
+      evaluation.status === "NOT_REQUIRED" ||
+      evaluation.status === "NOT_APPLICABLE"
+    ) {
       continue;
     }
     const kind = gapKindForStatus(evaluation.status);
@@ -472,6 +476,18 @@ export function evaluateCanonicalMarketQuestions(input: {
   const provenanceIds = input.fusedContext.provenance.map((ref) => provenanceId(ref));
   const providerCoverageScore =
     input.providerCoverageScore ?? computeProviderCoverageScore(input.fusedContext);
+  const causalEvidence = [
+    ...(input.fusedContext.macroEvidence ?? []),
+    ...(input.fusedContext.newsEvidence ?? []),
+    ...(input.fusedContext.blockchainEvidence ?? []),
+    ...(input.fusedContext.regulatoryEvidence ?? []),
+    ...(input.fusedContext.protocolEvidence ?? []),
+  ].filter(
+    (observation) => observation.health === "HEALTHY" || observation.health === "DEGRADED",
+  );
+  const causalProvenanceIds = [
+    ...new Set(causalEvidence.map((observation) => provenanceId(observation.provenance))),
+  ];
 
   const questionBuilders: Record<MarketQuestionId, () => MarketQuestionEvaluation> = {
     Q_WHAT_HAPPENING: () => ({
@@ -495,10 +511,16 @@ export function evaluateCanonicalMarketQuestions(input: {
       }
       return {
         questionId: "Q_WHY_HAPPENING",
-        status: input.mtfAlignment === "UNCLEAR" ? "PARTIAL" : "ANSWERED",
-        answerSummary,
-        confidence: 0.55,
-        evidenceProvenanceIds: provenanceIds,
+        status:
+          causalEvidence.length === 0
+            ? "UNKNOWN"
+            : input.mtfAlignment === "UNCLEAR"
+              ? "PARTIAL"
+              : "ANSWERED",
+        answerSummary:
+          causalEvidence.length === 0 ? "causal_evidence_not_established" : answerSummary,
+        confidence: causalEvidence.length === 0 ? 0 : 0.55,
+        evidenceProvenanceIds: causalProvenanceIds,
         influencesPermission: false,
         influencesPosture: true,
       };
@@ -586,31 +608,40 @@ export function evaluateCanonicalMarketQuestions(input: {
     },
     Q_UNKNOWN: () => ({
       questionId: "Q_UNKNOWN",
-      status: input.knowledgeGapDescriptions.length > 0 ? "ANSWERED" : "ANSWERED",
+      status: input.knowledgeGapDescriptions.length > 0 ? "ANSWERED" : "UNKNOWN",
       answerSummary:
         input.knowledgeGapDescriptions.length > 0
           ? `${input.knowledgeGapDescriptions.length}_gaps`
-          : "none",
-      confidence: input.knowledgeGapDescriptions.length > 0 ? 0.75 : 0.9,
+          : "unknowns_not_established",
+      confidence: input.knowledgeGapDescriptions.length > 0 ? 0.75 : 0,
       evidenceProvenanceIds: provenanceIds,
+      influencesPermission: false,
+      influencesPosture: false,
+    }),
+    Q_HISTORICAL_ANALOGUES: () => ({
+      questionId: "Q_HISTORICAL_ANALOGUES",
+      status: "NOT_REQUIRED",
+      answerSummary: "requires_profile_declared_non_holdout_analogue_evidence",
+      confidence: 0,
+      evidenceProvenanceIds: [],
       influencesPermission: false,
       influencesPosture: false,
     }),
     Q_DEPLOY_CAPITAL: () => ({
       questionId: "Q_DEPLOY_CAPITAL",
-      status: "PARTIAL",
-      answerSummary: "deferred_to_posture",
-      confidence: 0.5,
-      evidenceProvenanceIds: provenanceIds,
+      status: "NOT_APPLICABLE",
+      answerSummary: "outside_market_understanding_authority",
+      confidence: 0,
+      evidenceProvenanceIds: [],
       influencesPermission: false,
       influencesPosture: true,
     }),
     Q_PRESERVE_CAPITAL: () => ({
       questionId: "Q_PRESERVE_CAPITAL",
-      status: "PARTIAL",
-      answerSummary: "deferred_to_posture",
-      confidence: 0.5,
-      evidenceProvenanceIds: provenanceIds,
+      status: "NOT_APPLICABLE",
+      answerSummary: "outside_market_understanding_authority",
+      confidence: 0,
+      evidenceProvenanceIds: [],
       influencesPermission: false,
       influencesPosture: true,
     }),

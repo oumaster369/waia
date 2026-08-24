@@ -1,4 +1,5 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import { evaluateInformationSufficiencyRuntimeAdmissionV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
@@ -68,6 +69,9 @@ export type PaperCycleInputWithHtrBreachCancellation = PaperCycleInput & {
 export type PaperCycleResultWithHtrBreachCancellation = PaperCycleResult & {
   htrBreachCancellation?: BreachCancellationResultV1;
 };
+
+/** Separate risk-reducing lane; never admitted or denied by NEW_OPPORTUNITY authority. */
+export const PAPER_GUARDIAN_INFORMATION_PURPOSE_V2 = "OPEN_POSITION_REASSESSMENT" as const;
 
 /**
  * Runs one paper trading cycle: intelligence evaluation → signal mapping → mock/paper
@@ -502,6 +506,7 @@ export async function runPaperCycleOnce(
 
   const evaluation = runEvaluationCycle({
     organizationId: context.organizationId,
+    accountId: input.accountKey,
     bars: snapshot.bars,
     quote: snapshot.quote,
     evaluatedAt: snapshot.evaluatedAt,
@@ -516,6 +521,8 @@ export async function runPaperCycleOnce(
     cycleId: snapshot.cycleId,
     symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
     costModel: input.costModel,
+    informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+    informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
     strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
   });
@@ -527,6 +534,19 @@ export async function runPaperCycleOnce(
         snapshot.activeStrategyIds.length === 0 ||
         snapshot.activeStrategyIds.includes(signal.strategyId)),
   );
+  const informationSufficiencyAdmission = evaluateInformationSufficiencyRuntimeAdmissionV2({
+    authority: input.informationSufficiencyAuthority,
+    organizationId: context.organizationId,
+    requiredPurpose: "NEW_OPPORTUNITY",
+    allowResearchNonCapital: true,
+    syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
+    expectedScope: {
+      accountId: input.accountKey,
+      symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+      analyticalTimeframe: snapshot.bars[0]?.interval,
+      pitAnchor: snapshot.evaluatedAt,
+    },
+  });
 
   let accountState = input.accountState;
   if (
@@ -568,6 +588,29 @@ export async function runPaperCycleOnce(
     (guardianPhase.guardianExecutions.length ?? 0) > 0;
 
   const strategyExecutions: PaperCycleStrategyExecution[] = [];
+
+  if (actionableSignals.length > 0 && informationSufficiencyAdmission.status === "BLOCKED") {
+    strategyExecutions.push(
+      ...actionableSignals.map((signal) => ({
+        signal,
+        submitBlocked: true as const,
+        skipReason: "information_sufficiency_blocked" as const,
+        execution: null,
+        reconciliation: null,
+      })),
+    );
+    return {
+      evaluation,
+      strategyExecutions,
+      ...pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions),
+      guardian: guardianPhase.guardianResult,
+      guardianExecutions: guardianPhase.guardianExecutions,
+      htrGuardian: htrGuardianPhase.htrGuardian,
+      htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+      htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
+      hypothesisSessionState: evaluation.hypothesisSessionState,
+    };
+  }
 
   const gatedSignals = await Promise.all(
     actionableSignals.map(async (signal) => {
@@ -838,6 +881,8 @@ export async function runFixturePaperCycles(
       accountState: input.accountState,
       telemetrySink: input.telemetrySink,
       newId: input.newId,
+      informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+      informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
       hypothesisSessionState,
       miCoreEnabled: input.miCoreEnabled,
     });
@@ -876,6 +921,8 @@ export async function runPollPaperCycles(
       accountState: input.accountState,
       telemetrySink: input.telemetrySink,
       newId: input.newId,
+      informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+      informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     });
 
     results.push(result);

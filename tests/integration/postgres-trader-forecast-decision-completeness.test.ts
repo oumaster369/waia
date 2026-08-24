@@ -42,11 +42,17 @@ describe.skipIf(!integrationEnabled || !url)(
       const db = getPostgresDrizzle();
       const wp13 = buildWp13Bundle(orgA, "wp14-complete", "0");
       await persistIntelligenceCycleBundle({ organizationId: orgA }, wp13, db);
-      const { buildWp14Bundle } = await import("./wp14-forecast-decision-test-helpers");
+      const { buildWp14Bundle, buildWp14PersistenceAuthorization } =
+        await import("./wp14-forecast-decision-test-helpers");
       const { persistForecastDecisionBundle } =
         await import("@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres");
       const bundle = buildWp14Bundle(orgA, "wp14-complete", "0");
-      await persistForecastDecisionBundle({ organizationId: orgA }, bundle, db);
+      await persistForecastDecisionBundle(
+        { organizationId: orgA },
+        bundle,
+        db,
+        buildWp14PersistenceAuthorization(orgA, bundle),
+      );
 
       await expect(
         assertForecastDecisionChainComplete(

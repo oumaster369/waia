@@ -7,6 +7,11 @@ import {
   type TraderIntelligenceDecisionRecord,
   type TraderIntelligenceForecastRecord,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import {
+  assertForecastDecisionConstructionPermit,
+  type ForecastDecisionConstructionPermit,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 export type BuildDecisionForecastLinksInput = Readonly<{
   decision: TraderIntelligenceDecisionRecord;
@@ -22,7 +27,13 @@ function assertTradeLinksRequired(decisionClass: DecisionClass, linkCount: numbe
 
 export function buildDecisionForecastLinks(
   input: BuildDecisionForecastLinksInput,
+  constructionPermit: ForecastDecisionConstructionPermit,
+  sourceBundle: IntelligenceCycleBundle,
 ): TraderIntelligenceDecisionForecastLink[] {
+  assertForecastDecisionConstructionPermit(constructionPermit, sourceBundle);
+  if (input.decision.cycleEnvelopeId !== sourceBundle.envelope.id) {
+    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
+  }
   if (input.decision.decisionClass === "NO_TRADE") {
     return [];
   }

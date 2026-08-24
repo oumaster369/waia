@@ -8,6 +8,7 @@ import { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
 import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
+import { evaluateInformationSufficiencyRuntimeAdmissionV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { createEmptyHypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import {
   finalizeMarketStateSnapshot,
@@ -208,14 +209,35 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           runId: input.runId,
           cycleId: input.cycleId,
           symbol: input.symbol ?? input.bars[0]?.symbol ?? "BTC/USDT",
+          accountId: input.accountId ?? null,
+          analyticalTimeframe: input.bars[0]?.interval ?? "",
           marketStateSnapshot,
           decisionChain,
           profile: input.historicalProfile,
         })
       : undefined;
 
+  const informationSufficiencyAdmission = evaluateInformationSufficiencyRuntimeAdmissionV2({
+    authority: input.informationSufficiencyAuthority,
+    organizationId: input.organizationId,
+    requiredPurpose: "NEW_OPPORTUNITY",
+    allowResearchNonCapital: true,
+    syntheticResearchBinding: input.informationSufficiencySyntheticBinding,
+    expectedScope: {
+      accountId: input.accountId ?? null,
+      symbol: input.symbol ?? input.bars[0]?.symbol,
+      analyticalTimeframe: input.bars[0]?.interval,
+      pitAnchor: evaluatedAt,
+    },
+  });
+
   const forecastDecisionBundle =
-    profileActive && intelligenceCycleBundle && hypothesisSet && decisionChain
+    profileActive &&
+    intelligenceCycleBundle &&
+    hypothesisSet &&
+    decisionChain &&
+    informationSufficiencyAdmission.status === "ADMITTED" &&
+    input.informationSufficiencyAuthority
       ? buildForecastDecisionBundle({
           intelligenceCycleBundle,
           hypothesisSet,
@@ -223,6 +245,9 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           msv,
           signal,
           costModel: input.costModel,
+          informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+          informationSufficiencySyntheticBinding:
+            input.informationSufficiencySyntheticBinding,
         })
       : undefined;
 

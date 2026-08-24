@@ -10,6 +10,10 @@ import type { OrderExecutionMode } from "@/lib/trader/execution/types";
 import type { EvaluationCycleResult, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import type {
+  InformationSufficiencyRuntimeAuthorityV2,
+  SyntheticResearchNonCapitalBindingV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
+import type {
   BarPollSource,
   BarReplayMode,
   BarReplaySource,
@@ -154,6 +158,10 @@ export type PaperCycleInput = {
   runId?: string;
   /** HTR-WP14: cost model for net-economics fail-closed decision records. */
   costModel?: CostModelV1;
+  /** DEE-621: missing or non-sufficient NEW_OPPORTUNITY authority blocks entry dispatch. */
+  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
+  informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
   /**
    * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
    */
@@ -164,7 +172,7 @@ export type PaperCycleInput = {
   htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };
 
-export type PaperCycleSkipReason = "no_signal" | "no_submit";
+export type PaperCycleSkipReason = "no_signal" | "no_submit" | "information_sufficiency_blocked";
 
 export type PaperCycleStrategyExecution = {
   signal: StrategySignal;
@@ -212,6 +220,10 @@ export type RunMultiPaperCyclesSharedInput = {
   accountState: AccountRiskState;
   telemetrySink?: WaiaTraderTelemetrySink;
   newId?: () => string;
+  /** Explicit receipt or RESEARCH_NON_CAPITAL declaration; omission fails closed. */
+  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
+  informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
   /** PR-2 MI Core: within-session conviction state seed. */
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override. */

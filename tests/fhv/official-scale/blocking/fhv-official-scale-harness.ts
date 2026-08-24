@@ -8,6 +8,7 @@ import postgres from "postgres";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { declareSyntheticResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 
 import { readReplayRunChainProjections } from "@/lib/trader/backtest/streaming-evidence/replay-run-chain-reader";
 import { readReplayCheckpoint } from "@/lib/trader/backtest/streaming-evidence/replay-checkpoint";
@@ -39,7 +40,9 @@ import type { FhvHistoricalExecutionSession } from "@/lib/trader/observability/f
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import {
   buildFhvSyntheticScaleAuthority,
+  FHV_SYNTHETIC_SCALE_AUTHORITY_CLASS,
   FHV_SYNTHETIC_SCALE_AUTHORITY_FILENAME,
+  readFhvSyntheticScaleAuthority,
   writeFhvSyntheticScaleAuthorityAtomic,
   type FhvSyntheticScaleAuthorityV1,
 } from "@/lib/trader/observability/fhv-synthetic-scale-authority";
@@ -750,8 +753,22 @@ export function setupFhvOfficialScaleLaunchPaths(input: {
 
 export function toFhvOfficialScaleLaunchInput(
   paths: FhvOfficialScaleLaunchPaths,
-  input?: { maxCycles?: number; resume?: boolean },
+  input?: { maxCycles?: number; resume?: boolean; syntheticResearchNonCapital?: boolean },
 ): FhvFullHistoricalLaunchInput & { resume?: boolean } {
+  const syntheticResearch = input?.syntheticResearchNonCapital
+    ? declareSyntheticResearchNonCapitalInformationAuthorityV2({
+        organizationId: paths.organizationId,
+        harness: "FHV_SYNTHETIC_WP7B",
+        runId: paths.runId,
+        provenanceDigest: readFhvSyntheticScaleAuthority(paths.syntheticScaleAuthorityPath)
+          .contentDigest,
+        officialBlindHoldout: false,
+        production: false,
+        live: false,
+        capitalEligible: false,
+        capitalUse: false,
+      })
+    : undefined;
   return {
     releaseSha: paths.releaseSha,
     releaseTag: paths.releaseTag,
@@ -770,6 +787,16 @@ export function toFhvOfficialScaleLaunchInput(
     syntheticScaleAuthorityPath: paths.syntheticScaleAuthorityPath,
     runDir: paths.runDir,
     boundedFixture: false,
+    ...(syntheticResearch
+      ? {
+          authorityClass: FHV_SYNTHETIC_SCALE_AUTHORITY_CLASS,
+          executionMode: "mock",
+          capitalEligible: false,
+          livePathInvoked: false,
+          holdoutAccessRequested: false,
+          syntheticResearchNonCapitalAuthority: syntheticResearch,
+        }
+      : {}),
     ...(input?.maxCycles != null ? { maxCycles: input.maxCycles } : {}),
     ...(input?.resume ? { resume: true } : {}),
   };
