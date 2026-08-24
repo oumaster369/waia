@@ -72,6 +72,6 @@ describe("PR2.6 M9 market understanding export", () => {
     expect(exported.cyclesWithUnderstanding).toBe(1);
     expect(exported.understandingSnapshots).toHaveLength(1);
     expect(exported.researchSignals).toHaveLength(1);
-    expect(exported.understandingSnapshots[0]!.questionEvaluations).toHaveLength(11);
+    expect(exported.understandingSnapshots[0]!.questionEvaluations).toHaveLength(12);
   });
 });

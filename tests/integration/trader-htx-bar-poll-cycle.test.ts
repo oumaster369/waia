@@ -119,7 +119,7 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-htx-poll-261");
   });
 
-  it("fails the legacy mocked HTX poll cycle closed at the Execution V2 boundary", async () => {
+  it("fails the legacy mocked HTX poll cycle closed at Information Sufficiency", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -141,14 +141,15 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
     });
 
     expect(result.evaluation.understanding).toBeDefined();
-    expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
+    expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(12);
     expect(
       result.evaluation.understanding!.questionEvaluations.map((q) => q.questionId).sort(),
     ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
 
     expect(result.evaluation.signal.outcome).toBe("SIGNAL");
     expect(result.submitBlocked).toBe(true);
-    expect(result.execution?.status).toBe("execution_v2_required");
+    expect(result.skipReason).toBe("information_sufficiency_blocked");
+    expect(result.execution).toBeNull();
     expect(result.reconciliation).toBeNull();
   });
 
@@ -177,14 +178,15 @@ describe("trader HTX bar poll cycle integration (AT-E3 S4)", () => {
 
     for (const result of results) {
       expect(result.evaluation.understanding).toBeDefined();
-      expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(11);
+      expect(result.evaluation.understanding!.questionEvaluations).toHaveLength(12);
       expect(
         result.evaluation.understanding!.questionEvaluations.map((q) => q.questionId).sort(),
       ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
 
       expect(result.evaluation.signal.outcome).toBe("SIGNAL");
       expect(result.submitBlocked).toBe(true);
-      expect(result.execution?.status).toBe("execution_v2_required");
+      expect(result.skipReason).toBe("information_sufficiency_blocked");
+      expect(result.execution).toBeNull();
       expect(result.reconciliation).toBeNull();
     }
   });

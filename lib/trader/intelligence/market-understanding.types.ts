@@ -12,6 +12,7 @@ export const CANONICAL_MARKET_QUESTION_IDS = [
   "Q_LIQUIDITY",
   "Q_DATA_TRUST",
   "Q_UNKNOWN",
+  "Q_HISTORICAL_ANALOGUES",
   "Q_DEPLOY_CAPITAL",
   "Q_PRESERVE_CAPITAL",
 ] as const;
@@ -23,7 +24,9 @@ export type MarketQuestionAnswerStatus =
   | "PARTIAL"
   | "UNKNOWN"
   | "UNAVAILABLE"
-  | "CONFLICTING";
+  | "CONFLICTING"
+  | "NOT_REQUIRED"
+  | "NOT_APPLICABLE";
 
 export type MarketQuestionEvaluation = {
   questionId: MarketQuestionId;

@@ -212,7 +212,7 @@ describe("PR2.6 golden market understanding fixtures", () => {
       const actual = testCase.build();
 
       expect(actual).toEqual(golden);
-      expect(actual.questionEvaluations).toHaveLength(11);
+      expect(actual.questionEvaluations).toHaveLength(12);
       expect(
         actual.questionEvaluations.map((q: { questionId: string }) => q.questionId).sort(),
       ).toEqual([...CANONICAL_MARKET_QUESTION_IDS].sort());
