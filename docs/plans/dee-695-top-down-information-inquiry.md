@@ -25,15 +25,15 @@ approvalGates:
 includedIssues: [DEE-696, DEE-697, DEE-698, DEE-699]
 state:
   status: in-progress
-  currentWorkPackage: DEE-696
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-696, DEE-697, DEE-698, DEE-699]
+  currentWorkPackage: integration-validation
+  completedWorkPackages: [DEE-696, DEE-697, DEE-698, DEE-699]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: c7b897db85e560f7f2b98a48da4c0f520636d690
+  lastValidatedGitSha: 258203149654f8d1490b2e35d9fcc988f7c30de7
   lastValidationAt: "2026-08-24"
   blockedReason: null
-  nextAction: "Commit the pre-implementation admission manifest, freeze A contracts, then deliver B, C, and D under their admitted dependencies."
+  nextAction: "Validate and commit the frozen manifest, run the one fresh-SQLite full suite, obtain final exact-head review, then publish the single PR for CI and DEE-653 admission."
 provenance:
   createdFrom: human-ratified-delegation
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
