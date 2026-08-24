@@ -30,7 +30,7 @@ state:
   remainingWorkPackages: []
   prNumber: 487
   prUrl: https://github.com/oumaster369/waia/pull/487
-  lastValidatedGitSha: a4e4c101a1c9616ed06f238620e42af217944b15
+  lastValidatedGitSha: af870c1ea56828b4155eac4e94b4608a44b5c535
   lastValidationAt: "2026-08-24"
   blockedReason: null
   nextAction: "Refresh exact-head manifest provenance, obtain a fresh zero-P1/P2 review, then require green CI and DEE-653 admission before squash merge."
@@ -62,7 +62,7 @@ provenance:
 
 The Human subsequently authorized provenance-compatible readmission of four mechanically discovered closure surfaces before publication: three legacy paper/intelligence tests whose expectations must reflect the already-ratified `information_sufficiency_blocked` and null-execution result, plus the existing Reality V2 consumer inventory digest. This changes no production byte, Reality disposition, scientific meaning, security boundary, or capital authority. The earlier full-suite-only FHV checkpoint failures were classified as contention/nondeterminism by an unchanged isolated 6/6 proof; no correction was made for those failures.
 
-The Human then ratified one narrow synthetic-only authority: typed `RESEARCH_NON_CAPITAL` provenance for the synthetic WP7B scale harness and synthetic capital-trace harness. Exact harness, run, provenance, public replay split, and Forecast/Decision persistence bindings fail closed. Official blind-holdout, production, live, capital-eligible, and capital-use contexts cannot select or reuse this authority. This adds no provider/source classification, formula, threshold, fill-density relaxation, production behavior, or real-capital authority.
+The Human then ratified one narrow synthetic-only authority: typed `RESEARCH_NON_CAPITAL` provenance for the synthetic WP7B scale harness and synthetic capital-trace harness. Exact harness, run, provenance, public replay split, and Forecast/Decision persistence bindings fail closed. WP7B reads only a bounded development/walk-forward prefix selected by the exact synthetic-scale corpus authority; the official blind-holdout reader and partition are unreachable. Production, live, capital-eligible, and capital-use contexts cannot select or reuse this authority. This adds no provider/source classification, formula, threshold, fill-density relaxation, production behavior, or real-capital authority.
 
 ## Ratified semantic boundary
 
