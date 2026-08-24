@@ -279,7 +279,7 @@ describe("PR2.5 market data gateway", () => {
     expect(bundle.snapshot.bars.length).toBeGreaterThanOrEqual(20);
   });
 
-  it("PR2.6 stores cross-venue triangulation on fused context", async () => {
+  it("does not derive cross-venue triangulation without an exact acquisition selection", async () => {
     const fixture = loadHtxFixture();
     const gateway = new MarketDataGateway({
       fetchImpl: createHtxGatewayMockFetch(fixture),
@@ -288,8 +288,9 @@ describe("PR2.5 market data gateway", () => {
 
     const bundle = await gateway.pollEvaluationBundle({ cycleIdPrefix: "pr26-triangulation" });
 
-    expect(bundle.fusedContext.crossVenueTriangulation).toBeDefined();
-    expect(bundle.fusedContext.crossVenueTriangulation?.agreement).toBeDefined();
+    expect(bundle.informationAcquisition).toBeNull();
+    expect(bundle.fusedContext.crossVenueTriangulation).toBeUndefined();
+    expect(bundle.fusedContext.crossExchangeConfirmation).toBeUndefined();
   });
 });
 

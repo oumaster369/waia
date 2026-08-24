@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { Bar, Quote } from "@/lib/trader/intelligence/types";
+import type { InformationAcquisitionSelectionV1 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
 import { selectMarketCanvasView } from "@/lib/trader/market-data/canvas/market-canvas";
 import type { MarketCanvasState } from "@/lib/trader/market-data/canvas/market-canvas.types";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
@@ -21,6 +22,8 @@ import {
   FUTURE_EVIDENCE_EXCLUDED,
   SIDECAR_LANE_ABSENT,
 } from "@/lib/trader/market-data/replay/replay-lane-normalizer";
+import { selectInformationNeedReplayEvidenceV1 } from "@/lib/trader/market-data/replay/information-need-replay-selection-v1";
+import type { InformationAcquisitionReceiptV1 } from "@/lib/trader/market-data/types";
 
 export const HTR_WP11_LIVE_PROVIDER_CALL_FORBIDDEN =
   "HTR_WP11_LIVE_PROVIDER_CALL_FORBIDDEN" as const;
@@ -45,12 +48,23 @@ export type HistoricalIngressInput = {
   instrumentId: string;
   providerSidecar?: ReplayProviderSidecar;
   canvasState: MarketCanvasState;
+  informationSelection?: InformationAcquisitionSelectionV1;
 };
 
 export type HistoricalIngressResult = {
   context: FusedMarketContext;
   degradationReasons: readonly string[];
+  informationAcquisition: InformationAcquisitionReceiptV1 | null;
 };
+
+function selectHistoricalInformation(
+  selection: InformationAcquisitionSelectionV1 | undefined,
+  context: FusedMarketContext,
+  pitAnchor: string,
+): InformationAcquisitionReceiptV1 | null {
+  if (!selection) return null;
+  return selectInformationNeedReplayEvidenceV1({ selection, context, pitAnchor });
+}
 
 export function assertNoNetworkImport(): void {
   const modulePath = fileURLToPath(import.meta.url);
@@ -145,6 +159,11 @@ export function buildHistoricalIngressContext(
     return {
       context: incremental!,
       degradationReasons: incremental!.degradationReasons,
+      informationAcquisition: selectHistoricalInformation(
+        input.informationSelection,
+        incremental!,
+        input.evaluatedAt,
+      ),
     };
   }
 
@@ -154,5 +173,10 @@ export function buildHistoricalIngressContext(
   return {
     context,
     degradationReasons: context.degradationReasons,
+    informationAcquisition: selectHistoricalInformation(
+      input.informationSelection,
+      context,
+      input.evaluatedAt,
+    ),
   };
 }

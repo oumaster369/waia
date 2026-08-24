@@ -1,5 +1,9 @@
-import { MarketDataGateway } from "@/lib/trader/market-data/market-data-gateway";
-import { BTC_USDT, type InstrumentId } from "@/lib/trader/intelligence/types";
+import type { InformationAcquisitionSelectionV1 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
+import {
+  MarketDataGateway,
+  type GatewayPollResult,
+} from "@/lib/trader/market-data/market-data-gateway";
+import { BTC_USDT } from "@/lib/trader/intelligence/types";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import type {
   BarPollSource,
@@ -64,5 +68,22 @@ export class HtxBarPollSource implements BarPollSource {
       snapshot: bundle.snapshot,
       fusedContext: bundle.fusedContext,
     };
+  }
+
+  async fetchMandatoryEvaluationBundle(): Promise<GatewayPollResult> {
+    const bundle = await this.gateway.pollEvaluationBundle({
+      cycleIdPrefix: this.cycleIdPrefix,
+    });
+    this.lastFusedContext = bundle.fusedContext;
+    return bundle;
+  }
+
+  async fetchSelectedEvaluationBundle(input: {
+    mandatoryBundle: GatewayPollResult;
+    selection: InformationAcquisitionSelectionV1;
+  }): Promise<GatewayPollResult> {
+    const bundle = await this.gateway.acquireSelectedInformation(input);
+    this.lastFusedContext = bundle.fusedContext;
+    return bundle;
   }
 }

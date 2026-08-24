@@ -2,6 +2,7 @@ import type {
   MarketDataProviderId,
   NormalizedObservationKind,
 } from "@/lib/trader/market-data/observation-types";
+import type { CanonicalPrimitiveObservationKindV1 } from "@/lib/trader/mi/canonical-observation-v1";
 
 export type MarketDataProviderDescriptor = {
   id: MarketDataProviderId;
@@ -163,5 +164,33 @@ export function getMarketDataProvider(id: MarketDataProviderId): MarketDataProvi
 }
 
 export function isRegisteredMarketDataProvider(id: string): id is MarketDataProviderId {
-  return id in PROVIDER_DESCRIPTORS;
+  return Object.prototype.hasOwnProperty.call(PROVIDER_DESCRIPTORS, id);
+}
+
+export type MarketDataProviderSelectionResolution =
+  | Readonly<{
+      status: "ACCEPTED";
+      provider: MarketDataProviderDescriptor;
+      admittedKinds: readonly NormalizedObservationKind[];
+    }>
+  | Readonly<{
+      status: "REJECTED";
+      reasonCode: "SOURCE_UNKNOWN" | "PROVIDER_KIND_MISMATCH";
+    }>;
+
+export function resolveMarketDataProviderSelection(input: {
+  providerId: string;
+  allowedObservationKinds: readonly CanonicalPrimitiveObservationKindV1[];
+}): MarketDataProviderSelectionResolution {
+  if (!isRegisteredMarketDataProvider(input.providerId)) {
+    return { status: "REJECTED", reasonCode: "SOURCE_UNKNOWN" };
+  }
+  const provider = getMarketDataProvider(input.providerId);
+  const admittedKinds = provider.kinds.filter((kind) =>
+    input.allowedObservationKinds.includes(kind as CanonicalPrimitiveObservationKindV1),
+  );
+  if (admittedKinds.length === 0) {
+    return { status: "REJECTED", reasonCode: "PROVIDER_KIND_MISMATCH" };
+  }
+  return { status: "ACCEPTED", provider, admittedKinds };
 }
