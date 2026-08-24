@@ -184,6 +184,8 @@ export type InformationNeedPlanV1 = Readonly<{
   ignoredSources: readonly InformationIgnoredSourceV1[];
   bounds: InformationInquiryBoundsV1;
   iterationIndex: number;
+  queryCountConsumedBeforeIteration: number;
+  acquisitionCostUnitsConsumedBeforeIteration: number;
   status: "READY" | "NO_ADDITIONAL_EVIDENCE_NEEDED" | "UNRESOLVED";
   evidenceSelectionDigest: string;
   authority: "EVIDENCE_ACQUISITION_ONLY";
