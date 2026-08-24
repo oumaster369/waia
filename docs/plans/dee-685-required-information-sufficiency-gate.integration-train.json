@@ -49,9 +49,9 @@
         "tests/unit/trader-information-sufficiency-contracts.test.ts"
       ],
       "integratedCommits": [
-        "b4311b372a972853aa475a190801d0a251633c08",
-        "d9563e79efd614ad5df5379f87ec95c62b22af20",
-        "c40f48971132adf9167138cf20b45cf67220ae0e"
+        "7b73019195e5f6c7ffa658bb7d2908c6e840a3f2",
+        "0faf4c9999599f7e970302cca031c9bea4bc4b0b",
+        "df0c0e6acb62da9a76bfb292118664502ff306d2"
       ],
       "acceptanceEvidence": [
         "Immutable content-addressed profiles/receipts fail closed on forged lineage and hard-floor inputs.",
@@ -126,11 +126,11 @@
         "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
       ],
       "integratedCommits": [
-        "74b65631f3675bc3be8ffb322285d44c38c82a9c",
-        "2fefa13e5ad631997c93b53cc2722eda80ce4223",
-        "b18b760e5a70c46e6dc111015d3d72bd7a59d04b",
-        "80398fee028faca8091a47ef6ecfc4c19738a121",
-        "d64d4e34f1035ecd9c2183ac76a302513d4a6525"
+        "b0e81a3489857029bc3cfc67e85cbeb2b358949c",
+        "eb284c26eb94d0c36aff0bbf7f179245ad6632df",
+        "84002a986e933ad23e91531bfe68a4e37614d19c",
+        "4c485bce78757e3551dde6ffa56a74a3d5142e37",
+        "4b30f378ec8026dcb5363addb75c381a43e8f321"
       ],
       "acceptanceEvidence": [
         "One additive 0162 migration persists append-only tenant-scoped profile/receipt identities.",
@@ -272,14 +272,14 @@
         "tests/unit/wp15-test-helpers.ts"
       ],
       "integratedCommits": [
-        "1790c528bba9b6a96e90ff1392afb4ca2cf58f35",
-        "b93bdbf4e5043e40b377740ee2f17abcd69c5c5c",
-        "7b093424b940edfcca7d2c64ccec0307f607f7c5",
-        "a209ec46ad7572b224684158691e356d2f17de33",
-        "69f882c47a4851286ab1dcf30bd3590ce2fac366",
-        "4a3cff464e8ed80d37a3d781f99ab66936aa6136",
-        "4495c05c9910a5ba8aa2a00bf6efd548451fd030",
-        "6a10625a6e69a73bb8a1671660d41197ee708e38"
+        "1a3056d3e4a3a0f979fcd343b0bca3f8ebb13e09",
+        "d2f167b8bbbfa5d7e1baf234e6af74d9fbe335cd",
+        "977b86f417d9db5a489a90da7ccadf58d1ff308c",
+        "5b64540167a1fa74c8808fd03e9f4e1af5daa97f",
+        "6580c521dbbd04dcc5ccf20fcf74faae972796f2",
+        "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
+        "a119d203217909214261b21362febf31733ca6cc",
+        "f94477dad65d165ad2594ebaaeed8391daeb4433"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
@@ -373,10 +373,10 @@
         "tests/unit/trader-market-understanding-golden.test.ts"
       ],
       "integratedCommits": [
-        "5a06d9582ab4014b1a9343fb330b43c39b3d0fbe",
-        "f617237ddd85e7441bbc59b8749df9e15ac98635",
-        "3d584be1ae302ed8047081059029c53126b063c5",
-        "4982ae2d88b4c7aa1821cd4a0077b0336fa7110b"
+        "d610fa1523bc704bdf6e654138eed82df131537b",
+        "a290689f85048dd45bb3db61d26dbce33b0601e5",
+        "eb5dda34fecfcd5f06e7158f0f7730a66d28cf8d",
+        "e46a3917100f3ed612202d20d53aaf00cf1c4d02"
       ],
       "acceptanceEvidence": [
         "Inventory covers direct/indirect/barrel/persistence/paper/poll/fixture/backtest/read-only/Guardian dispositions.",
@@ -398,8 +398,8 @@
   "integrationEvidence": {
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "81cdc75888ed7452965773ddcabbd23e706c859b0186b4be7f651da9775849eb",
-      "manifestCommit": "0a564969b38e021443f7e3482fef72c8cd04a607",
+      "manifestDigest": "3be11c24e6df2a5fe05fd38d2be730ade34e87e71814cf4dc30f110121b96e56",
+      "manifestCommit": "8ef7f29f168186528c2668a969b62eea3e9186eb",
       "manifestPath": "docs/plans/dee-685-required-information-sufficiency-gate.integration-train.json",
       "reviewer": "Human-authorized corrected readmission; independent exact-base, scope, byte-identity and ordering review"
     },
@@ -408,9 +408,9 @@
         "issue": "DEE-686",
         "status": "pass",
         "reviewedCommits": [
-          "b4311b372a972853aa475a190801d0a251633c08",
-          "d9563e79efd614ad5df5379f87ec95c62b22af20",
-          "c40f48971132adf9167138cf20b45cf67220ae0e"
+          "7b73019195e5f6c7ffa658bb7d2908c6e840a3f2",
+          "0faf4c9999599f7e970302cca031c9bea4bc4b0b",
+          "df0c0e6acb62da9a76bfb292118664502ff306d2"
         ],
         "reviewedFiles": [
           "lib/trader/intelligence/information-sufficiency/index.ts",
@@ -422,11 +422,11 @@
         "issue": "DEE-687",
         "status": "pass",
         "reviewedCommits": [
-          "74b65631f3675bc3be8ffb322285d44c38c82a9c",
-          "2fefa13e5ad631997c93b53cc2722eda80ce4223",
-          "b18b760e5a70c46e6dc111015d3d72bd7a59d04b",
-          "80398fee028faca8091a47ef6ecfc4c19738a121",
-          "d64d4e34f1035ecd9c2183ac76a302513d4a6525"
+          "b0e81a3489857029bc3cfc67e85cbeb2b358949c",
+          "eb284c26eb94d0c36aff0bbf7f179245ad6632df",
+          "84002a986e933ad23e91531bfe68a4e37614d19c",
+          "4c485bce78757e3551dde6ffa56a74a3d5142e37",
+          "4b30f378ec8026dcb5363addb75c381a43e8f321"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0162_trader_information_sufficiency_v2.sql",
@@ -446,14 +446,14 @@
         "issue": "DEE-688",
         "status": "pass",
         "reviewedCommits": [
-          "1790c528bba9b6a96e90ff1392afb4ca2cf58f35",
-          "b93bdbf4e5043e40b377740ee2f17abcd69c5c5c",
-          "7b093424b940edfcca7d2c64ccec0307f607f7c5",
-          "a209ec46ad7572b224684158691e356d2f17de33",
-          "69f882c47a4851286ab1dcf30bd3590ce2fac366",
-          "4a3cff464e8ed80d37a3d781f99ab66936aa6136",
-          "4495c05c9910a5ba8aa2a00bf6efd548451fd030",
-          "6a10625a6e69a73bb8a1671660d41197ee708e38"
+          "1a3056d3e4a3a0f979fcd343b0bca3f8ebb13e09",
+          "d2f167b8bbbfa5d7e1baf234e6af74d9fbe335cd",
+          "977b86f417d9db5a489a90da7ccadf58d1ff308c",
+          "5b64540167a1fa74c8808fd03e9f4e1af5daa97f",
+          "6580c521dbbd04dcc5ccf20fcf74faae972796f2",
+          "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
+          "a119d203217909214261b21362febf31733ca6cc",
+          "f94477dad65d165ad2594ebaaeed8391daeb4433"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -514,10 +514,10 @@
         "issue": "DEE-689",
         "status": "pass",
         "reviewedCommits": [
-          "5a06d9582ab4014b1a9343fb330b43c39b3d0fbe",
-          "f617237ddd85e7441bbc59b8749df9e15ac98635",
-          "3d584be1ae302ed8047081059029c53126b063c5",
-          "4982ae2d88b4c7aa1821cd4a0077b0336fa7110b"
+          "d610fa1523bc704bdf6e654138eed82df131537b",
+          "a290689f85048dd45bb3db61d26dbce33b0601e5",
+          "eb5dda34fecfcd5f06e7158f0f7730a66d28cf8d",
+          "e46a3917100f3ed612202d20d53aaf00cf1c4d02"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
