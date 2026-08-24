@@ -387,6 +387,37 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
         informationSufficiencySyntheticResearch: synthetic,
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    const technicalScaleAuthority = buildFhvSyntheticScaleAuthority({
+      runId: "fhv-synthetic-proof",
+      organizationId: ORG,
+      releaseSha: "f".repeat(40),
+      datasetContentDigest: "1".repeat(64),
+      manifestSemanticDigest: "2".repeat(64),
+      maxCycles: 1_000,
+      targetCycleCount: 4_509,
+      checkpointEveryCycles: 1_000,
+      technicalObservationMode: true,
+      issuedAtUtc: "2026-08-24T00:00:00.000Z",
+    });
+    const technicalResearch = declareSyntheticResearchNonCapitalInformationAuthorityV2({
+      organizationId: ORG,
+      harness: "FHV_SYNTHETIC_WP7B",
+      runId: "fhv-synthetic-proof",
+      provenanceDigest: technicalScaleAuthority.contentDigest,
+      officialBlindHoldout: false,
+      production: false,
+      live: false,
+      capitalEligible: false,
+      capitalUse: false,
+    });
+    expect(() =>
+      assertSyntheticResearchNonCapitalFhvScopeV2({
+        ...exactFhvScope,
+        maxCycles: 1_000,
+        syntheticScaleAuthority: technicalScaleAuthority,
+        informationSufficiencySyntheticResearch: technicalResearch,
+      }),
+    ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
   });
 
   it("preserves exact synthetic binding through Forecast/Decision persistence", async () => {

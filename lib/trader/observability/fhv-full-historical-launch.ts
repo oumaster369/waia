@@ -1132,7 +1132,12 @@ export async function executeFhvFullHistoricalLaunch(
   };
   let timingCursor = performance.now();
 
-  if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
+  if (
+    !input.syntheticResearchNonCapitalAuthority &&
+    !input.boundedFixture &&
+    input.datasetRoot &&
+    input.manifestPath
+  ) {
     revalidateFhvDatasetAtLaunch({
       datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
       datasetRoot: input.datasetRoot,
@@ -1215,7 +1220,12 @@ export async function resumeFhvFullHistoricalLaunch(
     syntheticScaleAuthority,
   } = validateFhvFullHistoricalLaunchInput(input, { resume: true });
 
-  if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
+  if (
+    !input.syntheticResearchNonCapitalAuthority &&
+    !input.boundedFixture &&
+    input.datasetRoot &&
+    input.manifestPath
+  ) {
     revalidateFhvDatasetAtLaunch({
       datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
       datasetRoot: input.datasetRoot,

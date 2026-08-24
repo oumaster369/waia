@@ -14,7 +14,10 @@ import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-b
 import { FhvSharedPortfolioBarReplaySource } from "@/lib/trader/market-data/fhv-shared-portfolio-bar-replay-source";
 import { FhvOfficialDatasetReader } from "@/lib/trader/market-data/fhv-official-dataset-reader";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
-import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
+import {
+  assertFhvDatasetSealed,
+  computeFhvFileRawSha256,
+} from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
   fhvBarsV2RecordToBar,
   parseFhvBarsV2Line,
@@ -109,6 +112,7 @@ export function assertSyntheticResearchNonCapitalFhvScopeV2(input: {
       syntheticResearch.binding.harness !== "FHV_SYNTHETIC_WP7B" ||
       syntheticResearch.binding.runId !== input.runId ||
       syntheticResearch.binding.provenanceDigest !== input.syntheticScaleAuthority.contentDigest ||
+      input.syntheticScaleAuthority.technicalObservationMode ||
       input.includeHoldout ||
       !input.datasetRoot?.trim() ||
       input.qualificationMode !== "OFFICIAL_MULTI_YEAR" ||
@@ -188,8 +192,12 @@ function loadAuthorityBoundSyntheticScalePreHoldoutCorpus(input: {
     const limit = limits.get(entry.symbol) ?? 0;
     const remaining = limit - (loaded.get(entry.symbol) ?? 0);
     if (remaining <= 0) continue;
+    const partitionPath = join(input.datasetRoot, entry.filePath);
+    if (computeFhvFileRawSha256(partitionPath) !== entry.rawSha256) {
+      throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+    }
     const partitionBars = readBoundedSyntheticScaleBars(
-      join(input.datasetRoot, entry.filePath),
+      partitionPath,
       remaining,
     );
     bars.push(...partitionBars);
