@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assertInformationInquiryRuntimeScopeV1,
   computeInquiryContentDigest,
   defineInformationInquiryPolicyV1,
   runInformationInquiryRuntimeV1,
@@ -59,7 +60,9 @@ function evidence(): InformationEvidenceV2 {
   };
 }
 
-function planningInput(initialEvidence: readonly InformationEvidenceV2[]): BuildInformationNeedPlanV1Input {
+function planningInput(
+  initialEvidence: readonly InformationEvidenceV2[],
+): BuildInformationNeedPlanV1Input {
   const profile = defineRequiredInformationProfileV2({
     organizationId: "org-a",
     accountId: "account-a",
@@ -152,23 +155,31 @@ function planningInput(initialEvidence: readonly InformationEvidenceV2[]): Build
         ["1m", "EXECUTION_PRECISION"],
       ].map(([timeframe, role]) => ({
         timeframe: timeframe as "1d" | "4h" | "1h" | "15m" | "1m",
-        role: role as "STRATEGIC_CONTEXT" | "STRUCTURAL_REFINEMENT" | "OPERATIONAL_STATE" | "SETUP_CONFIRMATION" | "EXECUTION_PRECISION",
+        role: role as
+          | "STRATEGIC_CONTEXT"
+          | "STRUCTURAL_REFINEMENT"
+          | "OPERATIONAL_STATE"
+          | "SETUP_CONFIRMATION"
+          | "EXECUTION_PRECISION",
         status: "AVAILABLE" as const,
         stateContentDigest: hex(`state-${timeframe}`),
         evidenceIds: [`state-${timeframe}`],
         reasonCodes: ["CALLER_STATE"],
       })),
-      relations: [["1d", "4h"], ["4h", "1h"], ["1h", "15m"], ["15m", "1m"]].map(
-        ([higherTimeframe, lowerTimeframe]) => ({
-          higherTimeframe: higherTimeframe as "1d" | "4h" | "1h" | "15m",
-          lowerTimeframe: lowerTimeframe as "4h" | "1h" | "15m" | "1m",
-          relation: "UNCLEAR" as const,
-          relationPolicyVersion: "relation-v1",
-          relationPolicyContentDigest: hex("relation-policy"),
-          evidenceIds: [`state-${higherTimeframe}`, `state-${lowerTimeframe}`],
-          reasonCodes: ["CALLER_RELATION"],
-        }),
-      ),
+      relations: [
+        ["1d", "4h"],
+        ["4h", "1h"],
+        ["1h", "15m"],
+        ["15m", "1m"],
+      ].map(([higherTimeframe, lowerTimeframe]) => ({
+        higherTimeframe: higherTimeframe as "1d" | "4h" | "1h" | "15m",
+        lowerTimeframe: lowerTimeframe as "4h" | "1h" | "15m" | "1m",
+        relation: "UNCLEAR" as const,
+        relationPolicyVersion: "relation-v1",
+        relationPolicyContentDigest: hex("relation-policy"),
+        evidenceIds: [`state-${higherTimeframe}`, `state-${lowerTimeframe}`],
+        reasonCodes: ["CALLER_RELATION"],
+      })),
       upwardReevaluationRequests: [],
     }),
     iterationIndex: 0,
@@ -181,7 +192,9 @@ function planningInput(initialEvidence: readonly InformationEvidenceV2[]): Build
   };
 }
 
-function unavailableReceipt(selection: InformationAcquisitionSelectionV1): InformationAcquisitionReceiptV1 {
+function unavailableReceipt(
+  selection: InformationAcquisitionSelectionV1,
+): InformationAcquisitionReceiptV1 {
   const outcomes = selection.requestedSources.map((requestedSource) => ({
     requestedSource,
     status: "UNAVAILABLE" as const,
@@ -195,6 +208,48 @@ function unavailableReceipt(selection: InformationAcquisitionSelectionV1): Infor
     mode: selection.mode,
     outcomes,
     causalObservationContentDigests: [],
+    authority: "EVIDENCE_ACQUISITION_ONLY" as const,
+  };
+  return { ...payload, contentDigest: computeInquiryContentDigest(payload) };
+}
+
+function availableReceipt(
+  selection: InformationAcquisitionSelectionV1,
+  observationContentDigest: string,
+): InformationAcquisitionReceiptV1 {
+  const outcomes = selection.requestedSources.map((requestedSource) => ({
+    requestedSource,
+    status: "AVAILABLE" as const,
+    reasonCode: null,
+    canonicalPitAttempts: [
+      {
+        gatewayKind: "ohlcv_bar" as const,
+        providerId: "htx_spot" as const,
+        normalizedInputDigest: observationContentDigest,
+        status: "AVAILABLE" as const,
+        reason: null,
+        kind: "ohlcv_bar" as const,
+        source: {
+          providerId: "htx_spot" as const,
+          venue: "HTX",
+          feedKind: "ohlcv_bar" as const,
+          symbol: "BTC/USDT",
+        },
+        subjectRef: "BTC/USDT",
+        payloadCanonical: {},
+        eventTimeUtc: PIT,
+        availableAtUtc: PIT,
+        ingestTimeUtc: PIT,
+      },
+    ],
+    observationContentDigests: [observationContentDigest],
+  }));
+  const payload = {
+    schemaVersion: INFORMATION_ACQUISITION_RECEIPT_V1_SCHEMA_VERSION,
+    selectionContentDigest: selection.contentDigest,
+    mode: selection.mode,
+    outcomes,
+    causalObservationContentDigests: [observationContentDigest],
     authority: "EVIDENCE_ACQUISITION_ONLY" as const,
   };
   return { ...payload, contentDigest: computeInquiryContentDigest(payload) };
@@ -242,6 +297,163 @@ describe("DEE-699 information inquiry runtime", () => {
     expect(result.loopReceipt.terminalStatus).toBe("ANSWERED_SUFFICIENTLY");
   });
 
+  it("rejects refreshed evidence whose digest is not in the exact AVAILABLE outcome", async () => {
+    const receiptDigest = hex("receipt-observation");
+    const substitutedEvidence = {
+      ...evidence(),
+      observationContentDigest: hex("substituted-observation"),
+    };
+    await expect(
+      runInformationInquiryRuntimeV1({
+        planningInput: planningInput([]),
+        mode: "LIVE",
+        acquire: async (selection) => ({
+          receipt: availableReceipt(selection, receiptDigest),
+          finalEvidence: [substitutedEvidence],
+          attempts: selection.requestedSources.map((source) => ({
+            iterationIndex: 0,
+            depth: 1,
+            needId: source.needId,
+            requirementId: source.requirementId,
+            providerId: source.providerId,
+            outcome: "AVAILABLE" as const,
+            elapsedMsAtCompletion: 10,
+            evidenceIds: [substitutedEvidence.evidenceId],
+            reasonCodes: ["SOURCE_AVAILABLE"],
+          })),
+        }),
+      }),
+    ).rejects.toThrow("INFORMATION_INQUIRY_RUNTIME_INVALID:attemptObservationDigestBinding");
+  });
+
+  it("accepts only receipt-bound acquired evidence as causal final evidence", async () => {
+    const acquiredEvidence = { ...evidence(), observationContentDigest: hex("acquired") };
+    const result = await runInformationInquiryRuntimeV1({
+      planningInput: planningInput([]),
+      mode: "LIVE",
+      acquire: async (selection) => ({
+        receipt: availableReceipt(selection, acquiredEvidence.observationContentDigest),
+        finalEvidence: [acquiredEvidence],
+        attempts: selection.requestedSources.map((source) => ({
+          iterationIndex: 0,
+          depth: 1,
+          needId: source.needId,
+          requirementId: source.requirementId,
+          providerId: source.providerId,
+          outcome: "AVAILABLE" as const,
+          elapsedMsAtCompletion: 10,
+          evidenceIds: [acquiredEvidence.evidenceId],
+          reasonCodes: ["SOURCE_AVAILABLE"],
+        })),
+      }),
+    });
+    expect(result.loopReceipt.terminalStatus).toBe("ANSWERED_SUFFICIENTLY");
+    expect(result.loopReceipt.finalSufficiencyReceipt.evidenceInventory).toEqual([
+      acquiredEvidence,
+    ]);
+  });
+
+  it("rejects omission or mutation of the exact initial evidence inventory", async () => {
+    const staleInitial = {
+      ...evidence(),
+      evidenceId: "stale-initial-evidence",
+      observationContentDigest: hex("stale-initial"),
+      availableAt: "2026-08-24T10:00:00.000Z",
+    };
+    const acquiredEvidence = {
+      ...evidence(),
+      evidenceId: "acquired-evidence",
+      observationContentDigest: hex("acquired"),
+    };
+    await expect(
+      runInformationInquiryRuntimeV1({
+        planningInput: planningInput([staleInitial]),
+        mode: "LIVE",
+        acquire: async (selection) => ({
+          receipt: availableReceipt(selection, acquiredEvidence.observationContentDigest),
+          finalEvidence: [acquiredEvidence],
+          attempts: selection.requestedSources.map((source) => ({
+            iterationIndex: 0,
+            depth: 1,
+            needId: source.needId,
+            requirementId: source.requirementId,
+            providerId: source.providerId,
+            outcome: "AVAILABLE" as const,
+            elapsedMsAtCompletion: 10,
+            evidenceIds: [acquiredEvidence.evidenceId],
+            reasonCodes: ["SOURCE_AVAILABLE"],
+          })),
+        }),
+      }),
+    ).rejects.toThrow("INFORMATION_INQUIRY_RUNTIME_INVALID:initialEvidenceClosure");
+  });
+
+  it("rejects unrequested final evidence outside the exact initial-plus-acquired closure", async () => {
+    const acquiredEvidence = { ...evidence(), observationContentDigest: hex("acquired") };
+    const extraEvidence = {
+      ...evidence(),
+      evidenceId: "unrequested-evidence",
+      observationContentDigest: hex("unrequested"),
+    };
+    await expect(
+      runInformationInquiryRuntimeV1({
+        planningInput: planningInput([]),
+        mode: "LIVE",
+        acquire: async (selection) => ({
+          receipt: availableReceipt(selection, acquiredEvidence.observationContentDigest),
+          finalEvidence: [acquiredEvidence, extraEvidence],
+          attempts: selection.requestedSources.map((source) => ({
+            iterationIndex: 0,
+            depth: 1,
+            needId: source.needId,
+            requirementId: source.requirementId,
+            providerId: source.providerId,
+            outcome: "AVAILABLE" as const,
+            elapsedMsAtCompletion: 10,
+            evidenceIds: [acquiredEvidence.evidenceId],
+            reasonCodes: ["SOURCE_AVAILABLE"],
+          })),
+        }),
+      }),
+    ).rejects.toThrow("INFORMATION_INQUIRY_RUNTIME_INVALID:finalEvidenceClosure");
+  });
+
+  it("rejects a scope mismatch before any selected live acquisition", async () => {
+    const mandatoryBundle = {
+      snapshot: { bars: [], quote: {}, evaluatedAt: PIT, cycleIndex: 0, cycleId: "cycle-a" },
+      fusedContext: { instrumentId: "BTC/USDT", fusedAtUtc: PIT },
+      mtfBarsByInterval: {},
+      canonicalPitCandidates: [],
+      informationAcquisition: null,
+    } as unknown as GatewayPollResult;
+    const poll = Object.create(HtxBarPollSource.prototype) as HtxBarPollSource;
+    poll.fetchMandatoryEvaluationBundle = vi.fn(async () => mandatoryBundle);
+    poll.fetchSelectedEvaluationBundle = vi.fn();
+    const refresh = vi.fn();
+
+    await expect(
+      resolveHtxInformationInquiryCycleV1({
+        poll,
+        expectedOrganizationId: "org-a",
+        expectedAccountId: "different-account",
+        resolver: async () => ({ planningInput: planningInput([]), refresh }),
+      }),
+    ).rejects.toThrow("INFORMATION_INQUIRY_RUNTIME_INVALID:expectedScope");
+    expect(poll.fetchSelectedEvaluationBundle).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("applies the same exact organization/account/symbol/PIT guard to replay inputs", () => {
+    expect(() =>
+      assertInformationInquiryRuntimeScopeV1(planningInput([]), {
+        organizationId: "org-a",
+        accountId: "account-a",
+        symbol: "ETH/USDT",
+        pitAnchor: PIT,
+      }),
+    ).toThrow("INFORMATION_INQUIRY_RUNTIME_INVALID:expectedScope");
+  });
+
   it("composes the standard HTX poll seam mandatory-first and selected-only", async () => {
     const events: string[] = [];
     const mandatoryBundle = {
@@ -262,6 +474,8 @@ describe("DEE-699 information inquiry runtime", () => {
     });
     const resolved = await resolveHtxInformationInquiryCycleV1({
       poll,
+      expectedOrganizationId: "org-a",
+      expectedAccountId: "account-a",
       resolver: async () => {
         events.push("resolve");
         return {

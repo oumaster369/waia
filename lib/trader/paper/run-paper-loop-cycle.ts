@@ -119,6 +119,8 @@ export async function runPaperLoopCycle(
     deps.poll instanceof HtxBarPollSource
       ? await resolveHtxInformationInquiryCycleV1({
           poll: deps.poll,
+          expectedOrganizationId: context.organizationId,
+          expectedAccountId: config.accountKey,
           resolver: deps.informationInquiryResolver,
         })
       : null;

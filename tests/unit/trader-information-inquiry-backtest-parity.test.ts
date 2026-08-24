@@ -9,6 +9,18 @@ describe("DEE-699 historical inquiry parity", () => {
   it("routes canonical runBacktest through the network-inert PIT replay selector", () => {
     const source = readFileSync(resolve(root, "lib/trader/backtest/backtest-runner.ts"), "utf8");
     expect(source).toContain("selectInformationNeedReplayEvidenceV1");
+    expect(source).toContain("assertInformationInquiryRuntimeScopeV1");
+    expect(
+      source.indexOf(
+        "assertInformationInquiryRuntimeScopeV1",
+        source.indexOf("let cycleInformationSufficiencyAuthority"),
+      ),
+    ).toBeLessThan(
+      source.indexOf(
+        "selectInformationNeedReplayEvidenceV1({",
+        source.indexOf("let cycleInformationSufficiencyAuthority"),
+      ),
+    );
     expect(source).toContain('mode: "HISTORICAL"');
     expect(source).toContain("informationInquiryResolver");
     expect(source).not.toContain("MarketDataGateway");

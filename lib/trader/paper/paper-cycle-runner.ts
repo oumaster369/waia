@@ -2,7 +2,10 @@ import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { evaluateInformationSufficiencyRuntimeAdmissionV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
-import { runInformationInquiryRuntimeV1 } from "@/lib/trader/intelligence/information-inquiry";
+import {
+  assertInformationInquiryRuntimeScopeV1,
+  runInformationInquiryRuntimeV1,
+} from "@/lib/trader/intelligence/information-inquiry";
 import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
 import { applyBreachSubmissionRestrictions } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
@@ -61,6 +64,8 @@ import type {
 
 export async function resolveHtxInformationInquiryCycleV1(input: {
   poll: HtxBarPollSource;
+  expectedOrganizationId: string;
+  expectedAccountId: string;
   resolver?: PaperInformationInquiryResolverV1;
 }): Promise<{
   bundle: Awaited<ReturnType<HtxBarPollSource["fetchMandatoryEvaluationBundle"]>>;
@@ -74,6 +79,12 @@ export async function resolveHtxInformationInquiryCycleV1(input: {
   if (resolution === null) {
     return { bundle: mandatoryBundle, informationSufficiencyAuthority: undefined };
   }
+  assertInformationInquiryRuntimeScopeV1(resolution.planningInput, {
+    organizationId: input.expectedOrganizationId,
+    accountId: input.expectedAccountId,
+    symbol: mandatoryBundle.fusedContext.instrumentId,
+    pitAnchor: mandatoryBundle.fusedContext.fusedAtUtc,
+  });
   let selectedBundle = mandatoryBundle;
   const runtime = await runInformationInquiryRuntimeV1({
     planningInput: resolution.planningInput,
@@ -951,6 +962,8 @@ export async function runPollPaperCycles(
     if (input.poll instanceof HtxBarPollSource) {
       const resolved = await resolveHtxInformationInquiryCycleV1({
         poll: input.poll,
+        expectedOrganizationId: input.context.organizationId,
+        expectedAccountId: input.accountKey,
         resolver: input.informationInquiryResolver,
       });
       const bundle = resolved.bundle;

@@ -135,6 +135,8 @@ export async function runPaperBarCloseLoop(
       config.poll instanceof HtxBarPollSource
         ? await resolveHtxInformationInquiryCycleV1({
             poll: config.poll,
+            expectedOrganizationId: config.context.organizationId,
+            expectedAccountId: config.accountKey,
             resolver: config.informationInquiryResolver,
           })
         : null;

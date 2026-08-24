@@ -64,6 +64,7 @@ import type {
 } from "@/lib/trader/market-data/types";
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
 import {
+  assertInformationInquiryRuntimeScopeV1,
   runInformationInquiryRuntimeV1,
   type BuildInformationNeedPlanV1Input,
   type InformationAcquisitionAttemptInputV1,
@@ -250,22 +251,22 @@ export type RunBacktestInput = {
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
   /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
   informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
-  informationInquiryResolver?: (input: Readonly<{
-    snapshot: MarketSnapshot;
-    fusedContext: FusedMarketContext;
-    cycleIndex: number;
-  }>) =>
-    | Promise<
-        Readonly<{
-          planningInput: BuildInformationNeedPlanV1Input;
-          refresh(receipt: InformationAcquisitionReceiptV1): Promise<
-            Readonly<{
-              finalEvidence: readonly InformationEvidenceV2[];
-              attempts: readonly InformationAcquisitionAttemptInputV1[];
-            }>
-          >;
-        }> | null
-      >
+  informationInquiryResolver?: (
+    input: Readonly<{
+      snapshot: MarketSnapshot;
+      fusedContext: FusedMarketContext;
+      cycleIndex: number;
+    }>,
+  ) =>
+    | Promise<Readonly<{
+        planningInput: BuildInformationNeedPlanV1Input;
+        refresh(receipt: InformationAcquisitionReceiptV1): Promise<
+          Readonly<{
+            finalEvidence: readonly InformationEvidenceV2[];
+            attempts: readonly InformationAcquisitionAttemptInputV1[];
+          }>
+        >;
+      }> | null>
     | Readonly<{
         planningInput: BuildInformationNeedPlanV1Input;
         refresh(receipt: InformationAcquisitionReceiptV1): Promise<
@@ -992,6 +993,12 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       if (resolution === null) {
         cycleInformationSufficiencyAuthority = undefined;
       } else {
+        assertInformationInquiryRuntimeScopeV1(resolution.planningInput, {
+          organizationId: input.context.organizationId,
+          accountId: input.accountKey,
+          symbol: fusedContext.instrumentId,
+          pitAnchor: fusedContext.fusedAtUtc,
+        });
         const runtime = await runInformationInquiryRuntimeV1({
           planningInput: resolution.planningInput,
           mode: "HISTORICAL",

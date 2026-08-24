@@ -39,17 +39,20 @@ export type InformationInquiryRuntimeResultV1 = Readonly<{
   createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority: false;
 }>;
 
-export type InformationInquiryCycleAuthorityResolverV1<TMandatory> = (
-  mandatory: TMandatory,
-) =>
-  | Promise<
-      Readonly<{
-        planningInput: BuildInformationNeedPlanV1Input;
-        acquire(
-          selection: InformationAcquisitionSelectionV1,
-        ): Promise<InformationInquiryRuntimeAcquisitionV1>;
-      }> | null
-    >
+export type InformationInquiryRuntimeExpectedScopeV1 = Readonly<{
+  organizationId: string;
+  accountId: string;
+  symbol: string;
+  pitAnchor: string;
+}>;
+
+export type InformationInquiryCycleAuthorityResolverV1<TMandatory> = (mandatory: TMandatory) =>
+  | Promise<Readonly<{
+      planningInput: BuildInformationNeedPlanV1Input;
+      acquire(
+        selection: InformationAcquisitionSelectionV1,
+      ): Promise<InformationInquiryRuntimeAcquisitionV1>;
+    }> | null>
   | Readonly<{
       planningInput: BuildInformationNeedPlanV1Input;
       acquire(
@@ -57,6 +60,86 @@ export type InformationInquiryCycleAuthorityResolverV1<TMandatory> = (
       ): Promise<InformationInquiryRuntimeAcquisitionV1>;
     }>
   | null;
+
+export function assertInformationInquiryRuntimeScopeV1(
+  planningInput: BuildInformationNeedPlanV1Input,
+  expected: InformationInquiryRuntimeExpectedScopeV1,
+): void {
+  if (
+    planningInput.profile.organizationId !== expected.organizationId ||
+    planningInput.receipt.organizationId !== expected.organizationId ||
+    planningInput.profile.accountId !== expected.accountId ||
+    planningInput.receipt.accountId !== expected.accountId ||
+    planningInput.profile.symbol !== expected.symbol ||
+    planningInput.receipt.symbol !== expected.symbol ||
+    planningInput.receipt.pitAnchor !== expected.pitAnchor
+  ) {
+    throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:expectedScope");
+  }
+}
+
+function assertFinalEvidenceBinding(input: {
+  initialEvidence: readonly InformationEvidenceV2[];
+  acquisition: InformationInquiryRuntimeAcquisitionV1;
+}): void {
+  const initialById = new Map<string, InformationEvidenceV2>();
+  for (const evidence of input.initialEvidence) {
+    if (initialById.has(evidence.evidenceId)) {
+      throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:duplicateInitialEvidenceId");
+    }
+    initialById.set(evidence.evidenceId, evidence);
+  }
+  const finalById = new Map<string, InformationEvidenceV2>();
+  for (const evidence of input.acquisition.finalEvidence) {
+    if (finalById.has(evidence.evidenceId)) {
+      throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:duplicateFinalEvidenceId");
+    }
+    finalById.set(evidence.evidenceId, evidence);
+  }
+  for (const [evidenceId, initialEvidence] of initialById) {
+    const finalEvidence = finalById.get(evidenceId);
+    if (
+      !finalEvidence ||
+      inquiryCanonicalJsonString(finalEvidence) !== inquiryCanonicalJsonString(initialEvidence)
+    ) {
+      throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:initialEvidenceClosure");
+    }
+  }
+
+  const acquiredEvidenceIds = new Set<string>();
+  for (const outcome of input.acquisition.receipt.outcomes) {
+    const attempt = input.acquisition.attempts.find(
+      (candidate) =>
+        candidate.needId === outcome.requestedSource.needId &&
+        candidate.providerId === outcome.requestedSource.providerId,
+    );
+    if (!attempt) {
+      throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:attemptAcquisitionMismatch");
+    }
+    const attemptDigests = attempt.evidenceIds
+      .map((evidenceId) => {
+        if (initialById.has(evidenceId) || acquiredEvidenceIds.has(evidenceId)) {
+          throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:acquiredEvidenceIdentity");
+        }
+        const evidence = finalById.get(evidenceId);
+        if (!evidence) {
+          throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:attemptEvidenceClosure");
+        }
+        acquiredEvidenceIds.add(evidenceId);
+        return evidence.observationContentDigest;
+      })
+      .sort(inquiryCanonicalTextCompare);
+    if (
+      inquiryCanonicalJsonString(attemptDigests) !==
+      inquiryCanonicalJsonString(outcome.observationContentDigests)
+    ) {
+      throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:attemptObservationDigestBinding");
+    }
+  }
+  if (finalById.size !== initialById.size + acquiredEvidenceIds.size) {
+    throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:finalEvidenceClosure");
+  }
+}
 
 function assertAcquisitionBinding(input: {
   selection: InformationAcquisitionSelectionV1;
@@ -144,11 +227,15 @@ function assertAcquisitionBinding(input: {
   }
 }
 
-export async function runInformationInquiryRuntimeV1(input: Readonly<{
-  planningInput: BuildInformationNeedPlanV1Input;
-  mode: "LIVE" | "HISTORICAL";
-  acquire(selection: InformationAcquisitionSelectionV1): Promise<InformationInquiryRuntimeAcquisitionV1>;
-}>): Promise<InformationInquiryRuntimeResultV1> {
+export async function runInformationInquiryRuntimeV1(
+  input: Readonly<{
+    planningInput: BuildInformationNeedPlanV1Input;
+    mode: "LIVE" | "HISTORICAL";
+    acquire(
+      selection: InformationAcquisitionSelectionV1,
+    ): Promise<InformationInquiryRuntimeAcquisitionV1>;
+  }>,
+): Promise<InformationInquiryRuntimeResultV1> {
   const planningBundle = buildInformationNeedPlanningBundleV1(input.planningInput);
   const selection = defineInformationAcquisitionSelectionV1({
     planId: planningBundle.plan.id,
@@ -163,7 +250,13 @@ export async function runInformationInquiryRuntimeV1(input: Readonly<{
   });
   const acquisition =
     selection.requestedSources.length === 0 ? null : await input.acquire(selection);
-  if (acquisition !== null) assertAcquisitionBinding({ selection, acquisition });
+  if (acquisition !== null) {
+    assertAcquisitionBinding({ selection, acquisition });
+    assertFinalEvidenceBinding({
+      initialEvidence: input.planningInput.receipt.evidenceInventory,
+      acquisition,
+    });
+  }
   const loopReceipt = runInformationInquiryLoopV1({
     bundle: planningBundle,
     planningInput: input.planningInput,
