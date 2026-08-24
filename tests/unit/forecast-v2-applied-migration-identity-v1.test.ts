@@ -48,6 +48,8 @@ describe("Forecast V2 applied migration identity", () => {
       "0160_trader_reality_v2",
       "0161_trader_mi_canonical_pit_lineage_v1",
       "0162_trader_information_sufficiency_v2",
+      "0163_treasury_fund_allocation_evidence",
+      "0164_treasury_fund_allocation_evidence_rls",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
