@@ -24,6 +24,11 @@ const IMPORT_MODULES: Record<InformationSufficiencyImportV2, string> = {
     "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority",
   FORECAST_DECISION_RAW_PERSISTENCE:
     "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres",
+  FORECAST_DECISION_LOW_LEVEL_DECISION_REPOSITORY:
+    "@/lib/trader/intelligence/forecast-decision/decision-record-repository-postgres",
+  FORECAST_DECISION_BARREL: "@/lib/trader/intelligence/forecast-decision",
+  TRADER_INTELLIGENCE_BARREL: "@/lib/trader/intelligence",
+  TRADER_PAPER_BARREL: "@/lib/trader/paper",
   RUN_PAPER_CYCLE_ONCE: "@/lib/trader/paper/paper-cycle-runner",
 };
 
@@ -112,6 +117,29 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
     expect(nonCapital.every((entry) => entry.authorityPurpose === "RESEARCH_NON_CAPITAL")).toBe(
       true,
     );
+
+    expect(
+      INFORMATION_SUFFICIENCY_CONSUMERS_V2.find(
+        (entry) => entry.path === "lib/trader/live/run-live-cycle.ts",
+      ),
+    ).toMatchObject({
+      disposition: "EXCLUDED_RESERVED_LIVE_UNGATED",
+      authorityPurpose: "NONE",
+    });
+    expect(read("lib/trader/live/run-live-cycle.ts")).not.toContain(
+      "declareExecutableInformationSufficiencyAuthorityV2",
+    );
+
+    expect(
+      INFORMATION_SUFFICIENCY_CONSUMERS_V2.find(
+        (entry) =>
+          entry.path ===
+          "lib/trader/intelligence/forecast-decision/forecast-decision-completeness.ts",
+      ),
+    ).toMatchObject({
+      disposition: "LOW_LEVEL_READ_ONLY_COMPLETENESS",
+      authorityPurpose: "NONE",
+    });
 
     expect(INFORMATION_SUFFICIENCY_GUARDIAN_LANE_V2).toMatchObject({
       purpose: "OPEN_POSITION_REASSESSMENT",

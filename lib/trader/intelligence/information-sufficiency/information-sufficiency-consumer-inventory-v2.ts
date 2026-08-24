@@ -16,6 +16,10 @@ export type InformationSufficiencyImportV2 =
   | "BUILD_FORECAST_DECISION_BUNDLE"
   | "FORECAST_DECISION_CONSTRUCTION_AUTHORITY"
   | "FORECAST_DECISION_RAW_PERSISTENCE"
+  | "FORECAST_DECISION_LOW_LEVEL_DECISION_REPOSITORY"
+  | "FORECAST_DECISION_BARREL"
+  | "TRADER_INTELLIGENCE_BARREL"
+  | "TRADER_PAPER_BARREL"
   | "RUN_PAPER_CYCLE_ONCE";
 
 export type InformationSufficiencyConsumerDispositionV2 =
@@ -27,6 +31,8 @@ export type InformationSufficiencyConsumerDispositionV2 =
   | "BACKTEST_ENTRY_FAIL_CLOSED"
   | "GATED_COMPONENT_CONSTRUCTION"
   | "GATED_PERSISTENCE"
+  | "LOW_LEVEL_READ_ONLY_COMPLETENESS"
+  | "EXCLUDED_RESERVED_LIVE_UNGATED"
   | "EXPORT_ONLY";
 
 export type InformationSufficiencyConsumerInventoryEntryV2 = Readonly<{
@@ -87,9 +93,19 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
   {
     path: "lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres.ts",
     symbols: ["persistForecastDecisionBundle", "admitForecastDecisionPersistence"],
-    imports: ["FORECAST_DECISION_CONSTRUCTION_AUTHORITY"],
+    imports: [
+      "FORECAST_DECISION_CONSTRUCTION_AUTHORITY",
+      "FORECAST_DECISION_LOW_LEVEL_DECISION_REPOSITORY",
+    ],
     disposition: "GATED_PERSISTENCE",
     authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/intelligence/forecast-decision/forecast-decision-completeness.ts",
+    symbols: ["assertForecastDecisionChainComplete", "createDecisionRecordRepositoryPostgres"],
+    imports: ["FORECAST_DECISION_LOW_LEVEL_DECISION_REPOSITORY"],
+    disposition: "LOW_LEVEL_READ_ONLY_COMPLETENESS",
+    authorityPurpose: "NONE",
   },
   {
     path: "lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts",
@@ -164,8 +180,8 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
     path: "lib/trader/live/run-live-cycle.ts",
     symbols: ["runLiveCycleOnce", "runEvaluationCycle"],
     imports: ["RUN_EVALUATION_CYCLE"],
-    disposition: "NEW_OPPORTUNITY_FAIL_CLOSED",
-    authorityPurpose: "NEW_OPPORTUNITY",
+    disposition: "EXCLUDED_RESERVED_LIVE_UNGATED",
+    authorityPurpose: "NONE",
   },
   {
     path: "lib/trader/paper/paper-cycle-runner.ts",
@@ -210,7 +226,7 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
   {
     path: "lib/trader/intelligence/index.ts",
     symbols: ["runEvaluationCycle"],
-    imports: ["RUN_EVALUATION_CYCLE"],
+    imports: ["RUN_EVALUATION_CYCLE", "FORECAST_DECISION_BARREL"],
     disposition: "EXPORT_ONLY",
     authorityPurpose: "NONE",
   },
@@ -225,6 +241,13 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
     path: "lib/trader/paper/index.ts",
     symbols: ["runPaperCycleOnce"],
     imports: ["RUN_PAPER_CYCLE_ONCE"],
+    disposition: "EXPORT_ONLY",
+    authorityPurpose: "NONE",
+  },
+  {
+    path: "lib/trader/index.ts",
+    symbols: ["runEvaluationCycle", "mapSignalToSubmitOrder"],
+    imports: ["TRADER_INTELLIGENCE_BARREL", "TRADER_PAPER_BARREL"],
     disposition: "EXPORT_ONLY",
     authorityPurpose: "NONE",
   },
@@ -278,9 +301,14 @@ export function auditInformationSufficiencyConsumerInventoryV2(): string[] {
         errors.push(`NON_CAPITAL_AUTHORITY_MISMATCH:${entry.path}`);
       }
     } else if (
-      entry.disposition !== "EXPORT_ONLY" &&
-      entry.authorityPurpose !== "NEW_OPPORTUNITY"
+      entry.disposition === "EXPORT_ONLY" ||
+      entry.disposition === "LOW_LEVEL_READ_ONLY_COMPLETENESS" ||
+      entry.disposition === "EXCLUDED_RESERVED_LIVE_UNGATED"
     ) {
+      if (entry.authorityPurpose !== "NONE") {
+        errors.push(`NON_CAPITAL_SEAM_AUTHORITY_MISMATCH:${entry.path}`);
+      }
+    } else if (entry.authorityPurpose !== "NEW_OPPORTUNITY") {
       errors.push(`CAPITAL_SEAM_AUTHORITY_MISMATCH:${entry.path}`);
     }
   }
