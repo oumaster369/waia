@@ -30,15 +30,15 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 8ffff574d9e92decf083b850e006e81cda89fd33
+  lastValidatedGitSha: 5fafeb9b97c1850e81f7c31cb15badf3359b6d09
   lastValidationAt: "2026-08-24"
   blockedReason: null
   nextAction: "Validate and commit the corrected frozen manifest, obtain a fresh exact-head review, then publish the single PR for CI and DEE-653 admission without repeating the completed full suite."
 provenance:
   createdFrom: human-ratified-delegation
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
-  authoritativeBase: c7b897db85e560f7f2b98a48da4c0f520636d690
-  admissionAudit: "Fresh origin/main reconciliation, Linear duplicate/ownership/dependency audit, canonical-algorithm audit, and repository producer/consumer scan passed before writes."
+  authoritativeBase: c0511181e8177aff7e401f1298a3485c35660b97
+  admissionAudit: "Fresh origin/main reconciliation, Linear duplicate/ownership/dependency audit, canonical-algorithm audit, and repository producer/consumer scan passed before writes; later DEE-690 Treasury drift was proven path/semantic/migration non-overlapping and mechanically readmitted byte-identically."
   acceleratedQualityProtocol: "Human-directed complete up-front surface/threat/command admission; A API freeze first; file-disjoint preparation may parallelize only without weakening serialized admission, sole-committer ownership, or exact-head review."
 ---
 
@@ -46,7 +46,7 @@ provenance:
 
 ## Admission result
 
-- Authoritative base: `origin/main@c7b897db85e560f7f2b98a48da4c0f520636d690`.
+- Authoritative base: `origin/main@c0511181e8177aff7e401f1298a3485c35660b97` after a zero-overlap mechanical readmission that preserves the DEE-690 Treasury change and all DEE-695 implementation blobs byte-for-byte.
 - Unique owner: DEE-645; no duplicate active issue, batch, branch, or child existed at admission.
 - Formal blockers DEE-620, DEE-621, and DEE-628 are Done. DEE-645 blocks DEE-622.
 - DEE-629 and DEE-636 remain separate downstream/intelligence and Guardian authorities. This train exposes typed gaps and scheduling inputs only; it does not implement their state, hypothesis, position, economic, or protective-action semantics.

@@ -64,17 +64,17 @@
         "tests/unit/trader-top-down-market-reconstruction.test.ts"
       ],
       "acceptanceEvidence": [
-        "Immutable contract, purpose, timeframe freshness, analogue and top-down reconstruction identities accepted at exact cumulative head bcea048b96d9b27da1430b48493a0ebf88983e5e.",
+        "Immutable contract, purpose, timeframe freshness, analogue and top-down reconstruction identities accepted at exact cumulative head 6c20679e2852abfadf54079577a231b992d8a0f6.",
         "Independent provenance recheck reported zero unresolved P1/P2; exact focused reviewer proof passed 35/35 tests."
       ],
       "integratedCommits": [
-        "72e222698456dfd0190e7b984485787ef514bebb",
-        "779d5fa150a800639a4e6f288981d75ac9e562b6",
-        "a27331f949c76db33ff0ec97c546a1d65ecc226e",
-        "c5937568b6342013a4762efcd556cd82667d6d69",
-        "23b8fd754df4052d2bec0f9d9cb991c4c79bcd21",
-        "db2c16a44c8ba27ff925887be615810e57a79599",
-        "074186a906d6f225be90263c8432930dca0eb670"
+        "04895f96bd331c4a0f9ea40797458af69a4437cb",
+        "68a4e1c0821bdef53b4040f8948774a56e1b0176",
+        "8a346e25d0181ff165786a37e4ab5072b71674ae",
+        "0269ebea1275d50318ccc0a2044344a5ff303912",
+        "25d0043588be8f156c2b0d4bfd95d276ef500c4b",
+        "8a6644e6503999e4d9077c6622ced8f6731e759f",
+        "9d767bb74659a1f64fe73dbed5d2c0b918e92528"
       ],
       "tests": [
         "Focused contract/reconstruction/analogue/Market Understanding tests PASS.",
@@ -141,13 +141,13 @@
         "tests/unit/trader-information-need-planner.test.ts"
       ],
       "acceptanceEvidence": [
-        "Deterministic profile-authorized planner, bounded loop, cost attribution, provenance rebuild and fair scheduler accepted at exact cumulative head bcea048b96d9b27da1430b48493a0ebf88983e5e.",
+        "Deterministic profile-authorized planner, bounded loop, cost attribution, provenance rebuild and fair scheduler accepted at exact cumulative head 6c20679e2852abfadf54079577a231b992d8a0f6.",
         "Independent provenance recheck reported zero unresolved P1/P2 with policy, bounds, counters, plan and attempt forgery negatives closed."
       ],
       "integratedCommits": [
-        "39da527bf4d22fdeca0e6024c004677d595984c1",
-        "fa1e597391b39f93eaedc31b4c64b0c371c06fcf",
-        "bcea048b96d9b27da1430b48493a0ebf88983e5e"
+        "fa328829da6578c8e5cb8f07c13df20902ff2522",
+        "ed89986509a8575ef387fc1a67083c52838bc114",
+        "6c20679e2852abfadf54079577a231b992d8a0f6"
       ],
       "tests": [
         "Focused planner/loop/scheduler/analogue planning tests PASS.",
@@ -240,13 +240,13 @@
         "tests/unit/trader-market-data-selective-inquiry.test.ts"
       ],
       "acceptanceEvidence": [
-        "Mandatory-first selective gateway acquisition and network-inert PIT replay selector accepted at exact head d33229ed050d9659aa725927511739c37a4c837a.",
+        "Mandatory-first selective gateway acquisition and network-inert PIT replay selector accepted at exact head 62ca00b9ee8a46b526a1e25008bb83e15fa1ea35.",
         "Independent exact-head review reported zero unresolved P1/P2; 13 admitted files and 14/14 focused tests passed."
       ],
       "integratedCommits": [
-        "8574cdafafde6436c4935864c5636649d76df5a5",
-        "bfe63e2ff23b40bebcb7f5ac518b0f0522095d39",
-        "d33229ed050d9659aa725927511739c37a4c837a"
+        "bd1c431c89bf9730bc18ba67aac85313f15575f3",
+        "26c2e8890190f05d6b1c8c0373d3f79600751682",
+        "62ca00b9ee8a46b526a1e25008bb83e15fa1ea35"
       ],
       "tests": [
         "Selective gateway/capture/replay focused tests PASS.",
@@ -347,15 +347,15 @@
         "tests/unit/trader-reality-v2-consumer-graph.test.ts"
       ],
       "acceptanceEvidence": [
-        "Standard paper/poll/worker and canonical runBacktest composition, exact scope/PIT pre-side-effect guard, receipt-bound final evidence closure and whole-repository inventory were accepted at cumulative head 258203149654f8d1490b2e35d9fcc988f7c30de7.",
-        "The first frozen-head adversarial review identified one P1 blind-split resolver reachability defect; admitted repair commit 8ffff574d9e92decf083b850e006e81cda89fd33 rejects that resolver before invocation and its affected 4-file / 23-test regression proof passed.",
+        "Standard paper/poll/worker and canonical runBacktest composition, exact scope/PIT pre-side-effect guard, receipt-bound final evidence closure and whole-repository inventory were accepted at cumulative head ee78beee1691982972686202bfe1c852b03f5333.",
+        "The first frozen-head adversarial review identified one P1 blind-split resolver reachability defect; admitted repair commit 5fafeb9b97c1850e81f7c31cb15badf3359b6d09 rejects that resolver before invocation and its affected 4-file / 23-test regression proof passed.",
         "Reality identity remains 153 sources, 115 consumers and 25 connector refs with unchanged dispositions and path identities; migrated PostgreSQL tenant/PIT lineage proof passed 10/10 tests."
       ],
       "integratedCommits": [
-        "126c5923cfebf200a167d953563f27304a572bbd",
-        "76dd0cff39447714525759a894a28d2eeca90e47",
-        "258203149654f8d1490b2e35d9fcc988f7c30de7",
-        "8ffff574d9e92decf083b850e006e81cda89fd33"
+        "8928158a47fb6d5fff3adf29f0b531187bb48faf",
+        "71e4ea57b865c09eeceb408f0069e15777e7ba66",
+        "ee78beee1691982972686202bfe1c852b03f5333",
+        "5fafeb9b97c1850e81f7c31cb15badf3359b6d09"
       ],
       "tests": [
         "Independent focused D/consumer/Reality/replay/paper/HTX proof: 12 files / 65 tests PASS.",
@@ -373,12 +373,12 @@
   "integrationEvidence": {
     "admissionEvidence": {
       "status": "pass",
-      "reviewer": "Human-ratified controller plus repository/Linear/canon read-only audit on origin/main@c7b897db85e560f7f2b98a48da4c0f520636d690"
+      "reviewer": "Human-ratified controller plus repository/Linear/canon read-only audit; mechanically readmitted after zero-overlap audit onto origin/main@c0511181e8177aff7e401f1298a3485c35660b97"
     },
     "preImplementationAdmission": {
       "status": "pass",
       "manifestDigest": "e444a62b696dfdf084463b76ac5b8925ca743a6ee74e18539a810ecbc4989e11",
-      "manifestCommit": "f8bd8808478a300bba378c5fa053568f2920a651",
+      "manifestCommit": "982d1b0cf63cc358d6c5253ccd44eb39b2a5ac0d",
       "manifestPath": "docs/plans/dee-695-top-down-information-inquiry.integration-train.json",
       "reviewer": "Human-ratified controller and independent pre-implementation surface admission review"
     },
@@ -387,13 +387,13 @@
         "issue": "DEE-696",
         "status": "pass",
         "reviewedCommits": [
-          "72e222698456dfd0190e7b984485787ef514bebb",
-          "779d5fa150a800639a4e6f288981d75ac9e562b6",
-          "a27331f949c76db33ff0ec97c546a1d65ecc226e",
-          "c5937568b6342013a4762efcd556cd82667d6d69",
-          "23b8fd754df4052d2bec0f9d9cb991c4c79bcd21",
-          "db2c16a44c8ba27ff925887be615810e57a79599",
-          "074186a906d6f225be90263c8432930dca0eb670"
+          "04895f96bd331c4a0f9ea40797458af69a4437cb",
+          "68a4e1c0821bdef53b4040f8948774a56e1b0176",
+          "8a346e25d0181ff165786a37e4ab5072b71674ae",
+          "0269ebea1275d50318ccc0a2044344a5ff303912",
+          "25d0043588be8f156c2b0d4bfd95d276ef500c4b",
+          "8a6644e6503999e4d9077c6622ced8f6731e759f",
+          "9d767bb74659a1f64fe73dbed5d2c0b918e92528"
         ],
         "reviewedFiles": [
           "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
@@ -409,9 +409,9 @@
         "issue": "DEE-697",
         "status": "pass",
         "reviewedCommits": [
-          "39da527bf4d22fdeca0e6024c004677d595984c1",
-          "fa1e597391b39f93eaedc31b4c64b0c371c06fcf",
-          "bcea048b96d9b27da1430b48493a0ebf88983e5e"
+          "fa328829da6578c8e5cb8f07c13df20902ff2522",
+          "ed89986509a8575ef387fc1a67083c52838bc114",
+          "6c20679e2852abfadf54079577a231b992d8a0f6"
         ],
         "reviewedFiles": [
           "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
@@ -430,9 +430,9 @@
         "issue": "DEE-698",
         "status": "pass",
         "reviewedCommits": [
-          "8574cdafafde6436c4935864c5636649d76df5a5",
-          "bfe63e2ff23b40bebcb7f5ac518b0f0522095d39",
-          "d33229ed050d9659aa725927511739c37a4c837a"
+          "bd1c431c89bf9730bc18ba67aac85313f15575f3",
+          "26c2e8890190f05d6b1c8c0373d3f79600751682",
+          "62ca00b9ee8a46b526a1e25008bb83e15fa1ea35"
         ],
         "reviewedFiles": [
           "lib/trader/market-data/adapters/adapter-registry.ts",
@@ -454,10 +454,10 @@
         "issue": "DEE-699",
         "status": "pass",
         "reviewedCommits": [
-          "126c5923cfebf200a167d953563f27304a572bbd",
-          "76dd0cff39447714525759a894a28d2eeca90e47",
-          "258203149654f8d1490b2e35d9fcc988f7c30de7",
-          "8ffff574d9e92decf083b850e006e81cda89fd33"
+          "8928158a47fb6d5fff3adf29f0b531187bb48faf",
+          "71e4ea57b865c09eeceb408f0069e15777e7ba66",
+          "ee78beee1691982972686202bfe1c852b03f5333",
+          "5fafeb9b97c1850e81f7c31cb15badf3359b6d09"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
