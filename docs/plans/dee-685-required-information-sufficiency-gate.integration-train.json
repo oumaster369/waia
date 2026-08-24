@@ -284,7 +284,8 @@
         "fba2277b85632732dc674ba7e70f1df34cf8fbab",
         "627fe04bd488a3124b09168936149751b8498829",
         "af870c1f118f317f96717d78c966c0b3cbb67361",
-        "1e3d4fa0a8fe32026f8325b70287614e9966ae60"
+        "1e3d4fa0a8fe32026f8325b70287614e9966ae60",
+        "21435e82c0b09d1fb1dffe05e94d156a20095cd2"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
@@ -293,6 +294,7 @@
         "Human-ratified typed RESEARCH_NON_CAPITAL authority is bound to exact synthetic WP7B or capital-trace harness/run/provenance identity at the public replay boundary and through Forecast/Decision persistence.",
         "Official blind-holdout, production, live, capital-eligible and capital-use selections remain explicitly forbidden; fill-density, trace and throughput assertions are unchanged.",
         "Exact synthetic-scale corpus authority selects only a bounded development/walk-forward prefix; no official blind-holdout reader or partition is reachable under RESEARCH_NON_CAPITAL.",
+        "Synthetic launch and resume bypass all-partition revalidation under RESEARCH_NON_CAPITAL, hash only selected non-blind partitions before bounded reads, and reject technical-observation authorities at the public engine boundary.",
         "Independent corrected-readmission review: PASS, zero P1/P2."
       ],
       "tests": [
@@ -303,7 +305,7 @@
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Synthetic WP7B representative 5/5 PASS (4509 cycles, 806 fills) and throughput probe 2/2 PASS.",
         "Synthetic WP7B process pause/crash/resume parity 3/3 PASS; legacy non-RESEARCH_NON_CAPITAL scale authority remains on its unchanged path.",
-        "Review repair: exact public run/split/harness, official-holdout exclusion and construction-to-persistence binding unit proof 7/7 PASS.",
+        "Review repair: exact public run/split/harness, official-holdout exclusion, technical-authority denial and construction-to-persistence binding unit proof 7/7 PASS.",
         "Synthetic capital-path trace 3/3 PASS; focused PostgreSQL sufficiency/Forecast-Decision 13/13 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
       ]
@@ -466,7 +468,8 @@
           "fba2277b85632732dc674ba7e70f1df34cf8fbab",
           "627fe04bd488a3124b09168936149751b8498829",
           "af870c1f118f317f96717d78c966c0b3cbb67361",
-          "1e3d4fa0a8fe32026f8325b70287614e9966ae60"
+          "1e3d4fa0a8fe32026f8325b70287614e9966ae60",
+          "21435e82c0b09d1fb1dffe05e94d156a20095cd2"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -581,7 +584,7 @@
           "synthetic WP7B throughput probe 2/2",
           "synthetic WP7B process pause/crash/resume parity 3/3",
           "synthetic capital trace 3/3",
-          "review repair public run/split/harness, official-holdout exclusion and persistence binding 7/7",
+          "review repair public run/split/harness, official-holdout exclusion, technical-authority denial and persistence binding 7/7",
           "focused PostgreSQL sufficiency/Forecast-Decision 13/13"
         ]
       },
