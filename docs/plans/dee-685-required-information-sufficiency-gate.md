@@ -30,19 +30,24 @@ state:
   remainingWorkPackages: []
   prNumber: 487
   prUrl: https://github.com/oumaster369/waia/pull/487
-  lastValidatedGitSha: 58c026c366861ad8411c418175bdcdf83fa759f2
+  lastValidatedGitSha: a4e4c101a1c9616ed06f238620e42af217944b15
   lastValidationAt: "2026-08-24"
   blockedReason: null
-  nextAction: "Refresh exact-head provenance after this canonical-plan structure correction, then require green CI and DEE-653 admission before squash merge."
+  nextAction: "Refresh exact-head manifest provenance, obtain a fresh zero-P1/P2 review, then require green CI and DEE-653 admission before squash merge."
 provenance:
   createdFrom: human-ratified-delegation
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
   authoritativeBase: 5cc17ad85e47266eb8f832e16eda093641ba3b54
-  correctedAdmissionCommit: 0a564969b38e021443f7e3482fef72c8cd04a607
+  correctedAdmissionCommit: 8ef7f29f168186528c2668a969b62eea3e9186eb
+  correctedAdmissionManifestDigest: 3be11c24e6df2a5fe05fd38d2be730ade34e87e71814cf4dc30f110121b96e56
+  syntheticAuthorityCorrection:
+    authorizedAt: "2026-08-24"
+    authority: "Human scientific/policy ratification for explicit RESEARCH_NON_CAPITAL authority only in the synthetic WP7B and synthetic capital-trace harnesses."
+    scope: "Typed exact harness/run/provenance binding with public replay and persistence guards; official blind-holdout, production, live, capital-eligible, and capital use remain forbidden."
   canonicalPlanRepair:
     authorizedAt: "2026-08-24"
     authority: "Standing Human authority for obvious mechanical provenance corrections inside the ratified DEE-621 train."
-    scope: "Add only validator-required plan state/provenance metadata and an Acceptance section after PR #487 exposed the omission; no implementation, scientific, Reality, FHV, security, production, holdout, retention, or capital semantic change."
+    scope: "Reconcile validator-required plan state/provenance and the Human-ratified synthetic-only authority correction; no scientific formula, threshold, Reality disposition, production, live, official-holdout, retention, security, or capital semantic change."
 ---
 
 # DEE-685 — Required Information Profile + Fail-Closed ISG
@@ -55,7 +60,9 @@ provenance:
 - Duplicate audit: DEE-621 is the unique active implementation owner; no earlier child or Integration Batch exists.
 - Integration boundary: one branch/worktree, one admitted/frozen manifest, one next PostgreSQL migration, one PR, one squash merge, and one revert-PR rollback.
 
-The Human subsequently authorized provenance-compatible readmission of four mechanically discovered closure surfaces before publication: three legacy paper/intelligence tests whose expectations must reflect the already-ratified `information_sufficiency_blocked` and null-execution result, plus the existing Reality V2 consumer inventory digest. This changes no production byte, Reality disposition, scientific meaning, security boundary, or capital authority. The earlier full-suite-only FHV checkpoint failures were classified as contention/nondeterminism by an unchanged isolated 6/6 proof; no FHV surface is admitted or modified.
+The Human subsequently authorized provenance-compatible readmission of four mechanically discovered closure surfaces before publication: three legacy paper/intelligence tests whose expectations must reflect the already-ratified `information_sufficiency_blocked` and null-execution result, plus the existing Reality V2 consumer inventory digest. This changes no production byte, Reality disposition, scientific meaning, security boundary, or capital authority. The earlier full-suite-only FHV checkpoint failures were classified as contention/nondeterminism by an unchanged isolated 6/6 proof; no correction was made for those failures.
+
+The Human then ratified one narrow synthetic-only authority: typed `RESEARCH_NON_CAPITAL` provenance for the synthetic WP7B scale harness and synthetic capital-trace harness. Exact harness, run, provenance, public replay split, and Forecast/Decision persistence bindings fail closed. Official blind-holdout, production, live, capital-eligible, and capital-use contexts cannot select or reuse this authority. This adds no provider/source classification, formula, threshold, fill-density relaxation, production behavior, or real-capital authority.
 
 ## Ratified semantic boundary
 
@@ -92,8 +99,9 @@ Expected surfaces: PostgreSQL schema/migration/journal/tracker, ISG repository, 
 - Share identical evaluator semantics across paper, poll, fixture and historical replay.
 - Missing executable authority and `INSUFFICIENT | UNAVAILABLE` block entries deterministically.
 - Preserve Guardian/open-position reassessment and risk-reducing exits as a separate lane.
+- Bind the Human-ratified synthetic authority to exact WP7B or capital-trace harness provenance, actual replay run/split, and Forecast/Decision persistence; reject blind or cross-harness reuse.
 
-Expected surfaces: evaluation/Forecast-Decision/paper orchestration types and services plus focused unit/integration tests.
+Expected surfaces: evaluation/Forecast-Decision/paper/backtest orchestration types and services, the synthetic WP7B launch/engine and capital-trace harness seams, plus focused unit/integration/scale tests.
 
 ### DEE-689 — consumer, question, replay and tenant closure
 
@@ -116,9 +124,9 @@ After D, freeze the exact manifest/head and run once: fresh PostgreSQL migration
 3. Exactly one additive PostgreSQL migration persists tenant-scoped append-only profiles and receipts; service-role behavior, authenticated/anon denial, tenant isolation, digest guards, and mutation denial are proven on a fresh database.
 4. Forecast/Decision construction and every new-entry paper, poll, fixture, and backtest submission path require exact bound sufficiency authority; missing, unavailable, invalid, or insufficient authority produces `information_sufficiency_blocked` and null execution.
 5. Guardian/open-position reassessment and risk-reducing exits remain independent of the NEW_OPPORTUNITY denial lane.
-6. Repository-wide consumer and bypass inventory closes direct, indirect, barrel, low-level, replay, and persistence seams while preserving explicit non-capital research authority.
+6. Repository-wide consumer and bypass inventory closes direct, indirect, barrel, low-level, replay, and persistence seams while preserving only explicit non-capital research authority; synthetic authority is additionally bound to the exact admitted harness, run, provenance, non-blind split, and persistence authorization.
 7. Causal WHY is never answered from price-only evidence, historical analogues remain restricted to admissible non-holdout history, and bounded inquiry never fabricates an answer.
-8. The diff introduces no new source class, empirical profile/formula/threshold, Reality or FHV semantic change, security/retention/holdout/production/live-capital surface, provider credential, or capital authority.
+8. The diff introduces no new source class, empirical profile/formula/threshold, Reality disposition, FHV economic or official-holdout semantic change, security/retention/production/live-capital surface, provider credential, or capital authority.
 
 ## STOP conditions
 
