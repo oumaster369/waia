@@ -81,6 +81,9 @@ describe("DEE-696 top-down reconstruction contract", () => {
       "UNCLEAR",
     ]);
     expect(reconstruction.authority).toBe("MARKET_RECONSTRUCTION_ONLY");
+    expect(Object.isFrozen(reconstruction)).toBe(true);
+    expect(Object.isFrozen(reconstruction.states[0])).toBe(true);
+    expect(Object.isFrozen(reconstruction.states[0]?.evidenceIds)).toBe(true);
     expect(assertTopDownReconstructionV1(reconstruction)).toBe(reconstruction);
   });
 
@@ -122,5 +125,32 @@ describe("DEE-696 top-down reconstruction contract", () => {
         ),
       }),
     ).toThrow("relationOrder");
+  });
+
+  it("rejects unknown state vocabulary and strips caller authority fields", () => {
+    expect(() =>
+      defineTopDownReconstructionV1({
+        ...reconstructionInput(),
+        states: reconstructionInput().states.map((state, index) =>
+          index === 0 ? { ...state, status: "PREDICTED" } : state,
+        ),
+      } as never),
+    ).toThrow("reconstruction.status");
+    expect(() =>
+      defineTopDownReconstructionV1({
+        ...reconstructionInput(),
+        states: reconstructionInput().states.map((state, index) =>
+          index === 3 ? { ...state, stateContentDigest: null } : state,
+        ),
+      }),
+    ).toThrow("availableDigest");
+
+    const input = reconstructionInput();
+    const statesWithUnknown = input.states.map((state) => ({ ...state, forecastAction: "BUY" }));
+    const sealed = defineTopDownReconstructionV1({ ...input, states: statesWithUnknown });
+    expect("forecastAction" in sealed.states[0]!).toBe(false);
+    expect(() =>
+      assertTopDownReconstructionV1({ ...sealed, capitalAuthority: true } as never),
+    ).toThrow("reconstructionIdentity");
   });
 });

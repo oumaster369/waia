@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 
 import type {
   InformationAnalysisPurposeV2,
@@ -6,8 +7,10 @@ import type {
   InformationQuestionIdV2,
   InformationRequirementClassV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
-import type { CanonicalPrimitiveObservationKindV1 } from "@/lib/trader/mi/canonical-observation-v1";
-import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import {
+  CANONICAL_PRIMITIVE_OBSERVATION_KINDS_V1,
+  type CanonicalPrimitiveObservationKindV1,
+} from "@/lib/trader/mi/canonical-observation-v1";
 
 export const INFORMATION_INQUIRY_POLICY_V1_SCHEMA_VERSION =
   "information_inquiry_policy/v1" as const;
@@ -204,6 +207,48 @@ export function inquiryCanonicalTextCompare(left: string, right: string): number
   return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 }
 
+export function inquiryCanonicalJsonString(value: unknown): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("INFORMATION_INQUIRY_INVALID:canonicalNumber");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(inquiryCanonicalJsonString).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Readonly<Record<string, unknown>>).sort(
+      ([left], [right]) => inquiryCanonicalTextCompare(left, right),
+    );
+    return `{${entries
+      .map(([key, entry]) => `${JSON.stringify(key)}:${inquiryCanonicalJsonString(entry)}`)
+      .join(",")}}`;
+  }
+  throw new Error("INFORMATION_INQUIRY_INVALID:canonicalValue");
+}
+
+export function computeInquiryContentDigest(value: unknown): string {
+  return createHash("sha256").update(inquiryCanonicalJsonString(value), "utf8").digest("hex");
+}
+
+export function deepFreezeInquiry<T>(value: T): Readonly<T> {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value as Readonly<Record<string, unknown>>)) {
+      deepFreezeInquiry(nested);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function assertExactInquiryIdentity(actual: unknown, expected: unknown, field: string): void {
+  if (inquiryCanonicalJsonString(actual) !== inquiryCanonicalJsonString(expected)) {
+    throw new Error(`INFORMATION_INQUIRY_INVALID:${field}`);
+  }
+}
+
 export function requireInquiryNonEmpty(value: string, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`INFORMATION_INQUIRY_INVALID:${field}`);
@@ -253,15 +298,21 @@ export function mapInformationInquiryPurposeV1(
   }
 }
 
-export function defineInformationInquiryPolicyV1(input: Omit<
-  InformationInquiryPolicyV1,
-  "schemaVersion" | "profilePurpose" | "authority" | "contentDigest"
->): InformationInquiryPolicyV1 {
+export function defineInformationInquiryPolicyV1(
+  input: Omit<
+    InformationInquiryPolicyV1,
+    "schemaVersion" | "profilePurpose" | "authority" | "contentDigest"
+  >,
+): InformationInquiryPolicyV1 {
   requireInquiryNonEmpty(input.policyVersion, "policyVersion");
   const profilePurpose = mapInformationInquiryPurposeV1(input.purpose);
-  for (const [field, value] of Object.entries(input.bounds)) {
-    requireNonNegativeInteger(value, `bounds.${field}`);
-  }
+  requireNonNegativeInteger(input.bounds.maxIterations, "bounds.maxIterations");
+  requireNonNegativeInteger(input.bounds.maxDepth, "bounds.maxDepth");
+  requireNonNegativeInteger(input.bounds.maxDurationMs, "bounds.maxDurationMs");
+  requireNonNegativeInteger(input.bounds.maxProviderFanout, "bounds.maxProviderFanout");
+  requireNonNegativeInteger(input.bounds.maxQueryCount, "bounds.maxQueryCount");
+  requireNonNegativeInteger(input.bounds.maxHistoricalResults, "bounds.maxHistoricalResults");
+  requireNonNegativeInteger(input.bounds.maxAcquisitionCostUnits, "bounds.maxAcquisitionCostUnits");
   if (input.bounds.maxIterations === 0 || input.bounds.maxDurationMs === 0) {
     throw new Error("INFORMATION_INQUIRY_INVALID:nonOperationalBounds");
   }
@@ -282,11 +333,11 @@ export function defineInformationInquiryPolicyV1(input: Omit<
     );
     const maxStalenessMsByRequirement = [...entry.maxStalenessMsByRequirement]
       .map((item) => {
-        requireInquiryNonEmpty(item.requirementId, "stalenessRequirementId");
+        const requirementId = requireInquiryNonEmpty(item.requirementId, "stalenessRequirementId");
         if (item.maxStalenessMs !== null) {
           requireNonNegativeInteger(item.maxStalenessMs, "maxStalenessMs");
         }
-        return { ...item };
+        return { requirementId, maxStalenessMs: item.maxStalenessMs };
       })
       .sort((left, right) => inquiryCanonicalTextCompare(left.requirementId, right.requirementId));
     if (
@@ -296,11 +347,12 @@ export function defineInformationInquiryPolicyV1(input: Omit<
       throw new Error("INFORMATION_INQUIRY_INVALID:duplicate_stalenessRequirementId");
     }
     if (
+      maxStalenessMsByRequirement.length !== relevantRequirementIds.length ||
       maxStalenessMsByRequirement.some(
-        (item) => !relevantRequirementIds.includes(item.requirementId),
+        (item, index) => item.requirementId !== relevantRequirementIds[index],
       )
     ) {
-      throw new Error("INFORMATION_INQUIRY_INVALID:irrelevantStalenessRequirement");
+      throw new Error("INFORMATION_INQUIRY_INVALID:incompleteStalenessRequirements");
     }
     return { timeframe, relevantRequirementIds, maxStalenessMsByRequirement };
   });
@@ -342,7 +394,15 @@ export function defineInformationInquiryPolicyV1(input: Omit<
     purpose: input.purpose,
     profilePurpose,
     timeframePolicies,
-    bounds: { ...input.bounds },
+    bounds: {
+      maxIterations: input.bounds.maxIterations,
+      maxDepth: input.bounds.maxDepth,
+      maxDurationMs: input.bounds.maxDurationMs,
+      maxProviderFanout: input.bounds.maxProviderFanout,
+      maxQueryCount: input.bounds.maxQueryCount,
+      maxHistoricalResults: input.bounds.maxHistoricalResults,
+      maxAcquisitionCostUnits: input.bounds.maxAcquisitionCostUnits,
+    },
     costPolicy: {
       evaluatorVersion: input.costPolicy.evaluatorVersion,
       evaluatorContentDigest: input.costPolicy.evaluatorContentDigest,
@@ -355,7 +415,7 @@ export function defineInformationInquiryPolicyV1(input: Omit<
     maxNewOpportunityWaitTurns: input.maxNewOpportunityWaitTurns,
     authority: "EVIDENCE_ACQUISITION_POLICY_ONLY" as const,
   };
-  return Object.freeze({ ...payload, contentDigest: computeStableJsonDigest(payload) });
+  return deepFreezeInquiry({ ...payload, contentDigest: computeInquiryContentDigest(payload) });
 }
 
 export function assertInformationInquiryPolicyV1(
@@ -373,29 +433,34 @@ export function assertInformationInquiryPolicyV1(
     schedulingPolicyDigest: policy.schedulingPolicyDigest,
     maxNewOpportunityWaitTurns: policy.maxNewOpportunityWaitTurns,
   });
-  if (
-    policy.schemaVersion !== expected.schemaVersion ||
-    policy.profilePurpose !== expected.profilePurpose ||
-    policy.authority !== expected.authority ||
-    policy.contentDigest !== expected.contentDigest
-  ) {
-    throw new Error("INFORMATION_INQUIRY_INVALID:policyIdentity");
-  }
+  assertExactInquiryIdentity(policy, expected, "policyIdentity");
   return policy;
 }
 
 function canonicalRequestedSources(
   sources: readonly InformationRequestedSourceV1[],
 ): InformationRequestedSourceV1[] {
-  return [...sources]
+  const canonical = [...sources]
     .map((source) => ({
-      ...source,
       needId: requireInquiryNonEmpty(source.needId, "needId"),
       requirementId: requireInquiryNonEmpty(source.requirementId, "requirementId"),
       providerId: requireInquiryNonEmpty(source.providerId, "providerId"),
-      allowedObservationKinds: [...source.allowedObservationKinds].sort(
-        inquiryCanonicalTextCompare,
-      ),
+      allowedObservationKinds: (() => {
+        const kinds = [...source.allowedObservationKinds].sort(inquiryCanonicalTextCompare);
+        if (
+          kinds.length === 0 ||
+          new Set(kinds).size !== kinds.length ||
+          kinds.some(
+            (kind) =>
+              !CANONICAL_PRIMITIVE_OBSERVATION_KINDS_V1.includes(
+                kind as CanonicalPrimitiveObservationKindV1,
+              ),
+          )
+        ) {
+          throw new Error("INFORMATION_INQUIRY_INVALID:allowedObservationKinds");
+        }
+        return kinds;
+      })(),
       costUnits: requireNonNegativeInteger(source.costUnits, "costUnits"),
       reasonCodes: sortInquiryUniqueStrings(source.reasonCodes, "requestReasonCode"),
     }))
@@ -405,12 +470,18 @@ function canonicalRequestedSources(
         `${right.needId}\u0000${right.providerId}`,
       ),
     );
+  if (
+    new Set(canonical.map((source) => `${source.needId}\u0000${source.providerId}`)).size !==
+    canonical.length
+  ) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:duplicateRequestedSource");
+  }
+  return canonical;
 }
 
-export function defineInformationAcquisitionSelectionV1(input: Omit<
-  InformationAcquisitionSelectionV1,
-  "schemaVersion" | "authority" | "contentDigest"
->): InformationAcquisitionSelectionV1 {
+export function defineInformationAcquisitionSelectionV1(
+  input: Omit<InformationAcquisitionSelectionV1, "schemaVersion" | "authority" | "contentDigest">,
+): InformationAcquisitionSelectionV1 {
   requireInquiryNonEmpty(input.planId, "planId");
   requireInquiryDigest(input.planContentDigest, "planContentDigest");
   requireInquiryNonEmpty(input.organizationId, "organizationId");
@@ -434,7 +505,7 @@ export function defineInformationAcquisitionSelectionV1(input: Omit<
     requestedSources: canonicalRequestedSources(input.requestedSources),
     authority: "EVIDENCE_ACQUISITION_ONLY" as const,
   };
-  return Object.freeze({ ...payload, contentDigest: computeStableJsonDigest(payload) });
+  return deepFreezeInquiry({ ...payload, contentDigest: computeInquiryContentDigest(payload) });
 }
 
 export function assertInformationAcquisitionSelectionV1(
@@ -451,12 +522,6 @@ export function assertInformationAcquisitionSelectionV1(
     mode: selection.mode,
     requestedSources: selection.requestedSources,
   });
-  if (
-    selection.schemaVersion !== expected.schemaVersion ||
-    selection.authority !== expected.authority ||
-    selection.contentDigest !== expected.contentDigest
-  ) {
-    throw new Error("INFORMATION_INQUIRY_INVALID:selectionIdentity");
-  }
+  assertExactInquiryIdentity(selection, expected, "selectionIdentity");
   return selection;
 }

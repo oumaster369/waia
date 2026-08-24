@@ -1,4 +1,6 @@
 import {
+  computeInquiryContentDigest,
+  deepFreezeInquiry,
   inquiryCanonicalTextCompare,
   requireInquiryDigest,
   requireInquiryNonEmpty,
@@ -6,10 +8,8 @@ import {
   sortInquiryUniqueStrings,
   type InformationInquiryTimeframeV1,
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
-import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
-export const HISTORICAL_ANALOGUE_QUERY_V1_SCHEMA_VERSION =
-  "historical_analogue_query/v1" as const;
+export const HISTORICAL_ANALOGUE_QUERY_V1_SCHEMA_VERSION = "historical_analogue_query/v1" as const;
 export const HISTORICAL_ANALOGUE_RESULT_V1_SCHEMA_VERSION =
   "historical_analogue_result/v1" as const;
 
@@ -116,7 +116,9 @@ function requirePositiveInteger(value: number, field: string): number {
   return value;
 }
 
-function canonicalPatternForms(forms: readonly HistoricalPatternFormV1[]): HistoricalPatternFormV1[] {
+function canonicalPatternForms(
+  forms: readonly HistoricalPatternFormV1[],
+): HistoricalPatternFormV1[] {
   const ordered = HISTORICAL_PATTERN_FORMS_V1.filter((form) => forms.includes(form));
   if (ordered.length === 0 || ordered.length !== forms.length) {
     throw new Error("INFORMATION_INQUIRY_INVALID:patternForms");
@@ -124,10 +126,9 @@ function canonicalPatternForms(forms: readonly HistoricalPatternFormV1[]): Histo
   return ordered;
 }
 
-export function defineHistoricalAnalogueQueryV1(input: Omit<
-  HistoricalAnalogueQueryV1,
-  "schemaVersion" | "id" | "authority" | "contentDigest"
->): HistoricalAnalogueQueryV1 {
+export function defineHistoricalAnalogueQueryV1(
+  input: Omit<HistoricalAnalogueQueryV1, "schemaVersion" | "id" | "authority" | "contentDigest">,
+): HistoricalAnalogueQueryV1 {
   requireInquiryTimestamp(input.pitAnchor, "analogueQuery.pitAnchor");
   requireInquiryNonEmpty(input.stateRepresentationSpecVersion, "stateRepresentationSpecVersion");
   requireInquiryDigest(
@@ -176,8 +177,8 @@ export function defineHistoricalAnalogueQueryV1(input: Omit<
     usesFutureOutcomeForSelection: false as const,
     authority: "HISTORICAL_EVIDENCE_QUERY_ONLY" as const,
   };
-  const contentDigest = computeStableJsonDigest(payload);
-  return Object.freeze({ ...payload, id: `hiq_${contentDigest}`, contentDigest });
+  const contentDigest = computeInquiryContentDigest(payload);
+  return deepFreezeInquiry({ ...payload, id: `hiq_${contentDigest}`, contentDigest });
 }
 
 const INFORMATION_INQUIRY_TIMEFRAME_ORDER: readonly InformationInquiryTimeframeV1[] = [
@@ -231,7 +232,15 @@ function canonicalOccurrence(
     throw new Error("INFORMATION_INQUIRY_INVALID:samplingMemberships");
   }
   return {
-    ...occurrence,
+    patternDefinitionId: occurrence.patternDefinitionId,
+    patternDefinitionContentDigest: occurrence.patternDefinitionContentDigest,
+    patternOccurrenceId: occurrence.patternOccurrenceId,
+    patternOccurrenceContentDigest: occurrence.patternOccurrenceContentDigest,
+    patternForm: occurrence.patternForm,
+    occurredAt: occurrence.occurredAt,
+    availableAt: occurrence.availableAt,
+    timeframe: occurrence.timeframe,
+    regime: occurrence.regime,
     contextContentDigests: sortInquiryUniqueStrings(
       occurrence.contextContentDigests,
       "occurrenceContextDigest",
@@ -245,13 +254,19 @@ function canonicalOccurrence(
   };
 }
 
-export function defineHistoricalAnalogueResultV1(input: Omit<
-  HistoricalAnalogueResultV1,
-  "schemaVersion" | "id" | "authority" | "createsForecastOrCapitalAuthority" | "contentDigest"
->): HistoricalAnalogueResultV1 {
+export function defineHistoricalAnalogueResultV1(
+  input: Omit<
+    HistoricalAnalogueResultV1,
+    "schemaVersion" | "id" | "authority" | "createsForecastOrCapitalAuthority" | "contentDigest"
+  >,
+): HistoricalAnalogueResultV1 {
   requireInquiryNonEmpty(input.queryId, "analogueResult.queryId");
   requireInquiryDigest(input.queryContentDigest, "analogueResult.queryContentDigest");
+  if (input.queryId !== `hiq_${input.queryContentDigest}`) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:analogueResult.queryIdentity");
+  }
   requireInquiryTimestamp(input.pitAnchor, "analogueResult.pitAnchor");
+  const pitAnchorMs = Date.parse(input.pitAnchor);
   if (!HISTORICAL_ANALOGUE_RESULT_STATUSES_V1.includes(input.status)) {
     throw new Error("INFORMATION_INQUIRY_INVALID:analogueResultStatus");
   }
@@ -266,38 +281,59 @@ export function defineHistoricalAnalogueResultV1(input: Omit<
   ) {
     throw new Error("INFORMATION_INQUIRY_INVALID:duplicatePatternOccurrence");
   }
+  if (
+    occurrences.some((occurrence) => {
+      const occurredAtMs = Date.parse(occurrence.occurredAt);
+      const availableAtMs = Date.parse(occurrence.availableAt);
+      return occurredAtMs > availableAtMs || availableAtMs > pitAnchorMs;
+    })
+  ) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:occurrencePitLineage");
+  }
   const knowledgeRefs = [...input.knowledgeRefs]
-    .map((knowledge) => ({
-      ...knowledge,
-      knowledgeId: requireInquiryNonEmpty(knowledge.knowledgeId, "knowledgeId"),
-      knowledgeContentDigest: requireInquiryDigest(
-        knowledge.knowledgeContentDigest,
-        "knowledgeContentDigest",
-      ),
-      failureBoundaryContentDigest:
-        knowledge.failureBoundaryContentDigest === null
-          ? null
-          : requireInquiryDigest(
-              knowledge.failureBoundaryContentDigest,
-              "failureBoundaryContentDigest",
-            ),
-    }))
+    .map((knowledge) => {
+      if (!["QUALIFIED", "STALE", "CONTESTED", "OUT_OF_SCOPE"].includes(knowledge.status)) {
+        throw new Error("INFORMATION_INQUIRY_INVALID:knowledgeStatus");
+      }
+      return {
+        knowledgeId: requireInquiryNonEmpty(knowledge.knowledgeId, "knowledgeId"),
+        knowledgeContentDigest: requireInquiryDigest(
+          knowledge.knowledgeContentDigest,
+          "knowledgeContentDigest",
+        ),
+        status: knowledge.status,
+        failureBoundaryContentDigest:
+          knowledge.failureBoundaryContentDigest === null
+            ? null
+            : requireInquiryDigest(
+                knowledge.failureBoundaryContentDigest,
+                "failureBoundaryContentDigest",
+              ),
+      };
+    })
     .sort((left, right) => inquiryCanonicalTextCompare(left.knowledgeId, right.knowledgeId));
-  if (new Set(knowledgeRefs.map((knowledge) => knowledge.knowledgeId)).size !== knowledgeRefs.length) {
+  if (
+    new Set(knowledgeRefs.map((knowledge) => knowledge.knowledgeId)).size !== knowledgeRefs.length
+  ) {
     throw new Error("INFORMATION_INQUIRY_INVALID:duplicateKnowledgeRef");
   }
-  if (input.status === "NO_MATCHING_OCCURRENCE" && occurrences.length !== 0) {
+  if (
+    input.status === "NO_MATCHING_OCCURRENCE" &&
+    (occurrences.length !== 0 || knowledgeRefs.length !== 0)
+  ) {
     throw new Error("INFORMATION_INQUIRY_INVALID:noMatchHasOccurrences");
   }
   if (
     input.status === "MATCHED_QUALIFIED_KNOWLEDGE" &&
-    (occurrences.length === 0 || !knowledgeRefs.some((knowledge) => knowledge.status === "QUALIFIED"))
+    (occurrences.length === 0 ||
+      knowledgeRefs.length === 0 ||
+      knowledgeRefs.some((knowledge) => knowledge.status !== "QUALIFIED"))
   ) {
     throw new Error("INFORMATION_INQUIRY_INVALID:qualifiedKnowledgeMissing");
   }
   if (
     input.status === "NO_QUALIFIED_RELATION_KNOWLEDGE" &&
-    (occurrences.length === 0 || knowledgeRefs.some((knowledge) => knowledge.status === "QUALIFIED"))
+    (occurrences.length === 0 || knowledgeRefs.length !== 0)
   ) {
     throw new Error("INFORMATION_INQUIRY_INVALID:noQualifiedKnowledgeInvalid");
   }
@@ -305,7 +341,7 @@ export function defineHistoricalAnalogueResultV1(input: Omit<
     input.status === "QUALIFIED_KNOWLEDGE_STALE_CONTESTED_OR_OUT_OF_SCOPE" &&
     (occurrences.length === 0 ||
       knowledgeRefs.length === 0 ||
-      knowledgeRefs.every((knowledge) => knowledge.status === "QUALIFIED"))
+      knowledgeRefs.some((knowledge) => knowledge.status === "QUALIFIED"))
   ) {
     throw new Error("INFORMATION_INQUIRY_INVALID:qualifiedKnowledgeScopeStatus");
   }
@@ -327,6 +363,6 @@ export function defineHistoricalAnalogueResultV1(input: Omit<
     authority: "HISTORICAL_EVIDENCE_ONLY" as const,
     createsForecastOrCapitalAuthority: false as const,
   };
-  const contentDigest = computeStableJsonDigest(payload);
-  return Object.freeze({ ...payload, id: `hir_${contentDigest}`, contentDigest });
+  const contentDigest = computeInquiryContentDigest(payload);
+  return deepFreezeInquiry({ ...payload, id: `hir_${contentDigest}`, contentDigest });
 }

@@ -5,6 +5,7 @@ import {
   assertInformationInquiryPolicyV1,
   defineInformationAcquisitionSelectionV1,
   defineInformationInquiryPolicyV1,
+  inquiryCanonicalJsonString,
   mapInformationInquiryPurposeV1,
   type InformationInquiryPolicyV1,
 } from "@/lib/trader/intelligence/information-inquiry";
@@ -12,10 +13,12 @@ import {
 const D = "a".repeat(64);
 const E = "b".repeat(64);
 
-function policyInput(overrides: Partial<{
-  purpose: "NEW_OPPORTUNITY_SEARCH" | "OPEN_POSITION_REASSESSMENT" | "RESEARCH";
-  assignments: InformationInquiryPolicyV1["costPolicy"]["assignments"];
-}> = {}) {
+function policyInput(
+  overrides: Partial<{
+    purpose: "NEW_OPPORTUNITY_SEARCH" | "OPEN_POSITION_REASSESSMENT" | "RESEARCH";
+    assignments: InformationInquiryPolicyV1["costPolicy"]["assignments"];
+  }> = {},
+) {
   return {
     policyVersion: "policy-v1",
     purpose: overrides.purpose ?? ("NEW_OPPORTUNITY_SEARCH" as const),
@@ -42,12 +45,10 @@ function policyInput(overrides: Partial<{
     costPolicy: {
       evaluatorVersion: "fixed-policy-assignments-v1",
       evaluatorContentDigest: D,
-      assignments:
-        overrides.assignments ??
-        [
-          { requirementId: "r-price", providerId: "htx_spot", costUnits: 1 },
-          { requirementId: "r-liquidity", providerId: "htx_spot", costUnits: 2 },
-        ],
+      assignments: overrides.assignments ?? [
+        { requirementId: "r-price", providerId: "htx_spot", costUnits: 1 },
+        { requirementId: "r-liquidity", providerId: "htx_spot", costUnits: 2 },
+      ],
     },
     contradictionMaterialityPolicyVersion: "contradiction-v1",
     contradictionMaterialityPolicyDigest: E,
@@ -65,6 +66,7 @@ describe("DEE-696 information inquiry contracts", () => {
     );
     expect(mapInformationInquiryPurposeV1("RESEARCH")).toBe("RESEARCH_NON_CAPITAL");
     expect(() => mapInformationInquiryPurposeV1("NEW_OPPORTUNITY" as never)).toThrow("purpose");
+    expect(inquiryCanonicalJsonString({ ä: 1, z: 2 })).toBe('{"z":2,"ä":1}');
   });
 
   it("seals a caller-valued policy deterministically without defaults", () => {
@@ -86,6 +88,9 @@ describe("DEE-696 information inquiry contracts", () => {
       "1m",
     ]);
     expect(left.authority).toBe("EVIDENCE_ACQUISITION_POLICY_ONLY");
+    expect(Object.isFrozen(left)).toBe(true);
+    expect(Object.isFrozen(left.bounds)).toBe(true);
+    expect(Object.isFrozen(left.timeframePolicies[0])).toBe(true);
     expect(assertInformationInquiryPolicyV1(left)).toBe(left);
   });
 
@@ -115,6 +120,16 @@ describe("DEE-696 information inquiry contracts", () => {
         timeframePolicies: policyInput().timeframePolicies.slice(1),
       }),
     ).toThrow("timeframePolicy");
+    expect(() =>
+      defineInformationInquiryPolicyV1({
+        ...policyInput(),
+        timeframePolicies: policyInput().timeframePolicies.map((entry) =>
+          entry.timeframe === "1m"
+            ? { ...entry, maxStalenessMsByRequirement: entry.maxStalenessMsByRequirement.slice(1) }
+            : entry,
+        ),
+      }),
+    ).toThrow("incompleteStalenessRequirements");
   });
 
   it("seals exact plan-derived live/historical selections and rejects forged identities", () => {
@@ -144,6 +159,8 @@ describe("DEE-696 information inquiry contracts", () => {
       "ohlcv_bar",
       "quote_l1",
     ]);
+    expect(Object.isFrozen(selection.requestedSources[0])).toBe(true);
+    expect(Object.isFrozen(selection.requestedSources[0]?.allowedObservationKinds)).toBe(true);
     expect(assertInformationAcquisitionSelectionV1(selection)).toBe(selection);
     expect(() =>
       assertInformationAcquisitionSelectionV1({
@@ -151,5 +168,45 @@ describe("DEE-696 information inquiry contracts", () => {
         organizationId: "org-2",
       }),
     ).toThrow("selectionIdentity");
+    expect(() =>
+      defineInformationAcquisitionSelectionV1({
+        ...input,
+        requestedSources: [
+          { ...input.requestedSources[0]!, allowedObservationKinds: ["quote_l1", "quote_l1"] },
+        ],
+      }),
+    ).toThrow("allowedObservationKinds");
+    expect(() =>
+      defineInformationAcquisitionSelectionV1({
+        ...input,
+        requestedSources: [
+          {
+            ...input.requestedSources[0]!,
+            allowedObservationKinds: ["cross_exchange_confirmation"],
+          },
+        ],
+      } as never),
+    ).toThrow("allowedObservationKinds");
+    expect(() =>
+      defineInformationAcquisitionSelectionV1({
+        ...input,
+        requestedSources: [input.requestedSources[0]!, input.requestedSources[0]!],
+      }),
+    ).toThrow("duplicateRequestedSource");
+  });
+
+  it("strips unknown authority fields and rejects them on asserted identities", () => {
+    const input = policyInput() as ReturnType<typeof policyInput> & {
+      formula?: string;
+      bounds: ReturnType<typeof policyInput>["bounds"] & { capitalAuthority?: boolean };
+    };
+    input.formula = "forbidden";
+    input.bounds.capitalAuthority = true;
+    const sealed = defineInformationInquiryPolicyV1(input);
+    expect("formula" in sealed).toBe(false);
+    expect("capitalAuthority" in sealed.bounds).toBe(false);
+    expect(() => assertInformationInquiryPolicyV1({ ...sealed, futurePnl: 7 } as never)).toThrow(
+      "policyIdentity",
+    );
   });
 });

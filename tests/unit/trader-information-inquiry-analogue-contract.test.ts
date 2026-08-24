@@ -63,6 +63,8 @@ describe("DEE-696 historical analogue contract", () => {
     expect(sealed.blindHoldoutAccessible).toBe(false);
     expect(sealed.usesFutureOutcomeForSelection).toBe(false);
     expect(sealed.authority).toBe("HISTORICAL_EVIDENCE_QUERY_ONLY");
+    expect(Object.isFrozen(sealed)).toBe(true);
+    expect(Object.isFrozen(sealed.requestedPatternForms)).toBe(true);
     expect(() =>
       defineHistoricalAnalogueQueryV1({
         ...sealed,
@@ -100,6 +102,8 @@ describe("DEE-696 historical analogue contract", () => {
       "state",
     ]);
     expect(result.createsForecastOrCapitalAuthority).toBe(false);
+    expect(Object.isFrozen(result.occurrences[0])).toBe(true);
+    expect(Object.isFrozen(result.occurrences[0]?.matchComponents)).toBe(true);
   });
 
   it("distinguishes all four no-result/unavailable outcomes without synthesis", () => {
@@ -156,5 +160,116 @@ describe("DEE-696 historical analogue contract", () => {
         knowledgeRefs: [],
       }).status,
     ).toBe("HISTORY_UNAVAILABLE_OR_UNQUALIFIED");
+  });
+
+  it("enforces query identity and point-in-time occurrence lineage", () => {
+    const sealedQuery = query();
+    const base = {
+      queryId: sealedQuery.id,
+      queryContentDigest: sealedQuery.contentDigest,
+      pitAnchor: sealedQuery.pitAnchor,
+      status: "NO_QUALIFIED_RELATION_KNOWLEDGE" as const,
+      occurrences: [occurrence()],
+      knowledgeRefs: [],
+      reasonCodes: ["EXPLICIT_TERMINAL"],
+    };
+    expect(() => defineHistoricalAnalogueResultV1({ ...base, queryId: `hiq_${D}` })).toThrow(
+      "queryIdentity",
+    );
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        occurrences: [
+          {
+            ...occurrence(),
+            occurredAt: "2026-08-24T12:01:00.000Z",
+            availableAt: "2026-08-24T12:02:00.000Z",
+          },
+        ],
+      }),
+    ).toThrow("occurrencePitLineage");
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        occurrences: [
+          {
+            ...occurrence(),
+            occurredAt: "2026-08-20T12:02:00.000Z",
+            availableAt: "2026-08-20T12:01:00.000Z",
+          },
+        ],
+      }),
+    ).toThrow("occurrencePitLineage");
+  });
+
+  it("keeps analogue terminal outcomes mutually exclusive and Knowledge status closed", () => {
+    const sealedQuery = query();
+    const base = {
+      queryId: sealedQuery.id,
+      queryContentDigest: sealedQuery.contentDigest,
+      pitAnchor: sealedQuery.pitAnchor,
+      reasonCodes: ["EXPLICIT_TERMINAL"],
+    };
+    const qualified = {
+      knowledgeId: "knowledge-1",
+      knowledgeContentDigest: D,
+      status: "QUALIFIED" as const,
+      failureBoundaryContentDigest: E,
+    };
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        status: "NO_MATCHING_OCCURRENCE",
+        occurrences: [],
+        knowledgeRefs: [qualified],
+      }),
+    ).toThrow("noMatchHasOccurrences");
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        status: "NO_QUALIFIED_RELATION_KNOWLEDGE",
+        occurrences: [occurrence()],
+        knowledgeRefs: [{ ...qualified, status: "CONTESTED" as const }],
+      }),
+    ).toThrow("noQualifiedKnowledgeInvalid");
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        status: "QUALIFIED_KNOWLEDGE_STALE_CONTESTED_OR_OUT_OF_SCOPE",
+        occurrences: [occurrence()],
+        knowledgeRefs: [qualified, { ...qualified, knowledgeId: "knowledge-2", status: "STALE" }],
+      }),
+    ).toThrow("qualifiedKnowledgeScopeStatus");
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        status: "MATCHED_QUALIFIED_KNOWLEDGE",
+        occurrences: [occurrence()],
+        knowledgeRefs: [{ ...qualified, status: "UNREVIEWED" }],
+      } as never),
+    ).toThrow("knowledgeStatus");
+  });
+
+  it("strips unknown occurrence and Knowledge fields from the sealed identity", () => {
+    const sealedQuery = query();
+    const result = defineHistoricalAnalogueResultV1({
+      queryId: sealedQuery.id,
+      queryContentDigest: sealedQuery.contentDigest,
+      pitAnchor: sealedQuery.pitAnchor,
+      status: "MATCHED_QUALIFIED_KNOWLEDGE",
+      occurrences: [{ ...occurrence(), futurePnl: 42 }],
+      knowledgeRefs: [
+        {
+          knowledgeId: "knowledge-1",
+          knowledgeContentDigest: F,
+          status: "QUALIFIED",
+          failureBoundaryContentDigest: D,
+          forecastAction: "BUY",
+        },
+      ],
+      reasonCodes: ["QUALIFIED_MATCH"],
+    } as never);
+    expect("futurePnl" in result.occurrences[0]!).toBe(false);
+    expect("forecastAction" in result.knowledgeRefs[0]!).toBe(false);
   });
 });

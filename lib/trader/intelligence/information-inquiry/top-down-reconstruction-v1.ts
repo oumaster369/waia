@@ -1,4 +1,6 @@
 import {
+  computeInquiryContentDigest,
+  deepFreezeInquiry,
   INFORMATION_INQUIRY_TIMEFRAMES_V1,
   INFORMATION_INQUIRY_TIMEFRAME_ROLES_V1,
   inquiryCanonicalTextCompare,
@@ -9,7 +11,6 @@ import {
   type InformationInquiryTimeframeRoleV1,
   type InformationInquiryTimeframeV1,
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
-import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 export const TOP_DOWN_RECONSTRUCTION_V1_SCHEMA_VERSION = "top_down_reconstruction/v1" as const;
 
@@ -77,14 +78,15 @@ const ADJACENT_PAIRS = [
   ["15m", "1m"],
 ] as const;
 
+const TOP_DOWN_STATE_STATUSES = ["AVAILABLE", "UNAVAILABLE", "CONTRADICTORY"] as const;
+
 function timeframeIndex(timeframe: InformationInquiryTimeframeV1): number {
   return INFORMATION_INQUIRY_TIMEFRAMES_V1.indexOf(timeframe);
 }
 
-export function defineTopDownReconstructionV1(input: Omit<
-  TopDownReconstructionV1,
-  "schemaVersion" | "authority" | "contentDigest"
->): TopDownReconstructionV1 {
+export function defineTopDownReconstructionV1(
+  input: Omit<TopDownReconstructionV1, "schemaVersion" | "authority" | "contentDigest">,
+): TopDownReconstructionV1 {
   requireInquiryNonEmpty(input.symbol, "reconstruction.symbol");
   requireInquiryTimestamp(input.pitAnchor, "reconstruction.pitAnchor");
   if (input.states.length !== INFORMATION_INQUIRY_TIMEFRAMES_V1.length) {
@@ -99,14 +101,20 @@ export function defineTopDownReconstructionV1(input: Omit<
     if (!INFORMATION_INQUIRY_TIMEFRAME_ROLES_V1.includes(state.role)) {
       throw new Error("INFORMATION_INQUIRY_INVALID:reconstruction.role");
     }
-    if (state.status === "AVAILABLE" && state.stateContentDigest === null) {
+    if (!TOP_DOWN_STATE_STATUSES.includes(state.status)) {
+      throw new Error("INFORMATION_INQUIRY_INVALID:reconstruction.status");
+    }
+    if (state.status !== "UNAVAILABLE" && state.stateContentDigest === null) {
       throw new Error("INFORMATION_INQUIRY_INVALID:reconstruction.availableDigest");
     }
     if (state.stateContentDigest !== null) {
       requireInquiryDigest(state.stateContentDigest, "reconstruction.stateContentDigest");
     }
     return {
-      ...state,
+      timeframe: state.timeframe,
+      role: state.role,
+      status: state.status,
+      stateContentDigest: state.stateContentDigest,
       evidenceIds: sortInquiryUniqueStrings(state.evidenceIds, "reconstruction.evidenceId"),
       reasonCodes: sortInquiryUniqueStrings(state.reasonCodes, "reconstruction.reasonCode"),
     };
@@ -128,7 +136,11 @@ export function defineTopDownReconstructionV1(input: Omit<
     requireInquiryNonEmpty(relation.relationPolicyVersion, "relationPolicyVersion");
     requireInquiryDigest(relation.relationPolicyContentDigest, "relationPolicyContentDigest");
     return {
-      ...relation,
+      higherTimeframe: relation.higherTimeframe,
+      lowerTimeframe: relation.lowerTimeframe,
+      relation: relation.relation,
+      relationPolicyVersion: relation.relationPolicyVersion,
+      relationPolicyContentDigest: relation.relationPolicyContentDigest,
       evidenceIds: sortInquiryUniqueStrings(relation.evidenceIds, "relationEvidenceId"),
       reasonCodes: sortInquiryUniqueStrings(relation.reasonCodes, "relationReasonCode"),
     };
@@ -143,7 +155,8 @@ export function defineTopDownReconstructionV1(input: Omit<
         throw new Error("INFORMATION_INQUIRY_INVALID:upwardReevaluationDirection");
       }
       return {
-        ...request,
+        triggerTimeframe: request.triggerTimeframe,
+        targetHigherTimeframe: request.targetHigherTimeframe,
         triggerEvidenceIds: sortInquiryUniqueStrings(
           request.triggerEvidenceIds,
           "reevaluationEvidenceId",
@@ -168,7 +181,7 @@ export function defineTopDownReconstructionV1(input: Omit<
     upwardReevaluationRequests,
     authority: "MARKET_RECONSTRUCTION_ONLY" as const,
   };
-  return Object.freeze({ ...payload, contentDigest: computeStableJsonDigest(payload) });
+  return deepFreezeInquiry({ ...payload, contentDigest: computeInquiryContentDigest(payload) });
 }
 
 export function assertTopDownReconstructionV1(
@@ -181,11 +194,7 @@ export function assertTopDownReconstructionV1(
     relations: reconstruction.relations,
     upwardReevaluationRequests: reconstruction.upwardReevaluationRequests,
   });
-  if (
-    reconstruction.schemaVersion !== expected.schemaVersion ||
-    reconstruction.authority !== expected.authority ||
-    reconstruction.contentDigest !== expected.contentDigest
-  ) {
+  if (computeInquiryContentDigest(reconstruction) !== computeInquiryContentDigest(expected)) {
     throw new Error("INFORMATION_INQUIRY_INVALID:reconstructionIdentity");
   }
   return reconstruction;
