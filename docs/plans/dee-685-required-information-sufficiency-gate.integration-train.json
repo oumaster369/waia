@@ -283,7 +283,8 @@
         "a4e4c101a1c9616ed06f238620e42af217944b15",
         "fba2277b85632732dc674ba7e70f1df34cf8fbab",
         "627fe04bd488a3124b09168936149751b8498829",
-        "af870c1f118f317f96717d78c966c0b3cbb67361"
+        "af870c1f118f317f96717d78c966c0b3cbb67361",
+        "1e3d4fa0a8fe32026f8325b70287614e9966ae60"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
@@ -301,6 +302,7 @@
         "WP14/WP15 compatibility: 40/40 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Synthetic WP7B representative 5/5 PASS (4509 cycles, 806 fills) and throughput probe 2/2 PASS.",
+        "Synthetic WP7B process pause/crash/resume parity 3/3 PASS; legacy non-RESEARCH_NON_CAPITAL scale authority remains on its unchanged path.",
         "Review repair: exact public run/split/harness, official-holdout exclusion and construction-to-persistence binding unit proof 7/7 PASS.",
         "Synthetic capital-path trace 3/3 PASS; focused PostgreSQL sufficiency/Forecast-Decision 13/13 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
@@ -463,7 +465,8 @@
           "a4e4c101a1c9616ed06f238620e42af217944b15",
           "fba2277b85632732dc674ba7e70f1df34cf8fbab",
           "627fe04bd488a3124b09168936149751b8498829",
-          "af870c1f118f317f96717d78c966c0b3cbb67361"
+          "af870c1f118f317f96717d78c966c0b3cbb67361",
+          "1e3d4fa0a8fe32026f8325b70287614e9966ae60"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -576,6 +579,7 @@
           "WP14/WP15 40/40",
           "synthetic WP7B representative 5/5 (4509 cycles, 806 fills)",
           "synthetic WP7B throughput probe 2/2",
+          "synthetic WP7B process pause/crash/resume parity 3/3",
           "synthetic capital trace 3/3",
           "review repair public run/split/harness, official-holdout exclusion and persistence binding 7/7",
           "focused PostgreSQL sufficiency/Forecast-Decision 13/13"
