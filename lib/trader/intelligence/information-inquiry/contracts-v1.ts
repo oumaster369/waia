@@ -105,6 +105,11 @@ export type InformationContradictionLineageV1 = Readonly<{
   reasonCodes: readonly string[];
 }>;
 
+export type InformationNeedTimeframeRequirementV1 = Readonly<{
+  timeframe: InformationInquiryTimeframeV1;
+  maxStalenessMs: number | null;
+}>;
+
 export type InformationNeedV1 = Readonly<{
   id: string;
   requirementId: string;
@@ -113,10 +118,7 @@ export type InformationNeedV1 = Readonly<{
   evidenceFamily: string;
   allowedObservationKinds: readonly CanonicalPrimitiveObservationKindV1[];
   allowedObservationSchemaVersions: readonly string[];
-  timeframeRequirements: readonly Readonly<{
-    timeframe: InformationInquiryTimeframeV1;
-    maxStalenessMs: number | null;
-  }>[];
+  timeframeRequirements: readonly InformationNeedTimeframeRequirementV1[];
   providerCandidates: readonly Readonly<{
     providerId: string;
     substitutionRuleId: string | null;
@@ -283,6 +285,36 @@ function requireNonNegativeInteger(value: number, field: string): number {
     throw new Error(`INFORMATION_INQUIRY_INVALID:${field}`);
   }
   return value;
+}
+
+export function canonicalizeInformationNeedTimeframeRequirementsV1(
+  values: readonly InformationNeedTimeframeRequirementV1[],
+): readonly InformationNeedTimeframeRequirementV1[] {
+  if (values.length === 0) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:needTimeframeRequirements");
+  }
+  const canonical = values
+    .map((entry) => {
+      if (!INFORMATION_INQUIRY_TIMEFRAMES_V1.includes(entry.timeframe)) {
+        throw new Error("INFORMATION_INQUIRY_INVALID:needTimeframe");
+      }
+      if (entry.maxStalenessMs !== null) {
+        requireNonNegativeInteger(entry.maxStalenessMs, "needMaxStalenessMs");
+      }
+      return {
+        timeframe: entry.timeframe,
+        maxStalenessMs: entry.maxStalenessMs,
+      };
+    })
+    .sort(
+      (left, right) =>
+        INFORMATION_INQUIRY_TIMEFRAMES_V1.indexOf(left.timeframe) -
+        INFORMATION_INQUIRY_TIMEFRAMES_V1.indexOf(right.timeframe),
+    );
+  if (new Set(canonical.map((entry) => entry.timeframe)).size !== canonical.length) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:duplicateNeedTimeframe");
+  }
+  return deepFreezeInquiry(canonical);
 }
 
 export function mapInformationInquiryPurposeV1(

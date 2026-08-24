@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertInformationAcquisitionSelectionV1,
   assertInformationInquiryPolicyV1,
+  canonicalizeInformationNeedTimeframeRequirementsV1,
   defineInformationAcquisitionSelectionV1,
   defineInformationInquiryPolicyV1,
   inquiryCanonicalJsonString,
@@ -79,10 +80,10 @@ describe("DEE-696 information inquiry contracts", () => {
       evidenceFamily: "PRICE_STATE",
       allowedObservationKinds: ["ohlcv_bar"],
       allowedObservationSchemaVersions: ["ohlcv_bar/v1"],
-      timeframeRequirements: [
-        { timeframe: "4h", maxStalenessMs: 60_000 },
+      timeframeRequirements: canonicalizeInformationNeedTimeframeRequirementsV1([
         { timeframe: "1h", maxStalenessMs: 15_000 },
-      ],
+        { timeframe: "4h", maxStalenessMs: 60_000 },
+      ]),
       providerCandidates: [{ providerId: "htx_spot", substitutionRuleId: null, costUnits: 1 }],
       requirePitQualified: true,
       requireReplayEligible: true,
@@ -93,6 +94,19 @@ describe("DEE-696 information inquiry contracts", () => {
       { timeframe: "4h", maxStalenessMs: 60_000 },
       { timeframe: "1h", maxStalenessMs: 15_000 },
     ]);
+    expect(Object.isFrozen(need.timeframeRequirements)).toBe(true);
+    expect(() =>
+      canonicalizeInformationNeedTimeframeRequirementsV1([
+        { timeframe: "1h", maxStalenessMs: 15_000 },
+        { timeframe: "1h", maxStalenessMs: 30_000 },
+      ]),
+    ).toThrow("duplicateNeedTimeframe");
+    expect(() =>
+      canonicalizeInformationNeedTimeframeRequirementsV1([{ timeframe: "1h", maxStalenessMs: -1 }]),
+    ).toThrow("needMaxStalenessMs");
+    expect(() => canonicalizeInformationNeedTimeframeRequirementsV1([])).toThrow(
+      "needTimeframeRequirements",
+    );
   });
 
   it("seals a caller-valued policy deterministically without defaults", () => {
