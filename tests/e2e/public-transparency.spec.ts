@@ -30,4 +30,25 @@ test.describe("public WAIA transparency pages", () => {
     await expect(page.locator("form, iframe")).toHaveCount(0);
     await expect(page.getByRole("button")).toHaveCount(0);
   });
+
+  test("keeps the Patrons page truthful, read-only, and responsive", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/patrons");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Patrons" })).toBeVisible();
+    await expect(page.getByText("People who help keep WAIA alive.")).toBeVisible();
+    await expect(
+      page
+        .getByTestId("public-patrons-pending")
+        .or(page.getByTestId("public-patrons-unavailable"))
+        .or(page.getByTestId("public-patrons-record")),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: /Breath of WAIA/i })).toHaveAttribute(
+      "href",
+      "/#breath-of-waia",
+    );
+    await expect(page.locator("form, iframe")).toHaveCount(0);
+    await expect(page.getByRole("button")).toHaveCount(0);
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+  });
 });

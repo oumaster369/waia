@@ -5,6 +5,7 @@ import {
   formatPublicMoney,
   formatPublicMonth,
   formatPublicRunway,
+  formatPublicShare,
 } from "@/lib/landing/public-format";
 
 describe("public transparency formatting", () => {
@@ -23,6 +24,15 @@ describe("public transparency formatting", () => {
     expect(formatPublicMoney("1.2", "USD")).toBe("Not yet published");
     expect(formatPublicDateTime("not-a-date")).toBe("Not yet published");
     expect(formatPublicRunway(null, 0)).toBe("Not yet published");
+    expect(formatPublicShare(null)).toBe("Not yet published");
+    expect(formatPublicShare("1000001")).toBe("Not yet published");
+  });
+
+  it("formats the server-owned million-part contribution share exactly", () => {
+    expect(formatPublicShare("1000000")).toBe("100%");
+    expect(formatPublicShare("666666")).toBe("66.6666%");
+    expect(formatPublicShare("333333")).toBe("33.3333%");
+    expect(formatPublicShare("1")).toBe("0.0001%");
   });
 
   it("formats public UTC dates, months, and minute-precision runway", () => {

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BudgetPage from "@/app/budget/page";
+import PatronsPage from "@/app/patrons/page";
 import WorkPlanPage from "@/app/work-plan/page";
 import type { PublicWorkPlanProjection } from "@/lib/public-work-plan/types";
 import type { PublicTreasuryProjection } from "@/lib/waia-core/treasury/public/types";
@@ -153,5 +154,92 @@ describe("public transparency pages", () => {
       "https://linear.app/example/issue/DEE-618",
     );
     expect(document.querySelector("form, iframe, button")).toBeNull();
+  });
+
+  it("renders consented Patrons and one non-identifying private aggregate", async () => {
+    readTreasuryMock.mockResolvedValue({
+      ...publishedTreasury,
+      patrons: {
+        status: "published",
+        totalContributedAmountMicros: "30000000",
+        currency: "USD",
+        patrons: [
+          {
+            displayName: "Alice",
+            contributedAmountMicros: "20000000",
+            currency: "USD",
+            share: {
+              numeratorMicros: "20000000",
+              denominatorMicros: "30000000",
+              partsPerMillion: "666666",
+            },
+          },
+        ],
+        privateSupport: {
+          contributedAmountMicros: "10000000",
+          currency: "USD",
+          share: {
+            numeratorMicros: "10000000",
+            denominatorMicros: "30000000",
+            partsPerMillion: "333333",
+          },
+        },
+        lastUpdatedAt: "2026-08-23T11:00:00.000Z",
+      },
+    } satisfies PublicTreasuryProjection);
+
+    render(await PatronsPage());
+
+    expect(screen.getByRole("heading", { level: 1, name: "Patrons" })).toBeInTheDocument();
+    expect(screen.getByText("People who help keep WAIA alive.")).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: /Published WAIA patron contributions/i });
+    expect(table).toHaveTextContent("Alice");
+    expect(table).toHaveTextContent("20 USD");
+    expect(table).toHaveTextContent("66.6666%");
+    expect(table).toHaveTextContent("Private & anonymous support");
+    expect(table).toHaveTextContent("10 USD");
+    expect(table).toHaveTextContent("33.3333%");
+    expect(screen.getByTestId("public-patrons-record")).toHaveTextContent(
+      "Share shows financial participation only. It does not grant ownership, governance power or voting weight.",
+    );
+    expect(document.querySelector("form, iframe, button")).toBeNull();
+  });
+
+  it("keeps pending and unavailable Patron states distinct and private", async () => {
+    readTreasuryMock.mockResolvedValue(publishedTreasury);
+    const { unmount } = render(await PatronsPage());
+    expect(screen.getByTestId("public-patrons-pending")).toHaveTextContent(/awaiting publication/i);
+    expect(document.body).not.toHaveTextContent("Alice");
+    unmount();
+
+    readTreasuryMock.mockResolvedValue(null);
+    render(await PatronsPage());
+    expect(screen.getByTestId("public-patrons-unavailable")).toHaveTextContent(
+      /cannot be loaded right now/i,
+    );
+    expect(document.querySelector("table, form, iframe, button")).toBeNull();
+  });
+
+  it("renders a truthful empty published Patron record", async () => {
+    readTreasuryMock.mockResolvedValue({
+      ...publishedTreasury,
+      patrons: {
+        status: "published",
+        totalContributedAmountMicros: "0",
+        currency: "USD",
+        patrons: [],
+        privateSupport: null,
+        lastUpdatedAt: null,
+      },
+    } satisfies PublicTreasuryProjection);
+
+    render(await PatronsPage());
+
+    expect(screen.getByTestId("public-patrons-empty")).toHaveTextContent(
+      /No confirmed contribution rows/i,
+    );
+    expect(screen.getByTestId("public-patrons-record")).toHaveTextContent(
+      /Confirmed contributions: 0 USD/i,
+    );
   });
 });

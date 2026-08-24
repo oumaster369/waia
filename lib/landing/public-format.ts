@@ -17,6 +17,18 @@ export function formatPublicMoney(micros: string | null, currency: string | null
   return `${negative ? "−" : ""}${groupWhole(whole)}${fraction ? `.${fraction}` : ""} ${currency}`;
 }
 
+/** Exact display of the server-owned million-part share: 1,000,000 parts = 100%. */
+export function formatPublicShare(partsPerMillion: string | null): string {
+  if (partsPerMillion === null || !/^\d+$/.test(partsPerMillion)) {
+    return "Not yet published";
+  }
+  const parts = BigInt(partsPerMillion);
+  if (parts > 1_000_000n) return "Not yet published";
+  const wholePercent = parts / 10_000n;
+  const fraction = (parts % 10_000n).toString().padStart(4, "0").replace(/0+$/, "");
+  return String(wholePercent) + (fraction ? "." + fraction : "") + "%";
+}
+
 export function formatPublicDateTime(value: string | null): string {
   if (!value) return "Not yet published";
   const date = new Date(value);
