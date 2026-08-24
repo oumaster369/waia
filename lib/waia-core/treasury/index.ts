@@ -80,6 +80,23 @@ export {
 } from "@/lib/waia-core/treasury/commitment-service";
 export { createTreasuryInceptionService } from "@/lib/waia-core/treasury/inception-service";
 export { getBreathPublicSnapshot } from "@/lib/waia-core/treasury/breath/public-snapshot";
+export {
+  computeVirtualFundAllocation,
+  createMemoryTreasuryFundAllocationRepository,
+  createPostgresTreasuryFundAllocationRepository,
+  createTreasuryFundAllocationService,
+  evaluateFundAllocationFacts,
+  fundAllocationUnavailableReasons,
+  TREASURY_FUND_ALLOCATION_ACCOUNTING_CURRENCY,
+  TREASURY_FUND_ALLOCATION_POLICY_CODE,
+  TREASURY_FUND_ALLOCATION_POLICY_VERSION,
+} from "@/lib/waia-core/treasury/allocation";
+export type {
+  FundAllocationCurrent,
+  FundAllocationEvidenceRecord,
+  FundAllocationUnavailableReason,
+  TreasuryFundAllocationService,
+} from "@/lib/waia-core/treasury/allocation";
 export { getPublicContributionAggregate } from "@/lib/waia-core/treasury/share/public-aggregate";
 export {
   derivePublicTreasuryProjection,

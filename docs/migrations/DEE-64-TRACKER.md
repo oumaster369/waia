@@ -41,6 +41,14 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-690** adds Postgres-only immutable virtual fund-allocation evidence in migrations
+`0163`/`0164`. The derived-read service protects the one applicable ACTIVE+PUBLIC ideal
+annual budget, accounts only non-negative canonical free funds above it to the Development
+Fund, and fails closed on unavailable accounting, ambiguous authority or currency mismatch.
+Evidence is organization-scoped, input-idempotent, append-only and service-only behind deny
+RLS. It does not rewrite transactions, move custody, apply production SQL, touch the Finance
+walkthrough database, or change broad runtime routing.
+
 **DEE-671** adds Postgres-only Treasury category group text and effective-month budget
 history in migrations `0158`/`0159` (`0157` is reserved by active AI-TRADER PR #477).
 It derives month/year category and group budget truth from verified Treasury transactions;
