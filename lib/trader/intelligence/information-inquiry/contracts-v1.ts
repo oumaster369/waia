@@ -113,8 +113,7 @@ export type InformationNeedV1 = Readonly<{
   evidenceFamily: string;
   allowedObservationKinds: readonly CanonicalPrimitiveObservationKindV1[];
   allowedObservationSchemaVersions: readonly string[];
-  timeframeRequirements: readonly InformationInquiryTimeframeV1[];
-  maxStalenessMsByTimeframe: readonly Readonly<{
+  timeframeRequirements: readonly Readonly<{
     timeframe: InformationInquiryTimeframeV1;
     maxStalenessMs: number | null;
   }>[];

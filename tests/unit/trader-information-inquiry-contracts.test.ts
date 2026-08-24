@@ -79,8 +79,7 @@ describe("DEE-696 information inquiry contracts", () => {
       evidenceFamily: "PRICE_STATE",
       allowedObservationKinds: ["ohlcv_bar"],
       allowedObservationSchemaVersions: ["ohlcv_bar/v1"],
-      timeframeRequirements: ["4h", "1h"],
-      maxStalenessMsByTimeframe: [
+      timeframeRequirements: [
         { timeframe: "4h", maxStalenessMs: 60_000 },
         { timeframe: "1h", maxStalenessMs: 15_000 },
       ],
@@ -90,7 +89,7 @@ describe("DEE-696 information inquiry contracts", () => {
       contradiction: null,
       reasonCodes: ["PRICE_REQUIRED"],
     } as const satisfies InformationNeedV1;
-    expect(need.maxStalenessMsByTimeframe).toEqual([
+    expect(need.timeframeRequirements).toEqual([
       { timeframe: "4h", maxStalenessMs: 60_000 },
       { timeframe: "1h", maxStalenessMs: 15_000 },
     ]);
