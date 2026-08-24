@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-685",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-686",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Seal the generic immutable RequiredInformationProfileV2 and deterministic fail-closed InformationSufficiencyReceiptV2 contracts, question/purpose vocabulary, hard-floor evaluator, explicit degradation/substitution/dependence semantics, and no-formula aggregate adapter boundary.",
       "dependencies": [],
@@ -42,11 +42,30 @@
       "execution": {
         "wave": 1,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "lib/trader/intelligence/information-sufficiency/index.ts",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+        "tests/unit/trader-information-sufficiency-contracts.test.ts"
+      ],
+      "integratedCommits": [
+        "9870eeb1ebd57b7b9ff75dd00f6a538c33752ae7",
+        "e066a85e2d711faa296bd806df7166e3206bdb93",
+        "6d37fb8678a9b1c37eaa7fd921e82f6413d27ded"
+      ],
+      "acceptanceEvidence": [
+        "Immutable content-addressed profiles/receipts fail closed on forged lineage and hard-floor inputs.",
+        "No empirical formula, threshold, source classification or capital authority.",
+        "Independent corrected-readmission review: PASS, zero P1/P2; implementation byte-identical."
+      ],
+      "tests": [
+        "Reissued contract/migration identity focus: 42/42 PASS.",
+        "Typecheck, scoped lint and diff integrity: PASS."
+      ]
     },
     {
       "issue": "DEE-687",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Add one next additive PostgreSQL migration, Drizzle schema and server-only repository for append-only tenant-scoped profile/receipt persistence with exact JSON/digest guards and authenticated/anon deny RLS.",
       "dependencies": [
@@ -92,11 +111,41 @@
       "execution": {
         "wave": 2,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "db/migrations_postgres/0162_trader_information_sufficiency_v2.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "docs/migrations/DEE-64-TRACKER.md",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres.ts",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+        "tests/integration/postgres-information-sufficiency-v2.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/trader-information-sufficiency-contracts.test.ts",
+        "tests/unit/trader-information-sufficiency-migration-identity.test.ts",
+        "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
+      ],
+      "integratedCommits": [
+        "a50b60ee9a50dcdb2632e583734945750ae8c00e",
+        "abb56e583bd47291be5ffb6cbfc37c4cb22f6b5b",
+        "bbf6003744cf3344426ada248a6f6bf5f65e23e4",
+        "3aa11ebb47dde94706254be92d02f0f99ea1d5de",
+        "77a0c0ee40a28e96b7396f8ed1d4da104ac85e94"
+      ],
+      "acceptanceEvidence": [
+        "One additive 0162 migration persists append-only tenant-scoped profile/receipt identities.",
+        "Service succeeds; authenticated/anon, cross-tenant, mutation and conflicting-content paths fail closed.",
+        "Independent corrected-readmission review: PASS, zero P1/P2; no migration collision."
+      ],
+      "tests": [
+        "Reissued contract/migration identity focus: 42/42 PASS.",
+        "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
+        "Typecheck, scoped lint and diff integrity: PASS."
+      ]
     },
     {
       "issue": "DEE-688",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Bind exact sufficiency authority before Forecast/Decision construction and new-entry paper/poll/fixture/backtest submission, with explicit non-capital authority and a separately preserved Guardian/open-position reassessment lane.",
       "dependencies": [
@@ -167,11 +216,77 @@
       "execution": {
         "wave": 3,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/intelligence/evaluation-cycle.ts",
+        "lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres.ts",
+        "lib/trader/intelligence/forecast-decision/build-decision-forecast-links.ts",
+        "lib/trader/intelligence/forecast-decision/build-decision-record.ts",
+        "lib/trader/intelligence/forecast-decision/build-entry-purpose-record.ts",
+        "lib/trader/intelligence/forecast-decision/build-forecast-records.ts",
+        "lib/trader/intelligence/forecast-decision/decision-forecast-link-repository-postgres.ts",
+        "lib/trader/intelligence/forecast-decision/decision-record-repository-postgres.ts",
+        "lib/trader/intelligence/forecast-decision/entry-purpose-record-repository-postgres.ts",
+        "lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority.ts",
+        "lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters.ts",
+        "lib/trader/intelligence/forecast-decision/forecast-decision-service.ts",
+        "lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts",
+        "lib/trader/intelligence/forecast-decision/index.ts",
+        "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
+        "lib/trader/intelligence/information-sufficiency/index.ts",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2.ts",
+        "lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres.ts",
+        "lib/trader/intelligence/records/intelligence-records-service.ts",
+        "lib/trader/intelligence/records/intelligence-records.types.ts",
+        "lib/trader/intelligence/types.ts",
+        "lib/trader/knowledge/mkb-read-model-evidence-harness.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "tests/integration/postgres-trader-forecast-decision-completeness.test.ts",
+        "tests/integration/postgres-trader-forecast-decision-idempotency.test.ts",
+        "tests/integration/postgres-trader-forecast-decision-parity.test.ts",
+        "tests/integration/postgres-trader-wp21-outcome-calibration-parity.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+        "tests/integration/trader-paper-bar-close-loop.test.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "tests/integration/wp13-intelligence-test-helpers.ts",
+        "tests/integration/wp14-forecast-decision-test-helpers.ts",
+        "tests/integration/wp15-mkb-read-model-test-helpers.ts",
+        "tests/unit/forecast-decision-construction-test-helper.ts",
+        "tests/unit/trader-authority-chain.test.ts",
+        "tests/unit/trader-information-sufficiency-runtime.test.ts",
+        "tests/unit/trader-paper-bar-close-loop.test.ts",
+        "tests/unit/trader-paper-cycle-runner.test.ts",
+        "tests/unit/trader-wp14-cost-evidence-fail-closed.test.ts",
+        "tests/unit/wp14-test-helpers.ts",
+        "tests/unit/wp15-test-helpers.ts"
+      ],
+      "integratedCommits": [
+        "f56b85d291c7af25a06f6f3d28a7605f5292b48e",
+        "54115481f8e5ee45777bcf683dfc0ae78ce629f1",
+        "d04f33002c5732a3042db7e2d6a0dd08a47ef0c1",
+        "b0e8d1a756c8258bc0045727b04c9bacc5dced15",
+        "89b503797021d3463f1708dffe16e1f171edd5e7",
+        "e0cab73f660f7581d36adbe96458bb00908879ca"
+      ],
+      "acceptanceEvidence": [
+        "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
+        "Guardian risk-reducing exits remain separate and unblocked.",
+        "Two Human-authorized tests assert information_sufficiency_blocked, null execution, bounded abort and no execution/reconciliation; production bytes unchanged.",
+        "Independent corrected-readmission review: PASS, zero P1/P2."
+      ],
+      "tests": [
+        "Affected runtime/Guardian/bar-close focus: 47/47 PASS.",
+        "Authorized corrected tests independently: 9/9 PASS.",
+        "WP14/WP15 compatibility: 40/40 PASS.",
+        "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
+        "Typecheck, scoped lint and diff integrity: PASS."
+      ]
     },
     {
       "issue": "DEE-689",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Inventory and prove every profile/receipt producer, Forecast/Decision consumer, paper/poll/fixture/backtest entry path and bypass; close question-relative, replay, tenant and separate-Guardian semantics without implementing downstream inquiry planning or evidence attribution.",
       "dependencies": [
@@ -222,14 +337,209 @@
       "execution": {
         "wave": 4,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts",
+        "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+        "lib/trader/intelligence/market-understanding.types.ts",
+        "lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts",
+        "lib/trader/market-brain/market-brain-pipeline.ts",
+        "tests/fixtures/trader/market-understanding-aligned-trend.json",
+        "tests/fixtures/trader/market-understanding-cross-venue-conflict.json",
+        "tests/fixtures/trader/market-understanding-gaps-conflict.json",
+        "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+        "tests/unit/trader-information-sufficiency-consumer-closure.test.ts",
+        "tests/unit/trader-m9-market-understanding-export.test.ts",
+        "tests/unit/trader-market-brain-pipeline.test.ts",
+        "tests/unit/trader-market-question-evaluation.test.ts",
+        "tests/unit/trader-market-understanding-bridge.test.ts",
+        "tests/unit/trader-market-understanding-golden.test.ts"
+      ],
+      "integratedCommits": [
+        "784273255175c1b3fe58232b3c19fbae3b00728d",
+        "50aa62a5c12ef3aec12cd94fa26f564fbb977983"
+      ],
+      "acceptanceEvidence": [
+        "Inventory covers direct/indirect/barrel/persistence/paper/poll/fixture/backtest/read-only/Guardian dispositions.",
+        "Reserved live is accurately excluded/ungated without live production change; causal and capital-question semantics remain conservative.",
+        "Independent corrected-readmission review: PASS, zero P1/P2; Wave D byte-identical."
+      ],
+      "tests": [
+        "Downstream closure: 75/75 PASS.",
+        "Reviewer-repair closure/semantics/poll: 12/12 PASS.",
+        "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
+        "Typecheck, scoped lint and diff integrity: PASS."
+      ]
     }
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": {
+    "preImplementationAdmission": {
       "status": "pass",
-      "reviewer": "Single visible DEE-621 integration owner under Human-ratified scope; no duplicate or unresolved semantic choice"
-    }
+      "manifestDigest": "54a013d6ddf1386657b9e830d84d51d6c619131e10e1027becc9d8444da4bd64",
+      "manifestCommit": "4b873354c33eefa16d1eceb20d480928292de33b",
+      "manifestPath": "docs/plans/dee-685-required-information-sufficiency-gate.integration-train.json",
+      "reviewer": "Human-authorized corrected readmission; independent exact-base, scope, byte-identity and ordering review"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-686",
+        "status": "pass",
+        "reviewedCommits": [
+          "9870eeb1ebd57b7b9ff75dd00f6a538c33752ae7",
+          "e066a85e2d711faa296bd806df7166e3206bdb93",
+          "6d37fb8678a9b1c37eaa7fd921e82f6413d27ded"
+        ],
+        "reviewedFiles": [
+          "lib/trader/intelligence/information-sufficiency/index.ts",
+          "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+          "tests/unit/trader-information-sufficiency-contracts.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-687",
+        "status": "pass",
+        "reviewedCommits": [
+          "a50b60ee9a50dcdb2632e583734945750ae8c00e",
+          "abb56e583bd47291be5ffb6cbfc37c4cb22f6b5b",
+          "bbf6003744cf3344426ada248a6f6bf5f65e23e4",
+          "3aa11ebb47dde94706254be92d02f0f99ea1d5de",
+          "77a0c0ee40a28e96b7396f8ed1d4da104ac85e94"
+        ],
+        "reviewedFiles": [
+          "db/migrations_postgres/0162_trader_information_sufficiency_v2.sql",
+          "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts",
+          "docs/migrations/DEE-64-TRACKER.md",
+          "lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres.ts",
+          "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+          "tests/integration/postgres-information-sufficiency-v2.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+          "tests/unit/trader-information-sufficiency-contracts.test.ts",
+          "tests/unit/trader-information-sufficiency-migration-identity.test.ts",
+          "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-688",
+        "status": "pass",
+        "reviewedCommits": [
+          "f56b85d291c7af25a06f6f3d28a7605f5292b48e",
+          "54115481f8e5ee45777bcf683dfc0ae78ce629f1",
+          "d04f33002c5732a3042db7e2d6a0dd08a47ef0c1",
+          "b0e8d1a756c8258bc0045727b04c9bacc5dced15",
+          "89b503797021d3463f1708dffe16e1f171edd5e7",
+          "e0cab73f660f7581d36adbe96458bb00908879ca"
+        ],
+        "reviewedFiles": [
+          "lib/trader/backtest/backtest-runner.ts",
+          "lib/trader/intelligence/evaluation-cycle.ts",
+          "lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres.ts",
+          "lib/trader/intelligence/forecast-decision/build-decision-forecast-links.ts",
+          "lib/trader/intelligence/forecast-decision/build-decision-record.ts",
+          "lib/trader/intelligence/forecast-decision/build-entry-purpose-record.ts",
+          "lib/trader/intelligence/forecast-decision/build-forecast-records.ts",
+          "lib/trader/intelligence/forecast-decision/decision-forecast-link-repository-postgres.ts",
+          "lib/trader/intelligence/forecast-decision/decision-record-repository-postgres.ts",
+          "lib/trader/intelligence/forecast-decision/entry-purpose-record-repository-postgres.ts",
+          "lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority.ts",
+          "lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters.ts",
+          "lib/trader/intelligence/forecast-decision/forecast-decision-service.ts",
+          "lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts",
+          "lib/trader/intelligence/forecast-decision/index.ts",
+          "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
+          "lib/trader/intelligence/information-sufficiency/index.ts",
+          "lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2.ts",
+          "lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres.ts",
+          "lib/trader/intelligence/records/intelligence-records-service.ts",
+          "lib/trader/intelligence/records/intelligence-records.types.ts",
+          "lib/trader/intelligence/types.ts",
+          "lib/trader/knowledge/mkb-read-model-evidence-harness.ts",
+          "lib/trader/paper/paper-cycle-runner.ts",
+          "lib/trader/paper/paper-cycle.types.ts",
+          "tests/integration/postgres-trader-forecast-decision-completeness.test.ts",
+          "tests/integration/postgres-trader-forecast-decision-idempotency.test.ts",
+          "tests/integration/postgres-trader-forecast-decision-parity.test.ts",
+          "tests/integration/postgres-trader-wp21-outcome-calibration-parity.test.ts",
+          "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+          "tests/integration/trader-paper-bar-close-loop.test.ts",
+          "tests/integration/trader-paper-cycle-runner.test.ts",
+          "tests/integration/wp13-intelligence-test-helpers.ts",
+          "tests/integration/wp14-forecast-decision-test-helpers.ts",
+          "tests/integration/wp15-mkb-read-model-test-helpers.ts",
+          "tests/unit/forecast-decision-construction-test-helper.ts",
+          "tests/unit/trader-authority-chain.test.ts",
+          "tests/unit/trader-information-sufficiency-runtime.test.ts",
+          "tests/unit/trader-paper-bar-close-loop.test.ts",
+          "tests/unit/trader-paper-cycle-runner.test.ts",
+          "tests/unit/trader-wp14-cost-evidence-fail-closed.test.ts",
+          "tests/unit/wp14-test-helpers.ts",
+          "tests/unit/wp15-test-helpers.ts"
+        ]
+      },
+      {
+        "issue": "DEE-689",
+        "status": "pass",
+        "reviewedCommits": [
+          "784273255175c1b3fe58232b3c19fbae3b00728d",
+          "50aa62a5c12ef3aec12cd94fa26f564fbb977983"
+        ],
+        "reviewedFiles": [
+          "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts",
+          "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+          "lib/trader/intelligence/market-understanding.types.ts",
+          "lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts",
+          "lib/trader/market-brain/market-brain-pipeline.ts",
+          "tests/fixtures/trader/market-understanding-aligned-trend.json",
+          "tests/fixtures/trader/market-understanding-cross-venue-conflict.json",
+          "tests/fixtures/trader/market-understanding-gaps-conflict.json",
+          "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+          "tests/unit/trader-information-sufficiency-consumer-closure.test.ts",
+          "tests/unit/trader-m9-market-understanding-export.test.ts",
+          "tests/unit/trader-market-brain-pipeline.test.ts",
+          "tests/unit/trader-market-question-evaluation.test.ts",
+          "tests/unit/trader-market-understanding-bridge.test.ts",
+          "tests/unit/trader-market-understanding-golden.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-686",
+        "status": "pass",
+        "commands": [
+          "contract/migration identity 42/42",
+          "typecheck/scoped lint PASS"
+        ]
+      },
+      {
+        "afterIssue": "DEE-687",
+        "status": "pass",
+        "commands": [
+          "PostgreSQL 16/16",
+          "fresh migration proof retained by byte identity"
+        ]
+      },
+      {
+        "afterIssue": "DEE-688",
+        "status": "pass",
+        "commands": [
+          "runtime/Guardian/bar-close 47/47",
+          "corrected tests 9/9",
+          "WP14/WP15 40/40"
+        ]
+      },
+      {
+        "afterIssue": "DEE-689",
+        "status": "pass",
+        "commands": [
+          "downstream closure 75/75",
+          "review repair 12/12",
+          "independent corrected-readmission review zero P1/P2"
+        ]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   }
 }
