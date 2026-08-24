@@ -1,6 +1,8 @@
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { evaluateInformationSufficiencyRuntimeAdmissionV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
+import { runInformationInquiryRuntimeV1 } from "@/lib/trader/intelligence/information-inquiry";
 import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
 import { applyBreachSubmissionRestrictions } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
@@ -53,8 +55,50 @@ import type {
   PaperCycleStrategyExecution,
   RunFixturePaperCyclesInput,
   RunMultiPaperCyclesResult,
+  PaperInformationInquiryResolverV1,
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
+
+export async function resolveHtxInformationInquiryCycleV1(input: {
+  poll: HtxBarPollSource;
+  resolver?: PaperInformationInquiryResolverV1;
+}): Promise<{
+  bundle: Awaited<ReturnType<HtxBarPollSource["fetchMandatoryEvaluationBundle"]>>;
+  informationSufficiencyAuthority: InformationSufficiencyRuntimeAuthorityV2 | undefined;
+}> {
+  const mandatoryBundle = await input.poll.fetchMandatoryEvaluationBundle();
+  if (!input.resolver) {
+    return { bundle: mandatoryBundle, informationSufficiencyAuthority: undefined };
+  }
+  const resolution = await input.resolver(mandatoryBundle);
+  if (resolution === null) {
+    return { bundle: mandatoryBundle, informationSufficiencyAuthority: undefined };
+  }
+  let selectedBundle = mandatoryBundle;
+  const runtime = await runInformationInquiryRuntimeV1({
+    planningInput: resolution.planningInput,
+    mode: "LIVE",
+    acquire: async (selection) => {
+      selectedBundle = await input.poll.fetchSelectedEvaluationBundle({
+        mandatoryBundle,
+        selection,
+      });
+      if (selectedBundle.informationAcquisition === null) {
+        throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:missingAcquisitionReceipt");
+      }
+      const refreshed = await resolution.refresh(selectedBundle);
+      return {
+        receipt: selectedBundle.informationAcquisition,
+        finalEvidence: refreshed.finalEvidence,
+        attempts: refreshed.attempts,
+      };
+    },
+  });
+  return {
+    bundle: selectedBundle,
+    informationSufficiencyAuthority: runtime.informationSufficiencyAuthority,
+  };
+}
 
 export type PaperCycleHtrBreachCancellationOptions = {
   historicalExchange?: HistoricalSimulatedExchange;
@@ -902,11 +946,17 @@ export async function runPollPaperCycles(
   for (let index = 0; index < input.n; index += 1) {
     let snapshot;
     let fusedContext;
+    let informationSufficiencyAuthority = input.informationSufficiencyAuthority;
 
     if (input.poll instanceof HtxBarPollSource) {
-      const bundle = await input.poll.fetchEvaluationBundle();
+      const resolved = await resolveHtxInformationInquiryCycleV1({
+        poll: input.poll,
+        resolver: input.informationInquiryResolver,
+      });
+      const bundle = resolved.bundle;
       snapshot = bundle.snapshot;
       fusedContext = bundle.fusedContext;
+      informationSufficiencyAuthority = resolved.informationSufficiencyAuthority;
     } else {
       snapshot = await input.poll.fetchSnapshot();
     }
@@ -921,7 +971,7 @@ export async function runPollPaperCycles(
       accountState: input.accountState,
       telemetrySink: input.telemetrySink,
       newId: input.newId,
-      informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+      informationSufficiencyAuthority,
       informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     });
 
