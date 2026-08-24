@@ -1010,8 +1010,8 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
     claimPath: input.launchExecution.claimPath,
     checkpointConfig: input.launchExecution.checkpointConfig,
     resumeFromCycle: input.launchExecution.resumeFromCycle,
-    informationSufficiencySyntheticResearch:
-      input.launchInput.syntheticResearchNonCapitalAuthority,
+    syntheticScaleAuthority: input.syntheticScaleAuthority,
+    informationSufficiencySyntheticResearch: input.launchInput.syntheticResearchNonCapitalAuthority,
   });
   const { hotPathWallTimeMs, ...backtestResult } = backtest;
 

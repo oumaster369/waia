@@ -43,6 +43,11 @@ import { buildResearchV2PortfolioContext } from "@/lib/trader/research/research-
 import { readFhvLaunchJournal } from "@/lib/trader/observability/fhv-launch-journal";
 import { getFhvSyntheticProfilingHooks } from "@/lib/trader/observability/fhv-synthetic-profiling-hook";
 import { createFhvFullHistoricalProgressReporter } from "@/lib/trader/observability/fhv-full-historical-progress";
+import { FHV_EXECUTION_PURPOSE_FULL_HISTORICAL } from "@/lib/trader/observability/fhv-execution-purpose";
+import {
+  assertFhvSyntheticScaleAuthorityForLaunch,
+  type FhvSyntheticScaleAuthorityV1,
+} from "@/lib/trader/observability/fhv-synthetic-scale-authority";
 import {
   isFhvThroughputQualifierSamplingRequired,
   buildFhvThroughputQualifierSamplerContract,
@@ -79,13 +84,40 @@ export type FhvFullHistoricalBacktestResult = RunBacktestResult & {
 
 export function assertSyntheticResearchNonCapitalFhvScopeV2(input: {
   includeHoldout: boolean;
+  runId: string;
+  organizationId: string;
+  releaseSha: string;
+  configurationFreeze: FhvConfigurationFreezeV1;
+  qualificationMode?: FhvQualificationMode;
+  maxCycles?: number;
+  syntheticScaleAuthority?: FhvSyntheticScaleAuthorityV1;
   informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
 }): void {
   const syntheticResearch = input.informationSufficiencySyntheticResearch;
-  if (
-    syntheticResearch &&
-    (syntheticResearch.binding.harness !== "FHV_SYNTHETIC_WP7B" || input.includeHoldout)
-  ) {
+  if (!syntheticResearch && !input.syntheticScaleAuthority) return;
+  try {
+    if (
+      !syntheticResearch ||
+      !input.syntheticScaleAuthority ||
+      syntheticResearch.binding.harness !== "FHV_SYNTHETIC_WP7B" ||
+      syntheticResearch.binding.runId !== input.runId ||
+      syntheticResearch.binding.provenanceDigest !== input.syntheticScaleAuthority.contentDigest ||
+      input.qualificationMode !== "OFFICIAL_MULTI_YEAR" ||
+      (process.env.NODE_ENV !== "test" && process.env.FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY !== "1")
+    ) {
+      throw new Error("scope mismatch");
+    }
+    assertFhvSyntheticScaleAuthorityForLaunch({
+      authority: input.syntheticScaleAuthority,
+      executionPurpose: FHV_EXECUTION_PURPOSE_FULL_HISTORICAL,
+      runId: input.runId,
+      organizationId: input.organizationId,
+      releaseSha: input.releaseSha,
+      datasetContentDigest: input.configurationFreeze.datasetDigest,
+      manifestSemanticDigest: input.configurationFreeze.manifestDigest,
+      maxCycles: input.maxCycles,
+    });
+  } catch {
     throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
   }
 }
@@ -112,6 +144,7 @@ export async function runFullHistoricalBacktest(input: {
   checkpointConfig?: FhvExecutionCheckpointConfig;
   resumeFromCycle?: number;
   sessionDbPath?: string;
+  syntheticScaleAuthority?: FhvSyntheticScaleAuthorityV1;
   informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
 }): Promise<FhvFullHistoricalBacktestResult> {
   assertSyntheticResearchNonCapitalFhvScopeV2(input);
@@ -364,7 +397,12 @@ export async function runFullHistoricalBacktest(input: {
         ? "fhv-full-historical-bounded"
         : "fhv-full-historical-official",
       runId: input.runId,
-      split: input.includeHoldout ? "blind" : "validation",
+      // The exact scale authority proves this partition is synthetic workload, never official blind.
+      split: input.informationSufficiencySyntheticResearch
+        ? "validation"
+        : input.includeHoldout
+          ? "blind"
+          : "validation",
       window,
       accountState,
       exportedAt: new Date(window.end),

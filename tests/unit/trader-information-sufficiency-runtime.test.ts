@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
 import { assertSyntheticResearchNonCapitalBacktestScopeV2 } from "@/lib/trader/backtest/backtest-runner";
 import { assertSyntheticResearchNonCapitalFhvScopeV2 } from "@/lib/trader/observability/fhv-full-historical-engine";
+import { buildFhvSyntheticScaleAuthority } from "@/lib/trader/observability/fhv-synthetic-scale-authority";
 import {
   buildForecastDecisionBundle,
   persistForecastDecisionBundleForCycle,
@@ -330,32 +331,52 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
 
+    const syntheticScaleAuthority = buildFhvSyntheticScaleAuthority({
+      runId: "fhv-synthetic-proof",
+      organizationId: ORG,
+      releaseSha: "f".repeat(40),
+      datasetContentDigest: "1".repeat(64),
+      manifestSemanticDigest: "2".repeat(64),
+      maxCycles: 4_509,
+      targetCycleCount: 4_509,
+      checkpointEveryCycles: 1_000,
+      issuedAtUtc: "2026-08-24T00:00:00.000Z",
+    });
     const fhvSynthetic = declareSyntheticResearchNonCapitalInformationAuthorityV2({
       organizationId: ORG,
       harness: "FHV_SYNTHETIC_WP7B",
       runId: "fhv-synthetic-proof",
-      provenanceDigest: "d".repeat(64),
+      provenanceDigest: syntheticScaleAuthority.contentDigest,
       officialBlindHoldout: false,
       production: false,
       live: false,
       capitalEligible: false,
       capitalUse: false,
     });
+    const exactFhvScope = {
+      includeHoldout: true,
+      runId: "fhv-synthetic-proof",
+      organizationId: ORG,
+      releaseSha: "f".repeat(40),
+      configurationFreeze: {
+        datasetDigest: "1".repeat(64),
+        manifestDigest: "2".repeat(64),
+      } as never,
+      qualificationMode: "OFFICIAL_MULTI_YEAR" as const,
+      maxCycles: 4_509,
+      syntheticScaleAuthority,
+      informationSufficiencySyntheticResearch: fhvSynthetic,
+    };
+    expect(() => assertSyntheticResearchNonCapitalFhvScopeV2(exactFhvScope)).not.toThrow();
     expect(() =>
       assertSyntheticResearchNonCapitalFhvScopeV2({
-        includeHoldout: false,
-        informationSufficiencySyntheticResearch: fhvSynthetic,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      assertSyntheticResearchNonCapitalFhvScopeV2({
-        includeHoldout: true,
-        informationSufficiencySyntheticResearch: fhvSynthetic,
+        ...exactFhvScope,
+        syntheticScaleAuthority: undefined,
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
     expect(() =>
       assertSyntheticResearchNonCapitalFhvScopeV2({
-        includeHoldout: false,
+        ...exactFhvScope,
         informationSufficiencySyntheticResearch: synthetic,
       }),
     ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
