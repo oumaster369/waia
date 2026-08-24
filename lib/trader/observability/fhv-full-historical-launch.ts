@@ -943,7 +943,8 @@ async function runFhvFullHistoricalLaunchBacktest(input: {
   launchReceiptDigest: string;
   replaceLaunchResult?: boolean;
 }): Promise<FhvFullHistoricalLaunchResult> {
-  const includeHoldout = !input.launchInput.boundedFixture;
+  const includeHoldout =
+    !input.launchInput.boundedFixture && !input.launchInput.syntheticResearchNonCapitalAuthority;
   let bars: readonly Bar[] | undefined;
   let datasetRoot: string | undefined;
 

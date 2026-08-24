@@ -354,10 +354,11 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
       capitalUse: false,
     });
     const exactFhvScope = {
-      includeHoldout: true,
+      includeHoldout: false,
       runId: "fhv-synthetic-proof",
       organizationId: ORG,
       releaseSha: "f".repeat(40),
+      datasetRoot: "/synthetic-scale-corpus",
       configurationFreeze: {
         datasetDigest: "1".repeat(64),
         manifestDigest: "2".repeat(64),
@@ -368,6 +369,12 @@ describe("DEE-688 Information Sufficiency runtime authority", () => {
       informationSufficiencySyntheticResearch: fhvSynthetic,
     };
     expect(() => assertSyntheticResearchNonCapitalFhvScopeV2(exactFhvScope)).not.toThrow();
+    expect(() =>
+      assertSyntheticResearchNonCapitalFhvScopeV2({
+        ...exactFhvScope,
+        includeHoldout: true,
+      }),
+    ).toThrow("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
     expect(() =>
       assertSyntheticResearchNonCapitalFhvScopeV2({
         ...exactFhvScope,
