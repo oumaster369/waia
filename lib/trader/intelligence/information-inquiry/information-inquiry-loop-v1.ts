@@ -12,7 +12,6 @@ import {
   inquiryCanonicalJsonString,
   inquiryCanonicalTextCompare,
   mapInformationInquiryPurposeV1,
-  requireInquiryNonEmpty,
   sortInquiryUniqueStrings,
   type InformationNeedTerminalStatusV1,
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
@@ -75,14 +74,6 @@ function requireNonNegativeInteger(value: number, field: string): number {
   return value;
 }
 
-function assertExactFields(value: object, expected: readonly string[], field: string): void {
-  const actual = Object.keys(value).sort(inquiryCanonicalTextCompare);
-  const canonicalExpected = [...expected].sort(inquiryCanonicalTextCompare);
-  if (computeInquiryContentDigest(actual) !== computeInquiryContentDigest(canonicalExpected)) {
-    throw new Error(`INFORMATION_INQUIRY_LOOP_INVALID:${field}Fields`);
-  }
-}
-
 function canonicalAttempts(input: {
   bundle: InformationInquiryPlanningBundleV1;
   attempts: readonly InformationAcquisitionAttemptInputV1[];
@@ -112,8 +103,16 @@ function canonicalAttempts(input: {
     }
     const key = `${attempt.needId}\u0000${attempt.providerId}`;
     const requested = requestedByKey.get(key);
+    const need = input.bundle.plan.needs.find((item) => item.id === attempt.needId);
     if (!requested || requested.requirementId !== attempt.requirementId || attemptedKeys.has(key)) {
       throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:attemptNotPlanAuthorized");
+    }
+    if (
+      !need ||
+      attempt.depth > need.inquiryBounds.maxDepth ||
+      attempt.elapsedMsAtCompletion > need.inquiryBounds.maxDurationMs
+    ) {
+      throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:attemptNeedBounds");
     }
     attemptedKeys.add(key);
     if (!(["AVAILABLE", "UNAVAILABLE", "REJECTED"] as const).includes(attempt.outcome)) {
@@ -150,6 +149,23 @@ function canonicalAttempts(input: {
     const contentDigest = computeInquiryContentDigest(body);
     return deepFreezeInquiry({ ...body, id: `iat_${contentDigest}`, contentDigest });
   });
+  for (const need of input.bundle.plan.needs) {
+    if (
+      attempts.filter((attempt) => attempt.needId === need.id).length >
+      Math.min(input.bundle.plan.bounds.maxProviderFanout, need.inquiryBounds.maxProviderFanout)
+    ) {
+      throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:attemptNeedFanout");
+    }
+  }
+  for (const requirementId of new Set(input.bundle.plan.needs.map((need) => need.requirementId))) {
+    const need = input.bundle.plan.needs.find((item) => item.requirementId === requirementId)!;
+    if (
+      attempts.filter((attempt) => attempt.requirementId === requirementId).length >
+      Math.min(input.bundle.plan.bounds.maxProviderFanout, need.inquiryBounds.maxProviderFanout)
+    ) {
+      throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:attemptNeedFanout");
+    }
+  }
   return deepFreezeInquiry(
     attempts.sort((left, right) =>
       inquiryCanonicalTextCompare(
@@ -179,6 +195,8 @@ export function runInformationInquiryLoopV1(
     bundle.plan.accountId !== profile.accountId ||
     bundle.plan.symbol !== profile.symbol ||
     bundle.plan.venue !== profile.venue ||
+    bundle.plan.analyticalTimeframe !== profile.analyticalTimeframe ||
+    bundle.plan.horizon !== profile.horizon ||
     bundle.plan.profilePurpose !== profile.purpose
   ) {
     throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:profileScope");
@@ -199,6 +217,8 @@ export function runInformationInquiryLoopV1(
         inquiryCanonicalJsonString(need.allowedObservationKinds) ||
       inquiryCanonicalJsonString(requirement.allowedObservationSchemaVersions) !==
         inquiryCanonicalJsonString(need.allowedObservationSchemaVersions) ||
+      inquiryCanonicalJsonString(requirement.inquiryBounds) !==
+        inquiryCanonicalJsonString(need.inquiryBounds) ||
       need.providerCandidates.some(
         (candidate) =>
           !satisfier.providerIds.includes(candidate.providerId) ||
@@ -248,6 +268,14 @@ export function runInformationInquiryLoopV1(
     bundle.plan.iterationIndex + 1 >= bundle.plan.bounds.maxIterations ||
     bundle.plan.bounds.maxDepth === 0 ||
     attempts.some((attempt) => attempt.depth >= bundle.plan.bounds.maxDepth) ||
+    attempts.some((attempt) => {
+      const need = bundle.plan.needs.find((item) => item.id === attempt.needId)!;
+      return (
+        attempt.depth >= need.inquiryBounds.maxDepth ||
+        attempt.elapsedMsAtCompletion >= need.inquiryBounds.maxDurationMs
+      );
+    }) ||
+    attempts.some((attempt) => attempt.elapsedMsAtCompletion >= bundle.plan.bounds.maxDurationMs) ||
     queryCountConsumed >= bundle.plan.bounds.maxQueryCount ||
     acquisitionCostUnitsConsumed >= bundle.plan.bounds.maxAcquisitionCostUnits;
   const terminalStatus: InformationNeedTerminalStatusV1 =
@@ -286,115 +314,28 @@ export function runInformationInquiryLoopV1(
 
 export function assertInformationInquiryLoopReceiptV1(
   receipt: InformationInquiryLoopReceiptV1,
+  bundle: InformationInquiryPlanningBundleV1,
+  profile: RequiredInformationProfileV2,
 ): InformationInquiryLoopReceiptV1 {
-  assertExactFields(
-    receipt,
-    [
-      "schemaVersion",
-      "id",
-      "planId",
-      "planContentDigest",
-      "attempts",
-      "queryCountConsumed",
-      "acquisitionCostUnitsConsumed",
-      "terminalStatus",
-      "finalSufficiencyReceipt",
-      "reasonCodes",
-      "authority",
-      "createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority",
-      "contentDigest",
-    ],
-    "receipt",
-  );
-  requireInquiryNonEmpty(receipt.id, "loopReceiptId");
-  if (
-    receipt.schemaVersion !== INFORMATION_INQUIRY_LOOP_RECEIPT_V1_SCHEMA_VERSION ||
-    receipt.authority !== "INFORMATION_SUFFICIENCY_REEVALUATION_ONLY" ||
-    receipt.createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority !== false ||
-    !(
-      [
-        "ANSWERED_SUFFICIENTLY",
-        "UNRESOLVED",
-        "INFORMATION_INSUFFICIENT",
-        "UNAVAILABLE",
-        "NOT_REQUIRED",
-        "NOT_APPLICABLE",
-      ] as const
-    ).includes(receipt.terminalStatus)
-  ) {
-    throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:receiptVocabulary");
-  }
-  requireNonNegativeInteger(receipt.queryCountConsumed, "receiptQueryCount");
-  requireNonNegativeInteger(receipt.acquisitionCostUnitsConsumed, "receiptCostUnits");
-  for (const attempt of receipt.attempts) {
-    assertExactFields(
-      attempt,
-      [
-        "id",
-        "iterationIndex",
-        "depth",
-        "needId",
-        "requirementId",
-        "providerId",
-        "costUnits",
-        "outcome",
-        "elapsedMsAtCompletion",
-        "evidenceIds",
-        "reasonCodes",
-        "authority",
-        "contentDigest",
-      ],
-      "attempt",
-    );
-    const {
-      id,
-      contentDigest,
-      iterationIndex,
-      depth,
-      needId,
-      requirementId,
-      providerId,
-      costUnits,
-      outcome,
-      elapsedMsAtCompletion,
-      evidenceIds,
-      reasonCodes,
-      authority,
-    } = attempt;
-    const attemptBody = {
-      iterationIndex,
-      depth,
-      needId,
-      requirementId,
-      providerId,
-      costUnits,
-      outcome,
-      elapsedMsAtCompletion,
-      evidenceIds,
-      reasonCodes,
-      authority,
-    };
-    const attemptDigest = computeInquiryContentDigest(attemptBody);
-    if (id !== `iat_${attemptDigest}` || contentDigest !== attemptDigest) {
-      throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:attemptIdentity");
-    }
-  }
-  const body = {
-    schemaVersion: receipt.schemaVersion,
-    planId: receipt.planId,
-    planContentDigest: receipt.planContentDigest,
-    attempts: receipt.attempts,
-    queryCountConsumed: receipt.queryCountConsumed,
-    acquisitionCostUnitsConsumed: receipt.acquisitionCostUnitsConsumed,
-    terminalStatus: receipt.terminalStatus,
-    finalSufficiencyReceipt: receipt.finalSufficiencyReceipt,
-    reasonCodes: receipt.reasonCodes,
-    authority: receipt.authority,
-    createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority:
-      receipt.createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority,
-  };
-  const expectedDigest = computeInquiryContentDigest(body);
-  if (receipt.id !== `iil_${expectedDigest}` || receipt.contentDigest !== expectedDigest) {
+  const expected = runInformationInquiryLoopV1({
+    bundle,
+    profile,
+    attempts: receipt.attempts.map((attempt) => ({
+      iterationIndex: attempt.iterationIndex,
+      depth: attempt.depth,
+      needId: attempt.needId,
+      requirementId: attempt.requirementId,
+      providerId: attempt.providerId,
+      outcome: attempt.outcome,
+      elapsedMsAtCompletion: attempt.elapsedMsAtCompletion,
+      evidenceIds: attempt.evidenceIds,
+      reasonCodes: attempt.reasonCodes,
+    })),
+    finalEvidence: receipt.finalSufficiencyReceipt.evidenceInventory,
+    activeContextTriggers: receipt.finalSufficiencyReceipt.activeContextTriggers,
+    aggregateQualityEvaluation: receipt.finalSufficiencyReceipt.aggregateQualityEvaluation,
+  });
+  if (inquiryCanonicalJsonString(expected) !== inquiryCanonicalJsonString(receipt)) {
     throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:receiptIdentity");
   }
   return receipt;

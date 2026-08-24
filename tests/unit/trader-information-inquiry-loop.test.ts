@@ -7,7 +7,10 @@ import {
   INFORMATION_NEED_PLAN_V1_SCHEMA_VERSION,
   type InformationNeedPlanV1,
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
-import { runInformationInquiryLoopV1 } from "@/lib/trader/intelligence/information-inquiry/information-inquiry-loop-v1";
+import {
+  assertInformationInquiryLoopReceiptV1,
+  runInformationInquiryLoopV1,
+} from "@/lib/trader/intelligence/information-inquiry/information-inquiry-loop-v1";
 import {
   INFORMATION_INQUIRY_PLANNING_BUNDLE_V1_SCHEMA_VERSION,
   type InformationInquiryPlanningBundleV1,
@@ -21,7 +24,13 @@ import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/canoni
 const hex = (value: string) => createHash("sha256").update(value).digest("hex");
 const PIT = "2026-08-24T12:00:00.000Z";
 
-function profile() {
+function profile(
+  inquiryBounds: Readonly<{
+    maxDepth: number;
+    maxDurationMs: number;
+    maxProviderFanout: number;
+  }> = { maxDepth: 2, maxDurationMs: 1_000, maxProviderFanout: 1 },
+) {
   return defineRequiredInformationProfileV2({
     organizationId: "org-a",
     accountId: "account-a",
@@ -52,7 +61,7 @@ function profile() {
         contradictionPolicy: "FAIL_UNRESOLVED",
         requirePitQualified: true,
         requireReplayEligible: true,
-        inquiryBounds: { maxDepth: 2, maxDurationMs: 1_000, maxProviderFanout: 1 },
+        inquiryBounds,
       },
     ],
     aggregateQualityContract: null,
@@ -112,6 +121,7 @@ function bundle(
     allowedObservationKinds: ["ohlcv_bar"] as const,
     allowedObservationSchemaVersions: [CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION],
     timeframeRequirements: [{ timeframe: "1m" as const, maxStalenessMs: 60_000 }],
+    inquiryBounds: selectedProfile.requirements[0]!.inquiryBounds,
     providerCandidates: [{ providerId: "htx_spot", substitutionRuleId: null, costUnits: 1 }],
     requirePitQualified: true,
     requireReplayEligible: true,
@@ -138,6 +148,8 @@ function bundle(
     accountId: "account-a",
     symbol: "BTC/USDT",
     venue: "HTX",
+    analyticalTimeframe: selectedProfile.analyticalTimeframe,
+    horizon: selectedProfile.horizon,
     pitAnchor: PIT,
     purpose: "NEW_OPPORTUNITY_SEARCH",
     profilePurpose: "NEW_OPPORTUNITY",
@@ -220,6 +232,9 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(receipt.finalSufficiencyReceipt.status).toBe("SUFFICIENT");
     expect(receipt.attempts[0]).toMatchObject({ costUnits: 1, outcome: "AVAILABLE" });
     expect(receipt.createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority).toBe(false);
+    expect(assertInformationInquiryLoopReceiptV1(receipt, selectedBundle, selectedProfile)).toBe(
+      receipt,
+    );
   });
 
   it("terminates honestly on unavailable evidence without zero or synthetic fallback", () => {
@@ -358,5 +373,163 @@ describe("DEE-697 bounded information inquiry loop", () => {
         activeContextTriggers: [],
       }),
     ).toThrow("planSelectionBounds");
+  });
+
+  it("enforces exact per-need depth and duration independently of global bounds", () => {
+    const depthProfile = profile({ maxDepth: 1, maxDurationMs: 1_000, maxProviderFanout: 1 });
+    const depthBundle = bundle(depthProfile, { maxDepth: 2 });
+    expect(() =>
+      runInformationInquiryLoopV1({
+        bundle: depthBundle,
+        profile: depthProfile,
+        attempts: [
+          {
+            iterationIndex: 0,
+            depth: 2,
+            needId: depthBundle.plan.needs[0]!.id,
+            requirementId: "price-state",
+            providerId: "htx_spot",
+            outcome: "UNAVAILABLE",
+            elapsedMsAtCompletion: 10,
+            evidenceIds: [],
+            reasonCodes: ["SOURCE_UNAVAILABLE"],
+          },
+        ],
+        finalEvidence: [],
+        activeContextTriggers: [],
+      }),
+    ).toThrow("attemptNeedBounds");
+
+    const durationProfile = profile({ maxDepth: 2, maxDurationMs: 50, maxProviderFanout: 1 });
+    const durationBundle = bundle(durationProfile, { maxDepth: 2 });
+    expect(() =>
+      runInformationInquiryLoopV1({
+        bundle: durationBundle,
+        profile: durationProfile,
+        attempts: [
+          {
+            iterationIndex: 0,
+            depth: 1,
+            needId: durationBundle.plan.needs[0]!.id,
+            requirementId: "price-state",
+            providerId: "htx_spot",
+            outcome: "UNAVAILABLE",
+            elapsedMsAtCompletion: 51,
+            evidenceIds: [],
+            reasonCodes: ["SOURCE_UNAVAILABLE"],
+          },
+        ],
+        finalEvidence: [],
+        activeContextTriggers: [],
+      }),
+    ).toThrow("attemptNeedBounds");
+
+    const zeroFanoutProfile = profile({ maxDepth: 2, maxDurationMs: 1_000, maxProviderFanout: 0 });
+    const zeroFanoutBundle = bundle(zeroFanoutProfile, { maxDepth: 2 });
+    expect(() =>
+      runInformationInquiryLoopV1({
+        bundle: zeroFanoutBundle,
+        profile: zeroFanoutProfile,
+        attempts: [],
+        finalEvidence: [],
+        activeContextTriggers: [],
+      }),
+    ).toThrow("planNeedSelectionBounds");
+  });
+
+  it("rejects exact-scope and self-consistent receipt forgeries by reconstruction", () => {
+    const selectedProfile = profile();
+    const selectedBundle = bundle(selectedProfile);
+    const selectedEvidence = evidence();
+    const receipt = runInformationInquiryLoopV1({
+      bundle: selectedBundle,
+      profile: selectedProfile,
+      attempts: [
+        {
+          iterationIndex: 0,
+          depth: 1,
+          needId: selectedBundle.plan.needs[0]!.id,
+          requirementId: "price-state",
+          providerId: "htx_spot",
+          outcome: "AVAILABLE",
+          elapsedMsAtCompletion: 100,
+          evidenceIds: [selectedEvidence.evidenceId],
+          reasonCodes: ["SOURCE_AVAILABLE"],
+        },
+      ],
+      finalEvidence: [selectedEvidence],
+      activeContextTriggers: [],
+    });
+    const receiptBody = Object.fromEntries(
+      Object.entries(receipt).filter(([key]) => key !== "id" && key !== "contentDigest"),
+    ) as Omit<typeof receipt, "id" | "contentDigest">;
+    const forgedBody = {
+      ...receiptBody,
+      queryCountConsumed: receipt.queryCountConsumed + 1,
+      terminalStatus: "ANSWERED_SUFFICIENTLY" as const,
+      reasonCodes: ["FORGED_REASON"],
+    };
+    const forgedDigest = computeInquiryContentDigest(forgedBody);
+    const forgedReceipt = {
+      ...forgedBody,
+      id: `iil_${forgedDigest}`,
+      contentDigest: forgedDigest,
+    };
+    expect(() =>
+      assertInformationInquiryLoopReceiptV1(forgedReceipt, selectedBundle, selectedProfile),
+    ).toThrow("receiptIdentity");
+
+    const attemptBody = Object.fromEntries(
+      Object.entries(receipt.attempts[0]!).filter(
+        ([key]) => key !== "id" && key !== "contentDigest",
+      ),
+    ) as Omit<(typeof receipt.attempts)[number], "id" | "contentDigest">;
+    const forgedAttemptBody = { ...attemptBody, costUnits: attemptBody.costUnits + 1 };
+    const forgedAttemptDigest = computeInquiryContentDigest(forgedAttemptBody);
+    const forgedAttempt = {
+      ...forgedAttemptBody,
+      id: `iat_${forgedAttemptDigest}`,
+      contentDigest: forgedAttemptDigest,
+    };
+    const forgedAttemptReceiptBody = { ...receiptBody, attempts: [forgedAttempt] };
+    const forgedAttemptReceiptDigest = computeInquiryContentDigest(forgedAttemptReceiptBody);
+    const forgedAttemptReceipt = {
+      ...forgedAttemptReceiptBody,
+      id: `iil_${forgedAttemptReceiptDigest}`,
+      contentDigest: forgedAttemptReceiptDigest,
+    };
+    expect(() =>
+      assertInformationInquiryLoopReceiptV1(forgedAttemptReceipt, selectedBundle, selectedProfile),
+    ).toThrow("receiptIdentity");
+
+    const planBody = Object.fromEntries(
+      Object.entries(selectedBundle.plan).filter(
+        ([key]) => key !== "id" && key !== "contentDigest",
+      ),
+    ) as Omit<typeof selectedBundle.plan, "id" | "contentDigest">;
+    const mismatchedPlanBody = { ...planBody, horizon: "30m" };
+    const mismatchedPlanDigest = computeInquiryContentDigest(mismatchedPlanBody);
+    const mismatchedPlan = {
+      ...mismatchedPlanBody,
+      id: `inp_${mismatchedPlanDigest}`,
+      contentDigest: mismatchedPlanDigest,
+    };
+    const bundleBody = Object.fromEntries(
+      Object.entries(selectedBundle).filter(([key]) => key !== "contentDigest"),
+    ) as Omit<typeof selectedBundle, "contentDigest">;
+    const mismatchedBundleBody = { ...bundleBody, plan: mismatchedPlan };
+    const mismatchedBundle = {
+      ...mismatchedBundleBody,
+      contentDigest: computeInquiryContentDigest(mismatchedBundleBody),
+    };
+    expect(() =>
+      runInformationInquiryLoopV1({
+        bundle: mismatchedBundle,
+        profile: selectedProfile,
+        attempts: [],
+        finalEvidence: [],
+        activeContextTriggers: [],
+      }),
+    ).toThrow("profileScope");
   });
 });

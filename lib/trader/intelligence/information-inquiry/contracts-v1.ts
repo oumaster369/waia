@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type {
   InformationAnalysisPurposeV2,
   InformationEvidenceAvailabilityV2,
+  InformationEvidenceContradictionV2,
   InformationQuestionIdV2,
   InformationRequirementClassV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
@@ -99,9 +100,21 @@ export type InformationContradictionLineageV1 = Readonly<{
   questionId: InformationQuestionIdV2;
   claimId: string;
   materiality: "MATERIAL" | "IMMATERIAL" | "UNKNOWN";
+  evidenceIds: readonly string[];
   observationIds: readonly string[];
+  observationContentDigests: readonly Readonly<{
+    observationId: string;
+    observationContentDigest: string;
+  }>[];
+  observationContradictionStates: readonly Readonly<{
+    observationId: string;
+    contradiction: InformationEvidenceContradictionV2;
+  }>[];
   providerIds: readonly string[];
   dependenceGroups: readonly string[];
+  materialityPolicyVersion: string;
+  materialityPolicyContentDigest: string;
+  materialityEvaluationContentDigest: string;
   reasonCodes: readonly string[];
 }>;
 
@@ -119,6 +132,11 @@ export type InformationNeedV1 = Readonly<{
   allowedObservationKinds: readonly CanonicalPrimitiveObservationKindV1[];
   allowedObservationSchemaVersions: readonly string[];
   timeframeRequirements: readonly InformationNeedTimeframeRequirementV1[];
+  inquiryBounds: Readonly<{
+    maxDepth: number;
+    maxDurationMs: number;
+    maxProviderFanout: number;
+  }>;
   providerCandidates: readonly Readonly<{
     providerId: string;
     substitutionRuleId: string | null;
@@ -169,6 +187,8 @@ export type InformationNeedPlanV1 = Readonly<{
   accountId: string | null;
   symbol: string;
   venue: string;
+  analyticalTimeframe: string;
+  horizon: string;
   pitAnchor: string;
   purpose: InformationInquiryPurposeV1;
   profilePurpose: InformationAnalysisPurposeV2;
@@ -317,6 +337,99 @@ export function canonicalizeInformationNeedTimeframeRequirementsV1(
     throw new Error("INFORMATION_INQUIRY_INVALID:duplicateNeedTimeframe");
   }
   return deepFreezeInquiry(canonical);
+}
+
+export function computeInformationContradictionMaterialityEvaluationDigestV1(
+  input: Readonly<
+    Pick<
+      InformationContradictionLineageV1,
+      | "claimId"
+      | "materiality"
+      | "evidenceIds"
+      | "observationIds"
+      | "observationContentDigests"
+      | "observationContradictionStates"
+      | "providerIds"
+      | "dependenceGroups"
+      | "materialityPolicyVersion"
+      | "materialityPolicyContentDigest"
+    >
+  >,
+): string {
+  const claimId = requireInquiryNonEmpty(input.claimId, "contradictionClaimId");
+  if (!("MATERIAL,IMMATERIAL,UNKNOWN".split(",") as string[]).includes(input.materiality)) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:contradictionMateriality");
+  }
+  const observationIds = sortInquiryUniqueStrings(
+    input.observationIds,
+    "contradictionObservationId",
+  );
+  const evidenceIds = sortInquiryUniqueStrings(input.evidenceIds, "contradictionEvidenceId");
+  const observationContentDigests = [...input.observationContentDigests]
+    .map((entry) => ({
+      observationId: requireInquiryNonEmpty(
+        entry.observationId,
+        "contradictionObservationDigestId",
+      ),
+      observationContentDigest: requireInquiryDigest(
+        entry.observationContentDigest,
+        "contradictionObservationContentDigest",
+      ),
+    }))
+    .sort((left, right) => inquiryCanonicalTextCompare(left.observationId, right.observationId));
+  if (
+    new Set(observationContentDigests.map((entry) => entry.observationId)).size !==
+      observationContentDigests.length ||
+    inquiryCanonicalJsonString(observationContentDigests.map((entry) => entry.observationId)) !==
+      inquiryCanonicalJsonString(observationIds)
+  ) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:contradictionObservationDigestIdentity");
+  }
+  const observationContradictionStates = [...input.observationContradictionStates]
+    .map((entry) => {
+      if (!("SUPPORTS,CONTRADICTS,UNRESOLVED".split(",") as string[]).includes(entry.contradiction)) {
+        throw new Error("INFORMATION_INQUIRY_INVALID:contradictionEvidenceState");
+      }
+      return {
+        observationId: requireInquiryNonEmpty(
+          entry.observationId,
+          "contradictionObservationStateId",
+        ),
+        contradiction: entry.contradiction,
+      };
+    })
+    .sort((left, right) => inquiryCanonicalTextCompare(left.observationId, right.observationId));
+  if (
+    new Set(observationContradictionStates.map((entry) => entry.observationId)).size !==
+      observationContradictionStates.length ||
+    inquiryCanonicalJsonString(observationContradictionStates.map((entry) => entry.observationId)) !==
+      inquiryCanonicalJsonString(observationIds) ||
+    !observationContradictionStates.some((entry) => entry.contradiction === "CONTRADICTS")
+  ) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:contradictionEvidenceStateIdentity");
+  }
+  const payload = {
+    claimId,
+    materiality: input.materiality,
+    evidenceIds,
+    observationIds,
+    observationContentDigests,
+    observationContradictionStates,
+    providerIds: sortInquiryUniqueStrings(input.providerIds, "contradictionProviderId"),
+    dependenceGroups: sortInquiryUniqueStrings(
+      input.dependenceGroups,
+      "contradictionDependenceGroup",
+    ),
+    materialityPolicyVersion: requireInquiryNonEmpty(
+      input.materialityPolicyVersion,
+      "contradictionMaterialityPolicyVersion",
+    ),
+    materialityPolicyContentDigest: requireInquiryDigest(
+      input.materialityPolicyContentDigest,
+      "contradictionMaterialityPolicyContentDigest",
+    ),
+  };
+  return computeInquiryContentDigest(payload);
 }
 
 export function mapInformationInquiryPurposeV1(

@@ -22,6 +22,7 @@ import {
 import {
   assertInformationInquiryPolicyV1,
   canonicalizeInformationNeedTimeframeRequirementsV1,
+  computeInformationContradictionMaterialityEvaluationDigestV1,
   computeInquiryContentDigest,
   deepFreezeInquiry,
   defineInformationAcquisitionSelectionV1,
@@ -169,6 +170,8 @@ function assertScope(input: BuildInformationNeedPlanV1Input): void {
     input.receipt.accountId !== input.profile.accountId ||
     input.receipt.symbol !== input.profile.symbol ||
     input.receipt.venue !== input.profile.venue ||
+    input.receipt.analyticalTimeframe !== input.profile.analyticalTimeframe ||
+    input.receipt.horizon !== input.profile.horizon ||
     input.receipt.purpose !== mapInformationInquiryPurposeV1(input.policy.purpose) ||
     input.topDownReconstruction.symbol !== input.profile.symbol ||
     input.topDownReconstruction.pitAnchor !== input.receipt.pitAnchor
@@ -237,11 +240,71 @@ function canonicalContradictions(
     const matchedEvidence = receipt.matchedEvidenceIds.map((id) =>
       input.receipt.evidenceInventory.find((item) => item.evidenceId === id),
     );
-    const lineageEvidence = observationIds.map((observationId) =>
-      matchedEvidence.find((item) => item?.observationId === observationId),
-    );
-    if (lineageEvidence.some((item) => !item)) {
+    const claimId = requireInquiryNonEmpty(entry.lineage.claimId, "contradictionClaimId");
+    if (
+      matchedEvidence.length === 0 ||
+      matchedEvidence.some(
+        (item) => !item || item.contradictionGroup === null || item.contradictionGroup !== claimId,
+      )
+    ) {
       throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:contradictionEvidenceLineage");
+    }
+    const lineageEvidence = matchedEvidence as readonly InformationEvidenceV2[];
+    const exactObservationIds = sortInquiryUniqueStrings(
+      lineageEvidence.map((item) => item.observationId),
+      "derivedContradictionObservationId",
+    );
+    const observationContentDigests = [...entry.lineage.observationContentDigests]
+      .map((reference) => ({
+        observationId: requireInquiryNonEmpty(
+          reference.observationId,
+          "contradictionObservationDigestId",
+        ),
+        observationContentDigest: requireInquiryDigest(
+          reference.observationContentDigest,
+          "contradictionObservationContentDigest",
+        ),
+      }))
+      .sort((left, right) => inquiryCanonicalTextCompare(left.observationId, right.observationId));
+    const exactObservationContentDigests = lineageEvidence
+      .map((item) => ({
+        observationId: item!.observationId,
+        observationContentDigest: item!.observationContentDigest,
+      }))
+      .sort((left, right) => inquiryCanonicalTextCompare(left.observationId, right.observationId));
+    const evidenceIds = sortInquiryUniqueStrings(
+      entry.lineage.evidenceIds,
+      "contradictionEvidenceId",
+    );
+    const exactEvidenceIds = sortInquiryUniqueStrings(
+      lineageEvidence.map((item) => item!.evidenceId),
+      "derivedContradictionEvidenceId",
+    );
+    const observationContradictionStates = [...entry.lineage.observationContradictionStates]
+      .map((state) => ({
+        observationId: requireInquiryNonEmpty(
+          state.observationId,
+          "contradictionObservationStateId",
+        ),
+        contradiction: state.contradiction,
+      }))
+      .sort((left, right) => inquiryCanonicalTextCompare(left.observationId, right.observationId));
+    const exactObservationContradictionStates = lineageEvidence
+      .map((item) => ({
+        observationId: item!.observationId,
+        contradiction: item!.contradiction,
+      }))
+      .sort((left, right) => inquiryCanonicalTextCompare(left.observationId, right.observationId));
+    if (
+      inquiryCanonicalJsonString(observationContentDigests) !==
+        inquiryCanonicalJsonString(exactObservationContentDigests) ||
+      inquiryCanonicalJsonString(observationIds) !==
+        inquiryCanonicalJsonString(exactObservationIds) ||
+      inquiryCanonicalJsonString(evidenceIds) !== inquiryCanonicalJsonString(exactEvidenceIds) ||
+      inquiryCanonicalJsonString(observationContradictionStates) !==
+        inquiryCanonicalJsonString(exactObservationContradictionStates)
+    ) {
+      throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:contradictionObservationIdentity");
     }
     const providerIds = sortInquiryUniqueStrings(
       entry.lineage.providerIds,
@@ -261,17 +324,43 @@ function canonicalContradictions(
     );
     if (
       computeInquiryContentDigest(providerIds) !== computeInquiryContentDigest(exactProviders) ||
-      computeInquiryContentDigest(dependenceGroups) !== computeInquiryContentDigest(exactGroups)
+      computeInquiryContentDigest(dependenceGroups) !== computeInquiryContentDigest(exactGroups) ||
+      entry.lineage.materialityPolicyVersion !==
+        input.policy.contradictionMaterialityPolicyVersion ||
+      entry.lineage.materialityPolicyContentDigest !==
+        input.policy.contradictionMaterialityPolicyDigest
     ) {
       throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:contradictionSourceLineage");
     }
+    const materialityEvaluationContentDigest =
+      computeInformationContradictionMaterialityEvaluationDigestV1({
+        claimId,
+        materiality: entry.lineage.materiality,
+        evidenceIds,
+        observationIds,
+        observationContentDigests,
+        observationContradictionStates,
+        providerIds,
+        dependenceGroups,
+        materialityPolicyVersion: entry.lineage.materialityPolicyVersion,
+        materialityPolicyContentDigest: entry.lineage.materialityPolicyContentDigest,
+      });
+    if (entry.lineage.materialityEvaluationContentDigest !== materialityEvaluationContentDigest) {
+      throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:contradictionMaterialityIdentity");
+    }
     const lineage = deepFreezeInquiry({
       questionId: entry.lineage.questionId,
-      claimId: requireInquiryNonEmpty(entry.lineage.claimId, "contradictionClaimId"),
+      claimId,
       materiality: entry.lineage.materiality,
+      evidenceIds,
       observationIds,
+      observationContentDigests,
+      observationContradictionStates,
       providerIds,
       dependenceGroups,
+      materialityPolicyVersion: entry.lineage.materialityPolicyVersion,
+      materialityPolicyContentDigest: entry.lineage.materialityPolicyContentDigest,
+      materialityEvaluationContentDigest,
       reasonCodes: sortInquiryUniqueStrings(entry.lineage.reasonCodes, "contradictionReasonCode"),
     });
     if (!(["MATERIAL", "IMMATERIAL", "UNKNOWN"] as const).includes(lineage.materiality)) {
@@ -347,6 +436,11 @@ function canonicalNeed(input: {
     allowedObservationKinds: [...input.requirement.allowedObservationKinds],
     allowedObservationSchemaVersions: [...input.requirement.allowedObservationSchemaVersions],
     timeframeRequirements,
+    inquiryBounds: {
+      maxDepth: input.requirement.inquiryBounds.maxDepth,
+      maxDurationMs: input.requirement.inquiryBounds.maxDurationMs,
+      maxProviderFanout: input.requirement.inquiryBounds.maxProviderFanout,
+    },
     providerCandidates,
     requirePitQualified: input.requirement.requirePitQualified,
     requireReplayEligible: input.requirement.requireReplayEligible,
@@ -378,43 +472,70 @@ export function classifyHistoricalAnaloguePlanningDispositionV1(
 function canonicalAnaloguePlanning(
   input: BuildInformationNeedPlanV1Input,
 ): readonly HistoricalAnaloguePlanningV1[] {
-  return deepFreezeInquiry(
-    input.analogueRequests
-      .map((entry) => {
-        const requirementId = requireInquiryNonEmpty(entry.requirementId, "analogueRequirementId");
-        const requirement = input.profile.requirements.find((item) => item.id === requirementId);
-        if (!requirement || requirement.questionId !== "Q_HISTORICAL_ANALOGUES") {
-          throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analogueApplicability");
-        }
-        const query = assertHistoricalAnalogueQueryV1(entry.query);
-        if (query.pitAnchor !== input.receipt.pitAnchor) {
-          throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePitMismatch");
-        }
-        const result = (() => {
-          if (entry.result === null) return null;
-          const expected = defineHistoricalAnalogueResultV1({
-            query,
-            status: entry.result.status,
-            occurrences: entry.result.occurrences,
-            knowledgeRefs: entry.result.knowledgeRefs,
-            reasonCodes: entry.result.reasonCodes,
-          });
-          if (inquiryCanonicalJsonString(expected) !== inquiryCanonicalJsonString(entry.result)) {
-            throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analogueResultIdentity");
-          }
-          return entry.result;
-        })();
-        return {
-          requirementId,
-          questionId: "Q_HISTORICAL_ANALOGUES" as const,
+  const requirementIds = new Set<string>();
+  const planning = input.analogueRequests
+    .map((entry) => {
+      const requirementId = requireInquiryNonEmpty(entry.requirementId, "analogueRequirementId");
+      const requirement = input.profile.requirements.find((item) => item.id === requirementId);
+      const applicableReceipts = input.receipt.requirementReceipts.filter(
+        (item) =>
+          item.requirementId === requirementId && UNRESOLVED_TERMINALS.has(item.terminalStatus),
+      );
+      if (
+        !requirement ||
+        requirement.questionId !== "Q_HISTORICAL_ANALOGUES" ||
+        applicableReceipts.length !== 1 ||
+        requirementIds.has(requirementId)
+      ) {
+        throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analogueApplicability");
+      }
+      requirementIds.add(requirementId);
+      const query = assertHistoricalAnalogueQueryV1(entry.query);
+      if (
+        query.pitAnchor !== input.receipt.pitAnchor ||
+        query.maxResults > input.policy.bounds.maxHistoricalResults
+      ) {
+        throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePitMismatch");
+      }
+      const result = (() => {
+        if (entry.result === null) return null;
+        const expected = defineHistoricalAnalogueResultV1({
           query,
-          result,
-          disposition: classifyHistoricalAnaloguePlanningDispositionV1(result?.status ?? null),
-          createsKnowledgeAuthority: false as const,
-        };
-      })
-      .sort((left, right) => inquiryCanonicalTextCompare(left.requirementId, right.requirementId)),
-  );
+          status: entry.result.status,
+          occurrences: entry.result.occurrences,
+          knowledgeRefs: entry.result.knowledgeRefs,
+          reasonCodes: entry.result.reasonCodes,
+        });
+        if (inquiryCanonicalJsonString(expected) !== inquiryCanonicalJsonString(entry.result)) {
+          throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analogueResultIdentity");
+        }
+        if (entry.result.occurrences.length > query.maxResults) {
+          throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analogueResultBound");
+        }
+        return entry.result;
+      })();
+      return {
+        requirementId,
+        questionId: "Q_HISTORICAL_ANALOGUES" as const,
+        query,
+        result,
+        disposition: classifyHistoricalAnaloguePlanningDispositionV1(result?.status ?? null),
+        createsKnowledgeAuthority: false as const,
+      };
+    })
+    .sort((left, right) => inquiryCanonicalTextCompare(left.requirementId, right.requirementId));
+  const reservedQueries = planning.reduce((sum, entry) => sum + entry.query.maxQueries, 0);
+  const reservedResults = planning.reduce((sum, entry) => sum + entry.query.maxResults, 0);
+  const reservedCostUnits = planning.reduce((sum, entry) => sum + entry.query.maxCostUnits, 0);
+  if (
+    input.queryCountConsumed + reservedQueries > input.policy.bounds.maxQueryCount ||
+    reservedResults > input.policy.bounds.maxHistoricalResults ||
+    input.acquisitionCostUnitsConsumed + reservedCostUnits >
+      input.policy.bounds.maxAcquisitionCostUnits
+  ) {
+    throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analogueCumulativeBounds");
+  }
+  return deepFreezeInquiry(planning);
 }
 
 function canonicalHypothesisDiscriminators(
@@ -547,12 +668,24 @@ export function buildInformationNeedPlanningBundleV1(
       );
     });
 
+  const analoguePlanning = canonicalAnaloguePlanning(input);
+  const analogueReservedQueries = analoguePlanning.reduce(
+    (sum, entry) => sum + entry.query.maxQueries,
+    0,
+  );
+  const analogueReservedCostUnits = analoguePlanning.reduce(
+    (sum, entry) => sum + entry.query.maxCostUnits,
+    0,
+  );
+
   const requestedSources: InformationRequestedSourceV1[] = [];
   const ignoredSources: InformationIgnoredSourceV1[] = [];
   const requestedKeys = new Set<string>();
   let remainingQueries = input.policy.bounds.maxQueryCount - input.queryCountConsumed;
   let remainingCost =
     input.policy.bounds.maxAcquisitionCostUnits - input.acquisitionCostUnitsConsumed;
+  remainingQueries -= analogueReservedQueries;
+  remainingCost -= analogueReservedCostUnits;
   const iterationOrDepthExhausted =
     input.iterationIndex >= input.policy.bounds.maxIterations || input.policy.bounds.maxDepth === 0;
   const budgetReasonByRequirementProvider = new Map<
@@ -573,6 +706,8 @@ export function buildInformationNeedPlanningBundleV1(
     const groupCost = candidates.reduce((sum, candidate) => sum + candidate.costUnits, 0);
     const queryBounded =
       iterationOrDepthExhausted ||
+      need.inquiryBounds.maxDepth === 0 ||
+      need.inquiryBounds.maxDurationMs === 0 ||
       candidates.length > remainingQueries ||
       selectedForRequirement + candidates.length > fanout;
     const costBounded = groupCost > remainingCost;
@@ -651,6 +786,8 @@ export function buildInformationNeedPlanningBundleV1(
     accountId: input.profile.accountId,
     symbol: input.profile.symbol,
     venue: input.profile.venue,
+    analyticalTimeframe: input.profile.analyticalTimeframe,
+    horizon: input.profile.horizon,
     pitAnchor: input.receipt.pitAnchor,
     purpose: input.policy.purpose,
     profilePurpose: input.policy.profilePurpose,
@@ -691,7 +828,6 @@ export function buildInformationNeedPlanningBundleV1(
     id: `inp_${planContentDigest}`,
     contentDigest: planContentDigest,
   });
-  const analoguePlanning = canonicalAnaloguePlanning(input);
   const hypothesisDiscriminators = canonicalHypothesisDiscriminators(input);
   const contradictionLineage = deepFreezeInquiry(
     [...contradictions.entries()]
@@ -768,6 +904,8 @@ export function assertInformationInquiryPlanningBundleV1(
       "accountId",
       "symbol",
       "venue",
+      "analyticalTimeframe",
+      "horizon",
       "pitAnchor",
       "purpose",
       "profilePurpose",
@@ -798,6 +936,8 @@ export function assertInformationInquiryPlanningBundleV1(
     requireInquiryNonEmpty(bundle.plan.accountId, "planAccountId");
   requireInquiryNonEmpty(bundle.plan.symbol, "planSymbol");
   requireInquiryNonEmpty(bundle.plan.venue, "planVenue");
+  requireInquiryNonEmpty(bundle.plan.analyticalTimeframe, "planAnalyticalTimeframe");
+  requireInquiryNonEmpty(bundle.plan.horizon, "planHorizon");
   requireInquiryTimestamp(bundle.plan.pitAnchor, "planPitAnchor");
   requireInquiryDigest(bundle.plan.profileId, "planProfileId");
   requireInquiryDigest(bundle.plan.profileContentDigest, "planProfileContentDigest");
@@ -870,6 +1010,7 @@ export function assertInformationInquiryPlanningBundleV1(
           "allowedObservationKinds",
           "allowedObservationSchemaVersions",
           "timeframeRequirements",
+          "inquiryBounds",
           "providerCandidates",
           "requirePitQualified",
           "requireReplayEligible",
@@ -889,6 +1030,14 @@ export function assertInformationInquiryPlanningBundleV1(
       const timeframeRequirements = canonicalizeInformationNeedTimeframeRequirementsV1(
         need.timeframeRequirements,
       );
+      assertExactKeys(
+        need.inquiryBounds as unknown as Readonly<Record<string, unknown>>,
+        ["maxDepth", "maxDurationMs", "maxProviderFanout"],
+        "needInquiryBounds",
+      );
+      for (const [field, value] of Object.entries(need.inquiryBounds)) {
+        requireNonNegativeInteger(value, `needInquiryBounds.${field}`);
+      }
       if (
         typeof need.requirePitQualified !== "boolean" ||
         typeof need.requireReplayEligible !== "boolean" ||
@@ -946,9 +1095,15 @@ export function assertInformationInquiryPlanningBundleV1(
             "questionId",
             "claimId",
             "materiality",
+            "evidenceIds",
             "observationIds",
+            "observationContentDigests",
+            "observationContradictionStates",
             "providerIds",
             "dependenceGroups",
+            "materialityPolicyVersion",
+            "materialityPolicyContentDigest",
+            "materialityEvaluationContentDigest",
             "reasonCodes",
           ],
           "needContradiction",
@@ -959,22 +1114,91 @@ export function assertInformationInquiryPlanningBundleV1(
         ) {
           throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:needContradictionIdentity");
         }
+        const observationIds = sortInquiryUniqueStrings(
+          need.contradiction.observationIds,
+          "needContradictionObservationId",
+        );
+        const evidenceIds = sortInquiryUniqueStrings(
+          need.contradiction.evidenceIds,
+          "needContradictionEvidenceId",
+        );
+        const observationContentDigests = [...need.contradiction.observationContentDigests]
+          .map((reference) => ({
+            observationId: requireInquiryNonEmpty(
+              reference.observationId,
+              "needContradictionObservationDigestId",
+            ),
+            observationContentDigest: requireInquiryDigest(
+              reference.observationContentDigest,
+              "needContradictionObservationContentDigest",
+            ),
+          }))
+          .sort((left, right) =>
+            inquiryCanonicalTextCompare(left.observationId, right.observationId),
+          );
+        const providerIds = sortInquiryUniqueStrings(
+          need.contradiction.providerIds,
+          "needContradictionProviderId",
+        );
+        const observationContradictionStates = [
+          ...need.contradiction.observationContradictionStates,
+        ]
+          .map((state) => ({
+            observationId: requireInquiryNonEmpty(
+              state.observationId,
+              "needContradictionObservationStateId",
+            ),
+            contradiction: state.contradiction,
+          }))
+          .sort((left, right) =>
+            inquiryCanonicalTextCompare(left.observationId, right.observationId),
+          );
+        const dependenceGroups = sortInquiryUniqueStrings(
+          need.contradiction.dependenceGroups,
+          "needContradictionDependenceGroup",
+        );
+        const materialityPolicyVersion = requireInquiryNonEmpty(
+          need.contradiction.materialityPolicyVersion,
+          "needContradictionMaterialityPolicyVersion",
+        );
+        const materialityPolicyContentDigest = requireInquiryDigest(
+          need.contradiction.materialityPolicyContentDigest,
+          "needContradictionMaterialityPolicyContentDigest",
+        );
+        const materialityEvaluationContentDigest =
+          computeInformationContradictionMaterialityEvaluationDigestV1({
+            claimId: need.contradiction.claimId,
+            materiality: need.contradiction.materiality,
+            evidenceIds,
+            observationIds,
+            observationContentDigests,
+            observationContradictionStates,
+            providerIds,
+            dependenceGroups,
+            materialityPolicyVersion,
+            materialityPolicyContentDigest,
+          });
+        if (
+          need.contradiction.materialityEvaluationContentDigest !==
+          materialityEvaluationContentDigest
+        ) {
+          throw new Error(
+            "INFORMATION_INQUIRY_PLANNER_INVALID:needContradictionMaterialityIdentity",
+          );
+        }
         contradiction = {
           questionId: need.contradiction.questionId,
           claimId: requireInquiryNonEmpty(need.contradiction.claimId, "needContradictionClaimId"),
           materiality: need.contradiction.materiality,
-          observationIds: sortInquiryUniqueStrings(
-            need.contradiction.observationIds,
-            "needContradictionObservationId",
-          ),
-          providerIds: sortInquiryUniqueStrings(
-            need.contradiction.providerIds,
-            "needContradictionProviderId",
-          ),
-          dependenceGroups: sortInquiryUniqueStrings(
-            need.contradiction.dependenceGroups,
-            "needContradictionDependenceGroup",
-          ),
+          evidenceIds,
+          observationIds,
+          observationContentDigests,
+          observationContradictionStates,
+          providerIds,
+          dependenceGroups,
+          materialityPolicyVersion,
+          materialityPolicyContentDigest,
+          materialityEvaluationContentDigest,
           reasonCodes: sortInquiryUniqueStrings(
             need.contradiction.reasonCodes,
             "needContradictionReasonCode",
@@ -989,6 +1213,11 @@ export function assertInformationInquiryPlanningBundleV1(
         allowedObservationKinds,
         allowedObservationSchemaVersions,
         timeframeRequirements,
+        inquiryBounds: {
+          maxDepth: need.inquiryBounds.maxDepth,
+          maxDurationMs: need.inquiryBounds.maxDurationMs,
+          maxProviderFanout: need.inquiryBounds.maxProviderFanout,
+        },
         providerCandidates,
         requirePitQualified: need.requirePitQualified,
         requireReplayEligible: need.requireReplayEligible,
@@ -1087,6 +1316,19 @@ export function assertInformationInquiryPlanningBundleV1(
     (sum, source) => sum + source.costUnits,
     0,
   );
+  for (const need of bundle.plan.needs) {
+    const requestedForNeed = bundle.plan.requestedSources.filter(
+      (source) => source.needId === need.id,
+    );
+    if (
+      requestedForNeed.length > need.inquiryBounds.maxProviderFanout ||
+      requestedForNeed.length > bundle.plan.bounds.maxProviderFanout ||
+      ((need.inquiryBounds.maxDepth === 0 || need.inquiryBounds.maxDurationMs === 0) &&
+        requestedForNeed.length > 0)
+    ) {
+      throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:planNeedSelectionBounds");
+    }
+  }
   if (
     bundle.plan.queryCountConsumedBeforeIteration + bundle.plan.requestedSources.length >
       bundle.plan.bounds.maxQueryCount ||
@@ -1159,14 +1401,44 @@ export function assertInformationInquiryPlanningBundleV1(
         "questionId",
         "claimId",
         "materiality",
+        "evidenceIds",
         "observationIds",
+        "observationContentDigests",
+        "observationContradictionStates",
         "providerIds",
         "dependenceGroups",
+        "materialityPolicyVersion",
+        "materialityPolicyContentDigest",
+        "materialityEvaluationContentDigest",
         "reasonCodes",
       ],
       "bundleContradictionLineage",
     );
-    requireInquiryNonEmpty(contradiction.lineage.claimId, "bundleContradictionClaimId");
+    const claimId = requireInquiryNonEmpty(
+      contradiction.lineage.claimId,
+      "bundleContradictionClaimId",
+    );
+    const materialityPolicyVersion = requireInquiryNonEmpty(
+      contradiction.lineage.materialityPolicyVersion,
+      "bundleContradictionMaterialityPolicyVersion",
+    );
+    const materialityPolicyContentDigest = requireInquiryDigest(
+      contradiction.lineage.materialityPolicyContentDigest,
+      "bundleContradictionMaterialityPolicyContentDigest",
+    );
+    const materialityEvaluationContentDigest =
+      computeInformationContradictionMaterialityEvaluationDigestV1({
+        claimId,
+        materiality: contradiction.lineage.materiality,
+        evidenceIds: contradiction.lineage.evidenceIds,
+        observationIds: contradiction.lineage.observationIds,
+        observationContentDigests: contradiction.lineage.observationContentDigests,
+        observationContradictionStates: contradiction.lineage.observationContradictionStates,
+        providerIds: contradiction.lineage.providerIds,
+        dependenceGroups: contradiction.lineage.dependenceGroups,
+        materialityPolicyVersion,
+        materialityPolicyContentDigest,
+      });
     if (
       !INFORMATION_QUESTION_IDS_V2.includes(contradiction.lineage.questionId) ||
       !(["MATERIAL", "IMMATERIAL", "UNKNOWN"] as const).includes(
@@ -1177,10 +1449,26 @@ export function assertInformationInquiryPlanningBundleV1(
           0) ||
       inquiryCanonicalJsonString(
         sortInquiryUniqueStrings(
+          contradiction.lineage.evidenceIds,
+          "bundleContradictionEvidenceId",
+        ),
+      ) !== inquiryCanonicalJsonString(contradiction.lineage.evidenceIds) ||
+      inquiryCanonicalJsonString(
+        sortInquiryUniqueStrings(
           contradiction.lineage.observationIds,
           "bundleContradictionObservationId",
         ),
       ) !== inquiryCanonicalJsonString(contradiction.lineage.observationIds) ||
+      inquiryCanonicalJsonString(
+        [...contradiction.lineage.observationContentDigests].sort((left, right) =>
+          inquiryCanonicalTextCompare(left.observationId, right.observationId),
+        ),
+      ) !== inquiryCanonicalJsonString(contradiction.lineage.observationContentDigests) ||
+      inquiryCanonicalJsonString(
+        [...contradiction.lineage.observationContradictionStates].sort((left, right) =>
+          inquiryCanonicalTextCompare(left.observationId, right.observationId),
+        ),
+      ) !== inquiryCanonicalJsonString(contradiction.lineage.observationContradictionStates) ||
       inquiryCanonicalJsonString(
         sortInquiryUniqueStrings(
           contradiction.lineage.providerIds,
@@ -1198,7 +1486,9 @@ export function assertInformationInquiryPlanningBundleV1(
           contradiction.lineage.reasonCodes,
           "bundleContradictionReasonCode",
         ),
-      ) !== inquiryCanonicalJsonString(contradiction.lineage.reasonCodes)
+      ) !== inquiryCanonicalJsonString(contradiction.lineage.reasonCodes) ||
+      contradiction.lineage.materialityEvaluationContentDigest !==
+        materialityEvaluationContentDigest
     ) {
       throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:bundleContradictionIdentity");
     }
@@ -1227,6 +1517,9 @@ export function assertInformationInquiryPlanningBundleV1(
       throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:needContradictionBundleMismatch");
     }
   }
+  let priorAnalogueRequirementId: string | null = null;
+  let analogueReservedQueries = 0;
+  let analogueReservedCostUnits = 0;
   for (const analogue of bundle.analoguePlanning) {
     assertExactKeys(
       analogue as unknown as Readonly<Record<string, unknown>>,
@@ -1245,7 +1538,10 @@ export function assertInformationInquiryPlanningBundleV1(
     if (
       analogue.questionId !== "Q_HISTORICAL_ANALOGUES" ||
       analogue.createsKnowledgeAuthority !== false ||
-      query.pitAnchor !== bundle.plan.pitAnchor
+      query.pitAnchor !== bundle.plan.pitAnchor ||
+      query.maxResults > bundle.plan.bounds.maxHistoricalResults ||
+      (priorAnalogueRequirementId !== null &&
+        inquiryCanonicalTextCompare(priorAnalogueRequirementId, analogue.requirementId) >= 0)
     ) {
       throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePlanScope");
     }
@@ -1263,11 +1559,29 @@ export function assertInformationInquiryPlanningBundleV1(
       ) {
         throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePlanResultIdentity");
       }
+      if (analogue.result.occurrences.length > query.maxResults) {
+        throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePlanResultBound");
+      }
       resultStatus = analogue.result.status;
     }
     if (analogue.disposition !== classifyHistoricalAnaloguePlanningDispositionV1(resultStatus)) {
       throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePlanDisposition");
     }
+    analogueReservedQueries += query.maxQueries;
+    analogueReservedCostUnits += query.maxCostUnits;
+    priorAnalogueRequirementId = analogue.requirementId;
+  }
+  if (
+    bundle.plan.queryCountConsumedBeforeIteration +
+      bundle.plan.requestedSources.length +
+      analogueReservedQueries >
+      bundle.plan.bounds.maxQueryCount ||
+    bundle.plan.acquisitionCostUnitsConsumedBeforeIteration +
+      requestedCostUnits +
+      analogueReservedCostUnits >
+      bundle.plan.bounds.maxAcquisitionCostUnits
+  ) {
+    throw new Error("INFORMATION_INQUIRY_PLANNER_INVALID:analoguePlanCumulativeBounds");
   }
   for (const discriminator of bundle.hypothesisDiscriminators) {
     assertExactKeys(

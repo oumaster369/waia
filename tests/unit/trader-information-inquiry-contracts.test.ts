@@ -4,6 +4,7 @@ import {
   assertInformationAcquisitionSelectionV1,
   assertInformationInquiryPolicyV1,
   canonicalizeInformationNeedTimeframeRequirementsV1,
+  computeInformationContradictionMaterialityEvaluationDigestV1,
   defineInformationAcquisitionSelectionV1,
   defineInformationInquiryPolicyV1,
   inquiryCanonicalJsonString,
@@ -61,6 +62,41 @@ function policyInput(
 }
 
 describe("DEE-696 information inquiry contracts", () => {
+  it("binds contradiction materiality to exact evidence and pinned policy identity", () => {
+    const input = {
+      claimId: "claim-price-state",
+      materiality: "MATERIAL" as const,
+      evidenceIds: ["evidence-a", "evidence-b"],
+      observationIds: ["obs-a", "obs-b"],
+      observationContentDigests: [
+        { observationId: "obs-a", observationContentDigest: D },
+        { observationId: "obs-b", observationContentDigest: E },
+      ],
+      observationContradictionStates: [
+        { observationId: "obs-a", contradiction: "SUPPORTS" as const },
+        { observationId: "obs-b", contradiction: "CONTRADICTS" as const },
+      ],
+      providerIds: ["binance_spot", "htx_spot"],
+      dependenceGroups: ["independent-a", "independent-b"],
+      materialityPolicyVersion: "contradiction-v1",
+      materialityPolicyContentDigest: E,
+    };
+    const digest = computeInformationContradictionMaterialityEvaluationDigestV1(input);
+    expect(digest).toHaveLength(64);
+    expect(
+      computeInformationContradictionMaterialityEvaluationDigestV1({
+        ...input,
+        materiality: "IMMATERIAL",
+      }),
+    ).not.toBe(digest);
+    expect(() =>
+      computeInformationContradictionMaterialityEvaluationDigestV1({
+        ...input,
+        observationContentDigests: [input.observationContentDigests[0]],
+      }),
+    ).toThrow("contradictionObservationDigestIdentity");
+  });
+
   it("maps the three inquiry purposes exactly onto DEE-621 purposes", () => {
     expect(mapInformationInquiryPurposeV1("NEW_OPPORTUNITY_SEARCH")).toBe("NEW_OPPORTUNITY");
     expect(mapInformationInquiryPurposeV1("OPEN_POSITION_REASSESSMENT")).toBe(
@@ -84,6 +120,7 @@ describe("DEE-696 information inquiry contracts", () => {
         { timeframe: "1h", maxStalenessMs: 15_000 },
         { timeframe: "4h", maxStalenessMs: 60_000 },
       ]),
+      inquiryBounds: { maxDepth: 2, maxDurationMs: 5_000, maxProviderFanout: 1 },
       providerCandidates: [{ providerId: "htx_spot", substitutionRuleId: null, costUnits: 1 }],
       requirePitQualified: true,
       requireReplayEligible: true,

@@ -61,6 +61,8 @@ function planningBundle(purpose: InformationInquiryPurposeV1): InformationInquir
     accountId: null,
     symbol: "BTC/USDT",
     venue: "HTX",
+    analyticalTimeframe: "1m",
+    horizon: "15m",
     pitAnchor: "2026-08-24T12:00:00.000Z",
     purpose,
     profilePurpose: mapInformationInquiryPurposeV1(purpose),
