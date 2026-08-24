@@ -164,4 +164,3 @@ DEE-690 must start from the then-current `origin/main` after competing migration
 - DEE-611 owns the public Patrons list and contribution-share boundary.
 - DEE-613 owns this economic doctrine.
 - DEE-690 owns the first virtual Development Fund implementation.
-
