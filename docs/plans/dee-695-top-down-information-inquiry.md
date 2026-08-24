@@ -30,10 +30,10 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 258203149654f8d1490b2e35d9fcc988f7c30de7
+  lastValidatedGitSha: 8ffff574d9e92decf083b850e006e81cda89fd33
   lastValidationAt: "2026-08-24"
   blockedReason: null
-  nextAction: "Validate and commit the frozen manifest, run the one fresh-SQLite full suite, obtain final exact-head review, then publish the single PR for CI and DEE-653 admission."
+  nextAction: "Validate and commit the corrected frozen manifest, obtain a fresh exact-head review, then publish the single PR for CI and DEE-653 admission without repeating the completed full suite."
 provenance:
   createdFrom: human-ratified-delegation
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2

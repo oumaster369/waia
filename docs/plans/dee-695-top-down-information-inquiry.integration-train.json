@@ -347,18 +347,21 @@
         "tests/unit/trader-reality-v2-consumer-graph.test.ts"
       ],
       "acceptanceEvidence": [
-        "Standard paper/poll/worker and canonical runBacktest composition, exact scope/PIT pre-side-effect guard, receipt-bound final evidence closure and whole-repository inventory accepted at exact head 258203149654f8d1490b2e35d9fcc988f7c30de7.",
-        "Fresh independent exact-head review reported zero unresolved P1/P2; 12 focused files / 65 tests, typecheck and cumulative diff check passed.",
+        "Standard paper/poll/worker and canonical runBacktest composition, exact scope/PIT pre-side-effect guard, receipt-bound final evidence closure and whole-repository inventory were accepted at cumulative head 258203149654f8d1490b2e35d9fcc988f7c30de7.",
+        "The first frozen-head adversarial review identified one P1 blind-split resolver reachability defect; admitted repair commit 8ffff574d9e92decf083b850e006e81cda89fd33 rejects that resolver before invocation and its affected 4-file / 23-test regression proof passed.",
         "Reality identity remains 153 sources, 115 consumers and 25 connector refs with unchanged dispositions and path identities; migrated PostgreSQL tenant/PIT lineage proof passed 10/10 tests."
       ],
       "integratedCommits": [
         "126c5923cfebf200a167d953563f27304a572bbd",
         "76dd0cff39447714525759a894a28d2eeca90e47",
-        "258203149654f8d1490b2e35d9fcc988f7c30de7"
+        "258203149654f8d1490b2e35d9fcc988f7c30de7",
+        "8ffff574d9e92decf083b850e006e81cda89fd33"
       ],
       "tests": [
         "Independent focused D/consumer/Reality/replay/paper/HTX proof: 12 files / 65 tests PASS.",
-        "Local typecheck, lint with zero errors, production build, diff check and migrated PostgreSQL 10/10 proof PASS."
+        "Blind-holdout resolver repair proof: affected 4 files / 23 tests PASS; scoped eslint, typecheck and diff check PASS.",
+        "Local typecheck, lint with zero errors, production build, diff check and migrated PostgreSQL 10/10 proof PASS.",
+        "Single fresh-SQLite full suite: 4914 PASS, 404 skipped, 2 contention failures; only the exact two failed proofs reran isolated and passed 2/2, with no FHV or production edit."
       ],
       "execution": {
         "wave": 3,
@@ -453,7 +456,8 @@
         "reviewedCommits": [
           "126c5923cfebf200a167d953563f27304a572bbd",
           "76dd0cff39447714525759a894a28d2eeca90e47",
-          "258203149654f8d1490b2e35d9fcc988f7c30de7"
+          "258203149654f8d1490b2e35d9fcc988f7c30de7",
+          "8ffff574d9e92decf083b850e006e81cda89fd33"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -505,16 +509,19 @@
         "status": "pass",
         "commands": [
           "independent 65/65 focused exact-head proof",
+          "blind-holdout resolver repair affected proof 23/23",
           "typecheck",
           "lint",
           "build",
           "PostgreSQL 10/10",
           "Reality inventory closure",
-          "diff check"
+          "diff check",
+          "single fresh-SQLite full suite 4914 pass / 404 skipped / 2 contention failures with exact isolated rerun 2/2 pass"
         ]
       }
     ],
     "fullDiffFrozen": true,
-    "finalAdversarialReviewRequired": true
+    "finalAdversarialReviewRequired": true,
+    "finalAdversarialReviewStatus": "pending-on-this-frozen-head"
   }
 }
