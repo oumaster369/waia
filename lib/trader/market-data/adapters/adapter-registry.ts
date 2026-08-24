@@ -1,5 +1,8 @@
 import type { InstrumentId } from "@/lib/trader/intelligence/types";
-import type { NormalizedObservation } from "@/lib/trader/market-data/observation-types";
+import type {
+  MarketDataProviderId,
+  NormalizedObservation,
+} from "@/lib/trader/market-data/observation-types";
 import { BinanceAnnouncementsAdapter } from "@/lib/trader/market-data/adapters/binance-announcements-adapter";
 import { BybitAnnouncementsAdapter } from "@/lib/trader/market-data/adapters/bybit-announcements-adapter";
 import { CmeFedWatchAdapter } from "@/lib/trader/market-data/adapters/cme-fedwatch-adapter";
@@ -31,9 +34,10 @@ export type OptionalMarketDataAdaptersConfig = {
 
 export function buildOptionalMarketDataAdapters(
   config: OptionalMarketDataAdaptersConfig = {},
+  providerIds?: readonly MarketDataProviderId[],
 ): MarketDataAdapter[] {
   const fetchImpl = config.fetchImpl;
-  return [
+  const adapters: MarketDataAdapter[] = [
     new FredAdapter({ apiKey: config.fredApiKey, fetchImpl }),
     new FederalReserveAdapter({ fetchImpl }),
     new CmeFedWatchAdapter({ enabled: config.cmeFedWatchEnabled, fetchImpl }),
@@ -54,6 +58,9 @@ export function buildOptionalMarketDataAdapters(
     new MempoolSpaceAdapter({ fetchImpl }),
     new SecEdgarAdapter({ userAgent: config.secEdgarUserAgent, fetchImpl }),
   ];
+  if (!providerIds) return adapters;
+  const admitted = new Set(providerIds);
+  return adapters.filter((adapter) => admitted.has(adapter.providerId));
 }
 
 export function categorizeOptionalObservations(observations: readonly NormalizedObservation[]): {

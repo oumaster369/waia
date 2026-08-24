@@ -57,7 +57,20 @@ import type {
   StreamingEvidenceManifestRef,
   ReplayRetentionMode,
 } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence.types";
-import type { BarReplaySource } from "@/lib/trader/market-data/types";
+import type {
+  BarReplaySource,
+  InformationAcquisitionReceiptV1,
+  MarketSnapshot,
+} from "@/lib/trader/market-data/types";
+import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+import {
+  assertInformationInquiryRuntimeScopeV1,
+  runInformationInquiryRuntimeV1,
+  type BuildInformationNeedPlanV1Input,
+  type InformationAcquisitionAttemptInputV1,
+} from "@/lib/trader/intelligence/information-inquiry";
+import type { InformationEvidenceV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import { selectInformationNeedReplayEvidenceV1 } from "@/lib/trader/market-data/replay/information-need-replay-selection-v1";
 import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
 import type { ReplayProviderSidecar } from "@/lib/trader/market-data/replay-fused-context-builder";
@@ -238,6 +251,32 @@ export type RunBacktestInput = {
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
   /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
   informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
+  informationInquiryResolver?: (
+    input: Readonly<{
+      snapshot: MarketSnapshot;
+      fusedContext: FusedMarketContext;
+      cycleIndex: number;
+    }>,
+  ) =>
+    | Promise<Readonly<{
+        planningInput: BuildInformationNeedPlanV1Input;
+        refresh(receipt: InformationAcquisitionReceiptV1): Promise<
+          Readonly<{
+            finalEvidence: readonly InformationEvidenceV2[];
+            attempts: readonly InformationAcquisitionAttemptInputV1[];
+          }>
+        >;
+      }> | null>
+    | Readonly<{
+        planningInput: BuildInformationNeedPlanV1Input;
+        refresh(receipt: InformationAcquisitionReceiptV1): Promise<
+          Readonly<{
+            finalEvidence: readonly InformationEvidenceV2[];
+            attempts: readonly InformationAcquisitionAttemptInputV1[];
+          }>
+        >;
+      }>
+    | null;
   /** HTR-WP13: optional intelligence records persistence sink. */
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
   /** HTR-WP14: optional forecast-decision persistence sink. */
@@ -553,6 +592,9 @@ function buildHtrAccountingContext(input: {
  */
 export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestResult> {
   assertSyntheticResearchNonCapitalBacktestScopeV2(input);
+  if (input.split === "blind" && input.informationInquiryResolver) {
+    throw new Error("INFORMATION_INQUIRY_RUNTIME_FORBIDDEN:blindHoldout");
+  }
   const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
   resetFullHistoryRescanCount();
 
@@ -941,6 +983,46 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       wp21CheckpointState = cycleSeam.checkpoint;
     }
 
+    let cycleInformationSufficiencyAuthority = input.informationSufficiencyAuthority;
+    if (input.informationInquiryResolver) {
+      if (!fusedContext) {
+        throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:historicalFusedContextRequired");
+      }
+      const resolution = await input.informationInquiryResolver({
+        snapshot,
+        fusedContext,
+        cycleIndex,
+      });
+      if (resolution === null) {
+        cycleInformationSufficiencyAuthority = undefined;
+      } else {
+        assertInformationInquiryRuntimeScopeV1(resolution.planningInput, {
+          organizationId: input.context.organizationId,
+          accountId: input.accountKey,
+          symbol: fusedContext.instrumentId,
+          pitAnchor: fusedContext.fusedAtUtc,
+        });
+        const runtime = await runInformationInquiryRuntimeV1({
+          planningInput: resolution.planningInput,
+          mode: "HISTORICAL",
+          acquire: async (selection) => {
+            const receipt = selectInformationNeedReplayEvidenceV1({
+              selection,
+              context: fusedContext!,
+              pitAnchor: resolution.planningInput.receipt.pitAnchor,
+            });
+            const refreshed = await resolution.refresh(receipt);
+            return {
+              receipt,
+              finalEvidence: refreshed.finalEvidence,
+              attempts: refreshed.attempts,
+            };
+          },
+        });
+        cycleInformationSufficiencyAuthority = runtime.informationSufficiencyAuthority;
+      }
+    }
+
     const paperCycleTimer = benchmarkObserver.beginStage("paper-cycle", cycleIndex);
     input.deps.researchReplayDeterminism?.setDecisionBarIndex?.(cycleIndex);
     let result: PaperCycleResult;
@@ -964,7 +1046,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         reconstruction,
         wp16: input.wp16,
         historicalProfile: input.historicalProfile,
-        informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+        informationSufficiencyAuthority: cycleInformationSufficiencyAuthority,
         informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
         runId: input.runId,
         costModel: input.costModel,
@@ -1048,7 +1130,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       if (
         result.evaluation.hypothesisSet &&
         result.evaluation.forecastDecisionBundle &&
-        input.informationSufficiencyAuthority
+        cycleInformationSufficiencyAuthority
       ) {
         const forecastDecisionInput = {
           intelligenceCycleBundle: bundle,
@@ -1057,7 +1139,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
           msv: result.evaluation.msv,
           signal: result.evaluation.signal,
           costModel: input.costModel,
-          informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+          informationSufficiencyAuthority: cycleInformationSufficiencyAuthority,
           informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
           wp13Persisted,
         };

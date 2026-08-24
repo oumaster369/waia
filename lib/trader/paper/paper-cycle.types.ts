@@ -14,6 +14,12 @@ import type {
   SyntheticResearchNonCapitalBindingV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import type {
+  BuildInformationNeedPlanV1Input,
+  InformationAcquisitionAttemptInputV1,
+} from "@/lib/trader/intelligence/information-inquiry";
+import type { GatewayPollResult } from "@/lib/trader/market-data/market-data-gateway";
+import type { InformationEvidenceV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import type {
   BarPollSource,
   BarReplayMode,
   BarReplaySource,
@@ -65,6 +71,31 @@ export type PortfolioCycleContext = {
 };
 
 export type PaperCycleExecutionMode = Extract<OrderExecutionMode, "mock" | "paper">;
+
+export type PaperInformationInquiryResolverV1 = (
+  mandatoryBundle: GatewayPollResult,
+) =>
+  | Promise<
+      Readonly<{
+        planningInput: BuildInformationNeedPlanV1Input;
+        refresh(selectedBundle: GatewayPollResult): Promise<
+          Readonly<{
+            finalEvidence: readonly InformationEvidenceV2[];
+            attempts: readonly InformationAcquisitionAttemptInputV1[];
+          }>
+        >;
+      }> | null
+    >
+  | Readonly<{
+      planningInput: BuildInformationNeedPlanV1Input;
+      refresh(selectedBundle: GatewayPollResult): Promise<
+        Readonly<{
+          finalEvidence: readonly InformationEvidenceV2[];
+          attempts: readonly InformationAcquisitionAttemptInputV1[];
+        }>
+      >;
+    }>
+  | null;
 
 /** M4 session-scoped trailing cache (not replay truth). */
 export type ExitEngineCycleContext = {
@@ -240,6 +271,7 @@ export type RunFixturePaperCyclesInput = RunMultiPaperCyclesSharedInput & {
 
 export type RunPollPaperCyclesInput = RunMultiPaperCyclesSharedInput & {
   poll: BarPollSource;
+  informationInquiryResolver?: PaperInformationInquiryResolverV1;
 };
 
 export type RunMultiPaperCyclesResult = {

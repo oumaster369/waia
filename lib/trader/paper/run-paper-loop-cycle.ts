@@ -5,6 +5,8 @@ import {
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { emitPaperBarCloseCycleComplete } from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
+import { resolveHtxInformationInquiryCycleV1 } from "@/lib/trader/paper/paper-cycle-runner";
+import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import type {
   PaperLoopCycleReport,
   PaperLoopWorkerConfig,
@@ -113,7 +115,16 @@ export async function runPaperLoopCycle(
   const context = requireOrgContext(config.organizationId);
   const startup = await deps.startupReconciliation.runStartupReconciliation(context, "mock");
 
-  const snapshot = await deps.poll.fetchSnapshot();
+  const resolvedInquiry =
+    deps.poll instanceof HtxBarPollSource
+      ? await resolveHtxInformationInquiryCycleV1({
+          poll: deps.poll,
+          expectedOrganizationId: context.organizationId,
+          expectedAccountId: config.accountKey,
+          resolver: deps.informationInquiryResolver,
+        })
+      : null;
+  const snapshot = resolvedInquiry?.bundle.snapshot ?? (await deps.poll.fetchSnapshot());
   const portfolio = buildPaperLoopPortfolioContext(
     config,
     buildMarkPricesFromSnapshot(snapshot.bars),
@@ -129,12 +140,14 @@ export async function runPaperLoopCycle(
   const result = await runPaperCycleOnce(deps.paperCycleDeps, {
     context,
     snapshot,
+    fusedContext: resolvedInquiry?.bundle.fusedContext,
     accountKey: config.accountKey,
     defaultQuantity: config.defaultQuantity,
     accountState,
     executionMode: "mock",
     telemetrySink,
     newId: input.newId,
+    informationSufficiencyAuthority: resolvedInquiry?.informationSufficiencyAuthority,
     orderRepository: deps.orderRepository,
     refreshAccountStateBetweenStrategies: true,
     portfolio,

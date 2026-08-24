@@ -51,9 +51,17 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
       for (const path of paths) {
         const absolute = join(root, path);
         expect(existsSync(absolute), path).toBe(true);
-        expect(readFileSync(absolute, "utf8"), `${providerId}:${path}`).toContain(
-          `providerId: "${providerId}"`,
-        );
+        const source = readFileSync(absolute, "utf8");
+        if (providerId === "coingecko_global") {
+          expect(GATEWAY_PRIMITIVE_DISPOSITION_V1.global_market_stats.disposition).toBe(
+            "EXCLUDED_UNMODELED",
+          );
+          expect(source, `${providerId}:${path}`).toContain(
+            "CoinGeckoGlobalMarketClient remains registry-covered but is never selected",
+          );
+          continue;
+        }
+        expect(source, `${providerId}:${path}`).toContain(`providerId: "${providerId}"`);
       }
     }
   });

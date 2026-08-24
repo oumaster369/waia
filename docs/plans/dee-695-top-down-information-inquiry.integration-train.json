@@ -1,0 +1,527 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-695",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-696",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Freeze the closed information inquiry vocabulary, immutable/content-addressed identities, authority exclusions, and exact top-down 1d-to-1m reconstruction contract without selecting scientific policy values.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-620, DEE-621, and DEE-628 are Done on authoritative main.",
+        "DEE-645 plus its Human-ratified addenda specify the closed contract and prohibit provider/source/scientific/capital choices in this wave."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
+        "lib/trader/intelligence/information-inquiry/top-down-reconstruction-v1.ts",
+        "lib/trader/intelligence/information-inquiry/historical-analogue-contract-v1.ts",
+        "lib/trader/intelligence/information-inquiry/index.ts",
+        "lib/trader/intelligence/market-understanding.types.ts",
+        "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+        "tests/unit/trader-information-inquiry-contracts.test.ts",
+        "tests/unit/trader-top-down-market-reconstruction.test.ts",
+        "tests/unit/trader-information-inquiry-analogue-contract.test.ts",
+        "tests/unit/trader-market-question-evaluation.test.ts",
+        "tests/unit/trader-market-understanding-bridge.test.ts",
+        "tests/unit/trader-market-understanding-golden.test.ts",
+        "tests/fixtures/trader/market-understanding-aligned-trend.json",
+        "tests/fixtures/trader/market-understanding-cross-venue-conflict.json",
+        "tests/fixtures/trader/market-understanding-gaps-conflict.json"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-645 Step 1/3/5/6/8/9/10 semantics authorize the typed contract while reserving all scientific and capital choices."
+      },
+      "expectedAcceptanceEvidence": [
+        "Identical inputs produce identical plan/reconstruction identities independent of input order; purpose mappings are exact and aliases fail closed.",
+        "Top-down order, five relation values and timeframe roles are exact; bottom-up anomalies cannot overwrite higher-timeframe state; NOT_REQUIRED/NOT_APPLICABLE create no false gap.",
+        "Versioned caller policy binds per-timeframe relevance/freshness, query/depth/duration/fan-out/result/cost/fairness, exact per-need/provider cost-unit attribution or cost-evaluator identity, and contradiction materiality with no defaults.",
+        "Analogue contracts pin Pattern forms, representation/similarity identities, occurrence refs, match/distance components, sampling membership, Knowledge refs and the four exact no-result/unavailable distinctions.",
+        "No formula, threshold, provider classification, executable hypothesis, probability, action, sizing, or capital authority is introduced."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-top-down-market-reconstruction.test.ts tests/unit/trader-information-inquiry-analogue-contract.test.ts",
+        "pnpm test --run tests/unit/trader-market-question-evaluation.test.ts tests/unit/trader-market-understanding-bridge.test.ts tests/unit/trader-market-understanding-golden.test.ts",
+        "pnpm typecheck",
+        "scoped eslint and git diff --check"
+      ],
+      "actualFiles": [
+        "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
+        "lib/trader/intelligence/information-inquiry/historical-analogue-contract-v1.ts",
+        "lib/trader/intelligence/information-inquiry/index.ts",
+        "lib/trader/intelligence/information-inquiry/top-down-reconstruction-v1.ts",
+        "tests/unit/trader-information-inquiry-analogue-contract.test.ts",
+        "tests/unit/trader-information-inquiry-contracts.test.ts",
+        "tests/unit/trader-top-down-market-reconstruction.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Immutable contract, purpose, timeframe freshness, analogue and top-down reconstruction identities accepted at exact cumulative head 6c20679e2852abfadf54079577a231b992d8a0f6.",
+        "Independent provenance recheck reported zero unresolved P1/P2; exact focused reviewer proof passed 35/35 tests."
+      ],
+      "integratedCommits": [
+        "04895f96bd331c4a0f9ea40797458af69a4437cb",
+        "68a4e1c0821bdef53b4040f8948774a56e1b0176",
+        "8a346e25d0181ff165786a37e4ab5072b71674ae",
+        "0269ebea1275d50318ccc0a2044344a5ff303912",
+        "25d0043588be8f156c2b0d4bfd95d276ef500c4b",
+        "8a6644e6503999e4d9077c6622ced8f6731e759f",
+        "9d767bb74659a1f64fe73dbed5d2c0b918e92528"
+      ],
+      "tests": [
+        "Focused contract/reconstruction/analogue/Market Understanding tests PASS.",
+        "Independent cumulative exact-head proof: 5 files / 35 tests PASS; typecheck and diff check PASS."
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-697",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Build the deterministic profile-authorized question-to-need-to-attempt-to-termination planner, bounded loop and fair scheduler above the unchanged DEE-621 hard floor.",
+      "dependencies": ["DEE-696"],
+      "dependencyEvidence": [
+        "Implementation begins only after DEE-696 freezes the shared API and exact identities.",
+        "All relevance, freshness, provider satisfier, contradiction and bound values are consumed from a validated DEE-621 profile or explicit versioned policy input."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
+        "lib/trader/intelligence/information-inquiry/index.ts",
+        "lib/trader/intelligence/information-inquiry/information-need-planner-v1.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-loop-v1.ts",
+        "lib/trader/intelligence/information-inquiry/inquiry-scheduler-v1.ts",
+        "tests/unit/trader-information-need-planner.test.ts",
+        "tests/unit/trader-information-inquiry-loop.test.ts",
+        "tests/unit/trader-information-inquiry-scheduler.test.ts",
+        "tests/unit/trader-information-inquiry-analogue-planning.test.ts",
+        "tests/unit/trader-information-inquiry-contracts.test.ts",
+        "tests/unit/trader-information-sufficiency-contracts.test.ts",
+        "tests/unit/trader-information-sufficiency-runtime.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-645 Human canon explicitly authorizes bounded typed dynamic inquiry above, but never in place of, DEE-621."
+      },
+      "expectedAcceptanceEvidence": [
+        "Only profile-authorized relevant needs/providers are selected and all ignored available sources are explicit.",
+        "Contradiction, causal WHY, analogue and hypothesis-discriminator gaps retain exact claim/question/materiality/identity lineage and stay typed and bounded.",
+        "Static-vs-trajectory policy, all four analogue terminal distinctions, competing discriminators and NO_APPLICABLE_QUALIFIED_HYPOTHESIS-to-DEE-646 routing pass known-answer proofs without creating Knowledge/Hypothesis authority.",
+        "Cost assignment/evaluator identity changes the policy/plan digest; every attempt decrements exact caller-supplied units and exhaustion fails closed without a default cost formula.",
+        "Bound exhaustion terminates unresolved/insufficient and scheduling prioritizes open positions without starving opportunities.",
+        "No source is called and no Forecast/Decision/Risk/Execution/Guardian/capital authority exists in planner output."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-scheduler.test.ts tests/unit/trader-information-inquiry-analogue-planning.test.ts",
+        "pnpm test --run tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts",
+        "pnpm typecheck",
+        "scoped eslint and git diff --check"
+      ],
+      "actualFiles": [
+        "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
+        "lib/trader/intelligence/information-inquiry/index.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-loop-v1.ts",
+        "lib/trader/intelligence/information-inquiry/information-need-planner-v1.ts",
+        "lib/trader/intelligence/information-inquiry/inquiry-scheduler-v1.ts",
+        "tests/unit/trader-information-inquiry-analogue-planning.test.ts",
+        "tests/unit/trader-information-inquiry-contracts.test.ts",
+        "tests/unit/trader-information-inquiry-loop.test.ts",
+        "tests/unit/trader-information-inquiry-scheduler.test.ts",
+        "tests/unit/trader-information-need-planner.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Deterministic profile-authorized planner, bounded loop, cost attribution, provenance rebuild and fair scheduler accepted at exact cumulative head 6c20679e2852abfadf54079577a231b992d8a0f6.",
+        "Independent provenance recheck reported zero unresolved P1/P2 with policy, bounds, counters, plan and attempt forgery negatives closed."
+      ],
+      "integratedCommits": [
+        "fa328829da6578c8e5cb8f07c13df20902ff2522",
+        "ed89986509a8575ef387fc1a67083c52838bc114",
+        "6c20679e2852abfadf54079577a231b992d8a0f6"
+      ],
+      "tests": [
+        "Focused planner/loop/scheduler/analogue planning tests PASS.",
+        "Independent exact-head proof: 5 files / 35 tests PASS; typecheck and diff check PASS."
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "parallel",
+        "parallelGroup": "post-api-freeze",
+        "dependencyCompatible": true,
+        "overlap": "none",
+        "competingMigration": false,
+        "sharedCanonicalIdentity": false,
+        "sharedAuthoritySchema": false,
+        "mutualInvalidationRisk": false
+      }
+    },
+    {
+      "issue": "DEE-698",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Wire exact plan-derived provider selections into mandatory-first gateway acquisition and an as-of network-inert historical replay selector with explicit availability outcomes.",
+      "dependencies": ["DEE-696"],
+      "dependencyEvidence": [
+        "The gateway accepts only the exact validated selection identity schema frozen by DEE-696; DEE-697 and DEE-698 are file-disjoint implementations of that API.",
+        "DEE-620 canonical PIT kinds and DEE-621 source qualification/hard-floor semantics remain unchanged."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/market-data/market-data-gateway.ts",
+        "lib/trader/market-data/adapters/adapter-registry.ts",
+        "lib/trader/market-data/htx-bar-poll-source.ts",
+        "lib/trader/market-data/observation-types.ts",
+        "lib/trader/market-data/provider-registry.ts",
+        "lib/trader/market-data/types.ts",
+        "lib/trader/market-data/index.ts",
+        "lib/trader/market-data/capture/capture-provider-snapshot.ts",
+        "lib/trader/market-data/replay/historical-ingress-gateway.ts",
+        "lib/trader/market-data/replay/information-need-replay-selection-v1.ts",
+        "lib/trader/market-data/replay/provider-sidecar-types.ts",
+        "lib/trader/market-data/replay-fused-context-builder.ts",
+        "tests/unit/trader-market-data-selective-inquiry.test.ts",
+        "tests/unit/trader-capture-provider-snapshot-selective.test.ts",
+        "tests/unit/trader-information-need-replay-selection.test.ts",
+        "tests/unit/trader-market-data-integration.test.ts",
+        "tests/unit/trader-market-data-pr25.test.ts",
+        "tests/unit/trader-htx-bar-poll-source.test.ts",
+        "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+        "tests/unit/trader-wp11-historical-ingress-gateway.test.ts",
+        "tests/unit/trader-wp11-gateway-parity.test.ts",
+        "tests/unit/trader-wp11-absent-lanes.test.ts",
+        "tests/unit/trader-wp11-pit-selection.test.ts",
+        "tests/unit/trader-wp11-sidecar-v3-timeline.test.ts",
+        "tests/unit/helpers/wp11-wp12-fixture.ts",
+        "tests/fixtures/trader/wp13/htr-historical-intelligence-profile-v1.json",
+        "tests/fixtures/trader/wp13/timeframe-evidence-lane-authority-matrix-v1.json",
+        "tests/unit/trader-research-backtest-isolation.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-645 ratifies selective qualified acquisition, same-semantics historical replay, no live historical calls and explicit failure terminals."
+      },
+      "expectedAcceptanceEvidence": [
+        "Absent selection causes zero optional-provider calls; exact selected providers alone are polled.",
+        "Unknown providers and registered providers whose kinds do not intersect the need's admitted primitive kinds return typed REJECTED without a call or throw.",
+        "Unrequested data cannot affect the causal digest and excluded/unmodeled kinds cannot satisfy a primitive need.",
+        "Historical selection rejects future/latest evidence and cannot import or invoke live gateway/provider/fetch surfaces.",
+        "Unavailable/rejected/stale evidence remains explicit without zero, stale or synthetic fallback."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-market-data-selective-inquiry.test.ts tests/unit/trader-capture-provider-snapshot-selective.test.ts tests/unit/trader-information-need-replay-selection.test.ts",
+        "pnpm test --run tests/unit/trader-market-data-integration.test.ts tests/unit/trader-market-data-pr25.test.ts tests/unit/trader-htx-bar-poll-source.test.ts tests/integration/trader-htx-bar-poll-cycle.test.ts",
+        "pnpm test --run tests/unit/trader-wp11-historical-ingress-gateway.test.ts tests/unit/trader-wp11-gateway-parity.test.ts tests/unit/trader-wp11-absent-lanes.test.ts tests/unit/trader-research-backtest-isolation.test.ts",
+        "pnpm typecheck",
+        "scoped eslint and git diff --check"
+      ],
+      "actualFiles": [
+        "lib/trader/market-data/adapters/adapter-registry.ts",
+        "lib/trader/market-data/capture/capture-provider-snapshot.ts",
+        "lib/trader/market-data/htx-bar-poll-source.ts",
+        "lib/trader/market-data/index.ts",
+        "lib/trader/market-data/market-data-gateway.ts",
+        "lib/trader/market-data/provider-registry.ts",
+        "lib/trader/market-data/replay/historical-ingress-gateway.ts",
+        "lib/trader/market-data/replay/information-need-replay-selection-v1.ts",
+        "lib/trader/market-data/types.ts",
+        "tests/unit/trader-capture-provider-snapshot-selective.test.ts",
+        "tests/unit/trader-information-need-replay-selection.test.ts",
+        "tests/unit/trader-market-data-pr25.test.ts",
+        "tests/unit/trader-market-data-selective-inquiry.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Mandatory-first selective gateway acquisition and network-inert PIT replay selector accepted at exact head 62ca00b9ee8a46b526a1e25008bb83e15fa1ea35.",
+        "Independent exact-head review reported zero unresolved P1/P2; 13 admitted files and 14/14 focused tests passed."
+      ],
+      "integratedCommits": [
+        "bd1c431c89bf9730bc18ba67aac85313f15575f3",
+        "26c2e8890190f05d6b1c8c0373d3f79600751682",
+        "62ca00b9ee8a46b526a1e25008bb83e15fa1ea35"
+      ],
+      "tests": [
+        "Selective gateway/capture/replay focused tests PASS.",
+        "Independent exact-head proof: 13 files / 14 tests PASS; typecheck and diff check PASS."
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "parallel",
+        "parallelGroup": "post-api-freeze",
+        "dependencyCompatible": true,
+        "overlap": "none",
+        "competingMigration": false,
+        "sharedCanonicalIdentity": false,
+        "sharedAuthoritySchema": false,
+        "mutualInvalidationRisk": false
+      }
+    },
+    {
+      "issue": "DEE-699",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Compose the planner and selective acquisition in standard paper/poll/worker runtime and canonical runBacktest, then freeze whole-repository producer/consumer/bypass inventory and end-to-end negative closure, including Reality identity, DEE-621 non-bypass, replay and scheduling proofs.",
+      "dependencies": ["DEE-697", "DEE-698"],
+      "dependencyEvidence": [
+        "Closure commits only after the exact A/B/C producers and consumers are accepted.",
+        "The Human accelerated-quality directive admits every mechanically affected legacy test and inventory before implementation to prevent retrospective surface expansion."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/information-inquiry/index.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-consumer-inventory-v1.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-runtime-v1.ts",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/paper/paper-bar-close-loop.ts",
+        "lib/trader/paper/run-paper-loop-cycle.ts",
+        "lib/trader/paper/paper-loop-worker.types.ts",
+        "lib/trader/paper/build-worker-deps.ts",
+        "lib/trader/backtest/backtest-runner.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "tests/unit/trader-information-inquiry-consumer-closure.test.ts",
+        "tests/unit/trader-information-sufficiency-consumer-closure.test.ts",
+        "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
+        "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
+        "tests/unit/trader-market-data-canonical-pit-replay.test.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "tests/integration/trader-information-inquiry-runtime.test.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "tests/integration/trader-paper-bar-close-loop.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-telemetry.test.ts",
+        "tests/unit/trader-paper-bar-close-loop.test.ts",
+        "tests/unit/trader-paper-bar-close-loop-telemetry.test.ts",
+        "tests/unit/trader-paper-cycle-runner.test.ts",
+        "tests/unit/trader-paper-loop-worker.test.ts",
+        "tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+        "tests/integration/postgres-information-sufficiency-v2.test.ts",
+        "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-directed accelerated quality protocol explicitly authorizes the complete up-front repository/test/inventory surface map and negative closure."
+      },
+      "expectedAcceptanceEvidence": [
+        "Mandatory acquisition, plan derivation, selective optional acquisition, refresh/re-evaluation and final DEE-621 receipt execute in order in standard paper/poll/worker and canonical runBacktest composition seams.",
+        "Every cycle resolves an exact scope/PIT-matching profile, receipt and policy after mandatory acquisition; missing or stale resolver output causes zero optional calls and explicit insufficiency.",
+        "Historical runBacktest uses the same policy/profile/plan semantics over as-of replay evidence and cannot reach live providers or blind holdout.",
+        "Every inquiry producer, direct/indirect consumer, gateway/replay seam and forbidden authority bypass is inventoried exactly.",
+        "Same-PIT determinism, hard-floor non-bypass, contradiction/budget terminals, replay no-leakage and scheduling fairness pass end to end.",
+        "Reality source/consumer counts and digests are refreshed mechanically while every disposition and canonical source kind remains unchanged.",
+        "PostgreSQL regression proves the unchanged DEE-621 profile/receipt tenant and persistence boundary."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-market-data-canonical-pit-bridge.test.ts tests/unit/trader-market-data-canonical-pit-replay.test.ts tests/unit/trader-reality-v2-consumer-graph.test.ts",
+        "pnpm test --run tests/integration/trader-information-inquiry-runtime.test.ts tests/integration/trader-paper-cycle-runner.test.ts tests/integration/trader-paper-bar-close-loop.test.ts tests/integration/trader-paper-bar-close-loop-account-state.test.ts tests/integration/trader-paper-bar-close-loop-telemetry.test.ts tests/unit/trader-paper-bar-close-loop.test.ts tests/unit/trader-paper-bar-close-loop-telemetry.test.ts tests/unit/trader-paper-cycle-runner.test.ts tests/unit/trader-paper-loop-worker.test.ts",
+        "pnpm test --run tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<permission-correct-loopback-url> pnpm test --run --no-file-parallelism tests/integration/postgres-information-sufficiency-v2.test.ts tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
+        "pnpm lint && pnpm typecheck && pnpm build",
+        "one fresh-SQLite pnpm test --run only after semantic completion and preliminary independent review",
+        "manifest/canon/PR governance validation and fresh independent exact-head zero-P1/P2 review"
+      ],
+      "actualFiles": [
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/intelligence/information-inquiry/index.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-consumer-inventory-v1.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-runtime-v1.ts",
+        "lib/trader/paper/paper-bar-close-loop.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/paper/paper-loop-worker.types.ts",
+        "lib/trader/paper/run-paper-loop-cycle.ts",
+        "tests/integration/trader-information-inquiry-runtime.test.ts",
+        "tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+        "tests/unit/trader-information-inquiry-consumer-closure.test.ts",
+        "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Standard paper/poll/worker and canonical runBacktest composition, exact scope/PIT pre-side-effect guard, receipt-bound final evidence closure and whole-repository inventory were accepted at cumulative head ee78beee1691982972686202bfe1c852b03f5333.",
+        "The first frozen-head adversarial review identified one P1 blind-split resolver reachability defect; admitted repair commit 5fafeb9b97c1850e81f7c31cb15badf3359b6d09 rejects that resolver before invocation and its affected 4-file / 23-test regression proof passed.",
+        "Reality identity remains 153 sources, 115 consumers and 25 connector refs with unchanged dispositions and path identities; migrated PostgreSQL tenant/PIT lineage proof passed 10/10 tests."
+      ],
+      "integratedCommits": [
+        "8928158a47fb6d5fff3adf29f0b531187bb48faf",
+        "71e4ea57b865c09eeceb408f0069e15777e7ba66",
+        "ee78beee1691982972686202bfe1c852b03f5333",
+        "5fafeb9b97c1850e81f7c31cb15badf3359b6d09"
+      ],
+      "tests": [
+        "Independent focused D/consumer/Reality/replay/paper/HTX proof: 12 files / 65 tests PASS.",
+        "Blind-holdout resolver repair proof: affected 4 files / 23 tests PASS; scoped eslint, typecheck and diff check PASS.",
+        "Local typecheck, lint with zero errors, production build, diff check and migrated PostgreSQL 10/10 proof PASS.",
+        "Single fresh-SQLite full suite: 4914 PASS, 404 skipped, 2 contention failures; only the exact two failed proofs reran isolated and passed 2/2, with no FHV or production edit."
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human-ratified controller plus repository/Linear/canon read-only audit; mechanically readmitted after zero-overlap audit onto origin/main@c0511181e8177aff7e401f1298a3485c35660b97"
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "e444a62b696dfdf084463b76ac5b8925ca743a6ee74e18539a810ecbc4989e11",
+      "manifestCommit": "982d1b0cf63cc358d6c5253ccd44eb39b2a5ac0d",
+      "manifestPath": "docs/plans/dee-695-top-down-information-inquiry.integration-train.json",
+      "reviewer": "Human-ratified controller and independent pre-implementation surface admission review"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-696",
+        "status": "pass",
+        "reviewedCommits": [
+          "04895f96bd331c4a0f9ea40797458af69a4437cb",
+          "68a4e1c0821bdef53b4040f8948774a56e1b0176",
+          "8a346e25d0181ff165786a37e4ab5072b71674ae",
+          "0269ebea1275d50318ccc0a2044344a5ff303912",
+          "25d0043588be8f156c2b0d4bfd95d276ef500c4b",
+          "8a6644e6503999e4d9077c6622ced8f6731e759f",
+          "9d767bb74659a1f64fe73dbed5d2c0b918e92528"
+        ],
+        "reviewedFiles": [
+          "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
+          "lib/trader/intelligence/information-inquiry/historical-analogue-contract-v1.ts",
+          "lib/trader/intelligence/information-inquiry/index.ts",
+          "lib/trader/intelligence/information-inquiry/top-down-reconstruction-v1.ts",
+          "tests/unit/trader-information-inquiry-analogue-contract.test.ts",
+          "tests/unit/trader-information-inquiry-contracts.test.ts",
+          "tests/unit/trader-top-down-market-reconstruction.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-697",
+        "status": "pass",
+        "reviewedCommits": [
+          "fa328829da6578c8e5cb8f07c13df20902ff2522",
+          "ed89986509a8575ef387fc1a67083c52838bc114",
+          "6c20679e2852abfadf54079577a231b992d8a0f6"
+        ],
+        "reviewedFiles": [
+          "lib/trader/intelligence/information-inquiry/contracts-v1.ts",
+          "lib/trader/intelligence/information-inquiry/index.ts",
+          "lib/trader/intelligence/information-inquiry/information-inquiry-loop-v1.ts",
+          "lib/trader/intelligence/information-inquiry/information-need-planner-v1.ts",
+          "lib/trader/intelligence/information-inquiry/inquiry-scheduler-v1.ts",
+          "tests/unit/trader-information-inquiry-analogue-planning.test.ts",
+          "tests/unit/trader-information-inquiry-contracts.test.ts",
+          "tests/unit/trader-information-inquiry-loop.test.ts",
+          "tests/unit/trader-information-inquiry-scheduler.test.ts",
+          "tests/unit/trader-information-need-planner.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-698",
+        "status": "pass",
+        "reviewedCommits": [
+          "bd1c431c89bf9730bc18ba67aac85313f15575f3",
+          "26c2e8890190f05d6b1c8c0373d3f79600751682",
+          "62ca00b9ee8a46b526a1e25008bb83e15fa1ea35"
+        ],
+        "reviewedFiles": [
+          "lib/trader/market-data/adapters/adapter-registry.ts",
+          "lib/trader/market-data/capture/capture-provider-snapshot.ts",
+          "lib/trader/market-data/htx-bar-poll-source.ts",
+          "lib/trader/market-data/index.ts",
+          "lib/trader/market-data/market-data-gateway.ts",
+          "lib/trader/market-data/provider-registry.ts",
+          "lib/trader/market-data/replay/historical-ingress-gateway.ts",
+          "lib/trader/market-data/replay/information-need-replay-selection-v1.ts",
+          "lib/trader/market-data/types.ts",
+          "tests/unit/trader-capture-provider-snapshot-selective.test.ts",
+          "tests/unit/trader-information-need-replay-selection.test.ts",
+          "tests/unit/trader-market-data-pr25.test.ts",
+          "tests/unit/trader-market-data-selective-inquiry.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-699",
+        "status": "pass",
+        "reviewedCommits": [
+          "8928158a47fb6d5fff3adf29f0b531187bb48faf",
+          "71e4ea57b865c09eeceb408f0069e15777e7ba66",
+          "ee78beee1691982972686202bfe1c852b03f5333",
+          "5fafeb9b97c1850e81f7c31cb15badf3359b6d09"
+        ],
+        "reviewedFiles": [
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "lib/trader/backtest/backtest-runner.ts",
+          "lib/trader/intelligence/information-inquiry/index.ts",
+          "lib/trader/intelligence/information-inquiry/information-inquiry-consumer-inventory-v1.ts",
+          "lib/trader/intelligence/information-inquiry/information-inquiry-runtime-v1.ts",
+          "lib/trader/paper/paper-bar-close-loop.ts",
+          "lib/trader/paper/paper-cycle-runner.ts",
+          "lib/trader/paper/paper-cycle.types.ts",
+          "lib/trader/paper/paper-loop-worker.types.ts",
+          "lib/trader/paper/run-paper-loop-cycle.ts",
+          "tests/integration/trader-information-inquiry-runtime.test.ts",
+          "tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+          "tests/unit/trader-information-inquiry-consumer-closure.test.ts",
+          "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
+          "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-696",
+        "status": "pass",
+        "commands": ["focused contract/reconstruction/analogue tests", "typecheck", "diff check"]
+      },
+      {
+        "afterIssue": "DEE-697",
+        "status": "pass",
+        "commands": [
+          "focused planner/loop/scheduler tests",
+          "independent 35/35 exact-head proof",
+          "typecheck",
+          "diff check"
+        ]
+      },
+      {
+        "afterIssue": "DEE-698",
+        "status": "pass",
+        "commands": [
+          "focused gateway/capture/replay tests",
+          "independent 14/14 exact-head proof",
+          "typecheck",
+          "diff check"
+        ]
+      },
+      {
+        "afterIssue": "DEE-699",
+        "status": "pass",
+        "commands": [
+          "independent 65/65 focused exact-head proof",
+          "blind-holdout resolver repair affected proof 23/23",
+          "typecheck",
+          "lint",
+          "build",
+          "PostgreSQL 10/10",
+          "Reality inventory closure",
+          "diff check",
+          "single fresh-SQLite full suite 4914 pass / 404 skipped / 2 contention failures with exact isolated rerun 2/2 pass"
+        ]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true,
+    "finalAdversarialReviewStatus": "pending-on-this-frozen-head"
+  }
+}

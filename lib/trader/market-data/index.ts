@@ -63,15 +63,20 @@ export {
   type IngressIntegritySuccess,
   type IngressSourceProvenance,
 } from "@/lib/trader/market-data/ingress/bar-integrity-gate";
-export type {
-  BarPollSource,
-  BarReplayMode,
-  BarReplayNextResult,
-  BarReplaySource,
-  FixtureBarReplayOptions,
-  HtxBarPollOptions,
-  MarketSnapshot,
-  TraderFixtureFile,
+export {
+  defineInformationAcquisitionReceiptV1,
+  INFORMATION_ACQUISITION_RECEIPT_V1_SCHEMA_VERSION,
+  type BarPollSource,
+  type BarReplayMode,
+  type BarReplayNextResult,
+  type BarReplaySource,
+  type FixtureBarReplayOptions,
+  type HtxBarPollOptions,
+  type InformationAcquisitionOutcomeReasonV1,
+  type InformationAcquisitionOutcomeV1,
+  type InformationAcquisitionReceiptV1,
+  type MarketSnapshot,
+  type TraderFixtureFile,
 } from "@/lib/trader/market-data/types";
 export {
   FUSED_CONTEXT_SCHEMA_VERSION,
@@ -93,6 +98,8 @@ export {
   getMarketDataProvider,
   isRegisteredMarketDataProvider,
   listMarketDataProviders,
+  resolveMarketDataProviderSelection,
+  type MarketDataProviderSelectionResolution,
 } from "@/lib/trader/market-data/provider-registry";
 export {
   MarketDataGateway,
@@ -128,3 +135,4 @@ export {
   type HistoricalIngressInput,
   type HistoricalIngressResult,
 } from "@/lib/trader/market-data/replay/historical-ingress-gateway";
+export { selectInformationNeedReplayEvidenceV1 } from "@/lib/trader/market-data/replay/information-need-replay-selection-v1";

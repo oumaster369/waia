@@ -1,5 +1,6 @@
 import type { GatewayPollResult } from "@/lib/trader/market-data/market-data-gateway";
 import { MarketDataGateway } from "@/lib/trader/market-data/market-data-gateway";
+import type { InformationAcquisitionSelectionV1 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
 import type {
   MarketDataProviderId,
   NormalizedObservation,
@@ -19,8 +20,6 @@ import {
   type SidecarLaneMacroProbability,
   type SidecarLaneMacroSeries,
   type SidecarLaneMarketTrades,
-  type SidecarLaneMempoolStats,
-  type SidecarLaneNewsCluster,
   type SidecarLaneNewsHeadline,
   type SidecarLaneOrderBook,
   type SidecarLaneProtocolRelease,
@@ -373,6 +372,7 @@ export async function captureProviderSnapshot(input: {
   instrumentId?: InstrumentId;
   fetchImpl?: typeof fetch;
   generatedBy?: string;
+  informationSelection?: InformationAcquisitionSelectionV1;
 }): Promise<ReplayProviderSidecarV2> {
   assertResearchRuntime("captureProviderSnapshot");
 
@@ -384,6 +384,7 @@ export async function captureProviderSnapshot(input: {
 
   const bundle = await gateway.pollEvaluationBundle({
     cycleIdPrefix: "m9-sidecar-capture",
+    informationSelection: input.informationSelection,
   });
 
   const crossObservations = {

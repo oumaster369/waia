@@ -1,9 +1,15 @@
 import { AlternativeMeFearGreedClient } from "@/lib/trader/connectors/alternative-me/fear-greed-client";
 import { BinancePublicMarketClient } from "@/lib/trader/connectors/binance/public-market-client";
 import { BybitPublicMarketClient } from "@/lib/trader/connectors/bybit/public-market-client";
-import { CoinGeckoGlobalMarketClient } from "@/lib/trader/connectors/coingecko/global-market-client";
 import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
 import { HtxRestClient, type HtxFetchFn } from "@/lib/trader/connectors/htx/client";
+import {
+  assertInformationAcquisitionSelectionV1,
+  computeInquiryContentDigest,
+  inquiryCanonicalTextCompare,
+  type InformationAcquisitionSelectionV1,
+  type InformationRequestedSourceV1,
+} from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import {
   buildOptionalMarketDataAdapters,
@@ -19,20 +25,34 @@ import {
   buildProvenanceRef,
   normalizeCrossExchangeConfirmation,
   normalizeFearGreedObservation,
-  normalizeGlobalMarketObservation,
   normalizeOhlcvBarsObservation,
   normalizeQuoteObservation,
   normalizeUnavailableObservation,
 } from "@/lib/trader/market-data/normalization/normalize-observation";
+import { prepareCanonicalPitAttemptV1 } from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
 import {
   HTX_PERIOD_BY_INTERVAL,
   MTF_BAR_INTERVALS,
   type FusedMarketContext,
+  type MarketDataProviderId,
   type NormalizedObservation,
 } from "@/lib/trader/market-data/observation-types";
 import { buildMarketSnapshot } from "@/lib/trader/market-data/market-snapshot";
-import type { MarketSnapshot } from "@/lib/trader/market-data/types";
+import {
+  defineInformationAcquisitionReceiptV1,
+  type InformationAcquisitionOutcomeReasonV1,
+  type InformationAcquisitionOutcomeV1,
+  type InformationAcquisitionReceiptV1,
+  type MarketSnapshot,
+} from "@/lib/trader/market-data/types";
+import {
+  resolveMarketDataProviderSelection,
+  type MarketDataProviderSelectionResolution,
+} from "@/lib/trader/market-data/provider-registry";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+
+// CoinGeckoGlobalMarketClient remains registry-covered but is never selected here because
+// global_market_stats is EXCLUDED_UNMODELED at the canonical primitive boundary.
 
 export type MarketDataGatewayConfig = {
   internalSymbol?: InstrumentId;
@@ -58,7 +78,91 @@ export type GatewayPollResult = {
     bybit?: NormalizedObservation;
   };
   canonicalPitCandidates: readonly NormalizedObservation[];
+  informationAcquisition: InformationAcquisitionReceiptV1 | null;
 };
+
+type ResolvedRequestedSource = Readonly<{
+  source: InformationRequestedSourceV1;
+  resolution: MarketDataProviderSelectionResolution;
+}>;
+
+function rejectedAcquisitionOutcome(
+  source: InformationRequestedSourceV1,
+  reasonCode: InformationAcquisitionOutcomeReasonV1,
+): InformationAcquisitionOutcomeV1 {
+  return {
+    requestedSource: source,
+    status: "REJECTED",
+    reasonCode,
+    canonicalPitAttempts: [],
+    observationContentDigests: [],
+  };
+}
+
+function unavailableAcquisitionOutcome(
+  source: InformationRequestedSourceV1,
+): InformationAcquisitionOutcomeV1 {
+  return {
+    requestedSource: source,
+    status: "UNAVAILABLE",
+    reasonCode: "SOURCE_UNAVAILABLE",
+    canonicalPitAttempts: [],
+    observationContentDigests: [],
+  };
+}
+
+function classifyAcquisitionOutcome(input: {
+  source: InformationRequestedSourceV1;
+  observations: readonly NormalizedObservation[];
+  pitAnchor: string;
+}): Readonly<{
+  outcome: InformationAcquisitionOutcomeV1;
+  acceptedObservations: readonly NormalizedObservation[];
+  lineageObservations: readonly NormalizedObservation[];
+}> {
+  const observations = input.observations
+    .filter(
+      (observation) =>
+        observation.provenance.providerId === input.source.providerId &&
+        (input.source.allowedObservationKinds as readonly string[]).includes(observation.kind),
+    )
+    .map((observation) => ({
+      observation,
+      attempt: prepareCanonicalPitAttemptV1(observation, { pitCutoffUtc: input.pitAnchor }),
+    }))
+    .map((entry) => ({ ...entry, digest: entry.attempt.normalizedInputDigest }))
+    .sort((left, right) => inquiryCanonicalTextCompare(left.digest, right.digest))
+    .filter((entry, index, entries) => index === 0 || entry.digest !== entries[index - 1]?.digest);
+
+  if (observations.length === 0) {
+    return {
+      outcome: rejectedAcquisitionOutcome(input.source, "SOURCE_RETURNED_NO_ADMITTED_OBSERVATION"),
+      acceptedObservations: [],
+      lineageObservations: [],
+    };
+  }
+
+  const available = observations.filter((entry) => entry.attempt.status === "AVAILABLE");
+  const rejected = observations.filter((entry) => entry.attempt.status === "REJECTED");
+  const unavailable = observations.filter((entry) => entry.attempt.status === "UNAVAILABLE");
+  const selected = available.length > 0 ? available : rejected.length > 0 ? rejected : unavailable;
+  const status =
+    available.length > 0 ? "AVAILABLE" : rejected.length > 0 ? "REJECTED" : "UNAVAILABLE";
+  const reasonCode =
+    status === "AVAILABLE" ? null : (selected[0]?.attempt.reason ?? "SOURCE_UNAVAILABLE");
+  return {
+    outcome: {
+      requestedSource: input.source,
+      status,
+      reasonCode,
+      canonicalPitAttempts: selected.map((entry) => entry.attempt),
+      observationContentDigests:
+        status === "AVAILABLE" ? selected.map((entry) => entry.digest) : [],
+    },
+    acceptedObservations: status === "AVAILABLE" ? selected.map((entry) => entry.observation) : [],
+    lineageObservations: selected.map((entry) => entry.observation),
+  };
+}
 
 export function listCanonicalPitGatewayCandidates(
   context: FusedMarketContext,
@@ -123,7 +227,6 @@ export class MarketDataGateway {
   private readonly binance: BinancePublicMarketClient;
   private readonly bybit: BybitPublicMarketClient;
   private readonly fearGreed: AlternativeMeFearGreedClient;
-  private readonly coinGecko: CoinGeckoGlobalMarketClient;
   private readonly disableOptionalProviders: boolean;
   private readonly optionalAdaptersConfig: {
     fetchImpl?: HtxFetchFn;
@@ -155,10 +258,6 @@ export class MarketDataGateway {
     this.binance = new BinancePublicMarketClient({ fetchImpl });
     this.bybit = new BybitPublicMarketClient({ fetchImpl });
     this.fearGreed = new AlternativeMeFearGreedClient({ fetchImpl });
-    this.coinGecko = new CoinGeckoGlobalMarketClient({
-      fetchImpl,
-      apiKey: config.coingeckoApiKey ?? process.env.COINGECKO_API_KEY,
-    });
     this.disableOptionalProviders = config.disableOptionalProviders ?? false;
     this.optionalAdaptersConfig = {
       fetchImpl,
@@ -182,6 +281,7 @@ export class MarketDataGateway {
   async pollEvaluationBundle(input?: {
     cycleIdPrefix?: string;
     evaluatedAt?: string;
+    informationSelection?: InformationAcquisitionSelectionV1;
   }): Promise<GatewayPollResult> {
     const degradationReasons: string[] = [];
 
@@ -266,74 +366,6 @@ export class MarketDataGateway {
       }
     }
 
-    let crossExchangeConfirmation: NormalizedObservation | undefined;
-    let crossVenueTriangulation;
-    let crossExchangeBinance: NormalizedObservation | undefined;
-    let crossExchangeBybit: NormalizedObservation | undefined;
-    let fearGreedObservation: NormalizedObservation | undefined;
-    let globalMarketObservation: NormalizedObservation | undefined;
-    let macroEvidence: NormalizedObservation[] = [];
-    let newsEvidence: NormalizedObservation[] = [];
-    let blockchainEvidence: NormalizedObservation[] = [];
-    let regulatoryEvidence: NormalizedObservation[] = [];
-    let protocolEvidence: NormalizedObservation[] = [];
-
-    if (!this.disableOptionalProviders) {
-      const crossExchange = await this.fetchCrossExchangeConfirmation({
-        primaryLast: quote.last,
-        evaluatedAt,
-        degradationReasons,
-      });
-      crossExchangeConfirmation = crossExchange.crossExchangeConfirmation;
-      crossVenueTriangulation = crossExchange.crossVenueTriangulation;
-      crossExchangeBinance = crossExchange.binance;
-      crossExchangeBybit = crossExchange.bybit;
-      fearGreedObservation = await this.fetchFearGreed({ evaluatedAt, degradationReasons });
-      globalMarketObservation = await this.fetchGlobalMarket({ evaluatedAt, degradationReasons });
-
-      const optionalAdapters = buildOptionalMarketDataAdapters(this.optionalAdaptersConfig);
-      const adapterResults = await Promise.allSettled(
-        optionalAdapters.map((adapter) =>
-          adapter.fetchObservations({
-            instrumentId: this.internalSymbol,
-            symbol: this.internalSymbol,
-            evaluatedAt,
-            fetchImpl: this.optionalAdaptersConfig.fetchImpl,
-          }),
-        ),
-      );
-
-      const optionalObservations: NormalizedObservation[] = [];
-      for (let index = 0; index < adapterResults.length; index++) {
-        const result = adapterResults[index];
-        const adapter = optionalAdapters[index];
-        if (!result || !adapter) {
-          continue;
-        }
-        if (result.status === "rejected") {
-          degradationReasons.push(
-            `${adapter.providerId}_unavailable:${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
-          );
-          continue;
-        }
-        for (const observation of result.value) {
-          if (observation.health === "UNAVAILABLE") {
-            degradationReasons.push(
-              `${adapter.providerId}_unavailable:${observation.payload.reason ?? "unknown"}`,
-            );
-          }
-        }
-        optionalObservations.push(...result.value);
-      }
-
-      const categorized = categorizeOptionalObservations(optionalObservations);
-      macroEvidence = categorized.macroEvidence;
-      newsEvidence = categorized.newsEvidence;
-      blockchainEvidence = categorized.blockchainEvidence;
-      regulatoryEvidence = categorized.regulatoryEvidence;
-      protocolEvidence = categorized.protocolEvidence;
-    }
-
     const fusedContext = fuseContextV1({
       instrumentId: this.internalSymbol,
       fusedAtUtc: evaluatedAt,
@@ -341,50 +373,252 @@ export class MarketDataGateway {
       primaryQuote,
       orderBookSnapshot,
       marketTradesSnapshot,
-      crossExchangeConfirmation,
-      crossVenueTriangulation,
-      fearGreed: fearGreedObservation,
-      globalMarket: globalMarketObservation,
-      macroEvidence,
-      newsEvidence,
-      blockchainEvidence,
-      regulatoryEvidence,
-      protocolEvidence,
+      macroEvidence: [],
+      newsEvidence: [],
+      blockchainEvidence: [],
+      regulatoryEvidence: [],
+      protocolEvidence: [],
       degradationReasons,
     });
 
-    const crossExchangeObservations = {
-      binance: crossExchangeBinance,
-      bybit: crossExchangeBybit,
-    };
-    return {
+    const mandatoryBundle: GatewayPollResult = {
       snapshot: { ...snapshot, evaluatedAt: snapshot.evaluatedAt ?? evaluatedAt },
       fusedContext,
       mtfBarsByInterval,
+      crossExchangeObservations: {},
+      canonicalPitCandidates: listCanonicalPitGatewayCandidates(fusedContext),
+      informationAcquisition: null,
+    };
+    if (!input?.informationSelection) return mandatoryBundle;
+    return this.acquireSelectedInformation({
+      mandatoryBundle,
+      selection: input.informationSelection,
+    });
+  }
+
+  async acquireSelectedInformation(input: {
+    mandatoryBundle: GatewayPollResult;
+    selection: InformationAcquisitionSelectionV1;
+  }): Promise<GatewayPollResult> {
+    const selection = assertInformationAcquisitionSelectionV1(input.selection);
+    const resolvedSources: ResolvedRequestedSource[] = selection.requestedSources.map((source) => ({
+      source,
+      resolution: resolveMarketDataProviderSelection(source),
+    }));
+    const scopeReason =
+      selection.mode !== "LIVE"
+        ? "SELECTION_MODE_MISMATCH"
+        : selection.symbol !== this.internalSymbol ||
+            selection.pitAnchor !== input.mandatoryBundle.fusedContext.fusedAtUtc
+          ? "SELECTION_SCOPE_MISMATCH"
+          : null;
+
+    const providerObservations = new Map<string, readonly NormalizedObservation[]>();
+    providerObservations.set("htx_spot", input.mandatoryBundle.canonicalPitCandidates);
+    const unavailableProviders = new Set<string>();
+    const optionalDegradationReasons: string[] = [];
+    const selectedProviderIds = [
+      ...new Set(
+        resolvedSources.flatMap(({ resolution }) =>
+          resolution.status === "ACCEPTED" && resolution.provider.id !== "htx_spot"
+            ? [resolution.provider.id]
+            : [],
+        ),
+      ),
+    ];
+
+    if (!scopeReason && !this.disableOptionalProviders) {
+      if (selectedProviderIds.includes("alternative_me")) {
+        const fearGreed = await this.fetchFearGreed({
+          evaluatedAt: selection.pitAnchor,
+          degradationReasons: optionalDegradationReasons,
+        });
+        providerObservations.set("alternative_me", fearGreed ? [fearGreed] : []);
+      }
+      for (const providerId of ["binance_public", "bybit_public"] as const) {
+        if (!selectedProviderIds.includes(providerId)) continue;
+        try {
+          providerObservations.set(providerId, [
+            await this.fetchCrossExchangeProvider({
+              providerId,
+              primaryLast: input.mandatoryBundle.snapshot.quote.last,
+              evaluatedAt: selection.pitAnchor,
+            }),
+          ]);
+        } catch (error) {
+          unavailableProviders.add(providerId);
+          optionalDegradationReasons.push(
+            `${providerId}_unavailable:${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      const directProviders = new Set<MarketDataProviderId>([
+        "htx_spot",
+        "alternative_me",
+        "binance_public",
+        "bybit_public",
+      ]);
+      const adapterProviderIds: MarketDataProviderId[] = selectedProviderIds.filter(
+        (providerId) => !directProviders.has(providerId),
+      );
+      const optionalAdapters = buildOptionalMarketDataAdapters(
+        this.optionalAdaptersConfig,
+        adapterProviderIds,
+      );
+      const adapterResults = await Promise.allSettled(
+        optionalAdapters.map((adapter) =>
+          adapter.fetchObservations({
+            instrumentId: this.internalSymbol,
+            symbol: this.internalSymbol,
+            evaluatedAt: selection.pitAnchor,
+            fetchImpl: this.optionalAdaptersConfig.fetchImpl,
+          }),
+        ),
+      );
+      for (let index = 0; index < adapterResults.length; index++) {
+        const result = adapterResults[index];
+        const adapter = optionalAdapters[index];
+        if (!result || !adapter) continue;
+        if (result.status === "rejected") {
+          unavailableProviders.add(adapter.providerId);
+          optionalDegradationReasons.push(
+            `${adapter.providerId}_unavailable:${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          continue;
+        }
+        providerObservations.set(adapter.providerId, result.value);
+        for (const observation of result.value) {
+          if (observation.health === "UNAVAILABLE") {
+            optionalDegradationReasons.push(
+              `${adapter.providerId}_unavailable:${observation.payload.reason ?? "unknown"}`,
+            );
+          }
+        }
+      }
+    } else if (!scopeReason) {
+      for (const providerId of selectedProviderIds) unavailableProviders.add(providerId);
+    }
+
+    const resolvedOutcomes = resolvedSources.map(({ source, resolution }) => {
+      if (scopeReason) {
+        return {
+          outcome: rejectedAcquisitionOutcome(source, scopeReason),
+          acceptedObservations: [],
+          lineageObservations: [],
+        };
+      }
+      if (resolution.status === "REJECTED") {
+        return {
+          outcome: rejectedAcquisitionOutcome(source, resolution.reasonCode),
+          acceptedObservations: [],
+          lineageObservations: [],
+        };
+      }
+      if (unavailableProviders.has(resolution.provider.id)) {
+        return {
+          outcome: unavailableAcquisitionOutcome(source),
+          acceptedObservations: [],
+          lineageObservations: [],
+        };
+      }
+      const observations = providerObservations.get(resolution.provider.id);
+      if (!observations) {
+        return {
+          outcome: unavailableAcquisitionOutcome(source),
+          acceptedObservations: [],
+          lineageObservations: [],
+        };
+      }
+      return classifyAcquisitionOutcome({ source, observations, pitAnchor: selection.pitAnchor });
+    });
+    const outcomes = resolvedOutcomes.map((resolved) => resolved.outcome);
+    const lineageObservations = new Map<string, NormalizedObservation>();
+    for (const observation of resolvedOutcomes.flatMap((resolved) => resolved.lineageObservations)) {
+      const digest = prepareCanonicalPitAttemptV1(observation, {
+        pitCutoffUtc: selection.pitAnchor,
+      }).normalizedInputDigest;
+      if (!lineageObservations.has(digest)) lineageObservations.set(digest, observation);
+    }
+    const informationAcquisition = defineInformationAcquisitionReceiptV1({
+      selection,
+      outcomes,
+      observations: [...lineageObservations.values()],
+    });
+    const acceptedObservations = resolvedOutcomes.flatMap(
+      (resolved) => resolved.acceptedObservations,
+    );
+    const uniqueAccepted = new Map<string, NormalizedObservation>();
+    for (const observation of acceptedObservations) {
+      const digest = computeInquiryContentDigest(observation);
+      if (!uniqueAccepted.has(digest)) uniqueAccepted.set(digest, observation);
+    }
+    const optionalObservations = [...uniqueAccepted.values()].filter(
+      (observation) => observation.provenance.providerId !== "htx_spot",
+    );
+    const categorized = categorizeOptionalObservations(optionalObservations);
+    const fearGreed = optionalObservations.find(
+      (observation) => observation.kind === "fear_greed_index",
+    );
+    const crossExchangeObservations = {
+      binance: optionalObservations.find(
+        (observation) => observation.provenance.providerId === "binance_public",
+      ),
+      bybit: optionalObservations.find(
+        (observation) => observation.provenance.providerId === "bybit_public",
+      ),
+    };
+    const crossExchangeCandidates = [
+      crossExchangeObservations.binance,
+      crossExchangeObservations.bybit,
+    ].filter((observation): observation is NormalizedObservation => observation !== undefined);
+    const crossExchangeConfirmation = crossExchangeCandidates[0];
+    const crossVenueTriangulation =
+      crossExchangeCandidates.length > 0
+        ? buildCrossVenueTriangulation({
+            binance: crossExchangeObservations.binance,
+            bybit: crossExchangeObservations.bybit,
+          })
+        : undefined;
+    const mandatory = input.mandatoryBundle.fusedContext;
+    const fusedContext = fuseContextV1({
+      instrumentId: this.internalSymbol,
+      fusedAtUtc: selection.pitAnchor,
+      mtfBars: mandatory.mtfBars,
+      primaryQuote: mandatory.primaryQuote,
+      orderBookSnapshot: mandatory.orderBookSnapshot,
+      marketTradesSnapshot: mandatory.marketTradesSnapshot,
+      crossExchangeConfirmation,
+      crossVenueTriangulation,
+      fearGreed,
+      macroEvidence: categorized.macroEvidence,
+      newsEvidence: categorized.newsEvidence,
+      blockchainEvidence: categorized.blockchainEvidence,
+      regulatoryEvidence: categorized.regulatoryEvidence,
+      protocolEvidence: categorized.protocolEvidence,
+      degradationReasons: [...mandatory.degradationReasons, ...optionalDegradationReasons],
+    });
+    return {
+      snapshot: input.mandatoryBundle.snapshot,
+      fusedContext,
+      mtfBarsByInterval: input.mandatoryBundle.mtfBarsByInterval,
       crossExchangeObservations,
       canonicalPitCandidates: listCanonicalPitGatewayCandidates(
         fusedContext,
         crossExchangeObservations,
       ),
+      informationAcquisition,
     };
   }
 
-  private async fetchCrossExchangeConfirmation(input: {
+  private async fetchCrossExchangeProvider(input: {
+    providerId: "binance_public" | "bybit_public";
     primaryLast: string;
     evaluatedAt: string;
-    degradationReasons: string[];
-  }): Promise<{
-    crossExchangeConfirmation?: NormalizedObservation;
-    crossVenueTriangulation: ReturnType<typeof buildCrossVenueTriangulation>;
-    binance?: NormalizedObservation;
-    bybit?: NormalizedObservation;
-  }> {
-    let binanceObs: NormalizedObservation | undefined;
-    let bybitObs: NormalizedObservation | undefined;
-
-    try {
+  }): Promise<NormalizedObservation> {
+    if (input.providerId === "binance_public") {
       const binanceTimed = await timed(() => this.binance.getTickerPrice(this.internalSymbol));
-      binanceObs = normalizeCrossExchangeConfirmation({
+      return normalizeCrossExchangeConfirmation({
         symbol: this.internalSymbol,
         primaryLast: input.primaryLast,
         confirmLast: binanceTimed.value.price,
@@ -399,73 +633,23 @@ export class MarketDataGateway {
         latencyMs: binanceTimed.latencyMs,
         evaluatedAt: input.evaluatedAt,
       });
-    } catch (error) {
-      input.degradationReasons.push(
-        `binance_unavailable:${error instanceof Error ? error.message : String(error)}`,
-      );
     }
-
-    try {
-      const bybitTimed = await timed(() => this.bybit.getSpotTicker(this.internalSymbol));
-      bybitObs = normalizeCrossExchangeConfirmation({
+    const bybitTimed = await timed(() => this.bybit.getSpotTicker(this.internalSymbol));
+    return normalizeCrossExchangeConfirmation({
+      symbol: this.internalSymbol,
+      primaryLast: input.primaryLast,
+      confirmLast: bybitTimed.value.lastPrice,
+      confirmVenue: "bybit",
+      provenance: buildProvenanceRef({
+        providerId: "bybit_public",
+        venue: "bybit",
+        feedKind: "cross_exchange_confirmation",
         symbol: this.internalSymbol,
-        primaryLast: input.primaryLast,
-        confirmLast: bybitTimed.value.lastPrice,
-        confirmVenue: "bybit",
-        provenance: buildProvenanceRef({
-          providerId: "bybit_public",
-          venue: "bybit",
-          feedKind: "cross_exchange_confirmation",
-          symbol: this.internalSymbol,
-          eventTimeUtc: input.evaluatedAt,
-        }),
-        latencyMs: bybitTimed.latencyMs,
-        evaluatedAt: input.evaluatedAt,
-      });
-    } catch (error) {
-      input.degradationReasons.push(
-        `bybit_unavailable:${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    const crossVenueTriangulation = buildCrossVenueTriangulation({
-      binance: binanceObs,
-      bybit: bybitObs,
+        eventTimeUtc: input.evaluatedAt,
+      }),
+      latencyMs: bybitTimed.latencyMs,
+      evaluatedAt: input.evaluatedAt,
     });
-
-    if (!binanceObs && !bybitObs) {
-      return {
-        crossExchangeConfirmation: normalizeUnavailableObservation({
-          kind: "cross_exchange_confirmation",
-          provenance: buildProvenanceRef({
-            providerId: "binance_public",
-            venue: "binance",
-            feedKind: "cross_exchange_confirmation",
-            symbol: this.internalSymbol,
-            eventTimeUtc: input.evaluatedAt,
-          }),
-          evaluatedAt: input.evaluatedAt,
-          reason: "cross_exchange_unavailable",
-        }),
-        crossVenueTriangulation,
-        binance: undefined,
-        bybit: undefined,
-      };
-    }
-
-    const crossExchangeConfirmation =
-      binanceObs && bybitObs
-        ? binanceObs.confidence >= bybitObs.confidence
-          ? binanceObs
-          : bybitObs
-        : (binanceObs ?? bybitObs);
-
-    return {
-      crossExchangeConfirmation,
-      crossVenueTriangulation,
-      binance: binanceObs,
-      bybit: bybitObs,
-    };
   }
 
   private async fetchFearGreed(input: {
@@ -499,46 +683,6 @@ export class MarketDataGateway {
           providerId: "alternative_me",
           venue: "alternative_me",
           feedKind: "fear_greed_index",
-          symbol: "GLOBAL",
-          eventTimeUtc: input.evaluatedAt,
-        }),
-        evaluatedAt: input.evaluatedAt,
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async fetchGlobalMarket(input: {
-    evaluatedAt: string;
-    degradationReasons: string[];
-  }): Promise<NormalizedObservation | undefined> {
-    try {
-      const timedResult = await timed(() => this.coinGecko.getGlobalMarket());
-      const eventTimeUtc = new Date(timedResult.value.updated_at * 1000).toISOString();
-      return normalizeGlobalMarketObservation({
-        btcDominance: timedResult.value.market_cap_percentage.btc ?? 0,
-        marketCapUsd: timedResult.value.total_market_cap.usd ?? 0,
-        provenance: buildProvenanceRef({
-          providerId: "coingecko_global",
-          venue: "coingecko",
-          feedKind: "global_market_stats",
-          symbol: "GLOBAL",
-          eventTimeUtc,
-        }),
-        latencyMs: timedResult.latencyMs,
-        evaluatedAt: input.evaluatedAt,
-        eventTimeUtc,
-      });
-    } catch (error) {
-      input.degradationReasons.push(
-        `coingecko_unavailable:${error instanceof Error ? error.message : String(error)}`,
-      );
-      return normalizeUnavailableObservation({
-        kind: "global_market_stats",
-        provenance: buildProvenanceRef({
-          providerId: "coingecko_global",
-          venue: "coingecko",
-          feedKind: "global_market_stats",
           symbol: "GLOBAL",
           eventTimeUtc: input.evaluatedAt,
         }),

@@ -12,7 +12,12 @@ import {
   updatePaperBarCloseRollupCounters,
 } from "@/lib/trader/paper/paper-bar-close-loop-telemetry";
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
-import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
+import { resolveHtxInformationInquiryCycleV1 } from "@/lib/trader/paper/paper-cycle-runner";
+import type {
+  PaperCycleDeps,
+  PaperInformationInquiryResolverV1,
+} from "@/lib/trader/paper/paper-cycle.types";
+import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -41,6 +46,7 @@ export type PaperBarCloseLoopConfig = {
   sleep?: (ms: number) => Promise<void>;
   abortSignal?: AbortSignal;
   newId?: () => string;
+  informationInquiryResolver?: PaperInformationInquiryResolverV1;
 };
 
 export type PaperBarCloseLoopResult = {
@@ -125,7 +131,16 @@ export async function runPaperBarCloseLoop(
     }
 
     const cycleStartedMs = nowMs();
-    const snapshot = await config.poll.fetchSnapshot();
+    const resolvedInquiry =
+      config.poll instanceof HtxBarPollSource
+        ? await resolveHtxInformationInquiryCycleV1({
+            poll: config.poll,
+            expectedOrganizationId: config.context.organizationId,
+            expectedAccountId: config.accountKey,
+            resolver: config.informationInquiryResolver,
+          })
+        : null;
+    const snapshot = resolvedInquiry?.bundle.snapshot ?? (await config.poll.fetchSnapshot());
 
     const result = await runPaperCycleOnce(config.deps, {
       context: config.context,
@@ -136,6 +151,8 @@ export async function runPaperBarCloseLoop(
       executionMode: "mock",
       telemetrySink,
       newId,
+      fusedContext: resolvedInquiry?.bundle.fusedContext,
+      informationSufficiencyAuthority: resolvedInquiry?.informationSufficiencyAuthority,
       orderRepository: config.orderRepository,
       refreshAccountStateBetweenStrategies: Boolean(
         config.refreshAccountState && config.orderRepository,
