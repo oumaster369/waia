@@ -143,7 +143,26 @@ describe("DEE-696 top-down reconstruction contract", () => {
           index === 3 ? { ...state, stateContentDigest: null } : state,
         ),
       }),
-    ).toThrow("availableDigest");
+    ).toThrow("statusDigest");
+    expect(() =>
+      defineTopDownReconstructionV1({
+        ...reconstructionInput(),
+        states: reconstructionInput().states.map((state, index) =>
+          index === 0 ? { ...state, status: "UNAVAILABLE" as const } : state,
+        ),
+      }),
+    ).toThrow("statusDigest");
+    expect(() =>
+      defineTopDownReconstructionV1({
+        ...reconstructionInput(),
+        upwardReevaluationRequests: [
+          {
+            ...reconstructionInput().upwardReevaluationRequests[0]!,
+            targetHigherTimeframe: "garbage",
+          },
+        ],
+      } as never),
+    ).toThrow("upwardReevaluationDirection");
 
     const input = reconstructionInput();
     const statesWithUnknown = input.states.map((state) => ({ ...state, forecastAction: "BUY" }));

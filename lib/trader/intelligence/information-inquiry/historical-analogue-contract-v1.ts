@@ -1,6 +1,7 @@
 import {
   computeInquiryContentDigest,
   deepFreezeInquiry,
+  inquiryCanonicalJsonString,
   inquiryCanonicalTextCompare,
   requireInquiryDigest,
   requireInquiryNonEmpty,
@@ -181,6 +182,36 @@ export function defineHistoricalAnalogueQueryV1(
   return deepFreezeInquiry({ ...payload, id: `hiq_${contentDigest}`, contentDigest });
 }
 
+export function assertHistoricalAnalogueQueryV1(
+  query: HistoricalAnalogueQueryV1,
+): HistoricalAnalogueQueryV1 {
+  const expected = defineHistoricalAnalogueQueryV1({
+    pitAnchor: query.pitAnchor,
+    stateRepresentationSpecVersion: query.stateRepresentationSpecVersion,
+    stateRepresentationSpecContentDigest: query.stateRepresentationSpecContentDigest,
+    dynamicStateContentDigest: query.dynamicStateContentDigest,
+    requestedPatternForms: query.requestedPatternForms,
+    similarityPolicyVersion: query.similarityPolicyVersion,
+    similarityPolicyContentDigest: query.similarityPolicyContentDigest,
+    timeframeFilters: query.timeframeFilters,
+    regimeFilters: query.regimeFilters,
+    contextFilterContentDigests: query.contextFilterContentDigests,
+    retrievalPolicyVersion: query.retrievalPolicyVersion,
+    retrievalPolicyContentDigest: query.retrievalPolicyContentDigest,
+    samplingPolicyVersion: query.samplingPolicyVersion,
+    samplingPolicyContentDigest: query.samplingPolicyContentDigest,
+    maxQueries: query.maxQueries,
+    maxResults: query.maxResults,
+    maxCostUnits: query.maxCostUnits,
+    blindHoldoutAccessible: query.blindHoldoutAccessible,
+    usesFutureOutcomeForSelection: query.usesFutureOutcomeForSelection,
+  });
+  if (inquiryCanonicalJsonString(query) !== inquiryCanonicalJsonString(expected)) {
+    throw new Error("INFORMATION_INQUIRY_INVALID:analogueQueryIdentity");
+  }
+  return query;
+}
+
 const INFORMATION_INQUIRY_TIMEFRAME_ORDER: readonly InformationInquiryTimeframeV1[] = [
   "1d",
   "4h",
@@ -257,16 +288,19 @@ function canonicalOccurrence(
 export function defineHistoricalAnalogueResultV1(
   input: Omit<
     HistoricalAnalogueResultV1,
-    "schemaVersion" | "id" | "authority" | "createsForecastOrCapitalAuthority" | "contentDigest"
-  >,
+    | "schemaVersion"
+    | "id"
+    | "queryId"
+    | "queryContentDigest"
+    | "pitAnchor"
+    | "authority"
+    | "createsForecastOrCapitalAuthority"
+    | "contentDigest"
+  > &
+    Readonly<{ query: HistoricalAnalogueQueryV1 }>,
 ): HistoricalAnalogueResultV1 {
-  requireInquiryNonEmpty(input.queryId, "analogueResult.queryId");
-  requireInquiryDigest(input.queryContentDigest, "analogueResult.queryContentDigest");
-  if (input.queryId !== `hiq_${input.queryContentDigest}`) {
-    throw new Error("INFORMATION_INQUIRY_INVALID:analogueResult.queryIdentity");
-  }
-  requireInquiryTimestamp(input.pitAnchor, "analogueResult.pitAnchor");
-  const pitAnchorMs = Date.parse(input.pitAnchor);
+  const query = assertHistoricalAnalogueQueryV1(input.query);
+  const pitAnchorMs = Date.parse(query.pitAnchor);
   if (!HISTORICAL_ANALOGUE_RESULT_STATUSES_V1.includes(input.status)) {
     throw new Error("INFORMATION_INQUIRY_INVALID:analogueResultStatus");
   }
@@ -353,9 +387,9 @@ export function defineHistoricalAnalogueResultV1(
   }
   const payload = {
     schemaVersion: HISTORICAL_ANALOGUE_RESULT_V1_SCHEMA_VERSION,
-    queryId: input.queryId,
-    queryContentDigest: input.queryContentDigest,
-    pitAnchor: input.pitAnchor,
+    queryId: query.id,
+    queryContentDigest: query.contentDigest,
+    pitAnchor: query.pitAnchor,
     status: input.status,
     occurrences,
     knowledgeRefs,

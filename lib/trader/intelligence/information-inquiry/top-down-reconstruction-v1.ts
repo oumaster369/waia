@@ -79,6 +79,8 @@ const ADJACENT_PAIRS = [
 ] as const;
 
 const TOP_DOWN_STATE_STATUSES = ["AVAILABLE", "UNAVAILABLE", "CONTRADICTORY"] as const;
+const TOP_DOWN_REEVALUATION_TRIGGERS = ["4h", "1h", "15m", "1m"] as const;
+const TOP_DOWN_REEVALUATION_TARGETS = ["1d", "4h", "1h", "15m"] as const;
 
 function timeframeIndex(timeframe: InformationInquiryTimeframeV1): number {
   return INFORMATION_INQUIRY_TIMEFRAMES_V1.indexOf(timeframe);
@@ -104,8 +106,8 @@ export function defineTopDownReconstructionV1(
     if (!TOP_DOWN_STATE_STATUSES.includes(state.status)) {
       throw new Error("INFORMATION_INQUIRY_INVALID:reconstruction.status");
     }
-    if (state.status !== "UNAVAILABLE" && state.stateContentDigest === null) {
-      throw new Error("INFORMATION_INQUIRY_INVALID:reconstruction.availableDigest");
+    if ((state.status === "UNAVAILABLE") !== (state.stateContentDigest === null)) {
+      throw new Error("INFORMATION_INQUIRY_INVALID:reconstruction.statusDigest");
     }
     if (state.stateContentDigest !== null) {
       requireInquiryDigest(state.stateContentDigest, "reconstruction.stateContentDigest");
@@ -149,6 +151,8 @@ export function defineTopDownReconstructionV1(
   const upwardReevaluationRequests = [...input.upwardReevaluationRequests]
     .map((request) => {
       if (
+        !TOP_DOWN_REEVALUATION_TRIGGERS.includes(request.triggerTimeframe) ||
+        !TOP_DOWN_REEVALUATION_TARGETS.includes(request.targetHigherTimeframe) ||
         timeframeIndex(request.targetHigherTimeframe) >= timeframeIndex(request.triggerTimeframe) ||
         request.mayOverwriteHigherState !== false
       ) {

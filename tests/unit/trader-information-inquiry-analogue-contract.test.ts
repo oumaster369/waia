@@ -76,9 +76,7 @@ describe("DEE-696 historical analogue contract", () => {
   it("seals exact occurrence, match/distance, sampling, and qualified Knowledge refs", () => {
     const sealedQuery = query();
     const result = defineHistoricalAnalogueResultV1({
-      queryId: sealedQuery.id,
-      queryContentDigest: sealedQuery.contentDigest,
-      pitAnchor: sealedQuery.pitAnchor,
+      query: sealedQuery,
       status: "MATCHED_QUALIFIED_KNOWLEDGE",
       occurrences: [occurrence()],
       knowledgeRefs: [
@@ -116,9 +114,7 @@ describe("DEE-696 historical analogue contract", () => {
     ]);
     const sealedQuery = query();
     const base = {
-      queryId: sealedQuery.id,
-      queryContentDigest: sealedQuery.contentDigest,
-      pitAnchor: sealedQuery.pitAnchor,
+      query: sealedQuery,
       reasonCodes: ["EXPLICIT_TERMINAL"],
     };
     expect(
@@ -165,17 +161,18 @@ describe("DEE-696 historical analogue contract", () => {
   it("enforces query identity and point-in-time occurrence lineage", () => {
     const sealedQuery = query();
     const base = {
-      queryId: sealedQuery.id,
-      queryContentDigest: sealedQuery.contentDigest,
-      pitAnchor: sealedQuery.pitAnchor,
+      query: sealedQuery,
       status: "NO_QUALIFIED_RELATION_KNOWLEDGE" as const,
       occurrences: [occurrence()],
       knowledgeRefs: [],
       reasonCodes: ["EXPLICIT_TERMINAL"],
     };
-    expect(() => defineHistoricalAnalogueResultV1({ ...base, queryId: `hiq_${D}` })).toThrow(
-      "queryIdentity",
-    );
+    expect(() =>
+      defineHistoricalAnalogueResultV1({
+        ...base,
+        query: { ...sealedQuery, pitAnchor: "2026-08-26T12:00:00.000Z" },
+      }),
+    ).toThrow("analogueQueryIdentity");
     expect(() =>
       defineHistoricalAnalogueResultV1({
         ...base,
@@ -205,9 +202,7 @@ describe("DEE-696 historical analogue contract", () => {
   it("keeps analogue terminal outcomes mutually exclusive and Knowledge status closed", () => {
     const sealedQuery = query();
     const base = {
-      queryId: sealedQuery.id,
-      queryContentDigest: sealedQuery.contentDigest,
-      pitAnchor: sealedQuery.pitAnchor,
+      query: sealedQuery,
       reasonCodes: ["EXPLICIT_TERMINAL"],
     };
     const qualified = {
@@ -253,9 +248,7 @@ describe("DEE-696 historical analogue contract", () => {
   it("strips unknown occurrence and Knowledge fields from the sealed identity", () => {
     const sealedQuery = query();
     const result = defineHistoricalAnalogueResultV1({
-      queryId: sealedQuery.id,
-      queryContentDigest: sealedQuery.contentDigest,
-      pitAnchor: sealedQuery.pitAnchor,
+      query: sealedQuery,
       status: "MATCHED_QUALIFIED_KNOWLEDGE",
       occurrences: [{ ...occurrence(), futurePnl: 42 }],
       knowledgeRefs: [
