@@ -114,12 +114,15 @@ export type InformationNeedV1 = Readonly<{
   allowedObservationKinds: readonly CanonicalPrimitiveObservationKindV1[];
   allowedObservationSchemaVersions: readonly string[];
   timeframeRequirements: readonly InformationInquiryTimeframeV1[];
+  maxStalenessMsByTimeframe: readonly Readonly<{
+    timeframe: InformationInquiryTimeframeV1;
+    maxStalenessMs: number | null;
+  }>[];
   providerCandidates: readonly Readonly<{
     providerId: string;
     substitutionRuleId: string | null;
     costUnits: number;
   }>[];
-  maxStalenessMs: number | null;
   requirePitQualified: boolean;
   requireReplayEligible: boolean;
   contradiction: InformationContradictionLineageV1 | null;

@@ -7,6 +7,7 @@ import {
   defineInformationInquiryPolicyV1,
   inquiryCanonicalJsonString,
   mapInformationInquiryPurposeV1,
+  type InformationNeedV1,
   type InformationInquiryPolicyV1,
 } from "@/lib/trader/intelligence/information-inquiry";
 
@@ -67,6 +68,32 @@ describe("DEE-696 information inquiry contracts", () => {
     expect(mapInformationInquiryPurposeV1("RESEARCH")).toBe("RESEARCH_NON_CAPITAL");
     expect(() => mapInformationInquiryPurposeV1("NEW_OPPORTUNITY" as never)).toThrow("purpose");
     expect(inquiryCanonicalJsonString({ ä: 1, z: 2 })).toBe('{"z":2,"ä":1}');
+  });
+
+  it("preserves caller-supplied freshness independently for every required timeframe", () => {
+    const need = {
+      id: "need-price",
+      requirementId: "r-price",
+      questionId: "Q_WHAT_HAPPENING",
+      classification: "MANDATORY",
+      evidenceFamily: "PRICE_STATE",
+      allowedObservationKinds: ["ohlcv_bar"],
+      allowedObservationSchemaVersions: ["ohlcv_bar/v1"],
+      timeframeRequirements: ["4h", "1h"],
+      maxStalenessMsByTimeframe: [
+        { timeframe: "4h", maxStalenessMs: 60_000 },
+        { timeframe: "1h", maxStalenessMs: 15_000 },
+      ],
+      providerCandidates: [{ providerId: "htx_spot", substitutionRuleId: null, costUnits: 1 }],
+      requirePitQualified: true,
+      requireReplayEligible: true,
+      contradiction: null,
+      reasonCodes: ["PRICE_REQUIRED"],
+    } as const satisfies InformationNeedV1;
+    expect(need.maxStalenessMsByTimeframe).toEqual([
+      { timeframe: "4h", maxStalenessMs: 60_000 },
+      { timeframe: "1h", maxStalenessMs: 15_000 },
+    ]);
   });
 
   it("seals a caller-valued policy deterministically without defaults", () => {
