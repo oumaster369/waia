@@ -23,6 +23,26 @@ approvalGates:
   - integration-ready
   - dee-653-exact-head-admission
 includedIssues: [DEE-686, DEE-687, DEE-688, DEE-689]
+state:
+  status: in-review
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-686, DEE-687, DEE-688, DEE-689]
+  remainingWorkPackages: []
+  prNumber: 487
+  prUrl: https://github.com/oumaster369/waia/pull/487
+  lastValidatedGitSha: 58c026c366861ad8411c418175bdcdf83fa759f2
+  lastValidationAt: "2026-08-24"
+  blockedReason: null
+  nextAction: "Refresh exact-head provenance after this canonical-plan structure correction, then require green CI and DEE-653 admission before squash merge."
+provenance:
+  createdFrom: human-ratified-delegation
+  sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
+  authoritativeBase: 5cc17ad85e47266eb8f832e16eda093641ba3b54
+  correctedAdmissionCommit: 0a564969b38e021443f7e3482fef72c8cd04a607
+  canonicalPlanRepair:
+    authorizedAt: "2026-08-24"
+    authority: "Standing Human authority for obvious mechanical provenance corrections inside the ratified DEE-621 train."
+    scope: "Add only validator-required plan state/provenance metadata and an Acceptance section after PR #487 exposed the omission; no implementation, scientific, Reality, FHV, security, production, holdout, retention, or capital semantic change."
 ---
 
 # DEE-685 — Required Information Profile + Fail-Closed ISG
@@ -88,6 +108,17 @@ Expected surfaces: checked source/consumer inventory and focused closure tests; 
 After each serialized child commit, run its focused tests, cumulative focused tests, typecheck and scoped lint. Wave B onward requires fresh migrated PostgreSQL and real authenticated/anon role probes. Mark a child Done only after its immutable commit, scoped gates and independent reviewer acceptance are recorded.
 
 After D, freeze the exact manifest/head and run once: fresh PostgreSQL migration/smoke, all focused PostgreSQL/tenant/replay/non-bypass proofs, lint, typecheck, build, a fresh migrated SQLite database and the full unit suite, canonical/PR governance validation, and one fresh exact-head adversarial review with zero unresolved P1/P2. Any material base/head/manifest change invalidates affected evidence.
+
+## Acceptance
+
+1. The generic `RequiredInformationProfileV2` and deterministic receipt remain immutable, content-addressed, purpose/question/PIT-relative, formula-free, and capital-inert.
+2. Missing or invalid mandatory/context-triggered evidence, unavailable/stale/untrusted/non-PIT lineage, unresolved required contradiction, or insufficient independence fails closed without aggregate compensation or silent substitution.
+3. Exactly one additive PostgreSQL migration persists tenant-scoped append-only profiles and receipts; service-role behavior, authenticated/anon denial, tenant isolation, digest guards, and mutation denial are proven on a fresh database.
+4. Forecast/Decision construction and every new-entry paper, poll, fixture, and backtest submission path require exact bound sufficiency authority; missing, unavailable, invalid, or insufficient authority produces `information_sufficiency_blocked` and null execution.
+5. Guardian/open-position reassessment and risk-reducing exits remain independent of the NEW_OPPORTUNITY denial lane.
+6. Repository-wide consumer and bypass inventory closes direct, indirect, barrel, low-level, replay, and persistence seams while preserving explicit non-capital research authority.
+7. Causal WHY is never answered from price-only evidence, historical analogues remain restricted to admissible non-holdout history, and bounded inquiry never fabricates an answer.
+8. The diff introduces no new source class, empirical profile/formula/threshold, Reality or FHV semantic change, security/retention/holdout/production/live-capital surface, provider credential, or capital authority.
 
 ## STOP conditions
 
