@@ -49,9 +49,9 @@
         "tests/unit/trader-information-sufficiency-contracts.test.ts"
       ],
       "integratedCommits": [
-        "9870eeb1ebd57b7b9ff75dd00f6a538c33752ae7",
-        "e066a85e2d711faa296bd806df7166e3206bdb93",
-        "6d37fb8678a9b1c37eaa7fd921e82f6413d27ded"
+        "b4311b372a972853aa475a190801d0a251633c08",
+        "d9563e79efd614ad5df5379f87ec95c62b22af20",
+        "c40f48971132adf9167138cf20b45cf67220ae0e"
       ],
       "acceptanceEvidence": [
         "Immutable content-addressed profiles/receipts fail closed on forged lineage and hard-floor inputs.",
@@ -126,11 +126,11 @@
         "tests/unit/trader-mi-canonical-pit-migration-identity.test.ts"
       ],
       "integratedCommits": [
-        "a50b60ee9a50dcdb2632e583734945750ae8c00e",
-        "abb56e583bd47291be5ffb6cbfc37c4cb22f6b5b",
-        "bbf6003744cf3344426ada248a6f6bf5f65e23e4",
-        "3aa11ebb47dde94706254be92d02f0f99ea1d5de",
-        "77a0c0ee40a28e96b7396f8ed1d4da104ac85e94"
+        "74b65631f3675bc3be8ffb322285d44c38c82a9c",
+        "2fefa13e5ad631997c93b53cc2722eda80ce4223",
+        "b18b760e5a70c46e6dc111015d3d72bd7a59d04b",
+        "80398fee028faca8091a47ef6ecfc4c19738a121",
+        "d64d4e34f1035ecd9c2183ac76a302513d4a6525"
       ],
       "acceptanceEvidence": [
         "One additive 0162 migration persists append-only tenant-scoped profile/receipt identities.",
@@ -247,9 +247,12 @@
         "tests/integration/postgres-trader-forecast-decision-idempotency.test.ts",
         "tests/integration/postgres-trader-forecast-decision-parity.test.ts",
         "tests/integration/postgres-trader-wp21-outcome-calibration-parity.test.ts",
+        "tests/integration/trader-intelligence-loop.test.ts",
         "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+        "tests/integration/trader-paper-bar-close-loop-telemetry.test.ts",
         "tests/integration/trader-paper-bar-close-loop.test.ts",
         "tests/integration/trader-paper-cycle-runner.test.ts",
+        "tests/integration/trader-paper-p5-multi-strategy.test.ts",
         "tests/integration/wp13-intelligence-test-helpers.ts",
         "tests/integration/wp14-forecast-decision-test-helpers.ts",
         "tests/integration/wp15-mkb-read-model-test-helpers.ts",
@@ -263,22 +266,24 @@
         "tests/unit/wp15-test-helpers.ts"
       ],
       "integratedCommits": [
-        "f56b85d291c7af25a06f6f3d28a7605f5292b48e",
-        "54115481f8e5ee45777bcf683dfc0ae78ce629f1",
-        "d04f33002c5732a3042db7e2d6a0dd08a47ef0c1",
-        "b0e8d1a756c8258bc0045727b04c9bacc5dced15",
-        "89b503797021d3463f1708dffe16e1f171edd5e7",
-        "e0cab73f660f7581d36adbe96458bb00908879ca"
+        "1790c528bba9b6a96e90ff1392afb4ca2cf58f35",
+        "b93bdbf4e5043e40b377740ee2f17abcd69c5c5c",
+        "7b093424b940edfcca7d2c64ccec0307f607f7c5",
+        "a209ec46ad7572b224684158691e356d2f17de33",
+        "69f882c47a4851286ab1dcf30bd3590ce2fac366",
+        "4a3cff464e8ed80d37a3d781f99ab66936aa6136",
+        "4495c05c9910a5ba8aa2a00bf6efd548451fd030"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
         "Guardian risk-reducing exits remain separate and unblocked.",
-        "Two Human-authorized tests assert information_sufficiency_blocked, null execution, bounded abort and no execution/reconciliation; production bytes unchanged.",
+        "Five Human-authorized tests assert information_sufficiency_blocked, null execution, bounded abort and no execution/reconciliation; production bytes unchanged.",
         "Independent corrected-readmission review: PASS, zero P1/P2."
       ],
       "tests": [
         "Affected runtime/Guardian/bar-close focus: 47/47 PASS.",
-        "Authorized corrected tests independently: 9/9 PASS.",
+        "Authorized corrected tests independently: 12/12 PASS.",
+        "Post-readmission corrected/runtime/consumer focus: 26/26 PASS.",
         "WP14/WP15 compatibility: 40/40 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
@@ -339,6 +344,7 @@
         "mode": "serialized"
       },
       "actualFiles": [
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
         "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts",
         "lib/trader/intelligence/market-understanding-bridge-v0.ts",
         "lib/trader/intelligence/market-understanding.types.ts",
@@ -356,8 +362,9 @@
         "tests/unit/trader-market-understanding-golden.test.ts"
       ],
       "integratedCommits": [
-        "784273255175c1b3fe58232b3c19fbae3b00728d",
-        "50aa62a5c12ef3aec12cd94fa26f564fbb977983"
+        "5a06d9582ab4014b1a9343fb330b43c39b3d0fbe",
+        "f617237ddd85e7441bbc59b8749df9e15ac98635",
+        "3d584be1ae302ed8047081059029c53126b063c5"
       ],
       "acceptanceEvidence": [
         "Inventory covers direct/indirect/barrel/persistence/paper/poll/fixture/backtest/read-only/Guardian dispositions.",
@@ -366,6 +373,7 @@
       ],
       "tests": [
         "Downstream closure: 75/75 PASS.",
+        "Reality V2 source/consumer graph: 4/4 PASS with exact current count and digests.",
         "Reviewer-repair closure/semantics/poll: 12/12 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
@@ -376,8 +384,8 @@
   "integrationEvidence": {
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "54a013d6ddf1386657b9e830d84d51d6c619131e10e1027becc9d8444da4bd64",
-      "manifestCommit": "4b873354c33eefa16d1eceb20d480928292de33b",
+      "manifestDigest": "81cdc75888ed7452965773ddcabbd23e706c859b0186b4be7f651da9775849eb",
+      "manifestCommit": "0a564969b38e021443f7e3482fef72c8cd04a607",
       "manifestPath": "docs/plans/dee-685-required-information-sufficiency-gate.integration-train.json",
       "reviewer": "Human-authorized corrected readmission; independent exact-base, scope, byte-identity and ordering review"
     },
@@ -386,9 +394,9 @@
         "issue": "DEE-686",
         "status": "pass",
         "reviewedCommits": [
-          "9870eeb1ebd57b7b9ff75dd00f6a538c33752ae7",
-          "e066a85e2d711faa296bd806df7166e3206bdb93",
-          "6d37fb8678a9b1c37eaa7fd921e82f6413d27ded"
+          "b4311b372a972853aa475a190801d0a251633c08",
+          "d9563e79efd614ad5df5379f87ec95c62b22af20",
+          "c40f48971132adf9167138cf20b45cf67220ae0e"
         ],
         "reviewedFiles": [
           "lib/trader/intelligence/information-sufficiency/index.ts",
@@ -400,11 +408,11 @@
         "issue": "DEE-687",
         "status": "pass",
         "reviewedCommits": [
-          "a50b60ee9a50dcdb2632e583734945750ae8c00e",
-          "abb56e583bd47291be5ffb6cbfc37c4cb22f6b5b",
-          "bbf6003744cf3344426ada248a6f6bf5f65e23e4",
-          "3aa11ebb47dde94706254be92d02f0f99ea1d5de",
-          "77a0c0ee40a28e96b7396f8ed1d4da104ac85e94"
+          "74b65631f3675bc3be8ffb322285d44c38c82a9c",
+          "2fefa13e5ad631997c93b53cc2722eda80ce4223",
+          "b18b760e5a70c46e6dc111015d3d72bd7a59d04b",
+          "80398fee028faca8091a47ef6ecfc4c19738a121",
+          "d64d4e34f1035ecd9c2183ac76a302513d4a6525"
         ],
         "reviewedFiles": [
           "db/migrations_postgres/0162_trader_information_sufficiency_v2.sql",
@@ -424,12 +432,13 @@
         "issue": "DEE-688",
         "status": "pass",
         "reviewedCommits": [
-          "f56b85d291c7af25a06f6f3d28a7605f5292b48e",
-          "54115481f8e5ee45777bcf683dfc0ae78ce629f1",
-          "d04f33002c5732a3042db7e2d6a0dd08a47ef0c1",
-          "b0e8d1a756c8258bc0045727b04c9bacc5dced15",
-          "89b503797021d3463f1708dffe16e1f171edd5e7",
-          "e0cab73f660f7581d36adbe96458bb00908879ca"
+          "1790c528bba9b6a96e90ff1392afb4ca2cf58f35",
+          "b93bdbf4e5043e40b377740ee2f17abcd69c5c5c",
+          "7b093424b940edfcca7d2c64ccec0307f607f7c5",
+          "a209ec46ad7572b224684158691e356d2f17de33",
+          "69f882c47a4851286ab1dcf30bd3590ce2fac366",
+          "4a3cff464e8ed80d37a3d781f99ab66936aa6136",
+          "4495c05c9910a5ba8aa2a00bf6efd548451fd030"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -461,9 +470,12 @@
           "tests/integration/postgres-trader-forecast-decision-idempotency.test.ts",
           "tests/integration/postgres-trader-forecast-decision-parity.test.ts",
           "tests/integration/postgres-trader-wp21-outcome-calibration-parity.test.ts",
+          "tests/integration/trader-intelligence-loop.test.ts",
           "tests/integration/trader-paper-bar-close-loop-account-state.test.ts",
+          "tests/integration/trader-paper-bar-close-loop-telemetry.test.ts",
           "tests/integration/trader-paper-bar-close-loop.test.ts",
           "tests/integration/trader-paper-cycle-runner.test.ts",
+          "tests/integration/trader-paper-p5-multi-strategy.test.ts",
           "tests/integration/wp13-intelligence-test-helpers.ts",
           "tests/integration/wp14-forecast-decision-test-helpers.ts",
           "tests/integration/wp15-mkb-read-model-test-helpers.ts",
@@ -481,10 +493,12 @@
         "issue": "DEE-689",
         "status": "pass",
         "reviewedCommits": [
-          "784273255175c1b3fe58232b3c19fbae3b00728d",
-          "50aa62a5c12ef3aec12cd94fa26f564fbb977983"
+          "5a06d9582ab4014b1a9343fb330b43c39b3d0fbe",
+          "f617237ddd85e7441bbc59b8749df9e15ac98635",
+          "3d584be1ae302ed8047081059029c53126b063c5"
         ],
         "reviewedFiles": [
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
           "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts",
           "lib/trader/intelligence/market-understanding-bridge-v0.ts",
           "lib/trader/intelligence/market-understanding.types.ts",
@@ -525,7 +539,8 @@
         "status": "pass",
         "commands": [
           "runtime/Guardian/bar-close 47/47",
-          "corrected tests 9/9",
+          "corrected tests 12/12",
+          "post-readmission corrected/runtime/consumer focus 26/26",
           "WP14/WP15 40/40"
         ]
       },
@@ -534,6 +549,7 @@
         "status": "pass",
         "commands": [
           "downstream closure 75/75",
+          "Reality source/consumer graph 4/4",
           "review repair 12/12",
           "independent corrected-readmission review zero P1/P2"
         ]
