@@ -77,6 +77,19 @@ export type FhvFullHistoricalBacktestResult = RunBacktestResult & {
   hotPathWallTimeMs: number;
 };
 
+export function assertSyntheticResearchNonCapitalFhvScopeV2(input: {
+  includeHoldout: boolean;
+  informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
+}): void {
+  const syntheticResearch = input.informationSufficiencySyntheticResearch;
+  if (
+    syntheticResearch &&
+    (syntheticResearch.binding.harness !== "FHV_SYNTHETIC_WP7B" || input.includeHoldout)
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
+  }
+}
+
 export async function runFullHistoricalBacktest(input: {
   runDir: string;
   runId: string;
@@ -101,6 +114,7 @@ export async function runFullHistoricalBacktest(input: {
   sessionDbPath?: string;
   informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
 }): Promise<FhvFullHistoricalBacktestResult> {
+  assertSyntheticResearchNonCapitalFhvScopeV2(input);
   const costModel = costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
   const portfolio = buildResearchV2PortfolioContext(costModel);
   const accountKey = "fhv-full-historical";
@@ -350,11 +364,7 @@ export async function runFullHistoricalBacktest(input: {
         ? "fhv-full-historical-bounded"
         : "fhv-full-historical-official",
       runId: input.runId,
-      split: input.informationSufficiencySyntheticResearch
-        ? "validation"
-        : input.includeHoldout
-          ? "blind"
-          : "validation",
+      split: input.includeHoldout ? "blind" : "validation",
       window,
       accountState,
       exportedAt: new Date(window.end),

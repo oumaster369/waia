@@ -11,9 +11,7 @@ export const INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION =
 export const SYNTHETIC_RESEARCH_NON_CAPITAL_BINDING_V2_SCHEMA_VERSION =
   "synthetic-research-non-capital-binding-v2" as const;
 
-export type SyntheticResearchNonCapitalHarnessV2 =
-  | "FHV_SYNTHETIC_WP7B"
-  | "CAPITAL_TRACE_SYNTHETIC";
+export type SyntheticResearchNonCapitalHarnessV2 = "FHV_SYNTHETIC_WP7B" | "CAPITAL_TRACE_SYNTHETIC";
 
 export type SyntheticResearchNonCapitalBindingV2 = Readonly<{
   schemaVersion: typeof SYNTHETIC_RESEARCH_NON_CAPITAL_BINDING_V2_SCHEMA_VERSION;
@@ -107,8 +105,7 @@ function assertSyntheticResearchNonCapitalBindingV2(
 ): void {
   if (
     binding.schemaVersion !== SYNTHETIC_RESEARCH_NON_CAPITAL_BINDING_V2_SCHEMA_VERSION ||
-    (binding.harness !== "FHV_SYNTHETIC_WP7B" &&
-      binding.harness !== "CAPITAL_TRACE_SYNTHETIC") ||
+    (binding.harness !== "FHV_SYNTHETIC_WP7B" && binding.harness !== "CAPITAL_TRACE_SYNTHETIC") ||
     binding.officialBlindHoldout !== false ||
     binding.production !== false ||
     binding.live !== false ||
@@ -121,7 +118,7 @@ function assertSyntheticResearchNonCapitalBindingV2(
   requireDigest(binding.provenanceDigest, "syntheticBinding.provenanceDigest");
 }
 
-function sameSyntheticResearchBinding(
+export function syntheticResearchNonCapitalBindingsEqualV2(
   left: SyntheticResearchNonCapitalBindingV2,
   right: SyntheticResearchNonCapitalBindingV2,
 ): boolean {
@@ -190,34 +187,32 @@ export function declareSyntheticResearchNonCapitalInformationAuthorityV2(input: 
   ) {
     throw new Error("INFORMATION_SUFFICIENCY_SYNTHETIC_RESEARCH_SCOPE_FORBIDDEN");
   }
-  const binding: SyntheticResearchNonCapitalBindingV2 = {
+  const binding: SyntheticResearchNonCapitalBindingV2 = Object.freeze({
     schemaVersion: SYNTHETIC_RESEARCH_NON_CAPITAL_BINDING_V2_SCHEMA_VERSION,
     harness: input.harness,
     runId: requireNonEmpty(input.runId, "syntheticBinding.runId"),
-    provenanceDigest: requireDigest(
-      input.provenanceDigest,
-      "syntheticBinding.provenanceDigest",
-    ),
+    provenanceDigest: requireDigest(input.provenanceDigest, "syntheticBinding.provenanceDigest"),
     officialBlindHoldout: false,
     production: false,
     live: false,
     capitalEligible: false,
     capitalUse: false,
-  };
+  });
   assertSyntheticResearchNonCapitalBindingV2(binding);
-  return {
-    authority: {
-      schemaVersion: INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION,
-      kind: "RESEARCH_NON_CAPITAL",
-      organizationId: requireNonEmpty(input.organizationId, "organizationId"),
-      purpose: "RESEARCH_NON_CAPITAL",
-      declaration: "EXPLICIT_RESEARCH_NON_CAPITAL",
-      reason: `Human-ratified synthetic harness ${binding.harness}; provenance ${binding.provenanceDigest}`,
-      authority: "NON_CAPITAL_ONLY",
-      syntheticBinding: binding,
-    },
+  const authority: InformationSufficiencyRuntimeAuthorityV2 = Object.freeze({
+    schemaVersion: INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION,
+    kind: "RESEARCH_NON_CAPITAL",
+    organizationId: requireNonEmpty(input.organizationId, "organizationId"),
+    purpose: "RESEARCH_NON_CAPITAL",
+    declaration: "EXPLICIT_RESEARCH_NON_CAPITAL",
+    reason: `Human-ratified synthetic harness ${binding.harness}; provenance ${binding.provenanceDigest}`,
+    authority: "NON_CAPITAL_ONLY",
+    syntheticBinding: binding,
+  });
+  return Object.freeze({
+    authority,
     binding,
-  };
+  });
 }
 
 export function evaluateInformationSufficiencyRuntimeAdmissionV2(input: {
@@ -277,7 +272,10 @@ export function evaluateInformationSufficiencyRuntimeAdmissionV2(input: {
         }
         if (
           !input.syntheticResearchBinding ||
-          !sameSyntheticResearchBinding(authority.syntheticBinding, input.syntheticResearchBinding)
+          !syntheticResearchNonCapitalBindingsEqualV2(
+            authority.syntheticBinding,
+            input.syntheticResearchBinding,
+          )
         ) {
           return blocked("RESEARCH_NON_CAPITAL_SCOPE_MISMATCH");
         }

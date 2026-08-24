@@ -1,6 +1,7 @@
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import {
   evaluateInformationSufficiencyRuntimeAdmissionV2,
+  syntheticResearchNonCapitalBindingsEqualV2,
   type InformationSufficiencyRuntimeAuthorityV2,
   type InformationSufficiencyRuntimeScopeV2,
   type SyntheticResearchNonCapitalBindingV2,
@@ -22,6 +23,7 @@ type ConstructionMetadata = Readonly<{
   sourceBundle: IntelligenceCycleBundle;
   organizationId: string;
   scope: InformationSufficiencyRuntimeScopeV2;
+  syntheticResearchBinding?: SyntheticResearchNonCapitalBindingV2;
 }>;
 
 type PersistenceMetadata = Readonly<{
@@ -79,7 +81,12 @@ export function admitForecastDecisionConstruction(input: {
   });
 
   const permit = Object.freeze({});
-  constructionPermits.set(permit, { sourceBundle: input.sourceBundle, organizationId, scope });
+  constructionPermits.set(permit, {
+    sourceBundle: input.sourceBundle,
+    organizationId,
+    scope,
+    syntheticResearchBinding: input.syntheticResearchBinding,
+  });
   return permit as ForecastDecisionConstructionPermit;
 }
 
@@ -132,6 +139,17 @@ export function admitForecastDecisionPersistence(input: {
   const construction = sealedBundles.get(input.bundle);
   if (!construction || construction.organizationId !== input.organizationId) {
     throw new Error("INFORMATION_SUFFICIENCY_PERSISTENCE_BLOCKED:UNSEALED_BUNDLE");
+  }
+  if (
+    (construction.syntheticResearchBinding || input.syntheticResearchBinding) &&
+    (!construction.syntheticResearchBinding ||
+      !input.syntheticResearchBinding ||
+      !syntheticResearchNonCapitalBindingsEqualV2(
+        construction.syntheticResearchBinding,
+        input.syntheticResearchBinding,
+      ))
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_PERSISTENCE_BLOCKED:SYNTHETIC_BINDING_MISMATCH");
   }
   admitAuthority({
     authority: input.authority,
