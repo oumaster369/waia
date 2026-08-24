@@ -17,6 +17,7 @@ const ROOT = process.cwd();
 const WAVE_C_PROOF = "tests/unit/trader-information-sufficiency-runtime.test.ts";
 
 const IMPORT_MODULES: Record<InformationSufficiencyImportV2, string> = {
+  RUN_BACKTEST: "@/lib/trader/backtest/backtest-runner",
   RUN_EVALUATION_CYCLE: "@/lib/trader/intelligence/evaluation-cycle",
   BUILD_FORECAST_DECISION_BUNDLE:
     "@/lib/trader/intelligence/forecast-decision/forecast-decision-service",
@@ -111,7 +112,9 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
     ).toEqual(["lib/trader/backtest/backtest-runner.ts"]);
 
     const nonCapital = INFORMATION_SUFFICIENCY_CONSUMERS_V2.filter(
-      (entry) => entry.disposition === "RESEARCH_NON_CAPITAL_EXPLICIT",
+      (entry) =>
+        entry.disposition === "RESEARCH_NON_CAPITAL_EXPLICIT" ||
+        entry.disposition === "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND",
     );
     expect(nonCapital.length).toBeGreaterThan(0);
     expect(nonCapital.every((entry) => entry.authorityPurpose === "RESEARCH_NON_CAPITAL")).toBe(
@@ -169,6 +172,11 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
       expect(read(entry.path), entry.path).toContain(
         "declareResearchNonCapitalInformationAuthorityV2",
       );
+    }
+    for (const entry of INFORMATION_SUFFICIENCY_CONSUMERS_V2.filter(
+      (consumer) => consumer.disposition === "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND",
+    )) {
+      expect(read(entry.path), entry.path).toContain("SyntheticResearchNonCapital");
     }
     expect(read(INFORMATION_SUFFICIENCY_GUARDIAN_LANE_V2.path)).toContain(
       "OPEN_POSITION_REASSESSMENT",

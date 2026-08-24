@@ -20,7 +20,8 @@ export type InformationSufficiencyImportV2 =
   | "FORECAST_DECISION_BARREL"
   | "TRADER_INTELLIGENCE_BARREL"
   | "TRADER_PAPER_BARREL"
-  | "RUN_PAPER_CYCLE_ONCE";
+  | "RUN_PAPER_CYCLE_ONCE"
+  | "RUN_BACKTEST";
 
 export type InformationSufficiencyConsumerDispositionV2 =
   | "NEW_OPPORTUNITY_FAIL_CLOSED"
@@ -29,6 +30,9 @@ export type InformationSufficiencyConsumerDispositionV2 =
   | "POLL_ENTRY_FAIL_CLOSED"
   | "FIXTURE_ENTRY_FAIL_CLOSED"
   | "BACKTEST_ENTRY_FAIL_CLOSED"
+  | "RUN_BACKTEST_DEFAULT_FAIL_CLOSED"
+  | "RUN_BACKTEST_TYPE_ONLY"
+  | "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND"
   | "GATED_COMPONENT_CONSTRUCTION"
   | "GATED_PERSISTENCE"
   | "LOW_LEVEL_READ_ONLY_COMPLETENESS"
@@ -177,6 +181,104 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
     authorityPurpose: "RESEARCH_NON_CAPITAL",
   },
   {
+    path: "lib/trader/backtest/canvas-checkpoint-resume-harness.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/backtest/replay-benchmark-harness.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/backtest/streaming-evidence/replay-checkpoint-resume-harness.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/backtest/streaming-evidence/streaming-evidence-recovery-harness.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/intelligence/epistemic/wp21-flag-off-parity.ts",
+    symbols: ["RunBacktestResult"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_TYPE_ONLY",
+    authorityPurpose: "NONE",
+  },
+  {
+    path: "lib/trader/observability/fhv-economic-non-interference-harness.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/observability/fhv-execution-checkpoint-runtime.ts",
+    symbols: ["FhvCycleBoundarySnapshot"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_TYPE_ONLY",
+    authorityPurpose: "NONE",
+  },
+  {
+    path: "lib/trader/observability/fhv-execution-checkpoint.ts",
+    symbols: ["FhvCycleBoundarySnapshot"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_TYPE_ONLY",
+    authorityPurpose: "NONE",
+  },
+  {
+    path: "lib/trader/observability/fhv-full-historical-engine.ts",
+    symbols: ["runFullHistoricalBacktest", "runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND",
+    authorityPurpose: "RESEARCH_NON_CAPITAL",
+  },
+  {
+    path: "lib/trader/observability/fhv-full-historical-launch.ts",
+    symbols: ["SyntheticResearchNonCapitalAuthorityV2", "runFhvFullHistoricalLaunch"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND",
+    authorityPurpose: "RESEARCH_NON_CAPITAL",
+  },
+  {
+    path: "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/research/capital-path-trace-harness.ts",
+    symbols: ["runAllCapitalPathTraceScenarios", "runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND",
+    authorityPurpose: "RESEARCH_NON_CAPITAL",
+  },
+  {
+    path: "lib/trader/research/research-backtest-runner.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
+    path: "lib/trader/research/wp21-g2-zero-fill-structural-comparison.ts",
+    symbols: ["runBacktest"],
+    imports: ["RUN_BACKTEST"],
+    disposition: "RUN_BACKTEST_DEFAULT_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
     path: "lib/trader/live/run-live-cycle.ts",
     symbols: ["runLiveCycleOnce", "runEvaluationCycle"],
     imports: ["RUN_EVALUATION_CYCLE"],
@@ -296,14 +398,18 @@ export function auditInformationSufficiencyConsumerInventoryV2(): string[] {
   if (new Set(paths).size !== paths.length) errors.push("DUPLICATE_CONSUMER_PATH");
   for (const entry of consumers) {
     if (entry.symbols.length === 0) errors.push(`CONSUMER_WITHOUT_SYMBOL:${entry.path}`);
-    if (entry.disposition === "RESEARCH_NON_CAPITAL_EXPLICIT") {
+    if (
+      entry.disposition === "RESEARCH_NON_CAPITAL_EXPLICIT" ||
+      entry.disposition === "RESEARCH_NON_CAPITAL_SYNTHETIC_BOUND"
+    ) {
       if (entry.authorityPurpose !== "RESEARCH_NON_CAPITAL") {
         errors.push(`NON_CAPITAL_AUTHORITY_MISMATCH:${entry.path}`);
       }
     } else if (
       entry.disposition === "EXPORT_ONLY" ||
       entry.disposition === "LOW_LEVEL_READ_ONLY_COMPLETENESS" ||
-      entry.disposition === "EXCLUDED_RESERVED_LIVE_UNGATED"
+      entry.disposition === "EXCLUDED_RESERVED_LIVE_UNGATED" ||
+      entry.disposition === "RUN_BACKTEST_TYPE_ONLY"
     ) {
       if (entry.authorityPurpose !== "NONE") {
         errors.push(`NON_CAPITAL_SEAM_AUTHORITY_MISMATCH:${entry.path}`);
