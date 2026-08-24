@@ -17,6 +17,7 @@ export async function persistIntelligenceCycleBundle(
     envelope: bundle.envelope,
     hypotheses: sortedHypotheses,
     conviction: bundle.conviction,
+    informationSufficiencyProvenance: bundle.informationSufficiencyProvenance,
   };
 
   return runWaiaPostgresTransaction(db, async (tx) => {

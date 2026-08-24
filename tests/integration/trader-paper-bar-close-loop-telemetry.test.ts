@@ -177,7 +177,8 @@ describe("trader paper bar-close loop telemetry (AT-E9 S7)", () => {
       cycle_id: "test-telemetry-0",
       cycles_run: 1,
       state_refreshed: true,
-      execution_status: "execution_v2_required",
+      skip_reason: "information_sufficiency_blocked",
+      execution_status: null,
     });
     expect(cycleCompleteEvents[0]?.position_symbol_count).toBe(0);
 
@@ -187,7 +188,8 @@ describe("trader paper bar-close loop telemetry (AT-E9 S7)", () => {
       cycle_id: "test-telemetry-1",
       cycles_run: 2,
       state_refreshed: true,
-      execution_status: "execution_v2_required",
+      skip_reason: "information_sufficiency_blocked",
+      execution_status: null,
     });
     expect(cycleCompleteEvents[1]?.position_symbol_count).toBe(0);
   });

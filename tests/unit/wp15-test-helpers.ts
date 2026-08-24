@@ -2,6 +2,7 @@ import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import type {
   KnowledgeEdge,
@@ -70,6 +71,10 @@ export function buildWp15Snapshot(
   runId: string,
   cycleId: string,
 ): MkbReadModelSnapshot {
+  const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "HTR_WP15_UNIT_TEST",
+  });
   const cycle = runEvaluationCycle({
     organizationId,
     bars: wp14Bars(),
@@ -78,6 +83,7 @@ export function buildWp15Snapshot(
     cycleId,
     newId: createDeterministicReplayIdFactory(415_150),
     costModel: createCostModelV1("10", "5"),
+    informationSufficiencyAuthority,
   });
 
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
@@ -85,6 +91,8 @@ export function buildWp15Snapshot(
     runId,
     cycleId,
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: wp14Bars()[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
@@ -96,6 +104,7 @@ export function buildWp15Snapshot(
     msv: cycle.msv,
     signal: cycle.signal,
     costModel: createCostModelV1("10", "5"),
+    informationSufficiencyAuthority,
   });
 
   const knowledgeSeed = buildWp15KnowledgeSeedArtifacts(organizationId);

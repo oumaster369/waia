@@ -1397,6 +1397,108 @@ export const traderMiCanonicalMeasurementValueInputV1 = pgTable(
   ],
 );
 
+/** DEE-687: immutable, content-addressed epistemic prerequisite profile. */
+export const traderRequiredInformationProfileV2 = pgTable(
+  "trader_required_information_profile_v2",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id"),
+    profileVersion: text("profile_version").notNull(),
+    purpose: text("purpose").notNull(),
+    symbol: text("symbol").notNull(),
+    venue: text("venue").notNull(),
+    analyticalTimeframe: text("analytical_timeframe").notNull(),
+    horizon: text("horizon").notNull(),
+    profileJson: jsonb("profile_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    authority: text("authority").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    unique("trader_required_information_profile_v2_exact_uq").on(
+      t.id,
+      t.organizationId,
+      t.contentDigest,
+    ),
+    index("trader_required_information_profile_v2_scope_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.purpose,
+      t.symbol,
+      t.venue,
+    ),
+    check(
+      "trader_required_information_profile_v2_identity_check",
+      sql`${t.id} = ${t.contentDigest} AND ${t.id} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "trader_required_information_profile_v2_contract_check",
+      sql`${t.schemaVersion} = 'required-information-profile-v2'
+        AND ${t.authority} = 'EPISTEMIC_PREREQUISITE_ONLY'
+        AND ${t.purpose} IN ('NEW_OPPORTUNITY', 'OPEN_POSITION_REASSESSMENT', 'RESEARCH_NON_CAPITAL')
+        AND jsonb_typeof(${t.profileJson}) = 'object'`,
+    ),
+  ],
+);
+
+/** DEE-687: immutable exact verdict over one exact profile and PIT evidence inventory. */
+export const traderInformationSufficiencyReceiptV2 = pgTable(
+  "trader_information_sufficiency_receipt_v2",
+  {
+    id: text("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id"),
+    profileId: text("profile_id").notNull(),
+    profileContentDigest: text("profile_content_digest").notNull(),
+    purpose: text("purpose").notNull(),
+    status: text("status").notNull(),
+    pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "date" }).notNull(),
+    receiptJson: jsonb("receipt_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    authority: text("authority").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.profileId, t.organizationId, t.profileContentDigest],
+      foreignColumns: [
+        traderRequiredInformationProfileV2.id,
+        traderRequiredInformationProfileV2.organizationId,
+        traderRequiredInformationProfileV2.contentDigest,
+      ],
+    }),
+    index("trader_information_sufficiency_receipt_v2_scope_idx").on(
+      t.organizationId,
+      t.accountId,
+      t.purpose,
+      t.pitAnchor,
+    ),
+    check(
+      "trader_information_sufficiency_receipt_v2_identity_check",
+      sql`${t.id} = ${t.contentDigest} AND ${t.id} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "trader_information_sufficiency_receipt_v2_contract_check",
+      sql`${t.schemaVersion} = 'information-sufficiency-receipt-v2'
+        AND ${t.authority} = 'EPISTEMIC_PREREQUISITE_ONLY'
+        AND ${t.purpose} IN ('NEW_OPPORTUNITY', 'OPEN_POSITION_REASSESSMENT', 'RESEARCH_NON_CAPITAL')
+        AND ${t.status} IN ('SUFFICIENT', 'INSUFFICIENT', 'UNAVAILABLE')
+        AND jsonb_typeof(${t.receiptJson}) = 'object'`,
+    ),
+  ],
+);
+
 export const miMeasurementKindEnumPg = pgEnum("mi_measurement_kind", ["feature_transform"]);
 
 /** AI-TRADER MI: append-only versioned transform-definition registry (DEE-282 / LD-3). */

@@ -34,8 +34,13 @@ import {
 } from "@/lib/trader/risk/kill-switch/kill-fold";
 import { mapKillFoldToDecision } from "@/lib/trader/risk/kill-switch-enforcement";
 import { runWp14EvaluationCycle } from "./wp14-test-helpers";
+import { admitResearchForecastDecisionConstruction } from "./forecast-decision-construction-test-helper";
 
 const EVALUATED_AT = "2026-08-10T12:00:00.000Z";
+
+function decisionConstructionPermit(bundle: BuildDecisionRecordInput["intelligenceCycleBundle"]) {
+  return admitResearchForecastDecisionConstruction(bundle);
+}
 
 const ORDER: PlaceOrderInput = {
   clientOrderId: "coid-auth",
@@ -78,6 +83,8 @@ function buildV2DecisionInput(
     runId: "wp14-run",
     cycleId: "0",
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: "1m",
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
@@ -195,15 +202,22 @@ describe("trader authority chain (DEE-521)", () => {
   describe("strategy mutation non-effect on V2 EV and decision", () => {
     it("ignores legacy strategy confidence/expectedEdge/maxRisk for V2 decision record", () => {
       const baselineInput = buildV2DecisionInput();
-      const baseline = buildDecisionRecord(baselineInput);
-      const mutated = buildDecisionRecord(
-        buildV2DecisionInput({
-          signal: mutateSignal(baselineInput.signal, {
-            confidence: "0.99",
-            expectedEdge: "99999.00",
-            maxRisk: "1.00",
-          }),
+      const baseline = buildDecisionRecord(
+        baselineInput,
+        decisionConstructionPermit(baselineInput.intelligenceCycleBundle),
+        baselineInput.intelligenceCycleBundle,
+      );
+      const mutatedInput = buildV2DecisionInput({
+        signal: mutateSignal(baselineInput.signal, {
+          confidence: "0.99",
+          expectedEdge: "99999.00",
+          maxRisk: "1.00",
         }),
+      });
+      const mutated = buildDecisionRecord(
+        mutatedInput,
+        decisionConstructionPermit(mutatedInput.intelligenceCycleBundle),
+        mutatedInput.intelligenceCycleBundle,
       );
 
       expect(mutated.decisionClass).toBe(baseline.decisionClass);
@@ -231,7 +245,12 @@ describe("trader authority chain (DEE-521)", () => {
         scientificAdmissionVerified: true,
       });
 
-      const baselineDecision = buildDecisionRecord(buildV2DecisionInput({ decisionEvRange }));
+      const baselineInput = buildV2DecisionInput({ decisionEvRange });
+      const baselineDecision = buildDecisionRecord(
+        baselineInput,
+        decisionConstructionPermit(baselineInput.intelligenceCycleBundle),
+        baselineInput.intelligenceCycleBundle,
+      );
 
       const cycle = runWp14EvaluationCycle();
       const highConvictionBundle = buildIntelligenceCycleBundle({
@@ -239,6 +258,8 @@ describe("trader authority chain (DEE-521)", () => {
         runId: "wp14-run",
         cycleId: "0",
         symbol: "BTC/USDT",
+        accountId: null,
+        analyticalTimeframe: "1m",
         marketStateSnapshot: cycle.marketStateSnapshot!,
         decisionChain: cycle.decisionChain!,
       });
@@ -255,6 +276,8 @@ describe("trader authority chain (DEE-521)", () => {
           intelligenceCycleBundle: lowConvictionBundle,
           decisionEvRange,
         }),
+        decisionConstructionPermit(lowConvictionBundle),
+        lowConvictionBundle,
       );
 
       expect(mutatedDecision.decisionClass).toBe(baselineDecision.decisionClass);

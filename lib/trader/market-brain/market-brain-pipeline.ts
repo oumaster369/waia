@@ -1,5 +1,6 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import type { Bar, InstrumentId, Quote, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { FeatureSnapshot, MsvEnvelope } from "@/lib/trader/intelligence/types";
@@ -92,6 +93,10 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     fusedContext: input.fusedContext,
     newId: input.newId,
     telemetrySink: input.telemetrySink,
+    informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
+      organizationId: input.organizationId,
+      reason: "MARKET_BRAIN_NON_CAPITAL_EVALUATION",
+    }),
   });
 
   return {

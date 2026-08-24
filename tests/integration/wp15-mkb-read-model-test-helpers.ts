@@ -15,6 +15,7 @@ import { createInMemoryMkbReadModelSource } from "@/lib/trader/knowledge/mkb-rea
 import { queryMkbReadModel } from "@/lib/trader/knowledge/mkb-read-model";
 import {
   buildWp14Bundle,
+  buildWp14PersistenceAuthorization,
   cleanupWp14AllRows,
   seedWp14User,
   WP14_PG_USER_A,
@@ -41,7 +42,12 @@ export async function seedWp15KnowledgeRows(
   const wp13 = buildWp13Bundle(organizationId, runId, cycleId);
   await persistIntelligenceCycleBundle({ organizationId }, wp13, db);
   const wp14 = buildWp14Bundle(organizationId, runId, cycleId);
-  await persistForecastDecisionBundle({ organizationId }, wp14, db);
+  await persistForecastDecisionBundle(
+    { organizationId },
+    wp14,
+    db,
+    buildWp14PersistenceAuthorization(organizationId, wp14),
+  );
 
   const knowledgeSeed = buildWp15KnowledgeSeedArtifacts(organizationId);
 

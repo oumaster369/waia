@@ -51,6 +51,8 @@ export function buildWp13Bundle(
     runId,
     cycleId,
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: wp13Bars()[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });

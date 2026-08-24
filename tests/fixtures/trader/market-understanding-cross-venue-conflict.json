@@ -20,19 +20,10 @@
     },
     {
       "questionId": "Q_WHY_HAPPENING",
-      "status": "ANSWERED",
-      "answerSummary": "mtf_aligned",
-      "confidence": 0.55,
-      "evidenceProvenanceIds": [
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "binance_public:cross_exchange_confirmation:2026-01-01T14:00:00.000Z",
-        "alternative_me:fear_greed_index:2026-01-01T14:00:00.000Z",
-        "coingecko_global:global_market_stats:2026-01-01T14:00:00.000Z"
-      ],
+      "status": "UNKNOWN",
+      "answerSummary": "causal_evidence_not_established",
+      "confidence": 0,
+      "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": true
     },
@@ -140,20 +131,20 @@
       "influencesPosture": false
     },
     {
+      "questionId": "Q_HISTORICAL_ANALOGUES",
+      "status": "NOT_REQUIRED",
+      "answerSummary": "requires_profile_declared_non_holdout_analogue_evidence",
+      "confidence": 0,
+      "evidenceProvenanceIds": [],
+      "influencesPermission": false,
+      "influencesPosture": false
+    },
+    {
       "questionId": "Q_DEPLOY_CAPITAL",
       "status": "PARTIAL",
       "answerSummary": "NO_TRADE",
       "confidence": 0.25,
-      "evidenceProvenanceIds": [
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "binance_public:cross_exchange_confirmation:2026-01-01T14:00:00.000Z",
-        "alternative_me:fear_greed_index:2026-01-01T14:00:00.000Z",
-        "coingecko_global:global_market_stats:2026-01-01T14:00:00.000Z"
-      ],
+      "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": true
     },
@@ -162,21 +153,19 @@
       "status": "ANSWERED",
       "answerSummary": "NO_TRADE",
       "confidence": 0.25,
-      "evidenceProvenanceIds": [
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "htx_spot:ohlcv_bar:2026-01-01T14:00:00.000Z",
-        "binance_public:cross_exchange_confirmation:2026-01-01T14:00:00.000Z",
-        "alternative_me:fear_greed_index:2026-01-01T14:00:00.000Z",
-        "coingecko_global:global_market_stats:2026-01-01T14:00:00.000Z"
-      ],
+      "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": true
     }
   ],
   "knowledgeGaps": [
+    {
+      "kind": "UNKNOWN",
+      "questionId": "Q_WHY_HAPPENING",
+      "description": "Q_WHY_HAPPENING:UNKNOWN",
+      "blocksPermission": false,
+      "reasonCode": "GAP_Q_WHY_HAPPENING_UNKNOWN"
+    },
     {
       "kind": "CONFLICTING",
       "questionId": "Q_CROSS_VENUE",
@@ -199,18 +188,11 @@
       "reasonCode": "GAP_Q_DATA_TRUST_PARTIAL"
     },
     {
-      "kind": "NEED_MORE_EVIDENCE",
-      "questionId": "Q_DEPLOY_CAPITAL",
-      "description": "Q_DEPLOY_CAPITAL:PARTIAL",
+      "kind": "UNKNOWN",
+      "questionId": "Q_UNKNOWN",
+      "description": "Q_UNKNOWN:UNKNOWN",
       "blocksPermission": false,
-      "reasonCode": "GAP_Q_DEPLOY_CAPITAL_PARTIAL"
-    },
-    {
-      "kind": "NEED_MORE_EVIDENCE",
-      "questionId": "Q_PRESERVE_CAPITAL",
-      "description": "Q_PRESERVE_CAPITAL:PARTIAL",
-      "blocksPermission": false,
-      "reasonCode": "GAP_Q_PRESERVE_CAPITAL_PARTIAL"
+      "reasonCode": "GAP_Q_UNKNOWN_UNKNOWN"
     }
   ],
   "confidenceAttribution": {
@@ -250,7 +232,10 @@
       "CROSS_VENUE_DISAGREE",
       "GAP_Q_CROSS_VENUE_CONFLICTING"
     ],
-    "unknowns": []
+    "unknowns": [
+      "GAP_Q_WHY_HAPPENING_UNKNOWN",
+      "GAP_Q_UNKNOWN_UNKNOWN"
+    ]
   },
   "mtfBackdrop": {
     "1m": "DOWN",

@@ -128,7 +128,7 @@ describe("trader paper bar-close loop account state refresh (AT-E9 S6)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-bar-close-265");
   });
 
-  it("fails both legacy cycles closed before Risk V2 or account-state mutation", async () => {
+  it("fails both cycles closed at Information Sufficiency before Risk or state mutation", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const orderRepository = createSqliteOrderRepository(db);
@@ -161,16 +161,11 @@ describe("trader paper bar-close loop account state refresh (AT-E9 S6)", () => {
     });
 
     expect(result).toEqual({ cyclesRun: 2, aborted: false });
-    expect(submitSpy).toHaveBeenCalledTimes(2);
+    expect(submitSpy).not.toHaveBeenCalled();
     expect(evaluateSpy).not.toHaveBeenCalled();
-
-    const firstSubmit = await submitSpy.mock.results[0]?.value;
-    const secondSubmit = await submitSpy.mock.results[1]?.value;
-    expect(firstSubmit?.status).toBe("execution_v2_required");
-    expect(secondSubmit?.status).toBe("execution_v2_required");
   });
 
-  it("fails both legacy cycles closed without a refresh callback", async () => {
+  it("fails both cycles closed without a sufficiency authority or refresh callback", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const { deps } = buildPaperCycleDeps(db, connector, writeAudit);
@@ -194,6 +189,6 @@ describe("trader paper bar-close loop account state refresh (AT-E9 S6)", () => {
     });
 
     expect(result).toEqual({ cyclesRun: 2, aborted: false });
-    expect(submitSpy).toHaveBeenCalledTimes(2);
+    expect(submitSpy).not.toHaveBeenCalled();
   });
 });

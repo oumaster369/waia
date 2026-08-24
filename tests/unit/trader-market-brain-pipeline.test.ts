@@ -72,7 +72,7 @@ describe("market brain pipeline (P3 DEE-197–202)", () => {
 
     expect(result.halted).toBe(false);
     expect(result.understanding).toBeDefined();
-    expect(result.understanding!.questionEvaluations).toHaveLength(11);
+    expect(result.understanding!.questionEvaluations).toHaveLength(12);
     expect(result.understanding!.questionEvaluations.map((q) => q.questionId).sort()).toEqual(
       [...CANONICAL_MARKET_QUESTION_IDS].sort(),
     );

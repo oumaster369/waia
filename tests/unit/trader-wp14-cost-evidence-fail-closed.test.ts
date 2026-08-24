@@ -5,6 +5,7 @@ import {
 } from "@/lib/trader/intelligence/forecast-decision/build-decision-record";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { runWp14EvaluationCycle } from "./wp14-test-helpers";
+import { admitResearchForecastDecisionConstruction } from "./forecast-decision-construction-test-helper";
 
 describe("trader wp14 cost evidence fail closed", () => {
   it("forces NO_TRADE when cost evidence is unavailable", () => {
@@ -14,16 +15,22 @@ describe("trader wp14 cost evidence fail closed", () => {
       runId: "wp14-run",
       cycleId: "0",
       symbol: "BTC/USDT",
+      accountId: null,
+      analyticalTimeframe: "1m",
       marketStateSnapshot: cycle.marketStateSnapshot!,
       decisionChain: cycle.decisionChain!,
     });
-    const decision = buildDecisionRecord({
-      intelligenceCycleBundle: bundle,
-      decisionChain: cycle.decisionChain!,
-      msv: cycle.msv,
-      signal: cycle.signal,
-      costModel: undefined,
-    });
+    const decision = buildDecisionRecord(
+      {
+        intelligenceCycleBundle: bundle,
+        decisionChain: cycle.decisionChain!,
+        msv: cycle.msv,
+        signal: cycle.signal,
+        costModel: undefined,
+      },
+      admitResearchForecastDecisionConstruction(bundle),
+      bundle,
+    );
     expect(decision.decisionClass).toBe("NO_TRADE");
     expect(decision.costEvidenceState).toBe("UNAVAILABLE");
     expect(decision.reasonCodesJson).toContain(wp14DecisionReasonCodes.costEvidenceUnavailable);

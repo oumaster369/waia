@@ -170,9 +170,11 @@ describe("P5 multi-strategy paper pipeline integration (DEE-334)", () => {
       });
 
       expect(result.submitBlocked).toBe(true);
+      expect(result.skipReason).toBe("information_sufficiency_blocked");
       expect(result.strategyExecutions.length).toBeGreaterThan(0);
       for (const entry of result.strategyExecutions) {
-        expect(entry.execution?.status).toBe("execution_v2_required");
+        expect(entry.skipReason).toBe("information_sufficiency_blocked");
+        expect(entry.execution).toBeNull();
         strategySignalIds.push(entry.signal.strategySignalId);
       }
     }

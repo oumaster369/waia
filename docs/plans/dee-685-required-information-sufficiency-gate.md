@@ -1,0 +1,141 @@
+---
+integrationIssue: DEE-685
+integrationTitle: "Required Information Profile + Fail-Closed ISG Integration Batch"
+parentIssue: DEE-621
+branch: dee-685-required-information-sufficiency-gate
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local, postgres-ci, github-pr-ci]
+requiredValidation:
+  - focused-contract-tests
+  - focused-postgres-tests
+  - paper-poll-fixture-backtest-non-bypass
+  - replay-and-tenant-closure
+  - lint
+  - typecheck
+  - build
+  - full-frozen-head-unit-suite
+  - pr-governance
+  - independent-exact-head-adversarial-review
+approvalGates:
+  - human-ratified-dee-621-scope
+  - t3-scope-preauthorized
+  - integration-ready
+  - dee-653-exact-head-admission
+includedIssues: [DEE-686, DEE-687, DEE-688, DEE-689]
+state:
+  status: in-review
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-686, DEE-687, DEE-688, DEE-689]
+  remainingWorkPackages: []
+  prNumber: 487
+  prUrl: https://github.com/oumaster369/waia/pull/487
+  lastValidatedGitSha: c1222c59f634474f8338fcd2f2b70d3974dc1a38
+  lastValidationAt: "2026-08-24"
+  blockedReason: null
+  nextAction: "Refresh exact-head manifest provenance, obtain a fresh zero-P1/P2 review, then require green CI and DEE-653 admission before squash merge."
+provenance:
+  createdFrom: human-ratified-delegation
+  sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
+  authoritativeBase: 2945feba8fe48aa3c197e8a76078b9937f5e1c88
+  correctedAdmissionCommit: 93cd2e1256871b68bb8158858a8275465c46388f
+  correctedAdmissionManifestDigest: 3be11c24e6df2a5fe05fd38d2be730ade34e87e71814cf4dc30f110121b96e56
+  mechanicalBaseReconciliation:
+    authorizedAt: "2026-08-24"
+    authority: "Controller authorization under standing mechanical base/provenance authority after a zero-overlap and zero-migration-collision audit."
+    scope: "Reissue the exact byte-identical DEE-621 implementation train on origin/main@2945feba8fe48aa3c197e8a76078b9937f5e1c88; only commit identities and this plan/manifest provenance may change."
+  syntheticAuthorityCorrection:
+    authorizedAt: "2026-08-24"
+    authority: "Human scientific/policy ratification for explicit RESEARCH_NON_CAPITAL authority only in the synthetic WP7B and synthetic capital-trace harnesses."
+    scope: "Typed exact harness/run/provenance binding with public replay and persistence guards; official blind-holdout, production, live, capital-eligible, and capital use remain forbidden."
+  canonicalPlanRepair:
+    authorizedAt: "2026-08-24"
+    authority: "Standing Human authority for obvious mechanical provenance corrections inside the ratified DEE-621 train."
+    scope: "Reconcile validator-required plan state/provenance and the Human-ratified synthetic-only authority correction; no scientific formula, threshold, Reality disposition, production, live, official-holdout, retention, security, or capital semantic change."
+---
+
+# DEE-685 — Required Information Profile + Fail-Closed ISG
+
+## Admission
+
+- Human-ratified owner: DEE-621, including its 2026-08-18 Step 1, Step 3, and Step 6 addenda.
+- Authoritative base: `origin/main@2945feba8fe48aa3c197e8a76078b9937f5e1c88`.
+- Dependencies: DEE-620 and DEE-597 are Done.
+- Duplicate audit: DEE-621 is the unique active implementation owner; no earlier child or Integration Batch exists.
+- Integration boundary: one branch/worktree, one admitted/frozen manifest, one next PostgreSQL migration, one PR, one squash merge, and one revert-PR rollback.
+
+The Human subsequently authorized provenance-compatible readmission of four mechanically discovered closure surfaces before publication: three legacy paper/intelligence tests whose expectations must reflect the already-ratified `information_sufficiency_blocked` and null-execution result, plus the existing Reality V2 consumer inventory digest. This changes no production byte, Reality disposition, scientific meaning, security boundary, or capital authority. The earlier full-suite-only FHV checkpoint failures were classified as contention/nondeterminism by an unchanged isolated 6/6 proof; no correction was made for those failures.
+
+The Human then ratified one narrow synthetic-only authority: typed `RESEARCH_NON_CAPITAL` provenance for the synthetic WP7B scale harness and synthetic capital-trace harness. Exact harness, run, provenance, public replay split, and Forecast/Decision persistence bindings fail closed. WP7B reads only a bounded development/walk-forward prefix selected by the exact synthetic-scale corpus authority; the official blind-holdout reader and partition are unreachable. Production, live, capital-eligible, and capital-use contexts cannot select or reuse this authority. This adds no provider/source classification, formula, threshold, fill-density relaxation, production behavior, or real-capital authority.
+
+## Ratified semantic boundary
+
+The train builds a generic, immutable and content-addressed `RequiredInformationProfileV2` plus deterministic `InformationSufficiencyReceiptV2`. Profiles are purpose- and question-relative and support `NEW_OPPORTUNITY`, `OPEN_POSITION_REASSESSMENT`, and explicitly non-capital research use. Requirements are `MANDATORY`, `CONTEXT_TRIGGERED`, or `OPTIONAL_ENRICHMENT`.
+
+Layer A is fail-closed. Missing, unavailable, stale, untrusted, non-PIT, non-replayable, source-revision-mismatched, version-incompatible, insufficiently independent, or policy-forbidden contradictory evidence cannot be hidden by optional evidence or an aggregate score. Substitution is allowed only through an exact profile-declared equivalence rule and must be visible in the receipt.
+
+Layer B is contract-only in this train. The profile may pin a later-qualified aggregate evaluator version and digest, but this implementation invents no formula, component, weight, threshold, source classification, or empirical policy. `SUFFICIENT` is epistemic permission to continue only; it creates no probability, economics, action, sizing, Risk permission, Execution authority, or live-capital authority.
+
+`NEW_OPPORTUNITY` insufficiency blocks new-entry Forecast/Decision admission and order submission, but it never blocks a separately sufficient `OPEN_POSITION_REASSESSMENT` lane or risk-reducing Guardian exit. Tests and research must declare explicit non-capital authority; omission is never a silent bypass.
+
+## A → B → C → D
+
+### DEE-686 — contracts and deterministic evaluator
+
+- Define the closed purpose, question, applicability, evidence state, contradiction, substitution, terminal and reason-code vocabularies.
+- Build immutable profile identity and deterministic hard-floor evaluator/receipt over exact DEE-620 Observation, trust/provenance and Measurement identities.
+- Preserve `NOT_REQUIRED` and `NOT_APPLICABLE`; never mark causal `WHY` answered from price-only evidence.
+- Expose only a version/digest-bound adapter seam for a later-qualified Layer B aggregate.
+
+Expected surfaces: `lib/trader/intelligence/information-sufficiency/**`, focused unit tests.
+
+### DEE-687 — PostgreSQL persistence
+
+- Add exactly `0162_trader_information_sufficiency_v2.sql`, the journal entry, Drizzle schema, tracker record and a server-only repository.
+- Persist exact profile/receipt JSON and digest identity with tenant scope, append-only guards and authenticated/anon deny RLS.
+- Prove service-role CRUD/idempotency, conflicting-content denial, tenant isolation, cross-tenant denial, mutation denial and fresh migration apply.
+
+Expected surfaces: PostgreSQL schema/migration/journal/tracker, ISG repository, focused migration and PostgreSQL tests.
+
+### DEE-688 — non-bypassable runtime binding
+
+- Require exact sufficiency authority before Forecast/Decision construction and before new-entry submission.
+- Share identical evaluator semantics across paper, poll, fixture and historical replay.
+- Missing executable authority and `INSUFFICIENT | UNAVAILABLE` block entries deterministically.
+- Preserve Guardian/open-position reassessment and risk-reducing exits as a separate lane.
+- Bind the Human-ratified synthetic authority to exact WP7B or capital-trace harness provenance, actual replay run/split, and Forecast/Decision persistence; reject blind or cross-harness reuse.
+
+Expected surfaces: evaluation/Forecast-Decision/paper/backtest orchestration types and services, the synthetic WP7B launch/engine and capital-trace harness seams, plus focused unit/integration/scale tests.
+
+### DEE-689 — consumer, question, replay and tenant closure
+
+- Inventory every profile/receipt producer, Forecast/Decision consumer, paper/poll/fixture/backtest entry seam and possible bypass.
+- Prove question-relative hard floors, causal-WHY boundaries, non-holdout historical analogues, bounded terminals, duplicate/dependence handling, explicit substitution, same-PIT parity and separate Guardian lane.
+- Freeze the manifest only after the exact cumulative diff and evidence map are complete.
+
+Expected surfaces: checked source/consumer inventory and focused closure tests; no downstream DEE-622/645 implementation.
+
+## Validation and freeze
+
+After each serialized child commit, run its focused tests, cumulative focused tests, typecheck and scoped lint. Wave B onward requires fresh migrated PostgreSQL and real authenticated/anon role probes. Mark a child Done only after its immutable commit, scoped gates and independent reviewer acceptance are recorded.
+
+After D, freeze the exact manifest/head and run once: fresh PostgreSQL migration/smoke, all focused PostgreSQL/tenant/replay/non-bypass proofs, lint, typecheck, build, a fresh migrated SQLite database and the full unit suite, canonical/PR governance validation, and one fresh exact-head adversarial review with zero unresolved P1/P2. Any material base/head/manifest change invalidates affected evidence.
+
+## Acceptance
+
+1. The generic `RequiredInformationProfileV2` and deterministic receipt remain immutable, content-addressed, purpose/question/PIT-relative, formula-free, and capital-inert.
+2. Missing or invalid mandatory/context-triggered evidence, unavailable/stale/untrusted/non-PIT lineage, unresolved required contradiction, or insufficient independence fails closed without aggregate compensation or silent substitution.
+3. Exactly one additive PostgreSQL migration persists tenant-scoped append-only profiles and receipts; service-role behavior, authenticated/anon denial, tenant isolation, digest guards, and mutation denial are proven on a fresh database.
+4. Forecast/Decision construction and every new-entry paper, poll, fixture, and backtest submission path require exact bound sufficiency authority; missing, unavailable, invalid, or insufficient authority produces `information_sufficiency_blocked` and null execution.
+5. Guardian/open-position reassessment and risk-reducing exits remain independent of the NEW_OPPORTUNITY denial lane.
+6. Repository-wide consumer and bypass inventory closes direct, indirect, barrel, low-level, replay, and persistence seams while preserving only explicit non-capital research authority; synthetic authority is additionally bound to the exact admitted harness, run, provenance, non-blind split, and persistence authorization.
+7. Causal WHY is never answered from price-only evidence, historical analogues remain restricted to admissible non-holdout history, and bounded inquiry never fabricates an answer.
+8. The diff introduces no new source class, empirical profile/formula/threshold, Reality disposition, FHV economic or official-holdout semantic change, security/retention/production/live-capital surface, provider credential, or capital authority.
+
+## STOP conditions
+
+Stop on a new source class; any concrete aggregate formula, component, weight, threshold or scientific classification; security/retention/holdout/production/live-capital action; Guardian risk-reduction restriction; capital-authority widening; migration collision; semantic overlap with moving `main`; or an unfixable required gate.
+
+## Rollback
+
+Rollback is one revert PR of the squash commit. No destructive down migration, production SQL, deployment, credential operation, holdout access, release tag, or live operation is authorized.

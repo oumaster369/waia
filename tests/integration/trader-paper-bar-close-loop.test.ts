@@ -118,7 +118,7 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
     writeAudit = vi.fn((input: TraderAuditInput) => input.entityId ?? "audit-bar-close-264");
   });
 
-  it("fails a legacy mocked HTX bar-close cycle closed before reconciliation", async () => {
+  it("fails a bar-close entry closed at Information Sufficiency before Execution", async () => {
     const context = requireOrgContext(orgA);
     const db = getDb();
     const deps = buildPaperCycleDeps(db, connector, writeAudit);
@@ -128,6 +128,7 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
     const poll = new HtxBarPollSource(
       htxPollSourceOptions(fixture, { cycleIdPrefix: "test-paper-loop" }),
     );
+    const telemetry: string[] = [];
 
     const result = await runPaperBarCloseLoop({
       deps,
@@ -140,13 +141,12 @@ describe("trader paper bar-close loop integration (AT-E9 S5)", () => {
       sleep: async () => {},
       nowMs: () => 0,
       newId: () => crypto.randomUUID(),
+      telemetrySink: (line) => telemetry.push(line),
     });
 
     expect(result).toEqual({ cyclesRun: 1, aborted: false });
-    expect(submitSpy).toHaveBeenCalledTimes(1);
+    expect(submitSpy).not.toHaveBeenCalled();
     expect(reconcileSpy).not.toHaveBeenCalled();
-
-    const submitResult = await submitSpy.mock.results[0]?.value;
-    expect(submitResult?.status).toBe("execution_v2_required");
+    expect(telemetry.some((line) => line.includes("information_sufficiency_blocked"))).toBe(true);
   });
 });

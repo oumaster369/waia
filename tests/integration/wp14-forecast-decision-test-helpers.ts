@@ -7,12 +7,19 @@ import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { createDeterministicReplayIdFactory } from "@/lib/trader/research/deterministic-replay-id-factory";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
+import type { ForecastDecisionPersistenceAuthorizationV2 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import {
+  admitForecastDecisionConstruction,
+  sealForecastDecisionBundleConstruction,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 import { WP13_PG_USER_A } from "./wp13-intelligence-test-helpers";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import {
+  buildWp13Bundle,
   cleanupWp13IntelligenceRows,
   cleanupWp13Org,
   seedWp13User,
@@ -26,6 +33,10 @@ export function buildWp14Bundle(
   runId: string,
   cycleId: string,
 ): ForecastDecisionBundle {
+  const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
+    organizationId,
+    reason: "HTR_WP14_POSTGRES_TEST",
+  });
   const cycle = runEvaluationCycle({
     organizationId,
     bars: wp13Bars(),
@@ -34,12 +45,15 @@ export function buildWp14Bundle(
     cycleId,
     newId: createDeterministicReplayIdFactory(415_140),
     costModel: createCostModelV1("10", "5"),
+    informationSufficiencyAuthority,
   });
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
     organizationId,
     runId,
     cycleId,
     symbol: "BTC/USDT",
+    accountId: null,
+    analyticalTimeframe: wp13Bars()[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
@@ -50,7 +64,35 @@ export function buildWp14Bundle(
     msv: cycle.msv,
     signal: cycle.signal,
     costModel: createCostModelV1("10", "5"),
+    informationSufficiencyAuthority,
   });
+}
+
+export function buildWp14PersistenceAuthorization(
+  organizationId: string,
+  _bundle: ForecastDecisionBundle,
+): ForecastDecisionPersistenceAuthorizationV2 {
+  return {
+    authority: declareResearchNonCapitalInformationAuthorityV2({
+      organizationId,
+      reason: "HTR_WP14_POSTGRES_PERSISTENCE_TEST",
+    }),
+  };
+}
+
+export function sealWp14PersistenceConflictFixture(
+  organizationId: string,
+  bundle: ForecastDecisionBundle,
+): ForecastDecisionBundle {
+  const sourceBundle = buildWp13Bundle(organizationId, bundle.decision.runId, bundle.decision.cycleId);
+  const constructionPermit = admitForecastDecisionConstruction({
+    authority: declareResearchNonCapitalInformationAuthorityV2({
+      organizationId,
+      reason: "HTR_WP14_POSTGRES_CONFLICT_FIXTURE",
+    }),
+    sourceBundle,
+  });
+  return sealForecastDecisionBundleConstruction(bundle, constructionPermit, sourceBundle);
 }
 
 export async function cleanupWp14ForecastDecisionRows(

@@ -27,6 +27,10 @@ import {
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { MsvEnvelope, StrategySignal } from "@/lib/trader/intelligence/types";
+import {
+  assertForecastDecisionConstructionPermit,
+  type ForecastDecisionConstructionPermit,
+} from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
 
 export const wp14DecisionReasonCodes = {
   costEvidenceUnavailable: "WP14_COST_EVIDENCE_UNAVAILABLE",
@@ -306,7 +310,13 @@ function buildWhyCashOrAbstainJson(
 
 export function buildDecisionRecord(
   input: BuildDecisionRecordInput,
+  constructionPermit: ForecastDecisionConstructionPermit,
+  sourceBundle: IntelligenceCycleBundle,
 ): TraderIntelligenceDecisionRecord {
+  assertForecastDecisionConstructionPermit(constructionPermit, sourceBundle);
+  if (input.intelligenceCycleBundle !== sourceBundle) {
+    throw new Error("INFORMATION_SUFFICIENCY_FORECAST_BLOCKED:BUNDLE_SCOPE_MISMATCH");
+  }
   const envelope = input.intelligenceCycleBundle.envelope;
   const conviction = input.intelligenceCycleBundle.conviction;
   assertHypothesisConfidenceNonAuthoritative({

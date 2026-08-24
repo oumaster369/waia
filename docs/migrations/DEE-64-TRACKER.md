@@ -28,6 +28,15 @@ authenticated/anon deny RLS. No formula, unit/window choice, economic evaluator,
 bytes, retention/security-policy change, SQLite migration, production SQL apply, live
 or capital authority is included.
 
+**DEE-621 / M685-B** adds the Postgres-only immutable Required Information Profile
+and Information Sufficiency Receipt records in the single additive migration `0162`.
+Both relations are organization/account-scoped, content-addressed, append-only, and
+service-only behind authenticated/anon deny RLS. PostgreSQL recomputes exact canonical
+JSON digests and binds each receipt to one exact profile scope. The migration adds no
+SQLite counterpart, formula/weight/threshold, new source class, retention/security-policy
+change, Forecast/Decision/Risk/Execution authority, production apply, live enablement,
+or capital authority.
+
 This tracker records **what shipped**, **what must not regress**, and **what remains** so future agents and contributors do not collapse the program into fake backend-neutral abstractions or premature SQLite removal.
 
 ## Current Status
