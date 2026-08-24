@@ -210,7 +210,8 @@ describe("DEE-698 selective live information acquisition", () => {
     expect(Object.isFrozen(providers)).toBe(true);
     expect(Object.isFrozen(resolution)).toBe(true);
     expect(resolution.status).toBe("ACCEPTED");
-    if (resolution.status === "ACCEPTED") expect(Object.isFrozen(resolution.admittedKinds)).toBe(true);
+    if (resolution.status === "ACCEPTED")
+      expect(Object.isFrozen(resolution.admittedKinds)).toBe(true);
     expect(() => (descriptor.kinds as string[]).push("quote_l1")).toThrow();
     expect(getMarketDataProvider("alternative_me").kinds).toEqual(["fear_greed_index"]);
   });
@@ -251,9 +252,7 @@ describe("DEE-698 selective live information acquisition", () => {
     expectRejected(
       {
         ...outcome,
-        canonicalPitAttempts: [
-          { ...outcome.canonicalPitAttempts[0]!, providerId: "coindesk_rss" },
-        ],
+        canonicalPitAttempts: [{ ...outcome.canonicalPitAttempts[0]!, providerId: "coindesk_rss" }],
       },
       [observation],
     );
@@ -272,10 +271,18 @@ describe("DEE-698 selective live information acquisition", () => {
     expectRejected(
       {
         ...outcome,
-        canonicalPitAttempts: [
-          { ...futureAttempt, status: "AVAILABLE", reason: null },
-        ],
+        canonicalPitAttempts: [{ ...futureAttempt, status: "AVAILABLE", reason: null }],
         observationContentDigests: [futureAttempt.normalizedInputDigest],
+      },
+      [futureObservation],
+    );
+    expectRejected(
+      {
+        ...outcome,
+        status: "REJECTED",
+        reasonCode: "EXCLUDED_UNMODELED",
+        canonicalPitAttempts: [futureAttempt],
+        observationContentDigests: [],
       },
       [futureObservation],
     );

@@ -163,6 +163,7 @@ export function defineInformationAcquisitionReceiptV1(input: {
     const expectedObservationContentDigests = canonicalPitAttempts
       .filter((attempt) => attempt.status === "AVAILABLE")
       .map((attempt) => attempt.normalizedInputDigest);
+    const expectedAttemptReason = canonicalPitAttempts[0]?.reason ?? null;
     if (
       new Set(canonicalPitAttempts.map((attempt) => attempt.normalizedInputDigest)).size !==
         canonicalPitAttempts.length ||
@@ -177,7 +178,10 @@ export function defineInformationAcquisitionReceiptV1(input: {
       (outcome.status === "AVAILABLE" &&
         (canonicalPitAttempts.length === 0 ||
           inquiryCanonicalJsonString(expectedObservationContentDigests) !==
-            inquiryCanonicalJsonString(observationContentDigests)))
+            inquiryCanonicalJsonString(observationContentDigests))) ||
+      (outcome.status !== "AVAILABLE" &&
+        canonicalPitAttempts.length > 0 &&
+        outcome.reasonCode !== expectedAttemptReason)
     ) {
       throw new Error("INFORMATION_ACQUISITION_INVALID:canonicalPitAttempts");
     }
