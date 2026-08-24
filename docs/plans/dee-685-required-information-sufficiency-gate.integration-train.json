@@ -279,13 +279,14 @@
         "6580c521dbbd04dcc5ccf20fcf74faae972796f2",
         "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
         "a119d203217909214261b21362febf31733ca6cc",
-        "f94477dad65d165ad2594ebaaeed8391daeb4433"
+        "f94477dad65d165ad2594ebaaeed8391daeb4433",
+        "a4e4c101a1c9616ed06f238620e42af217944b15"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
         "Guardian risk-reducing exits remain separate and unblocked.",
         "Five Human-authorized tests assert information_sufficiency_blocked, null execution, bounded abort and no execution/reconciliation; production bytes unchanged.",
-        "Human-ratified typed RESEARCH_NON_CAPITAL authority is bound to exact synthetic WP7B or capital-trace run/provenance identity and cannot be reused without the matching binding.",
+        "Human-ratified typed RESEARCH_NON_CAPITAL authority is bound to exact synthetic WP7B or capital-trace harness/run/provenance identity at the public replay boundary and through Forecast/Decision persistence.",
         "Official blind-holdout, production, live, capital-eligible and capital-use selections remain explicitly forbidden; fill-density, trace and throughput assertions are unchanged.",
         "Independent corrected-readmission review: PASS, zero P1/P2."
       ],
@@ -296,6 +297,7 @@
         "WP14/WP15 compatibility: 40/40 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Synthetic WP7B representative 5/5 PASS (4509 cycles, 806 fills) and throughput probe 2/2 PASS.",
+        "Review repair: exact public run/split/harness and persistence binding unit proof 7/7 PASS.",
         "Synthetic capital-path trace 3/3 PASS; focused PostgreSQL sufficiency/Forecast-Decision 13/13 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
       ]
@@ -453,7 +455,8 @@
           "6580c521dbbd04dcc5ccf20fcf74faae972796f2",
           "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
           "a119d203217909214261b21362febf31733ca6cc",
-          "f94477dad65d165ad2594ebaaeed8391daeb4433"
+          "f94477dad65d165ad2594ebaaeed8391daeb4433",
+          "a4e4c101a1c9616ed06f238620e42af217944b15"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -567,6 +570,7 @@
           "synthetic WP7B representative 5/5 (4509 cycles, 806 fills)",
           "synthetic WP7B throughput probe 2/2",
           "synthetic capital trace 3/3",
+          "review repair public run/split/harness and persistence binding 7/7",
           "focused PostgreSQL sufficiency/Forecast-Decision 13/13"
         ]
       },
