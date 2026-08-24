@@ -280,7 +280,10 @@
         "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
         "a119d203217909214261b21362febf31733ca6cc",
         "f94477dad65d165ad2594ebaaeed8391daeb4433",
-        "a4e4c101a1c9616ed06f238620e42af217944b15"
+        "a4e4c101a1c9616ed06f238620e42af217944b15",
+        "fba2277b85632732dc674ba7e70f1df34cf8fbab",
+        "627fe04bd488a3124b09168936149751b8498829",
+        "af870c1f118f317f96717d78c966c0b3cbb67361"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
@@ -288,6 +291,7 @@
         "Five Human-authorized tests assert information_sufficiency_blocked, null execution, bounded abort and no execution/reconciliation; production bytes unchanged.",
         "Human-ratified typed RESEARCH_NON_CAPITAL authority is bound to exact synthetic WP7B or capital-trace harness/run/provenance identity at the public replay boundary and through Forecast/Decision persistence.",
         "Official blind-holdout, production, live, capital-eligible and capital-use selections remain explicitly forbidden; fill-density, trace and throughput assertions are unchanged.",
+        "Exact synthetic-scale corpus authority selects only a bounded development/walk-forward prefix; no official blind-holdout reader or partition is reachable under RESEARCH_NON_CAPITAL.",
         "Independent corrected-readmission review: PASS, zero P1/P2."
       ],
       "tests": [
@@ -297,7 +301,7 @@
         "WP14/WP15 compatibility: 40/40 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Synthetic WP7B representative 5/5 PASS (4509 cycles, 806 fills) and throughput probe 2/2 PASS.",
-        "Review repair: exact public run/split/harness and persistence binding unit proof 7/7 PASS.",
+        "Review repair: exact public run/split/harness, official-holdout exclusion and construction-to-persistence binding unit proof 7/7 PASS.",
         "Synthetic capital-path trace 3/3 PASS; focused PostgreSQL sufficiency/Forecast-Decision 13/13 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
       ]
@@ -456,7 +460,10 @@
           "5d386263dec35d2acf82727fdfc5adefc3cf5ece",
           "a119d203217909214261b21362febf31733ca6cc",
           "f94477dad65d165ad2594ebaaeed8391daeb4433",
-          "a4e4c101a1c9616ed06f238620e42af217944b15"
+          "a4e4c101a1c9616ed06f238620e42af217944b15",
+          "fba2277b85632732dc674ba7e70f1df34cf8fbab",
+          "627fe04bd488a3124b09168936149751b8498829",
+          "af870c1f118f317f96717d78c966c0b3cbb67361"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -570,7 +577,7 @@
           "synthetic WP7B representative 5/5 (4509 cycles, 806 fills)",
           "synthetic WP7B throughput probe 2/2",
           "synthetic capital trace 3/3",
-          "review repair public run/split/harness and persistence binding 7/7",
+          "review repair public run/split/harness, official-holdout exclusion and persistence binding 7/7",
           "focused PostgreSQL sufficiency/Forecast-Decision 13/13"
         ]
       },

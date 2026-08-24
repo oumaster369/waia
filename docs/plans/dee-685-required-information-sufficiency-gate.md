@@ -30,7 +30,7 @@ state:
   remainingWorkPackages: []
   prNumber: 487
   prUrl: https://github.com/oumaster369/waia/pull/487
-  lastValidatedGitSha: af870c1ea56828b4155eac4e94b4608a44b5c535
+  lastValidatedGitSha: af870c1f118f317f96717d78c966c0b3cbb67361
   lastValidationAt: "2026-08-24"
   blockedReason: null
   nextAction: "Refresh exact-head manifest provenance, obtain a fresh zero-P1/P2 review, then require green CI and DEE-653 admission before squash merge."
