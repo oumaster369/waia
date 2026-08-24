@@ -17,6 +17,12 @@ import {
   createPostgresTreasuryBreathFactsRepository,
   createTreasuryBreathReadModel,
 } from "@/lib/waia-core/treasury/breath";
+import {
+  createMemoryTreasuryFundAllocationRepository,
+  createPostgresTreasuryFundAllocationRepository,
+  createTreasuryFundAllocationService,
+  type TreasuryFundAllocationService,
+} from "@/lib/waia-core/treasury/allocation";
 import type { AuditLogInput } from "@/lib/waia-core/types";
 import {
   createMemoryTreasuryDomainServices,
@@ -42,6 +48,7 @@ export type TreasuryAdminServices = {
   ledgerCatalogRepo: TreasuryLedgerCatalogRepository;
   watcher: TreasuryWatcherRepository;
   breath: TreasuryBreathReadModelPort;
+  allocation: TreasuryFundAllocationService;
   evidenceStorage: TreasuryEvidenceStorage | null;
 };
 
@@ -77,6 +84,9 @@ export function openProductionTreasuryAdmin(
       facts: createPostgresTreasuryBreathFactsRepository(runtime.db),
       writeAudit: (input) => writeAuditLogPostgres(runtime.db, input),
     }),
+    allocation: createTreasuryFundAllocationService({
+      repository: createPostgresTreasuryFundAllocationRepository(runtime.db),
+    }),
     evidenceStorage: resolveTreasuryEvidenceStorage(),
   };
 }
@@ -90,6 +100,11 @@ export function createMemoryTreasuryAdminServices(
   const ledgerCatalogRepo = createMemoryTreasuryLedgerCatalogRepository();
   const watcher = createMemoryTreasuryWatcherRepository(domain.repository);
   const facts = createMemoryTreasuryBreathFactsRepository({
+    treasury: domain.repository,
+    catalog: catalogRepo,
+    watcher,
+  });
+  const allocationRepository = createMemoryTreasuryFundAllocationRepository({
     treasury: domain.repository,
     catalog: catalogRepo,
     watcher,
@@ -129,6 +144,10 @@ export function createMemoryTreasuryAdminServices(
     breath: createTreasuryBreathReadModel({
       facts,
       writeAudit: writeAuditAndIndex,
+      now: options?.now,
+    }),
+    allocation: createTreasuryFundAllocationService({
+      repository: allocationRepository,
       now: options?.now,
     }),
     evidenceStorage: options?.evidenceStorage ?? null,

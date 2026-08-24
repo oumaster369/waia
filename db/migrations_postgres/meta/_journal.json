@@ -1142,6 +1142,20 @@
       "when": 1780000000162,
       "tag": "0162_trader_information_sufficiency_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1780000000163,
+      "tag": "0163_treasury_fund_allocation_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "7",
+      "when": 1780000000164,
+      "tag": "0164_treasury_fund_allocation_evidence_rls",
+      "breakpoints": true
     }
   ]
 }

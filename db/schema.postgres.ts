@@ -5889,6 +5889,7 @@ export const treasuryIdealAnnualBudgets = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    unique("treasury_ideal_budgets_id_org_uq").on(t.id, t.organizationId),
     uniqueIndex("treasury_ideal_annual_budgets_active_public_unique")
       .on(t.organizationId, t.periodYear)
       .where(sql`"status" = 'ACTIVE' AND "publication_state" = 'PUBLIC'`),
@@ -6440,6 +6441,7 @@ export const treasuryBalanceReconciliations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    unique("treasury_balance_recon_id_org_uq").on(t.id, t.organizationId),
     foreignKey({
       columns: [t.ledgerInceptionId, t.organizationId],
       foreignColumns: [treasuryLedgerInceptions.id, treasuryLedgerInceptions.organizationId],
@@ -6452,6 +6454,77 @@ export const treasuryBalanceReconciliations = pgTable(
     }).onDelete("set null"),
     index("treasury_balance_reconciliations_org_created_idx").on(t.organizationId, t.createdAt),
     check("treasury_balance_recon_tolerance_nonneg", sql`"tolerance_micros" >= 0`),
+  ],
+);
+
+export const treasuryFundAllocationEvidence = pgTable(
+  "treasury_fund_allocation_evidence",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    policyCode: text("policy_code").notNull(),
+    policyVersion: integer("policy_version").notNull(),
+    accountingCurrency: text("accounting_currency").notNull(),
+    idealAnnualBudgetId: uuid("ideal_annual_budget_id").notNull(),
+    balanceReconciliationId: uuid("balance_reconciliation_id").notNull(),
+    accountingAsOf: timestamp("accounting_as_of", { withTimezone: true, mode: "date" }).notNull(),
+    accountingCashBalanceMicros: bigint("accounting_cash_balance_micros", {
+      mode: "bigint",
+    }).notNull(),
+    activeCommitmentsMicros: bigint("active_commitments_micros", { mode: "bigint" }).notNull(),
+    canonicalFreeFundsMicros: bigint("canonical_free_funds_micros", { mode: "bigint" }).notNull(),
+    protectedAnnualBudgetMicros: bigint("protected_annual_budget_micros", {
+      mode: "bigint",
+    }).notNull(),
+    operatingAllocationMicros: bigint("operating_allocation_micros", {
+      mode: "bigint",
+    }).notNull(),
+    developmentAllocationMicros: bigint("development_allocation_micros", {
+      mode: "bigint",
+    }).notNull(),
+    inputDigest: text("input_digest").notNull(),
+    outputDigest: text("output_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_fund_alloc_evidence_id_org_uq").on(t.id, t.organizationId),
+    uniqueIndex("treasury_fund_alloc_evidence_input_uq").on(t.organizationId, t.inputDigest),
+    index("treasury_fund_alloc_evidence_latest_idx").on(t.organizationId, t.createdAt, t.id),
+    foreignKey({
+      columns: [t.idealAnnualBudgetId, t.organizationId],
+      foreignColumns: [treasuryIdealAnnualBudgets.id, treasuryIdealAnnualBudgets.organizationId],
+      name: "treasury_fund_alloc_evidence_ideal_same_org_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.balanceReconciliationId, t.organizationId],
+      foreignColumns: [
+        treasuryBalanceReconciliations.id,
+        treasuryBalanceReconciliations.organizationId,
+      ],
+      name: "treasury_fund_alloc_evidence_recon_same_org_fk",
+    }).onDelete("restrict"),
+    check(
+      "treasury_fund_alloc_evidence_policy_check",
+      sql`"policy_code" = 'WAIA_DEVELOPMENT_FUND_EXCESS_ANNUAL_BUDGET' AND "policy_version" = 1`,
+    ),
+    check(
+      "treasury_fund_alloc_evidence_currency_check",
+      sql`"accounting_currency" ~ '^[A-Z][A-Z0-9]{2,11}$'`,
+    ),
+    check(
+      "treasury_fund_alloc_evidence_digest_check",
+      sql`"input_digest" ~ '^[0-9a-f]{64}$' AND "output_digest" ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "treasury_fund_alloc_evidence_amounts_check",
+      sql`"accounting_cash_balance_micros" >= 0 AND "active_commitments_micros" >= 0 AND "canonical_free_funds_micros" >= 0 AND "protected_annual_budget_micros" > 0 AND "operating_allocation_micros" >= 0 AND "development_allocation_micros" >= 0`,
+    ),
+    check(
+      "treasury_fund_alloc_evidence_formula_check",
+      sql`"canonical_free_funds_micros" = "accounting_cash_balance_micros" - "active_commitments_micros" AND "operating_allocation_micros" = LEAST("canonical_free_funds_micros", "protected_annual_budget_micros") AND "development_allocation_micros" = GREATEST(0, "canonical_free_funds_micros" - "protected_annual_budget_micros") AND "operating_allocation_micros" + "development_allocation_micros" = "canonical_free_funds_micros"`,
+    ),
   ],
 );
 
