@@ -118,7 +118,7 @@ function assertFinalEvidenceBinding(input: {
     }
     const attemptDigests = attempt.evidenceIds
       .map((evidenceId) => {
-        if (initialById.has(evidenceId) || acquiredEvidenceIds.has(evidenceId)) {
+        if (initialById.has(evidenceId)) {
           throw new Error("INFORMATION_INQUIRY_RUNTIME_INVALID:acquiredEvidenceIdentity");
         }
         const evidence = finalById.get(evidenceId);

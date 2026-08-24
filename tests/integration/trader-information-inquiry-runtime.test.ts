@@ -62,7 +62,11 @@ function evidence(): InformationEvidenceV2 {
 
 function planningInput(
   initialEvidence: readonly InformationEvidenceV2[],
+  options: Readonly<{ includeSecondaryRequirement?: boolean }> = {},
 ): BuildInformationNeedPlanV1Input {
+  const requirementIds = options.includeSecondaryRequirement
+    ? ["price-state", "price-state-secondary"]
+    : ["price-state"];
   const profile = defineRequiredInformationProfileV2({
     organizationId: "org-a",
     accountId: "account-a",
@@ -75,27 +79,25 @@ function planningInput(
     forecastPackageId: null,
     forecastPackageContentDigest: null,
     inputContractContentDigest: null,
-    requirements: [
-      {
-        id: "price-state",
-        questionId: "Q_WHAT_HAPPENING",
-        classification: "MANDATORY",
-        contextTriggerKey: null,
-        satisfiers: [
-          { evidenceFamily: "price", providerIds: ["htx_spot"], substitutionRuleId: null },
-        ],
-        allowedObservationKinds: ["ohlcv_bar"],
-        allowedObservationSchemaVersions: [CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION],
-        allowedMeasurementDefinitionDigests: [],
-        maxStalenessMs: 60_000,
-        minimumTrustScore: 0.5,
-        minimumIndependentGroups: 1,
-        contradictionPolicy: "FAIL_UNRESOLVED",
-        requirePitQualified: true,
-        requireReplayEligible: true,
-        inquiryBounds: { maxDepth: 1, maxDurationMs: 1_000, maxProviderFanout: 1 },
-      },
-    ],
+    requirements: requirementIds.map((requirementId) => ({
+      id: requirementId,
+      questionId: "Q_WHAT_HAPPENING",
+      classification: "MANDATORY",
+      contextTriggerKey: null,
+      satisfiers: [
+        { evidenceFamily: "price", providerIds: ["htx_spot"], substitutionRuleId: null },
+      ],
+      allowedObservationKinds: ["ohlcv_bar"],
+      allowedObservationSchemaVersions: [CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION],
+      allowedMeasurementDefinitionDigests: [],
+      maxStalenessMs: 60_000,
+      minimumTrustScore: 0.5,
+      minimumIndependentGroups: 1,
+      contradictionPolicy: "FAIL_UNRESOLVED",
+      requirePitQualified: true,
+      requireReplayEligible: true,
+      inquiryBounds: { maxDepth: 1, maxDurationMs: 1_000, maxProviderFanout: 1 },
+    })),
     aggregateQualityContract: null,
   });
   const receipt = evaluateInformationSufficiencyV2({
@@ -120,23 +122,29 @@ function planningInput(
       purpose: "NEW_OPPORTUNITY_SEARCH",
       timeframePolicies: ["1d", "4h", "1h", "15m", "1m"].map((timeframe) => ({
         timeframe: timeframe as "1d" | "4h" | "1h" | "15m" | "1m",
-        relevantRequirementIds: timeframe === "1m" ? ["price-state"] : [],
+        relevantRequirementIds: timeframe === "1m" ? requirementIds : [],
         maxStalenessMsByRequirement:
-          timeframe === "1m" ? [{ requirementId: "price-state", maxStalenessMs: 60_000 }] : [],
+          timeframe === "1m"
+            ? requirementIds.map((requirementId) => ({ requirementId, maxStalenessMs: 60_000 }))
+            : [],
       })),
       bounds: {
         maxIterations: 1,
         maxDepth: 1,
         maxDurationMs: 1_000,
-        maxProviderFanout: 1,
-        maxQueryCount: 1,
+        maxProviderFanout: requirementIds.length,
+        maxQueryCount: requirementIds.length,
         maxHistoricalResults: 1,
-        maxAcquisitionCostUnits: 1,
+        maxAcquisitionCostUnits: requirementIds.length,
       },
       costPolicy: {
         evaluatorVersion: "caller-cost-v1",
         evaluatorContentDigest: hex("cost-policy"),
-        assignments: [{ requirementId: "price-state", providerId: "htx_spot", costUnits: 1 }],
+        assignments: requirementIds.map((requirementId) => ({
+          requirementId,
+          providerId: "htx_spot",
+          costUnits: 1,
+        })),
       },
       contradictionMaterialityPolicyVersion: "materiality-v1",
       contradictionMaterialityPolicyDigest: hex("materiality-policy"),
@@ -215,9 +223,12 @@ function unavailableReceipt(
 
 function availableReceipt(
   selection: InformationAcquisitionSelectionV1,
-  observationContentDigest: string,
+  observationContentDigest: string | readonly string[],
 ): InformationAcquisitionReceiptV1 {
-  const outcomes = selection.requestedSources.map((requestedSource) => ({
+  const digests = Array.isArray(observationContentDigest)
+    ? observationContentDigest
+    : selection.requestedSources.map(() => observationContentDigest);
+  const outcomes = selection.requestedSources.map((requestedSource, index) => ({
     requestedSource,
     status: "AVAILABLE" as const,
     reasonCode: null,
@@ -225,7 +236,7 @@ function availableReceipt(
       {
         gatewayKind: "ohlcv_bar" as const,
         providerId: "htx_spot" as const,
-        normalizedInputDigest: observationContentDigest,
+        normalizedInputDigest: digests[index]!,
         status: "AVAILABLE" as const,
         reason: null,
         kind: "ohlcv_bar" as const,
@@ -242,14 +253,14 @@ function availableReceipt(
         ingestTimeUtc: PIT,
       },
     ],
-    observationContentDigests: [observationContentDigest],
+    observationContentDigests: [digests[index]!],
   }));
   const payload = {
     schemaVersion: INFORMATION_ACQUISITION_RECEIPT_V1_SCHEMA_VERSION,
     selectionContentDigest: selection.contentDigest,
     mode: selection.mode,
     outcomes,
-    causalObservationContentDigests: [observationContentDigest],
+    causalObservationContentDigests: [...new Set(digests)].sort(),
     authority: "EVIDENCE_ACQUISITION_ONLY" as const,
   };
   return { ...payload, contentDigest: computeInquiryContentDigest(payload) };
@@ -351,6 +362,68 @@ describe("DEE-699 information inquiry runtime", () => {
     expect(result.loopReceipt.finalSufficiencyReceipt.evidenceInventory).toEqual([
       acquiredEvidence,
     ]);
+  });
+
+  it("reuses one immutable receipt-bound observation across two selected needs", async () => {
+    const sharedEvidence = {
+      ...evidence(),
+      evidenceId: "shared-acquired-evidence",
+      observationContentDigest: hex("shared-acquired"),
+    };
+    const result = await runInformationInquiryRuntimeV1({
+      planningInput: planningInput([], { includeSecondaryRequirement: true }),
+      mode: "LIVE",
+      acquire: async (selection) => ({
+        receipt: availableReceipt(selection, sharedEvidence.observationContentDigest),
+        finalEvidence: [sharedEvidence],
+        attempts: selection.requestedSources.map((source) => ({
+          iterationIndex: 0,
+          depth: 1,
+          needId: source.needId,
+          requirementId: source.requirementId,
+          providerId: source.providerId,
+          outcome: "AVAILABLE" as const,
+          elapsedMsAtCompletion: 10,
+          evidenceIds: [sharedEvidence.evidenceId],
+          reasonCodes: ["SOURCE_AVAILABLE"],
+        })),
+      }),
+    });
+    expect(result.selection.requestedSources).toHaveLength(2);
+    expect(result.loopReceipt.attempts).toHaveLength(2);
+    expect(result.loopReceipt.finalSufficiencyReceipt.evidenceInventory).toEqual([sharedEvidence]);
+  });
+
+  it("rejects shared evidence when any referencing outcome binds a different digest", async () => {
+    const sharedEvidence = {
+      ...evidence(),
+      evidenceId: "shared-acquired-evidence",
+      observationContentDigest: hex("shared-acquired"),
+    };
+    await expect(
+      runInformationInquiryRuntimeV1({
+        planningInput: planningInput([], { includeSecondaryRequirement: true }),
+        mode: "LIVE",
+        acquire: async (selection) => ({
+          receipt: availableReceipt(selection, [
+            sharedEvidence.observationContentDigest,
+            hex("different-second-outcome"),
+          ]),
+          finalEvidence: [sharedEvidence],
+          attempts: selection.requestedSources.map((source) => ({
+            iterationIndex: 0,
+            depth: 1,
+            needId: source.needId,
+            requirementId: source.requirementId,
+            providerId: source.providerId,
+            outcome: "AVAILABLE" as const,
+            elapsedMsAtCompletion: 10,
+            evidenceIds: [sharedEvidence.evidenceId],
+            reasonCodes: ["SOURCE_AVAILABLE"],
+          })),
+        }),
+      }),
+    ).rejects.toThrow("INFORMATION_INQUIRY_RUNTIME_INVALID:attemptObservationDigestBinding");
   });
 
   it("rejects omission or mutation of the exact initial evidence inventory", async () => {
