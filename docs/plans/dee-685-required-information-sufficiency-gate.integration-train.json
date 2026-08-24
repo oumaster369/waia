@@ -241,8 +241,14 @@
         "lib/trader/intelligence/records/intelligence-records.types.ts",
         "lib/trader/intelligence/types.ts",
         "lib/trader/knowledge/mkb-read-model-evidence-harness.ts",
+        "lib/trader/observability/fhv-full-historical-engine.ts",
+        "lib/trader/observability/fhv-full-historical-launch.ts",
         "lib/trader/paper/paper-cycle-runner.ts",
         "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/research/capital-path-trace-harness.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-scale-harness.ts",
+        "tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
         "tests/integration/postgres-trader-forecast-decision-completeness.test.ts",
         "tests/integration/postgres-trader-forecast-decision-idempotency.test.ts",
         "tests/integration/postgres-trader-forecast-decision-parity.test.ts",
@@ -272,12 +278,15 @@
         "a209ec46ad7572b224684158691e356d2f17de33",
         "69f882c47a4851286ab1dcf30bd3590ce2fac366",
         "4a3cff464e8ed80d37a3d781f99ab66936aa6136",
-        "4495c05c9910a5ba8aa2a00bf6efd548451fd030"
+        "4495c05c9910a5ba8aa2a00bf6efd548451fd030",
+        "6a10625a6e69a73bb8a1671660d41197ee708e38"
       ],
       "acceptanceEvidence": [
         "Exact sufficiency authority is required before Forecast/Decision and new-entry submission.",
         "Guardian risk-reducing exits remain separate and unblocked.",
         "Five Human-authorized tests assert information_sufficiency_blocked, null execution, bounded abort and no execution/reconciliation; production bytes unchanged.",
+        "Human-ratified typed RESEARCH_NON_CAPITAL authority is bound to exact synthetic WP7B or capital-trace run/provenance identity and cannot be reused without the matching binding.",
+        "Official blind-holdout, production, live, capital-eligible and capital-use selections remain explicitly forbidden; fill-density, trace and throughput assertions are unchanged.",
         "Independent corrected-readmission review: PASS, zero P1/P2."
       ],
       "tests": [
@@ -286,6 +295,8 @@
         "Post-readmission corrected/runtime/consumer focus: 26/26 PASS.",
         "WP14/WP15 compatibility: 40/40 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
+        "Synthetic WP7B representative 5/5 PASS (4509 cycles, 806 fills) and throughput probe 2/2 PASS.",
+        "Synthetic capital-path trace 3/3 PASS; focused PostgreSQL sufficiency/Forecast-Decision 13/13 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
       ]
     },
@@ -364,16 +375,19 @@
       "integratedCommits": [
         "5a06d9582ab4014b1a9343fb330b43c39b3d0fbe",
         "f617237ddd85e7441bbc59b8749df9e15ac98635",
-        "3d584be1ae302ed8047081059029c53126b063c5"
+        "3d584be1ae302ed8047081059029c53126b063c5",
+        "4982ae2d88b4c7aa1821cd4a0077b0336fa7110b"
       ],
       "acceptanceEvidence": [
         "Inventory covers direct/indirect/barrel/persistence/paper/poll/fixture/backtest/read-only/Guardian dispositions.",
+        "Every runBacktest importer is closed as type-only, default fail-closed or exact synthetic-bound authority propagation/validation.",
         "Reserved live is accurately excluded/ungated without live production change; causal and capital-question semantics remain conservative.",
         "Independent corrected-readmission review: PASS, zero P1/P2; Wave D byte-identical."
       ],
       "tests": [
         "Downstream closure: 75/75 PASS.",
         "Reality V2 source/consumer graph: 4/4 PASS with exact current count and digests.",
+        "Synthetic authority and runBacktest consumer closure: 11/11 PASS.",
         "Reviewer-repair closure/semantics/poll: 12/12 PASS.",
         "Loopback PostgreSQL cumulative proof: 16/16 PASS.",
         "Typecheck, scoped lint and diff integrity: PASS."
@@ -438,7 +452,8 @@
           "a209ec46ad7572b224684158691e356d2f17de33",
           "69f882c47a4851286ab1dcf30bd3590ce2fac366",
           "4a3cff464e8ed80d37a3d781f99ab66936aa6136",
-          "4495c05c9910a5ba8aa2a00bf6efd548451fd030"
+          "4495c05c9910a5ba8aa2a00bf6efd548451fd030",
+          "6a10625a6e69a73bb8a1671660d41197ee708e38"
         ],
         "reviewedFiles": [
           "lib/trader/backtest/backtest-runner.ts",
@@ -464,8 +479,14 @@
           "lib/trader/intelligence/records/intelligence-records.types.ts",
           "lib/trader/intelligence/types.ts",
           "lib/trader/knowledge/mkb-read-model-evidence-harness.ts",
+          "lib/trader/observability/fhv-full-historical-engine.ts",
+          "lib/trader/observability/fhv-full-historical-launch.ts",
           "lib/trader/paper/paper-cycle-runner.ts",
           "lib/trader/paper/paper-cycle.types.ts",
+          "lib/trader/research/capital-path-trace-harness.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-representative-segment.test.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-scale-harness.ts",
+          "tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
           "tests/integration/postgres-trader-forecast-decision-completeness.test.ts",
           "tests/integration/postgres-trader-forecast-decision-idempotency.test.ts",
           "tests/integration/postgres-trader-forecast-decision-parity.test.ts",
@@ -495,7 +516,8 @@
         "reviewedCommits": [
           "5a06d9582ab4014b1a9343fb330b43c39b3d0fbe",
           "f617237ddd85e7441bbc59b8749df9e15ac98635",
-          "3d584be1ae302ed8047081059029c53126b063c5"
+          "3d584be1ae302ed8047081059029c53126b063c5",
+          "4982ae2d88b4c7aa1821cd4a0077b0336fa7110b"
         ],
         "reviewedFiles": [
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
@@ -541,7 +563,11 @@
           "runtime/Guardian/bar-close 47/47",
           "corrected tests 12/12",
           "post-readmission corrected/runtime/consumer focus 26/26",
-          "WP14/WP15 40/40"
+          "WP14/WP15 40/40",
+          "synthetic WP7B representative 5/5 (4509 cycles, 806 fills)",
+          "synthetic WP7B throughput probe 2/2",
+          "synthetic capital trace 3/3",
+          "focused PostgreSQL sufficiency/Forecast-Decision 13/13"
         ]
       },
       {
@@ -550,6 +576,7 @@
         "commands": [
           "downstream closure 75/75",
           "Reality source/consumer graph 4/4",
+          "synthetic authority/runBacktest consumer closure 11/11",
           "review repair 12/12",
           "independent corrected-readmission review zero P1/P2"
         ]
