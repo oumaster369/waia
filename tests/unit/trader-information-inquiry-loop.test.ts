@@ -4,19 +4,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   computeInquiryContentDigest,
-  INFORMATION_NEED_PLAN_V1_SCHEMA_VERSION,
-  type InformationNeedPlanV1,
+  defineInformationInquiryPolicyV1,
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
 import {
   assertInformationInquiryLoopReceiptV1,
   runInformationInquiryLoopV1,
 } from "@/lib/trader/intelligence/information-inquiry/information-inquiry-loop-v1";
 import {
-  INFORMATION_INQUIRY_PLANNING_BUNDLE_V1_SCHEMA_VERSION,
+  buildInformationNeedPlanningBundleV1,
+  type BuildInformationNeedPlanV1Input,
   type InformationInquiryPlanningBundleV1,
 } from "@/lib/trader/intelligence/information-inquiry/information-need-planner-v1";
+import { defineTopDownReconstructionV1 } from "@/lib/trader/intelligence/information-inquiry/top-down-reconstruction-v1";
 import {
   defineRequiredInformationProfileV2,
+  evaluateInformationSufficiencyV2,
   type InformationEvidenceV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/canonical-observation-v1";
@@ -101,6 +103,19 @@ function evidence(overrides: Partial<InformationEvidenceV2> = {}): InformationEv
   };
 }
 
+const planningInputs = new WeakMap<
+  InformationInquiryPlanningBundleV1,
+  BuildInformationNeedPlanV1Input
+>();
+
+function planningInputFor(
+  selectedBundle: InformationInquiryPlanningBundleV1,
+): BuildInformationNeedPlanV1Input {
+  const planningInput = planningInputs.get(selectedBundle);
+  if (!planningInput) throw new Error("missing planning input fixture");
+  return planningInput;
+}
+
 function bundle(
   selectedProfile: ReturnType<typeof profile>,
   overrides: Readonly<{
@@ -113,56 +128,28 @@ function bundle(
     acquisitionCostUnitsConsumedBeforeIteration?: number;
   }> = {},
 ): InformationInquiryPlanningBundleV1 {
-  const needBody = {
-    requirementId: "price-state",
-    questionId: "Q_WHAT_HAPPENING" as const,
-    classification: "MANDATORY" as const,
-    evidenceFamily: "price",
-    allowedObservationKinds: ["ohlcv_bar"] as const,
-    allowedObservationSchemaVersions: [CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION],
-    timeframeRequirements: [{ timeframe: "1m" as const, maxStalenessMs: 60_000 }],
-    inquiryBounds: selectedProfile.requirements[0]!.inquiryBounds,
-    providerCandidates: [{ providerId: "htx_spot", substitutionRuleId: null, costUnits: 1 }],
-    requirePitQualified: true,
-    requireReplayEligible: true,
-    contradiction: null,
-    reasonCodes: ["PRICE_REQUIRED"],
-  };
-  const need = { ...needBody, id: `need_${computeInquiryContentDigest(needBody)}` };
-  const requestedSources = [
-    {
-      needId: need.id,
-      requirementId: "price-state",
-      providerId: "htx_spot",
-      allowedObservationKinds: ["ohlcv_bar"] as const,
-      costUnits: 1,
-      reasonCodes: ["PRICE_REQUIRED"],
-    },
-  ];
-  const unresolvedQuestionIds = ["Q_WHAT_HAPPENING"] as const;
-  const availableEvidence: [] = [];
-  const planPayload: Omit<InformationNeedPlanV1, "id" | "contentDigest"> = {
-    schemaVersion: INFORMATION_NEED_PLAN_V1_SCHEMA_VERSION,
-    derivationVersion: "planner-v1",
-    organizationId: "org-a",
-    accountId: "account-a",
-    symbol: "BTC/USDT",
-    venue: "HTX",
+  const initialReceipt = evaluateInformationSufficiencyV2({
+    profile: selectedProfile,
+    organizationId: selectedProfile.organizationId,
+    accountId: selectedProfile.accountId,
+    purpose: selectedProfile.purpose,
+    symbol: selectedProfile.symbol,
+    venue: selectedProfile.venue,
     analyticalTimeframe: selectedProfile.analyticalTimeframe,
     horizon: selectedProfile.horizon,
     pitAnchor: PIT,
-    purpose: "NEW_OPPORTUNITY_SEARCH",
-    profilePurpose: "NEW_OPPORTUNITY",
-    profileId: selectedProfile.id,
-    profileContentDigest: selectedProfile.contentDigest,
+    activeContextTriggers: [],
+    evidence: [],
+  });
+  const policy = defineInformationInquiryPolicyV1({
     policyVersion: "policy-v1",
-    policyContentDigest: hex("policy"),
-    topDownReconstructionContentDigest: hex("reconstruction"),
-    unresolvedQuestionIds,
-    availableEvidence,
-    needs: [need],
-    requestedSources,
-    ignoredSources: [],
+    purpose: "NEW_OPPORTUNITY_SEARCH",
+    timeframePolicies: ["1d", "4h", "1h", "15m", "1m"].map((timeframe) => ({
+      timeframe: timeframe as "1d" | "4h" | "1h" | "15m" | "1m",
+      relevantRequirementIds: timeframe === "1m" ? ["price-state"] : [],
+      maxStalenessMsByRequirement:
+        timeframe === "1m" ? [{ requirementId: "price-state", maxStalenessMs: 60_000 }] : [],
+    })),
     bounds: {
       maxIterations: overrides.maxIterations ?? 1,
       maxDepth: overrides.maxDepth ?? 2,
@@ -172,36 +159,72 @@ function bundle(
       maxHistoricalResults: 1,
       maxAcquisitionCostUnits: overrides.maxAcquisitionCostUnits ?? 1,
     },
+    costPolicy: {
+      evaluatorVersion: "caller-cost-v1",
+      evaluatorContentDigest: hex("cost-policy"),
+      assignments: [{ requirementId: "price-state", providerId: "htx_spot", costUnits: 1 }],
+    },
+    contradictionMaterialityPolicyVersion: "materiality-v1",
+    contradictionMaterialityPolicyDigest: hex("materiality-policy"),
+    schedulingPolicyVersion: "scheduler-v1",
+    schedulingPolicyDigest: hex("scheduler-policy"),
+    maxNewOpportunityWaitTurns: 2,
+  });
+  const topDownReconstruction = defineTopDownReconstructionV1({
+    symbol: selectedProfile.symbol,
+    pitAnchor: PIT,
+    states: [
+      ["1d", "STRATEGIC_CONTEXT"],
+      ["4h", "STRUCTURAL_REFINEMENT"],
+      ["1h", "OPERATIONAL_STATE"],
+      ["15m", "SETUP_CONFIRMATION"],
+      ["1m", "EXECUTION_PRECISION"],
+    ].map(([timeframe, role]) => ({
+      timeframe: timeframe as "1d" | "4h" | "1h" | "15m" | "1m",
+      role: role as
+        | "STRATEGIC_CONTEXT"
+        | "STRUCTURAL_REFINEMENT"
+        | "OPERATIONAL_STATE"
+        | "SETUP_CONFIRMATION"
+        | "EXECUTION_PRECISION",
+      status: "AVAILABLE" as const,
+      stateContentDigest: hex(`state-${timeframe}`),
+      evidenceIds: [`state-${timeframe}`],
+      reasonCodes: ["CALLER_STATE"],
+    })),
+    relations: [
+      ["1d", "4h"],
+      ["4h", "1h"],
+      ["1h", "15m"],
+      ["15m", "1m"],
+    ].map(([higherTimeframe, lowerTimeframe]) => ({
+      higherTimeframe: higherTimeframe as "1d" | "4h" | "1h" | "15m",
+      lowerTimeframe: lowerTimeframe as "4h" | "1h" | "15m" | "1m",
+      relation: "UNCLEAR" as const,
+      relationPolicyVersion: "relation-v1",
+      relationPolicyContentDigest: hex("relation-policy"),
+      evidenceIds: [`state-${higherTimeframe}`, `state-${lowerTimeframe}`],
+      reasonCodes: ["CALLER_RELATION"],
+    })),
+    upwardReevaluationRequests: [],
+  });
+  const planningInput: BuildInformationNeedPlanV1Input = {
+    derivationVersion: "planner-v1",
+    profile: selectedProfile,
+    receipt: initialReceipt,
+    policy,
+    topDownReconstruction,
     iterationIndex: overrides.iterationIndex ?? 0,
-    queryCountConsumedBeforeIteration: overrides.queryCountConsumedBeforeIteration ?? 0,
-    acquisitionCostUnitsConsumedBeforeIteration:
-      overrides.acquisitionCostUnitsConsumedBeforeIteration ?? 0,
-    status: "READY",
-    evidenceSelectionDigest: computeInquiryContentDigest({
-      unresolvedQuestionIds,
-      availableEvidence,
-      needs: [need],
-      requestedSources,
-    }),
-    authority: "EVIDENCE_ACQUISITION_ONLY",
-  };
-  const planContentDigest = computeInquiryContentDigest(planPayload);
-  const plan = {
-    ...planPayload,
-    id: `inp_${planContentDigest}`,
-    contentDigest: planContentDigest,
-  };
-  const payload = {
-    schemaVersion: INFORMATION_INQUIRY_PLANNING_BUNDLE_V1_SCHEMA_VERSION,
-    plan,
+    queryCountConsumed: overrides.queryCountConsumedBeforeIteration ?? 0,
+    acquisitionCostUnitsConsumed: overrides.acquisitionCostUnitsConsumedBeforeIteration ?? 0,
+    availableProviderIds: ["htx_spot"],
     contradictions: [],
-    analoguePlanning: [],
+    analogueRequests: [],
     hypothesisDiscriminators: [],
-    researchQuestionRoutes: [],
-    authority: "EVIDENCE_ACQUISITION_PLANNING_ONLY" as const,
-    createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority: false as const,
   };
-  return { ...payload, contentDigest: computeInquiryContentDigest(payload) };
+  const selectedBundle = buildInformationNeedPlanningBundleV1(planningInput);
+  planningInputs.set(selectedBundle, planningInput);
+  return selectedBundle;
 }
 
 describe("DEE-697 bounded information inquiry loop", () => {
@@ -211,7 +234,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     const selectedBundle = bundle(selectedProfile);
     const receipt = runInformationInquiryLoopV1({
       bundle: selectedBundle,
-      profile: selectedProfile,
+      planningInput: planningInputFor(selectedBundle),
       attempts: [
         {
           iterationIndex: 0,
@@ -232,9 +255,13 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(receipt.finalSufficiencyReceipt.status).toBe("SUFFICIENT");
     expect(receipt.attempts[0]).toMatchObject({ costUnits: 1, outcome: "AVAILABLE" });
     expect(receipt.createsKnowledgeHypothesisForecastDecisionOrCapitalAuthority).toBe(false);
-    expect(assertInformationInquiryLoopReceiptV1(receipt, selectedBundle, selectedProfile)).toBe(
-      receipt,
-    );
+    expect(
+      assertInformationInquiryLoopReceiptV1(
+        receipt,
+        selectedBundle,
+        planningInputFor(selectedBundle),
+      ),
+    ).toBe(receipt);
   });
 
   it("terminates honestly on unavailable evidence without zero or synthetic fallback", () => {
@@ -242,7 +269,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     const selectedBundle = bundle(selectedProfile);
     const receipt = runInformationInquiryLoopV1({
       bundle: selectedBundle,
-      profile: selectedProfile,
+      planningInput: planningInputFor(selectedBundle),
       attempts: [
         {
           iterationIndex: 0,
@@ -270,7 +297,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(() =>
       runInformationInquiryLoopV1({
         bundle: selectedBundle,
-        profile: selectedProfile,
+        planningInput: planningInputFor(selectedBundle),
         attempts: [
           {
             iterationIndex: 0,
@@ -291,7 +318,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
 
     const insufficient = runInformationInquiryLoopV1({
       bundle: selectedBundle,
-      profile: selectedProfile,
+      planningInput: planningInputFor(selectedBundle),
       attempts: [
         {
           iterationIndex: 0,
@@ -337,7 +364,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     };
     const unresolved = runInformationInquiryLoopV1({
       bundle: selectedBundle,
-      profile: selectedProfile,
+      planningInput: planningInputFor(selectedBundle),
       attempts: [attempt],
       finalEvidence: [selectedEvidence],
       activeContextTriggers: [],
@@ -348,7 +375,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
 
     const depthExhausted = runInformationInquiryLoopV1({
       bundle: selectedBundle,
-      profile: selectedProfile,
+      planningInput: planningInputFor(selectedBundle),
       attempts: [{ ...attempt, depth: 2 }],
       finalEvidence: [selectedEvidence],
       activeContextTriggers: [],
@@ -356,7 +383,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(depthExhausted.terminalStatus).toBe("INFORMATION_INSUFFICIENT");
   });
 
-  it("rejects a plan whose cumulative prior plus current selection exceeds a bound", () => {
+  it("rejects a hash-correct current selection that exceeds trusted cumulative lineage", () => {
     const selectedProfile = profile();
     const overdrawn = bundle(selectedProfile, {
       maxIterations: 3,
@@ -364,15 +391,87 @@ describe("DEE-697 bounded information inquiry loop", () => {
       maxAcquisitionCostUnits: 1,
       queryCountConsumedBeforeIteration: 1,
     });
+    const forgedSelection = bundle(selectedProfile, {
+      maxIterations: 3,
+      maxQueryCount: 1,
+      maxAcquisitionCostUnits: 1,
+    });
     expect(() =>
       runInformationInquiryLoopV1({
-        bundle: overdrawn,
-        profile: selectedProfile,
+        bundle: forgedSelection,
+        planningInput: planningInputFor(overdrawn),
         attempts: [],
         finalEvidence: [],
         activeContextTriggers: [],
       }),
-    ).toThrow("planSelectionBounds");
+    ).toThrow("planningProvenance");
+  });
+
+  it("rejects hash-correct altered policy identity, costs, and bounds", () => {
+    const selectedBundle = bundle(profile(), { maxIterations: 3, maxQueryCount: 3 });
+    const trustedInput = planningInputFor(selectedBundle);
+    const redefinePolicy = (
+      overrides: Readonly<{
+        policyVersion?: string;
+        bounds?: typeof trustedInput.policy.bounds;
+        costPolicy?: typeof trustedInput.policy.costPolicy;
+      }>,
+    ) =>
+      defineInformationInquiryPolicyV1({
+        policyVersion: overrides.policyVersion ?? trustedInput.policy.policyVersion,
+        purpose: trustedInput.policy.purpose,
+        timeframePolicies: trustedInput.policy.timeframePolicies,
+        bounds: overrides.bounds ?? trustedInput.policy.bounds,
+        costPolicy: overrides.costPolicy ?? trustedInput.policy.costPolicy,
+        contradictionMaterialityPolicyVersion:
+          trustedInput.policy.contradictionMaterialityPolicyVersion,
+        contradictionMaterialityPolicyDigest:
+          trustedInput.policy.contradictionMaterialityPolicyDigest,
+        schedulingPolicyVersion: trustedInput.policy.schedulingPolicyVersion,
+        schedulingPolicyDigest: trustedInput.policy.schedulingPolicyDigest,
+        maxNewOpportunityWaitTurns: trustedInput.policy.maxNewOpportunityWaitTurns,
+      });
+    const forgedPolicies = [
+      redefinePolicy({ policyVersion: "forged-policy-v2" }),
+      redefinePolicy({
+        costPolicy: {
+          ...trustedInput.policy.costPolicy,
+          evaluatorContentDigest: hex("forged-cost-policy"),
+          assignments: trustedInput.policy.costPolicy.assignments.map((assignment) => ({
+            ...assignment,
+            costUnits: 0,
+          })),
+        },
+      }),
+      redefinePolicy({
+        bounds: { ...trustedInput.policy.bounds, maxIterations: 2 },
+      }),
+    ];
+    const forgedBundles = forgedPolicies.map((policy) =>
+      buildInformationNeedPlanningBundleV1({ ...trustedInput, policy }),
+    );
+    for (const forgedBundle of forgedBundles) {
+      expect(() =>
+        runInformationInquiryLoopV1({
+          bundle: forgedBundle,
+          planningInput: trustedInput,
+          attempts: [],
+          finalEvidence: [],
+          activeContextTriggers: [],
+        }),
+      ).toThrow("planningProvenance");
+    }
+
+    const trustedReceipt = runInformationInquiryLoopV1({
+      bundle: selectedBundle,
+      planningInput: trustedInput,
+      attempts: [],
+      finalEvidence: [],
+      activeContextTriggers: [],
+    });
+    expect(() =>
+      assertInformationInquiryLoopReceiptV1(trustedReceipt, forgedBundles[0]!, trustedInput),
+    ).toThrow("planningProvenance");
   });
 
   it("enforces exact per-need depth and duration independently of global bounds", () => {
@@ -381,7 +480,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(() =>
       runInformationInquiryLoopV1({
         bundle: depthBundle,
-        profile: depthProfile,
+        planningInput: planningInputFor(depthBundle),
         attempts: [
           {
             iterationIndex: 0,
@@ -405,7 +504,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(() =>
       runInformationInquiryLoopV1({
         bundle: durationBundle,
-        profile: durationProfile,
+        planningInput: planningInputFor(durationBundle),
         attempts: [
           {
             iterationIndex: 0,
@@ -426,15 +525,16 @@ describe("DEE-697 bounded information inquiry loop", () => {
 
     const zeroFanoutProfile = profile({ maxDepth: 2, maxDurationMs: 1_000, maxProviderFanout: 0 });
     const zeroFanoutBundle = bundle(zeroFanoutProfile, { maxDepth: 2 });
+    const forgedFanoutBundle = bundle(profile(), { maxDepth: 2 });
     expect(() =>
       runInformationInquiryLoopV1({
-        bundle: zeroFanoutBundle,
-        profile: zeroFanoutProfile,
+        bundle: forgedFanoutBundle,
+        planningInput: planningInputFor(zeroFanoutBundle),
         attempts: [],
         finalEvidence: [],
         activeContextTriggers: [],
       }),
-    ).toThrow("planNeedSelectionBounds");
+    ).toThrow("planningProvenance");
   });
 
   it("rejects exact-scope and self-consistent receipt forgeries by reconstruction", () => {
@@ -443,7 +543,7 @@ describe("DEE-697 bounded information inquiry loop", () => {
     const selectedEvidence = evidence();
     const receipt = runInformationInquiryLoopV1({
       bundle: selectedBundle,
-      profile: selectedProfile,
+      planningInput: planningInputFor(selectedBundle),
       attempts: [
         {
           iterationIndex: 0,
@@ -476,7 +576,11 @@ describe("DEE-697 bounded information inquiry loop", () => {
       contentDigest: forgedDigest,
     };
     expect(() =>
-      assertInformationInquiryLoopReceiptV1(forgedReceipt, selectedBundle, selectedProfile),
+      assertInformationInquiryLoopReceiptV1(
+        forgedReceipt,
+        selectedBundle,
+        planningInputFor(selectedBundle),
+      ),
     ).toThrow("receiptIdentity");
 
     const attemptBody = Object.fromEntries(
@@ -499,7 +603,11 @@ describe("DEE-697 bounded information inquiry loop", () => {
       contentDigest: forgedAttemptReceiptDigest,
     };
     expect(() =>
-      assertInformationInquiryLoopReceiptV1(forgedAttemptReceipt, selectedBundle, selectedProfile),
+      assertInformationInquiryLoopReceiptV1(
+        forgedAttemptReceipt,
+        selectedBundle,
+        planningInputFor(selectedBundle),
+      ),
     ).toThrow("receiptIdentity");
 
     const planBody = Object.fromEntries(
@@ -525,11 +633,11 @@ describe("DEE-697 bounded information inquiry loop", () => {
     expect(() =>
       runInformationInquiryLoopV1({
         bundle: mismatchedBundle,
-        profile: selectedProfile,
+        planningInput: planningInputFor(selectedBundle),
         attempts: [],
         finalEvidence: [],
         activeContextTriggers: [],
       }),
-    ).toThrow("profileScope");
+    ).toThrow("planningProvenance");
   });
 });

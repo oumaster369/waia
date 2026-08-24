@@ -4,7 +4,6 @@ import {
   type AggregateQualityEvaluationV2,
   type InformationEvidenceV2,
   type InformationSufficiencyReceiptV2,
-  type RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import {
   computeInquiryContentDigest,
@@ -17,6 +16,8 @@ import {
 } from "@/lib/trader/intelligence/information-inquiry/contracts-v1";
 import {
   assertInformationInquiryPlanningBundleV1,
+  buildInformationNeedPlanningBundleV1,
+  type BuildInformationNeedPlanV1Input,
   type InformationInquiryPlanningBundleV1,
 } from "@/lib/trader/intelligence/information-inquiry/information-need-planner-v1";
 
@@ -179,7 +180,7 @@ function canonicalAttempts(input: {
 export function runInformationInquiryLoopV1(
   input: Readonly<{
     bundle: InformationInquiryPlanningBundleV1;
-    profile: RequiredInformationProfileV2;
+    planningInput: BuildInformationNeedPlanV1Input;
     attempts: readonly InformationAcquisitionAttemptInputV1[];
     finalEvidence: readonly InformationEvidenceV2[];
     activeContextTriggers: readonly string[];
@@ -187,7 +188,11 @@ export function runInformationInquiryLoopV1(
   }>,
 ): InformationInquiryLoopReceiptV1 {
   const bundle = assertInformationInquiryPlanningBundleV1(input.bundle);
-  const profile = assertRequiredInformationProfileV2(input.profile);
+  const expectedBundle = buildInformationNeedPlanningBundleV1(input.planningInput);
+  if (inquiryCanonicalJsonString(expectedBundle) !== inquiryCanonicalJsonString(bundle)) {
+    throw new Error("INFORMATION_INQUIRY_LOOP_INVALID:planningProvenance");
+  }
+  const profile = assertRequiredInformationProfileV2(input.planningInput.profile);
   if (
     bundle.plan.profileId !== profile.id ||
     bundle.plan.profileContentDigest !== profile.contentDigest ||
@@ -315,11 +320,11 @@ export function runInformationInquiryLoopV1(
 export function assertInformationInquiryLoopReceiptV1(
   receipt: InformationInquiryLoopReceiptV1,
   bundle: InformationInquiryPlanningBundleV1,
-  profile: RequiredInformationProfileV2,
+  planningInput: BuildInformationNeedPlanV1Input,
 ): InformationInquiryLoopReceiptV1 {
   const expected = runInformationInquiryLoopV1({
     bundle,
-    profile,
+    planningInput,
     attempts: receipt.attempts.map((attempt) => ({
       iterationIndex: attempt.iterationIndex,
       depth: attempt.depth,
