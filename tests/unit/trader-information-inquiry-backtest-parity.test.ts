@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  runBacktest,
+  type RunBacktestInput,
+} from "@/lib/trader/backtest/backtest-runner";
 
 const root = process.cwd();
 
@@ -26,6 +31,18 @@ describe("DEE-699 historical inquiry parity", () => {
     expect(source).not.toContain("MarketDataGateway");
     expect(source).not.toContain("HtxBarPollSource");
     expect(source).not.toMatch(/\bfetch\s*\(/);
+  });
+
+  it("rejects a blind-split inquiry resolver before it can read holdout-derived context", async () => {
+    const informationInquiryResolver = vi.fn();
+
+    await expect(
+      runBacktest({
+        split: "blind",
+        informationInquiryResolver,
+      } as unknown as RunBacktestInput),
+    ).rejects.toThrow("INFORMATION_INQUIRY_RUNTIME_FORBIDDEN:blindHoldout");
+    expect(informationInquiryResolver).not.toHaveBeenCalled();
   });
 
   it("keeps the composition runtime free of live provider and downstream authority imports", () => {

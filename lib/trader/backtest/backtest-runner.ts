@@ -592,6 +592,9 @@ function buildHtrAccountingContext(input: {
  */
 export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestResult> {
   assertSyntheticResearchNonCapitalBacktestScopeV2(input);
+  if (input.split === "blind" && input.informationInquiryResolver) {
+    throw new Error("INFORMATION_INQUIRY_RUNTIME_FORBIDDEN:blindHoldout");
+  }
   const substrateMode = input.substrateMode ?? DEFAULT_REPLAY_SUBSTRATE_MODE;
   resetFullHistoryRescanCount();
 
