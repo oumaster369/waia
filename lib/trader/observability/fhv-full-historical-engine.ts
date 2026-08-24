@@ -101,7 +101,7 @@ export function assertSyntheticResearchNonCapitalFhvScopeV2(input: {
   informationSufficiencySyntheticResearch?: SyntheticResearchNonCapitalAuthorityV2;
 }): void {
   const syntheticResearch = input.informationSufficiencySyntheticResearch;
-  if (!syntheticResearch && !input.syntheticScaleAuthority) return;
+  if (!syntheticResearch) return;
   try {
     if (
       !syntheticResearch ||
