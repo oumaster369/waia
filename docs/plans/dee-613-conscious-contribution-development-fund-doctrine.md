@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: [WP-0]
-  remainingWorkPackages: [WP-1, WP-2]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-0, WP-1, WP-2]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: e774e1276f11963120ee13f56eaacc307fc3b921
+  lastValidationAt: "2026-08-24T11:02:38Z"
   blockedReason: null
-  nextAction: "Complete the doctrine diff and validation, then prepare one Human-reviewed PR to main."
+  nextAction: "Prepare one Human-reviewed PR to main, then stop for Human squash merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -113,4 +113,3 @@ git diff --check
 ```
 
 No runtime or user-visible behavior changes; unit and end-to-end tests are not required for this product-doctrine batch.
-
