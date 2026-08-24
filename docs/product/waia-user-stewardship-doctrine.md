@@ -90,7 +90,7 @@ This doctrine authorizes no treasury transfer, subsidy, entitlement, custody or 
 - auditable funding records without public beneficiary exposure;
 - legal and jurisdictional review.
 
-The conscious-contribution and solidarity-treasury economics remain owned by DEE-613. Adaptive Breath-to-Commons allocation, including any accounting transfer of eligible excess, requires its own approved backend contract after the Human policy variables are fixed. It must not be smuggled into the DEE-611 public patrons page.
+The conscious-contribution and fund-allocation economics remain owned by DEE-613. The Human-approved first rule protects one approved annual WAIA budget and accounts canonical free funds above it to the virtual Development Fund; the exact doctrine lives in [`waia-conscious-contribution-development-fund-doctrine.md`](waia-conscious-contribution-development-fund-doctrine.md). DEE-690 owns the separate backend implementation. Until that implementation truth is Human-merged, no product surface may claim that the Development Fund is operational. These mechanics must not be smuggled into the DEE-611 public Patrons page.
 
 ## Public claim matrix
 
@@ -108,6 +108,7 @@ The conscious-contribution and solidarity-treasury economics remain owned by DEE
 
 - **DEE-611** consumes the patrons copy boundary after this doctrine is Human-approved.
 - **DEE-617** owns the canonical public Treasury and patrons read model.
-- **DEE-613** owns the conscious-contribution and solidarity-treasury economic sub-doctrine.
-- Future fund accounting and adaptive excess allocation require dedicated implementation issues.
+- **DEE-613** owns the conscious-contribution and Development Fund economic doctrine.
+- **DEE-690** owns the first virtual fund-accounting and annual-budget surplus implementation.
+- Commons, solidarity, adaptive reserves and physical transfers require later dedicated implementation issues.
 - AI-TRADER and the Execution Server are outside this doctrine and receive no access or authority from it.
