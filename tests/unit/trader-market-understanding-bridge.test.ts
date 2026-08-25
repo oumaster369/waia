@@ -6,15 +6,16 @@ import { describe, expect, it } from "vitest";
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import {
+  buildExactMarketUnderstandingArtifactV1,
   buildMarketUnderstandingBridge,
   buildResearchSignals,
 } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
+import { bindInformationSufficiencyReceiptAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import {
   CANONICAL_MARKET_QUESTION_IDS,
   MARKET_UNDERSTANDING_SCHEMA_VERSION,
   type MarketUnderstandingSnapshot,
 } from "@/lib/trader/intelligence/market-understanding.types";
-import { cdeReasonCodes } from "@/lib/trader/intelligence/types";
 import { buildCrossVenueTriangulation } from "@/lib/trader/market-data/fusion/cross-venue-triangulation";
 import { fuseContextV0 } from "@/lib/trader/market-data/fusion/context-fusion-v0";
 import {
@@ -25,6 +26,11 @@ import {
 } from "@/lib/trader/market-data/normalization/normalize-observation";
 import { buildReplayFusedContext } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { MTF_BAR_INTERVALS } from "@/lib/trader/market-data/observation-types";
+import {
+  makeUnderstandingEvidence,
+  makeUnderstandingProfileReceipt,
+  makeUnderstandingRequirement,
+} from "@/tests/unit/helpers/market-understanding-evidence";
 
 function loadFixtureBars() {
   const filePath = path.join(process.cwd(), "tests/fixtures/trader/btcusdt-1m-mean-reversion.json");
@@ -188,10 +194,10 @@ describe("PR2.6 market understanding bridge", () => {
     });
     const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
     const msv = buildMsvEnvelope({ features, fusedContext, understanding });
+    const withoutLegacyUnderstanding = buildMsvEnvelope({ features, fusedContext });
 
     expect(understanding.spotPosture).not.toBe("TRADE");
-    expect(msv.derived.tradingPermission).not.toBe("ALLOW_TRADING");
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingCrossVenueConflict);
+    expect(msv.derived).toEqual(withoutLegacyUnderstanding.derived);
     expect(msv.understanding?.spotPosture).toBe(understanding.spotPosture);
   });
 
@@ -215,10 +221,351 @@ describe("PR2.6 market understanding bridge", () => {
     expect(Array.isArray(signals.conflicts)).toBe(true);
     expect(Array.isArray(signals.anomalies)).toBe(true);
   });
+
+  it("builds exact question-relative attribution only from a scope-matched profile receipt", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
+    const profileReceipt = makeUnderstandingProfileReceipt({
+      pitAnchor: evaluatedAt,
+      evidence: [makeUnderstandingEvidence({ availableAt: "2026-01-01T00:24:30.000Z" })],
+    });
+    const authority = bindInformationSufficiencyReceiptAuthorityV2(
+      profileReceipt.profile,
+      profileReceipt.receipt,
+    );
+    if (authority.kind !== "PROFILE_RECEIPT") throw new Error("expected profile receipt");
+
+    const artifact = buildExactMarketUnderstandingArtifactV1({
+      authority,
+      organizationId: "org-a",
+      accountId: "account-a",
+      symbol: "BTC/USDT",
+      analyticalTimeframe: "1m",
+      evaluatedAt,
+      features,
+      questionEvaluations: understanding.questionEvaluations,
+    });
+
+    expect(artifact.claims.find((claim) => claim.marketQuestionId === "Q_WHAT_HAPPENING"))
+      .toMatchObject({
+        claimState: "SUPPORTED",
+        claimKind: "OBSERVED_FACT",
+        dependencies: [
+          expect.objectContaining({
+            disposition: "CONSUMED",
+            evidence: expect.objectContaining({ evidenceId: "evidence-price-1" }),
+          }),
+        ],
+      });
+    expect(artifact.claims.find((claim) => claim.marketQuestionId === "Q_DEPLOY_CAPITAL"))
+      .toMatchObject({
+        claimState: "NOT_APPLICABLE",
+        claimKind: "UNRESOLVED",
+        answerSummary: "outside_market_understanding_authority",
+      });
+    expect(artifact.authority.createsForecastAuthority).toBe(false);
+    expect(artifact.authority.createsDecisionAuthority).toBe(false);
+    expect(artifact.authority.createsExecutionAuthority).toBe(false);
+    expect(artifact.authority.createsCapitalAuthority).toBe(false);
+
+    expect(() =>
+      buildExactMarketUnderstandingArtifactV1({
+        authority,
+        organizationId: "other-org",
+        accountId: "account-a",
+        symbol: "BTC/USDT",
+        analyticalTimeframe: "1m",
+        evaluatedAt,
+        features,
+        questionEvaluations: understanding.questionEvaluations,
+      }),
+    ).toThrow(/runtimeScope/);
+  });
+
+  it("preserves unavailable receipt evidence instead of forcing a question answer", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
+    const profileReceipt = makeUnderstandingProfileReceipt({ pitAnchor: evaluatedAt, evidence: [] });
+    const authority = bindInformationSufficiencyReceiptAuthorityV2(
+      profileReceipt.profile,
+      profileReceipt.receipt,
+    );
+    if (authority.kind !== "PROFILE_RECEIPT") throw new Error("expected profile receipt");
+    const artifact = buildExactMarketUnderstandingArtifactV1({
+      authority,
+      organizationId: "org-a",
+      accountId: "account-a",
+      symbol: "BTC/USDT",
+      analyticalTimeframe: "1m",
+      evaluatedAt,
+      features,
+      questionEvaluations: understanding.questionEvaluations,
+    });
+
+    expect(artifact.claims.find((claim) => claim.marketQuestionId === "Q_WHAT_HAPPENING"))
+      .toMatchObject({
+        claimState: "UNAVAILABLE",
+        claimKind: "UNRESOLVED",
+        answerSummary: "question_evidence_unavailable",
+        missingExpectedEvidence: [expect.objectContaining({ terminalStatus: "UNAVAILABLE" })],
+      });
+    expect(artifact.evidenceUsed).toEqual([]);
+  });
+
+  it("keeps unused accepted evidence and legacy caller summaries outside causal lineage", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
+    const primary = makeUnderstandingEvidence({ availableAt: "2026-01-01T00:24:30.000Z" });
+    const extra = makeUnderstandingEvidence({
+      evidenceId: "evidence-price-2",
+      sourceId: "00000000-0000-4000-8000-000000000051",
+      observationId: "00000000-0000-4000-8000-000000000052",
+      observationContentDigest: "5".repeat(64),
+      trustAsOfReceiptId: "6".repeat(64),
+      trustRevisionId: "00000000-0000-4000-8000-000000000053",
+      trustRevisionContentDigest: "7".repeat(64),
+      dependenceGroup: "unused-independent-price",
+      availableAt: "2026-01-01T00:24:20.000Z",
+    });
+    const first = makeUnderstandingProfileReceipt({ pitAnchor: evaluatedAt, evidence: [primary] });
+    const withUnused = makeUnderstandingProfileReceipt({
+      pitAnchor: evaluatedAt,
+      evidence: [primary, extra],
+    });
+    const build = (
+      selected: ReturnType<typeof makeUnderstandingProfileReceipt>,
+      questionEvaluations = understanding.questionEvaluations,
+    ) => {
+      const authority = bindInformationSufficiencyReceiptAuthorityV2(
+        selected.profile,
+        selected.receipt,
+      );
+      if (authority.kind !== "PROFILE_RECEIPT") throw new Error("expected profile receipt");
+      return buildExactMarketUnderstandingArtifactV1({
+        authority,
+        organizationId: "org-a",
+        accountId: "account-a",
+        symbol: "BTC/USDT",
+        analyticalTimeframe: "1m",
+        evaluatedAt,
+        features,
+        questionEvaluations,
+      });
+    };
+    const firstArtifact = build(first);
+    const unusedArtifact = build(withUnused);
+    const firstWhat = firstArtifact.claims.find(
+      (claim) => claim.marketQuestionId === "Q_WHAT_HAPPENING",
+    )!;
+    const unusedWhat = unusedArtifact.claims.find(
+      (claim) => claim.marketQuestionId === "Q_WHAT_HAPPENING",
+    )!;
+
+    expect(unusedWhat.dependencies.filter((entry) => entry.disposition === "CONSUMED"))
+      .toHaveLength(1);
+    expect(unusedWhat.dependencies.find((entry) => entry.evidence.evidenceId === extra.evidenceId))
+      .toMatchObject({ disposition: "IGNORED" });
+    expect(unusedWhat.causalLineageDigest).toBe(firstWhat.causalLineageDigest);
+    expect(unusedWhat.contentDigest).not.toBe(firstWhat.contentDigest);
+
+    const callerMutated = understanding.questionEvaluations.map((evaluation) =>
+      evaluation.questionId === "Q_CROSS_VENUE"
+        ? { ...evaluation, answerSummary: "caller_controlled_excluded_lane" }
+        : evaluation,
+    );
+    const baselineCrossVenue = firstArtifact.claims.find(
+      (claim) => claim.marketQuestionId === "Q_CROSS_VENUE",
+    )!;
+    const mutatedCrossVenue = build(first, callerMutated).claims.find(
+      (claim) => claim.marketQuestionId === "Q_CROSS_VENUE",
+    )!;
+    expect(mutatedCrossVenue.causalLineageDigest).toBe(baselineCrossVenue.causalLineageDigest);
+    expect(mutatedCrossVenue.answerSummary).toBe("question_requirement_not_declared");
+  });
+
+  it("does not promote a rejected untrusted contradiction into causal conflict", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
+    const rejected = makeUnderstandingEvidence({
+      availableAt: "2026-01-01T00:24:30.000Z",
+      contradiction: "UNRESOLVED",
+      contradictionGroup: "untrusted-conflict",
+      trust: "UNTRUSTED",
+      trustScore: 0,
+    });
+    const selected = makeUnderstandingProfileReceipt({
+      pitAnchor: evaluatedAt,
+      evidence: [rejected],
+    });
+    const authority = bindInformationSufficiencyReceiptAuthorityV2(
+      selected.profile,
+      selected.receipt,
+    );
+    if (authority.kind !== "PROFILE_RECEIPT") throw new Error("expected profile receipt");
+    const artifact = buildExactMarketUnderstandingArtifactV1({
+      authority,
+      organizationId: "org-a",
+      accountId: "account-a",
+      symbol: "BTC/USDT",
+      analyticalTimeframe: "1m",
+      evaluatedAt,
+      features,
+      questionEvaluations: understanding.questionEvaluations,
+    });
+    const claim = artifact.claims.find(
+      (candidate) => candidate.marketQuestionId === "Q_WHAT_HAPPENING",
+    )!;
+
+    expect(claim.claimState).toBe("UNKNOWN");
+    expect(claim.dependencies).toEqual([
+      expect.objectContaining({
+        disposition: "IGNORED",
+        evidence: expect.objectContaining({ evidenceId: rejected.evidenceId }),
+      }),
+    ]);
+    expect(artifact.evidenceUsed).toEqual([]);
+  });
+
+  it("retains below-floor accepted evidence as partial and makes record-only conflict order-independent", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
+    const build = (selected: ReturnType<typeof makeUnderstandingProfileReceipt>) => {
+      const authority = bindInformationSufficiencyReceiptAuthorityV2(
+        selected.profile,
+        selected.receipt,
+      );
+      if (authority.kind !== "PROFILE_RECEIPT") throw new Error("expected profile receipt");
+      return buildExactMarketUnderstandingArtifactV1({
+        authority,
+        organizationId: "org-a",
+        accountId: "account-a",
+        symbol: "BTC/USDT",
+        analyticalTimeframe: "1m",
+        evaluatedAt,
+        features,
+        questionEvaluations: understanding.questionEvaluations,
+      });
+    };
+
+    const partialFixture = makeUnderstandingProfileReceipt({
+      pitAnchor: evaluatedAt,
+      requirements: [makeUnderstandingRequirement({ minimumIndependentGroups: 2 })],
+      evidence: [makeUnderstandingEvidence({ availableAt: "2026-01-01T00:24:30.000Z" })],
+    });
+    expect(partialFixture.receipt.requirementReceipts[0]).toMatchObject({
+      terminalStatus: "INSUFFICIENT_BLOCKING",
+      acceptedEvidenceIds: ["evidence-price-1"],
+    });
+    const partialClaim = build(partialFixture).claims.find(
+      (claim) => claim.marketQuestionId === "Q_WHAT_HAPPENING",
+    )!;
+    expect(partialClaim).toMatchObject({
+      claimState: "PARTIALLY_SUPPORTED",
+      dependencies: [expect.objectContaining({ disposition: "CONSUMED" })],
+    });
+
+    const support = makeUnderstandingEvidence({
+      evidenceId: "a-support",
+      availableAt: "2026-01-01T00:24:30.000Z",
+    });
+    const conflict = makeUnderstandingEvidence({
+      evidenceId: "z-conflict",
+      sourceId: "00000000-0000-4000-8000-000000000061",
+      observationId: "00000000-0000-4000-8000-000000000062",
+      observationContentDigest: "8".repeat(64),
+      trustAsOfReceiptId: "9".repeat(64),
+      trustRevisionId: "00000000-0000-4000-8000-000000000063",
+      trustRevisionContentDigest: "a".repeat(64),
+      dependenceGroup: "record-only-conflict",
+      contradiction: "CONTRADICTS",
+      contradictionGroup: "record-only",
+      availableAt: "2026-01-01T00:24:20.000Z",
+    });
+    const recordOnly = makeUnderstandingProfileReceipt({
+      pitAnchor: evaluatedAt,
+      requirements: [makeUnderstandingRequirement({ contradictionPolicy: "RECORD_ONLY" })],
+      evidence: [support, conflict],
+    });
+    expect(recordOnly.receipt.requirementReceipts[0]?.terminalStatus).toBe(
+      "ANSWERED_SUFFICIENTLY",
+    );
+    const conflictedClaim = build(recordOnly).claims.find(
+      (claim) => claim.marketQuestionId === "Q_WHAT_HAPPENING",
+    )!;
+    expect(conflictedClaim.claimState).toBe("CONFLICTED");
+    expect(
+      conflictedClaim.dependencies
+        .filter((entry) => entry.disposition === "CONSUMED")
+        .map((entry) => [entry.evidence.evidenceId, entry.role]),
+    ).toEqual([
+      ["a-support", "SUPPORTING"],
+      ["z-conflict", "CONTRADICTING"],
+    ]);
+  });
 });
 
 function minimalUnderstanding(
-  overrides: Partial<MarketUnderstandingSnapshot>,
+  overrides: Partial<MarketUnderstandingSnapshot> = {},
 ): MarketUnderstandingSnapshot {
   return {
     schemaVersion: MARKET_UNDERSTANDING_SCHEMA_VERSION,
@@ -261,8 +608,8 @@ function minimalUnderstanding(
   };
 }
 
-describe("PR2.6 CDE posture from understanding", () => {
-  function buildMsvForPosture(understanding: MarketUnderstandingSnapshot) {
+describe("DEE-622 legacy Understanding telemetry boundary", () => {
+  function buildMsvForPosture(understanding?: MarketUnderstandingSnapshot) {
     const fixture = loadFixtureBars();
     const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
     const fusedContext = buildReplayFusedContext({
@@ -279,7 +626,8 @@ describe("PR2.6 CDE posture from understanding", () => {
     return buildMsvEnvelope({ features, fusedContext, understanding });
   }
 
-  it("restricts permission when regime hint is STRESSED", () => {
+  it("does not let STRESSED/REDUCE_RISK posture affect CDE authority", () => {
+    const baseline = buildMsvForPosture(minimalUnderstanding());
     const msv = buildMsvForPosture(
       minimalUnderstanding({
         regimeHint: "STRESSED",
@@ -287,12 +635,12 @@ describe("PR2.6 CDE posture from understanding", () => {
       }),
     );
 
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingStressed);
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingReducedRisk);
-    expect(msv.derived.tradingPermission).toBe("ALLOW_REDUCED_RISK");
+    expect(msv.derived).toEqual(baseline.derived);
+    expect(msv.understanding?.spotPosture).toBe("REDUCE_RISK");
   });
 
-  it("forces ONLY_CLOSE_POSITIONS when posture is PRESERVE_CAPITAL", () => {
+  it("does not let PRESERVE_CAPITAL posture affect CDE authority", () => {
+    const baseline = buildMsvForPosture(minimalUnderstanding());
     const msv = buildMsvForPosture(
       minimalUnderstanding({
         regimeHint: "STRESSED",
@@ -301,12 +649,12 @@ describe("PR2.6 CDE posture from understanding", () => {
       }),
     );
 
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingPreserveCapital);
-    expect(msv.derived.tradingPermission).toBe("ONLY_CLOSE_POSITIONS");
-    expect(msv.derived.riskMultiplier).toBe("0.25");
+    expect(msv.derived).toEqual(baseline.derived);
+    expect(msv.understanding?.spotPosture).toBe("PRESERVE_CAPITAL");
   });
 
-  it("forces PAPER_ONLY when posture is NO_TRADE", () => {
+  it("does not let NO_TRADE or aggregate data-quality posture affect CDE authority", () => {
+    const baseline = buildMsvForPosture(minimalUnderstanding());
     const msv = buildMsvForPosture(
       minimalUnderstanding({
         dataQualitySufficient: false,
@@ -315,9 +663,7 @@ describe("PR2.6 CDE posture from understanding", () => {
       }),
     );
 
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingNoTrade);
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingDataInsufficient);
-    expect(msv.derived.tradingPermission).toBe("PAPER_ONLY");
-    expect(msv.derived.riskMultiplier).toBe("0.25");
+    expect(msv.derived).toEqual(baseline.derived);
+    expect(msv.understanding?.spotPosture).toBe("NO_TRADE");
   });
 });

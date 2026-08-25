@@ -1,5 +1,20 @@
+import { createHash } from "node:crypto";
+
 import type { FeatureSnapshot } from "@/lib/trader/intelligence/types";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
+import {
+  INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION,
+  type InformationSufficiencyRuntimeAuthorityV2,
+} from "@/lib/trader/intelligence/information-sufficiency";
+import {
+  MARKET_UNDERSTANDING_QUESTION_MAPPING_V1,
+  defineMarketUnderstandingArtifactV1,
+  defineUnderstandingClaimV1,
+  type MarketUnderstandingArtifactV1,
+  type UnderstandingClaimKindV1,
+  type UnderstandingClaimStateV1,
+  type UnderstandingEvidenceRoleV1,
+} from "@/lib/trader/intelligence/market-understanding-evidence-attribution-v1";
 import {
   CANONICAL_MARKET_QUESTION_IDS,
   provenanceId,
@@ -32,6 +47,7 @@ import {
   classifyMtfBackdropFromObservations,
 } from "@/lib/trader/market-data/mtf/mtf-backdrop-classifier";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { canonicalJsonString } from "@/lib/trader/research/digest";
 
 const PARTIAL_CONFIDENCE_THRESHOLD = 0.55;
 const SPREAD_THIN_BPS = 50;
@@ -143,6 +159,23 @@ export type BuildMarketUnderstandingBridgeInput = {
   /** PR-2 MI Core: optional reconstruction descriptors (additive). */
   reconstruction?: ReconstructionSnapshot;
 };
+
+type ProfileReceiptAuthorityV2 = Extract<
+  InformationSufficiencyRuntimeAuthorityV2,
+  { kind: "PROFILE_RECEIPT" }
+>;
+
+export type BuildExactMarketUnderstandingArtifactInputV1 = Readonly<{
+  authority: ProfileReceiptAuthorityV2;
+  organizationId: string;
+  accountId: string | null;
+  symbol: string;
+  analyticalTimeframe: string;
+  evaluatedAt: string;
+  features: FeatureSnapshot;
+  reconstruction?: ReconstructionSnapshot;
+  questionEvaluations: readonly MarketQuestionEvaluation[];
+}>;
 
 function resolveCrossVenue(fusedContext: FusedMarketContext) {
   if (fusedContext.crossVenueTriangulation) {
@@ -650,6 +683,285 @@ export function evaluateCanonicalMarketQuestions(input: {
   return CANONICAL_MARKET_QUESTION_IDS.map((questionId) => questionBuilders[questionId]());
 }
 
+function exactUnderstandingDigest(value: unknown): string {
+  return createHash("sha256").update(canonicalJsonString(value), "utf8").digest("hex");
+}
+
+function exactTextCompare(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+function exactClaimKind(
+  questionId: MarketQuestionId,
+  state: UnderstandingClaimStateV1,
+): UnderstandingClaimKindV1 {
+  if (
+    state === "UNKNOWN" ||
+    state === "UNAVAILABLE" ||
+    state === "NOT_REQUIRED" ||
+    state === "NOT_APPLICABLE"
+  ) {
+    return "UNRESOLVED";
+  }
+  if (questionId === "Q_WHY_HAPPENING" && state !== "CONFLICTED") {
+    return "EVIDENCE_SUPPORTED_CAUSAL_ATTRIBUTION";
+  }
+  if (
+    questionId === "Q_HTF_ALIGNED" ||
+    questionId === "Q_LTF_ALIGNED" ||
+    questionId === "Q_HISTORICAL_ANALOGUES"
+  ) {
+    return "STRUCTURAL_OR_TEMPORAL_ASSOCIATION";
+  }
+  return "OBSERVED_FACT";
+}
+
+function exactEvidenceRole(
+  questionId: MarketQuestionId,
+  evidence: ProfileReceiptAuthorityV2["receipt"]["evidenceInventory"][number],
+): UnderstandingEvidenceRoleV1 {
+  if (evidence.contradiction === "CONTRADICTS" || evidence.contradiction === "UNRESOLVED") {
+    return "CONTRADICTING";
+  }
+  if (evidence.epistemicRole === "CORROBORATING") return "CORROBORATING";
+  if (questionId === "Q_WHY_HAPPENING" && evidence.epistemicRole !== "CAUSAL") {
+    return "CONTEXTUAL";
+  }
+  return "SUPPORTING";
+}
+
+function contradictionPassesEveryNonContradictionGate(
+  evidence: ProfileReceiptAuthorityV2["receipt"]["evidenceInventory"][number],
+  requirement: ProfileReceiptAuthorityV2["profile"]["requirements"][number],
+  pitAnchor: string,
+): boolean {
+  const availableAtMs = Date.parse(evidence.availableAt);
+  const pitAnchorMs = Date.parse(pitAnchor);
+  return (
+    evidence.availability === "AVAILABLE" &&
+    !evidence.degradationReasonCodes.includes("SOURCE_REVISION_MISMATCH") &&
+    availableAtMs <= pitAnchorMs &&
+    (requirement.maxStalenessMs === null ||
+      pitAnchorMs - availableAtMs <= requirement.maxStalenessMs) &&
+    evidence.trust === "TRUSTED" &&
+    (requirement.minimumTrustScore === null ||
+      (evidence.trustScore !== null && evidence.trustScore >= requirement.minimumTrustScore)) &&
+    evidence.pitQualified &&
+    evidence.replayEligible &&
+    (requirement.allowedObservationKinds.length === 0 ||
+      requirement.allowedObservationKinds.includes(evidence.observationKind)) &&
+    (requirement.allowedObservationSchemaVersions.length === 0 ||
+      requirement.allowedObservationSchemaVersions.includes(evidence.observationSchemaVersion)) &&
+    (requirement.allowedMeasurementDefinitionDigests.length === 0 ||
+      (evidence.measurementDefinitionContentDigest !== null &&
+        requirement.allowedMeasurementDefinitionDigests.includes(
+          evidence.measurementDefinitionContentDigest,
+        ))) &&
+    (requirement.questionId !== "Q_WHY_HAPPENING" || evidence.epistemicRole === "CAUSAL") &&
+    (requirement.questionId !== "Q_HISTORICAL_ANALOGUES" ||
+      (evidence.epistemicRole === "HISTORICAL_ANALOGUE" &&
+        ["DEVELOPMENT", "ADMISSIBLE_PATTERN_KNOWLEDGE"].includes(evidence.historyScope)))
+  );
+}
+
+/**
+ * Constructs the authoritative evidence-attribution artifact from a validated DEE-621
+ * PROFILE_RECEIPT. The legacy snapshot remains a compatibility/fact projection only.
+ */
+export function buildExactMarketUnderstandingArtifactV1(
+  input: BuildExactMarketUnderstandingArtifactInputV1,
+): MarketUnderstandingArtifactV1 {
+  const { authority } = input;
+  if (
+    authority.schemaVersion !== INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION ||
+    authority.kind !== "PROFILE_RECEIPT" ||
+    authority.authority !== "EPISTEMIC_PREREQUISITE_ONLY" ||
+    authority.purpose !== authority.profile.purpose ||
+    authority.purpose !== authority.receipt.purpose ||
+    authority.organizationId !== input.organizationId ||
+    authority.profile.organizationId !== input.organizationId ||
+    authority.receipt.organizationId !== input.organizationId ||
+    authority.profile.accountId !== input.accountId ||
+    authority.receipt.accountId !== input.accountId ||
+    authority.profile.symbol !== input.symbol ||
+    authority.receipt.symbol !== input.symbol ||
+    input.features.instrumentId !== input.symbol ||
+    authority.profile.analyticalTimeframe !== input.analyticalTimeframe ||
+    authority.receipt.analyticalTimeframe !== input.analyticalTimeframe ||
+    authority.receipt.pitAnchor !== input.evaluatedAt ||
+    input.features.evaluatedAt !== input.evaluatedAt ||
+    (input.reconstruction !== undefined &&
+      (input.reconstruction.instrumentId !== input.symbol ||
+        input.reconstruction.evaluatedAt !== input.evaluatedAt))
+  ) {
+    throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:runtimeScope");
+  }
+
+  const evaluationsById = new Map(
+    input.questionEvaluations.map((evaluation) => [evaluation.questionId, evaluation]),
+  );
+  if (
+    input.questionEvaluations.length !== CANONICAL_MARKET_QUESTION_IDS.length ||
+    evaluationsById.size !== CANONICAL_MARKET_QUESTION_IDS.length
+  ) {
+    throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:questionEvaluationCoverage");
+  }
+  const evidenceById = new Map(
+    authority.receipt.evidenceInventory.map((evidence) => [evidence.evidenceId, evidence]),
+  );
+  const claims = CANONICAL_MARKET_QUESTION_IDS.map((marketQuestionId) => {
+    const evaluation = evaluationsById.get(marketQuestionId);
+    if (!evaluation) {
+      throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:questionEvaluationCoverage");
+    }
+    const mapping = MARKET_UNDERSTANDING_QUESTION_MAPPING_V1.find(
+      (candidate) => candidate.marketQuestionId === marketQuestionId,
+    )!;
+    const requirements = mapping.informationQuestionId
+      ? authority.receipt.requirementReceipts.filter(
+          (requirement) => requirement.questionId === mapping.informationQuestionId,
+        )
+      : [];
+    const profileRequirementsById = new Map(
+      authority.profile.requirements.map((requirement) => [requirement.id, requirement]),
+    );
+    const consumedEvidenceIdsSet = new Set<string>();
+    for (const receiptRequirement of requirements) {
+      const definition = profileRequirementsById.get(receiptRequirement.requirementId);
+      if (!definition) {
+        throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:requirementDefinitionClosure");
+      }
+      const accepted = receiptRequirement.acceptedEvidenceIds
+        .map((evidenceId) => evidenceById.get(evidenceId)!)
+        .sort((left, right) => exactTextCompare(left.evidenceId, right.evidenceId));
+      const acceptedContradictions = accepted.filter(
+        (evidence) =>
+          evidence.contradiction === "CONTRADICTS" || evidence.contradiction === "UNRESOLVED",
+      );
+      const acceptedNonContradictions = accepted.filter(
+        (evidence) =>
+          evidence.contradiction !== "CONTRADICTS" && evidence.contradiction !== "UNRESOLVED",
+      );
+      for (const evidence of acceptedContradictions) {
+        consumedEvidenceIdsSet.add(evidence.evidenceId);
+      }
+      const selectedGroups = new Set(
+        acceptedContradictions.map((evidence) => evidence.dependenceGroup),
+      );
+      for (const evidence of acceptedNonContradictions) {
+        if (selectedGroups.has(evidence.dependenceGroup)) continue;
+        consumedEvidenceIdsSet.add(evidence.evidenceId);
+        selectedGroups.add(evidence.dependenceGroup);
+        if (selectedGroups.size >= definition.minimumIndependentGroups) break;
+      }
+      if (receiptRequirement.terminalStatus === "UNRESOLVED_CONTRADICTION") {
+        const contradiction = receiptRequirement.matchedEvidenceIds
+          .map((evidenceId) => evidenceById.get(evidenceId)!)
+          .filter(
+            (evidence) =>
+              (evidence.contradiction === "CONTRADICTS" ||
+                evidence.contradiction === "UNRESOLVED") &&
+              contradictionPassesEveryNonContradictionGate(
+                evidence,
+                definition,
+                authority.receipt.pitAnchor,
+              ),
+          )
+          .sort((left, right) => exactTextCompare(left.evidenceId, right.evidenceId))[0];
+        if (contradiction) consumedEvidenceIdsSet.add(contradiction.evidenceId);
+      }
+    }
+    const consumedEvidenceIds = [...consumedEvidenceIdsSet].sort(exactTextCompare);
+    const hasContradiction = consumedEvidenceIds.some((evidenceId) => {
+      const evidence = evidenceById.get(evidenceId)!;
+      return evidence.contradiction === "CONTRADICTS" || evidence.contradiction === "UNRESOLVED";
+    });
+    const activeRequired = requirements.filter(
+      (entry) => entry.active && entry.classification !== "OPTIONAL_ENRICHMENT",
+    );
+    const allActiveAnswered =
+      activeRequired.length > 0 &&
+      activeRequired.every((entry) => entry.terminalStatus === "ANSWERED_SUFFICIENTLY");
+    let claimState: UnderstandingClaimStateV1;
+    if (mapping.informationQuestionId === null) {
+      claimState = "NOT_APPLICABLE";
+    } else if (hasContradiction) {
+      claimState = "CONFLICTED";
+    } else if (allActiveAnswered) {
+      claimState = "SUPPORTED";
+    } else if (consumedEvidenceIds.length > 0 && !allActiveAnswered) {
+      claimState = "PARTIALLY_SUPPORTED";
+    } else if (
+      requirements.length > 0 &&
+      requirements.every((entry) => entry.terminalStatus === "NOT_REQUIRED")
+    ) {
+      claimState = "NOT_REQUIRED";
+    } else if (requirements.some((entry) => entry.terminalStatus === "UNAVAILABLE")) {
+      claimState = "UNAVAILABLE";
+    } else {
+      claimState = "UNKNOWN";
+    }
+
+    const questionInputPath = `question.${marketQuestionId.toLowerCase()}.receipt_selection`;
+    const computationInputs = [
+      {
+        path: questionInputPath,
+        contentDigest: exactUnderstandingDigest({
+          marketQuestionId,
+          informationQuestionId: mapping.informationQuestionId,
+          requirementStates: requirements.map((requirement) => ({
+            requirementId: requirement.requirementId,
+            terminalStatus: requirement.terminalStatus,
+            blocking: requirement.blocking,
+          })),
+          consumedEvidenceIds,
+        }),
+      },
+    ];
+    const dependencyPaths = [questionInputPath];
+    const answerSummary =
+      claimState === "NOT_APPLICABLE"
+        ? "outside_market_understanding_authority"
+        : claimState === "NOT_REQUIRED"
+          ? "question_not_required_by_profile"
+          : claimState === "UNAVAILABLE"
+            ? "question_evidence_unavailable"
+            : requirements.length === 0
+              ? "question_requirement_not_declared"
+              : claimState === "CONFLICTED"
+                ? "question_conflicted_by_canonical_evidence"
+                : claimState === "PARTIALLY_SUPPORTED"
+                  ? "question_partially_supported_by_canonical_evidence"
+                  : claimState === "SUPPORTED"
+                    ? "question_supported_by_canonical_evidence"
+                    : "question_evidence_unresolved";
+    return defineUnderstandingClaimV1({
+      profile: authority.profile,
+      receipt: authority.receipt,
+      computationInputs,
+      marketQuestionId,
+      claimState,
+      claimKind: exactClaimKind(marketQuestionId, claimState),
+      answerSummary,
+      consumedEvidence: consumedEvidenceIds.map((evidenceId) => {
+        const evidence = evidenceById.get(evidenceId)!;
+        return {
+          evidenceId,
+          role: exactEvidenceRole(marketQuestionId, evidence),
+          dependencyPaths,
+        };
+      }),
+    });
+  });
+
+  return defineMarketUnderstandingArtifactV1({
+    profile: authority.profile,
+    receipt: authority.receipt,
+    evaluatedAt: input.evaluatedAt,
+    claims,
+  });
+}
+
 export function buildMarketUnderstandingBridge(
   input: BuildMarketUnderstandingBridgeInput,
 ): MarketUnderstandingSnapshot {
@@ -756,39 +1068,11 @@ export function buildMarketUnderstandingBridge(
     fusedHealth: fusedContext.aggregateHealth,
   });
 
-  const deployEval = questionEvaluations.find((q) => q.questionId === "Q_DEPLOY_CAPITAL");
-  const preserveEval = questionEvaluations.find((q) => q.questionId === "Q_PRESERVE_CAPITAL");
-  const finalizedEvaluations = questionEvaluations.map((evaluation) => {
-    if (evaluation.questionId === "Q_DEPLOY_CAPITAL") {
-      return {
-        ...evaluation,
-        status: posture === "TRADE" ? ("ANSWERED" as const) : ("PARTIAL" as const),
-        answerSummary: posture,
-        confidence: finalConfidence,
-      };
-    }
-    if (evaluation.questionId === "Q_PRESERVE_CAPITAL") {
-      return {
-        ...evaluation,
-        status:
-          posture === "PRESERVE_CAPITAL" || posture === "NO_TRADE"
-            ? ("ANSWERED" as const)
-            : ("PARTIAL" as const),
-        answerSummary: posture,
-        confidence: finalConfidence,
-      };
-    }
-    return evaluation;
-  });
-
-  void deployEval;
-  void preserveEval;
-
   return {
     schemaVersion: MARKET_UNDERSTANDING_SCHEMA_VERSION,
     instrumentId: fusedContext.instrumentId,
     evaluatedAt: fusedContext.fusedAtUtc,
-    questionEvaluations: finalizedEvaluations,
+    questionEvaluations,
     knowledgeGaps,
     confidenceAttribution,
     reasoningInputs,

@@ -14,7 +14,10 @@ import {
   finalizeMarketStateSnapshot,
   resolveTerminalReasonCode,
 } from "@/lib/trader/intelligence/market-state-finalization";
-import { buildMarketUnderstandingBridge } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
+import {
+  buildExactMarketUnderstandingArtifactV1,
+  buildMarketUnderstandingBridge,
+} from "@/lib/trader/intelligence/market-understanding-bridge-v0";
 import { buildReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
 import { recordFullHistoryRescan } from "@/lib/trader/backtest/replay-runtime-metrics";
 import {
@@ -58,6 +61,19 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           features,
         })
       : undefined;
+    const understandingArtifact =
+      understanding && input.informationSufficiencyAuthority?.kind === "PROFILE_RECEIPT"
+        ? buildExactMarketUnderstandingArtifactV1({
+            authority: input.informationSufficiencyAuthority,
+            organizationId: input.organizationId,
+            accountId: input.accountId ?? null,
+            symbol: input.symbol ?? input.bars[0]?.symbol ?? "",
+            analyticalTimeframe: input.bars[0]?.interval ?? "",
+            evaluatedAt,
+            features,
+            questionEvaluations: understanding.questionEvaluations,
+          })
+        : undefined;
 
     const msv = buildMsvEnvelope({
       features,
@@ -79,7 +95,15 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
 
     const signal = selectPrimaryStrategySignal(signals);
 
-    return { features, msv, signals, signal, fusedContext: input.fusedContext, understanding };
+    return {
+      features,
+      msv,
+      signals,
+      signal,
+      fusedContext: input.fusedContext,
+      understanding,
+      understandingArtifact,
+    };
   }
 
   const reconstruction: ReconstructionSnapshot =
@@ -100,6 +124,20 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
         reconstruction,
       })
     : undefined;
+  const understandingArtifact =
+    understanding && input.informationSufficiencyAuthority?.kind === "PROFILE_RECEIPT"
+      ? buildExactMarketUnderstandingArtifactV1({
+          authority: input.informationSufficiencyAuthority,
+          organizationId: input.organizationId,
+          accountId: input.accountId ?? null,
+          symbol: input.symbol ?? input.bars[0]?.symbol ?? "",
+          analyticalTimeframe: input.bars[0]?.interval ?? "",
+          evaluatedAt,
+          features,
+          reconstruction,
+          questionEvaluations: understanding.questionEvaluations,
+        })
+      : undefined;
 
   const sessionState = input.hypothesisSessionState ?? createEmptyHypothesisSessionState();
   // STREAM_ONLY + fusedContext off: CDE returns ALLOW_TRADING before opportunity/conviction.
@@ -169,6 +207,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       signal,
       fusedContext: input.fusedContext,
       understanding,
+      understandingArtifact,
       reconstruction,
       hypothesisSet,
       hypothesisSessionState: nextSessionState,
@@ -195,7 +234,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
   const decisionChain = assembleDecisionChain({
     evaluatedAt,
     reconstruction,
-    understanding,
     hypothesisSet,
     marketStateSnapshot,
     tradingPermission: msv.derived.tradingPermission,
@@ -258,6 +296,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     signal,
     fusedContext: input.fusedContext,
     understanding,
+    understandingArtifact,
     reconstruction,
     hypothesisSet,
     marketStateSnapshot,

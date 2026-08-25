@@ -141,18 +141,18 @@
     },
     {
       "questionId": "Q_DEPLOY_CAPITAL",
-      "status": "PARTIAL",
-      "answerSummary": "NO_TRADE",
-      "confidence": 0.25,
+      "status": "NOT_APPLICABLE",
+      "answerSummary": "outside_market_understanding_authority",
+      "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": true
     },
     {
       "questionId": "Q_PRESERVE_CAPITAL",
-      "status": "ANSWERED",
-      "answerSummary": "NO_TRADE",
-      "confidence": 0.25,
+      "status": "NOT_APPLICABLE",
+      "answerSummary": "outside_market_understanding_authority",
+      "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,
       "influencesPosture": true
