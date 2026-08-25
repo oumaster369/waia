@@ -183,7 +183,10 @@ function resolveRiskOutcome(cycle: {
   }>;
 }): string {
   for (const entry of cycle.strategyExecutions) {
-    if (entry.submitBlocked) return "RISK_REJECTED";
+    // A pre-risk fail-closed block (for example, information sufficiency) must
+    // not be attributed to the risk layer. Only an explicit risk outcome is a
+    // risk rejection; otherwise the no-fill lane preserves its parent risk
+    // projection.
     if (entry.skipReason?.includes("risk")) return "RISK_REJECTED";
     if (entry.execution?.status === "rejected") return "RISK_REJECTED";
   }
