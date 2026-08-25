@@ -253,6 +253,33 @@ describe("FHV rehearsal campaign runner (DEE-431)", () => {
     }
   }, 360_000);
 
+  it("binds late pause classification to the requested cycle without polling races", async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const root = mkdtempSync(join(tmpdir(), `fhv-campaign-late-race-${attempt}-`));
+      const uninterruptedRoot = mkdtempSync(
+        join(tmpdir(), `fhv-campaign-late-race-uninter-${attempt}-`),
+      );
+      const runId = `fhv-late-race-${attempt}`;
+      try {
+        const pauseResumeDir = prepareRunDir(root, runId);
+        const parity = await runFhvRehearsalCampaignParityProof({
+          runRootUninterrupted: prepareRunDir(uninterruptedRoot, runId),
+          runRootPauseResume: pauseResumeDir,
+          runId,
+          organizationId: ORG_ID,
+          targetSha: TARGET_SHA,
+          pauseAfterCycles: FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES,
+        });
+        expect(parity.match).toBe(true);
+        expect(parity.actualPauseCycle).toBe(FHV_REHEARSAL_LATE_PAUSE_MIN_CYCLES);
+        expect(readFhvRehearsalTerminalClassification(pauseResumeDir)).toBe("REHEARSAL_OK");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(uninterruptedRoot, { recursive: true, force: true });
+      }
+    }
+  }, 360_000);
+
   it("classifies injected deadline overrun as REHEARSAL_TIMEOUT", async () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-campaign-timeout-"));
     try {
