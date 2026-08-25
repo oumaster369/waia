@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { FinanceOrgProvider, useFinanceOrg } from "@/components/treasury/admin/finance-org-context";
+import { FinanceAssistant } from "@/components/treasury/admin/finance-assistant";
 import { FinanceOrgPicker } from "@/components/treasury/admin/org-picker";
 
 const NAV = [
@@ -15,6 +16,7 @@ const NAV = [
   { href: "/finance/counterparties", label: "Counterparties" },
   { href: "/finance/accounts", label: "Accounts" },
   { href: "/finance/projects", label: "Projects" },
+  { href: "/finance/wallet", label: "Wallet" },
 ] as const;
 
 function FinanceNav() {
@@ -57,6 +59,7 @@ function FinanceShellInner({ children }: { children: React.ReactNode }) {
         <FinanceNav />
       </header>
       <main className="flex-1">{children}</main>
+      <FinanceAssistant />
     </div>
   );
 }

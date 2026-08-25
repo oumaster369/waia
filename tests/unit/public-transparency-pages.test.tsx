@@ -84,6 +84,17 @@ const publishedTreasury: PublicTreasuryProjection = {
     privateSupport: null,
     lastUpdatedAt: null,
   },
+  funds: {
+    status: "published",
+    currency: "USD",
+    allocationAsOf: "2026-08-23T11:00:00.000Z",
+    canonicalFreeFundsMicros: "42000000000",
+    protectedAnnualBudgetMicros: "120000000000",
+    operatingAllocationMicros: "42000000000",
+    developmentAllocationMicros: "0",
+    policyCode: "ANNUAL_BUDGET_EXCESS_V1",
+    policyVersion: 1,
+  },
 };
 
 const availableWorkPlan: PublicWorkPlanProjection = {

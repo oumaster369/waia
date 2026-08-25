@@ -117,6 +117,20 @@ export type PublicTreasuryPatrons = {
   lastUpdatedAt: string | null;
 };
 
+export type PublicTreasuryFundAllocation =
+  | { status: "pending"; reason: string }
+  | {
+      status: "published";
+      currency: string;
+      allocationAsOf: string;
+      canonicalFreeFundsMicros: string;
+      protectedAnnualBudgetMicros: string;
+      operatingAllocationMicros: string;
+      developmentAllocationMicros: string;
+      policyCode: string;
+      policyVersion: number;
+    };
+
 export type PublicTreasuryProjection = {
   schemaVersion: typeof PUBLIC_TREASURY_SCHEMA_VERSION;
   breath: PublicTreasuryBreath;
@@ -124,4 +138,5 @@ export type PublicTreasuryProjection = {
   transactions: PublicTreasuryTransaction[];
   fundingNeeds: PublicTreasuryFundingNeed[];
   patrons: PublicTreasuryPatrons;
+  funds: PublicTreasuryFundAllocation;
 };

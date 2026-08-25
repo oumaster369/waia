@@ -43,6 +43,12 @@ import {
   type PublicTreasuryShare,
   type PublicTreasuryTransaction,
 } from "@/lib/waia-core/treasury/public/types";
+import { computeVirtualFundAllocation } from "@/lib/waia-core/treasury/allocation/engine";
+import { evaluateFundAllocationFacts } from "@/lib/waia-core/treasury/allocation/service";
+import {
+  TREASURY_FUND_ALLOCATION_POLICY_CODE,
+  TREASURY_FUND_ALLOCATION_POLICY_VERSION,
+} from "@/lib/waia-core/treasury/allocation/types";
 
 function maxDate(dates: Array<Date | null | undefined>): Date | null {
   let latest: Date | null = null;
@@ -85,8 +91,7 @@ function assertFactScope(facts: PublicTreasuryFacts): void {
 }
 
 function publicShare(numerator: bigint, denominator: bigint): PublicTreasuryShare {
-  const parts =
-    denominator > 0n ? (numerator * PUBLIC_TREASURY_SHARE_SCALE) / denominator : 0n;
+  const parts = denominator > 0n ? (numerator * PUBLIC_TREASURY_SHARE_SCALE) / denominator : 0n;
   return {
     numeratorMicros: money(numerator),
     denominatorMicros: money(denominator),
@@ -100,10 +105,7 @@ function publicTransactions(input: {
 }): PublicTreasuryTransaction[] {
   const categoryById = new Map(input.facts.categories.map((row) => [row.id, row]));
   const projectById = new Map(input.facts.projects.map((row) => [row.id, row]));
-  const monthCache = new Map<
-    string,
-    ReturnType<typeof deriveCategoryBudgetMonth>["categories"]
-  >();
+  const monthCache = new Map<string, ReturnType<typeof deriveCategoryBudgetMonth>["categories"]>();
 
   function categoryGroup(tx: TreasuryTransactionRecord): string | null {
     if (!tx.categoryId) return null;
@@ -274,10 +276,7 @@ function publicPatrons(input: {
   const profileByUser = new Map(
     input.facts.profiles.map((row) => [row.userId, row.displayName.trim()]),
   );
-  const publicByUser = new Map<
-    string,
-    { displayName: string; amountMicros: bigint }
-  >();
+  const publicByUser = new Map<string, { displayName: string; amountMicros: bigint }>();
   let privateAmount = 0n;
   let denominator = 0n;
 
@@ -297,9 +296,7 @@ function publicPatrons(input: {
       };
     }
     denominator += net;
-    const attribution = openAttribution(
-      attributionByTransaction.get(contribution.id) ?? [],
-    );
+    const attribution = openAttribution(attributionByTransaction.get(contribution.id) ?? []);
     if (attribution === "ambiguous") {
       return {
         status: "pending",
@@ -504,6 +501,10 @@ export function derivePublicTreasuryProjection(
     privateSupport: null,
     lastUpdatedAt: null,
   };
+  let funds: PublicTreasuryProjection["funds"] = {
+    status: "pending",
+    reason: reasons[0] ?? "PUBLIC_TREASURY_UNAVAILABLE",
+  };
   if (coreReady && ideal) {
     try {
       transactions = publicTransactions({ facts, currency: ideal.currency });
@@ -520,6 +521,27 @@ export function derivePublicTreasuryProjection(
         privateSupport: null,
         lastUpdatedAt: null,
       };
+    }
+
+    const allocation = evaluateFundAllocationFacts(facts, now);
+    if (allocation.status === "available") {
+      const amounts = computeVirtualFundAllocation({
+        canonicalFreeFundsMicros: allocation.input.canonicalFreeFundsMicros,
+        protectedAnnualBudgetMicros: allocation.input.protectedAnnualBudgetMicros,
+      });
+      funds = {
+        status: "published",
+        currency: allocation.input.accountingCurrency,
+        allocationAsOf: allocation.input.reconciliation.asOfTime.toISOString(),
+        canonicalFreeFundsMicros: money(allocation.input.canonicalFreeFundsMicros),
+        protectedAnnualBudgetMicros: money(allocation.input.protectedAnnualBudgetMicros),
+        operatingAllocationMicros: money(amounts.operatingAllocationMicros),
+        developmentAllocationMicros: money(amounts.developmentAllocationMicros),
+        policyCode: TREASURY_FUND_ALLOCATION_POLICY_CODE,
+        policyVersion: TREASURY_FUND_ALLOCATION_POLICY_VERSION,
+      };
+    } else {
+      funds = { status: "pending", reason: allocation.reason };
     }
   }
 
@@ -539,5 +561,6 @@ export function derivePublicTreasuryProjection(
     transactions,
     fundingNeeds,
     patrons,
+    funds,
   };
 }

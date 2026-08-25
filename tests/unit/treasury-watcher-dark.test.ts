@@ -4,6 +4,7 @@ import { loadWatcherConfig } from "@/lib/waia-core/payment-watcher/watcher-confi
 import { OrgScopeError } from "@/lib/waia-core/scope/org-context";
 import { loadTreasuryWatcherConfig } from "@/lib/waia-core/treasury/watcher/config";
 import { runTreasuryWatcherCycle } from "@/lib/waia-core/treasury/watcher/cycle";
+import { treasuryWatcherReadiness } from "@/lib/waia-core/treasury/watcher/build-worker-deps";
 import { createSilentTreasuryWatcherLogger } from "@/lib/waia-core/treasury/watcher/logger";
 import {
   createFakeChainAdapter,
@@ -52,6 +53,36 @@ describe("DEE-606 WP-3 treasury watcher DARK + org/inception", () => {
     expect(config.maxBlocksPerCycle).toBe(9);
     expect(config.tokenContract).toBe("TCustomContract");
     expect(config.tronGridApiKey).toBe("k1");
+  });
+
+  it("requires org, Postgres, TronGrid, and an independent secondary before readiness", () => {
+    expect(treasuryWatcherReadiness({ TREASURY_WATCHER_ENABLED: "true" })).toMatchObject({
+      enabled: true,
+      ready: false,
+    });
+    expect(
+      treasuryWatcherReadiness({
+        TREASURY_WATCHER_ENABLED: "false",
+        TREASURY_WATCHER_ORGANIZATION_ID: ctxA.organizationId,
+        DATABASE_URL_POSTGRES: "postgresql://local.invalid/waia",
+        TREASURY_WATCHER_TRONGRID_API_KEY: "primary",
+        TREASURY_WATCHER_TRON_SECONDARY_URL: "https://secondary.example",
+      }),
+    ).toMatchObject({
+      enabled: false,
+      primaryKeyPresent: true,
+      secondaryConfigured: true,
+      ready: true,
+    });
+    expect(
+      treasuryWatcherReadiness({
+        TREASURY_WATCHER_ORGANIZATION_ID: ctxA.organizationId,
+        DATABASE_URL_POSTGRES: "postgresql://local.invalid/waia",
+        TREASURY_WATCHER_TRONGRID_API_KEY: "primary",
+        TREASURY_WATCHER_TRON_PRIMARY_URL: "https://api.trongrid.io",
+        TREASURY_WATCHER_TRON_SECONDARY_URL: "https://api.trongrid.io/another-path",
+      }),
+    ).toMatchObject({ secondaryConfigured: false, ready: false });
   });
 
   it("2-3. disabled cycle makes zero chain calls and zero persistence mutations", async () => {

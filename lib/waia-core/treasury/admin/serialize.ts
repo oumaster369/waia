@@ -20,6 +20,7 @@ import type {
 import type { TreasuryBalanceReconciliationRecord } from "@/lib/waia-core/treasury/watcher/types";
 import type { TreasuryInceptionRecord } from "@/lib/waia-core/treasury/types";
 import type { TreasuryWatchedAddressRecord } from "@/lib/waia-core/treasury/watcher/types";
+import type { FundAllocationCurrent } from "@/lib/waia-core/treasury/allocation/types";
 import type { TreasuryRevisionRecord } from "@/lib/waia-core/treasury/types";
 import type { TreasuryEvidenceLinkRecord } from "@/lib/waia-core/treasury/types";
 import type { TreasuryObservationRecord } from "@/lib/waia-core/treasury/types";
@@ -208,6 +209,27 @@ export function serializeWatchedAddress(
     isActive: row.isActive,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
+  };
+}
+
+export function serializeFundAllocation(row: FundAllocationCurrent): Record<string, unknown> {
+  if (row.status === "unavailable") {
+    return { status: "unavailable", reason: row.reason };
+  }
+  const evidence = row.evidence;
+  return {
+    status: "available",
+    accountingCurrency: evidence.accountingCurrency,
+    accountingAsOf: iso(evidence.accountingAsOf),
+    canonicalFreeFundsMicros: serializeDecimalBigint(evidence.canonicalFreeFundsMicros),
+    protectedAnnualBudgetMicros: serializeDecimalBigint(evidence.protectedAnnualBudgetMicros),
+    operatingAllocationMicros: serializeDecimalBigint(evidence.operatingAllocationMicros),
+    developmentAllocationMicros: serializeDecimalBigint(evidence.developmentAllocationMicros),
+    policyCode: evidence.policyCode,
+    policyVersion: evidence.policyVersion,
+    evidenceId: evidence.id,
+    inputDigest: evidence.inputDigest,
+    outputDigest: evidence.outputDigest,
   };
 }
 

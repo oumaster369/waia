@@ -276,6 +276,38 @@ export type TreasuryOverviewCountsDto = {
   publicationPendingCount: number;
 };
 
+export type TreasuryFundAllocationDto =
+  | { status: "unavailable"; reason: string }
+  | {
+      status: "available";
+      accountingCurrency: string;
+      accountingAsOf: string;
+      canonicalFreeFundsMicros: string;
+      protectedAnnualBudgetMicros: string;
+      operatingAllocationMicros: string;
+      developmentAllocationMicros: string;
+      policyCode: string;
+      policyVersion: number;
+      evidenceId: string;
+      inputDigest: string;
+      outputDigest: string;
+    };
+
+export type TreasuryWatchedAddressDto = {
+  id: string;
+  organizationId: string;
+  network: "TRC-20";
+  address: string;
+  tokenContract: string;
+  assetCode: string;
+  directionScope: "INBOUND" | "OUTBOUND" | "BOTH";
+  includeInBalanceRecon: boolean;
+  label: string;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export type BreathPublicActivityDto = {
   occurredAt: string;
   kind: string | null;

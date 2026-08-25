@@ -6528,6 +6528,47 @@ export const treasuryFundAllocationEvidence = pgTable(
   ],
 );
 
+/** Single-use receipts for Human-confirmed Finance Assistant writes (DEE-705). */
+export const treasuryFinanceAssistantConfirmations = pgTable(
+  "treasury_finance_assistant_confirmations",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    subjectUserId: uuid("subject_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    intent: text("intent").notNull(),
+    nonceDigest: text("nonce_digest").notNull(),
+    fieldsDigest: text("fields_digest").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("treasury_finance_assistant_confirmation_nonce_uq").on(t.nonceDigest),
+    index("treasury_finance_assistant_confirmation_org_consumed_idx").on(
+      t.organizationId,
+      t.consumedAt,
+    ),
+    check(
+      "treasury_finance_assistant_confirmation_intent_check",
+      sql`"intent" IN ('CREATE_COUNTERPARTY', 'CREATE_ACCOUNT', 'CREATE_CATEGORY', 'CREATE_PROJECT', 'CREATE_TRANSACTION')`,
+    ),
+    check(
+      "treasury_finance_assistant_confirmation_digest_check",
+      sql`"nonce_digest" ~ '^[0-9a-f]{64}$' AND "fields_digest" ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "treasury_finance_assistant_confirmation_time_check",
+      sql`"issued_at" <= "consumed_at" AND "consumed_at" <= "expires_at"`,
+    ),
+  ],
+);
+
 /**
  * Postgres transaction integration validation table (DEE-64 D6-core).
  * Used only by opt-in `tests/integration/postgres-transaction-rollback.test.ts` to verify commit/rollback semantics.

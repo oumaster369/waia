@@ -1156,6 +1156,20 @@
       "when": 1780000000164,
       "tag": "0164_treasury_fund_allocation_evidence_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1780000000165,
+      "tag": "0165_treasury_finance_assistant_confirmations",
+      "breakpoints": true
+    },
+    {
+      "idx": 166,
+      "version": "7",
+      "when": 1780000000166,
+      "tag": "0166_treasury_finance_assistant_confirmations_rls",
+      "breakpoints": true
     }
   ]
 }

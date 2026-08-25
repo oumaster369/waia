@@ -58,6 +58,43 @@ async function runPaymentWatcherCycle(env: Record<string, unknown>): Promise<voi
   }
 }
 
+async function runTreasuryWatcherScheduled(env: Record<string, unknown>): Promise<void> {
+  const enabled = String(env.TREASURY_WATCHER_ENABLED ?? "").toLowerCase();
+  if (!new Set(["true", "1", "yes", "on"]).has(enabled)) {
+    console.log(JSON.stringify({ event: "waia_treasury_watcher", phase: "disabled" }));
+    return;
+  }
+  let dispose: (() => Promise<void>) | undefined;
+  try {
+    const [{ buildTreasuryWatcherDepsFromEnv }, { runTreasuryWatcherCycle }] = await Promise.all([
+      import("@/lib/waia-core/treasury/watcher/build-worker-deps"),
+      import("@/lib/waia-core/treasury/watcher/cycle"),
+    ]);
+    const built = await buildTreasuryWatcherDepsFromEnv(env);
+    dispose = built.dispose;
+    const report = await runTreasuryWatcherCycle(built.context, built.deps);
+    console.log(
+      JSON.stringify({
+        event: "waia_treasury_watcher",
+        phase: "scheduled_complete",
+        outcome: report.outcome,
+        observations: report.observationsUpserted,
+        semantic_transactions: report.semanticTransactions,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "waia_treasury_watcher",
+        phase: "scheduled_error",
+        error: error instanceof Error ? error.name : "Error",
+      }),
+    );
+  } finally {
+    await dispose?.();
+  }
+}
+
 export default {
   fetch: handler.fetch,
 
@@ -67,6 +104,8 @@ export default {
     ctx: { waitUntil: (promise: Promise<unknown>) => void },
   ): Promise<void> {
     await runPaymentWatcherCycle(env);
+
+    ctx.waitUntil(runTreasuryWatcherScheduled(env));
 
     ctx.waitUntil(
       (async () => {

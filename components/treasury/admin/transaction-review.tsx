@@ -27,6 +27,7 @@ import { signedAmountLabel } from "@/lib/treasury-admin/ledger";
 import { buildClassifyCommandPatch } from "@/lib/treasury-admin/manual-draft";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { backendUnavailableLabel } from "@/lib/treasury-admin/facts";
+import { tronScanTransactionUrl } from "@/lib/treasury-admin/explorer";
 import {
   formatAtomicToHumanDecimal,
   parseHumanDecimalToAtomic,
@@ -363,7 +364,25 @@ function TransactionReviewLoaded({
             <dt>Canonical token</dt>
             <dd>{tx.canonicalTokenContract ?? "None"}</dd>
             <dt>Canonical tx hash</dt>
-            <dd className="font-mono text-xs">{tx.canonicalTxHash ?? tx.txHash ?? "None"}</dd>
+            <dd className="font-mono text-xs">
+              {(() => {
+                const hash = tx.canonicalTxHash ?? tx.txHash;
+                const explorer = hash ? tronScanTransactionUrl(hash) : null;
+                return explorer ? (
+                  <a
+                    href={explorer}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                    aria-label="Open in TronScan"
+                  >
+                    {hash}
+                  </a>
+                ) : (
+                  (hash ?? "None")
+                );
+              })()}
+            </dd>
             <dt>Transfer index</dt>
             <dd>{tx.canonicalTransferIndex ?? "None"}</dd>
             <dt>Canonical direction</dt>
