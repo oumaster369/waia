@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { FeatureSnapshot } from "@/lib/trader/intelligence/types";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
+import { computeReconstructionContentDigest } from "@/lib/trader/intelligence/reconstruction/reconstruction-assembly";
 import {
   INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION,
   type InformationSufficiencyRuntimeAuthorityV2,
@@ -796,6 +797,12 @@ export function buildExactMarketUnderstandingArtifactV1(
   ) {
     throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:runtimeScope");
   }
+  if (input.reconstruction !== undefined) {
+    const { contentDigest, ...reconstructionWithoutDigest } = input.reconstruction;
+    if (computeReconstructionContentDigest(reconstructionWithoutDigest) !== contentDigest) {
+      throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:reconstructionContentDigest");
+    }
+  }
 
   const evaluationsById = new Map(
     input.questionEvaluations.map((evaluation) => [evaluation.questionId, evaluation]),
@@ -902,7 +909,8 @@ export function buildExactMarketUnderstandingArtifactV1(
       claimState = "UNKNOWN";
     }
 
-    const questionInputPath = `question.${marketQuestionId.toLowerCase()}.receipt_selection`;
+    const questionPrefix = `question.${marketQuestionId.toLowerCase()}`;
+    const questionInputPath = `${questionPrefix}.receipt_selection`;
     const computationInputs = [
       {
         path: questionInputPath,
@@ -919,7 +927,63 @@ export function buildExactMarketUnderstandingArtifactV1(
       },
     ];
     const dependencyPaths = [questionInputPath];
-    const answerSummary =
+    if (requirements.length > 0) {
+      const computedAnswerPath = `${questionPrefix}.computed_answer`;
+      computationInputs.push({
+        path: computedAnswerPath,
+        contentDigest: exactUnderstandingDigest({
+          questionId: evaluation.questionId,
+          status: evaluation.status,
+          answerSummary: evaluation.answerSummary,
+          confidence: evaluation.confidence,
+          influencesPermission: evaluation.influencesPermission,
+          influencesPosture: evaluation.influencesPosture,
+        }),
+      });
+      dependencyPaths.push(computedAnswerPath);
+    }
+    if (marketQuestionId === "Q_WHAT_HAPPENING") {
+      const featurePath = `${questionPrefix}.feature.zscore_vs_sma20`;
+      computationInputs.push({
+        path: featurePath,
+        contentDigest: exactUnderstandingDigest({
+          featureSetId: input.features.featureSetId,
+          value: input.features.features.zscoreVsSma20,
+        }),
+      });
+      dependencyPaths.push(featurePath);
+      if (input.reconstruction !== undefined) {
+        const reconstructionPath = `${questionPrefix}.reconstruction`;
+        computationInputs.push({
+          path: reconstructionPath,
+          contentDigest: input.reconstruction.contentDigest,
+        });
+        dependencyPaths.push(reconstructionPath);
+      }
+    }
+    if (marketQuestionId === "Q_LIQUIDITY") {
+      const featurePath = `${questionPrefix}.feature.spread_bps`;
+      computationInputs.push({
+        path: featurePath,
+        contentDigest: exactUnderstandingDigest({
+          featureSetId: input.features.featureSetId,
+          value: input.features.features.spreadBps,
+        }),
+      });
+      dependencyPaths.push(featurePath);
+    }
+    if (marketQuestionId === "Q_DATA_TRUST") {
+      const featurePath = `${questionPrefix}.feature.data_quality_score`;
+      computationInputs.push({
+        path: featurePath,
+        contentDigest: exactUnderstandingDigest({
+          featureSetId: input.features.featureSetId,
+          value: input.features.dataQualityScore,
+        }),
+      });
+      dependencyPaths.push(featurePath);
+    }
+    const receiptAnswerSummary =
       claimState === "NOT_APPLICABLE"
         ? "outside_market_understanding_authority"
         : claimState === "NOT_REQUIRED"
@@ -935,6 +999,13 @@ export function buildExactMarketUnderstandingArtifactV1(
                   : claimState === "SUPPORTED"
                     ? "question_supported_by_canonical_evidence"
                     : "question_evidence_unresolved";
+    const answerSummary =
+      requirements.length > 0 &&
+      (claimState === "SUPPORTED" ||
+        claimState === "PARTIALLY_SUPPORTED" ||
+        claimState === "CONFLICTED")
+        ? evaluation.answerSummary
+        : receiptAnswerSummary;
     return defineUnderstandingClaimV1({
       profile: authority.profile,
       receipt: authority.receipt,

@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
+import { buildReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
+import { assembleReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction-assembly";
 import {
   buildExactMarketUnderstandingArtifactV1,
   buildMarketUnderstandingBridge,
@@ -417,6 +419,121 @@ describe("PR2.6 market understanding bridge", () => {
     )!;
     expect(mutatedCrossVenue.causalLineageDigest).toBe(baselineCrossVenue.causalLineageDigest);
     expect(mutatedCrossVenue.answerSummary).toBe("question_requirement_not_declared");
+  });
+
+  it("binds computed answers and only their consumed feature and reconstruction inputs", () => {
+    const fixture = loadFixtureBars();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const fusedContext = buildReplayFusedContext({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+      instrumentId: "BTC/USDT",
+    });
+    const features = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    const reconstruction = buildReconstructionSnapshot({
+      bars1m: fixture.bars,
+      evaluatedAt,
+      fusedContext,
+    });
+    const understanding = buildMarketUnderstandingBridge({
+      fusedContext,
+      features,
+      reconstruction,
+    });
+    const selected = makeUnderstandingProfileReceipt({
+      pitAnchor: evaluatedAt,
+      requirements: [
+        makeUnderstandingRequirement(),
+        makeUnderstandingRequirement({
+          id: "liquidity-state",
+          questionId: "Q_EXECUTION_LIQUIDITY",
+        }),
+      ],
+      evidence: [makeUnderstandingEvidence({ availableAt: "2026-01-01T00:24:30.000Z" })],
+    });
+    const authority = bindInformationSufficiencyReceiptAuthorityV2(
+      selected.profile,
+      selected.receipt,
+    );
+    if (authority.kind !== "PROFILE_RECEIPT") throw new Error("expected profile receipt");
+    const build = (input: {
+      selectedFeatures?: typeof features;
+      selectedReconstruction?: typeof reconstruction;
+      questionEvaluations?: typeof understanding.questionEvaluations;
+    }) =>
+      buildExactMarketUnderstandingArtifactV1({
+        authority,
+        organizationId: "org-a",
+        accountId: "account-a",
+        symbol: "BTC/USDT",
+        analyticalTimeframe: "1m",
+        evaluatedAt,
+        features: input.selectedFeatures ?? features,
+        reconstruction: input.selectedReconstruction ?? reconstruction,
+        questionEvaluations: input.questionEvaluations ?? understanding.questionEvaluations,
+      });
+    const digestFor = (
+      artifact: ReturnType<typeof build>,
+      questionId: (typeof CANONICAL_MARKET_QUESTION_IDS)[number],
+    ) => artifact.claims.find((claim) => claim.marketQuestionId === questionId)!.causalLineageDigest;
+
+    const baseline = build({});
+    const answerMutated = build({
+      questionEvaluations: understanding.questionEvaluations.map((evaluation) =>
+        evaluation.questionId === "Q_WHAT_HAPPENING"
+          ? { ...evaluation, answerSummary: `${evaluation.answerSummary}_mutated` }
+          : evaluation,
+      ),
+    });
+    expect(digestFor(answerMutated, "Q_WHAT_HAPPENING")).not.toBe(
+      digestFor(baseline, "Q_WHAT_HAPPENING"),
+    );
+    expect(digestFor(answerMutated, "Q_LIQUIDITY")).toBe(digestFor(baseline, "Q_LIQUIDITY"));
+
+    const spreadMutated = build({
+      selectedFeatures: {
+        ...features,
+        features: { ...features.features, spreadBps: "49" },
+      },
+    });
+    expect(digestFor(spreadMutated, "Q_LIQUIDITY")).not.toBe(
+      digestFor(baseline, "Q_LIQUIDITY"),
+    );
+    expect(digestFor(spreadMutated, "Q_WHAT_HAPPENING")).toBe(
+      digestFor(baseline, "Q_WHAT_HAPPENING"),
+    );
+
+    const reconstructionMutated = assembleReconstructionSnapshot({
+      instrumentId: reconstruction.instrumentId,
+      evaluatedAt: reconstruction.evaluatedAt,
+      marketStructure: reconstruction.marketStructure,
+      liquidityStructure: reconstruction.liquidityStructure,
+      trendStructure: {
+        ...reconstruction.trendStructure,
+        regimeBias: reconstruction.trendStructure.regimeBias === "TREND" ? "RANGE" : "TREND",
+      },
+      volatilityStructure: reconstruction.volatilityStructure,
+      participationStructure: reconstruction.participationStructure,
+      contextStructure: reconstruction.contextStructure,
+    });
+    const reconstructionChanged = build({ selectedReconstruction: reconstructionMutated });
+    expect(digestFor(reconstructionChanged, "Q_WHAT_HAPPENING")).not.toBe(
+      digestFor(baseline, "Q_WHAT_HAPPENING"),
+    );
+    expect(digestFor(reconstructionChanged, "Q_LIQUIDITY")).toBe(
+      digestFor(baseline, "Q_LIQUIDITY"),
+    );
+
+    expect(() =>
+      build({
+        selectedReconstruction: { ...reconstruction, contentDigest: "0".repeat(64) },
+      }),
+    ).toThrow(/reconstructionContentDigest/);
   });
 
   it("does not promote a rejected untrusted contradiction into causal conflict", () => {
