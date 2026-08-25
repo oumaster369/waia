@@ -105,6 +105,40 @@ export function BreathOfWaiaSection({
           </div>
         )}
 
+        {projection?.funds.status === "published" ? (
+          <div
+            data-testid="landing-breath-funds"
+            className="border-waia-divider grid gap-5 border-b pb-7 sm:grid-cols-2"
+          >
+            <div>
+              <p className="text-waia-fg-subtle text-xs font-semibold tracking-[0.12em] uppercase">
+                WAIA operating fund
+              </p>
+              <p className="text-waia-fg mt-2 font-mono text-xl tabular-nums">
+                {formatPublicMoney(
+                  projection.funds.operatingAllocationMicros,
+                  projection.funds.currency,
+                )}
+              </p>
+            </div>
+            <div>
+              <p className="text-waia-fg-subtle text-xs font-semibold tracking-[0.12em] uppercase">
+                Development Fund
+              </p>
+              <p className="text-waia-fg mt-2 font-mono text-xl tabular-nums">
+                {formatPublicMoney(
+                  projection.funds.developmentAllocationMicros,
+                  projection.funds.currency,
+                )}
+              </p>
+            </div>
+            <p className="text-waia-fg-subtle text-xs leading-relaxed sm:col-span-2">
+              This is a virtual accounting allocation. It does not move money or grant ownership,
+              governance power, or spending authority.
+            </p>
+          </div>
+        ) : null}
+
         {projection && projection.fundingNeeds.length > 0 ? (
           <div data-testid="landing-breath-funding-needs" className="flex flex-col gap-2">
             <p className="text-waia-fg-subtle text-xs font-semibold tracking-[0.12em] uppercase">

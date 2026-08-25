@@ -62,7 +62,12 @@ export type TreasuryWatcherCycleDeps = {
   logger: TreasuryWatcherLogger;
   now?: () => Date;
   newId?: () => string;
-  runAtomic?: <T>(fn: () => Promise<T>) => Promise<T>;
+  runAtomic?: <T>(
+    fn: (bound: {
+      watcherRepository: TreasuryWatcherRepository;
+      transactions: ReturnType<typeof createTreasuryTransactionService>;
+    }) => Promise<T>,
+  ) => Promise<T>;
 };
 
 function emptyReport(
@@ -92,7 +97,13 @@ export async function runTreasuryWatcherCycle(
   const scoped = requireOrgContext(context.organizationId);
   const now = deps.now?.() ?? new Date();
   const newId = deps.newId ?? (() => crypto.randomUUID());
-  const runAtomic = deps.runAtomic ?? (async (fn) => fn());
+  const runAtomic =
+    deps.runAtomic ??
+    (async (fn) =>
+      fn({
+        watcherRepository: deps.watcherRepository,
+        transactions: deps.transactions,
+      }));
   const counters = { chainCalls: 0, persistenceMutations: 0 };
 
   if (!deps.config.enabled) {

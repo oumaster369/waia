@@ -67,6 +67,36 @@ export default async function BudgetPage() {
                 publishedRecord.currency,
               )}
             </p>
+            {projection?.funds.status === "published" ? (
+              <div className="border-waia-divider mt-6 grid gap-5 border-t pt-5 sm:grid-cols-2">
+                <div>
+                  <p className="text-waia-fg-subtle text-xs font-semibold tracking-wide uppercase">
+                    WAIA operating fund
+                  </p>
+                  <p className="text-waia-fg mt-2 font-mono text-xl tabular-nums">
+                    {formatPublicMoney(
+                      projection.funds.operatingAllocationMicros,
+                      projection.funds.currency,
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-waia-fg-subtle text-xs font-semibold tracking-wide uppercase">
+                    Development Fund
+                  </p>
+                  <p className="text-waia-fg mt-2 font-mono text-xl tabular-nums">
+                    {formatPublicMoney(
+                      projection.funds.developmentAllocationMicros,
+                      projection.funds.currency,
+                    )}
+                  </p>
+                </div>
+                <p className="text-waia-fg-muted text-xs leading-relaxed sm:col-span-2">
+                  The approved annual budget is protected first. Any remaining free funds are
+                  accounted to development without moving custody.
+                </p>
+              </div>
+            ) : null}
           </section>
 
           <section data-testid="public-budget-months" className="flex flex-col gap-7">

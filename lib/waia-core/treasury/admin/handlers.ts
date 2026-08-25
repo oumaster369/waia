@@ -7,7 +7,25 @@ if (process.env.VITEST !== "true") {
 
 import { organizations } from "@/db/schema";
 import * as pgSchema from "@/db/schema.postgres";
-import { treasuryAccountKindEnum } from "@/db/core-enums";
+import { treasuryAccountKindEnum, treasuryTxKindEnum } from "@/db/core-enums";
+import { parseHumanDecimalToAtomic } from "@/lib/treasury-admin/parse-human-amount";
+import {
+  createFinanceConfirmation,
+  verifyFinanceConfirmation,
+} from "@/lib/waia-core/finance-assistant/confirmation";
+import { consumeFinanceAssistantConfirmation } from "@/lib/waia-core/finance-assistant/confirmation-store";
+import { planFinanceRequest } from "@/lib/waia-core/finance-assistant/openai-planner";
+import {
+  isReportIntent,
+  isWriteIntent,
+  requireSafeFinanceAssistantMessage,
+} from "@/lib/waia-core/finance-assistant/planner";
+import { buildFinanceAssistantReport } from "@/lib/waia-core/finance-assistant/report";
+import {
+  FinanceAssistantError,
+  type FinanceAssistantPlan,
+  type FinanceAssistantWriteIntent,
+} from "@/lib/waia-core/finance-assistant/types";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import {
   adminClientError,
@@ -79,6 +97,7 @@ import {
   serializeEvidenceLink,
   serializeEvidenceObject,
   serializeFundingNeed,
+  serializeFundAllocation,
   serializeIdealBudget,
   serializeInception,
   serializeReconciliation,
@@ -94,7 +113,11 @@ import {
   type TreasuryAdminServices,
 } from "@/lib/waia-core/treasury/admin/services";
 import { countTreasuryOverview } from "@/lib/waia-core/treasury/transaction-list-query";
-import type { TreasuryActorContext } from "@/lib/waia-core/treasury/types";
+import {
+  TREASURY_USDT_V1_DECIMALS,
+  USDT_NOMINAL_USD_POLICY_V1,
+  type TreasuryActorContext,
+} from "@/lib/waia-core/treasury/types";
 import {
   TREASURY_EVIDENCE_DEFAULT_SOURCE,
   TREASURY_EVIDENCE_MAX_UPLOAD_BYTES,
@@ -114,6 +137,7 @@ export type TreasuryAdminHandlerDeps = AdminRouteHandlerDeps & {
     permission: string;
   }) => boolean;
   testListOrganizations?: () => Promise<{ id: string; name: string; kind: string }[]>;
+  consumeFinanceAssistantConfirmation?: typeof consumeFinanceAssistantConfirmation;
 };
 
 function actor(userId: string): TreasuryActorContext {
@@ -138,6 +162,7 @@ async function withTreasuryAdmin(input: {
     userId: string;
     organizationId: string;
     services: TreasuryAdminServices;
+    runtime: WaiaRuntimeDb;
   }) => Promise<AdminRouteHandlerResult>;
 }): Promise<AdminRouteHandlerResult> {
   let runtime: WaiaRuntimeDb | undefined;
@@ -173,14 +198,271 @@ async function withTreasuryAdmin(input: {
       userId,
       organizationId: input.organizationId,
       services: opened,
+      runtime,
     });
   } catch (err) {
     if (err instanceof Error && err.message === "INVALID_JSON") {
       return adminClientError(400, "INVALID_BODY", "JSON object required.");
     }
+    if (err instanceof FinanceAssistantError) {
+      const status =
+        err.code === "ASSISTANT_NOT_CONFIGURED" ||
+        err.code === "ASSISTANT_CONFIRMATION_NOT_CONFIGURED" ||
+        err.code === "ASSISTANT_CONFIRMATION_STORE_NOT_READY" ||
+        err.code === "ASSISTANT_WRITES_DISABLED" ||
+        err.code === "ASSISTANT_PROVIDER_UNAVAILABLE"
+          ? 503
+          : err.code === "ASSISTANT_CONFIRMATION_ALREADY_USED"
+            ? 409
+            : err.code === "INVALID_MODEL_OUTPUT"
+              ? 502
+              : 400;
+      return adminClientError(status, err.code, err.message);
+    }
     return mapTreasuryHttpError(err);
   } finally {
     if (runtime) await input.deps.disposeRuntimeDb(runtime);
+  }
+}
+
+function requiredAssistantValue(fields: Record<string, string | null>, field: string): string {
+  const value = fields[field]?.trim();
+  if (!value) {
+    throw new FinanceAssistantError(
+      "ASSISTANT_FIELD_REQUIRED",
+      `The request is missing ${field}. Add it and try again.`,
+    );
+  }
+  return value;
+}
+
+function requiredAssistantField(plan: FinanceAssistantPlan, field: string): string {
+  return requiredAssistantValue(plan.fields, field);
+}
+
+function validateAssistantWritePlan(
+  plan: FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent },
+): FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent } {
+  switch (plan.intent) {
+    case "CREATE_COUNTERPARTY":
+      requiredAssistantField(plan, "displayName");
+      break;
+    case "CREATE_ACCOUNT":
+      requiredAssistantField(plan, "displayName");
+      parseEnum(requiredAssistantField(plan, "kind"), treasuryAccountKindEnum, "kind");
+      requiredAssistantField(plan, "currency");
+      break;
+    case "CREATE_CATEGORY":
+      requiredAssistantField(plan, "name");
+      requiredAssistantField(plan, "monthlyBudget");
+      requiredAssistantField(plan, "currency");
+      break;
+    case "CREATE_PROJECT":
+      requiredAssistantField(plan, "name");
+      break;
+    case "CREATE_TRANSACTION":
+      requiredAssistantField(plan, "signedAmount");
+      break;
+    default:
+      throw new FinanceAssistantError(
+        "ASSISTANT_INTENT_NOT_WRITABLE",
+        "This request cannot create a record.",
+      );
+  }
+  return plan;
+}
+
+async function resolveAssistantTransactionReferences(
+  plan: FinanceAssistantPlan & { intent: "CREATE_TRANSACTION" },
+  services: TreasuryAdminServices,
+  organizationId: string,
+): Promise<FinanceAssistantPlan & { intent: "CREATE_TRANSACTION" }> {
+  const context = requireOrgContext(organizationId);
+
+  async function resolve(
+    kind: "counterparty" | "account" | "category" | "project",
+    idField: "counterpartyId" | "accountId" | "categoryId" | "projectId",
+    nameField: "counterpartyName" | "accountName" | "categoryName" | "projectName",
+  ): Promise<string> {
+    const suppliedId = plan.fields[idField]?.trim();
+    if (suppliedId) {
+      const row =
+        kind === "counterparty"
+          ? await services.ledgerCatalog.getCounterparty(context, suppliedId)
+          : kind === "account"
+            ? await services.ledgerCatalog.getAccount(context, suppliedId)
+            : kind === "category"
+              ? await services.ledgerCatalog.getCategory(context, suppliedId)
+              : await services.ledgerCatalog.getProject(context, suppliedId);
+      if (!row.isActive) {
+        throw new FinanceAssistantError(
+          "ASSISTANT_REFERENCE_INACTIVE",
+          `The selected ${kind} is inactive.`,
+        );
+      }
+      return suppliedId;
+    }
+
+    const suppliedName = requiredAssistantField(plan, nameField);
+    const query = { q: suppliedName, active: true, limit: 20 };
+    const rows =
+      kind === "counterparty"
+        ? (await services.ledgerCatalog.listCounterparties(context, query)).items.map((row) => ({
+            id: row.id,
+            name: row.displayName,
+          }))
+        : kind === "account"
+          ? (await services.ledgerCatalog.listAccounts(context, query)).items.map((row) => ({
+              id: row.id,
+              name: row.displayName,
+            }))
+          : kind === "category"
+            ? (await services.ledgerCatalog.listCategories(context, query)).items.map((row) => ({
+                id: row.id,
+                name: row.name,
+              }))
+            : (await services.ledgerCatalog.listProjects(context, query)).items.map((row) => ({
+                id: row.id,
+                name: row.name,
+              }));
+    const exact = rows.filter(
+      (row) => row.name.localeCompare(suppliedName, undefined, { sensitivity: "accent" }) === 0,
+    );
+    if (exact.length !== 1) {
+      throw new FinanceAssistantError(
+        "ASSISTANT_REFERENCE_NOT_UNIQUE",
+        exact.length === 0
+          ? `No active ${kind} named “${suppliedName}” was found.`
+          : `More than one active ${kind} matches “${suppliedName}”.`,
+      );
+    }
+    return exact[0]!.id;
+  }
+
+  const [counterpartyId, accountId, categoryId, projectId] = await Promise.all([
+    resolve("counterparty", "counterpartyId", "counterpartyName"),
+    resolve("account", "accountId", "accountName"),
+    resolve("category", "categoryId", "categoryName"),
+    resolve("project", "projectId", "projectName"),
+  ]);
+  return {
+    ...plan,
+    fields: { ...plan.fields, counterpartyId, accountId, categoryId, projectId },
+  };
+}
+
+function assistantOptional(fields: Record<string, string | null>, field: string): string | null {
+  return fields[field]?.trim() || null;
+}
+
+function assistantAtomicAmount(raw: string, options?: { allowZero?: boolean }): bigint {
+  const parsed = parseHumanDecimalToAtomic(raw, TREASURY_USDT_V1_DECIMALS, {
+    requirePositive: options?.allowZero !== true,
+  });
+  if (!parsed.ok) {
+    throw new TreasuryValidationError("INVALID_MONEY", parsed.message);
+  }
+  return BigInt(parsed.atomic);
+}
+
+async function executeAssistantWrite(input: {
+  payload: import("@/lib/waia-core/finance-assistant/types").FinanceAssistantConfirmationPayload;
+  services: TreasuryAdminServices;
+  userId: string;
+}) {
+  const { payload, services, userId } = input;
+  const context = requireOrgContext(payload.organizationId);
+  const admin = actor(userId);
+  const reason = "Finance Assistant preview confirmed by the operator";
+  const fields = payload.fields;
+
+  switch (payload.intent) {
+    case "CREATE_COUNTERPARTY": {
+      const created = await services.ledgerCatalog.createCounterparty(context, admin, {
+        displayName: requiredAssistantValue(fields, "displayName"),
+        websiteUrl: assistantOptional(fields, "websiteUrl"),
+        email: assistantOptional(fields, "email"),
+        phone: assistantOptional(fields, "phone"),
+        paymentInstructions: assistantOptional(fields, "paymentInstructions"),
+        waiaUsername: assistantOptional(fields, "waiaUsername"),
+        reason,
+      });
+      return { entityType: "counterparty", entity: serializeCounterpartyDetail(created) };
+    }
+    case "CREATE_ACCOUNT": {
+      const kind = parseEnum(
+        requiredAssistantValue(fields, "kind"),
+        treasuryAccountKindEnum,
+        "kind",
+      );
+      const created = await services.ledgerCatalog.createAccount(context, admin, {
+        displayName: requiredAssistantValue(fields, "displayName"),
+        kind,
+        currency: requiredAssistantValue(fields, "currency"),
+        network: assistantOptional(fields, "network"),
+        address: assistantOptional(fields, "address"),
+        maskedRequisites: assistantOptional(fields, "maskedRequisites"),
+        watchedAddressId: assistantOptional(fields, "watchedAddressId"),
+        reason,
+      });
+      return { entityType: "account", entity: serializeAccountDetail(created) };
+    }
+    case "CREATE_CATEGORY": {
+      const monthlyBudget = requiredAssistantValue(fields, "monthlyBudget");
+      const created = await services.ledgerCatalog.createCategory(context, admin, {
+        name: requiredAssistantValue(fields, "name"),
+        groupName: assistantOptional(fields, "groupName") ?? undefined,
+        description: assistantOptional(fields, "description"),
+        monthlyBudgetMicros: assistantAtomicAmount(monthlyBudget, { allowZero: true }),
+        currency: requiredAssistantValue(fields, "currency"),
+        reason,
+      });
+      return { entityType: "category", entity: serializeCategory(created) };
+    }
+    case "CREATE_PROJECT": {
+      const created = await services.ledgerCatalog.createProject(context, admin, {
+        name: requiredAssistantValue(fields, "name"),
+        description: assistantOptional(fields, "description"),
+        startsOn: assistantOptional(fields, "startsOn"),
+        endsOn: assistantOptional(fields, "endsOn"),
+        reason,
+      });
+      return { entityType: "project", entity: serializeProject(created) };
+    }
+    case "CREATE_TRANSACTION": {
+      const signedRaw = requiredAssistantValue(fields, "signedAmount");
+      const negative = signedRaw.startsWith("-");
+      const magnitude = assistantAtomicAmount(negative ? signedRaw.slice(1) : signedRaw);
+      const refs = {
+        counterpartyId: requiredAssistantValue(fields, "counterpartyId"),
+        accountId: requiredAssistantValue(fields, "accountId"),
+        categoryId: requiredAssistantValue(fields, "categoryId"),
+        projectId: requiredAssistantValue(fields, "projectId"),
+      };
+      await assertActiveLedgerReferences(services, context, refs);
+      const account = await services.ledgerCatalog.getAccount(context, refs.accountId);
+      const kindRaw = assistantOptional(fields, "kind");
+      const kind = kindRaw ? parseEnum(kindRaw, treasuryTxKindEnum, "kind") : null;
+      const occurredAt = requireIsoDate(requiredAssistantValue(fields, "occurredAt"), "occurredAt");
+      const created = await services.domain.transactions.createManualDraft(context, admin, {
+        direction: negative ? "OUTFLOW" : "INFLOW",
+        kind,
+        nativeAmountAtomic: magnitude,
+        nativeDecimals: TREASURY_USDT_V1_DECIMALS,
+        nativeAsset: account.currency,
+        accountingAmountMicros: magnitude,
+        accountingDenominationPolicy:
+          account.currency === "USDT"
+            ? USDT_NOMINAL_USD_POLICY_V1
+            : "MANUAL_ACCOUNTING_CURRENCY_V1",
+        occurredAt,
+        ...refs,
+        internalNotes: assistantOptional(fields, "notes"),
+        initialStatus: "NEEDS_REVIEW",
+        reason,
+      });
+      return { entityType: "transaction", entity: serializeTransaction(created) };
+    }
   }
 }
 
@@ -289,6 +571,25 @@ export async function handleTreasuryOverviewCountsGet(
       );
       return adminSuccess(countTreasuryOverview(rows));
     },
+  });
+}
+
+export async function handleTreasuryFundAllocationGet(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  const organizationId = orgFromQuery(request);
+  if (typeof organizationId !== "string") return organizationId;
+  return withTreasuryAdmin({
+    deps,
+    organizationId,
+    permission: "admin.treasury.read",
+    fn: async ({ services }) =>
+      adminSuccess({
+        allocation: serializeFundAllocation(
+          await services.allocation.getCurrent(requireOrgContext(organizationId)),
+        ),
+      }),
   });
 }
 
@@ -1941,6 +2242,166 @@ export async function handleTreasuryBreathPreviewGet(
   });
 }
 
+export async function handleFinanceAssistantPlanPost(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    const requestedAt = new Date();
+    const body = await readJsonObject(request);
+    const organizationId = parseOrganizationIdFromUnknown(
+      body.organization_id ?? body.organizationId,
+    );
+    if (typeof organizationId !== "string") return organizationId;
+    const message = requireSafeFinanceAssistantMessage(body.message);
+
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission: "admin.treasury.read",
+      fn: async ({ userId, services }) => {
+        const plan = await planFinanceRequest(message, request.signal);
+        if (plan.intent === "UNSUPPORTED") {
+          return adminSuccess({
+            mode: "unsupported",
+            summary: plan.summary,
+          });
+        }
+        if (isReportIntent(plan.intent)) {
+          return adminSuccess({
+            mode: "report",
+            summary: plan.summary,
+            report: await buildFinanceAssistantReport({
+              intent: plan.intent,
+              organizationId,
+              services,
+              now: requestedAt,
+            }),
+          });
+        }
+        if (!isWriteIntent(plan.intent)) {
+          throw new FinanceAssistantError(
+            "ASSISTANT_INTENT_NOT_PERMITTED",
+            "This Finance request is not permitted.",
+          );
+        }
+
+        const writePlan: FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent } = {
+          ...plan,
+          intent: plan.intent,
+          fields:
+            plan.intent === "CREATE_TRANSACTION"
+              ? { ...plan.fields, occurredAt: requestedAt.toISOString() }
+              : plan.fields,
+        };
+        const validated = validateAssistantWritePlan(writePlan);
+        const preview =
+          validated.intent === "CREATE_TRANSACTION"
+            ? await resolveAssistantTransactionReferences(
+                validated as FinanceAssistantPlan & { intent: "CREATE_TRANSACTION" },
+                services,
+                organizationId,
+              )
+            : validated;
+        const writesEnabled = process.env.WAIA_FINANCE_ASSISTANT_WRITES_ENABLED === "true";
+        const secretReady =
+          (process.env.WAIA_FINANCE_ASSISTANT_CONFIRMATION_SECRET?.trim().length ?? 0) >= 32;
+        const confirmationAvailable = writesEnabled && secretReady;
+        const confirmationToken = confirmationAvailable
+          ? await createFinanceConfirmation({
+              userId,
+              organizationId,
+              intent: preview.intent,
+              fields: preview.fields,
+              now: requestedAt,
+            })
+          : null;
+
+        return adminSuccess({
+          mode: "write_preview",
+          summary: preview.summary,
+          intent: preview.intent,
+          fields: preview.fields,
+          confirmationAvailable,
+          confirmationToken,
+          notice: confirmationAvailable
+            ? "Review every field. Nothing is written until you confirm."
+            : "Write confirmation is not activated. Reports remain available.",
+        });
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INVALID_JSON") {
+      return adminClientError(400, "INVALID_BODY", "JSON object required.");
+    }
+    if (err instanceof FinanceAssistantError) {
+      return adminClientError(400, err.code, err.message);
+    }
+    return mapTreasuryHttpError(err);
+  }
+}
+
+export async function handleFinanceAssistantExecutePost(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    if (process.env.WAIA_FINANCE_ASSISTANT_WRITES_ENABLED !== "true") {
+      return adminClientError(
+        503,
+        "ASSISTANT_WRITES_DISABLED",
+        "Finance Assistant writes are not activated. Reports remain available.",
+      );
+    }
+    const body = await readJsonObject(request);
+    const organizationId = parseOrganizationIdFromUnknown(
+      body.organization_id ?? body.organizationId,
+    );
+    if (typeof organizationId !== "string") return organizationId;
+    const token = requireString(
+      body.confirmation_token ?? body.confirmationToken,
+      "confirmation_token",
+    );
+
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission: "admin.treasury.mutate",
+      fn: async ({ userId, services, runtime }) => {
+        const payload = await verifyFinanceConfirmation(token, { userId, organizationId });
+        for (const value of Object.values(payload.fields)) {
+          if (value?.trim()) requireSafeFinanceAssistantMessage(value);
+        }
+        const consume =
+          deps.consumeFinanceAssistantConfirmation ?? consumeFinanceAssistantConfirmation;
+        await consume(runtime, payload);
+        const created = await executeAssistantWrite({ payload, services, userId });
+        return adminSuccess({
+          mode: "write_result",
+          intent: payload.intent,
+          entityType: created.entityType,
+          entity: created.entity,
+          notice: "The confirmed record was created. Financial transactions remain NEEDS_REVIEW.",
+        });
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INVALID_JSON") {
+      return adminClientError(400, "INVALID_BODY", "JSON object required.");
+    }
+    if (err instanceof FinanceAssistantError) {
+      const status =
+        err.code === "ASSISTANT_CONFIRMATION_ALREADY_USED"
+          ? 409
+          : err.code.includes("NOT_CONFIGURED") || err.code.includes("NOT_READY")
+            ? 503
+            : 400;
+      return adminClientError(status, err.code, err.message);
+    }
+    return mapTreasuryHttpError(err);
+  }
+}
+
 export type TreasuryLedgerCatalogKind = "counterparties" | "accounts" | "categories" | "projects";
 
 export async function handleTreasuryCategoryBudgetsGet(
@@ -2141,20 +2602,19 @@ export async function handleTreasuryLedgerCatalogPost(
               category: serializeCategory(
                 await services.ledgerCatalog.createCategory(context, admin, {
                   name: requireString(body.name, "name"),
-                  groupName: optionalString(
-                    body.group_name ?? body.groupName,
-                    "group_name",
-                  ) ?? undefined,
+                  groupName:
+                    optionalString(body.group_name ?? body.groupName, "group_name") ?? undefined,
                   description: optionalString(body.description, "description"),
                   monthlyBudgetMicros: parseNonnegativeDecimalBigint(
                     body.monthly_budget_micros ?? body.monthlyBudgetMicros,
                     "monthly_budget_micros",
                   ),
                   currency: requireString(body.currency, "currency"),
-                  effectiveMonth: optionalString(
-                    body.effective_month ?? body.effectiveMonth,
-                    "effective_month",
-                  ) ?? undefined,
+                  effectiveMonth:
+                    optionalString(
+                      body.effective_month ?? body.effectiveMonth,
+                      "effective_month",
+                    ) ?? undefined,
                   reason,
                 }),
               ),

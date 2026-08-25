@@ -229,6 +229,17 @@ describe("LandingPage", () => {
         privateSupport: null,
         lastUpdatedAt: null,
       },
+      funds: {
+        status: "published",
+        currency: "USD",
+        allocationAsOf: asOf,
+        canonicalFreeFundsMicros: "42000000000",
+        protectedAnnualBudgetMicros: "100000000000",
+        operatingAllocationMicros: "42000000000",
+        developmentAllocationMicros: "0",
+        policyCode: "ANNUAL_BUDGET_EXCESS_V1",
+        policyVersion: 1,
+      },
     };
 
     render(<LandingPageContent publicTreasury={projection} />);

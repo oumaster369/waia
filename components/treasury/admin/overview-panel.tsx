@@ -18,6 +18,7 @@ import { financeHref } from "@/lib/treasury-admin/org";
 import type {
   BreathAdminPreviewDto,
   TreasuryApiResult,
+  TreasuryFundAllocationDto,
   TreasuryOverviewCountsDto,
   TreasurySettingsDto,
 } from "@/lib/treasury-admin/types";
@@ -28,6 +29,7 @@ type OverviewBundle = {
   preview: BreathAdminPreviewDto;
   counts: TreasuryOverviewCountsDto;
   settings: TreasurySettingsDto | null;
+  allocation: TreasuryFundAllocationDto | null;
 };
 
 function FactCard({ label, value, note }: { label: string; value: React.ReactNode; note: string }) {
@@ -51,7 +53,7 @@ function OverviewInner() {
 
   const query = React.useCallback(async (): Promise<TreasuryApiResult<OverviewBundle>> => {
     if (!organizationId) return missingOrganizationResult();
-    const [previewResult, countsResult, settingsResult] = await Promise.all([
+    const [previewResult, countsResult, settingsResult, allocationResult] = await Promise.all([
       treasuryGet<{ preview: BreathAdminPreviewDto }>(
         "/api/admin/treasury/breath-preview",
         organizationId,
@@ -59,6 +61,10 @@ function OverviewInner() {
       treasuryGet<TreasuryOverviewCountsDto>("/api/admin/treasury/overview-counts", organizationId),
       treasuryGet<{ settings: TreasurySettingsDto | null }>(
         "/api/admin/treasury/settings",
+        organizationId,
+      ),
+      treasuryGet<{ allocation: TreasuryFundAllocationDto }>(
+        "/api/admin/treasury/fund-allocation",
         organizationId,
       ),
     ]);
@@ -70,6 +76,7 @@ function OverviewInner() {
         preview: previewResult.data.preview,
         counts: countsResult.data,
         settings: settingsResult.ok ? (settingsResult.data.settings ?? null) : null,
+        allocation: allocationResult.ok ? allocationResult.data.allocation : null,
       },
     };
   }, [organizationId]);
@@ -120,6 +127,7 @@ function OverviewInner() {
   const { preview, counts, settings } = data;
   const runway = preview.runway;
   const ideal = preview.idealAnnualBudget;
+  const allocation = data.allocation;
 
   return (
     <div className="space-y-5" data-testid="finance-overview">
@@ -179,6 +187,39 @@ function OverviewInner() {
           }
         />
       </div>
+
+      <WaiaSurface variant="raised" className="space-y-4 p-5" data-testid="fund-allocation">
+        <div>
+          <h3 className="text-sm font-medium">Fund allocation</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            One approved annual budget is protected for operations. Free funds above it are
+            accounted to development. Money remains in the same accounts and wallets.
+          </p>
+        </div>
+        {allocation?.status === "available" ? (
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground text-xs">WAIA operating fund</dt>
+              <dd className="mt-1 text-xl font-medium tabular-nums">
+                <MoneyText micros={allocation.operatingAllocationMicros} />{" "}
+                <span className="text-sm">{allocation.accountingCurrency}</span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Development Fund</dt>
+              <dd className="mt-1 text-xl font-medium tabular-nums">
+                <MoneyText micros={allocation.developmentAllocationMicros} />{" "}
+                <span className="text-sm">{allocation.accountingCurrency}</span>
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <FactValue
+            kind="pending"
+            reason={allocation?.reason ?? "Authoritative allocation is unavailable"}
+          />
+        )}
+      </WaiaSurface>
 
       <WaiaSurface
         variant="elevated"

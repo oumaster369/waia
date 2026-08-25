@@ -37,7 +37,12 @@ export async function ingestObservedTransfer(input: {
   newId: () => string;
   watcherRepository: TreasuryWatcherRepository;
   transactions: ReturnType<typeof createTreasuryTransactionService>;
-  runAtomic: <T>(fn: () => Promise<T>) => Promise<T>;
+  runAtomic: <T>(
+    fn: (bound: {
+      watcherRepository: TreasuryWatcherRepository;
+      transactions: ReturnType<typeof createTreasuryTransactionService>;
+    }) => Promise<T>,
+  ) => Promise<T>;
 }): Promise<{ observations: number; semanticCreated: boolean }> {
   const transferHeight = parseChainBlockHeight(input.transfer.blockHeight, "transfer_block");
   const inception = parseChainBlockHeight(input.inceptionBlock, "inception_block");
@@ -87,7 +92,7 @@ export async function ingestObservedTransfer(input: {
     blockTimestamp: input.transfer.blockTimestamp?.toISOString() ?? null,
   });
 
-  return input.runAtomic(async () => {
+  return input.runAtomic(async ({ watcherRepository, transactions }) => {
     const observationIds: string[] = [];
     for (const match of matches) {
       const idempotencyKey = treasuryObservationIdempotencyKey({
@@ -96,7 +101,7 @@ export async function ingestObservedTransfer(input: {
         transferIndex: input.transfer.transferIndex,
         watchedAddressId: match.address.id,
       });
-      const existing = await input.watcherRepository.getObservationByIdempotency(
+      const existing = await watcherRepository.getObservationByIdempotency(
         input.context,
         idempotencyKey,
       );
@@ -116,7 +121,7 @@ export async function ingestObservedTransfer(input: {
           (status === "CONFIRMED" || depth !== existing.confirmationsObserved)
         ) {
           if (existing.observationStatus === "OBSERVED") {
-            await input.watcherRepository.updateObservationLifecycle(input.context, existing.id, {
+            await watcherRepository.updateObservationLifecycle(input.context, existing.id, {
               confirmationsObserved: depth,
               observationStatus: status,
             });
@@ -126,7 +131,7 @@ export async function ingestObservedTransfer(input: {
         continue;
       }
       const observationId = input.newId();
-      await input.watcherRepository.insertChainObservation({
+      await watcherRepository.insertChainObservation({
         id: observationId,
         organizationId: input.context.organizationId,
         watchedAddressId: match.address.id,
@@ -155,41 +160,37 @@ export async function ingestObservedTransfer(input: {
       observationIds.push(observationId);
     }
 
-    const before = await input.watcherRepository.getTransactionByCanonicalTransfer(input.context, {
+    const before = await watcherRepository.getTransactionByCanonicalTransfer(input.context, {
       network: input.network,
       tokenContract: input.tokenContract,
       txHash: input.transfer.txHash,
       transferIndex: input.transfer.transferIndex,
     });
-    const tx = await input.transactions.ensureWatcherDetected(
-      input.context,
-      WATCHER_SERVICE_ACTOR,
-      {
-        direction: semanticDirection,
-        nativeAmountAtomic: input.transfer.nativeAmountAtomic,
-        nativeDecimals: input.nativeDecimals,
-        nativeAsset: TREASURY_USDT_V1_ASSET,
-        nativeContract: input.tokenContract,
-        canonicalNetwork: input.network,
-        canonicalTokenContract: input.tokenContract,
-        canonicalTxHash: input.transfer.txHash,
-        canonicalTransferIndex: input.transfer.transferIndex,
-        occurredAt: input.transfer.blockTimestamp ?? input.now,
-        counterpartyIsInternal: internal,
-        ledgerInceptionId: input.inceptionId,
-      },
-    );
+    const tx = await transactions.ensureWatcherDetected(input.context, WATCHER_SERVICE_ACTOR, {
+      direction: semanticDirection,
+      nativeAmountAtomic: input.transfer.nativeAmountAtomic,
+      nativeDecimals: input.nativeDecimals,
+      nativeAsset: TREASURY_USDT_V1_ASSET,
+      nativeContract: input.tokenContract,
+      canonicalNetwork: input.network,
+      canonicalTokenContract: input.tokenContract,
+      canonicalTxHash: input.transfer.txHash,
+      canonicalTransferIndex: input.transfer.transferIndex,
+      occurredAt: input.transfer.blockTimestamp ?? input.now,
+      counterpartyIsInternal: internal,
+      ledgerInceptionId: input.inceptionId,
+    });
 
     for (let i = 0; i < matches.length; i += 1) {
       const observationId = observationIds[i];
       const match = matches[i];
       if (!observationId || !match) continue;
-      const existingLink = await input.watcherRepository.getLinkForObservation(
+      const existingLink = await watcherRepository.getLinkForObservation(
         input.context,
         observationId,
       );
       if (existingLink) continue;
-      await input.watcherRepository.insertObservationLink({
+      await watcherRepository.insertObservationLink({
         id: input.newId(),
         organizationId: input.context.organizationId,
         transactionId: tx.id,
