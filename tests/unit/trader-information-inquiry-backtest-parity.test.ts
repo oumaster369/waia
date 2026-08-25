@@ -45,6 +45,23 @@ describe("DEE-699 historical inquiry parity", () => {
     expect(informationInquiryResolver).not.toHaveBeenCalled();
   });
 
+  it("rejects a blind PROFILE_RECEIPT before reading bars or starting a cycle", async () => {
+    const next = vi.fn();
+    const reset = vi.fn();
+
+    await expect(
+      runBacktest({
+        split: "blind",
+        barSource: { next, reset },
+        informationSufficiencyAuthority: {
+          kind: "PROFILE_RECEIPT",
+        },
+      } as unknown as RunBacktestInput),
+    ).rejects.toThrow("INFORMATION_SUFFICIENCY_PROFILE_RECEIPT_FORBIDDEN:blindHoldout");
+    expect(next).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
+
   it("keeps the composition runtime free of live provider and downstream authority imports", () => {
     const source = readFileSync(
       resolve(

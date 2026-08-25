@@ -9,6 +9,10 @@ import {
   iterateM9Cycles,
 } from "@/lib/trader/research/m9-projection-source";
 import type { PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
+import {
+  buildMarketUnderstandingReplayIdentityV1,
+  type MarketUnderstandingReplayIdentityV1,
+} from "@/lib/trader/research/replay-repro-digest";
 
 export const M9_MARKET_UNDERSTANDING_SAMPLE_SCHEMA_VERSION =
   "m9_market_understanding_sample_v1" as const;
@@ -24,6 +28,8 @@ export type M9MarketUnderstandingSampleExport = {
   understandingSnapshots: readonly MarketUnderstandingSnapshot[];
   researchSignals: readonly ResearchSignals[];
   cyclesWithUnderstanding: number;
+  understandingArtifactIdentities: readonly MarketUnderstandingReplayIdentityV1[];
+  cyclesWithUnderstandingArtifact: number;
 };
 
 const DEFAULT_MAX_SAMPLES = 25;
@@ -41,19 +47,28 @@ export function buildM9MarketUnderstandingSampleExport(input: {
   const maxSamples = input.maxSamples ?? DEFAULT_MAX_SAMPLES;
   const understandingSnapshots: MarketUnderstandingSnapshot[] = [];
   const researchSignals: ResearchSignals[] = [];
+  const understandingArtifactIdentities: MarketUnderstandingReplayIdentityV1[] = [];
   let cyclesWithUnderstanding = 0;
+  let cyclesWithUnderstandingArtifact = 0;
 
   for (const cycle of iterateM9Cycles(input)) {
     const understanding = cycle.evaluation.understanding;
-    if (!understanding) {
-      continue;
+    const understandingArtifact = cycle.evaluation.understandingArtifact;
+    if (understandingArtifact) {
+      cyclesWithUnderstandingArtifact += 1;
+      if (understandingArtifactIdentities.length < maxSamples) {
+        understandingArtifactIdentities.push(
+          buildMarketUnderstandingReplayIdentityV1(understandingArtifact),
+        );
+      }
     }
-    cyclesWithUnderstanding += 1;
-    if (understandingSnapshots.length >= maxSamples) {
-      continue;
+    if (understanding) {
+      cyclesWithUnderstanding += 1;
+      if (understandingSnapshots.length < maxSamples) {
+        understandingSnapshots.push(understanding);
+        researchSignals.push(buildResearchSignals(understanding));
+      }
     }
-    understandingSnapshots.push(understanding);
-    researchSignals.push(buildResearchSignals(understanding));
   }
 
   return {
@@ -67,5 +82,7 @@ export function buildM9MarketUnderstandingSampleExport(input: {
     understandingSnapshots,
     researchSignals,
     cyclesWithUnderstanding,
+    understandingArtifactIdentities,
+    cyclesWithUnderstandingArtifact,
   };
 }

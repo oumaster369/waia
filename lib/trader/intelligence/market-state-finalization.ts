@@ -42,6 +42,7 @@ export function finalizeMarketStateSnapshot(input: FinalizeMarketStateInput): Ma
     evaluatedAt: input.reconstruction.evaluatedAt,
     instrumentId: input.reconstruction.instrumentId,
     reconstruction: input.reconstruction,
+    // Compatibility projection for audit/telemetry only; it never affects fields below.
     understanding: input.understanding ?? null,
     hypotheses: input.hypothesisSet,
     activeOpportunity: opportunity,

@@ -95,8 +95,8 @@
     },
     {
       "questionId": "Q_DEPLOY_CAPITAL",
-      "status": "PARTIAL",
-      "answerSummary": "NO_TRADE",
+      "status": "NOT_APPLICABLE",
+      "answerSummary": "outside_market_understanding_authority",
       "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,
@@ -104,8 +104,8 @@
     },
     {
       "questionId": "Q_PRESERVE_CAPITAL",
-      "status": "ANSWERED",
-      "answerSummary": "NO_TRADE",
+      "status": "NOT_APPLICABLE",
+      "answerSummary": "outside_market_understanding_authority",
       "confidence": 0,
       "evidenceProvenanceIds": [],
       "influencesPermission": false,

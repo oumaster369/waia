@@ -1,6 +1,7 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type {
   CrossVenueAgreement,
+  MarketUnderstandingArtifactV1,
   MarketUnderstandingSnapshot,
   MtfAlignment,
   RegimeHint,
@@ -312,6 +313,8 @@ export type EvaluationCycleResult = {
   signal: StrategySignal;
   fusedContext?: FusedMarketContext;
   understanding?: MarketUnderstandingSnapshot;
+  /** DEE-622: exact question-relative, receipt-authenticated evidence attribution. */
+  understandingArtifact?: MarketUnderstandingArtifactV1;
   /** PR-2 MI Core outputs (present only when miCoreEnabled). */
   reconstruction?: ReconstructionSnapshot;
   hypothesisSet?: HypothesisSet;

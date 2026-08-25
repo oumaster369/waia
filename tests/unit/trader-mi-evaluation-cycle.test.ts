@@ -7,6 +7,7 @@ import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { buildMarketUnderstandingBridge } from "@/lib/trader/intelligence/market-understanding-bridge-v0";
+import { bindInformationSufficiencyReceiptAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import {
   evaluateRegisteredStrategies,
   selectPrimaryStrategySignal,
@@ -18,6 +19,10 @@ import type {
   Quote,
 } from "@/lib/trader/intelligence/types";
 import { buildReplayFusedContext } from "@/lib/trader/market-data/replay-fused-context-builder";
+import {
+  makeUnderstandingEvidence,
+  makeUnderstandingProfileReceipt,
+} from "@/tests/unit/helpers/market-understanding-evidence";
 
 function loadFixture() {
   const filePath = path.join(process.cwd(), "tests/fixtures/trader/btcusdt-1m-mean-reversion.json");
@@ -167,5 +172,54 @@ describe("trader evaluation cycle MI core (PR-2)", () => {
     expect(Object.isFrozen(result.marketStateSnapshot)).toBe(
       process.env.NODE_ENV === "production" ? false : true,
     );
+  });
+
+  it("threads an exact profile-receipt Understanding artifact without granting authority", () => {
+    const fixture = loadFixture();
+    const input = baseInput(fixture);
+    const profileReceipt = makeUnderstandingProfileReceipt({
+      pitAnchor: input.evaluatedAt,
+      evidence: [makeUnderstandingEvidence({ availableAt: "2026-01-01T00:24:30.000Z" })],
+    });
+    const authority = bindInformationSufficiencyReceiptAuthorityV2(
+      profileReceipt.profile,
+      profileReceipt.receipt,
+    );
+
+    const result = runEvaluationCycle({
+      ...input,
+      organizationId: "org-a",
+      accountId: "account-a",
+      symbol: "BTC/USDT",
+      informationSufficiencyAuthority: authority,
+      miCoreEnabled: true,
+    });
+
+    expect(result.understandingArtifact?.scope).toMatchObject({
+      organizationId: "org-a",
+      accountId: "account-a",
+      symbol: "BTC/USDT",
+      analyticalTimeframe: "1m",
+      pitAnchor: input.evaluatedAt,
+    });
+    expect(result.understandingArtifact?.claims).toHaveLength(12);
+    expect(result.understandingArtifact?.authority).toMatchObject({
+      createsForecastAuthority: false,
+      createsDecisionAuthority: false,
+      createsRiskAuthority: false,
+      createsExecutionAuthority: false,
+      createsCapitalAuthority: false,
+    });
+
+    expect(() =>
+      runEvaluationCycle({
+        ...input,
+        organizationId: "wrong-org",
+        accountId: "account-a",
+        symbol: "BTC/USDT",
+        informationSufficiencyAuthority: authority,
+        miCoreEnabled: true,
+      }),
+    ).toThrow(/runtimeScope/);
   });
 });

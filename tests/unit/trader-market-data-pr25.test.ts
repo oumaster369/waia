@@ -194,7 +194,7 @@ describe("PR2.5 CDE fused context hooks", () => {
     expect(msv.derived.riskMultiplier).toBe("0.5");
   });
 
-  it("PR2.6 downgrades permission when understanding reports cross-venue conflict", () => {
+  it("keeps legacy cross-venue Understanding telemetry causally inert", () => {
     const fixture = loadFixtureBars();
     const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
     const features = computeFeatureSnapshot({
@@ -243,10 +243,10 @@ describe("PR2.5 CDE fused context hooks", () => {
     });
     const understanding = buildMarketUnderstandingBridge({ fusedContext, features });
     const msv = buildMsvEnvelope({ features, fusedContext, understanding });
+    const withoutLegacyUnderstanding = buildMsvEnvelope({ features, fusedContext });
 
     expect(msv.understanding).toBeDefined();
-    expect(msv.derived.tradingPermission).not.toBe("ALLOW_TRADING");
-    expect(msv.derived.reasonCodes).toContain(cdeReasonCodes.understandingCrossVenueConflict);
+    expect(msv.derived).toEqual(withoutLegacyUnderstanding.derived);
   });
 });
 

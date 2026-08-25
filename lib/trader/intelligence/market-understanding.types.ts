@@ -1,5 +1,19 @@
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 
+export type {
+  CanonicalUnderstandingEvidenceRefV1,
+  MarketUnderstandingArtifactV1,
+  MarketUnderstandingDerivationDefinitionV1,
+  UnderstandingComputationInputV1,
+  UnderstandingClaimKindV1,
+  UnderstandingClaimScopeV1,
+  UnderstandingClaimStateV1,
+  UnderstandingClaimV1,
+  UnderstandingEvidenceDependencyV1,
+  UnderstandingEvidenceRoleV1,
+  UnderstandingMissingExpectedEvidenceV1,
+} from "@/lib/trader/intelligence/market-understanding-evidence-attribution-v1";
+
 export const MARKET_UNDERSTANDING_SCHEMA_VERSION = "waia.trader.market_understanding.v0" as const;
 
 export const CANONICAL_MARKET_QUESTION_IDS = [

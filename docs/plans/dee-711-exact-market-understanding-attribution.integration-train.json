@@ -1,0 +1,455 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-711",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-712",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Freeze immutable content-addressed Understanding claims, exact DEE-620/621 evidence identities and roles, structural question mapping, deterministic canonicalization and MARKET_UNDERSTANDING_ONLY authority without a scientific evaluator.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-620, DEE-621 and DEE-645 are Done on authoritative main.",
+        "The Human-ratified DEE-622 addenda freeze the claim, sufficiency, Reconstruction and no-actionability boundaries."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/market-understanding.types.ts",
+        "lib/trader/intelligence/market-understanding-evidence-attribution-v1.ts",
+        "lib/trader/intelligence/evaluate-canonical-market-questions.ts",
+        "lib/trader/intelligence/index.ts",
+        "tests/unit/helpers/market-understanding-evidence.ts",
+        "tests/unit/trader-market-understanding-evidence-attribution.test.ts",
+        "tests/unit/trader-market-question-evaluation.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-622 Step 3/5/6/7 semantics authorize the typed identity/role contract and reserve all scientific and capital choices."
+      },
+      "expectedAcceptanceEvidence": [
+        "Every authoritative ref pins exact observation/source/trust and optional Measurement lineage from an authenticated DEE-621 receipt.",
+        "Closed roles distinguish supporting, corroborating, contradicting, contextual, ignored and missing expected evidence.",
+        "Question and Understanding digests are deterministic, input-order independent and change only with their declared computation dependencies.",
+        "The contract exposes no BUY/SELL, probability, economic, permission, order or capital authority."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-market-understanding-evidence-attribution.test.ts tests/unit/trader-market-question-evaluation.test.ts",
+        "pnpm typecheck",
+        "scoped eslint and git diff --check"
+      ],
+      "actualFiles": [
+        "lib/trader/intelligence/evaluate-canonical-market-questions.ts",
+        "lib/trader/intelligence/index.ts",
+        "lib/trader/intelligence/market-understanding-evidence-attribution-v1.ts",
+        "lib/trader/intelligence/market-understanding.types.ts",
+        "tests/unit/helpers/market-understanding-evidence.ts",
+        "tests/unit/trader-market-understanding-evidence-attribution.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Exact immutable Market Understanding identity, attribution and validation contract accepted at commit fc045e2c35cf5a9da182cfea502edbdc7a09dab5.",
+        "Fresh independent cumulative review at aca7b4cbb3eb1df2c578b0f7d51aa6db0c8dc6a1 reported zero unresolved P1/P2."
+      ],
+      "integratedCommits": [
+        "23911432d293512b135ae9ef8566e22f3bed2d6f"
+      ],
+      "tests": [
+        "Cumulative focused DEE-622 proof: 24 files / 126 tests PASS.",
+        "Typecheck, exact PostgreSQL 10/10 regression and diff check PASS."
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-713",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Replace weak and blanket MarketUnderstandingBridge provenance with exact question-relative computation dependencies from the validated DEE-621 PROFILE_RECEIPT inventory; preserve missing/degraded/contradiction semantics and remove legacy actionability.",
+      "dependencies": ["DEE-712"],
+      "dependencyEvidence": [
+        "Implementation begins only after DEE-712 freezes the shared identity/role/digest API.",
+        "The existing EvaluationCycleInput already carries DEE-621 runtime authority, so no PIT repository or new composition authority is needed."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+        "lib/trader/intelligence/evaluation-cycle.ts",
+        "lib/trader/intelligence/types.ts",
+        "tests/unit/trader-market-understanding-bridge.test.ts",
+        "tests/unit/trader-mi-evaluation-cycle.test.ts",
+        "tests/unit/trader-mi-understanding-reconstruction.test.ts",
+        "tests/unit/trader-market-understanding-golden.test.ts",
+        "tests/unit/trader-m9-provider-fusion-remediation.test.ts",
+        "tests/unit/trader-market-data-pr25.test.ts",
+        "tests/unit/trader-mi-cde-conviction.test.ts",
+        "tests/fixtures/trader/market-understanding-aligned-trend.json",
+        "tests/fixtures/trader/market-understanding-cross-venue-conflict.json",
+        "tests/fixtures/trader/market-understanding-gaps-conflict.json"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-622 sufficiency-to-Understanding boundary requires unresolved fail-close and removal of actionability; DEE-620 fixes the admitted primitive set."
+      },
+      "expectedAcceptanceEvidence": [
+        "No blanket fused provenance or coarse provider-kind-time identity remains in authoritative question attribution.",
+        "Only accepted evidence for the matching receipt requirement can resolve a question; unavailable, rejected, degraded and contradictory evidence stays typed.",
+        "The eleven DEE-620 excluded/unmodeled lanes cannot become authoritative primitive or causal evidence.",
+        "Q_DEPLOY_CAPITAL and Q_PRESERVE_CAPITAL remain NOT_APPLICABLE and no Understanding result amplifies permission."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-market-understanding-bridge.test.ts tests/unit/trader-mi-evaluation-cycle.test.ts tests/unit/trader-mi-understanding-reconstruction.test.ts tests/unit/trader-market-understanding-golden.test.ts",
+        "pnpm test --run tests/unit/trader-m9-provider-fusion-remediation.test.ts tests/unit/trader-market-data-pr25.test.ts tests/unit/trader-mi-cde-conviction.test.ts",
+        "pnpm typecheck",
+        "scoped eslint and git diff --check"
+      ],
+      "actualFiles": [
+        "lib/trader/intelligence/evaluation-cycle.ts",
+        "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+        "lib/trader/intelligence/types.ts",
+        "tests/fixtures/trader/market-understanding-aligned-trend.json",
+        "tests/fixtures/trader/market-understanding-cross-venue-conflict.json",
+        "tests/fixtures/trader/market-understanding-gaps-conflict.json",
+        "tests/unit/trader-market-data-pr25.test.ts",
+        "tests/unit/trader-market-understanding-bridge.test.ts",
+        "tests/unit/trader-mi-evaluation-cycle.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Exact PROFILE_RECEIPT-bound Understanding derivation accepted at commit a28cf9f484a46a7e6e01acaebe66af538fbe75bc.",
+        "Fresh independent cumulative review at aca7b4cbb3eb1df2c578b0f7d51aa6db0c8dc6a1 reported zero unresolved P1/P2."
+      ],
+      "integratedCommits": [
+        "0af5bd0f5fe382b60b5fd82cebf2dd578409166b",
+        "873471af650bebb1b1ffa1c161b51153ee3a4adc",
+        "80d4ce1cb9f36e89bd8110382edfa1d25206f51a"
+      ],
+      "tests": [
+        "Cumulative focused DEE-622 proof: 24 files / 126 tests PASS.",
+        "Typecheck, exact PostgreSQL 10/10 regression and diff check PASS."
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "parallel",
+        "parallelGroup": "post-contract-freeze",
+        "dependencyCompatible": true,
+        "overlap": "none",
+        "competingMigration": false,
+        "sharedCanonicalIdentity": false,
+        "sharedAuthoritySchema": false,
+        "mutualInvalidationRisk": false
+      }
+    },
+    {
+      "issue": "DEE-714",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Pin exact Understanding derivation/content/question-lineage identities in replay reproduction and M9 exports, with deterministic unused-evidence isolation and without changing DEE-623-owned durable cycle persistence.",
+      "dependencies": ["DEE-712"],
+      "dependencyEvidence": [
+        "Implementation begins only after DEE-712 freezes the digest and projection API.",
+        "Replay/export files are disjoint from DEE-713 bridge/runtime files and introduce no migration or authority schema."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/research/replay-repro-digest.ts",
+        "lib/trader/research/m9-market-understanding-export.ts",
+        "lib/trader/research/m9-decision-trace-export.ts",
+        "tests/unit/trader-m9-market-understanding-export.test.ts",
+        "tests/unit/trader-mi-decision-trace.test.ts",
+        "tests/unit/trader-replay-fused-context.test.ts",
+        "tests/unit/trader-m9-deterministic-replay.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-622 requires deterministic replay/export identity while DEE-623 explicitly retains full causal-cycle persistence ownership."
+      },
+      "expectedAcceptanceEvidence": [
+        "Identical exact PIT/profile/receipt/derivation inputs reproduce identical question and Understanding digests.",
+        "An unused observation revision does not change a question causal-lineage digest; a consumed observation or trust revision does.",
+        "M9 exports expose exact typed roles and identities rather than weak provenance strings.",
+        "No streaming causal-cycle schema, intelligence-record semantic digest, migration or blind-holdout reader changes."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-m9-market-understanding-export.test.ts tests/unit/trader-mi-decision-trace.test.ts tests/unit/trader-replay-fused-context.test.ts tests/unit/trader-m9-deterministic-replay.test.ts",
+        "pnpm typecheck",
+        "scoped eslint and git diff --check"
+      ],
+      "actualFiles": [
+        "lib/trader/research/m9-decision-trace-export.ts",
+        "lib/trader/research/m9-market-understanding-export.ts",
+        "lib/trader/research/replay-repro-digest.ts",
+        "tests/unit/trader-m9-market-understanding-export.test.ts",
+        "tests/unit/trader-mi-decision-trace.test.ts",
+        "tests/unit/trader-replay-fused-context.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Exact replay reproduction and M9 export lineage identities accepted at commit 28f06a25bfb33e1ab180f1592397b0b9b75e11b0.",
+        "Fresh independent cumulative review at aca7b4cbb3eb1df2c578b0f7d51aa6db0c8dc6a1 reported zero unresolved P1/P2."
+      ],
+      "integratedCommits": [
+        "f6b36ff543a74f62963366eb56047738f89f7783"
+      ],
+      "tests": [
+        "Cumulative focused DEE-622 proof: 24 files / 126 tests PASS.",
+        "Typecheck, exact PostgreSQL 10/10 regression and diff check PASS."
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "parallel",
+        "parallelGroup": "post-contract-freeze",
+        "dependencyCompatible": true,
+        "overlap": "none",
+        "competingMigration": false,
+        "sharedCanonicalIdentity": false,
+        "sharedAuthoritySchema": false,
+        "mutualInvalidationRisk": false
+      }
+    },
+    {
+      "issue": "DEE-715",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Compose the accepted bridge and replay/export identities, inventory every Understanding producer/consumer/persistence/bypass, close tenant/PIT/replay/holdout/no-downstream-authority proofs plus affected legacy expectations, and apply the separately Human-ratified deterministic FHV parity-harness pause ordering repair.",
+      "dependencies": ["DEE-713", "DEE-714"],
+      "dependencyEvidence": [
+        "D begins only after both file-disjoint post-contract implementations are accepted.",
+        "Whole-repository closure may mechanically update existing DEE-620/621/inquiry inventories but cannot change their semantics.",
+        "Human ratification on 2026-08-25 admits exactly the public backtest boundary and its focused parity test solely to reject blind PROFILE_RECEIPT authority before any bar read or cycle execution.",
+        "Human ratification on 2026-08-25 additionally admits only FHV pause-command ordering and test-harness isolation to prove deterministic late-pause classification; holdout data, formulas, production/live and capital semantics remain forbidden."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/intelligence/market-understanding-consumer-inventory-v1.ts",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts",
+        "lib/trader/intelligence/information-inquiry/information-inquiry-consumer-inventory-v1.ts",
+        "lib/trader/mi/canonical-source-consumer-inventory-v1.ts",
+        "lib/trader/intelligence/analytical-layers-v0.ts",
+        "lib/trader/intelligence/cde-v0.ts",
+        "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts",
+        "lib/trader/intelligence/decision-chain.ts",
+        "lib/trader/intelligence/market-state-finalization.ts",
+        "lib/trader/intelligence/mi-core.types.ts",
+        "lib/trader/market-brain/market-brain-pipeline.ts",
+        "tests/unit/trader-market-understanding-consumer-closure.test.ts",
+        "tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+        "tests/unit/trader-information-sufficiency-consumer-closure.test.ts",
+        "tests/unit/trader-information-inquiry-consumer-closure.test.ts",
+        "tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
+        "tests/unit/trader-market-data-canonical-pit-bridge.test.ts",
+        "tests/unit/trader-market-data-canonical-pit-replay.test.ts",
+        "tests/unit/trader-information-need-replay-selection.test.ts",
+        "tests/unit/trader-research-backtest-isolation.test.ts",
+        "tests/unit/trader-market-brain-pipeline.test.ts",
+        "tests/integration/trader-htx-bar-poll-cycle.test.ts",
+        "lib/trader/research/wp21-g2-zero-fill-structural-comparison.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+        "tests/integration/fhv-rehearsal-campaign.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-directed accelerated quality protocol authorizes the complete up-front consumer, persistence, negative-path and CI-equivalent surface map."
+      },
+      "expectedAcceptanceEvidence": [
+        "Every producer, direct/indirect consumer, export/persistence seam and forbidden source-to-downstream bypass is inventoried exactly.",
+        "Tenant, account, symbol, timeframe and PIT mismatch fails closed before claim construction.",
+        "Official blind-holdout evidence/readers and research-only declarations cannot reach authoritative Understanding or downstream capital paths.",
+        "A blind split carrying PROFILE_RECEIPT rejects at the public backtest boundary before the bar source or any evaluation cycle is reached.",
+        "PostgreSQL regression proves unchanged DEE-620/621 append-only tenant persistence and no new migration.",
+        "All focused, negative, compile/build, one fresh-SQLite full suite and exact-head review gates pass before publication."
+      ],
+      "expectedTests": [
+        "pnpm test --run tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts",
+        "pnpm test --run tests/unit/trader-market-data-canonical-pit-bridge.test.ts tests/unit/trader-market-data-canonical-pit-replay.test.ts tests/unit/trader-information-need-replay-selection.test.ts tests/unit/trader-research-backtest-isolation.test.ts",
+        "WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES=<permission-correct-loopback-url> pnpm test --run --no-file-parallelism tests/integration/postgres-information-sufficiency-v2.test.ts tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts",
+        "pnpm lint && pnpm typecheck && pnpm build",
+        "one fresh-SQLite pnpm test --run only after semantic completion and preliminary review",
+        "manifest/canon/PR governance validation and fresh independent exact-head zero-P1/P2 review"
+      ],
+      "actualFiles": [
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/intelligence/analytical-layers-v0.ts",
+        "lib/trader/intelligence/cde-v0.ts",
+        "lib/trader/intelligence/decision-chain.ts",
+        "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts",
+        "lib/trader/intelligence/market-state-finalization.ts",
+        "lib/trader/intelligence/market-understanding-consumer-inventory-v1.ts",
+        "lib/trader/intelligence/mi-core.types.ts",
+        "tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+        "tests/unit/trader-market-understanding-consumer-closure.test.ts",
+        "lib/trader/research/wp21-g2-zero-fill-structural-comparison.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+        "tests/integration/fhv-rehearsal-campaign.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Consumer composition and initial closure accepted at commit e6973a37df959566cab4f78b650903580a681355.",
+        "Human-ratified blind PROFILE_RECEIPT rejection and exact inventory closure accepted at commit aca7b4cbb3eb1df2c578b0f7d51aa6db0c8dc6a1 after fresh independent review with zero unresolved P1/P2."
+      ],
+      "integratedCommits": [
+        "d57e4cd051e2e51bfe6b73b6e61062f1e9a6aacd",
+        "0e1f6301f7750016d5e8c6f2eecc4019469a23e8",
+        "281b3d100ffd7bedbc0cb60d840991fbf1006858",
+        "81cbbbaa5312a4d8a0dc3ed36726cfdd7e072a10"
+      ],
+      "tests": [
+        "Cumulative focused DEE-622 proof: 24 files / 126 tests PASS.",
+        "Blind PROFILE_RECEIPT negative proves rejection before bar reset/read or cycle execution.",
+        "Exact PostgreSQL DEE-620/621 regression: 2 files / 10 tests PASS; typecheck and diff check PASS."
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human-ratified controller plus independent repository/Linear/canon admission and threat-model audits on origin/main@1d8ec175190cb8d72c49ab6337dc848d0099d9f2"
+    },
+    "fhvLatePauseDeterminismRatification": {
+      "status": "human-ratified",
+      "authorizedAt": "2026-08-25",
+      "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
+      "surfaces": [
+        "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+        "tests/integration/fhv-rehearsal-campaign.test.ts"
+      ],
+      "boundary": "Only pause-command ordering, SQLite test isolation and deterministic classification proof; no holdout data, formula, production, live or capital semantic change."
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "9cec9082c518aa88260cd321fcde9beb8c7e6dba48ecb16a3aad431f383ff10b",
+      "manifestCommit": "0e0613d9acbcf5d96ffef8f3e5aef57fa87ff72f",
+      "manifestPath": "docs/plans/dee-711-exact-market-understanding-attribution.integration-train.json",
+      "reviewer": "Human-ratified controller and independent pre-implementation surface admission review"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-712",
+        "status": "pass",
+        "reviewedCommits": ["23911432d293512b135ae9ef8566e22f3bed2d6f"],
+        "reviewedFiles": [
+          "lib/trader/intelligence/evaluate-canonical-market-questions.ts",
+          "lib/trader/intelligence/index.ts",
+          "lib/trader/intelligence/market-understanding-evidence-attribution-v1.ts",
+          "lib/trader/intelligence/market-understanding.types.ts",
+          "tests/unit/helpers/market-understanding-evidence.ts",
+          "tests/unit/trader-market-understanding-evidence-attribution.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-713",
+        "status": "pass",
+        "reviewedCommits": [
+          "0af5bd0f5fe382b60b5fd82cebf2dd578409166b",
+          "873471af650bebb1b1ffa1c161b51153ee3a4adc",
+          "80d4ce1cb9f36e89bd8110382edfa1d25206f51a"
+        ],
+        "reviewedFiles": [
+          "lib/trader/intelligence/evaluation-cycle.ts",
+          "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+          "lib/trader/intelligence/types.ts",
+          "tests/fixtures/trader/market-understanding-aligned-trend.json",
+          "tests/fixtures/trader/market-understanding-cross-venue-conflict.json",
+          "tests/fixtures/trader/market-understanding-gaps-conflict.json",
+          "tests/unit/trader-market-data-pr25.test.ts",
+          "tests/unit/trader-market-understanding-bridge.test.ts",
+          "tests/unit/trader-mi-evaluation-cycle.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-714",
+        "status": "pass",
+        "reviewedCommits": ["f6b36ff543a74f62963366eb56047738f89f7783"],
+        "reviewedFiles": [
+          "lib/trader/research/m9-decision-trace-export.ts",
+          "lib/trader/research/m9-market-understanding-export.ts",
+          "lib/trader/research/replay-repro-digest.ts",
+          "tests/unit/trader-m9-market-understanding-export.test.ts",
+          "tests/unit/trader-mi-decision-trace.test.ts",
+          "tests/unit/trader-replay-fused-context.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-715",
+        "status": "pass",
+        "reviewedCommits": [
+          "d57e4cd051e2e51bfe6b73b6e61062f1e9a6aacd",
+          "0e1f6301f7750016d5e8c6f2eecc4019469a23e8",
+          "281b3d100ffd7bedbc0cb60d840991fbf1006858",
+          "81cbbbaa5312a4d8a0dc3ed36726cfdd7e072a10"
+        ],
+        "reviewedFiles": [
+          "lib/trader/backtest/backtest-runner.ts",
+          "lib/trader/intelligence/analytical-layers-v0.ts",
+          "lib/trader/intelligence/cde-v0.ts",
+          "lib/trader/intelligence/decision-chain.ts",
+          "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts",
+          "lib/trader/intelligence/market-state-finalization.ts",
+          "lib/trader/intelligence/market-understanding-consumer-inventory-v1.ts",
+          "lib/trader/intelligence/mi-core.types.ts",
+          "tests/unit/trader-information-inquiry-backtest-parity.test.ts",
+        "tests/unit/trader-market-understanding-consumer-closure.test.ts",
+        "lib/trader/research/wp21-g2-zero-fill-structural-comparison.ts",
+        "tests/integration/trader-paper-cycle-runner.test.ts",
+        "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+        "tests/integration/fhv-rehearsal-campaign.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-712",
+        "status": "pass",
+        "commands": ["focused attribution and question tests", "typecheck", "diff check"]
+      },
+      {
+        "afterIssue": "DEE-713",
+        "status": "pass",
+        "commands": ["focused bridge and evaluation-cycle tests", "cumulative focused suite", "typecheck", "diff check"]
+      },
+      {
+        "afterIssue": "DEE-714",
+        "status": "pass",
+        "commands": ["focused replay and export tests", "cumulative focused suite", "typecheck", "diff check"]
+      },
+      {
+        "afterIssue": "DEE-715",
+        "status": "pass",
+        "commands": [
+          "cumulative focused DEE-622 suite 126/126",
+          "blind PROFILE_RECEIPT no-read negative",
+          "exact runtime consumer inventory closure",
+          "PostgreSQL DEE-620/621 regression 10/10",
+          "typecheck",
+          "diff check",
+          "fresh independent preliminary exact-head review P1=0 P2=0"
+        ]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true,
+    "finalAdversarialReviewStatus": "pending-on-this-frozen-head",
+    "blindProfileReceiptScopeRatification": {
+      "status": "human-ratified",
+      "authorizedAt": "2026-08-25",
+      "sourceThread": "01a019c0-8940-7272-bc9c-6b330e6bf0f2",
+      "surfaces": [
+        "lib/trader/backtest/backtest-runner.ts",
+        "tests/unit/trader-information-inquiry-backtest-parity.test.ts"
+      ],
+      "boundary": "Fail closed when split is blind and authority is PROFILE_RECEIPT before any bar read or cycle execution; no blind-holdout, production, live, capital-eligible, or capital-use authority."
+    }
+  }
+}

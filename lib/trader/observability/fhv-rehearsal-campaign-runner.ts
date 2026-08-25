@@ -742,6 +742,8 @@ async function runCampaignWithPauseSupport(input: {
   manifest: FhvRehearsalLaunchConfigV1;
   targetSha: string;
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
+  /** Parity-harness only: records the pause request on the observed cycle boundary. */
+  parityPauseAfterCycles?: number;
 }): Promise<FhvRehearsalCampaignResult> {
   const deadline = prepareT4DeterministicRuntimeDeadline({
     runRoot: input.runRoot,
@@ -772,6 +774,9 @@ async function runCampaignWithPauseSupport(input: {
         updatedAtUtc: new Date().toISOString(),
       });
       appendFhvRehearsalProgressSample(input.runRoot, cyclesProcessed);
+      if (cyclesProcessed === input.parityPauseAfterCycles) {
+        writeFhvCampaignControlPauseRequest(input.runRoot, input.runId, input.organizationId);
+      }
       maybeHoldFhvCrossProcessPauseTestBarrier({
         runRoot: input.runRoot,
         cyclesProcessed,
@@ -1310,7 +1315,12 @@ export async function runFhvRehearsalCampaignParityProof(input: {
   targetSha: string;
   organizationId: string;
   pauseAfterCycles?: number;
-}): Promise<{ uninterruptedDigest: string; resumedDigest: string; match: boolean }> {
+}): Promise<{
+  uninterruptedDigest: string;
+  resumedDigest: string;
+  match: boolean;
+  actualPauseCycle: number;
+}> {
   const pauseAfterCycles = input.pauseAfterCycles ?? FHV_REHEARSAL_CHECKPOINT_CYCLE;
   const uninterrupted = await runFhvRehearsalCampaign({
     runRoot: input.runRootUninterrupted,
@@ -1320,15 +1330,21 @@ export async function runFhvRehearsalCampaignParityProof(input: {
   });
   expectUninterruptedEvidenceComplete(input.runRootUninterrupted);
 
-  const pausePromise = runFhvRehearsalCampaign({
+  const pauseManifest = assertFhvCampaignRuntimeIdentity({
     runRoot: input.runRootPauseResume,
     runId: input.runId,
     targetSha: input.targetSha,
     organizationId: input.organizationId,
   });
-  await waitForFhvRehearsalCycles(input.runRootPauseResume, pauseAfterCycles);
-  writeFhvCampaignControlPauseRequest(input.runRootPauseResume, input.runId, input.organizationId);
-  const paused = await pausePromise;
+  mkdirSync(resolveFhvRehearsalEvidenceDir(input.runRootPauseResume), { recursive: true });
+  const paused = await runCampaignWithPauseSupport({
+    runRoot: input.runRootPauseResume,
+    runId: input.runId,
+    organizationId: input.organizationId,
+    manifest: pauseManifest,
+    targetSha: input.targetSha,
+    parityPauseAfterCycles: pauseAfterCycles,
+  });
   if (paused.classification !== "REHEARSAL_PAUSED") {
     throw new Error("Expected paused rehearsal classification.");
   }
@@ -1343,6 +1359,7 @@ export async function runFhvRehearsalCampaignParityProof(input: {
     uninterruptedDigest: uninterrupted.semanticReproDigest,
     resumedDigest: resumed.semanticReproDigest,
     match: uninterrupted.semanticReproDigest === resumed.semanticReproDigest,
+    actualPauseCycle: paused.cyclesProcessed,
   };
 }
 

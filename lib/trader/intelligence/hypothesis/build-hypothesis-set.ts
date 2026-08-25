@@ -33,7 +33,6 @@ function clampConfidence(value: number): number {
 function buildHypothesis(
   hypothesisType: HypothesisType,
   reconstruction: ReconstructionSnapshot,
-  understanding?: MarketUnderstandingSnapshot,
 ): MarketHypothesis {
   const ms = reconstruction.marketStructure;
   const ls = reconstruction.liquidityStructure;
@@ -137,22 +136,9 @@ function buildHypothesis(
         supporting.push("range_or_chop_regime");
         confidence += 0.2;
       }
-      if (understanding?.spotPosture === "REDUCE_RISK") {
-        supporting.push("reduced_risk_posture_favors_reversion");
-        confidence += 0.1;
-      }
       expectedPath = "revert_to_mean";
       invalidation.push("trend_extension_beyond_band");
       break;
-  }
-
-  if (understanding?.mtfAlignment === "CONFLICTING") {
-    contradicting.push("mtf_conflict");
-    confidence -= 0.1;
-  }
-  if (!understanding?.dataQualitySufficient) {
-    contradicting.push("data_quality_insufficient");
-    confidence -= 0.15;
   }
   if (ps.volumeAnomaly && hypothesisType !== "distribution") {
     supporting.push("participation_anomaly");
@@ -232,6 +218,8 @@ function resolveOpportunity(
 
 /**
  * Strategy-agnostic hypothesis engine — produces competing market hypotheses.
+ * Legacy Understanding remains an input-compatible audit projection and is causally inert here;
+ * DEE-626 owns future exact-evidence propagation into Hypothesis/Forecast lineage.
  */
 export function buildHypothesisSet(input: BuildHypothesisSetInput): BuildHypothesisSetResult {
   const hypothesisTypes: HypothesisType[] = [
@@ -245,9 +233,7 @@ export function buildHypothesisSet(input: BuildHypothesisSetInput): BuildHypothe
     "mean_reversion",
   ];
 
-  const hypotheses = hypothesisTypes.map((type) =>
-    buildHypothesis(type, input.reconstruction, input.understanding),
-  );
+  const hypotheses = hypothesisTypes.map((type) => buildHypothesis(type, input.reconstruction));
 
   const updatedSession = updateSessionState(input.sessionState, hypotheses);
   const ranked = [...hypotheses].sort((a, b) => b.confidence - a.confidence);

@@ -12,6 +12,7 @@ export {
   type BuildMsvEnvelopeInput,
 } from "@/lib/trader/intelligence/cde-v0";
 export { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
+export * from "@/lib/trader/intelligence/market-understanding-evidence-attribution-v1";
 export { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
 export {
   createEmptyHypothesisSessionState,
