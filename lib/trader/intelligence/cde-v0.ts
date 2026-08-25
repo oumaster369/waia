@@ -67,7 +67,6 @@ function lessRestrictivePermission(
 function hasHardVeto(input: {
   dataQualityScore: number;
   fusedContext?: FusedMarketContext;
-  understanding?: MarketUnderstandingSnapshot;
 }): boolean {
   if (input.dataQualityScore < QUALITY_PAPER_ONLY_THRESHOLD) {
     return true;
@@ -75,24 +74,6 @@ function hasHardVeto(input: {
   if (
     input.fusedContext?.aggregateHealth === "UNAVAILABLE" ||
     input.fusedContext?.aggregateHealth === "STALE"
-  ) {
-    return true;
-  }
-  if (!input.understanding) {
-    return false;
-  }
-  if (!input.understanding.dataQualitySufficient) {
-    return true;
-  }
-  if (input.understanding.crossVenue.agreement === "DISAGREE") {
-    return true;
-  }
-  if (input.understanding.knowledgeGaps.some((gap) => gap.blocksPermission)) {
-    return true;
-  }
-  if (
-    input.understanding.spotPosture === "NO_TRADE" ||
-    input.understanding.spotPosture === "PRESERVE_CAPITAL"
   ) {
     return true;
   }
@@ -125,7 +106,6 @@ function resolveConvictionPermission(input: {
   opportunity?: MarketOpportunity;
   dataQualityScore: number;
   fusedContext?: FusedMarketContext;
-  understanding?: MarketUnderstandingSnapshot;
 }): {
   permission: TradingPermission;
   reasonCodes: string[];
@@ -150,7 +130,7 @@ function resolveConvictionPermission(input: {
     reasonCodes.push(cdeReasonCodes.truthfulHealthSufficient);
   }
 
-  if (input.understanding?.spotPosture === "REDUCE_RISK" || health.degradedOk) {
+  if (health.degradedOk) {
     reasonCodes.push(cdeReasonCodes.convictionAllowReducedRisk);
     return { permission: "ALLOW_REDUCED_RISK", reasonCodes, riskMultiplier: "0.5" };
   }
@@ -162,7 +142,6 @@ function resolveConvictionPermission(input: {
 function resolveTradingPermission(input: {
   dataQualityScore: number;
   fusedContext?: FusedMarketContext;
-  understanding?: MarketUnderstandingSnapshot;
   opportunity?: MarketOpportunity;
   miCoreEnabled?: boolean;
 }): {
@@ -210,63 +189,11 @@ function resolveTradingPermission(input: {
     }
   }
 
-  if (input.understanding) {
-    if (!input.understanding.dataQualitySufficient) {
-      reasonCodes.push(cdeReasonCodes.understandingDataInsufficient);
-      permission = moreRestrictivePermission(permission, "PAPER_ONLY");
-      riskMultiplier = "0.5";
-    }
-
-    if (input.understanding.crossVenue.agreement === "DISAGREE") {
-      reasonCodes.push(cdeReasonCodes.understandingCrossVenueConflict);
-      permission = moreRestrictivePermission(permission, "PAPER_ONLY");
-      riskMultiplier = "0.5";
-    }
-
-    if (input.understanding.knowledgeGaps.some((gap) => gap.blocksPermission)) {
-      reasonCodes.push(cdeReasonCodes.understandingKnowledgeGap);
-      permission = moreRestrictivePermission(permission, "PAPER_ONLY");
-      riskMultiplier = "0.5";
-    }
-
-    if (input.understanding.regimeHint === "STRESSED") {
-      reasonCodes.push(cdeReasonCodes.understandingStressed);
-      permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
-      riskMultiplier = "0.5";
-    }
-
-    switch (input.understanding.spotPosture) {
-      case "NO_TRADE":
-        reasonCodes.push(cdeReasonCodes.understandingNoTrade);
-        permission = moreRestrictivePermission(permission, "PAPER_ONLY");
-        riskMultiplier = "0.25";
-        break;
-      case "WAIT":
-        reasonCodes.push(cdeReasonCodes.understandingWait);
-        permission = moreRestrictivePermission(permission, "PAPER_ONLY");
-        riskMultiplier = "0.5";
-        break;
-      case "PRESERVE_CAPITAL":
-        reasonCodes.push(cdeReasonCodes.understandingPreserveCapital);
-        permission = moreRestrictivePermission(permission, "ONLY_CLOSE_POSITIONS");
-        riskMultiplier = "0.25";
-        break;
-      case "REDUCE_RISK":
-        reasonCodes.push(cdeReasonCodes.understandingReducedRisk);
-        permission = moreRestrictivePermission(permission, "ALLOW_REDUCED_RISK");
-        riskMultiplier = "0.5";
-        break;
-      case "TRADE":
-        break;
-    }
-  }
-
   if (input.miCoreEnabled) {
     const convictionPath = resolveConvictionPermission({
       opportunity: input.opportunity,
       dataQualityScore: input.dataQualityScore,
       fusedContext: input.fusedContext,
-      understanding: input.understanding,
     });
     if (convictionPath && !hasHardVeto(input)) {
       for (const code of convictionPath.reasonCodes) {
@@ -306,7 +233,8 @@ export type BuildMsvEnvelopeInput = {
  * Chief Decision Engine v0 — aggregates features into an MSV envelope.
  * Does not recompute {@link FeatureSnapshot.dataQualityScore}.
  * PR2.5: fused context may adjust permission/confidence only — never trade signals.
- * PR2.6: understanding augments permission/posture rationale — never trade signals.
+ * DEE-622: legacy Understanding is projected to telemetry only and never affects permission,
+ * conviction, risk, strategy selection, or data-quality authority.
  */
 function resolveAllowedStrategyIds(regime: Regime): readonly string[] {
   const all = listMvpStrategyRegistry().map((entry) => entry.strategyId);
@@ -328,7 +256,6 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
   const permission = resolveTradingPermission({
     dataQualityScore: features.dataQualityScore,
     fusedContext,
-    understanding,
     opportunity,
     miCoreEnabled,
   });
@@ -340,10 +267,7 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
 
   const fusedQuality =
     fusedContext !== undefined
-      ? Math.min(
-          features.dataQualityScore,
-          understanding?.understandingConfidence ?? fusedContext.aggregateConfidence,
-        )
+      ? Math.min(features.dataQualityScore, fusedContext.aggregateConfidence)
       : features.dataQualityScore;
 
   return {
@@ -354,7 +278,7 @@ export function buildMsvEnvelope(input: BuildMsvEnvelopeInput): MsvEnvelope {
     physics: buildMarketPhysicsLayer(features),
     liquidity: buildLiquidityLayer(features),
     crowd,
-    futureContext: buildFutureContextLayer(fusedContext, understanding),
+    futureContext: buildFutureContextLayer(fusedContext),
     understanding: understanding ? buildMsvUnderstandingBlock(understanding) : undefined,
     derived: {
       regime,

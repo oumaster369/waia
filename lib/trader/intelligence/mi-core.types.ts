@@ -13,6 +13,7 @@ export type MarketStateSnapshot = Readonly<{
   evaluatedAt: string;
   instrumentId: string;
   reconstruction: ReconstructionSnapshot;
+  /** Legacy audit/telemetry projection only; carries no hypothesis, permission, or capital authority. */
   understanding: MarketUnderstandingSnapshot | null;
   hypotheses: HypothesisSet;
   activeOpportunity: MarketOpportunity | null;

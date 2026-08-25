@@ -39,18 +39,10 @@ export function buildCrowdPsychologyLayer(fusedContext?: FusedMarketContext): Ms
 
 export function buildFutureContextLayer(
   fusedContext?: FusedMarketContext,
-  understanding?: MarketUnderstandingSnapshot,
 ): MsvFutureContextBlock {
   const sessionPhase = fusedContext?.sessionPhase ?? "UNKNOWN";
   const corridor = fusedContext?.asianRangeCorridor;
-  const eventRiskScore =
-    understanding?.regimeHint === "STRESSED"
-      ? "0.35"
-      : understanding?.mtfAlignment === "CONFLICTING"
-        ? "0.2"
-        : corridor
-          ? "0.1"
-          : "0";
+  const eventRiskScore = corridor ? "0.1" : "0";
   return {
     eventRiskScore,
     sessionPhase,

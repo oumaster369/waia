@@ -1,4 +1,3 @@
-import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import {
@@ -15,7 +14,6 @@ import { resolveUniversalTerminalReason } from "@/lib/trader/intelligence/termin
 export type AssembleDecisionChainInput = {
   evaluatedAt: string;
   reconstruction: ReconstructionSnapshot;
-  understanding?: MarketUnderstandingSnapshot;
   hypothesisSet: HypothesisSet;
   marketStateSnapshot: MarketStateSnapshot;
   tradingPermission: TradingPermission;
