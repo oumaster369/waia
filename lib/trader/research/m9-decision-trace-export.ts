@@ -1,4 +1,8 @@
-import { computeReplayReproContentDigest } from "@/lib/trader/research/replay-repro-digest";
+import {
+  buildMarketUnderstandingReplayIdentityV1,
+  computeReplayReproContentDigest,
+  type MarketUnderstandingReplayIdentityV1,
+} from "@/lib/trader/research/replay-repro-digest";
 import type { StreamingEvidenceReader } from "@/lib/trader/backtest/streaming-evidence";
 import {
   assertM9ProjectionSource,
@@ -11,6 +15,7 @@ export const M9_DECISION_TRACE_SCHEMA_VERSION = "m9_decision_trace_v1" as const;
 
 export type M9DecisionTraceCycle = {
   evaluatedAt: string;
+  understandingArtifact: MarketUnderstandingReplayIdentityV1 | null;
   fused: {
     aggregateHealth: string;
     aggregateConfidence: number;
@@ -127,11 +132,15 @@ export function buildM9DecisionTraceExport(input: {
     const evaluation = cycle.evaluation;
     const fused = evaluation.fusedContext;
     const understanding = evaluation.understanding;
+    const understandingArtifact = evaluation.understandingArtifact;
     const primarySignal = evaluation.signal;
     const decisionChain = evaluation.decisionChain;
 
     const traceCycle: M9DecisionTraceCycle = {
       evaluatedAt: evaluation.features.evaluatedAt,
+      understandingArtifact: understandingArtifact
+        ? buildMarketUnderstandingReplayIdentityV1(understandingArtifact)
+        : null,
       fused: fused
         ? {
             aggregateHealth: fused.aggregateHealth,
