@@ -592,6 +592,12 @@ function buildHtrAccountingContext(input: {
  */
 export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestResult> {
   assertSyntheticResearchNonCapitalBacktestScopeV2(input);
+  if (
+    input.split === "blind" &&
+    input.informationSufficiencyAuthority?.kind === "PROFILE_RECEIPT"
+  ) {
+    throw new Error("INFORMATION_SUFFICIENCY_PROFILE_RECEIPT_FORBIDDEN:blindHoldout");
+  }
   if (input.split === "blind" && input.informationInquiryResolver) {
     throw new Error("INFORMATION_INQUIRY_RUNTIME_FORBIDDEN:blindHoldout");
   }

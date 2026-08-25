@@ -13,6 +13,7 @@ export const MARKET_UNDERSTANDING_IMPORT_MODULES_V1 = {
   EXACT_BRIDGE: "@/lib/trader/intelligence/market-understanding-bridge-v0",
   LEGACY_TYPES: "@/lib/trader/intelligence/market-understanding.types",
   REPLAY_IDENTITY: "@/lib/trader/research/replay-repro-digest",
+  EVALUATION_CYCLE: "@/lib/trader/intelligence/evaluation-cycle",
   INTELLIGENCE_BARREL: "@/lib/trader/intelligence",
 } as const;
 
@@ -64,6 +65,15 @@ export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
     "lib/trader/research/m9-decision-trace-export.ts",
     "lib/trader/research/m9-market-understanding-export.ts",
     "lib/trader/research/m9-provider-fusion-export.ts",
+  ],
+  EVALUATION_CYCLE: [
+    "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
+    "lib/trader/intelligence/index.ts",
+    "lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts",
+    "lib/trader/knowledge/mkb-read-model-evidence-harness.ts",
+    "lib/trader/live/run-live-cycle.ts",
+    "lib/trader/market-brain/market-brain-pipeline.ts",
+    "lib/trader/paper/paper-cycle-runner.ts",
   ],
   INTELLIGENCE_BARREL: ["lib/trader/index.ts"],
 } as const satisfies Record<MarketUnderstandingImportV1, readonly string[]>;
@@ -143,6 +153,12 @@ export const MARKET_UNDERSTANDING_INDIRECT_CONSUMERS_V1 = [
     createsCapitalAuthority: false,
   },
   {
+    path: "lib/trader/research/research-orchestrator.ts",
+    symbol: "runResearchPipelinePostgres",
+    disposition: "BLIND_ORCHESTRATOR_WITHOUT_PROFILE_RECEIPT_AUTHORITY",
+    createsCapitalAuthority: false,
+  },
+  {
     path: "lib/trader/market-brain/market-brain-pipeline.ts",
     symbol: "runMarketBrainPipeline",
     disposition: "RESEARCH_NON_CAPITAL_LEGACY_RESULT_ONLY",
@@ -152,6 +168,24 @@ export const MARKET_UNDERSTANDING_INDIRECT_CONSUMERS_V1 = [
     path: "lib/trader/intelligence/forecast-decision/forecast-decision-service.ts",
     symbol: "buildForecastDecisionBundle",
     disposition: "NO_ARTIFACT_INPUT_OR_GATE",
+    createsCapitalAuthority: false,
+  },
+  {
+    path: "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
+    symbol: "runWp14ForecastDecisionEvidenceHarness",
+    disposition: "SYNTHETIC_EVIDENCE_HARNESS_NO_CAPITAL_AUTHORITY",
+    createsCapitalAuthority: false,
+  },
+  {
+    path: "lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts",
+    symbol: "runWp13IntelligenceEvidenceHarness",
+    disposition: "SYNTHETIC_EVIDENCE_HARNESS_NO_CAPITAL_AUTHORITY",
+    createsCapitalAuthority: false,
+  },
+  {
+    path: "lib/trader/knowledge/mkb-read-model-evidence-harness.ts",
+    symbol: "runWp15MkbReadModelEvidenceHarness",
+    disposition: "SYNTHETIC_EVIDENCE_HARNESS_NO_CAPITAL_AUTHORITY",
     createsCapitalAuthority: false,
   },
   {

@@ -65,6 +65,14 @@ function importSpecifiers(source: string): string[] {
   ].map((match) => match[1]!);
 }
 
+function runtimeImportSpecifiers(source: string): string[] {
+  return [
+    ...source.matchAll(
+      /(?:import|export)\s+(?!type\b)(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g,
+    ),
+  ].map((match) => match[1]!);
+}
+
 function directImporters(modulePath: string): string[] {
   return productionSources()
     .filter((path) => importSpecifiers(readFileSync(path, "utf8")).includes(modulePath))
@@ -83,16 +91,26 @@ function resolveInternalImport(fromPath: string, specifier: string): string | nu
   return null;
 }
 
-function reachableProductionFiles(startPaths: readonly string[]): Set<string> {
+function reachableProductionConsumers(startPaths: readonly string[]): Set<string> {
+  const sources = productionSources();
+  const consumersByDependency = new Map<string, string[]>();
+  for (const sourcePath of sources) {
+    for (const specifier of runtimeImportSpecifiers(readFileSync(sourcePath, "utf8"))) {
+      const dependencyPath = resolveInternalImport(sourcePath, specifier);
+      if (!dependencyPath) continue;
+      const consumers = consumersByDependency.get(dependencyPath) ?? [];
+      consumers.push(sourcePath);
+      consumersByDependency.set(dependencyPath, consumers);
+    }
+  }
   const pending = startPaths.map((path) => join(ROOT, path));
-  const visited = new Set<string>();
+  const visited = new Set<string>(pending);
   while (pending.length > 0) {
-    const path = pending.pop()!;
-    if (visited.has(path)) continue;
-    visited.add(path);
-    for (const specifier of importSpecifiers(readFileSync(path, "utf8"))) {
-      const dependency = resolveInternalImport(path, specifier);
-      if (dependency && !visited.has(dependency)) pending.push(dependency);
+    const dependencyPath = pending.pop()!;
+    for (const sourcePath of consumersByDependency.get(dependencyPath) ?? []) {
+      if (visited.has(sourcePath)) continue;
+      visited.add(sourcePath);
+      pending.push(sourcePath);
     }
   }
   return new Set([...visited].map(repoRelative));
@@ -260,15 +278,19 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
     expect(live).not.toMatch(/informationSufficiencyAuthority|understandingArtifact/);
   });
 
-  it("keeps blind holdout unreachable and forbids named bypasses", () => {
-    const reachable = reachableProductionFiles([
+  it("accounts for blind runtime consumers and forbids holdout authority or bypasses", () => {
+    const reachableConsumers = reachableProductionConsumers([
       "lib/trader/intelligence/market-understanding-evidence-attribution-v1.ts",
       "lib/trader/intelligence/market-understanding-bridge-v0.ts",
+      "lib/trader/intelligence/evaluation-cycle.ts",
       "lib/trader/research/replay-repro-digest.ts",
     ]);
+    expect(reachableConsumers.has("lib/trader/backtest/backtest-runner.ts")).toBe(true);
     for (const path of MARKET_UNDERSTANDING_BLIND_HOLDOUT_BOUNDARIES_V1) {
       expect(existsSync(join(ROOT, path)), path).toBe(true);
-      expect(reachable.has(path), path).toBe(false);
+      expect(reachableConsumers.has(path), path).toBe(
+        path === "lib/trader/research/research-orchestrator.ts",
+      );
       expect(
         importSpecifiers(read(path)).filter((specifier) =>
           MARKET_UNDERSTANDING_FORBIDDEN_DIRECT_IMPORT_MODULES_V1.includes(
@@ -277,6 +299,9 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
         ),
       ).toEqual([]);
     }
+    expect(read("lib/trader/research/research-orchestrator.ts")).not.toContain(
+      "informationSufficiencyAuthority",
+    );
 
     const bypasses = productionSources()
       .map(repoRelative)
