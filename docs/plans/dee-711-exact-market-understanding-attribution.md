@@ -25,15 +25,15 @@ approvalGates:
 includedIssues: [DEE-712, DEE-713, DEE-714, DEE-715]
 state:
   status: in-progress
-  currentWorkPackage: DEE-712
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-712, DEE-713, DEE-714, DEE-715]
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-712, DEE-713, DEE-714, DEE-715]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 1d8ec175190cb8d72c49ab6337dc848d0099d9f2
-  lastValidationAt: "2026-08-24"
+  lastValidatedGitSha: 81cbbbaa5312a4d8a0dc3ed36726cfdd7e072a10
+  lastValidationAt: "2026-08-25"
   blockedReason: null
-  nextAction: "Validate and commit the complete pre-implementation admission manifest, then freeze the shared A contract before file-disjoint B/C work."
+  nextAction: "Validate and commit the frozen manifest, then run the single fresh-SQLite full suite and final exact-head review before publication."
 provenance:
   createdFrom: human-ratified-delegation
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
@@ -121,6 +121,14 @@ After A and file-disjoint from B, pin exact per-question lineage and Understandi
 ### DEE-715 — repository closure
 
 Compose B/C, inventory every consumer/bypass/persistence seam, refresh only mechanically affected DEE-620/621/inquiry inventories, and prove tenant/PIT/replay/holdout/no-authority negatives end to end.
+
+## Acceptance
+
+- All four admitted child waves are delivered by their exact manifest-mapped immutable commits and independently accepted with zero unresolved P1/P2.
+- Exact DEE-620/621 identities, typed missing/degraded/contradiction states, replay/export lineage and whole-repository runtime-consumer closure pass their focused and PostgreSQL proofs.
+- A blind split carrying `PROFILE_RECEIPT` rejects at the public backtest boundary before any bar reset/read or evaluation cycle; it grants no blind-holdout, production, live, capital-eligible or capital-use authority.
+- The frozen manifest, canon, lint, typecheck, build, one fresh-SQLite full suite, final exact-head review, authoritative CI/PostgreSQL and DEE-653 admission all pass before squash merge.
+- No migration, new source class, scientific formula or threshold, security/retention change, official holdout access, or Forecast/Decision/Risk/Execution/Guardian/live-capital authority is introduced.
 
 ## Exact local pre-push checklist
 
