@@ -947,7 +947,6 @@ export function buildExactMarketUnderstandingArtifactV1(
       computationInputs.push({
         path: featurePath,
         contentDigest: exactUnderstandingDigest({
-          featureSetId: input.features.featureSetId,
           value: input.features.features.zscoreVsSma20,
         }),
       });
@@ -966,7 +965,6 @@ export function buildExactMarketUnderstandingArtifactV1(
       computationInputs.push({
         path: featurePath,
         contentDigest: exactUnderstandingDigest({
-          featureSetId: input.features.featureSetId,
           value: input.features.features.spreadBps,
         }),
       });
@@ -977,7 +975,6 @@ export function buildExactMarketUnderstandingArtifactV1(
       computationInputs.push({
         path: featurePath,
         contentDigest: exactUnderstandingDigest({
-          featureSetId: input.features.featureSetId,
           value: input.features.dataQualityScore,
         }),
       });

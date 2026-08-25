@@ -483,6 +483,22 @@ describe("PR2.6 market understanding bridge", () => {
     ) => artifact.claims.find((claim) => claim.marketQuestionId === questionId)!.causalLineageDigest;
 
     const baseline = build({});
+    const independentlyComputedFeatures = computeFeatureSnapshot({
+      bars: fixture.bars,
+      quote: fixture.latestQuote,
+      evaluatedAt,
+    });
+    expect(independentlyComputedFeatures.featureSetId).not.toBe(features.featureSetId);
+    const independentlyComputed = build({ selectedFeatures: independentlyComputedFeatures });
+    expect(digestFor(independentlyComputed, "Q_WHAT_HAPPENING")).toBe(
+      digestFor(baseline, "Q_WHAT_HAPPENING"),
+    );
+    expect(digestFor(independentlyComputed, "Q_LIQUIDITY")).toBe(
+      digestFor(baseline, "Q_LIQUIDITY"),
+    );
+    expect(digestFor(independentlyComputed, "Q_DATA_TRUST")).toBe(
+      digestFor(baseline, "Q_DATA_TRUST"),
+    );
     const answerMutated = build({
       questionEvaluations: understanding.questionEvaluations.map((evaluation) =>
         evaluation.questionId === "Q_WHAT_HAPPENING"
