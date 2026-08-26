@@ -79,6 +79,101 @@ function sortedUnique(values: readonly string[]): string[] {
   return [...new Set(values)].sort(compareText);
 }
 
+function hasExactKeys(value: object, keys: readonly string[]): boolean {
+  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort());
+}
+
+function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
+  if (
+    !bundle ||
+    typeof bundle !== "object" ||
+    !hasExactKeys(bundle, ["schemaVersion", "scope", "reconstruction", "understanding", "hypothesisConstruction", "policyProfiles"]) ||
+    bundle.schemaVersion !== CAUSAL_INPUT_BUNDLE_SCHEMA_VERSION ||
+    !hasExactKeys(bundle.scope, ["organizationId", "instrumentId", "evaluatedAt"]) ||
+    !bundle.scope.organizationId ||
+    !bundle.scope.instrumentId ||
+    !Number.isFinite(Date.parse(bundle.scope.evaluatedAt)) ||
+    !hasExactKeys(bundle.reconstruction, ["schemaVersion", "contentDigest"]) ||
+    !bundle.reconstruction.schemaVersion
+  ) {
+    throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:shape");
+  }
+  requireDigest(bundle.reconstruction.contentDigest, "reconstructionContentDigest");
+  if (
+    !hasExactKeys(bundle.hypothesisConstruction, ["hypothesisSetSchemaVersion", "policyVersion", "authority", "canonicalIntelligenceStateDigests", "canonicalCausalLineageDigests"]) ||
+    bundle.hypothesisConstruction.hypothesisSetSchemaVersion !== HYPOTHESIS_SET_SCHEMA_VERSION ||
+    bundle.hypothesisConstruction.policyVersion !== HYPOTHESIS_CONSTRUCTION_POLICY_VERSION ||
+    !["LEGACY_DIAGNOSTIC", "CANONICAL_PIT_KNOWLEDGE", "EMPTY"].includes(bundle.hypothesisConstruction.authority) ||
+    !Array.isArray(bundle.hypothesisConstruction.canonicalIntelligenceStateDigests) ||
+    !Array.isArray(bundle.hypothesisConstruction.canonicalCausalLineageDigests) ||
+    !hasExactKeys(bundle.policyProfiles, ["historicalProfileId", "historicalProfileContentDigest", "timeframeEvidenceAuthorityMatrixContentDigest"]) ||
+    !bundle.policyProfiles.historicalProfileId
+  ) {
+    throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:policyShape");
+  }
+  for (const digest of [
+    ...bundle.hypothesisConstruction.canonicalIntelligenceStateDigests,
+    ...bundle.hypothesisConstruction.canonicalCausalLineageDigests,
+    bundle.policyProfiles.historicalProfileContentDigest,
+    bundle.policyProfiles.timeframeEvidenceAuthorityMatrixContentDigest,
+  ]) requireDigest(digest, "policyOrHypothesisDigest");
+  if (bundle.understanding.status === "NOT_CAUSALLY_APPLICABLE") {
+    if (!hasExactKeys(bundle.understanding, ["status"])) {
+      throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:understandingShape");
+    }
+    return;
+  }
+  if (
+    bundle.understanding.status !== "EXACT" ||
+    !hasExactKeys(bundle.understanding, [
+      "status", "schemaVersion", "contentDigest", "derivationDefinitionContentDigest",
+      "requiredInformationProfileId", "requiredInformationProfileContentDigest",
+      "informationSufficiencyReceiptId", "informationSufficiencyReceiptContentDigest",
+      "claimContentDigests", "claimCausalLineageDigests", "computationInputs", "consumedEvidence",
+    ]) ||
+    !bundle.understanding.schemaVersion ||
+    !bundle.understanding.requiredInformationProfileId ||
+    !bundle.understanding.informationSufficiencyReceiptId ||
+    !Array.isArray(bundle.understanding.claimContentDigests) ||
+    !Array.isArray(bundle.understanding.claimCausalLineageDigests) ||
+    !Array.isArray(bundle.understanding.computationInputs) ||
+    !Array.isArray(bundle.understanding.consumedEvidence)
+  ) throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:understandingShape");
+  for (const digest of [
+    bundle.understanding.contentDigest,
+    bundle.understanding.derivationDefinitionContentDigest,
+    bundle.understanding.requiredInformationProfileContentDigest,
+    bundle.understanding.informationSufficiencyReceiptContentDigest,
+    ...bundle.understanding.claimContentDigests,
+    ...bundle.understanding.claimCausalLineageDigests,
+  ]) requireDigest(digest, "understandingDigest");
+  for (const item of bundle.understanding.computationInputs) {
+    if (!hasExactKeys(item, ["path", "contentDigest"]) || !item.path) {
+      throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:computationInput");
+    }
+    requireDigest(item.contentDigest, "computationInputDigest");
+  }
+  for (const evidence of bundle.understanding.consumedEvidence) {
+    if (
+      !hasExactKeys(evidence, [
+        "evidenceId", "sourceId", "observationId", "observationSchemaVersion",
+        "observationContentDigest", "trustAsOfReceiptId", "trustRevisionId",
+        "trustRevisionContentDigest", "measurementDefinitionId",
+        "measurementDefinitionContentDigest", "measurementValueId",
+        "measurementValueContentDigest",
+      ]) ||
+      !evidence.evidenceId || !evidence.sourceId || !evidence.observationId ||
+      !evidence.observationSchemaVersion
+    ) throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:evidenceShape");
+    requireDigest(evidence.observationContentDigest, "observationContentDigest");
+    for (const [field, digest] of [
+      ["trustRevisionContentDigest", evidence.trustRevisionContentDigest],
+      ["measurementDefinitionContentDigest", evidence.measurementDefinitionContentDigest],
+      ["measurementValueContentDigest", evidence.measurementValueContentDigest],
+    ] as const) if (digest !== null) requireDigest(digest, field);
+  }
+}
+
 function buildUnderstandingIdentity(
   artifact: MarketUnderstandingArtifactV1 | undefined,
   snapshot: MarketStateSnapshot,
@@ -231,11 +326,14 @@ export function computeCanonicalCycleCausalInputDigestV2(
 export function parseCanonicalCycleCausalInputBundleV2(
   canonicalJson: string,
 ): CanonicalCycleCausalInputBundleV2 {
-  const parsed = JSON.parse(canonicalJson) as CanonicalCycleCausalInputBundleV2;
-  if (
-    parsed.schemaVersion !== CAUSAL_INPUT_BUNDLE_SCHEMA_VERSION ||
-    serializeCanonicalCycleCausalInputBundleV2(parsed) !== canonicalJson
-  ) {
+  let parsed: CanonicalCycleCausalInputBundleV2;
+  try {
+    parsed = JSON.parse(canonicalJson) as CanonicalCycleCausalInputBundleV2;
+    assertBundleShape(parsed);
+  } catch {
+    throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:canonicalIdentity");
+  }
+  if (serializeCanonicalCycleCausalInputBundleV2(parsed) !== canonicalJson) {
     throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:canonicalIdentity");
   }
   return parsed;
