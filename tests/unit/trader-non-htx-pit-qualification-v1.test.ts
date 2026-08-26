@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyNonHtxPartitionV1,
   qualifyAlternativeMeBoundedProbeV1,
+  qualifyCurrentRssReceiptV1,
   qualifyNonHtxCapabilityV1,
   verifyNonHtxQualificationReceiptV1,
   verifyNonHtxProviderInventoryClosureV1,
@@ -96,6 +97,21 @@ describe("DEE-625 non-HTX PIT qualification", () => {
     expect(receipt.disposition).toBe("NOT_QUALIFIED");
     expect(receipt.reasonCodes).toEqual(["CURRENT_RSS_RECEIPT_ONLY"]);
   });
+
+  it.each(["coindesk_rss", "cointelegraph_rss", "decrypt_rss"] as const)(
+    "builds a closed receipt-only envelope for %s",
+    (providerId) => {
+      const receipt = qualifyCurrentRssReceiptV1({
+        providerId,
+        retrievedAtUtc: "2026-08-26T03:11:11.000Z",
+        rawContentDigest: digest(providerId),
+      });
+      expect(receipt.disposition).toBe("NOT_QUALIFIED");
+      expect(receipt.corpusAdmitted).toBe(false);
+      expect(receipt.reasonCodes).toContain("CURRENT_RSS_RECEIPT_ONLY");
+      expect(receipt.reasonCodes).toContain("TRUTHFUL_ARCHIVE_UNAVAILABLE");
+    },
+  );
 
   it("fails closed when historical event time itself is absent", () => {
     const receipt = qualifyNonHtxCapabilityV1(evidence({ eventTimePresent: false }));

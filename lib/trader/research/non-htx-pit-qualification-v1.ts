@@ -173,6 +173,27 @@ export function qualifyAlternativeMeBoundedProbeV1(input: Readonly<{
   });
 }
 
+export function qualifyCurrentRssReceiptV1(input: Readonly<{
+  providerId: (typeof NON_HTX_RSS_PROVIDER_IDS_V1)[number];
+  retrievedAtUtc: string;
+  rawContentDigest: string;
+}>): NonHtxQualificationReceiptV1 {
+  return qualifyNonHtxCapabilityV1({
+    providerId: input.providerId,
+    observationKind: "news_headline",
+    endpoint: NON_HTX_RATIFIED_ENDPOINTS_V1[input.providerId],
+    method: "GET",
+    retrievedAtUtc: input.retrievedAtUtc,
+    rawContentDigest: input.rawContentDigest,
+    eventTimePresent: true,
+    historicalAvailableAtProven: false,
+    historicalIngestLineageProven: false,
+    immutableHistoryProven: false,
+    revisionIdentityProven: false,
+    archiveCoverage: { from: null, to: null },
+  });
+}
+
 export function verifyNonHtxProviderInventoryClosureV1(): void {
   const classified = new Set<string>([
     "htx_spot",
