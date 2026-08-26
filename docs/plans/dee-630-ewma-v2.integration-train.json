@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-630",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-738",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Implement canonical raw-return-squared EWMA v2 and fail-closed 1m input contract.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "DEE-623 is squash-merged at authoritative base 95e421b0026bafdcd4bf28f2fa23753d0fd2157f."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/research/benchmark/baseline-models-v1.ts",
+        "tests/unit/baseline-models-v1-scientific.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human-ratified DEE-630 formula repair only."
+      },
+      "expectedAcceptanceEvidence": [
+        "Raw r² known answers and fail-closed exact contiguous 2000×1m validation."
+      ],
+      "expectedTests": ["tests/unit/baseline-models-v1-scientific.test.ts"],
+      "execution": { "wave": 1, "mode": "serialized" }
+    },
+    {
+      "issue": "DEE-737",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Advance baseline, trial and scientific receipt identities from defective v1 semantics.",
+      "dependencies": ["DEE-738"],
+      "dependencyEvidence": ["Identity can freeze only after canonical computation API is frozen."],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-630 explicitly requires invalidation/requalification of defective scientific evidence."
+      },
+      "expectedAcceptanceEvidence": [
+        "v2 baseline and receipt identity deterministically differ from v1."
+      ],
+      "expectedTests": ["tests/unit/research-harness-admission-integration.test.ts"],
+      "execution": { "wave": 2, "mode": "serialized" }
+    },
+    {
+      "issue": "DEE-736",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Close known-answer, negative, horizon scaling, replay and integration evidence.",
+      "dependencies": ["DEE-737"],
+      "dependencyEvidence": ["Validation targets the frozen corrected semantics and identities."],
+      "expectedFileOrSchemaSurfaces": [
+        "tests/unit/research-harness-admission-integration.test.ts",
+        "docs/plans"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Validation only; holdout remains sealed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Focused/negative gates and deterministic receipt evidence pass."
+      ],
+      "expectedTests": ["focused benchmark and research-harness suites"],
+      "execution": { "wave": 3, "mode": "serialized" }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Controller dependency, duplicate, ownership, producer/consumer and protected-surface audit"
+    }
+  },
+  "crossCuttingInvariants": [
+    "Raw returns are squared directly.",
+    "All required 1m observations are exact and contiguous.",
+    "Defective v1 evidence is not reusable.",
+    "No holdout, Decision, Risk, live or capital change."
+  ],
+  "rollbackStrategy": "One revert PR restores the previous baseline family; no persistence migration or holdout mutation is involved.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh docs/plans/dee-630-ewma-v2.integration-train.json DEE-630 admission",
+    "focused": [
+      "pnpm test --run tests/unit/baseline-models-v1-scientific.test.ts tests/unit/research-harness-admission-integration.test.ts",
+      "pnpm typecheck"
+    ],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 before squash merge"
+  }
+}
