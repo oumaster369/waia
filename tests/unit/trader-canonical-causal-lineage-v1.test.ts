@@ -32,7 +32,7 @@ function reconstruction(): ReconstructionSnapshot {
     volatilityStructure: { atrUsdt: null, atrPeriod: 14, volatilityRegime: "NORMAL", expansionRatio: null },
     participationStructure: { relativeVolume: null, volumeAnomaly: false, effortVsResult: "NEUTRAL" },
     contextStructure: { sessionPhase: "TEST", fearGreedIndex: null, crossVenueAgreement: null, contextOnly: true },
-    contentDigest: "reconstruction-digest",
+    contentDigest: "a".repeat(64),
   };
 }
 

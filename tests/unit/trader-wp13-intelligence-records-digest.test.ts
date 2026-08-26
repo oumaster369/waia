@@ -15,6 +15,7 @@ describe("trader wp13 intelligence records digest", () => {
       historicalProfileDigest: "a".repeat(64),
       matrixDigest: "b".repeat(64),
       terminalReasonCode: "NO_TRADE",
+      inputCausalBundleJson: null,
       inputSemanticDigest: "c".repeat(64),
       outputSemanticDigest: "d".repeat(64),
       contentDigest: "",
