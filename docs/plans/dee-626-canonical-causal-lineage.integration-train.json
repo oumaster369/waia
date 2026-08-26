@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-626",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-727",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Freeze CanonicalCausalLineageV1 and fail-closed validation without numeric or capital authority.",
       "dependencies": [],
@@ -21,15 +21,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "DEE-626 exact causal reconstruction scope; no protected authority expansion."},
       "expectedAcceptanceEvidence": ["Closed versioned content-addressed API.", "Cutoff, scope, digest and derivation mutation reject."],
       "expectedTests": ["focused causal lineage tests"],
-      "actualFiles": [],
-      "acceptanceEvidence": [],
-      "integratedCommits": [],
-      "tests": [],
+      "actualFiles": ["lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1.ts"],
+      "acceptanceEvidence": ["Canonical lineage contract and exact validation implemented."],
+      "integratedCommits": ["8d562e29f9e2eaab4a3730e375d393b9566c3ef0", "c8e1443900bed6fa52c6c7b2951c163f6f31dedd"],
+      "tests": ["tests/unit/trader-canonical-causal-lineage-v1.test.ts"],
       "execution": {"wave": 1, "mode": "serialized"}
     },
     {
       "issue": "DEE-728",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Propagate exact DEE-629 PIT Evidence/Knowledge lineage into canonical MarketHypothesis and HypothesisRecord.",
       "dependencies": ["DEE-727"],
@@ -39,15 +39,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Exact evidence propagation only."},
       "expectedAcceptanceEvidence": ["Per-hypothesis refs only.", "Unrelated evidence non-perturbation."],
       "expectedTests": ["hypothesis lineage propagation and mutation tests"],
-      "actualFiles": [],
-      "acceptanceEvidence": [],
-      "integratedCommits": [],
-      "tests": [],
+      "actualFiles": ["lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/hypothesis/hypothesis.types.ts", "lib/trader/intelligence/hypothesis/hypothesis-link.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"],
+      "acceptanceEvidence": ["Canonical JSON/digest copied exactly into the hypothesis cycle record."],
+      "integratedCommits": ["1161d8313fcc11fcae88df8b4d9d741dcc8124ed", "d40b83d1052d316c89cd087fa77c5e478cf844e4"],
+      "tests": ["tests/unit/trader-canonical-causal-lineage-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"],
       "execution": {"wave": 2, "mode": "serialized"}
     },
     {
       "issue": "DEE-729",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Seal byte-identical Hypothesis lineage into Forecast identity/content and emit no Forecast on absence or mismatch.",
       "dependencies": ["DEE-728"],
@@ -57,15 +57,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Forecast provenance only; no formula or Decision change."},
       "expectedAcceptanceEvidence": ["Byte-identical lineage.", "No lineage or any mismatch produces zero Forecast."],
       "expectedTests": ["Forecast propagation and fail-closed negatives"],
-      "actualFiles": [],
-      "acceptanceEvidence": [],
-      "integratedCommits": [],
-      "tests": [],
+      "actualFiles": ["lib/trader/intelligence/forecast-decision/build-forecast-records.ts", "lib/trader/intelligence/forecast-decision/derive-forecast-decision-ids.ts", "lib/trader/intelligence/forecast-decision/forecast-decision.types.ts", "lib/trader/intelligence/forecast-decision/serialize-forecast-decision.ts"],
+      "acceptanceEvidence": ["Forecast key and content digest pin the exact lineage digest."],
+      "integratedCommits": ["e639a709037d3d1902a23d28137a84a56cf31262", "db421c9386455d477a1ede8335b6b6688eaa4de4"],
+      "tests": ["tests/unit/trader-canonical-causal-lineage-v1.test.ts"],
       "execution": {"wave": 3, "mode": "serialized"}
     },
     {
       "issue": "DEE-730",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Close PostgreSQL persistence/read parity, replay, inventory and integration evidence for causal lineage.",
       "dependencies": ["DEE-729"],
@@ -75,28 +75,33 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Additive nullable persistence and parity proof only."},
       "expectedAcceptanceEvidence": ["PostgreSQL round-trip preserves exact bytes.", "Legacy null rows remain non-authoritative."],
       "expectedTests": ["PostgreSQL parity, full fresh SQLite, review and governance"],
-      "actualFiles": [],
-      "acceptanceEvidence": [],
-      "integratedCommits": [],
-      "tests": [],
+      "actualFiles": ["db/migrations_postgres/0167_trader_canonical_causal_lineage_v1.sql", "db/migrations_postgres/meta/_journal.json", "db/schema.postgres.ts", "lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts", "lib/trader/intelligence/outcome-resolution/outcome-resolution-source-postgres.ts", "lib/trader/intelligence/records/hypothesis-record-repository-postgres.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "tests/unit/trader-canonical-causal-lineage-v1.test.ts"],
+      "acceptanceEvidence": ["All PostgreSQL producer/read projections preserve nullable exact lineage fields."],
+      "integratedCommits": ["725de5002d5609fe061b5ba6374d43f276431891", "59e877a734746ce765aba5b8893cad7a9f4b8105"],
+      "tests": ["focused unit tests, PostgreSQL parity, fresh SQLite full suite"],
       "execution": {"wave": 4, "mode": "serialized"}
     }
   ],
   "deferredChildren": [],
   "integrationEvidence": {
     "admissionEvidence": {"status": "pass", "reviewer": "Controller dependency, duplicate, ownership and producer/consumer audit"},
-    "preImplementationAdmission": {"status": "pass", "manifestPath": "docs/plans/dee-626-canonical-causal-lineage.integration-train.json", "reviewer": "Controller pre-write surface admission"},
+    "preImplementationAdmission": {"status": "pass", "manifestDigest": "f1831c1ca58deca6eba734a3ca387250cbd8fd37fa4d2157b3a07077e6e72048", "manifestCommit": "9fad57ed14f0774883b552f79df029a8c3840b28", "manifestPath": "docs/plans/dee-626-canonical-causal-lineage.integration-train.json", "reviewer": "Controller pre-write surface admission"},
     "admissionReviews": [
-      {"issue": "DEE-727", "status": "pass", "reviewedCommits": ["5f13652acb23b2ce6bb1d698b513c3cb4c456fad"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1.ts", "lib/trader/intelligence/hypothesis/hypothesis.types.ts"]},
-      {"issue": "DEE-728", "status": "pass", "reviewedCommits": ["5f13652acb23b2ce6bb1d698b513c3cb4c456fad"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/records/intelligence-records-service.ts"]},
-      {"issue": "DEE-729", "status": "pass", "reviewedCommits": ["5f13652acb23b2ce6bb1d698b513c3cb4c456fad"], "reviewedFiles": ["lib/trader/intelligence/forecast-decision/build-forecast-records.ts", "lib/trader/intelligence/forecast-decision/forecast-decision.types.ts"]},
-      {"issue": "DEE-730", "status": "pass", "reviewedCommits": ["5f13652acb23b2ce6bb1d698b513c3cb4c456fad"], "reviewedFiles": ["db/schema.postgres.ts", "lib/trader/intelligence/records/hypothesis-record-repository-postgres.ts", "lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts"]}
+      {"issue": "DEE-727", "status": "pass", "reviewedCommits": ["8d562e29f9e2eaab4a3730e375d393b9566c3ef0", "c8e1443900bed6fa52c6c7b2951c163f6f31dedd"], "reviewedFiles": ["lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1.ts"]},
+      {"issue": "DEE-728", "status": "pass", "reviewedCommits": ["1161d8313fcc11fcae88df8b4d9d741dcc8124ed", "d40b83d1052d316c89cd087fa77c5e478cf844e4"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/hypothesis/hypothesis.types.ts", "lib/trader/intelligence/hypothesis/hypothesis-link.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"]},
+      {"issue": "DEE-729", "status": "pass", "reviewedCommits": ["e639a709037d3d1902a23d28137a84a56cf31262", "db421c9386455d477a1ede8335b6b6688eaa4de4"], "reviewedFiles": ["lib/trader/intelligence/forecast-decision/build-forecast-records.ts", "lib/trader/intelligence/forecast-decision/derive-forecast-decision-ids.ts", "lib/trader/intelligence/forecast-decision/forecast-decision.types.ts", "lib/trader/intelligence/forecast-decision/serialize-forecast-decision.ts"]},
+      {"issue": "DEE-730", "status": "pass", "reviewedCommits": ["725de5002d5609fe061b5ba6374d43f276431891", "59e877a734746ce765aba5b8893cad7a9f4b8105"], "reviewedFiles": ["db/migrations_postgres/0167_trader_canonical_causal_lineage_v1.sql", "db/migrations_postgres/meta/_journal.json", "db/schema.postgres.ts", "lib/trader/intelligence/forecast-decision/forecast-record-repository-postgres.ts", "lib/trader/intelligence/outcome-resolution/outcome-resolution-source-postgres.ts", "lib/trader/intelligence/records/hypothesis-record-repository-postgres.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "tests/unit/trader-canonical-causal-lineage-v1.test.ts"]}
     ],
-    "cumulativeChecks": [],
-    "fullDiffFrozen": false,
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-727", "status": "pass", "commands": ["canonical causal lineage API validation", "typecheck"]},
+      {"afterIssue": "DEE-728", "status": "pass", "commands": ["runtime Knowledge/Hypothesis replay and mutation tests", "typecheck"]},
+      {"afterIssue": "DEE-729", "status": "pass", "commands": ["Hypothesis-to-Forecast byte identity and fail-closed negatives", "typecheck"]},
+      {"afterIssue": "DEE-730", "status": "pass", "commands": ["focused 10/10", "scoped eslint", "typecheck"]}
+    ],
+    "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": ["Exact causal refs propagate byte-identically.", "Missing or mismatched lineage yields no Forecast.", "No Decision/Risk/live/capital authority change."],
   "rollbackStrategy": "One revert PR of the squash merge; additive nullable columns preserve existing rows.",
-  "validation": {"manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh docs/plans/dee-626-canonical-causal-lineage.integration-train.json DEE-626 admission", "focused": ["pnpm vitest run --cache=false tests/unit/trader-canonical-causal-lineage-v1.test.ts tests/unit/trader-runtime-knowledge-authority-v1.test.ts", "pnpm typecheck"], "fullSuite": "one fresh migrated SQLite pnpm test --run after exact-head review", "review": "fresh independent exact-head zero P1/P2", "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 exact-base/head PASS before squash merge"}
+  "validation": {"manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh docs/plans/dee-626-canonical-causal-lineage.integration-train.json DEE-626 frozen", "focused": ["pnpm vitest run --cache=false tests/unit/trader-canonical-causal-lineage-v1.test.ts tests/unit/trader-runtime-knowledge-authority-v1.test.ts", "pnpm typecheck"], "fullSuite": "one fresh migrated SQLite pnpm test --run after exact-head review", "review": "fresh independent exact-head zero P1/P2", "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 exact-base/head PASS before squash merge"}
 }
