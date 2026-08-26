@@ -34,7 +34,7 @@ function reconstruction(): ReconstructionSnapshot {
   };
 }
 
-function buildFixture() {
+function buildFixture(includeUnrelatedEvidence = false) {
   const authority = buildRuntimeKnowledgeAuthorityV1({
     organizationId: "org-1",
     symbol: "BTC/USDT",
@@ -55,7 +55,22 @@ function buildFixture() {
       contradictingEvidence: [{ evidenceId: "ev-against", contentDigest: "digest-against", direction: "AGAINST", eventTime: "2026-01-01T11:10:00.000Z", ingestTime: "2026-01-01T11:11:00.000Z" }],
       knowledgeRefs: [{ knowledgeEdgeId: "edge-1", knowledgeState: "RESOLVED_CORRECT" }],
       supersedesHypothesisIds: [],
-    }],
+    }, ...(includeUnrelatedEvidence ? [{
+      hypothesisId: "hyp-unrelated",
+      hypothesisKey: "mean-reversion",
+      definitionDigest: "unrelated-definition-digest",
+      createdAt: "2026-01-01T09:00:00.000Z",
+      hypothesisType: "mean_reversion" as const,
+      lifecycleState: "RETIRED" as const,
+      rankOrdinal: 1,
+      ordinalJudgment: "WEAKENED" as const,
+      expectedPath: "unrelated_path",
+      invalidationConditions: ["unrelated_condition"],
+      supportingEvidence: [{ evidenceId: "ev-unrelated", contentDigest: "digest-unrelated", direction: "FOR" as const, eventTime: "2026-01-01T09:30:00.000Z", ingestTime: "2026-01-01T09:31:00.000Z" }],
+      contradictingEvidence: [],
+      knowledgeRefs: [],
+      supersedesHypothesisIds: [],
+    }] : [])],
   });
   const hypothesisSet = buildHypothesisSet({
     reconstruction: reconstruction(),
@@ -125,7 +140,7 @@ describe("DEE-626 canonical causal lineage", () => {
 
   it("does not perturb lineage when unrelated evidence exists outside the hypothesis", () => {
     const first = buildFixture();
-    const second = buildFixture();
+    const second = buildFixture(true);
     expect(second.hypothesisSet.activeHypothesis?.canonicalCausalLineageJson).toBe(first.hypothesisSet.activeHypothesis?.canonicalCausalLineageJson);
   });
 });
