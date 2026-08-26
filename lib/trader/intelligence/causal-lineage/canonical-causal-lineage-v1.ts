@@ -18,6 +18,7 @@ export type CanonicalCausalLineageV1 = Readonly<{
   organizationId: string;
   symbol: string;
   pitAnchor: string;
+  hypothesisCausalStateDigest: string;
   hypothesisId: string;
   hypothesisDefinitionDigest: string;
   supportingEvidence: RuntimeKnowledgeHypothesisV1["supportingEvidence"];
@@ -29,6 +30,19 @@ export type CanonicalCausalLineageV1 = Readonly<{
 }>;
 
 type LineageBody = Omit<CanonicalCausalLineageV1, "contentDigest">;
+
+const LINEAGE_KEYS = ["schemaVersion", "derivationVersion", "runtimeKnowledgeDerivationVersion", "organizationId", "symbol", "pitAnchor", "hypothesisCausalStateDigest", "hypothesisId", "hypothesisDefinitionDigest", "supportingEvidence", "contradictingEvidence", "knowledgeRefs", "invalidationConditions", "supersedesHypothesisIds", "contentDigest"].sort();
+const EVIDENCE_KEYS = ["evidenceId", "contentDigest", "direction", "eventTime", "ingestTime"].sort();
+const KNOWLEDGE_KEYS = ["knowledgeEdgeId", "knowledgeState"].sort();
+const KNOWLEDGE_STATES = new Set(["OBSERVATION_ONLY", "RESOLVED_CORRECT", "RESOLVED_INCORRECT", "UNRESOLVED", "INSUFFICIENT_EVIDENCE", "STALE", "INELIGIBLE"]);
+
+function exactKeys(value: object, expected: readonly string[]): boolean {
+  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expected);
+}
+
+function hypothesisCausalStateDigest(hypothesis: RuntimeKnowledgeHypothesisV1): string {
+  return createHash("sha256").update(canonicalizeSemanticJsonString(hypothesis), "utf8").digest("hex");
+}
 
 function digest(body: LineageBody): string {
   return createHash("sha256")
@@ -51,6 +65,9 @@ export function parseCanonicalCausalLineageV1(value: string): CanonicalCausalLin
     throw new Error("CANONICAL_CAUSAL_LINEAGE_INVALID_JSON");
   }
   const lineage = parsed as CanonicalCausalLineageV1;
+  if (!exactKeys(lineage, LINEAGE_KEYS)) {
+    throw new Error("CANONICAL_CAUSAL_LINEAGE_UNEXPECTED_FIELD");
+  }
   assertCanonicalCausalLineageV1(lineage);
   if (serializeCanonicalCausalLineageV1(lineage) !== value) {
     throw new Error("CANONICAL_CAUSAL_LINEAGE_NON_CANONICAL_JSON");
@@ -72,6 +89,7 @@ export function assertCanonicalCausalLineageV1(
   if (
     !lineage.organizationId ||
     !lineage.symbol ||
+    !lineage.hypothesisCausalStateDigest ||
     !lineage.hypothesisId ||
     !lineage.hypothesisDefinitionDigest
   ) {
@@ -81,7 +99,15 @@ export function assertCanonicalCausalLineageV1(
   if (!Number.isFinite(cutoff) || lineage.pitAnchor !== cutoffAt) {
     throw new Error("CANONICAL_CAUSAL_LINEAGE_CUTOFF_MISMATCH");
   }
+  if (!Array.isArray(lineage.supportingEvidence) || !Array.isArray(lineage.contradictingEvidence) || !Array.isArray(lineage.knowledgeRefs)) {
+    throw new Error("CANONICAL_CAUSAL_LINEAGE_INCOMPLETE");
+  }
+  const evidenceIds = new Set<string>();
   for (const evidence of [...lineage.supportingEvidence, ...lineage.contradictingEvidence]) {
+    if (!evidence || typeof evidence !== "object" || !exactKeys(evidence, EVIDENCE_KEYS) || evidenceIds.has(evidence.evidenceId)) {
+      throw new Error("CANONICAL_CAUSAL_LINEAGE_EVIDENCE_INVALID");
+    }
+    evidenceIds.add(evidence.evidenceId);
     const eventTime = Date.parse(evidence.eventTime);
     const ingestTime = Date.parse(evidence.ingestTime);
     if (
@@ -94,6 +120,19 @@ export function assertCanonicalCausalLineageV1(
     ) {
       throw new Error("CANONICAL_CAUSAL_LINEAGE_EVIDENCE_INVALID");
     }
+  }
+  if (lineage.supportingEvidence.some((item) => item.direction !== "FOR") || lineage.contradictingEvidence.some((item) => item.direction !== "AGAINST")) {
+    throw new Error("CANONICAL_CAUSAL_LINEAGE_EVIDENCE_INVALID");
+  }
+  const knowledgeIds = new Set<string>();
+  for (const ref of lineage.knowledgeRefs) {
+    if (!ref || typeof ref !== "object" || !exactKeys(ref, KNOWLEDGE_KEYS) || !ref.knowledgeEdgeId || !KNOWLEDGE_STATES.has(ref.knowledgeState) || knowledgeIds.has(ref.knowledgeEdgeId)) {
+      throw new Error("CANONICAL_CAUSAL_LINEAGE_KNOWLEDGE_REF_INVALID");
+    }
+    knowledgeIds.add(ref.knowledgeEdgeId);
+  }
+  if (!Array.isArray(lineage.invalidationConditions) || !lineage.invalidationConditions.every((item) => typeof item === "string" && item.length > 0) || !Array.isArray(lineage.supersedesHypothesisIds) || !lineage.supersedesHypothesisIds.every((item) => typeof item === "string" && item.length > 0)) {
+    throw new Error("CANONICAL_CAUSAL_LINEAGE_HYPOTHESIS_REF_INVALID");
   }
   const body = Object.fromEntries(
     Object.entries(lineage).filter(([key]) => key !== "contentDigest"),
@@ -114,6 +153,7 @@ export function buildCanonicalCausalLineageV1(
     organizationId: authority.organizationId,
     symbol: authority.symbol,
     pitAnchor: authority.pitAnchor,
+    hypothesisCausalStateDigest: hypothesisCausalStateDigest(hypothesis),
     hypothesisId: hypothesis.hypothesisId,
     hypothesisDefinitionDigest: hypothesis.definitionDigest,
     supportingEvidence: hypothesis.supportingEvidence,
