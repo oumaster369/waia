@@ -41,7 +41,7 @@
       "expectedTests": ["determinism, mutation, PIT negatives"],
       "actualFiles": ["lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "lib/trader/knowledge/mkb-read-model-source.ts", "tests/integration/postgres-trader-mkb-read-model-parity.test.ts", "tests/integration/wp15-mkb-read-model-test-helpers.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"],
       "acceptanceEvidence": ["Repository-backed as-of fold rejects future event/ingest time, cross-tenant/version and missing references.", "Content-addressed fold and deterministic tie-break are stable under input shuffle and unrelated evidence."],
-      "integratedCommits": ["f03be990833abd90b32bb76ee5e4d11a3bc0025b"],
+      "integratedCommits": ["f03be990833abd90b32bb76ee5e4d11a3bc0025b", "0014727db59ccdf656e5612b01caccdc1cdd657b"],
       "tests": ["tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"],
       "execution": {"wave": 2, "mode": "serialized"}
     },
@@ -76,8 +76,8 @@
       "expectedAcceptanceEvidence": ["Negative evidence preserved.", "Retired/quarantined/superseded hypotheses excluded."],
       "expectedTests": ["focused negatives, PostgreSQL parity, full fresh SQLite"],
       "actualFiles": ["docs/plans/dee-629-runtime-knowledge-convergence.md"],
-      "acceptanceEvidence": ["Explicit FOR/AGAINST evidence and invalidation/supersession exclusions are fail closed.", "All runtime consumers converge through runEvaluationCycle; adapter-neutral repositories preserve SQLite/PostgreSQL semantics."],
-      "integratedCommits": ["4c40725dad70b4588fcf692df9d7fde2427b86a1"],
+      "acceptanceEvidence": ["Explicit FOR/AGAINST evidence and invalidation/supersession exclusions are fail closed.", "Non-live runtime consumers converge through runEvaluationCycle; in-memory/PostgreSQL PIT cutoffs match and actual PostgreSQL MI/MKB composition replays identically."],
+      "integratedCommits": ["4c40725dad70b4588fcf692df9d7fde2427b86a1", "b37d20a1ef71741afb0e15bf5feb8e607c4d617f"],
       "tests": ["tests/unit/trader-runtime-knowledge-authority-v1.test.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts"],
       "execution": {"wave": 4, "mode": "serialized"}
     }
@@ -88,9 +88,9 @@
     "preImplementationAdmission": {"status": "pass", "manifestDigest": "4f8986348886f7939eb0262bf3d2e4dd6de1ca4b678ec63b0c40d3082f271cfd", "manifestCommit": "e34bbc15760fb01d5aa7f413457f0e7930d00fcb", "manifestPath": "docs/plans/dee-629-runtime-knowledge-convergence.integration-train.json", "reviewer": "Controller duplicate, dependency, ownership and producer/consumer audit"},
     "admissionReviews": [
       {"issue": "DEE-721", "status": "pass", "reviewedCommits": ["d20d43d7b0a0a420056028052bbe4e33bd9fc84c"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/hypothesis.types.ts", "lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1.ts"]},
-      {"issue": "DEE-722", "status": "pass", "reviewedCommits": ["f03be990833abd90b32bb76ee5e4d11a3bc0025b"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "lib/trader/knowledge/mkb-read-model-source.ts", "tests/integration/postgres-trader-mkb-read-model-parity.test.ts", "tests/integration/wp15-mkb-read-model-test-helpers.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"]},
+      {"issue": "DEE-722", "status": "pass", "reviewedCommits": ["f03be990833abd90b32bb76ee5e4d11a3bc0025b", "0014727db59ccdf656e5612b01caccdc1cdd657b"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "lib/trader/knowledge/mkb-read-model-source.ts", "tests/integration/postgres-trader-mkb-read-model-parity.test.ts", "tests/integration/wp15-mkb-read-model-test-helpers.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"]},
       {"issue": "DEE-723", "status": "pass", "reviewedCommits": ["e7b84b0efa2d57e136f1a0f1e7f9095aa5029138"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/types.ts", "lib/trader/market-brain/market-brain-pipeline.ts", "lib/trader/market-brain/run-market-brain-cycle.ts", "lib/trader/market-brain/types.ts", "lib/trader/paper/paper-cycle-runner.ts", "lib/trader/paper/paper-cycle.types.ts", "tests/unit/trader-canonical-runtime-intelligence-consumer-closure.test.ts", "tests/unit/trader-market-brain-pipeline.test.ts", "tests/unit/trader-mi-cde-conviction.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts", "tests/unit/trader-mi-integration.test.ts", "tests/unit/trader-paper-cycle-runner.test.ts"]},
-      {"issue": "DEE-724", "status": "pass", "reviewedCommits": ["4c40725dad70b4588fcf692df9d7fde2427b86a1"], "reviewedFiles": ["docs/plans/dee-629-runtime-knowledge-convergence.md"]}
+      {"issue": "DEE-724", "status": "pass", "reviewedCommits": ["4c40725dad70b4588fcf692df9d7fde2427b86a1", "b37d20a1ef71741afb0e15bf5feb8e607c4d617f"], "reviewedFiles": ["docs/plans/dee-629-runtime-knowledge-convergence.md"]}
     ],
     "cumulativeChecks": [
       {"afterIssue": "DEE-721", "status": "pass", "commands": ["authority contract and derivation-version negatives", "typecheck"]},
