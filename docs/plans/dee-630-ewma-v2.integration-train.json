@@ -170,7 +170,7 @@
   ],
   "rollbackStrategy": "One revert PR restores the previous baseline family; no persistence migration or holdout mutation is involved.",
   "validation": {
-    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh docs/plans/dee-630-ewma-v2.integration-train.json DEE-630 admission",
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-630-ewma-v2.integration-train.json DEE-630 frozen",
     "focused": [
       "pnpm test --run tests/unit/baseline-models-v1-scientific.test.ts tests/unit/research-harness-admission-integration.test.ts",
       "pnpm typecheck"

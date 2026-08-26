@@ -27,4 +27,3 @@ authoritativeBase: 95e421b0026bafdcd4bf28f2fa23753d0fd2157f
 ## Validation
 
 Focused and negative tests run continuously. The frozen exact head requires lint, typecheck, build, one fresh SQLite full suite, exact-head independent review with zero P1/P2, authoritative CI/PostgreSQL and DEE-653 before squash merge.
-
