@@ -16,6 +16,10 @@ requiredValidation:
   - postgres-parity
   - independent-exact-head-review
   - dee-653-exact-head-admission
+approvalGates:
+  - t3-scope-preauthorized
+  - integration-ready
+  - dee-653-exact-head-admission
 state:
   status: in-progress
   completedWorkPackages: []
@@ -50,3 +54,11 @@ provenance:
 Focused negative tests run after every wave. After semantic completion and preliminary review, run exactly one full test suite against freshly migrated SQLite, authoritative PostgreSQL parity, exact-head independent review with zero P1/P2, CI and DEE-653 before squash merge.
 
 Rollback is one revert of the squash merge; this train adds no migration and makes no external durable data mutation.
+
+## Acceptance
+
+- Identical PIT canonical state produces the identical semantic digest and ordinal ranking on SQLite/in-memory and PostgreSQL read ports.
+- Exact supporting and contradicting evidence, invalidation and supersession remain reconstructable.
+- Future evidence/revisions, cross-org rows, missing lineage, terminal citations and digest mutation fail closed.
+- Legacy fixed-delta hypotheses remain diagnostic and cannot authorize an opportunity.
+- Production build, canonical/governance validation, frozen-head fresh-SQLite suite, PostgreSQL parity, independent review, CI and DEE-653 all pass before merge.
