@@ -114,6 +114,24 @@ export async function queryWp15PostgresReadModel(organizationId: string, runId: 
   );
 }
 
+export async function seedWp15FutureUpdatedKnowledgeEdge(organizationId: string): Promise<string> {
+  const id = "wp15-future-updated-edge";
+  await insertKnowledgeEdgePostgres(getPostgresDrizzle(), { organizationId }, {
+    id,
+    fromRef: "evidence:past",
+    toRef: "hypothesis:past",
+    relationKind: "supports",
+    confidence: "high",
+    strength: "strong",
+    regimeScope: "trend",
+    failureCasesJson: "[]",
+    verified: true,
+    createdAt: new Date(WP15_AS_OF.getTime() - 60_000),
+    updatedAt: new Date(WP15_AS_OF.getTime() + 1),
+  });
+  return id;
+}
+
 export async function queryWp15InMemoryReadModel(
   organizationId: string,
   runId: string,
