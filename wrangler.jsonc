@@ -18,6 +18,12 @@
       "service": "waia-app",
     },
   ],
+  "r2_buckets": [
+    {
+      "binding": "TREASURY_EVIDENCE_R2",
+      "bucket_name": "waia-treasury-evidence-prod",
+    },
+  ],
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://waia.life",
     "NEXT_PUBLIC_TRADER_URL": "https://trader.waia.life",

@@ -225,6 +225,18 @@ Validation: `pnpm validate:provider-readiness` · `pnpm validate:market-data-int
 
 ---
 
+## Treasury evidence storage
+
+| Binding | Secret? | Cloudflare | Notes |
+|---------|---------|------------|-------|
+| `TREASURY_EVIDENCE_R2` | No | Private R2 binding in `wrangler.jsonc` | Production bucket: `waia-treasury-evidence-prod`; no public URL, S3 credentials, or `r2.dev` access |
+
+Run `pnpm cf-typegen` after changing Worker bindings. Local development and tests use
+Wrangler's local R2 simulation or the in-memory adapter; they do not write to the
+production bucket.
+
+---
+
 ## Files and git
 
 | File | Committed? |

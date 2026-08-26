@@ -1,6 +1,6 @@
 import { TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
 
-/** Intended future Worker binding. Not registered in wrangler.jsonc by WP-5. */
+/** Private Worker binding for immutable Treasury evidence objects. */
 export const TREASURY_EVIDENCE_R2_BINDING_NAME = "TREASURY_EVIDENCE_R2" as const;
 
 export const TREASURY_EVIDENCE_STORAGE_BACKEND = "cloudflare-r2" as const;
