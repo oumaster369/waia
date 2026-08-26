@@ -75,9 +75,9 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Fixed pre-holdout partitions and sealed blind 2025."},
       "expectedAcceptanceEvidence": ["Identical evidence yields identical receipts.", "Mutation changes digest and replay rejects mismatch.", "No live/capital authority or calls during replay."],
       "expectedTests": ["determinism, mutation, partition and blind seal negatives", "one full fresh-SQLite suite"],
-      "actualFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
-      "acceptanceEvidence": ["All registered providers are exhaustively classified as HTX, ratified or EXCLUDED_UNMODELED.", "Replay admits only an exact verified PIT_CORPUS_QUALIFIED receipt in fixed pre-holdout partitions."],
-      "integratedCommits": ["fee7b7fe4acbec81e1769a3f2533c58ee71e4ed7"],
+      "actualFiles": ["docs/plans/dee-625-non-htx-pit-qualification.md", "lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "acceptanceEvidence": ["All registered providers are exhaustively classified as HTX, ratified or EXCLUDED_UNMODELED.", "Receipt replay verifies exact evidence without live calls; no corpus consumer is wired while all ratified sources remain NOT_QUALIFIED."],
+      "integratedCommits": ["fee7b7fe4acbec81e1769a3f2533c58ee71e4ed7", "a7aa7535d26c3c2b351ad4d0db1d0d5e6b485fc7"],
       "tests": ["20/20 focused pass", "typecheck pass", "scoped eslint pass"],
       "execution": {"wave": 4, "mode": "serialized"}
     }
@@ -89,7 +89,7 @@
       {"issue": "DEE-716", "status": "pass", "reviewedCommits": ["ebd6059ac1e424a1a00b83231aae2793ef1b9056"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]},
       {"issue": "DEE-717", "status": "pass", "reviewedCommits": ["1999fcf68fc9151caddb61a58da52be8b028e22a"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]},
       {"issue": "DEE-719", "status": "pass", "reviewedCommits": ["e984b06e09d9dbf72a0dc3bcc1aaf1b7ec854766"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]},
-      {"issue": "DEE-718", "status": "pass", "reviewedCommits": ["fee7b7fe4acbec81e1769a3f2533c58ee71e4ed7"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]}
+      {"issue": "DEE-718", "status": "pass", "reviewedCommits": ["fee7b7fe4acbec81e1769a3f2533c58ee71e4ed7", "a7aa7535d26c3c2b351ad4d0db1d0d5e6b485fc7"], "reviewedFiles": ["docs/plans/dee-625-non-htx-pit-qualification.md", "lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]}
     ],
     "cumulativeChecks": [
       {"afterIssue": "DEE-716", "status": "pass", "commands": ["focused unit suite", "typecheck", "scoped eslint"]},
