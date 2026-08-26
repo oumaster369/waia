@@ -217,3 +217,16 @@ export function verifyNonHtxQualificationReceiptV1(
     throw new Error("NON_HTX_QUALIFICATION_RECEIPT_MISMATCH");
   }
 }
+
+export function admitNonHtxReceiptForReplayV1(input: Readonly<{
+  eventTimeUtc: string;
+  evidence: NonHtxCapabilityEvidenceV1;
+  receipt: NonHtxQualificationReceiptV1;
+}>): "DEVELOPMENT" | "WALK_FORWARD_PREDICTIVE" | "WALK_FORWARD_ECONOMIC" {
+  const partition = classifyNonHtxPartitionV1(input.eventTimeUtc);
+  verifyNonHtxQualificationReceiptV1(input.evidence, input.receipt);
+  if (input.receipt.disposition !== "PIT_CORPUS_QUALIFIED" || !input.receipt.corpusAdmitted) {
+    throw new Error("NON_HTX_CORPUS_NOT_QUALIFIED");
+  }
+  return partition;
+}

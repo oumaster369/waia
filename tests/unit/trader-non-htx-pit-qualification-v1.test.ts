@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  admitNonHtxReceiptForReplayV1,
   classifyNonHtxPartitionV1,
   qualifyAlternativeMeBoundedProbeV1,
   qualifyCurrentRssReceiptV1,
@@ -170,6 +171,41 @@ describe("DEE-625 non-HTX PIT qualification", () => {
     expect(classifyNonHtxPartitionV1("2023-06-01T00:00:00.000Z")).toBe("WALK_FORWARD_PREDICTIVE");
     expect(classifyNonHtxPartitionV1("2024-06-01T00:00:00.000Z")).toBe("WALK_FORWARD_ECONOMIC");
     expect(() => classifyNonHtxPartitionV1("2025-01-01T00:00:00.000Z")).toThrow("BLIND_HOLDOUT_SEALED");
+  });
+
+  it("rejects receipt-only evidence at the replay consumer boundary", () => {
+    const source = evidence();
+    const receipt = qualifyNonHtxCapabilityV1(source);
+    expect(() => admitNonHtxReceiptForReplayV1({
+      eventTimeUtc: "2024-06-01T00:00:00.000Z",
+      evidence: source,
+      receipt,
+    })).toThrow("NON_HTX_CORPUS_NOT_QUALIFIED");
+  });
+
+  it("admits only an exact verified qualified receipt into a pre-holdout partition", () => {
+    const source = evidence({
+      historicalAvailableAtProven: true,
+      historicalIngestLineageProven: true,
+      immutableHistoryProven: true,
+      revisionIdentityProven: true,
+    });
+    const receipt = qualifyNonHtxCapabilityV1(source);
+    expect(admitNonHtxReceiptForReplayV1({
+      eventTimeUtc: "2023-06-01T00:00:00.000Z",
+      evidence: source,
+      receipt,
+    })).toBe("WALK_FORWARD_PREDICTIVE");
+  });
+
+  it("rejects blind 2025 before attempting receipt replay", () => {
+    const source = evidence();
+    const receipt = qualifyNonHtxCapabilityV1(source);
+    expect(() => admitNonHtxReceiptForReplayV1({
+      eventTimeUtc: "2025-01-01T00:00:00.000Z",
+      evidence: { ...source, rawContentDigest: "forged" },
+      receipt,
+    })).toThrow("BLIND_HOLDOUT_SEALED");
   });
 
   it("is deterministic", () => {
