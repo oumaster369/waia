@@ -23,7 +23,7 @@
       "expectedTests": ["focused causal input bundle tests"],
       "actualFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"],
       "acceptanceEvidence": ["Canonical v2 JSON is the sole new-envelope input digest preimage."],
-      "integratedCommits": ["41cf5bc48a7b4e24e0e099600496d1753cf2c635", "7bd76f336c2090f3fbd53f9065f7bc9b4c29dc1f", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660"],
+      "integratedCommits": ["41cf5bc48a7b4e24e0e099600496d1753cf2c635", "7bd76f336c2090f3fbd53f9065f7bc9b4c29dc1f", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "344e8037173168b6081035725f3afa56864a1733"],
       "tests": ["tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts"],
       "execution": {"wave": 1, "mode": "serialized"}
     },
@@ -69,7 +69,7 @@
     "admissionEvidence": {"status": "pass", "reviewer": "Controller dependency, duplicate, ownership and producer/consumer audit"},
     "preImplementationAdmission": {"status": "pass", "manifestDigest": "9d235ec2f5340a921d61929cda81c47a090ad04a6d36ff08f1c3ca411b933520", "manifestCommit": "b627bb9326fa6da49efbe03ceb9e39596c0f63f7", "manifestPath": "docs/plans/dee-623-causal-input-bundle-v2.integration-train.json", "reviewer": "Controller pre-write API and surface freeze"},
     "admissionReviews": [
-      {"issue": "DEE-733", "status": "pass", "reviewedCommits": ["41cf5bc48a7b4e24e0e099600496d1753cf2c635", "7bd76f336c2090f3fbd53f9065f7bc9b4c29dc1f", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"]},
+      {"issue": "DEE-733", "status": "pass", "reviewedCommits": ["41cf5bc48a7b4e24e0e099600496d1753cf2c635", "7bd76f336c2090f3fbd53f9065f7bc9b4c29dc1f", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "344e8037173168b6081035725f3afa56864a1733"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"]},
       {"issue": "DEE-735", "status": "pass", "reviewedCommits": ["78bff61fe24838c34dbf40f4eebda4366af772b3", "5a263ea29835b9fde695f0bdda3462de9b81801f"], "reviewedFiles": ["db/migrations_postgres/0168_trader_intelligence_cycle_causal_input_bundle_v2.sql", "db/migrations_postgres/meta/_journal.json", "db/schema.postgres.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/cycle-envelope-repository-postgres.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts"]},
       {"issue": "DEE-734", "status": "pass", "reviewedCommits": ["a8cee694fcd93fc4705e7d00b367ad8e4931be9d", "ef48761cfedd05321dab09e24dfa8b75be9f8e0e", "873b689252ca754b6fea62b9b3c4485fae85a998", "b9c604e002360f5fd97f16a82842d34ed460aaaa", "a6a862b7eac8452c2b7c776faf8e61679535aae1"], "reviewedFiles": ["tests/integration/postgres-trader-intelligence-records-parity.test.ts", "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts", "tests/unit/trader-canonical-causal-lineage-v1.test.ts", "tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts", "tests/unit/trader-wp13-intelligence-records-digest.test.ts", "tests/unit/trader-wp15-knowledge-state.test.ts"]}
     ],
@@ -81,8 +81,8 @@
     "finalReviewRemediation": {
       "status": "pass",
       "reviewedHead": "3b9eb4904c1276eb1212b7daa02b3c67a070f912",
-      "findings": ["legacy hypothesis collision", "envelope cross-binding", "MKB read fail-closed", "v1 digest compatibility", "timestamp round-trip normalization"],
-      "remediationCommits": ["5a263ea29835b9fde695f0bdda3462de9b81801f", "b9c604e002360f5fd97f16a82842d34ed460aaaa", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "a6a862b7eac8452c2b7c776faf8e61679535aae1"]
+      "findings": ["legacy hypothesis collision", "envelope cross-binding", "MKB read fail-closed", "v1 digest compatibility", "timestamp round-trip normalization", "legacy consumer inventory closure"],
+      "remediationCommits": ["5a263ea29835b9fde695f0bdda3462de9b81801f", "b9c604e002360f5fd97f16a82842d34ed460aaaa", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "a6a862b7eac8452c2b7c776faf8e61679535aae1", "344e8037173168b6081035725f3afa56864a1733"]
     },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
