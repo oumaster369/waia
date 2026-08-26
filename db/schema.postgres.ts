@@ -4677,6 +4677,7 @@ export const traderIntelligenceCycleEnvelope = pgTable(
     historicalProfileDigest: text("historical_profile_digest").notNull(),
     matrixDigest: text("matrix_digest").notNull(),
     terminalReasonCode: text("terminal_reason_code").notNull(),
+    inputCausalBundleJson: text("input_causal_bundle_json"),
     inputSemanticDigest: text("input_semantic_digest").notNull(),
     outputSemanticDigest: text("output_semantic_digest").notNull(),
     contentDigest: text("content_digest").notNull(),

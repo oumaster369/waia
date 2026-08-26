@@ -160,6 +160,7 @@ function mapEnvelopeRow(
     historicalProfileDigest: row.historicalProfileDigest,
     matrixDigest: row.matrixDigest,
     terminalReasonCode: row.terminalReasonCode,
+    inputCausalBundleJson: row.inputCausalBundleJson,
     inputSemanticDigest: row.inputSemanticDigest,
     outputSemanticDigest: row.outputSemanticDigest,
     contentDigest: row.contentDigest,

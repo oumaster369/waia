@@ -7,6 +7,11 @@ import type { TraderIntelligenceCycleEnvelopeRecord } from "@/lib/trader/intelli
 import type { CycleEnvelopeRepository } from "@/lib/trader/intelligence/records/repository-adapters";
 import { runIdempotentInsertWithSavepoint } from "@/lib/trader/intelligence/records/postgres-idempotent-insert";
 import {
+  computeCanonicalCycleCausalInputDigestV2,
+  parseCanonicalCycleCausalInputBundleV2,
+} from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
+import { CYCLE_ENVELOPE_SCHEMA_VERSION } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import {
   orgScopedWhere,
   requireOrgContext,
   type OrgContext,
@@ -14,10 +19,21 @@ import {
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
+function assertCausalInputIdentity(record: TraderIntelligenceCycleEnvelopeRecord): void {
+  if (record.schemaVersion !== CYCLE_ENVELOPE_SCHEMA_VERSION) return;
+  if (!record.inputCausalBundleJson) {
+    throw new IntelligenceRecordsIdempotencyConflictError("v2 cycle envelope missing causal input bundle");
+  }
+  const bundle = parseCanonicalCycleCausalInputBundleV2(record.inputCausalBundleJson);
+  if (computeCanonicalCycleCausalInputDigestV2(bundle) !== record.inputSemanticDigest) {
+    throw new IntelligenceRecordsIdempotencyConflictError("cycle causal input bundle digest mismatch");
+  }
+}
+
 function mapRow(
   row: typeof pgSchema.traderIntelligenceCycleEnvelope.$inferSelect,
 ): TraderIntelligenceCycleEnvelopeRecord {
-  return {
+  const record: TraderIntelligenceCycleEnvelopeRecord = {
     id: row.id,
     organizationId: row.organizationId,
     runId: row.runId,
@@ -28,11 +44,14 @@ function mapRow(
     historicalProfileDigest: row.historicalProfileDigest,
     matrixDigest: row.matrixDigest,
     terminalReasonCode: row.terminalReasonCode,
+    inputCausalBundleJson: row.inputCausalBundleJson,
     inputSemanticDigest: row.inputSemanticDigest,
     outputSemanticDigest: row.outputSemanticDigest,
     contentDigest: row.contentDigest,
     schemaVersion: row.schemaVersion as TraderIntelligenceCycleEnvelopeRecord["schemaVersion"],
   };
+  assertCausalInputIdentity(record);
+  return record;
 }
 
 function assertIdempotentMatch(
@@ -74,6 +93,7 @@ export function createCycleEnvelopeRepositoryPostgres(ex: PgExecutor): CycleEnve
     },
 
     async insert(context, record) {
+      assertCausalInputIdentity(record);
       const scoped = requireOrgContext(context.organizationId);
       const existing = await this.findByBusinessKey(context, {
         runId: record.runId,
@@ -100,6 +120,7 @@ export function createCycleEnvelopeRepositoryPostgres(ex: PgExecutor): CycleEnve
             historicalProfileDigest: record.historicalProfileDigest,
             matrixDigest: record.matrixDigest,
             terminalReasonCode: record.terminalReasonCode,
+            inputCausalBundleJson: record.inputCausalBundleJson,
             inputSemanticDigest: record.inputSemanticDigest,
             outputSemanticDigest: record.outputSemanticDigest,
             contentDigest: record.contentDigest,
