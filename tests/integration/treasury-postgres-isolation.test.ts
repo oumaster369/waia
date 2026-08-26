@@ -640,13 +640,14 @@ describeWp8("DEE-606 WP-8 Postgres isolation + structural proof", () => {
     expect(JSON.stringify(snapshot)).not.toContain(evidenceA);
   });
 
-  it("62-64 watcher remains DARK; wrangler has no R2; 54329 identity is not this connection", async () => {
+  it("62-64 watcher remains DARK; evidence R2 stays private; 54329 is not this connection", async () => {
     expect(loadTreasuryWatcherConfig().enabled).toBe(false);
     const wranglerPath = path.resolve(process.cwd(), "wrangler.jsonc");
     expect(existsSync(wranglerPath)).toBe(true);
     const wrangler = readFileSync(wranglerPath, "utf8");
-    expect(wrangler).not.toMatch(/r2_buckets/);
-    expect(wrangler).not.toMatch(/TREASURY_EVIDENCE_R2/);
+    expect(wrangler).toMatch(/"binding": "TREASURY_EVIDENCE_R2"/);
+    expect(wrangler).toMatch(/"bucket_name": "waia-treasury-evidence-prod"/);
+    expect(wrangler).not.toMatch(/r2\.dev|public_bucket|custom_domain/i);
     expect(wrangler).not.toMatch(/TREASURY_WATCHER_ENABLED/);
     expect(handle.url).not.toContain("54329");
     expect(handle.url).not.toContain("waia_validate");

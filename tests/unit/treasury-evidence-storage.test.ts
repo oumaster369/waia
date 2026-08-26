@@ -26,7 +26,13 @@ describe("DEE-606 WP-5 evidence storage adapter isolation", () => {
   it("1-9 adapter import and missing R2 do not couple other modules", async () => {
     const adapter = await import("@/lib/waia-core/treasury/evidence/r2-adapter");
     expect(typeof adapter.createR2TreasuryEvidenceStorage).toBe("function");
-    expect(resolveTreasuryEvidenceStorage()).toBeNull();
+    expect(
+      resolveTreasuryEvidenceStorage({
+        readCloudflareContext: () => {
+          throw new Error("not running in workerd");
+        },
+      }),
+    ).toBeNull();
     expect(TREASURY_EVIDENCE_R2_BINDING_NAME).toBe("TREASURY_EVIDENCE_R2");
 
     await import("@/lib/waia-core/treasury");
@@ -39,16 +45,40 @@ describe("DEE-606 WP-5 evidence storage adapter isolation", () => {
     ).toBe(false);
 
     const wrangler = readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
-    expect(wrangler).not.toMatch(/r2_buckets/);
-    expect(wrangler).not.toMatch(/TREASURY_EVIDENCE_R2/);
+    expect(wrangler).toMatch(/"r2_buckets"/);
+    expect(wrangler).toMatch(/"binding": "TREASURY_EVIDENCE_R2"/);
+    expect(wrangler).toMatch(/"bucket_name": "waia-treasury-evidence-prod"/);
     const worker = readFileSync(path.join(ROOT, "custom-worker.ts"), "utf8");
     expect(worker).not.toMatch(/TREASURY_EVIDENCE_R2/);
     expect(worker).not.toMatch(/treasuryEvidence/);
   });
+
+  it("10-12 resolves only a structurally valid private Worker binding", () => {
+    const bucket = createMemoryTreasuryEvidenceR2Bucket();
+    expect(
+      resolveTreasuryEvidenceStorage({
+        readCloudflareContext: () => ({
+          env: { TREASURY_EVIDENCE_R2: bucket },
+        }),
+      }),
+    ).not.toBeNull();
+    expect(
+      resolveTreasuryEvidenceStorage({
+        readCloudflareContext: () => ({
+          env: { TREASURY_EVIDENCE_R2: { put: async () => null } },
+        }),
+      }),
+    ).toBeNull();
+    expect(
+      resolveTreasuryEvidenceStorage({
+        readCloudflareContext: () => ({ env: {} }),
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("DEE-606 WP-5 object key, immutability, and hash", () => {
-  it("10-17 opaque key, no overwrite, no committed delete API", async () => {
+  it("13-20 opaque key, no overwrite, no committed delete API", async () => {
     const org = ORG_A;
     const id = "dddddddd-dddd-4ddd-8ddd-ddddddddddd4";
     const key = treasuryEvidenceObjectKey(org, id);

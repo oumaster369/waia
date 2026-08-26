@@ -21,7 +21,7 @@ We do **not** use the legacy `@cloudflare/next-on-pages` flow.
 
 | File | Purpose |
 |------|---------|
-| [`wrangler.jsonc`](../wrangler.jsonc) | Worker name, `main`, static `assets`, `nodejs_compat`, `WORKER_SELF_REFERENCE` |
+| [`wrangler.jsonc`](../wrangler.jsonc) | Worker name, `main`, static `assets`, `nodejs_compat`, `WORKER_SELF_REFERENCE`, private Treasury evidence R2 binding |
 | [`open-next.config.ts`](../open-next.config.ts) | OpenNext Cloudflare config (R2 cache optional later) |
 | [`next.config.ts`](../next.config.ts) | Standard Next config + `initOpenNextCloudflareForDev()` for local dev parity |
 | [`public/_headers`](../public/_headers) | Long-cache headers for `/_next/static/*` (OpenNext recommendation) |
