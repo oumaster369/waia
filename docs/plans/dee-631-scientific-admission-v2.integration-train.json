@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-631",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-740",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Build the conjunctive predictive, KM convergence and Human-ratification authority v2.",
+      "dependencies": ["DEE-630"],
+      "dependencyEvidence": ["DEE-630 is squash-merged at authoritative base f07ddd74cc79f098a86aac269a2b0e0a65410b78."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts", "lib/trader/research/execopp-qualification/scientific-admission-v2.ts"],
+      "riskTier": "T3",
+      "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Human-ratified DEE-631 scope." },
+      "expectedAcceptanceEvidence": ["Exact mandatory-baseline, positive-mean, Holm, K/M and ratification bindings fail closed."],
+      "expectedTests": ["tests/unit/scientific-admission-v2.test.ts"],
+      "execution": { "wave": 1, "mode": "serialized" }
+    },
+    {
+      "issue": "DEE-739",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Persist v2 append-only and prove deterministic, stale/replay and tenant fail-closed behavior.",
+      "dependencies": ["DEE-740"],
+      "dependencyEvidence": ["Persistence consumes the frozen v2 authority contract."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/unit/scientific-admission-v2.test.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Durable evidence only; no holdout or capital authority." },
+      "expectedAcceptanceEvidence": ["Append-only deterministic persistence and fail-closed exact binding evidence."],
+      "expectedTests": ["focused unit and PostgreSQL scientific-admission tests"],
+      "execution": { "wave": 2, "mode": "serialized" }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" }
+  },
+  "crossCuttingInvariants": ["No KM-only scientific admission.", "NO_CHALLENGER is terminal-valid but not admitted.", "Holdout remains sealed.", "No Decision, Risk, production/live or capital semantics."],
+  "rollbackStrategy": "One revert PR removes the v2 authority while preserving existing v1 rows and schema.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-631-scientific-admission-v2.integration-train.json DEE-631 admission",
+    "focused": ["pnpm test --run tests/unit/scientific-admission-v2.test.ts tests/unit/research-harness-admission-integration.test.ts tests/unit/km-convergence-gate-v1.test.ts", "pnpm typecheck"],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 before squash merge"
+  }
+}
