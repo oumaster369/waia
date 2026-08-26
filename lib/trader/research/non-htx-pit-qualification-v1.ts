@@ -45,7 +45,8 @@ export type NonHtxQualificationReasonV1 =
   | "IMMUTABLE_HISTORY_UNPROVEN"
   | "TRUTHFUL_ARCHIVE_UNAVAILABLE"
   | "HISTORICAL_EVENT_TIME_UNPROVEN"
-  | "CURRENT_RSS_RECEIPT_ONLY";
+  | "CURRENT_RSS_RECEIPT_ONLY"
+  | "PIT_CORPUS_PROOF_UNAVAILABLE";
 
 export type NonHtxCapabilityEvidenceV1 = Readonly<{
   providerId: "alternative_me" | "coindesk_rss" | "cointelegraph_rss" | "decrypt_rss";
@@ -67,8 +68,8 @@ export type NonHtxQualificationReceiptV1 = Readonly<{
   authority: "RESEARCH_NON_CAPITAL";
   providerId: NonHtxCapabilityEvidenceV1["providerId"];
   observationKind: NonHtxCapabilityEvidenceV1["observationKind"];
-  disposition: "PIT_CORPUS_QUALIFIED" | "NOT_QUALIFIED";
-  corpusAdmitted: boolean;
+  disposition: "NOT_QUALIFIED";
+  corpusAdmitted: false;
   reasonCodes: readonly NonHtxQualificationReasonV1[];
   capabilityEvidenceDigest: string;
   partitionPolicyDigest: string;
@@ -137,14 +138,19 @@ export function qualifyNonHtxCapabilityV1(
       reasons.push("TRUTHFUL_ARCHIVE_UNAVAILABLE");
     }
   }
-  const corpusAdmitted = evidence.eventTimePresent && reasons.length === 0;
+  // Capability observations are not PIT corpus proofs. Caller-supplied booleans
+  // cannot establish historical availability, ingest, revision identity or
+  // immutability. DEE-625 found no qualifying corpus, so this API is deliberately
+  // receipt-only. A future corpus requires a separately ratified structured proof
+  // contract and a real consumer integration; it cannot be promoted here.
+  reasons.push("PIT_CORPUS_PROOF_UNAVAILABLE");
   const body = {
     schemaVersion: NON_HTX_PIT_QUALIFICATION_SCHEMA_V1,
     authority: "RESEARCH_NON_CAPITAL" as const,
     providerId: evidence.providerId,
     observationKind: evidence.observationKind,
-    disposition: corpusAdmitted ? "PIT_CORPUS_QUALIFIED" as const : "NOT_QUALIFIED" as const,
-    corpusAdmitted,
+    disposition: "NOT_QUALIFIED" as const,
+    corpusAdmitted: false as const,
     reasonCodes: Object.freeze([...reasons].sort()),
     capabilityEvidenceDigest: sha256(evidence),
     partitionPolicyDigest: sha256(NON_HTX_PARTITIONS_V1),
@@ -218,15 +224,10 @@ export function verifyNonHtxQualificationReceiptV1(
   }
 }
 
-export function admitNonHtxReceiptForReplayV1(input: Readonly<{
-  eventTimeUtc: string;
+export function replayNonHtxQualificationReceiptV1(input: Readonly<{
   evidence: NonHtxCapabilityEvidenceV1;
   receipt: NonHtxQualificationReceiptV1;
-}>): "DEVELOPMENT" | "WALK_FORWARD_PREDICTIVE" | "WALK_FORWARD_ECONOMIC" {
-  const partition = classifyNonHtxPartitionV1(input.eventTimeUtc);
+}>): NonHtxQualificationReceiptV1 {
   verifyNonHtxQualificationReceiptV1(input.evidence, input.receipt);
-  if (input.receipt.disposition !== "PIT_CORPUS_QUALIFIED" || !input.receipt.corpusAdmitted) {
-    throw new Error("NON_HTX_CORPUS_NOT_QUALIFIED");
-  }
-  return partition;
+  return input.receipt;
 }

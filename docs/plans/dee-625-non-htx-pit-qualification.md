@@ -56,7 +56,7 @@ provenance:
 3. Current RSS is never retrospectively rewritten into history.
 4. No interpolation, zero/stale/current/synthetic fill exists.
 5. Exact raw content, capability evidence, partition policy and final receipt digests are deterministic and mutation-sensitive.
-6. Replay consumes receipts/corpus only; it never calls a live provider.
+6. Receipt replay verifies exact evidence deterministically and never calls a live provider. No corpus consumer is wired because every ratified source is `NOT_QUALIFIED`.
 7. Blind 2025 rejects before item selection or payload access.
 8. Provider count never proves independence; all three RSS feeds are separate provider receipts for the same unqualified class and add no effective-information authority.
 9. Rollback is one revert of the squash merge; no migration or external durable mutation exists.
@@ -66,7 +66,7 @@ provenance:
 - DEE-716 A freezes the API, closed vocabulary, fixed partitions and exclusion policy.
 - DEE-717 B evaluates only bounded Alternative.me capability evidence and fails closed unless all PIT dimensions are proven.
 - DEE-719 C emits deterministic receipt-only RSS `NOT_QUALIFIED` evidence.
-- DEE-718 D closes replay, consumer inventory, deterministic mutation proofs and blind seal.
+- DEE-718 D closes receipt replay, proves the zero-corpus consumer boundary, deterministic mutation proofs and blind seal.
 
 ## Validation
 
@@ -90,6 +90,6 @@ After semantic completion and preliminary review, run one full suite on a freshl
 
 ## Acceptance
 
-- Exact selective-source API, receipt replay, provider-inventory closure and blind seal pass focused negative tests.
+- Exact selective-source API, receipt replay, provider-inventory closure, explicit zero-corpus consumer boundary and blind seal pass focused negative tests.
 - Alternative.me and all three current RSS sources terminate in deterministic `NOT_QUALIFIED` receipts with zero corpus admission.
 - Build, typecheck, canonical/governance validation, one frozen-head fresh-SQLite full suite, exact-head independent review, CI and DEE-653 must all pass before squash merge.

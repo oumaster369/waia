@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
-  admitNonHtxReceiptForReplayV1,
   classifyNonHtxPartitionV1,
   qualifyAlternativeMeBoundedProbeV1,
   qualifyCurrentRssReceiptV1,
   qualifyNonHtxCapabilityV1,
+  replayNonHtxQualificationReceiptV1,
   verifyNonHtxQualificationReceiptV1,
   verifyNonHtxProviderInventoryClosureV1,
   type NonHtxCapabilityEvidenceV1,
@@ -60,6 +61,7 @@ describe("DEE-625 non-HTX PIT qualification", () => {
       "HISTORICAL_INGEST_LINEAGE_UNPROVEN",
       "HISTORICAL_REVISION_IDENTITY_UNPROVEN",
       "IMMUTABLE_HISTORY_UNPROVEN",
+      "PIT_CORPUS_PROOF_UNAVAILABLE",
     ]);
   });
 
@@ -96,7 +98,10 @@ describe("DEE-625 non-HTX PIT qualification", () => {
       },
     }));
     expect(receipt.disposition).toBe("NOT_QUALIFIED");
-    expect(receipt.reasonCodes).toEqual(["CURRENT_RSS_RECEIPT_ONLY"]);
+    expect(receipt.reasonCodes).toEqual([
+      "CURRENT_RSS_RECEIPT_ONLY",
+      "PIT_CORPUS_PROOF_UNAVAILABLE",
+    ]);
   });
 
   it.each(["coindesk_rss", "cointelegraph_rss", "decrypt_rss"] as const)(
@@ -120,15 +125,16 @@ describe("DEE-625 non-HTX PIT qualification", () => {
     expect(receipt.corpusAdmitted).toBe(false);
   });
 
-  it("admits only evidence with every PIT truth dimension proven", () => {
+  it("does not treat caller-supplied PIT booleans as corpus proof", () => {
     const receipt = qualifyNonHtxCapabilityV1(evidence({
       historicalAvailableAtProven: true,
       historicalIngestLineageProven: true,
       immutableHistoryProven: true,
       revisionIdentityProven: true,
     }));
-    expect(receipt.disposition).toBe("PIT_CORPUS_QUALIFIED");
-    expect(receipt.corpusAdmitted).toBe(true);
+    expect(receipt.disposition).toBe("NOT_QUALIFIED");
+    expect(receipt.corpusAdmitted).toBe(false);
+    expect(receipt.reasonCodes).toContain("PIT_CORPUS_PROOF_UNAVAILABLE");
   });
 
   it("records the bounded Alternative.me probe as receipt-only NOT_QUALIFIED", () => {
@@ -173,39 +179,24 @@ describe("DEE-625 non-HTX PIT qualification", () => {
     expect(() => classifyNonHtxPartitionV1("2025-01-01T00:00:00.000Z")).toThrow("BLIND_HOLDOUT_SEALED");
   });
 
-  it("rejects receipt-only evidence at the replay consumer boundary", () => {
+  it("replays an exact receipt deterministically without conferring corpus authority", () => {
     const source = evidence();
     const receipt = qualifyNonHtxCapabilityV1(source);
-    expect(() => admitNonHtxReceiptForReplayV1({
-      eventTimeUtc: "2024-06-01T00:00:00.000Z",
+    expect(replayNonHtxQualificationReceiptV1({
       evidence: source,
       receipt,
-    })).toThrow("NON_HTX_CORPUS_NOT_QUALIFIED");
+    })).toEqual(receipt);
+    expect(receipt.corpusAdmitted).toBe(false);
   });
 
-  it("admits only an exact verified qualified receipt into a pre-holdout partition", () => {
-    const source = evidence({
-      historicalAvailableAtProven: true,
-      historicalIngestLineageProven: true,
-      immutableHistoryProven: true,
-      revisionIdentityProven: true,
-    });
-    const receipt = qualifyNonHtxCapabilityV1(source);
-    expect(admitNonHtxReceiptForReplayV1({
-      eventTimeUtc: "2023-06-01T00:00:00.000Z",
-      evidence: source,
-      receipt,
-    })).toBe("WALK_FORWARD_PREDICTIVE");
-  });
-
-  it("rejects blind 2025 before attempting receipt replay", () => {
+  it("keeps blind 2025 sealed independently of receipt replay", () => {
     const source = evidence();
     const receipt = qualifyNonHtxCapabilityV1(source);
-    expect(() => admitNonHtxReceiptForReplayV1({
-      eventTimeUtc: "2025-01-01T00:00:00.000Z",
+    expect(() => classifyNonHtxPartitionV1("2025-01-01T00:00:00.000Z")).toThrow("BLIND_HOLDOUT_SEALED");
+    expect(() => replayNonHtxQualificationReceiptV1({
       evidence: { ...source, rawContentDigest: "forged" },
       receipt,
-    })).toThrow("BLIND_HOLDOUT_SEALED");
+    })).toThrow("rawContentDigest must be lowercase SHA-256");
   });
 
   it("is deterministic", () => {
@@ -214,5 +205,12 @@ describe("DEE-625 non-HTX PIT qualification", () => {
 
   it("classifies every registered provider with no silent future-provider admission", () => {
     expect(() => verifyNonHtxProviderInventoryClosureV1()).not.toThrow();
+  });
+
+  it("has no wired corpus consumer while every ratified source is NOT_QUALIFIED", () => {
+    const runner = readFileSync("lib/trader/backtest/backtest-runner.ts", "utf8");
+    const researchRunner = readFileSync("lib/trader/research/research-backtest-runner.ts", "utf8");
+    expect(runner).not.toContain("non-htx-pit-qualification-v1");
+    expect(researchRunner).not.toContain("non-htx-pit-qualification-v1");
   });
 });
