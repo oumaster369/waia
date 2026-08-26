@@ -165,6 +165,7 @@ function buildHypothesis(
     rankOrdinal: null,
     canonicalHypothesisId: null,
     canonicalIntelligenceStateDigest: null,
+    canonicalHypothesisCausalStateDigest: null,
     canonicalCausalLineageJson: null,
     canonicalCausalLineageDigest: null,
   };
@@ -197,6 +198,7 @@ function buildCanonicalHypotheses(authority: CanonicalRuntimeIntelligenceStateV1
       rankOrdinal: hypothesis.rankOrdinal,
       canonicalHypothesisId: hypothesis.hypothesisId,
       canonicalIntelligenceStateDigest: authority.semanticDigest,
+      canonicalHypothesisCausalStateDigest: lineage.hypothesisCausalStateDigest,
       canonicalCausalLineageJson: serializeCanonicalCausalLineageV1(lineage),
       canonicalCausalLineageDigest: lineage.contentDigest,
       };
