@@ -103,5 +103,8 @@ describe("DEE-623 canonical causal input bundle v2", () => {
     expect(serializeCanonicalCycleCausalInputBundleV2(second)).toBe(serializeCanonicalCycleCausalInputBundleV2(first));
     expect(computeCanonicalCycleCausalInputDigestV2(second)).toBe(computeCanonicalCycleCausalInputDigestV2(first));
     expect(parseCanonicalCycleCausalInputBundleV2(serializeCanonicalCycleCausalInputBundleV2(first))).toEqual(first);
+    expect(() => parseCanonicalCycleCausalInputBundleV2(JSON.stringify({ ...first, retryCount: 1 }))).toThrow(
+      "CAUSAL_INPUT_BUNDLE_INVALID:canonicalIdentity",
+    );
   });
 });
