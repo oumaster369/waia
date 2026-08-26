@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +7,8 @@ import {
 } from "@/lib/trader/research/benchmark/baseline-models-v1";
 import { holmFwerV1 } from "@/lib/trader/research/benchmark/holm-fwer-v1";
 import {
+  RESEARCH_HARNESS_ADMISSION_VERSION,
+  SCIENTIFIC_ADMISSION_RECEIPT_VERSION,
   runResearchHarnessAdmissionV1,
   type ResearchHarnessAnchorV1,
 } from "@/lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
@@ -37,6 +38,10 @@ function developmentReturns(count = 400): number[] {
 
 function historyReturns(count = 2500): number[] {
   return Array.from({ length: count }, (_, i) => Math.cos(i / 23) * 0.015);
+}
+
+function historyReturnMinuteOpenTimesMs(count = 2500): number[] {
+  return Array.from({ length: count }, (_, i) => 1_700_000_000_000 + i * 60_000);
 }
 
 function challengerProbabilities(development: readonly number[]): number[] {
@@ -86,6 +91,7 @@ describe("DEE-531 research harness admission integration", () => {
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors: anchorsBeatAllBaselines(development, observed),
     });
     expect(result.terminalStatus).toBe("QUALIFIED");
@@ -122,6 +128,7 @@ describe("DEE-531 research harness admission integration", () => {
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors,
     });
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
@@ -134,7 +141,7 @@ describe("DEE-531 research harness admission integration", () => {
       { comparisonId: "gaussian-pop-std/v1", pValue: 0.013 },
       { comparisonId: "student-t5-nu5/v1", pValue: 0.013 },
       { comparisonId: "rolling-w2000/v1", pValue: 0.013 },
-      { comparisonId: "ewma-lambda094/v1", pValue: 0.013 },
+      { comparisonId: "ewma-lambda094/v2", pValue: 0.013 },
     ];
     expect(comparisons.every((c) => c.pValue <= 0.05)).toBe(true);
     const holm = holmFwerV1(comparisons);
@@ -148,11 +155,12 @@ describe("DEE-531 research harness admission integration", () => {
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors: anchorsFromReturns({ development, observedReturns: development.slice(0, 10) }),
     });
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
     expect(result.baselineAvailability["rolling-w2000/v1"]).toBe("UNAVAILABLE");
-    expect(result.baselineAvailability["ewma-lambda094/v1"]).toBe("UNAVAILABLE");
+    expect(result.baselineAvailability["ewma-lambda094/v2"]).toBe("UNAVAILABLE");
     expect(result.reasonCodes).toContain("INCOMPLETE_MANDATORY_BASELINE_FAMILY");
   }, 60_000);
 
@@ -166,12 +174,14 @@ describe("DEE-531 research harness admission integration", () => {
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors,
     });
     const b = runResearchHarnessAdmissionV1({
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors: shuffled,
     });
     expect(a.commonAnchorSetDigestHex).toBe(b.commonAnchorSetDigestHex);
@@ -204,6 +214,7 @@ describe("DEE-531 research harness admission integration", () => {
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors: anchorsFromReturns({ development, observedReturns: development.slice(0, 16) }),
     };
     const one = runResearchHarnessAdmissionV1(payload);
@@ -226,8 +237,48 @@ describe("DEE-531 research harness admission integration", () => {
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors,
     });
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
   }, 180_000);
+
+  it("H: v2 baseline and receipt identities cannot collide with defective v1 evidence", () => {
+    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v2");
+    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v2");
+    const common = {
+      scoringContractVersion: "multiclass-log-score/v1",
+      evaluationPartitionReceiptDigestHex: BASE_INPUT.evaluationPartitionReceiptDigestHex,
+      venue: BASE_INPUT.venue,
+      market: BASE_INPUT.market,
+      symbol: BASE_INPUT.symbol,
+      primaryHorizonMinutes: 30,
+      modelTransformVersion: "rv-state-conditional-empirical-joint/v1",
+      challengerPackageContentDigestHex: BASE_INPUT.challengerPackageContentDigestHex,
+      metricId: "terminal-multiclass-log-score/v1",
+      commonAnchorSetDigestHex: "a".repeat(64),
+      purgeDurationMinutes: 30,
+      embargoDurationMinutes: 30,
+      comparisonFamilyId: BASE_INPUT.comparisonFamilyId,
+    };
+    const defective = computeTrialIdentityDigestV2({ ...common, baselineId: "ewma-lambda094/v1" });
+    const corrected = computeTrialIdentityDigestV2({ ...common, baselineId: "ewma-lambda094/v2" });
+    expect(corrected.equals(defective)).toBe(false);
+  });
+
+  it("I: a missing 1m timestamp fails the corrected EWMA baseline closed", () => {
+    const development = developmentReturns();
+    const history = historyReturns();
+    const timestamps = historyReturnMinuteOpenTimesMs(history.length);
+    timestamps[1500] = timestamps[1499]! + 120_000;
+    const result = runResearchHarnessAdmissionV1({
+      ...BASE_INPUT,
+      developmentReturns: development,
+      historyReturns: history,
+      historyReturnMinuteOpenTimesMs: timestamps,
+      anchors: anchorsFromReturns({ development, observedReturns: development.slice(0, 10) }),
+    });
+    expect(result.baselineAvailability["ewma-lambda094/v2"]).toBe("UNAVAILABLE");
+    expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
+  });
 });
