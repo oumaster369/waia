@@ -22,6 +22,7 @@ import type {
   TraderIntelligenceCycleEnvelopeRecord,
   TraderIntelligenceHypothesisRecord,
 } from "@/lib/trader/intelligence/records/intelligence-records.types";
+import { assertCausalInputIdentity } from "@/lib/trader/intelligence/records/cycle-envelope-repository-postgres";
 import type { MkbReadModelQuery } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { MkbReadModelSource } from "@/lib/trader/knowledge/mkb-read-model-source";
 import { orgScopedWhere, requireOrgContext } from "@/lib/waia-core/scope/org-context";
@@ -149,7 +150,7 @@ function mapEntryPurposeRow(
 function mapEnvelopeRow(
   row: typeof pgSchema.traderIntelligenceCycleEnvelope.$inferSelect,
 ): TraderIntelligenceCycleEnvelopeRecord {
-  return {
+  const record: TraderIntelligenceCycleEnvelopeRecord = {
     id: row.id,
     organizationId: row.organizationId,
     runId: row.runId,
@@ -166,6 +167,8 @@ function mapEnvelopeRow(
     contentDigest: row.contentDigest,
     schemaVersion: row.schemaVersion as TraderIntelligenceCycleEnvelopeRecord["schemaVersion"],
   };
+  assertCausalInputIdentity(record);
+  return record;
 }
 
 function mapHypothesisRow(

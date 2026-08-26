@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import type { MarketUnderstandingArtifactV1 } from "@/lib/trader/intelligence/market-understanding.types";
 import { HYPOTHESIS_SET_SCHEMA_VERSION } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import type { MarketStateSnapshot } from "@/lib/trader/intelligence/mi-core.types";
-import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  canonicalizeSemanticJsonString,
+  computeSemanticSha256Hex,
+} from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 export const CAUSAL_INPUT_BUNDLE_SCHEMA_VERSION =
   "waia.trader.intelligence_cycle_causal_input_bundle.v2" as const;
@@ -52,6 +55,7 @@ export type CanonicalCycleCausalInputBundleV2 = Readonly<{
       }>;
   hypothesisConstruction: Readonly<{
     hypothesisSetSchemaVersion: typeof HYPOTHESIS_SET_SCHEMA_VERSION;
+    hypothesisSetContentDigest: string;
     policyVersion: typeof HYPOTHESIS_CONSTRUCTION_POLICY_VERSION;
     authority: "LEGACY_DIAGNOSTIC" | "CANONICAL_PIT_KNOWLEDGE" | "EMPTY";
     canonicalIntelligenceStateDigests: readonly string[];
@@ -100,7 +104,7 @@ function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
   }
   requireDigest(bundle.reconstruction.contentDigest, "reconstructionContentDigest");
   if (
-    !hasExactKeys(bundle.hypothesisConstruction, ["hypothesisSetSchemaVersion", "policyVersion", "authority", "canonicalIntelligenceStateDigests", "canonicalCausalLineageDigests"]) ||
+    !hasExactKeys(bundle.hypothesisConstruction, ["hypothesisSetSchemaVersion", "hypothesisSetContentDigest", "policyVersion", "authority", "canonicalIntelligenceStateDigests", "canonicalCausalLineageDigests"]) ||
     bundle.hypothesisConstruction.hypothesisSetSchemaVersion !== HYPOTHESIS_SET_SCHEMA_VERSION ||
     bundle.hypothesisConstruction.policyVersion !== HYPOTHESIS_CONSTRUCTION_POLICY_VERSION ||
     !["LEGACY_DIAGNOSTIC", "CANONICAL_PIT_KNOWLEDGE", "EMPTY"].includes(bundle.hypothesisConstruction.authority) ||
@@ -114,6 +118,7 @@ function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
   for (const digest of [
     ...bundle.hypothesisConstruction.canonicalIntelligenceStateDigests,
     ...bundle.hypothesisConstruction.canonicalCausalLineageDigests,
+    bundle.hypothesisConstruction.hypothesisSetContentDigest,
     bundle.policyProfiles.historicalProfileContentDigest,
     bundle.policyProfiles.timeframeEvidenceAuthorityMatrixContentDigest,
   ]) requireDigest(digest, "policyOrHypothesisDigest");
@@ -278,6 +283,7 @@ export function buildCanonicalCycleCausalInputBundleV2(input: {
     ),
     hypothesisConstruction: {
       hypothesisSetSchemaVersion: HYPOTHESIS_SET_SCHEMA_VERSION,
+      hypothesisSetContentDigest: computeSemanticSha256Hex(input.snapshot.hypotheses),
       policyVersion: HYPOTHESIS_CONSTRUCTION_POLICY_VERSION,
       authority,
       canonicalIntelligenceStateDigests: sortedUnique(

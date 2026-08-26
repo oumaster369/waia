@@ -19,7 +19,7 @@ import {
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
-function assertCausalInputIdentity(record: TraderIntelligenceCycleEnvelopeRecord): void {
+export function assertCausalInputIdentity(record: TraderIntelligenceCycleEnvelopeRecord): void {
   if (record.schemaVersion !== CYCLE_ENVELOPE_SCHEMA_VERSION) return;
   if (!record.inputCausalBundleJson) {
     throw new IntelligenceRecordsIdempotencyConflictError("v2 cycle envelope missing causal input bundle");
@@ -27,6 +27,18 @@ function assertCausalInputIdentity(record: TraderIntelligenceCycleEnvelopeRecord
   const bundle = parseCanonicalCycleCausalInputBundleV2(record.inputCausalBundleJson);
   if (computeCanonicalCycleCausalInputDigestV2(bundle) !== record.inputSemanticDigest) {
     throw new IntelligenceRecordsIdempotencyConflictError("cycle causal input bundle digest mismatch");
+  }
+  if (
+    bundle.scope.organizationId !== record.organizationId ||
+    bundle.scope.instrumentId !== record.symbol ||
+    bundle.scope.evaluatedAt !== record.evaluatedAt ||
+    bundle.policyProfiles.historicalProfileId !== record.historicalProfileId ||
+    bundle.policyProfiles.historicalProfileContentDigest !== record.historicalProfileDigest ||
+    bundle.policyProfiles.timeframeEvidenceAuthorityMatrixContentDigest !== record.matrixDigest
+  ) {
+    throw new IntelligenceRecordsIdempotencyConflictError(
+      "cycle causal input bundle is not bound to envelope scope or policy profiles",
+    );
   }
 }
 
