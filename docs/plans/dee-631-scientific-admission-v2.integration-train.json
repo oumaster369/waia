@@ -40,7 +40,14 @@
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" }
+    "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "f73b3d39127951d79440f99ae95d0dcaa84bfb0acba99ece72d735fefa0b9f9f",
+      "manifestCommit": "737e9cf0d76225b8625c5a89f8245fd3458da701",
+      "manifestPath": "docs/plans/dee-631-scientific-admission-v2.integration-train.json",
+      "reviewer": "Controller pre-write API, dependency, ownership and file-surface freeze"
+    }
   },
   "crossCuttingInvariants": ["No KM-only scientific admission.", "NO_CHALLENGER is terminal-valid but not admitted.", "Holdout remains sealed.", "No Decision, Risk, production/live or capital semantics."],
   "rollbackStrategy": "One revert PR removes the v2 authority while preserving existing v1 rows and schema.",
