@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-625",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-716",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Freeze the exact two-class intake, receipt vocabulary, fixed DEVELOPMENT/WALK_FORWARD partitions, blind seal and no-authority invariants.",
+      "dependencies": [],
+      "dependencyEvidence": ["DEE-620, DEE-621 and DEE-622 are Done on authoritative main.", "Human ratified the exact conservative intake after it was presented."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Exact two-class source intake ratified; no credentials, license, holdout, live or capital authority."},
+      "expectedAcceptanceEvidence": ["Closed deterministic qualification vocabulary.", "Blind 2025 rejected before payload access."],
+      "expectedTests": ["pnpm test --run tests/unit/trader-non-htx-pit-qualification-v1.test.ts", "pnpm typecheck"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-717",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Qualify bounded public Alternative.me capability evidence and admit a corpus only with complete immutable PIT knowability proof.",
+      "dependencies": ["DEE-716"],
+      "dependencyEvidence": ["DEE-716 freezes the fail-closed receipt contract."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Public no-credential bounded Alternative.me probe only."},
+      "expectedAcceptanceEvidence": ["Event time alone remains NOT_QUALIFIED.", "Every admitted corpus binds availability, ingest, immutable history and revision identity."],
+      "expectedTests": ["Alternative.me negative and mutation proofs"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-719",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Emit receipt-only NOT_QUALIFIED evidence for current CoinDesk, Cointelegraph and Decrypt RSS without historical reconstruction.",
+      "dependencies": ["DEE-716"],
+      "dependencyEvidence": ["DEE-716 freezes the fail-closed receipt contract."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Current RSS is receipt-only NOT_QUALIFIED."},
+      "expectedAcceptanceEvidence": ["All three feeds record truthful archive unavailable.", "No provider-count independence inference."],
+      "expectedTests": ["RSS provider table negatives"],
+      "execution": {"wave": 3, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-718",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Close deterministic receipt replay, excluded-provider inventory, consumer boundaries and blind-holdout seal.",
+      "dependencies": ["DEE-717", "DEE-719"],
+      "dependencyEvidence": ["Both candidate classes must have terminal receipts before closure."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts", "docs/plans/dee-625-non-htx-pit-qualification.md"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Fixed pre-holdout partitions and sealed blind 2025."},
+      "expectedAcceptanceEvidence": ["Identical evidence yields identical receipts.", "Mutation changes digest and replay rejects mismatch.", "No live/capital authority or calls during replay."],
+      "expectedTests": ["determinism, mutation, partition and blind seal negatives", "one full fresh-SQLite suite"],
+      "execution": {"wave": 4, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human exact-source ratification plus controller duplicate, ownership, dependency and surface audit"
+    }
+  },
+  "crossCuttingInvariants": ["No current/latest/synthetic historical substitution.", "No blind-2025 payload access.", "No provider credentials or licenses.", "No first-live REQUIRED/OPTIONAL or capital authority."],
+  "rollbackStrategy": "One revert PR of the squash merge; no migration or external durable mutation.",
+  "validation": {"manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh docs/plans/dee-625-non-htx-pit-qualification.integration-train.json DEE-625 frozen", "focused": ["pnpm test --run tests/unit/trader-non-htx-pit-qualification-v1.test.ts", "pnpm typecheck", "pnpm build"], "fullSuite": "one fresh migrated SQLite pnpm test --run", "review": "fresh independent exact-head zero P1/P2", "publication": "one PR; authoritative CI and DEE-653 exact-base/head PASS before squash merge"}
+}
