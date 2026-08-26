@@ -421,6 +421,7 @@ export function createMkbReadModelSourcePostgres(ex: PgExecutor): MkbReadModelSo
       const edgeConditions = [
         orgScopedWhere(pgSchema.traderKnowledgeEdges.organizationId, scoped),
         lte(pgSchema.traderKnowledgeEdges.createdAt, asOf),
+        lte(pgSchema.traderKnowledgeEdges.updatedAt, asOf),
       ];
       if (query.regimeScope) {
         edgeConditions.push(eq(pgSchema.traderKnowledgeEdges.regimeScope, query.regimeScope));

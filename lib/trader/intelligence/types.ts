@@ -23,6 +23,7 @@ import type {
   SyntheticResearchNonCapitalBindingV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
+import type { CanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 
 /** Canonical spot symbol for MVP intelligence slice (HTX-style slash form). */
 export const BTC_USDT = "BTC/USDT" as const;
@@ -279,6 +280,8 @@ export type EvaluationCycleInput = {
   miCoreEnabled?: boolean;
   /** PR-2 MI Core: within-session conviction state (caller-owned). */
   hypothesisSessionState?: HypothesisSessionState;
+  /** DEE-629: exact PIT-causal Knowledge/Hypothesis receipt. Omission yields no opportunity. */
+  canonicalRuntimeIntelligenceState?: CanonicalRuntimeIntelligenceStateV1;
   /** HTR-WP09: prebuilt incremental reconstruction from canvas view (skips full recompute). */
   reconstruction?: ReconstructionSnapshot;
   /** HTR-WP13: explicit historical intelligence profile (never global default). */

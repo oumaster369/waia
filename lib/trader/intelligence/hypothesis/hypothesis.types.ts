@@ -19,6 +19,10 @@ export type MarketHypothesis = Readonly<{
   expectedPath: string;
   invalidationConditions: readonly string[];
   eligibleStrategyFamilies: readonly string[];
+  authority?: "LEGACY_DIAGNOSTIC" | "CANONICAL_PIT_KNOWLEDGE";
+  rankOrdinal?: number | null;
+  canonicalHypothesisId?: string | null;
+  canonicalIntelligenceStateDigest?: string | null;
 }>;
 
 export type MarketOpportunity = Readonly<{

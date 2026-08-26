@@ -92,7 +92,7 @@ function filterSnapshot(
 
   const knowledgeEdges = snapshot.knowledgeEdges
     .filter((row) => (query.regimeScope ? row.regimeScope === query.regimeScope : true))
-    .filter((row) => row.createdAt.getTime() <= asOfMs)
+    .filter((row) => row.createdAt.getTime() <= asOfMs && row.updatedAt.getTime() <= asOfMs)
     .slice(0, limit);
 
   const marketPredictions = snapshot.marketPredictions

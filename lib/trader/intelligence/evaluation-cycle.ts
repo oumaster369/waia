@@ -159,6 +159,9 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
         understanding,
         evaluatedAt,
         sessionState,
+        organizationId: input.organizationId,
+        symbol: input.symbol ?? input.bars[0]?.symbol ?? "",
+        canonicalRuntimeIntelligenceState: input.canonicalRuntimeIntelligenceState,
       });
 
   const msv = buildMsvEnvelope({

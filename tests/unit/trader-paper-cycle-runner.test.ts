@@ -37,6 +37,7 @@ import {
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
 import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
+import { buildCanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 import type { Bar, EvaluationCycleResult, Quote } from "@/lib/trader/intelligence/types";
 import { FixtureBarReplaySource } from "@/lib/trader/market-data/fixture-bar-replay-source";
 import type { BarPollSource } from "@/lib/trader/market-data/types";
@@ -257,6 +258,20 @@ describe("paper cycle runner (DEE-260)", () => {
     });
 
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ telemetrySink: sink }));
+  });
+
+  it("invokes the canonical PIT provider and passes its state into evaluation", async () => {
+    const replay = new FixtureBarReplaySource({ mode: "full", cycleIdPrefix: "dee-629" });
+    const next = replay.next();
+    expect(next.done).toBe(false);
+    if (next.done) return;
+    const state = buildCanonicalRuntimeIntelligenceStateV1({ organizationId: ORG, symbol: "BTC/USDT", pitAnchor: next.snapshot.evaluatedAt, knowledgeSemanticDigest: "paper-knowledge", hypotheses: [] });
+    const provider = vi.fn(async () => state);
+    const deps = { ...mockDeps(), canonicalRuntimeIntelligenceProvider: provider };
+    const spy = vi.spyOn(evaluationCycleModule, "runEvaluationCycle").mockReturnValue(mockEvaluation());
+    await runPaperCycleOnce(deps, { context: requireOrgContext(ORG), snapshot: next.snapshot, accountKey: "acct-260", defaultQuantity: "0.01", accountState: EMPTY_STATE, informationSufficiencyAuthority: researchAuthority() });
+    expect(provider).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ canonicalRuntimeIntelligenceState: state }));
   });
 
   it("uses cycleId-derived idempotency keys on submit", async () => {

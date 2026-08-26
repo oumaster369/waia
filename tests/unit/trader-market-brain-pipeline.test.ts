@@ -1,14 +1,15 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { HTX_ENDPOINTS } from "@/lib/trader/connectors/htx/config";
 import type { HtxKlineResponse, HtxMarketMergedResponse } from "@/lib/trader/connectors/htx/types";
 import { BTC_USDT, ETH_USDT } from "@/lib/trader/intelligence/types";
 import { runHtxIngestionCycle } from "@/lib/trader/market-brain/htx-ingestion";
 import { CANONICAL_MARKET_QUESTION_IDS } from "@/lib/trader/intelligence/market-understanding.types";
-import { runMarketBrainPipeline } from "@/lib/trader/market-brain/market-brain-pipeline";
+import { runMarketBrainPipeline, runMarketBrainPipelineWithCanonicalRuntimeIntelligenceV1 } from "@/lib/trader/market-brain/market-brain-pipeline";
+import { buildCanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 import { buildReplayFusedContext } from "@/lib/trader/market-data/replay-fused-context-builder";
 import {
   DATA_QUALITY_HALT_REASON,
@@ -94,6 +95,18 @@ describe("market brain pipeline (P3 DEE-197–202)", () => {
     expect(result.msv).not.toBeNull();
     expect(result.signal).not.toBeNull();
     expect(result.msv!.derived.tradingPermission).toBe("ALLOW_TRADING");
+  });
+
+  it("invokes the canonical provider and activates its ranked hypothesis on the async path", async () => {
+    vi.stubEnv("WAIA_MI_CORE_ENABLED", "true");
+    const fixture = loadMeanReversionFixture();
+    const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
+    const provider = vi.fn(async () => buildCanonicalRuntimeIntelligenceStateV1({ organizationId: "org-p3", symbol: BTC_USDT, pitAnchor: evaluatedAt, knowledgeSemanticDigest: "knowledge-digest", hypotheses: [{ hypothesisId: "hyp-provider", hypothesisKey: "provider", definitionDigest: "definition-provider", createdAt: evaluatedAt, hypothesisType: "reversal", lifecycleState: "VALIDATED", rankOrdinal: 0, ordinalJudgment: "WEAKENED", expectedPath: "reverse", invalidationConditions: ["break"], supportingEvidence: [], contradictingEvidence: [], knowledgeRefs: [], supersedesHypothesisIds: [] }] }));
+    const result = await runMarketBrainPipelineWithCanonicalRuntimeIntelligenceV1({ organizationId: "org-p3", instrumentId: BTC_USDT, bars: fixture.bars, quote: fixture.latestQuote, evaluatedAt, newId: () => "p3-provider-id" }, provider);
+    expect(provider).toHaveBeenCalledOnce();
+    expect(result.hypothesisSet?.activeHypothesis?.canonicalHypothesisId).toBe("hyp-provider");
+    expect(result.hypothesisSet?.opportunity).toBeNull();
+    vi.unstubAllEnvs();
   });
 
   it("halts fail-closed on ingestion error", () => {

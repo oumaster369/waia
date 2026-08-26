@@ -3,7 +3,7 @@ import { incrementTraderCounter } from "@/lib/observability/waia-trader-telemetr
 import type { MiObservationService } from "@/lib/trader/mi/observation-service";
 import { recordMsvObservationSafe } from "@/lib/trader/mi/record-msv-observation-safe";
 import { runHtxIngestionCycle } from "@/lib/trader/market-brain/htx-ingestion";
-import { runMarketBrainPipeline } from "@/lib/trader/market-brain/market-brain-pipeline";
+import { runMarketBrainPipeline, runMarketBrainPipelineWithCanonicalRuntimeIntelligenceV1 } from "@/lib/trader/market-brain/market-brain-pipeline";
 import type { MarketBrainCycleReport, MarketBrainCycleDeps } from "@/lib/trader/market-brain/types";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -102,7 +102,7 @@ export async function runMarketBrainCycle(
       continue;
     }
 
-    const pipeline = runMarketBrainPipeline({
+    const pipelineInput = {
       organizationId,
       instrumentId: entry.instrumentId,
       bars: entry.snapshot.bars,
@@ -111,7 +111,13 @@ export async function runMarketBrainCycle(
       fusedContext: entry.fusedContext ?? undefined,
       newId: input.newId,
       telemetrySink,
-    });
+    };
+    const pipeline = deps.canonicalRuntimeIntelligenceProvider
+      ? await runMarketBrainPipelineWithCanonicalRuntimeIntelligenceV1(
+          pipelineInput,
+          deps.canonicalRuntimeIntelligenceProvider,
+        )
+      : runMarketBrainPipeline(pipelineInput);
 
     if (pipeline.halted) {
       emitCycleCounter(organizationId, "MARKET_BRAIN_QUALITY_HALT", telemetrySink);

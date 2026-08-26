@@ -82,7 +82,7 @@ describe("trader CDE conviction gate (PR-2)", () => {
     expect(withMi.derived.reasonCodes).toContain(cdeReasonCodes.truthfulHealthDegradedOk);
   });
 
-  it("publishes conviction/opportunity/eligible families in derived when miCore enabled", () => {
+  it("does not publish diagnostic heuristic hypotheses as an opportunity", () => {
     const fixture = loadFixture();
     const evaluatedAt = fixture.bars.at(-1)!.barCloseTime;
     const features = computeFeatureSnapshot({
@@ -120,7 +120,7 @@ describe("trader CDE conviction gate (PR-2)", () => {
       newId: () => "msv-derived",
     });
 
-    expect(msv.derived.activeHypothesisType).toBeDefined();
-    expect(msv.derived.eligibleStrategyFamilies?.length).toBeGreaterThan(0);
+    expect(msv.derived.activeHypothesisType).toBeUndefined();
+    expect(msv.derived.eligibleStrategyFamilies).toBeUndefined();
   });
 });

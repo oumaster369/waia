@@ -4,6 +4,7 @@ import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/in
 import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import type { Bar, InstrumentId, Quote, StrategySignal } from "@/lib/trader/intelligence/types";
 import type { FeatureSnapshot, MsvEnvelope } from "@/lib/trader/intelligence/types";
+import type { HypothesisSet } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import {
   DATA_QUALITY_HALT_REASON,
@@ -13,6 +14,8 @@ import {
 } from "@/lib/trader/market-data/data-quality-gate";
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
+import type { CanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
+import type { CanonicalRuntimeIntelligenceStateProviderV1 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
 
 export type MarketBrainPipelineInput = {
   organizationId: string;
@@ -24,6 +27,8 @@ export type MarketBrainPipelineInput = {
   fusedContext?: FusedMarketContext;
   newId?: () => string;
   telemetrySink?: WaiaTraderTelemetrySink;
+  /** DEE-629 canonical PIT state. Missing state cannot authorize an opportunity. */
+  canonicalRuntimeIntelligenceState?: CanonicalRuntimeIntelligenceStateV1;
 };
 
 export type MarketBrainPipelineResult = {
@@ -36,6 +41,7 @@ export type MarketBrainPipelineResult = {
   understanding?: MarketUnderstandingSnapshot;
   signals: StrategySignal[] | null;
   signal: StrategySignal | null;
+  hypothesisSet?: HypothesisSet;
 };
 
 /**
@@ -93,6 +99,7 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     fusedContext: input.fusedContext,
     newId: input.newId,
     telemetrySink: input.telemetrySink,
+    canonicalRuntimeIntelligenceState: input.canonicalRuntimeIntelligenceState,
     informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
       organizationId: input.organizationId,
       reason: "MARKET_BRAIN_NON_CAPITAL_EVALUATION",
@@ -108,5 +115,23 @@ export function runMarketBrainPipeline(input: MarketBrainPipelineInput): MarketB
     understanding: evaluation.understanding,
     signals: evaluation.signals,
     signal: evaluation.signal,
+    hypothesisSet: evaluation.hypothesisSet,
   };
+}
+
+/** Async production entrypoint when canonical PIT repositories are configured. */
+export async function runMarketBrainPipelineWithCanonicalRuntimeIntelligenceV1(
+  input: MarketBrainPipelineInput,
+  provider: CanonicalRuntimeIntelligenceStateProviderV1,
+): Promise<MarketBrainPipelineResult> {
+  const evaluatedAt = input.evaluatedAt ?? input.bars.at(-1)?.barCloseTime;
+  if (!evaluatedAt) {
+    throw new Error("[market-brain] canonical runtime intelligence requires evaluatedAt");
+  }
+  const state = input.canonicalRuntimeIntelligenceState ?? await provider({
+    context: { organizationId: input.organizationId },
+    symbol: input.instrumentId,
+    asOf: new Date(evaluatedAt),
+  });
+  return runMarketBrainPipeline({ ...input, canonicalRuntimeIntelligenceState: state });
 }

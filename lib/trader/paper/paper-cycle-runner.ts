@@ -558,6 +558,14 @@ export async function runPaperCycleOnce(
   const { snapshot, context } = input;
   const executionMode = input.executionMode ?? "mock";
   const cycleNewId = input.newId ?? deps.researchReplayDeterminism?.newId;
+  const canonicalRuntimeIntelligenceState = input.canonicalRuntimeIntelligenceState ??
+    (deps.canonicalRuntimeIntelligenceProvider
+      ? await deps.canonicalRuntimeIntelligenceProvider({
+          context,
+          symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+          asOf: new Date(snapshot.evaluatedAt),
+        })
+      : undefined);
 
   const evaluation = runEvaluationCycle({
     organizationId: context.organizationId,
@@ -570,6 +578,7 @@ export async function runPaperCycleOnce(
     telemetrySink: input.telemetrySink,
     hypothesisSessionState: input.hypothesisSessionState,
     miCoreEnabled: input.miCoreEnabled,
+    canonicalRuntimeIntelligenceState,
     reconstruction: input.reconstruction,
     historicalProfile: input.historicalProfile ?? input.wp16?.historicalProfile,
     runId: input.runId,

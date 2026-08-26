@@ -1,10 +1,8 @@
 import type { MarketUnderstandingSnapshot } from "@/lib/trader/intelligence/market-understanding.types";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import {
-  CONVICTION_SUSTAINED_CYCLES,
   CONVICTION_THRESHOLD,
   HYPOTHESIS_SET_SCHEMA_VERSION,
-  hypothesisReasonCodes,
   type HypothesisSet,
   type HypothesisType,
   type MarketHypothesis,
@@ -12,13 +10,19 @@ import {
 } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import { resolveEligibleStrategyFamilies } from "@/lib/trader/intelligence/hypothesis/strategy-family-mapping";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
-import { miCoreReasonCodes } from "@/lib/trader/intelligence/mi-core.types";
+import {
+  assertCanonicalRuntimeIntelligenceStateV1,
+  type CanonicalRuntimeIntelligenceStateV1,
+} from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 
 export type BuildHypothesisSetInput = {
   reconstruction: ReconstructionSnapshot;
   understanding?: MarketUnderstandingSnapshot;
   evaluatedAt: string;
   sessionState: HypothesisSessionState;
+  organizationId?: string;
+  symbol?: string;
+  canonicalRuntimeIntelligenceState?: CanonicalRuntimeIntelligenceStateV1;
 };
 
 export type BuildHypothesisSetResult = {
@@ -153,7 +157,39 @@ function buildHypothesis(
     expectedPath,
     invalidationConditions: invalidation,
     eligibleStrategyFamilies: resolveEligibleStrategyFamilies(hypothesisType),
+    authority: "LEGACY_DIAGNOSTIC",
+    rankOrdinal: null,
+    canonicalHypothesisId: null,
+    canonicalIntelligenceStateDigest: null,
   };
+}
+
+function buildCanonicalHypotheses(authority: CanonicalRuntimeIntelligenceStateV1): readonly MarketHypothesis[] {
+  const superseded = new Set(
+    authority.hypotheses
+      .filter((item) => item.lifecycleState === "VALIDATED" || item.lifecycleState === "DECAYING")
+      .flatMap((item) => item.supersedesHypothesisIds),
+  );
+  return [...authority.hypotheses]
+    .filter((hypothesis) =>
+      (hypothesis.lifecycleState === "VALIDATED" || hypothesis.lifecycleState === "DECAYING") &&
+      !superseded.has(hypothesis.hypothesisId),
+    )
+    .sort((a, b) => a.rankOrdinal - b.rankOrdinal)
+    .map((hypothesis) => ({
+      hypothesisType: hypothesis.hypothesisType,
+      // Canonical rank is ordinal, never a probability or confidence scalar.
+      confidence: 0,
+      supportingEvidence: hypothesis.supportingEvidence.map((item) => item.evidenceId),
+      contradictingEvidence: hypothesis.contradictingEvidence.map((item) => item.evidenceId),
+      expectedPath: hypothesis.expectedPath,
+      invalidationConditions: hypothesis.invalidationConditions,
+      eligibleStrategyFamilies: resolveEligibleStrategyFamilies(hypothesis.hypothesisType),
+      authority: "CANONICAL_PIT_KNOWLEDGE" as const,
+      rankOrdinal: hypothesis.rankOrdinal,
+      canonicalHypothesisId: hypothesis.hypothesisId,
+      canonicalIntelligenceStateDigest: authority.semanticDigest,
+    }));
 }
 
 function updateSessionState(
@@ -188,34 +224,6 @@ function updateSessionState(
   };
 }
 
-function resolveOpportunity(
-  hypotheses: readonly MarketHypothesis[],
-  sessionState: HypothesisSessionState,
-): MarketOpportunity | null {
-  const ranked = [...hypotheses].sort((a, b) => b.confidence - a.confidence);
-  const top = ranked[0];
-  if (!top) {
-    return null;
-  }
-
-  const sustained = sessionState.sustainedCyclesByType[top.hypothesisType] ?? 0;
-  const authorized =
-    top.confidence >= CONVICTION_THRESHOLD && sustained >= CONVICTION_SUSTAINED_CYCLES;
-
-  return {
-    authorized,
-    hypothesisType: top.hypothesisType,
-    conviction: top.confidence,
-    sustainedCycles: sustained,
-    eligibleStrategyFamilies: top.eligibleStrategyFamilies,
-    reasonCode: authorized
-      ? miCoreReasonCodes.opportunityAuthorized
-      : top.confidence < CONVICTION_THRESHOLD
-        ? hypothesisReasonCodes.convictionInsufficient
-        : miCoreReasonCodes.opportunityNotAuthorized,
-  };
-}
-
 /**
  * Strategy-agnostic hypothesis engine — produces competing market hypotheses.
  * Legacy Understanding remains an input-compatible audit projection and is causally inert here;
@@ -233,12 +241,37 @@ export function buildHypothesisSet(input: BuildHypothesisSetInput): BuildHypothe
     "mean_reversion",
   ];
 
-  const hypotheses = hypothesisTypes.map((type) => buildHypothesis(type, input.reconstruction));
+  const diagnosticHypotheses = hypothesisTypes.map((type) => buildHypothesis(type, input.reconstruction));
+
+  if (!input.canonicalRuntimeIntelligenceState) {
+    return {
+      hypothesisSet: {
+        schemaVersion: HYPOTHESIS_SET_SCHEMA_VERSION,
+        evaluatedAt: input.evaluatedAt,
+        hypotheses: diagnosticHypotheses,
+        activeHypothesis: null,
+        opportunity: null,
+      },
+      sessionState: input.sessionState,
+    };
+  }
+  assertCanonicalRuntimeIntelligenceStateV1(input.canonicalRuntimeIntelligenceState);
+  if (
+    input.canonicalRuntimeIntelligenceState.pitAnchor !== input.evaluatedAt ||
+    (input.organizationId && input.canonicalRuntimeIntelligenceState.organizationId !== input.organizationId) ||
+    (input.symbol && input.canonicalRuntimeIntelligenceState.symbol !== input.symbol)
+  ) {
+    throw new Error("[runtime-knowledge-authority] authority scope mismatch");
+  }
+
+  const hypotheses = buildCanonicalHypotheses(input.canonicalRuntimeIntelligenceState);
 
   const updatedSession = updateSessionState(input.sessionState, hypotheses);
   const ranked = [...hypotheses].sort((a, b) => b.confidence - a.confidence);
   const activeHypothesis = ranked[0] ?? null;
-  const opportunity = resolveOpportunity(hypotheses, updatedSession);
+  // DEE-629 is epistemic authority only. Predictive Admission owns any future
+  // numeric/opportunity receipt; ordinal Knowledge rank cannot authorize capital.
+  const opportunity: MarketOpportunity | null = null;
 
   return {
     hypothesisSet: {

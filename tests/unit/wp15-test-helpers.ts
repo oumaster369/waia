@@ -2,6 +2,7 @@ import { createCostModelV1 } from "@/lib/trader/execution/cost-model";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { buildCanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import type {
@@ -71,19 +72,46 @@ export function buildWp15Snapshot(
   runId: string,
   cycleId: string,
 ): MkbReadModelSnapshot {
+  const bars = wp14Bars();
+  const pitAnchor = bars.at(-1)!.barCloseTime;
   const informationSufficiencyAuthority = declareResearchNonCapitalInformationAuthorityV2({
     organizationId,
     reason: "HTR_WP15_UNIT_TEST",
   });
   const cycle = runEvaluationCycle({
     organizationId,
-    bars: wp14Bars(),
+    bars,
     historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
     runId,
     cycleId,
     newId: createDeterministicReplayIdFactory(415_150),
     costModel: createCostModelV1("10", "5"),
     informationSufficiencyAuthority,
+    canonicalRuntimeIntelligenceState: buildCanonicalRuntimeIntelligenceStateV1({
+      organizationId,
+      symbol: "BTC/USDT",
+      pitAnchor,
+      knowledgeSemanticDigest: "wp15-canonical-knowledge-fixture-v1",
+      hypotheses: [{
+        hypothesisId: `${runId}:${cycleId}:canonical-hypothesis`,
+        hypothesisKey: "wp15-canonical-trend-continuation",
+        definitionDigest: "wp15-canonical-definition-v1",
+        createdAt: pitAnchor,
+        hypothesisType: "trend_continuation",
+        lifecycleState: "VALIDATED",
+        rankOrdinal: 0,
+        ordinalJudgment: "SUPPORTED",
+        expectedPath: "continuation",
+        invalidationConditions: ["structure_break"],
+        supportingEvidence: [],
+        contradictingEvidence: [],
+        knowledgeRefs: [{
+          knowledgeEdgeId: "00000000-0000-4000-8000-000000041503",
+          knowledgeState: "RESOLVED_CORRECT",
+        }],
+        supersedesHypothesisIds: [],
+      }],
+    }),
   });
 
   const intelligenceCycleBundle = buildIntelligenceCycleBundle({
@@ -92,7 +120,7 @@ export function buildWp15Snapshot(
     cycleId,
     symbol: "BTC/USDT",
     accountId: null,
-    analyticalTimeframe: wp14Bars()[0]!.interval,
+    analyticalTimeframe: bars[0]!.interval,
     marketStateSnapshot: cycle.marketStateSnapshot!,
     decisionChain: cycle.decisionChain!,
   });
