@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 
 import { buildForecastRecords } from "@/lib/trader/intelligence/forecast-decision/build-forecast-records";
 import { buildHypothesisSet } from "@/lib/trader/intelligence/hypothesis/build-hypothesis-set";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { admitResearchForecastDecisionConstruction } from "./forecast-decision-construction-test-helper";
+import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 const PIT = "2026-01-01T12:00:00.000Z";
 
@@ -136,6 +138,19 @@ describe("DEE-626 canonical causal lineage", () => {
     expect(forecastsFor(missing)).toEqual([]);
     const mutated = { ...fixture, hypothesisSet: { ...fixture.hypothesisSet, hypotheses: [{ ...active, canonicalCausalLineageDigest: "mutated" }], activeHypothesis: { ...active, canonicalCausalLineageDigest: "mutated" } } };
     expect(forecastsFor(mutated)).toEqual([]);
+    const parsed = JSON.parse(active.canonicalCausalLineageJson!) as Record<string, unknown>;
+    parsed.hypothesisCausalStateDigest = "rehash-mutated-state";
+    delete parsed.contentDigest;
+    parsed.contentDigest = createHash("sha256").update(canonicalizeSemanticJsonString(parsed), "utf8").digest("hex");
+    const rehashedJson = canonicalizeSemanticJsonString(parsed);
+    const rehashed = { ...active, canonicalCausalLineageJson: rehashedJson, canonicalCausalLineageDigest: parsed.contentDigest as string };
+    expect(forecastsFor({ ...fixture, hypothesisSet: { ...fixture.hypothesisSet, hypotheses: [rehashed], activeHypothesis: rehashed } })).toEqual([]);
+    const withExtra: Record<string, unknown> = { ...parsed, terminalReasonCode: "SMUGGLED_REASON" };
+    delete withExtra.contentDigest;
+    withExtra.contentDigest = createHash("sha256").update(canonicalizeSemanticJsonString(withExtra), "utf8").digest("hex");
+    const extraJson = canonicalizeSemanticJsonString(withExtra);
+    const extra = { ...active, canonicalCausalLineageJson: extraJson, canonicalCausalLineageDigest: withExtra.contentDigest as string };
+    expect(forecastsFor({ ...fixture, hypothesisSet: { ...fixture.hypothesisSet, hypotheses: [extra], activeHypothesis: extra } })).toEqual([]);
   });
 
   it("does not perturb lineage when unrelated evidence exists outside the hypothesis", () => {

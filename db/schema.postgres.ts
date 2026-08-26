@@ -4741,6 +4741,7 @@ export const traderIntelligenceHypothesisRecord = pgTable(
       t.organizationId,
       t.cycleEnvelopeId,
     ),
+    check("trader_intelligence_hypothesis_record_causal_lineage_pair_check", sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`),
   ],
 );
 
@@ -4842,6 +4843,7 @@ export const traderIntelligenceForecastRecord = pgTable(
       t.organizationId,
       t.cycleEnvelopeId,
     ),
+    check("trader_intelligence_forecast_record_causal_lineage_pair_check", sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`),
   ],
 );
 
