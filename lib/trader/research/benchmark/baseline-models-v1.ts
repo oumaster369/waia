@@ -22,7 +22,8 @@ export type BaselineForecastResult =
 export type BaselineContext = {
   developmentReturns: readonly number[];
   grid: TerminalTargetGrid;
-  history: readonly number[];
+  history: readonly (number | null)[];
+  historyMinuteOpenTimesMs?: readonly number[];
   primaryHorizonMinutes?: 30 | 60;
 };
 
@@ -58,15 +59,50 @@ function studentT5BucketProbabilities(grid: TerminalTargetGrid, sigmaDev: number
   return probs;
 }
 
-function ewmaVarianceReturns(history: readonly number[]): number | null {
-  if (history.length < EWMA_WARMUP) {
+function developmentSampleVariance(returns: readonly number[]): number | null {
+  if (returns.length < 2 || returns.some((value) => !Number.isFinite(value))) {
     return null;
   }
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const variance =
+    returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1);
+  return Number.isFinite(variance) && variance >= 0 ? variance : null;
+}
+
+export function computeEwmaVarianceReturnsV2(context: BaselineContext): number | null {
+  const { history, historyMinuteOpenTimesMs, developmentReturns } = context;
+  if (
+    history.length < EWMA_WARMUP ||
+    historyMinuteOpenTimesMs === undefined ||
+    historyMinuteOpenTimesMs.length !== history.length
+  ) {
+    return null;
+  }
+
   const series = history.slice(-EWMA_WARMUP);
-  let varEwma = 0;
-  for (let i = 1; i < series.length; i += 1) {
-    const diff = series[i]! - series[i - 1]!;
-    varEwma = EWMA_LAMBDA * varEwma + (1 - EWMA_LAMBDA) * diff * diff;
+  const minuteOpenTimesMs = historyMinuteOpenTimesMs.slice(-EWMA_WARMUP);
+  const initialVariance = developmentSampleVariance(developmentReturns);
+  if (initialVariance === null) {
+    return null;
+  }
+  let varEwma: number = initialVariance;
+  for (let i = 0; i < series.length; i += 1) {
+    const value = series[i];
+    const minuteOpenTimeMs = minuteOpenTimesMs[i];
+    if (
+      value === null ||
+      !Number.isFinite(value) ||
+      minuteOpenTimeMs === undefined ||
+      !Number.isSafeInteger(minuteOpenTimeMs) ||
+      (i > 0 && minuteOpenTimeMs - minuteOpenTimesMs[i - 1]! !== 60_000)
+    ) {
+      return null;
+    }
+    const nextVariance = EWMA_LAMBDA * varEwma + (1 - EWMA_LAMBDA) * value * value;
+    if (!Number.isFinite(nextVariance) || nextVariance < 0) {
+      return null;
+    }
+    varEwma = nextVariance;
   }
   return varEwma;
 }
@@ -88,7 +124,7 @@ export const MANDATORY_BASELINE_IDS = [
   "gaussian-pop-std/v1",
   "student-t5-nu5/v1",
   "rolling-w2000/v1",
-  "ewma-lambda094/v1",
+  "ewma-lambda094/v2",
 ] as const;
 
 export function evaluateMandatoryBaselineV1(
@@ -107,13 +143,16 @@ export function evaluateMandatoryBaselineV1(
       return makeAvailable(studentT5BucketProbabilities(grid, sigmaDev), grid);
     case "rolling-w2000/v1": {
       const window = history.slice(-ROLLING_WINDOW);
-      if (window.length < ROLLING_WINDOW) {
+      if (
+        window.length < ROLLING_WINDOW ||
+        window.some((value) => value === null || !Number.isFinite(value))
+      ) {
         return { status: "UNAVAILABLE", reason: "ROLLING_WARMUP_INSUFFICIENT" };
       }
-      return makeAvailable(empiricalBucketProbabilities(window, grid), grid);
+      return makeAvailable(empiricalBucketProbabilities(window as number[], grid), grid);
     }
-    case "ewma-lambda094/v1": {
-      const varEwma = ewmaVarianceReturns(history);
+    case "ewma-lambda094/v2": {
+      const varEwma = computeEwmaVarianceReturnsV2(context);
       if (varEwma === null) {
         return { status: "UNAVAILABLE", reason: "EWMA_WARMUP_INSUFFICIENT" };
       }
@@ -142,12 +181,14 @@ export function beatAllMandatoryBaselinesV1(
 
 export function buildBaselineContextFromDevelopment(input: {
   developmentReturns: readonly number[];
-  history: readonly number[];
+  history: readonly (number | null)[];
+  historyMinuteOpenTimesMs?: readonly number[];
   primaryHorizonMinutes?: 30 | 60;
 }): BaselineContext {
   return {
     developmentReturns: input.developmentReturns,
     history: input.history,
+    historyMinuteOpenTimesMs: input.historyMinuteOpenTimesMs,
     primaryHorizonMinutes: input.primaryHorizonMinutes,
     grid: computeTerminalTargetGridFromDevelopmentReturns(input.developmentReturns),
   };
