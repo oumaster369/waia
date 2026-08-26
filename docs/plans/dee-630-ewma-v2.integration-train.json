@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-630",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-738",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Implement canonical raw-return-squared EWMA v2 and fail-closed 1m input contract.",
       "dependencies": [],
@@ -31,11 +31,20 @@
         "Raw r² known answers and fail-closed exact contiguous 2000×1m validation."
       ],
       "expectedTests": ["tests/unit/baseline-models-v1-scientific.test.ts"],
+      "actualFiles": [
+        "lib/trader/research/benchmark/baseline-models-v1.ts",
+        "tests/unit/baseline-models-v1-scientific.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Raw-r² known answers and fail-closed input negatives pass."
+      ],
+      "integratedCommits": ["d1c841616965d751f2e2ba4eb63c774504debb1c"],
+      "tests": ["tests/unit/baseline-models-v1-scientific.test.ts: 14/14 PASS"],
       "execution": { "wave": 1, "mode": "serialized" }
     },
     {
       "issue": "DEE-737",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Advance baseline, trial and scientific receipt identities from defective v1 semantics.",
       "dependencies": ["DEE-738"],
@@ -52,11 +61,17 @@
         "v2 baseline and receipt identity deterministically differ from v1."
       ],
       "expectedTests": ["tests/unit/research-harness-admission-integration.test.ts"],
+      "actualFiles": [
+        "lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts"
+      ],
+      "acceptanceEvidence": ["v2 baseline and receipt identity cannot collide with v1."],
+      "integratedCommits": ["165bbc1851a2c167c408617cc3c69e1f94cc8ae0"],
+      "tests": ["tests/unit/research-harness-admission-integration.test.ts: 9/9 PASS"],
       "execution": { "wave": 2, "mode": "serialized" }
     },
     {
       "issue": "DEE-736",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Close known-answer, negative, horizon scaling, replay and integration evidence.",
       "dependencies": ["DEE-737"],
@@ -74,6 +89,12 @@
         "Focused/negative gates and deterministic receipt evidence pass."
       ],
       "expectedTests": ["focused benchmark and research-harness suites"],
+      "actualFiles": ["tests/unit/research-harness-admission-integration.test.ts"],
+      "acceptanceEvidence": [
+        "Focused 23/23, typecheck and production build pass; exact-head semantic review P1=0/P2=0."
+      ],
+      "integratedCommits": ["1de73ddfdf0be1362d794038ac751aee9043450c"],
+      "tests": ["focused benchmark and research-harness suites: 23/23 PASS"],
       "execution": { "wave": 3, "mode": "serialized" }
     }
   ],
@@ -82,7 +103,64 @@
     "admissionEvidence": {
       "status": "pass",
       "reviewer": "Controller dependency, duplicate, ownership, producer/consumer and protected-surface audit"
-    }
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "9934b2d4c2c536edf712644bfd75d209a5cb1a7369d2eb2af8856340d6bfade8",
+      "manifestCommit": "f30d945b11235f03ba8a0213942666f6ecfd6d30",
+      "manifestPath": "docs/plans/dee-630-ewma-v2.integration-train.json",
+      "reviewer": "Controller pre-write API and surface freeze recorded in Linear before implementation"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-738",
+        "status": "pass",
+        "reviewedCommits": ["d1c841616965d751f2e2ba4eb63c774504debb1c"],
+        "reviewedFiles": [
+          "lib/trader/research/benchmark/baseline-models-v1.ts",
+          "tests/unit/baseline-models-v1-scientific.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-737",
+        "status": "pass",
+        "reviewedCommits": ["165bbc1851a2c167c408617cc3c69e1f94cc8ae0"],
+        "reviewedFiles": [
+          "lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts"
+        ]
+      },
+      {
+        "issue": "DEE-736",
+        "status": "pass",
+        "reviewedCommits": ["1de73ddfdf0be1362d794038ac751aee9043450c"],
+        "reviewedFiles": ["tests/unit/research-harness-admission-integration.test.ts"]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-738",
+        "status": "pass",
+        "commands": ["EWMA focused known-answer and negative tests", "pnpm typecheck"]
+      },
+      {
+        "afterIssue": "DEE-737",
+        "status": "pass",
+        "commands": ["research-harness deterministic identity tests", "pnpm typecheck"]
+      },
+      {
+        "afterIssue": "DEE-736",
+        "status": "pass",
+        "commands": ["focused 23/23", "pnpm typecheck", "pnpm build"]
+      }
+    ],
+    "finalReviewRemediation": {
+      "status": "pass",
+      "reviewedHead": "1de73ddfdf0be1362d794038ac751aee9043450c",
+      "findings": ["P2 arithmetic overflow fail-closed found during pre-freeze review"],
+      "remediationCommits": ["d1c841616965d751f2e2ba4eb63c774504debb1c"]
+    },
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "Raw returns are squared directly.",
