@@ -28,6 +28,8 @@ import {
   wp14Bars,
 } from "./wp14-forecast-decision-test-helpers";
 import { buildWp13Bundle } from "./wp13-intelligence-test-helpers";
+import { createOutcomeResolutionSourcePostgres } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution-source-postgres";
+import { createMkbReadModelSourcePostgres } from "@/lib/trader/knowledge/mkb-read-model-postgres";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -105,6 +107,18 @@ describe.skipIf(!integrationEnabled || !url)(
       expect(forecasts.length).toBe(bundle.forecasts.length + 1);
       expect(forecasts[0]?.canonicalCausalLineageJson).toBe(lineageJson);
       expect(forecasts[0]?.canonicalCausalLineageDigest).toBe(lineageDigest);
+      const context = { organizationId: orgA };
+      const outcomeRows = await createOutcomeResolutionSourcePostgres(db)
+        .listForecastsEligibleForResolution(context, "wp14-parity-run", "2027-01-01T00:00:00.000Z");
+      expect(outcomeRows[0]?.canonicalCausalLineageJson).toBe(lineageJson);
+      expect(outcomeRows[0]?.canonicalCausalLineageDigest).toBe(lineageDigest);
+      const mkb = await createMkbReadModelSourcePostgres(db).loadSnapshot(
+        context,
+        { runId: "wp14-parity-run", cycleId: "0", symbol: "BTC/USDT" },
+        new Date("2027-01-01T00:00:00.000Z"),
+      );
+      expect(mkb.forecasts[0]?.canonicalCausalLineageJson).toBe(lineageJson);
+      expect(mkb.forecasts[0]?.canonicalCausalLineageDigest).toBe(lineageDigest);
 
       const decisions = await db
         .select()
