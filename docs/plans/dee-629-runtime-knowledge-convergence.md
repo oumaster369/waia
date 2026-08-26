@@ -57,7 +57,7 @@ Rollback is one revert of the squash merge; this train adds no migration and mak
 
 ## Acceptance
 
-- Identical PIT canonical state produces the identical semantic digest and ordinal ranking on SQLite/in-memory and PostgreSQL read ports.
+- The deterministic fold replays byte-identically; in-memory and PostgreSQL read ports enforce the same PIT cutoffs, and the actual PostgreSQL MI/MKB composition replays the same exact state/digest.
 - Exact supporting and contradicting evidence, invalidation and supersession remain reconstructable.
 - Future evidence/revisions, cross-org rows, missing lineage, terminal citations and digest mutation fail closed.
 - Legacy fixed-delta hypotheses remain diagnostic and cannot authorize an opportunity.
