@@ -23,7 +23,7 @@
       "expectedTests": ["focused authority contract tests"],
       "actualFiles": ["lib/trader/intelligence/hypothesis/hypothesis.types.ts", "lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1.ts"],
       "acceptanceEvidence": ["CanonicalRuntimeIntelligenceStateV1 freezes versioned PIT identity, lifecycle, evidence lanes, ordinal judgment, deterministic rank and semantic digest.", "Numeric authority remains absent and ordinal rank is never exposed as probability."],
-      "integratedCommits": ["98ed4a8977e90be030611e2136b25bc3458c59dd"],
+      "integratedCommits": ["6ddab2fb1867c8e3e34cf53d814c3f21b203ef0a"],
       "tests": ["tests/unit/trader-runtime-knowledge-authority-v1.test.ts"],
       "execution": {"wave": 1, "mode": "serialized"}
     },
@@ -41,7 +41,7 @@
       "expectedTests": ["determinism, mutation, PIT negatives"],
       "actualFiles": ["lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "lib/trader/knowledge/mkb-read-model-source.ts", "tests/integration/postgres-trader-mkb-read-model-parity.test.ts", "tests/integration/wp15-mkb-read-model-test-helpers.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"],
       "acceptanceEvidence": ["Repository-backed as-of fold rejects future event/ingest time, cross-tenant/version and missing references.", "Content-addressed fold and deterministic tie-break are stable under input shuffle and unrelated evidence."],
-      "integratedCommits": ["6c75eb17399a0971a9ecff786744e1ba440d4f51", "63f1096acdb3329e075c3269a9487ee5171b5226"],
+      "integratedCommits": ["870f6e8d9d2fc77f45f7714ea6bf1eda3e6f931f", "b36a4cbd4cd7a19b557af677ce744d735f5aa4b5"],
       "tests": ["tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"],
       "execution": {"wave": 2, "mode": "serialized"}
     },
@@ -59,7 +59,7 @@
       "expectedTests": ["runtime consumer and negative tests"],
       "actualFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/types.ts", "lib/trader/market-brain/market-brain-pipeline.ts", "lib/trader/market-brain/run-market-brain-cycle.ts", "lib/trader/market-brain/types.ts", "lib/trader/paper/paper-cycle-runner.ts", "lib/trader/paper/paper-cycle.types.ts", "tests/unit/trader-canonical-runtime-intelligence-consumer-closure.test.ts", "tests/unit/trader-market-brain-pipeline.test.ts", "tests/unit/trader-mi-cde-conviction.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts", "tests/unit/trader-mi-integration.test.ts", "tests/unit/trader-paper-cycle-runner.test.ts"],
       "acceptanceEvidence": ["Evaluation cycle has one canonical state input and buildHypothesisSet has one production caller.", "Missing canonical state and legacy diagnostic path both yield no authorized opportunity."],
-      "integratedCommits": ["73306ed15f0ccbe1e3c0ae7cd96b459ec55f5a5a"],
+      "integratedCommits": ["452e40431920f49747e35eebc56919badebd1787"],
       "tests": ["tests/unit/trader-mi-cde-conviction.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts", "tests/unit/trader-mi-integration.test.ts", "tests/unit/trader-mi-hypothesis-engine.test.ts"],
       "execution": {"wave": 3, "mode": "serialized"}
     },
@@ -77,7 +77,7 @@
       "expectedTests": ["focused negatives, PostgreSQL parity, full fresh SQLite"],
       "actualFiles": ["docs/ai-trader/reality-v2-source-consumer-inventory.json", "docs/plans/dee-629-runtime-knowledge-convergence.md", "tests/unit/wp15-test-helpers.ts"],
       "acceptanceEvidence": ["Explicit FOR/AGAINST evidence and invalidation/supersession exclusions are fail closed.", "Non-live runtime consumers converge through runEvaluationCycle; in-memory/PostgreSQL PIT cutoffs match and actual PostgreSQL MI/MKB composition replays identically."],
-      "integratedCommits": ["e27802e96e38a91d180e6eef692f299e84a4de7e", "c091fc3fc2fd47b8ea3435263465c94b76a3e48b", "f04cc9c096f6e43c18e688aee165b8419cd72450"],
+      "integratedCommits": ["94c10eefd35dc1b29f57d9c016c58bcf360c736e", "1d5e8583fbbd4d9c156dcc3e0f45c5aa2ac5d583", "645c1a52fe05a284542b448e41884578ebc67a5b"],
       "tests": ["tests/unit/trader-runtime-knowledge-authority-v1.test.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts", "tests/unit/trader-reality-v2-consumer-graph.test.ts", "tests/unit/trader-wp15-optional-outcome-port.test.ts", "tests/unit/trader-wp15-no-unresolved-as-knowledge.test.ts", "tests/unit/trader-wp15-incomplete-chain-ineligible.test.ts"],
       "execution": {"wave": 4, "mode": "serialized"}
     }
@@ -85,12 +85,12 @@
   "deferredChildren": [],
   "integrationEvidence": {
     "admissionEvidence": {"status": "pass", "reviewer": "Controller duplicate, dependency, ownership and producer/consumer audit"},
-    "preImplementationAdmission": {"status": "pass", "manifestDigest": "4f8986348886f7939eb0262bf3d2e4dd6de1ca4b678ec63b0c40d3082f271cfd", "manifestCommit": "b04a7aef61273d55107a89eedadbd328bc1f9037", "manifestPath": "docs/plans/dee-629-runtime-knowledge-convergence.integration-train.json", "reviewer": "Controller duplicate, dependency, ownership and producer/consumer audit"},
+    "preImplementationAdmission": {"status": "pass", "manifestDigest": "ddb1f6ef64aaa1587fd5e95eb7c0d1b86942b207718d6623d695ec890e1e4122", "manifestCommit": "413f20a098f3a91f7414c94a9f4dfef348d68825", "manifestPath": "docs/plans/dee-629-runtime-knowledge-convergence.integration-train.json", "reviewer": "Controller duplicate, dependency, ownership and producer/consumer audit"},
     "admissionReviews": [
-      {"issue": "DEE-721", "status": "pass", "reviewedCommits": ["98ed4a8977e90be030611e2136b25bc3458c59dd"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/hypothesis.types.ts", "lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1.ts"]},
-      {"issue": "DEE-722", "status": "pass", "reviewedCommits": ["6c75eb17399a0971a9ecff786744e1ba440d4f51", "63f1096acdb3329e075c3269a9487ee5171b5226"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "lib/trader/knowledge/mkb-read-model-source.ts", "tests/integration/postgres-trader-mkb-read-model-parity.test.ts", "tests/integration/wp15-mkb-read-model-test-helpers.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"]},
-      {"issue": "DEE-723", "status": "pass", "reviewedCommits": ["73306ed15f0ccbe1e3c0ae7cd96b459ec55f5a5a"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/types.ts", "lib/trader/market-brain/market-brain-pipeline.ts", "lib/trader/market-brain/run-market-brain-cycle.ts", "lib/trader/market-brain/types.ts", "lib/trader/paper/paper-cycle-runner.ts", "lib/trader/paper/paper-cycle.types.ts", "tests/unit/trader-canonical-runtime-intelligence-consumer-closure.test.ts", "tests/unit/trader-market-brain-pipeline.test.ts", "tests/unit/trader-mi-cde-conviction.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts", "tests/unit/trader-mi-integration.test.ts", "tests/unit/trader-paper-cycle-runner.test.ts"]},
-      {"issue": "DEE-724", "status": "pass", "reviewedCommits": ["e27802e96e38a91d180e6eef692f299e84a4de7e", "c091fc3fc2fd47b8ea3435263465c94b76a3e48b", "f04cc9c096f6e43c18e688aee165b8419cd72450"], "reviewedFiles": ["docs/ai-trader/reality-v2-source-consumer-inventory.json", "docs/plans/dee-629-runtime-knowledge-convergence.md", "tests/unit/wp15-test-helpers.ts"]}
+      {"issue": "DEE-721", "status": "pass", "reviewedCommits": ["6ddab2fb1867c8e3e34cf53d814c3f21b203ef0a"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/hypothesis.types.ts", "lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1.ts"]},
+      {"issue": "DEE-722", "status": "pass", "reviewedCommits": ["870f6e8d9d2fc77f45f7714ea6bf1eda3e6f931f", "b36a4cbd4cd7a19b557af677ce744d735f5aa4b5"], "reviewedFiles": ["lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts", "lib/trader/knowledge/mkb-read-model-source.ts", "tests/integration/postgres-trader-mkb-read-model-parity.test.ts", "tests/integration/wp15-mkb-read-model-test-helpers.ts", "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts", "tests/unit/trader-runtime-knowledge-authority-v1.test.ts"]},
+      {"issue": "DEE-723", "status": "pass", "reviewedCommits": ["452e40431920f49747e35eebc56919badebd1787"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/hypothesis/build-hypothesis-set.ts", "lib/trader/intelligence/types.ts", "lib/trader/market-brain/market-brain-pipeline.ts", "lib/trader/market-brain/run-market-brain-cycle.ts", "lib/trader/market-brain/types.ts", "lib/trader/paper/paper-cycle-runner.ts", "lib/trader/paper/paper-cycle.types.ts", "tests/unit/trader-canonical-runtime-intelligence-consumer-closure.test.ts", "tests/unit/trader-market-brain-pipeline.test.ts", "tests/unit/trader-mi-cde-conviction.test.ts", "tests/unit/trader-mi-evaluation-cycle.test.ts", "tests/unit/trader-mi-integration.test.ts", "tests/unit/trader-paper-cycle-runner.test.ts"]},
+      {"issue": "DEE-724", "status": "pass", "reviewedCommits": ["94c10eefd35dc1b29f57d9c016c58bcf360c736e", "1d5e8583fbbd4d9c156dcc3e0f45c5aa2ac5d583", "645c1a52fe05a284542b448e41884578ebc67a5b"], "reviewedFiles": ["docs/ai-trader/reality-v2-source-consumer-inventory.json", "docs/plans/dee-629-runtime-knowledge-convergence.md", "tests/unit/wp15-test-helpers.ts"]}
     ],
     "cumulativeChecks": [
       {"afterIssue": "DEE-721", "status": "pass", "commands": ["authority contract and derivation-version negatives", "typecheck"]},
