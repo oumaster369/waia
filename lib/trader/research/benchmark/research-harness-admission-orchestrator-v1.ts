@@ -16,8 +16,8 @@ import {
 } from "./trial-identity-v2";
 import { validationBootstrapPValueV1 } from "./validation-bootstrap-v1";
 
-export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v1" as const;
-export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v1" as const;
+export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v2" as const;
+export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v2" as const;
 
 export type ResearchHarnessAnchorV1 = {
   anchorId: string;
@@ -36,7 +36,8 @@ export type ResearchHarnessAdmissionInputV1 = {
   purgeDurationMinutes: number;
   embargoDurationMinutes: number;
   developmentReturns: readonly number[];
-  historyReturns: readonly number[];
+  historyReturns: readonly (number | null)[];
+  historyReturnMinuteOpenTimesMs: readonly number[];
   anchors: readonly ResearchHarnessAnchorV1[];
 };
 
@@ -146,6 +147,7 @@ export function runResearchHarnessAdmissionV1(
   const context = buildBaselineContextFromDevelopment({
     developmentReturns: input.developmentReturns,
     history: input.historyReturns,
+    historyMinuteOpenTimesMs: input.historyReturnMinuteOpenTimesMs,
     primaryHorizonMinutes: input.primaryHorizonMinutes,
   });
 
