@@ -142,7 +142,7 @@ describe("trader evaluation cycle MI core (PR-2)", () => {
     expect(first.decisionChain?.terminalReasonCode).toBe(second.decisionChain?.terminalReasonCode);
   });
 
-  it("threads session state across cycles", () => {
+  it("does not accumulate heuristic conviction without Knowledge authority", () => {
     const fixture = loadFixture();
     const input = baseInput(fixture);
 
@@ -159,10 +159,8 @@ describe("trader evaluation cycle MI core (PR-2)", () => {
     }
 
     expect(states[0]).toBeDefined();
-    const hasEvolution = states.some((state, index) => index > 0 && state !== states[0]);
-    expect(
-      hasEvolution || Object.keys(JSON.parse(states[0]!).peakConfidenceByType).length > 0,
-    ).toBe(true);
+    expect(new Set(states).size).toBe(1);
+    expect(Object.keys(JSON.parse(states[0]!).peakConfidenceByType)).toHaveLength(0);
   });
 
   it("market state snapshot is immutable in non-production", () => {

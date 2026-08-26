@@ -4,7 +4,6 @@ import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { buildHypothesisSet } from "@/lib/trader/intelligence/hypothesis/build-hypothesis-set";
 import {
   CONVICTION_SUSTAINED_CYCLES,
-  CONVICTION_THRESHOLD,
   type MarketHypothesis,
 } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import { createEmptyHypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
@@ -84,7 +83,7 @@ function highQualityFeatures(): FeatureSnapshot {
 }
 
 describe("trader MI core conviction authorization (PR-2)", () => {
-  it("reaches ALLOW_TRADING on sustained conviction fixture", () => {
+  it("fails closed without canonical Knowledge authority despite sustained heuristic conviction", () => {
     const reconstruction = highConvictionReconstruction();
     let sessionState = createEmptyHypothesisSessionState();
     let opportunity;
@@ -99,8 +98,7 @@ describe("trader MI core conviction authorization (PR-2)", () => {
       opportunity = result.hypothesisSet.opportunity;
     }
 
-    expect(opportunity?.authorized).toBe(true);
-    expect(opportunity!.conviction).toBeGreaterThanOrEqual(CONVICTION_THRESHOLD);
+    expect(opportunity).toBeNull();
 
     const msv = buildMsvEnvelope({
       features: highQualityFeatures(),
@@ -109,8 +107,7 @@ describe("trader MI core conviction authorization (PR-2)", () => {
       newId: () => "msv-conviction",
     });
 
-    expect(["ALLOW_TRADING", "ALLOW_REDUCED_RISK"]).toContain(msv.derived.tradingPermission);
-    expect(msv.derived.opportunityAuthorized).toBe(true);
+    expect(msv.derived.opportunityAuthorized).not.toBe(true);
   });
 
   it("all 8 hypothesis types are independently constructible", () => {

@@ -1,6 +1,7 @@
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type { MiObservationService } from "@/lib/trader/mi/observation-service";
 import type { InstrumentId } from "@/lib/trader/intelligence/types";
+import type { CanonicalRuntimeIntelligenceStateProviderV1 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
 import {
   DATA_QUALITY_HALT_REASON,
   INGESTION_HALT_REASON,
@@ -22,6 +23,8 @@ export type MarketBrainCycleDeps = {
   observationService?: MiObservationService;
   logger: MarketBrainLogger;
   fetchImpl?: typeof fetch;
+  /** DEE-629 non-capital PIT intelligence reader. Absence remains fail closed. */
+  canonicalRuntimeIntelligenceProvider?: CanonicalRuntimeIntelligenceStateProviderV1;
 };
 
 export type MarketBrainSymbolCycleResult = {

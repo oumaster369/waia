@@ -39,6 +39,8 @@ import type {
 } from "@/lib/trader/portfolio";
 import type { DeterministicReplayClock } from "@/lib/trader/research/deterministic-replay-clock";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { CanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
+import type { CanonicalRuntimeIntelligenceStateProviderV1 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
 
 /**
  * Research replay determinism hook (M9+ / DEE-397 / ADR-0021).
@@ -130,6 +132,8 @@ export type PaperCycleDeps = {
   lifecycleRepository?: LifecycleRepository;
   /** Research replay determinism only (M9+ / DEE-397). Omitted on live/paper paths. */
   researchReplayDeterminism?: ResearchReplayDeterminismDeps;
+  /** Optional runtime PIT reader; explicit input state wins for replay pinning. */
+  canonicalRuntimeIntelligenceProvider?: CanonicalRuntimeIntelligenceStateProviderV1;
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
@@ -179,6 +183,8 @@ export type PaperCycleInput = {
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override (defaults to WAIA_MI_CORE_ENABLED env). */
   miCoreEnabled?: boolean;
+  /** DEE-629: caller-folded canonical PIT state; absence remains fail closed. */
+  canonicalRuntimeIntelligenceState?: CanonicalRuntimeIntelligenceStateV1;
   /** HTR-WP09: prebuilt incremental reconstruction from canvas view. */
   reconstruction?: import("@/lib/trader/intelligence/reconstruction/reconstruction.types").ReconstructionSnapshot;
   /** HTR-WP16: strategy eligibility, trial, and drawdown gating context. */
