@@ -8,11 +8,13 @@ import {
   parseCanonicalCycleCausalInputBundleV2,
   serializeCanonicalCycleCausalInputBundleV2,
 } from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
+import { assertCausalInputIdentity } from "@/lib/trader/intelligence/records/cycle-envelope-repository-postgres";
+import { CYCLE_ENVELOPE_SCHEMA_VERSION } from "@/lib/trader/intelligence/records/intelligence-records.types";
 
 const d = (character: string) => character.repeat(64);
 const evaluatedAt = "2026-08-26T00:00:00.000Z";
 
-function snapshot(reconstructionDigest = d("a")): MarketStateSnapshot {
+function snapshot(reconstructionDigest = d("a"), legacyExpectedPath?: string): MarketStateSnapshot {
   return {
     schemaVersion: "waia.trader.market_state_snapshot.v1",
     evaluatedAt,
@@ -37,7 +39,22 @@ function snapshot(reconstructionDigest = d("a")): MarketStateSnapshot {
       contentDigest: reconstructionDigest,
     },
     understanding: null,
-    hypotheses: { schemaVersion: "waia.trader.hypothesis_set.v1", evaluatedAt, hypotheses: [], activeHypothesis: null, opportunity: null },
+    hypotheses: {
+      schemaVersion: "waia.trader.hypothesis_set.v1",
+      evaluatedAt,
+      hypotheses: legacyExpectedPath === undefined ? [] : [{
+        hypothesisType: "breakout",
+        confidence: 0.7,
+        supportingEvidence: ["structure"],
+        contradictingEvidence: [],
+        expectedPath: legacyExpectedPath,
+        invalidationConditions: ["close below support"],
+        eligibleStrategyFamilies: ["trend_momentum"],
+        authority: "LEGACY_DIAGNOSTIC",
+      }],
+      activeHypothesis: null,
+      opportunity: null,
+    },
     activeOpportunity: null,
     tradingPermission: "STOP_TRADING",
     terminalReasonCode: "NO_TRADE",
@@ -76,10 +93,10 @@ function artifact(overrides: {
   } as unknown as MarketUnderstandingArtifactV1;
 }
 
-function build(input: { reconstructionDigest?: string; understandingArtifact?: MarketUnderstandingArtifactV1; runtimeNonce?: string } = {}) {
+function build(input: { reconstructionDigest?: string; understandingArtifact?: MarketUnderstandingArtifactV1; runtimeNonce?: string; legacyExpectedPath?: string } = {}) {
   return buildCanonicalCycleCausalInputBundleV2({
     organizationId: "org-1",
-    snapshot: snapshot(input.reconstructionDigest),
+    snapshot: snapshot(input.reconstructionDigest, input.legacyExpectedPath),
     understandingArtifact: input.understandingArtifact,
     historicalProfileId: "historical-profile-1",
     historicalProfileContentDigest: d("8"),
@@ -97,6 +114,14 @@ describe("DEE-623 canonical causal input bundle v2", () => {
     expect(computeCanonicalCycleCausalInputDigestV2(build({ understandingArtifact: artifact({ receiptDigest: d("a") }) }))).not.toBe(baseline);
   });
 
+  it("content-addresses the complete legacy hypothesis set", () => {
+    const continuation = computeCanonicalCycleCausalInputDigestV2(build({ legacyExpectedPath: "continue higher" }));
+    const rejection = computeCanonicalCycleCausalInputDigestV2(build({ legacyExpectedPath: "reject lower" }));
+    expect(rejection).not.toBe(continuation);
+    expect(build({ legacyExpectedPath: "continue higher" }).hypothesisConstruction.hypothesisSetContentDigest)
+      .not.toBe(build().hypothesisConstruction.hypothesisSetContentDigest);
+  });
+
   it("is replay deterministic and ignores non-causal operational metadata", () => {
     const first = build({ understandingArtifact: artifact(), runtimeNonce: "worker-a" });
     const second = build({ understandingArtifact: artifact(), runtimeNonce: "worker-b" });
@@ -106,5 +131,40 @@ describe("DEE-623 canonical causal input bundle v2", () => {
     expect(() => parseCanonicalCycleCausalInputBundleV2(JSON.stringify({ ...first, retryCount: 1 }))).toThrow(
       "CAUSAL_INPUT_BUNDLE_INVALID:canonicalIdentity",
     );
+  });
+
+  it("fails closed when a self-consistent bundle is attached to the wrong envelope", () => {
+    const bundle = build({ understandingArtifact: artifact() });
+    const canonicalJson = serializeCanonicalCycleCausalInputBundleV2(bundle);
+    const record = {
+      id: "00000000-0000-4000-8000-000000000001",
+      organizationId: "org-1",
+      runId: "run-1",
+      cycleId: "0",
+      symbol: "BTC/USDT",
+      evaluatedAt,
+      historicalProfileId: "historical-profile-1",
+      historicalProfileDigest: d("8"),
+      matrixDigest: d("9"),
+      terminalReasonCode: "NO_TRADE",
+      inputCausalBundleJson: canonicalJson,
+      inputSemanticDigest: computeCanonicalCycleCausalInputDigestV2(bundle),
+      outputSemanticDigest: d("0"),
+      contentDigest: d("a"),
+      schemaVersion: CYCLE_ENVELOPE_SCHEMA_VERSION,
+    } as const;
+    expect(() => assertCausalInputIdentity(record)).not.toThrow();
+    for (const mismatched of [
+      { ...record, organizationId: "org-2" },
+      { ...record, symbol: "ETH/USDT" },
+      { ...record, evaluatedAt: "2026-08-26T00:00:01.000Z" },
+      { ...record, historicalProfileId: "other-profile" },
+      { ...record, historicalProfileDigest: d("7") },
+      { ...record, matrixDigest: d("6") },
+    ]) {
+      expect(() => assertCausalInputIdentity(mismatched)).toThrow(
+        "cycle causal input bundle is not bound to envelope scope or policy profiles",
+      );
+    }
   });
 });
