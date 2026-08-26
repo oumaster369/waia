@@ -1,4 +1,6 @@
-export const CYCLE_ENVELOPE_SCHEMA_VERSION = "waia.trader.intelligence_cycle_envelope.v1" as const;
+export const LEGACY_CYCLE_ENVELOPE_SCHEMA_VERSION =
+  "waia.trader.intelligence_cycle_envelope.v1" as const;
+export const CYCLE_ENVELOPE_SCHEMA_VERSION = "waia.trader.intelligence_cycle_envelope.v2" as const;
 export const HYPOTHESIS_RECORD_SCHEMA_VERSION =
   "waia.trader.intelligence_hypothesis_record.v1" as const;
 export const CONVICTION_RECORD_SCHEMA_VERSION =
@@ -17,10 +19,14 @@ export type TraderIntelligenceCycleEnvelopeRecord = Readonly<{
   historicalProfileDigest: string;
   matrixDigest: string;
   terminalReasonCode: string;
+  /** Canonical v2 causal inputs. Null is accepted only when reading historical v1 rows. */
+  inputCausalBundleJson: string | null;
   inputSemanticDigest: string;
   outputSemanticDigest: string;
   contentDigest: string;
-  schemaVersion: typeof CYCLE_ENVELOPE_SCHEMA_VERSION;
+  schemaVersion:
+    | typeof LEGACY_CYCLE_ENVELOPE_SCHEMA_VERSION
+    | typeof CYCLE_ENVELOPE_SCHEMA_VERSION;
 }>;
 
 export type TraderIntelligenceHypothesisRecord = Readonly<{

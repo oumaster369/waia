@@ -1177,6 +1177,13 @@
       "when": 1780000000167,
       "tag": "0167_trader_canonical_causal_lineage_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1780000000168,
+      "tag": "0168_trader_intelligence_cycle_causal_input_bundle_v2",
+      "breakpoints": true
     }
   ]
 }

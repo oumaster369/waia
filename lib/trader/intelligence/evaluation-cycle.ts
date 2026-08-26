@@ -253,6 +253,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           accountId: input.accountId ?? null,
           analyticalTimeframe: input.bars[0]?.interval ?? "",
           marketStateSnapshot,
+          understandingArtifact,
           decisionChain,
           profile: input.historicalProfile,
         })

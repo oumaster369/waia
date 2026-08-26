@@ -12,6 +12,7 @@ import {
 } from "@/lib/trader/intelligence/hypothesis/hypothesis-link";
 import {
   CYCLE_ENVELOPE_SCHEMA_VERSION,
+  LEGACY_CYCLE_ENVELOPE_SCHEMA_VERSION,
   CONVICTION_RECORD_SCHEMA_VERSION,
   HYPOTHESIS_RECORD_SCHEMA_VERSION,
   type TraderIntelligenceConvictionRecord,
@@ -48,7 +49,7 @@ export { deriveHypothesisRecordId };
 export function canonicalizeCycleEnvelope(
   record: TraderIntelligenceCycleEnvelopeRecord,
 ): Record<string, unknown> {
-  return {
+  const legacyPreimage = {
     schema_version: record.schemaVersion,
     organization_id: record.organizationId,
     run_id: record.runId,
@@ -61,6 +62,13 @@ export function canonicalizeCycleEnvelope(
     terminal_reason_code: record.terminalReasonCode,
     input_semantic_digest: record.inputSemanticDigest,
     output_semantic_digest: record.outputSemanticDigest,
+  };
+  if (record.schemaVersion === LEGACY_CYCLE_ENVELOPE_SCHEMA_VERSION) {
+    return legacyPreimage;
+  }
+  return {
+    ...legacyPreimage,
+    input_causal_bundle_json: record.inputCausalBundleJson,
   };
 }
 

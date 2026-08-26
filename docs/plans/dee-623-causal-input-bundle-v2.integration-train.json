@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-623",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": null,
+  "includedChildren": [
+    {
+      "issue": "DEE-733",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Freeze CanonicalCycleCausalInputBundleV2, deterministic digest and runtime wiring.",
+      "dependencies": [],
+      "dependencyEvidence": ["DEE-626 is squash-merged on exact base 8b8f0196e6c6338a77d991d8356ff3ab5d2d9006."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/intelligence/records", "lib/trader/intelligence/evaluation-cycle.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Ratified DEE-623 semantic-input identity repair only."},
+      "expectedAcceptanceEvidence": ["Versioned canonical API.", "Causal mutation sensitivity and operational isolation."],
+      "expectedTests": ["focused causal input bundle tests"],
+      "actualFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"],
+      "acceptanceEvidence": ["Canonical v2 JSON is the sole new-envelope input digest preimage."],
+      "integratedCommits": ["41cf5bc48a7b4e24e0e099600496d1753cf2c635", "7bd76f336c2090f3fbd53f9065f7bc9b4c29dc1f", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "344e8037173168b6081035725f3afa56864a1733"],
+      "tests": ["tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-735",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Persist exact canonical causal-input JSON with fail-closed v2 verification and v1 compatibility.",
+      "dependencies": ["DEE-733"],
+      "dependencyEvidence": ["DEE-733 freezes the canonical bundle API."],
+      "expectedFileOrSchemaSurfaces": ["db/schema.postgres.ts", "db/migrations_postgres", "lib/trader/intelligence/records", "lib/trader/knowledge"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Additive nullable persistence; no retention or authority change."},
+      "expectedAcceptanceEvidence": ["v2 bundle required and verified.", "v1 null rows remain readable."],
+      "expectedTests": ["PostgreSQL persistence parity and migration identity"],
+      "actualFiles": ["db/migrations_postgres/0168_trader_intelligence_cycle_causal_input_bundle_v2.sql", "db/migrations_postgres/meta/_journal.json", "db/schema.postgres.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/cycle-envelope-repository-postgres.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts"],
+      "acceptanceEvidence": ["Repository rejects missing or mismatched v2 bundle identity."],
+      "integratedCommits": ["78bff61fe24838c34dbf40f4eebda4366af772b3", "5a263ea29835b9fde695f0bdda3462de9b81801f"],
+      "tests": ["tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-734",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Close replay, collision-by-omission, migration, PostgreSQL and integration evidence.",
+      "dependencies": ["DEE-735"],
+      "dependencyEvidence": ["DEE-735 freezes persistence semantics."],
+      "expectedFileOrSchemaSurfaces": ["tests/unit", "tests/integration", "docs/plans"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Validation and documentation only."},
+      "expectedAcceptanceEvidence": ["All causal dimensions perturb identity.", "Replay and non-causal isolation deterministic."],
+      "expectedTests": ["focused negatives, full fresh SQLite, PostgreSQL parity, CI"],
+      "actualFiles": ["tests/integration/postgres-trader-intelligence-records-parity.test.ts", "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts", "tests/unit/trader-canonical-causal-lineage-v1.test.ts", "tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts", "tests/unit/trader-wp13-intelligence-records-digest.test.ts", "tests/unit/trader-wp15-knowledge-state.test.ts"],
+      "acceptanceEvidence": ["Focused collision-by-omission and replay tests pass."],
+      "integratedCommits": ["a8cee694fcd93fc4705e7d00b367ad8e4931be9d", "ef48761cfedd05321dab09e24dfa8b75be9f8e0e", "873b689252ca754b6fea62b9b3c4485fae85a998", "b9c604e002360f5fd97f16a82842d34ed460aaaa", "a6a862b7eac8452c2b7c776faf8e61679535aae1"],
+      "tests": ["tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts"],
+      "execution": {"wave": 3, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Controller dependency, duplicate, ownership and producer/consumer audit"},
+    "preImplementationAdmission": {"status": "pass", "manifestDigest": "9d235ec2f5340a921d61929cda81c47a090ad04a6d36ff08f1c3ca411b933520", "manifestCommit": "b627bb9326fa6da49efbe03ceb9e39596c0f63f7", "manifestPath": "docs/plans/dee-623-causal-input-bundle-v2.integration-train.json", "reviewer": "Controller pre-write API and surface freeze"},
+    "admissionReviews": [
+      {"issue": "DEE-733", "status": "pass", "reviewedCommits": ["41cf5bc48a7b4e24e0e099600496d1753cf2c635", "7bd76f336c2090f3fbd53f9065f7bc9b4c29dc1f", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "344e8037173168b6081035725f3afa56864a1733"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/intelligence-records-service.ts", "lib/trader/intelligence/records/intelligence-records.types.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts"]},
+      {"issue": "DEE-735", "status": "pass", "reviewedCommits": ["78bff61fe24838c34dbf40f4eebda4366af772b3", "5a263ea29835b9fde695f0bdda3462de9b81801f"], "reviewedFiles": ["db/migrations_postgres/0168_trader_intelligence_cycle_causal_input_bundle_v2.sql", "db/migrations_postgres/meta/_journal.json", "db/schema.postgres.ts", "lib/trader/intelligence/records/causal-input-bundle-v2.ts", "lib/trader/intelligence/records/cycle-envelope-repository-postgres.ts", "lib/trader/intelligence/records/serialize-intelligence-records.ts", "lib/trader/knowledge/mkb-read-model-postgres.ts"]},
+      {"issue": "DEE-734", "status": "pass", "reviewedCommits": ["a8cee694fcd93fc4705e7d00b367ad8e4931be9d", "ef48761cfedd05321dab09e24dfa8b75be9f8e0e", "873b689252ca754b6fea62b9b3c4485fae85a998", "b9c604e002360f5fd97f16a82842d34ed460aaaa", "a6a862b7eac8452c2b7c776faf8e61679535aae1"], "reviewedFiles": ["tests/integration/postgres-trader-intelligence-records-parity.test.ts", "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts", "tests/unit/trader-canonical-causal-lineage-v1.test.ts", "tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts", "tests/unit/trader-wp13-intelligence-records-digest.test.ts", "tests/unit/trader-wp15-knowledge-state.test.ts"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-733", "status": "pass", "commands": ["causal bundle focused tests", "typecheck"]},
+      {"afterIssue": "DEE-735", "status": "pass", "commands": ["repository identity negatives", "typecheck"]},
+      {"afterIssue": "DEE-734", "status": "pass", "commands": ["focused 22/22", "typecheck"]}
+    ],
+    "finalReviewRemediation": {
+      "status": "pass",
+      "reviewedHead": "3b9eb4904c1276eb1212b7daa02b3c67a070f912",
+      "findings": ["legacy hypothesis collision", "envelope cross-binding", "MKB read fail-closed", "v1 digest compatibility", "timestamp round-trip normalization", "legacy consumer inventory closure"],
+      "remediationCommits": ["5a263ea29835b9fde695f0bdda3462de9b81801f", "b9c604e002360f5fd97f16a82842d34ed460aaaa", "d6d922ba56bf78a2ea9d3bbe4e58ed693e9ee660", "a6a862b7eac8452c2b7c776faf8e61679535aae1", "344e8037173168b6081035725f3afa56864a1733"]
+    },
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": ["Exact causal inputs are content-addressed.", "Operational metadata is excluded.", "No Forecast/Decision/Risk/live/capital authority change."],
+  "rollbackStrategy": "One revert PR; additive nullable column preserves historical v1 rows.",
+  "validation": {"manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh docs/plans/dee-623-causal-input-bundle-v2.integration-train.json DEE-623 frozen", "focused": ["pnpm test --run tests/unit/trader-dee-623-causal-input-bundle-v2.test.ts", "pnpm typecheck"], "fullSuite": "one fresh migrated SQLite pnpm test --run", "review": "fresh independent exact-head zero P1/P2", "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 before squash merge"}
+}

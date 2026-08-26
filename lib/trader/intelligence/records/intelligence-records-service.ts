@@ -36,6 +36,12 @@ import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-se
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { parseCanonicalCausalLineageV1 } from "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
+import {
+  buildCanonicalCycleCausalInputBundleV2,
+  computeCanonicalCycleCausalInputDigestV2,
+  serializeCanonicalCycleCausalInputBundleV2,
+  type CausalMarketUnderstandingArtifactV1,
+} from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
 
 export type BuildIntelligenceCycleBundleInput = Readonly<{
   organizationId: string;
@@ -45,20 +51,11 @@ export type BuildIntelligenceCycleBundleInput = Readonly<{
   accountId: string | null;
   analyticalTimeframe: string;
   marketStateSnapshot: MarketStateSnapshot;
+  understandingArtifact?: CausalMarketUnderstandingArtifactV1;
   decisionChain: DecisionChain;
   profile?: HistoricalIntelligenceProfile;
   matrixDigest?: string;
 }>;
-
-function computeInputSemanticDigest(snapshot: MarketStateSnapshot): string {
-  const body = {
-    reconstruction_digest: snapshot.reconstruction.instrumentId,
-    evaluated_at: snapshot.evaluatedAt,
-    instrument_id: snapshot.instrumentId,
-    hypothesis_count: snapshot.hypotheses.hypotheses.length,
-  };
-  return createHash("sha256").update(canonicalizeSemanticJsonString(body), "utf8").digest("hex");
-}
 
 function computeOutputSemanticDigest(
   snapshot: MarketStateSnapshot,
@@ -94,6 +91,18 @@ export function buildIntelligenceCycleBundle(
   const matrixDigest = input.matrixDigest ?? TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1_DIGEST;
   const snapshot = input.marketStateSnapshot;
   const decisionChain = input.decisionChain;
+  if (input.symbol !== snapshot.instrumentId) {
+    throw new Error("buildIntelligenceCycleBundle: symbol must match snapshot instrumentId");
+  }
+  const causalInputBundle = buildCanonicalCycleCausalInputBundleV2({
+    organizationId: input.organizationId,
+    snapshot,
+    understandingArtifact: input.understandingArtifact,
+    historicalProfileId: profile.profileId,
+    historicalProfileContentDigest: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
+    matrixContentDigest: matrixDigest,
+  });
+  const inputCausalBundleJson = serializeCanonicalCycleCausalInputBundleV2(causalInputBundle);
 
   const universalTerminalReason = resolveUniversalTerminalReason({
     sourceTerminalReasonCode: snapshot.terminalReasonCode,
@@ -122,7 +131,8 @@ export function buildIntelligenceCycleBundle(
     historicalProfileDigest: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
     matrixDigest,
     terminalReasonCode: universalTerminalReason,
-    inputSemanticDigest: computeInputSemanticDigest(snapshot),
+    inputCausalBundleJson,
+    inputSemanticDigest: computeCanonicalCycleCausalInputDigestV2(causalInputBundle),
     outputSemanticDigest: computeOutputSemanticDigest(snapshot, decisionChain),
     contentDigest: "",
     schemaVersion: CYCLE_ENVELOPE_SCHEMA_VERSION,

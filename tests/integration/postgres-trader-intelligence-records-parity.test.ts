@@ -63,6 +63,8 @@ describe.skipIf(!integrationEnabled || !url)(
         .where(eq(pgSchema.traderIntelligenceCycleEnvelope.organizationId, orgA));
       expect(envelopes).toHaveLength(1);
       expect(envelopes[0]?.contentDigest).toBe(bundle.envelope.contentDigest);
+      expect(envelopes[0]?.inputCausalBundleJson).toBe(bundle.envelope.inputCausalBundleJson);
+      expect(envelopes[0]?.inputSemanticDigest).toBe(bundle.envelope.inputSemanticDigest);
 
       const hypotheses = await db
         .select()
