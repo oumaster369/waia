@@ -51,7 +51,10 @@ describe.skipIf(!integrationEnabled || !url)(
 
     it("persists envelope, hypotheses and conviction with parity", async () => {
       const db = getPostgresDrizzle();
-      const bundle = buildWp13Bundle(orgA, "wp13-parity-run", "0");
+      const source = buildWp13Bundle(orgA, "wp13-parity-run", "0");
+      const lineageJson = '{"schemaVersion":"waia.trader.canonical_causal_lineage.v1","sentinel":"exact-bytes"}';
+      const lineageDigest = "dee-626-postgres-hypothesis-round-trip";
+      const bundle = { ...source, hypotheses: source.hypotheses.map((record, index) => index === 0 ? { ...record, canonicalCausalLineageJson: lineageJson, canonicalCausalLineageDigest: lineageDigest } : record) };
       await persistIntelligenceCycleBundle({ organizationId: orgA }, bundle, db);
 
       const envelopes = await db
@@ -66,6 +69,8 @@ describe.skipIf(!integrationEnabled || !url)(
         .from(pgSchema.traderIntelligenceHypothesisRecord)
         .where(eq(pgSchema.traderIntelligenceHypothesisRecord.organizationId, orgA));
       expect(hypotheses.length).toBe(bundle.hypotheses.length);
+      expect(hypotheses[0]?.canonicalCausalLineageJson).toBe(lineageJson);
+      expect(hypotheses[0]?.canonicalCausalLineageDigest).toBe(lineageDigest);
 
       const convictions = await db
         .select()

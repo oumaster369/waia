@@ -12,6 +12,7 @@ export type HypothesisLinkInput = Readonly<{
   evaluatedAt: string;
   thesisDigest: string;
   evidenceDigest: string;
+  canonicalCausalLineageDigest?: string;
 }>;
 
 function deriveDeterministicUuidV4(seed: string): string {
@@ -30,6 +31,9 @@ export function deriveAuthoritativeHypothesisLinkDigest(input: HypothesisLinkInp
     evaluated_at: input.evaluatedAt,
     thesis_digest: input.thesisDigest,
     evidence_digest: input.evidenceDigest,
+    ...(input.canonicalCausalLineageDigest
+      ? { canonical_causal_lineage_digest: input.canonicalCausalLineageDigest }
+      : {}),
   };
   return createHash("sha256").update(canonicalizeSemanticJsonString(body), "utf8").digest("hex");
 }

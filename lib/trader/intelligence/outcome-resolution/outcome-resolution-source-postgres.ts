@@ -41,6 +41,8 @@ function mapForecastRow(
     matrixDigest: row.matrixDigest,
     evidenceDigest: row.evidenceDigest,
     authoritativeLinkDigest: row.authoritativeLinkDigest,
+    canonicalCausalLineageJson: row.canonicalCausalLineageJson,
+    canonicalCausalLineageDigest: row.canonicalCausalLineageDigest,
     forecastModelVersion: row.forecastModelVersion,
     contentDigest: row.contentDigest,
     schemaVersion: row.schemaVersion as TraderIntelligenceForecastRecord["schemaVersion"],
@@ -100,6 +102,8 @@ function mapHypothesisRow(
     evidenceDigest: row.evidenceDigest,
     miHypothesisId: row.miHypothesisId,
     authoritativeLinkDigest: row.authoritativeLinkDigest,
+    canonicalCausalLineageJson: row.canonicalCausalLineageJson,
+    canonicalCausalLineageDigest: row.canonicalCausalLineageDigest,
     contentDigest: row.contentDigest,
     schemaVersion: row.schemaVersion as TraderIntelligenceHypothesisRecord["schemaVersion"],
   };

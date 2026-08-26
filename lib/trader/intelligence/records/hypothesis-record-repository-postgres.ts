@@ -32,6 +32,8 @@ function mapRow(
     evidenceDigest: row.evidenceDigest,
     miHypothesisId: row.miHypothesisId,
     authoritativeLinkDigest: row.authoritativeLinkDigest,
+    canonicalCausalLineageJson: row.canonicalCausalLineageJson,
+    canonicalCausalLineageDigest: row.canonicalCausalLineageDigest,
     contentDigest: row.contentDigest,
     schemaVersion: row.schemaVersion as TraderIntelligenceHypothesisRecord["schemaVersion"],
   };
@@ -50,6 +52,8 @@ function assertIdempotentMatch(
     existing.hypothesisType !== incoming.hypothesisType ||
     existing.schemaVersion !== incoming.schemaVersion ||
     existing.contentDigest !== incoming.contentDigest
+    || existing.canonicalCausalLineageJson !== (incoming.canonicalCausalLineageJson ?? null)
+    || existing.canonicalCausalLineageDigest !== (incoming.canonicalCausalLineageDigest ?? null)
   ) {
     throw new IntelligenceRecordsIdempotencyConflictError(
       "hypothesis record business key conflict with mismatched identity or digest",
@@ -111,6 +115,8 @@ export function createHypothesisRecordRepositoryPostgres(
             evidenceDigest: record.evidenceDigest,
             miHypothesisId: record.miHypothesisId,
             authoritativeLinkDigest: record.authoritativeLinkDigest,
+            canonicalCausalLineageJson: record.canonicalCausalLineageJson ?? null,
+            canonicalCausalLineageDigest: record.canonicalCausalLineageDigest ?? null,
             contentDigest: record.contentDigest,
             schemaVersion: record.schemaVersion,
           });

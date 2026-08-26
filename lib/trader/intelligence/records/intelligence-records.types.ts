@@ -38,6 +38,8 @@ export type TraderIntelligenceHypothesisRecord = Readonly<{
   evidenceDigest: string;
   miHypothesisId: string | null;
   authoritativeLinkDigest: string;
+  canonicalCausalLineageJson?: string | null;
+  canonicalCausalLineageDigest?: string | null;
   contentDigest: string;
   schemaVersion: typeof HYPOTHESIS_RECORD_SCHEMA_VERSION;
 }>;

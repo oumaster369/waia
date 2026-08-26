@@ -4719,6 +4719,8 @@ export const traderIntelligenceHypothesisRecord = pgTable(
     evidenceDigest: text("evidence_digest").notNull(),
     miHypothesisId: uuid("mi_hypothesis_id"),
     authoritativeLinkDigest: text("authoritative_link_digest").notNull(),
+    canonicalCausalLineageJson: text("canonical_causal_lineage_json"),
+    canonicalCausalLineageDigest: text("canonical_causal_lineage_digest"),
     contentDigest: text("content_digest").notNull(),
     schemaVersion: text("schema_version").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -4739,6 +4741,7 @@ export const traderIntelligenceHypothesisRecord = pgTable(
       t.organizationId,
       t.cycleEnvelopeId,
     ),
+    check("trader_intelligence_hypothesis_record_causal_lineage_pair_check", sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`),
   ],
 );
 
@@ -4820,6 +4823,8 @@ export const traderIntelligenceForecastRecord = pgTable(
     matrixDigest: text("matrix_digest").notNull(),
     evidenceDigest: text("evidence_digest").notNull(),
     authoritativeLinkDigest: text("authoritative_link_digest").notNull(),
+    canonicalCausalLineageJson: text("canonical_causal_lineage_json"),
+    canonicalCausalLineageDigest: text("canonical_causal_lineage_digest"),
     forecastModelVersion: text("forecast_model_version").notNull(),
     contentDigest: text("content_digest").notNull(),
     schemaVersion: text("schema_version").notNull(),
@@ -4838,6 +4843,7 @@ export const traderIntelligenceForecastRecord = pgTable(
       t.organizationId,
       t.cycleEnvelopeId,
     ),
+    check("trader_intelligence_forecast_record_causal_lineage_pair_check", sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`),
   ],
 );
 

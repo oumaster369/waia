@@ -30,6 +30,7 @@ export type ForecastKeyDigestInput = Readonly<{
   targetWindowEndAt: string;
   marketQuestion: string;
   forecastModelVersion: string;
+  canonicalCausalLineageDigest?: string;
 }>;
 
 export function deriveForecastKeyDigest(input: ForecastKeyDigestInput): string {
@@ -43,6 +44,9 @@ export function deriveForecastKeyDigest(input: ForecastKeyDigestInput): string {
     target_window_end_at: input.targetWindowEndAt,
     market_question: input.marketQuestion,
     forecast_model_version: input.forecastModelVersion,
+    ...(input.canonicalCausalLineageDigest
+      ? { canonical_causal_lineage_digest: input.canonicalCausalLineageDigest }
+      : {}),
   });
 }
 

@@ -35,6 +35,7 @@ import { resolveUniversalTerminalReason } from "@/lib/trader/intelligence/termin
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { parseCanonicalCausalLineageV1 } from "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
 
 export type BuildIntelligenceCycleBundleInput = Readonly<{
   organizationId: string;
@@ -139,6 +140,8 @@ export function buildIntelligenceCycleBundle(
         hypothesis.supportingEvidence,
         hypothesis.contradictingEvidence,
       );
+      const causalLineageJson = hypothesis.canonicalCausalLineageJson ?? null;
+      const causalLineageDigest = hypothesis.canonicalCausalLineageDigest ?? null;
       const authoritativeLinkDigest = buildHypothesisLinkDigestInput({
         organizationId: input.organizationId,
         runId: input.runId,
@@ -148,7 +151,24 @@ export function buildIntelligenceCycleBundle(
         hypothesisType: hypothesis.hypothesisType,
         thesisDigest,
         evidenceDigest,
+        ...(causalLineageDigest ? { canonicalCausalLineageDigest: causalLineageDigest } : {}),
       });
+      if ((causalLineageJson === null) !== (causalLineageDigest === null)) {
+        throw new Error("CANONICAL_CAUSAL_LINEAGE_INCOMPLETE");
+      }
+      if (causalLineageJson !== null && causalLineageDigest !== null) {
+        const lineage = parseCanonicalCausalLineageV1(causalLineageJson);
+        if (
+          lineage.contentDigest !== causalLineageDigest ||
+          lineage.organizationId !== input.organizationId ||
+          lineage.symbol !== input.symbol ||
+          lineage.pitAnchor !== snapshot.evaluatedAt ||
+          lineage.hypothesisId !== hypothesis.canonicalHypothesisId
+          || lineage.hypothesisCausalStateDigest !== hypothesis.canonicalHypothesisCausalStateDigest
+        ) {
+          throw new Error("CANONICAL_CAUSAL_LINEAGE_SCOPE_OR_DIGEST_MISMATCH");
+        }
+      }
       const base: TraderIntelligenceHypothesisRecord = {
         id: deriveHypothesisRecordId({
           organizationId: input.organizationId,
@@ -159,6 +179,7 @@ export function buildIntelligenceCycleBundle(
           hypothesisType: hypothesis.hypothesisType,
           thesisDigest,
           evidenceDigest,
+          ...(causalLineageDigest ? { canonicalCausalLineageDigest: causalLineageDigest } : {}),
         }),
         organizationId: input.organizationId,
         cycleEnvelopeId: envelope.id,
@@ -173,6 +194,8 @@ export function buildIntelligenceCycleBundle(
         evidenceDigest,
         miHypothesisId: null,
         authoritativeLinkDigest,
+        canonicalCausalLineageJson: causalLineageJson,
+        canonicalCausalLineageDigest: causalLineageDigest,
         contentDigest: "",
         schemaVersion: HYPOTHESIS_RECORD_SCHEMA_VERSION,
       };

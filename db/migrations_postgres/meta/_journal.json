@@ -1170,6 +1170,13 @@
       "when": 1780000000166,
       "tag": "0166_treasury_finance_assistant_confirmations_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "7",
+      "when": 1780000000167,
+      "tag": "0167_trader_canonical_causal_lineage_v1",
+      "breakpoints": true
     }
   ]
 }

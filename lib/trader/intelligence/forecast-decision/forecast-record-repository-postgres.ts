@@ -38,6 +38,8 @@ function mapRow(
     matrixDigest: row.matrixDigest,
     evidenceDigest: row.evidenceDigest,
     authoritativeLinkDigest: row.authoritativeLinkDigest,
+    canonicalCausalLineageJson: row.canonicalCausalLineageJson,
+    canonicalCausalLineageDigest: row.canonicalCausalLineageDigest,
     forecastModelVersion: row.forecastModelVersion,
     contentDigest: row.contentDigest,
     schemaVersion: row.schemaVersion as TraderIntelligenceForecastRecord["schemaVersion"],
@@ -57,6 +59,8 @@ function assertIdempotentMatch(
     existing.forecastKeyDigest !== incoming.forecastKeyDigest ||
     existing.schemaVersion !== incoming.schemaVersion ||
     existing.contentDigest !== incoming.contentDigest
+    || existing.canonicalCausalLineageJson !== (incoming.canonicalCausalLineageJson ?? null)
+    || existing.canonicalCausalLineageDigest !== (incoming.canonicalCausalLineageDigest ?? null)
   ) {
     throw new ForecastDecisionIdempotencyConflictError(
       "forecast record business key conflict with mismatched identity or digest",
@@ -126,6 +130,8 @@ export function createForecastRecordRepositoryPostgres(ex: PgExecutor): Forecast
             matrixDigest: record.matrixDigest,
             evidenceDigest: record.evidenceDigest,
             authoritativeLinkDigest: record.authoritativeLinkDigest,
+            canonicalCausalLineageJson: record.canonicalCausalLineageJson ?? null,
+            canonicalCausalLineageDigest: record.canonicalCausalLineageDigest ?? null,
             forecastModelVersion: record.forecastModelVersion,
             contentDigest: record.contentDigest,
             schemaVersion: record.schemaVersion,
