@@ -14,11 +14,17 @@ requiredValidation:
   - one-full-fresh-sqlite-suite
   - independent-exact-head-review
   - dee-653-exact-head-admission
+approvalGates:
+  - human-ratified-dee-625-selective-source-scope
+  - t3-scope-preauthorized
+  - integration-ready
+  - dee-653-exact-head-admission
+includedIssues: [DEE-716, DEE-717, DEE-719, DEE-718]
 state:
   status: in-progress
-  currentWorkPackage: DEE-716
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-716, DEE-717, DEE-719, DEE-718]
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-716, DEE-717, DEE-719, DEE-718]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   blockedReason: null
@@ -81,3 +87,9 @@ After semantic completion and preliminary review, run one full suite on a freshl
 - Exact response bytes SHA-256: `db55e69207fa75f59a3518728da2cf91b02b6dc280a045a60b5e1b64dfa4ca33`.
 - The response exposes event timestamps but no historical `availableAt`, revision identity, ingest lineage or immutable-history proof. Therefore `fear_greed_index` is receipt-only `NOT_QUALIFIED`; no corpus was created.
 - CoinDesk, Cointelegraph and Decrypt current RSS remain receipt-only `NOT_QUALIFIED`; no historical reconstruction was attempted.
+
+## Acceptance
+
+- Exact selective-source API, receipt replay, provider-inventory closure and blind seal pass focused negative tests.
+- Alternative.me and all three current RSS sources terminate in deterministic `NOT_QUALIFIED` receipts with zero corpus admission.
+- Build, typecheck, canonical/governance validation, one frozen-head fresh-SQLite full suite, exact-head independent review, CI and DEE-653 must all pass before squash merge.
