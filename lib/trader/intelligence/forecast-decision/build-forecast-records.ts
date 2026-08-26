@@ -73,6 +73,7 @@ function buildForecastForHypothesis(
       lineage.organizationId !== envelope.organizationId ||
       lineage.symbol !== envelope.symbol ||
       lineage.hypothesisId !== hypothesis.canonicalHypothesisId
+      || lineage.hypothesisCausalStateDigest !== hypothesis.canonicalHypothesisCausalStateDigest
     ) {
       return null;
     }
