@@ -14,6 +14,10 @@ import {
   assertCanonicalRuntimeIntelligenceStateV1,
   type CanonicalRuntimeIntelligenceStateV1,
 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
+import {
+  buildCanonicalCausalLineageV1,
+  serializeCanonicalCausalLineageV1,
+} from "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
 
 export type BuildHypothesisSetInput = {
   reconstruction: ReconstructionSnapshot;
@@ -161,6 +165,8 @@ function buildHypothesis(
     rankOrdinal: null,
     canonicalHypothesisId: null,
     canonicalIntelligenceStateDigest: null,
+    canonicalCausalLineageJson: null,
+    canonicalCausalLineageDigest: null,
   };
 }
 
@@ -176,7 +182,9 @@ function buildCanonicalHypotheses(authority: CanonicalRuntimeIntelligenceStateV1
       !superseded.has(hypothesis.hypothesisId),
     )
     .sort((a, b) => a.rankOrdinal - b.rankOrdinal)
-    .map((hypothesis) => ({
+    .map((hypothesis) => {
+      const lineage = buildCanonicalCausalLineageV1(authority, hypothesis);
+      return {
       hypothesisType: hypothesis.hypothesisType,
       // Canonical rank is ordinal, never a probability or confidence scalar.
       confidence: 0,
@@ -189,7 +197,10 @@ function buildCanonicalHypotheses(authority: CanonicalRuntimeIntelligenceStateV1
       rankOrdinal: hypothesis.rankOrdinal,
       canonicalHypothesisId: hypothesis.hypothesisId,
       canonicalIntelligenceStateDigest: authority.semanticDigest,
-    }));
+      canonicalCausalLineageJson: serializeCanonicalCausalLineageV1(lineage),
+      canonicalCausalLineageDigest: lineage.contentDigest,
+      };
+    });
 }
 
 function updateSessionState(

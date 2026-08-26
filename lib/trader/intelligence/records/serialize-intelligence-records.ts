@@ -86,6 +86,8 @@ export function canonicalizeHypothesisRecord(
     thesis_digest: record.thesisDigest,
     evidence_digest: record.evidenceDigest,
     authoritative_link_digest: record.authoritativeLinkDigest,
+    canonical_causal_lineage_json: record.canonicalCausalLineageJson ?? null,
+    canonical_causal_lineage_digest: record.canonicalCausalLineageDigest ?? null,
   };
 }
 
@@ -152,6 +154,7 @@ export function buildHypothesisLinkDigestInput(input: {
   hypothesisType: string;
   thesisDigest: string;
   evidenceDigest: string;
+  canonicalCausalLineageDigest?: string;
 }) {
   return deriveAuthoritativeHypothesisLinkDigest({
     organizationId: input.organizationId,
@@ -162,6 +165,7 @@ export function buildHypothesisLinkDigestInput(input: {
     hypothesisType: input.hypothesisType,
     thesisDigest: input.thesisDigest,
     evidenceDigest: input.evidenceDigest,
+    canonicalCausalLineageDigest: input.canonicalCausalLineageDigest,
   });
 }
 

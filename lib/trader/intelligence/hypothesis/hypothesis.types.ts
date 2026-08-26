@@ -23,6 +23,8 @@ export type MarketHypothesis = Readonly<{
   rankOrdinal?: number | null;
   canonicalHypothesisId?: string | null;
   canonicalIntelligenceStateDigest?: string | null;
+  canonicalCausalLineageJson?: string | null;
+  canonicalCausalLineageDigest?: string | null;
 }>;
 
 export type MarketOpportunity = Readonly<{
