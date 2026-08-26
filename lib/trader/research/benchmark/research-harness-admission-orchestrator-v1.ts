@@ -49,6 +49,7 @@ export type ResearchHarnessAdmissionResultV1 = {
   holmComparisons: readonly HolmComparison[];
   holmResults: ReturnType<typeof holmFwerV1>;
   baselineAvailability: Record<string, "AVAILABLE" | "UNAVAILABLE">;
+  meanImprovementByBaseline: Record<string, number>;
   admissionReceiptDigestHex: string;
   reasonCodes: string[];
 };
@@ -101,7 +102,7 @@ function baselineAvailableOnAllAnchors(
   return probe.status === "AVAILABLE";
 }
 
-function computeAdmissionReceiptDigest(input: {
+export function computeResearchHarnessAdmissionReceiptDigestV2(input: {
   comparisonFamilyId: string;
   commonAnchorSetDigestHex: string;
   holmComparisons: readonly HolmComparison[];
@@ -134,7 +135,8 @@ export function runResearchHarnessAdmissionV1(
       baselineAvailability: Object.fromEntries(
         MANDATORY_BASELINE_IDS.map((id) => [id, "UNAVAILABLE"]),
       ),
-      admissionReceiptDigestHex: computeAdmissionReceiptDigest({
+      meanImprovementByBaseline: {},
+      admissionReceiptDigestHex: computeResearchHarnessAdmissionReceiptDigestV2({
         comparisonFamilyId: input.comparisonFamilyId,
         commonAnchorSetDigestHex: computeCommonAnchorSetDigestHex([]),
         holmComparisons: [],
@@ -203,7 +205,8 @@ export function runResearchHarnessAdmissionV1(
       holmComparisons,
       holmResults,
       baselineAvailability,
-      admissionReceiptDigestHex: computeAdmissionReceiptDigest({
+      meanImprovementByBaseline: {},
+      admissionReceiptDigestHex: computeResearchHarnessAdmissionReceiptDigestV2({
         comparisonFamilyId: input.comparisonFamilyId,
         commonAnchorSetDigestHex,
         holmComparisons,
@@ -213,21 +216,26 @@ export function runResearchHarnessAdmissionV1(
     };
   }
 
-  const positiveMeanRequired = holmComparisons.every((comparison) => {
+  const meanImprovementByBaseline = Object.fromEntries(
+    holmComparisons.map((comparison) => {
     const baseline = evaluateMandatoryBaselineV1(
       comparison.comparisonId as (typeof MANDATORY_BASELINE_IDS)[number],
       context,
     );
     if (baseline.status === "UNAVAILABLE") {
-      return false;
+        return [comparison.comparisonId, Number.NaN];
     }
     const meanDiff =
       canonicalAnchors.reduce((acc, anchor) => {
         const challenger = challengerLogScoreAtAnchor(anchor, context);
         return acc + (challenger - baseline.logScore(anchor.observedReturn));
       }, 0) / canonicalAnchors.length;
-    return meanDiff > 0;
-  });
+      return [comparison.comparisonId, meanDiff];
+    }),
+  );
+  const positiveMeanRequired = holmComparisons.every(
+    (comparison) => (meanImprovementByBaseline[comparison.comparisonId] ?? Number.NaN) > 0,
+  );
 
   if (!positiveMeanRequired) {
     const holmResults = holmFwerV1(holmComparisons);
@@ -239,7 +247,8 @@ export function runResearchHarnessAdmissionV1(
       holmComparisons,
       holmResults,
       baselineAvailability,
-      admissionReceiptDigestHex: computeAdmissionReceiptDigest({
+      meanImprovementByBaseline,
+      admissionReceiptDigestHex: computeResearchHarnessAdmissionReceiptDigestV2({
         comparisonFamilyId: input.comparisonFamilyId,
         commonAnchorSetDigestHex,
         holmComparisons,
@@ -264,7 +273,8 @@ export function runResearchHarnessAdmissionV1(
     holmComparisons,
     holmResults,
     baselineAvailability,
-    admissionReceiptDigestHex: computeAdmissionReceiptDigest({
+    meanImprovementByBaseline,
+    admissionReceiptDigestHex: computeResearchHarnessAdmissionReceiptDigestV2({
       comparisonFamilyId: input.comparisonFamilyId,
       commonAnchorSetDigestHex,
       holmComparisons,
