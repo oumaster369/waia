@@ -31,7 +31,7 @@ provenance:
 
 ## Frozen API and invariants
 
-1. `CanonicalCausalLineageV1` is additive and content-addressed. It binds exact organization, symbol, PIT anchor, runtime Knowledge derivation/state digests, Hypothesis identity/definition, supporting and contradicting Evidence refs with content/event/ingest identity, Knowledge refs, invalidation and supersession.
+1. `CanonicalCausalLineageV1` is additive and content-addressed. It binds exact organization, symbol, PIT anchor, runtime Knowledge derivation and a Hypothesis-scoped causal-state digest (never the unrelated global authority digest), Hypothesis identity/definition, supporting and contradicting Evidence refs with content/event/ingest identity, Knowledge refs, invalidation and supersession.
 2. The canonical JSON and content digest propagate byte-identically from `MarketHypothesis` to `TraderIntelligenceHypothesisRecord` to `TraderIntelligenceForecastRecord`.
 3. Missing JSON/digest pairs, unsupported derivation, non-canonical JSON, scope mutation, digest mutation and Evidence later than the Forecast cutoff fail closed to no Forecast.
 4. Semantic terminal/reason codes remain outside the immutable causal ref bundle. They cannot rewrite lineage.
