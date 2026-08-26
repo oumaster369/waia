@@ -18,8 +18,6 @@ export type CanonicalCausalLineageV1 = Readonly<{
   organizationId: string;
   symbol: string;
   pitAnchor: string;
-  knowledgeSemanticDigest: string;
-  runtimeIntelligenceStateDigest: string;
   hypothesisId: string;
   hypothesisDefinitionDigest: string;
   supportingEvidence: RuntimeKnowledgeHypothesisV1["supportingEvidence"];
@@ -74,8 +72,6 @@ export function assertCanonicalCausalLineageV1(
   if (
     !lineage.organizationId ||
     !lineage.symbol ||
-    !lineage.knowledgeSemanticDigest ||
-    !lineage.runtimeIntelligenceStateDigest ||
     !lineage.hypothesisId ||
     !lineage.hypothesisDefinitionDigest
   ) {
@@ -118,8 +114,6 @@ export function buildCanonicalCausalLineageV1(
     organizationId: authority.organizationId,
     symbol: authority.symbol,
     pitAnchor: authority.pitAnchor,
-    knowledgeSemanticDigest: authority.knowledgeSemanticDigest,
-    runtimeIntelligenceStateDigest: authority.semanticDigest,
     hypothesisId: hypothesis.hypothesisId,
     hypothesisDefinitionDigest: hypothesis.definitionDigest,
     supportingEvidence: hypothesis.supportingEvidence,
