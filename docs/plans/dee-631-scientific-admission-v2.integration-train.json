@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-631",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-740",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Build the conjunctive predictive, KM convergence and Human-ratification authority v2.",
       "dependencies": ["DEE-630"],
@@ -21,11 +21,15 @@
       "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Human-ratified DEE-631 scope." },
       "expectedAcceptanceEvidence": ["Exact mandatory-baseline, positive-mean, Holm, K/M and ratification bindings fail closed."],
       "expectedTests": ["tests/unit/scientific-admission-v2.test.ts"],
+      "actualFiles": ["lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts", "lib/trader/research/execopp-qualification/scientific-admission-v2.ts", "tests/unit/scientific-admission-v2.test.ts"],
+      "integratedCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59"],
+      "acceptanceEvidence": ["Authority is derived from authoritative harness input and binds exact package, partition, baselines, positive means, Holm, KM and RATIFIED identities."],
+      "tests": ["focused scientific/harness/KM suites: 23/23 pass", "pnpm typecheck: pass", "scoped eslint: pass"],
       "execution": { "wave": 1, "mode": "serialized" }
     },
     {
       "issue": "DEE-739",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Persist v2 append-only and prove deterministic, stale/replay and tenant fail-closed behavior.",
       "dependencies": ["DEE-740"],
@@ -35,6 +39,10 @@
       "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Durable evidence only; no holdout or capital authority." },
       "expectedAcceptanceEvidence": ["Append-only deterministic persistence and fail-closed exact binding evidence."],
       "expectedTests": ["focused unit and PostgreSQL scientific-admission tests"],
+      "actualFiles": ["lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"],
+      "integratedCommits": ["1115aa1696cfb3061fc2e3e11e027687c5a122b4"],
+      "acceptanceEvidence": ["Append-only persistence reconstructs exact content and exact evidence lookup closes stale, replay, tenant and independent-writer races."],
+      "tests": ["v2 durable unit coverage: pass", "PostgreSQL roundtrip/concurrency/conflict/stale coverage admitted for authoritative CI"],
       "execution": { "wave": 2, "mode": "serialized" }
     }
   ],
@@ -47,7 +55,18 @@
       "manifestCommit": "737e9cf0d76225b8625c5a89f8245fd3458da701",
       "manifestPath": "docs/plans/dee-631-scientific-admission-v2.integration-train.json",
       "reviewer": "Controller pre-write API, dependency, ownership and file-surface freeze"
-    }
+    },
+    "admissionReviews": [
+      {"issue": "DEE-740", "status": "pass", "reviewedCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59"], "reviewedFiles": ["lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts", "lib/trader/research/execopp-qualification/scientific-admission-v2.ts", "tests/unit/scientific-admission-v2.test.ts"]},
+      {"issue": "DEE-739", "status": "pass", "reviewedCommits": ["1115aa1696cfb3061fc2e3e11e027687c5a122b4"], "reviewedFiles": ["lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-740", "status": "pass", "commands": ["focused scientific/harness/KM suites 23/23", "typecheck", "scoped eslint"]},
+      {"afterIssue": "DEE-739", "status": "pass", "commands": ["durable unit and PostgreSQL test admission", "typecheck", "production build"]}
+    ],
+    "finalReviewRemediation": {"status": "pass", "reviewedHead": "a2493bbc1a331a4e93405cd2216e5db31a397de1", "findings": ["predictive self-forgery", "ratification verdict bypass", "package and partition substitution", "ambiguous durable lookup", "independent-writer convergence"], "remediationCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59", "1115aa1696cfb3061fc2e3e11e027687c5a122b4"]},
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": ["No KM-only scientific admission.", "NO_CHALLENGER is terminal-valid but not admitted.", "Holdout remains sealed.", "No Decision, Risk, production/live or capital semantics."],
   "rollbackStrategy": "One revert PR removes the v2 authority while preserving existing v1 rows and schema.",
