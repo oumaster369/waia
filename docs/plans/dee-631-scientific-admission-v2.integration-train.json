@@ -22,7 +22,7 @@
       "expectedAcceptanceEvidence": ["Exact mandatory-baseline, positive-mean, Holm, K/M and ratification bindings fail closed."],
       "expectedTests": ["tests/unit/scientific-admission-v2.test.ts"],
       "actualFiles": ["lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts", "lib/trader/research/execopp-qualification/scientific-admission-v2.ts", "tests/unit/scientific-admission-v2.test.ts"],
-      "integratedCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59"],
+      "integratedCommits": ["0bea79a6d2dcf51d6865570fa9b6354c69fbf958"],
       "acceptanceEvidence": ["Authority is derived from authoritative harness input and binds exact package, partition, baselines, positive means, Holm, KM and RATIFIED identities."],
       "tests": ["focused scientific/harness/KM suites: 23/23 pass", "pnpm typecheck: pass", "scoped eslint: pass"],
       "execution": { "wave": 1, "mode": "serialized" }
@@ -39,10 +39,10 @@
       "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Durable evidence only; no holdout or capital authority." },
       "expectedAcceptanceEvidence": ["Append-only deterministic persistence and fail-closed exact binding evidence."],
       "expectedTests": ["focused unit and PostgreSQL scientific-admission tests"],
-      "actualFiles": ["lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"],
-      "integratedCommits": ["1115aa1696cfb3061fc2e3e11e027687c5a122b4"],
+      "actualFiles": [".github/workflows/postgres-integration.yml", "lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"],
+      "integratedCommits": ["f5fa67f770aed685eb554e1886d3d1b7ee250d0a", "d683d1b36d053bfcd65f809cd0123c477c47ac29"],
       "acceptanceEvidence": ["Append-only persistence reconstructs exact content and exact evidence lookup closes stale, replay, tenant and independent-writer races."],
-      "tests": ["v2 durable unit coverage: pass", "PostgreSQL roundtrip/concurrency/conflict/stale coverage admitted for authoritative CI"],
+      "tests": ["v2 durable unit coverage: pass", "PostgreSQL roundtrip/concurrency/conflict/stale coverage wired into authoritative postgres-integration CI"],
       "execution": { "wave": 2, "mode": "serialized" }
     }
   ],
@@ -57,8 +57,8 @@
       "reviewer": "Controller pre-write API, dependency, ownership and file-surface freeze"
     },
     "admissionReviews": [
-      {"issue": "DEE-740", "status": "pass", "reviewedCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59"], "reviewedFiles": ["lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts", "lib/trader/research/execopp-qualification/scientific-admission-v2.ts", "tests/unit/scientific-admission-v2.test.ts"]},
-      {"issue": "DEE-739", "status": "pass", "reviewedCommits": ["1115aa1696cfb3061fc2e3e11e027687c5a122b4"], "reviewedFiles": ["lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"]}
+      {"issue": "DEE-740", "status": "pass", "reviewedCommits": ["0bea79a6d2dcf51d6865570fa9b6354c69fbf958"], "reviewedFiles": ["lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts", "lib/trader/research/execopp-qualification/scientific-admission-v2.ts", "tests/unit/scientific-admission-v2.test.ts"]},
+      {"issue": "DEE-739", "status": "pass", "reviewedCommits": ["f5fa67f770aed685eb554e1886d3d1b7ee250d0a", "d683d1b36d053bfcd65f809cd0123c477c47ac29"], "reviewedFiles": [".github/workflows/postgres-integration.yml", "lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"]}
     ],
     "cumulativeChecks": [
       {"afterIssue": "DEE-740", "status": "pass", "commands": ["child file-surface diff audit", "frozen API and invariant inspection"]},
