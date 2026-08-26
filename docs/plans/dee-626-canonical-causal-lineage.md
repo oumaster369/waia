@@ -50,4 +50,11 @@ provenance:
 
 Focused negative tests run after each wave. After semantic completion and independent review, run exactly one fresh migrated SQLite full suite, PostgreSQL parity, CI and DEE-653 before squash merge.
 
+## Acceptance
+
+- `CanonicalCausalLineageV1` remains byte-identical from canonical Hypothesis construction through persisted Hypothesis and Forecast records.
+- Missing, malformed, version-incompatible, cutoff-invalid or scope-mismatched lineage fails closed to zero Forecast authority.
+- PostgreSQL migration, persistence and read projections preserve the exact nullable lineage JSON/digest pair and reject drift.
+- Exact-head independent review reports zero P1/P2, authoritative CI/PostgreSQL and DEE-653 pass, and the Integration Train is squash-merged only after every gate is green.
+
 Rollback is one revert of the squash merge plus the additive nullable PostgreSQL columns. Existing legacy rows remain valid with null lineage and cannot acquire canonical Forecast authority.
