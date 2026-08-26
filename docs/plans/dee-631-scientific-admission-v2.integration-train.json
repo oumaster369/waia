@@ -64,7 +64,7 @@
       {"afterIssue": "DEE-740", "status": "pass", "commands": ["child file-surface diff audit", "frozen API and invariant inspection"]},
       {"afterIssue": "DEE-739", "status": "pass", "commands": ["focused scientific/harness/KM suites 23/23", "durable unit and PostgreSQL test admission", "typecheck", "scoped eslint", "production build"]}
     ],
-    "finalReviewRemediation": {"status": "pass", "reviewedHead": "a2493bbc1a331a4e93405cd2216e5db31a397de1", "findings": ["predictive self-forgery", "ratification verdict bypass", "package and partition substitution", "ambiguous durable lookup", "independent-writer convergence"], "remediationCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59", "1115aa1696cfb3061fc2e3e11e027687c5a122b4"]},
+    "finalReviewRemediation": {"status": "pass", "reviewedHead": "d683d1b36d053bfcd65f809cd0123c477c47ac29", "findings": ["predictive self-forgery", "ratification verdict bypass", "package and partition substitution", "ambiguous durable lookup", "independent-writer convergence"], "remediationCommits": ["0bea79a6d2dcf51d6865570fa9b6354c69fbf958", "f5fa67f770aed685eb554e1886d3d1b7ee250d0a", "d683d1b36d053bfcd65f809cd0123c477c47ac29"]},
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
