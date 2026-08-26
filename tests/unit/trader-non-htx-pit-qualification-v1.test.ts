@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyNonHtxPartitionV1,
+  qualifyAlternativeMeBoundedProbeV1,
   qualifyNonHtxCapabilityV1,
   verifyNonHtxQualificationReceiptV1,
   verifyNonHtxProviderInventoryClosureV1,
@@ -118,6 +119,19 @@ describe("DEE-625 non-HTX PIT qualification", () => {
     expect(receipt.disposition).toBe("NOT_QUALIFIED");
     expect(receipt.corpusAdmitted).toBe(false);
     expect(receipt.capabilityEvidenceDigest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("cannot promote the bounded public Alternative.me probe from event-time coverage alone", () => {
+    const receipt = qualifyAlternativeMeBoundedProbeV1({
+      retrievedAtUtc: alternativeProbe.retrievedAtUtc,
+      rawContentDigest: alternativeProbe.rawContentDigest,
+      archiveCoverage: alternativeProbe.archiveCoverage,
+    });
+    expect(receipt.disposition).toBe("NOT_QUALIFIED");
+    expect(receipt.reasonCodes).toContain("HISTORICAL_AVAILABLE_AT_UNPROVEN");
+    expect(receipt.reasonCodes).toContain("HISTORICAL_REVISION_IDENTITY_UNPROVEN");
+    expect(receipt.reasonCodes).toContain("HISTORICAL_INGEST_LINEAGE_UNPROVEN");
+    expect(receipt.reasonCodes).toContain("IMMUTABLE_HISTORY_UNPROVEN");
   });
 
   it("rejects an endpoint outside the exact ratified source surface", () => {

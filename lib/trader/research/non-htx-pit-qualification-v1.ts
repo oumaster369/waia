@@ -152,6 +152,27 @@ export function qualifyNonHtxCapabilityV1(
   return Object.freeze({ ...body, receiptDigest: sha256(body) });
 }
 
+export function qualifyAlternativeMeBoundedProbeV1(input: Readonly<{
+  retrievedAtUtc: string;
+  rawContentDigest: string;
+  archiveCoverage: Readonly<{ from: string | null; to: string | null }>;
+}>): NonHtxQualificationReceiptV1 {
+  return qualifyNonHtxCapabilityV1({
+    providerId: "alternative_me",
+    observationKind: "fear_greed_index",
+    endpoint: NON_HTX_RATIFIED_ENDPOINTS_V1.alternative_me,
+    method: "GET",
+    retrievedAtUtc: input.retrievedAtUtc,
+    rawContentDigest: input.rawContentDigest,
+    eventTimePresent: true,
+    historicalAvailableAtProven: false,
+    historicalIngestLineageProven: false,
+    immutableHistoryProven: false,
+    revisionIdentityProven: false,
+    archiveCoverage: input.archiveCoverage,
+  });
+}
+
 export function verifyNonHtxProviderInventoryClosureV1(): void {
   const classified = new Set<string>([
     "htx_spot",
