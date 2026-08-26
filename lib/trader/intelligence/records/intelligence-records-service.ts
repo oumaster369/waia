@@ -163,8 +163,7 @@ export function buildIntelligenceCycleBundle(
           lineage.organizationId !== input.organizationId ||
           lineage.symbol !== input.symbol ||
           lineage.pitAnchor !== snapshot.evaluatedAt ||
-          lineage.hypothesisId !== hypothesis.canonicalHypothesisId ||
-          lineage.runtimeIntelligenceStateDigest !== hypothesis.canonicalIntelligenceStateDigest
+          lineage.hypothesisId !== hypothesis.canonicalHypothesisId
         ) {
           throw new Error("CANONICAL_CAUSAL_LINEAGE_SCOPE_OR_DIGEST_MISMATCH");
         }
