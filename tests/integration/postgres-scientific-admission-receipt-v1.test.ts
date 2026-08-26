@@ -15,6 +15,19 @@ import {
   type KmConvergenceReceipt,
 } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
 import {
+  buildEpistemicParameterRatificationReceiptV1,
+  buildPredictiveTerminalReceiptV1,
+} from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
+import {
+  buildScientificAdmissionReceiptRecordV2,
+  persistScientificAdmissionReceiptV2,
+  requireScientificAdmissionReceiptV2ForOrganization,
+} from "@/lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2";
+import {
+  bucketIndexForReturn,
+  computeTerminalTargetGridFromDevelopmentReturns,
+} from "@/lib/trader/research/benchmark/target-grid-ceremony-v1";
+import {
   assertScientificAdmissionDoesNotAuthorizeCapital,
   buildScientificAdmissionReceiptRecordV1,
   persistScientificAdmissionReceiptV1,
@@ -68,6 +81,74 @@ function qualifiedKmConvergenceReceipt(seed: string): KmConvergenceReceipt {
     selectedPackageGenerationIdentityDigestHex: hex64(`${seed}-selected-gen`),
     selectedPackageContentDigestHex: hex64(`${seed}-selected-content`),
   });
+}
+
+function qualifiedV2Fixture(organizationId: string, seed: string) {
+  const developmentReturns = Array.from(
+    { length: 400 },
+    (_, index) => Math.sin(index / 17) * 0.02 + (index % 9) * 0.0005,
+  );
+  const historyReturns = Array.from(
+    { length: 2500 },
+    (_, index) => developmentReturns[index % developmentReturns.length]!,
+  );
+  const grid = computeTerminalTargetGridFromDevelopmentReturns(developmentReturns);
+  const identities = {
+    developmentDatasetDigestHex: hex64(`${seed}-development`),
+    targetGridReceiptDigestHex: hex64(`${seed}-grid`),
+    predictivePackageGenerationIdentityDigestHex: hex64(`${seed}-selected-gen`),
+    predictivePackageContentDigestHex: hex64(`${seed}-selected-content`),
+    runtimeContractDigestHex: hex64(`${seed}-runtime`),
+    scoringContractVersion: "multiclass-log-score/v1" as const,
+    evaluationPartitionReceiptDigestHex: hex64(`${seed}-partition`),
+  };
+  const predictive = buildPredictiveTerminalReceiptV1({
+    identities,
+    harnessInput: {
+      venue: "htx",
+      market: "spot",
+      symbol: "BTCUSDT",
+      primaryHorizonMinutes: 30,
+      challengerPackageContentDigestHex: identities.predictivePackageContentDigestHex,
+      comparisonFamilyId: "mandatory-baseline-family/v1",
+      evaluationPartitionReceiptDigestHex: identities.evaluationPartitionReceiptDigestHex,
+      purgeDurationMinutes: 30,
+      embargoDurationMinutes: 30,
+      developmentReturns,
+      historyReturns,
+      historyReturnMinuteOpenTimesMs: historyReturns.map(
+        (_, index) => 1_700_000_000_000 + index * 60_000,
+      ),
+      anchors: developmentReturns.slice(0, 24).map((observedReturn, index) => {
+        const bucket = bucketIndexForReturn(observedReturn, grid);
+        return {
+          anchorId: `anchor-${index}`,
+          observedReturn,
+          challengerProbabilities: Array.from({ length: 7 }, (_, bucketIndex) =>
+            bucketIndex === bucket ? 0.999 : 0.001 / 6,
+          ),
+        };
+      }),
+    },
+  });
+  const km = qualifiedKmConvergenceReceipt(seed);
+  const ratification = buildEpistemicParameterRatificationReceiptV1({
+    kmConvergenceEvidenceSemanticDigestHex: km.evidenceSemanticDigestHex,
+    selectedK: km.selectedK!,
+    selectedM: km.selectedM!,
+    alphaEpiConfigScale8: km.alphaEpiConfigScale8,
+    selectedPackageGenerationIdentityDigestHex: identities.predictivePackageGenerationIdentityDigestHex,
+    selectedPackageContentDigestHex: identities.predictivePackageContentDigestHex,
+    humanReceiptIdentityDigestHex: hex64(`${seed}-human`),
+  });
+  const expected = {
+    organizationId,
+    ...identities,
+    kmConvergenceEvidenceSemanticDigestHex: km.evidenceSemanticDigestHex,
+    epistemicParameterRatificationReceiptDigestHex: ratification.contentDigestHex,
+    predictiveTerminalReceiptContentDigestHex: predictive.contentDigestHex,
+  };
+  return { predictive, km, ratification, expected };
 }
 
 async function cleanupScientificAdmissionReceipt(
@@ -266,5 +347,40 @@ describe.skipIf(!integrationEnabled || !url)(
         }),
       ).toThrow(/FROZEN_SELECTED_PACKAGE_READY/);
     });
+
+    it("roundtrips v2, converges concurrent duplicates, and rejects conflict/replay", async () => {
+      const volume = await persistQualifiedVolumeForOrg(sql, orgId);
+      const fixture = qualifiedV2Fixture(orgId, "v2-postgres");
+      const record = buildScientificAdmissionReceiptRecordV2({
+        organizationId: orgId,
+        predictiveTerminalReceipt: fixture.predictive,
+        kmConvergenceReceipt: fixture.km,
+        epistemicParameterRatificationReceipt: fixture.ratification,
+        htxVolumeQualificationReceipt: volume,
+      });
+      const writes = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          persistScientificAdmissionReceiptV2(sql, { ...record, id: randomUUID() }),
+        ),
+      );
+      expect(writes.filter((result) => result.insertedNew)).toHaveLength(1);
+      expect(new Set(writes.map((result) => result.id)).size).toBe(1);
+      await expect(
+        persistScientificAdmissionReceiptV2(sql, {
+          ...record,
+          id: randomUUID(),
+          contentDigest: hex64("v2-conflict"),
+        }),
+      ).rejects.toThrow("SCIENTIFIC_ADMISSION_V2_RECORD_CONTENT_MISMATCH");
+      await expect(
+        requireScientificAdmissionReceiptV2ForOrganization(sql, {
+          ...fixture.expected,
+          runtimeContractDigestHex: hex64("stale-runtime"),
+        }),
+      ).rejects.toThrow("SCIENTIFIC_ADMISSION_V2_STALE_OR_REPLAYED_BINDING");
+      await expect(
+        requireScientificAdmissionReceiptV2ForOrganization(sql, fixture.expected),
+      ).resolves.toMatchObject({ terminalStatus: "ADMITTED", organizationId: orgId });
+    }, 180_000);
   },
 );
