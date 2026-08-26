@@ -79,6 +79,13 @@ function requireDigest(value: string, field: string): string {
   return value;
 }
 
+function requireCanonicalInstant(value: string, field: string): string {
+  if (!Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) {
+    throw new Error(`CAUSAL_INPUT_BUNDLE_INVALID:${field}`);
+  }
+  return value;
+}
+
 function sortedUnique(values: readonly string[]): string[] {
   return [...new Set(values)].sort(compareText);
 }
@@ -96,7 +103,7 @@ function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
     !hasExactKeys(bundle.scope, ["organizationId", "instrumentId", "evaluatedAt"]) ||
     !bundle.scope.organizationId ||
     !bundle.scope.instrumentId ||
-    !Number.isFinite(Date.parse(bundle.scope.evaluatedAt)) ||
+    requireCanonicalInstant(bundle.scope.evaluatedAt, "evaluatedAt") !== bundle.scope.evaluatedAt ||
     !hasExactKeys(bundle.reconstruction, ["schemaVersion", "contentDigest"]) ||
     !bundle.reconstruction.schemaVersion
   ) {
@@ -253,6 +260,7 @@ export function buildCanonicalCycleCausalInputBundleV2(input: {
   historicalProfileContentDigest: string;
   matrixContentDigest: string;
 }): CanonicalCycleCausalInputBundleV2 {
+  requireCanonicalInstant(input.snapshot.evaluatedAt, "evaluatedAt");
   const hypotheses = input.snapshot.hypotheses.hypotheses;
   const authorities = sortedUnique(
     hypotheses.map((hypothesis) => hypothesis.authority ?? "LEGACY_DIAGNOSTIC"),
