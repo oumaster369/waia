@@ -61,8 +61,8 @@
       {"issue": "DEE-739", "status": "pass", "reviewedCommits": ["1115aa1696cfb3061fc2e3e11e027687c5a122b4"], "reviewedFiles": ["lib/trader/research/execopp-qualification/index.ts", "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts", "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"]}
     ],
     "cumulativeChecks": [
-      {"afterIssue": "DEE-740", "status": "pass", "commands": ["focused scientific/harness/KM suites 23/23", "typecheck", "scoped eslint"]},
-      {"afterIssue": "DEE-739", "status": "pass", "commands": ["durable unit and PostgreSQL test admission", "typecheck", "production build"]}
+      {"afterIssue": "DEE-740", "status": "pass", "commands": ["child file-surface diff audit", "frozen API and invariant inspection"]},
+      {"afterIssue": "DEE-739", "status": "pass", "commands": ["focused scientific/harness/KM suites 23/23", "durable unit and PostgreSQL test admission", "typecheck", "scoped eslint", "production build"]}
     ],
     "finalReviewRemediation": {"status": "pass", "reviewedHead": "a2493bbc1a331a4e93405cd2216e5db31a397de1", "findings": ["predictive self-forgery", "ratification verdict bypass", "package and partition substitution", "ambiguous durable lookup", "independent-writer convergence"], "remediationCommits": ["8b7de73a5baf6f0d7a34e13b4ae95eafa0d1ec59", "1115aa1696cfb3061fc2e3e11e027687c5a122b4"]},
     "fullDiffFrozen": true,
@@ -71,7 +71,7 @@
   "crossCuttingInvariants": ["No KM-only scientific admission.", "NO_CHALLENGER is terminal-valid but not admitted.", "Holdout remains sealed.", "No Decision, Risk, production/live or capital semantics."],
   "rollbackStrategy": "One revert PR removes the v2 authority while preserving existing v1 rows and schema.",
   "validation": {
-    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-631-scientific-admission-v2.integration-train.json DEE-631 admission",
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-631-scientific-admission-v2.integration-train.json DEE-631 frozen",
     "focused": ["pnpm test --run tests/unit/scientific-admission-v2.test.ts tests/unit/research-harness-admission-integration.test.ts tests/unit/km-convergence-gate-v1.test.ts", "pnpm typecheck"],
     "fullSuite": "one fresh migrated SQLite pnpm test --run",
     "review": "fresh independent exact-head zero P1/P2",

@@ -21,16 +21,16 @@ approvalGates:
   - dee-653-exact-head-admission
 includedIssues: [DEE-740, DEE-739]
 state:
-  status: in-progress
-  currentWorkPackage: DEE-740
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-740, DEE-739]
+  status: locally-validated-awaiting-pr
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-740, DEE-739]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 3b64844efcb2b2fb85284047210211de7601af79
+  lastValidationAt: "2026-08-27T02:00:00+03:00"
   blockedReason: null
-  nextAction: "Implement frozen v2 authority and durable fail-closed evidence."
+  nextAction: "Complete exact-head review/full SQLite, publish one PR, then require authoritative CI/PostgreSQL and DEE-653."
 provenance:
   createdFrom: human-ratified-dee-631-scope
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2
