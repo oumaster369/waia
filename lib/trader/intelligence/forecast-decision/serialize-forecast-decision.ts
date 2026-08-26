@@ -41,6 +41,8 @@ export function canonicalizeForecastRecord(
     matrix_digest: record.matrixDigest,
     evidence_digest: record.evidenceDigest,
     authoritative_link_digest: record.authoritativeLinkDigest,
+    canonical_causal_lineage_json: record.canonicalCausalLineageJson ?? null,
+    canonical_causal_lineage_digest: record.canonicalCausalLineageDigest ?? null,
     forecast_model_version: record.forecastModelVersion,
   };
 }

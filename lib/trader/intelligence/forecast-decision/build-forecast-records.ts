@@ -20,6 +20,10 @@ import {
   assertForecastDecisionConstructionPermit,
   type ForecastDecisionConstructionPermit,
 } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-construction-authority";
+import {
+  assertCanonicalCausalLineageV1,
+  parseCanonicalCausalLineageV1,
+} from "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
 
 const SUPPORTING_CONFIDENCE_THRESHOLD = 0.45;
 const FORECAST_HORIZON_MS = 60 * 60 * 1000;
@@ -41,16 +45,41 @@ function buildForecastForHypothesis(
   bundle: IntelligenceCycleBundle,
   hypothesisRecordId: string,
   hypothesis: MarketHypothesis,
-): TraderIntelligenceForecastRecord {
+): TraderIntelligenceForecastRecord | null {
   const envelope = bundle.envelope;
   const conviction = bundle.conviction;
   const hypothesisRow = bundle.hypotheses.find((row) => row.id === hypothesisRecordId);
   if (!hypothesisRow) {
-    throw new Error("buildForecastForHypothesis: hypothesis record not found in bundle");
+    return null;
   }
 
   const issuedAt = envelope.evaluatedAt;
   const evidenceCutoffAt = envelope.evaluatedAt;
+  const lineageJson = hypothesis.canonicalCausalLineageJson ?? null;
+  const lineageDigest = hypothesis.canonicalCausalLineageDigest ?? null;
+  if (
+    lineageJson === null ||
+    lineageDigest === null ||
+    hypothesisRow.canonicalCausalLineageJson !== lineageJson ||
+    hypothesisRow.canonicalCausalLineageDigest !== lineageDigest
+  ) {
+    return null;
+  }
+  try {
+    const lineage = parseCanonicalCausalLineageV1(lineageJson);
+    assertCanonicalCausalLineageV1(lineage, evidenceCutoffAt);
+    if (
+      lineage.contentDigest !== lineageDigest ||
+      lineage.organizationId !== envelope.organizationId ||
+      lineage.symbol !== envelope.symbol ||
+      lineage.hypothesisId !== hypothesis.canonicalHypothesisId ||
+      lineage.runtimeIntelligenceStateDigest !== hypothesis.canonicalIntelligenceStateDigest
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
   const targetWindowStartAt = envelope.evaluatedAt;
   const targetWindowEndAt = addHorizon(envelope.evaluatedAt, FORECAST_HORIZON_MS);
   const marketQuestion = buildMarketQuestion(hypothesis.hypothesisType, hypothesis.expectedPath);
@@ -65,6 +94,7 @@ function buildForecastForHypothesis(
     targetWindowEndAt,
     marketQuestion,
     forecastModelVersion: FORECAST_MODEL_VERSION,
+    canonicalCausalLineageDigest: lineageDigest,
   });
 
   const base: TraderIntelligenceForecastRecord = {
@@ -78,6 +108,7 @@ function buildForecastForHypothesis(
       targetWindowEndAt,
       marketQuestion,
       forecastModelVersion: FORECAST_MODEL_VERSION,
+      canonicalCausalLineageDigest: lineageDigest,
     }),
     organizationId: envelope.organizationId,
     cycleEnvelopeId: envelope.id,
@@ -109,6 +140,8 @@ function buildForecastForHypothesis(
     matrixDigest: TIMEFRAME_EVIDENCE_LANE_AUTHORITY_MATRIX_V1_DIGEST,
     evidenceDigest: hypothesisRow.evidenceDigest,
     authoritativeLinkDigest: hypothesisRow.authoritativeLinkDigest,
+    canonicalCausalLineageJson: lineageJson,
+    canonicalCausalLineageDigest: lineageDigest,
     forecastModelVersion: FORECAST_MODEL_VERSION,
     contentDigest: "",
     schemaVersion: FORECAST_RECORD_SCHEMA_VERSION,
@@ -149,9 +182,15 @@ export function buildForecastRecords(
     return [];
   }
 
-  const forecasts: TraderIntelligenceForecastRecord[] = [
-    buildForecastForHypothesis(bundle, activeHypothesisRecordId, activeHypothesis),
-  ];
+  const activeForecast = buildForecastForHypothesis(
+    bundle,
+    activeHypothesisRecordId,
+    activeHypothesis,
+  );
+  if (!activeForecast) {
+    return [];
+  }
+  const forecasts: TraderIntelligenceForecastRecord[] = [activeForecast];
 
   const supportingRows = bundle.hypotheses
     .filter((row) => row.id !== activeHypothesisRecordId)
@@ -163,7 +202,10 @@ export function buildForecastRecords(
     if (!hypothesis) {
       continue;
     }
-    forecasts.push(buildForecastForHypothesis(bundle, row.id, hypothesis));
+    const forecast = buildForecastForHypothesis(bundle, row.id, hypothesis);
+    if (forecast) {
+      forecasts.push(forecast);
+    }
   }
 
   return forecasts;

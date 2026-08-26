@@ -41,6 +41,8 @@ export type TraderIntelligenceForecastRecord = Readonly<{
   matrixDigest: string;
   evidenceDigest: string;
   authoritativeLinkDigest: string;
+  canonicalCausalLineageJson?: string | null;
+  canonicalCausalLineageDigest?: string | null;
   forecastModelVersion: string;
   contentDigest: string;
   schemaVersion: typeof FORECAST_RECORD_SCHEMA_VERSION;
