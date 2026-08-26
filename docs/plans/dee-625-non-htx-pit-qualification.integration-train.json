@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-625",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-716",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Freeze the exact two-class intake, receipt vocabulary, fixed DEVELOPMENT/WALK_FORWARD partitions, blind seal and no-authority invariants.",
       "dependencies": [],
@@ -21,11 +21,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Exact two-class source intake ratified; no credentials, license, holdout, live or capital authority."},
       "expectedAcceptanceEvidence": ["Closed deterministic qualification vocabulary.", "Blind 2025 rejected before payload access."],
       "expectedTests": ["pnpm test --run tests/unit/trader-non-htx-pit-qualification-v1.test.ts", "pnpm typecheck"],
+      "actualFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "acceptanceEvidence": ["Exact two-class vocabulary, partition policy, endpoint allowlist and authority freeze implemented.", "Blind 2025 fails closed before receipt replay."],
+      "integratedCommits": ["ebd6059ac1e424a1a00b83231aae2793ef1b9056"],
+      "tests": ["focused unit suite pass", "typecheck pass", "scoped eslint pass"],
       "execution": {"wave": 1, "mode": "serialized"}
     },
     {
       "issue": "DEE-717",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Qualify bounded public Alternative.me capability evidence and admit a corpus only with complete immutable PIT knowability proof.",
       "dependencies": ["DEE-716"],
@@ -35,11 +39,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Public no-credential bounded Alternative.me probe only."},
       "expectedAcceptanceEvidence": ["Event time alone remains NOT_QUALIFIED.", "Every admitted corpus binds availability, ingest, immutable history and revision identity."],
       "expectedTests": ["Alternative.me negative and mutation proofs"],
+      "actualFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "acceptanceEvidence": ["Bounded public probe returned 3125 event-time rows with exact raw SHA-256 receipt.", "No historical availableAt, revision identity, ingest lineage or immutability proof exists; disposition is NOT_QUALIFIED and corpusAdmitted=false."],
+      "integratedCommits": ["1999fcf68fc9151caddb61a58da52be8b028e22a"],
+      "tests": ["Alternative.me bounded-probe and mutation negatives pass"],
       "execution": {"wave": 2, "mode": "serialized"}
     },
     {
       "issue": "DEE-719",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Emit receipt-only NOT_QUALIFIED evidence for current CoinDesk, Cointelegraph and Decrypt RSS without historical reconstruction.",
       "dependencies": ["DEE-716"],
@@ -49,11 +57,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Current RSS is receipt-only NOT_QUALIFIED."},
       "expectedAcceptanceEvidence": ["All three feeds record truthful archive unavailable.", "No provider-count independence inference."],
       "expectedTests": ["RSS provider table negatives"],
+      "actualFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "acceptanceEvidence": ["CoinDesk, Cointelegraph and Decrypt exact current endpoints emit deterministic receipt-only NOT_QUALIFIED.", "Even forged complete PIT flags cannot promote current RSS."],
+      "integratedCommits": ["e984b06e09d9dbf72a0dc3bcc1aaf1b7ec854766"],
+      "tests": ["RSS provider-table and forced-promotion negatives pass"],
       "execution": {"wave": 3, "mode": "serialized"}
     },
     {
       "issue": "DEE-718",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Close deterministic receipt replay, excluded-provider inventory, consumer boundaries and blind-holdout seal.",
       "dependencies": ["DEE-717", "DEE-719"],
@@ -63,15 +75,30 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Fixed pre-holdout partitions and sealed blind 2025."},
       "expectedAcceptanceEvidence": ["Identical evidence yields identical receipts.", "Mutation changes digest and replay rejects mismatch.", "No live/capital authority or calls during replay."],
       "expectedTests": ["determinism, mutation, partition and blind seal negatives", "one full fresh-SQLite suite"],
+      "actualFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"],
+      "acceptanceEvidence": ["All registered providers are exhaustively classified as HTX, ratified or EXCLUDED_UNMODELED.", "Replay admits only an exact verified PIT_CORPUS_QUALIFIED receipt in fixed pre-holdout partitions."],
+      "integratedCommits": ["fee7b7fe4acbec81e1769a3f2533c58ee71e4ed7"],
+      "tests": ["20/20 focused pass", "typecheck pass", "scoped eslint pass"],
       "execution": {"wave": 4, "mode": "serialized"}
     }
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": {
-      "status": "pass",
-      "reviewer": "Human exact-source ratification plus controller duplicate, ownership, dependency and surface audit"
-    }
+    "preImplementationAdmission": {"status": "pass", "manifestDigest": "0cb11ea2f16ad1a8b1201c55766d20d27d0549959e71f5ac21182cdbb90dfc07", "manifestCommit": "aef109e6890ca7651bd3ed3ce1b9d998a308b9fa", "manifestPath": "docs/plans/dee-625-non-htx-pit-qualification.integration-train.json", "reviewer": "Human exact-source ratification plus controller duplicate, ownership, dependency and surface audit"},
+    "admissionReviews": [
+      {"issue": "DEE-716", "status": "pass", "reviewedCommits": ["ebd6059ac1e424a1a00b83231aae2793ef1b9056"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]},
+      {"issue": "DEE-717", "status": "pass", "reviewedCommits": ["1999fcf68fc9151caddb61a58da52be8b028e22a"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]},
+      {"issue": "DEE-719", "status": "pass", "reviewedCommits": ["e984b06e09d9dbf72a0dc3bcc1aaf1b7ec854766"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]},
+      {"issue": "DEE-718", "status": "pass", "reviewedCommits": ["fee7b7fe4acbec81e1769a3f2533c58ee71e4ed7"], "reviewedFiles": ["lib/trader/research/non-htx-pit-qualification-v1.ts", "tests/unit/trader-non-htx-pit-qualification-v1.test.ts"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-716", "status": "pass", "commands": ["focused unit suite", "typecheck", "scoped eslint"]},
+      {"afterIssue": "DEE-717", "status": "pass", "commands": ["bounded public probe", "Alternative.me negatives"]},
+      {"afterIssue": "DEE-719", "status": "pass", "commands": ["RSS receipt-only negatives"]},
+      {"afterIssue": "DEE-718", "status": "pass", "commands": ["20/20 focused tests", "typecheck", "scoped eslint"]}
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": ["No current/latest/synthetic historical substitution.", "No blind-2025 payload access.", "No provider credentials or licenses.", "No first-live REQUIRED/OPTIONAL or capital authority."],
   "rollbackStrategy": "One revert PR of the squash merge; no migration or external durable mutation.",

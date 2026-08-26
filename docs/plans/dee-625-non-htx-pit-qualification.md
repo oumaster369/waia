@@ -74,3 +74,10 @@ pnpm validate:pr-governance
 ```
 
 After semantic completion and preliminary review, run one full suite on a freshly migrated SQLite database. Publish one PR only from an exact reviewed head with zero P1/P2, authoritative CI and DEE-653 PASS.
+
+## Bounded capability result
+
+- The exact public request returned HTTP 200 at `2026-08-26T03:11:11.000Z` with 3,125 event-time rows.
+- Exact response bytes SHA-256: `db55e69207fa75f59a3518728da2cf91b02b6dc280a045a60b5e1b64dfa4ca33`.
+- The response exposes event timestamps but no historical `availableAt`, revision identity, ingest lineage or immutable-history proof. Therefore `fear_greed_index` is receipt-only `NOT_QUALIFIED`; no corpus was created.
+- CoinDesk, Cointelegraph and Decrypt current RSS remain receipt-only `NOT_QUALIFIED`; no historical reconstruction was attempted.
