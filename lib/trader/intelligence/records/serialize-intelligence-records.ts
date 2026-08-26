@@ -59,6 +59,7 @@ export function canonicalizeCycleEnvelope(
     historical_profile_digest: record.historicalProfileDigest,
     matrix_digest: record.matrixDigest,
     terminal_reason_code: record.terminalReasonCode,
+    input_causal_bundle_json: record.inputCausalBundleJson,
     input_semantic_digest: record.inputSemanticDigest,
     output_semantic_digest: record.outputSemanticDigest,
   };
