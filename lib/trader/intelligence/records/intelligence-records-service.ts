@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
-import type { MarketUnderstandingArtifactV1 } from "@/lib/trader/intelligence/market-understanding.types";
 import {
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
   HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
@@ -41,6 +40,7 @@ import {
   buildCanonicalCycleCausalInputBundleV2,
   computeCanonicalCycleCausalInputDigestV2,
   serializeCanonicalCycleCausalInputBundleV2,
+  type CausalMarketUnderstandingArtifactV1,
 } from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
 
 export type BuildIntelligenceCycleBundleInput = Readonly<{
@@ -51,7 +51,7 @@ export type BuildIntelligenceCycleBundleInput = Readonly<{
   accountId: string | null;
   analyticalTimeframe: string;
   marketStateSnapshot: MarketStateSnapshot;
-  understandingArtifact?: MarketUnderstandingArtifactV1;
+  understandingArtifact?: CausalMarketUnderstandingArtifactV1;
   decisionChain: DecisionChain;
   profile?: HistoricalIntelligenceProfile;
   matrixDigest?: string;

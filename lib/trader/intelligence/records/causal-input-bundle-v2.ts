@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 
-import type { MarketUnderstandingArtifactV1 } from "@/lib/trader/intelligence/market-understanding.types";
 import { HYPOTHESIS_SET_SCHEMA_VERSION } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import type { MarketStateSnapshot } from "@/lib/trader/intelligence/mi-core.types";
 import {
@@ -12,6 +11,40 @@ export const CAUSAL_INPUT_BUNDLE_SCHEMA_VERSION =
   "waia.trader.intelligence_cycle_causal_input_bundle.v2" as const;
 export const HYPOTHESIS_CONSTRUCTION_POLICY_VERSION =
   "waia.trader.hypothesis_construction_policy.v1" as const;
+
+/**
+ * The exact causal fields consumed from an Understanding artifact. Keeping this
+ * structural boundary local prevents the records layer from becoming a new
+ * legacy MarketUnderstanding consumer while retaining compile-time closure.
+ */
+export type CausalMarketUnderstandingArtifactV1 = Readonly<{
+  schemaVersion: string;
+  contentDigest: string;
+  evaluatedAt: string;
+  scope: Readonly<{ organizationId: string; symbol: string; pitAnchor: string }>;
+  derivationDefinition: Readonly<{ contentDigest: string }>;
+  authenticatedProfile: Readonly<{ id: string; contentDigest: string }>;
+  authenticatedSufficiencyReceipt: Readonly<{ id: string; contentDigest: string }>;
+  claims: readonly Readonly<{
+    contentDigest: string;
+    causalLineageDigest: string;
+    computationInputs: readonly Readonly<{ path: string; contentDigest: string }>[];
+  }>[];
+  evidenceUsed: readonly Readonly<{
+    evidenceId: string;
+    sourceId: string;
+    observationId: string;
+    observationSchemaVersion: string;
+    observationContentDigest: string;
+    trustAsOfReceiptId: string | null;
+    trustRevisionId: string | null;
+    trustRevisionContentDigest: string | null;
+    measurementDefinitionId: string | null;
+    measurementDefinitionContentDigest: string | null;
+    measurementValueId: string | null;
+    measurementValueContentDigest: string | null;
+  }>[];
+}>;
 
 export type CanonicalCycleCausalInputBundleV2 = Readonly<{
   schemaVersion: typeof CAUSAL_INPUT_BUNDLE_SCHEMA_VERSION;
@@ -187,7 +220,7 @@ function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
 }
 
 function buildUnderstandingIdentity(
-  artifact: MarketUnderstandingArtifactV1 | undefined,
+  artifact: CausalMarketUnderstandingArtifactV1 | undefined,
   snapshot: MarketStateSnapshot,
   organizationId: string,
 ): CanonicalCycleCausalInputBundleV2["understanding"] {
@@ -255,7 +288,7 @@ function buildUnderstandingIdentity(
 export function buildCanonicalCycleCausalInputBundleV2(input: {
   organizationId: string;
   snapshot: MarketStateSnapshot;
-  understandingArtifact?: MarketUnderstandingArtifactV1;
+  understandingArtifact?: CausalMarketUnderstandingArtifactV1;
   historicalProfileId: string;
   historicalProfileContentDigest: string;
   matrixContentDigest: string;
