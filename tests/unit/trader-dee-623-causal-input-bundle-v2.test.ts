@@ -167,4 +167,22 @@ describe("DEE-623 canonical causal input bundle v2", () => {
       );
     }
   });
+
+  it("rejects timestamps that PostgreSQL would normalize on round trip", () => {
+    const nonCanonicalSnapshot = {
+      ...snapshot(),
+      evaluatedAt: "2026-08-26T00:00:00Z",
+      reconstruction: {
+        ...snapshot().reconstruction,
+        evaluatedAt: "2026-08-26T00:00:00Z",
+      },
+    };
+    expect(() => buildCanonicalCycleCausalInputBundleV2({
+      organizationId: "org-1",
+      snapshot: nonCanonicalSnapshot,
+      historicalProfileId: "historical-profile-1",
+      historicalProfileContentDigest: d("8"),
+      matrixContentDigest: d("9"),
+    })).toThrow("CAUSAL_INPUT_BUNDLE_INVALID:evaluatedAt");
+  });
 });
