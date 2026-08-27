@@ -61,5 +61,5 @@ No Decision/Risk/execution/live caller is changed in this issue. Downstream capi
 
 - Exact admitted receipt, contract, package, model, artifact, runtime, target, PIT and input identities are required and fail closed.
 - Terminal and execution distributions/content seals replay deterministically; malformed, missing and research-only inputs remain typed NON_ACTIONABLE.
-- The canonical evaluation cycle exposes the Forecast V2 runtime outcome without any legacy ForecastDecisionBundle fallback.
+- An explicit Forecast V2 input cannot fall back; omission remains NON_ACTIONABLE while a legacy ForecastDecisionBundle may exist only as compatibility/historical evidence and never as predictive authority.
 - Focused negative tests, typecheck/build, a fresh migrated SQLite validation, exact-head review, authoritative CI/PostgreSQL and DEE-653 pass before squash merge.
