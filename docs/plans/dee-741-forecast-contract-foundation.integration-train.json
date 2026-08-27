@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-741",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-745",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Freeze content-addressed Forecast V2 input/model/artifact contracts.",
       "dependencies": ["DEE-631", "DEE-742"],
@@ -27,15 +27,19 @@
       "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Human ratified DEE-648A contract-only boundaries on 2026-08-27." },
       "expectedAcceptanceEvidence": ["Exact contracts and append-only binding fail closed without creating model, runtime or capital authority."],
       "expectedTests": ["focused unit contract tests"],
-      "actualFiles": [],
-      "integratedCommits": [],
-      "acceptanceEvidence": [],
-      "tests": [],
+      "actualFiles": [
+        "lib/trader/intelligence/forecast-v2/forecast-contract-foundation-v2.ts",
+        "lib/trader/intelligence/forecast-v2/index.ts",
+        "tests/unit/forecast-contract-foundation-v2.test.ts"
+      ],
+      "integratedCommits": ["0568964512cd14ee12a8232c0eb3efcca4deaa52", "4834583dc314ab10caaffe96d4cb63470d9cd893", "6e168e4fbbd37bef1930e83e50f62b2aba6842c4"],
+      "acceptanceEvidence": ["Exact contract construction/reconstruction, declared/undeclared input identity and applicability-only hypothesis separation pass."],
+      "tests": ["tests/unit/forecast-contract-foundation-v2.test.ts: 8/8 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 1, "mode": "serialized" }
     },
     {
       "issue": "DEE-746",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Persist and replay the org-scoped append-only selected-package contract binding.",
       "dependencies": ["DEE-745"],
@@ -54,10 +58,19 @@
       "humanGate": { "status": "t3-scope-preauthorized", "evidence": "Human ratified DEE-648A contract-only boundaries on 2026-08-27." },
       "expectedAcceptanceEvidence": ["Org-scoped append-only binding fails closed for missing, stale, replayed, cross-tenant and conflicting evidence."],
       "expectedTests": ["PostgreSQL binding persistence and negative tests"],
-      "actualFiles": [],
-      "integratedCommits": [],
-      "acceptanceEvidence": [],
-      "tests": [],
+      "actualFiles": [
+        ".github/workflows/postgres-integration.yml",
+        "db/migrations_postgres/0169_trader_forecast_contract_binding_v1.sql",
+        "db/migrations_postgres/0170_trader_forecast_contract_binding_v1_rls.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1.ts",
+        "lib/trader/intelligence/forecast-v2/index.ts",
+        "tests/integration/postgres-forecast-contract-binding-v1.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts"
+      ],
+      "integratedCommits": ["ebe7b7d54b53ecb2c3b771994e1d261f77ff1257", "bce83f92e640cf6505f25abda048a8d2f40e7c8e"],
+      "acceptanceEvidence": ["PostgreSQL binding is append-only, exact, tenant-scoped and deterministic for duplicate independent writers; missing legacy binding is NOT_ADMITTED."],
+      "tests": ["fresh PostgreSQL migrations: PASS", "tests/integration/postgres-forecast-contract-binding-v1.test.ts: 4/4 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 2, "mode": "serialized" }
     }
   ],
@@ -68,15 +81,21 @@
     "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" },
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "pending-freeze-commit",
-      "manifestCommit": "pending-freeze-commit",
+      "manifestDigest": "09b85b8725eeb163342c42c19ebef7c4a3032f4db7d0f24ebfe585761e179769",
+      "manifestCommit": "08b68d0afe70d263c4707ac9bd3ca93c87acc663",
       "manifestPath": "docs/plans/dee-741-forecast-contract-foundation.integration-train.json",
       "reviewer": "Controller pre-write API, invariant and file-surface freeze"
     },
-    "admissionReviews": [],
-    "cumulativeChecks": [],
+    "admissionReviews": [
+      { "issue": "DEE-745", "status": "pass", "reviewedCommits": ["0568964512cd14ee12a8232c0eb3efcca4deaa52", "4834583dc314ab10caaffe96d4cb63470d9cd893", "6e168e4fbbd37bef1930e83e50f62b2aba6842c4"], "reviewedFiles": ["lib/trader/intelligence/forecast-v2/forecast-contract-foundation-v2.ts", "lib/trader/intelligence/forecast-v2/index.ts", "tests/unit/forecast-contract-foundation-v2.test.ts"] },
+      { "issue": "DEE-746", "status": "pass", "reviewedCommits": ["ebe7b7d54b53ecb2c3b771994e1d261f77ff1257", "bce83f92e640cf6505f25abda048a8d2f40e7c8e"], "reviewedFiles": [".github/workflows/postgres-integration.yml", "db/migrations_postgres/0169_trader_forecast_contract_binding_v1.sql", "db/migrations_postgres/0170_trader_forecast_contract_binding_v1_rls.sql", "db/migrations_postgres/meta/_journal.json", "lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1.ts", "lib/trader/intelligence/forecast-v2/index.ts", "tests/integration/postgres-forecast-contract-binding-v1.test.ts", "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts"] }
+    ],
+    "cumulativeChecks": [
+      { "afterIssue": "DEE-745", "status": "pass", "commands": ["focused contract suite 8/8", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-746", "status": "pass", "commands": ["fresh Postgres migration", "PostgreSQL binding suite 4/4", "typecheck", "scoped eslint"] }
+    ],
     "finalReviewRemediation": { "status": "pending", "reviewedHead": null, "findings": [], "remediationCommits": [] },
-    "fullDiffFrozen": false,
+    "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
