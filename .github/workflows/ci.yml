@@ -389,7 +389,9 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data && pnpm db:migrate
-      - run: pnpm test --run
+      # Preserve assertion/failure output while preventing multi-megabyte passing-test
+      # telemetry from back-pressuring the hosted runner log pipe.
+      - run: pnpm test --run --reporter=dot --silent
 
   # RELEASE-BLOCKING GATE (ADR-0007): any cross-organization access leak blocks merge/release.
   # Owner: Architect / backend label. Tests are classified by the `tenant-isolation` filename
