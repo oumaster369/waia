@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-647",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Two file-disjoint atomic children separate the content-addressed authority core from the legacy compatibility and static consumer firewall.",
+  "includedChildren": [
+    {
+      "issue": "DEE-749",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Build content-addressed MarketStateSnapshotV2 and deterministic PredictiveAdmissionReceiptV1.",
+      "dependencies": ["DEE-621", "DEE-629", "DEE-631", "DEE-741", "DEE-742", "DEE-745", "DEE-746"],
+      "dependencyEvidence": ["All dependencies are squash-merged in authoritative base b62f8e6432a62227902007b4e97f8bf746360822."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/intelligence/predictive-admission/**", "tests/unit/trader-predictive-admission-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": { "status": "t3-scope-preauthorized", "evidence": "DEE-627 ratified the Step 11 Predictive Admission boundary." },
+      "expectedAcceptanceEvidence": ["Exact bindings, PIT identities, applicability-only hypothesis, posture monotonicity and fail-closed verdicts are deterministic."],
+      "expectedTests": ["focused deterministic and negative unit suite"],
+      "actualFiles": [
+        "lib/trader/intelligence/predictive-admission/index.ts",
+        "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts",
+        "tests/unit/trader-predictive-admission-v1.test.ts"
+      ],
+      "integratedCommits": [
+        "045c4f5f071cf0f408150871c1336ba1269155e8",
+        "0c991997bbd729e2cfa6dd11d4567a54f26c060e",
+        "8668a08dec7e04d7ba6b7f42ad3173c0d92bdbc8"
+      ],
+      "acceptanceEvidence": ["Exact scientific/package/contract identities, PIT replay, applicability-only Hypothesis, fail-closed mismatch handling, posture monotonicity and research firewall pass."],
+      "tests": ["tests/unit/trader-predictive-admission-v1.test.ts: 11/11 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
+      "execution": { "wave": 1, "mode": "serialized" }
+    },
+    {
+      "issue": "DEE-750",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Declare legacy CDE/MSV compatibility-only and prove the new admission authority has no capital consumer edge.",
+      "dependencies": ["DEE-749"],
+      "dependencyEvidence": ["The firewall consumes only the frozen DEE-749 public contract."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/**", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": { "status": "t3-scope-preauthorized", "evidence": "DEE-627 ratified quarantine of legacy CDE/MSV capital authority." },
+      "expectedAcceptanceEvidence": ["Legacy declaration is compatibility-only and static inventory excludes Decision/Risk/Execution/holdout/live/capital consumers."],
+      "expectedTests": ["static forbidden-consumer and compatibility tests"],
+      "actualFiles": [
+        "lib/trader/intelligence/cde-v0.ts",
+        "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts",
+        "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"
+      ],
+      "integratedCommits": ["4bf9a028b0a6882b02604a2da83ffe30907f08e3"],
+      "acceptanceEvidence": ["Legacy MSV is explicitly compatibility/telemetry-only and static inventory rejects direct Decision/Risk/Execution/holdout/live/capital consumers."],
+      "tests": ["tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts: 3/3 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
+      "execution": { "wave": 2, "mode": "serialized" }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" },
+    "preImplementationAdmission": { "status": "pass", "manifestDigest": "851d4f233a7c658a9be7c288fe795369627bf4788a99e928c1751b573d711e36", "manifestCommit": "65f165b33155e60be03e4177896caa6e7043f6ab", "manifestPath": "docs/plans/dee-647-predictive-admission.integration-train.json", "reviewer": "Controller pre-write API, invariant and file-surface freeze" },
+    "admissionReviews": [
+      { "issue": "DEE-749", "status": "pass", "reviewedCommits": ["045c4f5f071cf0f408150871c1336ba1269155e8", "0c991997bbd729e2cfa6dd11d4567a54f26c060e", "8668a08dec7e04d7ba6b7f42ad3173c0d92bdbc8"], "reviewedFiles": ["lib/trader/intelligence/predictive-admission/index.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts", "tests/unit/trader-predictive-admission-v1.test.ts"] },
+      { "issue": "DEE-750", "status": "pass", "reviewedCommits": ["4bf9a028b0a6882b02604a2da83ffe30907f08e3"], "reviewedFiles": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"] }
+    ],
+    "cumulativeChecks": [
+      { "afterIssue": "DEE-749", "status": "pass", "commands": ["focused predictive admission suite 11/11", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-750", "status": "pass", "commands": ["focused consumer firewall suite 3/3", "typecheck", "scoped eslint"] }
+    ],
+    "finalReviewRemediation": {
+      "status": "remediated-awaiting-exact-head-rereview",
+      "reviewedHead": "58b7ea983d2bdea3369d5fff29fc4823815e38cd",
+      "findings": [
+        "P1: canonical ISG receipt validation was missing",
+        "P1: scientific receipt was not cross-bound to package and model artifact",
+        "P1: runtime admission narrowing trusted an unverified receipt",
+        "P2: analysis purpose and runtime posture lacked runtime enum validation",
+        "P1 rereview: ADMITTED receipt verifier lacked verdict-dependent scientific and non-research semantics"
+      ],
+      "remediationCommits": [
+        "0c991997bbd729e2cfa6dd11d4567a54f26c060e",
+        "8668a08dec7e04d7ba6b7f42ad3173c0d92bdbc8"
+      ]
+    },
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "The sole champion predictor is anchorRealizedVol20m_1m.",
+    "HypothesisAssessment is applicability-only and carries no predictor confidence.",
+    "Scientific admission and contract/spec/artifact bindings are exact and fail closed.",
+    "Runtime posture can only preserve or restrict analysis authority.",
+    "No Decision, Risk, Execution, holdout, production/live or capital semantics."
+  ],
+  "rollbackStrategy": "One revert removes the additive Predictive Admission authority and compatibility declaration without changing upstream identities or durable rows.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-647-predictive-admission.integration-train.json DEE-647 frozen",
+    "focused": ["pnpm test --run tests/unit/trader-predictive-admission-v1.test.ts tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts", "pnpm typecheck"],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 before squash merge"
+  }
+}
