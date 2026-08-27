@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-632",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Separate the content-addressed Forecast runtime authority core from the canonical evaluation-cycle compatibility cutover while retaining one integrator, branch, manifest and PR.",
+  "includedChildren": [
+    {
+      "issue": "DEE-756",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Implement ForecastRuntimeAuthorityV2 or typed NON_ACTIONABLE with exact Predictive Admission, package, target, runtime and replay seals.",
+      "dependencies": ["DEE-647", "DEE-648", "DEE-741", "DEE-740"],
+      "dependencyEvidence": ["All dependencies are Done and squash-merged in authoritative base 4acb6c61a1479fc57f4ffd1cac53d03cf2f77118."],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2.ts",
+        "lib/trader/intelligence/forecast-v2/index.ts",
+        "tests/unit/trader-forecast-runtime-authority-v2.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-627 and DEE-632 ratify Forecast V2 as the sole probability authority."
+      },
+      "expectedAcceptanceEvidence": [
+        "Only an exactly verified ADMITTED predictive receipt can issue a runtime Forecast.",
+        "Executable PredictivePackageV1 is explicitly supplied and cross-bound to contract, model, artifact, runtime and targets.",
+        "Both terminal and execution distribution/content seals replay exactly; all failures are typed NON_ACTIONABLE."
+      ],
+      "expectedTests": ["focused deterministic, tamper and fail-closed unit suite"],
+      "execution": { "wave": 1, "mode": "serialized" }
+    },
+    {
+      "issue": "DEE-757",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Expose the frozen Forecast runtime outcome on the canonical evaluation cycle and quarantine ForecastDecisionBundle as compatibility/historical-artifact-only.",
+      "dependencies": ["DEE-756"],
+      "dependencyEvidence": ["DEE-756 public API and invariants are frozen by this admitted manifest; implementation is scheduled in the preceding serialized wave."],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/evaluation-cycle.ts",
+        "lib/trader/intelligence/types.ts",
+        "lib/trader/intelligence/forecast-v2/forecast-runtime-consumer-inventory-v1.ts",
+        "tests/unit/trader-forecast-runtime-evaluation-cycle-v2.test.ts",
+        "tests/unit/trader-forecast-runtime-consumer-inventory-v1.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-632 explicitly requires the canonical cycle cutover and legacy ForecastDecisionBundle quarantine."
+      },
+      "expectedAcceptanceEvidence": [
+        "Equivalent historical/paper inputs consume one ForecastRuntimeOutcomeV2 contract.",
+        "Missing runtime authority is explicitly NON_ACTIONABLE and cannot silently fall back to legacy forecast confidence/scenarios.",
+        "Static inventory proves no new Decision, Risk, execution, holdout, production/live or capital edge."
+      ],
+      "expectedTests": ["evaluation-cycle parity, absence and static forbidden-consumer tests"],
+      "execution": { "wave": 2, "mode": "serialized" }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Program Controller duplicate, ownership, dependency and protected-surface audit"
+    },
+    "authoritativeBase": "4acb6c61a1479fc57f4ffd1cac53d03cf2f77118",
+    "duplicateOwnershipDependencyAudit": {
+      "status": "pass",
+      "evidence": "DEE-632 has no children or duplicate and solely owns production Forecast runtime; all blockers are Done after DEE-647 PR #507."
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "producerConsumerReplayPersistenceTestInventoryPlan": "frozen",
+      "reviewer": "Program Controller read-only admission"
+    },
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "Forecast owns probability/distribution authority only.",
+    "The sole mathematical predictor remains anchorRealizedVol20m_1m; HypothesisAssessment remains applicability-only.",
+    "ADMITTED receipt, organization, package, contract, model, artifact, runtime, target, PIT and input identities are exact and fail closed.",
+    "RESEARCH_ONLY and malformed receipts never narrow to runtime authority.",
+    "No StrategySignal confidence/edge, Decision economics, Risk, execution, holdout, production/live or capital semantics are introduced.",
+    "Legacy ForecastDecisionBundle is compatibility/historical-artifact-only and never a fallback predictive authority."
+  ],
+  "persistence": {
+    "newMigrationRequired": false,
+    "authority": "Reuse existing persistForecastBundleV2 and Forecast V2 append-only schema; DEE-633 owns outcome/calibration writes."
+  },
+  "rollbackStrategy": "One revert removes the additive Forecast runtime authority/cycle outcome and restores the explicit legacy compatibility surface without mutating durable Forecast V2 rows.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-632-forecast-runtime-authority.integration-train.json DEE-632 frozen",
+    "focused": [
+      "pnpm test --run tests/unit/trader-forecast-runtime-authority-v2.test.ts tests/unit/trader-forecast-runtime-evaluation-cycle-v2.test.ts tests/unit/trader-forecast-runtime-consumer-inventory-v1.test.ts",
+      "pnpm typecheck"
+    ],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run after semantic completion",
+    "postgres": "existing Forecast V2 persistence roundtrip and authoritative PostgreSQL CI",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
