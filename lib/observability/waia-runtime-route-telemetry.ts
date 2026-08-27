@@ -82,6 +82,7 @@ export type WaiaRuntimeRouteKey =
   | "admin_treasury_evidence_links"
   | "admin_treasury_inceptions"
   | "admin_treasury_reconciliations"
+  | "admin_treasury_balance_checkpoints"
   | "admin_treasury_settings"
   | "admin_treasury_breath_preview"
   | "admin_treasury_fund_allocation"

@@ -20,8 +20,10 @@ function isTreasuryProjection(value: unknown): value is PublicTreasuryProjection
 }
 
 /** Content-free frontend boundary over the existing DEE-617 read model. */
-export async function readPublicTreasuryForView(): Promise<PublicTreasuryProjection | null> {
-  const result = await handlePublicTreasuryGet();
+export async function readPublicTreasuryForView(
+  options: { transactionOffset?: number; transactionLimit?: number } = {},
+): Promise<PublicTreasuryProjection | null> {
+  const result = await handlePublicTreasuryGet(options);
   return result.status === 200 && isTreasuryProjection(result.body) ? result.body : null;
 }
 

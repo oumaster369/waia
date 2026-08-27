@@ -97,6 +97,8 @@ export type PublicTreasuryShare = {
 
 export type PublicTreasuryPatron = {
   displayName: string;
+  publicSiteUrl: string | null;
+  twinProfileUrl: string | null;
   contributedAmountMicros: string;
   currency: string;
   share: PublicTreasuryShare;
@@ -136,6 +138,13 @@ export type PublicTreasuryProjection = {
   breath: PublicTreasuryBreath;
   budget: PublicTreasuryBudget;
   transactions: PublicTreasuryTransaction[];
+  transactionPagination: {
+    offset: number;
+    limit: number;
+    total: number;
+    hasPrevious: boolean;
+    hasNext: boolean;
+  };
   fundingNeeds: PublicTreasuryFundingNeed[];
   patrons: PublicTreasuryPatrons;
   funds: PublicTreasuryFundAllocation;

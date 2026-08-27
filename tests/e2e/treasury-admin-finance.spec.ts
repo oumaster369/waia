@@ -710,7 +710,9 @@ test.describe("WAIA Admin Finance Console", () => {
     grantPlatformAdminByUserEmail(email);
     const capture = await installFinanceFixtures(page);
 
-    await page.goto("/finance");
+    await page.goto("/waia-admin");
+    await expect(page.getByTestId("waia-admin-finance-module")).toBeVisible();
+    await page.getByRole("link", { name: "Open Finance" }).click();
     await page.getByTestId("finance-org-select").selectOption(ORG_A);
     await expect(page.getByTestId("finance-overview")).toBeVisible();
     await expect(page.getByTestId("review-required-count")).toContainText("1 transaction");
@@ -722,6 +724,8 @@ test.describe("WAIA Admin Finance Console", () => {
 
     const financeNav = page.getByTestId("finance-nav");
     await expect(financeNav.getByRole("link")).toHaveCount(7);
+    await expect(financeNav.locator('[data-nav-level="primary"]')).toHaveCount(3);
+    await expect(financeNav.locator('[data-nav-level="secondary"]')).toHaveCount(4);
     await expect(financeNav).toContainText("Overview");
     await expect(financeNav).toContainText("Transactions");
     await expect(financeNav).toContainText("Budget");
@@ -729,6 +733,10 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(financeNav).toContainText("Accounts");
     await expect(financeNav).toContainText("Projects");
     await expect(financeNav).toContainText("Wallet");
+    await expect(page.getByRole("link", { name: "Admin home" })).toHaveAttribute(
+      "href",
+      "/waia-admin",
+    );
 
     await page.getByRole("button", { name: "Ask Finance" }).click();
     await page.getByLabel("Request").fill("Show the current overview");

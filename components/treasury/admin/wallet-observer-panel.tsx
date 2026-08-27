@@ -121,9 +121,9 @@ function WalletObserverInner() {
             </p>
           </div>
           <div>
-            <p className="text-muted-foreground text-xs uppercase">Independent check</p>
+            <p className="text-muted-foreground text-xs uppercase">Optional fallback</p>
             <p className="mt-1 text-sm">
-              {health.secondaryConfigured ? "Secondary ready" : "Secondary missing"}
+              {health.secondaryConfigured ? "Configured" : "Not configured"}
             </p>
           </div>
           <p className="text-muted-foreground text-xs sm:col-span-3">

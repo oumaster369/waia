@@ -10,11 +10,11 @@ type BreathCountdownProps = {
   endsAt: string | null;
 };
 
-const MINUTE_MS = 60_000;
+const SECOND_MS = 1_000;
 
 /**
  * Lightweight ticking display for WAIA CAN BREATHE FOR.
- * Updates once per minute — never fabricates time when endsAt is null.
+ * Updates once per second to preserve the intended sense of life — never fabricates time.
  */
 export function BreathCountdown({ endsAt }: BreathCountdownProps) {
   const copy = HOMEPAGE_COPY.breath;
@@ -22,7 +22,7 @@ export function BreathCountdown({ endsAt }: BreathCountdownProps) {
 
   useEffect(() => {
     if (!endsAt) return;
-    const id = window.setInterval(() => setNowMs(Date.now()), MINUTE_MS);
+    const id = window.setInterval(() => setNowMs(Date.now()), SECOND_MS);
     return () => window.clearInterval(id);
   }, [endsAt]);
 

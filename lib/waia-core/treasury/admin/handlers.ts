@@ -92,6 +92,7 @@ import {
 import { TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
 import {
   serializeAttribution,
+  serializeBalanceCheckpoint,
   serializeBudget,
   serializeCommitment,
   serializeEvidenceLink,
@@ -114,6 +115,8 @@ import {
 } from "@/lib/waia-core/treasury/admin/services";
 import { countTreasuryOverview } from "@/lib/waia-core/treasury/transaction-list-query";
 import {
+  MANUAL_ACCOUNTING_CURRENCY_V1,
+  TREASURY_USDT_V1_ASSET,
   TREASURY_USDT_V1_DECIMALS,
   USDT_NOMINAL_USD_POLICY_V1,
   type TreasuryActorContext,
@@ -452,9 +455,7 @@ async function executeAssistantWrite(input: {
         nativeAsset: account.currency,
         accountingAmountMicros: magnitude,
         accountingDenominationPolicy:
-          account.currency === "USDT"
-            ? USDT_NOMINAL_USD_POLICY_V1
-            : "MANUAL_ACCOUNTING_CURRENCY_V1",
+          account.currency === "USDT" ? USDT_NOMINAL_USD_POLICY_V1 : MANUAL_ACCOUNTING_CURRENCY_V1,
         occurredAt,
         ...refs,
         internalNotes: assistantOptional(fields, "notes"),
@@ -745,6 +746,7 @@ export async function handleTreasuryTransactionsPost(
           projectId: optionalString(body.project_id ?? body.projectId, "project_id"),
         };
         await assertActiveLedgerReferences(services, context, refs);
+        const nativeAsset = requireString(body.native_asset ?? body.nativeAsset, "native_asset");
         const created = await services.domain.transactions.createManualDraft(
           context,
           actor(userId),
@@ -759,12 +761,16 @@ export async function handleTreasuryTransactionsPost(
               body.native_decimals ?? body.nativeDecimals ?? 6,
               "native_decimals",
             ),
-            nativeAsset: requireString(body.native_asset ?? body.nativeAsset, "native_asset"),
+            nativeAsset,
             nativeContract: optionalString(
               body.native_contract ?? body.nativeContract,
               "native_contract",
             ),
             accountingAmountMicros: absoluteSigned ?? suppliedAccounting,
+            accountingDenominationPolicy:
+              nativeAsset === TREASURY_USDT_V1_ASSET
+                ? USDT_NOMINAL_USD_POLICY_V1
+                : MANUAL_ACCOUNTING_CURRENCY_V1,
             occurredAt: requireIsoDate(body.occurred_at ?? body.occurredAt, "occurred_at"),
             purpose: optionalString(body.purpose, "purpose"),
             budgetId:
@@ -2240,6 +2246,44 @@ export async function handleTreasuryBreathPreviewGet(
       return adminSuccess({ preview });
     },
   });
+}
+
+export async function handleTreasuryBalanceCheckpointPost(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  try {
+    const body = await readJsonObject(request);
+    const organizationId = parseOrganizationIdFromUnknown(body.organization_id);
+    if (typeof organizationId !== "string") return organizationId;
+    return withTreasuryAdmin({
+      deps,
+      organizationId,
+      permission: "admin.treasury.publish",
+      fn: async ({ userId, services }) => {
+        const checkpoint = await services.breath.confirmBalanceCheckpoint(
+          requireOrgContext(organizationId),
+          actor(userId),
+          {
+            currency: requireString(body.currency, "currency"),
+            confirmedBalanceMicros: parseNonnegativeDecimalBigint(
+              body.confirmed_balance_micros ?? body.confirmedBalanceMicros,
+              "confirmed_balance_micros",
+            ),
+            asOf: requireIsoDate(body.as_of ?? body.asOf, "as_of"),
+            note: requireString(body.note, "note"),
+            reason: requireString(body.reason, "reason"),
+          },
+        );
+        return adminSuccess({ checkpoint: serializeBalanceCheckpoint(checkpoint) });
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INVALID_JSON") {
+      return adminClientError(400, "INVALID_BODY", "JSON object required.");
+    }
+    return mapTreasuryHttpError(err);
+  }
 }
 
 export async function handleFinanceAssistantPlanPost(

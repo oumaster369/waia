@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import {
   PublicPageShell,
@@ -24,8 +25,19 @@ const cellClass = "border-b border-waia-divider px-4 py-3 align-top text-waia-fg
 const headClass =
   "border-b border-waia-divider bg-waia-elevated px-4 py-3 text-xs font-semibold tracking-wide text-waia-fg-subtle uppercase";
 
-export default async function BudgetPage() {
-  const projection = await readPublicTreasuryForView();
+export default async function BudgetPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+} = {}) {
+  const query = searchParams ? await searchParams : {};
+  const rawPage = Array.isArray(query.page) ? query.page[0] : query.page;
+  const requestedPage = Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1);
+  const pageSize = 50;
+  const projection = await readPublicTreasuryForView({
+    transactionOffset: (requestedPage - 1) * pageSize,
+    transactionLimit: pageSize,
+  });
   const budget = projection?.budget;
   const publishedRecord =
     budget?.status === "published" &&
@@ -39,14 +51,15 @@ export default async function BudgetPage() {
           annualBudgetAmountMicros: budget.annualBudgetAmountMicros,
           months: budget.months,
           transactions: projection.transactions,
+          transactionPagination: projection.transactionPagination,
         }
       : null;
 
   return (
     <PublicPageShell
       eyebrow="Public financial record"
-      title="WAIA Budget"
-      intro="Published budgets and transactions behind the current Breath of WAIA figures. This page is read-only."
+      title="Transactions & budget"
+      intro="The confirmed current-month budget and public transaction history behind Breath of WAIA. Read-only."
     >
       {!publishedRecord ? (
         <section data-testid="public-budget-pending" className={publicPanelClass}>
@@ -59,13 +72,60 @@ export default async function BudgetPage() {
         <>
           <section data-testid="public-budget-summary" className={publicPanelClass}>
             <p className="text-waia-fg-subtle text-xs font-semibold tracking-[0.14em] uppercase">
-              Published annual budget · {publishedRecord.year}
+              Current month · {formatPublicMonth(new Date().toISOString().slice(0, 7))}
             </p>
-            <p className="text-waia-fg mt-3 font-mono text-3xl tabular-nums sm:text-4xl">
-              {formatPublicMoney(
-                publishedRecord.annualBudgetAmountMicros,
-                publishedRecord.currency,
-              )}
+            {publishedRecord.months.find(
+              (month) => month.month === new Date().toISOString().slice(0, 7),
+            ) ? (
+              (() => {
+                const current = publishedRecord.months.find(
+                  (month) => month.month === new Date().toISOString().slice(0, 7),
+                )!;
+                const budgetMicros = current.categories.reduce(
+                  (sum, row) => sum + BigInt(row.budgetMicros),
+                  0n,
+                );
+                const spentMicros = current.categories.reduce(
+                  (sum, row) => sum + BigInt(row.spentMicros),
+                  0n,
+                );
+                return (
+                  <dl className="mt-5 grid gap-5 sm:grid-cols-3">
+                    <div>
+                      <dt className="text-waia-fg-subtle text-xs uppercase">Budget</dt>
+                      <dd className="text-waia-fg mt-1 font-mono text-2xl tabular-nums">
+                        {formatPublicMoney(budgetMicros.toString(), publishedRecord.currency)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-waia-fg-subtle text-xs uppercase">Spent</dt>
+                      <dd className="text-waia-fg mt-1 font-mono text-2xl tabular-nums">
+                        {formatPublicMoney(spentMicros.toString(), publishedRecord.currency)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-waia-fg-subtle text-xs uppercase">Remaining</dt>
+                      <dd className="text-waia-fg mt-1 font-mono text-2xl tabular-nums">
+                        {formatPublicMoney(
+                          (budgetMicros - spentMicros).toString(),
+                          publishedRecord.currency,
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                );
+              })()
+            ) : (
+              <p className="text-waia-fg-muted mt-3">Current-month budget is not published.</p>
+            )}
+            <p className="text-waia-fg-subtle mt-6 text-xs">
+              Confirmed annual operating budget · {publishedRecord.year}:{" "}
+              <span className="font-mono tabular-nums">
+                {formatPublicMoney(
+                  publishedRecord.annualBudgetAmountMicros,
+                  publishedRecord.currency,
+                )}
+              </span>
             </p>
             {projection?.funds.status === "published" ? (
               <div className="border-waia-divider mt-6 grid gap-5 border-t pt-5 sm:grid-cols-2">
@@ -101,7 +161,7 @@ export default async function BudgetPage() {
 
           <section data-testid="public-budget-months" className="flex flex-col gap-7">
             <div>
-              <h2 className="font-waia-serif text-waia-fg text-2xl">Budget by month</h2>
+              <h2 className="font-waia-serif text-waia-fg text-2xl">Monthly budget history</h2>
               <p className="text-waia-fg-muted mt-2 text-sm leading-relaxed">
                 Category and group limits, spending, and remaining amounts from the published
                 Treasury record.
@@ -265,6 +325,30 @@ export default async function BudgetPage() {
                 </table>
               </div>
             )}
+            <nav aria-label="Transaction pages" className="flex items-center justify-between gap-4">
+              <p className="text-waia-fg-subtle text-xs">
+                Page {requestedPage} · {publishedRecord.transactionPagination.total} public
+                transactions · 50 per page
+              </p>
+              <div className="flex gap-4 text-sm">
+                {publishedRecord.transactionPagination.hasPrevious ? (
+                  <Link
+                    className="underline underline-offset-4"
+                    href={`/budget?page=${requestedPage - 1}`}
+                  >
+                    ← Previous 50
+                  </Link>
+                ) : null}
+                {publishedRecord.transactionPagination.hasNext ? (
+                  <Link
+                    className="underline underline-offset-4"
+                    href={`/budget?page=${requestedPage + 1}`}
+                  >
+                    Next 50 →
+                  </Link>
+                ) : null}
+              </div>
+            </nav>
           </section>
         </>
       )}

@@ -63,7 +63,15 @@ function methods<T extends TreasuryLedgerCatalogRecord>(entity: string, rows: Ma
       const scopedKey = key(org.organizationId, id);
       const current = rows.get(scopedKey);
       if (!current) throw new TreasuryNotFoundError(entity, id);
-      const next = { ...current, ...patch, id: current.id, organizationId: current.organizationId };
+      const definedPatch = Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined),
+      ) as Partial<T>;
+      const next = {
+        ...current,
+        ...definedPatch,
+        id: current.id,
+        organizationId: current.organizationId,
+      };
       rows.set(scopedKey, clone(next));
       return clone(next);
     },

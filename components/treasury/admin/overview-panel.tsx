@@ -11,9 +11,11 @@ import { MoneyText } from "@/components/treasury/admin/money-text";
 import { OrgGate } from "@/components/treasury/admin/org-gate";
 import { LoadingState, UnavailableState } from "@/components/treasury/admin/unavailable-state";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { missingOrganizationResult, treasuryGet, treasuryJson } from "@/lib/treasury-admin/api";
 import { WATCHER_DARK_COPY } from "@/lib/treasury-admin/facts";
+import { parseHumanDecimalToAtomic } from "@/lib/treasury-admin/parse-human-amount";
 import { financeHref } from "@/lib/treasury-admin/org";
 import type {
   BreathAdminPreviewDto,
@@ -47,6 +49,11 @@ function OverviewInner() {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [checkpointOpen, setCheckpointOpen] = React.useState(false);
+  const [checkpointAmount, setCheckpointAmount] = React.useState("");
+  const [checkpointAsOf, setCheckpointAsOf] = React.useState("");
+  const [checkpointNote, setCheckpointNote] = React.useState("");
+  const [checkpointReason, setCheckpointReason] = React.useState("");
   const [commandError, setCommandError] = React.useState<{ code?: string; message: string } | null>(
     null,
   );
@@ -106,6 +113,50 @@ function OverviewInner() {
       return;
     }
     setCommandError(null);
+    reload();
+  }
+
+  async function confirmBalanceCheckpoint() {
+    if (!organizationId) return;
+    const parsed = parseHumanDecimalToAtomic(checkpointAmount, 6, { requirePositive: false });
+    if (!parsed.ok) {
+      setCommandError({ code: parsed.code, message: parsed.message });
+      setCheckpointOpen(false);
+      return;
+    }
+    const asOf = new Date(checkpointAsOf);
+    if (!checkpointAsOf || !Number.isFinite(asOf.getTime()) || !checkpointNote.trim()) {
+      setCommandError({
+        code: "INVALID_CHECKPOINT",
+        message: "Enter a valid as-of time and an evidence note.",
+      });
+      setCheckpointOpen(false);
+      return;
+    }
+    setBusy(true);
+    const result = await treasuryJson<{ checkpoint: { id: string } }>(
+      "/api/admin/treasury/balance-checkpoints",
+      "POST",
+      {
+        organization_id: organizationId,
+        currency: "USD",
+        confirmed_balance_micros: parsed.atomic,
+        as_of: asOf.toISOString(),
+        note: checkpointNote,
+        reason: checkpointReason,
+      },
+    );
+    setBusy(false);
+    setCheckpointOpen(false);
+    setCheckpointReason("");
+    if (!result.ok) {
+      setCommandError({ code: result.code, message: result.message });
+      return;
+    }
+    setCommandError(null);
+    setCheckpointAmount("");
+    setCheckpointAsOf("");
+    setCheckpointNote("");
     reload();
   }
 
@@ -296,6 +347,51 @@ function OverviewInner() {
             Pending: {preview.pendingReasons.join(", ")}
           </p>
         ) : null}
+        <div className="border-border space-y-3 border-t pt-4">
+          <div>
+            <h3 className="text-sm font-medium">Human-confirmed balance checkpoint</h3>
+            <p className="text-muted-foreground text-xs">
+              Records an append-only observed cash balance. Verified transactions after the selected
+              time update the live balance automatically.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="space-y-1 text-sm">
+              <span>Balance (USD)</span>
+              <Input
+                value={checkpointAmount}
+                inputMode="decimal"
+                placeholder="26.55"
+                onChange={(event) => setCheckpointAmount(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>Observed at</span>
+              <Input
+                type="datetime-local"
+                value={checkpointAsOf}
+                onChange={(event) => setCheckpointAsOf(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>Evidence note</span>
+              <Input
+                value={checkpointNote}
+                placeholder="Confirmed account balance"
+                onChange={(event) => setCheckpointNote(event.target.value)}
+              />
+            </label>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!checkpointAmount || !checkpointAsOf || !checkpointNote.trim()}
+            onClick={() => setCheckpointOpen(true)}
+          >
+            Confirm balance checkpoint
+          </Button>
+        </div>
       </MoreDetails>
 
       <ConfirmDialog
@@ -307,6 +403,17 @@ function OverviewInner() {
         onReasonChange={setReason}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => void confirmBreathToggle()}
+        busy={busy}
+      />
+      <ConfirmDialog
+        open={checkpointOpen}
+        title="Confirm observed cash balance"
+        impact="Creates an immutable financial baseline. Verified transactions occurring after its as-of time will change the displayed balance and runway."
+        confirmLabel="Record checkpoint"
+        reason={checkpointReason}
+        onReasonChange={setCheckpointReason}
+        onCancel={() => setCheckpointOpen(false)}
+        onConfirm={() => void confirmBalanceCheckpoint()}
         busy={busy}
       />
     </div>

@@ -34,6 +34,7 @@ export function createPostgresPublicTreasuryFactsRepository(
         runwaySnapshots,
         reconciliations,
         inceptions,
+        balanceCheckpoints,
         categories,
         categoryBudgetHistory,
         projects,
@@ -79,6 +80,10 @@ export function createPostgresPublicTreasuryFactsRepository(
           .where(orgScopedWhere(pgSchema.treasuryLedgerInceptions.organizationId, org)),
         db
           .select()
+          .from(pgSchema.treasuryBalanceCheckpoints)
+          .where(orgScopedWhere(pgSchema.treasuryBalanceCheckpoints.organizationId, org)),
+        db
+          .select()
           .from(pgSchema.treasuryCategories)
           .where(orgScopedWhere(pgSchema.treasuryCategories.organizationId, org)),
         db
@@ -96,16 +101,15 @@ export function createPostgresPublicTreasuryFactsRepository(
             transactionId: pgSchema.treasuryContributionAttributions.transactionId,
             status: pgSchema.treasuryContributionAttributions.status,
             contributorUserId: pgSchema.treasuryContributionAttributions.contributorUserId,
-            consentPublicIdentity:
-              pgSchema.treasuryContributionAttributions.consentPublicIdentity,
+            consentPublicIdentity: pgSchema.treasuryContributionAttributions.consentPublicIdentity,
+            publicSiteUrl: pgSchema.treasuryContributionAttributions.publicSiteUrl,
+            twinProfileUrl: pgSchema.treasuryContributionAttributions.twinProfileUrl,
             createdAt: pgSchema.treasuryContributionAttributions.createdAt,
             attributedAt: pgSchema.treasuryContributionAttributions.attributedAt,
             revokedAt: pgSchema.treasuryContributionAttributions.revokedAt,
           })
           .from(pgSchema.treasuryContributionAttributions)
-          .where(
-            orgScopedWhere(pgSchema.treasuryContributionAttributions.organizationId, org),
-          ),
+          .where(orgScopedWhere(pgSchema.treasuryContributionAttributions.organizationId, org)),
         db
           .select({
             userId: pgSchema.profiles.userId,
@@ -120,9 +124,7 @@ export function createPostgresPublicTreasuryFactsRepository(
               pgSchema.profiles.userId,
             ),
           )
-          .where(
-            orgScopedWhere(pgSchema.treasuryContributionAttributions.organizationId, org),
-          ),
+          .where(orgScopedWhere(pgSchema.treasuryContributionAttributions.organizationId, org)),
         db
           .select({
             entityId: pgSchema.auditLogs.entityId,
@@ -157,6 +159,10 @@ export function createPostgresPublicTreasuryFactsRepository(
         runwaySnapshots,
         reconciliations,
         inceptions,
+        balanceCheckpoints: balanceCheckpoints.map((row) => ({
+          ...row,
+          sourceLabel: "HUMAN_CONFIRMED" as const,
+        })),
         categories,
         categoryBudgetHistory,
         projects,

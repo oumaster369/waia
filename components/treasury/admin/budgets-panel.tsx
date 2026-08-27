@@ -11,6 +11,7 @@ import { formatAtomicToHumanDecimal } from "@/lib/treasury-admin/parse-human-amo
 import type {
   TreasuryApiResult,
   TreasuryCategoryBudgetAnnualDto,
+  TreasuryCategoryBudgetMonthDto,
 } from "@/lib/treasury-admin/types";
 import { useTreasuryQuery } from "@/lib/treasury-admin/use-treasury-query";
 import { cn } from "@/lib/utils";
@@ -26,18 +27,37 @@ function AnnualAmount({ micros, currency }: { micros: string; currency: string }
   );
 }
 
+function annualizeMicros(monthlyMicros: string): string {
+  return (BigInt(monthlyMicros) * 12n).toString(10);
+}
+
+type BudgetBundle = {
+  annual: TreasuryCategoryBudgetAnnualDto;
+  current: TreasuryCategoryBudgetMonthDto;
+};
+
 export function BudgetsPanel() {
   const { organizationId } = useFinanceOrg();
   const [year, setYear] = React.useState(() => new Date().getFullYear());
-  const query = React.useCallback((): Promise<
-    TreasuryApiResult<{ annual: TreasuryCategoryBudgetAnnualDto }>
-  > => {
+  const query = React.useCallback(async (): Promise<TreasuryApiResult<BudgetBundle>> => {
     if (!organizationId) return Promise.resolve(missingOrganizationResult());
-    return treasuryGet<{ annual: TreasuryCategoryBudgetAnnualDto }>(
-      "/api/admin/treasury/category-budgets",
-      organizationId,
-      { year: String(year) },
-    );
+    const [annualResult, currentResult] = await Promise.all([
+      treasuryGet<{ annual: TreasuryCategoryBudgetAnnualDto }>(
+        "/api/admin/treasury/category-budgets",
+        organizationId,
+        { year: String(year) },
+      ),
+      treasuryGet<{ month: TreasuryCategoryBudgetMonthDto }>(
+        "/api/admin/treasury/category-budgets",
+        organizationId,
+      ),
+    ]);
+    if (!annualResult.ok) return annualResult;
+    if (!currentResult.ok) return currentResult;
+    return {
+      ok: true,
+      data: { annual: annualResult.data.annual, current: currentResult.data.month },
+    };
   }, [organizationId, year]);
   const { data, error, loading, reload } = useTreasuryQuery(
     Boolean(organizationId),
@@ -48,6 +68,7 @@ export function BudgetsPanel() {
   if (loading) return <LoadingState label="Loading annual budget…" />;
   if (error) return <UnavailableState code={error.code} message={error.message} onRetry={reload} />;
   const annual = data?.annual;
+  const current = data?.current;
 
   return (
     <div className="space-y-4" data-testid="finance-annual-budget">
@@ -69,9 +90,36 @@ export function BudgetsPanel() {
           />
         </label>
       </div>
+      {current?.totals.map((total) => (
+        <WaiaSurface
+          key={`current-plan:${total.currency}`}
+          variant="raised"
+          className="p-4"
+          data-testid="current-annual-operating-plan"
+        >
+          <p className="text-muted-foreground text-xs tracking-wide uppercase">
+            Current annual operating plan
+          </p>
+          <p className="mt-2 text-2xl font-medium">
+            <AnnualAmount micros={annualizeMicros(total.budgetMicros)} currency={total.currency} />
+          </p>
+          <p className="text-muted-foreground mt-2 text-xs">
+            12 × the current monthly budget of{" "}
+            <AnnualAmount micros={total.budgetMicros} currency={total.currency} />.
+          </p>
+        </WaiaSurface>
+      ))}
+      <div>
+        <p className="text-sm font-medium">Calendar-year budget history</p>
+        <p className="text-muted-foreground text-xs">
+          Totals below include only months from which each approved category limit became effective.
+        </p>
+      </div>
       {annual?.totals.map((total) => (
         <WaiaSurface key={total.currency} variant="elevated" className="p-4">
-          <p className="text-muted-foreground text-xs">{annual.year} · {total.currency}</p>
+          <p className="text-muted-foreground text-xs">
+            {annual.year} allocated months · {total.currency}
+          </p>
           <dl className="mt-3 grid gap-3 sm:grid-cols-3">
             {[
               ["Budget", total.budgetMicros],
@@ -89,10 +137,15 @@ export function BudgetsPanel() {
         </WaiaSurface>
       ))}
       {annual && annual.totals.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No category budget has been set for this year.</p>
+        <p className="text-muted-foreground text-sm">
+          No category budget has been set for this year.
+        </p>
       ) : null}
       <WaiaSurface variant="raised" className="overflow-x-auto">
-        <table className="w-full min-w-[620px] text-left text-sm" data-testid="annual-budget-history">
+        <table
+          className="w-full min-w-[620px] text-left text-sm"
+          data-testid="annual-budget-history"
+        >
           <thead className="bg-muted/30">
             <tr className="border-b">
               <th className="p-3">Month</th>
@@ -103,21 +156,29 @@ export function BudgetsPanel() {
           </thead>
           <tbody>
             {annual?.months.flatMap((month) =>
-              month.totals.length === 0 ? [
-                <tr key={month.month} className="border-b last:border-0">
-                  <td className="p-3 font-medium">{month.month}</td>
-                  <td className="text-muted-foreground p-3 text-right">—</td>
-                  <td className="text-muted-foreground p-3 text-right">—</td>
-                  <td className="text-muted-foreground p-3 text-right">—</td>
-                </tr>,
-              ] : month.totals.map((total) => (
-                <tr key={`${month.month}:${total.currency}`} className="border-b last:border-0">
-                  <td className="p-3 font-medium">{month.month}</td>
-                  <td className="p-3 text-right"><AnnualAmount micros={total.budgetMicros} currency={total.currency} /></td>
-                  <td className="p-3 text-right"><AnnualAmount micros={total.spentMicros} currency={total.currency} /></td>
-                  <td className="p-3 text-right"><AnnualAmount micros={total.remainingMicros} currency={total.currency} /></td>
-                </tr>
-              )),
+              month.totals.length === 0
+                ? [
+                    <tr key={month.month} className="border-b last:border-0">
+                      <td className="p-3 font-medium">{month.month}</td>
+                      <td className="text-muted-foreground p-3 text-right">—</td>
+                      <td className="text-muted-foreground p-3 text-right">—</td>
+                      <td className="text-muted-foreground p-3 text-right">—</td>
+                    </tr>,
+                  ]
+                : month.totals.map((total) => (
+                    <tr key={`${month.month}:${total.currency}`} className="border-b last:border-0">
+                      <td className="p-3 font-medium">{month.month}</td>
+                      <td className="p-3 text-right">
+                        <AnnualAmount micros={total.budgetMicros} currency={total.currency} />
+                      </td>
+                      <td className="p-3 text-right">
+                        <AnnualAmount micros={total.spentMicros} currency={total.currency} />
+                      </td>
+                      <td className="p-3 text-right">
+                        <AnnualAmount micros={total.remainingMicros} currency={total.currency} />
+                      </td>
+                    </tr>
+                  )),
             ) ?? null}
           </tbody>
         </table>

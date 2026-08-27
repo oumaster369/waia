@@ -52,6 +52,18 @@ export type TreasuryRunwaySnapshotRecord = {
   createdAt: Date;
 };
 
+export type TreasuryBalanceCheckpointRecord = {
+  id: string;
+  organizationId: string;
+  currency: string;
+  confirmedBalanceMicros: bigint;
+  asOf: Date;
+  sourceLabel: "HUMAN_CONFIRMED";
+  note: string;
+  confirmedByUserId: string;
+  createdAt: Date;
+};
+
 export type BreathMoney = string;
 
 export type BreathPublicActivity = {
@@ -162,6 +174,7 @@ export type BreathFacts = {
   runwayPlans: readonly TreasuryRunwayPlanRecord[];
   reconciliations: readonly TreasuryBalanceReconciliationRecord[];
   inceptions: readonly TreasuryInceptionRecord[];
+  balanceCheckpoints?: readonly TreasuryBalanceCheckpointRecord[];
 };
 
 export function moneyString(value: bigint): string {

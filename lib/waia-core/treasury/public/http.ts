@@ -2,11 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import {
-  disposeWaiaRuntimeDb,
-  getWaiaRuntimeDb,
-  type WaiaRuntimeDb,
-} from "@/db/waia-runtime-db";
+import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { PostgresDisposeOutcome } from "@/db/postgres-client";
 import type { WaiaRuntimeRouteOutcome } from "@/lib/observability/waia-runtime-route-telemetry";
 import {
@@ -20,9 +16,7 @@ import type { PublicTreasuryProjection } from "@/lib/waia-core/treasury/public/t
 
 export type PublicTreasuryHttpResult = {
   status: number;
-  body:
-    | PublicTreasuryProjection
-    | { error: { code: string; message: string } };
+  body: PublicTreasuryProjection | { error: { code: string; message: string } };
   outcome: WaiaRuntimeRouteOutcome;
   waiaDbBackend?: WaiaRuntimeDb["kind"];
   errorClass?: string;
@@ -35,8 +29,12 @@ export type PublicTreasuryHttpDeps = {
   disposeRuntimeDb?: (
     runtime: WaiaRuntimeDb | undefined,
   ) => Promise<PostgresDisposeOutcome | undefined>;
-  openFacts?: (runtime: Extract<WaiaRuntimeDb, { kind: "postgres" }>) => PublicTreasuryFactsRepository;
+  openFacts?: (
+    runtime: Extract<WaiaRuntimeDb, { kind: "postgres" }>,
+  ) => PublicTreasuryFactsRepository;
   now?: () => Date;
+  transactionOffset?: number;
+  transactionLimit?: number;
 };
 
 function unavailable(
@@ -81,6 +79,10 @@ export async function handlePublicTreasuryGet(
         body: derivePublicTreasuryProjection(
           await facts.loadFacts(context),
           deps.now?.() ?? new Date(),
+          {
+            transactionOffset: deps.transactionOffset,
+            transactionLimit: deps.transactionLimit,
+          },
         ),
         outcome: "success",
         waiaDbBackend: "postgres",

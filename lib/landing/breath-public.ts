@@ -12,7 +12,7 @@ import { WAIA_PUBLIC_GITHUB_URL } from "@/lib/landing/homepage-links";
 export type BreathPublicationStatus = "pending" | "published";
 
 export type BreathMoney = {
-  currency: "USD" | null;
+  currency: string | null;
   amount: number | null;
 };
 
@@ -129,7 +129,7 @@ export function getBreathPublicSnapshot(): BreathPublicSnapshot {
   };
 }
 
-export function formatBreathAmount(value: number | null, currency: "USD" | null): string {
+export function formatBreathAmount(value: number | null, currency: string | null): string {
   if (value === null || currency === null) return "Not yet published";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -183,13 +183,15 @@ export function isBreathAnnualTargetMet(free: BreathMoney, ideal: BreathMoney): 
 
 /**
  * Compact remaining-time label from millisecond delta.
- * Never negative; no seconds; format: `{d}d {h}h {m}m`.
+ * Never negative; format: `{d}d {h}h {m}m {s}s`.
  */
 export function formatBreathCountdown(remainingMs: number): string {
   const clamped = Math.max(0, Math.floor(remainingMs));
-  const totalMinutes = Math.floor(clamped / 60_000);
+  const totalSeconds = Math.floor(clamped / 1000);
+  const totalMinutes = Math.floor(totalSeconds / 60);
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
   const minutes = totalMinutes % 60;
-  return `${days}d ${hours}h ${minutes}m`;
+  const seconds = totalSeconds % 60;
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 }

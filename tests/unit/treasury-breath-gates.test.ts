@@ -18,6 +18,56 @@ import {
 } from "@/tests/unit/helpers/treasury-wp6";
 
 describe("DEE-606 WP-6 publication gates and privacy", () => {
+  it("accepts an append-only Human checkpoint and applies later verified movements", async () => {
+    const { services, audits } = createWp6Bundle();
+    await seedSettings(services);
+    await seedIdeal(services, { id: IDEAL_A });
+    await seedTx(services, {
+      id: "before-checkpoint",
+      status: "VERIFIED",
+      direction: "INFLOW",
+      accountingAmountMicros: 99_000_000n,
+      cashEffectMicros: 99_000_000n,
+      occurredAt: new Date("2026-08-13T11:00:00.000Z"),
+    });
+
+    const checkpoint = await services.breath.confirmBalanceCheckpoint(
+      ctxA,
+      { actorType: "admin", actorUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1" },
+      {
+        currency: "usd",
+        confirmedBalanceMicros: 26_550_000n,
+        asOf: new Date("2026-08-13T11:30:00.000Z"),
+        note: "Operator confirmed observed total cash balance.",
+        reason: "Human checkpoint approved",
+      },
+    );
+    expect(checkpoint).toMatchObject({
+      currency: "USD",
+      confirmedBalanceMicros: 26_550_000n,
+      sourceLabel: "HUMAN_CONFIRMED",
+    });
+    expect((await services.breath.getAdminPreview(ctxA)).currentFreeFunds).toBe("26550000");
+
+    await seedTx(services, {
+      id: "after-checkpoint",
+      status: "VERIFIED",
+      direction: "OUTFLOW",
+      kind: "EXPENSE",
+      accountingAmountMicros: 1_000_000n,
+      cashEffectMicros: -1_000_000n,
+      occurredAt: NOW,
+    });
+    const preview = await services.breath.getAdminPreview(ctxA);
+    expect(preview.status).toBe("published");
+    expect(preview.currentFreeFunds).toBe("25550000");
+    expect(preview.reconciliationGate.status).toBe("HUMAN_CONFIRMED");
+    expect(audits.at(-1)).toMatchObject({
+      action: "treasury.balance_checkpoint.confirm",
+      entityType: "treasury_balance_checkpoint",
+    });
+  });
+
   it("42-61 global Breath gates, recon freshness, MATCHED and PENDING_CONFIRMATIONS", async () => {
     const disabled = createWp6Bundle();
     await seedSettings(disabled.services, { breathEnabled: false });

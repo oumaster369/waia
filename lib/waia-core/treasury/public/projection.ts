@@ -6,8 +6,10 @@ import {
 import {
   computeVerifiedAccountingTotals,
   contributionFundedMicros,
+  deriveCheckpointCashBalance,
   deriveActiveCommittedFunds,
   deriveCurrentFreeFunds,
+  latestBalanceCheckpoint,
 } from "@/lib/waia-core/treasury/breath/accounting";
 import {
   evaluateBalanceReconciliationGate,
@@ -77,6 +79,7 @@ function assertFactScope(facts: PublicTreasuryFacts): void {
     ...facts.runwaySnapshots,
     ...facts.reconciliations,
     ...facts.inceptions,
+    ...(facts.balanceCheckpoints ?? []),
     ...facts.categories,
     ...facts.categoryBudgetHistory,
     ...facts.projects,
@@ -102,7 +105,9 @@ function publicShare(numerator: bigint, denominator: bigint): PublicTreasuryShar
 function publicTransactions(input: {
   facts: PublicTreasuryFacts;
   currency: string;
-}): PublicTreasuryTransaction[] {
+  offset: number;
+  limit: number;
+}): { rows: PublicTreasuryTransaction[]; total: number } {
   const categoryById = new Map(input.facts.categories.map((row) => [row.id, row]));
   const projectById = new Map(input.facts.projects.map((row) => [row.id, row]));
   const monthCache = new Map<string, ReturnType<typeof deriveCategoryBudgetMonth>["categories"]>();
@@ -123,7 +128,7 @@ function publicTransactions(input: {
     return rows.find((row) => row.categoryId === tx.categoryId)?.groupName ?? null;
   }
 
-  return input.facts.transactions
+  const eligible = input.facts.transactions
     .filter(
       (tx) =>
         tx.status === "VERIFIED" &&
@@ -135,9 +140,10 @@ function publicTransactions(input: {
     .sort((a, b) => {
       const byTime = b.occurredAt.getTime() - a.occurredAt.getTime();
       return byTime !== 0 ? byTime : a.recordContentDigest.localeCompare(b.recordContentDigest);
-    })
-    .slice(0, PUBLIC_TREASURY_TRANSACTION_LIMIT)
-    .map((tx) => ({
+    });
+  return {
+    total: eligible.length,
+    rows: eligible.slice(input.offset, input.offset + input.limit).map((tx) => ({
       occurredAt: tx.occurredAt.toISOString(),
       amountMicros: money(tx.cashEffectMicros!),
       currency: input.currency,
@@ -145,7 +151,8 @@ function publicTransactions(input: {
       categoryGroup: categoryGroup(tx),
       projectName: tx.projectId ? (projectById.get(tx.projectId)?.name ?? null) : null,
       description: tx.publicDescription?.trim() || null,
-    }));
+    })),
+  };
 }
 
 function serializeBudgetMonth(
@@ -182,6 +189,7 @@ function publicBudget(input: {
   year: number;
   currency: string;
   amountMicros: bigint;
+  now: Date;
 }): PublicTreasuryBudget {
   try {
     const annual = deriveCategoryBudgetAnnual({
@@ -190,11 +198,17 @@ function publicBudget(input: {
       history: input.facts.categoryBudgetHistory,
       transactions: input.facts.transactions,
     });
-    const matching = annual.totals.find((row) => row.currency === input.currency);
-    const conflicting = annual.totals.some(
+    const currentMonth = deriveCategoryBudgetMonth({
+      month: `${input.year}-${String(input.now.getUTCMonth() + 1).padStart(2, "0")}`,
+      categories: input.facts.categories,
+      history: input.facts.categoryBudgetHistory,
+      transactions: input.facts.transactions,
+    });
+    const matching = currentMonth.totals.find((row) => row.currency === input.currency);
+    const conflicting = currentMonth.totals.some(
       (row) => row.currency !== input.currency && row.budgetMicros !== 0n,
     );
-    if (!matching || conflicting || matching.budgetMicros !== input.amountMicros) {
+    if (!matching || conflicting || matching.budgetMicros * 12n !== input.amountMicros) {
       throw new TreasuryValidationError(
         "PUBLIC_ANNUAL_BUDGET_MISMATCH",
         "Published annual snapshot does not match category history",
@@ -276,7 +290,15 @@ function publicPatrons(input: {
   const profileByUser = new Map(
     input.facts.profiles.map((row) => [row.userId, row.displayName.trim()]),
   );
-  const publicByUser = new Map<string, { displayName: string; amountMicros: bigint }>();
+  const publicByUser = new Map<
+    string,
+    {
+      displayName: string;
+      publicSiteUrl: string | null;
+      twinProfileUrl: string | null;
+      amountMicros: bigint;
+    }
+  >();
   let privateAmount = 0n;
   let denominator = 0n;
 
@@ -295,7 +317,6 @@ function publicPatrons(input: {
         lastUpdatedAt: null,
       };
     }
-    denominator += net;
     const attribution = openAttribution(attributionByTransaction.get(contribution.id) ?? []);
     if (attribution === "ambiguous") {
       return {
@@ -307,6 +328,9 @@ function publicPatrons(input: {
         lastUpdatedAt: null,
       };
     }
+    // Contributions without an attribution decision are not publication truth yet.
+    if (!attribution) continue;
+    denominator += net;
     const userId = attribution?.contributorUserId ?? null;
     const displayName = userId ? profileByUser.get(userId) : undefined;
     if (
@@ -315,8 +339,15 @@ function publicPatrons(input: {
       userId &&
       displayName
     ) {
-      const current = publicByUser.get(userId) ?? { displayName, amountMicros: 0n };
+      const current = publicByUser.get(userId) ?? {
+        displayName,
+        publicSiteUrl: null,
+        twinProfileUrl: null,
+        amountMicros: 0n,
+      };
       current.amountMicros += net;
+      current.publicSiteUrl = attribution.publicSiteUrl ?? current.publicSiteUrl;
+      current.twinProfileUrl = attribution.twinProfileUrl ?? current.twinProfileUrl;
       publicByUser.set(userId, current);
     } else {
       privateAmount += net;
@@ -332,6 +363,8 @@ function publicPatrons(input: {
     })
     .map(([, row]) => ({
       displayName: row.displayName,
+      publicSiteUrl: row.publicSiteUrl,
+      twinProfileUrl: row.twinProfileUrl,
       contributedAmountMicros: money(row.amountMicros),
       currency: input.currency,
       share: publicShare(row.amountMicros, denominator),
@@ -413,17 +446,27 @@ function latestCurrentRunway(input: {
 export function derivePublicTreasuryProjection(
   facts: PublicTreasuryFacts,
   now: Date = new Date(),
+  options: { transactionOffset?: number; transactionLimit?: number } = {},
 ): PublicTreasuryProjection {
   assertFactScope(facts);
   const reasons: PublicTreasuryPendingReason[] = [];
   const ideals = selectApplicablePublicIdeals(facts.idealBudgets, now);
   const latest = latestReconciliation(facts.reconciliations);
-  const balanceGate = evaluateBalanceReconciliationGate({
+  const reconciliationGate = evaluateBalanceReconciliationGate({
     latest,
     inceptions: facts.inceptions,
     now,
   });
-  const materialReconciliation = evaluateMaterialUnresolvedReconciliation(facts.transactions);
+  const checkpoint = latestBalanceCheckpoint(
+    facts.balanceCheckpoints ?? [],
+    ideals.length === 1 ? ideals[0]!.currency : undefined,
+  );
+  const balanceGate = checkpoint ? { ok: true, reason: null } : reconciliationGate;
+  const materialReconciliation = checkpoint
+    ? evaluateMaterialUnresolvedReconciliation(
+        facts.transactions.filter((row) => row.occurredAt.getTime() > checkpoint.asOf.getTime()),
+      )
+    : evaluateMaterialUnresolvedReconciliation(facts.transactions);
 
   if (facts.settings?.breathEnabled !== true) {
     reasons.push(publicTreasuryPendingReasons.PUBLICATION_DISABLED);
@@ -442,12 +485,17 @@ export function derivePublicTreasuryProjection(
     reasons.push(publicTreasuryPendingReasons.FINANCIAL_RECORD_INCOMPLETE);
   }
 
-  const coreReady = reasons.length === 0 && accounting !== null && ideals.length === 1;
+  const publicDataReady =
+    facts.settings?.breathEnabled === true && accounting !== null && ideals.length === 1;
+  const coreReady = reasons.length === 0 && publicDataReady;
   const ideal = coreReady ? ideals[0]! : null;
+  const publicIdeal = publicDataReady ? ideals[0]! : null;
   const allocated = accounting ? deriveActiveCommittedFunds(facts.commitments) : 0n;
-  const freeFunds = accounting
-    ? deriveCurrentFreeFunds(accounting.accountingCashBalance, allocated)
-    : 0n;
+  const canonicalCashBalance =
+    accounting && checkpoint
+      ? deriveCheckpointCashBalance(checkpoint, facts.transactions)
+      : (accounting?.accountingCashBalance ?? 0n);
+  const freeFunds = accounting ? deriveCurrentFreeFunds(canonicalCashBalance, allocated) : 0n;
   const runway =
     coreReady && ideal
       ? latestCurrentRunway({ facts, now, freeFunds, currency: ideal.currency })
@@ -457,12 +505,13 @@ export function derivePublicTreasuryProjection(
   }
 
   const budget =
-    coreReady && ideal
+    publicDataReady && publicIdeal
       ? publicBudget({
           facts,
-          year: ideal.periodYear,
-          currency: ideal.currency,
-          amountMicros: ideal.amountMicros,
+          year: publicIdeal.periodYear,
+          currency: publicIdeal.currency,
+          amountMicros: publicIdeal.amountMicros,
+          now,
         })
       : {
           status: "pending" as const,
@@ -481,6 +530,7 @@ export function derivePublicTreasuryProjection(
             .filter((row) => row.entityId === ideal.id)
             .map((row) => row.createdAt),
           latest?.createdAt,
+          checkpoint?.createdAt,
           runway.status === "published" ? new Date(runway.asOf) : null,
           ...facts.transactions.flatMap((row) =>
             row.status === "VERIFIED" ? [row.verifiedAt, row.updatedAt] : [],
@@ -491,7 +541,16 @@ export function derivePublicTreasuryProjection(
         ])
       : null;
 
+  const transactionOffset = Math.max(0, Math.floor(options.transactionOffset ?? 0));
+  const transactionLimit = Math.max(
+    1,
+    Math.min(
+      PUBLIC_TREASURY_TRANSACTION_LIMIT,
+      Math.floor(options.transactionLimit ?? PUBLIC_TREASURY_TRANSACTION_LIMIT),
+    ),
+  );
   let transactions: PublicTreasuryTransaction[] = [];
+  let transactionTotal = 0;
   let fundingNeeds: PublicTreasuryFundingNeed[] = [];
   let patrons: PublicTreasuryPatrons = {
     status: "pending",
@@ -505,11 +564,18 @@ export function derivePublicTreasuryProjection(
     status: "pending",
     reason: reasons[0] ?? "PUBLIC_TREASURY_UNAVAILABLE",
   };
-  if (coreReady && ideal) {
+  if (publicDataReady && publicIdeal) {
     try {
-      transactions = publicTransactions({ facts, currency: ideal.currency });
-      fundingNeeds = publicFundingNeeds({ facts, currency: ideal.currency });
-      patrons = publicPatrons({ facts, currency: ideal.currency });
+      const page = publicTransactions({
+        facts,
+        currency: publicIdeal.currency,
+        offset: transactionOffset,
+        limit: transactionLimit,
+      });
+      transactions = page.rows;
+      transactionTotal = page.total;
+      fundingNeeds = publicFundingNeeds({ facts, currency: publicIdeal.currency });
+      patrons = publicPatrons({ facts, currency: publicIdeal.currency });
     } catch {
       transactions = [];
       fundingNeeds = [];
@@ -523,8 +589,28 @@ export function derivePublicTreasuryProjection(
       };
     }
 
-    const allocation = evaluateFundAllocationFacts(facts, now);
-    if (allocation.status === "available") {
+    const checkpointAllocation =
+      coreReady && checkpoint
+        ? computeVirtualFundAllocation({
+            canonicalFreeFundsMicros: freeFunds,
+            protectedAnnualBudgetMicros: publicIdeal.amountMicros,
+          })
+        : null;
+    const allocationCheckpoint = checkpointAllocation ? checkpoint : null;
+    const allocation = coreReady && !checkpoint ? evaluateFundAllocationFacts(facts, now) : null;
+    if (checkpointAllocation && allocationCheckpoint) {
+      funds = {
+        status: "published",
+        currency: publicIdeal.currency,
+        allocationAsOf: allocationCheckpoint.asOf.toISOString(),
+        canonicalFreeFundsMicros: money(freeFunds),
+        protectedAnnualBudgetMicros: money(publicIdeal.amountMicros),
+        operatingAllocationMicros: money(checkpointAllocation.operatingAllocationMicros),
+        developmentAllocationMicros: money(checkpointAllocation.developmentAllocationMicros),
+        policyCode: TREASURY_FUND_ALLOCATION_POLICY_CODE,
+        policyVersion: TREASURY_FUND_ALLOCATION_POLICY_VERSION,
+      };
+    } else if (allocation?.status === "available") {
       const amounts = computeVirtualFundAllocation({
         canonicalFreeFundsMicros: allocation.input.canonicalFreeFundsMicros,
         protectedAnnualBudgetMicros: allocation.input.protectedAnnualBudgetMicros,
@@ -541,7 +627,10 @@ export function derivePublicTreasuryProjection(
         policyVersion: TREASURY_FUND_ALLOCATION_POLICY_VERSION,
       };
     } else {
-      funds = { status: "pending", reason: allocation.reason };
+      funds = {
+        status: "pending",
+        reason: allocation?.reason ?? reasons[0] ?? "PUBLIC_TREASURY_UNAVAILABLE",
+      };
     }
   }
 
@@ -551,14 +640,21 @@ export function derivePublicTreasuryProjection(
       status: coreReady && runway.status === "published" ? "published" : "pending",
       pendingReasons: uniqueReasons(reasons),
       availableAmountMicros: coreReady ? money(freeFunds) : null,
-      availableCurrency: ideal?.currency ?? null,
+      availableCurrency: publicIdeal?.currency ?? null,
       runway,
-      annualBudgetAmountMicros: ideal ? money(ideal.amountMicros) : null,
-      annualBudgetCurrency: ideal?.currency ?? null,
+      annualBudgetAmountMicros: publicIdeal ? money(publicIdeal.amountMicros) : null,
+      annualBudgetCurrency: publicIdeal?.currency ?? null,
       lastUpdatedAt: lastUpdated?.toISOString() ?? null,
     },
     budget,
     transactions,
+    transactionPagination: {
+      offset: transactionOffset,
+      limit: transactionLimit,
+      total: transactionTotal,
+      hasPrevious: transactionOffset > 0,
+      hasNext: transactionOffset + transactions.length < transactionTotal,
+    },
     fundingNeeds,
     patrons,
     funds,

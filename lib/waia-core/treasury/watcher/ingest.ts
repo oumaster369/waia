@@ -200,6 +200,25 @@ export async function ingestObservedTransfer(input: {
       });
     }
 
+    if (semanticDirection === "INFLOW" && watcherRepository.matchContributionIntent) {
+      const matchedIntentId = await watcherRepository.matchContributionIntent(input.context, {
+        transactionId: tx.id,
+        toAddress: input.transfer.toAddress,
+        amountAtomic: input.transfer.nativeAmountAtomic,
+        network: input.network,
+        assetCode: TREASURY_USDT_V1_ASSET,
+        now: input.now,
+        newId: input.newId,
+      });
+      if (!matchedIntentId && watcherRepository.ensureAnonymousContributionAttribution) {
+        await watcherRepository.ensureAnonymousContributionAttribution(input.context, {
+          transactionId: tx.id,
+          now: input.now,
+          newId: input.newId,
+        });
+      }
+    }
+
     return { observations: matches.length, semanticCreated: !before };
   });
 }

@@ -52,7 +52,9 @@ export function treasuryWatcherReadiness(env: Record<string, unknown>) {
     databasePresent,
     primaryKeyPresent,
     secondaryConfigured,
-    ready: organizationId !== "" && databasePresent && primaryKeyPresent && secondaryConfigured,
+    // TronGrid is the canonical Treasury observation channel. A second provider is an
+    // optional failover only and must never block readiness or production activation.
+    ready: organizationId !== "" && databasePresent && primaryKeyPresent,
   };
 }
 

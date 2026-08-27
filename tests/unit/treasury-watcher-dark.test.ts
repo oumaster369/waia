@@ -55,7 +55,7 @@ describe("DEE-606 WP-3 treasury watcher DARK + org/inception", () => {
     expect(config.tronGridApiKey).toBe("k1");
   });
 
-  it("requires org, Postgres, TronGrid, and an independent secondary before readiness", () => {
+  it("requires org, Postgres, and TronGrid; an independent secondary is optional", () => {
     expect(treasuryWatcherReadiness({ TREASURY_WATCHER_ENABLED: "true" })).toMatchObject({
       enabled: true,
       ready: false,
@@ -82,7 +82,7 @@ describe("DEE-606 WP-3 treasury watcher DARK + org/inception", () => {
         TREASURY_WATCHER_TRON_PRIMARY_URL: "https://api.trongrid.io",
         TREASURY_WATCHER_TRON_SECONDARY_URL: "https://api.trongrid.io/another-path",
       }),
-    ).toMatchObject({ secondaryConfigured: false, ready: false });
+    ).toMatchObject({ secondaryConfigured: false, ready: true });
   });
 
   it("2-3. disabled cycle makes zero chain calls and zero persistence mutations", async () => {

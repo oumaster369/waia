@@ -1171,11 +1171,7 @@ export const traderMiGatewayPitReceiptV1 = pgTable(
       .default(sql`date_trunc('milliseconds', transaction_timestamp())`),
   },
   (t) => [
-    unique("tm_gateway_pit_receipt_v1_id_org_source_uq").on(
-      t.id,
-      t.organizationId,
-      t.sourceId,
-    ),
+    unique("tm_gateway_pit_receipt_v1_id_org_source_uq").on(t.id, t.organizationId, t.sourceId),
     foreignKey({
       columns: [t.sourceId, t.organizationId],
       foreignColumns: [traderMiSource.id, traderMiSource.organizationId],
@@ -2896,11 +2892,13 @@ export const traderRiskAccountStateV2 = pgTable(
     realityContentDigest: text("reality_content_digest").notNull(),
     reconciliationAuthorityDigest: text("reconciliation_authority_digest").notNull(),
     reconciledInstrumentExposures: jsonb("reconciled_instrument_exposures")
-      .$type<readonly Readonly<{
-        instrumentIdentityDigestHex: string;
-        symbol: string;
-        baseQuantity: string;
-      }>[]>()
+      .$type<
+        readonly Readonly<{
+          instrumentIdentityDigestHex: string;
+          symbol: string;
+          baseQuantity: string;
+        }>[]
+      >()
       .notNull(),
     reconciledExposureNotional: numeric("reconciled_exposure_notional", {
       precision: 38,
@@ -2914,8 +2912,10 @@ export const traderRiskAccountStateV2 = pgTable(
       precision: 38,
       scale: 8,
     }).notNull(),
-    exposureLimitNotional: numeric("exposure_limit_notional", { precision: 38, scale: 8 })
-      .notNull(),
+    exposureLimitNotional: numeric("exposure_limit_notional", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
     nextAdmissionSequence: bigint("next_admission_sequence", { mode: "bigint" }).notNull(),
     nextEnforcementEventSequence: bigint("next_enforcement_event_sequence", {
       mode: "bigint",
@@ -2926,7 +2926,10 @@ export const traderRiskAccountStateV2 = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.organizationId, t.accountId] }),
-    check("trader_risk_account_state_v2_spot_usdt", sql`"market" = 'SPOT' AND "quote_asset" = 'USDT'`),
+    check(
+      "trader_risk_account_state_v2_spot_usdt",
+      sql`"market" = 'SPOT' AND "quote_asset" = 'USDT'`,
+    ),
     check(
       "trader_risk_account_state_v2_posture",
       sql`"posture" IN ('NORMAL', 'CLOSE_ONLY', 'HALT', 'KILLED')`,
@@ -3000,11 +3003,7 @@ export const traderRiskVerdictsV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    unique("trader_risk_verdicts_v2_id_org_account_unique").on(
-      t.id,
-      t.organizationId,
-      t.accountId,
-    ),
+    unique("trader_risk_verdicts_v2_id_org_account_unique").on(t.id, t.organizationId, t.accountId),
     uniqueIndex("trader_risk_verdicts_v2_org_account_sequence_unique").on(
       t.organizationId,
       t.accountId,
@@ -3059,10 +3058,14 @@ export const traderRiskAllowancesV2 = pgTable(
     reconciliationAuthorityDigest: text("reconciliation_authority_digest").notNull(),
     postureAtIssuance: text("posture_at_issuance").notNull(),
     strictExposureReduction: boolean("strict_exposure_reduction").notNull(),
-    exactQualifiedQuantity: numeric("exact_qualified_quantity", { precision: 38, scale: 8 })
-      .notNull(),
-    reservedExposureNotional: numeric("reserved_exposure_notional", { precision: 38, scale: 8 })
-      .notNull(),
+    exactQualifiedQuantity: numeric("exact_qualified_quantity", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
+    reservedExposureNotional: numeric("reserved_exposure_notional", {
+      precision: 38,
+      scale: 8,
+    }).notNull(),
     lifecycleState: text("lifecycle_state").notNull(),
     boundOrderId: uuid("bound_order_id"),
     boundOrderDigest: text("bound_order_digest"),
@@ -3512,8 +3515,9 @@ export const traderRealitySourceReportsV2 = pgTable(
     executionReportId: uuid("execution_report_id").references(() => traderExecutionReportsV2.id),
     executionReportDigest: text("execution_report_digest"),
     rawCaptureSourceId: uuid("raw_capture_source_id"),
-    rawCaptureReceiptDigest: text("raw_capture_receipt_digest")
-      .references(() => traderMiRawCaptureReceiptV1.id),
+    rawCaptureReceiptDigest: text("raw_capture_receipt_digest").references(
+      () => traderMiRawCaptureReceiptV1.id,
+    ),
     rawBytesDigest: text("raw_bytes_digest"),
     storageBindingDigest: text("storage_binding_digest"),
     provenance: jsonb("provenance").notNull(),
@@ -3605,10 +3609,7 @@ export const traderRealityTruthRecordsV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    check(
-      "trader_reality_truth_records_v2_account_nonblank",
-      sql`${t.accountId} ~ '[^[:space:]]'`,
-    ),
+    check("trader_reality_truth_records_v2_account_nonblank", sql`${t.accountId} ~ '[^[:space:]]'`),
     unique("trader_reality_truth_records_v2_id_scope_unique").on(
       t.id,
       t.organizationId,
@@ -3669,10 +3670,7 @@ export const traderRealityEventsV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    check(
-      "trader_reality_events_v2_account_nonblank",
-      sql`${t.accountId} ~ '[^[:space:]]'`,
-    ),
+    check("trader_reality_events_v2_account_nonblank", sql`${t.accountId} ~ '[^[:space:]]'`),
     unique("trader_reality_events_v2_id_scope_unique").on(t.id, t.organizationId, t.accountId),
     unique("trader_reality_events_v2_scope_sequence_unique").on(
       t.organizationId,
@@ -3749,15 +3747,8 @@ export const traderRealityProjectionsV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    check(
-      "trader_reality_projections_v2_account_nonblank",
-      sql`${t.accountId} ~ '[^[:space:]]'`,
-    ),
-    unique("trader_reality_projections_v2_id_scope_unique").on(
-      t.id,
-      t.organizationId,
-      t.accountId,
-    ),
+    check("trader_reality_projections_v2_account_nonblank", sql`${t.accountId} ~ '[^[:space:]]'`),
+    unique("trader_reality_projections_v2_id_scope_unique").on(t.id, t.organizationId, t.accountId),
     foreignKey({
       columns: [t.frontierEventDigest, t.organizationId, t.accountId],
       foreignColumns: [
@@ -4742,7 +4733,10 @@ export const traderIntelligenceHypothesisRecord = pgTable(
       t.organizationId,
       t.cycleEnvelopeId,
     ),
-    check("trader_intelligence_hypothesis_record_causal_lineage_pair_check", sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`),
+    check(
+      "trader_intelligence_hypothesis_record_causal_lineage_pair_check",
+      sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`,
+    ),
   ],
 );
 
@@ -4844,7 +4838,10 @@ export const traderIntelligenceForecastRecord = pgTable(
       t.organizationId,
       t.cycleEnvelopeId,
     ),
-    check("trader_intelligence_forecast_record_causal_lineage_pair_check", sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`),
+    check(
+      "trader_intelligence_forecast_record_causal_lineage_pair_check",
+      sql`(${t.canonicalCausalLineageJson} IS NULL) = (${t.canonicalCausalLineageDigest} IS NULL)`,
+    ),
   ],
 );
 
@@ -5657,10 +5654,7 @@ export const treasuryCategoryBudgetHistory = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    unique("treasury_category_budget_history_id_org_unique_fk_source").on(
-      t.id,
-      t.organizationId,
-    ),
+    unique("treasury_category_budget_history_id_org_unique_fk_source").on(t.id, t.organizationId),
     foreignKey({
       columns: [t.categoryId, t.organizationId],
       foreignColumns: [treasuryCategories.id, treasuryCategories.organizationId],
@@ -5671,10 +5665,7 @@ export const treasuryCategoryBudgetHistory = pgTable(
       t.categoryId,
       t.effectiveMonth,
     ),
-    index("treasury_category_budget_history_org_month_idx").on(
-      t.organizationId,
-      t.effectiveMonth,
-    ),
+    index("treasury_category_budget_history_org_month_idx").on(t.organizationId, t.effectiveMonth),
     check(
       "treasury_category_budget_history_month_start",
       sql`"effective_month" = date_trunc('month', "effective_month")::date`,
@@ -5683,14 +5674,8 @@ export const treasuryCategoryBudgetHistory = pgTable(
       "treasury_category_budget_history_group_name_nonempty",
       sql`length(btrim("group_name")) > 0`,
     ),
-    check(
-      "treasury_category_budget_history_monthly_nonneg",
-      sql`"monthly_budget_micros" >= 0`,
-    ),
-    check(
-      "treasury_category_budget_history_currency_nonempty",
-      sql`length(btrim("currency")) > 0`,
-    ),
+    check("treasury_category_budget_history_monthly_nonneg", sql`"monthly_budget_micros" >= 0`),
+    check("treasury_category_budget_history_currency_nonempty", sql`length(btrim("currency")) > 0`),
   ],
 );
 
@@ -6285,6 +6270,8 @@ export const treasuryContributionAttributions = pgTable(
     }),
     attributionMethod: text("attribution_method").notNull(),
     consentPublicIdentity: boolean("consent_public_identity").notNull().default(false),
+    publicSiteUrl: text("public_site_url"),
+    twinProfileUrl: text("twin_profile_url"),
     note: text("note"),
     attributedByUserId: uuid("attributed_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -6302,6 +6289,77 @@ export const treasuryContributionAttributions = pgTable(
     uniqueIndex("treasury_contribution_attributions_open_tx_unique")
       .on(t.transactionId)
       .where(sql`"revoked_at" IS NULL`),
+  ],
+);
+
+/**
+ * Public, non-custodial support instruction created by an authenticated WAIA user.
+ * A row is an attribution hint only: it never verifies a Treasury transaction.
+ */
+export const treasuryContributionPaymentIntents = pgTable(
+  "treasury_contribution_payment_intents",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    contributorUserId: uuid("contributor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    displayNameSnapshot: text("display_name_snapshot").notNull(),
+    publicSiteUrl: text("public_site_url"),
+    twinProfileUrl: text("twin_profile_url"),
+    consentPublicIdentity: boolean("consent_public_identity").notNull(),
+    requestedAmountAtomic: bigint("requested_amount_atomic", { mode: "bigint" }).notNull(),
+    payableAmountAtomic: bigint("payable_amount_atomic", { mode: "bigint" }).notNull(),
+    assetCode: text("asset_code").notNull(),
+    network: text("network").notNull(),
+    receivingAddress: text("receiving_address").notNull(),
+    status: text("status", {
+      enum: ["PENDING", "MATCHED", "EXPIRED", "CANCELLED"],
+    })
+      .notNull()
+      .default("PENDING"),
+    matchedTransactionId: uuid("matched_transaction_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    matchedAt: timestamp("matched_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_contribution_payment_intents_id_org_uq").on(t.id, t.organizationId),
+    uniqueIndex("treasury_contribution_payment_intents_exact_amount_uq").on(
+      t.receivingAddress,
+      t.assetCode,
+      t.payableAmountAtomic,
+    ),
+    index("treasury_contribution_payment_intents_match_idx").on(
+      t.organizationId,
+      t.status,
+      t.receivingAddress,
+      t.payableAmountAtomic,
+    ),
+    index("treasury_contribution_payment_intents_user_created_idx").on(
+      t.contributorUserId,
+      t.createdAt,
+    ),
+    foreignKey({
+      columns: [t.matchedTransactionId, t.organizationId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.organizationId],
+      name: "treasury_contribution_payment_intents_tx_same_org_fk",
+    }).onDelete("restrict"),
+    check(
+      "treasury_contribution_payment_intents_requested_positive",
+      sql`"requested_amount_atomic" > 0`,
+    ),
+    check(
+      "treasury_contribution_payment_intents_payable_range",
+      sql`"payable_amount_atomic" >= "requested_amount_atomic" AND "payable_amount_atomic" < "requested_amount_atomic" + 1000`,
+    ),
+    check(
+      "treasury_contribution_payment_intents_status_shape",
+      sql`("status" = 'MATCHED' AND "matched_transaction_id" IS NOT NULL AND "matched_at" IS NOT NULL) OR ("status" <> 'MATCHED' AND "matched_transaction_id" IS NULL AND "matched_at" IS NULL)`,
+    ),
   ],
 );
 
@@ -6461,6 +6519,36 @@ export const treasuryBalanceReconciliations = pgTable(
     }).onDelete("set null"),
     index("treasury_balance_reconciliations_org_created_idx").on(t.organizationId, t.createdAt),
     check("treasury_balance_recon_tolerance_nonneg", sql`"tolerance_micros" >= 0`),
+  ],
+);
+
+/**
+ * Human-confirmed organization cash balance used as an append-only baseline.
+ * Verified transactions occurring after `asOf` are applied as deltas.
+ */
+export const treasuryBalanceCheckpoints = pgTable(
+  "treasury_balance_checkpoints",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    currency: text("currency").notNull(),
+    confirmedBalanceMicros: bigint("confirmed_balance_micros", { mode: "bigint" }).notNull(),
+    asOf: timestamp("as_of", { withTimezone: true, mode: "date" }).notNull(),
+    sourceLabel: text("source_label").notNull(),
+    note: text("note").notNull(),
+    confirmedByUserId: uuid("confirmed_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("treasury_balance_checkpoints_id_org_uq").on(t.id, t.organizationId),
+    index("treasury_balance_checkpoints_org_as_of_idx").on(t.organizationId, t.asOf),
+    check("treasury_balance_checkpoints_nonnegative", sql`"confirmed_balance_micros" >= 0`),
+    check("treasury_balance_checkpoints_currency_nonempty", sql`length(trim("currency")) > 0`),
+    check("treasury_balance_checkpoints_source_human", sql`"source_label" = 'HUMAN_CONFIRMED'`),
   ],
 );
 

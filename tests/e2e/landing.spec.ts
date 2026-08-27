@@ -81,7 +81,7 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-final-cta-research")).not.toHaveClass(/rounded-xl/);
   });
 
-  test("desktop definition→Auth ~120px and Auth→Breath ~128px without overlap", async ({
+  test("desktop places equal Auth and Breath columns directly below the framed hero", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -100,16 +100,9 @@ test.describe("WAIA landing page", () => {
     if (!defBox || !authBox || !breathBox) return;
 
     expect(authBox.y).toBeGreaterThan(defBox.y + defBox.height);
-    const defAuthGap = authBox.y - (defBox.y + defBox.height);
-    // Human visual-rhythm: ≈120px definition → Auth (±4px).
-    expect(defAuthGap).toBeGreaterThanOrEqual(116);
-    expect(defAuthGap).toBeLessThanOrEqual(124);
-
-    expect(breathBox.y).toBeGreaterThan(authBox.y + authBox.height);
-    const authBreathGap = breathBox.y - (authBox.y + authBox.height);
-    // Auth → Breath: ≈128px on desktop (±8px for border/scroll-mt tolerance).
-    expect(authBreathGap).toBeGreaterThanOrEqual(120);
-    expect(authBreathGap).toBeLessThanOrEqual(140);
+    expect(Math.abs(authBox.y - breathBox.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(authBox.width - breathBox.width)).toBeLessThanOrEqual(1);
+    expect(breathBox.x).toBeGreaterThan(authBox.x + authBox.width);
   });
 
   test("large desktop viewports keep Hero image and definition from overlapping", async ({
@@ -129,23 +122,26 @@ test.describe("WAIA landing page", () => {
       await page.goto("/");
       const image = page.getByTestId("landing-hero-image");
       const definition = page.getByTestId("landing-hero-definition");
-      const eyebrow = page.getByTestId("landing-hero-eyebrow");
+      const definitionText = page.getByTestId("landing-hero-definition-text");
       await expect(image).toBeVisible();
       await expect(definition).toBeVisible();
-      await expect(eyebrow).toBeVisible();
+      await expect(definitionText).toBeVisible();
       const imageBox = await image.boundingBox();
       const defBox = await definition.boundingBox();
-      const eyebrowBox = await eyebrow.boundingBox();
-      expect(imageBox && defBox && eyebrowBox, `boxes missing at ${viewport.width}`).toBeTruthy();
-      if (!imageBox || !defBox || !eyebrowBox) continue;
+      const definitionTextBox = await definitionText.boundingBox();
+      expect(
+        imageBox && defBox && definitionTextBox,
+        `boxes missing at ${viewport.width}`,
+      ).toBeTruthy();
+      if (!imageBox || !defBox || !definitionTextBox) continue;
 
       // Layout boxes must not overlap (definition follows image in normal flow).
       expect(defBox.y, `layout overlap at ${viewport.width}`).toBeGreaterThanOrEqual(
         imageBox.y + imageBox.height - 0.5,
       );
 
-      // Visual air is padding inside the definition block — measure image → eyebrow text.
-      const visualGap = eyebrowBox.y - (imageBox.y + imageBox.height);
+      // Visual air is padding inside the definition block — measure image → definition text.
+      const visualGap = definitionTextBox.y - (imageBox.y + imageBox.height);
       expect(visualGap, `hero→definition text air at ${viewport.width}`).toBeGreaterThanOrEqual(36);
       expect(visualGap, `hero→definition text air at ${viewport.width}`).toBeLessThanOrEqual(56);
 
@@ -160,12 +156,17 @@ test.describe("WAIA landing page", () => {
     await page.goto("/");
     const definition = page.getByTestId("landing-hero-definition");
     const auth = page.getByTestId("landing-auth");
+    const breath = page.getByTestId("landing-breath");
     const defBox = await definition.boundingBox();
     const authBox = await auth.boundingBox();
+    const breathBox = await breath.boundingBox();
     expect(defBox).toBeTruthy();
     expect(authBox).toBeTruthy();
-    if (!defBox || !authBox) return;
+    expect(breathBox).toBeTruthy();
+    if (!defBox || !authBox || !breathBox) return;
     expect(authBox.y).toBeGreaterThan(defBox.y + defBox.height);
+    expect(breathBox.y).toBeGreaterThan(authBox.y + authBox.height);
+    expect(Math.abs(authBox.width - breathBox.width)).toBeLessThanOrEqual(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       390 + 1,
     );

@@ -4,7 +4,11 @@
  * Q / TRC-20 / REFUND+CORRECTION netting / current-open attribution contract.
  */
 import { TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
-import { isApprovedV1UsdtAsset, requireBigint } from "@/lib/waia-core/treasury/money";
+import {
+  isApprovedManualUsdAsset,
+  isApprovedV1UsdtAsset,
+  requireBigint,
+} from "@/lib/waia-core/treasury/money";
 import {
   TREASURY_USDT_V1_NETWORK,
   TREASURY_USDT_V1_TOKEN_CONTRACT,
@@ -45,7 +49,8 @@ export function isQualifyingContribution(tx: TreasuryTransactionRecord): boolean
   if (tx.direction !== "INFLOW") return false;
   if (tx.status !== "VERIFIED") return false;
   if (tx.accountingAmountMicros === null) return false;
-  if (!isApprovedV1UsdtTrc20ContributionAsset(tx)) return false;
+  const approvedManualUsd = tx.provenance === "MANUAL" && isApprovedManualUsdAsset(tx);
+  if (!isApprovedV1UsdtTrc20ContributionAsset(tx) && !approvedManualUsd) return false;
   return true;
 }
 
