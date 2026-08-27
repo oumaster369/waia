@@ -68,14 +68,18 @@
     ],
     "finalReviewRemediation": {
       "status": "remediated-awaiting-exact-head-rereview",
-      "reviewedHead": "6f6e9723c91c16735e75cc0bbca6e9983f4680b0",
+      "reviewedHead": "58b7ea983d2bdea3369d5fff29fc4823815e38cd",
       "findings": [
         "P1: canonical ISG receipt validation was missing",
         "P1: scientific receipt was not cross-bound to package and model artifact",
         "P1: runtime admission narrowing trusted an unverified receipt",
-        "P2: analysis purpose and runtime posture lacked runtime enum validation"
+        "P2: analysis purpose and runtime posture lacked runtime enum validation",
+        "P1 rereview: ADMITTED receipt verifier lacked verdict-dependent scientific and non-research semantics"
       ],
-      "remediationCommits": ["60a1a42517e785511539036bc385837f4538b681"]
+      "remediationCommits": [
+        "60a1a42517e785511539036bc385837f4538b681",
+        "aca0b467a69cc759d968bea2b886809b32e89120"
+      ]
     },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
