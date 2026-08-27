@@ -117,6 +117,37 @@ describe("DEE-745 Forecast V2 content-addressed contract core", () => {
     );
   });
 
+  it("binds mathematical identity to the exact canonical PIT anchor", () => {
+    const { inputContract } = fixture();
+    const base = {
+      contract: inputContract,
+      anchorClosedBarAt: "2026-08-27T00:00:00.000Z",
+      predictors: { anchorRealizedVol20m_1m: 0.015 },
+      hypothesisAssessmentContentDigestHex: digest("7"),
+    };
+    const first = computeForecastInputIdentitiesV2(base);
+    const nextClosedBar = computeForecastInputIdentitiesV2({
+      ...base,
+      anchorClosedBarAt: "2026-08-27T00:01:00.000Z",
+    });
+
+    expect(nextClosedBar.mathematicalInputDigestHex).not.toBe(
+      first.mathematicalInputDigestHex,
+    );
+    expect(() =>
+      computeForecastInputIdentitiesV2({
+        ...base,
+        anchorClosedBarAt: "2026-08-27T00:00:00Z",
+      }),
+    ).toThrow("FORECAST_CONTRACT_INVALID:anchorClosedBarAt");
+    expect(() =>
+      computeForecastInputIdentitiesV2({
+        ...base,
+        anchorClosedBarAt: "not-an-instant",
+      }),
+    ).toThrow("FORECAST_CONTRACT_INVALID:anchorClosedBarAt");
+  });
+
   it.each([Number.NaN, Number.POSITIVE_INFINITY, -0.01])(
     "rejects invalid declared predictor %s",
     (value) => {
