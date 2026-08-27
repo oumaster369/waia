@@ -24,6 +24,13 @@ import { compareDecimal } from "@/lib/trader/risk/numeric";
 const QUALITY_PAPER_ONLY_THRESHOLD = FEATURE_ENGINE_QUALITY_THRESHOLD;
 const FUSED_DEGRADED_CONFIDENCE_THRESHOLD = 0.5;
 
+/**
+ * DEE-647: the legacy MSV is retained only for compatibility and telemetry while
+ * downstream migration completes. It is not Predictive Admission, Forecast V2,
+ * or capital authority. New runtime code must consume PredictiveAdmissionReceiptV1.
+ */
+export const LEGACY_MSV_AUTHORITY = "COMPATIBILITY_TELEMETRY_ONLY" as const;
+
 const PERMISSION_RESTRICTIVENESS: Record<TradingPermission, number> = {
   STOP_TRADING: 0,
   ONLY_CLOSE_POSITIONS: 1,
