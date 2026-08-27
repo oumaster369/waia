@@ -13,3 +13,4 @@ export * from "./canonical-development-corpus-v1";
 export * from "./rv-state-conditional-empirical-joint-v1";
 export * from "./storage-scale-projection";
 export * from "./forecast-v2-persistence-service";
+export * from "./forecast-contract-foundation-v2";
