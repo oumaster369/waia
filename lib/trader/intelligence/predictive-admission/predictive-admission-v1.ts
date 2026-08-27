@@ -2,9 +2,11 @@ import {
   canonicalizeSemanticJsonString,
   computeSemanticSha256Hex,
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import type {
+import {
+  assertInformationSufficiencyReceiptV2,
   InformationAnalysisPurposeV2,
   InformationSufficiencyReceiptV2,
+  RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
 import {
   type ForecastContractBindingV1,
@@ -31,6 +33,18 @@ export type RuntimeAnalysisPostureV1 =
   | "NO_NEW_RISK"
   | "CLOSE_ONLY"
   | "HALT";
+
+const ANALYSIS_PURPOSES = [
+  "NEW_OPPORTUNITY",
+  "OPEN_POSITION_REASSESSMENT",
+  "RESEARCH_NON_CAPITAL",
+] as const satisfies readonly InformationAnalysisPurposeV2[];
+const RUNTIME_POSTURES = [
+  "FULL_ANALYSIS_AND_NEW_RISK",
+  "NO_NEW_RISK",
+  "CLOSE_ONLY",
+  "HALT",
+] as const satisfies readonly RuntimeAnalysisPostureV1[];
 
 export type HypothesisApplicabilityAssessmentV1 = Readonly<{
   hypothesisAssessmentContentDigestHex: string;
@@ -133,6 +147,20 @@ function canonicalDigests(values: readonly string[], field: string): readonly st
   return result;
 }
 
+function requireAnalysisPurpose(value: InformationAnalysisPurposeV2): InformationAnalysisPurposeV2 {
+  if (!(ANALYSIS_PURPOSES as readonly string[]).includes(value)) {
+    throw new Error("PREDICTIVE_ADMISSION_INVALID:analysisPurpose");
+  }
+  return value;
+}
+
+function requireRuntimePosture(value: RuntimeAnalysisPostureV1): RuntimeAnalysisPostureV1 {
+  if (!(RUNTIME_POSTURES as readonly string[]).includes(value)) {
+    throw new Error("PREDICTIVE_ADMISSION_INVALID:runtimePosture");
+  }
+  return value;
+}
+
 export function buildMarketStateSnapshotV2(input: SnapshotInput): MarketStateSnapshotV2 {
   const binding = requireForecastContractBindingV1(input.forecastContractBinding);
   const digestFields = {
@@ -179,12 +207,12 @@ export function buildMarketStateSnapshotV2(input: SnapshotInput): MarketStateSna
     instrumentId: requireText(input.instrumentId, "instrumentId"),
     symbol: requireText(input.symbol, "symbol"),
     venue: requireText(input.venue, "venue"),
-    analysisPurpose: input.analysisPurpose,
+    analysisPurpose: requireAnalysisPurpose(input.analysisPurpose),
     analyticalTimeframe: requireText(input.analyticalTimeframe, "analyticalTimeframe"),
     horizon: requireText(input.horizon, "horizon"),
     pitAnchor: inputIdentities.anchorClosedBarAt,
     runtimeContextDigestHex: input.runtimeContextDigestHex,
-    runtimePosture: input.runtimePosture,
+    runtimePosture: requireRuntimePosture(input.runtimePosture),
     requiredInformationProfileDigestHex: input.requiredInformationProfileDigestHex,
     informationSufficiencyReceiptDigestHex: input.informationSufficiencyReceiptDigestHex,
     reconstructionDigestHex: input.reconstructionDigestHex,
@@ -215,6 +243,7 @@ export function buildMarketStateSnapshotV2(input: SnapshotInput): MarketStateSna
 
 export type PredictiveAdmissionInputV1 = Readonly<{
   snapshot: MarketStateSnapshotV2;
+  requiredInformationProfile: RequiredInformationProfileV2;
   informationSufficiencyReceipt: InformationSufficiencyReceiptV2;
   forecastContractBinding: ForecastContractBindingV1;
   scientificAdmissionReceipt: ScientificAdmissionReceiptV2 | null;
@@ -280,6 +309,12 @@ export function assessPredictiveAdmissionV1(
   if (computeSemanticSha256Hex(snapshotBody) !== ignoredDigest) {
     reasons.push("PIT_OR_INTEGRITY_INVALID");
   }
+  try {
+    requireAnalysisPurpose(snapshot.analysisPurpose);
+    requireRuntimePosture(snapshot.runtimePosture);
+  } catch {
+    reasons.push("PIT_OR_INTEGRITY_INVALID");
+  }
   if (binding) {
     try {
       const identities = computeForecastInputIdentitiesV2({
@@ -311,9 +346,16 @@ export function assessPredictiveAdmissionV1(
     reasons.push("NEW_RISK_NOT_PERMITTED");
   }
   const isg = input.informationSufficiencyReceipt;
+  try {
+    assertInformationSufficiencyReceiptV2(isg, input.requiredInformationProfile);
+  } catch {
+    reasons.push("ISG_IDENTITY_MISMATCH");
+  }
   if (isg.status !== "SUFFICIENT") reasons.push("ISG_NOT_SUFFICIENT");
   if (
     isg.contentDigest !== snapshot.informationSufficiencyReceiptDigestHex ||
+    input.requiredInformationProfile.contentDigest !==
+      snapshot.requiredInformationProfileDigestHex ||
     isg.profileContentDigest !== snapshot.requiredInformationProfileDigestHex ||
     isg.organizationId !== snapshot.organizationId ||
     isg.accountId !== snapshot.accountId ||
@@ -369,6 +411,19 @@ export function assessPredictiveAdmissionV1(
         input.scientificAdmissionReceipt,
         input.scientificAdmissionExpectedBindings,
       );
+      const scientific = input.scientificAdmissionExpectedBindings;
+      if (
+        scientific.organizationId !== binding.organizationId ||
+        scientific.predictivePackageContentDigestHex !==
+          binding.selectedPredictivePackageContentDigestHex ||
+        scientific.predictivePackageContentDigestHex !==
+          expected.selectedPredictivePackageContentDigestHex ||
+        scientific.developmentDatasetDigestHex !==
+          binding.modelArtifact.developmentDatasetDigestHex ||
+        scientific.runtimeContractDigestHex !== binding.modelArtifact.runtimeContractDigestHex
+      ) {
+        throw new Error("PREDICTIVE_ADMISSION_SCIENTIFIC_CROSS_BINDING_MISMATCH");
+      }
     } catch {
       reasons.push("SCIENTIFIC_ADMISSION_MISSING_OR_MISMATCHED");
     }
@@ -379,7 +434,70 @@ export function assessPredictiveAdmissionV1(
 export function requireForecastRuntimeAdmittedPredictiveAdmissionV1(
   value: PredictiveAdmissionReceiptV1,
 ): ForecastRuntimeAdmittedPredictiveAdmissionReceiptV1 {
-  if (value.verdict !== "ADMITTED" || value.blockingReasons.length !== 0) {
+  const allowedReasons: readonly PredictiveAdmissionReasonV1[] = [
+    "RUNTIME_HALTED",
+    "NEW_RISK_NOT_PERMITTED",
+    "ISG_NOT_SUFFICIENT",
+    "ISG_IDENTITY_MISMATCH",
+    "PIT_OR_INTEGRITY_INVALID",
+    "PACKAGE_COMPATIBILITY_MISMATCH",
+    "HYPOTHESIS_APPLICABILITY_MISSING",
+    "HYPOTHESIS_NOT_APPLICABLE",
+    "FORECAST_CONTRACT_BINDING_MISMATCH",
+    "SCIENTIFIC_ADMISSION_MISSING_OR_MISMATCHED",
+    "PACKAGE_QUARANTINED_OR_STALE",
+  ];
+  try {
+    requireAnalysisPurpose(value.analysisPurpose);
+    requireInstant(value.pitAnchor);
+    for (const [field, digest] of Object.entries({
+      marketStateSnapshotContentDigestHex: value.marketStateSnapshotContentDigestHex,
+      selectedPredictivePackageContentDigestHex:
+        value.selectedPredictivePackageContentDigestHex,
+      inputContractDigestHex: value.inputContractDigestHex,
+      modelSpecDigestHex: value.modelSpecDigestHex,
+      modelArtifactDigestHex: value.modelArtifactDigestHex,
+      qualifiedInputBindingDigestHex: value.qualifiedInputBindingDigestHex,
+    })) {
+      assertDigestHex64(digest, field);
+    }
+    if (value.scientificAdmissionReceiptContentDigestHex !== null) {
+      assertDigestHex64(
+        value.scientificAdmissionReceiptContentDigestHex,
+        "scientificAdmissionReceiptContentDigestHex",
+      );
+    }
+    if (
+      value.schemaVersion !== PREDICTIVE_ADMISSION_RECEIPT_V1_VERSION ||
+      value.capitalAuthority !== "NONE" ||
+      value.verdict !== "ADMITTED" ||
+      value.blockingReasons.length !== 0 ||
+      value.blockingReasons.some((reason) => !allowedReasons.includes(reason))
+    ) {
+      throw new Error("invalid fields");
+    }
+    const body: ReceiptBody = {
+      schemaVersion: value.schemaVersion,
+      verdict: value.verdict,
+      capitalAuthority: value.capitalAuthority,
+      analysisPurpose: value.analysisPurpose,
+      pitAnchor: value.pitAnchor,
+      marketStateSnapshotContentDigestHex: value.marketStateSnapshotContentDigestHex,
+      selectedPredictivePackageContentDigestHex:
+        value.selectedPredictivePackageContentDigestHex,
+      scientificAdmissionReceiptContentDigestHex:
+        value.scientificAdmissionReceiptContentDigestHex,
+      inputContractDigestHex: value.inputContractDigestHex,
+      modelSpecDigestHex: value.modelSpecDigestHex,
+      modelArtifactDigestHex: value.modelArtifactDigestHex,
+      qualifiedInputBindingDigestHex: value.qualifiedInputBindingDigestHex,
+      blockingReasons: value.blockingReasons,
+    };
+    const rebuilt = { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
+    if (canonicalizeSemanticJsonString(rebuilt) !== canonicalizeSemanticJsonString(value)) {
+      throw new Error("invalid receipt identity");
+    }
+  } catch {
     throw new Error("PREDICTIVE_ADMISSION_NOT_FORECAST_RUNTIME_ADMITTED");
   }
   return value as ForecastRuntimeAdmittedPredictiveAdmissionReceiptV1;
