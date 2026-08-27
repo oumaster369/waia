@@ -471,6 +471,20 @@ describe("DEE-647 deterministic Predictive Admission", () => {
         capitalAuthority: "LIVE" as "NONE",
       }),
     ).toThrow("PREDICTIVE_ADMISSION_NOT_FORECAST_RUNTIME_ADMITTED");
+    for (const mutation of [
+      { scientificAdmissionReceiptContentDigestHex: null },
+      { analysisPurpose: "RESEARCH_NON_CAPITAL" as const },
+    ]) {
+      const tamperedBody: Record<string, unknown> = { ...admitted, ...mutation };
+      delete tamperedBody.contentDigestHex;
+      const tampered = {
+        ...tamperedBody,
+        contentDigestHex: computeSemanticSha256Hex(tamperedBody),
+      } as typeof admitted;
+      expect(() => requireForecastRuntimeAdmittedPredictiveAdmissionV1(tampered)).toThrow(
+        "PREDICTIVE_ADMISSION_NOT_FORECAST_RUNTIME_ADMITTED",
+      );
+    }
     expect(() =>
       buildMarketStateSnapshotV2({
         ...value.snapshot,

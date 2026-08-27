@@ -471,6 +471,8 @@ export function requireForecastRuntimeAdmittedPredictiveAdmissionV1(
       value.schemaVersion !== PREDICTIVE_ADMISSION_RECEIPT_V1_VERSION ||
       value.capitalAuthority !== "NONE" ||
       value.verdict !== "ADMITTED" ||
+      value.analysisPurpose === "RESEARCH_NON_CAPITAL" ||
+      value.scientificAdmissionReceiptContentDigestHex === null ||
       value.blockingReasons.length !== 0 ||
       value.blockingReasons.some((reason) => !allowedReasons.includes(reason))
     ) {
