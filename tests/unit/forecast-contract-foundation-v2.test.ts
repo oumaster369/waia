@@ -134,6 +134,12 @@ describe("DEE-745 Forecast V2 content-addressed contract core", () => {
     expect(nextClosedBar.mathematicalInputDigestHex).not.toBe(
       first.mathematicalInputDigestHex,
     );
+    expect(nextClosedBar.applicabilityPrerequisiteDigestHex).not.toBe(
+      first.applicabilityPrerequisiteDigestHex,
+    );
+    expect(nextClosedBar.qualifiedInputBindingDigestHex).not.toBe(
+      first.qualifiedInputBindingDigestHex,
+    );
     expect(() =>
       computeForecastInputIdentitiesV2({
         ...base,
