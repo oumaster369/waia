@@ -6,7 +6,11 @@ import {
   buildForecastModelArtifactV2,
   buildForecastModelSpecV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-foundation-v2";
-import type { InformationSufficiencyReceiptV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  defineRequiredInformationProfileV2,
+  evaluateInformationSufficiencyV2,
+} from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
 import {
   assessPredictiveAdmissionV1,
   buildMarketStateSnapshotV2,
@@ -23,6 +27,10 @@ import {
   buildPredictiveTerminalReceiptV1,
   buildScientificAdmissionReceiptV2,
 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
+import {
+  makeUnderstandingEvidence,
+  makeUnderstandingRequirement,
+} from "@/tests/unit/helpers/market-understanding-evidence";
 
 const hex = (char: string) => char.repeat(64);
 const organizationId = "11111111-1111-4111-8111-111111111111";
@@ -156,6 +164,36 @@ function fixture(purpose: "NEW_OPPORTUNITY" | "OPEN_POSITION_REASSESSMENT" | "RE
     modelSpec,
     modelArtifact,
   });
+  const pitAnchor = "2026-08-27T00:00:00.000Z";
+  const requiredInformationProfile = defineRequiredInformationProfileV2({
+    organizationId,
+    accountId: null,
+    profileVersion: "dee-647-test-profile-v1",
+    purpose,
+    symbol: "BTCUSDT",
+    venue: "htx",
+    analyticalTimeframe: "1m",
+    horizon: "30m",
+    forecastPackageId: "champion-v1",
+    forecastPackageContentDigest: binding.selectedPredictivePackageContentDigestHex,
+    inputContractContentDigest: binding.inputContract.contentDigestHex,
+    requirements: [makeUnderstandingRequirement()],
+    aggregateQualityContract: null,
+  });
+  const isg = evaluateInformationSufficiencyV2({
+    profile: requiredInformationProfile,
+    organizationId,
+    accountId: null,
+    purpose,
+    symbol: "BTCUSDT",
+    venue: "htx",
+    analyticalTimeframe: "1m",
+    horizon: "30m",
+    pitAnchor,
+    activeContextTriggers: [],
+    evidence: [makeUnderstandingEvidence({ availableAt: "2026-08-26T23:59:30.000Z" })],
+  });
+  expect(isg.status).toBe("SUFFICIENT");
   const digest = hex("f");
   const snapshot = buildMarketStateSnapshotV2({
     organizationId,
@@ -166,11 +204,11 @@ function fixture(purpose: "NEW_OPPORTUNITY" | "OPEN_POSITION_REASSESSMENT" | "RE
     analysisPurpose: purpose,
     analyticalTimeframe: "1m",
     horizon: "30m",
-    pitAnchor: "2026-08-27T00:00:00.000Z",
+    pitAnchor,
     runtimeContextDigestHex: digest,
     runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
-    requiredInformationProfileDigestHex: hex("1"),
-    informationSufficiencyReceiptDigestHex: hex("2"),
+    requiredInformationProfileDigestHex: requiredInformationProfile.contentDigest,
+    informationSufficiencyReceiptDigestHex: isg.contentDigest,
     reconstructionDigestHex: hex("3"),
     stateRepresentationSpecDigestHex: hex("4"),
     dynamicStateDescriptorDigestHex: hex("5"),
@@ -191,21 +229,6 @@ function fixture(purpose: "NEW_OPPORTUNITY" | "OPEN_POSITION_REASSESSMENT" | "RE
     anchorRealizedVol20m_1m: 0.015,
     forecastContractBinding: binding,
   });
-  const isg = {
-    organizationId,
-    accountId: null,
-    profileContentDigest: snapshot.requiredInformationProfileDigestHex,
-    purpose,
-    symbol: snapshot.symbol,
-    venue: snapshot.venue,
-    analyticalTimeframe: snapshot.analyticalTimeframe,
-    horizon: snapshot.horizon,
-    pitAnchor: snapshot.pitAnchor,
-    forecastPackageContentDigest: binding.selectedPredictivePackageContentDigestHex,
-    inputContractContentDigest: binding.inputContract.contentDigestHex,
-    status: "SUFFICIENT",
-    contentDigest: snapshot.informationSufficiencyReceiptDigestHex,
-  } as InformationSufficiencyReceiptV2;
   const expected = {
     organizationId,
     symbol: snapshot.symbol,
@@ -221,7 +244,7 @@ function fixture(purpose: "NEW_OPPORTUNITY" | "OPEN_POSITION_REASSESSMENT" | "RE
     modelSpecDigestHex: binding.modelSpec.contentDigestHex,
     modelArtifactDigestHex: binding.modelArtifact.contentDigestHex,
   };
-  return { snapshot, isg, binding, scientific, expected };
+  return { snapshot, requiredInformationProfile, isg, binding, scientific, expected };
 }
 
 describe("DEE-647 deterministic Predictive Admission", () => {
@@ -229,6 +252,7 @@ describe("DEE-647 deterministic Predictive Admission", () => {
     const value = fixture();
     const input = {
       snapshot: value.snapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
       informationSufficiencyReceipt: value.isg,
       forecastContractBinding: value.binding,
       scientificAdmissionReceipt: value.scientific.receipt,
@@ -295,6 +319,7 @@ describe("DEE-647 deterministic Predictive Admission", () => {
       : value.snapshot;
     const result = assessPredictiveAdmissionV1({
       snapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
       informationSufficiencyReceipt: {
         ...value.isg,
         status: mutation.isgStatus ?? value.isg.status,
@@ -319,6 +344,7 @@ describe("DEE-647 deterministic Predictive Admission", () => {
     });
     const result = assessPredictiveAdmissionV1({
       snapshot,
+      requiredInformationProfile: reassessment.requiredInformationProfile,
       informationSufficiencyReceipt: reassessment.isg,
       forecastContractBinding: reassessment.binding,
       scientificAdmissionReceipt: reassessment.scientific.receipt,
@@ -336,6 +362,7 @@ describe("DEE-647 deterministic Predictive Admission", () => {
         runtimePosture: "NO_NEW_RISK",
         forecastContractBinding: newRisk.binding,
       }),
+      requiredInformationProfile: newRisk.requiredInformationProfile,
       informationSufficiencyReceipt: newRisk.isg,
       forecastContractBinding: newRisk.binding,
       scientificAdmissionReceipt: newRisk.scientific.receipt,
@@ -351,6 +378,7 @@ describe("DEE-647 deterministic Predictive Admission", () => {
     const value = fixture("RESEARCH_NON_CAPITAL");
     const result = assessPredictiveAdmissionV1({
       snapshot: value.snapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
       informationSufficiencyReceipt: value.isg,
       forecastContractBinding: value.binding,
       scientificAdmissionReceipt: value.scientific.receipt,
@@ -363,5 +391,114 @@ describe("DEE-647 deterministic Predictive Admission", () => {
     expect(() => requireForecastRuntimeAdmittedPredictiveAdmissionV1(result)).toThrow(
       "PREDICTIVE_ADMISSION_NOT_FORECAST_RUNTIME_ADMITTED",
     );
+  });
+
+  it("rejects forged ISG receipts even when their declared identity fields match", () => {
+    const value = fixture();
+    const result = assessPredictiveAdmissionV1({
+      snapshot: value.snapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
+      informationSufficiencyReceipt: {
+        ...value.isg,
+        evidenceInventory: [],
+      },
+      forecastContractBinding: value.binding,
+      scientificAdmissionReceipt: value.scientific.receipt,
+      scientificAdmissionExpectedBindings: value.scientific.expected,
+      expected: value.expected,
+      integrityAndPitValid: true,
+      packageQuarantinedOrStale: false,
+    });
+    expect(result.blockingReasons).toContain("ISG_IDENTITY_MISMATCH");
+  });
+
+  it("rejects a scientific receipt cross-bound to a different model artifact", () => {
+    const value = fixture();
+    const mismatchedArtifact = buildForecastModelArtifactV2({
+      modelSpecDigestHex: value.binding.modelSpec.contentDigestHex,
+      inputContractDigestHex: value.binding.inputContract.contentDigestHex,
+      developmentDatasetDigestHex: hex("0"),
+      runtimeContractDigestHex: value.scientific.identities.runtimeContractDigestHex,
+      artifactPayloadDigestHex: hex("e"),
+    });
+    const mismatchedBinding = buildForecastContractBindingV1({
+      organizationId,
+      scientificAdmissionReceiptId,
+      scientificAdmissionReceiptContentDigestHex: value.scientific.receipt.contentDigestHex,
+      selectedPredictivePackageContentDigestHex:
+        value.scientific.identities.predictivePackageContentDigestHex,
+      inputContract: value.binding.inputContract,
+      modelSpec: value.binding.modelSpec,
+      modelArtifact: mismatchedArtifact,
+    });
+    const snapshot = buildMarketStateSnapshotV2({
+      ...value.snapshot,
+      forecastContractBinding: mismatchedBinding,
+    });
+    const result = assessPredictiveAdmissionV1({
+      snapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
+      informationSufficiencyReceipt: value.isg,
+      forecastContractBinding: mismatchedBinding,
+      scientificAdmissionReceipt: value.scientific.receipt,
+      scientificAdmissionExpectedBindings: value.scientific.expected,
+      expected: {
+        ...value.expected,
+        modelArtifactDigestHex: mismatchedArtifact.contentDigestHex,
+      },
+      integrityAndPitValid: true,
+      packageQuarantinedOrStale: false,
+    });
+    expect(result.blockingReasons).toContain("SCIENTIFIC_ADMISSION_MISSING_OR_MISMATCHED");
+  });
+
+  it("rejects forged runtime admission receipts and unknown semantic enums", () => {
+    const value = fixture();
+    const admitted = assessPredictiveAdmissionV1({
+      snapshot: value.snapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
+      informationSufficiencyReceipt: value.isg,
+      forecastContractBinding: value.binding,
+      scientificAdmissionReceipt: value.scientific.receipt,
+      scientificAdmissionExpectedBindings: value.scientific.expected,
+      expected: value.expected,
+      integrityAndPitValid: true,
+      packageQuarantinedOrStale: false,
+    });
+    expect(() =>
+      requireForecastRuntimeAdmittedPredictiveAdmissionV1({
+        ...admitted,
+        capitalAuthority: "LIVE" as "NONE",
+      }),
+    ).toThrow("PREDICTIVE_ADMISSION_NOT_FORECAST_RUNTIME_ADMITTED");
+    expect(() =>
+      buildMarketStateSnapshotV2({
+        ...value.snapshot,
+        runtimePosture: "UNKNOWN" as "HALT",
+        forecastContractBinding: value.binding,
+      }),
+    ).toThrow("PREDICTIVE_ADMISSION_INVALID:runtimePosture");
+
+    const invalidBody: Record<string, unknown> = {
+      ...value.snapshot,
+      analysisPurpose: "UNKNOWN" as "OPEN_POSITION_REASSESSMENT",
+    };
+    delete invalidBody.contentDigestHex;
+    const invalidSnapshot = {
+      ...invalidBody,
+      contentDigestHex: computeSemanticSha256Hex(invalidBody),
+    } as typeof value.snapshot;
+    const result = assessPredictiveAdmissionV1({
+      snapshot: invalidSnapshot,
+      requiredInformationProfile: value.requiredInformationProfile,
+      informationSufficiencyReceipt: value.isg,
+      forecastContractBinding: value.binding,
+      scientificAdmissionReceipt: value.scientific.receipt,
+      scientificAdmissionExpectedBindings: value.scientific.expected,
+      expected: value.expected,
+      integrityAndPitValid: true,
+      packageQuarantinedOrStale: false,
+    });
+    expect(result.blockingReasons).toContain("PIT_OR_INTEGRITY_INVALID");
   });
 });
