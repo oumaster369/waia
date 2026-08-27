@@ -27,9 +27,9 @@
         "tests/unit/trader-predictive-admission-v1.test.ts"
       ],
       "integratedCommits": [
-        "340f2e46e41df96ec753d4209f94388c94f65f21",
-        "f467b14c3e0c392e75e076f2cc402032d935a28d",
-        "c2d391b889019cf9fbaa11de29b5d42d014c06d1"
+        "428bb97003f426f37dd63214ac9ee8be57df22d0",
+        "238862458c212b2cf8c48c64bc9307c47bc39caf",
+        "e317f4920165d1e84f4a061b642caeb7b3d7e642"
       ],
       "acceptanceEvidence": ["Exact scientific/package/contract identities, PIT replay, applicability-only Hypothesis, fail-closed mismatch handling, posture monotonicity and research firewall pass."],
       "tests": ["tests/unit/trader-predictive-admission-v1.test.ts: 11/11 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
@@ -52,7 +52,7 @@
         "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts",
         "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"
       ],
-      "integratedCommits": ["a97a1f906c62a1fca2b70d5be6b9abc725d9d441"],
+      "integratedCommits": ["686b68a8279cd868b99f0de55497f594aec99f6e"],
       "acceptanceEvidence": ["Legacy MSV is explicitly compatibility/telemetry-only and static inventory rejects direct Decision/Risk/Execution/holdout/live/capital consumers."],
       "tests": ["tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts: 3/3 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 2, "mode": "serialized" }
@@ -61,10 +61,10 @@
   "deferredChildren": [],
   "integrationEvidence": {
     "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" },
-    "preImplementationAdmission": { "status": "pass", "manifestDigest": "851d4f233a7c658a9be7c288fe795369627bf4788a99e928c1751b573d711e36", "manifestCommit": "48a711b749f0d3409f7342042c31167a2a94aac9", "manifestPath": "docs/plans/dee-647-predictive-admission.integration-train.json", "reviewer": "Controller pre-write API, invariant and file-surface freeze" },
+    "preImplementationAdmission": { "status": "pass", "manifestDigest": "851d4f233a7c658a9be7c288fe795369627bf4788a99e928c1751b573d711e36", "manifestCommit": "1c16de5cd9a2c75b88d1966644ada40164d78200", "manifestPath": "docs/plans/dee-647-predictive-admission.integration-train.json", "reviewer": "Controller pre-write API, invariant and file-surface freeze" },
     "admissionReviews": [
-      { "issue": "DEE-749", "status": "pass", "reviewedCommits": ["340f2e46e41df96ec753d4209f94388c94f65f21", "f467b14c3e0c392e75e076f2cc402032d935a28d", "c2d391b889019cf9fbaa11de29b5d42d014c06d1"], "reviewedFiles": ["lib/trader/intelligence/predictive-admission/index.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts", "tests/unit/trader-predictive-admission-v1.test.ts"] },
-      { "issue": "DEE-750", "status": "pass", "reviewedCommits": ["a97a1f906c62a1fca2b70d5be6b9abc725d9d441"], "reviewedFiles": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"] }
+      { "issue": "DEE-749", "status": "pass", "reviewedCommits": ["428bb97003f426f37dd63214ac9ee8be57df22d0", "238862458c212b2cf8c48c64bc9307c47bc39caf", "e317f4920165d1e84f4a061b642caeb7b3d7e642"], "reviewedFiles": ["lib/trader/intelligence/predictive-admission/index.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts", "tests/unit/trader-predictive-admission-v1.test.ts"] },
+      { "issue": "DEE-750", "status": "pass", "reviewedCommits": ["686b68a8279cd868b99f0de55497f594aec99f6e"], "reviewedFiles": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"] }
     ],
     "cumulativeChecks": [
       { "afterIssue": "DEE-749", "status": "pass", "commands": ["focused predictive admission suite 11/11", "typecheck", "scoped eslint"] },
@@ -81,8 +81,8 @@
         "P1 rereview: ADMITTED receipt verifier lacked verdict-dependent scientific and non-research semantics"
       ],
       "remediationCommits": [
-        "f467b14c3e0c392e75e076f2cc402032d935a28d",
-        "c2d391b889019cf9fbaa11de29b5d42d014c06d1"
+        "238862458c212b2cf8c48c64bc9307c47bc39caf",
+        "e317f4920165d1e84f4a061b642caeb7b3d7e642"
       ]
     },
     "fullDiffFrozen": true,
