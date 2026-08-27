@@ -66,6 +66,21 @@ function independentMarginalNull(samples: readonly (readonly number[])[]): numbe
 }
 
 const DIGEST_HEX = /^[0-9a-f]{64}$/;
+const EXECUTION_OPPORTUNITY_COORDINATES = [
+  "R1",
+  "R2",
+  "R3",
+  "Rh",
+  "Rh+1",
+  "Rh+2",
+  "Rh+3",
+  "V1",
+  "V2",
+  "V3",
+  "Vh+1",
+  "Vh+2",
+  "Vh+3",
+] as const;
 
 function requireCanonicalAnchor(value: string): void {
   if (!Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value)
@@ -79,6 +94,15 @@ export function runChallengerArenaV2(input: {
   observedJoint13d: readonly number[];
 }): ArenaEvidenceV2 {
   if (input.submissions.length === 0) throw new Error("CHALLENGER_ARENA_EMPTY");
+  if (
+    input.terminalGrid.bucketCount !== 7 ||
+    input.terminalGrid.edges.length !== 6 ||
+    input.terminalGrid.edges.some((edge) => !Number.isFinite(edge)) ||
+    input.terminalGrid.edges.some(
+      (edge, index) => index > 0 && edge <= input.terminalGrid.edges[index - 1]!,
+    )
+  )
+    throw new Error("CHALLENGER_ARENA_TERMINAL_GRID_INVALID");
   if (
     input.observedJoint13d.length !== 13 ||
     input.observedJoint13d.some((value) => !Number.isFinite(value)) ||
@@ -125,6 +149,13 @@ export function runChallengerArenaV2(input: {
         throw new Error("CHALLENGER_ARENA_COMMON_TARGET_MISMATCH");
       if (submission.evidencePartition !== first.evidencePartition)
         throw new Error("CHALLENGER_ARENA_COMMON_PARTITION_MISMATCH");
+      if (
+        (submission.executionOpportunityTargetDefinition.horizonMinutes !== 30 &&
+          submission.executionOpportunityTargetDefinition.horizonMinutes !== 60) ||
+        JSON.stringify(submission.executionOpportunityTargetDefinition.coordinates) !==
+          JSON.stringify(EXECUTION_OPPORTUNITY_COORDINATES)
+      )
+        throw new Error("CHALLENGER_ARENA_EXECUTION_TARGET_INVALID");
       if (
         submission.terminalTargetDefinitionDigestHex !== terminalGridContentDigestHex ||
         submission.executionOpportunityTargetDefinitionDigestHex !==

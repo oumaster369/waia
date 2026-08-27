@@ -119,6 +119,14 @@ describe("DEE-648 common-anchor challenger arena", () => {
         observedJoint13d: new Array(13).fill(0),
       }),
     ).toThrow("COMMON_TARGET_MISMATCH");
+    expect(() =>
+      runChallengerArenaV2({
+        submissions: [submission("a")],
+        terminalGrid: { edges: [-3, -2, -1, 1, 3, 2], bucketCount: 7 },
+        observedTerminalReturn: 0,
+        observedJoint13d: new Array(13).fill(0),
+      }),
+    ).toThrow("TERMINAL_GRID_INVALID");
   });
   it("delegates terminal qualification to the canonical multi-anchor scientific harness", () => {
     const modelTrial = trial("a");
@@ -156,5 +164,11 @@ describe("DEE-648 common-anchor challenger arena", () => {
     expect(evidence.results[0]!.terminalAdmission.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
     expect(evidence.qualificationScope).toContain("DEE631_ADMISSION");
     expect(evidence.capitalEligible).toBe(false);
+    expect(() =>
+      qualifyChallengerCandidatesV2([
+        { trialSpec: modelTrial, artifact, harnessInput },
+        { trialSpec: modelTrial, artifact, harnessInput },
+      ]),
+    ).toThrow("DUPLICATE_MODEL");
   });
 });

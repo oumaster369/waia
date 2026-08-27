@@ -27,6 +27,7 @@ function comparisonSurface(input: ResearchHarnessAdmissionInputV1) {
     evaluationPartitionReceiptDigestHex: input.evaluationPartitionReceiptDigestHex,
     purgeDurationMinutes: input.purgeDurationMinutes,
     embargoDurationMinutes: input.embargoDurationMinutes,
+    comparisonFamilyId: input.comparisonFamilyId,
     developmentReturns: input.developmentReturns,
     historyReturns: input.historyReturns,
     historyReturnMinuteOpenTimesMs: input.historyReturnMinuteOpenTimesMs,
@@ -49,10 +50,19 @@ export function qualifyChallengerCandidatesV2(
   const commonSurfaceDigestHex = computeSemanticSha256Hex(
     comparisonSurface(candidates[0]!.harnessInput),
   );
+  const seenModelIds = new Set<string>();
+  const seenModelSpecs = new Set<string>();
   const results = candidates
     .map((candidate) => {
       const trial = requireModelTrialSpecV2(candidate.trialSpec);
       const artifact = requireForecastModelArtifactV2(candidate.artifact);
+      if (
+        seenModelIds.has(trial.modelSpec.modelId) ||
+        seenModelSpecs.has(trial.modelSpec.contentDigestHex)
+      )
+        throw new Error("CHALLENGER_QUALIFICATION_DUPLICATE_MODEL");
+      seenModelIds.add(trial.modelSpec.modelId);
+      seenModelSpecs.add(trial.modelSpec.contentDigestHex);
       if (trial.readiness !== "EXECUTOR_READY")
         throw new Error(`CHALLENGER_QUALIFICATION_NOT_EXECUTABLE:${trial.readiness}`);
       if (
