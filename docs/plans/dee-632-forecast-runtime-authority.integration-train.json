@@ -106,7 +106,7 @@
       { "afterIssue": "DEE-756", "status": "pass", "commands": ["focused authority suite", "typecheck", "scoped eslint"] },
       { "afterIssue": "DEE-757", "status": "pass", "commands": ["focused cutover/inventory suites", "typecheck", "scoped eslint"] }
     ],
-    "finalReviewRemediation": { "status": "pending", "reviewedHead": null, "findings": ["P1 package artifact/target replay gap", "P1 incomplete authorized issuance regeneration", "P1 PIT ISO/epoch mismatch"], "remediationCommits": ["87d8fb2d67ae1fd05fe5e3afcea66e1bd096c503"], "verdict": "pending exact governance-rewritten head review" },
+    "finalReviewRemediation": { "status": "pass", "reviewedHead": "a04eeb9cb4184fd4b6f336dbb2b85ceecd53c903", "findings": ["P1 package artifact/target replay gap", "P1 incomplete authorized issuance regeneration", "P1 PIT ISO/epoch mismatch"], "remediationCommits": ["87d8fb2d67ae1fd05fe5e3afcea66e1bd096c503"], "verdict": "P1=0 P2=0 PASS; governance child partitions exact" },
     "fullSuiteEvidence": { "status": "baseline-exception", "result": "5088 PASS, 419 skipped, 2 failures", "exceptions": ["finance confirmation last-character token mutation is nondeterministic and passed isolated rerun", "health settlement SQLite table missing reproduces unchanged on authoritative base 4acb6c61"], "dee632Regressions": 0 },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
