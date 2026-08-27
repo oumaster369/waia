@@ -95,6 +95,8 @@ export function runChallengerArenaV2(input: {
 }): ArenaEvidenceV2 {
   if (input.submissions.length === 0) throw new Error("CHALLENGER_ARENA_EMPTY");
   if (
+    JSON.stringify(Object.keys(input.terminalGrid).sort()) !==
+      JSON.stringify(["bucketCount", "edges"]) ||
     input.terminalGrid.bucketCount !== 7 ||
     input.terminalGrid.edges.length !== 6 ||
     input.terminalGrid.edges.some((edge) => !Number.isFinite(edge)) ||
@@ -150,6 +152,8 @@ export function runChallengerArenaV2(input: {
       if (submission.evidencePartition !== first.evidencePartition)
         throw new Error("CHALLENGER_ARENA_COMMON_PARTITION_MISMATCH");
       if (
+        JSON.stringify(Object.keys(submission.executionOpportunityTargetDefinition).sort()) !==
+          JSON.stringify(["coordinates", "horizonMinutes"]) ||
         (submission.executionOpportunityTargetDefinition.horizonMinutes !== 30 &&
           submission.executionOpportunityTargetDefinition.horizonMinutes !== 60) ||
         JSON.stringify(submission.executionOpportunityTargetDefinition.coordinates) !==
