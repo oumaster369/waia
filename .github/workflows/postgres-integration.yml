@@ -31,6 +31,9 @@ on:
       - "tests/unit/fhv-real-htx-preholdout-control-replay.test.ts"
       - "tests/unit/fhv-btc-eth-execution-evidence.test.ts"
       - "tests/integration/trader-capital-path-trace-evidence.test.ts"
+      - "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts"
+      - "lib/trader/research/execopp-qualification/scientific-admission-v2.ts"
+      - "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
 
@@ -84,3 +87,4 @@ jobs:
           tests/unit/fhv-real-htx-preholdout-control-replay.test.ts
           tests/unit/fhv-btc-eth-execution-evidence.test.ts
           tests/integration/trader-capital-path-trace-evidence.test.ts
+          tests/integration/postgres-scientific-admission-receipt-v1.test.ts

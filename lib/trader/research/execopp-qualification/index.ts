@@ -39,6 +39,29 @@ export {
   ScientificAdmissionReceiptConflictError,
   ScientificAdmissionReceiptTenantIsolationError,
 } from "./scientific-admission-receipt-service-v1";
+export {
+  buildEpistemicParameterRatificationReceiptV1,
+  buildPredictiveTerminalReceiptV1,
+  buildScientificAdmissionReceiptV2,
+  EPISTEMIC_PARAMETER_RATIFICATION_VERSION,
+  PREDICTIVE_TERMINAL_RECEIPT_VERSION,
+  requireScientificAdmissionV2,
+  SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION,
+} from "./scientific-admission-v2";
+export type {
+  EpistemicParameterRatificationReceiptV1,
+  PredictiveIdentityBindingsV1,
+  PredictiveTerminalReceiptV1,
+  ScientificAdmissionExpectedBindingsV2,
+  ScientificAdmissionReceiptV2,
+} from "./scientific-admission-v2";
+export {
+  buildScientificAdmissionReceiptRecordV2,
+  persistScientificAdmissionReceiptV2,
+  requireScientificAdmissionReceiptV2ForOrganization,
+  ScientificAdmissionReceiptV2ConflictError,
+} from "./scientific-admission-receipt-service-v2";
+export type { ScientificAdmissionReceiptRecordV2 } from "./scientific-admission-receipt-service-v2";
 export type {
   BuildScientificAdmissionReceiptRecordInput,
   PersistScientificAdmissionReceiptResult,
