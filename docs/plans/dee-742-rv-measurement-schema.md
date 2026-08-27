@@ -20,16 +20,16 @@ approvalGates:
   - dee-653-exact-head-admission
 includedIssues: [DEE-744, DEE-743]
 state:
-  status: admitted
-  currentWorkPackage: DEE-744
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-744, DEE-743]
+  status: locally-validated-awaiting-pr
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-744, DEE-743]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 36929bba3f46ec79002ef45f2a04dce8e86593c4
-  lastValidationAt: "2026-08-27T08:42:00+03:00"
+  lastValidatedGitSha: d0b1e822130e5df58b3c21527759c91e47454bc3
+  lastValidationAt: "2026-08-27T12:00:00+03:00"
   blockedReason: null
-  nextAction: "Freeze required RV v2 schema/producer contract, then prove PIT/parity/inventory boundaries."
+  nextAction: "Complete the running full fresh-SQLite suite, publish one governed PR, and require CI/DEE-653 before squash merge."
 provenance:
   createdFrom: human-ratified-dee-624m-split
   sourceThread: 01a019c0-8940-7272-bc9c-6b330e6bf0f2

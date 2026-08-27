@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-742",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-744",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Require canonical RV v2 identities in schema, producer return type and parity checks while preserving equations and compatibility alias.",
       "dependencies": [],
@@ -21,11 +21,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly ratified DEE-624M on 2026-08-27."},
       "expectedAcceptanceEvidence": ["Required canonical fields, exact legacy alias and full RV parity comparisons."],
       "expectedTests": ["tests/unit/feature-engine-rv-v2.test.ts", "tests/unit/trader-intelligence-parity.test.ts"],
-      "execution": {"wave": 1, "mode": "serialized"}
+      "execution": {"wave": 1, "mode": "serialized"},
+      "actualFiles": ["lib/trader/intelligence/types.ts", "lib/trader/intelligence/feature-engine-v0.ts", "lib/trader/intelligence/feature-engine-parity.ts"],
+      "integratedCommits": ["e236242e9c22cd2d6ab0b5f23ae8744c00aa5660"],
+      "acceptanceEvidence": ["FeatureVectorRvV2 and FeatureSnapshotRvV2 require all three canonical identities; producer returns the refined snapshot; parity compares every canonical field and the exact legacy alias."],
+      "tests": ["tests/unit/feature-engine-rv-v2.test.ts", "tests/unit/trader-intelligence-feature-engine-parity.test.ts"]
     },
     {
       "issue": "DEE-743",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Prove known-answer, UNAVAILABLE, PIT-prefix, mutation and legacy-consumer quarantine boundaries.",
       "dependencies": ["DEE-744"],
@@ -35,24 +39,34 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Validation and inventory only; protected downstream semantics remain deferred."},
       "expectedAcceptanceEvidence": ["PIT/gap invariants and every canonical-field parity mutation are covered; legacy consumers are enumerated without code changes."],
       "expectedTests": ["focused RV v2 and parity tests", "inventory check"],
-      "execution": {"wave": 2, "mode": "serialized"}
+      "execution": {"wave": 2, "mode": "serialized"},
+      "actualFiles": ["tests/unit/feature-engine-rv-v2.test.ts", "docs/plans/dee-742-realized-vol20-consumer-inventory.md"],
+      "integratedCommits": ["d0b1e822130e5df58b3c21527759c91e47454bc3"],
+      "acceptanceEvidence": ["Known-answer, UNAVAILABLE, PIT-prefix, per-field mutation and fail-closed legacy-consumer inventory proofs pass without downstream semantic changes."],
+      "tests": ["tests/unit/feature-engine-rv-v2.test.ts"]
     }
   ],
   "deferredChildren": [],
   "integrationEvidence": {
     "admissionEvidence": {"status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test/inventory and protected-surface audit"},
-    "preImplementationAdmission": {"status": "pending-freeze", "manifestDigest": null, "manifestCommit": null, "manifestPath": "docs/plans/dee-742-rv-measurement-schema.integration-train.json", "reviewer": "Controller pre-write API and invariant freeze"},
-    "admissionReviews": [],
-    "cumulativeChecks": [],
-    "finalReviewRemediation": null,
-    "fullDiffFrozen": false,
+    "preImplementationAdmission": {"status": "pass", "manifestDigest": "ab77c3f7d8803ad600d3364210d44142a3abb7d6a8a6efc89c3dd99a0e45c859", "manifestCommit": "2b25545f1d305ff61a6ff1b11a3f81dd660be2c6", "manifestPath": "docs/plans/dee-742-rv-measurement-schema.integration-train.json", "reviewer": "Controller pre-write API and invariant freeze"},
+    "admissionReviews": [
+      {"issue": "DEE-744", "status": "pass", "reviewedCommits": ["e236242e9c22cd2d6ab0b5f23ae8744c00aa5660"], "reviewedFiles": ["lib/trader/intelligence/types.ts", "lib/trader/intelligence/feature-engine-v0.ts", "lib/trader/intelligence/feature-engine-parity.ts"]},
+      {"issue": "DEE-743", "status": "pass", "reviewedCommits": ["d0b1e822130e5df58b3c21527759c91e47454bc3"], "reviewedFiles": ["tests/unit/feature-engine-rv-v2.test.ts", "docs/plans/dee-742-realized-vol20-consumer-inventory.md"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-744", "status": "pass", "commands": ["required RV v2 schema and producer tests", "typecheck"]},
+      {"afterIssue": "DEE-743", "status": "pass", "commands": ["focused RV/parity/inventory 13/13", "typecheck", "production build", "canonical validation", "PR governance"]}
+    ],
+    "finalReviewRemediation": {"status": "pass", "reviewedHead": "d0b1e822130e5df58b3c21527759c91e47454bc3", "reviewer": "independent exact-diff reviewer", "p1": 0, "p2": 0, "findings": []},
+    "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": ["RV equations and rounding unchanged.", "Legacy alias equals priceDispersion20 exactly.", "No downstream consumer reinterpretation.", "No holdout, Decision, Risk, production/live or capital semantics."],
   "rollbackStrategy": "One revert PR restores optional schema fields and prior parity scope without touching formulas or downstream consumers.",
   "validation": {
     "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-742-rv-measurement-schema.integration-train.json DEE-742 frozen",
-    "focused": ["pnpm test --run tests/unit/feature-engine-rv-v2.test.ts tests/unit/trader-intelligence-parity.test.ts", "pnpm typecheck"],
+    "focused": ["pnpm test --run tests/unit/feature-engine-rv-v2.test.ts tests/unit/trader-intelligence-feature-engine-parity.test.ts", "pnpm typecheck"],
     "fullSuite": "one fresh migrated SQLite pnpm test --run",
     "review": "fresh independent exact-head zero P1/P2",
     "publication": "one PR; authoritative CI/applicable PostgreSQL and DEE-653 before squash merge"
