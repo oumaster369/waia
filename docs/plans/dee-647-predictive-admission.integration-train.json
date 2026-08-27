@@ -26,7 +26,11 @@
         "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts",
         "tests/unit/trader-predictive-admission-v1.test.ts"
       ],
-      "integratedCommits": ["345a5a9f9a836ec011dcb9cc1a424a66f2a402d0"],
+      "integratedCommits": [
+        "345a5a9f9a836ec011dcb9cc1a424a66f2a402d0",
+        "60a1a42517e785511539036bc385837f4538b681",
+        "aca0b467a69cc759d968bea2b886809b32e89120"
+      ],
       "acceptanceEvidence": ["Exact scientific/package/contract identities, PIT replay, applicability-only Hypothesis, fail-closed mismatch handling, posture monotonicity and research firewall pass."],
       "tests": ["tests/unit/trader-predictive-admission-v1.test.ts: 11/11 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 1, "mode": "serialized" }
@@ -59,7 +63,7 @@
     "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" },
     "preImplementationAdmission": { "status": "pass", "manifestDigest": "851d4f233a7c658a9be7c288fe795369627bf4788a99e928c1751b573d711e36", "manifestCommit": "dc1043ba69aecddc685ae26ec7ea309828b2e27e", "manifestPath": "docs/plans/dee-647-predictive-admission.integration-train.json", "reviewer": "Controller pre-write API, invariant and file-surface freeze" },
     "admissionReviews": [
-      { "issue": "DEE-749", "status": "pass", "reviewedCommits": ["345a5a9f9a836ec011dcb9cc1a424a66f2a402d0"], "reviewedFiles": ["lib/trader/intelligence/predictive-admission/index.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts", "tests/unit/trader-predictive-admission-v1.test.ts"] },
+      { "issue": "DEE-749", "status": "pass", "reviewedCommits": ["345a5a9f9a836ec011dcb9cc1a424a66f2a402d0", "60a1a42517e785511539036bc385837f4538b681", "aca0b467a69cc759d968bea2b886809b32e89120"], "reviewedFiles": ["lib/trader/intelligence/predictive-admission/index.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-v1.ts", "tests/unit/trader-predictive-admission-v1.test.ts"] },
       { "issue": "DEE-750", "status": "pass", "reviewedCommits": ["32da21fb36dbe1afc9c66cd20278da0237ac78a6"], "reviewedFiles": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"] }
     ],
     "cumulativeChecks": [
