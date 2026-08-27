@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import type { WaiaDb } from "@/db/types";
 import { organizationMembers, organizationSubscriptions, userPlatformRoles } from "@/db/schema";
@@ -17,7 +17,14 @@ export const TREASURY_ADMIN_PERMISSIONS = [
   "admin.treasury.publish",
 ] as const;
 
+export const HR_ADMIN_PERMISSIONS = ["admin.hr.read", "admin.hr.mutate", "admin.hr.grant"] as const;
+
 export type TreasuryAdminPermission = (typeof TREASURY_ADMIN_PERMISSIONS)[number];
+
+const SHARED_WAIA_ADMIN_PERMISSIONS = [
+  ...TREASURY_ADMIN_PERMISSIONS,
+  ...HR_ADMIN_PERMISSIONS,
+] as const;
 
 const ADMIN_PERMISSIONS = new Set([
   "admin.audit.read",
@@ -25,6 +32,7 @@ const ADMIN_PERMISSIONS = new Set([
   "admin.entitlement.manage",
   "admin.trader.operations.mutate",
   ...TREASURY_ADMIN_PERMISSIONS,
+  ...HR_ADMIN_PERMISSIONS,
 ]);
 
 const USER_PERMISSIONS = new Set(["org.member.read", "org.subscription.read"]);
@@ -117,22 +125,49 @@ export async function resolvePermissionPostgres(
     return { allowed: false, role: null, enforced: isWaiaCoreEnforcementEnabled() };
   }
 
-  const memberRows = await ex
-    .select({ id: pgSchema.organizationMembers.id })
-    .from(pgSchema.organizationMembers)
-    .where(
-      and(
-        eq(pgSchema.organizationMembers.organizationId, input.organizationId),
-        eq(pgSchema.organizationMembers.userId, input.userId),
-      ),
-    )
-    .limit(1);
+  const sharedAdminPermission = SHARED_WAIA_ADMIN_PERMISSIONS.includes(
+    input.permission as (typeof SHARED_WAIA_ADMIN_PERMISSIONS)[number],
+  );
+  const [memberRows, grantRows] = await Promise.all([
+    ex
+      .select({ id: pgSchema.organizationMembers.id })
+      .from(pgSchema.organizationMembers)
+      .where(
+        and(
+          eq(pgSchema.organizationMembers.organizationId, input.organizationId),
+          eq(pgSchema.organizationMembers.userId, input.userId),
+        ),
+      )
+      .limit(1),
+    sharedAdminPermission
+      ? ex
+          .select({ role: pgSchema.waiaAdminModuleGrants.role })
+          .from(pgSchema.waiaAdminModuleGrants)
+          .where(
+            and(
+              eq(pgSchema.waiaAdminModuleGrants.userId, input.userId),
+              isNull(pgSchema.waiaAdminModuleGrants.revokedAt),
+            ),
+          )
+      : Promise.resolve([]),
+  ]);
 
-  if (!memberRows[0] && role !== "admin" && role !== "service") {
+  const grantRoles = new Set(grantRows.map((row) => row.role));
+  const superGrant = grantRoles.has("SUPER_ADMIN");
+
+  if (!memberRows[0] && role !== "admin" && role !== "service" && !superGrant) {
     return { allowed: false, role, enforced: isWaiaCoreEnforcementEnabled() };
   }
 
-  const allowed = ROLE_PERMISSIONS[role]?.has(input.permission) ?? false;
+  const financeGrant =
+    grantRoles.has("FINANCE_ADMIN") &&
+    TREASURY_ADMIN_PERMISSIONS.includes(input.permission as TreasuryAdminPermission);
+  const hrGrant =
+    grantRoles.has("HR_ADMIN") &&
+    HR_ADMIN_PERMISSIONS.includes(input.permission as (typeof HR_ADMIN_PERMISSIONS)[number]);
+  const allowed =
+    (ROLE_PERMISSIONS[role]?.has(input.permission) ?? false) ||
+    (sharedAdminPermission && (superGrant || financeGrant || hrGrant));
   return { allowed, role, enforced: isWaiaCoreEnforcementEnabled() };
 }
 

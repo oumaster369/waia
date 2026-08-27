@@ -18,7 +18,7 @@ test.describe("public WAIA transparency pages", () => {
     await expect(page.getByRole("button")).toHaveCount(0);
   });
 
-  test("renders the allowlisted work-plan surface without an iframe or controls", async ({
+  test("renders the allowlisted work plan and public team application without an iframe", async ({
     page,
   }) => {
     await page.goto("/work-plan");
@@ -29,8 +29,9 @@ test.describe("public WAIA transparency pages", () => {
         .getByTestId("public-work-plan-unavailable")
         .or(page.getByTestId("public-work-plan-projects")),
     ).toBeVisible();
-    await expect(page.locator("form, iframe")).toHaveCount(0);
-    await expect(page.getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 2, name: "Join the work" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send application" })).toBeVisible();
+    await expect(page.locator("iframe")).toHaveCount(0);
   });
 
   test("keeps the Patrons page truthful, read-only, and responsive", async ({ page }) => {

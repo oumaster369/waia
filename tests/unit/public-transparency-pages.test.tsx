@@ -17,6 +17,10 @@ vi.mock("@/lib/landing/public-data", () => ({
   readPublicWorkPlanForView: readWorkPlanMock,
 }));
 
+vi.mock("@/lib/auth/session-user", () => ({
+  getOptionalSessionUserId: vi.fn().mockResolvedValue(null),
+}));
+
 const publishedTreasury: PublicTreasuryProjection = {
   schemaVersion: "waia-public-treasury/v1",
   breath: {
@@ -171,7 +175,8 @@ describe("public transparency pages", () => {
       "href",
       "https://linear.app/example/issue/DEE-618",
     );
-    expect(document.querySelector("form, iframe, button")).toBeNull();
+    expect(screen.getByRole("button", { name: /Send application/i })).toBeInTheDocument();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
   it("renders consented Patrons and one non-identifying private aggregate", async () => {

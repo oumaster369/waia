@@ -6,6 +6,7 @@ import { WaiaSurface } from "@/components/waia/waia-surface";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
+import { resolveWaiaAdminAccess } from "@/lib/waia-core/permissions/waia-admin";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 
 function FinanceForbidden() {
@@ -32,6 +33,7 @@ export default async function FinanceLayout({
   }
 
   let runtime;
+  let moduleAccess = { finance: false, hr: false };
   try {
     runtime = await getWaiaRuntimeDb();
     const contextOrgId = personalOrganizationIdFromUserId(userId);
@@ -39,13 +41,15 @@ export default async function FinanceLayout({
     if (!check.allowed) {
       return <FinanceForbidden />;
     }
+    const resolved = await resolveWaiaAdminAccess(runtime, userId);
+    moduleAccess = { finance: resolved.finance, hr: resolved.hr };
   } finally {
     await disposeWaiaRuntimeDb(runtime);
   }
 
   return (
     <Suspense fallback={<p className="text-muted-foreground p-8 text-sm">Loading Finance…</p>}>
-      <FinanceShell>{children}</FinanceShell>
+      <FinanceShell moduleAccess={moduleAccess}>{children}</FinanceShell>
     </Suspense>
   );
 }

@@ -35,6 +35,9 @@ const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
 import {
   auditActorTypeEnum,
+  hrApplicationEventTypeEnum,
+  hrApplicationStatusEnum,
+  hrApplicationTargetTypeEnum,
   organizationKindEnum,
   organizationMemberRoleEnum,
   paymentAddressEventTypeEnum,
@@ -67,6 +70,7 @@ import {
   treasuryTxDirectionEnum,
   treasuryTxKindEnum,
   treasuryTxStatusEnum,
+  waiaAdminGrantRoleEnum,
   waiaModuleEnum,
 } from "@/db/core-enums";
 
@@ -86,6 +90,18 @@ export const platformRoleEnumPg = pgEnum("platform_role", [...platformRoleEnum])
 export const waiaModuleEnumPg = pgEnum("waia_module", [...waiaModuleEnum]);
 export const subscriptionStatusEnumPg = pgEnum("subscription_status", [...subscriptionStatusEnum]);
 export const auditActorTypeEnumPg = pgEnum("audit_actor_type", [...auditActorTypeEnum]);
+export const waiaAdminGrantRoleEnumPg = pgEnum("waia_admin_grant_role", [
+  ...waiaAdminGrantRoleEnum,
+]);
+export const hrApplicationStatusEnumPg = pgEnum("hr_application_status", [
+  ...hrApplicationStatusEnum,
+]);
+export const hrApplicationTargetTypeEnumPg = pgEnum("hr_application_target_type", [
+  ...hrApplicationTargetTypeEnum,
+]);
+export const hrApplicationEventTypeEnumPg = pgEnum("hr_application_event_type", [
+  ...hrApplicationEventTypeEnum,
+]);
 
 export const paymentEventTypeEnumPg = pgEnum("payment_event_type", [...paymentEventTypeEnum]);
 export const paymentDirectionEnumPg = pgEnum("payment_direction", [...paymentDirectionEnum]);
@@ -324,6 +340,92 @@ export const userPlatformRoles = pgTable("user_platform_roles", {
   role: platformRoleEnumPg("role").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
+
+/** DEE-747: explicit, revocable access to shared WAIA Admin modules. */
+export const waiaAdminModuleGrants = pgTable(
+  "waia_admin_module_grants",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: waiaAdminGrantRoleEnumPg("role").notNull(),
+    grantedByUserId: uuid("granted_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    grantReason: text("grant_reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    revokedByUserId: uuid("revoked_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    revokeReason: text("revoke_reason"),
+  },
+  (t) => [
+    index("waia_admin_module_grants_user_idx").on(t.userId, t.role),
+    uniqueIndex("waia_admin_module_grants_active_uq")
+      .on(t.userId, t.role)
+      .where(sql`${t.revokedAt} is null`),
+  ],
+);
+
+/** DEE-747: immutable public intake plus mutable HR funnel projection. */
+export const hrTeamApplications = pgTable(
+  "hr_team_applications",
+  {
+    id: uuid("id").primaryKey(),
+    applicantUserId: uuid("applicant_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    identityName: text("identity_name").notNull(),
+    contactEmail: text("contact_email").notNull(),
+    publicProfileUrl: text("public_profile_url"),
+    targetType: hrApplicationTargetTypeEnumPg("target_type").notNull(),
+    targetReference: text("target_reference"),
+    competencies: text("competencies").notNull(),
+    experience: text("experience").notNull(),
+    collaborationTerms: text("collaboration_terms").notNull(),
+    context: text("context").notNull(),
+    consentVersion: text("consent_version").notNull(),
+    consentedAt: timestamp("consented_at", { withTimezone: true, mode: "date" }).notNull(),
+    source: text("source").notNull(),
+    status: hrApplicationStatusEnumPg("status").notNull().default("NEW_APPLICATION"),
+    assignedToUserId: uuid("assigned_to_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("hr_team_applications_status_created_idx").on(t.status, t.createdAt),
+    index("hr_team_applications_assignee_status_idx").on(t.assignedToUserId, t.status),
+    index("hr_team_applications_contact_created_idx").on(t.contactEmail, t.createdAt),
+  ],
+);
+
+/** DEE-747: append-only comments and status/assignee history. */
+export const hrApplicationEvents = pgTable(
+  "hr_application_events",
+  {
+    id: uuid("id").primaryKey(),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => hrTeamApplications.id, { onDelete: "restrict" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    eventType: hrApplicationEventTypeEnumPg("event_type").notNull(),
+    fromStatus: hrApplicationStatusEnumPg("from_status"),
+    toStatus: hrApplicationStatusEnumPg("to_status"),
+    previousAssigneeUserId: uuid("previous_assignee_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    newAssigneeUserId: uuid("new_assignee_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("hr_application_events_application_created_idx").on(t.applicationId, t.createdAt)],
+);
 
 /** WAIA Core: per-organization module subscription (WC-E4). */
 export const organizationSubscriptions = pgTable(

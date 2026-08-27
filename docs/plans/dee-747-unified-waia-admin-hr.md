@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-747
 integrationTitle: "Unified WAIA Admin — role-scoped Finance/HR and Work plan applications"
-branch: dee-747-unified-waia-admin-hr
+branch: dee-747-unified-waia-admin
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr, human-production-activation]
@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: blocked
-  currentWorkPackage: null
-  completedWorkPackages: [WP-0]
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
+  status: in_progress
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3]
+  remainingWorkPackages: [WP-4]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
-  blockedReason: "DEE-731 must be Human-merged before the DEE-747 main-based integration branch opens."
-  nextAction: "After DEE-731 merge, branch from current origin/main and complete the protected Admin/HR batch."
+  blockedReason: "Human requested that no DEE-747 PR open while any AI-TRADER PR remains open."
+  nextAction: "Finish qualification, then refresh origin/main and rebase/renumber if needed after the AI-TRADER PR train merges; open one DEE-747 PR only when that queue is clear."
 provenance:
   createdFrom: human-approved-chat-2026-08-27
   gapRegistry: null
@@ -82,8 +82,21 @@ Human-mandated two-PR completion sequence.
 The database grant is authoritative for ordinary staff. Bootstrap super-admin identity is evaluated
 server-side from a verified auth email and immediately receives all module permissions; it is never
 read from client-controlled Supabase user metadata. RLS remains deny-by-default for browser roles.
+DEE-747 roles authorize only the shared Finance/HR surface; they never confer AI-TRADER Admin
+permissions. Existing AI-TRADER authorization remains unchanged and outside this integration.
+
+## Production rollout order
+
+1. Keep the current production application version live while applying additive migrations
+   `0174` and `0175` through the Human-approved targeted Supabase procedure.
+2. Verify the three tables, deny policies, immutable/history triggers and the
+   `oumaster369@gmail.com` SUPER_ADMIN bootstrap row.
+3. Deploy the exact reviewed application version, then verify `/waia-admin`, `/finance`, `/hr` and
+   public `/work-plan` intake with no AI-TRADER Admin regression.
+4. If intake must stop without deleting data, set `WAIA_PUBLIC_TEAM_APPLICATIONS_ENABLED=false`.
 
 ## Rollback
 
-Disable public application intake, retain audit/history rows, and revert the squash commit. Never
-delete applications or HR history as a rollback shortcut.
+Set `WAIA_PUBLIC_TEAM_APPLICATIONS_ENABLED=false`, roll back the application version, and retain
+all additive schema, applications, audit and history rows. Never delete applications or HR history
+as a rollback shortcut; dropping `0174`/`0175` objects is not an approved operational rollback.
