@@ -400,6 +400,30 @@ export function serializeRunwaySnapshot(row: {
   };
 }
 
+export function serializeBalanceCheckpoint(row: {
+  id: string;
+  organizationId: string;
+  currency: string;
+  confirmedBalanceMicros: bigint;
+  asOf: Date;
+  sourceLabel: string;
+  note: string;
+  confirmedByUserId: string;
+  createdAt: Date;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    currency: row.currency,
+    confirmedBalanceMicros: serializeDecimalBigint(row.confirmedBalanceMicros),
+    asOf: iso(row.asOf),
+    sourceLabel: row.sourceLabel,
+    note: row.note,
+    confirmedByUserId: row.confirmedByUserId,
+    createdAt: iso(row.createdAt),
+  };
+}
+
 export function serializeReconciliation(
   row: TreasuryBalanceReconciliationRecord,
 ): Record<string, unknown> {

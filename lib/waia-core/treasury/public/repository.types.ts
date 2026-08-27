@@ -10,7 +10,10 @@ import type {
   TreasuryProjectRecord,
 } from "@/lib/waia-core/treasury/admin/ledger-catalog-types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
-import type { TreasuryRunwaySnapshotRecord } from "@/lib/waia-core/treasury/breath/types";
+import type {
+  TreasuryBalanceCheckpointRecord,
+  TreasuryRunwaySnapshotRecord,
+} from "@/lib/waia-core/treasury/breath/types";
 import type {
   TreasuryCommitmentRecord,
   TreasuryInceptionRecord,
@@ -25,6 +28,8 @@ export type PublicTreasuryAttributionFact = {
   status: "UNMATCHED" | "ATTRIBUTED" | "ANONYMOUS" | "REVOKED";
   contributorUserId: string | null;
   consentPublicIdentity: boolean;
+  publicSiteUrl: string | null;
+  twinProfileUrl: string | null;
   createdAt: Date;
   attributedAt: Date | null;
   revokedAt: Date | null;
@@ -52,6 +57,7 @@ export type PublicTreasuryFacts = {
   runwaySnapshots: TreasuryRunwaySnapshotRecord[];
   reconciliations: TreasuryBalanceReconciliationRecord[];
   inceptions: TreasuryInceptionRecord[];
+  balanceCheckpoints?: TreasuryBalanceCheckpointRecord[];
   categories: TreasuryCategoryRecord[];
   categoryBudgetHistory: TreasuryCategoryBudgetHistoryRecord[];
   projects: TreasuryProjectRecord[];

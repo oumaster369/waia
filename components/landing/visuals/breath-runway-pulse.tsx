@@ -32,7 +32,6 @@ function buildWavePath(cells: number): string {
 
 const WAVE_PATH = buildWavePath(WAVE_CELL_COUNT);
 
-/** Keep marker amount labels readable near the 0 / 1 endpoints. */
 function markerLabelTransform(ratio: number): string {
   if (ratio <= 0.12) return "translateX(0)";
   if (ratio >= 0.88) return "translateX(-100%)";
@@ -55,8 +54,6 @@ export function BreathFundingGauge({
   const ratio = deriveBreathFundingMarkerRatio(currentFreeFunds, idealAnnualBudget);
   const gaugePending = status === "pending" || ratio === null;
   const idealPublished = idealAnnualBudget.amount !== null && idealAnnualBudget.currency !== null;
-  const freePublished = currentFreeFunds.amount !== null && currentFreeFunds.currency !== null;
-  const showMarker = ratio !== null && freePublished;
 
   return (
     <div
@@ -80,18 +77,15 @@ export function BreathFundingGauge({
         <div className="mb-2 flex items-start justify-between gap-3">
           <span
             data-testid="landing-breath-runway-now"
-            className="text-[0.65rem] font-semibold tracking-[0.14em] text-[rgba(170,210,220,0.75)] uppercase"
+            className="font-mono text-sm text-[rgba(205,225,230,0.82)] tabular-nums"
           >
-            {copy.fundingZero}
+            0
           </span>
-          <span
-            data-testid="landing-breath-runway-end"
-            className="max-w-[11rem] text-right text-[0.65rem] font-semibold tracking-[0.1em] text-[rgba(170,210,220,0.75)] uppercase"
-          >
+          <span className="max-w-[13rem] text-right text-[0.65rem] font-semibold tracking-[0.1em] text-[rgba(170,210,220,0.75)] uppercase">
             {copy.idealAnnualBudgetLabel}
             <span
               data-testid="landing-breath-ideal-budget-value"
-              className="mt-1 block font-mono text-[0.7rem] font-normal tracking-normal text-[rgba(200,220,225,0.78)] normal-case tabular-nums"
+              className="mt-1 block font-mono text-sm font-normal tracking-normal text-[#e8f2f4] normal-case tabular-nums"
             >
               {idealPublished
                 ? formatBreathAmount(idealAnnualBudget.amount, idealAnnualBudget.currency)
@@ -99,7 +93,6 @@ export function BreathFundingGauge({
             </span>
           </span>
         </div>
-
         <div className="relative" aria-hidden={ratio === null ? true : undefined}>
           <svg
             data-testid="landing-breath-runway-svg"
@@ -145,25 +138,26 @@ export function BreathFundingGauge({
           ) : null}
         </div>
 
-        {/* Lower info: free-funds under marker, then countdown in funded/left interval */}
-        <div
-          data-testid="landing-breath-gauge-lower"
-          className="mt-3 flex flex-col gap-3 overflow-x-hidden"
-        >
-          {showMarker ? (
+        {gaugePending ? (
+          <p
+            data-testid="landing-breath-pending"
+            data-publication-status="pending"
+            className="mt-5 max-w-2xl text-sm leading-relaxed text-[rgba(205,222,228,0.78)]"
+          >
+            {copy.pending}
+          </p>
+        ) : (
+          <div data-testid="landing-breath-facts" data-publication-status="published">
             <div
               data-testid="landing-breath-free-funds"
-              className="relative min-h-10 w-full"
+              className="relative mt-2 min-h-12 w-full overflow-hidden"
               aria-label={`Current free funds ${formatBreathAmount(currentFreeFunds.amount, currentFreeFunds.currency)}`}
             >
               <div
-                className="relative w-max max-w-full text-center sm:absolute sm:top-0"
-                style={{
-                  left: `${ratio * 100}%`,
-                  transform: markerLabelTransform(ratio),
-                }}
+                className="absolute top-0 w-max max-w-full text-center"
+                style={{ left: `${ratio * 100}%`, transform: markerLabelTransform(ratio) }}
               >
-                <p className="text-[0.6rem] font-semibold tracking-[0.12em] text-[rgba(170,210,220,0.7)] uppercase">
+                <p className="text-[0.6rem] font-semibold tracking-[0.12em] text-[rgba(170,210,220,0.72)] uppercase">
                   {copy.freeFundsLabel}
                 </p>
                 <p
@@ -174,39 +168,16 @@ export function BreathFundingGauge({
                 </p>
               </div>
             </div>
-          ) : (
-            <p
-              data-testid="landing-breath-funding-pending"
-              className="text-sm text-[rgba(185,210,218,0.72)]"
+            <div
+              data-testid="landing-breath-countdown-region"
+              data-countdown-region="published"
+              className="mt-3 border-t border-[rgba(150,195,205,0.18)] pt-4 sm:max-w-[70%]"
             >
-              {copy.fundingPositionPending}
-            </p>
-          )}
-
-          <div
-            data-testid="landing-breath-countdown-region"
-            data-countdown-region={showMarker ? "funded-interval" : "pending-lower"}
-            className={cn("min-w-0", showMarker && "sm:max-w-full")}
-            style={
-              showMarker
-                ? {
-                    /* Own the left/funded side toward the marker; floor keeps mobile readable. */
-                    maxWidth: `${Math.max(ratio * 100, 42)}%`,
-                  }
-                : undefined
-            }
-          >
-            <BreathCountdown endsAt={runway.endsAt} />
+              <BreathCountdown endsAt={runway.endsAt} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
-
-      <p
-        data-testid="landing-breath-runway-note"
-        className="mt-4 text-sm leading-relaxed text-[rgba(185,210,218,0.78)]"
-      >
-        {gaugePending ? copy.fundingScalePendingNote : copy.fundingScalePublishedNote}
-      </p>
     </div>
   );
 }

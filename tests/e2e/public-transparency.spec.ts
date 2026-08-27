@@ -4,7 +4,9 @@ test.describe("public WAIA transparency pages", () => {
   test("keeps the budget page truthful and read-only before publication", async ({ page }) => {
     await page.goto("/budget");
 
-    await expect(page.getByRole("heading", { level: 1, name: "WAIA Budget" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Transactions & budget" }),
+    ).toBeVisible();
     await expect(page.getByTestId("public-budget-pending")).toContainText(
       /first complete public financial record is still awaiting publication/i,
     );
@@ -36,7 +38,7 @@ test.describe("public WAIA transparency pages", () => {
     await page.goto("/patrons");
 
     await expect(page.getByRole("heading", { level: 1, name: "Patrons" })).toBeVisible();
-    await expect(page.getByText("People who help keep WAIA alive.")).toBeVisible();
+    await expect(page.getByText(/Thank you to everyone helping WAIA breathe\./)).toBeVisible();
     await expect(
       page
         .getByTestId("public-patrons-pending")

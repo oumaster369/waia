@@ -109,12 +109,12 @@ describe("breath-public contract", () => {
     ).toBe(false);
   });
 
-  it("formats countdown without negatives or seconds", () => {
+  it("formats the living countdown with seconds and without negatives", () => {
     expect(formatBreathCountdown(73 * 24 * 60 * 60_000 + 14 * 60 * 60_000 + 28 * 60_000)).toBe(
-      "73d 14h 28m",
+      "73d 14h 28m 0s",
     );
-    expect(formatBreathCountdown(-5_000)).toBe("0d 0h 0m");
-    expect(formatBreathCountdown(0)).toBe("0d 0h 0m");
+    expect(formatBreathCountdown(-5_000)).toBe("0d 0h 0m 0s");
+    expect(formatBreathCountdown(0)).toBe("0d 0h 0m 0s");
   });
 });
 
@@ -139,10 +139,10 @@ describe("breath public copy hygiene", () => {
 });
 
 describe("breath-support channel", () => {
-  it("remains pending with no invented destination until Finance publishes", () => {
+  it("always opens the truthful public support surface", () => {
     const channel = getBreathSupportChannel();
-    expect(channel.status).toBe("pending");
-    expect(channel.href).toBeNull();
+    expect(channel.status).toBe("available");
+    expect(channel.href).toBe("/support");
   });
 });
 

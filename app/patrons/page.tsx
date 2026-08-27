@@ -38,7 +38,7 @@ export default async function PatronsPage() {
     <PublicPageShell
       eyebrow="Public contribution record"
       title="Patrons"
-      intro="People who help keep WAIA alive."
+      intro="Thank you to everyone helping WAIA breathe. We keep this record so that, when the time is right, WAIA can decide how to thank each patron — perhaps through future WAIA Core shares, perhaps in another form. Nothing is promised today; the contribution record is kept faithfully."
     >
       {!projection ? (
         <section data-testid="public-patrons-unavailable" className={publicPanelClass}>
@@ -88,6 +88,12 @@ export default async function PatronsPage() {
                       Patron
                     </th>
                     <th className={headClass} scope="col">
+                      Profile
+                    </th>
+                    <th className={headClass} scope="col">
+                      Website / social
+                    </th>
+                    <th className={headClass} scope="col">
                       Contributed
                     </th>
                     <th className={headClass} scope="col">
@@ -101,6 +107,24 @@ export default async function PatronsPage() {
                       <th className={cellClass + " text-waia-fg font-medium"} scope="row">
                         {patron.displayName}
                       </th>
+                      <td className={cellClass}>
+                        {patron.twinProfileUrl ? (
+                          <a className="underline underline-offset-4" href={patron.twinProfileUrl}>
+                            AI-Twin profile
+                          </a>
+                        ) : (
+                          <span className="text-waia-fg-subtle">Reserved</span>
+                        )}
+                      </td>
+                      <td className={cellClass}>
+                        {patron.publicSiteUrl ? (
+                          <a className="underline underline-offset-4" href={patron.publicSiteUrl}>
+                            Open link
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className={cellClass + " font-mono tabular-nums"}>
                         {formatPublicMoney(patron.contributedAmountMicros, patron.currency)}
                       </td>
@@ -114,6 +138,8 @@ export default async function PatronsPage() {
                       <th className={cellClass + " text-waia-fg font-medium"} scope="row">
                         Private &amp; anonymous support
                       </th>
+                      <td className={cellClass}>—</td>
+                      <td className={cellClass}>—</td>
                       <td className={cellClass + " font-mono tabular-nums"}>
                         {formatPublicMoney(
                           publishedRecord.privateSupport.contributedAmountMicros,

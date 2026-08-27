@@ -4,6 +4,7 @@ import {
   handleTreasuryIdealBudgetCommandsPost,
   handleTreasuryLedgerCatalogGet,
   handleTreasuryLedgerCatalogPost,
+  handleTreasuryTransactionCommandsPost,
   handleTreasuryTransactionsPost,
 } from "@/lib/waia-core/treasury/admin/handlers";
 import { computeAnnualCategoryBudgetMicros } from "@/lib/waia-core/treasury/admin/ledger-catalog-service";
@@ -283,6 +284,53 @@ describe("DEE-661 Treasury ledger catalogs", () => {
     );
     expect(verified.status).toBe(400);
     expect(errorCode(verified)).toBe("STATUS_GATE_REQUIRED");
+  });
+
+  it("allows an audited manual USD card expense to become verified", async () => {
+    const { services } = createWp4Bundle();
+    const deps = createWp4Deps({ services });
+    const created = await handleTreasuryTransactionsPost(
+      jsonRequest("/api/admin/treasury/transactions", {
+        organization_id: ORG_A,
+        status: "NEEDS_REVIEW",
+        kind: "EXPENSE",
+        signed_amount_micros: "-1250000",
+        native_amount_atomic: "1250000",
+        native_decimals: 6,
+        native_asset: "USD",
+        occurred_at: "2026-08-21T12:00:00.000Z",
+        reason: "import card statement",
+      }),
+      deps,
+    );
+    expect(created.status).toBe(200);
+    const transactionId = (created.body as { transaction: { id: string } }).transaction.id;
+
+    const classified = await handleTreasuryTransactionCommandsPost(
+      jsonRequest("/api/admin/treasury/transactions/commands", {
+        organization_id: ORG_A,
+        command: "classify",
+        transaction_id: transactionId,
+        patch: { kind: "EXPENSE", direction: "OUTFLOW" },
+        reason: "classify statement expense",
+      }),
+      deps,
+    );
+    expect(classified.status).toBe(200);
+
+    const verified = await handleTreasuryTransactionCommandsPost(
+      jsonRequest("/api/admin/treasury/transactions/commands", {
+        organization_id: ORG_A,
+        command: "verify",
+        transaction_id: transactionId,
+        reason: "operator supplied statement",
+      }),
+      deps,
+    );
+    expect(verified.status).toBe(200);
+    expect((verified.body as { transaction: { status: string } }).transaction.status).toBe(
+      "VERIFIED",
+    );
   });
 
   it("enforces mutate permission on catalog writes", async () => {

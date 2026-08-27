@@ -5,6 +5,7 @@ import type {
   TreasuryCommitmentRecord,
   TreasuryTransactionRecord,
 } from "@/lib/waia-core/treasury/types";
+import type { TreasuryBalanceCheckpointRecord } from "@/lib/waia-core/treasury/breath/types";
 import {
   BREATH_FILL_RATIO_SCALE,
   breathPendingReasons,
@@ -67,6 +68,36 @@ export function deriveCurrentFreeFunds(
 ): bigint {
   const free = accountingCashBalance - activeCommittedFunds;
   return free > 0n ? free : 0n;
+}
+
+export function latestBalanceCheckpoint(
+  checkpoints: readonly TreasuryBalanceCheckpointRecord[],
+  currency?: string,
+): TreasuryBalanceCheckpointRecord | null {
+  const eligible = currency
+    ? checkpoints.filter((row) => row.currency === currency)
+    : [...checkpoints];
+  return (
+    eligible.sort((a, b) => {
+      const byAsOf = b.asOf.getTime() - a.asOf.getTime();
+      if (byAsOf !== 0) return byAsOf;
+      const byCreated = b.createdAt.getTime() - a.createdAt.getTime();
+      return byCreated !== 0 ? byCreated : b.id.localeCompare(a.id);
+    })[0] ?? null
+  );
+}
+
+/** Apply only verified cash movements that occurred after the confirmed baseline. */
+export function deriveCheckpointCashBalance(
+  checkpoint: TreasuryBalanceCheckpointRecord,
+  transactions: readonly TreasuryTransactionRecord[],
+): bigint {
+  let balance = checkpoint.confirmedBalanceMicros;
+  for (const tx of transactions) {
+    if (tx.status !== "VERIFIED" || tx.occurredAt.getTime() <= checkpoint.asOf.getTime()) continue;
+    balance += requireVerifiedCashEffect(tx);
+  }
+  return balance;
 }
 
 export function budgetFillRatioDisplay(funded: bigint, planned: bigint): number | null {

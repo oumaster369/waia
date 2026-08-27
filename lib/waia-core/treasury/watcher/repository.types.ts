@@ -79,6 +79,25 @@ export type TreasuryWatcherRepository = {
   ): Promise<TreasuryTransactionRecord | null>;
   listOrgTransactions(context: OrgContext): Promise<TreasuryTransactionRecord[]>;
 
+  /** Exact-amount identity match only; never verifies the semantic transaction. */
+  matchContributionIntent?(
+    context: OrgContext,
+    input: {
+      transactionId: string;
+      toAddress: string;
+      amountAtomic: bigint;
+      network: string;
+      assetCode: string;
+      now: Date;
+      newId: () => string;
+    },
+  ): Promise<string | null>;
+  /** Records a direct wallet inflow as anonymous support; never verifies the transaction. */
+  ensureAnonymousContributionAttribution?(
+    context: OrgContext,
+    input: { transactionId: string; now: Date; newId: () => string },
+  ): Promise<void>;
+
   insertBalanceReconciliation(record: TreasuryBalanceReconciliationRecord): Promise<void>;
   listBalanceReconciliations(context: OrgContext): Promise<TreasuryBalanceReconciliationRecord[]>;
 };

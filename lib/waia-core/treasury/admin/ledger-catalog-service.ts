@@ -291,22 +291,27 @@ export function createTreasuryLedgerCatalogService(deps: {
       const categories = await allCategories(org);
       const history = await deps.repository.categoryBudgetHistory.list(org);
       const transactions = await deps.listTransactions(org);
-      const annual = deriveCategoryBudgetAnnual({
-        year: year ?? now().getUTCFullYear(),
+      const targetYear = year ?? now().getUTCFullYear();
+      const currentMonth = deriveCategoryBudgetMonth({
+        month: `${targetYear}-${String(now().getUTCMonth() + 1).padStart(2, "0")}`,
         categories,
         history,
         transactions,
       });
-      const total = annual.totals.find((row) => row.currency === normalizedCurrency);
+      const total = currentMonth.totals.find((row) => row.currency === normalizedCurrency);
       const activeCategoryCount = categories.filter((row) => row.isActive).length;
-      if (annual.totals.some((row) => row.currency !== normalizedCurrency && row.budgetMicros > 0n)) {
+      if (
+        currentMonth.totals.some(
+          (row) => row.currency !== normalizedCurrency && row.budgetMicros > 0n,
+        )
+      ) {
         throw new TreasuryValidationError(
           "BUDGET_CURRENCY_MISMATCH",
           "all active category budgets must use the annual budget currency",
         );
       }
       return {
-        amountMicros: total?.budgetMicros ?? 0n,
+        amountMicros: (total?.budgetMicros ?? 0n) * 12n,
         activeCategoryCount,
       };
     },
@@ -694,29 +699,33 @@ export function createTreasuryLedgerCatalogService(deps: {
         input.groupName !== undefined ||
         input.isActive !== undefined;
       const month = changesBudget ? effectiveMonth(input.effectiveMonth, updatedAt) : undefined;
-      const updated = await deps.repository.categories.updateWithBudget(org, id, {
-        name: input.name === undefined ? undefined : requiredText(input.name, "name"),
-        groupName:
-          input.groupName === undefined ? undefined : nextGroupName,
-        description:
-          input.description === undefined
-            ? undefined
-            : optionalText(input.description, "description", 2_000),
-        monthlyBudgetMicros: input.monthlyBudgetMicros,
-        currency: input.currency === undefined ? undefined : nextCurrency,
-        isActive: input.isActive,
-        updatedAt,
-      }, changesBudget && month
-        ? budgetHistoryRecord({
-            organizationId: org.organizationId,
-            categoryId: id,
-            month,
-            groupName: nextGroupName,
-            amount: nextActive ? nextMonthly : 0n,
-            currency: nextCurrency,
-            timestamp: updatedAt,
-          })
-        : undefined);
+      const updated = await deps.repository.categories.updateWithBudget(
+        org,
+        id,
+        {
+          name: input.name === undefined ? undefined : requiredText(input.name, "name"),
+          groupName: input.groupName === undefined ? undefined : nextGroupName,
+          description:
+            input.description === undefined
+              ? undefined
+              : optionalText(input.description, "description", 2_000),
+          monthlyBudgetMicros: input.monthlyBudgetMicros,
+          currency: input.currency === undefined ? undefined : nextCurrency,
+          isActive: input.isActive,
+          updatedAt,
+        },
+        changesBudget && month
+          ? budgetHistoryRecord({
+              organizationId: org.organizationId,
+              categoryId: id,
+              month,
+              groupName: nextGroupName,
+              amount: nextActive ? nextMonthly : 0n,
+              currency: nextCurrency,
+              timestamp: updatedAt,
+            })
+          : undefined,
+      );
       await audit(
         actor,
         treasuryAuditActions.categoryUpdate,

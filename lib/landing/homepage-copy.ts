@@ -35,7 +35,7 @@ export const HOMEPAGE_COPY = {
       "The live funding scale appears with the Breath ledger — waves stay calm until then.",
     fundingScalePublishedNote:
       "Current free funds against the ideal annual budget — WAIA’s financial breathing capacity.",
-    breatheForLabel: "WAIA can breathe for",
+    breatheForLabel: "WAIA can keep breathing for",
     breatheForPending: "Awaiting first ledger publication",
     supportCta: "KEEP WAIA BREATHING",
     supportFullyFunded: "WAIA IS FULLY FUNDED",

@@ -1,5 +1,6 @@
 import { TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
 import {
+  MANUAL_ACCOUNTING_CURRENCY_V1,
   TREASURY_USDT_V1_ASSET,
   TREASURY_USDT_V1_DECIMALS,
   USDT_NOMINAL_USD_POLICY_V1,
@@ -68,6 +69,18 @@ export function isApprovedV1UsdtAsset(input: {
     input.nativeAsset === TREASURY_USDT_V1_ASSET &&
     input.nativeDecimals === TREASURY_USDT_V1_DECIMALS &&
     input.accountingDenominationPolicy === USDT_NOMINAL_USD_POLICY_V1
+  );
+}
+
+export function isApprovedManualUsdAsset(input: {
+  nativeAsset: string;
+  nativeDecimals: number;
+  accountingDenominationPolicy: string | null;
+}): boolean {
+  return (
+    input.nativeAsset === "USD" &&
+    input.nativeDecimals === TREASURY_USDT_V1_DECIMALS &&
+    input.accountingDenominationPolicy === MANUAL_ACCOUNTING_CURRENCY_V1
   );
 }
 

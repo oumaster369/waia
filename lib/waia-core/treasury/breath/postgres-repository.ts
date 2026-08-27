@@ -17,7 +17,10 @@ import type {
   BreathLoadedFacts,
   BreathSnapshotStore,
 } from "@/lib/waia-core/treasury/breath/repository.types";
-import type { TreasuryRunwaySnapshotRecord } from "@/lib/waia-core/treasury/breath/types";
+import type {
+  TreasuryBalanceCheckpointRecord,
+  TreasuryRunwaySnapshotRecord,
+} from "@/lib/waia-core/treasury/breath/types";
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
@@ -55,6 +58,10 @@ function snapshotStore(ex: PgExecutor): BreathSnapshotStore {
       requireOrgContext(record.organizationId);
       await ex.insert(pgSchema.treasuryRunwaySnapshots).values(record);
     },
+    async insertBalanceCheckpoint(record: TreasuryBalanceCheckpointRecord) {
+      requireOrgContext(record.organizationId);
+      await ex.insert(pgSchema.treasuryBalanceCheckpoints).values(record);
+    },
   };
 }
 
@@ -80,6 +87,7 @@ export function createPostgresTreasuryBreathFactsRepository(
         runwayPlans,
         reconciliations,
         inceptions,
+        balanceCheckpoints,
       ] = await Promise.all([
         db
           .select()
@@ -117,6 +125,10 @@ export function createPostgresTreasuryBreathFactsRepository(
           .select()
           .from(pgSchema.treasuryLedgerInceptions)
           .where(orgScopedWhere(pgSchema.treasuryLedgerInceptions.organizationId, org)),
+        db
+          .select()
+          .from(pgSchema.treasuryBalanceCheckpoints)
+          .where(orgScopedWhere(pgSchema.treasuryBalanceCheckpoints.organizationId, org)),
       ]);
       return {
         settings: settingsRows[0] ?? null,
@@ -128,10 +140,15 @@ export function createPostgresTreasuryBreathFactsRepository(
         runwayPlans,
         reconciliations,
         inceptions,
+        balanceCheckpoints: balanceCheckpoints.map((row) => ({
+          ...row,
+          sourceLabel: "HUMAN_CONFIRMED" as const,
+        })),
       };
     },
     getLatestRunwaySnapshot: rootStore.getLatestRunwaySnapshot,
     insertRunwaySnapshot: rootStore.insertRunwaySnapshot,
+    insertBalanceCheckpoint: rootStore.insertBalanceCheckpoint,
     async listIdealBudgetAuditTimes(context, idealId) {
       const org = scoped(context);
       const rows = await db

@@ -162,6 +162,46 @@ describe("DEE-617 public Treasury projection", () => {
     expect(facts.runwaySnapshots).toHaveLength(1);
   });
 
+  it("uses a Human-confirmed checkpoint as the current balance authority", async () => {
+    const facts = await createPublishedPublicTreasuryFacts();
+    facts.balanceCheckpoints = [
+      {
+        id: "61700000-0000-4000-8000-000000000012",
+        organizationId: ORG_A,
+        currency: "USD",
+        confirmedBalanceMicros: 26_550_000n,
+        asOf: NOW,
+        sourceLabel: "HUMAN_CONFIRMED",
+        note: "Operator confirmed balance",
+        confirmedByUserId: USER_A,
+        createdAt: NOW,
+      },
+    ];
+    const plan = facts.runwayPlans[0]!;
+    facts.runwaySnapshots[0] = {
+      ...facts.runwaySnapshots[0]!,
+      freeFundsAtAsOfMicros: 26_550_000n,
+      endsAt: new Date("2026-09-09T01:12:00.000Z"),
+      inputDigest: (
+        await import("@/lib/waia-core/treasury/breath/runway")
+      ).computeRunwayInputDigest({
+        verified: facts.transactions,
+        commitments: facts.commitments,
+        plan,
+        freeFundsAtAsOfMicros: 26_550_000n,
+      }),
+    };
+    facts.reconciliations = [];
+    facts.inceptions = [];
+
+    const projection = derivePublicTreasuryProjection(facts, NOW);
+    expect(projection.breath).toMatchObject({
+      status: "published",
+      availableAmountMicros: "26550000",
+      pendingReasons: [],
+    });
+  });
+
   it("withholds category history when it no longer matches the approved annual snapshot", async () => {
     const facts = await createPublishedPublicTreasuryFacts();
     facts.idealBudgets[0] = { ...facts.idealBudgets[0]!, amountMicros: 121_000_000n };
@@ -205,9 +245,7 @@ describe("DEE-617 public Treasury projection", () => {
 
   it("bounds the public transaction ledger and rejects mixed-organization facts", async () => {
     const facts = await createPublishedPublicTreasuryFacts();
-    const template = facts.transactions.find(
-      (row) => row.detailPublication === "DETAIL_PUBLIC",
-    )!;
+    const template = facts.transactions.find((row) => row.detailPublication === "DETAIL_PUBLIC")!;
     const additions: TreasuryTransactionRecord[] = Array.from({ length: 105 }, (_, index) => ({
       ...template,
       id: `public-${String(index).padStart(3, "0")}`,

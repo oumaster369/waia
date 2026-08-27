@@ -11,12 +11,7 @@ import {
   getRequest,
   jsonRequest,
 } from "@/tests/unit/helpers/treasury-wp4";
-import {
-  NOW,
-  createWp6Bundle,
-  createWp6Clock,
-  seedTx,
-} from "@/tests/unit/helpers/treasury-wp6";
+import { NOW, createWp6Bundle, createWp6Clock, seedTx } from "@/tests/unit/helpers/treasury-wp6";
 
 const ADMIN = { actorType: "admin" as const, actorUserId: "admin-user" };
 const context = { organizationId: ORG_A };
@@ -159,6 +154,12 @@ describe("DEE-671 category budget truth", () => {
       },
     ]);
     await expect(
+      services.ledgerCatalog.deriveAnnualBudgetMicros(context, "USD", 2026),
+    ).resolves.toEqual({
+      amountMicros: 240_000_000n,
+      activeCategoryCount: 1,
+    });
+    await expect(
       services.ledgerCatalog.updateCategory(context, ADMIN, category.id, {
         monthlyBudgetMicros: 1n,
         effectiveMonth: "2026-08",
@@ -244,9 +245,7 @@ describe("DEE-671 category budget truth", () => {
 
     for (const year of ["not-a-year", "2026.5", "2026.0", "2e3", "1999", "2201"]) {
       const invalid = await handleTreasuryCategoryBudgetsGet(
-        getRequest(
-          `/api/admin/treasury/category-budgets?organization_id=${ORG_A}&year=${year}`,
-        ),
+        getRequest(`/api/admin/treasury/category-budgets?organization_id=${ORG_A}&year=${year}`),
         deps,
       );
       expect(invalid.status).toBe(400);

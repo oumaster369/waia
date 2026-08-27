@@ -1,7 +1,10 @@
 import { computeCanonicalCashEffect } from "@/lib/waia-core/treasury/cash-effect";
 import { TreasuryValidationError } from "@/lib/waia-core/treasury/errors";
-import { isApprovedV1UsdtAsset } from "@/lib/waia-core/treasury/money";
-import { USDT_NOMINAL_USD_POLICY_V1 } from "@/lib/waia-core/treasury/types";
+import { isApprovedManualUsdAsset, isApprovedV1UsdtAsset } from "@/lib/waia-core/treasury/money";
+import {
+  MANUAL_ACCOUNTING_CURRENCY_V1,
+  USDT_NOMINAL_USD_POLICY_V1,
+} from "@/lib/waia-core/treasury/types";
 import type {
   TreasuryEvidenceLinkRecord,
   TreasuryObservationRecord,
@@ -21,16 +24,20 @@ export function assertClassifiedSemanticFields(tx: TreasuryTransactionRecord): v
       "classification requires accounting_amount_micros",
     );
   }
-  if (tx.accountingDenominationPolicy !== USDT_NOMINAL_USD_POLICY_V1) {
+  if (
+    tx.accountingDenominationPolicy !== USDT_NOMINAL_USD_POLICY_V1 &&
+    tx.accountingDenominationPolicy !== MANUAL_ACCOUNTING_CURRENCY_V1
+  ) {
     throw new TreasuryValidationError(
       "DENOMINATION_POLICY_REQUIRED",
-      `v1 requires ${USDT_NOMINAL_USD_POLICY_V1}`,
+      `v1 requires ${USDT_NOMINAL_USD_POLICY_V1} or ${MANUAL_ACCOUNTING_CURRENCY_V1}`,
     );
   }
-  if (!isApprovedV1UsdtAsset(tx)) {
+  const approvedManualUsd = tx.provenance === "MANUAL" && isApprovedManualUsdAsset(tx);
+  if (!isApprovedV1UsdtAsset(tx) && !approvedManualUsd) {
     throw new TreasuryValidationError(
       "ASSET_POLICY_REQUIRED",
-      "v1 qualifying accounting requires approved USDT TRC-20 nominal policy",
+      "v1 qualifying accounting requires approved USDT nominal policy or a manual USD entry",
     );
   }
   const expected = computeCanonicalCashEffect({

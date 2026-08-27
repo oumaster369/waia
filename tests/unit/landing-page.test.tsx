@@ -111,7 +111,13 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-breath-pending")).toHaveTextContent(
       /first public financial snapshot has not been published/i,
     );
-    expect(screen.queryByTestId("landing-breath-facts")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway")).toHaveAttribute(
+      "data-runway-state",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-runway-wave")).toBeInTheDocument();
+    expect(screen.queryByText(/One annual operating budget is protected/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-support-cta")).toHaveAttribute("href", "/support");
     expect(screen.getByTestId("landing-breath-budget-link")).toHaveAttribute("href", "/budget");
     expect(screen.getByTestId("landing-breath-patrons-link")).toHaveAttribute("href", "/patrons");
     expect(screen.getByTestId("landing-breath-work-plan-link")).toHaveAttribute(
@@ -187,8 +193,11 @@ describe("LandingPage", () => {
     expect(screen.queryByText(/Resource transparency/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Recent activity/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Work transparency/i)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("landing-breath-media")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("landing-breath-support")).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-runway-wave")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-support")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-support-cta")).toHaveTextContent(
+      "KEEP WAIA BREATHING",
+    );
     expect(screen.getByTestId("landing-living-legacy-example")).toHaveTextContent(/grandchild/i);
   });
 
@@ -220,6 +229,13 @@ describe("LandingPage", () => {
         months: [],
       },
       transactions: [],
+      transactionPagination: {
+        offset: 0,
+        limit: 100,
+        total: 0,
+        hasPrevious: false,
+        hasNext: false,
+      },
       fundingNeeds: [],
       patrons: {
         status: "pending",
@@ -245,13 +261,18 @@ describe("LandingPage", () => {
     render(<LandingPageContent publicTreasury={projection} />);
     await waitFor(() => expect(screen.getByTestId("landing-auth-divider")).toBeInTheDocument());
 
-    expect(screen.getByTestId("landing-breath-facts")).toHaveAttribute(
-      "data-publication-status",
+    expect(screen.getByTestId("landing-breath-runway")).toHaveAttribute(
+      "data-runway-state",
       "published",
     );
-    expect(screen.getByTestId("landing-breath-available-value")).toHaveTextContent("42,000 USD");
-    expect(screen.getByTestId("landing-breath-runway-value")).toHaveTextContent("30d 0h");
-    expect(screen.getByTestId("landing-breath-annual-value")).toHaveTextContent("100,000 USD");
+    expect(screen.getByTestId("landing-breath-free-funds-value")).toHaveTextContent("$42,000");
+    expect(screen.getByTestId("landing-breath-countdown-value")).toHaveTextContent(
+      /(?:29d 23h|30d 0h)/,
+    );
+    expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent("$100,000");
+    expect(screen.getByTestId("landing-breath-runway-wave")).toBeInTheDocument();
+    expect(screen.queryByText(/Fund allocation/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("landing-breath-facts")).toBeInTheDocument();
     expect(screen.queryByTestId("landing-breath-pending")).not.toBeInTheDocument();
   });
 
@@ -277,7 +298,7 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent("$100,000");
     expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
       "data-countdown-region",
-      "funded-interval",
+      "published",
     );
     expect(screen.getByTestId("landing-breath-runway-pulse")).toContainElement(
       screen.getByTestId("landing-breath-countdown"),
@@ -317,7 +338,7 @@ describe("LandingPage", () => {
     );
   });
 
-  it("keeps free-funds labels readable at 0 / midpoint / 1 marker fixtures", () => {
+  it("keeps the three primary facts readable at 0 / midpoint / 1 marker fixtures", () => {
     const fixtures = [
       { free: 0, ratio: "0.0000" },
       { free: 50_000, ratio: "0.5000" },
@@ -335,12 +356,11 @@ describe("LandingPage", () => {
       );
       const marker = screen.getByTestId("landing-breath-funding-marker");
       expect(marker).toHaveAttribute("data-marker-ratio", fixture.ratio);
-      const funds = screen.getByTestId("landing-breath-free-funds");
-      expect(funds.textContent).toMatch(/Current free funds/i);
-      expect(funds.getBoundingClientRect().width).toBeGreaterThanOrEqual(0);
+      expect(screen.getByTestId("landing-breath-facts")).toHaveTextContent(/Current free funds/i);
+      expect(screen.getByTestId("landing-breath-free-funds-value")).toBeVisible();
       expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
         "data-countdown-region",
-        "funded-interval",
+        "published",
       );
       unmount();
     }

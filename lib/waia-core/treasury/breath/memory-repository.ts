@@ -10,6 +10,7 @@ import type {
   BreathSnapshotStore,
 } from "@/lib/waia-core/treasury/breath/repository.types";
 import type { TreasuryRunwaySnapshotRecord } from "@/lib/waia-core/treasury/breath/types";
+import type { TreasuryBalanceCheckpointRecord } from "@/lib/waia-core/treasury/breath/types";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -31,6 +32,7 @@ export function createMemoryTreasuryBreathFactsRepository(deps: {
 }): BreathFactsRepository & { recordAuditEvent: (event: BreathIdealAuditEvent) => void } {
   const snapshots: TreasuryRunwaySnapshotRecord[] = [];
   const auditEvents: BreathIdealAuditEvent[] = [];
+  const balanceCheckpoints: TreasuryBalanceCheckpointRecord[] = [];
   const locks = new Map<string, Promise<unknown>>();
 
   const store: BreathSnapshotStore = {
@@ -50,6 +52,9 @@ export function createMemoryTreasuryBreathFactsRepository(deps: {
     async insertRunwaySnapshot(record) {
       requireOrgContext(record.organizationId);
       snapshots.push(clone(record));
+    },
+    async insertBalanceCheckpoint(record) {
+      balanceCheckpoints.push(clone(record));
     },
   };
 
@@ -90,10 +95,14 @@ export function createMemoryTreasuryBreathFactsRepository(deps: {
         runwayPlans,
         reconciliations,
         inceptions,
+        balanceCheckpoints: balanceCheckpoints
+          .filter((row) => row.organizationId === org.organizationId)
+          .map(clone),
       };
     },
     getLatestRunwaySnapshot: store.getLatestRunwaySnapshot,
     insertRunwaySnapshot: store.insertRunwaySnapshot,
+    insertBalanceCheckpoint: store.insertBalanceCheckpoint,
     async listIdealBudgetAuditTimes(context, idealId) {
       const org = scoped(context);
       return auditEvents

@@ -1,7 +1,8 @@
 /**
  * Breath of WAIA — public support-channel contract.
- * Active destination is owned by future Finance publication (DEE-606/607).
- * Until then, the homepage CTA must render as honest pending — never a fake href.
+ * The public support page is always a real destination. The payment address on
+ * that page remains fail-closed until an operator publishes the governed
+ * USDT/TRC-20 address through server configuration.
  */
 
 export type BreathSupportChannel = {
@@ -13,7 +14,7 @@ export type BreathSupportChannel = {
 /** Canonical public support destination for KEEP WAIA BREATHING. */
 export function getBreathSupportChannel(): BreathSupportChannel {
   return {
-    status: "pending",
-    href: null,
+    status: "available",
+    href: "/support",
   };
 }

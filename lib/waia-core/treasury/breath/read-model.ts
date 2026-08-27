@@ -13,8 +13,10 @@ import {
   budgetFillRatioDisplay,
   computeVerifiedAccountingTotals,
   contributionFundedMicros,
+  deriveCheckpointCashBalance,
   deriveActiveCommittedFunds,
   deriveCurrentFreeFunds,
+  latestBalanceCheckpoint,
 } from "@/lib/waia-core/treasury/breath/accounting";
 import {
   collectGlobalPendingReasons,
@@ -43,6 +45,7 @@ import {
   type BreathPublicActivity,
   type BreathPublicSnapshot,
   type BreathRunwayDto,
+  type TreasuryBalanceCheckpointRecord,
   type TreasuryRunwaySnapshotRecord,
 } from "@/lib/waia-core/treasury/breath/types";
 
@@ -54,6 +57,17 @@ export type TreasuryBreathReadModelPort = {
     actor: TreasuryActorContext,
     reason: string,
   ): Promise<TreasuryRunwaySnapshotRecord>;
+  confirmBalanceCheckpoint(
+    context: OrgContext,
+    actor: TreasuryActorContext,
+    input: {
+      currency: string;
+      confirmedBalanceMicros: bigint;
+      asOf: Date;
+      note: string;
+      reason: string;
+    },
+  ): Promise<TreasuryBalanceCheckpointRecord>;
 };
 
 export const WP6_BREATH_PUBLIC_SNAPSHOT_IMPLEMENTED = true as const;
@@ -215,8 +229,12 @@ export function createTreasuryBreathReadModel(deps: {
           }
           const plan = plans[0]!;
           const accounting = computeVerifiedAccountingTotals(facts.transactions);
+          const checkpoint = latestBalanceCheckpoint(facts.balanceCheckpoints ?? [], plan.currency);
+          const canonicalCashBalance = checkpoint
+            ? deriveCheckpointCashBalance(checkpoint, facts.transactions)
+            : accounting.accountingCashBalance;
           const allocated = deriveActiveCommittedFunds(facts.commitments);
-          const freeFunds = deriveCurrentFreeFunds(accounting.accountingCashBalance, allocated);
+          const freeFunds = deriveCurrentFreeFunds(canonicalCashBalance, allocated);
           const digest = computeRunwayInputDigest({
             verified: facts.transactions,
             commitments: facts.commitments,
@@ -290,11 +308,21 @@ export function createTreasuryBreathReadModel(deps: {
     const fundingNeeds = selectEligiblePublicFundingNeeds(facts.fundingNeeds);
     const latest = latestReconciliation(facts.reconciliations);
     const materialReconciliation = evaluateMaterialUnresolvedReconciliation(facts.transactions);
-    const balanceGate = evaluateBalanceReconciliationGate({
+    const reconciliationGate = evaluateBalanceReconciliationGate({
       latest,
       inceptions: facts.inceptions,
       now: now(),
     });
+    const checkpoint = latestBalanceCheckpoint(
+      facts.balanceCheckpoints ?? [],
+      ideals.length === 1 ? ideals[0]!.currency : undefined,
+    );
+    const materialAfterCheckpoint = checkpoint
+      ? evaluateMaterialUnresolvedReconciliation(
+          facts.transactions.filter((row) => row.occurredAt.getTime() > checkpoint.asOf.getTime()),
+        )
+      : materialReconciliation;
+    const balanceGate = checkpoint ? { ok: true, reason: null } : reconciliationGate;
 
     let verifiedIncomplete = false;
     let accounting: ReturnType<typeof computeVerifiedAccountingTotals> | null = null;
@@ -315,7 +343,7 @@ export function createTreasuryBreathReadModel(deps: {
     const pendingReasons = collectGlobalPendingReasons({
       breathEnabled,
       idealCount: ideals.length,
-      materialReconciliation,
+      materialReconciliation: materialAfterCheckpoint,
       balanceGate,
       verifiedIncomplete,
     });
@@ -326,9 +354,11 @@ export function createTreasuryBreathReadModel(deps: {
     }
 
     const allocated = deriveActiveCommittedFunds(facts.commitments);
-    const freeFunds = accounting
-      ? deriveCurrentFreeFunds(accounting.accountingCashBalance, allocated)
-      : 0n;
+    const canonicalCashBalance =
+      accounting && checkpoint
+        ? deriveCheckpointCashBalance(checkpoint, facts.transactions)
+        : (accounting?.accountingCashBalance ?? 0n);
+    const freeFunds = accounting ? deriveCurrentFreeFunds(canonicalCashBalance, allocated) : 0n;
 
     let runway = {
       dto: { status: "pending" } as BreathRunwayDto,
@@ -423,6 +453,7 @@ export function createTreasuryBreathReadModel(deps: {
       selectedBudget?.updatedAt,
       selectedNeed?.updatedAt,
       latest?.createdAt,
+      checkpoint?.createdAt,
       runway.snapshot?.createdAt,
       ...facts.transactions.flatMap((tx) =>
         tx.status === "VERIFIED" ? [tx.verifiedAt, tx.updatedAt] : [],
@@ -457,7 +488,7 @@ export function createTreasuryBreathReadModel(deps: {
           ? {
               entered: moneyString(accounting.entered),
               spent: moneyString(accounting.spent),
-              remaining: moneyString(accounting.remaining),
+              remaining: moneyString(canonicalCashBalance),
               allocated: moneyString(allocated),
               neededNext: neededNext === null ? null : moneyString(neededNext),
             }
@@ -470,7 +501,7 @@ export function createTreasuryBreathReadModel(deps: {
       componentStatus: {
         breathEnabled,
         idealBudget: ideals.length === 1 ? "ok" : ideals.length === 0 ? "missing" : "ambiguous",
-        materialReconciliation,
+        materialReconciliation: materialAfterCheckpoint,
         balanceReconciliation: mapBalanceComponent(balanceGate.reason, balanceGate.ok),
         budget: budgets.length === 1 ? "ok" : budgets.length === 0 ? "absent" : "ambiguous",
         fundingNeed:
@@ -478,9 +509,9 @@ export function createTreasuryBreathReadModel(deps: {
         verifiedFinancialComplete: !verifiedIncomplete,
       },
       reconciliationGate: {
-        latestId: latest?.id ?? null,
-        status: latest?.status ?? null,
-        createdAt: latest?.createdAt.toISOString() ?? null,
+        latestId: checkpoint?.id ?? latest?.id ?? null,
+        status: checkpoint ? "HUMAN_CONFIRMED" : (latest?.status ?? null),
+        createdAt: checkpoint?.createdAt.toISOString() ?? latest?.createdAt.toISOString() ?? null,
       },
       runwayStatus: {
         status: runway.dto.status,
@@ -515,8 +546,16 @@ export function createTreasuryBreathReadModel(deps: {
       }
       const facts = await deps.facts.loadFacts(org);
       const accounting = computeVerifiedAccountingTotals(facts.transactions);
+      const activePlans = selectActiveRunwayPlans(facts.runwayPlans, now());
+      const checkpoint = latestBalanceCheckpoint(
+        facts.balanceCheckpoints ?? [],
+        activePlans.length === 1 ? activePlans[0]!.currency : undefined,
+      );
+      const canonicalCashBalance = checkpoint
+        ? deriveCheckpointCashBalance(checkpoint, facts.transactions)
+        : accounting.accountingCashBalance;
       const allocated = deriveActiveCommittedFunds(facts.commitments);
-      const freeFunds = deriveCurrentFreeFunds(accounting.accountingCashBalance, allocated);
+      const freeFunds = deriveCurrentFreeFunds(canonicalCashBalance, allocated);
       const result = await materializeRunway({
         context: org,
         facts,
@@ -539,6 +578,55 @@ export function createTreasuryBreathReadModel(deps: {
         metadata: { reason: trimmed, inputDigest: result.snapshot.inputDigest },
       });
       return result.snapshot;
+    },
+    async confirmBalanceCheckpoint(context, actor, input) {
+      const org = requireOrgContext(context.organizationId);
+      if (!actor.actorUserId) {
+        throw new TreasuryValidationError(
+          "ACTOR_REQUIRED",
+          "balance checkpoint requires an admin actor",
+        );
+      }
+      const currency = input.currency.trim().toUpperCase();
+      const note = input.note.trim();
+      const reason = input.reason.trim();
+      if (!currency || !note || !reason) {
+        throw new TreasuryValidationError("INVALID_BODY", "currency, note and reason are required");
+      }
+      if (input.confirmedBalanceMicros < 0n) {
+        throw new TreasuryValidationError(
+          "INVALID_BALANCE",
+          "confirmed balance must be non-negative",
+        );
+      }
+      if (!Number.isFinite(input.asOf.getTime()) || input.asOf.getTime() > now().getTime()) {
+        throw new TreasuryValidationError("INVALID_AS_OF", "as_of must be a valid past time");
+      }
+      const createdAt = now();
+      const record: TreasuryBalanceCheckpointRecord = {
+        id: newId(),
+        organizationId: org.organizationId,
+        currency,
+        confirmedBalanceMicros: input.confirmedBalanceMicros,
+        asOf: input.asOf,
+        sourceLabel: "HUMAN_CONFIRMED",
+        note,
+        confirmedByUserId: actor.actorUserId,
+        createdAt,
+      };
+      await deps.facts.runExclusive(org.organizationId, async (store) => {
+        await store.insertBalanceCheckpoint(record);
+      });
+      await deps.writeAudit({
+        actorType: actor.actorType,
+        actorId: actor.actorUserId,
+        action: treasuryAuditActions.balanceCheckpointConfirm,
+        entityType: treasuryEntityTypes.balanceCheckpoint,
+        entityId: record.id,
+        organizationId: org.organizationId,
+        metadata: { reason, currency, asOf: input.asOf.toISOString() },
+      });
+      return record;
     },
   };
 }

@@ -24,6 +24,9 @@ export type TreasuryObservationStatus = (typeof treasuryObservationStatusEnum)[n
 export const USDT_NOMINAL_USD_POLICY_V1 = "USDT_NOMINAL_USD_POLICY_V1" as const;
 export type UsdtNominalUsdPolicyV1 = typeof USDT_NOMINAL_USD_POLICY_V1;
 
+/** Manual fiat/card entries keep their native currency as the accounting denomination. */
+export const MANUAL_ACCOUNTING_CURRENCY_V1 = "MANUAL_ACCOUNTING_CURRENCY_V1" as const;
+
 export const TREASURY_USDT_V1_ASSET = "USDT" as const;
 export const TREASURY_USDT_V1_NETWORK = "TRC-20" as const;
 export const TREASURY_USDT_V1_DECIMALS = 6 as const;

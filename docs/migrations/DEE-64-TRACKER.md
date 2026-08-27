@@ -41,6 +41,16 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-731** adds Postgres-only named contribution payment intents and Human-confirmed balance
+checkpoints in migrations `0171`/`0172` (after merged AI-TRADER migrations `0169`/`0170`). An authenticated
+Human receives an immutable, expiring exact USDT amount for the public WAIA TRC-20 address.
+The Treasury watcher may deterministically attach identity/consent to a detected inflow, but
+the transaction remains Needs review and cannot enter the public Patron calculation before
+Human verification. Public balance, runway and virtual fund allocation derive from the latest
+append-only Human checkpoint plus later verified cash effects. Browser roles have no direct table
+access; lifecycle updates and deletes are guarded. No production SQL apply, custody, signing,
+transfer broadcast or alternate chain provider is included.
+
 **DEE-690** adds Postgres-only immutable virtual fund-allocation evidence in migrations
 `0163`/`0164`. The derived-read service protects the one applicable ACTIVE+PUBLIC ideal
 annual budget, accounts only non-negative canonical free funds above it to the Development

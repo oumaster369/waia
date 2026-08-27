@@ -8,6 +8,7 @@ import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { orgScopedWhere, requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { TreasuryNotFoundError } from "@/lib/waia-core/treasury/errors";
+import { matchContributionPaymentIntent } from "@/lib/waia-core/treasury/contributions/payment-intents";
 import type { TreasuryWatcherRepository } from "@/lib/waia-core/treasury/watcher/repository.types";
 import type { TreasuryChainObservationRecord } from "@/lib/waia-core/treasury/watcher/types";
 
@@ -170,6 +171,36 @@ export function createPostgresTreasuryWatcherRepository(ex: PgExecutor): Treasur
         ...row,
         observationRole: row.observationRole as "PRIMARY" | "INTERNAL_COUNTERPARTY" | "SECONDARY",
       }));
+    },
+
+    async matchContributionIntent(context, input) {
+      const org = requireOrgContext(context.organizationId);
+      return matchContributionPaymentIntent({
+        db: ex,
+        organizationId: org.organizationId,
+        ...input,
+      });
+    },
+
+    async ensureAnonymousContributionAttribution(context, input) {
+      const org = requireOrgContext(context.organizationId);
+      await ex
+        .insert(pgSchema.treasuryContributionAttributions)
+        .values({
+          id: input.newId(),
+          organizationId: org.organizationId,
+          transactionId: input.transactionId,
+          status: "ANONYMOUS",
+          contributorUserId: null,
+          attributionMethod: "WALLET_DIRECT_ANONYMOUS",
+          consentPublicIdentity: false,
+          note: "Direct wallet support without a named payment intent.",
+          attributedByUserId: null,
+          attributedAt: input.now,
+          revokedAt: null,
+          createdAt: input.now,
+        })
+        .onConflictDoNothing();
     },
 
     async getCheckpoint(context, checkpointKey) {

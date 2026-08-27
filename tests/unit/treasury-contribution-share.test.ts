@@ -11,6 +11,7 @@ import {
   type TreasuryAttributionRecord,
   type TreasuryTransactionRecord,
 } from "@/lib/waia-core/treasury";
+import { MANUAL_ACCOUNTING_CURRENCY_V1 } from "@/lib/waia-core/treasury/types";
 
 function tx(
   partial: Partial<TreasuryTransactionRecord> &
@@ -114,6 +115,20 @@ describe("treasury contribution-share WP-2 foundation (DEE-606)", () => {
     expect(isQualifyingContribution(unverified)).toBe(false);
     expect(isQualifyingContribution(planned)).toBe(false);
     expect(isQualifyingContribution(expense)).toBe(false);
+  });
+
+  it("includes Human-verified manual USD contributions without weakening watcher asset rules", () => {
+    const manualUsd = tx({
+      id: "manual-usd",
+      kind: "CONTRIBUTION",
+      status: "VERIFIED",
+      provenance: "MANUAL",
+      nativeAsset: "USD",
+      nativeContract: null,
+      accountingDenominationPolicy: MANUAL_ACCOUNTING_CURRENCY_V1,
+    });
+    expect(isQualifyingContribution(manualUsd)).toBe(true);
+    expect(isQualifyingContribution({ ...manualUsd, provenance: "WATCHER" })).toBe(false);
   });
 
   it("keeps UNMATCHED and ANONYMOUS in the denominator and ignores expenses/commitments", () => {

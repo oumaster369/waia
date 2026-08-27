@@ -1,10 +1,16 @@
-import type { TreasuryCategoryRecord, TreasuryProjectRecord } from "@/lib/waia-core/treasury/admin/ledger-catalog-types";
+import type {
+  TreasuryCategoryRecord,
+  TreasuryProjectRecord,
+} from "@/lib/waia-core/treasury/admin/ledger-catalog-types";
 import {
   computeVerifiedAccountingTotals,
   deriveActiveCommittedFunds,
   deriveCurrentFreeFunds,
 } from "@/lib/waia-core/treasury/breath/accounting";
-import { computeRunwayEndsAt, computeRunwayInputDigest } from "@/lib/waia-core/treasury/breath/runway";
+import {
+  computeRunwayEndsAt,
+  computeRunwayInputDigest,
+} from "@/lib/waia-core/treasury/breath/runway";
 import type { PublicTreasuryFacts } from "@/lib/waia-core/treasury/public/repository.types";
 import {
   NOW,
@@ -223,7 +229,11 @@ export async function createPublishedPublicTreasuryFacts(): Promise<PublicTreasu
     categories,
     categoryBudgetHistory,
     projects,
-    attributions,
+    attributions: attributions.map((row) => ({
+      ...row,
+      publicSiteUrl: null,
+      twinProfileUrl: null,
+    })),
     profiles: [
       { userId: USER_A, displayName: "Alice", updatedAt: NOW },
       { userId: USER_B, displayName: "Bob", updatedAt: NOW },

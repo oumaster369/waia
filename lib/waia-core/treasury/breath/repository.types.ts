@@ -1,5 +1,8 @@
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
-import type { TreasuryRunwaySnapshotRecord } from "@/lib/waia-core/treasury/breath/types";
+import type {
+  TreasuryBalanceCheckpointRecord,
+  TreasuryRunwaySnapshotRecord,
+} from "@/lib/waia-core/treasury/breath/types";
 import type {
   TreasuryBudgetRecord,
   TreasuryFundingNeedRecord,
@@ -29,6 +32,7 @@ export type BreathLoadedFacts = {
   runwayPlans: TreasuryRunwayPlanRecord[];
   reconciliations: TreasuryBalanceReconciliationRecord[];
   inceptions: TreasuryInceptionRecord[];
+  balanceCheckpoints?: TreasuryBalanceCheckpointRecord[];
 };
 
 export type BreathSnapshotStore = {
@@ -37,6 +41,7 @@ export type BreathSnapshotStore = {
     runwayPlanId: string,
   ): Promise<TreasuryRunwaySnapshotRecord | null>;
   insertRunwaySnapshot(record: TreasuryRunwaySnapshotRecord): Promise<void>;
+  insertBalanceCheckpoint(record: TreasuryBalanceCheckpointRecord): Promise<void>;
 };
 
 export type BreathIdealAuditEvent = {

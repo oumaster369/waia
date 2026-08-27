@@ -1198,6 +1198,20 @@
       "when": 1780000000170,
       "tag": "0170_trader_forecast_contract_binding_v1_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1780000000171,
+      "tag": "0171_treasury_contribution_payment_intents",
+      "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1780000000172,
+      "tag": "0172_treasury_contribution_payment_intents_rls",
+      "breakpoints": true
     }
   ]
 }

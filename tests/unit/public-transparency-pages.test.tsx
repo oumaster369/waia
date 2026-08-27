@@ -75,6 +75,13 @@ const publishedTreasury: PublicTreasuryProjection = {
       description: "Published engineering expense",
     },
   ],
+  transactionPagination: {
+    offset: 0,
+    limit: 50,
+    total: 1,
+    hasPrevious: false,
+    hasNext: false,
+  },
   fundingNeeds: [],
   patrons: {
     status: "pending",
@@ -177,6 +184,8 @@ describe("public transparency pages", () => {
         patrons: [
           {
             displayName: "Alice",
+            publicSiteUrl: null,
+            twinProfileUrl: null,
             contributedAmountMicros: "20000000",
             currency: "USD",
             share: {
@@ -202,7 +211,7 @@ describe("public transparency pages", () => {
     render(await PatronsPage());
 
     expect(screen.getByRole("heading", { level: 1, name: "Patrons" })).toBeInTheDocument();
-    expect(screen.getByText("People who help keep WAIA alive.")).toBeInTheDocument();
+    expect(screen.getByText(/Thank you to everyone helping WAIA breathe/i)).toBeInTheDocument();
     const table = screen.getByRole("table", { name: /Published WAIA patron contributions/i });
     expect(table).toHaveTextContent("Alice");
     expect(table).toHaveTextContent("20 USD");
