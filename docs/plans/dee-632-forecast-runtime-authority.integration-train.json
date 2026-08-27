@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-632",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-756",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Implement ForecastRuntimeAuthorityV2 or typed NON_ACTIONABLE with exact Predictive Admission, package, target, runtime and replay seals.",
       "dependencies": ["DEE-647", "DEE-648", "DEE-741", "DEE-740"],
@@ -32,11 +32,19 @@
         "Both terminal and execution distribution/content seals replay exactly; all failures are typed NON_ACTIONABLE."
       ],
       "expectedTests": ["focused deterministic, tamper and fail-closed unit suite"],
+      "actualFiles": [
+        "lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2.ts",
+        "lib/trader/intelligence/forecast-v2/index.ts",
+        "tests/unit/trader-forecast-runtime-authority-v2.test.ts"
+      ],
+      "integratedCommits": ["87d8fb2d67ae1fd05fe5e3afcea66e1bd096c503"],
+      "acceptanceEvidence": ["Exact package refit, target-grid replay, PIT/input/contract/admission cross-binding and deterministic issuance regeneration fail closed under adversarial mutation."],
+      "tests": ["focused Forecast runtime authority suite: 9/9 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 1, "mode": "serialized" }
     },
     {
       "issue": "DEE-757",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Expose the frozen Forecast runtime outcome on the canonical evaluation cycle and quarantine ForecastDecisionBundle as compatibility/historical-artifact-only.",
       "dependencies": ["DEE-756"],
@@ -59,6 +67,16 @@
         "Static inventory proves no new Decision, Risk, execution, holdout, production/live or capital edge."
       ],
       "expectedTests": ["evaluation-cycle parity, absence and static forbidden-consumer tests"],
+      "actualFiles": [
+        "lib/trader/intelligence/evaluation-cycle.ts",
+        "lib/trader/intelligence/types.ts",
+        "lib/trader/intelligence/forecast-v2/forecast-runtime-consumer-inventory-v1.ts",
+        "tests/unit/trader-forecast-runtime-evaluation-cycle-v2.test.ts",
+        "tests/unit/trader-forecast-runtime-consumer-inventory-v1.test.ts"
+      ],
+      "integratedCommits": ["b2f91c8869c72e95c5a8130a3fa9ac3d3dc9b1d3"],
+      "acceptanceEvidence": ["Canonical cycle emits typed runtime outcome; explicit Forecast V2 inputs cannot fall back to ForecastDecisionBundle; forbidden protected consumers remain absent."],
+      "tests": ["evaluation and inventory suites: 5/5 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 2, "mode": "serialized" }
     }
   ],
@@ -75,10 +93,22 @@
     },
     "preImplementationAdmission": {
       "status": "pass",
-      "producerConsumerReplayPersistenceTestInventoryPlan": "frozen",
+      "manifestDigest": "0eb4b163c8c8f62a3fcfc203050c8426fdda676086e2d3b8338a5e48da57820b",
+      "manifestCommit": "c5951f721f273678a4dd64b08479c6d7d8f84e42",
+      "manifestPath": "docs/plans/dee-632-forecast-runtime-authority.integration-train.json",
       "reviewer": "Program Controller read-only admission"
     },
-    "fullDiffFrozen": false,
+    "admissionReviews": [
+      { "issue": "DEE-756", "status": "pass", "reviewedCommits": ["87d8fb2d67ae1fd05fe5e3afcea66e1bd096c503"], "reviewedFiles": ["lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2.ts", "lib/trader/intelligence/forecast-v2/index.ts", "tests/unit/trader-forecast-runtime-authority-v2.test.ts"] },
+      { "issue": "DEE-757", "status": "pass", "reviewedCommits": ["b2f91c8869c72e95c5a8130a3fa9ac3d3dc9b1d3"], "reviewedFiles": ["lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/intelligence/types.ts", "lib/trader/intelligence/forecast-v2/forecast-runtime-consumer-inventory-v1.ts", "tests/unit/trader-forecast-runtime-consumer-inventory-v1.test.ts", "tests/unit/trader-forecast-runtime-evaluation-cycle-v2.test.ts"] }
+    ],
+    "cumulativeChecks": [
+      { "afterIssue": "DEE-756", "status": "pass", "commands": ["focused authority suite", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-757", "status": "pass", "commands": ["focused cutover/inventory suites", "typecheck", "scoped eslint"] }
+    ],
+    "finalReviewRemediation": { "status": "pending", "reviewedHead": null, "findings": ["P1 package artifact/target replay gap", "P1 incomplete authorized issuance regeneration", "P1 PIT ISO/epoch mismatch"], "remediationCommits": ["87d8fb2d67ae1fd05fe5e3afcea66e1bd096c503"], "verdict": "pending exact governance-rewritten head review" },
+    "fullSuiteEvidence": { "status": "baseline-exception", "result": "5088 PASS, 419 skipped, 2 failures", "exceptions": ["finance confirmation last-character token mutation is nondeterministic and passed isolated rerun", "health settlement SQLite table missing reproduces unchanged on authoritative base 4acb6c61"], "dee632Regressions": 0 },
+    "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [

@@ -3,7 +3,7 @@ integrationIssue: DEE-632
 branch: dee-632-forecast-runtime-authority
 riskTier: T3
 authoritativeBase: 4acb6c61a1479fc57f4ffd1cac53d03cf2f77118
-state: frozen-pre-write
+state: frozen-delivered
 ---
 
 # DEE-632 — Forecast V2 sole predictive runtime authority
