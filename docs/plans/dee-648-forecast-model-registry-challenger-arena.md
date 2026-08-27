@@ -1,3 +1,41 @@
+---
+integrationIssue: DEE-648
+integrationTitle: "Forecast Model Registry and Challenger Arena"
+branch: dee-648-forecast-challenger-arena
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local, github-pr-ci]
+requiredValidation:
+  - focused-negative-tests
+  - one-full-fresh-sqlite-suite
+  - independent-exact-head-review
+  - authoritative-ci
+  - dee-653-exact-head-admission
+approvalGates:
+  - ratified-scope
+  - integration-ready
+  - dee-653-exact-head-admission
+includedIssues: [DEE-748]
+linearStatusFlow:
+  onPlanApproved: In Progress
+  onPrOpened: In Review
+  onMerge: Done
+state:
+  status: in-review
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
+  remainingWorkPackages: []
+  prNumber: 503
+  prUrl: https://github.com/oumaster369/waia/pull/503
+  lastValidatedGitSha: e763402a177d24404afd773a0d6d224fd2836d5f
+  lastValidationAt: "2026-08-27"
+  blockedReason: null
+  nextAction: "Complete exact-head full-suite and authoritative CI/DEE-653 gates, then squash-merge only when all pass."
+provenance:
+  authoritativeBase: b62f8e6432a62227902007b4e97f8bf746360822
+  createdFrom: ratified-linear-scope
+---
+
 # DEE-648 — Forecast Model Registry and Challenger Arena
 
 ## Admission and frozen boundary
@@ -17,3 +55,29 @@ The only mathematical predictor permitted by the merged input contract is `ancho
 - Inventory: only `lib/trader/research/forecast-model-registry/**`, `lib/trader/research/challenger-arena/**`, dedicated unit tests and this plan.
 
 Tier B families remain exact `RESEARCH_ONLY_UNIMPLEMENTED_<reason>` outcomes where no Human-frozen literal trial exists. No formula is improvised.
+
+## Acceptance
+
+- Registry identities are content-addressed, deterministic, and reject duplicate or undeclared inputs.
+- Every arena comparison binds one common PIT anchor, partition, target definition, artifact identity, and observed outcome.
+- Qualification uses the canonical predictive harness and cannot promote a model to production or capital use.
+- Missing Tier B mathematical authority remains an explicit research-only blocked outcome.
+- Focused negative tests, one full fresh-SQLite suite, exact-head independent review, authoritative CI, and DEE-653 admission all pass before squash merge.
+
+## Work packages
+
+### WP-1 — Freeze registry and adapter contracts
+
+Define the content-addressed model trial registry and research-only Forecast V2 adapter without persistence or capital authority.
+
+### WP-2 — Implement common-anchor challenger arena
+
+Bind exact artifacts, inputs, targets, partitions, predictive scores, and replay identity for deterministic comparisons.
+
+### WP-3 — Integrate canonical qualification
+
+Delegate Terminal admission to the existing WF_PREDICTIVE harness while leaving joint and final scientific admission with their existing owners.
+
+### WP-4 — Prove failure boundaries and release evidence
+
+Exercise undeclared/future input, target/anchor mismatch, duplicate candidate, and no-promotion paths; complete exact-head review and release gates.
