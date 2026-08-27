@@ -10,16 +10,16 @@ requiredValidation: [focused-negative-tests, typecheck, production-build, one-fu
 approvalGates: [ratified-dee-627-canon, exact-head-independent-review, dee-653-exact-head-admission]
 includedIssues: [DEE-647, DEE-749, DEE-750]
 state:
-  status: in-progress
-  currentWorkPackage: DEE-749
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-749, DEE-750]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-749, DEE-750]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement the frozen admission contracts, compatibility firewall, and evidence suite."
+  nextAction: "Execute final frozen-head suite, independent review, CI and DEE-653."
 provenance:
   createdFrom: ratified-dee-647-build
   authoritativeBase: b62f8e6432a62227902007b4e97f8bf746360822
