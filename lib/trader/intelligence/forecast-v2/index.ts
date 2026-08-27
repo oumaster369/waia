@@ -14,3 +14,4 @@ export * from "./rv-state-conditional-empirical-joint-v1";
 export * from "./storage-scale-projection";
 export * from "./forecast-v2-persistence-service";
 export * from "./forecast-contract-foundation-v2";
+export * from "./forecast-contract-binding-service-v1";
