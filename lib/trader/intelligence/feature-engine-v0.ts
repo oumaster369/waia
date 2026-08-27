@@ -2,7 +2,7 @@ import {
   BTC_USDT,
   featureReasonCodes,
   type Bar,
-  type FeatureSnapshot,
+  type FeatureSnapshotRvV2,
   type Quote,
 } from "@/lib/trader/intelligence/types";
 import {
@@ -182,7 +182,7 @@ function computeRealizedVol20m1m(realizedVar: string): string {
  * Feature Engine v0 — computes features and owns {@link FeatureSnapshot.dataQualityScore}.
  * RV semantics: {@link FEATURE_ENGINE_RV_VERSION}.
  */
-export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): FeatureSnapshot {
+export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): FeatureSnapshotRvV2 {
   const { bars, quote } = input;
   if (bars.length === 0) {
     throw new Error("[trader/intelligence] computeFeatureSnapshot requires at least one bar");
