@@ -1,9 +1,29 @@
 ---
 integrationIssue: DEE-632
+integrationTitle: "Forecast V2 Sole Predictive Runtime Authority"
+parentIssue: DEE-601
 branch: dee-632-forecast-runtime-authority
 riskTier: T3
-authoritativeBase: 4acb6c61a1479fc57f4ffd1cac53d03cf2f77118
-state: frozen-delivered
+prPolicy: one-integration-pr
+executionSurfaces: [local, github-pr-ci, postgres-ci]
+requiredValidation: [focused-negative-tests, typecheck, production-build, one-full-fresh-migrated-sqlite-suite, independent-exact-head-review, authoritative-postgres-and-dee-653]
+approvalGates: [ratified-dee-627-canon, exact-head-independent-review, dee-653-exact-head-admission]
+includedIssues: [DEE-632, DEE-756, DEE-757]
+state:
+  status: frozen-delivered
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-756, DEE-757]
+  remainingWorkPackages: []
+  prNumber: 508
+  prUrl: "https://github.com/oumaster369/waia/pull/508"
+  lastValidatedGitSha: 83714813348c509f407ea0d7c3602398a6614b55
+  lastValidationAt: "2026-08-27T20:03:00Z"
+  blockedReason: null
+  nextAction: "Close authoritative CI, PostgreSQL and DEE-653 gates before squash merge."
+provenance:
+  createdFrom: ratified-dee-632-build
+  authoritativeBase: 4acb6c61a1479fc57f4ffd1cac53d03cf2f77118
+  admissionAudit: "Fresh origin/main, Linear duplicate/ownership/dependency audit, and complete producer/consumer/replay/persistence/test/inventory/plan audit passed before implementation writes."
 ---
 
 # DEE-632 — Forecast V2 sole predictive runtime authority
@@ -36,3 +56,10 @@ No Decision/Risk/execution/live caller is changed in this issue. Downstream capi
 - Persistence: existing Forecast V2 append-only persistence only; no migration.
 - Inventory: all evaluation-cycle and legacy ForecastDecisionBundle consumers, with a forbidden-edge proof.
 - Tests: authorized replay, every identity mismatch, missing/research-only admission, insufficient package pools, deterministic equivalence and legacy-bypass rejection.
+
+## Acceptance
+
+- Exact admitted receipt, contract, package, model, artifact, runtime, target, PIT and input identities are required and fail closed.
+- Terminal and execution distributions/content seals replay deterministically; malformed, missing and research-only inputs remain typed NON_ACTIONABLE.
+- The canonical evaluation cycle exposes the Forecast V2 runtime outcome without any legacy ForecastDecisionBundle fallback.
+- Focused negative tests, typecheck/build, a fresh migrated SQLite validation, exact-head review, authoritative CI/PostgreSQL and DEE-653 pass before squash merge.
