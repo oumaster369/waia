@@ -1,4 +1,4 @@
-import type { FeatureSnapshot } from "@/lib/trader/intelligence/types";
+import type { FeatureSnapshotRvV2 } from "@/lib/trader/intelligence/types";
 
 /** Backtest/live parity contract version (DEE-199). */
 export const FEATURE_ENGINE_PARITY_CONTRACT_VERSION = "1.0.0" as const;
@@ -13,8 +13,8 @@ export type FeatureParityMismatch = {
  * Asserts two feature snapshots from the same inputs are identical (live/backtest parity).
  */
 export function findFeatureParityMismatches(
-  live: FeatureSnapshot,
-  backtest: FeatureSnapshot,
+  live: FeatureSnapshotRvV2,
+  backtest: FeatureSnapshotRvV2,
 ): FeatureParityMismatch[] {
   const mismatches: FeatureParityMismatch[] = [];
 
@@ -32,6 +32,21 @@ export function findFeatureParityMismatches(
   compare("features.sma20", live.features.sma20, backtest.features.sma20);
   compare("features.zscoreVsSma20", live.features.zscoreVsSma20, backtest.features.zscoreVsSma20);
   compare("features.realizedVol20", live.features.realizedVol20, backtest.features.realizedVol20);
+  compare(
+    "features.priceDispersion20",
+    live.features.priceDispersion20,
+    backtest.features.priceDispersion20,
+  );
+  compare(
+    "features.realizedVar20m_1m",
+    live.features.realizedVar20m_1m,
+    backtest.features.realizedVar20m_1m,
+  );
+  compare(
+    "features.realizedVol20m_1m",
+    live.features.realizedVol20m_1m,
+    backtest.features.realizedVol20m_1m,
+  );
   compare("features.spreadBps", live.features.spreadBps, backtest.features.spreadBps);
   compare("inputs.barCount", live.inputs.barCount, backtest.inputs.barCount);
   compare(
@@ -43,7 +58,10 @@ export function findFeatureParityMismatches(
   return mismatches;
 }
 
-export function assertFeatureParity(live: FeatureSnapshot, backtest: FeatureSnapshot): void {
+export function assertFeatureParity(
+  live: FeatureSnapshotRvV2,
+  backtest: FeatureSnapshotRvV2,
+): void {
   const mismatches = findFeatureParityMismatches(live, backtest);
   if (mismatches.length > 0) {
     const detail = mismatches.map(

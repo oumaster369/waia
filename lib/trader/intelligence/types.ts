@@ -72,6 +72,13 @@ export type FeatureVector = {
   spreadBps: string;
 };
 
+/** Required output contract for feature-engine/rv/v2 producers. */
+export type FeatureVectorRvV2 = FeatureVector & {
+  priceDispersion20: string;
+  realizedVar20m_1m: string;
+  realizedVol20m_1m: string;
+};
+
 export type FeatureSnapshot = {
   featureSetId: string;
   instrumentId: InstrumentId;
@@ -83,6 +90,11 @@ export type FeatureSnapshot = {
     barCount: number;
     latestQuoteAgeMs?: number;
   };
+};
+
+/** Canonical snapshot emitted by feature-engine/rv/v2. */
+export type FeatureSnapshotRvV2 = Omit<FeatureSnapshot, "features"> & {
+  features: FeatureVectorRvV2;
 };
 
 export const regimeEnum = [
