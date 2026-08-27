@@ -28,7 +28,7 @@
       ],
       "integratedCommits": ["345a5a9f9a836ec011dcb9cc1a424a66f2a402d0"],
       "acceptanceEvidence": ["Exact scientific/package/contract identities, PIT replay, applicability-only Hypothesis, fail-closed mismatch handling, posture monotonicity and research firewall pass."],
-      "tests": ["tests/unit/trader-predictive-admission-v1.test.ts: 8/8 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
+      "tests": ["tests/unit/trader-predictive-admission-v1.test.ts: 11/11 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
       "execution": { "wave": 1, "mode": "serialized" }
     },
     {
@@ -63,10 +63,20 @@
       { "issue": "DEE-750", "status": "pass", "reviewedCommits": ["32da21fb36dbe1afc9c66cd20278da0237ac78a6"], "reviewedFiles": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/predictive-admission-consumer-inventory-v1.ts", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"] }
     ],
     "cumulativeChecks": [
-      { "afterIssue": "DEE-749", "status": "pass", "commands": ["focused predictive admission suite 8/8", "typecheck", "scoped eslint"] },
+      { "afterIssue": "DEE-749", "status": "pass", "commands": ["focused predictive admission suite 11/11", "typecheck", "scoped eslint"] },
       { "afterIssue": "DEE-750", "status": "pass", "commands": ["focused consumer firewall suite 3/3", "typecheck", "scoped eslint"] }
     ],
-    "finalReviewRemediation": { "status": "pending", "reviewedHead": null, "findings": [], "remediationCommits": [] },
+    "finalReviewRemediation": {
+      "status": "remediated-awaiting-exact-head-rereview",
+      "reviewedHead": "6f6e9723c91c16735e75cc0bbca6e9983f4680b0",
+      "findings": [
+        "P1: canonical ISG receipt validation was missing",
+        "P1: scientific receipt was not cross-bound to package and model artifact",
+        "P1: runtime admission narrowing trusted an unverified receipt",
+        "P2: analysis purpose and runtime posture lacked runtime enum validation"
+      ],
+      "remediationCommits": ["60a1a42517e785511539036bc385837f4538b681"]
+    },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
