@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-647",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Two file-disjoint atomic children separate the content-addressed authority core from the legacy compatibility and static consumer firewall.",
+  "includedChildren": [
+    {
+      "issue": "DEE-749",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Build content-addressed MarketStateSnapshotV2 and deterministic PredictiveAdmissionReceiptV1.",
+      "dependencies": ["DEE-621", "DEE-629", "DEE-631", "DEE-741", "DEE-742", "DEE-745", "DEE-746"],
+      "dependencyEvidence": ["All dependencies are squash-merged in authoritative base b62f8e6432a62227902007b4e97f8bf746360822."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/intelligence/predictive-admission/**", "tests/unit/trader-predictive-admission-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": { "status": "t3-scope-preauthorized", "evidence": "DEE-627 ratified the Step 11 Predictive Admission boundary." },
+      "expectedAcceptanceEvidence": ["Exact bindings, PIT identities, applicability-only hypothesis, posture monotonicity and fail-closed verdicts are deterministic."],
+      "expectedTests": ["focused deterministic and negative unit suite"],
+      "execution": { "wave": 1, "mode": "serialized" }
+    },
+    {
+      "issue": "DEE-750",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Declare legacy CDE/MSV compatibility-only and prove the new admission authority has no capital consumer edge.",
+      "dependencies": ["DEE-749"],
+      "dependencyEvidence": ["The firewall consumes only the frozen DEE-749 public contract."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/intelligence/cde-v0.ts", "lib/trader/intelligence/predictive-admission/**", "tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts"],
+      "riskTier": "T3",
+      "humanGate": { "status": "t3-scope-preauthorized", "evidence": "DEE-627 ratified quarantine of legacy CDE/MSV capital authority." },
+      "expectedAcceptanceEvidence": ["Legacy declaration is compatibility-only and static inventory excludes Decision/Risk/Execution/holdout/live/capital consumers."],
+      "expectedTests": ["static forbidden-consumer and compatibility tests"],
+      "execution": { "wave": 2, "mode": "serialized" }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": { "status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test and protected-surface audit" },
+    "preImplementationAdmission": { "status": "pending", "manifestDigest": null, "manifestCommit": null, "manifestPath": "docs/plans/dee-647-predictive-admission.integration-train.json", "reviewer": "Controller pre-write API, invariant and file-surface freeze" },
+    "admissionReviews": [],
+    "cumulativeChecks": [],
+    "finalReviewRemediation": { "status": "pending", "reviewedHead": null, "findings": [], "remediationCommits": [] },
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "The sole champion predictor is anchorRealizedVol20m_1m.",
+    "HypothesisAssessment is applicability-only and carries no predictor confidence.",
+    "Scientific admission and contract/spec/artifact bindings are exact and fail closed.",
+    "Runtime posture can only preserve or restrict analysis authority.",
+    "No Decision, Risk, Execution, holdout, production/live or capital semantics."
+  ],
+  "rollbackStrategy": "One revert removes the additive Predictive Admission authority and compatibility declaration without changing upstream identities or durable rows.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-647-predictive-admission.integration-train.json DEE-647 admission",
+    "focused": ["pnpm test --run tests/unit/trader-predictive-admission-v1.test.ts tests/unit/trader-predictive-admission-consumer-inventory-v1.test.ts", "pnpm typecheck"],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI/PostgreSQL and DEE-653 before squash merge"
+  }
+}
