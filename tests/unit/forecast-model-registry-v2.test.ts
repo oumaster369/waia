@@ -22,12 +22,14 @@ describe("DEE-648 Forecast Model Registry V2", () => {
   it("rejects undeclared/future/PnL predictors and exposes exact Tier-B blocks", () => {
     expect(() => buildModelTrialSpecV2({ ...trial(), pitFeatureVector: ["future_return", "anchorRealizedVol20m_1m"] })).toThrow("pitFeatureVector");
     expect(TIER_B_RESEARCH_BLOCKS_V2["garch11-terminal/v1"]).toBe("RESEARCH_ONLY_UNIMPLEMENTED_NONLINEAR_OPTIMIZER_NOT_FROZEN");
+    expect(() => buildModelTrialSpecV2({ ...trial(), scoringTargets: ["JOINT_13D_ENERGY_SCORE", "TERMINAL_7_BUCKET_LOG_SCORE"] as never })).toThrow("scoringTargets");
+    expect(() => buildModelTrialSpecV2({ ...trial(), readiness: "CAPITAL_ELIGIBLE" as never })).toThrow("readiness");
   });
 
   it("adapts only exactly bound research artifacts without creating authority", () => {
     const artifact = buildForecastModelArtifactV2({ modelSpecDigestHex: spec.contentDigestHex, inputContractDigestHex: contract.contentDigestHex, developmentDatasetDigestHex: d("3"), runtimeContractDigestHex: d("4"), artifactPayloadDigestHex: d("5") });
     const identities = computeForecastInputIdentitiesV2({ contract, anchorClosedBarAt: "2026-08-27T09:00:00.000Z", predictors: { anchorRealizedVol20m_1m: 0.01 }, hypothesisAssessmentContentDigestHex: d("6") });
-    const result = adaptResearchForecastV2({ modelSpec: spec, artifact, inputIdentities: identities, terminalBucketProbabilities: [0.1,0.1,0.1,0.2,0.2,0.2,0.1], joint13dSamples: [new Array(13).fill(0), new Array(13).fill(0.1)] });
+    const result = adaptResearchForecastV2({ modelSpec: spec, artifact, inputContract: contract, anchorClosedBarAt: identities.anchorClosedBarAt, predictors: { anchorRealizedVol20m_1m: 0.01 }, hypothesisAssessmentContentDigestHex: d("6"), terminalBucketProbabilities: [0.1,0.1,0.1,0.2,0.2,0.2,0.1], joint13dSamples: [new Array(13).fill(0), new Array(13).fill(0.1)] });
     expect(result.researchOnly).toBe(true);
     expect(JSON.stringify(result)).not.toMatch(/capitalEligible|BUY|SELL/);
   });

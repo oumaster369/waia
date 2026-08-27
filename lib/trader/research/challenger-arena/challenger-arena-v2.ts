@@ -5,6 +5,7 @@ import { requireModelTrialSpecV2, type ModelTrialSpecV2 } from "@/lib/trader/res
 
 export type ArenaSubmissionV2 = Readonly<{
   trialSpec: ModelTrialSpecV2;
+  artifactContentDigestHex: string;
   anchorClosedBarAt: string;
   mathematicalInputDigestHex: string;
   terminalTargetDefinitionDigestHex: string;
@@ -19,12 +20,19 @@ export type ArenaEvidenceV2 = Readonly<{
   schemaVersion: "waia.trader.challenger_arena_evidence.v2";
   anchorClosedBarAt: string;
   results: readonly Readonly<{ modelId: string; terminalLogScore: number; jointEnergyScore: number; marginalIndependenceEnergyScore: number; capitalEligible: false }>[];
+  comparisonIdentityDigestHex: string;
   disposition: "RESEARCH_EVIDENCE_ONLY";
   contentDigestHex: string;
 }>;
 
 function independentMarginalNull(samples: readonly (readonly number[])[]): number[][] {
   return samples.map((_, row) => Array.from({ length: 13 }, (__, column) => samples[(row + column) % samples.length]![column]!));
+}
+
+const DIGEST_HEX = /^[0-9a-f]{64}$/;
+
+function requireCanonicalAnchor(value: string): void {
+  if (!Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw new Error("CHALLENGER_ARENA_ANCHOR_INVALID");
 }
 
 export function runChallengerArenaV2(input: {
@@ -34,11 +42,17 @@ export function runChallengerArenaV2(input: {
   observedJoint13d: readonly number[];
 }): ArenaEvidenceV2 {
   if (input.submissions.length === 0) throw new Error("CHALLENGER_ARENA_EMPTY");
+  if (input.observedJoint13d.length !== 13 || input.observedJoint13d.some((value) => !Number.isFinite(value)) || !Number.isFinite(input.observedTerminalReturn)) throw new Error("CHALLENGER_ARENA_OBSERVATION_INVALID");
   const first = input.submissions[0]!;
+  requireCanonicalAnchor(first.anchorClosedBarAt);
+  const terminalGridContentDigestHex = computeSemanticSha256Hex(input.terminalGrid);
   const results = input.submissions.map((submission) => {
     const trial = requireModelTrialSpecV2(submission.trialSpec);
     if (trial.readiness !== "EXECUTOR_READY") throw new Error(`CHALLENGER_ARENA_NOT_EXECUTABLE:${trial.readiness}`);
+    requireCanonicalAnchor(submission.anchorClosedBarAt);
+    for (const digest of [submission.artifactContentDigestHex, submission.mathematicalInputDigestHex, submission.terminalTargetDefinitionDigestHex, submission.executionOpportunityTargetDefinitionDigestHex]) if (!DIGEST_HEX.test(digest)) throw new Error("CHALLENGER_ARENA_IDENTITY_INVALID");
     if (submission.anchorClosedBarAt !== first.anchorClosedBarAt || submission.mathematicalInputDigestHex !== first.mathematicalInputDigestHex) throw new Error("CHALLENGER_ARENA_COMMON_ANCHOR_MISMATCH");
+    if (submission.terminalTargetDefinitionDigestHex !== first.terminalTargetDefinitionDigestHex || submission.executionOpportunityTargetDefinitionDigestHex !== first.executionOpportunityTargetDefinitionDigestHex) throw new Error("CHALLENGER_ARENA_COMMON_TARGET_MISMATCH");
     if (submission.terminalTargetDefinitionDigestHex !== trial.modelSpec.terminalTargetDefinitionDigestHex || submission.executionOpportunityTargetDefinitionDigestHex !== trial.modelSpec.executionOpportunityTargetDefinitionDigestHex) throw new Error("CHALLENGER_ARENA_TARGET_MISMATCH");
     if (submission.evidencePartition !== "DEVELOPMENT" && submission.evidencePartition !== "VALIDATION") throw new Error("CHALLENGER_ARENA_HOLDOUT_FORBIDDEN");
     if (submission.selectionMetric !== "PROPER_PREDICTIVE_SCORE") throw new Error("CHALLENGER_ARENA_PNL_SELECTION_FORBIDDEN");
@@ -53,6 +67,7 @@ export function runChallengerArenaV2(input: {
       capitalEligible: false as const,
     };
   }).sort((a, b) => b.terminalLogScore - a.terminalLogScore || a.jointEnergyScore - b.jointEnergyScore || a.modelId.localeCompare(b.modelId));
-  const body = { schemaVersion: "waia.trader.challenger_arena_evidence.v2" as const, anchorClosedBarAt: first.anchorClosedBarAt, results, disposition: "RESEARCH_EVIDENCE_ONLY" as const };
+  const comparisonIdentityDigestHex = computeSemanticSha256Hex({ schemaVersion: "waia.trader.challenger_arena_comparison_identity.v2", terminalGridContentDigestHex, observedTerminalReturn: input.observedTerminalReturn, observedJoint13d: input.observedJoint13d, submissions: input.submissions.map((submission) => ({ trialSpecDigestHex: submission.trialSpec.contentDigestHex, modelSpecDigestHex: submission.trialSpec.modelSpec.contentDigestHex, artifactContentDigestHex: submission.artifactContentDigestHex, anchorClosedBarAt: submission.anchorClosedBarAt, mathematicalInputDigestHex: submission.mathematicalInputDigestHex, terminalTargetDefinitionDigestHex: submission.terminalTargetDefinitionDigestHex, executionOpportunityTargetDefinitionDigestHex: submission.executionOpportunityTargetDefinitionDigestHex, evidencePartition: submission.evidencePartition, terminalDistributionDigestHex: computeSemanticSha256Hex(submission.terminalBucketProbabilities), jointDistributionDigestHex: computeSemanticSha256Hex(submission.joint13dSamples) })).sort((a, b) => a.modelSpecDigestHex.localeCompare(b.modelSpecDigestHex)) });
+  const body = { schemaVersion: "waia.trader.challenger_arena_evidence.v2" as const, anchorClosedBarAt: first.anchorClosedBarAt, results, comparisonIdentityDigestHex, disposition: "RESEARCH_EVIDENCE_ONLY" as const };
   return { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
 }

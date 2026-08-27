@@ -51,13 +51,30 @@ export function buildModelTrialSpecV2(
     ["pitFeatureVector", input.pitFeatureVector],
     ["knownAnswerFixtureIds", input.knownAnswerFixtureIds],
   ] as const) nonEmpty(values, field);
+  for (const [field, value] of [
+    ["initialization", input.initialization],
+    ["fittingAlgorithm", input.fittingAlgorithm],
+    ["convergenceAndFailure", input.convergenceAndFailure],
+    ["tieBreak", input.tieBreak],
+    ["forecastTransform", input.forecastTransform],
+    ["artifactSchema", input.artifactSchema],
+  ] as const) {
+    if (!value.trim()) throw new Error(`MODEL_TRIAL_SPEC_INVALID:${field}`);
+  }
+  if (
+    input.scoringTargets.length !== 2 ||
+    input.scoringTargets[0] !== "TERMINAL_7_BUCKET_LOG_SCORE" ||
+    input.scoringTargets[1] !== "JOINT_13D_ENERGY_SCORE"
+  ) throw new Error("MODEL_TRIAL_SPEC_INVALID:scoringTargets");
+  if (input.readiness !== "EXECUTOR_READY" && !input.readiness.startsWith("RESEARCH_ONLY_UNIMPLEMENTED_")) {
+    throw new Error("MODEL_TRIAL_SPEC_INVALID:readiness");
+  }
   for (const [field, value] of Object.entries(input.computeBudget)) {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`MODEL_TRIAL_SPEC_INVALID:${field}`);
   }
-  if (
-    input.pitFeatureVector.some((feature) => /future|centered|pnl|profit/i.test(feature)) ||
-    !input.pitFeatureVector.includes("anchorRealizedVol20m_1m")
-  ) throw new Error("MODEL_TRIAL_SPEC_INVALID:pitFeatureVector");
+  if (JSON.stringify(input.pitFeatureVector) !== JSON.stringify(["anchorRealizedVol20m_1m"])) {
+    throw new Error("MODEL_TRIAL_SPEC_INVALID:pitFeatureVector");
+  }
   const body = { schemaVersion: MODEL_TRIAL_SPEC_V2_VERSION, ...input, modelSpec };
   return { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
 }
