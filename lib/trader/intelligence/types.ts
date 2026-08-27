@@ -19,6 +19,10 @@ import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/hi
 import type { IntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { ForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision.types";
 import type {
+  ForecastRuntimeInputV2,
+  ForecastRuntimeOutcomeV2,
+} from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import type {
   InformationSufficiencyRuntimeAuthorityV2,
   SyntheticResearchNonCapitalBindingV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
@@ -310,6 +314,8 @@ export type EvaluationCycleInput = {
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
   /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
   informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
+  /** DEE-632: exact admitted Forecast V2 runtime input. Omission is explicitly NON_ACTIONABLE. */
+  forecastRuntimeInput?: ForecastRuntimeInputV2;
   /**
    * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
    * Does not alter MSV/signals/hypothesis economics.
@@ -340,4 +346,6 @@ export type EvaluationCycleResult = {
   intelligenceCycleBundle?: IntelligenceCycleBundle;
   /** HTR-WP14: forecast-decision bundle when historical profile active. */
   forecastDecisionBundle?: ForecastDecisionBundle;
+  /** DEE-632: sole predictive runtime authority outcome; never Decision/Risk/capital authority. */
+  forecastRuntimeOutcome?: ForecastRuntimeOutcomeV2;
 };
