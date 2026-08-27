@@ -8,6 +8,7 @@ import { isMiCoreEnabled } from "@/lib/trader/intelligence/mi-core-flag";
 import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { buildForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-service";
+import { issueForecastRuntimeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { evaluateInformationSufficiencyRuntimeAdmissionV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { createEmptyHypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import {
@@ -46,6 +47,16 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       "[trader/intelligence] runEvaluationCycle requires evaluatedAt or at least one bar with barCloseTime",
     );
   }
+  const forecastRuntimeOutcome = issueForecastRuntimeV2(
+    input.forecastRuntimeInput ?? {
+      predictiveAdmissionReceipt: null,
+      marketStateSnapshot: null,
+      forecastContractBinding: null,
+      predictivePackage: null,
+      executionHorizonMinutes: 0,
+      normalizationVersionDigestHex: "",
+    },
+  );
 
   const features = computeFeatureSnapshot({
     bars: input.bars,
@@ -103,6 +114,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       fusedContext: input.fusedContext,
       understanding,
       understandingArtifact,
+      forecastRuntimeOutcome,
     };
   }
 
@@ -214,6 +226,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       reconstruction,
       hypothesisSet,
       hypothesisSessionState: nextSessionState,
+      forecastRuntimeOutcome,
     };
   }
 
@@ -279,7 +292,8 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     hypothesisSet &&
     decisionChain &&
     informationSufficiencyAdmission.status === "ADMITTED" &&
-    input.informationSufficiencyAuthority
+    input.informationSufficiencyAuthority &&
+    input.forecastRuntimeInput == null
       ? buildForecastDecisionBundle({
           intelligenceCycleBundle,
           hypothesisSet,
@@ -308,5 +322,6 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     hypothesisSessionState: nextSessionState,
     intelligenceCycleBundle,
     forecastDecisionBundle,
+    forecastRuntimeOutcome,
   };
 }
