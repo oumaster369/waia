@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-742",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Human-ratified early measurement/schema slice; Decision and expectedEdge disposition remains deferred in DEE-624 after DEE-634.",
+  "includedChildren": [
+    {
+      "issue": "DEE-744",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Require canonical RV v2 identities in schema, producer return type and parity checks while preserving equations and compatibility alias.",
+      "dependencies": [],
+      "dependencyEvidence": ["DEE-631 is squash-merged at authoritative base 36929bba3f46ec79002ef45f2a04dce8e86593c4."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/intelligence/types.ts", "lib/trader/intelligence/feature-engine-v0.ts", "lib/trader/intelligence/feature-engine-parity.ts", "tests/unit/feature-engine-rv-v2.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly ratified DEE-624M on 2026-08-27."},
+      "expectedAcceptanceEvidence": ["Required canonical fields, exact legacy alias and full RV parity comparisons."],
+      "expectedTests": ["tests/unit/feature-engine-rv-v2.test.ts", "tests/unit/trader-intelligence-parity.test.ts"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-743",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Prove known-answer, UNAVAILABLE, PIT-prefix, mutation and legacy-consumer quarantine boundaries.",
+      "dependencies": ["DEE-744"],
+      "dependencyEvidence": ["Validation targets the frozen required RV v2 API."],
+      "expectedFileOrSchemaSurfaces": ["tests/unit/feature-engine-rv-v2.test.ts", "tests/unit/trader-intelligence-parity.test.ts", "docs/plans/dee-742-realized-vol20-consumer-inventory.md"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Validation and inventory only; protected downstream semantics remain deferred."},
+      "expectedAcceptanceEvidence": ["PIT/gap invariants and every canonical-field parity mutation are covered; legacy consumers are enumerated without code changes."],
+      "expectedTests": ["focused RV v2 and parity tests", "inventory check"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Controller dependency, duplicate, ownership, producer/consumer/replay/persistence/test/inventory and protected-surface audit"},
+    "preImplementationAdmission": {"status": "pending-freeze", "manifestDigest": null, "manifestCommit": null, "manifestPath": "docs/plans/dee-742-rv-measurement-schema.integration-train.json", "reviewer": "Controller pre-write API and invariant freeze"},
+    "admissionReviews": [],
+    "cumulativeChecks": [],
+    "finalReviewRemediation": null,
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": ["RV equations and rounding unchanged.", "Legacy alias equals priceDispersion20 exactly.", "No downstream consumer reinterpretation.", "No holdout, Decision, Risk, production/live or capital semantics."],
+  "rollbackStrategy": "One revert PR restores optional schema fields and prior parity scope without touching formulas or downstream consumers.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-742-rv-measurement-schema.integration-train.json DEE-742 frozen",
+    "focused": ["pnpm test --run tests/unit/feature-engine-rv-v2.test.ts tests/unit/trader-intelligence-parity.test.ts", "pnpm typecheck"],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI/applicable PostgreSQL and DEE-653 before squash merge"
+  }
+}
