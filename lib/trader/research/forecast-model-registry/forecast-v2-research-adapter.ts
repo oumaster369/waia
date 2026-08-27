@@ -31,17 +31,32 @@ export function adaptResearchForecastV2(input: {
   const spec = requireForecastModelSpecV2(input.modelSpec);
   const artifact = requireForecastModelArtifactV2(input.artifact);
   const inputContract = requireForecastInputContractV2(input.inputContract);
-  const inputIdentities = computeForecastInputIdentitiesV2({ contract: inputContract, anchorClosedBarAt: input.anchorClosedBarAt, predictors: input.predictors, hypothesisAssessmentContentDigestHex: input.hypothesisAssessmentContentDigestHex });
-  if (inputContract.contentDigestHex !== spec.inputContractDigestHex) throw new Error("FORECAST_RESEARCH_ADAPTER_INPUT_CONTRACT_MISMATCH");
-  if (artifact.modelSpecDigestHex !== spec.contentDigestHex || artifact.inputContractDigestHex !== spec.inputContractDigestHex) {
+  const inputIdentities = computeForecastInputIdentitiesV2({
+    contract: inputContract,
+    anchorClosedBarAt: input.anchorClosedBarAt,
+    predictors: input.predictors,
+    hypothesisAssessmentContentDigestHex: input.hypothesisAssessmentContentDigestHex,
+  });
+  if (inputContract.contentDigestHex !== spec.inputContractDigestHex)
+    throw new Error("FORECAST_RESEARCH_ADAPTER_INPUT_CONTRACT_MISMATCH");
+  if (
+    artifact.modelSpecDigestHex !== spec.contentDigestHex ||
+    artifact.inputContractDigestHex !== spec.inputContractDigestHex
+  ) {
     throw new Error("FORECAST_RESEARCH_ADAPTER_BINDING_MISMATCH");
   }
-  if (input.terminalBucketProbabilities.length !== 7 || input.terminalBucketProbabilities.some((p) => !Number.isFinite(p) || p < 0)) {
+  if (
+    input.terminalBucketProbabilities.length !== 7 ||
+    input.terminalBucketProbabilities.some((p) => !Number.isFinite(p) || p < 0)
+  ) {
     throw new Error("FORECAST_RESEARCH_ADAPTER_INVALID_TERMINAL");
   }
   const sum = input.terminalBucketProbabilities.reduce((a, b) => a + b, 0);
   if (Math.abs(sum - 1) > 1e-12) throw new Error("FORECAST_RESEARCH_ADAPTER_INVALID_TERMINAL_SUM");
-  if (input.joint13dSamples.length < 2 || input.joint13dSamples.some((row) => row.length !== 13 || row.some((x) => !Number.isFinite(x)))) {
+  if (
+    input.joint13dSamples.length < 2 ||
+    input.joint13dSamples.some((row) => row.length !== 13 || row.some((x) => !Number.isFinite(x)))
+  ) {
     throw new Error("FORECAST_RESEARCH_ADAPTER_INVALID_JOINT");
   }
   const body = {
@@ -51,5 +66,13 @@ export function adaptResearchForecastV2(input: {
     joint13dSamples: input.joint13dSamples.map((row) => [...row]),
     researchOnly: true as const,
   };
-  return { ...body, contentDigestHex: computeSemanticSha256Hex({ ...body, modelSpecDigestHex: spec.contentDigestHex, artifactDigestHex: artifact.contentDigestHex, qualifiedInputBindingDigestHex: inputIdentities.qualifiedInputBindingDigestHex }) };
+  return {
+    ...body,
+    contentDigestHex: computeSemanticSha256Hex({
+      ...body,
+      modelSpecDigestHex: spec.contentDigestHex,
+      artifactDigestHex: artifact.contentDigestHex,
+      qualifiedInputBindingDigestHex: inputIdentities.qualifiedInputBindingDigestHex,
+    }),
+  };
 }

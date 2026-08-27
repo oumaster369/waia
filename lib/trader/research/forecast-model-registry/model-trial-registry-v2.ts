@@ -11,9 +11,7 @@ import {
 
 export const MODEL_TRIAL_SPEC_V2_VERSION = "waia.trader.model_trial_spec.v2" as const;
 
-export type ModelTrialReadinessV2 =
-  | "EXECUTOR_READY"
-  | `RESEARCH_ONLY_UNIMPLEMENTED_${string}`;
+export type ModelTrialReadinessV2 = "EXECUTOR_READY" | `RESEARCH_ONLY_UNIMPLEMENTED_${string}`;
 
 export type ModelTrialSpecV2 = Readonly<{
   schemaVersion: typeof MODEL_TRIAL_SPEC_V2_VERSION;
@@ -30,7 +28,11 @@ export type ModelTrialSpecV2 = Readonly<{
   artifactSchema: string;
   scoringTargets: readonly ["TERMINAL_7_BUCKET_LOG_SCORE", "JOINT_13D_ENERGY_SCORE"];
   knownAnswerFixtureIds: readonly string[];
-  computeBudget: Readonly<{ maxObservations: number; maxIterations: number; maxWallClockMs: number }>;
+  computeBudget: Readonly<{
+    maxObservations: number;
+    maxIterations: number;
+    maxWallClockMs: number;
+  }>;
   readiness: ModelTrialReadinessV2;
   contentDigestHex: string;
 }>;
@@ -50,7 +52,8 @@ export function buildModelTrialSpecV2(
     ["parameterConstraints", input.parameterConstraints],
     ["pitFeatureVector", input.pitFeatureVector],
     ["knownAnswerFixtureIds", input.knownAnswerFixtureIds],
-  ] as const) nonEmpty(values, field);
+  ] as const)
+    nonEmpty(values, field);
   for (const [field, value] of [
     ["initialization", input.initialization],
     ["fittingAlgorithm", input.fittingAlgorithm],
@@ -65,12 +68,17 @@ export function buildModelTrialSpecV2(
     input.scoringTargets.length !== 2 ||
     input.scoringTargets[0] !== "TERMINAL_7_BUCKET_LOG_SCORE" ||
     input.scoringTargets[1] !== "JOINT_13D_ENERGY_SCORE"
-  ) throw new Error("MODEL_TRIAL_SPEC_INVALID:scoringTargets");
-  if (input.readiness !== "EXECUTOR_READY" && !input.readiness.startsWith("RESEARCH_ONLY_UNIMPLEMENTED_")) {
+  )
+    throw new Error("MODEL_TRIAL_SPEC_INVALID:scoringTargets");
+  if (
+    input.readiness !== "EXECUTOR_READY" &&
+    !input.readiness.startsWith("RESEARCH_ONLY_UNIMPLEMENTED_")
+  ) {
     throw new Error("MODEL_TRIAL_SPEC_INVALID:readiness");
   }
   for (const [field, value] of Object.entries(input.computeBudget)) {
-    if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`MODEL_TRIAL_SPEC_INVALID:${field}`);
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new Error(`MODEL_TRIAL_SPEC_INVALID:${field}`);
   }
   if (JSON.stringify(input.pitFeatureVector) !== JSON.stringify(["anchorRealizedVol20m_1m"])) {
     throw new Error("MODEL_TRIAL_SPEC_INVALID:pitFeatureVector");
@@ -123,16 +131,21 @@ export class ForecastModelRegistryV2 {
     this.#trials.set(exact.modelSpec.modelId, exact);
   }
 
-  get(modelId: string): ModelTrialSpecV2 | undefined { return this.#trials.get(modelId); }
+  get(modelId: string): ModelTrialSpecV2 | undefined {
+    return this.#trials.get(modelId);
+  }
 
   list(): readonly ModelTrialSpecV2[] {
-    return [...this.#trials.values()].sort((a, b) => a.modelSpec.modelId.localeCompare(b.modelSpec.modelId));
+    return [...this.#trials.values()].sort((a, b) =>
+      a.modelSpec.modelId.localeCompare(b.modelSpec.modelId),
+    );
   }
 
   requireExecutable(modelId: string): ModelTrialSpecV2 {
     const spec = this.#trials.get(modelId);
     if (!spec) throw new Error("MODEL_REGISTRY_UNKNOWN_MODEL");
-    if (spec.readiness !== "EXECUTOR_READY") throw new Error(`MODEL_REGISTRY_NOT_EXECUTABLE:${spec.readiness}`);
+    if (spec.readiness !== "EXECUTOR_READY")
+      throw new Error(`MODEL_REGISTRY_NOT_EXECUTABLE:${spec.readiness}`);
     return spec;
   }
 }
@@ -142,5 +155,6 @@ export const TIER_B_RESEARCH_BLOCKS_V2 = Object.freeze({
   "har-rv-terminal/v1": "RESEARCH_ONLY_UNIMPLEMENTED_HAR_JOINT_SPEC_NOT_FROZEN",
   "ordinal-ridge-terminal/v1": "RESEARCH_ONLY_UNIMPLEMENTED_FEATURE_SET_NOT_PINNED",
   "joint-locscale-execopp/v1": "RESEARCH_ONLY_UNIMPLEMENTED_MULTIVARIATE_DENSITY_NOT_FROZEN",
-  "dynamic-state-transition-hazard/v1": "RESEARCH_ONLY_UNIMPLEMENTED_TRANSITION_TRIAL_SPEC_NOT_FROZEN",
+  "dynamic-state-transition-hazard/v1":
+    "RESEARCH_ONLY_UNIMPLEMENTED_TRANSITION_TRIAL_SPEC_NOT_FROZEN",
 } as const);

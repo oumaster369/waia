@@ -10,6 +10,7 @@ The only mathematical predictor permitted by the merged input contract is `ancho
 
 - Producer: content-addressed `ModelTrialSpecV2` and deterministic registry.
 - Consumer: research-only Forecast V2 adapter and common-anchor arena.
+- Qualification: delegates multi-anchor Terminal admission to the existing canonical WF_PREDICTIVE purge/embargo, mandatory-baseline, stationary-bootstrap B=10000 and Holm-FWER harness; joint admission remains DEE-532 and final scientific admission remains DEE-631.
 - Replay: digest reconstruction plus exact artifact/spec/input identity binding.
 - Persistence: none; merged DEE-648A binding remains the sole selected-package persistence surface.
 - Tests: registry conflicts, undeclared/future inputs, target/anchor mismatch, joint/marginal scoring and no-promotion firewall.
