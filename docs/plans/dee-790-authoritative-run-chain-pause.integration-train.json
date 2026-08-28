@@ -42,7 +42,7 @@
       "actualFiles": ["scripts/github/test-dee-790-authoritative-run-chain-proof.sh"],
       "integratedCommits": ["6a6b97aea7cffcadceb80e458c3ca480114d68b3"],
       "acceptanceEvidence": ["Bounded proof rejects both external timing surfaces and requires deterministic boundary plus protected parity/evidence assertions."],
-      "tests": ["Proof script PASS.", "Focused five-file FHV suite: 5 files / 14 tests PASS; full fresh SQLite pending frozen-head execution."],
+      "tests": ["Proof script PASS.", "Focused five-file FHV suite: 5 files / 14 tests PASS.", "Literal full fresh-migrated SQLite suite: 878 files / 5109 tests PASS; 0 failures; 426 skipped."],
       "execution": {"wave": 2, "mode": "serialized"}
     }
   ],
@@ -61,7 +61,7 @@
     ],
     "cumulativeChecks": [
       {"afterIssue": "DEE-792", "status": "pass", "commands": ["focused five-file FHV deterministic pause suite: 14/14 PASS"]},
-      {"afterIssue": "DEE-791", "status": "pass", "commands": ["proof script PASS", "focused five-file FHV deterministic pause suite: 14/14 PASS"]}
+      {"afterIssue": "DEE-791", "status": "pass", "commands": ["proof script PASS", "focused five-file FHV deterministic pause suite: 14/14 PASS", "literal full fresh-migrated SQLite suite: 878 files / 5109 tests PASS; 0 failures"]}
     ],
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
