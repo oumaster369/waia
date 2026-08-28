@@ -55,6 +55,7 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-breath")).not.toContainText(/DEE-\d+/i);
     await expect(page.getByTestId("landing-breath")).not.toContainText(/Resource transparency/i);
     await expect(page.getByTestId("landing-breath-media")).toHaveCount(0);
+    await expect(page.getByTestId("landing-breath-time-radar")).toBeVisible();
     await expect(page.getByTestId("landing-breath-budget-link")).toHaveAttribute("href", "/budget");
     await expect(page.getByTestId("landing-breath-patrons-link")).toHaveAttribute(
       "href",
@@ -79,6 +80,29 @@ test.describe("WAIA landing page", () => {
     // Unified gold CTA family on button-like controls; prose links stay text.
     await expect(page.getByTestId("landing-final-cta-register")).toHaveClass(/rounded-xl/);
     await expect(page.getByTestId("landing-final-cta-research")).not.toHaveClass(/rounded-xl/);
+  });
+
+  test("moves the Breath time radar counterclockwise and respects reduced motion", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    const sweep = page.getByTestId("landing-breath-radar-sweep");
+    await expect(sweep).toHaveAttribute("data-rotation", "counterclockwise");
+    const keyframes = await sweep.evaluate((element) => {
+      const animation = element.getAnimations()[0];
+      const effect = animation?.effect as KeyframeEffect | null;
+      return effect?.getKeyframes().map((keyframe) => keyframe.transform) ?? [];
+    });
+    expect(keyframes.at(-1)).toBe("rotate(-360deg)");
+    await expect(page.getByTestId("landing-breath-radar-contact-1")).toBeVisible();
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const reducedAnimationName = await sweep.evaluate(
+      (element) => window.getComputedStyle(element).animationName,
+    );
+    expect(reducedAnimationName).toBe("none");
   });
 
   test("desktop places equal Auth and Breath columns directly below the framed hero", async ({
