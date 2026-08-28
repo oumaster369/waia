@@ -14,10 +14,10 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const ORG = "00000000-0000-4000-8000-000000067001";
 const legacyConsumers = [
-  "lib/trader/live/run-live-cycle.ts",
   "lib/trader/paper/paper-cycle-runner.ts",
   "lib/trader/research/capital-path-trace-harness.ts",
 ] as const;
+const migratedProductionConsumers = ["lib/trader/live/run-live-cycle.ts"] as const;
 const migratedTestOnlyConsumers = [
   "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts",
 ] as const;
@@ -132,6 +132,12 @@ describe("Execution V2 whole-repository consumer graph (DEE-670 / E651-D)", () =
     for (const file of legacyConsumers) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
       expect(source).toContain(".submitOrder(");
+    }
+    for (const file of migratedProductionConsumers) {
+      const source = readFileSync(resolve(process.cwd(), file), "utf8");
+      expect(source).not.toContain(".submitOrder(");
+      expect(source).toContain("runDecisionCapitalAuthorityV2");
+      expect(source).toContain("decision_v2_authority_missing");
     }
     for (const file of migratedTestOnlyConsumers) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
