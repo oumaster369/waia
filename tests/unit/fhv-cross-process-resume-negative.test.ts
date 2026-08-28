@@ -24,10 +24,8 @@ import {
 import { assertFhvRehearsalResumeIdentity } from "@/lib/trader/observability/fhv-resume-identity-validator";
 import {
   runFhvRehearsalCampaign,
-  waitForFhvRehearsalCycles,
   writeFhvCampaignControlResumeRequest,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
-import { createRecordingLinuxSystemdCampaignControlExecutor } from "@/lib/trader/observability/fhv-linux-systemd-executor";
 
 const TARGET_SHA = "cccccccccccccccccccccccccccccccccccccccc";
 const RUN_ID = "fhv-cross-process-negative";
@@ -39,19 +37,7 @@ async function pauseCampaign(runDir: string, runId: string): Promise<void> {
     runId,
     organizationId: ORG_ID,
     targetSha: TARGET_SHA,
-  });
-  await waitForFhvRehearsalCycles(runDir, 45);
-  const executor = createRecordingLinuxSystemdCampaignControlExecutor({
-    hostOsQualified: true,
-    deploymentEnabled: true,
-    runRoot: runDir,
-  });
-  await executor.execute({
-    action: "PAUSE_AT_CHECKPOINT",
-    runId,
-    organizationId: ORG_ID,
-    operatorId: "negative-operator",
-    reason: "negative matrix pause",
+    testOnlyPauseAfterCycles: 45,
   });
   await pausePromise;
   writeFhvCampaignControlResumeRequest(runDir, runId, ORG_ID);

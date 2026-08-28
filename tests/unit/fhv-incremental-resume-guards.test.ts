@@ -11,8 +11,6 @@ import {
 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import {
   runFhvRehearsalCampaign,
-  waitForFhvRehearsalCycles,
-  writeFhvCampaignControlPauseRequest,
   writeFhvCampaignControlResumeRequest,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
 
@@ -42,9 +40,8 @@ describe("FHV incremental resume guards (DEE-431)", () => {
         runId: RUN_ID,
         organizationId: ORG_ID,
         targetSha: TARGET_SHA,
+        testOnlyPauseAfterCycles: 45,
       });
-      await waitForFhvRehearsalCycles(runDir, 45);
-      writeFhvCampaignControlPauseRequest(runDir, RUN_ID, ORG_ID);
       await pausePromise;
       writeFhvCampaignControlResumeRequest(runDir, RUN_ID, ORG_ID);
 
