@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-793",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-794",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Replay the reviewed DEE-781 deterministic default-off test-only pause boundary, three legacy consumers and retained source-train evidence byte-identically.",
       "dependencies": ["DEE-755"],
@@ -29,11 +29,23 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly authorized the governance-valid byte-identical replacement train."},
       "expectedAcceptanceEvidence": ["Patch and tree equal reviewed DEE-781 source; default-off test-only boundary and all protected assertions remain."],
       "expectedTests": ["focused deterministic pause/resume/default-off/fail-closed suite", "exact patch/tree equivalence proof"],
+      "actualFiles": [
+        "docs/plans/dee-781-fhv-deterministic-pause-harness.integration-train.json",
+        "docs/plans/dee-781-fhv-deterministic-pause-harness.md",
+        "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+        "tests/unit/fhv-cross-process-resume-negative.test.ts",
+        "tests/unit/fhv-incremental-resume-guards.test.ts",
+        "tests/unit/fhv-rehearsal-campaign-runner.test.ts",
+        "tests/unit/fhv-resume-timeout.test.ts"
+      ],
+      "integratedCommits": ["fbe194f9bc69e06a436df7ed85ade5100cb1bd90"],
+      "acceptanceEvidence": ["The exact DEE-781 source patch was replayed after admission; all seven source/evidence files are byte-identical to reviewed head b050f176."],
+      "tests": ["Exact source-file tree equivalence to combined reviewed head ce54f3dc: PASS."],
       "execution": {"wave": 1, "mode": "serialized"}
     },
     {
       "issue": "DEE-795",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Replay the reviewed DEE-790 fourth authoritative-run-chain consumer and retained source-train evidence byte-identically.",
       "dependencies": ["DEE-794"],
@@ -48,6 +60,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly authorized the governance-valid byte-identical replacement train."},
       "expectedAcceptanceEvidence": ["Patch and combined tree equal reviewed DEE-790 source; every parity/digest/gap/duplicate/evidence assertion remains."],
       "expectedTests": ["focused five-file deterministic FHV suite", "bounded source proof", "literal fresh-migrated full SQLite suite"],
+      "actualFiles": [
+        "docs/plans/dee-790-authoritative-run-chain-pause.integration-train.json",
+        "docs/plans/dee-790-authoritative-run-chain-pause.md",
+        "scripts/github/test-dee-790-authoritative-run-chain-proof.sh",
+        "tests/unit/fhv-authoritative-run-chain.test.ts"
+      ],
+      "integratedCommits": ["a3b2782874cef5dee5f6ee20a0523f0228b46d83"],
+      "acceptanceEvidence": ["The exact DEE-790 source patch was replayed after DEE-794; all four source/evidence files are byte-identical to reviewed head c7f60423 and combined head ce54f3dc."],
+      "tests": ["Exact source-file tree equivalence to combined reviewed head ce54f3dc: PASS."],
       "execution": {"wave": 2, "mode": "serialized"}
     }
   ],
@@ -55,7 +76,47 @@
   "integrationEvidence": {
     "admissionEvidence": {"status": "pass", "reviewer": "WAIA AI-TRADER Program Controller under explicit replacement authorization"},
     "authoritativeBase": "0fefa5f71d1cf38e065419781c1e9971804487c2",
-    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-793 is the sole replacement train; DEE-781/790 source work is retained only as byte-equivalence provenance, and PR #514 will not merge."}
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-793 is the sole replacement train; DEE-781/790 source work is retained only as byte-equivalence provenance, and PR #514 will not merge."},
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "1d4e7e2d0a2d706bd55791143c1b4d97765a6507d0d6ba7737c89682b3edff70",
+      "manifestCommit": "cc16506417557cbc5a73292bb39ff4407729d73f",
+      "manifestPath": "docs/plans/dee-793-fhv-governance-replacement.integration-train.json",
+      "reviewer": "WAIA AI-TRADER Program Controller under explicit governance-valid replacement authorization"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-794",
+        "status": "pass",
+        "reviewedCommits": ["fbe194f9bc69e06a436df7ed85ade5100cb1bd90"],
+        "reviewedFiles": [
+          "docs/plans/dee-781-fhv-deterministic-pause-harness.integration-train.json",
+          "docs/plans/dee-781-fhv-deterministic-pause-harness.md",
+          "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+          "tests/unit/fhv-cross-process-resume-negative.test.ts",
+          "tests/unit/fhv-incremental-resume-guards.test.ts",
+          "tests/unit/fhv-rehearsal-campaign-runner.test.ts",
+          "tests/unit/fhv-resume-timeout.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-795",
+        "status": "pass",
+        "reviewedCommits": ["a3b2782874cef5dee5f6ee20a0523f0228b46d83"],
+        "reviewedFiles": [
+          "docs/plans/dee-790-authoritative-run-chain-pause.integration-train.json",
+          "docs/plans/dee-790-authoritative-run-chain-pause.md",
+          "scripts/github/test-dee-790-authoritative-run-chain-proof.sh",
+          "tests/unit/fhv-authoritative-run-chain.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-794", "status": "pass", "commands": ["exact source-file tree equivalence to b050f176/ce54f3dc"]},
+      {"afterIssue": "DEE-795", "status": "pass", "commands": ["exact source-file tree equivalence to c7f60423/ce54f3dc"]}
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "Production FHV behavior is unchanged when the test-only input is omitted.",

@@ -19,17 +19,17 @@ approvalGates:
   - integration-ready
   - dee-653-exact-head-admission
 state:
-  status: admitted
-  currentWorkPackage: DEE-794
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-794, DEE-795]
+  status: frozen
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-794, DEE-795]
+  remainingWorkPackages: []
   blockedReason: null
-  nextAction: "Commit the sole admission plan/manifest, then replay the reviewed DEE-781 and DEE-790 patches as serialized child commits."
+  nextAction: "Run focused and complete exact-head gates, obtain independent review, then publish the replacement PR for authoritative CI and DEE-653."
 provenance:
   createdFrom: controller-authorized-governance-valid-replacement
   authoritativeBase: 0fefa5f71d1cf38e065419781c1e9971804487c2
-  admissionCommit: pending
-  admissionManifestDigest: pending
+  admissionCommit: cc16506417557cbc5a73292bb39ff4407729d73f
+  admissionManifestDigest: 1d4e7e2d0a2d706bd55791143c1b4d97765a6507d0d6ba7737c89682b3edff70
 ---
 
 # DEE-793 — governance-valid FHV replacement train
