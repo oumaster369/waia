@@ -34,15 +34,15 @@ export function HeroBlock() {
         </picture>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-[40%] bg-[linear-gradient(180deg,transparent_0%,rgba(3,8,19,0.38)_42%,rgba(3,8,19,0.82)_100%)]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[56%] bg-[linear-gradient(180deg,transparent_0%,rgba(3,8,19,0.28)_30%,rgba(3,8,19,0.72)_68%,rgba(3,8,19,0.92)_100%)]"
         />
         <div
           data-testid="landing-hero-definition"
-          className="absolute inset-x-0 bottom-[11%] z-10 mx-auto flex w-full flex-col items-center px-5 text-center sm:bottom-[7%] sm:px-10 lg:bottom-[8%]"
+          className="absolute inset-x-0 bottom-[4%] z-10 mx-auto flex w-full flex-col items-center px-5 text-center sm:bottom-[calc(7%+5rem)] sm:px-10 md:bottom-[5.5%]"
         >
           <p
             data-testid="landing-hero-definition-text"
-            className="font-waia-serif max-w-4xl text-[clamp(0.78rem,2.15vw,1.65rem)] leading-snug font-medium text-balance text-[#f0e4ce] [text-shadow:0_2px_18px_rgba(0,0,0,0.92)] sm:leading-relaxed"
+            className="font-waia-serif max-w-5xl text-[clamp(1.125rem,2.8vw,1.25rem)] leading-[1.45] font-semibold tracking-[-0.01em] text-balance text-[#f0e4ce] [text-shadow:0_2px_20px_rgba(0,0,0,0.96)] sm:text-[clamp(1.125rem,2.8vw,2.125rem)] md:text-[clamp(1.25rem,2.25vw,1.875rem)]"
           >
             {copy.definition}
           </p>

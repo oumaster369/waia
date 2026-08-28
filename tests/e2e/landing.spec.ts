@@ -105,10 +105,12 @@ test.describe("WAIA landing page", () => {
     expect(breathBox.x).toBeGreaterThan(authBox.x + authBox.width);
   });
 
-  test("large desktop viewports keep Hero image and definition from overlapping", async ({
+  test("target viewports keep the readable definition inside the Hero composition", async ({
     page,
   }) => {
     const viewports = [
+      { width: 390, height: 844 },
+      { width: 722, height: 987 },
       { width: 1024, height: 768 },
       { width: 1280, height: 800 },
       { width: 1440, height: 900 },
@@ -135,15 +137,33 @@ test.describe("WAIA landing page", () => {
       ).toBeTruthy();
       if (!imageBox || !defBox || !definitionTextBox) continue;
 
-      // Layout boxes must not overlap (definition follows image in normal flow).
-      expect(defBox.y, `layout overlap at ${viewport.width}`).toBeGreaterThanOrEqual(
-        imageBox.y + imageBox.height - 0.5,
+      expect(definitionTextBox.y, `definition above image at ${viewport.width}`).toBeGreaterThan(
+        imageBox.y,
+      );
+      expect(
+        definitionTextBox.y + definitionTextBox.height,
+        `definition below image at ${viewport.width}`,
+      ).toBeLessThan(imageBox.y + imageBox.height);
+
+      const bottomAir =
+        imageBox.y + imageBox.height - (definitionTextBox.y + definitionTextBox.height);
+      const expectedBottomAir =
+        viewport.width < 640
+          ? { min: 20, max: 80 }
+          : viewport.width < 768
+            ? { min: 120, max: 220 }
+            : { min: 32, max: 100 };
+      expect(bottomAir, `definition bottom air at ${viewport.width}`).toBeGreaterThanOrEqual(
+        expectedBottomAir.min,
+      );
+      expect(bottomAir, `definition bottom air at ${viewport.width}`).toBeLessThanOrEqual(
+        expectedBottomAir.max,
       );
 
-      // Visual air is padding inside the definition block — measure image → definition text.
-      const visualGap = definitionTextBox.y - (imageBox.y + imageBox.height);
-      expect(visualGap, `hero→definition text air at ${viewport.width}`).toBeGreaterThanOrEqual(36);
-      expect(visualGap, `hero→definition text air at ${viewport.width}`).toBeLessThanOrEqual(56);
+      const fontSize = await definitionText.evaluate((element) =>
+        Number.parseFloat(window.getComputedStyle(element).fontSize),
+      );
+      expect(fontSize, `definition font size at ${viewport.width}`).toBeGreaterThanOrEqual(18);
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         viewport.width + 1,
