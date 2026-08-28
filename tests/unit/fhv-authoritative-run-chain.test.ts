@@ -22,8 +22,6 @@ import {
 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import {
   runFhvRehearsalCampaign,
-  waitForFhvRehearsalCycles,
-  writeFhvCampaignControlPauseRequest,
   writeFhvCampaignControlResumeRequest,
   resolveFhvRehearsalEvidenceDir,
   FHV_REHEARSAL_CHECKPOINT_CYCLE,
@@ -64,9 +62,8 @@ describe("FHV authoritative run-chain composition (DEE-431)", () => {
         runId: RUN_ID,
         organizationId: ORG_ID,
         targetSha: TARGET_SHA,
+        testOnlyPauseAfterCycles: FHV_REHEARSAL_CHECKPOINT_CYCLE,
       });
-      await waitForFhvRehearsalCycles(pauseResumeDir, FHV_REHEARSAL_CHECKPOINT_CYCLE);
-      writeFhvCampaignControlPauseRequest(pauseResumeDir, RUN_ID, ORG_ID);
       const paused = await pausePromise;
       expect(paused.classification).toBe("REHEARSAL_PAUSED");
 
