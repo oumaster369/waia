@@ -14,8 +14,6 @@ import {
   readFhvRehearsalCampaignProgress,
   readFhvRehearsalTerminalClassification,
   runFhvRehearsalCampaign,
-  waitForFhvRehearsalCycles,
-  writeFhvCampaignControlPauseRequest,
   writeFhvCampaignControlResumeRequest,
 } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
 import { isFhvCanonicalRunChainComplete } from "@/lib/trader/observability/fhv-canonical-run-chain";
@@ -45,9 +43,8 @@ describe("FHV resumed replay timeout boundary (DEE-431)", () => {
         runId: RUN_ID,
         organizationId: ORG_ID,
         targetSha: TARGET_SHA,
+        testOnlyPauseAfterCycles: PAUSE_AFTER_CYCLES,
       });
-      await waitForFhvRehearsalCycles(runDir, PAUSE_AFTER_CYCLES);
-      writeFhvCampaignControlPauseRequest(runDir, RUN_ID, ORG_ID);
       const paused = await pausePromise;
       expect(paused.classification).toBe("REHEARSAL_PAUSED");
 
