@@ -733,10 +733,12 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(financeNav).toContainText("Accounts");
     await expect(financeNav).toContainText("Projects");
     await expect(financeNav).toContainText("Wallet");
-    await expect(page.getByRole("link", { name: "Admin home" })).toHaveAttribute(
-      "href",
-      "/waia-admin",
-    );
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Admin home" }),
+    ).toHaveAttribute("href", "/waia-admin");
+    await expect(
+      page.getByLabel("WAIA Admin modules").getByRole("link", { name: "Admin home" }),
+    ).toHaveAttribute("href", "/waia-admin");
 
     await page.getByRole("button", { name: "Ask Finance" }).click();
     await page.getByLabel("Request").fill("Show the current overview");
