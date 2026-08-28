@@ -54,6 +54,15 @@ Exact patch/tree equivalence to DEE-781 reviewed head `b050f176d0c3aa677de2a10a6
 3. The frozen manifest maps every base-to-head file and child commit without changing the governance validator.
 4. All required gates pass on the exact immutable replacement head before squash merge.
 
+## Frozen evidence
+
+- exact source-file tree equivalence to combined reviewed head `ce54f3dcce21707c13884d1e67722350abc77d90`: PASS;
+- focused deterministic FHV suite: 5 files / 14 tests PASS;
+- bounded authoritative-run-chain proof: PASS;
+- typecheck, lint and production build: PASS;
+- literal fresh-migrated SQLite: 878 files / 5109 tests PASS, 0 failures, 426 skipped;
+- fresh exact-head independent review and authoritative CI/DEE-653 remain required before merge.
+
 ## Rollback
 
 One revert PR of the replacement squash commit. No deployment, live trading or capital action is authorized.
