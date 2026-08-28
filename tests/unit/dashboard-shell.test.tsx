@@ -22,7 +22,9 @@ import type { TwinReadinessResult } from "@/lib/dashboard/twin-readiness-api.typ
 import type { TwinUnlockState } from "@/lib/dashboard/twin-unlock-api.types";
 import { computeReadinessResult, parseIndicatorVector } from "@/lib/readiness";
 
-function input(partial: Partial<ReadinessInput> & Pick<ReadinessInput, "indicators">): ReadinessInput {
+function input(
+  partial: Partial<ReadinessInput> & Pick<ReadinessInput, "indicators">,
+): ReadinessInput {
   return {
     indicators: partial.indicators,
     socializationCompleted: partial.socializationCompleted ?? false,
@@ -52,6 +54,11 @@ describe("DashboardSidebar", () => {
   it("renders brand, identity, and Sign out control", () => {
     render(<DashboardSidebar identityLabel="Alex" />);
     expect(screen.getByTestId("dashboard-sidebar-brand")).toHaveTextContent("WAIA");
+    expect(screen.getByTestId("dashboard-sidebar-breath-link")).toHaveAttribute(
+      "href",
+      "/dashboard/breath",
+    );
+    expect(screen.getByTestId("dashboard-sidebar-breath-link")).toHaveTextContent("BREATH OF WAIA");
     expect(screen.getByTestId("dashboard-sidebar-identity")).toHaveTextContent("Alex");
     const signOut = screen.getByTestId("dashboard-sidebar-sign-out");
     expect(signOut).toHaveAttribute("type", "button");
@@ -194,12 +201,30 @@ describe("DashboardShell", () => {
   it("maps six indicators to data-threshold bands and shows deterministic hints", () => {
     const model = buildTestModel({ indicators: [0, 33, 67, 100, 0, 100] });
     render(<DashboardShell model={model} />);
-    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute("data-threshold", "low");
-    expect(screen.getByTestId("dashboard-indicator-behavior")).toHaveAttribute("data-threshold", "medium");
-    expect(screen.getByTestId("dashboard-indicator-thinking")).toHaveAttribute("data-threshold", "medium");
-    expect(screen.getByTestId("dashboard-indicator-emotions")).toHaveAttribute("data-threshold", "high");
-    expect(screen.getByTestId("dashboard-indicator-interests")).toHaveAttribute("data-threshold", "low");
-    expect(screen.getByTestId("dashboard-indicator-goals")).toHaveAttribute("data-threshold", "high");
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute(
+      "data-threshold",
+      "low",
+    );
+    expect(screen.getByTestId("dashboard-indicator-behavior")).toHaveAttribute(
+      "data-threshold",
+      "medium",
+    );
+    expect(screen.getByTestId("dashboard-indicator-thinking")).toHaveAttribute(
+      "data-threshold",
+      "medium",
+    );
+    expect(screen.getByTestId("dashboard-indicator-emotions")).toHaveAttribute(
+      "data-threshold",
+      "high",
+    );
+    expect(screen.getByTestId("dashboard-indicator-interests")).toHaveAttribute(
+      "data-threshold",
+      "low",
+    );
+    expect(screen.getByTestId("dashboard-indicator-goals")).toHaveAttribute(
+      "data-threshold",
+      "high",
+    );
     expect(screen.getByText(/Share a guiding principle/i)).toBeInTheDocument();
   });
 
@@ -207,9 +232,15 @@ describe("DashboardShell", () => {
     const low = buildTestModel({ indicators: [0, 33, 33, 33, 33, 33] });
     const high = buildTestModel({ indicators: [100, 33, 33, 33, 33, 33] });
     const { rerender } = render(<DashboardShell model={low} />);
-    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute("data-threshold", "low");
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute(
+      "data-threshold",
+      "low",
+    );
     rerender(<DashboardShell model={high} />);
-    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute("data-threshold", "high");
+    expect(screen.getByTestId("dashboard-indicator-values")).toHaveAttribute(
+      "data-threshold",
+      "high",
+    );
   });
 
   it("unlocks Diary when computeReadinessResult unlocks diary (total ≥ 60)", () => {
@@ -217,9 +248,8 @@ describe("DashboardShell", () => {
       indicators: [67, 67, 67, 67, 67, 33],
     });
     expect(
-      computeReadinessResult(
-        input({ indicators: parseIndicatorVector(model.indicators) }),
-      ).diaryTabUnlocked,
+      computeReadinessResult(input({ indicators: parseIndicatorVector(model.indicators) }))
+        .diaryTabUnlocked,
     ).toBe(true);
     render(<DashboardShell model={model} />);
     const diary = screen.getByTestId("mode-tab-diary");
@@ -255,7 +285,10 @@ describe("DashboardShell", () => {
     expect(screen.getByTestId("dashboard-avatar-status-text")).toHaveTextContent(
       "AI-Twin formation complete · Dev user",
     );
-    expect(screen.getByTestId("dashboard-top-block")).toHaveAttribute("data-formation-complete", "true");
+    expect(screen.getByTestId("dashboard-top-block")).toHaveAttribute(
+      "data-formation-complete",
+      "true",
+    );
     expect(screen.getByTestId("dashboard-avatar-status-block")).toHaveAttribute(
       "data-formation-complete",
       "true",
@@ -290,19 +323,22 @@ describe("DashboardShell", () => {
       { indicators: [67, 67, 67, 67, 67, 33] },
       { hasMeaningfulExchange: true },
     );
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      const method = init?.method ?? "GET";
-      if (url.includes("/api/dashboard/diary/entries") && method === "GET") {
-        return Promise.resolve(
-          new Response(JSON.stringify({ entries: [] }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }
-      return Promise.resolve(new Response("", { status: 404 }));
-    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const method = init?.method ?? "GET";
+        if (url.includes("/api/dashboard/diary/entries") && method === "GET") {
+          return Promise.resolve(
+            new Response(JSON.stringify({ entries: [] }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        }
+        return Promise.resolve(new Response("", { status: 404 }));
+      },
+    );
     render(<DashboardShell model={model} />);
     fireEvent.click(screen.getByTestId("mode-tab-diary"));
     await waitFor(() =>
@@ -445,14 +481,12 @@ describe("DashboardShell", () => {
     const unlockedModel = buildTestModel({ indicators: [67, 67, 67, 67, 67, 33] });
 
     expect(
-      computeReadinessResult(
-        input({ indicators: parseIndicatorVector(lockedModel.indicators) }),
-      ).diaryTabUnlocked,
+      computeReadinessResult(input({ indicators: parseIndicatorVector(lockedModel.indicators) }))
+        .diaryTabUnlocked,
     ).toBe(false);
     expect(
-      computeReadinessResult(
-        input({ indicators: parseIndicatorVector(unlockedModel.indicators) }),
-      ).diaryTabUnlocked,
+      computeReadinessResult(input({ indicators: parseIndicatorVector(unlockedModel.indicators) }))
+        .diaryTabUnlocked,
     ).toBe(true);
 
     const { rerender } = render(<DashboardShell model={lockedModel} />);

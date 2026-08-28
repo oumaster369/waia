@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in_progress
-  currentWorkPackage: WP-4
-  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3]
-  remainingWorkPackages: [WP-4]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-0, WP-1, WP-2, WP-3, WP-4, WP-5]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: null
-  blockedReason: "Human requested that no DEE-747 PR open while any AI-TRADER PR remains open."
-  nextAction: "Finish qualification, then refresh origin/main and rebase/renumber if needed after the AI-TRADER PR train merges; open one DEE-747 PR only when that queue is clear."
+  lastValidationAt: "2026-08-28T08:22:14Z"
+  blockedReason: null
+  nextAction: "Open the single DEE-747 PR to main and stop for Human squash merge; after merge, perform the explicitly gated production activation in the documented order."
 provenance:
   createdFrom: human-approved-chat-2026-08-27
   gapRegistry: null
@@ -70,7 +70,21 @@ Human-mandated two-PR completion sequence.
 - Record comments, status and assignee changes as append-only actor/timestamp history.
 - Deny hard delete and cross-module/cross-tenant access.
 
-### WP-4 — Qualification and integration
+### WP-4 — Final Breath and signed-in support completion
+
+- Place the human-centered WAIA definition inside the framed hero composition with responsive
+  readability while preserving the canonical artwork.
+- Publish the Human-approved operating rate as exact USD/hour alongside the live
+  days/hours/minutes/seconds runway; elapsed or missing authority stays explicit.
+- Show current month first and older monthly budget history below it.
+- Rank public named Patrons together with one aggregated Anonymous Patrons row; only verified
+  CONTRIBUTION facts qualify, and Adamar links to `https://oumaster.com`.
+- Expand the Foundation explanation with Development Fund purpose and explicitly future DAO
+  governance.
+- Add the gold BREATH OF WAIA dashboard destination with anonymous instructions, exact named
+  payment form, authenticated self-only verified history and current share.
+
+### WP-5 — Qualification and integration
 
 - Prove super-admin and module-limited access in unit, Postgres isolation and Playwright tests.
 - Prove public intake validation and private HR data boundaries.
@@ -91,9 +105,13 @@ permissions. Existing AI-TRADER authorization remains unchanged and outside this
    `0174` and `0175` through the Human-approved targeted Supabase procedure.
 2. Verify the three tables, deny policies, immutable/history triggers and the
    `oumaster369@gmail.com` SUPER_ADMIN bootstrap row.
-3. Deploy the exact reviewed application version, then verify `/waia-admin`, `/finance`, `/hr` and
-   public `/work-plan` intake with no AI-TRADER Admin regression.
-4. If intake must stop without deleting data, set `WAIA_PUBLIC_TEAM_APPLICATIONS_ENABLED=false`.
+3. Deploy the exact reviewed application version, then verify `/waia-admin`, `/finance`, `/hr`,
+   `/dashboard/breath`, the public Breath pages and `/work-plan` intake with no AI-TRADER Admin
+   regression.
+4. Create and activate the Human-confirmed current operating-rate runway plan, refresh its snapshot,
+   and verify that the public countdown and USD/hour label use that exact authority. This is a
+   production financial-data action and stays Human-gated.
+5. If intake must stop without deleting data, set `WAIA_PUBLIC_TEAM_APPLICATIONS_ENABLED=false`.
 
 ## Rollback
 

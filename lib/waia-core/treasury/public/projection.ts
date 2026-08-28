@@ -198,8 +198,9 @@ function publicBudget(input: {
       history: input.facts.categoryBudgetHistory,
       transactions: input.facts.transactions,
     });
+    const currentMonthKey = `${input.year}-${String(input.now.getUTCMonth() + 1).padStart(2, "0")}`;
     const currentMonth = deriveCategoryBudgetMonth({
-      month: `${input.year}-${String(input.now.getUTCMonth() + 1).padStart(2, "0")}`,
+      month: currentMonthKey,
       categories: input.facts.categories,
       history: input.facts.categoryBudgetHistory,
       transactions: input.facts.transactions,
@@ -219,7 +220,10 @@ function publicBudget(input: {
       year: input.year,
       currency: input.currency,
       annualBudgetAmountMicros: money(input.amountMicros),
-      months: annual.months.map((month) => serializeBudgetMonth(month, input.currency)),
+      months: annual.months
+        .filter((month) => month.month <= currentMonthKey)
+        .map((month) => serializeBudgetMonth(month, input.currency))
+        .sort((a, b) => b.month.localeCompare(a.month)),
     };
   } catch {
     return {
@@ -328,9 +332,13 @@ function publicPatrons(input: {
         lastUpdatedAt: null,
       };
     }
-    // Contributions without an attribution decision are not publication truth yet.
-    if (!attribution) continue;
     denominator += net;
+    // A verified CONTRIBUTION without identity attribution is still truthful
+    // anonymous support. Ordinary inflows never enter `qualifying` above.
+    if (!attribution) {
+      privateAmount += net;
+      continue;
+    }
     const userId = attribution?.contributorUserId ?? null;
     const displayName = userId ? profileByUser.get(userId) : undefined;
     if (
@@ -440,6 +448,9 @@ function latestCurrentRunway(input: {
     status: "published",
     asOf: snapshot.runwayAsOf.toISOString(),
     endsAt: snapshot.endsAt.toISOString(),
+    currency: plan.currency,
+    dailyBurnMicros: money(plan.dailyBurnMicros),
+    hourlyBurnMicros: money(plan.dailyBurnMicros / 24n),
   };
 }
 

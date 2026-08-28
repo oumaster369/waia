@@ -5,9 +5,8 @@ const HERO_MOBILE = "/brand/head_mobile_1.webp";
 
 /**
  * Brand art (existing assets — no new artwork) + English “What is WAIA?” definition.
- *
- * Human visual-rhythm corrective: normal document flow only.
- * No negative margin under the hero image — ~40–48px clear air on large displays.
+ * The definition lives inside the artwork's lower field so the framed hero reads
+ * as one composition instead of an image followed by a detached caption.
  */
 export function HeroBlock() {
   const copy = HOMEPAGE_COPY.hero;
@@ -33,18 +32,21 @@ export function HeroBlock() {
             draggable={false}
           />
         </picture>
-      </div>
-
-      <div
-        data-testid="landing-hero-definition"
-        className="mx-auto flex w-full max-w-4xl flex-col items-center px-6 pt-8 pb-9 text-center sm:px-10 sm:pt-10 sm:pb-11"
-      >
-        <p
-          data-testid="landing-hero-definition-text"
-          className="font-waia-serif text-[clamp(1.35rem,3.2vw,1.85rem)] leading-snug font-medium text-balance text-[#e8dcc4]"
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[40%] bg-[linear-gradient(180deg,transparent_0%,rgba(3,8,19,0.38)_42%,rgba(3,8,19,0.82)_100%)]"
+        />
+        <div
+          data-testid="landing-hero-definition"
+          className="absolute inset-x-0 bottom-[11%] z-10 mx-auto flex w-full flex-col items-center px-5 text-center sm:bottom-[7%] sm:px-10 lg:bottom-[8%]"
         >
-          {copy.definition}
-        </p>
+          <p
+            data-testid="landing-hero-definition-text"
+            className="font-waia-serif max-w-4xl text-[clamp(0.78rem,2.15vw,1.65rem)] leading-snug font-medium text-balance text-[#f0e4ce] [text-shadow:0_2px_18px_rgba(0,0,0,0.92)] sm:leading-relaxed"
+          >
+            {copy.definition}
+          </p>
+        </div>
       </div>
     </section>
   );

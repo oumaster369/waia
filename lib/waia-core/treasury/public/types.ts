@@ -24,6 +24,9 @@ export type PublicTreasuryRunway =
       status: "published";
       asOf: string;
       endsAt: string;
+      currency: string;
+      dailyBurnMicros: string;
+      hourlyBurnMicros: string;
     };
 
 export type PublicTreasuryBreath = {

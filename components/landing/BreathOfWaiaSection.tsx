@@ -52,6 +52,8 @@ export function BreathOfWaiaSection({
           annualBudgetAmountMicros: breath.annualBudgetAmountMicros,
           annualBudgetCurrency: breath.annualBudgetCurrency,
           runwayEndsAt: breath.runway.endsAt,
+          runwayHourlyBurnMicros: breath.runway.hourlyBurnMicros,
+          runwayCurrency: breath.runway.currency,
           lastUpdatedAt: breath.lastUpdatedAt,
         }
       : null;
@@ -85,6 +87,8 @@ export function BreathOfWaiaSection({
             unit: null,
             endsAt: publishedBreath?.runwayEndsAt ?? null,
           }}
+          hourlyBurnMicros={publishedBreath?.runwayHourlyBurnMicros ?? null}
+          runwayCurrency={publishedBreath?.runwayCurrency ?? null}
         />
 
         <BreathSupportCta

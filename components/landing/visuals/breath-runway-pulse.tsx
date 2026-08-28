@@ -13,6 +13,8 @@ type BreathFundingGaugeProps = {
   idealAnnualBudget: BreathMoney;
   currentFreeFunds: BreathMoney;
   runway: BreathPublicSnapshot["runway"];
+  hourlyBurnMicros?: string | null;
+  runwayCurrency?: string | null;
 };
 
 /**
@@ -48,6 +50,8 @@ export function BreathFundingGauge({
   idealAnnualBudget,
   currentFreeFunds,
   runway,
+  hourlyBurnMicros = null,
+  runwayCurrency = null,
 }: BreathFundingGaugeProps) {
   const copy = HOMEPAGE_COPY.breath;
   const clipId = useId().replace(/:/g, "");
@@ -173,7 +177,11 @@ export function BreathFundingGauge({
               data-countdown-region="published"
               className="mt-3 border-t border-[rgba(150,195,205,0.18)] pt-4 sm:max-w-[70%]"
             >
-              <BreathCountdown endsAt={runway.endsAt} />
+              <BreathCountdown
+                endsAt={runway.endsAt}
+                hourlyBurnMicros={hourlyBurnMicros}
+                currency={runwayCurrency}
+              />
             </div>
           </div>
         )}

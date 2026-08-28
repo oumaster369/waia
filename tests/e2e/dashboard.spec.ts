@@ -42,6 +42,24 @@ test.describe("/dashboard smoke", () => {
     await expect(page.getByTestId("dashboard-sidebar-trader-link")).toHaveCount(0);
   });
 
+  test("opens the protected Breath of WAIA workspace from the gold sidebar entry", async ({
+    page,
+  }) => {
+    const email = `e2e-dashboard-breath-${Date.now()}@example.com`;
+    await signUpAndOpenDashboard(page, email);
+
+    const breathLink = page.getByTestId("dashboard-sidebar-breath-link");
+    await expect(breathLink).toBeVisible();
+    await expect(breathLink).toHaveText("BREATH OF WAIA");
+    await breathLink.click();
+
+    await expect(page).toHaveURL(/\/dashboard\/breath$/);
+    await expect(page.getByTestId("dashboard-breath-workspace")).toBeVisible();
+    await expect(page.getByTestId("dashboard-breath-anonymous")).toBeVisible();
+    await expect(page.getByTestId("dashboard-breath-named")).toBeVisible();
+    await expect(page.getByTestId("dashboard-breath-history")).toBeVisible();
+  });
+
   test("shows AI-TRADER sidebar entry with trader host href when entitled", async ({ page }) => {
     const email = `e2e-dashboard-trader-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);
