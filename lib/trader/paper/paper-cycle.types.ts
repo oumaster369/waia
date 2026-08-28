@@ -41,6 +41,8 @@ import type { DeterministicReplayClock } from "@/lib/trader/research/determinist
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { CanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 import type { CanonicalRuntimeIntelligenceStateProviderV1 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
+import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import type { ForecastV2DurableProducerConfigV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 
 /**
  * Research replay determinism hook (M9+ / DEE-397 / ADR-0021).
@@ -199,6 +201,8 @@ export type PaperCycleInput = {
   informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
   /** Exact synthetic harness/run provenance required by a bound non-capital declaration. */
   informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
+  /** DEE-633: exact issuance-time Forecast V2 input; omission remains NON_ACTIONABLE. */
+  forecastRuntimeInput?: ForecastRuntimeInputV2;
   /**
    * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
    */
@@ -265,6 +269,12 @@ export type RunMultiPaperCyclesSharedInput = {
   hypothesisSessionState?: HypothesisSessionState;
   /** PR-2 MI Core: explicit flag override. */
   miCoreEnabled?: boolean;
+  /** Exact per-snapshot Forecast V2 producer; null means typed NON_ACTIONABLE. */
+  forecastRuntimeInputResolver?: (
+    snapshot: MarketSnapshot,
+  ) => ForecastRuntimeInputV2 | null | Promise<ForecastRuntimeInputV2 | null>;
+  /** Durable issuance/terminal authority shared with historical backtest. */
+  forecastV2Producer?: ForecastV2DurableProducerConfigV1 & { runId: string };
 };
 
 export type RunFixturePaperCyclesInput = RunMultiPaperCyclesSharedInput & {

@@ -12,6 +12,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -29,6 +30,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
 import {
   auditActorTypeEnum,
@@ -208,6 +211,92 @@ export const organizations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("organizations_owner_user_id_idx").on(t.ownerUserId)],
+);
+
+/** DEE-633 durable, append-only one-minute PIT evidence cache for Forecast-V2 closure replay. */
+export const traderForecastPitBarV2 = pgTable(
+  "trader_forecast_pit_bar_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    symbol: text("symbol").notNull(),
+    interval: text("interval").notNull(),
+    barCloseTime: timestamp("bar_close_time", { withTimezone: true, mode: "date" }).notNull(),
+    barContentDigest: text("bar_content_digest").notNull(),
+    barJson: jsonb("bar_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.runId, t.symbol, t.interval, t.barCloseTime],
+      name: "trader_forecast_pit_bar_v2_pkey",
+    }),
+  ],
+);
+
+/** DEE-633 immutable evidence of each authorized tenant-scoped PIT retention purge. */
+export const traderForecastPitBarRetentionAuditV2 = pgTable(
+  "trader_forecast_pit_bar_retention_audit_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    requestId: uuid("request_id").notNull(),
+    cutoffAt: timestamp("cutoff_at", { withTimezone: true, mode: "date" }).notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    purgedRowCount: bigint("purged_row_count", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.requestId],
+      name: "trader_forecast_pit_bar_retention_audit_v2_pkey",
+    }),
+  ],
+);
+
+/** Transaction-local authorization rows used only inside the privileged retention function. */
+export const traderForecastPitBarRetentionGuardV2 = pgTable(
+  "trader_forecast_pit_bar_retention_guard_v2",
+  {
+    transactionId: bigint("transaction_id", { mode: "number" }).primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+  },
+);
+
+/** Forecast-V2 issuance seal, including DEE-633 durable authority and exact sequence. */
+export const traderForecastBundleV2 = pgTable(
+  "trader_forecast_bundle_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    predictivePackageId: uuid("predictive_package_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    anchorClosedBarEpochMs: bigint("anchor_closed_bar_epoch_ms", { mode: "number" }).notNull(),
+    completenessState: text("completeness_state").notNull().default("INCOMPLETE"),
+    bundleContentDigest: bytea("bundle_content_digest").notNull(),
+    schemaVersion: smallint("schema_version").notNull(),
+    forecastRuntimeAuthorizedOutcomeJson: jsonb("forecast_runtime_authorized_outcome_json"),
+    forecastRuntimeIssuanceSequence: integer("forecast_runtime_issuance_sequence"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("tfbv2_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tfbv2_org_natural_idempotency_uq").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.anchorClosedBarEpochMs,
+    ),
+  ],
 );
 
 /** WAIA Core: user ↔ organization membership (WC-E2). */

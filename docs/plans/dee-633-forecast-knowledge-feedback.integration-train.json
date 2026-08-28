@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-633",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Separate Forecast V2 objective outcome/proper scoring from future-only Knowledge persistence/replay while preserving one integrator, branch, manifest and PR.",
+  "includedChildren": [
+    {
+      "issue": "DEE-759",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Replace legacy scalar-confidence calibration with exact Forecast V2 objective outcome and proper scoring cross-binding.",
+      "dependencies": [
+        "DEE-632"
+      ],
+      "dependencyEvidence": [
+        "DEE-632 squash-merged as bb5f5d3645cd907a416bc7eee3714c5c3f59d57c."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/calibration/calibration-scorer.ts",
+        "lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2.ts",
+        "lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service.ts",
+        "db/migrations_postgres/0173_dee633_forecast_v2_feedback_payload.sql",
+        "db/schema.postgres.ts",
+        "db/migrations_postgres/meta/_journal.json",
+        "tests/unit/trader-forecast-runtime-authority-v2.test.ts",
+        "tests/unit/trader-dee633-migration-identity.test.ts",
+        "tests/integration/postgres-forecast-v2-persistence.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/intelligence/forecast-v2/exec-opp-outcome-materializer-v1.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-633 explicitly owns Forecast V2 outcome and calibration authority."
+      },
+      "expectedAcceptanceEvidence": [
+        "Only the exact Forecast V2 terminal distribution is scored.",
+        "Wrong organization/package/target/symbol/horizon/PIT identities fail closed.",
+        "Legacy forecast_confidence_json.confidence_value is absent from the authoritative scoring edge."
+      ],
+      "expectedTests": [
+        "known-answer Brier/log-loss, cross-bind negatives, single-verify/idempotence"
+      ],
+      "actualFiles": [
+        "db/migrations_postgres/0173_dee633_forecast_v2_feedback_payload.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "lib/trader/intelligence/calibration/calibration-scorer.ts",
+        "lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2.ts",
+        "lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service.ts",
+        "tests/integration/postgres-forecast-v2-persistence.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/trader-dee633-migration-identity.test.ts",
+        "tests/unit/trader-forecast-runtime-authority-v2.test.ts"
+      ],
+      "integratedCommits": ["4f43314d638641f3746cbae92206dec6ecb3cee3", "b95c1f72c17681b40350ba6b3df12cc7ae93aa5a", "788feefea5eb22db5a5d491027426987e9c7dfb4"],
+      "acceptanceEvidence": ["Canonical seven-class scoring, issuance Knowledge binding, package/artifact replay, transactional persistence and exact retry conflict checks fail closed."],
+      "tests": ["focused authority/migration suite: 29/29 PASS", "PostgreSQL forecast persistence and controlled-retention suite: 6/6 PASS"],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-758",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Persist deterministic bounded KnowledgeConfidenceUpdateRecord after terminal closure and expose it only to future-cycle Knowledge reads; quarantine heuristic mutation.",
+      "dependencies": [
+        "DEE-759"
+      ],
+      "dependencyEvidence": [
+        "DEE-759 public scoring/outcome contract is frozen in this manifest and precedes integration."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime.ts",
+        "lib/trader/knowledge/knowledge-confidence-update.ts",
+        "tests/unit/trader-wp21-same-run-no-feedback-proof.test.ts",
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "db/migrations_postgres/0173_dee633_forecast_v2_feedback_payload.sql",
+        "db/schema.postgres.ts",
+        "tests/integration/postgres-forecast-v2-persistence.test.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "DEE-633 explicitly owns terminal future-only Knowledge feedback."
+      },
+      "expectedAcceptanceEvidence": [
+        "Qualified closures produce one content-addressed bounded update.",
+        "Same-run/cycle authority remains prohibited and future-cycle visibility is deterministic.",
+        "No update creates capital, strategy, trade-eligibility, guardian or automatic promotion authority."
+      ],
+      "expectedTests": [
+        "confirm/reject/inconclusive/decay, duplicate closure, future-only visibility, replay parity"
+      ],
+      "actualFiles": [
+        "lib/trader/backtest/backtest-runner.ts",
+        "lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime.ts",
+        "lib/trader/knowledge/knowledge-confidence-update.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "tests/integration/postgres-forecast-v2-persistence.test.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "tests/unit/trader-wp21-same-run-no-feedback-proof.test.ts"
+      ],
+      "integratedCommits": ["e8ac9da3ac0266f6234994d8f2b99ca9523c17d5", "aef1479d5c4cbe2f745b9dbf1aad6063b44d9ec7"],
+      "acceptanceEvidence": ["Real backtest and paper callers persist issuance, hydrate exact restart state, resolve only sealed PIT outcomes and publish zero-delta Knowledge evidence only to a strictly later cycle; ratified tenant-scoped 30-day PIT retention is serialized against pending issuance, audited, immutable, idempotent, and fail-closed."],
+      "tests": ["same-run no-feedback suite: 3/3 PASS", "PostgreSQL real-caller/restart/rollback/idempotency/retention suite: 6/6 PASS"],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "User-ratified DEE-633 production producer expansion"
+    },
+    "authoritativeBase": "bb5f5d3645cd907a416bc7eee3714c5c3f59d57c",
+    "duplicateOwnershipDependencyAudit": {
+      "status": "pass",
+      "evidence": "Existing DEE-633/759/758 ownership retained; expansion is required to close exact production producer path."
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "4d123ef09462f82a8a4cde6eb91a514a8e71bca9cceab101d83cec730d5b086e",
+      "manifestCommit": "825f5c5d99f5b94a175a4e48ccb55de0386d73d6",
+      "manifestPath": "docs/plans/dee-633-forecast-knowledge-feedback.integration-train.json",
+      "reviewer": "User-ratified production semantic expansion",
+      "historyRebuildAuthorization": "User explicitly authorized unpublished DEE-633 history rebuild; manifest re-frozen before corrected child commits.",
+      "expandedPersistenceSurfaces": "Bundle authority+sequence columns, append-only tenant-scoped one-minute PIT evidence table, and db/schema.postgres.ts parity are required for real restart-safe backtest/paper closure.",
+      "mechanicalInventoryExpansion": "Reality-V2 pinned consumer inventory JSON and its exact graph assertion are admitted solely to refresh deterministic count/path/content digests caused by the already-admitted Forecast-V2 production caller surfaces; no Reality semantics change.",
+      "mechanicalMigrationIdentityExpansion": "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts is admitted solely to append the already-admitted DEE-633 migration tag to the deterministic beyond-0148 journal inventory; Forecast V2 max=148 and all migration semantics remain unchanged.",
+      "ratifiedRetentionContract": "Tenant-scoped audited purge of Forecast-V2 PIT bars is authorized only at a deterministic cutoff at least 30 days old, only when no unresolved bundle for the exact organization/run/symbol can require the bar, with pending evidence retained, mutation otherwise blocked, failures rolled back, and idempotent reruns evidenced."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-759",
+        "status": "pass",
+        "reviewedCommits": ["4f43314d638641f3746cbae92206dec6ecb3cee3", "b95c1f72c17681b40350ba6b3df12cc7ae93aa5a", "788feefea5eb22db5a5d491027426987e9c7dfb4"],
+        "reviewedFiles": ["db/migrations_postgres/0173_dee633_forecast_v2_feedback_payload.sql", "db/migrations_postgres/meta/_journal.json", "db/schema.postgres.ts", "lib/trader/intelligence/calibration/calibration-scorer.ts", "lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2.ts", "lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service.ts", "tests/integration/postgres-forecast-v2-persistence.test.ts", "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts", "tests/unit/trader-dee633-migration-identity.test.ts", "tests/unit/trader-forecast-runtime-authority-v2.test.ts"]
+      },
+      {
+        "issue": "DEE-758",
+        "status": "pass",
+        "reviewedCommits": ["e8ac9da3ac0266f6234994d8f2b99ca9523c17d5", "aef1479d5c4cbe2f745b9dbf1aad6063b44d9ec7"],
+        "reviewedFiles": ["docs/ai-trader/reality-v2-source-consumer-inventory.json", "lib/trader/backtest/backtest-runner.ts", "lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime.ts", "lib/trader/knowledge/knowledge-confidence-update.ts", "lib/trader/paper/paper-cycle-runner.ts", "lib/trader/paper/paper-cycle.types.ts", "tests/integration/postgres-forecast-v2-persistence.test.ts", "tests/unit/trader-wp21-same-run-no-feedback-proof.test.ts"]
+      }
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-759", "status": "pass", "commands": ["focused authority and migration suite", "typecheck", "scoped eslint", "PostgreSQL persistence roundtrip"]},
+      {"afterIssue": "DEE-758", "status": "pass", "commands": ["focused future-only suite", "real backtest/paper PostgreSQL E2E", "restart/rollback/idempotency negatives"]}
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "Forecast V2 distribution is the sole calibration probability authority.",
+    "Objective outcome identity cross-binds organization, package, target, symbol, horizon and PIT exactly.",
+    "Terminal updates are bounded, replayable and visible only to future cycles.",
+    "Seven-class Brier is (1/2)*sum((p-o)^2); log loss is -ln(max(p_observed,1e-15)); full-precision calculation and canonical decimal persistence never affect Decision.",
+    "Knowledge feedback is evidence-only zero delta and requires sealed issuance-time knowledgeEdgeId plus Knowledge content digest.",
+    "No Decision economics, Risk, execution, holdout, production/live/capital, model/arena/scoring-policy or automatic promotion changes."
+  ],
+  "persistence": {
+    "newMigrationRequired": true,
+    "authority": "Minimal additive immutable Forecast-V2 outcome/calibration replay payload; existing append-only/RLS/tenant protections and Knowledge update repository remain authoritative."
+  },
+  "rollbackStrategy": "One squash revert removes the new authority wiring without rewriting durable outcome/calibration/knowledge evidence.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-633-forecast-knowledge-feedback.integration-train.json DEE-633 frozen",
+    "focused": [
+      "WP21 Forecast V2 calibration and Knowledge feedback focused/negative suites",
+      "pnpm typecheck",
+      "scoped eslint"
+    ],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run after semantic completion",
+    "postgres": "existing WP21 outcome/calibration/knowledge persistence roundtrip",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}

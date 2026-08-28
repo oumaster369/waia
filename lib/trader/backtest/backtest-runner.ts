@@ -160,7 +160,10 @@ import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-conf
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { Wp21CheckpointState } from "@/lib/trader/intelligence/outcome-resolution/wp21-checkpoint-state";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import type postgres from "postgres";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 
 /** DEE-431/436: richer runtime snapshot at cycle boundary for epoch checkpointing. */
 export type FhvCycleBoundarySnapshot = {
@@ -333,6 +336,14 @@ export type RunBacktestInput = {
    * can interleave (rehearsal / T4). Official STREAM_ONLY scale leaves this unset.
    */
   enableCooperativeYield?: boolean;
+  /** DEE-633: explicit deterministic Forecast-V2 producer. No missing-input fallback. */
+  forecastV2Producer?: Readonly<{
+    sql: postgres.Sql;
+    kmGlobalAnchorSetDigestHex: string;
+    priorMachineRecommendedConfidence: string;
+    runtimeInputsByAnchorClosedBarEpochMs: ReadonlyMap<number, ForecastRuntimeInputV2>;
+    provenance: import("@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types").OutcomeProvenance;
+  }>;
 };
 
 type SyntheticResearchBacktestScopeInput = Pick<
@@ -726,6 +737,17 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
   /** Per-symbol incremental canvases for STREAM_ONLY reconstruction (fusedContext stays off). */
   const streamOnlyCanvasBySymbol = new Map<string, MarketCanvasState>();
   const bars1mPrefix: Bar[] = input.initialBars1mPrefix ? [...input.initialBars1mPrefix] : [];
+  const forecastV2DurableProducer = input.forecastV2Producer && input.historicalExecutionProfile
+    ? createForecastV2DurableProducerV1({
+        sql: input.forecastV2Producer.sql,
+        kmGlobalAnchorSetDigestHex: input.forecastV2Producer.kmGlobalAnchorSetDigestHex,
+        priorMachineRecommendedConfidence:
+          input.forecastV2Producer.priorMachineRecommendedConfidence,
+        provenance: input.forecastV2Producer.provenance,
+        resolveVolumeAuthorityReceipt: (symbol) =>
+          requireProfileHtxVolumeAuthority(input.historicalExecutionProfile!, symbol),
+      })
+    : null;
   let wp21CheckpointState = input.wp21CheckpointState;
   let boundaryEvidenceSealOverride: "partial" | "complete" | null = null;
   let sourceExhausted = false;
@@ -1033,6 +1055,12 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     input.deps.researchReplayDeterminism?.setDecisionBarIndex?.(cycleIndex);
     let result: PaperCycleResult;
     try {
+      const forecastAnchorEpochMs = Date.parse(
+        snapshot.bars.at(-1)?.barCloseTime ?? snapshot.evaluatedAt,
+      );
+      const forecastRuntimeInput = input.forecastV2Producer?.runtimeInputsByAnchorClosedBarEpochMs.get(
+        forecastAnchorEpochMs,
+      );
       result = await runPaperCycleOnce(input.deps, {
         context: input.context,
         snapshot,
@@ -1054,6 +1082,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         historicalProfile: input.historicalProfile,
         informationSufficiencyAuthority: cycleInformationSufficiencyAuthority,
         informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
+        forecastRuntimeInput,
         runId: input.runId,
         costModel: input.costModel,
         omitIntelligenceArtifacts:
@@ -1083,6 +1112,17 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       throw error;
     }
     paperCycleTimer.end();
+
+    const authorizedForecast = result.evaluation.forecastRuntimeOutcome;
+    await forecastV2DurableProducer?.processCycle({
+        organizationId: input.context.organizationId,
+        runId: input.runId,
+        cycleId: snapshot.cycleId,
+        pitAnchor: snapshot.evaluatedAt,
+        bars: bars1mPrefix,
+        sequence: cycleIndex,
+        outcome: authorizedForecast?.status === "FORECAST_AUTHORIZED" ? authorizedForecast : null,
+      });
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 
     const intelligenceTimer = benchmarkObserver.beginStage("intelligence-bundle", cycleIndex);

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import type postgres from "postgres";
 
@@ -11,9 +12,16 @@ import {
   TARGET_ROLE_TERMINAL,
 } from "./constants";
 import { digestByteaToHex, digestHexToBytea } from "./digest-storage-codec-v1";
-import { digestHex } from "./identity-digests";
+import {
+  computePredictivePackageContentDigest,
+  computePredictivePackageGenerationIdentityDigest,
+  computeReplicaArtifactDigestK,
+  computeReplicaRootFamilyIdentityDigest,
+  digestHex,
+} from "./identity-digests";
 import {
   TERMINAL_BUCKET_COUNT,
+  computeTerminalTargetGridFromDevelopmentReturns,
   terminalTargetBucketDefinitionsFromGrid,
 } from "@/lib/trader/research/benchmark/target-grid-ceremony-v1";
 import { scale8TextToInt8 } from "./scale8-storage-codec-v1";
@@ -25,11 +33,21 @@ import type {
   TerminalBucketTailSemanticsV1,
 } from "./rv-state-conditional-empirical-joint-v1";
 import {
+  computeTerminalTargetGridIdentityDigestHex,
+  fitReplicaArtifactV1,
   issueForecastV1,
   serializeReplicaArtifactPayloadV1,
   verifyForecastDistributionReplayV1,
+  verifyReplicaPoolReplayV1,
 } from "./rv-state-conditional-empirical-joint-v1";
+import { terminalRhFromOutcome13dV1 } from "./exec-opp-outcome-materializer-v1";
 import { quantizeScale8HalfUp } from "./quantize-scale8-half-up-v1";
+import {
+  scoreForecastV2MulticlassObservation,
+  requireForecastV2CalibrationObservation,
+  type ForecastV2CalibrationObservation,
+} from "@/lib/trader/intelligence/calibration/calibration-scorer";
+import type { ForecastRuntimeAuthorizedOutcomeV2 } from "./forecast-runtime-authority-v2";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -39,6 +57,7 @@ export const FORECAST_V2_SCHEMA_VERSION = "forecast/v2" as const;
 export const PREDICTIVE_PACKAGE_SCHEMA_VERSION = "predictive-package/v2" as const;
 export const TARGET_DEFINITION_SCHEMA_VERSION = "target-definition/v2" as const;
 export const TARGET_BUCKET_SCHEMA_VERSION = "target-bucket/v2" as const;
+export const FORECAST_V2_PIT_RETENTION_MIN_DAYS = 30 as const;
 
 export type PersistPredictivePackageV2Input = {
   organizationId: string;
@@ -54,11 +73,158 @@ export type PersistPredictivePackageV2Result = {
   terminalTargetBucketIds: readonly string[];
 };
 
-export async function persistPredictivePackageV2(
+async function persistPredictivePackageV2InTransaction(
   sql: postgres.Sql,
   pkg: PredictivePackageV1,
   input: PersistPredictivePackageV2Input,
 ): Promise<PersistPredictivePackageV2Result> {
+  const expectedRoot = computeReplicaRootFamilyIdentityDigest(pkg.family);
+  const expectedGeneration = computePredictivePackageGenerationIdentityDigest({
+    replicaRootFamilyIdentityDigestHex: digestHex(expectedRoot),
+    kConfigDec: pkg.kConfigDec,
+    mConfigDec: pkg.mConfigDec,
+    alphaEpiConfigScale8: pkg.alphaEpiConfigScale8,
+  });
+  const expectedContent = computePredictivePackageContentDigest(
+    expectedGeneration,
+    pkg.replicaArtifacts.map((artifact) => artifact.replicaArtifactDigest),
+  );
+  if (
+    !expectedRoot.equals(pkg.replicaRootFamilyIdentityDigest) ||
+    !expectedGeneration.equals(pkg.predictivePackageGenerationIdentityDigest) ||
+    !expectedContent.equals(pkg.predictivePackageContentDigest)
+  ) {
+    throw new Error("[forecast-v2/persistence] predictive package identity mismatch (fail closed)");
+  }
+  const expectedGrid = computeTerminalTargetGridFromDevelopmentReturns(
+    pkg.canonicalSourceCorpus.map((source) => terminalRhFromOutcome13dV1(source.outcome13d)),
+  );
+  if (
+    !isDeepStrictEqual(expectedGrid, pkg.terminalTargetGrid) ||
+    computeTerminalTargetGridIdentityDigestHex(expectedGrid) !==
+      pkg.terminalTargetGridIdentityDigestHex ||
+    pkg.replicaArtifacts.length !== pkg.kConfigDec
+  ) {
+    throw new Error("[forecast-v2/persistence] predictive package grid/replay mismatch");
+  }
+  for (const [ordinal, artifact] of pkg.replicaArtifacts.entries()) {
+    if (artifact.replicaOrdinal !== ordinal) {
+      throw new Error("[forecast-v2/persistence] replica ordinal mismatch");
+    }
+    verifyReplicaPoolReplayV1({
+      family: pkg.family,
+      canonicalSourceCorpus: pkg.canonicalSourceCorpus,
+      artifact,
+    });
+    const refit = fitReplicaArtifactV1({
+      family: pkg.family,
+      canonicalSourceCorpus: pkg.canonicalSourceCorpus,
+      replicaRootFamilyIdentityDigest: expectedRoot,
+      replicaOrdinal: ordinal,
+    });
+    const serializedDigest = computeReplicaArtifactDigestK(
+      serializeReplicaArtifactPayloadV1({
+        artifact,
+        symbol: pkg.family.symbol,
+        primaryHorizonMinutes: pkg.family.primaryHorizonMinutes,
+      }),
+    );
+    if (
+      !isDeepStrictEqual(refit, artifact) ||
+      !serializedDigest.equals(artifact.replicaArtifactDigest)
+    ) {
+      throw new Error("[forecast-v2/persistence] replica artifact full replay mismatch");
+    }
+  }
+  const packageDigest = digestHex(pkg.predictivePackageContentDigest);
+  await sql`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${`${input.organizationId}|${packageDigest}`}, 0)
+    )
+  `;
+  const expectedPersistedTargetDigest = createHash("sha256")
+    .update([
+      TARGET_DEFINITION_SCHEMA_VERSION,
+      input.organizationId,
+      pkg.family.symbol,
+      String(pkg.family.primaryHorizonMinutes),
+      TARGET_ROLE_TERMINAL,
+      "DISCRETE_SCENARIO",
+      pkg.terminalTargetGridIdentityDigestHex,
+    ].join("\n"), "utf8")
+    .digest("hex");
+  const existing = await sql<{
+    package_id: string;
+    target_definition_id: string;
+    bucket_ids: string[];
+    root_digest: Buffer;
+    generation_digest: Buffer;
+    km_digest: string;
+    runtime_digest: Buffer;
+    target_digest: string;
+    bucket_ordinals: number[];
+    bucket_lower_bounds: Array<string | null>;
+    bucket_upper_bounds: Array<string | null>;
+    bucket_tail_semantics: TerminalBucketTailSemanticsV1[];
+  }[]>`
+    SELECT p.id::text AS package_id,
+           pt.target_definition_id::text AS target_definition_id,
+           array_agg(tb.id::text ORDER BY tb.bucket_ordinal) AS bucket_ids,
+           p.replica_root_family_identity_digest AS root_digest,
+           p.predictive_package_generation_identity_digest AS generation_digest,
+           p.km_global_anchor_set_digest AS km_digest,
+           p.runtime_contract_digest AS runtime_digest,
+           td.target_definition_digest AS target_digest
+           ,array_agg(tb.bucket_ordinal ORDER BY tb.bucket_ordinal) AS bucket_ordinals
+           ,jsonb_agg(tb.lower_bound_scale8 ORDER BY tb.bucket_ordinal) AS bucket_lower_bounds
+           ,jsonb_agg(tb.upper_bound_scale8 ORDER BY tb.bucket_ordinal) AS bucket_upper_bounds
+           ,array_agg(tb.tail_semantics ORDER BY tb.bucket_ordinal) AS bucket_tail_semantics
+    FROM trader_forecast_predictive_package_v2 p
+    JOIN trader_forecast_predictive_package_target_v2 pt
+      ON pt.organization_id = p.organization_id AND pt.predictive_package_id = p.id
+      AND pt.target_role_id = ${TARGET_ROLE_TERMINAL}
+    JOIN trader_forecast_target_bucket_v2 tb
+      ON tb.organization_id = p.organization_id AND tb.target_definition_id = pt.target_definition_id
+    JOIN trader_forecast_target_definition_v2 td
+      ON td.organization_id = p.organization_id AND td.id = pt.target_definition_id
+    WHERE ${orgScopedPostgresPredicate(sql, input.organizationId, { column: "p.organization_id" })}
+      AND p.predictive_package_content_digest = ${packageDigest}
+    GROUP BY p.id, pt.target_definition_id, td.target_definition_digest
+    LIMIT 1
+  `;
+  if (existing[0]) {
+    const row = existing[0];
+    const expectedBuckets = terminalTargetBucketDefinitionsFromGrid(pkg.terminalTargetGrid);
+    const completeBucketBinding = expectedBuckets.every((bucket, index) =>
+      row.bucket_ordinals[index] === bucket.bucketOrdinal &&
+      row.bucket_tail_semantics[index] === bucket.tailSemantics &&
+      row.bucket_lower_bounds[index] ===
+        (bucket.lowerBound === null ? null : quantizeScale8HalfUp(bucket.lowerBound)) &&
+      row.bucket_upper_bounds[index] ===
+        (bucket.upperBound === null ? null : quantizeScale8HalfUp(bucket.upperBound)),
+    );
+    if (
+      row.bucket_ids.length !== TERMINAL_BUCKET_COUNT ||
+      row.bucket_ordinals.length !== TERMINAL_BUCKET_COUNT ||
+      !completeBucketBinding ||
+      digestByteaToHex(row.root_digest) !== digestHex(expectedRoot) ||
+      digestByteaToHex(row.generation_digest) !== digestHex(expectedGeneration) ||
+      row.km_digest !== input.kmGlobalAnchorSetDigestHex ||
+      digestByteaToHex(row.runtime_digest) !== digestHex(pkg.runtimeContractDigest) ||
+      row.target_digest !== expectedPersistedTargetDigest
+    ) {
+      throw new Error("[forecast-v2/persistence] existing predictive package binding mismatch");
+    }
+    return {
+      packageId: row.package_id,
+      predictivePackageContentDigestHex: packageDigest,
+      predictivePackageGenerationIdentityDigestHex: digestHex(
+        pkg.predictivePackageGenerationIdentityDigest,
+      ),
+      terminalTargetDefinitionId: row.target_definition_id,
+      terminalTargetBucketIds: row.bucket_ids,
+    };
+  }
   const packageId = randomUUID();
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
 
@@ -178,13 +344,38 @@ export async function persistPredictivePackageV2(
 
   return {
     packageId,
-    predictivePackageContentDigestHex: digestHex(pkg.predictivePackageContentDigest),
+    predictivePackageContentDigestHex: packageDigest,
     predictivePackageGenerationIdentityDigestHex: digestHex(
       pkg.predictivePackageGenerationIdentityDigest,
     ),
     terminalTargetDefinitionId: terminalTargets.targetDefinitionId,
     terminalTargetBucketIds: terminalTargets.bucketIds,
   };
+}
+
+/** One atomic issuance transaction. A concurrent identical natural retry is
+ * reloaded only after the losing transaction has rolled back completely. */
+export async function persistPredictivePackageV2(
+  sql: postgres.Sql,
+  pkg: PredictivePackageV1,
+  input: PersistPredictivePackageV2Input,
+): Promise<PersistPredictivePackageV2Result> {
+  try {
+    return await sql.begin((tx) =>
+      persistPredictivePackageV2InTransaction(tx as unknown as postgres.Sql, pkg, input),
+    );
+  } catch (error) {
+    if ((error as { code?: string }).code !== "23505") {
+      throw error;
+    }
+    const recovered = await sql.begin((tx) =>
+      persistPredictivePackageV2InTransaction(tx as unknown as postgres.Sql, pkg, input),
+    );
+    if (recovered.predictivePackageContentDigestHex !== digestHex(pkg.predictivePackageContentDigest)) {
+      throw error;
+    }
+    return recovered;
+  }
 }
 
 export type PersistForecastBundleV2Input = {
@@ -195,6 +386,8 @@ export type PersistForecastBundleV2Input = {
   symbol: string;
   anchorClosedBarEpochMs: number;
   issuance: ForecastIssuanceV1;
+  authorizedOutcome?: ForecastRuntimeAuthorizedOutcomeV2;
+  issuanceSequence?: number;
   /** @deprecated Natural identity (run/cycle/symbol/anchor) is the idempotency authority. */
   idempotencyKey?: string;
 };
@@ -210,8 +403,15 @@ async function loadExistingBundleByNaturalIdentity(
   sql: postgres.Sql,
   input: PersistForecastBundleV2Input,
 ): Promise<PersistForecastBundleV2Result | null> {
-  const rows = await sql<{ id: string }[]>`
-    SELECT id::text AS id
+  const rows = await sql<{
+    id: string;
+    predictive_package_id: string;
+    authorized_outcome: unknown;
+    issuance_sequence: number | null;
+  }[]>`
+    SELECT id::text AS id, predictive_package_id::text AS predictive_package_id,
+           forecast_runtime_authorized_outcome_json AS authorized_outcome,
+           forecast_runtime_issuance_sequence AS issuance_sequence
     FROM trader_forecast_bundle_v2
     WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
       AND run_id = ${input.runId}
@@ -223,6 +423,19 @@ async function loadExistingBundleByNaturalIdentity(
   const existingId = rows[0]?.id;
   if (!existingId) {
     return null;
+  }
+  const existingBundle = rows[0]!;
+  const expectedPayload = input.authorizedOutcome
+    ? JSON.parse(JSON.stringify(input.authorizedOutcome))
+    : null;
+  if (
+    existingBundle.predictive_package_id !== input.packageId ||
+    !isDeepStrictEqual(existingBundle.authorized_outcome, expectedPayload) ||
+    existingBundle.issuance_sequence !== (input.issuanceSequence ?? null)
+  ) {
+    throw new Error(
+      "[forecast-v2/persistence] natural-idempotent conflict: package/runtime issuance mismatch",
+    );
   }
   const forecastRows = await sql<{ id: string; target_role_id: string }[]>`
     SELECT id::text AS id, target_role_id
@@ -347,6 +560,11 @@ export async function persistForecastBundleV2(
 
   try {
     await sql.begin(async (tx) => {
+      // Serialize new pending issuance against the tenant retention purge. The purge
+      // re-checks unresolved references only after acquiring this same transaction lock.
+      await tx`
+        SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}::text, 633))
+      `;
       // Issuance seal = append-only bundle + dual Forecast members + 7 Terminal scenarios.
       // Outcomes/calibration are later append-only truth — not required for issuance seal.
       // completeness_state='INCOMPLETE' is the only insert-legal DDL value when outcomes are
@@ -355,11 +573,14 @@ export async function persistForecastBundleV2(
       await tx`
         INSERT INTO trader_forecast_bundle_v2 (
           id, organization_id, predictive_package_id, run_id, cycle_id, symbol,
-          anchor_closed_bar_epoch_ms, completeness_state, bundle_content_digest, schema_version
+          anchor_closed_bar_epoch_ms, completeness_state, bundle_content_digest, schema_version,
+          forecast_runtime_authorized_outcome_json, forecast_runtime_issuance_sequence
         ) VALUES (
           ${bundleId}::uuid, ${input.organizationId}::uuid, ${input.packageId}::uuid,
           ${input.runId}, ${input.cycleId}, ${input.symbol}, ${input.anchorClosedBarEpochMs},
-          'INCOMPLETE', ${terminalContent}, ${bundleSchema}
+          'INCOMPLETE', ${terminalContent}, ${bundleSchema},
+          ${input.authorizedOutcome ? tx.json(input.authorizedOutcome) : null},
+          ${input.issuanceSequence ?? null}
         )
       `;
       await tx`
@@ -565,6 +786,10 @@ export async function persistObjectiveForecastOutcomeResolutionV2(
     contentDigestHex: string;
     /** Independent PIT measurement identity (must not be the forecast digest). */
     pitMeasurementIdentityDigestHex: string;
+    feedbackPayload?: Readonly<{
+      authorizedOutcome: ForecastRuntimeAuthorizedOutcomeV2;
+      objectiveEvidence: Parameters<typeof scoreForecastV2MulticlassObservation>[0]["objectiveEvidence"];
+    }>;
   },
 ): Promise<void> {
   const eligibleFrom = input.anchorClosedBarEpochMs + (input.primaryHorizonMinutes + 3) * 60_000;
@@ -615,15 +840,77 @@ export async function persistObjectiveForecastOutcomeResolutionV2(
   const outcomeDigest = digestHexToBytea(input.observedOutcomeDigestHex);
   const contentDigest = digestHexToBytea(input.contentDigestHex);
   const outcomeSchema = schemaVersionTextToInt2(FORECAST_OUTCOME_SCHEMA_VERSION);
+  const feedback = input.feedbackPayload;
+  const observation = feedback
+    ? scoreForecastV2MulticlassObservation({
+        authorizedOutcome: feedback.authorizedOutcome,
+        objectiveEvidence: feedback.objectiveEvidence,
+      })
+    : null;
+  if (feedback) {
+    const evidence = feedback.objectiveEvidence;
+    if (
+      evidence.organizationId !== input.organizationId ||
+      evidence.resolvedAt !== input.resolvedAtIso ||
+      evidence.pitMeasurementIdentityDigestHex !== input.pitMeasurementIdentityDigestHex ||
+      evidence.observedOutcomeDigestHex !== input.observedOutcomeDigestHex ||
+      observation?.terminalForecastContentDigestHex !== forecastDigestHex
+    ) {
+      throw new Error("[forecast-v2/persistence] DEE-633 objective evidence mismatch");
+    }
+  }
+
+  const existingOutcome = await sql<
+    {
+      content_digest_hex: string;
+      observed_outcome_digest_hex: string;
+      pit_measurement_identity_digest_hex: string | null;
+    }[]
+  >`
+    SELECT encode(content_digest, 'hex') AS content_digest_hex,
+           encode(observed_outcome_digest, 'hex') AS observed_outcome_digest_hex,
+           encode(pit_measurement_identity_digest, 'hex') AS pit_measurement_identity_digest_hex
+    FROM trader_forecast_outcome_v2
+    WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
+      AND forecast_id = ${input.forecastId}::uuid
+    LIMIT 1
+  `;
+  if (existingOutcome[0]) {
+    if (
+      existingOutcome[0].content_digest_hex === input.contentDigestHex &&
+      existingOutcome[0].observed_outcome_digest_hex === input.observedOutcomeDigestHex &&
+      existingOutcome[0].pit_measurement_identity_digest_hex ===
+        (feedback ? input.pitMeasurementIdentityDigestHex : null)
+    ) {
+      return;
+    }
+    throw new Error(
+      "[forecast-v2/persistence] objective outcome natural-idempotent conflict (fail closed)",
+    );
+  }
 
   await sql`
     INSERT INTO trader_forecast_outcome_v2 (
       organization_id, bundle_id, forecast_id, target_role_id, resolved_at,
-      outcome_class, observed_outcome_digest, content_digest, schema_version
+      outcome_class, observed_outcome_digest, content_digest, schema_version,
+      pit_measurement_identity_digest, observed_terminal_return, observed_bucket_ordinal,
+      objective_evidence_json, forecast_runtime_authority_content_digest,
+      predictive_package_content_digest, terminal_target_definition_digest,
+      terminal_distribution_semantic_digest, knowledge_edge_id, knowledge_content_digest
     ) VALUES (
       ${input.organizationId}::uuid, ${input.bundleId}::uuid, ${input.forecastId}::uuid,
       ${input.targetRoleId}, ${input.resolvedAtIso}::timestamptz,
-      'RESOLVED', ${outcomeDigest}, ${contentDigest}, ${outcomeSchema}
+      'RESOLVED', ${outcomeDigest}, ${contentDigest}, ${outcomeSchema},
+      ${feedback ? digestHexToBytea(input.pitMeasurementIdentityDigestHex) : null},
+      ${feedback?.objectiveEvidence.observedTerminalReturn ?? null},
+      ${observation?.observedBucketOrdinal ?? null},
+      ${feedback ? sql.json(feedback.objectiveEvidence as never) : null}::jsonb,
+      ${observation ? digestHexToBytea(observation.forecastRuntimeAuthorityContentDigestHex) : null},
+      ${observation?.predictivePackageContentDigestHex ?? null},
+      ${observation?.terminalTargetDefinitionDigestHex ?? null},
+      ${observation ? digestHexToBytea(observation.terminalDistributionSemanticDigestHex) : null},
+      ${feedback?.objectiveEvidence.knowledgeEdgeId ?? null},
+      ${feedback ? digestHexToBytea(feedback.objectiveEvidence.knowledgeContentDigestHex) : null}
     )
   `;
 }
@@ -641,14 +928,38 @@ export async function persistForecastCalibrationObservationV2(
     targetRoleId: typeof TARGET_ROLE_TERMINAL | typeof TARGET_ROLE_EXECUTION;
     contentDigestHex: string;
     scoringEligible: boolean;
+    observation?: ForecastV2CalibrationObservation;
   },
 ): Promise<void> {
-  const outcomeRows = await sql<{ outcome_class: string }[]>`
-    SELECT outcome_class
-    FROM trader_forecast_outcome_v2
-    WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
-      AND forecast_id = ${input.forecastId}::uuid
-      AND bundle_id = ${input.bundleId}::uuid
+  const outcomeRows = await sql<
+    {
+      outcome_class: string;
+      observed_outcome_digest_hex: string;
+      pit_measurement_identity_digest_hex: string | null;
+      forecast_runtime_authority_content_digest_hex: string | null;
+      predictive_package_content_digest: string | null;
+      terminal_target_definition_digest: string | null;
+      terminal_distribution_semantic_digest_hex: string | null;
+      knowledge_edge_id: string | null;
+      knowledge_content_digest_hex: string | null;
+      terminal_forecast_content_digest_hex: string;
+    }[]
+  >`
+    SELECT o.outcome_class,
+           encode(o.observed_outcome_digest, 'hex') AS observed_outcome_digest_hex,
+           encode(o.pit_measurement_identity_digest, 'hex') AS pit_measurement_identity_digest_hex,
+           encode(o.forecast_runtime_authority_content_digest, 'hex') AS forecast_runtime_authority_content_digest_hex,
+           o.predictive_package_content_digest, o.terminal_target_definition_digest,
+           encode(o.terminal_distribution_semantic_digest, 'hex') AS terminal_distribution_semantic_digest_hex,
+           o.knowledge_edge_id,
+           encode(o.knowledge_content_digest, 'hex') AS knowledge_content_digest_hex,
+           encode(f.forecast_content_digest, 'hex') AS terminal_forecast_content_digest_hex
+    FROM trader_forecast_outcome_v2 o
+    JOIN trader_forecast_v2 f
+      ON f.organization_id = o.organization_id AND f.id = o.forecast_id
+    WHERE o.organization_id = ${input.organizationId}::uuid
+      AND o.forecast_id = ${input.forecastId}::uuid
+      AND o.bundle_id = ${input.bundleId}::uuid
     LIMIT 1
   `;
   if (!outcomeRows[0] || outcomeRows[0].outcome_class !== "RESOLVED") {
@@ -661,13 +972,68 @@ export async function persistForecastCalibrationObservationV2(
   }
   const contentDigest = digestHexToBytea(input.contentDigestHex);
   const calibrationSchema = schemaVersionTextToInt2(FORECAST_CALIBRATION_SCHEMA_VERSION);
+  if (
+    input.observation &&
+    (requireForecastV2CalibrationObservation(input.observation).organizationId !==
+      input.organizationId ||
+      input.observation.contentDigest !== input.contentDigestHex ||
+      input.observation.scoringEligible !== input.scoringEligible ||
+      input.observation.observedOutcomeDigestHex !== outcomeRows[0]?.observed_outcome_digest_hex ||
+      input.observation.pitMeasurementIdentityDigestHex !==
+        outcomeRows[0]?.pit_measurement_identity_digest_hex ||
+      input.observation.forecastRuntimeAuthorityContentDigestHex !==
+        outcomeRows[0]?.forecast_runtime_authority_content_digest_hex ||
+      input.observation.predictivePackageContentDigestHex !==
+        outcomeRows[0]?.predictive_package_content_digest ||
+      input.observation.terminalTargetDefinitionDigestHex !==
+        outcomeRows[0]?.terminal_target_definition_digest ||
+      input.observation.terminalDistributionSemanticDigestHex !==
+        outcomeRows[0]?.terminal_distribution_semantic_digest_hex ||
+      input.observation.terminalForecastContentDigestHex !==
+        outcomeRows[0]?.terminal_forecast_content_digest_hex ||
+      input.observation.knowledgeEdgeId !== outcomeRows[0]?.knowledge_edge_id ||
+      input.observation.knowledgeContentDigestHex !==
+        outcomeRows[0]?.knowledge_content_digest_hex)
+  ) {
+    throw new Error("[forecast-v2/persistence] DEE-633 calibration observation mismatch");
+  }
+  const existingObservation = await sql<
+    { content_digest_hex: string; scoring_eligible: boolean; scoring_version: string | null }[]
+  >`
+    SELECT encode(content_digest, 'hex') AS content_digest_hex,
+           scoring_eligible, scoring_version
+    FROM trader_forecast_calibration_observation_v2
+    WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
+      AND forecast_id = ${input.forecastId}::uuid
+    LIMIT 1
+  `;
+  if (existingObservation[0]) {
+    if (
+      existingObservation[0].content_digest_hex === input.contentDigestHex &&
+      existingObservation[0].scoring_eligible === input.scoringEligible &&
+      existingObservation[0].scoring_version === (input.observation?.schemaVersion ?? null)
+    ) {
+      return;
+    }
+    throw new Error(
+      "[forecast-v2/persistence] calibration natural-idempotent conflict (fail closed)",
+    );
+  }
   await sql`
     INSERT INTO trader_forecast_calibration_observation_v2 (
       organization_id, bundle_id, forecast_id, target_role_id, scoring_eligible,
-      content_digest, schema_version
+      content_digest, schema_version, scoring_version, observed_bucket_ordinal,
+      probability_vector_json, normalized_brier_score, log_loss_score,
+      calibration_payload_json
     ) VALUES (
       ${input.organizationId}::uuid, ${input.bundleId}::uuid, ${input.forecastId}::uuid,
-      ${input.targetRoleId}, ${input.scoringEligible}, ${contentDigest}, ${calibrationSchema}
+      ${input.targetRoleId}, ${input.scoringEligible}, ${contentDigest}, ${calibrationSchema},
+      ${input.observation?.schemaVersion ?? null},
+      ${input.observation?.observedBucketOrdinal ?? null},
+      ${input.observation ? sql.json([...input.observation.probabilities] as never) : null}::jsonb,
+      ${input.observation ? Number(input.observation.normalizedBrierScore) : null},
+      ${input.observation ? Number(input.observation.logLossScore) : null},
+      ${input.observation ? sql.json(input.observation as never) : null}::jsonb
     )
   `;
 }
@@ -675,6 +1041,52 @@ export async function persistForecastCalibrationObservationV2(
 /** A3 measurement-only COMPLETE+RESOLVED inserts live in storage-scale-postgres-v1 — not here. */
 export const A3_SYNTHETIC_OUTCOME_FIXTURE_ISOLATION =
   "A3_MEASUREMENT_HARNESS_ONLY_NOT_PRODUCTION" as const;
+
+export type ForecastV2PitRetentionPurgeResult = Readonly<{
+  requestId: string;
+  purgedRowCount: number;
+}>;
+
+/**
+ * Invokes the narrowly privileged, audited PostgreSQL retention boundary.
+ * The database remains authoritative for the 30-day minimum and unresolved-bundle exclusion.
+ */
+export async function purgeRetainedForecastV2PitBars(input: {
+  sql: postgres.Sql;
+  organizationId: string;
+  cutoffAtIso: string;
+  requestId?: string;
+}): Promise<ForecastV2PitRetentionPurgeResult> {
+  const requestId = input.requestId ?? randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    input.organizationId,
+  )) {
+    throw new Error("[forecast-v2/retention] invalid organizationId");
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    requestId,
+  )) {
+    throw new Error("[forecast-v2/retention] invalid requestId");
+  }
+  if (!Number.isFinite(Date.parse(input.cutoffAtIso))) {
+    throw new Error("[forecast-v2/retention] invalid cutoffAtIso");
+  }
+  return input.sql.begin(async (tx) => {
+    const rows = await tx<{ request_id: string; purged_row_count: string }[]>`
+      SELECT request_id::text, purged_row_count::text
+      FROM public.waia_forecast_pit_bar_v2_purge_retained(
+        ${input.organizationId}::uuid,
+        ${requestId}::uuid,
+        ${input.cutoffAtIso}::timestamptz
+      )
+    `;
+    const row = rows[0];
+    if (!row || !/^\d+$/.test(row.purged_row_count)) {
+      throw new Error("[forecast-v2/retention] purge receipt missing or invalid");
+    }
+    return { requestId: row.request_id, purgedRowCount: Number(row.purged_row_count) };
+  });
+}
 
 export type LoadedForecastV2Digests = {
   bundleContentDigestHex: string;

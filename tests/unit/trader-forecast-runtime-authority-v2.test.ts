@@ -22,6 +22,10 @@ import {
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { buildMarketStateSnapshotV2 } from "@/lib/trader/intelligence/predictive-admission";
 import type { PredictiveAdmissionReceiptV1 } from "@/lib/trader/intelligence/predictive-admission";
+import {
+  FORECAST_V2_LOG_LOSS_FLOOR,
+  scoreForecastV2MulticlassObservation,
+} from "@/lib/trader/intelligence/calibration/calibration-scorer";
 
 const hex = (char: string) => char.repeat(64);
 const organizationId = "11111111-1111-4111-8111-111111111111";
@@ -157,6 +161,8 @@ function fixture(): ForecastRuntimeInputV2 {
     predictivePackage,
     executionHorizonMinutes: 33,
     normalizationVersionDigestHex: family.normalizationVersionDigestHex,
+    knowledgeEdgeId: "00000000-0000-4000-8000-000000063200",
+    knowledgeContentDigestHex: hex("6"),
   };
 }
 
@@ -179,6 +185,9 @@ describe("DEE-756 Forecast Runtime Authority V2", () => {
     expect(
       issueForecastRuntimeV2({ ...input, predictiveAdmissionReceipt: null }),
     ).toMatchObject({ status: "NON_ACTIONABLE", reason: "MISSING_OR_NOT_ADMITTED" });
+    expect(
+      issueForecastRuntimeV2({ ...input, knowledgeEdgeId: "arbitrary-non-uuid-edge" }),
+    ).toMatchObject({ status: "NON_ACTIONABLE", reason: "PIT_OR_INPUT_MISMATCH" });
     expect(
       issueForecastRuntimeV2({
         ...input,
@@ -323,4 +332,112 @@ describe("DEE-756 Forecast Runtime Authority V2", () => {
       }),
     ).toThrow("FORECAST_RUNTIME_AUTHORIZED_OUTCOME_INVALID:replay");
   });
+});
+
+describe("DEE-633 Forecast V2 outcome, calibration and future Knowledge feedback", () => {
+  function authorizedFixture() {
+    const outcome = issueForecastRuntimeV2(fixture());
+    if (outcome.status !== "FORECAST_AUTHORIZED") throw new Error("expected authority");
+    return outcome;
+  }
+
+  function evidence(outcome = authorizedFixture()) {
+    const resolvedAt = new Date(
+      outcome.authority.anchorClosedBarEpochMs +
+        (outcome.issuance.package.family.primaryHorizonMinutes + 3) * 60_000,
+    ).toISOString();
+    return {
+      organizationId,
+      symbol: "BTCUSDT",
+      primaryHorizonMinutes: 30,
+      anchorClosedBarEpochMs: outcome.authority.anchorClosedBarEpochMs,
+      resolvedAt,
+      pitEvidenceBoundary: resolvedAt,
+      observedTerminalReturn: 0,
+      observedOutcomeDigestHex: hex("4"),
+      pitMeasurementIdentityDigestHex: hex("5"),
+      knowledgeEdgeId: outcome.authority.knowledgeEdgeId,
+      knowledgeContentDigestHex: outcome.authority.knowledgeContentDigestHex,
+    } as const;
+  }
+
+  it("scores the sealed seven-bucket distribution with the ratified proper-score convention", () => {
+    const outcome = authorizedFixture();
+    const observation = scoreForecastV2MulticlassObservation({
+      authorizedOutcome: outcome,
+      objectiveEvidence: evidence(outcome),
+    });
+    const probabilities = outcome.issuance.terminalScenarioMasses.probabilities;
+    const expectedBrier =
+      0.5 *
+      probabilities.reduce(
+        (sum, p, ordinal) =>
+          sum + (p - (ordinal === observation.observedBucketOrdinal ? 1 : 0)) ** 2,
+        0,
+      );
+    expect(observation.probabilities).toEqual(probabilities);
+    expect(Number(observation.normalizedBrierScore)).toBe(expectedBrier);
+    expect(Number(observation.logLossScore)).toBe(
+      -Math.log(
+        Math.max(probabilities[observation.observedBucketOrdinal]!, FORECAST_V2_LOG_LOSS_FLOOR),
+      ),
+    );
+    expect(Number(observation.normalizedBrierScore)).toBeGreaterThanOrEqual(0);
+    expect(Number(observation.normalizedBrierScore)).toBeLessThanOrEqual(1);
+    expect(observation.capitalAuthority).toBe("NONE");
+  });
+
+  it.each([
+    ["organization", { organizationId: "22222222-2222-4222-8222-222222222222" }],
+    ["symbol", { symbol: "ETHUSDT" }],
+    ["horizon", { primaryHorizonMinutes: 60 }],
+    ["anchor", { anchorClosedBarEpochMs: 0 }],
+  ])("rejects wrong %s binding", (_name, mutation) => {
+    const outcome = authorizedFixture();
+    expect(() =>
+      scoreForecastV2MulticlassObservation({
+        authorizedOutcome: outcome,
+        objectiveEvidence: { ...evidence(outcome), ...mutation },
+      }),
+    ).toThrow(/IDENTITY_MISMATCH/);
+  });
+
+  it("rejects early and non-finite objective evidence", () => {
+    const outcome = authorizedFixture();
+    expect(() =>
+      scoreForecastV2MulticlassObservation({
+        authorizedOutcome: outcome,
+        objectiveEvidence: {
+          ...evidence(outcome),
+          resolvedAt: new Date(outcome.authority.anchorClosedBarEpochMs).toISOString(),
+        },
+      }),
+    ).toThrow(/PIT_MISMATCH/);
+    expect(() =>
+      scoreForecastV2MulticlassObservation({
+        authorizedOutcome: outcome,
+        objectiveEvidence: { ...evidence(outcome), observedTerminalReturn: Number.NaN },
+      }),
+    ).toThrow(/PIT_MISMATCH/);
+    expect(() =>
+      scoreForecastV2MulticlassObservation({
+        authorizedOutcome: outcome,
+        objectiveEvidence: {
+          ...evidence(outcome),
+          pitEvidenceBoundary: new Date(outcome.authority.anchorClosedBarEpochMs).toISOString(),
+        },
+      }),
+    ).toThrow(/PIT_MISMATCH/);
+  });
+
+  it("rejects late-bound Knowledge identity that differs from the issuance seal", () => {
+    const outcome = authorizedFixture();
+    expect(() =>
+      scoreForecastV2MulticlassObservation({
+        authorizedOutcome: outcome,
+        objectiveEvidence: { ...evidence(outcome), knowledgeEdgeId: "late-edge" },
+      }),
+    ).toThrow(/IDENTITY_MISMATCH/);
+  });
+
 });

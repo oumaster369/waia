@@ -40,6 +40,8 @@ import {
 
 export const FORECAST_RUNTIME_AUTHORITY_V2_VERSION =
   "waia.trader.forecast_runtime_authority.v2" as const;
+const CANONICAL_KNOWLEDGE_EDGE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const FORECAST_RUNTIME_NON_ACTIONABLE_V2_VERSION =
   "waia.trader.forecast_runtime_non_actionable.v2" as const;
 
@@ -78,6 +80,8 @@ export type ForecastRuntimeAuthorityV2 = Readonly<{
   executionDistributionSemanticDigestHex: string;
   terminalForecastContentDigestHex: string;
   executionForecastContentDigestHex: string;
+  knowledgeEdgeId: string;
+  knowledgeContentDigestHex: string;
   contentDigestHex: string;
 }>;
 
@@ -100,6 +104,9 @@ export type ForecastRuntimeInputV2 = Readonly<{
   predictivePackage: PredictivePackageV1 | null;
   executionHorizonMinutes: number;
   normalizationVersionDigestHex: string;
+  /** Issuance-time Knowledge identity; late outcome-time inference is prohibited. */
+  knowledgeEdgeId?: string;
+  knowledgeContentDigestHex?: string;
 }>;
 
 export type ForecastRuntimeOutcomeV2 =
@@ -319,6 +326,14 @@ export function issueForecastRuntimeV2(input: ForecastRuntimeInputV2): ForecastR
       input.predictiveAdmissionReceipt?.blockingReasons,
     );
   }
+  if (
+    !input.knowledgeEdgeId ||
+    !CANONICAL_KNOWLEDGE_EDGE_UUID.test(input.knowledgeEdgeId) ||
+    !input.knowledgeContentDigestHex ||
+    !/^[0-9a-f]{64}$/.test(input.knowledgeContentDigestHex)
+  ) {
+    return nonActionable(input, "PIT_OR_INPUT_MISMATCH");
+  }
 
   let admission: ForecastRuntimeAdmittedPredictiveAdmissionReceiptV1;
   try {
@@ -436,6 +451,8 @@ export function issueForecastRuntimeV2(input: ForecastRuntimeInputV2): ForecastR
     executionDistributionSemanticDigestHex: digestHex(issuance.distributionSemanticDigestExec),
     terminalForecastContentDigestHex: digestHex(issuance.forecastContentDigestTerminal),
     executionForecastContentDigestHex: digestHex(issuance.forecastContentDigestExec),
+    knowledgeEdgeId: input.knowledgeEdgeId,
+    knowledgeContentDigestHex: input.knowledgeContentDigestHex,
   };
   const authority = { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
   return { status: "FORECAST_AUTHORIZED", authority, issuance };
@@ -458,6 +475,7 @@ export function requireForecastRuntimeAuthorityV2(
     !Number.isFinite(value.anchorRealizedVol20m_1m) ||
     !Number.isSafeInteger(value.executionHorizonMinutes) ||
     value.executionHorizonMinutes <= 0 ||
+    !CANONICAL_KNOWLEDGE_EDGE_UUID.test(value.knowledgeEdgeId) ||
     digestValues.some(
       (digest) => typeof digest !== "string" || !/^[0-9a-f]{64}$/.test(digest),
     ) ||
