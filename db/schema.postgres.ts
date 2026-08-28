@@ -236,6 +236,37 @@ export const traderForecastPitBarV2 = pgTable(
   ],
 );
 
+/** DEE-633 immutable evidence of each authorized tenant-scoped PIT retention purge. */
+export const traderForecastPitBarRetentionAuditV2 = pgTable(
+  "trader_forecast_pit_bar_retention_audit_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    requestId: uuid("request_id").notNull(),
+    cutoffAt: timestamp("cutoff_at", { withTimezone: true, mode: "date" }).notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" }).notNull(),
+    purgedRowCount: bigint("purged_row_count", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.requestId],
+      name: "trader_forecast_pit_bar_retention_audit_v2_pkey",
+    }),
+  ],
+);
+
+/** Transaction-local authorization rows used only inside the privileged retention function. */
+export const traderForecastPitBarRetentionGuardV2 = pgTable(
+  "trader_forecast_pit_bar_retention_guard_v2",
+  {
+    transactionId: bigint("transaction_id", { mode: "number" }).primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+  },
+);
+
 /** Forecast-V2 issuance seal, including DEE-633 durable authority and exact sequence. */
 export const traderForecastBundleV2 = pgTable(
   "trader_forecast_bundle_v2",

@@ -57,6 +57,7 @@ export const FORECAST_V2_SCHEMA_VERSION = "forecast/v2" as const;
 export const PREDICTIVE_PACKAGE_SCHEMA_VERSION = "predictive-package/v2" as const;
 export const TARGET_DEFINITION_SCHEMA_VERSION = "target-definition/v2" as const;
 export const TARGET_BUCKET_SCHEMA_VERSION = "target-bucket/v2" as const;
+export const FORECAST_V2_PIT_RETENTION_MIN_DAYS = 30 as const;
 
 export type PersistPredictivePackageV2Input = {
   organizationId: string;
@@ -559,6 +560,11 @@ export async function persistForecastBundleV2(
 
   try {
     await sql.begin(async (tx) => {
+      // Serialize new pending issuance against the tenant retention purge. The purge
+      // re-checks unresolved references only after acquiring this same transaction lock.
+      await tx`
+        SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}::text, 633))
+      `;
       // Issuance seal = append-only bundle + dual Forecast members + 7 Terminal scenarios.
       // Outcomes/calibration are later append-only truth — not required for issuance seal.
       // completeness_state='INCOMPLETE' is the only insert-legal DDL value when outcomes are
@@ -1035,6 +1041,52 @@ export async function persistForecastCalibrationObservationV2(
 /** A3 measurement-only COMPLETE+RESOLVED inserts live in storage-scale-postgres-v1 — not here. */
 export const A3_SYNTHETIC_OUTCOME_FIXTURE_ISOLATION =
   "A3_MEASUREMENT_HARNESS_ONLY_NOT_PRODUCTION" as const;
+
+export type ForecastV2PitRetentionPurgeResult = Readonly<{
+  requestId: string;
+  purgedRowCount: number;
+}>;
+
+/**
+ * Invokes the narrowly privileged, audited PostgreSQL retention boundary.
+ * The database remains authoritative for the 30-day minimum and unresolved-bundle exclusion.
+ */
+export async function purgeRetainedForecastV2PitBars(input: {
+  sql: postgres.Sql;
+  organizationId: string;
+  cutoffAtIso: string;
+  requestId?: string;
+}): Promise<ForecastV2PitRetentionPurgeResult> {
+  const requestId = input.requestId ?? randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    input.organizationId,
+  )) {
+    throw new Error("[forecast-v2/retention] invalid organizationId");
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    requestId,
+  )) {
+    throw new Error("[forecast-v2/retention] invalid requestId");
+  }
+  if (!Number.isFinite(Date.parse(input.cutoffAtIso))) {
+    throw new Error("[forecast-v2/retention] invalid cutoffAtIso");
+  }
+  return input.sql.begin(async (tx) => {
+    const rows = await tx<{ request_id: string; purged_row_count: string }[]>`
+      SELECT request_id::text, purged_row_count::text
+      FROM public.waia_forecast_pit_bar_v2_purge_retained(
+        ${input.organizationId}::uuid,
+        ${requestId}::uuid,
+        ${input.cutoffAtIso}::timestamptz
+      )
+    `;
+    const row = rows[0];
+    if (!row || !/^\d+$/.test(row.purged_row_count)) {
+      throw new Error("[forecast-v2/retention] purge receipt missing or invalid");
+    }
+    return { requestId: row.request_id, purgedRowCount: Number(row.purged_row_count) };
+  });
+}
 
 export type LoadedForecastV2Digests = {
   bundleContentDigestHex: string;

@@ -12,6 +12,7 @@ import {
   persistForecastCalibrationObservationV2,
   persistObjectiveForecastOutcomeResolutionV2,
   persistPredictivePackageV2,
+  purgeRetainedForecastV2PitBars,
   verifyPersistedForecastV2RoundTrip,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
 import type { ReplicaRootFamilyInput } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
@@ -215,6 +216,7 @@ describe.skipIf(!integrationEnabled || !url)(
     }
     async function cleanupForecastRows(): Promise<void> {
       const tables = [
+        "trader_forecast_pit_bar_retention_audit_v2",
         "trader_forecast_pit_bar_v2",
         "trader_forecast_scenario_v2", "trader_forecast_calibration_observation_v2",
         "trader_forecast_outcome_v2", "trader_forecast_v2", "trader_forecast_bundle_v2",
@@ -1147,6 +1149,208 @@ describe.skipIf(!integrationEnabled || !url)(
       `;
       expect(Number(count[0]?.count ?? 0)).toBe(1);
     });
+
+    it("purges only tenant-scoped unreferenced PIT bars after 30 days with audit, rollback, and idempotency", async () => {
+      const otherUserId = "00000000-0000-4000-8000-000000051803";
+      await cleanupWp13Org(url!, otherUserId);
+      const otherOrgId = await seedWp13User(url!, otherUserId, "Forecast V2 Retention Other");
+      const now = Date.now();
+      const cutoffAtIso = new Date(now - 30 * 86_400_000 - 60_000).toISOString();
+      const oldCreatedAt = new Date(now - 31 * 86_400_000).toISOString();
+      const recentCreatedAt = new Date(now - 20 * 86_400_000).toISOString();
+      const barClose = (minute: number) => new Date(1_700_100_000_000 + minute * 60_000);
+      const insertPit = async (input: {
+        organizationId: string;
+        runId: string;
+        minute: number;
+        createdAt: string;
+      }) => {
+        const payload = {
+          symbol: "BTCUSDT",
+          interval: "1m",
+          closeTime: barClose(input.minute).toISOString(),
+          close: "100",
+        };
+        await sql`
+          INSERT INTO trader_forecast_pit_bar_v2 (
+            organization_id, run_id, symbol, interval, bar_close_time,
+            bar_content_digest, bar_json, created_at
+          ) VALUES (
+            ${input.organizationId}::uuid, ${input.runId}, 'BTCUSDT', '1m',
+            ${barClose(input.minute)}::timestamptz,
+            ${createHash("sha256").update(JSON.stringify(payload)).digest("hex")},
+            ${sql.json(payload as never)}::jsonb, ${input.createdAt}::timestamptz
+          )
+        `;
+      };
+
+      try {
+        const family = { ...buildFamily(), organizationId: orgId };
+        const pkg = buildPredictivePackageV1({
+          family,
+          sourceCorpus: Array.from({ length: 120 }, (_, i) => anchor(i)),
+          kConfigDec: 3,
+          mConfigDec: 4,
+        });
+        const persistedPackage = await persistPredictivePackageV2(sql, pkg, {
+          organizationId: orgId,
+          kmGlobalAnchorSetDigestHex: "f".repeat(64),
+        });
+        const issuance = issueForecastV1({
+          pkg,
+          anchorClosedBarEpochMs: 1_700_100_000_000,
+          anchorRealizedVol20m_1m: 0.015,
+          executionHorizonMinutes: family.executionHorizonMinutes,
+          normalizationVersionDigestHex: family.normalizationVersionDigestHex,
+        });
+        await persistForecastBundleV2(sql, {
+          organizationId: orgId,
+          packageId: persistedPackage.packageId,
+          runId: "retention-pending",
+          cycleId: "0",
+          symbol: family.symbol,
+          anchorClosedBarEpochMs: issuance.anchorClosedBarEpochMs,
+          issuance,
+        });
+
+        await insertPit({ organizationId: orgId, runId: "retention-old-free", minute: 1, createdAt: oldCreatedAt });
+        await insertPit({ organizationId: orgId, runId: "retention-recent", minute: 2, createdAt: recentCreatedAt });
+        await insertPit({ organizationId: orgId, runId: "retention-pending", minute: 3, createdAt: oldCreatedAt });
+        await insertPit({ organizationId: otherOrgId, runId: "retention-other", minute: 4, createdAt: oldCreatedAt });
+        await insertPit({ organizationId: orgId, runId: "retention-equality", minute: 6, createdAt: cutoffAtIso });
+
+        await expect(purgeRetainedForecastV2PitBars({
+          sql,
+          organizationId: orgId,
+          requestId: "00000000-0000-4000-8000-000000063301",
+          cutoffAtIso: new Date(now - 29 * 86_400_000).toISOString(),
+        })).rejects.toThrow(/at least 30 days/);
+
+        const first = await purgeRetainedForecastV2PitBars({
+          sql,
+          organizationId: orgId,
+          requestId: "00000000-0000-4000-8000-000000063302",
+          cutoffAtIso,
+        });
+        expect(first.purgedRowCount).toBe(1);
+        const replay = await purgeRetainedForecastV2PitBars({
+          sql,
+          organizationId: orgId,
+          requestId: first.requestId,
+          cutoffAtIso,
+        });
+        expect(replay).toEqual(first);
+        await expect(purgeRetainedForecastV2PitBars({
+          sql,
+          organizationId: orgId,
+          requestId: first.requestId,
+          cutoffAtIso: new Date(Date.parse(cutoffAtIso) - 60_000).toISOString(),
+        })).rejects.toThrow(/request conflict/);
+
+        const remaining = await sql<{ organization_id: string; run_id: string }[]>`
+          SELECT organization_id::text, run_id
+          FROM trader_forecast_pit_bar_v2
+          WHERE organization_id IN (${orgId}::uuid, ${otherOrgId}::uuid)
+          ORDER BY run_id
+        `;
+        expect(remaining.map((row) => row.run_id)).toEqual([
+          "retention-equality",
+          "retention-other",
+          "retention-pending",
+          "retention-recent",
+        ]);
+        const audits = await sql<{ purged_row_count: string }[]>`
+          SELECT purged_row_count::text
+          FROM trader_forecast_pit_bar_retention_audit_v2
+          WHERE organization_id = ${orgId}::uuid
+            AND request_id = ${first.requestId}::uuid
+        `;
+        expect(audits).toEqual([{ purged_row_count: "1" }]);
+        await expect(sql`
+          UPDATE trader_forecast_pit_bar_retention_audit_v2 SET purged_row_count = 9
+          WHERE organization_id = ${orgId}::uuid AND request_id = ${first.requestId}::uuid
+        `).rejects.toThrow(/append-only/);
+        await expect(sql`
+          DELETE FROM trader_forecast_pit_bar_retention_audit_v2
+          WHERE organization_id = ${orgId}::uuid AND request_id = ${first.requestId}::uuid
+        `).rejects.toThrow(/append-only/);
+        await sql`SELECT set_config('waia.forecast_pit_retention_purge_org', ${orgId}, false)`;
+        await expect(sql`
+          DELETE FROM trader_forecast_pit_bar_v2
+          WHERE organization_id = ${orgId}::uuid AND run_id = 'retention-pending'
+        `).rejects.toThrow(/append-only/);
+
+        await insertPit({ organizationId: orgId, runId: "retention-concurrent", minute: 7, createdAt: oldCreatedAt });
+        let lockAcquired!: () => void;
+        const acquired = new Promise<void>((resolve) => { lockAcquired = resolve; });
+        const pendingInsert = sql.begin(async (tx) => {
+          await tx`SELECT pg_advisory_xact_lock(hashtextextended(${orgId}::text, 633))`;
+          lockAcquired();
+          await tx`
+            INSERT INTO trader_forecast_bundle_v2 (
+              id, organization_id, predictive_package_id, run_id, cycle_id, symbol,
+              anchor_closed_bar_epoch_ms, completeness_state, bundle_content_digest,
+              schema_version, forecast_runtime_authorized_outcome_json,
+              forecast_runtime_issuance_sequence
+            )
+            SELECT
+              '00000000-0000-4000-8000-000000063399'::uuid, organization_id,
+              predictive_package_id, 'retention-concurrent', '0', symbol,
+              anchor_closed_bar_epoch_ms, completeness_state, bundle_content_digest,
+              schema_version, forecast_runtime_authorized_outcome_json,
+              forecast_runtime_issuance_sequence
+            FROM trader_forecast_bundle_v2
+            WHERE organization_id = ${orgId}::uuid AND run_id = 'retention-pending'
+          `;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+        await acquired;
+        const concurrentPurge = purgeRetainedForecastV2PitBars({
+          sql,
+          organizationId: orgId,
+          requestId: "00000000-0000-4000-8000-000000063304",
+          cutoffAtIso,
+        });
+        await pendingInsert;
+        const concurrentReceipt = await concurrentPurge;
+        expect(concurrentReceipt.purgedRowCount).toBe(0);
+        const concurrentRows = await sql<{ count: string }[]>`
+          SELECT count(*)::text AS count FROM trader_forecast_pit_bar_v2
+          WHERE organization_id = ${orgId}::uuid AND run_id = 'retention-concurrent'
+        `;
+        expect(concurrentRows[0]?.count).toBe("1");
+
+        await insertPit({ organizationId: orgId, runId: "retention-rollback", minute: 5, createdAt: oldCreatedAt });
+        await sql.unsafe(`
+          CREATE OR REPLACE FUNCTION dee633_inject_retention_audit_failure() RETURNS trigger
+          LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'DEE633_RETENTION_AUDIT_FAILURE'; END $$;
+          CREATE TRIGGER dee633_inject_retention_audit_failure
+          BEFORE INSERT ON trader_forecast_pit_bar_retention_audit_v2
+          FOR EACH ROW EXECUTE FUNCTION dee633_inject_retention_audit_failure();
+        `);
+        try {
+          await expect(purgeRetainedForecastV2PitBars({
+            sql,
+            organizationId: orgId,
+            requestId: "00000000-0000-4000-8000-000000063303",
+            cutoffAtIso,
+          })).rejects.toThrow(/DEE633_RETENTION_AUDIT_FAILURE/);
+        } finally {
+          await sql.unsafe("DROP TRIGGER IF EXISTS dee633_inject_retention_audit_failure ON trader_forecast_pit_bar_retention_audit_v2");
+          await sql.unsafe("DROP FUNCTION IF EXISTS dee633_inject_retention_audit_failure()");
+        }
+        const rollbackRows = await sql<{ count: string }[]>`
+          SELECT count(*)::text AS count FROM trader_forecast_pit_bar_v2
+          WHERE organization_id = ${orgId}::uuid AND run_id = 'retention-rollback'
+        `;
+        expect(rollbackRows[0]?.count).toBe("1");
+      } finally {
+        await sql.unsafe("ALTER TABLE trader_forecast_pit_bar_v2 DISABLE TRIGGER USER");
+        await sql`DELETE FROM trader_forecast_pit_bar_v2 WHERE organization_id = ${otherOrgId}::uuid`;
+        await sql.unsafe("ALTER TABLE trader_forecast_pit_bar_v2 ENABLE TRIGGER USER");
+        await cleanupWp13Org(url!, otherUserId);
+      }
+    }, 120_000);
 
     it("natural-idempotent conflict (same identity, different content) fails closed", async () => {
       const family = { ...buildFamily(), organizationId: orgId };
