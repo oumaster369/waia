@@ -43,6 +43,10 @@ import type { CanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intellige
 import type { CanonicalRuntimeIntelligenceStateProviderV1 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
 import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import type { ForecastV2DurableProducerConfigV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import type {
+  CanonicalDecisionCapitalAuthorityV2Deps,
+  DecisionCapitalAuthorityV2Result,
+} from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 
 /**
  * Research replay determinism hook (M9+ / DEE-397 / ADR-0021).
@@ -136,6 +140,8 @@ export type PaperCycleDeps = {
   researchReplayDeterminism?: ResearchReplayDeterminismDeps;
   /** Optional runtime PIT reader; explicit input state wins for replay pinning. */
   canonicalRuntimeIntelligenceProvider?: CanonicalRuntimeIntelligenceStateProviderV1;
+  /** DEE-634: mandatory for the capital-shaped paper path; omission fails closed. */
+  decisionCapitalAuthorityV2?: CanonicalDecisionCapitalAuthorityV2Deps;
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
@@ -213,7 +219,13 @@ export type PaperCycleInput = {
   htrAccounting?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrAccountingCycleContext;
 };
 
-export type PaperCycleSkipReason = "no_signal" | "no_submit" | "information_sufficiency_blocked";
+export type PaperCycleSkipReason =
+  | "no_signal"
+  | "no_submit"
+  | "information_sufficiency_blocked"
+  | "decision_v2_authority_missing"
+  | "decision_v2_no_trade"
+  | "decision_v2_no_entry_proposal";
 
 export type PaperCycleStrategyExecution = {
   signal: StrategySignal;
@@ -248,6 +260,8 @@ export type PaperCycleResult = {
   htrRuntimeCallOrder?: import("@/lib/trader/accounting/htr-accounting-cycle-bridge").HtrRuntimeCallEvent[];
   /** PR-2 MI Core: updated session state for next cycle. */
   hypothesisSessionState?: HypothesisSessionState;
+  /** Canonical V2 authority proof for capital-shaped paper execution. */
+  decisionCapitalAuthorityV2?: DecisionCapitalAuthorityV2Result;
 };
 
 /** Shared N-cycle runner context (fixture replay + poll sources). */
