@@ -191,4 +191,37 @@ describe("DEE-780 canonical Decision V2 capital authority", () => {
       ),
     ).rejects.toMatchObject({ reason: "EXECUTION_AUTHORITY_BINDING_MISMATCH" });
   });
+
+  it("rejects missing authority identities before they can cross a stage boundary", async () => {
+    await expect(
+      runDecisionCapitalAuthorityV2(
+        deps({
+          decide: vi.fn(async () => ({
+            status: "ACTIONABLE" as const,
+            decision: decision({ decisionId: "" }),
+          })),
+        }),
+        request(),
+      ),
+    ).rejects.toMatchObject({ reason: "DECISION_ID_INVALID" });
+
+    await expect(
+      runDecisionCapitalAuthorityV2(
+        deps({
+          execute: vi.fn(async () => ({
+            decisionContentDigestHex: digest("c"),
+            riskAllowanceId: "allowance-1",
+            riskAllowanceContentDigestHex: digest("f"),
+            executionPlanId: "",
+            executionPlanContentDigestHex: digest("1"),
+            executionAttemptId: "attempt-1",
+            executionAttemptContentDigestHex: digest("2"),
+            submittedQuantity: "0.005",
+            execution: { status: "conflict" as const, orderId: "order-1" },
+          })),
+        }),
+        request(),
+      ),
+    ).rejects.toMatchObject({ reason: "EXECUTION_PLAN_ID_INVALID" });
+  });
 });

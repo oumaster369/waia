@@ -130,6 +130,12 @@ function requireDigest(value: string, field: string): void {
   if (!DIGEST.test(value)) throw new DecisionCapitalAuthorityV2ViolationError(`${field}_INVALID`);
 }
 
+function requireIdentity(value: string, field: string): void {
+  if (value.trim().length === 0) {
+    throw new DecisionCapitalAuthorityV2ViolationError(`${field}_INVALID`);
+  }
+}
+
 function requirePositive(value: string, field: string): void {
   if (!/^\d+(?:\.\d+)?$/.test(value) || compareDecimal(value, "0") <= 0) {
     throw new DecisionCapitalAuthorityV2ViolationError(`${field}_INVALID`);
@@ -159,6 +165,12 @@ export async function runDecisionCapitalAuthorityV2(
   deps: CanonicalDecisionCapitalAuthorityV2Deps,
   request: DecisionCapitalRequestV2,
 ): Promise<DecisionCapitalAuthorityV2Result> {
+  [
+    [request.organizationId, "ORGANIZATION_ID"],
+    [request.accountId, "ACCOUNT_ID"],
+    [request.cycleId, "CYCLE_ID"],
+    [request.symbol, "SYMBOL"],
+  ].forEach(([value, field]) => requireIdentity(value, field));
   if (request.forecastOutcome.status !== "FORECAST_AUTHORIZED") {
     return noTrade("FORECAST", [request.forecastOutcome.reason]);
   }
@@ -199,6 +211,8 @@ export async function runDecisionCapitalAuthorityV2(
   }
 
   const decision = decisionOutcome.decision;
+  requireIdentity(decision.decisionId, "DECISION_ID");
+  requireIdentity(decision.economicSizeSetId, "ECONOMIC_SIZE_SET_ID");
   [
     [decision.semanticDigestHex, "DECISION_SEMANTIC_DIGEST"],
     [decision.contentDigestHex, "DECISION_CONTENT_DIGEST"],
@@ -231,12 +245,16 @@ export async function runDecisionCapitalAuthorityV2(
   }
   requireDigest(risk.riskVerdictContentDigestHex, "RISK_VERDICT_CONTENT_DIGEST");
   requireDigest(risk.riskAllowanceContentDigestHex, "RISK_ALLOWANCE_CONTENT_DIGEST");
+  requireIdentity(risk.riskVerdictId, "RISK_VERDICT_ID");
+  requireIdentity(risk.riskAllowanceId, "RISK_ALLOWANCE_ID");
   requirePositive(risk.approvedQualifiedQuantity, "RISK_APPROVED_QUANTITY");
   if (compareDecimal(risk.approvedQualifiedQuantity, decision.qualifiedQuantity) > 0) {
     throw new DecisionCapitalAuthorityV2ViolationError("RISK_QUANTITY_AMPLIFICATION_FORBIDDEN");
   }
 
   const execution = await deps.execute({ request, decision, permission: risk });
+  requireIdentity(execution.executionPlanId, "EXECUTION_PLAN_ID");
+  requireIdentity(execution.executionAttemptId, "EXECUTION_ATTEMPT_ID");
   [
     [execution.executionPlanContentDigestHex, "EXECUTION_PLAN_CONTENT_DIGEST"],
     [execution.executionAttemptContentDigestHex, "EXECUTION_ATTEMPT_CONTENT_DIGEST"],
