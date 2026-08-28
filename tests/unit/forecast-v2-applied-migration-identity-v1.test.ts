@@ -58,6 +58,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0170_trader_forecast_contract_binding_v1_rls",
       "0171_treasury_contribution_payment_intents",
       "0172_treasury_contribution_payment_intents_rls",
+      "0173_dee633_forecast_v2_feedback_payload",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
