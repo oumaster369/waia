@@ -12,6 +12,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -29,6 +30,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
 import {
   auditActorTypeEnum,
@@ -208,6 +211,61 @@ export const organizations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("organizations_owner_user_id_idx").on(t.ownerUserId)],
+);
+
+/** DEE-633 durable, append-only one-minute PIT evidence cache for Forecast-V2 closure replay. */
+export const traderForecastPitBarV2 = pgTable(
+  "trader_forecast_pit_bar_v2",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    symbol: text("symbol").notNull(),
+    interval: text("interval").notNull(),
+    barCloseTime: timestamp("bar_close_time", { withTimezone: true, mode: "date" }).notNull(),
+    barContentDigest: text("bar_content_digest").notNull(),
+    barJson: jsonb("bar_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.runId, t.symbol, t.interval, t.barCloseTime],
+      name: "trader_forecast_pit_bar_v2_pkey",
+    }),
+  ],
+);
+
+/** Forecast-V2 issuance seal, including DEE-633 durable authority and exact sequence. */
+export const traderForecastBundleV2 = pgTable(
+  "trader_forecast_bundle_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    predictivePackageId: uuid("predictive_package_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    symbol: text("symbol").notNull(),
+    anchorClosedBarEpochMs: bigint("anchor_closed_bar_epoch_ms", { mode: "number" }).notNull(),
+    completenessState: text("completeness_state").notNull().default("INCOMPLETE"),
+    bundleContentDigest: bytea("bundle_content_digest").notNull(),
+    schemaVersion: smallint("schema_version").notNull(),
+    forecastRuntimeAuthorizedOutcomeJson: jsonb("forecast_runtime_authorized_outcome_json"),
+    forecastRuntimeIssuanceSequence: integer("forecast_runtime_issuance_sequence"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("tfbv2_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tfbv2_org_natural_idempotency_uq").on(
+      t.organizationId,
+      t.runId,
+      t.cycleId,
+      t.symbol,
+      t.anchorClosedBarEpochMs,
+    ),
+  ],
 );
 
 /** WAIA Core: user ↔ organization membership (WC-E2). */
