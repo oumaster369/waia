@@ -9,7 +9,6 @@ import {
 import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
 import { applyBreachSubmissionRestrictions } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
-import { HTR_GUARDIAN_EXIT_REASON_V1 } from "@/lib/trader/guardian/htr-guardian-exit-taxonomy";
 import {
   deriveAccountRiskStateFromBridge,
   derivePortfolioFromAccountingState,
@@ -22,7 +21,7 @@ import {
 } from "@/lib/trader/accounting/htr-accounting-cycle-bridge";
 import { executeBreachPartialEntryCancellation } from "@/lib/trader/guardian/htr-breach-partial-entry-cancellation";
 import { requiresHtrPartialEntryCancellation } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
-import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { assertLifecycleFillWalkOpenQtyParity } from "@/lib/trader/lifecycle";
 import {
   buildQuoteCurrencyBySymbol,
@@ -61,6 +60,7 @@ import type {
   PaperInformationInquiryResolverV1,
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
+import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 
 export async function resolveHtxInformationInquiryCycleV1(input: {
   poll: HtxBarPollSource;
@@ -587,6 +587,7 @@ export async function runPaperCycleOnce(
     costModel: input.costModel,
     informationSufficiencyAuthority: input.informationSufficiencyAuthority,
     informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
+    forecastRuntimeInput: input.forecastRuntimeInput,
     omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
     strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
   });
@@ -923,6 +924,9 @@ export async function runFixturePaperCycles(
 ): Promise<RunMultiPaperCyclesResult> {
   const results: PaperCycleResult[] = [];
   let hypothesisSessionState = input.hypothesisSessionState;
+  const forecastV2DurableProducer = input.forecastV2Producer
+    ? createForecastV2DurableProducerV1(input.forecastV2Producer)
+    : null;
 
   for (let index = 0; index < input.n; index += 1) {
     const next = input.replay.next();
@@ -947,8 +951,21 @@ export async function runFixturePaperCycles(
       newId: input.newId,
       informationSufficiencyAuthority: input.informationSufficiencyAuthority,
       informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
+      forecastRuntimeInput: (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined,
       hypothesisSessionState,
       miCoreEnabled: input.miCoreEnabled,
+    });
+    await forecastV2DurableProducer?.processCycle({
+      organizationId: input.context.organizationId,
+      runId: input.forecastV2Producer!.runId,
+      cycleId: next.snapshot.cycleId,
+      pitAnchor: next.snapshot.evaluatedAt,
+      bars: next.snapshot.bars,
+      sequence: index,
+      outcome:
+        result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
+          ? result.evaluation.forecastRuntimeOutcome
+          : null,
     });
 
     hypothesisSessionState = result.hypothesisSessionState;
@@ -962,6 +979,9 @@ export async function runPollPaperCycles(
   input: RunPollPaperCyclesInput,
 ): Promise<RunMultiPaperCyclesResult> {
   const results: PaperCycleResult[] = [];
+  const forecastV2DurableProducer = input.forecastV2Producer
+    ? createForecastV2DurableProducerV1(input.forecastV2Producer)
+    : null;
 
   for (let index = 0; index < input.n; index += 1) {
     let snapshot;
@@ -995,6 +1015,19 @@ export async function runPollPaperCycles(
       newId: input.newId,
       informationSufficiencyAuthority,
       informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
+      forecastRuntimeInput: (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined,
+    });
+    await forecastV2DurableProducer?.processCycle({
+      organizationId: input.context.organizationId,
+      runId: input.forecastV2Producer!.runId,
+      cycleId: snapshot.cycleId,
+      pitAnchor: snapshot.evaluatedAt,
+      bars: snapshot.bars,
+      sequence: index,
+      outcome:
+        result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
+          ? result.evaluation.forecastRuntimeOutcome
+          : null,
     });
 
     results.push(result);

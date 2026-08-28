@@ -26,8 +26,15 @@ import {
 import { formatEpistemicScore } from "@/lib/trader/intelligence/calibration/brier-score";
 import type { CalibrationSnapshotRecord } from "@/lib/trader/intelligence/calibration/calibration.types";
 import type { ForecastOutcomeRecord } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
+import {
+  requireForecastV2CalibrationObservation,
+  type ForecastV2CalibrationObservation,
+} from "@/lib/trader/intelligence/calibration/calibration-scorer";
 import type { OutcomeProvenance } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  canonicalizeSemanticJsonString,
+  computeSemanticSha256Hex,
+} from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 export const KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION =
   "waia.trader.knowledge_confidence_update_record.v1" as const;
@@ -203,6 +210,89 @@ export function computeKnowledgeConfidenceUpdate(input: {
     ...draft,
     contentDigest: computeKnowledgeConfidenceUpdateContentDigest(draft),
   };
+}
+
+export function computeForecastV2EvidenceOnlyKnowledgeUpdate(input: {
+  organizationId: string;
+  futureRunId: string;
+  futureCycleId: string;
+  futureCyclePitAnchor: string;
+  priorMachineRecommendedConfidence: string;
+  calibrationObservation: ForecastV2CalibrationObservation;
+  provenance: OutcomeProvenance;
+  sequence: number;
+}): KnowledgeConfidenceUpdateRecord {
+  const observation = requireForecastV2CalibrationObservation(input.calibrationObservation);
+  if (
+    observation.organizationId !== input.organizationId ||
+    !observation.scoringEligible ||
+    observation.capitalAuthority !== "NONE"
+  ) {
+    throw new Error("forecast v2 knowledge update identity mismatch");
+  }
+  const visibleAtMs = Date.parse(input.futureCyclePitAnchor);
+  const resolvedAtMs = Date.parse(observation.resolvedAt);
+  if (!Number.isFinite(visibleAtMs) || !Number.isFinite(resolvedAtMs) || visibleAtMs <= resolvedAtMs) {
+    throw new Error("forecast v2 knowledge update must be future-cycle only");
+  }
+  const prior = formatEpistemicScore(input.priorMachineRecommendedConfidence);
+  const id = deriveDeterministicUuidV4(
+    `${KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION}|${input.organizationId}|${observation.knowledgeEdgeId}|FORECAST_V2_EVIDENCE_ONLY|${input.sequence}`,
+  );
+  const idempotencyKey = [
+    KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION,
+    input.organizationId,
+    observation.knowledgeEdgeId,
+    "FORECAST_V2_EVIDENCE_ONLY",
+    String(input.sequence),
+  ].join("|");
+  const base: Omit<KnowledgeConfidenceUpdateRecord, "contentDigest"> = {
+    id,
+    organizationId: input.organizationId,
+    runId: input.futureRunId,
+    cycleId: input.futureCycleId,
+    symbol: observation.symbol,
+    knowledgeEdgeId: observation.knowledgeEdgeId,
+    updateKind: "UPDATE",
+    updateModelVersion: `${KNOWLEDGE_CONFIDENCE_UPDATE_MODEL_VERSION}.forecast-v2-evidence-only`,
+    priorMachineRecommendedConfidence: prior,
+    machineRecommendedConfidence: prior,
+    machineRecommendedDelta: "0.0000",
+    ...buildAuthorityFields(KNOWLEDGE_CONFIDENCE_VALUE_CLASS.machineRecommendedBoundedDelta),
+    issuedAt: new Date(observation.anchorClosedBarEpochMs).toISOString(),
+    eligibleResolutionAt: observation.resolvedAt,
+    resolvedAt: observation.resolvedAt,
+    pitEvidenceBoundary: observation.pitEvidenceBoundary,
+    outcomeClass: "FORECAST_V2_EVIDENCE_ONLY",
+    score: observation.normalizedBrierScore,
+    sourceRecordIdsJson: canonicalizeSemanticJsonString({
+      forecast_runtime_authority_content_digest_hex:
+        observation.forecastRuntimeAuthorityContentDigestHex,
+      forecast_content_digest_hex: observation.terminalForecastContentDigestHex,
+      forecast_outcome_content_digest_hex: observation.observedOutcomeDigestHex,
+      calibration_observation_content_digest: observation.contentDigest,
+      predictive_package_content_digest_hex: observation.predictivePackageContentDigestHex,
+      terminal_target_definition_digest_hex: observation.terminalTargetDefinitionDigestHex,
+      pit_measurement_identity_digest_hex: observation.pitMeasurementIdentityDigestHex,
+      knowledge_edge_id: observation.knowledgeEdgeId,
+      knowledge_content_digest_hex: observation.knowledgeContentDigestHex,
+      visible_from_cycle_pit_anchor: input.futureCyclePitAnchor,
+      feedback_policy: "EVIDENCE_ONLY_ZERO_DELTA",
+      authority_class: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.authorityClass,
+      operator_disposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.operatorDisposition,
+      capital_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.capitalAuthority,
+      strategy_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.strategyAuthority,
+      trade_eligibility_authority:
+        WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.tradeEligibilityAuthority,
+      guardian_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.guardianAuthority,
+    }),
+    idempotencyKey,
+    provenance: input.provenance,
+    terminalReason: "FORECAST_V2_EVIDENCE_ONLY_ZERO_DELTA",
+    schemaVersion: KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION,
+  };
+  const draft = { ...base, contentDigest: "" };
+  return { ...draft, contentDigest: computeKnowledgeConfidenceUpdateContentDigest(draft) };
 }
 
 export function computeKnowledgeConfidenceDecay(input: {
