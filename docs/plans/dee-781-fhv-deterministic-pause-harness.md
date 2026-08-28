@@ -19,7 +19,7 @@ Add an explicit hermetic-test-only pause-cycle control from `runFhvRehearsalCamp
 
 - The control is accepted only under `NODE_ENV=test`; any non-test use fails closed.
 - No test, assertion, replay cycle, deadline, checkpoint, or evidence verification is skipped.
-- The timeout, cross-process negative and incremental-resume guard tests pause deterministically after frontier progress; they retain resumed replay timeout, identity/tamper rejection, canvas-restore rejection and zero-replay restart behavior.
+- The timeout and cross-process negative tests pause deterministically after frontier progress; they retain resumed replay timeout, identity/tamper rejection and zero-replay restart behavior.
 - No trading, scientific, retention, holdout, live, execution, or capital semantics change.
 
 ## Validation
