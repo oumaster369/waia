@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-790",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T2",
   "humanGatePolicy": "none",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-792",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Replace the authoritative-run-chain test's external timing-race pause with the existing default-off deterministic test-only cycle boundary while preserving all assertions.",
       "dependencies": [],
@@ -21,11 +21,15 @@
       "humanGate": {"status": "none", "evidence": "Test-only deterministic remediation; no production behavior or assertion change."},
       "expectedAcceptanceEvidence": ["No external polling/pause request remains; parity, digest, gap, duplicate and evidence-health assertions remain."],
       "expectedTests": ["focused five-file FHV deterministic pause suite"],
+      "actualFiles": ["tests/unit/fhv-authoritative-run-chain.test.ts"],
+      "integratedCommits": ["e4495ffcb477db1acb8906e0530ab7a9ccf3cba7"],
+      "acceptanceEvidence": ["External polling/pause request removed; deterministic test-only cycle boundary used; protected assertions preserved."],
+      "tests": ["Focused five-file FHV suite: 5 files / 14 tests PASS."],
       "execution": {"wave": 1, "mode": "serialized"}
     },
     {
       "issue": "DEE-791",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Add bounded source-level proof and close focused/full-suite evidence for the fourth consumer.",
       "dependencies": ["DEE-792"],
@@ -35,14 +39,31 @@
       "humanGate": {"status": "none", "evidence": "Test-only proof; no production behavior or assertion change."},
       "expectedAcceptanceEvidence": ["Proof rejects restored external timing and confirms deterministic boundary plus protected assertions."],
       "expectedTests": ["bash scripts/github/test-dee-790-authoritative-run-chain-proof.sh", "literal fresh-migrated full SQLite suite"],
+      "actualFiles": ["scripts/github/test-dee-790-authoritative-run-chain-proof.sh"],
+      "integratedCommits": ["6a6b97aea7cffcadceb80e458c3ca480114d68b3"],
+      "acceptanceEvidence": ["Bounded proof rejects both external timing surfaces and requires deterministic boundary plus protected parity/evidence assertions."],
+      "tests": ["Proof script PASS.", "Focused five-file FHV suite: 5 files / 14 tests PASS; full fresh SQLite pending frozen-head execution."],
       "execution": {"wave": 2, "mode": "serialized"}
     }
   ],
   "deferredChildren": [],
   "integrationEvidence": {
-    "admissionEvidence": {
+    "preImplementationAdmission": {
       "status": "pass",
+      "manifestDigest": "49bc30bb669081682a4b85b79dbd66e42da1c56f2f836a2fbe67c7f84bae625d",
+      "manifestCommit": "7103288d2adf51f2eeca604f7461972397d71547",
+      "manifestPath": "docs/plans/dee-790-authoritative-run-chain-pause.integration-train.json",
       "reviewer": "WAIA AI-TRADER Program Controller under explicit test-quality authorization"
-    }
+    },
+    "admissionReviews": [
+      {"issue": "DEE-792", "status": "pass", "reviewedCommits": ["e4495ffcb477db1acb8906e0530ab7a9ccf3cba7"], "reviewedFiles": ["tests/unit/fhv-authoritative-run-chain.test.ts"]},
+      {"issue": "DEE-791", "status": "pass", "reviewedCommits": ["6a6b97aea7cffcadceb80e458c3ca480114d68b3"], "reviewedFiles": ["scripts/github/test-dee-790-authoritative-run-chain-proof.sh"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-792", "status": "pass", "commands": ["focused five-file FHV deterministic pause suite: 14/14 PASS"]},
+      {"afterIssue": "DEE-791", "status": "pass", "commands": ["proof script PASS", "focused five-file FHV deterministic pause suite: 14/14 PASS"]}
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   }
 }
