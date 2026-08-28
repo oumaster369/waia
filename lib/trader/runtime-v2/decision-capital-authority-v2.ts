@@ -26,6 +26,21 @@ export type DecisionCapitalRequestV2 = Readonly<{
   proposal: DecisionCapitalProposalV2;
 }>;
 
+/**
+ * Mode- and StrategySignal-independent economic input. Keeping execution mode and
+ * tactical signal identity out of this type makes paper/live parity structural,
+ * rather than a convention individual Decision implementations can violate.
+ */
+export type DecisionQualificationRequestV2 = Readonly<{
+  organizationId: string;
+  accountId: string;
+  cycleId: string;
+  symbol: string;
+  referencePrice: string;
+  forecastOutcome: Extract<ForecastRuntimeOutcomeV2, { status: "FORECAST_AUTHORIZED" }>;
+  proposal: Readonly<Pick<DecisionCapitalProposalV2, "action" | "quantity">>;
+}>;
+
 export type DecisionAuthorityV2 = Readonly<{
   decisionId: string;
   semanticDigestHex: string;
@@ -79,8 +94,8 @@ export type ExecutionStageOutcomeV2 = Readonly<{
 }>;
 
 export type CanonicalDecisionCapitalAuthorityV2Deps = Readonly<{
-  decide(request: DecisionCapitalRequestV2 & { forecastOutcome: Extract<ForecastRuntimeOutcomeV2, { status: "FORECAST_AUTHORIZED" }> }): Promise<DecisionStageOutcomeV2>;
-  assessRisk(input: Readonly<{ request: DecisionCapitalRequestV2; decision: DecisionAuthorityV2 }>): Promise<RiskStageOutcomeV2>;
+  decide(request: DecisionQualificationRequestV2): Promise<DecisionStageOutcomeV2>;
+  assessRisk(input: Readonly<{ request: DecisionQualificationRequestV2; decision: DecisionAuthorityV2 }>): Promise<RiskStageOutcomeV2>;
   execute(input: Readonly<{
     request: DecisionCapitalRequestV2;
     decision: DecisionAuthorityV2;
@@ -154,7 +169,19 @@ export async function runDecisionCapitalAuthorityV2(
   requirePositive(request.referencePrice, "REFERENCE_PRICE");
   requirePositive(request.proposal.quantity, "PROPOSED_QUANTITY");
 
-  const decisionOutcome = await deps.decide({ ...request, forecastOutcome });
+  const qualificationRequest: DecisionQualificationRequestV2 = Object.freeze({
+    organizationId: request.organizationId,
+    accountId: request.accountId,
+    cycleId: request.cycleId,
+    symbol: request.symbol,
+    referencePrice: request.referencePrice,
+    forecastOutcome,
+    proposal: Object.freeze({
+      action: request.proposal.action,
+      quantity: request.proposal.quantity,
+    }),
+  });
+  const decisionOutcome = await deps.decide(qualificationRequest);
   if (decisionOutcome.status === "NO_TRADE") {
     requireDigest(decisionOutcome.decisionContentDigestHex, "DECISION_CONTENT_DIGEST");
     if (
@@ -191,7 +218,7 @@ export async function runDecisionCapitalAuthorityV2(
   }
   requirePositive(decision.qualifiedQuantity, "DECISION_QUALIFIED_QUANTITY");
 
-  const risk = await deps.assessRisk({ request, decision });
+  const risk = await deps.assessRisk({ request: qualificationRequest, decision });
   if (risk.decisionContentDigestHex !== decision.contentDigestHex) {
     throw new DecisionCapitalAuthorityV2ViolationError("RISK_DECISION_BINDING_MISMATCH");
   }
