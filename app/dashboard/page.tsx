@@ -54,7 +54,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="bg-background flex min-h-screen w-full flex-col md:flex-row">
-      <DashboardSidebar identityLabel={model.identityLabel} traderEntryHref={traderEntryHref} />
+      <DashboardSidebar
+        identityLabel={model.identityLabel}
+        traderEntryHref={traderEntryHref}
+        twinActive
+      />
       <DashboardShell model={model} />
     </div>
   );

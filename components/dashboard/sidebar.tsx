@@ -6,12 +6,14 @@ export type DashboardSidebarProps = {
   identityLabel: string;
   traderEntryHref?: string | null;
   breathActive?: boolean;
+  twinActive?: boolean;
 };
 
 export function DashboardSidebar({
   identityLabel,
   traderEntryHref,
   breathActive = false,
+  twinActive = false,
 }: DashboardSidebarProps) {
   return (
     <aside
@@ -36,6 +38,14 @@ export function DashboardSidebar({
           {identityLabel}
         </p>
       </div>
+      <Link
+        data-testid="dashboard-sidebar-twin-link"
+        href="/dashboard"
+        aria-current={twinActive ? "page" : undefined}
+        className="text-sm font-medium underline-offset-4 hover:underline"
+      >
+        MY TWIN
+      </Link>
       {traderEntryHref ? (
         <a
           data-testid="dashboard-sidebar-trader-link"

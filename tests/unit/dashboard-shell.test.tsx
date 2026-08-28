@@ -59,6 +59,8 @@ describe("DashboardSidebar", () => {
       "/dashboard/breath",
     );
     expect(screen.getByTestId("dashboard-sidebar-breath-link")).toHaveTextContent("BREATH OF WAIA");
+    expect(screen.getByTestId("dashboard-sidebar-twin-link")).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByTestId("dashboard-sidebar-twin-link")).toHaveTextContent("MY TWIN");
     expect(screen.getByTestId("dashboard-sidebar-identity")).toHaveTextContent("Alex");
     const signOut = screen.getByTestId("dashboard-sidebar-sign-out");
     expect(signOut).toHaveAttribute("type", "button");
@@ -68,6 +70,29 @@ describe("DashboardSidebar", () => {
     render(<DashboardSidebar identityLabel="x" />);
     expect(screen.queryByRole("navigation", { name: /Twin/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/^Dashboard$/i)).not.toBeInTheDocument();
+  });
+
+  it("marks MY TWIN as the current workspace when requested", () => {
+    render(<DashboardSidebar identityLabel="Alex" twinActive />);
+
+    expect(screen.getByTestId("dashboard-sidebar-twin-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("dashboard-sidebar-breath-link")).not.toHaveAttribute("aria-current");
+  });
+
+  it("places MY TWIN immediately above AI-TRADER", () => {
+    render(
+      <DashboardSidebar identityLabel="Alex" traderEntryHref="https://trader.waia.life/trader" />,
+    );
+
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      "BREATH OF WAIA",
+      "MY TWIN",
+      "AI-TRADER",
+    ]);
   });
 });
 
