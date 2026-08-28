@@ -5,9 +5,16 @@ parentIssue: DEE-601
 branch: dee-633-forecast-knowledge-feedback
 riskTier: T3
 prPolicy: one-integration-pr
+executionSurfaces: [local, github-pr-ci, postgres-ci]
+requiredValidation: [focused-negative-tests, typecheck, production-build, one-full-fresh-migrated-sqlite-suite, independent-exact-head-review, authoritative-postgres-and-dee-653]
+approvalGates: [ratified-dee-633-contract, ratified-30-day-pit-retention, exact-head-independent-review, dee-653-exact-head-admission]
 includedIssues: [DEE-633, DEE-759, DEE-758]
 authoritativeBase: bb5f5d3645cd907a416bc7eee3714c5c3f59d57c
 state: admitted
+provenance:
+  createdFrom: ratified-dee-633-build
+  authoritativeBase: bb5f5d3645cd907a416bc7eee3714c5c3f59d57c
+  admissionAudit: "Fresh origin/main, Linear duplicate/ownership/dependency audit, frozen Integration Train admission, and Human-ratified production/retention expansions preceded semantic implementation."
 ---
 
 # DEE-633 — Forecast V2 outcome → calibration → knowledge feedback
@@ -41,3 +48,11 @@ Extend the existing append-only Forecast V2 outcome and calibration tables with 
 ## Validation
 
 Focused/negative known-answer, cross-bind, duplicate closure, same-cycle rejection, future-cycle visibility, decay and replay suites run continuously. After semantic completion: one literal fresh migrated SQLite full suite, exact-head independent review P1=0/P2=0, existing WP21/Forecast PostgreSQL roundtrip, authoritative CI and DEE-653 before squash merge.
+
+## Acceptance
+
+- Issuance, objective outcome, calibration, Knowledge evidence, package, target, symbol, horizon and PIT identities cross-bind exactly and fail closed.
+- Real backtest and paper callers persist and replay issuance/terminal closure deterministically; missing, early, conflicting or forged evidence never scores.
+- Proper scoring uses the frozen seven-class convention and emits only future-cycle, evidence-only zero-delta Knowledge updates with no Decision, Risk, execution or capital authority.
+- Forecast-V2 PIT evidence remains append-only and tenant-scoped; the ratified audited purge retains the exact 30-day boundary and every bar required by an unresolved bundle.
+- Focused negative tests, typecheck/build, fresh PostgreSQL roundtrip, one literal fresh-migrated SQLite suite, exact-head independent review, authoritative CI and DEE-653 pass before squash merge.
