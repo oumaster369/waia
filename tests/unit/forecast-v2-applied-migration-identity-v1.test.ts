@@ -32,7 +32,7 @@ describe("Forecast V2 applied migration identity", () => {
     expect(identity.bindings.some((b) => b.tag.startsWith("0146_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0147_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0148_"))).toBe(true);
-    // Forecast V2 remains 0148; later Treasury/MI migrations are extras, not V2 identity.
+    // Forecast V2 remains 0148; later Treasury/MI/Admin migrations are extras, not V2 identity.
     expect(identity.extraAppliedBeyondExpectedMax.map((b) => b.tag)).toEqual([
       "0149_treasury_transparency_ledger_foundation",
       "0150_treasury_transparency_ledger_rls",
@@ -59,6 +59,8 @@ describe("Forecast V2 applied migration identity", () => {
       "0171_treasury_contribution_payment_intents",
       "0172_treasury_contribution_payment_intents_rls",
       "0173_dee633_forecast_v2_feedback_payload",
+      "0174_waia_admin_hr",
+      "0175_waia_admin_hr_rls",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
