@@ -1,4 +1,5 @@
 import { ContributionIntentForm } from "@/components/public/contribution-intent-form";
+import { AnonymousSupportPanel } from "@/components/public/anonymous-support-panel";
 import {
   formatPublicDateTime,
   formatPublicMoney,
@@ -39,34 +40,7 @@ export function DashboardBreathWorkspace({
         </p>
       </header>
 
-      <section className={darkPanel} data-testid="dashboard-breath-anonymous">
-        <p className="text-xs font-semibold tracking-[0.14em] text-[#c9a96e] uppercase">
-          Anonymous support
-        </p>
-        {support ? (
-          <div className="mt-4 space-y-4">
-            <p className="max-w-3xl text-sm leading-relaxed text-[rgba(210,205,195,0.88)]">
-              Send any amount of USDT on the TRON (TRC-20) network directly to the official address.
-              After Human verification it is included under “Anonymous Patrons”; no wallet identity
-              is published.
-            </p>
-            <p className="font-mono text-sm break-all text-[#f0e4ce]">{support.address}</p>
-            <a
-              href={support.explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex text-sm text-[#d4b87a] underline underline-offset-4"
-            >
-              Verify the official address in TronScan →
-            </a>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-[rgba(210,205,195,0.78)]">
-            The governed support address is not available. Do not send funds to an address from
-            another source.
-          </p>
-        )}
-      </section>
+      <AnonymousSupportPanel support={support} testId="dashboard-breath-anonymous" />
 
       <section className={darkPanel} data-testid="dashboard-breath-named">
         <p className="text-xs font-semibold tracking-[0.14em] text-[#c9a96e] uppercase">

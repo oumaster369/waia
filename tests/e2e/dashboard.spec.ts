@@ -56,7 +56,13 @@ test.describe("/dashboard smoke", () => {
     await expect(page).toHaveURL(/\/dashboard\/breath$/);
     await expect(page.getByTestId("dashboard-breath-workspace")).toBeVisible();
     await expect(page.getByTestId("dashboard-breath-anonymous")).toBeVisible();
+    await expect(page.getByTestId("dashboard-breath-anonymous-address")).toHaveText(
+      "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD",
+    );
     await expect(page.getByTestId("dashboard-breath-named")).toBeVisible();
+    await expect(page.getByTestId("contribution-intent-form")).toBeVisible();
+    await expect(page.getByLabel(/Contribution amount.*USDT/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Prepare exact payment" })).toBeVisible();
     await expect(page.getByTestId("dashboard-breath-history")).toBeVisible();
   });
 

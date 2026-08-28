@@ -42,6 +42,7 @@ export default defineConfig({
       `NEXT_PUBLIC_SUPABASE_ANON_KEY=`,
       `WAIA_PRIMARY_HOST=127.0.0.1`,
       `WAIA_TRADER_HOST=trader.localhost`,
+      `WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS=TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD`,
       `pnpm build`,
       `&&`,
       `PORT=${PLAYWRIGHT_PORT}`,
@@ -53,6 +54,7 @@ export default defineConfig({
       `NEXT_PUBLIC_SUPABASE_ANON_KEY=`,
       `WAIA_PRIMARY_HOST=127.0.0.1`,
       `WAIA_TRADER_HOST=trader.localhost`,
+      `WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS=TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD`,
       `pnpm start`,
     ].join(" "),
     url: BASE_URL,
@@ -69,6 +71,7 @@ export default defineConfig({
       NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${PLAYWRIGHT_PORT}`,
       WAIA_PRIMARY_HOST: "127.0.0.1",
       WAIA_TRADER_HOST: "trader.localhost",
+      WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS: "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD",
       NEXT_PUBLIC_TRADER_URL: `http://trader.localhost:${PLAYWRIGHT_PORT}`,
       /** Deterministic Twin dialogue stub — never inherit live OpenAI keys from `.env.local`. */
       WAIA_AI_PROVIDER: "fake",

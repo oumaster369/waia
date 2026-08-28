@@ -100,6 +100,9 @@ describe("DEE-606 WP-6 server/public boundary", () => {
     const wrangler = readFileSync(path.join(root, "wrangler.jsonc"), "utf8");
     expect(wrangler).toContain('"binding": "TREASURY_EVIDENCE_R2"');
     expect(wrangler).toContain('"bucket_name": "waia-treasury-evidence-prod"');
+    expect(wrangler).toContain(
+      '"WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS": "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD"',
+    );
     expect(wrangler).not.toMatch(/r2\.dev|public_bucket|custom_domain/i);
     expect(wrangler).not.toContain("TREASURY_WATCHER_ENABLED");
     expect(loadTreasuryWatcherConfig({}).enabled).toBe(false);

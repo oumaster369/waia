@@ -30,7 +30,13 @@ describe("Dashboard Breath of WAIA workspace", () => {
       />,
     );
 
-    expect(screen.getByTestId("dashboard-breath-anonymous")).toHaveTextContent("Anonymous Patrons");
+    const anonymousSupport = screen.getByTestId("dashboard-breath-anonymous");
+    expect(anonymousSupport).toHaveTextContent("Anonymous support");
+    expect(anonymousSupport).toHaveTextContent("USDT · TRON (TRC-20)");
+    expect(anonymousSupport).toHaveTextContent("Anonymous Patrons");
+    expect(screen.getByTestId("dashboard-breath-anonymous-address")).toHaveTextContent(
+      "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD",
+    );
     expect(screen.getByTestId("contribution-intent-form")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-breath-history")).toHaveTextContent("2,006 USD");
     expect(screen.getByTestId("dashboard-breath-history")).toHaveTextContent("100%");
