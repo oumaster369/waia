@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-793",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Replay two independently reviewed, non-overlapping source trains as serialized children under one governance-valid admission-first replacement PR.",
+  "includedChildren": [
+    {
+      "issue": "DEE-794",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Replay the reviewed DEE-781 deterministic default-off test-only pause boundary, three legacy consumers and retained source-train evidence byte-identically.",
+      "dependencies": ["DEE-755"],
+      "dependencyEvidence": ["DEE-755 is merged on the exact base; DEE-781 source head b050f176 received full-suite and independent review evidence."],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-781-fhv-deterministic-pause-harness.integration-train.json",
+        "docs/plans/dee-781-fhv-deterministic-pause-harness.md",
+        "lib/trader/observability/fhv-rehearsal-campaign-runner.ts",
+        "tests/unit/fhv-cross-process-resume-negative.test.ts",
+        "tests/unit/fhv-incremental-resume-guards.test.ts",
+        "tests/unit/fhv-rehearsal-campaign-runner.test.ts",
+        "tests/unit/fhv-resume-timeout.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly authorized the governance-valid byte-identical replacement train."},
+      "expectedAcceptanceEvidence": ["Patch and tree equal reviewed DEE-781 source; default-off test-only boundary and all protected assertions remain."],
+      "expectedTests": ["focused deterministic pause/resume/default-off/fail-closed suite", "exact patch/tree equivalence proof"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-795",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Replay the reviewed DEE-790 fourth authoritative-run-chain consumer and retained source-train evidence byte-identically.",
+      "dependencies": ["DEE-794"],
+      "dependencyEvidence": ["DEE-794 establishes the only default-off test boundary consumed by this serialized proof-only replay."],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-790-authoritative-run-chain-pause.integration-train.json",
+        "docs/plans/dee-790-authoritative-run-chain-pause.md",
+        "scripts/github/test-dee-790-authoritative-run-chain-proof.sh",
+        "tests/unit/fhv-authoritative-run-chain.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly authorized the governance-valid byte-identical replacement train."},
+      "expectedAcceptanceEvidence": ["Patch and combined tree equal reviewed DEE-790 source; every parity/digest/gap/duplicate/evidence assertion remains."],
+      "expectedTests": ["focused five-file deterministic FHV suite", "bounded source proof", "literal fresh-migrated full SQLite suite"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "WAIA AI-TRADER Program Controller under explicit replacement authorization"},
+    "authoritativeBase": "0fefa5f71d1cf38e065419781c1e9971804487c2",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-793 is the sole replacement train; DEE-781/790 source work is retained only as byte-equivalence provenance, and PR #514 will not merge."}
+  },
+  "crossCuttingInvariants": [
+    "Production FHV behavior is unchanged when the test-only input is omitted.",
+    "Hermetic pause control fails closed outside NODE_ENV=test.",
+    "No assertion, replay cycle, evidence check or required gate is skipped.",
+    "No scientific, security, holdout, live, execution or capital semantic changes."
+  ],
+  "rollbackStrategy": "One squash revert removes the replacement train without durable-data effects.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-793-fhv-governance-replacement.integration-train.json DEE-793 admission",
+    "focused": ["affected FHV pause/resume/parity tests", "source proof", "pnpm typecheck", "pnpm lint", "pnpm build"],
+    "fullSuite": "one literal fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one replacement PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
