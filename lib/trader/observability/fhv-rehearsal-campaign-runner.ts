@@ -1196,7 +1196,26 @@ export async function runFhvRehearsalCampaign(input: {
   organizationId: string;
   /** Hermetic tests may inject a monotonic deadline override. */
   monotonicDeadline?: FhvRehearsalMonotonicDeadline;
+  /** Hermetic tests only: deterministically request pause on this observed cycle. */
+  testOnlyPauseAfterCycles?: number;
 }): Promise<FhvRehearsalCampaignResult> {
+  if (input.testOnlyPauseAfterCycles !== undefined) {
+    if (process.env.NODE_ENV !== "test") {
+      throw new FhvRehearsalCampaignError(
+        "REHEARSAL_TEST_ONLY_PAUSE_FORBIDDEN",
+        "testOnlyPauseAfterCycles is available only under NODE_ENV=test.",
+      );
+    }
+    if (
+      !Number.isInteger(input.testOnlyPauseAfterCycles) ||
+      input.testOnlyPauseAfterCycles <= 0
+    ) {
+      throw new FhvRehearsalCampaignError(
+        "REHEARSAL_TEST_ONLY_PAUSE_INVALID",
+        "testOnlyPauseAfterCycles must be a positive integer.",
+      );
+    }
+  }
   const manifest = assertFhvCampaignRuntimeIdentity(input);
   mkdirSync(resolveFhvRehearsalEvidenceDir(input.runRoot), { recursive: true });
 
@@ -1291,6 +1310,7 @@ export async function runFhvRehearsalCampaign(input: {
       manifest,
       targetSha: input.targetSha,
       monotonicDeadline: input.monotonicDeadline,
+      parityPauseAfterCycles: input.testOnlyPauseAfterCycles,
     });
   } catch (error) {
     if (
