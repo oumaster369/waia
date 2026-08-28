@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ContributionIntentForm } from "@/components/public/contribution-intent-form";
 import { PublicPageShell, publicPanelClass } from "@/components/public/public-page-shell";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { readPublishedSupportAddress } from "@/lib/landing/support-address";
 import { readProfileForSessionUser } from "@/lib/waia-core/profiles/runtime";
-import { isValidTronAddress, tronScanAddressUrl } from "@/lib/treasury-admin/explorer";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +13,10 @@ export const metadata: Metadata = {
   description: "The official public crypto support channel for Breath of WAIA.",
 };
 
-function publishedSupportAddress(): string | null {
-  const value = process.env.WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS?.trim() ?? "";
-  return isValidTronAddress(value) ? value : null;
-}
-
 export default async function SupportBreathPage() {
-  const address = publishedSupportAddress();
-  const explorerUrl = address ? tronScanAddressUrl(address) : null;
+  const support = readPublishedSupportAddress();
+  const address = support?.address ?? null;
+  const explorerUrl = support?.explorerUrl ?? null;
   const userId = await getOptionalSessionUserId();
   const profile = userId ? await readProfileForSessionUser(userId) : null;
 
@@ -78,12 +73,24 @@ export default async function SupportBreathPage() {
         </p>
         <div className="border-waia-divider mt-6 border-t pt-6">
           {profile ? (
-            <ContributionIntentForm displayName={profile.displayName} />
+            <div className="space-y-3">
+              <p className="text-waia-fg-muted text-sm">
+                You are signed in as {profile.displayName}. Open Breath of WAIA in your private
+                workspace to prepare the exact payment and see your confirmed contribution history.
+              </p>
+              <Link
+                className="text-waia-accent-warm underline underline-offset-4"
+                href="/dashboard/breath"
+              >
+                Open Breath of WAIA in my dashboard →
+              </Link>
+            </div>
           ) : (
             <div className="space-y-3">
               <p className="text-waia-fg-muted text-sm">
                 Sign in with your WAIA account to prepare a named contribution. Anonymous support
-                remains available above.
+                remains available above. After sign-in, use the gold BREATH OF WAIA button in your
+                dashboard.
               </p>
               <Link
                 className="text-waia-accent-warm underline underline-offset-4"

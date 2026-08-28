@@ -5,9 +5,8 @@ const HERO_MOBILE = "/brand/head_mobile_1.webp";
 
 /**
  * Brand art (existing assets — no new artwork) + English “What is WAIA?” definition.
- *
- * Human visual-rhythm corrective: normal document flow only.
- * No negative margin under the hero image — ~40–48px clear air on large displays.
+ * The definition lives inside the artwork's lower field so the framed hero reads
+ * as one composition instead of an image followed by a detached caption.
  */
 export function HeroBlock() {
   const copy = HOMEPAGE_COPY.hero;
@@ -33,18 +32,21 @@ export function HeroBlock() {
             draggable={false}
           />
         </picture>
-      </div>
-
-      <div
-        data-testid="landing-hero-definition"
-        className="mx-auto flex w-full max-w-4xl flex-col items-center px-6 pt-8 pb-9 text-center sm:px-10 sm:pt-10 sm:pb-11"
-      >
-        <p
-          data-testid="landing-hero-definition-text"
-          className="font-waia-serif text-[clamp(1.35rem,3.2vw,1.85rem)] leading-snug font-medium text-balance text-[#e8dcc4]"
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[56%] bg-[linear-gradient(180deg,transparent_0%,rgba(3,8,19,0.28)_30%,rgba(3,8,19,0.72)_68%,rgba(3,8,19,0.92)_100%)]"
+        />
+        <div
+          data-testid="landing-hero-definition"
+          className="absolute inset-x-0 bottom-[4%] z-10 mx-auto flex w-full flex-col items-center px-5 text-center sm:bottom-[calc(7%+5rem)] sm:px-10 md:bottom-[5.5%]"
         >
-          {copy.definition}
-        </p>
+          <p
+            data-testid="landing-hero-definition-text"
+            className="font-waia-serif max-w-5xl text-[clamp(1.125rem,2.8vw,1.25rem)] leading-[1.45] font-semibold tracking-[-0.01em] text-balance text-[#f0e4ce] [text-shadow:0_2px_20px_rgba(0,0,0,0.96)] sm:text-[clamp(1.125rem,2.8vw,2.125rem)] md:text-[clamp(1.25rem,2.25vw,1.875rem)]"
+          >
+            {copy.definition}
+          </p>
+        </div>
       </div>
     </section>
   );

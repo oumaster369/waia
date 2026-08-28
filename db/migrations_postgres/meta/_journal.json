@@ -1219,6 +1219,20 @@
       "when": 1780000000173,
       "tag": "0173_dee633_forecast_v2_feedback_payload",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1780000000174,
+      "tag": "0174_waia_admin_hr",
+      "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "7",
+      "when": 1780000000175,
+      "tag": "0175_waia_admin_hr_rls",
+      "breakpoints": true
     }
   ]
 }

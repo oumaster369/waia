@@ -12,6 +12,24 @@ export const waiaModuleEnum = ["twin", "trader", "3p", "marketplace"] as const;
 export const subscriptionStatusEnum = ["active", "inactive"] as const;
 export const auditActorTypeEnum = ["user", "admin", "agent", "service", "system"] as const;
 
+/** DEE-747 shared WAIA Admin module grants and HR funnel. */
+export const waiaAdminGrantRoleEnum = ["SUPER_ADMIN", "FINANCE_ADMIN", "HR_ADMIN"] as const;
+export const hrApplicationStatusEnum = [
+  "NEW_APPLICATION",
+  "INTERVIEW",
+  "CONTRACT",
+  "WORK",
+  "PAYMENT",
+  "TERMINATION",
+] as const;
+export const hrApplicationTargetTypeEnum = ["TASK", "MILESTONE", "PROJECT", "GENERAL"] as const;
+export const hrApplicationEventTypeEnum = [
+  "CREATED",
+  "STATUS_CHANGED",
+  "ASSIGNEE_CHANGED",
+  "COMMENT_ADDED",
+] as const;
+
 /** WAIA Core payment event types (AT-E12 S1 / DEE-312). */
 export const paymentEventTypeEnum = ["DETECTED", "CONFIRMED", "FAILED"] as const;
 

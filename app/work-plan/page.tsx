@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 
+import { TeamApplicationForm } from "@/components/hr/team-application-form";
 import { PublicPageShell, publicPanelClass } from "@/components/public/public-page-shell";
+import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { readPublicWorkPlanForView } from "@/lib/landing/public-data";
+import { readProfileForSessionUser } from "@/lib/waia-core/profiles/runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +14,11 @@ export const metadata: Metadata = {
 };
 
 export default async function WorkPlanPage() {
-  const plan = await readPublicWorkPlanForView();
+  const [plan, userId] = await Promise.all([
+    readPublicWorkPlanForView(),
+    getOptionalSessionUserId(),
+  ]);
+  const profile = userId ? await readProfileForSessionUser(userId) : null;
   const unavailable = plan.state === "unavailable";
 
   return (
@@ -92,6 +99,7 @@ export default async function WorkPlanPage() {
           ) : null}
         </>
       )}
+      <TeamApplicationForm initialName={profile?.displayName} />
     </PublicPageShell>
   );
 }

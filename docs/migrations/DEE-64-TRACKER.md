@@ -41,6 +41,13 @@ This tracker records **what shipped**, **what must not regress**, and **what rem
 
 ## Current Status
 
+**DEE-747** adds the Postgres-only shared WAIA Admin authority and HR intake/funnel in
+migrations `0174`/`0175`. `SUPER_ADMIN`, `FINANCE_ADMIN` and `HR_ADMIN` apply only to the
+shared WAIA Admin Finance/HR boundary and never grant AI-TRADER Admin access. Public team
+applications retain immutable intake facts; status, assignee and comment changes are append-only
+history. Browser roles are denied direct table access and hard deletion is blocked. Production
+apply and activation remain a separate Human checkpoint.
+
 **DEE-731** adds Postgres-only named contribution payment intents and Human-confirmed balance
 checkpoints in migrations `0171`/`0172` (after merged AI-TRADER migrations `0169`/`0170`). An authenticated
 Human receives an immutable, expiring exact USDT amount for the public WAIA TRC-20 address.

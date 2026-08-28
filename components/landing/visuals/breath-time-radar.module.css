@@ -1,0 +1,136 @@
+.frame {
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in oklch, var(--waia-color-accent-cool) 12%, transparent) 0%,
+      transparent 62%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--waia-color-field-mid) 78%, transparent),
+      color-mix(in oklch, var(--waia-color-field) 88%, transparent)
+    );
+}
+
+.radar {
+  display: block;
+  width: min(88%, 12rem);
+  height: auto;
+  overflow: visible;
+  color: var(--waia-color-accent-cool);
+}
+
+.outerRing {
+  fill: color-mix(in oklch, var(--waia-color-field-mid) 55%, transparent);
+  stroke: color-mix(in oklch, var(--waia-color-accent-cool) 38%, transparent);
+  stroke-width: 1;
+}
+
+.rangeRing,
+.axis {
+  fill: none;
+  stroke: color-mix(in oklch, var(--waia-color-accent-cool) 18%, transparent);
+  stroke-width: 0.75;
+}
+
+.axis {
+  stroke-dasharray: 2 4;
+}
+
+.hourMark {
+  stroke: color-mix(in oklch, var(--waia-color-accent-cool) 46%, transparent);
+  stroke-linecap: round;
+  stroke-width: 1.25;
+}
+
+.quarterMark {
+  stroke: color-mix(in oklch, var(--waia-color-accent-warm) 68%, transparent);
+  stroke-width: 2;
+}
+
+.hourNumber {
+  fill: color-mix(in oklch, var(--waia-color-fg-primary) 68%, transparent);
+  font-family: var(--font-waia-sans);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.sweep {
+  transform-origin: 100px 100px;
+  animation: breath-time-radar-sweep 8s linear infinite;
+  will-change: transform;
+}
+
+.beam {
+  fill: color-mix(in oklch, var(--waia-color-accent-cool) 16%, transparent);
+}
+
+.hand {
+  stroke: color-mix(in oklch, var(--waia-color-accent-cool) 78%, transparent);
+  stroke-linecap: round;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 4px color-mix(in oklch, var(--waia-color-accent-cool) 55%, transparent));
+}
+
+.arrowHead {
+  fill: color-mix(in oklch, var(--waia-color-accent-cool) 90%, transparent);
+  filter: drop-shadow(0 0 5px color-mix(in oklch, var(--waia-color-accent-cool) 52%, transparent));
+}
+
+.contact {
+  fill: var(--waia-color-accent-cool);
+  opacity: 0.08;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: breath-time-radar-contact 8s ease-out infinite;
+  animation-delay: var(--contact-delay);
+}
+
+.centerHalo {
+  fill: color-mix(in oklch, var(--waia-color-accent-cool) 16%, transparent);
+}
+
+.centerPoint {
+  fill: color-mix(in oklch, var(--waia-color-fg-primary) 88%, transparent);
+  filter: drop-shadow(0 0 6px color-mix(in oklch, var(--waia-color-accent-cool) 68%, transparent));
+}
+
+@keyframes breath-time-radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes breath-time-radar-contact {
+  0%,
+  18%,
+  100% {
+    opacity: 0.08;
+    transform: scale(0.72);
+  }
+  3% {
+    opacity: 0.95;
+    transform: scale(1.3);
+  }
+  8% {
+    opacity: 0.62;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep {
+    animation: none;
+    transform: rotate(-28deg);
+  }
+
+  .contact {
+    animation: none;
+    opacity: 0.42;
+    transform: none;
+  }
+}

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BudgetPage from "@/app/budget/page";
+import FoundationPage from "@/app/foundation/page";
 import PatronsPage from "@/app/patrons/page";
 import WorkPlanPage from "@/app/work-plan/page";
 import type { PublicWorkPlanProjection } from "@/lib/public-work-plan/types";
@@ -17,6 +18,10 @@ vi.mock("@/lib/landing/public-data", () => ({
   readPublicWorkPlanForView: readWorkPlanMock,
 }));
 
+vi.mock("@/lib/auth/session-user", () => ({
+  getOptionalSessionUserId: vi.fn().mockResolvedValue(null),
+}));
+
 const publishedTreasury: PublicTreasuryProjection = {
   schemaVersion: "waia-public-treasury/v1",
   breath: {
@@ -28,6 +33,9 @@ const publishedTreasury: PublicTreasuryProjection = {
       status: "published",
       asOf: "2026-08-23T11:00:00.000Z",
       endsAt: "2026-09-23T11:00:00.000Z",
+      currency: "USD",
+      dailyBurnMicros: "12000000",
+      hourlyBurnMicros: "500000",
     },
     annualBudgetAmountMicros: "120000000000",
     annualBudgetCurrency: "USD",
@@ -171,7 +179,8 @@ describe("public transparency pages", () => {
       "href",
       "https://linear.app/example/issue/DEE-618",
     );
-    expect(document.querySelector("form, iframe, button")).toBeNull();
+    expect(screen.getByRole("button", { name: /Send application/i })).toBeInTheDocument();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
   it("renders consented Patrons and one non-identifying private aggregate", async () => {
@@ -216,13 +225,63 @@ describe("public transparency pages", () => {
     expect(table).toHaveTextContent("Alice");
     expect(table).toHaveTextContent("20 USD");
     expect(table).toHaveTextContent("66.6666%");
-    expect(table).toHaveTextContent("Private & anonymous support");
+    expect(table).toHaveTextContent("Anonymous Patrons");
     expect(table).toHaveTextContent("10 USD");
     expect(table).toHaveTextContent("33.3333%");
     expect(screen.getByTestId("public-patrons-record")).toHaveTextContent(
       "Share shows financial participation only. It does not grant ownership, governance power or voting weight.",
     );
     expect(document.querySelector("form, iframe, button")).toBeNull();
+  });
+
+  it("publishes Adamar's approved public website as a safe external link", async () => {
+    readTreasuryMock.mockResolvedValue({
+      ...publishedTreasury,
+      patrons: {
+        status: "published",
+        totalContributedAmountMicros: "20000000",
+        currency: "USD",
+        patrons: [
+          {
+            displayName: "Adamar",
+            publicSiteUrl: null,
+            twinProfileUrl: null,
+            contributedAmountMicros: "20000000",
+            currency: "USD",
+            share: {
+              numeratorMicros: "20000000",
+              denominatorMicros: "20000000",
+              partsPerMillion: "1000000",
+            },
+          },
+        ],
+        privateSupport: null,
+        lastUpdatedAt: "2026-08-23T11:00:00.000Z",
+      },
+    } satisfies PublicTreasuryProjection);
+
+    render(await PatronsPage());
+
+    expect(screen.getByRole("link", { name: "Open link" })).toHaveAttribute(
+      "href",
+      "https://oumaster.com",
+    );
+  });
+
+  it("explains Development Fund purpose and marks DAO governance as future work", async () => {
+    readTreasuryMock.mockResolvedValue(publishedTreasury);
+
+    render(await FoundationPage());
+
+    expect(screen.getByTestId("public-foundation-purpose")).toHaveTextContent(
+      /research and projects connected to WAIA/i,
+    );
+    expect(screen.getByTestId("public-foundation-governance")).toHaveTextContent(
+      /planned direction is collegial decision-making by WAIA users through a DAO/i,
+    );
+    expect(screen.getByTestId("public-foundation-governance")).toHaveTextContent(
+      /does not exist yet/i,
+    );
   });
 
   it("keeps pending and unavailable Patron states distinct and private", async () => {

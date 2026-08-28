@@ -7,6 +7,7 @@ import {
   SectionHeading,
 } from "@/components/landing/homepage-section";
 import { BreathFundingGauge } from "@/components/landing/visuals/breath-runway-pulse";
+import { BreathTimeRadar } from "@/components/landing/visuals/breath-time-radar";
 import type { BreathMoney } from "@/lib/landing/breath-public";
 import { formatPublicDateTime } from "@/lib/landing/public-format";
 import { HOMEPAGE_COPY } from "@/lib/landing/homepage-copy";
@@ -52,6 +53,8 @@ export function BreathOfWaiaSection({
           annualBudgetAmountMicros: breath.annualBudgetAmountMicros,
           annualBudgetCurrency: breath.annualBudgetCurrency,
           runwayEndsAt: breath.runway.endsAt,
+          runwayHourlyBurnMicros: breath.runway.hourlyBurnMicros,
+          runwayCurrency: breath.runway.currency,
           lastUpdatedAt: breath.lastUpdatedAt,
         }
       : null;
@@ -85,6 +88,8 @@ export function BreathOfWaiaSection({
             unit: null,
             endsAt: publishedBreath?.runwayEndsAt ?? null,
           }}
+          hourlyBurnMicros={publishedBreath?.runwayHourlyBurnMicros ?? null}
+          runwayCurrency={publishedBreath?.runwayCurrency ?? null}
         />
 
         <BreathSupportCta
@@ -146,14 +151,7 @@ export function BreathOfWaiaSection({
               </p>
             ) : null}
           </nav>
-          <div
-            aria-hidden="true"
-            className="relative hidden min-h-44 overflow-hidden rounded-2xl border border-[rgba(150,195,205,0.15)] bg-[radial-gradient(circle_at_65%_42%,rgba(118,194,203,0.18),transparent_22%),radial-gradient(circle_at_42%_65%,rgba(201,169,110,0.12),transparent_25%)] sm:block"
-          >
-            <div className="absolute top-1/2 left-1/2 size-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(185,220,228,0.22)]" />
-            <div className="absolute top-1/2 left-1/2 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(201,169,110,0.28)] shadow-[0_0_32px_rgba(110,190,205,0.12)]" />
-            <div className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(224,232,228,0.75)] shadow-[0_0_18px_rgba(180,225,235,0.7)]" />
-          </div>
+          <BreathTimeRadar />
         </div>
       </div>
     </HomepageSection>

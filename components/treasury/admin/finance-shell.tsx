@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { WaiaAdminModuleNav } from "@/components/admin/waia-admin-module-nav";
 import { cn } from "@/lib/utils";
 import { financeHref } from "@/lib/treasury-admin/org";
 import { SidebarSignOut } from "@/components/dashboard/sidebar-sign-out";
@@ -89,49 +90,64 @@ function FinanceNav() {
   );
 }
 
-function FinanceShellInner({ children }: { children: React.ReactNode }) {
+function FinanceShellInner({
+  children,
+  moduleAccess,
+}: {
+  children: React.ReactNode;
+  moduleAccess: { finance: boolean; hr: boolean };
+}) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-8">
-      <header className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA Admin</p>
-            <h1 className="text-2xl font-medium">Finance</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              A clear view of WAIA’s money: what is available, what moved, and what is planned.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <Link
-              className="text-muted-foreground underline-offset-4 hover:underline"
-              href="/waia-admin"
-            >
-              Admin home
-            </Link>
-            <Link
-              className="text-muted-foreground underline-offset-4 hover:underline"
-              href="/dashboard"
-            >
-              User dashboard
-            </Link>
-            <div className="w-24">
-              <SidebarSignOut />
+    <div className="mx-auto grid min-h-screen max-w-7xl gap-8 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_14rem]">
+      <div className="flex min-w-0 flex-col gap-6">
+        <header className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA Admin</p>
+              <h1 className="text-2xl font-medium">Finance</h1>
+              <p className="text-muted-foreground mt-1 text-sm">
+                A clear view of WAIA’s money: what is available, what moved, and what is planned.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <Link
+                className="text-muted-foreground underline-offset-4 hover:underline"
+                href="/waia-admin"
+              >
+                Admin home
+              </Link>
+              <Link
+                className="text-muted-foreground underline-offset-4 hover:underline"
+                href="/dashboard"
+              >
+                User dashboard
+              </Link>
+              <div className="w-24">
+                <SidebarSignOut />
+              </div>
             </div>
           </div>
-        </div>
-        <FinanceOrgPicker />
-        <FinanceNav />
-      </header>
-      <main className="flex-1">{children}</main>
-      <FinanceAssistant />
+          <FinanceOrgPicker />
+          <FinanceNav />
+        </header>
+        <main className="flex-1">{children}</main>
+        <FinanceAssistant />
+      </div>
+      <WaiaAdminModuleNav finance={moduleAccess.finance} hr={moduleAccess.hr} active="finance" />
     </div>
   );
 }
 
-export function FinanceShell({ children }: { children: React.ReactNode }) {
+export function FinanceShell({
+  children,
+  moduleAccess,
+}: {
+  children: React.ReactNode;
+  moduleAccess: { finance: boolean; hr: boolean };
+}) {
   return (
     <FinanceOrgProvider>
-      <FinanceShellInner>{children}</FinanceShellInner>
+      <FinanceShellInner moduleAccess={moduleAccess}>{children}</FinanceShellInner>
     </FinanceOrgProvider>
   );
 }

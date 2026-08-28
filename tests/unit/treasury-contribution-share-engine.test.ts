@@ -398,6 +398,14 @@ describe("DEE-606 WP-7 contribution share engine", () => {
     expect(selfB.numeratorMicros).toBe("9000000");
     expect(selfA.isZeroShare).toBe(false);
 
+    const recordA = await engine.computeSelfRecord(ctxA, USER_A);
+    expect(recordA.partsPerMillion).toBe("222222");
+    expect(recordA.contributions.map((row) => row.transactionId)).toEqual(["a-mine", "a-consent"]);
+    expect(recordA.contributions.map((row) => row.contributedAmountMicros)).toEqual([
+      "1000000",
+      "9000000",
+    ]);
+
     const { services: ambServices, engine: ambEngine } = createWp7Bundle();
     await seedQualifyingContribution(ambServices, { id: "amb-tx" });
     await ambServices.domain.repository.insertAttribution({

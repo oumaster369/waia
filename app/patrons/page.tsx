@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 const cellClass = "border-b border-waia-divider px-4 py-3 align-top text-waia-fg-muted";
 const headClass =
   "border-b border-waia-divider bg-waia-elevated px-4 py-3 text-xs font-semibold tracking-wide text-waia-fg-subtle uppercase";
+const ADAMAR_PUBLIC_SITE = "https://oumaster.com";
 
 export default async function PatronsPage() {
   const projection = await readPublicTreasuryForView();
@@ -33,6 +34,35 @@ export default async function PatronsPage() {
     patrons.currency !== null
       ? patrons
       : null;
+  const rankedRows = publishedRecord
+    ? [
+        ...publishedRecord.patrons.map((patron) => ({
+          ...patron,
+          publicSiteUrl:
+            patron.publicSiteUrl ??
+            (patron.displayName.trim().toLocaleLowerCase("en-US") === "adamar"
+              ? ADAMAR_PUBLIC_SITE
+              : null),
+        })),
+        ...(publishedRecord.privateSupport
+          ? [
+              {
+                displayName: "Anonymous Patrons",
+                publicSiteUrl: null,
+                twinProfileUrl: null,
+                contributedAmountMicros: publishedRecord.privateSupport.contributedAmountMicros,
+                currency: publishedRecord.privateSupport.currency,
+                share: publishedRecord.privateSupport.share,
+              },
+            ]
+          : []),
+      ].sort((a, b) => {
+        const amountA = BigInt(a.contributedAmountMicros);
+        const amountB = BigInt(b.contributedAmountMicros);
+        if (amountA !== amountB) return amountA > amountB ? -1 : 1;
+        return a.displayName.localeCompare(b.displayName);
+      })
+    : [];
 
   return (
     <PublicPageShell
@@ -74,7 +104,7 @@ export default async function PatronsPage() {
             ) : null}
           </div>
 
-          {publishedRecord.patrons.length === 0 && publishedRecord.privateSupport === null ? (
+          {rankedRows.length === 0 ? (
             <p data-testid="public-patrons-empty" className={publicPanelClass}>
               No confirmed contribution rows have been published.
             </p>
@@ -102,14 +132,19 @@ export default async function PatronsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {publishedRecord.patrons.map((patron, index) => (
+                  {rankedRows.map((patron, index) => (
                     <tr key={patron.displayName + ":" + index}>
                       <th className={cellClass + " text-waia-fg font-medium"} scope="row">
                         {patron.displayName}
                       </th>
                       <td className={cellClass}>
                         {patron.twinProfileUrl ? (
-                          <a className="underline underline-offset-4" href={patron.twinProfileUrl}>
+                          <a
+                            className="underline underline-offset-4"
+                            href={patron.twinProfileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             AI-Twin profile
                           </a>
                         ) : (
@@ -118,7 +153,12 @@ export default async function PatronsPage() {
                       </td>
                       <td className={cellClass}>
                         {patron.publicSiteUrl ? (
-                          <a className="underline underline-offset-4" href={patron.publicSiteUrl}>
+                          <a
+                            className="underline underline-offset-4"
+                            href={patron.publicSiteUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             Open link
                           </a>
                         ) : (
@@ -133,24 +173,6 @@ export default async function PatronsPage() {
                       </td>
                     </tr>
                   ))}
-                  {publishedRecord.privateSupport ? (
-                    <tr>
-                      <th className={cellClass + " text-waia-fg font-medium"} scope="row">
-                        Private &amp; anonymous support
-                      </th>
-                      <td className={cellClass}>—</td>
-                      <td className={cellClass}>—</td>
-                      <td className={cellClass + " font-mono tabular-nums"}>
-                        {formatPublicMoney(
-                          publishedRecord.privateSupport.contributedAmountMicros,
-                          publishedRecord.privateSupport.currency,
-                        )}
-                      </td>
-                      <td className={cellClass + " font-mono tabular-nums"}>
-                        {formatPublicShare(publishedRecord.privateSupport.share.partsPerMillion)}
-                      </td>
-                    </tr>
-                  ) : null}
                 </tbody>
               </table>
             </div>

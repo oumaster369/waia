@@ -16,9 +16,12 @@ import type {
 import type { ContributionShareFactsRepository } from "@/lib/waia-core/treasury/share/repository.types";
 import type {
   PublicContributionAggregate,
+  SelfContributionRecord,
   SelfContributionShare,
   ShareAttributionFact,
 } from "@/lib/waia-core/treasury/share/types";
+
+const SHARE_PARTS_PER_MILLION = 1_000_000n;
 
 function maxDate(dates: Array<Date | null | undefined>): Date | null {
   let max: Date | null = null;
@@ -113,8 +116,66 @@ export type ContributionShareEngine = {
     context: OrgContext,
     authenticatedUserId: string,
   ): Promise<SelfContributionShare>;
+  computeSelfRecord(
+    context: OrgContext,
+    authenticatedUserId: string,
+  ): Promise<SelfContributionRecord>;
   computePublicAggregate(context: OrgContext): Promise<PublicContributionAggregate>;
 };
+
+function deriveSelfRecord(input: {
+  transactions: readonly TreasuryTransactionRecord[];
+  attributions: readonly ShareAttributionFact[];
+  userId: string;
+}): SelfContributionRecord {
+  const qualifying = qualifyingSet(input.transactions);
+  const byTx = attributionsByTransaction(input.attributions);
+  let numeratorMicros = 0n;
+  let denominatorMicros = 0n;
+  const contributions: SelfContributionRecord["contributions"] = [];
+
+  for (const contribution of qualifying) {
+    const net = netQualifyingMicros({
+      contribution,
+      linkedVerifiedAdjustments: input.transactions,
+    });
+    denominatorMicros += net;
+    const open = requireCurrentOpenAttribution(
+      asAttributionRecords(byTx.get(contribution.id) ?? []),
+    );
+    if (
+      open?.status === "ATTRIBUTED" &&
+      typeof open.contributorUserId === "string" &&
+      open.contributorUserId === input.userId
+    ) {
+      numeratorMicros += net;
+      contributions.push({
+        transactionId: contribution.id,
+        occurredAt: contribution.occurredAt.toISOString(),
+        contributedAmountMicros: serializeMicros(net),
+      });
+    }
+  }
+
+  contributions.sort((a, b) => {
+    const byTime = Date.parse(b.occurredAt) - Date.parse(a.occurredAt);
+    return byTime !== 0 ? byTime : b.transactionId.localeCompare(a.transactionId);
+  });
+  const share = contributionShareOrZero({ numeratorMicros, denominatorMicros });
+  const partsPerMillion =
+    share.denominatorMicros > 0n
+      ? (share.numeratorMicros * SHARE_PARTS_PER_MILLION) / share.denominatorMicros
+      : 0n;
+  const lastUpdated = lastUpdatedForSelfShare(qualifying, input.transactions, input.attributions);
+  return {
+    numeratorMicros: serializeMicros(share.numeratorMicros),
+    denominatorMicros: serializeMicros(share.denominatorMicros),
+    isZeroShare: share.isZeroShare,
+    partsPerMillion: serializeMicros(partsPerMillion),
+    contributions,
+    lastUpdatedAt: lastUpdated ? lastUpdated.toISOString() : null,
+  };
+}
 
 export function createContributionShareEngine(
   facts: ContributionShareFactsRepository,
@@ -130,37 +191,26 @@ export function createContributionShareEngine(
         facts.loadContributionFacts(org),
         facts.loadAttributionFacts(org),
       ]);
-      const qualifying = qualifyingSet(transactions);
-      const byTx = attributionsByTransaction(attributions);
-      let numeratorMicros = 0n;
-      let denominatorMicros = 0n;
-      for (const contribution of qualifying) {
-        const net = netQualifyingMicros({
-          contribution,
-          linkedVerifiedAdjustments: transactions,
-        });
-        denominatorMicros += net;
-        const open = requireCurrentOpenAttribution(
-          asAttributionRecords(byTx.get(contribution.id) ?? []),
-        );
-        if (
-          open &&
-          open.status === "ATTRIBUTED" &&
-          typeof open.contributorUserId === "string" &&
-          open.contributorUserId.length > 0 &&
-          open.contributorUserId === userId
-        ) {
-          numeratorMicros += net;
-        }
-      }
-      const share = contributionShareOrZero({ numeratorMicros, denominatorMicros });
-      const lastUpdated = lastUpdatedForSelfShare(qualifying, transactions, attributions);
+      const record = deriveSelfRecord({ transactions, attributions, userId });
       return {
-        numeratorMicros: serializeMicros(share.numeratorMicros),
-        denominatorMicros: serializeMicros(share.denominatorMicros),
-        isZeroShare: share.isZeroShare,
-        lastUpdatedAt: lastUpdated ? lastUpdated.toISOString() : null,
+        numeratorMicros: record.numeratorMicros,
+        denominatorMicros: record.denominatorMicros,
+        isZeroShare: record.isZeroShare,
+        lastUpdatedAt: record.lastUpdatedAt,
       };
+    },
+
+    async computeSelfRecord(context, authenticatedUserId) {
+      const org = requireOrgContext(context.organizationId);
+      const userId = authenticatedUserId.trim();
+      if (!userId) {
+        throw new TreasuryValidationError("USER_ID_REQUIRED", "authenticated user id is required");
+      }
+      const [transactions, attributions] = await Promise.all([
+        facts.loadContributionFacts(org),
+        facts.loadAttributionFacts(org),
+      ]);
+      return deriveSelfRecord({ transactions, attributions, userId });
     },
 
     async computePublicAggregate(context) {

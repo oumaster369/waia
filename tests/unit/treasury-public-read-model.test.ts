@@ -26,6 +26,9 @@ describe("DEE-617 public Treasury projection", () => {
         status: "published",
         asOf: NOW.toISOString(),
         endsAt: "2026-09-07T12:00:00.000Z",
+        currency: "USD",
+        dailyBurnMicros: "1000000",
+        hourlyBurnMicros: "41666",
       },
       annualBudgetAmountMicros: "120000000",
       annualBudgetCurrency: "USD",
@@ -50,7 +53,9 @@ describe("DEE-617 public Treasury projection", () => {
       currency: "USD",
       annualBudgetAmountMicros: "120000000",
     });
-    expect(projection.budget.months).toHaveLength(12);
+    expect(projection.budget.months).toHaveLength(8);
+    expect(projection.budget.months[0]?.month).toBe("2026-08");
+    expect(projection.budget.months.at(-1)?.month).toBe("2026-01");
     expect(projection.budget.months.find((row) => row.month === "2026-08")).toMatchObject({
       categories: [
         {
@@ -240,6 +245,23 @@ describe("DEE-617 public Treasury projection", () => {
       status: "pending",
       patrons: [],
       privateSupport: null,
+    });
+  });
+
+  it("counts a verified unattributed CONTRIBUTION only in the anonymous aggregate", async () => {
+    const facts = await createPublishedPublicTreasuryFacts();
+    facts.attributions = facts.attributions.slice(0, 1);
+
+    const projection = derivePublicTreasuryProjection(facts, NOW);
+
+    expect(projection.patrons).toMatchObject({
+      status: "published",
+      totalContributedAmountMicros: "30000000",
+      patrons: [{ displayName: "Alice", contributedAmountMicros: "20000000" }],
+      privateSupport: {
+        contributedAmountMicros: "10000000",
+        share: { partsPerMillion: "333333" },
+      },
     });
   });
 

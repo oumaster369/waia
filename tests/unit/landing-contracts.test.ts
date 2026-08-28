@@ -41,6 +41,8 @@ describe("breath-public contract", () => {
     expect(snap.recentActivity.inflows).toEqual([]);
     expect(snap.work.githubUrl).toBe(WAIA_PUBLIC_GITHUB_URL);
     expect(formatBreathAmount(null, null)).toBe("Not yet published");
+    expect(formatBreathAmount(83.83, "USD")).toBe("$83.83");
+    expect(formatBreathAmount(120_048, "USD")).toBe("$120,048");
     expect(formatBreathRunway(snap.runway)).toBe("Not yet published");
     expect(snap.methodologyNote).not.toMatch(/DEE-\d+/i);
     expect(

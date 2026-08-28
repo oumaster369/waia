@@ -37,6 +37,7 @@ export const HOMEPAGE_COPY = {
       "Current free funds against the ideal annual budget — WAIA’s financial breathing capacity.",
     breatheForLabel: "WAIA can keep breathing for",
     breatheForPending: "Awaiting first ledger publication",
+    breatheForElapsed: "Runway elapsed — awaiting an updated operating plan",
     supportCta: "KEEP WAIA BREATHING",
     supportFullyFunded: "WAIA IS FULLY FUNDED",
     supportExplanation: "Support the research, infrastructure, and work behind WAIA.",

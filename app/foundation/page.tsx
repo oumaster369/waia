@@ -36,6 +36,41 @@ export default async function FoundationPage() {
         </p>
       </section>
 
+      <section className={`${publicPanelClass} space-y-5`} data-testid="public-foundation-purpose">
+        <h2 className="font-waia-serif text-waia-fg text-2xl">What the Development Fund is for</h2>
+        <p className="text-waia-fg-muted leading-relaxed">
+          Once one complete annual operating budget for WAIA development is protected, confirmed
+          free resources above that threshold belong to the Development Fund accounting layer. The
+          fund exists to support research and projects connected to WAIA’s human-centered purpose:
+          deeper understanding of the human, responsible AI, coordination, education, digital
+          economy infrastructure and other meaning-adjacent work that can create durable public
+          value.
+        </p>
+        <p className="text-waia-fg-muted leading-relaxed">
+          A Development Fund balance is not permission to spend. Every real expense still requires a
+          documented purpose, the appropriate Human authorization and a verified Treasury record.
+          Publishing the allocation lets anyone distinguish resources needed to keep WAIA operating
+          from resources that may finance its wider mission.
+        </p>
+      </section>
+
+      <section
+        className={`${publicPanelClass} space-y-5`}
+        data-testid="public-foundation-governance"
+      >
+        <p className="text-waia-fg-subtle text-xs font-semibold tracking-[0.14em] uppercase">
+          Planned governance
+        </p>
+        <h2 className="font-waia-serif text-waia-fg text-2xl">Collegial decisions through WAIA</h2>
+        <p className="text-waia-fg-muted leading-relaxed">
+          When the funds begin to accumulate materially, the planned direction is collegial
+          decision-making by WAIA users through a DAO: proposals, transparent discussion, explicit
+          voting rules and an auditable decision record. That governance system does not exist yet
+          and no current Patron share grants voting power. It will be designed and activated only
+          after its legal, security and Human-governance rules are ready.
+        </p>
+      </section>
+
       {funds ? (
         <section className={publicPanelClass} data-testid="public-foundation-current">
           <h2 className="font-waia-serif text-waia-fg text-2xl">Current confirmed allocation</h2>
