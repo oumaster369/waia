@@ -13,7 +13,7 @@ provenance:
   createdFrom: authoritative-ci-failure
   authorizedAt: "2026-08-29"
   authority: "Program Controller authorization for a separate admission-first test-only train"
-state: admitted
+state: frozen
 ---
 
 # DEE-799 — deterministic Twin Engine facade proxy assertion harness
@@ -37,7 +37,7 @@ PR #518 run 33227987035 reports the facade test PASS after 771012 ms and then re
 
 Focused test completes repeatedly in bounded time; production diff is empty; literal full fresh-migrated SQLite, typecheck, lint, build and canonical validation pass; independent exact-head review is P1=0/P2=0; authoritative CI and DEE-653 pass before squash merge.
 
-## Validated local evidence pending manifest freeze
+## Frozen validated local evidence
 
 - Exact authoritative base: `4f46b953cdae58c849895fb4f51ae7b8edf1514d`.
 - Recoverable backup: `backup/dee-799-pre-dee802-rebase-8ad2bc36`.

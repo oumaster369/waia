@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-799",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-800",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Replace the recursive Drizzle proxy structural match with strict database-handle identity while preserving all facade delegation assertions.",
       "dependencies": ["DEE-755"],
@@ -21,15 +21,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller authorized a separate admission-first test-only train for the exact harness defect."},
       "expectedAcceptanceEvidence": ["Strict identity proves the exact database handle is delegated without recursively traversing its proxy."],
       "expectedTests": ["focused facade test repeated; full literal fresh-migrated SQLite suite"],
-      "actualFiles": [],
-      "integratedCommits": [],
-      "acceptanceEvidence": [],
-      "tests": [],
+      "actualFiles": ["tests/unit/twin-engine-runtime-facade.test.ts"],
+      "integratedCommits": ["176f0b2b731ddc9d121972db37985d736458dc60"],
+      "acceptanceEvidence": ["Strict identity proves the exact database handle is delegated without recursively traversing its proxy; all other facade assertions are preserved."],
+      "tests": ["focused facade test repeated 3x: 12/12 PASS", "literal fresh-migrated SQLite: 878 files/5109 tests PASS"],
       "execution": {"wave": 1, "mode": "serialized"}
     },
     {
       "issue": "DEE-801",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Prove bounded repeated facade execution, unchanged runtime surfaces and the mandatory full validation matrix.",
       "dependencies": ["DEE-800"],
@@ -39,10 +39,10 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller requires focused/full/review proof for the separate test-only train."},
       "expectedAcceptanceEvidence": ["Repeated focused test is bounded, production diff is empty, and full fresh-migrated SQLite plus repository gates pass."],
       "expectedTests": ["focused repeatability; full fresh-migrated SQLite; typecheck; lint; build; canon; exact-head review"],
-      "actualFiles": [],
-      "integratedCommits": [],
-      "acceptanceEvidence": [],
-      "tests": [],
+      "actualFiles": ["docs/plans/dee-799-twin-facade-proxy-harness.md"],
+      "integratedCommits": ["e423602a86e8fd45cf8bb83bcc4f851c8d46fb94"],
+      "acceptanceEvidence": ["Production diff is empty; current-main focused/full/type/lint/build/canon gates pass."],
+      "tests": ["typecheck PASS", "lint PASS: 0 errors", "production build PASS", "canonical validation PASS"],
       "execution": {"wave": 2, "mode": "serialized"}
     }
   ],
@@ -53,16 +53,19 @@
     "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-796 owns only the PostgreSQL Risk expiry test. DEE-799/800 exclusively own the pre-existing Twin Engine facade proxy assertion harness."},
     "preImplementationAdmission": {
       "status": "pass",
-      "manifestDigest": "pending-admission-commit",
-      "manifestCommit": "pending-admission-commit",
+      "manifestDigest": "22915ca77eb41dc7bafccdf624c1ade4f6e988794ff0eb0d0e14d4220300b387",
+      "manifestCommit": "241a2a65d424d1c93d6397550e1f6d90d68cc0d2",
       "manifestPath": "docs/plans/dee-799-twin-facade-proxy-harness.integration-train.json",
       "reviewer": "Program Controller exact test-harness authorization"
     },
     "admissionReviews": [
-      {"issue": "DEE-800", "status": "pass", "reviewedCommits": [], "reviewedFiles": ["tests/unit/twin-engine-runtime-facade.test.ts"]},
-      {"issue": "DEE-801", "status": "pass", "reviewedCommits": [], "reviewedFiles": ["docs/plans/dee-799-twin-facade-proxy-harness.integration-train.json", "docs/plans/dee-799-twin-facade-proxy-harness.md"]}
+      {"issue": "DEE-800", "status": "pass", "reviewedCommits": ["176f0b2b731ddc9d121972db37985d736458dc60"], "reviewedFiles": ["tests/unit/twin-engine-runtime-facade.test.ts"]},
+      {"issue": "DEE-801", "status": "pass", "reviewedCommits": ["e423602a86e8fd45cf8bb83bcc4f851c8d46fb94"], "reviewedFiles": ["docs/plans/dee-799-twin-facade-proxy-harness.md"]}
     ],
-    "cumulativeChecks": [],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-800", "status": "pass", "commands": ["focused facade test repeated 3x: 12/12 PASS", "production diff empty"]},
+      {"afterIssue": "DEE-801", "status": "pass", "commands": ["literal fresh-migrated SQLite: 878 files/5109 tests PASS, 0 fail, 1261.13 s", "typecheck PASS", "lint PASS with 0 errors", "production build PASS", "canonical validation PASS"]}
+    ],
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
@@ -73,7 +76,7 @@
   ],
   "rollbackStrategy": "One squash revert restores the prior recursive test matcher; no durable or production data is touched.",
   "validation": {
-    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-799-twin-facade-proxy-harness.integration-train.json DEE-799 admission",
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-799-twin-facade-proxy-harness.integration-train.json DEE-799 frozen",
     "focused": ["Twin Engine runtime facade positive and scenario-limit negatives repeated"],
     "fullSuite": "one literal full fresh-migrated SQLite suite and authoritative CI on the exact PR head",
     "review": "fresh independent exact-head zero P1/P2",
