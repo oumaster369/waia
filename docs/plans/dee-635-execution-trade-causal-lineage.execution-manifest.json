@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-635",
+  "base": {
+    "ref": "origin/main",
+    "sha": "446eb88c8e8ca70525b9d591275883721d08dba1"
+  },
+  "branch": "dee-635-causal-lineage",
+  "status": "admitted",
+  "riskTier": "T3",
+  "dependencies": {
+    "DEE-624": "Done",
+    "DEE-634": "Done",
+    "DEE-652": "Done"
+  },
+  "ownedGlobs": [
+    "lib/trader/execution/**",
+    "lib/trader/lifecycle/**",
+    "db/**",
+    "tests/unit/**",
+    "tests/integration/**",
+    "docs/plans/dee-635-*"
+  ],
+  "forbiddenGlobs": [
+    "lib/trader/intelligence/forecast-decision/**",
+    "lib/trader/decision-v2/**",
+    "lib/trader/risk/v2/**",
+    "lib/trader/billing/**",
+    "replay-runs/**"
+  ],
+  "frozenInvariants": [
+    "Opening causal lineage is content-addressed and immutable after first capital action.",
+    "Exposure-increasing submission fails closed on absent or mismatched Decision V2, Risk V2, Forecast V2 or canonical causal lineage authority.",
+    "Accounting, PnL, HWM, scientific formula, holdout, live and capital policy semantics are unchanged."
+  ],
+  "validation": [
+    "schema and digest known-answer/mutation tests",
+    "open/partial/multi-fill/close lifecycle parity",
+    "restart and reconciliation preservation",
+    "SQLite and PostgreSQL persistence parity",
+    "full fresh-migrated suite",
+    "independent exact-head P1=0/P2=0 review",
+    "authoritative CI and DEE-653 admission"
+  ]
+}
