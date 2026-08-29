@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 
 export const OPENING_CAUSAL_LINEAGE_SCHEMA_VERSION =
   "waia.trader.opening_causal_lineage.v1" as const;
@@ -60,6 +61,44 @@ export function buildOpeningCausalLineageV1(draft: OpeningCausalLineageV1Draft):
   const value = Object.freeze({ ...body, contentDigest: bodyDigest(body) });
   assertOpeningCausalLineageV1(value);
   return value;
+}
+
+export function buildOpeningCausalLineageFromRiskAllowanceV2(input: Readonly<{
+  allowance: RiskAllowanceV2;
+  organizationId: string;
+  symbol: string;
+  canonicalCausalLineageDigest: string;
+  forecastId: string;
+  forecastContentDigest: string;
+  decisionId: string;
+  decisionContentDigest: string;
+  riskVerdictId: string;
+}>): OpeningCausalLineageV1 {
+  const { allowance } = input;
+  if (allowance.organizationId !== input.organizationId || allowance.symbol !== input.symbol) {
+    throw new Error("OPENING_CAUSAL_LINEAGE_SCOPE_MISMATCH");
+  }
+  if (
+    allowance.decision.decisionId !== input.decisionId ||
+    allowance.decision.contentDigestHex !== input.decisionContentDigest
+  ) {
+    throw new Error("OPENING_CAUSAL_LINEAGE_DECISION_MISMATCH");
+  }
+  if (allowance.riskVerdictId !== input.riskVerdictId) {
+    throw new Error("OPENING_CAUSAL_LINEAGE_RISK_MISMATCH");
+  }
+  return buildOpeningCausalLineageV1({
+    organizationId: input.organizationId,
+    symbol: input.symbol,
+    canonicalCausalLineageDigest: input.canonicalCausalLineageDigest,
+    forecastId: input.forecastId,
+    forecastContentDigest: input.forecastContentDigest,
+    decisionId: input.decisionId,
+    decisionContentDigest: input.decisionContentDigest,
+    riskVerdictId: input.riskVerdictId,
+    riskAllowanceId: allowance.riskAllowanceId,
+    riskAllowanceContentDigest: allowance.contentDigestHex,
+  });
 }
 
 export function serializeOpeningCausalLineageV1(value: OpeningCausalLineageV1): string {
