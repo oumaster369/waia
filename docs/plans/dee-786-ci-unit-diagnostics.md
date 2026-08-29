@@ -13,7 +13,7 @@ provenance:
   createdFrom: chat
   authorizedAt: "2026-08-28"
   authority: "Program Controller authorization for a separate diagnostic-only CI Integration Train"
-state: admitted
+state: frozen
 ---
 
 # DEE-786 — bounded CI unit-test diagnostics
