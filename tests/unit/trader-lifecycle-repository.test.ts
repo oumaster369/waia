@@ -18,6 +18,10 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import {
+  buildOpeningCausalLineageV1,
+  serializeOpeningCausalLineageV1,
+} from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 
 const USER_A = "00000000-0000-4000-8000-0000000376a";
 
@@ -223,6 +227,19 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
   it("records buy fill into trade + lot rows via lifecycle recorder", async () => {
     const context = requireOrgContext(orgA);
     const recorder = createLifecycleRecorder({ repository: lifecycleRepo });
+    const openingLineage = buildOpeningCausalLineageV1({
+      organizationId: orgA,
+      symbol: "BTC/USDT",
+      canonicalCausalLineageDigest: "1".repeat(64),
+      forecastId: "forecast-wire",
+      forecastContentDigest: "2".repeat(64),
+      decisionId: "decision-wire",
+      decisionContentDigest: "3".repeat(64),
+      riskVerdictId: "risk-wire-buy",
+      riskAllowanceId: "allowance-wire",
+      riskAllowanceContentDigest: "4".repeat(64),
+    });
+    const openingLineageJson = serializeOpeningCausalLineageV1(openingLineage);
 
     const order = await orderRepo.createOrder(context, {
       venue: "mock",
@@ -234,6 +251,9 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
       clientOrderId: "client-lifecycle-wire-buy",
       idempotencyKey: "idem-lifecycle-wire-buy",
       riskDecisionId: "risk-wire-buy",
+      riskAllowanceId: openingLineage.riskAllowanceId,
+      openingCausalLineageJson: openingLineageJson,
+      openingCausalLineageDigest: openingLineage.contentDigest,
       strategySignalId: "signal-wire",
     });
 
@@ -257,18 +277,24 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
         riskDecisionId: order.riskDecisionId,
         openingMsvId: "msv-wire",
         openingFeatureSetId: "fs-wire",
+        openingCausalLineageJson: openingLineageJson,
+        openingCausalLineageDigest: openingLineage.contentDigest,
       },
     });
 
     const trades = await lifecycleRepo.listTrades(context, { strategySignalId: "signal-wire" });
     expect(trades).toHaveLength(1);
     expect(trades[0]?.state).toBe("OPEN");
+    expect(trades[0]?.openingCausalLineageJson).toBe(openingLineageJson);
+    expect(trades[0]?.openingCausalLineageDigest).toBe(openingLineage.contentDigest);
 
     const lots = await lifecycleRepo.listOpenPositionLots(context, {
       strategySignalId: "signal-wire",
     });
     expect(lots).toHaveLength(1);
     expect(lots[0]?.remainingQty).toBe("1");
+    expect(lots[0]?.openingCausalLineageJson).toBe(openingLineageJson);
+    expect(lots[0]?.openingCausalLineageDigest).toBe(openingLineage.contentDigest);
 
     const events = await lifecycleRepo.listLifecycleEvents(context, {
       entityType: "TRADE",

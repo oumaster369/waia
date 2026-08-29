@@ -27,6 +27,7 @@ import type {
   TradeRow,
 } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import { isTerminalTradeState } from "@/lib/trader/lifecycle/trade-lifecycle.types";
+import { assertLifecycleOpeningCausalLineage } from "@/lib/trader/lifecycle/assert-opening-causal-lineage";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -146,6 +147,11 @@ function createPostgresLifecycleRepositoryImpl(
   return {
     async insertTrade(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      assertLifecycleOpeningCausalLineage({
+        ...input.trade,
+        organizationId: scoped.organizationId,
+        symbol: input.trade.symbol,
+      });
       const now = new Date();
       const row = {
         ...input.trade,
@@ -241,6 +247,11 @@ function createPostgresLifecycleRepositoryImpl(
 
     async insertPositionLot(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      assertLifecycleOpeningCausalLineage({
+        ...input.lot,
+        organizationId: scoped.organizationId,
+        symbol: input.lot.symbol,
+      });
       const now = new Date();
       const row = {
         ...input.lot,

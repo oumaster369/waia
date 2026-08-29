@@ -33,6 +33,7 @@ import type {
   TradeRow,
 } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import { isTerminalTradeState } from "@/lib/trader/lifecycle/trade-lifecycle.types";
+import { assertLifecycleOpeningCausalLineage } from "@/lib/trader/lifecycle/assert-opening-causal-lineage";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -140,6 +141,11 @@ export function createSqliteLifecycleRepository(db: WaiaDb): LifecycleRepository
   return {
     async insertTrade(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      assertLifecycleOpeningCausalLineage({
+        ...input.trade,
+        organizationId: scoped.organizationId,
+        symbol: input.trade.symbol,
+      });
       const now = new Date();
       const row = {
         ...input.trade,
@@ -232,6 +238,11 @@ export function createSqliteLifecycleRepository(db: WaiaDb): LifecycleRepository
 
     async insertPositionLot(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      assertLifecycleOpeningCausalLineage({
+        ...input.lot,
+        organizationId: scoped.organizationId,
+        symbol: input.lot.symbol,
+      });
       const now = new Date();
       const row = {
         ...input.lot,

@@ -33,7 +33,7 @@
     "replay-runs/**"
   ],
   "frozenInvariants": [
-    "Opening causal lineage is content-addressed and immutable after first capital action.",
+    "Opening causal lineage is content-addressed and immutable on the opening order, trade and lot; fills and legs retain direct immutable references without reconstructing intent.",
     "Exposure-increasing submission fails closed on absent or mismatched Decision V2, Risk V2, Forecast V2 or canonical causal lineage authority.",
     "Accounting, PnL, HWM, scientific formula, holdout, live and capital policy semantics are unchanged."
   ],

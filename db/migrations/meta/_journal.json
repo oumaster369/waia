@@ -302,6 +302,13 @@
       "when": 1780000000042,
       "tag": "0042_dee635_lifecycle_opening_causal_lineage",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1780000000043,
+      "tag": "0043_dee635_lifecycle_lineage_guards",
+      "breakpoints": true
     }
   ]
 }

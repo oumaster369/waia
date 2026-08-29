@@ -20,9 +20,9 @@ provenance:
 
 ## Frozen contract
 
-Introduce one versioned, content-addressed opening-lineage envelope that references the exact canonical causal lineage, Forecast V2, Decision V2 and Risk V2 authority consumed by the first exposure-increasing order. The envelope is frozen on first capital action and propagated byte-identically through order, fills, lots, trades and closed trades.
+Introduce one versioned, content-addressed opening-lineage envelope that references the exact canonical causal lineage, Forecast V2, Decision V2 and Risk V2 authority consumed by the first exposure-increasing order. The envelope is frozen on that opening order and copied byte-identically onto its trade and lot. Each fill remains directly bound to the immutable opening order by the existing tenant-scoped foreign key, and each execution leg binds fill, order, trade and lot without reconstructing intent. Close/protective effects preserve the immutable trade/lot envelope; they do not invent a second opening envelope.
 
-The implementation stores immutable references/digests, not mutable upstream objects. Missing, malformed, cross-tenant, Decision/Risk-mismatched or retrospectively resolved authority fails closed before exposure increase. Close/protective actions preserve the opening envelope and append outcome/cost facts without rewriting intent.
+The implementation stores immutable references/digests, not mutable upstream objects. Missing, malformed, cross-tenant, Decision/Risk-mismatched or retrospectively reconstructed authority fails closed before exposure increase. Fill/leg linkage is an immutable direct reference to the opening order, not a lookup that derives or changes opening intent. Close/protective actions preserve the trade/lot envelope and append outcome/cost facts without rewriting intent.
 
 ## Owned surfaces
 
@@ -48,7 +48,7 @@ The controller authorized this additive expansion after implementation proved th
 
 1. Freeze the canonical opening-lineage V1 schema, canonical serialization/digest and adversarial validation.
 2. Require and cross-bind the exact Decision V2/Risk V2/Forecast/canonical-causal references at exposure-increasing submission.
-3. Persist the envelope on order/fill and preserve it across retry, restart and reconciliation.
+3. Persist the envelope on the opening order and preserve its direct fill/leg references across retry, restart and reconciliation.
 4. Propagate it byte-identically through FIFO lot/trade/closed-trade lifecycle, including partial and multi-fill paths.
 5. Close SQLite/PostgreSQL parity, source-revision mutation, mismatch, immutability and deterministic-digest proofs.
 
@@ -57,5 +57,5 @@ The controller authorized this additive expansion after implementation proved th
 - A closed trade resolves backward to exact PIT evidence and forward to calibration without legacy signal reconstruction.
 - Opening lineage is immutable across open, partial fill, close, restart and reconciliation.
 - Missing or mismatched required capital lineage blocks new exposure before connector submission.
-- Multi-fill and close paths preserve one byte-identical opening digest.
+- Multi-fill and close paths preserve one byte-identical opening digest on the opening order, trade and lot while immutable fill/leg references retain direct provenance.
 - Focused, full fresh-migrated SQLite, PostgreSQL, exact-head independent review, authoritative CI and DEE-653 all pass before squash merge.
