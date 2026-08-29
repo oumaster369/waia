@@ -13,7 +13,7 @@ provenance:
   createdFrom: authoritative-ci-timeout-with-continuous-progress
   authorizedAt: "2026-08-29"
   authority: "Program Controller authorization for a separate admission-first CI-capacity train"
-state: admitted
+state: frozen
 ---
 
 # DEE-802 — CI unit-suite bounded capacity
@@ -36,7 +36,7 @@ Focused wrapper timeout/KILL negatives, workflow invariant proof, typecheck, lin
 
 The exact CI-only tree completes every mandatory local and authoritative gate while retaining coherent finite inner and outer watchdogs and all existing diagnostic and process-termination guarantees.
 
-## Validated local evidence pending manifest freeze
+## Frozen local evidence
 
 - Authoritative base: `55ea7e2f3e3d6bc117d7b141dc1e8cba2edd8f0d`.
 - Recoverable pre-rebuild backup: `backup/dee-802-pre-rebuild-b3be8fc0`.
