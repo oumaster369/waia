@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-777",
+  "base": {
+    "ref": "origin/main",
+    "sha": "8ada56024db1f67f43530d3701fe9141273e46e7"
+  },
+  "branch": "dee-777-trader-dashboard-v2",
+  "status": "admitted",
+  "ownership": {
+    "ownedFiles": [
+      "app/(trader)/trader/page.tsx",
+      "components/trader/trader-workspace.tsx",
+      "docs/plans/dee-777-trader-dashboard-v2.execution-manifest.json",
+      "docs/plans/dee-777-trader-dashboard-v2.md",
+      "tests/e2e/trader.spec.ts",
+      "tests/unit/trader-dashboard-v2.test.tsx"
+    ],
+    "sharedFiles": [
+      {
+        "path": "components/trader/trader-workspace.tsx",
+        "reason": "Existing tenant-scoped Trader workspace presentation is replaced without changing server authorization or API contracts."
+      },
+      {
+        "path": "tests/e2e/trader.spec.ts",
+        "reason": "Existing Trader entitlement coverage is extended with factual Dashboard V2 landmarks and unavailable states."
+      }
+    ],
+    "forbiddenFiles": [
+      "app/globals.css",
+      "app/design/**",
+      "app/api/**",
+      "app/waia-admin/**",
+      "db/**",
+      "lib/trader/**"
+    ]
+  },
+  "overlapAudit": {
+    "dee634": {
+      "branch": "dee-634-decision-v2-sole-authority",
+      "result": "disjoint"
+    },
+    "adminPr509": {
+      "branch": "dee-747-unified-waia-admin",
+      "result": "disjoint"
+    },
+    "traderLandingPr512": {
+      "branch": "dee-775-trader-landing",
+      "result": "disjoint"
+    }
+  },
+  "frozenInvariants": [
+    "Session and Trader entitlement remain server-enforced by the existing Trader layout.",
+    "Server-resolved tenant scope remains authoritative; the browser never supplies an organization id.",
+    "HTX secrets remain write-only and are never returned or rendered.",
+    "Missing, empty, invalid or future-dated read models are unavailable rather than inferred.",
+    "Snapshot timing is factual persisted age only; no unversioned freshness threshold is introduced.",
+    "No operator, admin, live-enable, kill-switch, strategy-promotion or capital authority is added."
+  ],
+  "validation": [
+    "pnpm exec vitest --run --cache=false tests/unit/trader-dashboard-v2.test.tsx",
+    "pnpm exec playwright test tests/e2e/trader.spec.ts",
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm build",
+    "pnpm validate:canon",
+    "pnpm validate:pr-governance"
+  ]
+}
