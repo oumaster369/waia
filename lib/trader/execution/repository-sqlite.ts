@@ -16,6 +16,7 @@ import {
   fillPayloadMatches,
   isUniqueConstraintError,
   orderPayloadMatches,
+  assertOrderOpeningCausalLineage,
   type CreateOrderInput,
   type FillRow,
   type OrderEventRow,
@@ -95,6 +96,8 @@ function mapOrderRow(row: typeof traderOrders.$inferSelect): OrderRow {
     clientOrderId: row.clientOrderId,
     idempotencyKey: row.idempotencyKey,
     riskDecisionId: row.riskDecisionId,
+    openingCausalLineageJson: row.openingCausalLineageJson,
+    openingCausalLineageDigest: row.openingCausalLineageDigest,
     strategySignalId: row.strategySignalId,
     allocationDecisionId: row.allocationDecisionId,
     createdAt: row.createdAt,
@@ -367,6 +370,7 @@ export function createOrderSqlite(
   deps: SqliteOrderRepositoryClockDeps = {},
 ): OrderRow {
   const scoped = requireOrgContext(context.organizationId);
+  assertOrderOpeningCausalLineage(scoped.organizationId, input);
   const newId = resolveOrderNewId(deps);
 
   const byClientOrderId = findOrderByClientOrderIdSqlite(db, context, input.clientOrderId);
@@ -400,6 +404,8 @@ export function createOrderSqlite(
         clientOrderId: input.clientOrderId,
         idempotencyKey: input.idempotencyKey,
         riskDecisionId: input.riskDecisionId,
+        openingCausalLineageJson: input.openingCausalLineageJson ?? null,
+        openingCausalLineageDigest: input.openingCausalLineageDigest ?? null,
         strategySignalId: input.strategySignalId ?? null,
         allocationDecisionId: input.allocationDecisionId ?? null,
         createdAt: now,

@@ -1697,6 +1697,8 @@ export const traderOrders = sqliteTable(
     clientOrderId: text("client_order_id").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     riskDecisionId: text("risk_decision_id").notNull(),
+    openingCausalLineageJson: text("opening_causal_lineage_json"),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest"),
     strategySignalId: text("strategy_signal_id"),
     allocationDecisionId: text("allocation_decision_id"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })

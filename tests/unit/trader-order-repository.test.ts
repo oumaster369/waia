@@ -16,6 +16,7 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import { buildOpeningCausalLineageV1, serializeOpeningCausalLineageV1 } from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 
 const USER_A = "00000000-0000-4000-8000-0000000248a";
 
@@ -90,6 +91,39 @@ describe("trader order repository (DEE-248)", () => {
 
     expect(second.id).toBe(first.id);
     expect(second.stateVersion).toBe(1);
+  });
+
+  it("persists immutable tenant-bound opening causal lineage and rejects drift", async () => {
+    const context = requireOrgContext(orgA);
+    const digest = (value: string) => value.repeat(64);
+    const allowanceId = crypto.randomUUID();
+    const allowanceDigest = digest("4");
+    const lineage = buildOpeningCausalLineageV1({
+      organizationId: orgA,
+      symbol: "BTCUSDT",
+      canonicalCausalLineageDigest: digest("1"),
+      forecastId: crypto.randomUUID(),
+      forecastContentDigest: digest("2"),
+      decisionId: crypto.randomUUID(),
+      decisionContentDigest: digest("3"),
+      riskVerdictId: crypto.randomUUID(),
+      riskAllowanceId: allowanceId,
+      riskAllowanceContentDigest: allowanceDigest,
+    });
+    const input = {
+      ...baseCreateInput({ clientOrderId: "dee635-lineage", idempotencyKey: "dee635-lineage" }),
+      riskAllowanceId: allowanceId,
+      riskAllowanceBindingDigest: allowanceDigest,
+      openingCausalLineageJson: serializeOpeningCausalLineageV1(lineage),
+      openingCausalLineageDigest: lineage.contentDigest,
+    };
+    const created = await repo.createOrder(context, input);
+    expect(created.openingCausalLineageDigest).toBe(lineage.contentDigest);
+    expect((await repo.getOrderById(context, created.id))?.openingCausalLineageJson).toBe(input.openingCausalLineageJson);
+    await expect(repo.createOrder(context, { ...input, openingCausalLineageDigest: digest("a") })).rejects.toThrow("DIGEST_MISMATCH");
+    const { schemaVersion: _schema, contentDigest: _digest, ...lineageBody } = lineage;
+    const wrongScope = buildOpeningCausalLineageV1({ ...lineageBody, organizationId: crypto.randomUUID() });
+    await expect(repo.createOrder(context, { ...input, clientOrderId: "dee635-scope", idempotencyKey: "dee635-scope", openingCausalLineageJson: serializeOpeningCausalLineageV1(wrongScope), openingCausalLineageDigest: wrongScope.contentDigest })).rejects.toThrow("SCOPE_MISMATCH");
   });
 
   it("throws DuplicateOrderError when keys match but payload differs", async () => {

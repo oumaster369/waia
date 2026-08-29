@@ -11,6 +11,7 @@ import type {
   OrderType,
 } from "@/lib/trader/execution/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { parseOpeningCausalLineageV1 } from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 
 export interface OrderRow {
   id: string;
@@ -33,6 +34,8 @@ export interface OrderRow {
   riskDecisionId: string;
   riskAllowanceId?: string | null;
   riskAllowanceBindingDigest?: string | null;
+  openingCausalLineageJson?: string | null;
+  openingCausalLineageDigest?: string | null;
   strategySignalId: string | null;
   allocationDecisionId: string | null;
   createdAt: Date;
@@ -79,6 +82,8 @@ export interface CreateOrderInput {
   riskDecisionId: string;
   riskAllowanceId?: string | null;
   riskAllowanceBindingDigest?: string | null;
+  openingCausalLineageJson?: string | null;
+  openingCausalLineageDigest?: string | null;
   strategySignalId?: string | null;
   allocationDecisionId?: string | null;
   credentialId?: string | null;
@@ -162,10 +167,37 @@ export function orderPayloadMatches(existing: OrderRow, input: CreateOrderInput)
     existing.riskDecisionId === input.riskDecisionId &&
     nullableStringEqual(existing.riskAllowanceId, input.riskAllowanceId) &&
     nullableStringEqual(existing.riskAllowanceBindingDigest, input.riskAllowanceBindingDigest) &&
+    nullableStringEqual(existing.openingCausalLineageJson, input.openingCausalLineageJson) &&
+    nullableStringEqual(existing.openingCausalLineageDigest, input.openingCausalLineageDigest) &&
     nullableStringEqual(existing.price, input.price) &&
     nullableStringEqual(existing.strategySignalId, input.strategySignalId) &&
     nullableStringEqual(existing.allocationDecisionId, input.allocationDecisionId)
   );
+}
+
+export function assertOrderOpeningCausalLineage(
+  organizationId: string,
+  input: CreateOrderInput,
+): void {
+  const json = input.openingCausalLineageJson ?? null;
+  const digest = input.openingCausalLineageDigest ?? null;
+  if ((json === null) !== (digest === null)) {
+    throw new Error("ORDER_OPENING_CAUSAL_LINEAGE_INCOMPLETE");
+  }
+  if (json === null || digest === null) return;
+  const lineage = parseOpeningCausalLineageV1(json);
+  if (lineage.contentDigest !== digest) {
+    throw new Error("ORDER_OPENING_CAUSAL_LINEAGE_DIGEST_MISMATCH");
+  }
+  if (lineage.organizationId !== organizationId || lineage.symbol !== input.symbol) {
+    throw new Error("ORDER_OPENING_CAUSAL_LINEAGE_SCOPE_MISMATCH");
+  }
+  if (
+    lineage.riskAllowanceId !== (input.riskAllowanceId ?? "") ||
+    lineage.riskAllowanceContentDigest !== (input.riskAllowanceBindingDigest ?? "")
+  ) {
+    throw new Error("ORDER_OPENING_CAUSAL_LINEAGE_ALLOWANCE_MISMATCH");
+  }
 }
 
 export function fillPayloadMatches(existing: FillRow, input: RecordFillInput): boolean {

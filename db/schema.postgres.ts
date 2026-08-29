@@ -3027,6 +3027,8 @@ export const traderOrders = pgTable(
     riskDecisionId: text("risk_decision_id").notNull(),
     riskAllowanceId: uuid("risk_allowance_id"),
     riskAllowanceBindingDigest: text("risk_allowance_binding_digest"),
+    openingCausalLineageJson: text("opening_causal_lineage_json"),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest"),
     executionPlanId: uuid("execution_plan_id"),
     executionPlanDigest: text("execution_plan_digest"),
     executionAttemptId: uuid("execution_attempt_id"),

@@ -19,6 +19,7 @@ import {
   fillPayloadMatches,
   isUniqueConstraintError,
   orderPayloadMatches,
+  assertOrderOpeningCausalLineage,
   type CreateOrderInput,
   type FillRow,
   type OrderEventRow,
@@ -64,6 +65,8 @@ function mapOrderRow(row: typeof pgSchema.traderOrders.$inferSelect): OrderRow {
     riskDecisionId: row.riskDecisionId,
     riskAllowanceId: row.riskAllowanceId,
     riskAllowanceBindingDigest: row.riskAllowanceBindingDigest,
+    openingCausalLineageJson: row.openingCausalLineageJson,
+    openingCausalLineageDigest: row.openingCausalLineageDigest,
     strategySignalId: row.strategySignalId,
     allocationDecisionId: row.allocationDecisionId,
     createdAt: row.createdAt,
@@ -263,6 +266,7 @@ export async function createOrderPostgres(
   input: CreateOrderInput,
 ): Promise<OrderRow> {
   const scoped = requireOrgContext(context.organizationId);
+  assertOrderOpeningCausalLineage(scoped.organizationId, input);
 
   const byClientOrderId = await findOrderByClientOrderIdPostgres(ex, context, input.clientOrderId);
   if (byClientOrderId) {
@@ -300,6 +304,8 @@ export async function createOrderPostgres(
       riskDecisionId: input.riskDecisionId,
       riskAllowanceId: input.riskAllowanceId ?? null,
       riskAllowanceBindingDigest: input.riskAllowanceBindingDigest ?? null,
+      openingCausalLineageJson: input.openingCausalLineageJson ?? null,
+      openingCausalLineageDigest: input.openingCausalLineageDigest ?? null,
       strategySignalId: input.strategySignalId ?? null,
       allocationDecisionId: input.allocationDecisionId ?? null,
       createdAt: now,
