@@ -13,7 +13,7 @@ state:
   completedWorkPackages: [DEE-624]
   remainingWorkPackages: []
 provenance:
-  authoritativeBase: 56ba1ddc262204ca2cd2d2732756e509c856b743
+  authoritativeBase: 91628d4987f2ac3305d272c5ac8f2596c8d41f54
   predecessor: docs/plans/dee-742-rv-measurement-schema.md
 ---
 

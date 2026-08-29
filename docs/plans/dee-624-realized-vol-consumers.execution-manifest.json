@@ -3,7 +3,7 @@
   "issue": "DEE-624",
   "base": {
     "ref": "origin/main",
-    "sha": "56ba1ddc262204ca2cd2d2732756e509c856b743"
+    "sha": "91628d4987f2ac3305d272c5ac8f2596c8d41f54"
   },
   "branch": "dee-624-realized-vol-consumers",
   "status": "locally-validated",
@@ -57,7 +57,7 @@
     "fresh independent exact-head P1=0/P2=0 review"
   ],
   "evidence": {
-    "semanticCommit": "194f2004",
+    "semanticCommit": "a602621a",
     "runtimeLegacyIdentityCount": 0,
     "focusedTests": "124/124 PASS",
     "capitalAuthorityTests": "15/15 PASS",
