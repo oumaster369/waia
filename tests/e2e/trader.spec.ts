@@ -38,5 +38,8 @@ test.describe("/trader route gate (AT-E1 S1)", () => {
     await expect(page.getByTestId("trader-api-key")).toBeVisible();
     await expect(page.getByTestId("trader-api-secret")).toHaveAttribute("type", "password");
     await expect(page.getByTestId("trader-connect-submit")).toBeEnabled();
+    await expect(
+      page.getByText("This workspace cannot enable live trading or change capital authority."),
+    ).toBeVisible();
   });
 });

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "AI-TRADER",
-  description: "AI-TRADER workspace — HTX connect and account status.",
+  description: "AI-TRADER user dashboard — account, portfolio, activity and system posture.",
 };
 
 export default function TraderDashboardPage() {

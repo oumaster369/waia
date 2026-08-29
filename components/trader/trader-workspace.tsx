@@ -45,6 +45,60 @@ function formatTimestamp(iso: string): string {
   }
 }
 
+export function snapshotAgeText(iso: string | undefined, nowMs = Date.now()): string | null {
+  if (!iso) return null;
+  const timestamp = new Date(iso).getTime();
+  if (!Number.isFinite(timestamp) || timestamp > nowMs) return null;
+  const ageMinutes = Math.floor((nowMs - timestamp) / 60_000);
+  if (ageMinutes < 1) return "Observed less than a minute ago";
+  return `Observed ${ageMinutes} ${ageMinutes === 1 ? "minute" : "minutes"} ago`;
+}
+
+function StatusPill({ status }: { status: "unknown" | "unavailable" }) {
+  const label = status === "unknown" ? "Timestamp unknown" : "Unavailable";
+  return (
+    <span
+      className="border-border bg-muted/30 text-muted-foreground rounded-full border px-2 py-0.5 text-xs"
+      data-state={status}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SnapshotObservation({ iso, label = "Last sync" }: { iso: string; label?: string }) {
+  const age = snapshotAgeText(iso);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+      <p className="text-muted-foreground">
+        {label}: {formatTimestamp(iso)}
+      </p>
+      {age ? (
+        <span className="border-border bg-muted/30 text-muted-foreground rounded-full border px-2 py-0.5 text-xs">
+          {age}
+        </span>
+      ) : (
+        <StatusPill status="unknown" />
+      )}
+    </div>
+  );
+}
+
+function UnavailableReadModel({ title, description }: { title: string; description: string }) {
+  return (
+    <WaiaSurface variant="raised" className="p-5" data-testid="trader-unavailable-read-model">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <StatusPill status="unavailable" />
+      </div>
+      <p className="text-muted-foreground mt-3 text-sm">{description}</p>
+      <p className="text-muted-foreground mt-3 text-xs">
+        No verified tenant-scoped read model is published. Nothing is inferred.
+      </p>
+    </WaiaSurface>
+  );
+}
+
 function PermissionExplainer() {
   return (
     <div
@@ -142,17 +196,19 @@ function BalancesPanel({
       </div>
       {latest ? (
         <div className="space-y-2 text-sm">
-          <p className="text-muted-foreground text-xs">
-            Last sync: {formatTimestamp(latest.syncedAt)}
-          </p>
-          <ul className="divide-border divide-y" data-testid="trader-balance-list">
-            {latest.balances.map((balance) => (
-              <li key={balance.asset} className="flex justify-between py-2">
-                <span>{balance.asset.toUpperCase()}</span>
-                <span>{balance.total}</span>
-              </li>
-            ))}
-          </ul>
+          <SnapshotObservation iso={latest.syncedAt} />
+          {latest.balances.length > 0 ? (
+            <ul className="divide-border divide-y" data-testid="trader-balance-list">
+              {latest.balances.map((balance) => (
+                <li key={balance.asset} className="flex justify-between py-2">
+                  <span>{balance.asset.toUpperCase()}</span>
+                  <span>{balance.total}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">This snapshot contains no asset balances.</p>
+          )}
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
@@ -188,25 +244,25 @@ function PositionsPanel({
           {syncing ? "Syncing…" : "Sync positions"}
         </Button>
       </div>
-      {latest && latest.positions.length > 0 ? (
+      {latest ? (
         <div className="space-y-2 text-sm">
-          <p className="text-muted-foreground text-xs">
-            Last sync: {formatTimestamp(latest.syncedAt)}
-          </p>
-          <ul className="divide-border divide-y" data-testid="trader-position-list">
-            {latest.positions.map((position) => (
-              <li key={position.symbol} className="flex justify-between py-2">
-                <span>{position.symbol}</span>
-                <span>{position.quantity}</span>
-              </li>
-            ))}
-          </ul>
+          <SnapshotObservation iso={latest.syncedAt} />
+          {latest.positions.length > 0 ? (
+            <ul className="divide-border divide-y" data-testid="trader-position-list">
+              {latest.positions.map((position) => (
+                <li key={position.symbol} className="flex justify-between py-2">
+                  <span>{position.symbol}</span>
+                  <span>{position.quantity}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">This snapshot contains no open spot positions.</p>
+          )}
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
-          {latest
-            ? "No open spot positions."
-            : "No position snapshot yet. Sync to fetch HTX positions."}
+          No position snapshot yet. Sync to fetch HTX positions.
         </p>
       )}
     </WaiaSurface>
@@ -258,28 +314,30 @@ function TradeHistoryPanel({
           {syncing ? "Syncing…" : "Sync trades"}
         </Button>
       </div>
-      {latest && latest.trades.length > 0 ? (
+      {latest ? (
         <div className="space-y-2 text-sm">
-          <p className="text-muted-foreground text-xs">
-            Last sync ({latest.symbol}): {formatTimestamp(latest.syncedAt)}
-          </p>
-          <ul className="divide-border divide-y" data-testid="trader-trade-list">
-            {latest.trades.slice(0, 10).map((trade) => (
-              <li key={trade.tradeId} className="flex justify-between gap-2 py-2">
-                <span>
-                  {trade.side.toUpperCase()} {trade.quantity} @ {trade.price}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  {formatTimestamp(trade.executedAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <SnapshotObservation iso={latest.syncedAt} label={`Last sync (${latest.symbol})`} />
+          {latest.trades.length > 0 ? (
+            <ul className="divide-border divide-y" data-testid="trader-trade-list">
+              {latest.trades.slice(0, 10).map((trade) => (
+                <li key={trade.tradeId} className="flex justify-between gap-2 py-2">
+                  <span>
+                    {trade.side.toUpperCase()} {trade.quantity} @ {trade.price}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {formatTimestamp(trade.executedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">
+              This snapshot contains no trades for {latest.symbol}.
+            </p>
+          )}
         </div>
       ) : (
-        <p className="text-muted-foreground text-sm">
-          {latest ? "No trades in the last 48h window." : "Sync to fetch recent HTX trade history."}
-        </p>
+        <p className="text-muted-foreground text-sm">Sync to fetch recent HTX trade history.</p>
       )}
     </WaiaSurface>
   );
@@ -459,14 +517,22 @@ export function TraderWorkspace() {
       className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10"
     >
       <header className="border-border mb-10 border-b pb-6">
-        <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA Module</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
+          <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">
+            User observation workspace
+          </span>
+        </div>
         <h1
           data-testid="trader-workspace-title"
           className="mt-2 text-3xl font-semibold tracking-tight"
         >
           AI-TRADER
         </h1>
-        <p className="text-muted-foreground mt-2 text-sm">Exchange connect and account status</p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
+          Observe your connected exchange account and the verified posture of the trading system.
+          This workspace cannot enable live trading or change capital authority.
+        </p>
       </header>
 
       {errorMessage ? (
@@ -483,28 +549,98 @@ export function TraderWorkspace() {
         <p className="text-muted-foreground text-sm">Loading account…</p>
       ) : activeCredential ? (
         <div className="space-y-6">
-          <WaiaSurface variant="elevated" className="p-6">
-            <CredentialStatus credential={activeCredential} />
-          </WaiaSurface>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <BalancesPanel
-              snapshots={balanceSnapshots}
-              syncing={syncingBalances}
-              onSync={handleSyncBalances}
-            />
-            <PositionsPanel
-              snapshots={positionSnapshots}
-              syncing={syncingPositions}
-              onSync={handleSyncPositions}
-            />
-            <TradeHistoryPanel
-              symbol={tradeSymbol}
-              onSymbolChange={handleTradeSymbolChange}
-              snapshots={tradeSnapshots}
-              syncing={syncingTrades}
-              onSync={handleSyncTrades}
-            />
-          </div>
+          <section aria-labelledby="trader-account-heading" className="space-y-4">
+            <div>
+              <p className="text-muted-foreground text-xs tracking-wide uppercase">Account</p>
+              <h2 id="trader-account-heading" className="mt-1 text-xl font-semibold">
+                HTX connection
+              </h2>
+            </div>
+            <WaiaSurface variant="elevated" className="p-6">
+              <CredentialStatus credential={activeCredential} />
+            </WaiaSurface>
+          </section>
+          <section aria-labelledby="trader-portfolio-heading" className="space-y-4">
+            <div>
+              <p className="text-muted-foreground text-xs tracking-wide uppercase">Portfolio</p>
+              <h2 id="trader-portfolio-heading" className="mt-1 text-xl font-semibold">
+                Balances, positions and activity
+              </h2>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <BalancesPanel
+                snapshots={balanceSnapshots}
+                syncing={syncingBalances}
+                onSync={handleSyncBalances}
+              />
+              <PositionsPanel
+                snapshots={positionSnapshots}
+                syncing={syncingPositions}
+                onSync={handleSyncPositions}
+              />
+              <TradeHistoryPanel
+                symbol={tradeSymbol}
+                onSymbolChange={handleTradeSymbolChange}
+                snapshots={tradeSnapshots}
+                syncing={syncingTrades}
+                onSync={handleSyncTrades}
+              />
+            </div>
+          </section>
+          <section
+            aria-labelledby="trader-system-heading"
+            className="space-y-4"
+            data-testid="trader-system-posture"
+          >
+            <div>
+              <p className="text-muted-foreground text-xs tracking-wide uppercase">
+                System posture
+              </p>
+              <h2 id="trader-system-heading" className="mt-1 text-xl font-semibold">
+                Verified runtime evidence
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Read-only explanations become available only when tenant-scoped evidence APIs are
+                published.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <UnavailableReadModel
+                title="Execution mode"
+                description="Paper/live mode and its authorization state are not exposed to the user read model."
+              />
+              <UnavailableReadModel
+                title="Forecast & Decision"
+                description="No tenant-scoped Forecast V2 or Decision V2 explanation stream is available."
+              />
+              <UnavailableReadModel
+                title="Risk & Guardian"
+                description="No tenant-scoped risk verdict or Guardian posture stream is available."
+              />
+              <UnavailableReadModel
+                title="Execution & Reality"
+                description="No tenant-scoped execution-to-reality evidence projection is available."
+              />
+              <UnavailableReadModel
+                title="Runtime health"
+                description="Operator runtime health exists only behind administrative authority."
+              />
+              <UnavailableReadModel
+                title="Calibration & drift"
+                description="No tenant-scoped calibration or drift posture read model is available."
+              />
+            </div>
+          </section>
+          <aside
+            className="border-border bg-muted/10 rounded-lg border p-4 text-sm"
+            data-testid="trader-authority-boundary"
+          >
+            <p className="font-medium">Authority boundary</p>
+            <p className="text-muted-foreground mt-1">
+              This dashboard is observational. Live enablement, kill switches, strategy promotion,
+              administrative controls and capital changes are intentionally absent.
+            </p>
+          </aside>
         </div>
       ) : (
         <div className="mx-auto w-full max-w-lg space-y-6">
