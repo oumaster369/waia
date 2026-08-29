@@ -18,7 +18,9 @@ The implementation stores immutable references/digests, not mutable upstream obj
 
 - `lib/trader/execution/**`
 - `lib/trader/lifecycle/**`
+- exact additive Decision V2 / RiskAllowance V2 projection fields required to pass already-sealed Forecast and canonical-lineage identities into Execution V2
 - additive lifecycle persistence/schema and migrations required for exact parity
+- Admin operator and tenant-scoped read-only causal-lineage observability
 - focused unit/integration/PostgreSQL tests
 - this plan and execution manifest
 
@@ -27,6 +29,10 @@ The implementation stores immutable references/digests, not mutable upstream obj
 - scientific formulas, Forecast V2 construction, Decision V2 economics, Risk V2 sizing/permission policy
 - accounting/PnL/HWM semantics
 - holdout, production/live enablement or capital gates
+
+## Authorized scope expansion
+
+The controller authorized this additive expansion after implementation proved that Execution V2 currently carries Decision/Risk identities but not the already-sealed Forecast V2 or canonical causal-lineage identities. The only permitted upstream change is exact pass-through of existing IDs/digests into RiskAllowance/ExecutionPlan contracts. Retrospective lookup, reconstructed intent and invented references remain forbidden. Operator Admin and tenant user observability must remain separate, read-only and tenant-scoped.
 
 ## Ordered implementation
 
@@ -43,4 +49,3 @@ The implementation stores immutable references/digests, not mutable upstream obj
 - Missing or mismatched required capital lineage blocks new exposure before connector submission.
 - Multi-fill and close paths preserve one byte-identical opening digest.
 - Focused, full fresh-migrated SQLite, PostgreSQL, exact-head independent review, authoritative CI and DEE-653 all pass before squash merge.
-

@@ -16,15 +16,19 @@
   "ownedGlobs": [
     "lib/trader/execution/**",
     "lib/trader/lifecycle/**",
+    "lib/trader/decision-v2/**",
+    "lib/trader/risk/v2/**",
     "db/**",
+    "app/admin/**",
+    "app/api/admin/**",
+    "app/api/dashboard/**",
+    "app/dashboard/**",
     "tests/unit/**",
     "tests/integration/**",
     "docs/plans/dee-635-*"
   ],
   "forbiddenGlobs": [
     "lib/trader/intelligence/forecast-decision/**",
-    "lib/trader/decision-v2/**",
-    "lib/trader/risk/v2/**",
     "lib/trader/billing/**",
     "replay-runs/**"
   ],
@@ -33,6 +37,11 @@
     "Exposure-increasing submission fails closed on absent or mismatched Decision V2, Risk V2, Forecast V2 or canonical causal lineage authority.",
     "Accounting, PnL, HWM, scientific formula, holdout, live and capital policy semantics are unchanged."
   ],
+  "scopeExpansion": {
+    "status": "controller-authorized",
+    "reason": "Execution V2 lacked exact Forecast V2 and canonical-causal-lineage identities required for truthful persistence.",
+    "constraint": "Additive pass-through only; no retrospective lookup, invented refs, economics, permission, live or capital-policy change."
+  },
   "validation": [
     "schema and digest known-answer/mutation tests",
     "open/partial/multi-fill/close lifecycle parity",
