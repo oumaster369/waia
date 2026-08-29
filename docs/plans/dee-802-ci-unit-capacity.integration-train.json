@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-802",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Keep the measured CI capacity boundary separate from DEE-799 semantics and from all production surfaces.",
+  "includedChildren": [
+    {
+      "issue": "DEE-803",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Raise the inner unit wrapper hard watchdog from 2700 to 3600 seconds, set the outer GitHub job bound to 70 minutes, and prove both coherent bounds.",
+      "dependencies": ["DEE-755"],
+      "dependencyEvidence": ["DEE-755 established bounded progress, TERM grace, process-group KILL, full logging and exit preservation."],
+      "expectedFileOrSchemaSurfaces": [".github/workflows/ci.yml", "scripts/github/test-run-unit-tests-with-bounded-progress.sh"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller authorized the separate admission-first 60-minute CI-capacity train."},
+      "expectedAcceptanceEvidence": ["The workflow passes 3600 seconds to the unchanged bounded-progress wrapper; the 70-minute outer job bound leaves setup and termination margin."],
+      "expectedTests": ["focused wrapper timeout/TERM/KILL/exit negatives; explicit inner 3600-second and outer 70-minute invariant proofs"],
+      "actualFiles": [],
+      "integratedCommits": [],
+      "acceptanceEvidence": [],
+      "tests": [],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-804",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Prove preserved watchdog behavior and mandatory full-suite closure on the exact capacity-only tree.",
+      "dependencies": ["DEE-803"],
+      "dependencyEvidence": ["Proof runs only after the exact workflow hard-bound change."],
+      "expectedFileOrSchemaSurfaces": ["docs/plans/dee-802-ci-unit-capacity.integration-train.json", "docs/plans/dee-802-ci-unit-capacity.md"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller requires focused/full/review proof without skips or retries."},
+      "expectedAcceptanceEvidence": ["No command, selection, assertion, retry, progress, TERM, KILL, log or exit semantic changes; all gates pass."],
+      "expectedTests": ["literal fresh-migrated SQLite; typecheck; lint; build; canon; exact-head review"],
+      "actualFiles": [],
+      "integratedCommits": [],
+      "acceptanceEvidence": [],
+      "tests": [],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Program Controller exact CI-capacity authorization"},
+    "authoritativeBase": "55ea7e2f3e3d6bc117d7b141dc1e8cba2edd8f0d",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-799 owns only the Twin Engine facade assertion. DEE-802 owns only the explicit CI watchdog budget."},
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "pending-admission-commit",
+      "manifestCommit": "pending-admission-commit",
+      "manifestPath": "docs/plans/dee-802-ci-unit-capacity.integration-train.json",
+      "reviewer": "Program Controller exact CI-capacity authorization"
+    },
+    "admissionReviews": [],
+    "cumulativeChecks": [],
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "No production, schema, scientific, security, holdout, live, execution or capital semantics change.",
+    "No skip, retry, shard, filter, assertion, test command or test-selection change.",
+    "Minute progress, full stdout/stderr log, TERM grace, process-group KILL and original exit status remain intact.",
+    "The wrapper remains hard-bounded at 3600 seconds and the complete GitHub job remains hard-bounded at 70 minutes."
+  ],
+  "rollbackStrategy": "One squash revert restores the 2700-second CI bound; no production or durable data is touched.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-802-ci-unit-capacity.integration-train.json DEE-802 admission",
+    "focused": ["bounded-progress wrapper timeout/TERM/KILL/exit negatives", "workflow capacity invariant"],
+    "fullSuite": "one literal full fresh-migrated SQLite suite and authoritative CI on the exact PR head",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
