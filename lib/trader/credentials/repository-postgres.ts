@@ -108,13 +108,8 @@ export async function revokeCredentialRowPostgres(
   credentialId: string,
 ): Promise<ExchangeCredentialRow | null> {
   const scoped = requireOrgContext(context.organizationId);
-  const existing = await getCredentialRowByIdPostgres(ex, scoped, credentialId);
-  if (!existing || existing.status === "revoked") {
-    return null;
-  }
-
   const now = new Date();
-  await ex
+  const rows = await ex
     .update(pgSchema.exchangeCredentials)
     .set({
       status: "revoked",
@@ -124,9 +119,11 @@ export async function revokeCredentialRowPostgres(
     .where(
       and(
         eq(pgSchema.exchangeCredentials.id, credentialId),
+        eq(pgSchema.exchangeCredentials.status, "active"),
         orgScopedWhere(pgSchema.exchangeCredentials.organizationId, scoped),
       ),
-    );
+    )
+    .returning();
 
-  return getCredentialRowByIdPostgres(ex, scoped, credentialId);
+  return rows[0] ? mapRow(rows[0]) : null;
 }

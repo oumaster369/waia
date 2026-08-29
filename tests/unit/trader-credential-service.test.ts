@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
@@ -273,6 +273,135 @@ describe("trader credential service (DEE-234)", () => {
       .find((row) => row.action === traderAuditActions.credentialRevoked);
 
     expect(auditRow).toBeDefined();
+
+    const second = await service.revokeCredentials({ organizationId }, stored.id);
+    expect(second.status).toBe("revoked");
+    const revokeAudits = db
+      .select({ action: auditLogs.action })
+      .from(auditLogs)
+      .where(eq(auditLogs.entityId, stored.id))
+      .all()
+      .filter((row) => row.action === traderAuditActions.credentialRevoked);
+    expect(revokeAudits).toHaveLength(1);
+  });
+
+  it("rejects stale atomic replacement without revoking the active row", async () => {
+    const service = await createService();
+    const stored = await service.storeCredentials(
+      { organizationId },
+      {
+        venue: "mock",
+        exchangeAccountId: "guarded-acct-1",
+        credentials: { apiKey: "GUARDED-KEY-1", apiSecret: "GUARDED-SECRET-1" },
+      },
+    );
+
+    await expect(
+      service.storeCredentials(
+        { organizationId },
+        {
+          venue: "mock",
+          exchangeAccountId: "guarded-acct-1",
+          credentials: { apiKey: "GUARDED-KEY-2", apiSecret: "GUARDED-SECRET-2" },
+          expectedActiveCredentialId: "stale-id",
+        },
+      ),
+    ).rejects.toMatchObject({ code: "CREDENTIAL_CONFLICT" });
+
+    const rows = await service.listCredentialMetadata({ organizationId });
+    expect(rows.find((row) => row.id === stored.id)?.status).toBe("active");
+  });
+
+  it("rolls back SQLite replacement when audit append fails", async () => {
+    const ready = await createService();
+    const stored = await ready.storeCredentials(
+      { organizationId },
+      {
+        venue: "mock",
+        exchangeAccountId: "audit-rollback-replace",
+        credentials: { apiKey: "ROLLBACK-OLD", apiSecret: "ROLLBACK-OLD-SECRET" },
+      },
+    );
+    const failing = createSqliteCredentialService(getDb(), {
+      createProvider: () => createReadyProvider(),
+      writeAudit: () => {
+        throw new Error("synthetic audit failure");
+      },
+    });
+
+    await expect(
+      failing.storeCredentials(
+        { organizationId },
+        {
+          venue: "mock",
+          exchangeAccountId: "audit-rollback-replace",
+          credentials: { apiKey: "ROLLBACK-NEW", apiSecret: "ROLLBACK-NEW-SECRET" },
+          expectedActiveCredentialId: stored.id,
+        },
+      ),
+    ).rejects.toThrow("synthetic audit failure");
+
+    const rows = await ready.listCredentialMetadata({ organizationId });
+    expect(rows.find((row) => row.id === stored.id)?.status).toBe("active");
+    expect(
+      rows.filter(
+        (row) => row.exchangeAccountId === "audit-rollback-replace" && row.status === "active",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("rolls back SQLite revoke when replacement insert fails", async () => {
+    const service = await createService();
+    const stored = await service.storeCredentials(
+      { organizationId },
+      {
+        venue: "mock",
+        exchangeAccountId: "insert-rollback-replace",
+        credentials: { apiKey: "INSERT-OLD", apiSecret: "INSERT-OLD-SECRET" },
+      },
+    );
+    const uuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(stored.id);
+    try {
+      await expect(
+        service.storeCredentials(
+          { organizationId },
+          {
+            venue: "mock",
+            exchangeAccountId: "insert-rollback-replace",
+            credentials: { apiKey: "INSERT-NEW", apiSecret: "INSERT-NEW-SECRET" },
+            expectedActiveCredentialId: stored.id,
+          },
+        ),
+      ).rejects.toThrow();
+    } finally {
+      uuidSpy.mockRestore();
+    }
+    expect((await service.listCredentialMetadata({ organizationId })).find((row) => row.id === stored.id)?.status)
+      .toBe("active");
+  });
+
+  it("rolls back SQLite revoke when audit append fails", async () => {
+    const ready = await createService();
+    const stored = await ready.storeCredentials(
+      { organizationId },
+      {
+        venue: "mock",
+        exchangeAccountId: "audit-rollback-revoke",
+        credentials: { apiKey: "REVOKE-ROLLBACK", apiSecret: "REVOKE-ROLLBACK-SECRET" },
+      },
+    );
+    const failing = createSqliteCredentialService(getDb(), {
+      createProvider: () => createReadyProvider(),
+      writeAudit: () => {
+        throw new Error("synthetic audit failure");
+      },
+    });
+
+    await expect(
+      failing.revokeCredentials({ organizationId }, stored.id),
+    ).rejects.toThrow("synthetic audit failure");
+    expect((await ready.listCredentialMetadata({ organizationId })).find((row) => row.id === stored.id)?.status)
+      .toBe("active");
   });
 
   it("storeCredentials throws MasterKeyNotReadyError when provider is not production-ready", async () => {

@@ -1,5 +1,6 @@
 export const CREDENTIAL_ERROR_CODES = {
   NOT_FOUND: "CREDENTIAL_NOT_FOUND",
+  CONFLICT: "CREDENTIAL_CONFLICT",
   DECRYPT_FAILED: "CREDENTIAL_DECRYPT_FAILED",
   PAYLOAD_INVALID: "CREDENTIAL_PAYLOAD_INVALID",
 } as const;
@@ -21,6 +22,13 @@ export class CredentialNotFoundError extends CredentialError {
   constructor(message = "Exchange credential not found.") {
     super(CREDENTIAL_ERROR_CODES.NOT_FOUND, message);
     this.name = "CredentialNotFoundError";
+  }
+}
+
+export class CredentialConflictError extends CredentialError {
+  constructor(message = "Exchange credential state changed. Refresh before retrying.") {
+    super(CREDENTIAL_ERROR_CODES.CONFLICT, message);
+    this.name = "CredentialConflictError";
   }
 }
 

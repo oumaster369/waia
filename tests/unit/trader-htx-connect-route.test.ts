@@ -5,6 +5,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { POST as connectRoutePost } from "@/app/api/trader/exchange-credentials/connect/route";
+import {
+  DELETE as exchangeCredentialDelete,
+  isCredentialMutationSameOrigin,
+} from "@/app/api/trader/exchange-credentials/[credentialId]/route";
 import { GET as exchangeCredentialsGet } from "@/app/api/trader/exchange-credentials/route";
 import { getDb } from "@/db/client";
 import { auditLogs, organizationEntitlements } from "@/db/schema";
@@ -15,6 +19,7 @@ import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
 import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import {
   handleExchangeCredentialsGet,
+  handleExchangeCredentialDelete,
   handleHtxConnectPost,
   type ConnectHandlerDeps,
 } from "@/lib/trader/credentials/connect-handler";
@@ -331,13 +336,17 @@ describe("HTX connect API (DEE-236)", () => {
 
   it("replaces existing credentials and emits rotated audit", async () => {
     const deps = createDeps();
-    await handleHtxConnectPost(connectPostRequest({ venue: "htx", ...VALID_CREDS }), deps);
+    const listed = await handleExchangeCredentialsGet(deps);
+    const active = (listed.body as { credentials: Array<{ id: string; status: string }> })
+      .credentials.find((row) => row.status === "active");
+    expect(active).toBeDefined();
 
     const second = await handleHtxConnectPost(
       connectPostRequest({
         venue: "htx",
         apiKey: "replacement-key",
         apiSecret: "replacement-secret",
+        replacementCredentialId: active!.id,
       }),
       createDeps({
         createConnector: (config) =>
@@ -370,6 +379,91 @@ describe("HTX connect API (DEE-236)", () => {
       .where(eq(auditLogs.action, traderAuditActions.credentialRotated))
       .all();
     expect(rotated.length).toBeGreaterThan(0);
+  });
+
+  it("fails closed when a replacement uses a stale credential id", async () => {
+    const result = await handleHtxConnectPost(
+      connectPostRequest({
+        venue: "htx",
+        ...VALID_CREDS,
+        replacementCredentialId: "stale-session-credential-id",
+      }),
+      createDeps(),
+    );
+    expect(result.status).toBe(409);
+    expect(JSON.stringify(result.body)).not.toContain(VALID_CREDS.apiKey);
+    expect(JSON.stringify(result.body)).not.toContain(VALID_CREDS.apiSecret);
+  });
+
+  it("rejects destructive disconnect with missing or foreign Origin", async () => {
+    const context = { params: Promise.resolve({ credentialId: crypto.randomUUID() }) };
+    for (const request of [
+      new Request("https://trader.waia.life/api/trader/exchange-credentials/example", {
+        method: "DELETE",
+      }),
+      new Request("https://trader.waia.life/api/trader/exchange-credentials/example", {
+        method: "DELETE",
+        headers: { Origin: "https://foreign.example" },
+      }),
+    ]) {
+      const response = await exchangeCredentialDelete(request, context);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        error: {
+          code: HTX_CONNECT_ERROR_CODES.CSRF_INVALID,
+          message: "Request origin is not allowed.",
+        },
+      });
+    }
+  });
+
+  it("accepts the direct request origin and configured trusted-proxy origin", () => {
+    expect(
+      isCredentialMutationSameOrigin(
+        new Request("https://trader.waia.life/api/trader/exchange-credentials/example", {
+          method: "DELETE",
+          headers: { Origin: "https://trader.waia.life" },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isCredentialMutationSameOrigin(
+        new Request("http://internal-worker/api/trader/exchange-credentials/example", {
+          method: "DELETE",
+          headers: { Origin: "http://trader.localhost:3000" },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("disconnect replay is idempotent, emits one audit and does not disclose secrets", async () => {
+    const listed = await handleExchangeCredentialsGet(createDeps());
+    const active = (listed.body as { credentials: Array<{ id: string; status: string }> })
+      .credentials.find((row) => row.status === "active");
+    expect(active).toBeDefined();
+
+    const first = await handleExchangeCredentialDelete(active!.id, createDeps());
+    const second = await handleExchangeCredentialDelete(active!.id, createDeps());
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.body).toMatchObject({ id: active!.id, status: "revoked" });
+    expect(second.body).toMatchObject({ id: active!.id, status: "revoked" });
+    expect(JSON.stringify([first.body, second.body])).not.toContain(VALID_CREDS.apiSecret);
+    const revokeAudits = getDb()
+      .select({ action: auditLogs.action })
+      .from(auditLogs)
+      .where(eq(auditLogs.entityId, active!.id))
+      .all()
+      .filter((row) => row.action === traderAuditActions.credentialRevoked);
+    expect(revokeAudits).toHaveLength(1);
+  });
+
+  it("disconnect fails closed for an unknown or cross-tenant credential id", async () => {
+    const result = await handleExchangeCredentialDelete(crypto.randomUUID(), createDeps());
+    expect(result.status).toBe(404);
+    expect(result.body).toEqual({
+      error: { code: HTX_CONNECT_ERROR_CODES.CREDENTIAL_NOT_FOUND, message: "Credential not found." },
+    });
   });
 
   it("GET lists credential metadata for entitled user", async () => {
