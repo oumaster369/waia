@@ -38,3 +38,10 @@ On exact base `56ba1ddc262204ca2cd2d2732756e509c856b743`, a literal fresh full s
 - Run the health-route/SQLite focused suite.
 - Run literal full fresh suite, typecheck, lint, build, canon and PR governance.
 - Require independent exact-head review, authoritative CI, applicable PostgreSQL gate and DEE-653 before merge.
+
+## Acceptance
+
+- The route test passes from a fresh checkout with no pre-existing SQLite database.
+- Its dedicated migrated fixture is removed after the test.
+- Production runtime, database schema, migrations and settlement semantics remain byte-identical to the base.
+- Focused and full gates, independent review, CI and DEE-653 pass before merge.
