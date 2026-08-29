@@ -13,6 +13,8 @@ provenance:
   createdFrom: controller-authorized-risk-expiry-test-remediation
   authoritativeBase: ce9a726100aee93ad993b60ee43feae0cb27cbc0
   recoverableBackup: backup/dee-796-pre-dee799-rebuild-e1be7262
+  admissionCommit: 5816c858971f9c368d0e52c0121822f4ddb9ba91
+  admissionManifestDigest: 669f491d3723b01253129b02fd814b0d66fdedb2d389b5f290e14b19bea774c3
 state: admitted
 ---
 
@@ -38,3 +40,14 @@ Run the exact focused test repeatedly, the complete PostgreSQL Risk suite, the c
 - The exact expiry test passes repeatedly and the combined Decision/Risk/Execution PostgreSQL matrix remains green.
 - The bounded pre-consume validity and post-expiry wait preserve every existing consume and expiry assertion without retry, skip or production change.
 - Canon, typecheck, scoped lint, build, literal fresh-migrated SQLite and independent exact-head review pass before publication; authoritative CI and DEE-653 pass before squash merge.
+
+## Validated current-main evidence pending manifest freeze
+
+- Exact base: `ce9a726100aee93ad993b60ee43feae0cb27cbc0`.
+- Recoverable backup: `backup/dee-796-pre-dee799-rebuild-e1be7262`.
+- Admission-first commit: `5816c858971f9c368d0e52c0121822f4ddb9ba91`; admitted digest: `669f491d3723b01253129b02fd814b0d66fdedb2d389b5f290e14b19bea774c3`.
+- DEE-797 semantic commit: `757688e6`; DEE-798 proof commit: `7b84eba8`; combined semantic patch is byte-identical to the previously reviewed PR #518 tree.
+- Hermetic source proof PASS; exact PostgreSQL expiry test passed three consecutive runs; Decision/Risk/Execution PostgreSQL matrix `33/33` PASS.
+- Literal fresh-migrated SQLite at `/private/tmp/dee796-current-main-authoritative.C7c8MG/waia.sqlite`: `878` files passed + `83` skipped; `5109` tests passed + `426` skipped; `0` failures; `1256.91 s`.
+- Typecheck PASS; lint PASS with zero errors (296 repository-baseline warnings); production build PASS; canonical validation PASS.
+- Production/runtime/schema diff is empty; only the admitted PostgreSQL test, hermetic proof, and governance documents differ from base.
