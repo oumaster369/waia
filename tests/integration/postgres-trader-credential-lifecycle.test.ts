@@ -4,7 +4,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
-import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
@@ -15,8 +14,8 @@ import { seedHtrPostgresUser } from "@/tests/integration/htr-postgres-fixture-pr
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
-const USER_A = "00000000-0000-4000-8077-000000077901";
-const USER_B = "00000000-0000-4000-8077-000000077902";
+const USER_A = crypto.randomUUID();
+const USER_B = crypto.randomUUID();
 
 function randomMasterKeyBase64(): string {
   const bytes = new Uint8Array(32);
@@ -29,25 +28,6 @@ describe.skipIf(!enabled || !url)("postgres HTX credential lifecycle (DEE-779)",
   let orgB: string;
   const masterKey = randomMasterKeyBase64();
 
-  async function cleanup(): Promise<void> {
-    const sql = postgres(url!, { max: 1 });
-    try {
-      for (const userId of [USER_A, USER_B]) {
-        const orgId = personalOrganizationIdFromUserId(userId);
-        await sql.unsafe(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM exchange_credentials WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM organizations WHERE id = $1`, [orgId]);
-        await sql.unsafe(`DELETE FROM user_platform_roles WHERE user_id = $1`, [userId]);
-        await sql.unsafe(`DELETE FROM profiles WHERE user_id = $1`, [userId]);
-        await sql.unsafe(`DELETE FROM users WHERE id = $1`, [userId]);
-        await sql.unsafe(`DELETE FROM auth.users WHERE id = $1`, [userId]);
-      }
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
-  }
-
   const createProvider = () =>
     createMasterKeyProvider({
       injectSecretGetter: async () => masterKey,
@@ -55,13 +35,13 @@ describe.skipIf(!enabled || !url)("postgres HTX credential lifecycle (DEE-779)",
     });
 
   beforeAll(async () => {
-    await cleanup();
     orgA = await seedHtrPostgresUser(url!, USER_A, "Credential Lifecycle A");
     orgB = await seedHtrPostgresUser(url!, USER_B, "Credential Lifecycle B");
   });
 
   afterAll(async () => {
-    await cleanup();
+    // The authoritative audit is append-only, so this disposable test database
+    // intentionally retains its uniquely scoped fixture evidence.
     resetPostgresSingletonForTests();
   });
 
