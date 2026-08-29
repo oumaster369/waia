@@ -13,7 +13,7 @@ function makeCycle(overrides?: Partial<PaperCycleResult>): PaperCycleResult {
         instrumentId: "BTC/USDT",
         evaluatedAt: "2026-01-01T12:00:00.000Z",
         featureSetId: "fs-1",
-        physics: { close: "100", zscoreVsSma20: "1.2", realizedVol20: "1.5" },
+        physics: { close: "100", zscoreVsSma20: "1.2", priceDispersion20: "1.5" },
         liquidity: { spreadBps: "1" },
         crowd: { fearGreedIndex: null, newsSentiment: "neutral" },
         futureContext: { eventRiskScore: "0.1" },
@@ -27,7 +27,7 @@ function makeCycle(overrides?: Partial<PaperCycleResult>): PaperCycleResult {
         },
       },
       features: {
-        features: { close: "100", zscoreVsSma20: "1.2", realizedVol20: "1.5" },
+        features: { close: "100", zscoreVsSma20: "1.2", priceDispersion20: "1.5" },
       },
       signals: [],
     },

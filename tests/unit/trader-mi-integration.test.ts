@@ -74,7 +74,7 @@ function highQualityFeatures(): FeatureSnapshot {
       close: "68000",
       sma20: "67000",
       zscoreVsSma20: "1.5",
-      realizedVol20: "300",
+      priceDispersion20: "300",
       spreadBps: "1.0",
     },
     dataQualityScore: 0.9,

@@ -17,7 +17,7 @@ describe("event attribution rules (M7)", () => {
       features: {
         close: "100",
         zscoreVsSma20: "2",
-        realizedVol20: "1.5",
+        priceDispersion20: "1.5",
         regime: "RANGE",
       },
     });
@@ -34,7 +34,7 @@ describe("event attribution rules (M7)", () => {
       features: {
         close: "100",
         zscoreVsSma20: "2",
-        realizedVol20: "1.5",
+        priceDispersion20: "1.5",
         regime: "RANGE",
       },
     });

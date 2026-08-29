@@ -29,7 +29,7 @@ describe("analytical layers v0 (DEE-200)", () => {
     expect(buildMarketPhysicsLayer(features)).toEqual({
       close: features.features.close,
       zscoreVsSma20: features.features.zscoreVsSma20,
-      realizedVol20: features.features.realizedVol20,
+      priceDispersion20: features.features.priceDispersion20,
     });
     expect(buildLiquidityLayer(features)).toEqual({
       spreadBps: features.features.spreadBps,

@@ -40,7 +40,7 @@ function volatilityPhysicsConfidence(features: EventAttributionFeatureSnapshot |
   if (!features) {
     return "0.5000";
   }
-  const ratio = divideDecimal(features.realizedVol20, "1.0");
+  const ratio = divideDecimal(features.priceDispersion20, "1.0");
   return clampConfidence(formatDecimal(parseDecimal(ratio)));
 }
 
@@ -96,7 +96,7 @@ export function classifyEventDeterministic(input: {
     };
   }
 
-  if (input.features && compareDecimal(input.features.realizedVol20, "1.0") >= 0) {
+  if (input.features && compareDecimal(input.features.priceDispersion20, "1.0") >= 0) {
     return {
       classificationKind: eventClassificationKinds.volatilitySpike,
       ruleId: EVENT_CLASSIFICATION_RULE_IDS.volatilityPhysics,

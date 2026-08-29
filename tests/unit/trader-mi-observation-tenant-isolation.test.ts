@@ -86,7 +86,7 @@ describe("trader mi observation tenant isolation (DEE-281 / ADR-0007)", () => {
           instrumentId: "BTC/USDT",
           evaluatedAt: MARKET_KNOWABLE_TIME,
           featureSetId: "y",
-          physics: { close: "1", zscoreVsSma20: "0", realizedVol20: "0" },
+          physics: { close: "1", zscoreVsSma20: "0", priceDispersion20: "0" },
           liquidity: { spreadBps: "0" },
           crowd: { fearGreedIndex: null, newsSentiment: "0" },
           futureContext: { eventRiskScore: "0" },

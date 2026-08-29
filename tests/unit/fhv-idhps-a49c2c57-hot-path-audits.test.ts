@@ -54,7 +54,7 @@ function computeFeatureSnapshotSliceMapOracle(input: {
     return formatDecimal(sum / BigInt(closes.length));
   })();
   const sma20 = closes.length > 0 ? mean : close;
-  const realizedVol20 = (() => {
+  const priceDispersion20 = (() => {
     if (closes.length < 2) {
       return "0";
     }
@@ -67,10 +67,10 @@ function computeFeatureSnapshotSliceMapOracle(input: {
     return formatDecimal(bigintSqrt(sumSq / BigInt(closes.length)));
   })();
   const zscoreVsSma20 =
-    compareDecimal(realizedVol20, "0") === 0
+    compareDecimal(priceDispersion20, "0") === 0
       ? "0"
-      : divideDecimal(subtractDecimal(close, sma20), realizedVol20);
-  return { close, sma20, realizedVol20, zscoreVsSma20, selectedCloses: closes };
+      : divideDecimal(subtractDecimal(close, sma20), priceDispersion20);
+  return { close, sma20, priceDispersion20, zscoreVsSma20, selectedCloses: closes };
 }
 
 describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () => {
@@ -91,7 +91,7 @@ describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () 
     });
     expect(actual.features.close).toBe(oracle.close);
     expect(actual.features.sma20).toBe(oracle.sma20);
-    expect(actual.features.realizedVol20).toBe(oracle.realizedVol20);
+    expect(actual.features.priceDispersion20).toBe(oracle.priceDispersion20);
     expect(actual.features.zscoreVsSma20).toBe(oracle.zscoreVsSma20);
     expect(oracle.selectedCloses).toHaveLength(Math.min(20, barsCopy.length));
     // No input mutation.
@@ -112,7 +112,7 @@ describe("a49c2c57 hot-path audits (hypothesis omit + feature equivalence)", () 
       newId: () => "a",
     });
     expect(actual.features.sma20).toBe(oracle.sma20);
-    expect(actual.features.realizedVol20).toBe(oracle.realizedVol20);
+    expect(actual.features.priceDispersion20).toBe(oracle.priceDispersion20);
     expect(actual.features.zscoreVsSma20).toBe(oracle.zscoreVsSma20);
   });
 

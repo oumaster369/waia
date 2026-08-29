@@ -196,7 +196,6 @@ export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): Feat
   const close = bars[end - 1]!.close;
   const sma20 = end > start ? meanClose(bars, start, end) : close;
   const priceDispersion20 = sampleStdDevClose(bars, start, end, sma20);
-  const realizedVol20 = priceDispersion20;
   const zscoreVsSma20 =
     compareDecimal(priceDispersion20, "0") === 0
       ? "0"
@@ -214,7 +213,6 @@ export function computeFeatureSnapshot(input: ComputeFeatureSnapshotInput): Feat
       close,
       sma20,
       zscoreVsSma20,
-      realizedVol20,
       priceDispersion20,
       realizedVar20m_1m,
       realizedVol20m_1m,

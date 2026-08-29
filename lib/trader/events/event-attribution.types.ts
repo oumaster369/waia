@@ -35,7 +35,7 @@ export type EventClassificationResult = {
 export type EventAttributionFeatureSnapshot = {
   close: string;
   zscoreVsSma20: string;
-  realizedVol20: string;
+  priceDispersion20: string;
   regime: Regime;
 };
 

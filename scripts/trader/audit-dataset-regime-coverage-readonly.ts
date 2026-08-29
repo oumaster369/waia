@@ -44,8 +44,8 @@ type DiversityReport = {
     nonTrendingBarCount: number;
     downBarCount: number;
   };
-  volatility: {
-    realizedVol20: { min: string; p25: string; median: string; p75: string; max: string };
+  priceDispersion: {
+    priceDispersion20: { min: string; p25: string; median: string; p75: string; max: string };
     highVolBarShare: number;
     lowVolBarShare: number;
   };
@@ -105,7 +105,7 @@ function percentile(sorted: number[], p: number): number {
 
 function analyzeBars(bars: readonly Bar[]): DiversityReport {
   const regimeCounts = emptyRegimeCounts();
-  const realizedVols: number[] = [];
+  const priceDispersions: number[] = [];
   const zscores: string[] = [];
   let previousRegime: Regime | undefined;
   let transitionCount = 0;
@@ -138,7 +138,7 @@ function analyzeBars(bars: readonly Bar[]): DiversityReport {
     });
     const regime = classifyRegime(features);
     regimeCounts[regime] += 1;
-    realizedVols.push(Number.parseFloat(features.features.realizedVol20));
+    priceDispersions.push(Number.parseFloat(features.features.priceDispersion20));
     zscores.push(features.features.zscoreVsSma20);
 
     if (previousRegime !== undefined && previousRegime !== regime) {
@@ -212,11 +212,11 @@ function analyzeBars(bars: readonly Bar[]): DiversityReport {
     maxConsecutive[currentRegime] = Math.max(maxConsecutive[currentRegime] ?? 0, currentRun);
   }
 
-  const sortedVols = [...realizedVols].sort((a, b) => a - b);
-  const medianVol = percentile(sortedVols, 0.5);
+  const sortedPriceDispersions = [...priceDispersions].sort((a, b) => a - b);
+  const medianVol = percentile(sortedPriceDispersions, 0.5);
   let highVol = 0;
   let lowVol = 0;
-  for (const vol of realizedVols) {
+  for (const vol of priceDispersions) {
     if (vol >= medianVol * 1.5) {
       highVol += 1;
     }
@@ -269,13 +269,13 @@ function analyzeBars(bars: readonly Bar[]): DiversityReport {
       nonTrendingBarCount,
       downBarCount,
     },
-    volatility: {
-      realizedVol20: {
-        min: formatDecimal(parseDecimal(String(sortedVols[0] ?? 0))),
-        p25: sortedVols.length ? String(percentile(sortedVols, 0.25)) : "0",
+    priceDispersion: {
+      priceDispersion20: {
+        min: formatDecimal(parseDecimal(String(sortedPriceDispersions[0] ?? 0))),
+        p25: sortedPriceDispersions.length ? String(percentile(sortedPriceDispersions, 0.25)) : "0",
         median: String(medianVol),
-        p75: sortedVols.length ? String(percentile(sortedVols, 0.75)) : "0",
-        max: formatDecimal(parseDecimal(String(sortedVols.at(-1) ?? 0))),
+        p75: sortedPriceDispersions.length ? String(percentile(sortedPriceDispersions, 0.75)) : "0",
+        max: formatDecimal(parseDecimal(String(sortedPriceDispersions.at(-1) ?? 0))),
       },
       highVolBarShare: classifiableWindows
         ? Number(((highVol / classifiableWindows) * 100).toFixed(2))

@@ -28,7 +28,7 @@ export type PatternCatalogSubject = {
 export type PatternCatalogFeatureSnapshot = {
   close: string;
   zscoreVsSma20: string;
-  realizedVol20: string;
+  priceDispersion20: string;
   eventRiskScore: string;
 };
 

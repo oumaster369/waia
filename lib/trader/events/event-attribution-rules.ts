@@ -49,12 +49,12 @@ function physicsComponentForClassification(
     return "0";
   }
   if (classificationKind === eventClassificationKinds.volatilitySpike) {
-    return compareDecimal(features.realizedVol20, "1.0") >= 0 ? "1" : "0";
+    return compareDecimal(features.priceDispersion20, "1.0") >= 0 ? "1" : "0";
   }
   if (classificationKind === eventClassificationKinds.liquidationCascade) {
-    return compareDecimal(features.realizedVol20, "0.8") >= 0 ? "1" : "0.5000";
+    return compareDecimal(features.priceDispersion20, "0.8") >= 0 ? "1" : "0.5000";
   }
-  return compareDecimal(features.realizedVol20, "0") > 0 ? "0.5000" : "0.2500";
+  return compareDecimal(features.priceDispersion20, "0") > 0 ? "0.5000" : "0.2500";
 }
 
 function metadataComponent(classificationKind: EventClassificationKind): string {
@@ -125,7 +125,7 @@ function featuresFromCycle(cycle: PaperCycleResult): EventAttributionFeatureSnap
   return {
     close: cycle.evaluation.features.features.close,
     zscoreVsSma20: cycle.evaluation.msv.physics.zscoreVsSma20,
-    realizedVol20: cycle.evaluation.msv.physics.realizedVol20,
+    priceDispersion20: cycle.evaluation.msv.physics.priceDispersion20,
     regime: cycle.evaluation.msv.derived.regime,
   };
 }

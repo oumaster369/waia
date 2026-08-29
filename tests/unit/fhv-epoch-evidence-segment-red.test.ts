@@ -24,7 +24,7 @@ function makeCycle(): PaperCycleResult {
         instrumentId: "BTC/USDT",
         evaluatedAt: "2026-01-01T12:00:00.000Z",
         featureSetId: "fs-1",
-        physics: { close: "100", zscoreVsSma20: "0", realizedVol20: "1" },
+        physics: { close: "100", zscoreVsSma20: "0", priceDispersion20: "1" },
         liquidity: { spreadBps: "1" },
         crowd: { fearGreedIndex: null, newsSentiment: "neutral" },
         futureContext: { eventRiskScore: "0.1" },

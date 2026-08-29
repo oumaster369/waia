@@ -45,7 +45,7 @@ describe("trader intelligence CDE v0 (DEE-257)", () => {
         close: "64000.00",
         sma20: "64850",
         zscoreVsSma20: "-2.5",
-        realizedVol20: "300",
+        priceDispersion20: "300",
         spreadBps: "1.5",
       },
       dataQualityScore: 0.2,

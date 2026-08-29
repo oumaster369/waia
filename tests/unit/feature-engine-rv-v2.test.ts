@@ -64,10 +64,11 @@ describe("feature-engine/rv/v2", () => {
     expect(snapshot.features.realizedVol20m_1m).toBe("UNAVAILABLE");
   });
 
-  it("deprecates realizedVol20 as priceDispersion20 alias", () => {
+  it("publishes price-level dispersion only under its honest identity", () => {
     const bars = makeConsecutiveBars(25, (index) => String(100 + index));
     const snapshot = computeFeatureSnapshot({ bars });
-    expect(snapshot.features.priceDispersion20).toBe(snapshot.features.realizedVol20);
+    expect(Number(snapshot.features.priceDispersion20)).toBeGreaterThan(0);
+    expect(snapshot.features).not.toHaveProperty("realizedVol20");
   });
 
   it("is PIT-prefix invariant when future bars exist outside the anchor prefix", () => {
@@ -84,7 +85,7 @@ describe("feature-engine/rv/v2", () => {
     expect(replay.features.priceDispersion20).toBe(anchor.features.priceDispersion20);
     expect(replay.features.realizedVar20m_1m).toBe(anchor.features.realizedVar20m_1m);
     expect(replay.features.realizedVol20m_1m).toBe(anchor.features.realizedVol20m_1m);
-    expect(replay.features.realizedVol20).toBe(replay.features.priceDispersion20);
+    expect(replay.features).not.toHaveProperty("realizedVol20");
   });
 
   it.each([
@@ -102,33 +103,16 @@ describe("feature-engine/rv/v2", () => {
     );
   });
 
-  it("fails closed when a new runtime realizedVol20 consumer appears", () => {
+  it("fails closed when a legacy realizedVol20 runtime identity appears", () => {
     const repositoryRoot = process.cwd();
     const actual = walkTsFiles(path.join(repositoryRoot, "lib"))
       .filter((file) => /\brealizedVol20\b/u.test(readFileSync(file, "utf8")))
       .map((file) => path.relative(repositoryRoot, file))
       .sort();
 
-    expect(actual).toEqual([...CLASSIFIED_RUNTIME_SURFACES].sort());
+    expect(actual).toEqual([]);
   });
 });
-
-const CLASSIFIED_RUNTIME_SURFACES = [
-  "lib/trader/events/event-attribution-pass.ts",
-  "lib/trader/events/event-attribution-rules.ts",
-  "lib/trader/events/event-attribution.types.ts",
-  "lib/trader/events/event-classifier.ts",
-  "lib/trader/intelligence/analytical-layers-v0.ts",
-  "lib/trader/intelligence/feature-engine-parity.ts",
-  "lib/trader/intelligence/feature-engine-v0.ts",
-  "lib/trader/intelligence/strategies/liquidity-sweep-reversal-v0.ts",
-  "lib/trader/intelligence/strategies/mean-reversion-v0.ts",
-  "lib/trader/intelligence/strategies/trend-momentum-v0.ts",
-  "lib/trader/intelligence/types.ts",
-  "lib/trader/mi/pattern-catalog-pass.ts",
-  "lib/trader/mi/pattern-catalog-scoring.ts",
-  "lib/trader/mi/pattern-catalog.types.ts",
-] as const;
 
 function walkTsFiles(root: string): string[] {
   return readdirSync(root).flatMap((entry) => {
