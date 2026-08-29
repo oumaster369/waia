@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-775",
+  "base": {
+    "ref": "origin/main",
+    "sha": "f40a862b7e888507f7594bcc79c9a873fd148f9b"
+  },
+  "branch": "dee-775-trader-landing",
+  "status": "admitted",
+  "ownership": {
+    "ownedFiles": [
+      "app/page.tsx",
+      "components/landing/AuthBlock.tsx",
+      "components/trader/public/trader-landing-page.tsx",
+      "docs/plans/dee-775-trader-landing.execution-manifest.json",
+      "docs/plans/dee-775-trader-landing.md",
+      "tests/e2e/trader-host.spec.ts",
+      "tests/unit/trader-landing-page.test.tsx"
+    ],
+    "sharedFiles": [
+      {
+        "path": "app/page.tsx",
+        "reason": "Host-aware root dispatch only; primary landing rendering remains unchanged."
+      },
+      {
+        "path": "components/landing/AuthBlock.tsx",
+        "reason": "Backward-compatible initial mode and copy parameters only; primary defaults remain unchanged."
+      }
+    ],
+    "forbiddenFiles": [
+      "app/globals.css",
+      "app/design/tokens-waia.css",
+      "components/landing/landing-page-content.tsx",
+      "components/landing/HeroBlock.tsx",
+      "app/waia-admin/page.tsx",
+      "db/**",
+      "lib/trader/**"
+    ]
+  },
+  "overlapAudit": {
+    "dee634": {
+      "branch": "dee-634-decision-v2-sole-authority",
+      "result": "disjoint",
+      "observedFiles": [
+        "docs/plans/dee-634-decision-v2-sole-authority.integration-train.json",
+        "docs/plans/dee-634-decision-v2-sole-authority.md"
+      ]
+    },
+    "adminPr509": {
+      "branch": "dee-747-unified-waia-admin",
+      "result": "disjoint",
+      "notes": "PR #509 owns admin, HR, Treasury and primary-homepage files. DEE-775 does not edit those primary-homepage components or global tokens."
+    }
+  },
+  "frozenInvariants": [
+    "trader.waia.life is selected only through the existing DEE-226 host abstraction.",
+    "waia.life continues rendering LandingPageContent with identical inputs and defaults.",
+    "Authentication continues using the existing DEE-180 email and OAuth endpoints.",
+    "Authenticated entitled users redirect to /trader; non-entitled users redirect to the primary dashboard.",
+    "The public Trader landing grants no trading, live or capital authority.",
+    "No secrets, session identifiers, portfolio values or fabricated performance claims render publicly."
+  ],
+  "validation": [
+    "pnpm exec vitest --run --cache=false tests/unit/trader-landing-page.test.tsx tests/unit/landing-page.test.tsx tests/unit/hosts-resolve.test.ts tests/unit/cross-host-redirects.test.ts",
+    "pnpm exec playwright test tests/e2e/trader-host.spec.ts",
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm build"
+  ]
+}
