@@ -206,12 +206,13 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
     if (input.executionMode !== "mock" || input.type !== "market") {
       throw new Error("FHV TEST_ONLY Execution V2 permits modeled mock market orders only");
     }
-    const symbol = normalizeSymbolForHistoricalExecution(input.symbol);
+    const symbol = input.symbol;
+    const venueSymbol = normalizeSymbolForHistoricalExecution(symbol);
     const baseAsset = symbol.slice(0, -4);
     const referencePrice = input.referencePrice;
     const identity = `${invocationId}:${input.idempotencyKey}`;
     const accountId = `fhv-v2-${digestHex(identity).slice(0, 24)}`;
-    const instrumentDigest = digestHex(`${symbol}:SPOT`);
+    const instrumentDigest = digestHex(`${venueSymbol}:SPOT`);
     const isEntry = input.side === "buy";
     const action = isEntry ? "ENTER_LONG" as const : "CLOSE" as const;
     const reservationNotional = isEntry
@@ -263,6 +264,13 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
           decisionId,
           semanticDigestHex: digestHex(`${identity}:decision-semantic`),
           contentDigestHex: digestHex(`${identity}:decision-content`),
+          ...(isEntry
+            ? {
+                forecastId: `fhv-test-only-forecast-${digestHex(identity).slice(0, 24)}`,
+                forecastContentDigestHex: digestHex(`${identity}:forecast-content`),
+                canonicalCausalLineageDigestHex: digestHex(`${identity}:causal-lineage`),
+              }
+            : {}),
           action,
           economicSizeSetId: `fhv-test-only-size-${digestHex(identity).slice(0, 24)}`,
           economicSizeSetDigestHex: digestHex(`${identity}:economic-size-set`),
@@ -376,7 +384,7 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
           id: authority.order.id,
           venue: authority.order.venue,
           executionMode: "mock",
-          symbol: input.symbol,
+          symbol: authority.order.symbol,
           side: payload.side,
           type: payload.type,
           price: payload.price,
@@ -386,6 +394,8 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
           riskDecisionId: authority.order.riskDecisionId,
           riskAllowanceId: authority.order.riskAllowanceId,
           riskAllowanceBindingDigest: authority.order.riskAllowanceBindingDigest,
+          openingCausalLineageJson: authority.order.openingCausalLineageJson,
+          openingCausalLineageDigest: authority.order.openingCausalLineageDigest,
           strategySignalId: authority.order.strategySignalId,
           allocationDecisionId: authority.order.allocationDecisionId,
           credentialId: null,
@@ -435,8 +445,9 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       throw new Error(`FHV TEST_ONLY Execution V2 modeled placement failed: ${outcome.status}`);
     }
     updateTestOnlyV2Metrics({ venueAcceptedReports: testOnlyV2Metrics.venueAcceptedReports + 1 });
-    if (!modeledProjection) throw new Error("FHV TEST_ONLY Execution V2 projection missing");
-    return { status: "submitted", order: modeledProjection };
+    const projection = modeledProjection as OrderRow | null;
+    if (!projection) throw new Error("FHV TEST_ONLY Execution V2 projection missing");
+    return { status: "submitted", order: projection };
   };
 
   const execution = {
