@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-796",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -11,7 +11,7 @@
   "includedChildren": [
     {
       "issue": "DEE-797",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Replace only the 5 ms wall-clock assumption with a bounded pre-consume validity and post-expiry database wait while preserving all existing assertions.",
       "dependencies": ["DEE-755"],
@@ -21,11 +21,15 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller standing authorization for ordinary test-quality remediation without production semantic change."},
       "expectedAcceptanceEvidence": ["First consume is deterministically inside validity; second consume is after expiry; unchanged rejection assertion proves ALLOWANCE_EXPIRED."],
       "expectedTests": ["exact focused repeatability; PostgreSQL Risk 11/11; combined Decision/Risk/Execution 33/33"],
+      "actualFiles": ["tests/integration/postgres-risk-v2.test.ts"],
+      "integratedCommits": ["757688e68bc5d11d8b1732e46fea93e6778a9f41"],
+      "acceptanceEvidence": ["A 2000 ms validity window guarantees the first consume precedes expiry; a bounded 2.1 second database wait guarantees the unchanged post-expiry rejection assertion."],
+      "tests": ["exact focused PostgreSQL expiry test: 3/3 consecutive PASS", "combined Decision/Risk/Execution PostgreSQL: 33/33 PASS"],
       "execution": {"wave": 1, "mode": "serialized"}
     },
     {
       "issue": "DEE-798",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Add a hermetic source proof for the bounded validity, unchanged consume/expiry assertions and absence of skip/retry, then run repeatability and the complete PostgreSQL matrix.",
       "dependencies": ["DEE-797"],
@@ -35,6 +39,10 @@
       "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller standing authorization for ordinary test-quality proof without production semantic change."},
       "expectedAcceptanceEvidence": ["Static proof pins the bounded interval and unchanged assertions; repeated PostgreSQL execution is deterministic."],
       "expectedTests": ["hermetic source proof; exact focused repeatability; PostgreSQL Risk 11/11; combined Decision/Risk/Execution 33/33"],
+      "actualFiles": ["scripts/github/test-dee-796-risk-expiry-proof.sh"],
+      "integratedCommits": ["7b84eba8acc971a5c07865d35e731340428a524a"],
+      "acceptanceEvidence": ["Hermetic source proof pins the bounded validity/wait and unchanged CONSUMED/consumedNow/ALLOWANCE_EXPIRED assertions while rejecting skip/todo/retry semantics."],
+      "tests": ["scripts/github/test-dee-796-risk-expiry-proof.sh: PASS", "typecheck, lint, production build and canon PASS"],
       "execution": {"wave": 2, "mode": "serialized"}
     }
   ],
@@ -43,7 +51,22 @@
     "admissionEvidence": {"status": "pass", "reviewer": "Program Controller test-quality authorization"},
     "authoritativeBase": "ce9a726100aee93ad993b60ee43feae0cb27cbc0",
     "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-796/797 uniquely own only the proven PostgreSQL Risk expiry test race; DEE-799 is merged and owns only the disjoint Twin facade proxy test; DEE-634 retains production authority ownership."},
-    "fullDiffFrozen": false,
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "669f491d3723b01253129b02fd814b0d66fdedb2d389b5f290e14b19bea774c3",
+      "manifestCommit": "5816c858971f9c368d0e52c0121822f4ddb9ba91",
+      "manifestPath": "docs/plans/dee-796-risk-expiry-test-boundary.integration-train.json",
+      "reviewer": "Program Controller test-quality authorization"
+    },
+    "admissionReviews": [
+      {"issue": "DEE-797", "status": "pass", "reviewedCommits": ["757688e68bc5d11d8b1732e46fea93e6778a9f41"], "reviewedFiles": ["tests/integration/postgres-risk-v2.test.ts"]},
+      {"issue": "DEE-798", "status": "pass", "reviewedCommits": ["7b84eba8acc971a5c07865d35e731340428a524a"], "reviewedFiles": ["scripts/github/test-dee-796-risk-expiry-proof.sh"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-797", "status": "pass", "commands": ["exact focused PostgreSQL expiry test 3/3 PASS", "PostgreSQL Decision/Risk/Execution 33/33 PASS"]},
+      {"afterIssue": "DEE-798", "status": "pass", "commands": ["hermetic source proof PASS", "literal fresh-migrated SQLite: 878 files and 5109 tests passed, 0 failures, 1256.91 s", "typecheck PASS", "lint PASS with 0 errors", "production build PASS", "canonical validation PASS"]}
+    ],
+    "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
@@ -53,7 +76,7 @@
   ],
   "rollbackStrategy": "One squash revert restores the legacy test timing only; no durable or production data is touched.",
   "validation": {
-    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-796-risk-expiry-test-boundary.integration-train.json DEE-796 admission",
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-796-risk-expiry-test-boundary.integration-train.json DEE-796 frozen",
     "focused": ["exact expiry test repeatability", "complete PostgreSQL Risk suite", "combined Decision/Risk/Execution PostgreSQL matrix"],
     "review": "fresh independent exact-head zero P1/P2",
     "publication": "one PR; authoritative CI and DEE-653 before squash merge"

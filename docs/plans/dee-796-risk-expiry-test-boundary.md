@@ -15,7 +15,7 @@ provenance:
   recoverableBackup: backup/dee-796-pre-dee799-rebuild-e1be7262
   admissionCommit: 5816c858971f9c368d0e52c0121822f4ddb9ba91
   admissionManifestDigest: 669f491d3723b01253129b02fd814b0d66fdedb2d389b5f290e14b19bea774c3
-state: admitted
+state: frozen
 ---
 
 # DEE-796 — deterministic PostgreSQL Risk expiry test boundary
@@ -41,7 +41,7 @@ Run the exact focused test repeatedly, the complete PostgreSQL Risk suite, the c
 - The bounded pre-consume validity and post-expiry wait preserve every existing consume and expiry assertion without retry, skip or production change.
 - Canon, typecheck, scoped lint, build, literal fresh-migrated SQLite and independent exact-head review pass before publication; authoritative CI and DEE-653 pass before squash merge.
 
-## Validated current-main evidence pending manifest freeze
+## Frozen validated current-main evidence
 
 - Exact base: `ce9a726100aee93ad993b60ee43feae0cb27cbc0`.
 - Recoverable backup: `backup/dee-796-pre-dee799-rebuild-e1be7262`.
