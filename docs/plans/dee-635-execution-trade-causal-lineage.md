@@ -9,11 +9,12 @@ executionSurfaces: [local, github-pr-ci, postgres-ci]
 requiredValidation: [focused-negative-tests, lifecycle-parity, tenant-isolation, typecheck, production-build, one-full-fresh-migrated-sqlite-suite, independent-exact-head-review, authoritative-postgres-and-dee-653]
 approvalGates: [ratified-dee-635-contract, exact-head-independent-review, dee-653-exact-head-admission]
 authoritativeBase: 446eb88c8e8ca70525b9d591275883721d08dba1
-state: frozen
+state: ready-for-publication
 provenance:
   createdFrom: ratified-dee-635-build
   authoritativeBase: 446eb88c8e8ca70525b9d591275883721d08dba1
   admissionAudit: "Fresh DEE-624 merge base, Linear ownership/dependency audit, and frozen admission preceded semantic implementation."
+  validatedSemanticHead: a287a48f5fa21bfbb6c5c50f74a78bd1d9a441d2
 ---
 
 # DEE-635 — Execution-to-closed-trade causal lineage
@@ -59,3 +60,7 @@ The controller authorized this additive expansion after implementation proved th
 - Missing or mismatched required capital lineage blocks new exposure before connector submission.
 - Multi-fill and close paths preserve one byte-identical opening digest on the opening order, trade and lot while immutable fill/leg references retain direct provenance.
 - Focused, full fresh-migrated SQLite, PostgreSQL, exact-head independent review, authoritative CI and DEE-653 all pass before squash merge.
+
+## Prepublication evidence
+
+The frozen semantic head `a287a48f5fa21bfbb6c5c50f74a78bd1d9a441d2` passed the literal fresh suite with 890 files and 5,170 tests passing, 84 files and 431 tests skipped, zero failures, in 1,847.18 seconds. Fresh PostgreSQL migration, tenant-composite reference constraints, focused migration/lifecycle proofs, typecheck, lint with zero errors, production build and canonical validation passed. Independent exact-head review reported P1=0 and P2=0. Authoritative CI and DEE-653 remain required before merge.
