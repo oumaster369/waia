@@ -61,6 +61,10 @@ describe("Forecast V2 applied migration identity", () => {
       "0173_dee633_forecast_v2_feedback_payload",
       "0174_waia_admin_hr",
       "0175_waia_admin_hr_rls",
+      "0176_dee635_order_opening_causal_lineage",
+      "0177_dee635_lifecycle_opening_causal_lineage",
+      "0178_dee635_risk_causal_projection",
+      "0179_dee635_execution_plan_causal_projection",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
