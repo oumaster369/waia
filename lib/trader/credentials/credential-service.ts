@@ -13,12 +13,21 @@ import {
   decryptCredentialPayload,
   encryptCredentialPayload,
 } from "@/lib/trader/credentials/envelope-crypto";
-import { CredentialNotFoundError } from "@/lib/trader/credentials/errors";
+import {
+  CredentialConflictError,
+  CredentialNotFoundError,
+} from "@/lib/trader/credentials/errors";
 import { maskApiKey } from "@/lib/trader/credentials/masking";
 import {
   createPostgresExchangeCredentialRepository,
   createSqliteExchangeCredentialRepository,
 } from "@/lib/trader/credentials/repository-adapters";
+import {
+  getCredentialRowByIdSqlite,
+  insertCredentialRowSqlite,
+  listCredentialRowsForOrgSqlite,
+  revokeCredentialRowSqlite,
+} from "@/lib/trader/credentials/repository-sqlite";
 import type {
   CredentialMetadata,
   CredentialService,
@@ -144,8 +153,18 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
         input.exchangeAccountId,
       );
 
+      if (
+        input.expectedActiveCredentialId !== undefined &&
+        (existing?.id ?? null) !== input.expectedActiveCredentialId
+      ) {
+        throw new CredentialConflictError();
+      }
+
       if (existing) {
-        await deps.repository.revokeCredentialRow(scoped, existing.id);
+        const revoked = await deps.repository.revokeCredentialRow(scoped, existing.id);
+        if (!revoked) {
+          throw new CredentialConflictError();
+        }
       }
 
       const row = await deps.repository.insertCredentialRow(scoped, {
@@ -205,9 +224,22 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
       const scoped = requireOrgContext(context.organizationId);
       await assertMembershipIfNeeded(scoped, deps.assertMembership);
 
+      const existing = await deps.repository.getCredentialRowById(scoped, credentialId);
+      if (!existing) {
+        throw new CredentialNotFoundError();
+      }
+
+      if (existing.status === "revoked") {
+        return toCredentialMetadata(existing);
+      }
+
       const row = await deps.repository.revokeCredentialRow(scoped, credentialId);
       if (!row) {
-        throw new CredentialNotFoundError();
+        const raced = await deps.repository.getCredentialRowById(scoped, credentialId);
+        if (raced?.status === "revoked") {
+          return toCredentialMetadata(raced);
+        }
+        throw new CredentialConflictError();
       }
 
       const actorType = input.actorType ?? "service";
@@ -240,30 +272,155 @@ export function createSqliteCredentialService(
   db: WaiaDb,
   deps: Partial<CredentialServiceDeps> = {},
 ): CredentialService {
-  return createCredentialService({
-    repository: deps.repository ?? createSqliteExchangeCredentialRepository(db),
-    writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
-    createProvider: deps.createProvider,
-    assertMembership:
-      deps.assertMembership ??
-      ((context) => {
-        assertOrgMembershipSqlite(db, context);
-      }),
+  if (deps.repository) {
+    return createCredentialService({
+      repository: deps.repository ?? createSqliteExchangeCredentialRepository(db),
+      writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
+      createProvider: deps.createProvider,
+      assertMembership:
+        deps.assertMembership ??
+        ((context) => {
+          assertOrgMembershipSqlite(db, context);
+        }),
+    });
+  }
+
+  const createProvider = deps.createProvider ?? createMasterKeyProvider;
+  const assertMembership = deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context));
+  const writeAudit = deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input));
+  const writeAuditInTransaction = (tx: WaiaDb, input: TraderAuditInput): void => {
+    const result = deps.writeAudit
+      ? deps.writeAudit(input)
+      : writeTraderAuditLogSqlite(tx, input);
+    if (result instanceof Promise) {
+      throw new Error("[trader] SQLite credential audit writer must be synchronous");
+    }
+  };
+  const base = createCredentialService({
+    repository: createSqliteExchangeCredentialRepository(db),
+    writeAudit,
+    createProvider,
+    assertMembership,
   });
+
+  return {
+    ...base,
+    async storeCredentials(context, input) {
+      const scoped = requireOrgContext(context.organizationId);
+      await assertMembershipIfNeeded(scoped, assertMembership);
+      const provider = await createProvider();
+      assertCredentialStorageAllowed(provider);
+      const encrypted = await encryptCredentialPayload(provider, input.credentials);
+
+      return db.transaction((tx) => {
+        const sqlite = tx as WaiaDb;
+        const existing = listCredentialRowsForOrgSqlite(sqlite, scoped)
+          .find(
+            (row) =>
+              row.status === "active" &&
+              row.venue === input.venue &&
+              row.exchangeAccountId === input.exchangeAccountId,
+          ) ?? null;
+        if (
+          input.expectedActiveCredentialId !== undefined &&
+          (existing?.id ?? null) !== input.expectedActiveCredentialId
+        ) {
+          throw new CredentialConflictError();
+        }
+        if (existing && !revokeCredentialRowSqlite(sqlite, scoped, existing.id)) {
+          throw new CredentialConflictError();
+        }
+        const row = insertCredentialRowSqlite(sqlite, scoped, {
+          venue: input.venue,
+          exchangeAccountId: input.exchangeAccountId,
+          apiKeyMasked: maskApiKey(input.credentials.apiKey),
+          encryptedPayload: encrypted.encryptedPayload,
+          payloadKeyVersion: encrypted.payloadKeyVersion,
+          wrappedDekKeyVersion: encrypted.wrappedDekKeyVersion,
+          wrappedDekKey: encrypted.wrappedDekKey,
+          permissionMetadata: serializePermissionMetadata(input.permissionMetadata),
+        });
+        writeAuditInTransaction(
+          tx as WaiaDb,
+          buildAuditInput(
+            scoped,
+            existing ? traderAuditActions.credentialRotated : traderAuditActions.credentialCreated,
+            row.id,
+            {
+              venue: input.venue,
+              exchangeAccountId: input.exchangeAccountId,
+              ...(existing ? { replacedCredentialId: existing.id } : {}),
+            },
+            input.actorType ?? "service",
+            input.actorId ?? null,
+          ),
+        );
+        return toCredentialMetadata(row);
+      });
+    },
+    async revokeCredentials(context, credentialId, input = {}) {
+      const scoped = requireOrgContext(context.organizationId);
+      await assertMembershipIfNeeded(scoped, assertMembership);
+      return db.transaction((tx) => {
+        const sqlite = tx as WaiaDb;
+        const existing = getCredentialRowByIdSqlite(sqlite, scoped, credentialId);
+        if (!existing) throw new CredentialNotFoundError();
+        if (existing.status === "revoked") return toCredentialMetadata(existing);
+        const row = revokeCredentialRowSqlite(sqlite, scoped, credentialId);
+        if (!row) {
+          const raced = getCredentialRowByIdSqlite(sqlite, scoped, credentialId);
+          if (raced?.status === "revoked") return toCredentialMetadata(raced);
+          throw new CredentialConflictError();
+        }
+        writeAuditInTransaction(
+          tx as WaiaDb,
+          buildAuditInput(
+            scoped,
+            traderAuditActions.credentialRevoked,
+            row.id,
+            { venue: row.venue, exchangeAccountId: row.exchangeAccountId },
+            input.actorType ?? "service",
+            input.actorId ?? null,
+          ),
+        );
+        return toCredentialMetadata(row);
+      });
+    },
+  };
 }
 
 export function createPostgresCredentialService(
-  ex: PgCredentialExecutor,
+  ex: WaiaPostgresDb,
   deps: Partial<CredentialServiceDeps> = {},
 ): CredentialService {
-  return createCredentialService({
-    repository: deps.repository ?? createPostgresExchangeCredentialRepository(ex),
-    writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(ex, input)),
+  if (deps.repository) {
+    return createCredentialService({
+      repository: deps.repository ?? createPostgresExchangeCredentialRepository(ex),
+      writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(ex, input)),
+      createProvider: deps.createProvider,
+      assertMembership:
+        deps.assertMembership ??
+        (async (context) => {
+          await assertOrgMembershipPostgres(ex, context);
+        }),
+    });
+  }
+  const serviceFor = (executor: PgCredentialExecutor) => createCredentialService({
+    repository: createPostgresExchangeCredentialRepository(executor),
+    writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(executor, input)),
     createProvider: deps.createProvider,
     assertMembership:
       deps.assertMembership ??
       (async (context) => {
-        await assertOrgMembershipPostgres(ex, context);
+        await assertOrgMembershipPostgres(executor, context);
       }),
   });
+  const base = serviceFor(ex);
+  return {
+    ...base,
+    storeCredentials: (context, input) =>
+      ex.transaction(async (tx) => serviceFor(tx).storeCredentials(context, input)),
+    revokeCredentials: (context, credentialId, input) =>
+      ex.transaction(async (tx) => serviceFor(tx).revokeCredentials(context, credentialId, input)),
+  };
 }

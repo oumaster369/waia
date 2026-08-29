@@ -29,6 +29,10 @@ import {
 } from "@/lib/trader/credentials/credential-service";
 import type { CredentialService } from "@/lib/trader/credentials/types";
 import {
+  CredentialConflictError,
+  CredentialNotFoundError,
+} from "@/lib/trader/credentials/errors";
+import {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
@@ -124,11 +128,24 @@ function parseConnectBody(raw: unknown): HtxConnectRequestBody | ConnectHandlerR
     accountLabel = trimmedLabel.length > 0 ? trimmedLabel : undefined;
   }
 
+  let replacementCredentialId: string | undefined;
+  if (body.replacementCredentialId !== undefined && body.replacementCredentialId !== null) {
+    if (typeof body.replacementCredentialId !== "string" || !body.replacementCredentialId.trim()) {
+      return clientError(
+        400,
+        HTX_CONNECT_ERROR_CODES.INVALID_BODY,
+        "replacementCredentialId must be a non-empty string when provided.",
+      );
+    }
+    replacementCredentialId = body.replacementCredentialId.trim();
+  }
+
   return {
     venue: HTX_CONNECT_VENUE,
     apiKey,
     apiSecret,
     accountLabel,
+    replacementCredentialId,
   };
 }
 
@@ -251,6 +268,7 @@ export async function handleHtxConnectPost(
       permissionMetadata,
       actorType: "user",
       actorId: auth.userId,
+      expectedActiveCredentialId: body.replacementCredentialId ?? null,
     });
 
     return {
@@ -260,6 +278,68 @@ export async function handleHtxConnectPost(
       waiaDbBackend: runtime.kind,
     };
   } catch (err) {
+    if (err instanceof CredentialConflictError) {
+      return clientError(
+        409,
+        HTX_CONNECT_ERROR_CODES.CREDENTIAL_CONFLICT,
+        "Credential state changed. Refresh before reconnecting.",
+      );
+    }
+    const outcome = !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
+    return {
+      status: 500,
+      body: errorEnvelope(HTX_CONNECT_ERROR_CODES.INTERNAL_ERROR, "Something went wrong."),
+      outcome,
+      errorClass: safeTelemetryErrorClass(err),
+      waiaDbBackend: resolvedRuntime?.kind,
+    };
+  } finally {
+    await deps.disposeRuntimeDb(resolvedRuntime);
+  }
+}
+
+export async function handleExchangeCredentialDelete(
+  credentialId: string,
+  deps: ConnectHandlerDeps,
+): Promise<ConnectHandlerResult> {
+  const auth = await requireAuthenticatedTrader(deps);
+  if (isHandlerErrorResult(auth)) return auth;
+  if (!credentialId) {
+    return clientError(400, HTX_CONNECT_ERROR_CODES.INVALID_BODY, "credentialId is required.");
+  }
+
+  const context = requireOrgContext(personalOrganizationIdFromUserId(auth.userId));
+  context.userId = auth.userId;
+  let resolvedRuntime: WaiaRuntimeDb | undefined;
+  try {
+    const runtime = await deps.getRuntimeDb();
+    resolvedRuntime = runtime;
+    const service = deps.createCredentialService(runtime, deps.createProvider);
+    const metadata = await service.revokeCredentials(context, credentialId, {
+      actorType: "user",
+      actorId: auth.userId,
+    });
+    return {
+      status: 200,
+      body: toCredentialMetadataDto(metadata),
+      outcome: "success",
+      waiaDbBackend: runtime.kind,
+    };
+  } catch (err) {
+    if (err instanceof CredentialNotFoundError) {
+      return clientError(
+        404,
+        HTX_CONNECT_ERROR_CODES.CREDENTIAL_NOT_FOUND,
+        "Credential not found.",
+      );
+    }
+    if (err instanceof CredentialConflictError) {
+      return clientError(
+        409,
+        HTX_CONNECT_ERROR_CODES.CREDENTIAL_CONFLICT,
+        "Credential state changed. Refresh before retrying.",
+      );
+    }
     const outcome = !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
     return {
       status: 500,

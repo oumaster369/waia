@@ -11,6 +11,8 @@ export type HtxConnectRequestBody = {
   apiKey: string;
   apiSecret: string;
   accountLabel?: string;
+  /** Required to replace an active credential; omitted means the caller observed disconnected. */
+  replacementCredentialId?: string;
 };
 
 /** Metadata-only API shape — never includes secrets or ciphertext. */
@@ -40,6 +42,8 @@ export const HTX_CONNECT_ERROR_CODES = {
   UNSUPPORTED_VENUE: "UNSUPPORTED_VENUE",
   CREDENTIAL_VALIDATION_FAILED: "CREDENTIAL_VALIDATION_FAILED",
   MASTER_KEY_NOT_READY: "MASTER_KEY_NOT_READY",
+  CREDENTIAL_CONFLICT: "CREDENTIAL_CONFLICT",
+  CREDENTIAL_NOT_FOUND: "CREDENTIAL_NOT_FOUND",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 

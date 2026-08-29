@@ -108,13 +108,8 @@ export function revokeCredentialRowSqlite(
   credentialId: string,
 ): ExchangeCredentialRow | null {
   const scoped = requireOrgContext(context.organizationId);
-  const existing = getCredentialRowByIdSqlite(db, scoped, credentialId);
-  if (!existing || existing.status === "revoked") {
-    return null;
-  }
-
   const now = new Date();
-  db.update(exchangeCredentials)
+  const updated = db.update(exchangeCredentials)
     .set({
       status: "revoked",
       revokedAt: now,
@@ -123,10 +118,15 @@ export function revokeCredentialRowSqlite(
     .where(
       and(
         eq(exchangeCredentials.id, credentialId),
+        eq(exchangeCredentials.status, "active"),
         orgScopedWhere(exchangeCredentials.organizationId, scoped),
       ),
     )
     .run();
+
+  if (updated.changes !== 1) {
+    return null;
+  }
 
   return getCredentialRowByIdSqlite(db, scoped, credentialId);
 }

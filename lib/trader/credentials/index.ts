@@ -18,6 +18,7 @@ export type {
 } from "@/lib/trader/credentials/types";
 export {
   CredentialDecryptError,
+  CredentialConflictError,
   CredentialError,
   CredentialNotFoundError,
   CredentialPayloadInvalidError,
@@ -66,6 +67,7 @@ export {
 export {
   createProductionConnectDeps,
   handleExchangeCredentialsGet,
+  handleExchangeCredentialDelete,
   handleHtxConnectPost,
   type ConnectHandlerDeps,
   type ConnectHandlerResult,

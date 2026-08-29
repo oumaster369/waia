@@ -72,6 +72,8 @@ export type StoreCredentialsInput = {
   permissionMetadata?: Record<string, unknown> | null;
   actorType?: TraderAuditInput["actorType"];
   actorId?: string | null;
+  /** Optimistic replacement guard. null means the caller observed no active credential. */
+  expectedActiveCredentialId?: string | null;
 };
 
 export type RevokeCredentialsInput = {

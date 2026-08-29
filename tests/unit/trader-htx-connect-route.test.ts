@@ -15,6 +15,7 @@ import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
 import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import {
   handleExchangeCredentialsGet,
+  handleExchangeCredentialDelete,
   handleHtxConnectPost,
   type ConnectHandlerDeps,
 } from "@/lib/trader/credentials/connect-handler";
@@ -331,13 +332,17 @@ describe("HTX connect API (DEE-236)", () => {
 
   it("replaces existing credentials and emits rotated audit", async () => {
     const deps = createDeps();
-    await handleHtxConnectPost(connectPostRequest({ venue: "htx", ...VALID_CREDS }), deps);
+    const listed = await handleExchangeCredentialsGet(deps);
+    const active = (listed.body as { credentials: Array<{ id: string; status: string }> })
+      .credentials.find((row) => row.status === "active");
+    expect(active).toBeDefined();
 
     const second = await handleHtxConnectPost(
       connectPostRequest({
         venue: "htx",
         apiKey: "replacement-key",
         apiSecret: "replacement-secret",
+        replacementCredentialId: active!.id,
       }),
       createDeps({
         createConnector: (config) =>
@@ -370,6 +375,43 @@ describe("HTX connect API (DEE-236)", () => {
       .where(eq(auditLogs.action, traderAuditActions.credentialRotated))
       .all();
     expect(rotated.length).toBeGreaterThan(0);
+  });
+
+  it("fails closed when a replacement uses a stale credential id", async () => {
+    const result = await handleHtxConnectPost(
+      connectPostRequest({
+        venue: "htx",
+        ...VALID_CREDS,
+        replacementCredentialId: "stale-session-credential-id",
+      }),
+      createDeps(),
+    );
+    expect(result.status).toBe(409);
+    expect(JSON.stringify(result.body)).not.toContain(VALID_CREDS.apiKey);
+    expect(JSON.stringify(result.body)).not.toContain(VALID_CREDS.apiSecret);
+  });
+
+  it("disconnect is idempotent and does not disclose secrets", async () => {
+    const listed = await handleExchangeCredentialsGet(createDeps());
+    const active = (listed.body as { credentials: Array<{ id: string; status: string }> })
+      .credentials.find((row) => row.status === "active");
+    expect(active).toBeDefined();
+
+    const first = await handleExchangeCredentialDelete(active!.id, createDeps());
+    const second = await handleExchangeCredentialDelete(active!.id, createDeps());
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.body).toMatchObject({ id: active!.id, status: "revoked" });
+    expect(second.body).toMatchObject({ id: active!.id, status: "revoked" });
+    expect(JSON.stringify([first.body, second.body])).not.toContain(VALID_CREDS.apiSecret);
+  });
+
+  it("disconnect fails closed for an unknown or cross-tenant credential id", async () => {
+    const result = await handleExchangeCredentialDelete(crypto.randomUUID(), createDeps());
+    expect(result.status).toBe(404);
+    expect(result.body).toEqual({
+      error: { code: HTX_CONNECT_ERROR_CODES.CREDENTIAL_NOT_FOUND, message: "Credential not found." },
+    });
   });
 
   it("GET lists credential metadata for entitled user", async () => {
