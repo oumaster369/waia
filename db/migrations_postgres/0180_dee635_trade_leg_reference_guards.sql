@@ -1,3 +1,22 @@
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM trader_trade_legs leg
+    LEFT JOIN trader_fills fill
+      ON fill.id = leg.fill_id AND fill.organization_id = leg.organization_id
+    WHERE (leg.kind = 'FORCED_FLAT' AND (
+      leg.order_id IS NOT NULL OR leg.fill_id IS NOT NULL OR leg.synthetic_id IS NULL
+    )) OR (leg.kind <> 'FORCED_FLAT' AND (
+      leg.order_id IS NULL OR leg.fill_id IS NULL OR fill.id IS NULL
+      OR fill.order_id <> leg.order_id
+    ))
+  ) THEN
+    RAISE EXCEPTION 'TRADE_LEG_LEGACY_REFERENCE_INVALID';
+  END IF;
+END;
+$$;
+
 ALTER TABLE trader_trade_legs ALTER COLUMN order_id DROP NOT NULL;
 ALTER TABLE trader_trade_legs
   ADD CONSTRAINT trader_trade_legs_order_org_fk

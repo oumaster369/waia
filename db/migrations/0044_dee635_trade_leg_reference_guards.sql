@@ -13,6 +13,15 @@ CREATE TABLE `trader_trade_legs_dee635_new` (
   FOREIGN KEY (`fill_id`,`organization_id`) REFERENCES `trader_fills`(`id`,`organization_id`)
 );
 --> statement-breakpoint
+CREATE TRIGGER `trader_trade_legs_dee635_upgrade_reference_guard`
+BEFORE INSERT ON `trader_trade_legs_dee635_new` FOR EACH ROW
+WHEN (NEW.`kind` = 'FORCED_FLAT' AND (NEW.`order_id` IS NOT NULL OR NEW.`fill_id` IS NOT NULL OR NEW.`synthetic_id` IS NULL))
+  OR (NEW.`kind` != 'FORCED_FLAT' AND (NEW.`order_id` IS NULL OR NEW.`fill_id` IS NULL OR NOT EXISTS (
+    SELECT 1 FROM `trader_fills` f WHERE f.`id` = NEW.`fill_id`
+      AND f.`order_id` = NEW.`order_id` AND f.`organization_id` = NEW.`organization_id`
+  )))
+BEGIN SELECT RAISE(ABORT, 'TRADE_LEG_LEGACY_REFERENCE_INVALID'); END;
+--> statement-breakpoint
 INSERT INTO `trader_trade_legs_dee635_new`
 SELECT `id`, `organization_id`, `trade_id`, `position_lot_id`, `kind`, NULLIF(`order_id`, ''),
   `fill_id`, `synthetic_id`, `quantity`, `price`, `fee`, `executed_at`, `leg_pnl`, `created_at`
@@ -21,6 +30,8 @@ FROM `trader_trade_legs`;
 DROP TABLE `trader_trade_legs`;
 --> statement-breakpoint
 ALTER TABLE `trader_trade_legs_dee635_new` RENAME TO `trader_trade_legs`;
+--> statement-breakpoint
+DROP TRIGGER `trader_trade_legs_dee635_upgrade_reference_guard`;
 --> statement-breakpoint
 CREATE UNIQUE INDEX `trader_trade_legs_id_organization_unique` ON `trader_trade_legs` (`id`,`organization_id`);
 --> statement-breakpoint
