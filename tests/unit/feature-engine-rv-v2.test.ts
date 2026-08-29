@@ -106,7 +106,7 @@ describe("feature-engine/rv/v2", () => {
   it("fails closed when a legacy realizedVol20 runtime identity appears", () => {
     const repositoryRoot = process.cwd();
     const actual = walkTsFiles(path.join(repositoryRoot, "lib"))
-      .filter((file) => /\brealizedVol20\b/u.test(readFileSync(file, "utf8")))
+      .filter((file) => /\brealizedVol20\b|realized_vol20/u.test(readFileSync(file, "utf8")))
       .map((file) => path.relative(repositoryRoot, file))
       .sort();
 

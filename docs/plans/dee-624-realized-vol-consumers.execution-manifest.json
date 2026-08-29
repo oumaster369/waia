@@ -24,11 +24,7 @@
       "lib/trader/events/**",
       "lib/trader/mi/**",
       "scripts/trader/audit-dataset-regime-coverage-readonly.ts",
-      "tests/unit/**realized-vol**",
-      "tests/unit/feature-engine-rv-v2*.test.ts",
-      "tests/unit/trader-intelligence-*.test.ts",
-      "tests/unit/trader-event-*.test.ts",
-      "tests/unit/trader-pattern-*.test.ts",
+      "tests/unit/**",
       "docs/plans/dee-624-*"
     ],
     "forbiddenGlobs": [
@@ -59,8 +55,10 @@
   "evidence": {
     "semanticCommit": "a602621a",
     "runtimeLegacyIdentityCount": 0,
-    "focusedTests": "124/124 PASS",
-    "capitalAuthorityTests": "15/15 PASS",
+    "focusedCommand": "git diff --name-only -z 91628d4987f2ac3305d272c5ac8f2596c8d41f54..HEAD -- 'tests/unit/*.test.ts' | xargs -0 pnpm test --run",
+    "focusedTests": "25 files, 128/128 PASS",
+    "capitalAuthorityCommand": "pnpm test --run tests/unit/trader-decision-capital-authority-v2.test.ts tests/unit/trader-live-decision-v2-cutover.test.ts tests/unit/trader-paper-decision-v2-cutover.test.ts",
+    "capitalAuthorityTests": "3 files, 20/20 PASS",
     "typecheck": "PASS",
     "lint": "PASS with repository baseline warnings only",
     "build": "PASS",

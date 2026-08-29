@@ -30,6 +30,20 @@ describe("event classifier (M7)", () => {
     expect(result.classificationKind).toBe(eventClassificationKinds.unknownExternal);
   });
 
+  it("persists the honest price-dispersion identity for the physics threshold", () => {
+    const result = classifyEventDeterministic({
+      event: baseEvent,
+      features: {
+        close: "100",
+        zscoreVsSma20: "0",
+        priceDispersion20: "1.1",
+        regime: "STRESS",
+      },
+    });
+
+    expect(result.rationale).toEqual(["physics_price_dispersion20_threshold_met"]);
+  });
+
   it("classifies listing metadata", () => {
     const event: NormalizedEventRecord = {
       ...baseEvent,

@@ -101,7 +101,7 @@ export function classifyEventDeterministic(input: {
       classificationKind: eventClassificationKinds.volatilitySpike,
       ruleId: EVENT_CLASSIFICATION_RULE_IDS.volatilityPhysics,
       confidence: volatilityPhysicsConfidence(input.features),
-      rationale: ["physics_realized_vol20_threshold_met"],
+      rationale: ["physics_price_dispersion20_threshold_met"],
     };
   }
 
