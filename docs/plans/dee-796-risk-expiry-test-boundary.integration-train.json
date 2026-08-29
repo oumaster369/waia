@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-796",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Keep the one proven legacy PostgreSQL Risk timing-race correction isolated from DEE-634 production authority work.",
+  "includedChildren": [
+    {
+      "issue": "DEE-797",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Replace only the 5 ms wall-clock assumption with a bounded pre-consume validity and post-expiry database wait while preserving all existing assertions.",
+      "dependencies": ["DEE-755"],
+      "dependencyEvidence": ["DEE-755 and the prerequisite DEE-799 harness correction are Done; exact current origin/main is ce9a726100aee93ad993b60ee43feae0cb27cbc0."],
+      "expectedFileOrSchemaSurfaces": ["tests/integration/postgres-risk-v2.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller standing authorization for ordinary test-quality remediation without production semantic change."},
+      "expectedAcceptanceEvidence": ["First consume is deterministically inside validity; second consume is after expiry; unchanged rejection assertion proves ALLOWANCE_EXPIRED."],
+      "expectedTests": ["exact focused repeatability; PostgreSQL Risk 11/11; combined Decision/Risk/Execution 33/33"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-798",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Add a hermetic source proof for the bounded validity, unchanged consume/expiry assertions and absence of skip/retry, then run repeatability and the complete PostgreSQL matrix.",
+      "dependencies": ["DEE-797"],
+      "dependencyEvidence": ["DEE-798 validates the exact test-only boundary delivered by DEE-797."],
+      "expectedFileOrSchemaSurfaces": ["scripts/github/test-dee-796-risk-expiry-proof.sh"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller standing authorization for ordinary test-quality proof without production semantic change."},
+      "expectedAcceptanceEvidence": ["Static proof pins the bounded interval and unchanged assertions; repeated PostgreSQL execution is deterministic."],
+      "expectedTests": ["hermetic source proof; exact focused repeatability; PostgreSQL Risk 11/11; combined Decision/Risk/Execution 33/33"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Program Controller test-quality authorization"},
+    "authoritativeBase": "ce9a726100aee93ad993b60ee43feae0cb27cbc0",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-796/797 uniquely own only the proven PostgreSQL Risk expiry test race; DEE-799 is merged and owns only the disjoint Twin facade proxy test; DEE-634 retains production authority ownership."},
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "No production or Risk semantics change.",
+    "No assertion, test or required-check skip.",
+    "The test remains bounded and deterministic on real PostgreSQL."
+  ],
+  "rollbackStrategy": "One squash revert restores the legacy test timing only; no durable or production data is touched.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-796-risk-expiry-test-boundary.integration-train.json DEE-796 admission",
+    "focused": ["exact expiry test repeatability", "complete PostgreSQL Risk suite", "combined Decision/Risk/Execution PostgreSQL matrix"],
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
