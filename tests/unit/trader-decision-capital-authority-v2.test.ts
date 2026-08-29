@@ -12,6 +12,7 @@ import {
   type DecisionCapitalRequestV2,
 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 import type { ForecastRuntimeOutcomeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import type { SubmitOrderResult } from "@/lib/trader/execution/execution-service.types";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const digest = (character: string) => character.repeat(64);
@@ -23,7 +24,7 @@ function forecast(): ForecastRuntimeOutcomeV2 {
       organizationId: ORG,
       contentDigestHex: digest("a"),
     },
-    issuance: {},
+    issuance: { package: { family: { symbol: "BTCUSDT" } } },
   } as unknown as ForecastRuntimeOutcomeV2;
 }
 
@@ -57,6 +58,41 @@ function decision(patch: Partial<DecisionAuthorityV2> = {}): DecisionAuthorityV2
   };
 }
 
+function submittedOrder(
+  patch: Partial<Extract<SubmitOrderResult, { status: "submitted" }>["order"]> = {},
+): Extract<SubmitOrderResult, { status: "submitted" }> {
+  return {
+    status: "submitted",
+    order: {
+      id: "order-1",
+      organizationId: ORG,
+      credentialId: null,
+      venue: "paper",
+      executionMode: "paper",
+      symbol: "BTCUSDT",
+      side: "buy",
+      type: "market",
+      price: null,
+      quantity: "0.005",
+      filledQuantity: "0",
+      avgFillPrice: null,
+      state: "SENT_TO_EXCHANGE",
+      stateVersion: 1,
+      exchangeOrderId: null,
+      clientOrderId: "client-order-1",
+      idempotencyKey: "idem-1",
+      riskDecisionId: "verdict-1",
+      riskAllowanceId: "allowance-1",
+      riskAllowanceBindingDigest: digest("7"),
+      strategySignalId: null,
+      allocationDecisionId: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...patch,
+    },
+  };
+}
+
 function deps(patch: Partial<CanonicalDecisionCapitalAuthorityV2Deps> = {}): CanonicalDecisionCapitalAuthorityV2Deps {
   const exactDecision = decision();
   return {
@@ -74,6 +110,7 @@ function deps(patch: Partial<CanonicalDecisionCapitalAuthorityV2Deps> = {}): Can
       decisionContentDigestHex: exactDecision.contentDigestHex,
       riskAllowanceId: "allowance-1",
       riskAllowanceContentDigestHex: digest("f"),
+      riskAllowanceOrderBindingDigestHex: digest("7"),
       executionPlanId: "plan-1",
       executionPlanContentDigestHex: digest("1"),
       executionAttemptId: "attempt-1",
@@ -179,6 +216,7 @@ describe("DEE-780 canonical Decision V2 capital authority", () => {
             decisionContentDigestHex: digest("8"),
             riskAllowanceId: "allowance-1",
             riskAllowanceContentDigestHex: digest("f"),
+            riskAllowanceOrderBindingDigestHex: digest("7"),
             executionPlanId: "plan-1",
             executionPlanContentDigestHex: digest("1"),
             executionAttemptId: "attempt-1",
@@ -212,6 +250,7 @@ describe("DEE-780 canonical Decision V2 capital authority", () => {
             decisionContentDigestHex: digest("c"),
             riskAllowanceId: "allowance-1",
             riskAllowanceContentDigestHex: digest("f"),
+            riskAllowanceOrderBindingDigestHex: digest("7"),
             executionPlanId: "",
             executionPlanContentDigestHex: digest("1"),
             executionAttemptId: "attempt-1",
@@ -223,5 +262,98 @@ describe("DEE-780 canonical Decision V2 capital authority", () => {
         request(),
       ),
     ).rejects.toMatchObject({ reason: "EXECUTION_PLAN_ID_INVALID" });
+  });
+
+  it("rejects a sealed Forecast V2 package for a different symbol before Decision", async () => {
+    const stages = deps();
+    const mismatched = forecast() as Extract<ForecastRuntimeOutcomeV2, { status: "FORECAST_AUTHORIZED" }>;
+    const outcome = {
+      ...mismatched,
+      issuance: { ...mismatched.issuance, package: { family: { symbol: "ETHUSDT" } } },
+    } as ForecastRuntimeOutcomeV2;
+
+    await expect(runDecisionCapitalAuthorityV2(stages, request(outcome))).rejects.toMatchObject({
+      reason: "FORECAST_SYMBOL_MISMATCH",
+    });
+    expect(stages.decide).not.toHaveBeenCalled();
+    expect(stages.assessRisk).not.toHaveBeenCalled();
+    expect(stages.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["wrong tenant", { organizationId: "22222222-2222-4222-8222-222222222222" }],
+    ["wrong mode", { executionMode: "live" as const }],
+    ["wrong symbol", { symbol: "ETHUSDT" }],
+    ["wrong side", { side: "sell" as const }],
+    ["wrong risk decision", { riskDecisionId: "verdict-other" }],
+    ["wrong allowance", { riskAllowanceId: "allowance-other" }],
+    ["wrong allowance digest", { riskAllowanceBindingDigest: digest("9") }],
+    ["amplified actual quantity", { quantity: "0.02" }],
+  ])("rejects submitted order payload binding: %s", async (_label, orderPatch) => {
+    await expect(
+      runDecisionCapitalAuthorityV2(
+        deps({
+          execute: vi.fn(async () => ({
+            decisionContentDigestHex: digest("c"),
+            riskAllowanceId: "allowance-1",
+            riskAllowanceContentDigestHex: digest("f"),
+            riskAllowanceOrderBindingDigestHex: digest("7"),
+            executionPlanId: "plan-1",
+            executionPlanContentDigestHex: digest("1"),
+            executionAttemptId: "attempt-1",
+            executionAttemptContentDigestHex: digest("2"),
+            submittedQuantity: "0.005",
+            execution: submittedOrder(orderPatch),
+          })),
+        }),
+        request(),
+      ),
+    ).rejects.toMatchObject({ reason: "EXECUTION_ORDER_BINDING_MISMATCH" });
+  });
+
+  it.each([
+    ["paper" as const, "paper" as const],
+    ["live-equivalent" as const, "live" as const],
+  ])("accepts an exactly bound submitted order for %s", async (requestMode, orderMode) => {
+    const result = await runDecisionCapitalAuthorityV2(
+      deps({
+        execute: vi.fn(async () => ({
+          decisionContentDigestHex: digest("c"),
+          riskAllowanceId: "allowance-1",
+          riskAllowanceContentDigestHex: digest("f"),
+          riskAllowanceOrderBindingDigestHex: digest("7"),
+          executionPlanId: "plan-1",
+          executionPlanContentDigestHex: digest("1"),
+          executionAttemptId: "attempt-1",
+          executionAttemptContentDigestHex: digest("2"),
+          submittedQuantity: "0.005",
+          execution: submittedOrder({ executionMode: orderMode }),
+        })),
+      }),
+      { ...request(), executionMode: requestMode },
+    );
+    expect(result.status).toBe("EXECUTION_BOUND");
+  });
+
+  it("rejects a live order returned for paper qualification", async () => {
+    await expect(
+      runDecisionCapitalAuthorityV2(
+        deps({
+          execute: vi.fn(async () => ({
+            decisionContentDigestHex: digest("c"),
+            riskAllowanceId: "allowance-1",
+            riskAllowanceContentDigestHex: digest("f"),
+            riskAllowanceOrderBindingDigestHex: digest("7"),
+            executionPlanId: "plan-1",
+            executionPlanContentDigestHex: digest("1"),
+            executionAttemptId: "attempt-1",
+            executionAttemptContentDigestHex: digest("2"),
+            submittedQuantity: "0.005",
+            execution: submittedOrder({ executionMode: "live" }),
+          })),
+        }),
+        request(),
+      ),
+    ).rejects.toMatchObject({ reason: "EXECUTION_ORDER_BINDING_MISMATCH" });
   });
 });

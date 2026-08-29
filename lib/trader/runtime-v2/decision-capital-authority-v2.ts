@@ -85,6 +85,7 @@ export type ExecutionStageOutcomeV2 = Readonly<{
   decisionContentDigestHex: string;
   riskAllowanceId: string;
   riskAllowanceContentDigestHex: string;
+  riskAllowanceOrderBindingDigestHex: string;
   executionPlanId: string;
   executionPlanContentDigestHex: string;
   executionAttemptId: string;
@@ -178,6 +179,9 @@ export async function runDecisionCapitalAuthorityV2(
   if (forecastOutcome.authority.organizationId !== request.organizationId) {
     throw new DecisionCapitalAuthorityV2ViolationError("FORECAST_TENANT_MISMATCH");
   }
+  if (forecastOutcome.issuance.package.family.symbol !== request.symbol) {
+    throw new DecisionCapitalAuthorityV2ViolationError("FORECAST_SYMBOL_MISMATCH");
+  }
   requirePositive(request.referencePrice, "REFERENCE_PRICE");
   requirePositive(request.proposal.quantity, "PROPOSED_QUANTITY");
 
@@ -258,6 +262,7 @@ export async function runDecisionCapitalAuthorityV2(
   [
     [execution.executionPlanContentDigestHex, "EXECUTION_PLAN_CONTENT_DIGEST"],
     [execution.executionAttemptContentDigestHex, "EXECUTION_ATTEMPT_CONTENT_DIGEST"],
+    [execution.riskAllowanceOrderBindingDigestHex, "RISK_ALLOWANCE_ORDER_BINDING_DIGEST"],
   ].forEach(([value, field]) => requireDigest(value, field));
   if (
     execution.decisionContentDigestHex !== decision.contentDigestHex ||
@@ -270,6 +275,23 @@ export async function runDecisionCapitalAuthorityV2(
     requirePositive(execution.submittedQuantity, "EXECUTION_SUBMITTED_QUANTITY");
     if (compareDecimal(execution.submittedQuantity, risk.approvedQualifiedQuantity) > 0) {
       throw new DecisionCapitalAuthorityV2ViolationError("EXECUTION_QUANTITY_AMPLIFICATION_FORBIDDEN");
+    }
+    const order = execution.execution.order;
+    const expectedOrderMode = request.executionMode === "paper" ? "paper" : "live";
+    if (
+      order.organizationId !== request.organizationId ||
+      order.executionMode !== expectedOrderMode ||
+      order.symbol !== request.symbol ||
+      order.side !== "buy" ||
+      order.quantity !== execution.submittedQuantity ||
+      order.riskDecisionId !== risk.riskVerdictId ||
+      order.riskAllowanceId !== risk.riskAllowanceId ||
+      order.riskAllowanceBindingDigest !== execution.riskAllowanceOrderBindingDigestHex
+    ) {
+      throw new DecisionCapitalAuthorityV2ViolationError("EXECUTION_ORDER_BINDING_MISMATCH");
+    }
+    if (compareDecimal(order.quantity, risk.approvedQualifiedQuantity) > 0) {
+      throw new DecisionCapitalAuthorityV2ViolationError("EXECUTION_ORDER_QUANTITY_AMPLIFICATION_FORBIDDEN");
     }
   }
   return Object.freeze({
