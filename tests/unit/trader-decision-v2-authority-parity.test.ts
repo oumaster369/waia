@@ -28,7 +28,7 @@ function request(
     forecastOutcome: {
       status: "FORECAST_AUTHORIZED",
       authority: { organizationId, contentDigestHex: digest("a") },
-      issuance: {},
+      issuance: { package: { family: { symbol: "BTCUSDT" } } },
     } as DecisionCapitalRequestV2["forecastOutcome"],
     proposal: { action: "ENTER_LONG", quantity: "0.01", strategySignalId },
   };
@@ -65,6 +65,7 @@ function stages(): CanonicalDecisionCapitalAuthorityV2Deps {
       decisionContentDigestHex: decision.contentDigestHex,
       riskAllowanceId: permission.riskAllowanceId,
       riskAllowanceContentDigestHex: permission.riskAllowanceContentDigestHex,
+      riskAllowanceOrderBindingDigestHex: digest("7"),
       executionPlanId: "plan-1",
       executionPlanContentDigestHex: digest("1"),
       executionAttemptId: "attempt-1",
