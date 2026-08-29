@@ -30,6 +30,7 @@
     "WAIA_TRADER_HOST": "trader.waia.life",
     "WAIA_TRADER_ORG0_ORGANIZATION_ID": "3c50b4e9-1138-43a5-a29f-e65088124cfc",
     "OAUTH_PUBLIC_BASE_URL": "https://waia.life",
+    "WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS": "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD",
     "WAIA_DB_BACKEND": "postgres",
     "WAIA_DEPLOYMENT_TIER": "production",
     "WATCHER_ENABLED": "1",

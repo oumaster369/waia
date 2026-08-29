@@ -56,8 +56,26 @@ test.describe("/dashboard smoke", () => {
     await expect(page).toHaveURL(/\/dashboard\/breath$/);
     await expect(page.getByTestId("dashboard-breath-workspace")).toBeVisible();
     await expect(page.getByTestId("dashboard-breath-anonymous")).toBeVisible();
+    await expect(page.getByTestId("dashboard-breath-anonymous-address")).toHaveText(
+      "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD",
+    );
     await expect(page.getByTestId("dashboard-breath-named")).toBeVisible();
+    await expect(page.getByTestId("contribution-intent-form")).toBeVisible();
+    await expect(page.getByLabel(/Contribution amount.*USDT/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Prepare exact payment" })).toBeVisible();
     await expect(page.getByTestId("dashboard-breath-history")).toBeVisible();
+
+    const twinLink = page.getByTestId("dashboard-sidebar-twin-link");
+    await expect(twinLink).toBeVisible();
+    await expect(twinLink).toHaveText("MY TWIN");
+    await twinLink.click();
+
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByTestId("dashboard-dialogue-area")).toBeVisible();
+    await expect(page.getByTestId("dashboard-sidebar-twin-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   test("shows AI-TRADER sidebar entry with trader host href when entitled", async ({ page }) => {
@@ -70,6 +88,9 @@ test.describe("/dashboard smoke", () => {
     await page.reload();
 
     const traderLink = page.getByTestId("dashboard-sidebar-trader-link");
+    const twinLink = page.getByTestId("dashboard-sidebar-twin-link");
+    await expect(twinLink).toHaveText("MY TWIN");
+    await expect(twinLink).toHaveAttribute("href", "/dashboard");
     await expect(traderLink).toBeVisible();
     await expect(traderLink).toHaveText("AI-TRADER");
     const href = await traderLink.getAttribute("href");
