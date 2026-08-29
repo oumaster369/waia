@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-624",
+  "base": {
+    "ref": "origin/main",
+    "sha": "56ba1ddc262204ca2cd2d2732756e509c856b743"
+  },
+  "branch": "dee-624-hermetic-settlement-bootstrap",
+  "status": "admitted",
+  "ownership": {
+    "ownedFiles": [
+      "tests/unit/health-settlement-reconciliation-route.test.ts",
+      "docs/plans/dee-624-hermetic-settlement-bootstrap.execution-manifest.json",
+      "docs/plans/dee-624-hermetic-settlement-bootstrap.md"
+    ],
+    "sharedFiles": [],
+    "forbiddenFiles": ["app/**", "db/**", "lib/**", "replay-runs/**"]
+  },
+  "frozenInvariants": [
+    "Production route and database schema semantics remain unchanged.",
+    "The route test provisions a fresh migrated SQLite fixture and cannot depend on persistent checkout state.",
+    "No live, capital, holdout or production action is authorized."
+  ],
+  "validation": [
+    "pnpm test --run tests/unit/health-settlement-reconciliation-route.test.ts tests/unit/health-settlement-route.test.ts tests/unit/health-database-route.test.ts tests/unit/waia-runtime-db.test.ts",
+    "pnpm test --run",
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm build"
+  ]
+}
