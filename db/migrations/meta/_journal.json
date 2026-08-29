@@ -309,6 +309,13 @@
       "when": 1780000000043,
       "tag": "0043_dee635_lifecycle_lineage_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1780000000044,
+      "tag": "0044_dee635_trade_leg_reference_guards",
+      "breakpoints": true
     }
   ]
 }

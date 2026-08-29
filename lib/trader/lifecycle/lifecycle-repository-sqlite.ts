@@ -6,6 +6,8 @@ import { and, eq } from "drizzle-orm";
 
 import {
   traderLifecycleEvents,
+  traderFills,
+  traderOrders,
   traderPositionLots,
   traderTradeLegs,
   traderTrades,
@@ -318,6 +320,34 @@ export function createSqliteLifecycleRepository(db: WaiaDb): LifecycleRepository
 
     async insertTradeLeg(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      if (input.leg.kind === "FORCED_FLAT") {
+        if (input.leg.orderId !== "" || input.leg.fillId !== null || !input.leg.syntheticId) {
+          throw new Error("TRADE_LEG_SYNTHETIC_REFERENCE_INVALID");
+        }
+      } else {
+        if (!input.leg.fillId || !input.leg.orderId) {
+          throw new Error("TRADE_LEG_EXECUTION_REFERENCE_INCOMPLETE");
+        }
+        const refs = await db
+          .select({ orderId: traderFills.orderId })
+          .from(traderFills)
+          .innerJoin(
+            traderOrders,
+            and(
+              eq(traderOrders.id, traderFills.orderId),
+              eq(traderOrders.organizationId, traderFills.organizationId),
+            ),
+          )
+          .where(
+            and(
+              eq(traderFills.id, input.leg.fillId),
+              eq(traderFills.orderId, input.leg.orderId),
+              orgScopedWhere(traderFills.organizationId, scoped),
+            ),
+          )
+          .limit(1);
+        if (!refs[0]) throw new Error("TRADE_LEG_EXECUTION_REFERENCE_INVALID");
+      }
       const row = {
         ...input.leg,
         organizationId: scoped.organizationId,

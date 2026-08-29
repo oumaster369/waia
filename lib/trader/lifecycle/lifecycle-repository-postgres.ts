@@ -327,6 +327,34 @@ function createPostgresLifecycleRepositoryImpl(
 
     async insertTradeLeg(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      if (input.leg.kind === "FORCED_FLAT") {
+        if (input.leg.orderId !== "" || input.leg.fillId !== null || !input.leg.syntheticId) {
+          throw new Error("TRADE_LEG_SYNTHETIC_REFERENCE_INVALID");
+        }
+      } else {
+        if (!input.leg.fillId || !input.leg.orderId) {
+          throw new Error("TRADE_LEG_EXECUTION_REFERENCE_INCOMPLETE");
+        }
+        const refs = await db
+          .select({ orderId: pgSchema.traderFills.orderId })
+          .from(pgSchema.traderFills)
+          .innerJoin(
+            pgSchema.traderOrders,
+            and(
+              eq(pgSchema.traderOrders.id, pgSchema.traderFills.orderId),
+              eq(pgSchema.traderOrders.organizationId, pgSchema.traderFills.organizationId),
+            ),
+          )
+          .where(
+            and(
+              eq(pgSchema.traderFills.id, input.leg.fillId),
+              eq(pgSchema.traderFills.orderId, input.leg.orderId),
+              orgScopedWhere(pgSchema.traderFills.organizationId, scoped),
+            ),
+          )
+          .limit(1);
+        if (!refs[0]) throw new Error("TRADE_LEG_EXECUTION_REFERENCE_INVALID");
+      }
       const row = {
         ...input.leg,
         organizationId: scoped.organizationId,
