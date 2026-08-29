@@ -20,8 +20,13 @@ import {
 import { bindExecutionAuthorityV2Postgres } from "@/lib/trader/execution/v2/authority-postgres";
 import { dispatchAndRecordExecutionAttemptV2 } from "@/lib/trader/execution/v2/recovery-postgres";
 import type { SubmitOrderInput, SubmitOrderResult } from "@/lib/trader/execution/execution-service.types";
-import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import type { OrderRepository, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
+import {
+  buildOpeningCausalLineageV1,
+  parseOpeningCausalLineageV1,
+  serializeOpeningCausalLineageV1,
+} from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 import { resolveFhvDatasetManifestV2Path } from "@/lib/trader/market-data/fhv-dataset-manifest-v2";
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
 import {
@@ -89,6 +94,19 @@ export type FhvTestOnlyExecutionV2AuthorityMetrics = Readonly<{
   venueAcceptedReports: number;
   legacySubmissions: 0;
 }>;
+
+export function resolveFhvHistoricalExecutionInstrument(symbol: string): Readonly<{
+  historicalSymbol: string;
+  venueSymbol: string;
+  baseAsset: string;
+}> {
+  const venueSymbol = normalizeSymbolForHistoricalExecution(symbol);
+  return Object.freeze({
+    historicalSymbol: symbol,
+    venueSymbol,
+    baseAsset: venueSymbol.slice(0, -4),
+  });
+}
 
 let testOnlyV2Metrics: FhvTestOnlyExecutionV2AuthorityMetrics = Object.freeze({
   allowanceClaims: 0,
@@ -171,20 +189,6 @@ async function seedFhvTestOnlyV2Tenant(
   }).onConflictDoNothing();
 }
 
-async function transitionHistoricalProjection(
-  seeded: FhvHistoricalExecutionSession,
-  order: Awaited<ReturnType<FhvHistoricalExecutionSession["session"]["orderRepository"]["createOrder"]>>,
-  toState: "RISK_APPROVED" | "SENT_TO_EXCHANGE" | "ACCEPTED",
-  exchangeOrderId?: string,
-) {
-  return seeded.session.orderRepository.transitionOrder(seeded.context, {
-    orderId: order.id,
-    expectedStateVersion: order.stateVersion,
-    toState,
-    ...(exchangeOrderId ? { exchangeOrderId } : {}),
-  });
-}
-
 /**
  * Authorized only for the two official-scale Vitest gates. The production runtime remains
  * fail-closed; this adapter binds genuine PostgreSQL V2 authority before exposing the existing
@@ -200,15 +204,74 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
   const pgDb = drizzle(sqlClient, { schema: pgSchema }) as WaiaPostgresDb;
   await seedFhvTestOnlyV2Tenant(sqlClient, pgDb, seeded.context.organizationId);
   const originalExecution = seeded.session.deps.execution;
+  const originalOrderRepository = seeded.session.orderRepository;
+  const historicalSymbolsByOrderId = new Map<string, string>();
+  const projectHistoricalSymbol = (order: OrderRow | null): OrderRow | null => {
+    if (order === null) return null;
+    const historicalSymbol = historicalSymbolsByOrderId.get(order.id);
+    return historicalSymbol === undefined ? order : { ...order, symbol: historicalSymbol };
+  };
+  const orderRepository: OrderRepository = new Proxy(originalOrderRepository, {
+    get(target, property, receiver) {
+      if (property === "createOrder") {
+        return async (...args: Parameters<OrderRepository["createOrder"]>) => {
+          const [context, input] = args;
+          const historicalSymbol = input.id === undefined
+            ? undefined
+            : historicalSymbolsByOrderId.get(input.id);
+          if (historicalSymbol === undefined) {
+            return projectHistoricalSymbol(await target.createOrder(...args))!;
+          }
+          if (input.openingCausalLineageJson == null) {
+            return target.createOrder(context, { ...input, symbol: historicalSymbol });
+          }
+          const authorityLineage = parseOpeningCausalLineageV1(input.openingCausalLineageJson);
+          const { schemaVersion: _schemaVersion, contentDigest: _contentDigest, ...draft } =
+            authorityLineage;
+          const historicalLineage = buildOpeningCausalLineageV1({
+            ...draft,
+            symbol: historicalSymbol,
+          });
+          return target.createOrder(context, {
+            ...input,
+            symbol: historicalSymbol,
+            openingCausalLineageJson: serializeOpeningCausalLineageV1(historicalLineage),
+            openingCausalLineageDigest: historicalLineage.contentDigest,
+          });
+        };
+      }
+      if (property === "transitionOrder") {
+        return async (...args: Parameters<OrderRepository["transitionOrder"]>) =>
+          projectHistoricalSymbol(await target.transitionOrder(...args))!;
+      }
+      if (property === "getOrderById") {
+        return async (...args: Parameters<OrderRepository["getOrderById"]>) =>
+          projectHistoricalSymbol(await target.getOrderById(...args));
+      }
+      if (property === "findOrderByClientOrderId") {
+        return async (...args: Parameters<OrderRepository["findOrderByClientOrderId"]>) =>
+          projectHistoricalSymbol(await target.findOrderByClientOrderId(...args));
+      }
+      if (property === "findOrderByIdempotencyKey") {
+        return async (...args: Parameters<OrderRepository["findOrderByIdempotencyKey"]>) =>
+          projectHistoricalSymbol(await target.findOrderByIdempotencyKey(...args));
+      }
+      if (property === "listOpenOrders" || property === "listOrders") {
+        return async (...args: Parameters<OrderRepository["listOrders"]>) =>
+          (await target[property](...args)).map((order) => projectHistoricalSymbol(order)!);
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
   const submissions = new Map<string, Promise<SubmitOrderResult>>();
 
   const submitWithAuthority = async (input: SubmitOrderInput): Promise<SubmitOrderResult> => {
     if (input.executionMode !== "mock" || input.type !== "market") {
       throw new Error("FHV TEST_ONLY Execution V2 permits modeled mock market orders only");
     }
-    const symbol = input.symbol;
-    const venueSymbol = normalizeSymbolForHistoricalExecution(symbol);
-    const baseAsset = symbol.slice(0, -4);
+    const { historicalSymbol, venueSymbol, baseAsset } =
+      resolveFhvHistoricalExecutionInstrument(input.symbol);
+    const symbol = venueSymbol;
     const referencePrice = input.referencePrice;
     const identity = `${invocationId}:${input.idempotencyKey}`;
     const accountId = `fhv-v2-${digestHex(identity).slice(0, 24)}`;
@@ -380,7 +443,8 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
         ) {
           throw new Error("FHV TEST_ONLY Execution V2 dispatcher authority mismatch");
         }
-        const created = await seeded.session.orderRepository.createOrder(seeded.context, {
+        historicalSymbolsByOrderId.set(authority.order.id, historicalSymbol);
+        const created = await orderRepository.createOrder(seeded.context, {
           id: authority.order.id,
           venue: authority.order.venue,
           executionMode: "mock",
@@ -400,15 +464,23 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
           allocationDecisionId: authority.order.allocationDecisionId,
           credentialId: null,
         });
-        const approved = await transitionHistoricalProjection(seeded, created, "RISK_APPROVED");
-        const sent = await transitionHistoricalProjection(seeded, approved, "SENT_TO_EXCHANGE");
+        const approved = await orderRepository.transitionOrder(seeded.context, {
+          orderId: created.id,
+          expectedStateVersion: created.stateVersion,
+          toState: "RISK_APPROVED",
+        });
+        const sent = await orderRepository.transitionOrder(seeded.context, {
+          orderId: approved.id,
+          expectedStateVersion: approved.stateVersion,
+          toState: "SENT_TO_EXCHANGE",
+        });
         const venueOrderId = `fhv-model-${authority.attempt.effectIdentityDigestHex.slice(0, 24)}`;
-        const accepted = await transitionHistoricalProjection(
-          seeded,
-          sent,
-          "ACCEPTED",
-          venueOrderId,
-        );
+        const accepted = await orderRepository.transitionOrder(seeded.context, {
+          orderId: sent.id,
+          expectedStateVersion: sent.stateVersion,
+          toState: "ACCEPTED",
+          exchangeOrderId: venueOrderId,
+        });
         modeledProjection = accepted;
         seeded.session.historicalExecutionProfile.exchange.registerOrder(
           { ...accepted, symbol: normalizeSymbolForHistoricalExecution(accepted.symbol) },
@@ -467,6 +539,7 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
     ...seeded,
     session: {
       ...seeded.session,
+      orderRepository,
       deps: { ...seeded.session.deps, execution },
     },
     cleanup: () => {
