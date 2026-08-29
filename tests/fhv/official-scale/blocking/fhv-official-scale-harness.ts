@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, statfsSync, writeFileSync } from "
 import { join } from "node:path";
 
 import { drizzle } from "drizzle-orm/postgres-js";
+import { and, eq } from "drizzle-orm";
 import postgres from "postgres";
 
 import * as pgSchema from "@/db/schema.postgres";
@@ -429,6 +430,17 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       strategySignalId: input.strategySignalId ?? null,
       allocationDecisionId: input.allocationDecisionId ?? null,
     });
+    const [authorityOrderProjection] = await pgDb
+      .select({
+        openingCausalLineageJson: pgSchema.traderOrders.openingCausalLineageJson,
+        openingCausalLineageDigest: pgSchema.traderOrders.openingCausalLineageDigest,
+      })
+      .from(pgSchema.traderOrders)
+      .where(and(
+        eq(pgSchema.traderOrders.id, authority.order.id),
+        eq(pgSchema.traderOrders.organizationId, seeded.context.organizationId),
+      ))
+      .limit(1);
     updateTestOnlyV2Metrics({ boundAttempts: testOnlyV2Metrics.boundAttempts + 1 });
 
     let modeledProjection: OrderRow | null = null;
@@ -458,8 +470,8 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
           riskDecisionId: authority.order.riskDecisionId,
           riskAllowanceId: authority.order.riskAllowanceId,
           riskAllowanceBindingDigest: authority.order.riskAllowanceBindingDigest,
-          openingCausalLineageJson: authority.order.openingCausalLineageJson,
-          openingCausalLineageDigest: authority.order.openingCausalLineageDigest,
+          openingCausalLineageJson: authorityOrderProjection?.openingCausalLineageJson ?? null,
+          openingCausalLineageDigest: authorityOrderProjection?.openingCausalLineageDigest ?? null,
           strategySignalId: authority.order.strategySignalId,
           allocationDecisionId: authority.order.allocationDecisionId,
           credentialId: null,
