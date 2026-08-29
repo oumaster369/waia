@@ -533,7 +533,7 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("replay-expiry"));
     const authority = {
       ...admission({ accountId: "replay-expiry", identity: 31, reservation: "25" }),
-      validForMs: 5,
+      validForMs: 2_000,
     };
     await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
     const exactClaim = claim(authority, 31);
@@ -542,7 +542,7 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
       { organizationId: orgA },
       exactClaim,
     )).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
-    await sqlClient`SELECT pg_sleep(0.02)`;
+    await sqlClient`SELECT pg_sleep(2.1)`;
     await expect(consumeRiskAllowanceForOrderV2Postgres(
       db,
       { organizationId: orgA },
