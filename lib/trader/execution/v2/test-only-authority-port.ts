@@ -8,6 +8,9 @@ export type TestOnlyExecutionV2AuthorityRequest = Readonly<{
     decisionId: string;
     semanticDigestHex: string;
     contentDigestHex: string;
+    forecastId: string;
+    forecastContentDigestHex: string;
+    canonicalCausalLineageDigestHex: string;
     executionPolicyDigestHex: string;
     economicSizeSetId: string;
     economicSizeSetDigestHex: string;
