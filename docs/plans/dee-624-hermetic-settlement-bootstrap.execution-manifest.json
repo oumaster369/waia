@@ -3,7 +3,7 @@
   "issue": "DEE-861",
   "base": {
     "ref": "origin/main",
-    "sha": "56ba1ddc262204ca2cd2d2732756e509c856b743"
+    "sha": "5f492dfb5061b666155ca1e6bb12dc1022947b3b"
   },
   "branch": "dee-861-hermetic-settlement-bootstrap",
   "status": "admitted",

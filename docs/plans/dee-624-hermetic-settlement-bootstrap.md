@@ -11,7 +11,7 @@ state:
   status: admitted
   blockedReason: null
 provenance:
-  authoritativeBase: 56ba1ddc262204ca2cd2d2732756e509c856b743
+  authoritativeBase: 5f492dfb5061b666155ca1e6bb12dc1022947b3b
   createdFrom: user-authorized-ai-trader-program-controller
 ---
 
