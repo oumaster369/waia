@@ -1240,6 +1240,13 @@
       "when": 1780000000176,
       "tag": "0176_dee635_order_opening_causal_lineage",
       "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "7",
+      "when": 1780000000177,
+      "tag": "0177_dee635_lifecycle_opening_causal_lineage",
+      "breakpoints": true
     }
   ]
 }

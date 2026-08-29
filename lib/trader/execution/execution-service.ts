@@ -148,7 +148,9 @@ function hasExactConsumedRiskV2Proof(
   try {
     const priceMatches =
       (order.price === null && input.price === undefined) ||
-      (order.price !== null && input.price !== undefined && compareDecimal(order.price, input.price) === 0);
+      (order.price !== null &&
+        input.price !== undefined &&
+        compareDecimal(order.price, input.price) === 0);
     return (
       consumed.riskAllowanceId === requested.riskAllowanceId &&
       order.id === requested.orderId &&
@@ -315,6 +317,8 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
       openingRegime: input.openingRegime ?? null,
       openingMsvId: input.openingMsvId ?? null,
       openingFeatureSetId: input.openingFeatureSetId ?? null,
+      openingCausalLineageJson: order.openingCausalLineageJson ?? null,
+      openingCausalLineageDigest: order.openingCausalLineageDigest ?? null,
     };
   }
 
@@ -494,8 +498,7 @@ function createOrderExecutionService(deps: OrderExecutionServiceDeps): OrderExec
     }
 
     if (
-      (input.riskAllowanceV2 &&
-        !hasExactConsumedRiskV2Proof(context, input, consumedAllowance)) ||
+      (input.riskAllowanceV2 && !hasExactConsumedRiskV2Proof(context, input, consumedAllowance)) ||
       (!input.riskAllowanceV2 && order.riskAllowanceId)
     ) {
       return {

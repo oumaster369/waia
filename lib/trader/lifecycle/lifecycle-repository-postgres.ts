@@ -60,6 +60,8 @@ function mapTradeRow(row: typeof pgSchema.traderTrades.$inferSelect): TradeRow {
     openingRegime: (row.openingRegime as Regime | null) ?? null,
     openingMsvId: row.openingMsvId,
     openingFeatureSetId: row.openingFeatureSetId,
+    openingCausalLineageJson: row.openingCausalLineageJson,
+    openingCausalLineageDigest: row.openingCausalLineageDigest,
     closingMsvId: row.closingMsvId,
     closingFeatureSetId: row.closingFeatureSetId,
     closingRegime: (row.closingRegime as Regime | null) ?? null,
@@ -79,6 +81,8 @@ function mapLotRow(row: typeof pgSchema.traderPositionLots.$inferSelect): Positi
     positionSide: row.positionSide,
     instrumentKind: row.instrumentKind,
     strategySignalId: row.strategySignalId,
+    openingCausalLineageJson: row.openingCausalLineageJson,
+    openingCausalLineageDigest: row.openingCausalLineageDigest,
     state: row.state,
     openQty: row.openQty,
     remainingQty: row.remainingQty,
@@ -145,6 +149,8 @@ function createPostgresLifecycleRepositoryImpl(
       const now = new Date();
       const row = {
         ...input.trade,
+        openingCausalLineageJson: input.trade.openingCausalLineageJson ?? null,
+        openingCausalLineageDigest: input.trade.openingCausalLineageDigest ?? null,
         organizationId: scoped.organizationId,
         createdAt: now,
         updatedAt: now,
@@ -238,6 +244,8 @@ function createPostgresLifecycleRepositoryImpl(
       const now = new Date();
       const row = {
         ...input.lot,
+        openingCausalLineageJson: input.lot.openingCausalLineageJson ?? null,
+        openingCausalLineageDigest: input.lot.openingCausalLineageDigest ?? null,
         organizationId: scoped.organizationId,
         createdAt: now,
         updatedAt: now,

@@ -89,6 +89,8 @@ export function assertTradeLineageImmutable(existing: TradeRow, next: TradeRow):
     "strategyId",
     "strategyVersion",
     "riskDecisionId",
+    "openingCausalLineageJson",
+    "openingCausalLineageDigest",
   ];
   for (const key of immutableKeys) {
     if (existing[key as keyof TradeRow] !== next[key as keyof TradeRow]) {

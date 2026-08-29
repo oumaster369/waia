@@ -1,9 +1,19 @@
 ---
-issue: DEE-635
+integrationIssue: DEE-635
+integrationTitle: "Execution-to-closed-trade causal lineage"
+parentIssue: DEE-601
 branch: dee-635-causal-lineage
 riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local, github-pr-ci, postgres-ci]
+requiredValidation: [focused-negative-tests, lifecycle-parity, tenant-isolation, typecheck, production-build, one-full-fresh-migrated-sqlite-suite, independent-exact-head-review, authoritative-postgres-and-dee-653]
+approvalGates: [ratified-dee-635-contract, exact-head-independent-review, dee-653-exact-head-admission]
 authoritativeBase: 446eb88c8e8ca70525b9d591275883721d08dba1
-status: admitted
+state: frozen
+provenance:
+  createdFrom: ratified-dee-635-build
+  authoritativeBase: 446eb88c8e8ca70525b9d591275883721d08dba1
+  admissionAudit: "Fresh DEE-624 merge base, Linear ownership/dependency audit, and frozen admission preceded semantic implementation."
 ---
 
 # DEE-635 — Execution-to-closed-trade causal lineage

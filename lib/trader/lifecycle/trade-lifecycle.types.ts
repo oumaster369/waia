@@ -46,6 +46,8 @@ export type PositionLotRow = {
   positionSide: PositionSide;
   instrumentKind: InstrumentKind;
   strategySignalId: string;
+  openingCausalLineageJson?: string | null;
+  openingCausalLineageDigest?: string | null;
   state: PositionLotState;
   openQty: string;
   remainingQty: string;
@@ -86,6 +88,8 @@ export type TradeRow = {
   openingRegime: Regime | null;
   openingMsvId: string | null;
   openingFeatureSetId: string | null;
+  openingCausalLineageJson?: string | null;
+  openingCausalLineageDigest?: string | null;
   closingMsvId: string | null;
   closingFeatureSetId: string | null;
   closingRegime: Regime | null;
@@ -138,6 +142,8 @@ export type TradeLineageAtOpen = {
   openingFeatureSetId?: string | null;
   hypothesisId?: string | null;
   patternId?: string | null;
+  openingCausalLineageJson?: string | null;
+  openingCausalLineageDigest?: string | null;
 };
 
 export type TradeClosingWorldState = {

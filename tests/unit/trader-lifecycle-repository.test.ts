@@ -185,6 +185,12 @@ describe("trader lifecycle repository (M1 / DEE-376)", () => {
     expect(() =>
       assertTradeLineageImmutable(baseTrade, { ...baseTrade, strategyId: "mutated" }),
     ).toThrow(/immutable/);
+    expect(() =>
+      assertTradeLineageImmutable(baseTrade, {
+        ...baseTrade,
+        openingCausalLineageDigest: "b".repeat(64),
+      }),
+    ).toThrow(/openingCausalLineageDigest/);
   });
 });
 
