@@ -32,16 +32,43 @@ async function gotoExpectingCrossHostRedirect(
 }
 
 test.describe("trader host routing (AT-E1 S2)", () => {
-  test("renders landing on trader host root when unauthenticated", async ({ page }) => {
+  test("renders landing on trader host root when unauthenticated", async ({ page, baseURL }) => {
     await page.goto("/");
     await expect(page).toHaveURL("/");
+    await expect(page.getByTestId("trader-landing")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("See clearly");
+    await expect(page).toHaveTitle(/AI-TRADER/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      "href",
+      new RegExp(`^${baseURL?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`),
+    );
     await expect(page.getByTestId("landing-auth")).toBeVisible();
+    await expect(page.getByTestId("landing-auth")).toHaveAttribute("data-mode", "signIn");
+    await expect(page.getByTestId("landing-auth-full-name")).toHaveCount(0);
+    await expect(page.getByTestId("landing-auth-submit")).toHaveText("Sign in");
   });
 
   test("redirects unauthenticated /trader to landing on trader host", async ({ page }) => {
     await page.goto("/trader");
     await expect(page).toHaveURL("/");
+    await expect(page.getByTestId("trader-landing")).toBeVisible();
     await expect(page.getByTestId("landing-auth")).toBeVisible();
+  });
+
+  test("keeps the sign-in hero usable on a narrow viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByTestId("landing-auth-identity")).toBeVisible();
+    await expect(page.getByTestId("landing-auth-password")).toBeVisible();
+    await expect(page.getByTestId("landing-auth-submit")).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+
+    await page.keyboard.press("Tab");
+    await expect(page.locator(":focus")).toBeVisible();
   });
 
   test("redirects entitled user from trader host root to /trader", async ({
@@ -90,6 +117,8 @@ test.describe("trader host routing (AT-E1 S2)", () => {
 
   test("redirects trader host /dashboard to primary landing", async ({ page, baseURL }) => {
     await gotoExpectingCrossHostRedirect(page, "/dashboard", primaryLandingUrlPattern(baseURL));
+    await expect(page.getByTestId("trader-landing")).not.toBeVisible();
+    await expect(page.getByTestId("landing-hero")).toBeVisible();
     await expect(page.getByTestId("landing-auth")).toBeVisible();
   });
 });

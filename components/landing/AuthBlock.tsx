@@ -79,12 +79,20 @@ type AuthUiMode = "createTwin" | "signIn";
 type AuthBlockProps = {
   /** Wired from `app/page` server `searchParams` when present (OAuth redirect failures). */
   initialOauthErrorCode?: string | null;
+  /** Keeps the shared auth authority while allowing host-specific entry posture. */
+  initialMode?: AuthUiMode;
+  context?: "waia" | "trader";
   className?: string;
 };
 
-export function AuthBlock({ initialOauthErrorCode = null, className = undefined }: AuthBlockProps) {
+export function AuthBlock({
+  initialOauthErrorCode = null,
+  initialMode = "createTwin",
+  context = "waia",
+  className = undefined,
+}: AuthBlockProps) {
   const router = useRouter();
-  const [mode, setMode] = React.useState<AuthUiMode>("createTwin");
+  const [mode, setMode] = React.useState<AuthUiMode>(initialMode);
   const [fullName, setFullName] = React.useState("");
   const [identity, setIdentity] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -277,7 +285,7 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
       data-testid="landing-auth"
       data-status={status}
       data-mode={mode}
-      aria-label="WAIA authentication"
+      aria-label={context === "trader" ? "AI-TRADER authentication" : "WAIA authentication"}
       aria-busy={isLoading}
       className={cn(
         "mx-auto flex w-full max-w-[560px] flex-col gap-5 rounded-2xl border p-6 font-sans sm:gap-6 sm:p-8",
@@ -288,12 +296,18 @@ export function AuthBlock({ initialOauthErrorCode = null, className = undefined 
     >
       <header className="flex flex-col gap-2 text-center">
         <h2 className="font-waia-serif text-[1.35rem] leading-snug font-medium tracking-tight text-[#e8dcc4] sm:text-[1.5rem]">
-          {mode === "createTwin" ? "Create your AI-Twin" : "Sign in"}
+          {mode === "createTwin"
+            ? "Create your AI-Twin"
+            : context === "trader"
+              ? "Sign in to AI-TRADER"
+              : "Sign in"}
         </h2>
         <p className="text-sm leading-relaxed font-normal text-[rgba(210,204,195,0.9)]">
           {mode === "createTwin"
             ? "Use your email to start partner preview onboarding."
-            : "Welcome back. Sign in with the email on your WAIA account."}
+            : context === "trader"
+              ? "Use the email on your WAIA account. Access remains subject to your Trader entitlement."
+              : "Welcome back. Sign in with the email on your WAIA account."}
         </p>
       </header>
 
