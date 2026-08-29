@@ -151,22 +151,23 @@
       "freshMigratedSqlitePath": "/private/tmp/dee634-p1-remediated-authoritative.ApoU77/waia.sqlite"
     },
     "currentMainReconciliation": {
-      "status": "focused-validation-pass-review-pending",
+      "status": "pass",
       "base": "75a659bd9e8f4d19e21e00e7e349d073d458002d",
       "admissionCommit": "aa4d492cecac87ff627bb2a86841d4abeb5d7b91",
       "admissionManifestDigest": "775d8a28deed11dfe794e53e5ad256d94d8b79f0aa2aee7e79b6153e4507baa4",
       "priorPublishedBackup": "backup/dee-634-pre-main-75a659bd-aae94b36",
       "intermediateRebaseBackup": "backup/dee-634-rebased-pre-truthful-rebuild-ae18ad64",
       "semanticBlobEquivalence": "All DEE-780 production and DEE-778 test blobs are byte-identical to prior reviewed head aae94b3613549691b060ff70144223eb41c52744; only the exact combined Reality V2 inventory digest is reconciled for new-main credential consumers.",
-      "focusedValidation": "Decision authority/cutover 5 files / 22 tests PASS; consumer graphs 3 files / 10 tests PASS; typecheck PASS; canonical docs 97 files PASS; frozen manifest PASS."
+      "focusedValidation": "Decision authority/cutover 5 files / 22 tests PASS; consumer graphs 3 files / 10 tests PASS; typecheck PASS; canonical docs 97 files PASS; frozen manifest PASS.",
+      "independentReview": "P1=0/P2=0 at exact current-main semantic/evidence head 6ad563b16c12cded5c0c41f49391ef4b78798a3f; independent 7 files / 31 tests PASS."
     },
     "finalAdversarialReview": {
-      "status": "current-main-review-pending",
-      "reviewedHead": null,
+      "status": "pass",
+      "reviewedHead": "6ad563b16c12cded5c0c41f49391ef4b78798a3f",
       "base": "75a659bd9e8f4d19e21e00e7e349d073d458002d",
-      "p1": null,
-      "p2": null,
-      "focusedIndependentProof": "pending"
+      "p1": 0,
+      "p2": 0,
+      "focusedIndependentProof": "7 files / 31 tests PASS"
     },
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true

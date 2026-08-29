@@ -10,7 +10,7 @@ requiredValidation: [focused-negative-tests, consumer-graph, parity, typecheck, 
 approvalGates: [ratified-dee-634-contract, exact-head-independent-review, dee-653-exact-head-admission]
 includedIssues: [DEE-634, DEE-780, DEE-778]
 authoritativeBase: 75a659bd9e8f4d19e21e00e7e349d073d458002d
-state: admitted
+state: frozen
 provenance:
   createdFrom: ratified-dee-634-build
   authoritativeBase: 75a659bd9e8f4d19e21e00e7e349d073d458002d
