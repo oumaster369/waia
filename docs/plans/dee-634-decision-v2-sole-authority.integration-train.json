@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-634",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Separate production authority cutover from independent forbidden-consumer and parity proof while retaining one integrator, branch, worktree, manifest and PR.",
+  "includedChildren": [
+    {
+      "issue": "DEE-780",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Freeze and implement the canonical admitted Forecast V2 to Decision V2 to RiskAllowance V2 to Execution V2 production boundary, and cut over paper/live-equivalent entry callers without enabling live capital.",
+      "dependencies": ["DEE-633", "DEE-649", "DEE-650", "DEE-651"],
+      "dependencyEvidence": ["DEE-633, DEE-649, DEE-650 and DEE-651 are Linear Done; DEE-633 is present in reconciled origin/main 75a659bd9e8f4d19e21e00e7e349d073d458002d."],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/runtime-v2/decision-capital-authority-v2.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/live/run-live-cycle.ts",
+        "tests/unit/trader-decision-capital-authority-v2.test.ts",
+        "tests/unit/trader-paper-decision-v2-cutover.test.ts",
+        "tests/unit/trader-live-decision-v2-cutover.test.ts",
+        "tests/integration/trader-live-cycle.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "DEE-634 explicitly owns the standard Decision V2 to Risk to Execution sole-authority cutover."},
+      "expectedAcceptanceEvidence": ["Every executable request proves its exact Forecast, Decision, RiskAllowance, ExecutionPlan and ExecutionAttempt lineage; absent or non-actionable authority terminates as NO_TRADE."],
+      "expectedTests": ["positive/negative/degenerate EV; missing and mismatched authority; Risk clamp/veto; paper/live-equivalent cutover with no venue or capital effect"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-778",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Prove whole-repository absence of legacy capital-authority consumers and deterministic historical/replay/paper/live-equivalent semantic parity with fail-closed runtime negatives.",
+      "dependencies": ["DEE-780"],
+      "dependencyEvidence": ["The proof suite must inspect the exact production authority boundary delivered by DEE-780."],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/ai-trader/decision-v2-capital-authority-consumer-inventory.json",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "tests/unit/trader-decision-v2-capital-authority-consumer-graph.test.ts",
+        "tests/unit/trader-decision-v2-authority-parity.test.ts",
+        "tests/unit/trader-execution-v2-consumer-graph.test.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "DEE-778 is the independent proof child created under the ratified DEE-634 Integration Train."},
+      "expectedAcceptanceEvidence": ["Static and runtime bypass attempts fail closed and identical authoritative inputs produce identical Decision/Risk/Execution semantics across non-live paths; existing Execution V2 and Reality V2 source/consumer pins remain truthful after the admitted cutover."],
+      "expectedTests": ["forbidden consumer graph; exact Execution V2 and Reality V2 consumer inventory pins; forged/missing digest negatives; replay, historical, paper and live-equivalent parity"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Human-ratified DEE-634 Linear contract and Program Controller"},
+    "authoritativeBase": "75a659bd9e8f4d19e21e00e7e349d073d458002d",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-634 retains integration ownership; DEE-780 and DEE-778 are unique atomic children; all four upstream blockers are Done."},
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "Forecast V2 is the sole predictive input to Decision V2 capital economics.",
+    "StrategySignal confidence, expectedEdge and maxRisk are never capital authority.",
+    "Risk is deterministic and monotone restrictive; Execution is mechanical and allowance-bound.",
+    "NO_TRADE is first-class, terminal and reason-coded.",
+    "No holdout access, production/live venue effect, real capital, new policy or automatic promotion is authorized."
+  ],
+  "persistence": {"newMigrationRequired": false, "authority": "Reuse existing append-only Decision V2, Risk V2 and Execution V2 PostgreSQL stores."},
+  "rollbackStrategy": "One squash revert removes the cutover and proof surfaces without rewriting durable authority evidence.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-634-decision-v2-sole-authority.integration-train.json DEE-634 admission",
+    "focused": ["Decision V2 authority and cutover suites", "forbidden-consumer graph and parity", "pnpm typecheck", "scoped eslint"],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run after semantic completion",
+    "postgres": "existing Decision/Risk/Execution V2 atomic authority and rollback/concurrency suites",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
