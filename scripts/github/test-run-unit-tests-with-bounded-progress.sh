@@ -80,7 +80,9 @@ grep -q 'term-marker' "$term_output" || fail "TERM complete log missing"
 
 grep -q 'pnpm test --run --reporter=dot' "$ROOT/.github/workflows/ci.yml" \
   || fail "authoritative full test command changed or missing"
-grep -q 'timeout-minutes: 50' "$ROOT/.github/workflows/ci.yml" \
-  || fail "explicit unit job timeout missing"
+grep -q 'WAIA_UNIT_TIMEOUT_SECONDS=3600' "$ROOT/.github/workflows/ci.yml" \
+  || fail "explicit 3600-second inner unit watchdog missing"
+grep -q 'timeout-minutes: 70' "$ROOT/.github/workflows/ci.yml" \
+  || fail "explicit 70-minute outer unit job timeout missing"
 
 echo "PASS: bounded unit-test diagnostic wrapper"
