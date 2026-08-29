@@ -66,8 +66,18 @@ describe("Finance Assistant confirmation envelope", () => {
       fields: { displayName: "Patron" },
       secret,
     });
+    const [encoded, signature] = token.split(".");
+    const tamperedSignature = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+
+    expect(Buffer.from(tamperedSignature, "base64url")).not.toEqual(
+      Buffer.from(signature, "base64url"),
+    );
     await expect(
-      verifyFinanceConfirmation(`${token.slice(0, -1)}x`, { userId, organizationId, secret }),
+      verifyFinanceConfirmation(`${encoded}.${tamperedSignature}`, {
+        userId,
+        organizationId,
+        secret,
+      }),
     ).rejects.toThrow(/invalid/i);
   });
 

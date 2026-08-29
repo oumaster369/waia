@@ -376,6 +376,7 @@ jobs:
   test:
     name: unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     env:
       DATABASE_URL: file:./.data/ci-unit.sqlite
     steps:
@@ -392,15 +393,11 @@ jobs:
       - name: Run unit tests with bounded passing output
         shell: bash
         run: |
-          set +e
-          pnpm test --run --reporter=dot > "$RUNNER_TEMP/waia-unit-tests.log" 2>&1
-          test_status=$?
-          if [ "$test_status" -eq 0 ]; then
-            tail -n 80 "$RUNNER_TEMP/waia-unit-tests.log"
-          else
-            cat "$RUNNER_TEMP/waia-unit-tests.log"
-          fi
-          exit "$test_status"
+          WAIA_UNIT_LOG_FILE="$RUNNER_TEMP/waia-unit-tests.log" \
+          WAIA_PROGRESS_INTERVAL_SECONDS=60 \
+          WAIA_UNIT_TIMEOUT_SECONDS=2700 \
+            ./scripts/github/run-unit-tests-with-bounded-progress.sh \
+              pnpm test --run --reporter=dot
 
   # RELEASE-BLOCKING GATE (ADR-0007): any cross-organization access leak blocks merge/release.
   # Owner: Architect / backend label. Tests are classified by the `tenant-isolation` filename
