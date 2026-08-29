@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-786",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Keep the CI workflow boundary, its hermetic diagnostic proof and the independently discovered probabilistic unit-negative fixture in one test-only branch, manifest and PR without touching runtime semantics.",
+  "includedChildren": [
+    {
+      "issue": "DEE-787",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Add an explicit unit-job timeout and a diagnostic-only wrapper that preserves complete logs, emits bounded progress and survives termination without changing the test command or acceptance.",
+      "dependencies": ["DEE-755"],
+      "dependencyEvidence": ["DEE-755 is merged; PR #514 proved that its bounded-output wrapper loses the captured Vitest log when GitHub cancels a hung job."],
+      "expectedFileOrSchemaSurfaces": [
+        ".github/workflows/ci.yml",
+        "scripts/github/run-unit-tests-with-bounded-progress.sh"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller explicitly authorized a separate minimal test-only CI diagnostic expansion."},
+      "expectedAcceptanceEvidence": ["Bounded progress, success tail, complete failure/termination log and original status are proven without skipping or changing any test."],
+      "expectedTests": ["hermetic success, failure and TERM preservation shell proofs; workflow syntax and command inspection"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-788",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Prove success, failure and termination diagnostics and verify the workflow retains the unchanged full test command and bounded timeout.",
+      "dependencies": ["DEE-787"],
+      "dependencyEvidence": ["DEE-787 owns the only diagnostic wrapper exercised by this proof."],
+      "expectedFileOrSchemaSurfaces": [
+        "scripts/github/test-run-unit-tests-with-bounded-progress.sh"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller explicitly authorized focused diagnostic-only proof."},
+      "expectedAcceptanceEvidence": ["Success, failure and termination preserve bounded/full output and exact status without changing the full test invocation."],
+      "expectedTests": ["hermetic shell wrapper success/failure/TERM proof; workflow timeout and command inspection"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-789",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Replace the probabilistic Finance Assistant HMAC tamper fixture with a deterministic significant-byte mutation while retaining the unchanged rejection assertion and runtime verifier.",
+      "dependencies": ["DEE-788"],
+      "dependencyEvidence": ["DEE-788 proves the unchanged full-unit invocation; DEE-789 changes only one existing negative fixture exposed by that invocation."],
+      "expectedFileOrSchemaSurfaces": ["tests/unit/finance-assistant-confirmation.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "Program Controller explicitly authorized deterministic significant-byte HMAC tamper proof with no runtime/security semantic change."},
+      "expectedAcceptanceEvidence": ["The mutated signature decodes to bytes different from the original and the unchanged verifier rejects it deterministically."],
+      "expectedTests": ["focused Finance Assistant confirmation positive/scope/expiry/tamper/schema negatives; literal full fresh-SQLite suite"],
+      "execution": {"wave": 3, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Program Controller exact diagnostic-boundary authorization"},
+    "authoritativeBase": "cf060b86353a62eab714dbd06625bb6844a90c1f",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-786/787 exclusively own termination-safe CI unit diagnostics; DEE-789 owns only the deterministic Finance Assistant tamper fixture; DEE-781 remains unchanged and blocked on the diagnostic rerun."},
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "The authoritative pnpm test --run --reporter=dot command and full test set remain unchanged.",
+    "No retry, skip, shard, filter or assertion weakening is introduced.",
+    "Complete captured output is printed on failure or termination and the original nonzero result is preserved.",
+    "No production, scientific, security, holdout, live or capital semantics change.",
+    "The Finance Assistant tamper fixture changes significant decoded HMAC bytes and leaves the runtime verifier unchanged."
+  ],
+  "rollbackStrategy": "One squash revert restores the prior inline bounded-output wrapper; no durable or production data is touched.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-786-ci-unit-diagnostics.integration-train.json DEE-786 admission",
+    "focused": ["hermetic shell wrapper success/failure/TERM proof", "workflow inspection", "bash syntax", "Finance Assistant confirmation deterministic tamper negative"],
+    "fullSuite": "one literal full fresh-SQLite suite and authoritative CI on the exact PR head",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
