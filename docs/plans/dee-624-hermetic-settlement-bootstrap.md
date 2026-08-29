@@ -1,7 +1,7 @@
 ---
-integrationIssue: DEE-624
+integrationIssue: DEE-861
 integrationTitle: "Hermetic SQLite settlement reconciliation health-route bootstrap"
-branch: dee-624-hermetic-settlement-bootstrap
+branch: dee-861-hermetic-settlement-bootstrap
 riskTier: T1
 prPolicy: one-pr
 executionSurfaces: [local, github-pr-ci]
@@ -9,13 +9,13 @@ requiredValidation: [focused-unit, full-unit, lint, typecheck, build, canon, pr-
 approvalGates: [independent-exact-head-review, dee-653]
 state:
   status: admitted
-  blockedReason: "Linear child creation awaits explicit user approval after connector risk rejection"
+  blockedReason: null
 provenance:
   authoritativeBase: 56ba1ddc262204ca2cd2d2732756e509c856b743
   createdFrom: user-authorized-ai-trader-program-controller
 ---
 
-# DEE-624 — hermetic settlement health bootstrap
+# DEE-861 — hermetic settlement health bootstrap
 
 ## Outcome
 

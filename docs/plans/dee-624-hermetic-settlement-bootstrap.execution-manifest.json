@@ -1,11 +1,11 @@
 {
   "schemaVersion": "waia-execution-manifest/v1",
-  "issue": "DEE-624",
+  "issue": "DEE-861",
   "base": {
     "ref": "origin/main",
     "sha": "56ba1ddc262204ca2cd2d2732756e509c856b743"
   },
-  "branch": "dee-624-hermetic-settlement-bootstrap",
+  "branch": "dee-861-hermetic-settlement-bootstrap",
   "status": "admitted",
   "ownership": {
     "ownedFiles": [
