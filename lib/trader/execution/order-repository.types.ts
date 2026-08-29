@@ -192,10 +192,7 @@ export function assertOrderOpeningCausalLineage(
   if (lineage.organizationId !== organizationId || lineage.symbol !== input.symbol) {
     throw new Error("ORDER_OPENING_CAUSAL_LINEAGE_SCOPE_MISMATCH");
   }
-  if (
-    lineage.riskAllowanceId !== (input.riskAllowanceId ?? "") ||
-    lineage.riskAllowanceContentDigest !== (input.riskAllowanceBindingDigest ?? "")
-  ) {
+  if (lineage.riskAllowanceId !== (input.riskAllowanceId ?? "")) {
     throw new Error("ORDER_OPENING_CAUSAL_LINEAGE_ALLOWANCE_MISMATCH");
   }
 }

@@ -23,13 +23,15 @@ export type LegacyRiskVerdictMappingV2 = Readonly<{
   preservesHistoricalRecord: true;
 }>;
 
-const LEGACY_MAPPING: Readonly<Record<RiskDecisionOutcome, CanonicalRiskVerdictV2>> = Object.freeze({
-  APPROVE: "APPROVE",
-  RESIZE: "APPROVE_CLAMPED",
-  REJECT: "VETO",
-  CLOSE_ONLY: "CLOSE_ONLY",
-  STOP_ACCOUNT: "HALT",
-});
+const LEGACY_MAPPING: Readonly<Record<RiskDecisionOutcome, CanonicalRiskVerdictV2>> = Object.freeze(
+  {
+    APPROVE: "APPROVE",
+    RESIZE: "APPROVE_CLAMPED",
+    REJECT: "VETO",
+    CLOSE_ONLY: "CLOSE_ONLY",
+    STOP_ACCOUNT: "HALT",
+  },
+);
 
 export function mapLegacyRiskOutcomeToV2(outcome: RiskDecisionOutcome): LegacyRiskVerdictMappingV2 {
   return Object.freeze({
@@ -58,10 +60,17 @@ export type RiskVerdictV2 = Readonly<{
     action: RiskDecisionActionV2;
     economicSizeSetId: string;
     economicSizeSetDigestHex: string;
+    forecastId?: string;
+    forecastContentDigestHex?: string;
+    canonicalCausalLineageDigestHex?: string;
   }>;
   riskPolicyVersion: string;
   riskPolicyDigestHex: string;
-  limitVersions: readonly Readonly<{ layer: RiskBindingLayerV2; version: string; digestHex: string }>[];
+  limitVersions: readonly Readonly<{
+    layer: RiskBindingLayerV2;
+    version: string;
+    digestHex: string;
+  }>[];
   reality: Readonly<{
     snapshotId: string;
     contentDigestHex: string;
@@ -148,8 +157,10 @@ function validateDraft(input: RiskVerdictV2Draft): void {
     [input.referencePrice.authorityId, "referencePrice.authorityId"],
     [input.referencePrice.authorityVersion, "referencePrice.authorityVersion"],
   ].forEach(([value, field]) => requireText(value!, field!));
-  if (input.market !== "SPOT" || input.quoteAsset !== "USDT") throw new Error("only USDT SPOT is valid");
-  if (input.symbol !== `${input.baseAsset}${input.quoteAsset}`) throw new Error("symbol binding mismatch");
+  if (input.market !== "SPOT" || input.quoteAsset !== "USDT")
+    throw new Error("only USDT SPOT is valid");
+  if (input.symbol !== `${input.baseAsset}${input.quoteAsset}`)
+    throw new Error("symbol binding mismatch");
   [
     [input.instrumentIdentityDigestHex, "instrumentIdentityDigestHex"],
     [input.decision.semanticDigestHex, "decision.semanticDigestHex"],
@@ -160,6 +171,22 @@ function validateDraft(input: RiskVerdictV2Draft): void {
     [input.reality.reconciliationAuthorityDigestHex, "reconciliationAuthorityDigestHex"],
     [input.referencePrice.contentDigestHex, "referencePrice.contentDigestHex"],
   ].forEach(([value, field]) => requireDigest(value!, field!));
+  const causalProjection = [
+    input.decision.forecastId,
+    input.decision.forecastContentDigestHex,
+    input.decision.canonicalCausalLineageDigestHex,
+  ];
+  if (causalProjection.some((value) => value !== undefined)) {
+    if (causalProjection.some((value) => value === undefined)) {
+      throw new Error("decision causal projection must be complete");
+    }
+    requireText(input.decision.forecastId!, "decision.forecastId");
+    requireDigest(input.decision.forecastContentDigestHex!, "decision.forecastContentDigestHex");
+    requireDigest(
+      input.decision.canonicalCausalLineageDigestHex!,
+      "decision.canonicalCausalLineageDigestHex",
+    );
+  }
   input.limitVersions.forEach((entry) => {
     requireText(entry.version, "limitVersions.version");
     requireDigest(entry.digestHex, "limitVersions.digestHex");
@@ -204,14 +231,21 @@ export function createRiskVerdictV2(draft: RiskVerdictV2Draft): RiskVerdictV2 {
   validateDraft(draft);
   const limitVersions = [...draft.limitVersions]
     .map((entry) => ({ ...entry }))
-    .sort((a, b) => LAYER_ORDINAL.get(a.layer)! - LAYER_ORDINAL.get(b.layer)! || a.version.localeCompare(b.version));
+    .sort(
+      (a, b) =>
+        LAYER_ORDINAL.get(a.layer)! - LAYER_ORDINAL.get(b.layer)! ||
+        a.version.localeCompare(b.version),
+    );
   const withoutDigests = {
     ...draft,
     schemaVersion: RISK_VERDICT_V2_SCHEMA_VERSION,
     decision: { ...draft.decision },
     limitVersions,
     reality: { ...draft.reality },
-    referencePrice: { ...draft.referencePrice, price: canonicalPositive(draft.referencePrice.price) },
+    referencePrice: {
+      ...draft.referencePrice,
+      price: canonicalPositive(draft.referencePrice.price),
+    },
     approvedQualifiedQuantity:
       draft.approvedQualifiedQuantity === null
         ? null
@@ -221,12 +255,20 @@ export function createRiskVerdictV2(draft: RiskVerdictV2Draft): RiskVerdictV2 {
   };
   const semanticDigestHex = computeStableJsonDigest(semanticPayload(withoutDigests));
   const withSemantic = { ...withoutDigests, semanticDigestHex };
-  return deepFreezeVerdict({ ...withSemantic, contentDigestHex: computeStableJsonDigest(withSemantic) });
+  return deepFreezeVerdict({
+    ...withSemantic,
+    contentDigestHex: computeStableJsonDigest(withSemantic),
+  });
 }
 
 export function validateRiskVerdictV2(input: RiskVerdictV2): boolean {
   try {
-    const { schemaVersion: _schema, semanticDigestHex: _semantic, contentDigestHex: _content, ...draft } = input;
+    const {
+      schemaVersion: _schema,
+      semanticDigestHex: _semantic,
+      contentDigestHex: _content,
+      ...draft
+    } = input;
     void _schema;
     void _semantic;
     void _content;

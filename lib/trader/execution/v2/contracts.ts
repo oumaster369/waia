@@ -34,10 +34,7 @@ export type ExecutionTimeInForceV2 = "GTC" | "IOC" | "FOK";
 export type ExecutionSideV2 = "buy" | "sell";
 export type ExecutionActionV2 = "ENTER_LONG" | "REDUCE" | "CLOSE";
 
-export function multiplyExecutionNotionalConservativelyV2(
-  quantity: string,
-  price: string,
-): string {
+export function multiplyExecutionNotionalConservativelyV2(quantity: string, price: string): string {
   const scaledQuantity = parseDecimal(quantity);
   const scaledPrice = parseDecimal(price);
   if (scaledQuantity < 0n || scaledPrice < 0n) {
@@ -46,9 +43,7 @@ export function multiplyExecutionNotionalConservativelyV2(
   const exactProduct = scaledQuantity * scaledPrice;
   const scaledProduct = exactProduct / DECIMAL_SCALE_FACTOR;
   return formatDecimal(
-    exactProduct % DECIMAL_SCALE_FACTOR === 0n
-      ? scaledProduct
-      : scaledProduct + 1n,
+    exactProduct % DECIMAL_SCALE_FACTOR === 0n ? scaledProduct : scaledProduct + 1n,
   );
 }
 
@@ -122,6 +117,9 @@ export type ExecutionPlanV2 = Readonly<{
   riskVerdictId: string;
   decisionId: string;
   decisionContentDigestHex: string;
+  forecastId?: string;
+  forecastContentDigestHex?: string;
+  canonicalCausalLineageDigestHex?: string;
   economicSizeSetDigestHex: string;
   instrumentIdentityDigestHex: string;
   symbol: string;
@@ -219,10 +217,7 @@ export type ExecutionReportV2 = Readonly<{
   contentDigestHex: string;
 }>;
 
-export type ExecutionReportV2Draft = Omit<
-  ExecutionReportV2,
-  "schemaVersion" | "contentDigestHex"
->;
+export type ExecutionReportV2Draft = Omit<ExecutionReportV2, "schemaVersion" | "contentDigestHex">;
 
 const DIGEST = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -270,7 +265,8 @@ function canonicalQuantityRules(input: ExecutionQuantityRulesV2): ExecutionQuant
   const minimumQuantity = canonicalPositive(input.minimumQuantity, "minimumQuantity");
   const quantityStep = canonicalPositive(input.quantityStep, "quantityStep");
   const economicQualifiedQuantities = input.economicQualifiedQuantities.map((value) =>
-    canonicalPositive(value, "economicQualifiedQuantity"));
+    canonicalPositive(value, "economicQualifiedQuantity"),
+  );
   const sorted = [...new Set(economicQualifiedQuantities)].sort((a, b) => compareDecimal(a, b));
   if (sorted.length !== economicQualifiedQuantities.length) {
     throw new Error("economic qualified quantities must be unique");
@@ -311,10 +307,8 @@ export function createExecutionPolicyBindingV2(
 ): ExecutionPolicyBindingV2 {
   requireUuid(draft.executionPolicyId, "executionPolicyId");
   [draft.organizationId, draft.policyVersion, draft.decisionId, draft.venue].forEach(
-    (value, index) => requireText(
-      value,
-      ["organizationId", "policyVersion", "decisionId", "venue"][index]!,
-    ),
+    (value, index) =>
+      requireText(value, ["organizationId", "policyVersion", "decisionId", "venue"][index]!),
   );
   [
     draft.decisionContentDigestHex,
@@ -327,12 +321,17 @@ export function createExecutionPolicyBindingV2(
   if (!Number.isSafeInteger(draft.timeoutMs) || draft.timeoutMs <= 0) {
     throw new Error("timeoutMs must be a positive integer");
   }
-  if (!Number.isSafeInteger(draft.slicingPolicy.maximumSlices) ||
-    draft.slicingPolicy.maximumSlices <= 0) {
+  if (
+    !Number.isSafeInteger(draft.slicingPolicy.maximumSlices) ||
+    draft.slicingPolicy.maximumSlices <= 0
+  ) {
     throw new Error("maximumSlices must be a positive integer");
   }
-  if (draft.retryPolicy.maximumNetworkSubmissions !== 1 ||
-    draft.retryPolicy.sameIdentityRetryAllowed || draft.retryPolicy.venueIdempotencyProven) {
+  if (
+    draft.retryPolicy.maximumNetworkSubmissions !== 1 ||
+    draft.retryPolicy.sameIdentityRetryAllowed ||
+    draft.retryPolicy.venueIdempotencyProven
+  ) {
     throw new Error("unproven venue idempotency requires one fail-unknown submission");
   }
   const minimumPrice = canonicalPositive(draft.priceCollar.minimumPrice, "minimumPrice");
@@ -377,17 +376,21 @@ function requiredSide(action: ExecutionActionV2): ExecutionSideV2 {
 export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): ExecutionPlanV2 {
   requireUuid(input.executionPlanId, "executionPlanId");
   if (input.allowance.lifecycleState !== "ISSUED") throw new Error("allowance is not issuable");
-  if (input.policy.organizationId !== input.allowance.organizationId ||
+  if (
+    input.policy.organizationId !== input.allowance.organizationId ||
     input.policy.decisionId !== input.allowance.decision.decisionId ||
     input.policy.decisionContentDigestHex !== input.allowance.decision.contentDigestHex ||
     input.policy.venue !== input.allowance.venue ||
     input.policy.instrumentIdentityDigestHex !== input.allowance.instrumentIdentityDigestHex ||
-    input.policy.economicSizeSetDigestHex !== input.allowance.decision.economicSizeSetDigestHex) {
+    input.policy.economicSizeSetDigestHex !== input.allowance.decision.economicSizeSetDigestHex
+  ) {
     throw new Error("execution policy is not bound to the allowance economics");
   }
-  if (!input.policy.allowedOrderTypes.includes(input.orderType) ||
+  if (
+    !input.policy.allowedOrderTypes.includes(input.orderType) ||
     !input.policy.allowedTimeInForce.includes(input.timeInForce) ||
-    !input.policy.allowedLiquidityRoles.includes(input.liquidityRole)) {
+    !input.policy.allowedLiquidityRoles.includes(input.liquidityRole)
+  ) {
     throw new Error("planned mechanics are outside the execution policy");
   }
   if (input.orderType === "market" && input.limitPrice != null) {
@@ -402,6 +405,14 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     "approvedQualifiedQuantityCeiling",
   );
   const action = requiredAction(input.allowance);
+  if (
+    action === "ENTER_LONG" &&
+    (!input.allowance.decision.forecastId ||
+      !input.allowance.decision.forecastContentDigestHex ||
+      !input.allowance.decision.canonicalCausalLineageDigestHex)
+  ) {
+    throw new Error("exposure-increasing plan requires exact causal authority projection");
+  }
   const reservedExposureNotional = canonicalNonnegative(
     input.allowance.reservedExposureNotional,
     "reservedExposureNotional",
@@ -410,32 +421,44 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     input.approvedNotionalCeiling,
     "notional ceiling",
   );
-  if (action === "ENTER_LONG" &&
-    compareDecimal(approvedNotionalCeiling, reservedExposureNotional) > 0) {
+  if (
+    action === "ENTER_LONG" &&
+    compareDecimal(approvedNotionalCeiling, reservedExposureNotional) > 0
+  ) {
     throw new Error("approved notional exceeds the Risk allowance reservation");
   }
   const rules = canonicalQuantityRules(input.policy.quantityRules);
-  if (compareDecimal(plannedQuantity, approvedQuantity) > 0 ||
+  if (
+    compareDecimal(plannedQuantity, approvedQuantity) > 0 ||
     !rules.economicQualifiedQuantities.includes(plannedQuantity) ||
-    !exactMultiple(plannedQuantity, rules.quantityStep)) {
+    !exactMultiple(plannedQuantity, rules.quantityStep)
+  ) {
     throw new Error("planned quantity lacks qualified discrete membership");
   }
-  const limitPrice = input.limitPrice == null ? null : canonicalPositive(input.limitPrice, "limitPrice");
-  if (limitPrice !== null && (compareDecimal(limitPrice, input.policy.priceCollar.minimumPrice) < 0 ||
-    compareDecimal(limitPrice, input.policy.priceCollar.maximumPrice) > 0)) {
+  const limitPrice =
+    input.limitPrice == null ? null : canonicalPositive(input.limitPrice, "limitPrice");
+  if (
+    limitPrice !== null &&
+    (compareDecimal(limitPrice, input.policy.priceCollar.minimumPrice) < 0 ||
+      compareDecimal(limitPrice, input.policy.priceCollar.maximumPrice) > 0)
+  ) {
     throw new Error("limit price is outside the qualified collar");
   }
   const opensAtUtc = canonicalTimestamp(input.timingWindow.opensAtUtc, "opensAtUtc");
   const closesAtUtc = canonicalTimestamp(input.timingWindow.closesAtUtc, "closesAtUtc");
   const sealedAtUtc = canonicalTimestamp(input.sealedAtUtc, "sealedAtUtc");
-  if (new Date(closesAtUtc).getTime() <= new Date(opensAtUtc).getTime() ||
+  if (
+    new Date(closesAtUtc).getTime() <= new Date(opensAtUtc).getTime() ||
     new Date(opensAtUtc).getTime() < new Date(input.policy.effectiveFromUtc).getTime() ||
     new Date(closesAtUtc).getTime() > new Date(input.policy.effectiveUntilUtc).getTime() ||
-    new Date(sealedAtUtc).getTime() > new Date(opensAtUtc).getTime()) {
+    new Date(sealedAtUtc).getTime() > new Date(opensAtUtc).getTime()
+  ) {
     throw new Error("timing window is outside the qualified policy");
   }
-  if (input.childSlices.length === 0 ||
-    input.childSlices.length > input.policy.slicingPolicy.maximumSlices) {
+  if (
+    input.childSlices.length === 0 ||
+    input.childSlices.length > input.policy.slicingPolicy.maximumSlices
+  ) {
     throw new Error("complete child slice plan is required");
   }
   let sliceTotal = "0";
@@ -443,11 +466,16 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
   const childSlices = input.childSlices.map((slice, index) => {
     if (slice.sequence !== index + 1) throw new Error("slice sequence must be contiguous");
     const quantity = canonicalPositive(slice.quantity, "slice quantity");
-    if (!exactMultiple(quantity, rules.quantityStep)) throw new Error("slice violates quantity step");
-    const price = slice.limitPrice == null ? null : canonicalPositive(slice.limitPrice, "slice price");
-    if ((input.orderType === "limit") !== (price !== null) ||
-      (price !== null && (compareDecimal(price, input.policy.priceCollar.minimumPrice) < 0 ||
-        compareDecimal(price, input.policy.priceCollar.maximumPrice) > 0))) {
+    if (!exactMultiple(quantity, rules.quantityStep))
+      throw new Error("slice violates quantity step");
+    const price =
+      slice.limitPrice == null ? null : canonicalPositive(slice.limitPrice, "slice price");
+    if (
+      (input.orderType === "limit") !== (price !== null) ||
+      (price !== null &&
+        (compareDecimal(price, input.policy.priceCollar.minimumPrice) < 0 ||
+          compareDecimal(price, input.policy.priceCollar.maximumPrice) > 0))
+    ) {
       throw new Error("slice price is outside sealed mechanics");
     }
     sliceTotal = addDecimal(sliceTotal, quantity);
@@ -461,20 +489,21 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     return Object.freeze({ sequence: slice.sequence, quantity, limitPrice: price });
   });
   if (compareDecimal(sliceTotal, plannedQuantity) !== 0) throw new Error("slice total mismatch");
-  if (childSlices.length === 1 && (
-    childSlices[0]!.quantity !== plannedQuantity ||
-    childSlices[0]!.limitPrice !== limitPrice
-  )) {
+  if (
+    childSlices.length === 1 &&
+    (childSlices[0]!.quantity !== plannedQuantity || childSlices[0]!.limitPrice !== limitPrice)
+  ) {
     throw new Error("sole child slice must exactly match the venue request mechanics");
   }
   const exactEffectNotional = multiplyExecutionNotionalConservativelyV2(
     plannedQuantity,
     limitPrice ?? input.policy.priceCollar.maximumPrice,
   );
-  if (action === "ENTER_LONG" && (
-    compareDecimal(exactEffectNotional, approvedNotionalCeiling) > 0 ||
-    compareDecimal(sliceNotionalTotal, approvedNotionalCeiling) > 0
-  )) {
+  if (
+    action === "ENTER_LONG" &&
+    (compareDecimal(exactEffectNotional, approvedNotionalCeiling) > 0 ||
+      compareDecimal(sliceNotionalTotal, approvedNotionalCeiling) > 0)
+  ) {
     throw new Error("planned effect notional exceeds the approved Risk reservation ceiling");
   }
   const withoutDigests = {
@@ -487,6 +516,14 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
     riskVerdictId: input.allowance.riskVerdictId,
     decisionId: input.allowance.decision.decisionId,
     decisionContentDigestHex: input.allowance.decision.contentDigestHex,
+    ...(input.allowance.decision.forecastId
+      ? {
+          forecastId: input.allowance.decision.forecastId,
+          forecastContentDigestHex: input.allowance.decision.forecastContentDigestHex!,
+          canonicalCausalLineageDigestHex:
+            input.allowance.decision.canonicalCausalLineageDigestHex!,
+        }
+      : {}),
     economicSizeSetDigestHex: input.allowance.decision.economicSizeSetDigestHex,
     instrumentIdentityDigestHex: input.allowance.instrumentIdentityDigestHex,
     symbol: input.allowance.symbol,
@@ -518,11 +555,7 @@ export function createExecutionPlanV2(input: CreateExecutionPlanV2Input): Execut
   });
 }
 
-function requireExactPolicyProjection(
-  actual: unknown,
-  expected: unknown,
-  field: string,
-): void {
+function requireExactPolicyProjection(actual: unknown, expected: unknown, field: string): void {
   if (computeStableJsonDigest(actual) !== computeStableJsonDigest(expected)) {
     throw new Error(`${field} does not match the stored execution policy`);
   }
@@ -543,24 +576,26 @@ export function assertExecutionPlanPolicyMembershipV2(
   requireUuid(plan.executionPlanId, "executionPlanId");
   requireUuid(plan.riskAllowanceId, "riskAllowanceId");
   [plan.organizationId, plan.accountId, plan.decisionId, plan.symbol, plan.venue].forEach(
-    (value, index) => requireText(
-      value,
-      ["organizationId", "accountId", "decisionId", "symbol", "venue"][index]!,
-    ),
+    (value, index) =>
+      requireText(value, ["organizationId", "accountId", "decisionId", "symbol", "venue"][index]!),
   );
-  if (plan.organizationId !== policy.organizationId ||
+  if (
+    plan.organizationId !== policy.organizationId ||
     plan.decisionId !== policy.decisionId ||
     plan.decisionContentDigestHex !== policy.decisionContentDigestHex ||
     plan.economicSizeSetDigestHex !== policy.economicSizeSetDigestHex ||
     plan.instrumentIdentityDigestHex !== policy.instrumentIdentityDigestHex ||
     plan.venue !== policy.venue ||
     plan.executionPolicyId !== policy.executionPolicyId ||
-    plan.executionPolicyContentDigestHex !== policy.contentDigestHex) {
+    plan.executionPolicyContentDigestHex !== policy.contentDigestHex
+  ) {
     throw new Error("execution plan identity is outside the stored policy");
   }
-  if (!policy.allowedOrderTypes.includes(plan.orderType) ||
+  if (
+    !policy.allowedOrderTypes.includes(plan.orderType) ||
     !policy.allowedTimeInForce.includes(plan.timeInForce) ||
-    !policy.allowedLiquidityRoles.includes(plan.liquidityRole)) {
+    !policy.allowedLiquidityRoles.includes(plan.liquidityRole)
+  ) {
     throw new Error("execution plan mechanics are outside the stored policy");
   }
   if (plan.side !== requiredSide(plan.action)) {
@@ -579,10 +614,12 @@ export function assertExecutionPlanPolicyMembershipV2(
     plan.approvedNotionalCeiling,
     "approvedNotionalCeiling",
   );
-  if (plannedQuantity !== plan.plannedQuantity ||
+  if (
+    plannedQuantity !== plan.plannedQuantity ||
     approvedQuantity !== plan.approvedQualifiedQuantityCeiling ||
     approvedNotional !== plan.approvedNotionalCeiling ||
-    compareDecimal(plannedQuantity, approvedQuantity) > 0) {
+    compareDecimal(plannedQuantity, approvedQuantity) > 0
+  ) {
     throw new Error("execution plan quantities are not canonical or authorized");
   }
 
@@ -591,34 +628,40 @@ export function assertExecutionPlanPolicyMembershipV2(
   requireExactPolicyProjection(plan.quantityRules, rules, "quantity rules");
   requireExactPolicyProjection(plan.retryPolicy, policy.retryPolicy, "retry policy");
   requireExactPolicyProjection(plan.cancelPolicy, policy.cancelPolicy, "cancel policy");
-  if (!rules.economicQualifiedQuantities.includes(plannedQuantity) ||
-    !exactMultiple(plannedQuantity, rules.quantityStep)) {
+  if (
+    !rules.economicQualifiedQuantities.includes(plannedQuantity) ||
+    !exactMultiple(plannedQuantity, rules.quantityStep)
+  ) {
     throw new Error("execution plan quantity lacks stored policy membership");
   }
 
-  const limitPrice = plan.limitPrice === null
-    ? null
-    : canonicalPositive(plan.limitPrice, "limitPrice");
-  if (limitPrice !== plan.limitPrice ||
-    (limitPrice !== null && (
-      compareDecimal(limitPrice, policy.priceCollar.minimumPrice) < 0 ||
-      compareDecimal(limitPrice, policy.priceCollar.maximumPrice) > 0
-    ))) {
+  const limitPrice =
+    plan.limitPrice === null ? null : canonicalPositive(plan.limitPrice, "limitPrice");
+  if (
+    limitPrice !== plan.limitPrice ||
+    (limitPrice !== null &&
+      (compareDecimal(limitPrice, policy.priceCollar.minimumPrice) < 0 ||
+        compareDecimal(limitPrice, policy.priceCollar.maximumPrice) > 0))
+  ) {
     throw new Error("execution plan price is outside the stored policy collar");
   }
 
   const opensAtUtc = canonicalTimestamp(plan.timingWindow.opensAtUtc, "opensAtUtc");
   const closesAtUtc = canonicalTimestamp(plan.timingWindow.closesAtUtc, "closesAtUtc");
   const sealedAtUtc = canonicalTimestamp(plan.sealedAtUtc, "sealedAtUtc");
-  if (new Date(closesAtUtc).getTime() <= new Date(opensAtUtc).getTime() ||
+  if (
+    new Date(closesAtUtc).getTime() <= new Date(opensAtUtc).getTime() ||
     new Date(opensAtUtc).getTime() < new Date(policy.effectiveFromUtc).getTime() ||
     new Date(closesAtUtc).getTime() > new Date(policy.effectiveUntilUtc).getTime() ||
-    new Date(sealedAtUtc).getTime() > new Date(opensAtUtc).getTime()) {
+    new Date(sealedAtUtc).getTime() > new Date(opensAtUtc).getTime()
+  ) {
     throw new Error("execution plan timing is outside the stored policy");
   }
 
-  if (plan.childSlices.length === 0 ||
-    plan.childSlices.length > policy.slicingPolicy.maximumSlices) {
+  if (
+    plan.childSlices.length === 0 ||
+    plan.childSlices.length > policy.slicingPolicy.maximumSlices
+  ) {
     throw new Error("execution plan slices are outside the stored policy");
   }
   let sliceTotal = "0";
@@ -629,43 +672,42 @@ export function assertExecutionPlanPolicyMembershipV2(
     if (quantity !== slice.quantity || !exactMultiple(quantity, rules.quantityStep)) {
       throw new Error("slice quantity is outside the stored policy");
     }
-    const price = slice.limitPrice === null
-      ? null
-      : canonicalPositive(slice.limitPrice, "slice price");
-    if (price !== slice.limitPrice ||
+    const price =
+      slice.limitPrice === null ? null : canonicalPositive(slice.limitPrice, "slice price");
+    if (
+      price !== slice.limitPrice ||
       (plan.orderType === "limit") !== (price !== null) ||
-      (price !== null && (
-        compareDecimal(price, policy.priceCollar.minimumPrice) < 0 ||
-        compareDecimal(price, policy.priceCollar.maximumPrice) > 0
-      ))) {
+      (price !== null &&
+        (compareDecimal(price, policy.priceCollar.minimumPrice) < 0 ||
+          compareDecimal(price, policy.priceCollar.maximumPrice) > 0))
+    ) {
       throw new Error("slice price is outside the stored policy");
     }
     sliceTotal = addDecimal(sliceTotal, quantity);
     sliceNotionalTotal = addDecimal(
       sliceNotionalTotal,
-      multiplyExecutionNotionalConservativelyV2(
-        quantity,
-        price ?? policy.priceCollar.maximumPrice,
-      ),
+      multiplyExecutionNotionalConservativelyV2(quantity, price ?? policy.priceCollar.maximumPrice),
     );
   });
   if (compareDecimal(sliceTotal, plannedQuantity) !== 0) {
     throw new Error("slice total does not match the sealed plan quantity");
   }
-  if (plan.childSlices.length === 1 && (
-    plan.childSlices[0]!.quantity !== plannedQuantity ||
-    plan.childSlices[0]!.limitPrice !== limitPrice
-  )) {
+  if (
+    plan.childSlices.length === 1 &&
+    (plan.childSlices[0]!.quantity !== plannedQuantity ||
+      plan.childSlices[0]!.limitPrice !== limitPrice)
+  ) {
     throw new Error("sole child slice does not match the sealed venue request mechanics");
   }
   const exactEffectNotional = multiplyExecutionNotionalConservativelyV2(
     plannedQuantity,
     limitPrice ?? policy.priceCollar.maximumPrice,
   );
-  if (plan.action === "ENTER_LONG" && (
-    compareDecimal(exactEffectNotional, approvedNotional) > 0 ||
-    compareDecimal(sliceNotionalTotal, approvedNotional) > 0
-  )) {
+  if (
+    plan.action === "ENTER_LONG" &&
+    (compareDecimal(exactEffectNotional, approvedNotional) > 0 ||
+      compareDecimal(sliceNotionalTotal, approvedNotional) > 0)
+  ) {
     throw new Error("sealed effect notional exceeds its approved ceiling");
   }
 }
@@ -675,9 +717,7 @@ export function deterministicExecutionClientOrderId(planDigestHex: string): stri
   return `waia-v2-${planDigestHex.slice(0, 24)}`;
 }
 
-export function createExecutionAttemptV2(
-  input: CreateExecutionAttemptV2Input,
-): ExecutionAttemptV2 {
+export function createExecutionAttemptV2(input: CreateExecutionAttemptV2Input): ExecutionAttemptV2 {
   requireUuid(input.executionAttemptId, "executionAttemptId");
   requireUuid(input.orderId, "orderId");
   requireDigest(input.riskAllowanceContentDigestHex, "riskAllowanceContentDigestHex");
@@ -688,8 +728,7 @@ export function createExecutionAttemptV2(
     throw new Error("one attempt represents one pre-sealed venue order slice");
   }
   const slice = input.plan.childSlices[0]!;
-  if (slice.quantity !== input.plan.plannedQuantity ||
-    slice.limitPrice !== input.plan.limitPrice) {
+  if (slice.quantity !== input.plan.plannedQuantity || slice.limitPrice !== input.plan.limitPrice) {
     throw new Error("attempt mechanics must exactly match the sole pre-sealed child slice");
   }
   const clientOrderId = deterministicExecutionClientOrderId(input.plan.contentDigestHex);
@@ -763,32 +802,47 @@ export function validateExecutionPolicyBindingV2(value: ExecutionPolicyBindingV2
   try {
     const { schemaVersion: _s, semanticDigestHex: _sd, contentDigestHex: _cd, ...draft } = value;
     const rebuilt = createExecutionPolicyBindingV2(draft);
-    return _s === rebuilt.schemaVersion && _sd === rebuilt.semanticDigestHex &&
-      _cd === rebuilt.contentDigestHex;
-  } catch { return false; }
+    return (
+      _s === rebuilt.schemaVersion &&
+      _sd === rebuilt.semanticDigestHex &&
+      _cd === rebuilt.contentDigestHex
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function validateExecutionPlanV2(value: ExecutionPlanV2): boolean {
   try {
     const { semanticDigestHex, contentDigestHex, ...payload } = value;
-    return value.schemaVersion === EXECUTION_PLAN_V2_SCHEMA_VERSION &&
+    return (
+      value.schemaVersion === EXECUTION_PLAN_V2_SCHEMA_VERSION &&
       DIGEST.test(value.riskAllowanceContentDigestHex) &&
       DIGEST.test(value.executionPolicyContentDigestHex) &&
       value.childSlices.length > 0 &&
       computeStableJsonDigest(payload) === semanticDigestHex &&
-      computeStableJsonDigest({ ...payload, semanticDigestHex }) === contentDigestHex;
-  } catch { return false; }
+      computeStableJsonDigest({ ...payload, semanticDigestHex }) === contentDigestHex
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function validateExecutionAttemptV2(value: ExecutionAttemptV2): boolean {
   try {
     const { semanticDigestHex, contentDigestHex, ...payload } = value;
-    return value.schemaVersion === EXECUTION_ATTEMPT_V2_SCHEMA_VERSION &&
-      value.attemptSequence === "1" && value.lifecycleState === "BOUND" &&
-      value.clientOrderId === deterministicExecutionClientOrderId(value.executionPlanContentDigestHex) &&
+    return (
+      value.schemaVersion === EXECUTION_ATTEMPT_V2_SCHEMA_VERSION &&
+      value.attemptSequence === "1" &&
+      value.lifecycleState === "BOUND" &&
+      value.clientOrderId ===
+        deterministicExecutionClientOrderId(value.executionPlanContentDigestHex) &&
       computeStableJsonDigest(payload) === semanticDigestHex &&
-      computeStableJsonDigest({ ...payload, semanticDigestHex }) === contentDigestHex;
-  } catch { return false; }
+      computeStableJsonDigest({ ...payload, semanticDigestHex }) === contentDigestHex
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function validateExecutionReportV2(value: ExecutionReportV2): boolean {
@@ -796,5 +850,7 @@ export function validateExecutionReportV2(value: ExecutionReportV2): boolean {
     const { schemaVersion: _s, contentDigestHex: _cd, ...draft } = value;
     const rebuilt = createExecutionReportV2(draft);
     return _s === rebuilt.schemaVersion && _cd === rebuilt.contentDigestHex;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }

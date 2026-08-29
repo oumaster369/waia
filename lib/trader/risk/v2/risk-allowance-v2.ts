@@ -11,8 +11,7 @@ export const RISK_ALLOWANCE_LIFECYCLE_STATES_V2 = [
   "EXPIRED",
 ] as const;
 
-export type RiskAllowanceLifecycleStateV2 =
-  (typeof RISK_ALLOWANCE_LIFECYCLE_STATES_V2)[number];
+export type RiskAllowanceLifecycleStateV2 = (typeof RISK_ALLOWANCE_LIFECYCLE_STATES_V2)[number];
 
 export type RiskAllowanceV2 = Readonly<{
   schemaVersion: typeof RISK_ALLOWANCE_V2_SCHEMA_VERSION;
@@ -35,6 +34,9 @@ export type RiskAllowanceV2 = Readonly<{
     action: RiskDecisionActionV2;
     economicSizeSetId: string;
     economicSizeSetDigestHex: string;
+    forecastId?: string;
+    forecastContentDigestHex?: string;
+    canonicalCausalLineageDigestHex?: string;
   }>;
   riskPolicyVersion: string;
   riskPolicyDigestHex: string;
@@ -89,9 +91,7 @@ function canonicalTimestamp(value: string): string {
   return value;
 }
 
-function semanticPayload(
-  input: Omit<RiskAllowanceV2, "semanticDigestHex" | "contentDigestHex">,
-) {
+function semanticPayload(input: Omit<RiskAllowanceV2, "semanticDigestHex" | "contentDigestHex">) {
   const { riskAllowanceId: _id, issuedAtUtc: _issuedAt, nonce: _nonce, ...semantic } = input;
   void _id;
   void _issuedAt;
@@ -131,6 +131,22 @@ export function createRiskAllowanceV2(draft: RiskAllowanceV2Draft): RiskAllowanc
     [draft.realityContentDigestHex, "realityContentDigestHex"],
     [draft.reconciliationAuthorityDigestHex, "reconciliationAuthorityDigestHex"],
   ].forEach(([value, field]) => requireDigest(value!, field!));
+  const causalProjection = [
+    draft.decision.forecastId,
+    draft.decision.forecastContentDigestHex,
+    draft.decision.canonicalCausalLineageDigestHex,
+  ];
+  if (causalProjection.some((value) => value !== undefined)) {
+    if (causalProjection.some((value) => value === undefined)) {
+      throw new Error("decision causal projection must be complete");
+    }
+    requireText(draft.decision.forecastId!, "decision.forecastId");
+    requireDigest(draft.decision.forecastContentDigestHex!, "decision.forecastContentDigestHex");
+    requireDigest(
+      draft.decision.canonicalCausalLineageDigestHex!,
+      "decision.canonicalCausalLineageDigestHex",
+    );
+  }
   const issuedAtUtc = canonicalTimestamp(draft.issuedAtUtc);
   const validUntilUtc = canonicalTimestamp(draft.validUntilUtc);
   if (new Date(validUntilUtc).getTime() <= new Date(issuedAtUtc).getTime()) {
@@ -145,8 +161,7 @@ export function createRiskAllowanceV2(draft: RiskAllowanceV2Draft): RiskAllowanc
   if (draft.decision.action === "HOLD") {
     throw new Error("HOLD cannot produce an executable allowance");
   }
-  const reductionAction =
-    draft.decision.action === "REDUCE" || draft.decision.action === "CLOSE";
+  const reductionAction = draft.decision.action === "REDUCE" || draft.decision.action === "CLOSE";
   if (reductionAction !== draft.strictExposureReduction) {
     throw new Error("allowance reduction proof/action mismatch");
   }
