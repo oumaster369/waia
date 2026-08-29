@@ -31,7 +31,6 @@ export function findFeatureParityMismatches(
   compare("features.close", live.features.close, backtest.features.close);
   compare("features.sma20", live.features.sma20, backtest.features.sma20);
   compare("features.zscoreVsSma20", live.features.zscoreVsSma20, backtest.features.zscoreVsSma20);
-  compare("features.priceDispersion20", live.features.priceDispersion20, backtest.features.priceDispersion20);
   compare(
     "features.priceDispersion20",
     live.features.priceDispersion20,

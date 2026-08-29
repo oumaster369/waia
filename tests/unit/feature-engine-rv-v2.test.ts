@@ -98,9 +98,9 @@ describe("feature-engine/rv/v2", () => {
     const backtest = computeFeatureSnapshot({ bars, newId: () => "same-id" });
     backtest.features[field] = backtest.features[field] === "0" ? "1" : "0";
 
-    expect(findFeatureParityMismatches(live, backtest)).toContainEqual(
+    expect(findFeatureParityMismatches(live, backtest)).toEqual([
       expect.objectContaining({ field: `features.${field}` }),
-    );
+    ]);
   });
 
   it("fails closed when a legacy realizedVol20 runtime identity appears", () => {
