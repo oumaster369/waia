@@ -74,7 +74,7 @@ export function computePatternMatchScore(input: {
   const eventRiskMax = readNumericParam(params, "eventRiskMax", "1");
 
   const zscoreComponent = thresholdComponent(zscoreAbs, zscoreThreshold);
-  const volComponent = thresholdComponent(input.features.realizedVol20, volThreshold);
+  const volComponent = thresholdComponent(input.features.priceDispersion20, volThreshold);
   const eventRiskComponent = inverseThresholdComponent(input.features.eventRiskScore, eventRiskMax);
 
   const weighted =

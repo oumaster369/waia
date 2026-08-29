@@ -19,7 +19,7 @@ function featureSnapshot(zscore: string): FeatureSnapshot {
       close: "50000",
       sma20: "49000",
       zscoreVsSma20: zscore,
-      realizedVol20: "0.03",
+      priceDispersion20: "0.03",
       spreadBps: "5",
     },
     inputs: {

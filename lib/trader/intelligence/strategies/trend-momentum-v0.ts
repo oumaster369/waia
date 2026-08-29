@@ -63,7 +63,7 @@ export function evaluateTrendMomentumV0(
   }
 
   const zscore = features.features.zscoreVsSma20;
-  const vol = features.features.realizedVol20;
+  const vol = features.features.priceDispersion20;
 
   if (compareDecimal(zscore, MOMENTUM_ENTRY_ZSCORE) >= 0) {
     const volScale =

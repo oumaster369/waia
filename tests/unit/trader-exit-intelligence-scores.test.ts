@@ -52,7 +52,7 @@ function makeMsv(overrides?: Partial<MsvEnvelope["derived"]>): MsvEnvelope {
     instrumentId: "BTC/USDT",
     evaluatedAt: "2026-01-01T00:05:00.000Z",
     featureSetId: "fs-1",
-    physics: { close: "102", zscoreVsSma20: "0", realizedVol20: "2" },
+    physics: { close: "102", zscoreVsSma20: "0", priceDispersion20: "2" },
     liquidity: { spreadBps: "1" },
     crowd: { fearGreedIndex: null, newsSentiment: "neutral" },
     futureContext: { eventRiskScore: "0.1" },

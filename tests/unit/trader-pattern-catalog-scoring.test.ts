@@ -27,7 +27,7 @@ describe("pattern catalog scoring (M6)", () => {
       features: {
         close: "100",
         zscoreVsSma20: "2.5",
-        realizedVol20: "1.2",
+        priceDispersion20: "1.2",
         eventRiskScore: "0.2",
       },
     });
@@ -40,7 +40,7 @@ describe("pattern catalog scoring (M6)", () => {
     const features = {
       close: "100",
       zscoreVsSma20: "1.5",
-      realizedVol20: "0.8",
+      priceDispersion20: "0.8",
       eventRiskScore: "0.3",
     };
     expect(computePatternMatchScore({ definition, features })).toEqual(

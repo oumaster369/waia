@@ -18,7 +18,7 @@ export function buildMarketPhysicsLayer(features: FeatureSnapshot): MsvPhysicsBl
   return {
     close: features.features.close,
     zscoreVsSma20: features.features.zscoreVsSma20,
-    realizedVol20: features.features.realizedVol20,
+    priceDispersion20: features.features.priceDispersion20,
   };
 }
 

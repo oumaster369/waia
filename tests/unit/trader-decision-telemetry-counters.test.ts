@@ -31,7 +31,7 @@ function mockMsv(reasonCodes: unknown): MsvEnvelope {
     instrumentId: "BTC/USDT",
     evaluatedAt: "2026-01-01T00:25:00.000Z",
     featureSetId: "feature-set-259-test",
-    physics: { close: "64000", zscoreVsSma20: "-2.5", realizedVol20: "300" },
+    physics: { close: "64000", zscoreVsSma20: "-2.5", priceDispersion20: "300" },
     liquidity: { spreadBps: "1.5" },
     crowd: { fearGreedIndex: null, newsSentiment: "0" },
     futureContext: { eventRiskScore: "0" },

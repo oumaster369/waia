@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-624",
+  "base": {
+    "ref": "origin/main",
+    "sha": "91628d4987f2ac3305d272c5ac8f2596c8d41f54"
+  },
+  "branch": "dee-624-realized-vol-consumers",
+  "status": "locally-validated",
+  "riskTier": "T3",
+  "humanGate": {
+    "status": "preauthorized",
+    "evidence": "Human-ratified DEE-624M split recorded by DEE-742; controller explicitly advanced DEE-624 after DEE-775 on 2026-08-29."
+  },
+  "dependencies": {
+    "DEE-597": "Done",
+    "DEE-598": "Done",
+    "DEE-634": "Done",
+    "DEE-742": "measurement/schema slice present on base"
+  },
+  "ownership": {
+    "ownedGlobs": [
+      "lib/trader/intelligence/**",
+      "lib/trader/events/**",
+      "lib/trader/mi/**",
+      "scripts/trader/audit-dataset-regime-coverage-readonly.ts",
+      "tests/unit/**",
+      "docs/plans/dee-624-*"
+    ],
+    "forbiddenGlobs": [
+      "lib/trader/decision-v2/**",
+      "lib/trader/risk/**",
+      "lib/trader/execution/**",
+      "db/**",
+      "replay-runs/**"
+    ]
+  },
+  "frozenInvariants": [
+    "priceDispersion20 remains sample standard deviation of price levels with unchanged formula and rounding.",
+    "realizedVar20m_1m and realizedVol20m_1m remain the canonical return-based measurements with unchanged PIT/gap semantics.",
+    "Legacy Strategy V0 outputs remain non-authoritative research/tactical context and cannot authorize capital after DEE-634.",
+    "No Decision, Risk, Execution, live, production, holdout or capital policy is changed.",
+    "Historical replay evidence is immutable and may retain its legacy serialized compatibility field."
+  ],
+  "validation": [
+    "focused RV known-answer, gap, PIT-prefix, parity and consumer-inventory tests",
+    "focused Strategy/Event/MI regressions",
+    "forbidden-consumer and capital-authority graph proof",
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm build",
+    "authoritative full GitHub PR CI",
+    "fresh independent exact-head P1=0/P2=0 review"
+  ],
+  "evidence": {
+    "semanticCommit": "a602621a",
+    "runtimeLegacyIdentityCount": 0,
+    "focusedCommand": "git diff --name-only -z 91628d4987f2ac3305d272c5ac8f2596c8d41f54..HEAD -- 'tests/unit/*.test.ts' | xargs -0 pnpm test --run",
+    "focusedTests": "25 files, 128/128 PASS",
+    "capitalAuthorityCommand": "pnpm test --run tests/unit/trader-decision-capital-authority-v2.test.ts tests/unit/trader-live-decision-v2-cutover.test.ts tests/unit/trader-paper-decision-v2-cutover.test.ts",
+    "capitalAuthorityTests": "3 files, 20/20 PASS",
+    "typecheck": "PASS",
+    "lint": "PASS with repository baseline warnings only",
+    "build": "PASS",
+    "canonicalGovernance": "PASS",
+    "independentReview": "required on final exact head",
+    "authoritativeCi": "required on published final exact head"
+  }
+}

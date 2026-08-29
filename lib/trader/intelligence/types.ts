@@ -65,10 +65,8 @@ export type FeatureVector = {
   close: string;
   sma20: string;
   zscoreVsSma20: string;
-  /** @deprecated Use priceDispersion20 — legacy price-level std mislabeled as vol */
-  realizedVol20: string;
   /** Price-level sample std over SMA window (not log-return RV). */
-  priceDispersion20?: string;
+  priceDispersion20: string;
   /** Sum of squared 1m log returns over PIT window (t-20m, t]; UNAVAILABLE if gaps. */
   realizedVar20m_1m?: string;
   /** sqrt(realizedVar20m_1m); no demeaning, no annualization. */
@@ -129,7 +127,7 @@ export type TradingPermission = (typeof tradingPermissionEnum)[number];
 export type MsvPhysicsBlock = {
   close: string;
   zscoreVsSma20: string;
-  realizedVol20: string;
+  priceDispersion20: string;
 };
 
 export type MsvLiquidityBlock = {
@@ -272,9 +270,12 @@ export type StrategySignal = {
   /** Whether this signal may participate in trade-eligible primary selection. */
   tradeEligible?: boolean;
   side?: "buy" | "sell";
+  /** Legacy V0 research/tactical score; never probability or V2 capital authority. */
   confidence?: string;
+  /** Legacy V0 price-unit heuristic; never canonical EV or V2 capital authority. */
   expectedEdge?: string;
   horizon?: "1h";
+  /** Legacy V0 proposal metadata; V2 sizing ignores it and fails closed on attempted use. */
   maxRisk?: string;
   reasonCodes: readonly string[];
   msvId: string;

@@ -43,7 +43,7 @@ function featuresFromCycle(cycle: PaperCycleResult): EventAttributionFeatureSnap
   return {
     close: cycle.evaluation.features.features.close,
     zscoreVsSma20: cycle.evaluation.msv.physics.zscoreVsSma20,
-    realizedVol20: cycle.evaluation.msv.physics.realizedVol20,
+    priceDispersion20: cycle.evaluation.msv.physics.priceDispersion20,
     regime: cycle.evaluation.msv.derived.regime,
   };
 }

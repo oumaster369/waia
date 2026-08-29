@@ -106,7 +106,7 @@ export function evaluateLiquiditySweepReversalV0(
       outcome: "SIGNAL",
       side: "sell",
       confidence: "0.65",
-      expectedEdge: multiplyDecimal(features.features.realizedVol20, "0.5"),
+      expectedEdge: multiplyDecimal(features.features.priceDispersion20, "0.5"),
       horizon: DEFAULT_HORIZON,
       maxRisk: DEFAULT_MAX_RISK,
       reasonCodes: [liquiditySweepReasonCodes.recoveryExit],

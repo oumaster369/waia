@@ -48,7 +48,7 @@ function featuresFromCycle(cycle: PaperCycleResult): PatternCatalogFeatureSnapsh
   return {
     close: cycle.evaluation.features.features.close,
     zscoreVsSma20: cycle.evaluation.msv.physics.zscoreVsSma20,
-    realizedVol20: cycle.evaluation.msv.physics.realizedVol20,
+    priceDispersion20: cycle.evaluation.msv.physics.priceDispersion20,
     eventRiskScore: cycle.evaluation.msv.futureContext.eventRiskScore,
   };
 }
