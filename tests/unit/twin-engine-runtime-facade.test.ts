@@ -126,7 +126,10 @@ describe("runTwinEngineForRuntimeAsync (DEE-95a)", () => {
       expect(spy).toHaveBeenCalledTimes(1);
       const [persistenceArg, inputArg] = spy.mock.calls[0]!;
       expect(inputArg).toEqual(input);
-      expect(persistenceArg).toMatchObject({ db: mockPg });
+      // `mockPg` is a Drizzle proxy. Recursive structural matchers traverse that proxy's
+      // dynamic property space and can consume minutes while still eventually passing.
+      // The facade contract is reference identity: persistence must receive this exact DB.
+      expect(persistenceArg.db).toBe(mockPg);
     });
 
     it("rejects with TwinEngineScenarioTooLongError before engine I/O", async () => {
