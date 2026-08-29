@@ -105,7 +105,7 @@ export type TradeLegRow = {
   tradeId: string;
   positionLotId: string;
   kind: TradeLegKind;
-  orderId: string;
+  orderId: string | null;
   fillId: string | null;
   syntheticId: string | null;
   quantity: string;

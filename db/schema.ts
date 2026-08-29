@@ -1778,6 +1778,7 @@ export const traderFills = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => [
+    unique("trader_fills_id_organization_unique").on(t.id, t.organizationId),
     foreignKey({
       columns: [t.orderId, t.organizationId],
       foreignColumns: [traderOrders.id, traderOrders.organizationId],
@@ -1938,7 +1939,7 @@ export const traderTradeLegs = sqliteTable(
     tradeId: text("trade_id").notNull(),
     positionLotId: text("position_lot_id").notNull(),
     kind: text("kind", { enum: [...tradeLegKindEnum] }).notNull(),
-    orderId: text("order_id").notNull(),
+    orderId: text("order_id"),
     fillId: text("fill_id"),
     syntheticId: text("synthetic_id"),
     quantity: text("quantity").notNull(),
@@ -1960,6 +1961,14 @@ export const traderTradeLegs = sqliteTable(
       columns: [t.positionLotId, t.organizationId],
       foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId],
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }),
+    foreignKey({
+      columns: [t.fillId, t.organizationId],
+      foreignColumns: [traderFills.id, traderFills.organizationId],
+    }),
     index("trader_trade_legs_org_trade_idx").on(t.organizationId, t.tradeId),
   ],
 );

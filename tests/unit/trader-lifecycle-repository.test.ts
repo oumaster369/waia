@@ -119,7 +119,7 @@ describe("trader lifecycle repository (M1 / DEE-376)", () => {
         tradeId,
         positionLotId: lotId,
         kind: "FORCED_FLAT",
-        orderId: "",
+        orderId: null,
         fillId: null,
         syntheticId: "synthetic-repository-proof",
         quantity: "1",

@@ -328,7 +328,7 @@ function createPostgresLifecycleRepositoryImpl(
     async insertTradeLeg(context, input) {
       const scoped = requireOrgContext(context.organizationId);
       if (input.leg.kind === "FORCED_FLAT") {
-        if (input.leg.orderId !== "" || input.leg.fillId !== null || !input.leg.syntheticId) {
+        if (input.leg.orderId !== null || input.leg.fillId !== null || !input.leg.syntheticId) {
           throw new Error("TRADE_LEG_SYNTHETIC_REFERENCE_INVALID");
         }
       } else {

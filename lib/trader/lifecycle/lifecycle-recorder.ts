@@ -451,7 +451,7 @@ export async function recordForcedFlatLifecycle(
         tradeId: lot.tradeId,
         positionLotId: lot.id,
         kind: "FORCED_FLAT",
-        orderId: "",
+        orderId: null,
         fillId: null,
         syntheticId: markToClose.syntheticId,
         quantity: lot.remainingQty,

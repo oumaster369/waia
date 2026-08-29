@@ -1,8 +1,16 @@
+ALTER TABLE trader_trade_legs ALTER COLUMN order_id DROP NOT NULL;
+ALTER TABLE trader_trade_legs
+  ADD CONSTRAINT trader_trade_legs_order_org_fk
+  FOREIGN KEY (order_id, organization_id) REFERENCES trader_orders(id, organization_id);
+ALTER TABLE trader_trade_legs
+  ADD CONSTRAINT trader_trade_legs_fill_org_fk
+  FOREIGN KEY (fill_id, organization_id) REFERENCES trader_fills(id, organization_id);
+
 CREATE FUNCTION waia_trader_trade_leg_reference_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.kind = 'FORCED_FLAT' THEN
-    IF NEW.fill_id IS NOT NULL OR NEW.synthetic_id IS NULL THEN
+    IF NEW.order_id IS NOT NULL OR NEW.fill_id IS NOT NULL OR NEW.synthetic_id IS NULL THEN
       RAISE EXCEPTION 'TRADE_LEG_SYNTHETIC_REFERENCE_INVALID';
     END IF;
     RETURN NEW;

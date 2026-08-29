@@ -4226,7 +4226,7 @@ export const traderTradeLegs = pgTable(
     tradeId: uuid("trade_id").notNull(),
     positionLotId: uuid("position_lot_id").notNull(),
     kind: tradeLegKindEnumPg("kind").notNull(),
-    orderId: uuid("order_id").notNull(),
+    orderId: uuid("order_id"),
     fillId: uuid("fill_id"),
     syntheticId: text("synthetic_id"),
     quantity: text("quantity").notNull(),
@@ -4246,6 +4246,14 @@ export const traderTradeLegs = pgTable(
       columns: [t.positionLotId, t.organizationId],
       foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId],
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }),
+    foreignKey({
+      columns: [t.fillId, t.organizationId],
+      foreignColumns: [traderFills.id, traderFills.organizationId],
+    }),
     index("trader_trade_legs_org_trade_idx").on(t.organizationId, t.tradeId),
   ],
 );
