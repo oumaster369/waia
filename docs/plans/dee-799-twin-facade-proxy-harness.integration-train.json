@@ -40,7 +40,7 @@
       "expectedAcceptanceEvidence": ["Repeated focused test is bounded, production diff is empty, and full fresh-migrated SQLite plus repository gates pass."],
       "expectedTests": ["focused repeatability; full fresh-migrated SQLite; typecheck; lint; build; canon; exact-head review"],
       "actualFiles": ["docs/plans/dee-799-twin-facade-proxy-harness.md"],
-      "integratedCommits": ["e423602a86e8fd45cf8bb83bcc4f851c8d46fb94"],
+      "integratedCommits": ["e423602a86e8fd45cf8bb83bcc4f851c8d46fb94", "3daa50287c658d3483220a49cdc3eb2153218e94"],
       "acceptanceEvidence": ["Production diff is empty; current-main focused/full/type/lint/build/canon gates pass."],
       "tests": ["typecheck PASS", "lint PASS: 0 errors", "production build PASS", "canonical validation PASS"],
       "execution": {"wave": 2, "mode": "serialized"}
@@ -60,11 +60,11 @@
     },
     "admissionReviews": [
       {"issue": "DEE-800", "status": "pass", "reviewedCommits": ["176f0b2b731ddc9d121972db37985d736458dc60"], "reviewedFiles": ["tests/unit/twin-engine-runtime-facade.test.ts"]},
-      {"issue": "DEE-801", "status": "pass", "reviewedCommits": ["e423602a86e8fd45cf8bb83bcc4f851c8d46fb94"], "reviewedFiles": ["docs/plans/dee-799-twin-facade-proxy-harness.md"]}
+      {"issue": "DEE-801", "status": "pass", "reviewedCommits": ["e423602a86e8fd45cf8bb83bcc4f851c8d46fb94", "3daa50287c658d3483220a49cdc3eb2153218e94"], "reviewedFiles": ["docs/plans/dee-799-twin-facade-proxy-harness.md"]}
     ],
     "cumulativeChecks": [
       {"afterIssue": "DEE-800", "status": "pass", "commands": ["focused facade test repeated 3x: 12/12 PASS", "production diff empty"]},
-      {"afterIssue": "DEE-801", "status": "pass", "commands": ["literal fresh-migrated SQLite: 878 files/5109 tests PASS, 0 fail, 1261.13 s", "typecheck PASS", "lint PASS with 0 errors", "production build PASS", "canonical validation PASS"]}
+      {"afterIssue": "DEE-801", "status": "pass", "commands": ["literal fresh-migrated SQLite: 878 files and 5109 tests passed, 83 files and 426 tests skipped, 0 fail, 1261.13 s", "typecheck PASS", "lint PASS with 0 errors", "production build PASS", "canonical validation PASS"]}
     ],
     "fullDiffFrozen": true,
     "finalAdversarialReviewRequired": true
