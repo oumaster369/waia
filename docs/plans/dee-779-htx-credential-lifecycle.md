@@ -29,6 +29,8 @@ never creates trading or capital authority.
 
 - Session and Trader entitlement are required for every lifecycle operation.
 - Organization scope is derived from the authenticated user; it is never accepted from the client.
+- Destructive credential mutation fails closed unless `Origin` matches the direct request origin or
+  the configured canonical Trader origin used behind the trusted proxy.
 - API secrets and ciphertext are write-only and never returned, logged or included in audit metadata.
 - Revoke is soft, idempotent and tenant-scoped. A revoked credential cannot be decrypted.
 - Replacement is guarded by the exact active credential id observed by the client. Missing/stale
@@ -59,7 +61,8 @@ never creates trading or capital authority.
 ## Verification
 
 - Focused lifecycle and route tests cover stale replacement, idempotent revoke, unknown/cross-tenant
-  fail-close, audit uniqueness, secret non-disclosure and active-row preservation on conflict.
+  fail-close, missing/foreign Origin rejection, replay/audit uniqueness, secret non-disclosure and
+  active-row preservation on conflict.
 - Typecheck, lint, build and repository governance must pass.
 - PostgreSQL authoritative CI, including concurrent conditional-revoke behavior, remains required
   before merge.
