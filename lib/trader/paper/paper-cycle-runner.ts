@@ -61,6 +61,7 @@ import type {
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import { runDecisionCapitalAuthorityV2 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 
 export async function resolveHtxInformationInquiryCycleV1(input: {
   poll: HtxBarPollSource;
@@ -738,6 +739,104 @@ export async function runPaperCycleOnce(
       // Epoch-scoped callOrder reference is O(epoch); expose count+tail for evidence digests.
       htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
       hypothesisSessionState: evaluation.hypothesisSessionState,
+    };
+  }
+
+  // DEE-634: paper is capital-shaped qualification and therefore has exactly one
+  // Forecast→Decision→Risk→Execution authority chain per cycle/symbol. Legacy
+  // multi-strategy mapping remains mock/research-only and cannot run in paper mode.
+  if (executionMode === "paper" && eligibleActionableSignals.length > 0) {
+    const signal =
+      eligibleActionableSignals.find(
+        (candidate) =>
+          candidate.side === "buy" &&
+          candidate.strategySignalId === evaluation.signal?.strategySignalId,
+      ) ?? eligibleActionableSignals.find((candidate) => candidate.side === "buy");
+    if (!signal) {
+      return {
+        evaluation,
+        strategyExecutions: [],
+        submitBlocked: true,
+        skipReason: "decision_v2_no_entry_proposal",
+        execution: null,
+        reconciliation: null,
+        guardian: guardianPhase.guardianResult,
+        guardianExecutions: guardianPhase.guardianExecutions,
+        htrGuardian: htrGuardianPhase.htrGuardian,
+        htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+        htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
+        hypothesisSessionState: evaluation.hypothesisSessionState,
+      };
+    }
+    if (!deps.decisionCapitalAuthorityV2) {
+      strategyExecutions.push({
+        signal,
+        submitBlocked: true,
+        skipReason: "decision_v2_authority_missing",
+        execution: null,
+        reconciliation: null,
+      });
+      return {
+        evaluation,
+        strategyExecutions,
+        ...pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions),
+        guardian: guardianPhase.guardianResult,
+        guardianExecutions: guardianPhase.guardianExecutions,
+        htrGuardian: htrGuardianPhase.htrGuardian,
+        htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+        htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
+        hypothesisSessionState: evaluation.hypothesisSessionState,
+      };
+    }
+    const authority = await runDecisionCapitalAuthorityV2(deps.decisionCapitalAuthorityV2, {
+      organizationId: context.organizationId,
+      accountId: input.accountKey,
+      cycleId: snapshot.cycleId,
+      symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
+      referencePrice: evaluation.features.features.close,
+      executionMode: "paper",
+      forecastOutcome: evaluation.forecastRuntimeOutcome!,
+      proposal: {
+        action: "ENTER_LONG",
+        quantity: input.defaultQuantity,
+        strategySignalId: signal.strategySignalId,
+      },
+    });
+    if (authority.status === "NO_TRADE") {
+      strategyExecutions.push({
+        signal,
+        submitBlocked: true,
+        skipReason: "decision_v2_no_trade",
+        execution: null,
+        reconciliation: null,
+      });
+    } else {
+      const execution = authority.execution.execution;
+      const reconciliation =
+        execution.status === "submitted" && !shouldDeferReconciliationToHistoricalExchange(input)
+          ? await deps.reconciliation.reconcile(context, {
+              kind: "order",
+              orderId: execution.order.id,
+            })
+          : null;
+      strategyExecutions.push({
+        signal,
+        submitBlocked: execution.status !== "submitted",
+        execution,
+        reconciliation,
+      });
+    }
+    return {
+      evaluation,
+      strategyExecutions,
+      ...pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions),
+      guardian: guardianPhase.guardianResult,
+      guardianExecutions: guardianPhase.guardianExecutions,
+      htrGuardian: htrGuardianPhase.htrGuardian,
+      htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+      htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
+      hypothesisSessionState: evaluation.hypothesisSessionState,
+      decisionCapitalAuthorityV2: authority,
     };
   }
 

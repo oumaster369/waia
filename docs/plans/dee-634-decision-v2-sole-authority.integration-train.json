@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-634",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Separate production authority cutover from independent forbidden-consumer and parity proof while retaining one integrator, branch, worktree, manifest and PR.",
+  "includedChildren": [
+    {
+      "issue": "DEE-780",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Freeze and implement the canonical admitted Forecast V2 to Decision V2 to RiskAllowance V2 to Execution V2 production boundary, and cut over paper/live-equivalent entry callers without enabling live capital.",
+      "dependencies": ["DEE-633", "DEE-649", "DEE-650", "DEE-651"],
+      "dependencyEvidence": ["DEE-633, DEE-649, DEE-650 and DEE-651 are Linear Done; DEE-633 is present in reconciled origin/main 75a659bd9e8f4d19e21e00e7e349d073d458002d."],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/runtime-v2/decision-capital-authority-v2.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/live/run-live-cycle.ts",
+        "tests/unit/trader-decision-capital-authority-v2.test.ts",
+        "tests/unit/trader-paper-decision-v2-cutover.test.ts",
+        "tests/unit/trader-live-decision-v2-cutover.test.ts",
+        "tests/integration/trader-live-cycle.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "DEE-634 explicitly owns the standard Decision V2 to Risk to Execution sole-authority cutover."},
+      "expectedAcceptanceEvidence": ["Every executable request proves its exact Forecast, Decision, RiskAllowance, ExecutionPlan and ExecutionAttempt lineage; absent or non-actionable authority terminates as NO_TRADE."],
+      "expectedTests": ["positive/negative/degenerate EV; missing and mismatched authority; Risk clamp/veto; paper/live-equivalent cutover with no venue or capital effect"],
+      "actualFiles": [
+        "lib/trader/live/run-live-cycle.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "lib/trader/paper/paper-cycle.types.ts",
+        "lib/trader/runtime-v2/decision-capital-authority-v2.ts",
+        "tests/integration/trader-live-cycle.test.ts",
+        "tests/unit/trader-decision-capital-authority-v2.test.ts",
+        "tests/unit/trader-live-decision-v2-cutover.test.ts",
+        "tests/unit/trader-paper-decision-v2-cutover.test.ts"
+      ],
+      "integratedCommits": [
+        "8b83df1bf69f234fd4025b0b87d5301d0af8103e",
+        "2a4ad62163e3dba3af9637aa623e75d51653fb5d",
+        "79112d550b73a8fca7f975ec51c2c745010188f3",
+        "fe0d009c3232e6ecec7a949c9450e91e7d173a39"
+      ],
+      "acceptanceEvidence": ["Canonical Forecast V2 authority is required before Decision qualification; Decision economics are execution-mode and StrategySignal independent; Risk and Execution can only restrict exact sealed authority; non-actionable and veto outcomes terminate as reason-coded NO_TRADE."],
+      "tests": ["Focused authority and paper/live-equivalent cutover suite PASS; typecheck, scoped lint and production build PASS."],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-778",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Prove whole-repository absence of legacy capital-authority consumers and deterministic historical/replay/paper/live-equivalent semantic parity with fail-closed runtime negatives.",
+      "dependencies": ["DEE-780"],
+      "dependencyEvidence": ["The proof suite must inspect the exact production authority boundary delivered by DEE-780."],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/ai-trader/decision-v2-capital-authority-consumer-inventory.json",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "tests/unit/trader-decision-v2-capital-authority-consumer-graph.test.ts",
+        "tests/unit/trader-decision-v2-authority-parity.test.ts",
+        "tests/unit/trader-execution-v2-consumer-graph.test.ts",
+        "tests/unit/trader-reality-v2-consumer-graph.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "DEE-778 is the independent proof child created under the ratified DEE-634 Integration Train."},
+      "expectedAcceptanceEvidence": ["Static and runtime bypass attempts fail closed and identical authoritative inputs produce identical Decision/Risk/Execution semantics across non-live paths; existing Execution V2 and Reality V2 source/consumer pins remain truthful after the admitted cutover."],
+      "expectedTests": ["forbidden consumer graph; exact Execution V2 and Reality V2 consumer inventory pins; forged/missing digest negatives; replay, historical, paper and live-equivalent parity"],
+      "actualFiles": [
+        "docs/ai-trader/decision-v2-capital-authority-consumer-inventory.json",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "tests/unit/trader-decision-v2-authority-parity.test.ts",
+        "tests/unit/trader-decision-v2-capital-authority-consumer-graph.test.ts",
+        "tests/unit/trader-execution-v2-consumer-graph.test.ts"
+      ],
+      "integratedCommits": [
+        "aaf063db627b3a402acba66f687544237ca2b0b6",
+        "232d71af17a456f73dbb759659b57d32405f37ab",
+        "f39e686e5a52c3ae2d064d7be89e5f07403be8e1",
+        "aaa5ca41bc538a56c6374fab8773c094af22f0a6"
+      ],
+      "acceptanceEvidence": ["Whole-repository inventory permits only the canonical Decision V2 authority boundary for production new-exposure consumers; existing Execution V2 and Reality V2 pins are refreshed mechanically and validate without semantic expansion; identical sealed inputs produce identical authority outcomes across paper/live-equivalent modes."],
+      "tests": ["Focused forbidden-consumer, parity, Execution V2 and Reality V2 graph suite PASS."],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "Human-ratified DEE-634 Linear contract and Program Controller"},
+    "authoritativeBase": "75a659bd9e8f4d19e21e00e7e349d073d458002d",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-634 retains integration ownership; DEE-780 and DEE-778 are unique atomic children; all four upstream blockers are Done."},
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "775d8a28deed11dfe794e53e5ad256d94d8b79f0aa2aee7e79b6153e4507baa4",
+      "manifestCommit": "aa4d492cecac87ff627bb2a86841d4abeb5d7b91",
+      "manifestPath": "docs/plans/dee-634-decision-v2-sole-authority.integration-train.json",
+      "reviewer": "Program Controller under the user-ratified DEE-634 contract",
+      "historyRebuildAuthorization": "The Program Controller directed a recoverable admission-first reconciliation of published PR #521 after origin/main advanced; backup refs preserve both prior published and intermediate rebased heads, and the corrected admission was committed before the byte-identical replay.",
+      "mechanicalInventoryExpansion": "Existing Execution V2 and Reality V2 inventory/test surfaces are admitted only to refresh exact deterministic classifications and content digests caused by the already-admitted cutover; no protected semantics change."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-780",
+        "status": "pass",
+        "reviewedCommits": ["8b83df1bf69f234fd4025b0b87d5301d0af8103e", "2a4ad62163e3dba3af9637aa623e75d51653fb5d", "79112d550b73a8fca7f975ec51c2c745010188f3", "fe0d009c3232e6ecec7a949c9450e91e7d173a39"],
+        "reviewedFiles": ["lib/trader/live/run-live-cycle.ts", "lib/trader/paper/paper-cycle-runner.ts", "lib/trader/paper/paper-cycle.types.ts", "lib/trader/runtime-v2/decision-capital-authority-v2.ts", "tests/integration/trader-live-cycle.test.ts", "tests/unit/trader-decision-capital-authority-v2.test.ts", "tests/unit/trader-live-decision-v2-cutover.test.ts", "tests/unit/trader-paper-decision-v2-cutover.test.ts"]
+      },
+      {
+        "issue": "DEE-778",
+        "status": "pass",
+        "reviewedCommits": ["aaf063db627b3a402acba66f687544237ca2b0b6", "232d71af17a456f73dbb759659b57d32405f37ab", "f39e686e5a52c3ae2d064d7be89e5f07403be8e1", "aaa5ca41bc538a56c6374fab8773c094af22f0a6"],
+        "reviewedFiles": ["docs/ai-trader/decision-v2-capital-authority-consumer-inventory.json", "docs/ai-trader/reality-v2-source-consumer-inventory.json", "tests/unit/trader-decision-v2-authority-parity.test.ts", "tests/unit/trader-decision-v2-capital-authority-consumer-graph.test.ts", "tests/unit/trader-execution-v2-consumer-graph.test.ts"]
+      }
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-780", "status": "pass", "commands": ["focused authority/cutover and P1 tamper-negative suite", "typecheck", "scoped eslint", "production build", "PostgreSQL Decision/Risk/Execution 33/33", "literal full fresh-migrated SQLite 5133/5133"]},
+      {"afterIssue": "DEE-778", "status": "pass", "commands": ["forbidden-consumer and parity suite", "Execution V2 consumer graph", "Reality V2 consumer graph"]}
+    ],
+    "preRemediationValidation": {
+      "status": "pass",
+      "focused": "8 files / 20 tests PASS",
+      "postgres": "Decision/Risk/Execution 3 files / 33 tests PASS",
+      "typecheck": "PASS",
+      "lint": "PASS with 0 errors and 296 pre-existing warnings",
+      "productionBuild": "PASS",
+      "freshMigratedSqlite": "883 files / 5121 tests PASS; 83 files / 426 tests skipped; 0 failures",
+      "freshMigratedSqlitePath": "/private/tmp/dee634-current-main-authoritative.HC2ogb/waia.sqlite",
+      "semanticPatchEquivalenceSha256": "b14f79f54e1a5a703472c2d382e96fb82d24757d83af25371836cdb200559e31"
+    },
+    "p1Remediation": {
+      "status": "pass-on-prior-exact-head-current-main-revalidation-pending",
+      "commits": ["fe0d009c3232e6ecec7a949c9450e91e7d173a39", "aaa5ca41bc538a56c6374fab8773c094af22f0a6"],
+      "scope": "Bind sealed Forecast V2 package symbol and exact submitted OrderRow tenant/mode/symbol/side/quantity/Risk identities and order-binding digest before EXECUTION_BOUND.",
+      "focusedValidation": "5 files / 22 tests PASS; typecheck, lint and production build PASS",
+      "postgresValidation": "Decision/Risk/Execution 3 files / 33 tests PASS",
+      "fullValidation": "883 files / 5133 tests PASS; 83 files / 426 tests skipped; 0 failures",
+      "fullValidationPath": "/private/tmp/dee634-p1-remediated-authoritative.ApoU77/waia.sqlite",
+      "independentExactHeadReview": "P1=0/P2=0 at prior semantic/evidence head 9fb51260f21894bd65e864887d1b0c1b9c711b16 before current-main reconciliation"
+    },
+    "finalValidation": {
+      "status": "pass",
+      "focused": "5 files / 22 tests PASS",
+      "postgres": "Decision/Risk/Execution 3 files / 33 tests PASS",
+      "typecheck": "PASS",
+      "lint": "PASS with 0 errors and 296 pre-existing warnings",
+      "productionBuild": "PASS",
+      "freshMigratedSqlite": "883 files / 5133 tests PASS; 83 files / 426 tests skipped; 0 failures",
+      "freshMigratedSqlitePath": "/private/tmp/dee634-p1-remediated-authoritative.ApoU77/waia.sqlite"
+    },
+    "currentMainReconciliation": {
+      "status": "pass",
+      "base": "75a659bd9e8f4d19e21e00e7e349d073d458002d",
+      "admissionCommit": "aa4d492cecac87ff627bb2a86841d4abeb5d7b91",
+      "admissionManifestDigest": "775d8a28deed11dfe794e53e5ad256d94d8b79f0aa2aee7e79b6153e4507baa4",
+      "priorPublishedBackup": "backup/dee-634-pre-main-75a659bd-aae94b36",
+      "intermediateRebaseBackup": "backup/dee-634-rebased-pre-truthful-rebuild-ae18ad64",
+      "semanticBlobEquivalence": "All DEE-780 production and DEE-778 test blobs are byte-identical to prior reviewed head aae94b3613549691b060ff70144223eb41c52744; only the exact combined Reality V2 inventory digest is reconciled for new-main credential consumers.",
+      "focusedValidation": "Decision authority/cutover 5 files / 22 tests PASS; consumer graphs 3 files / 10 tests PASS; typecheck PASS; canonical docs 97 files PASS; frozen manifest PASS.",
+      "independentReview": "P1=0/P2=0 at exact current-main semantic/evidence head 6ad563b16c12cded5c0c41f49391ef4b78798a3f; independent 7 files / 31 tests PASS."
+    },
+    "finalAdversarialReview": {
+      "status": "pass",
+      "reviewedHead": "6ad563b16c12cded5c0c41f49391ef4b78798a3f",
+      "base": "75a659bd9e8f4d19e21e00e7e349d073d458002d",
+      "p1": 0,
+      "p2": 0,
+      "focusedIndependentProof": "7 files / 31 tests PASS"
+    },
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "Forecast V2 is the sole predictive input to Decision V2 capital economics.",
+    "StrategySignal confidence, expectedEdge and maxRisk are never capital authority.",
+    "Risk is deterministic and monotone restrictive; Execution is mechanical and allowance-bound.",
+    "NO_TRADE is first-class, terminal and reason-coded.",
+    "No holdout access, production/live venue effect, real capital, new policy or automatic promotion is authorized."
+  ],
+  "persistence": {"newMigrationRequired": false, "authority": "Reuse existing append-only Decision V2, Risk V2 and Execution V2 PostgreSQL stores."},
+  "rollbackStrategy": "One squash revert removes the cutover and proof surfaces without rewriting durable authority evidence.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-634-decision-v2-sole-authority.integration-train.json DEE-634 frozen",
+    "focused": ["Decision V2 authority and cutover suites", "forbidden-consumer graph and parity", "pnpm typecheck", "scoped eslint"],
+    "fullSuite": "one fresh migrated SQLite pnpm test --run after semantic completion",
+    "postgres": "existing Decision/Risk/Execution V2 atomic authority and rollback/concurrency suites",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "decision-v2-capital-authority-consumer-inventory/v1",
+  "scope": "whole-repository production TypeScript legacy StrategySignal-to-order and canonical Decision V2 capital ingress references",
+  "discoveryRoots": ["lib", "app", "scripts"],
+  "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+  "legacyMarkers": ["mapSignalToSubmitOrder", "mapSignalToLiveSubmitOrder"],
+  "canonicalMarker": "runDecisionCapitalAuthorityV2",
+  "legacyReferenceAllowlist": [
+    {"file": "lib/trader/index.ts", "disposition": "legacy export only; not a normal paper/live-equivalent caller"},
+    {"file": "lib/trader/intelligence/information-sufficiency/information-sufficiency-consumer-inventory-v2.ts", "disposition": "diagnostic inventory string only"},
+    {"file": "lib/trader/live/index.ts", "disposition": "legacy export only; live cycle has no mapper import"},
+    {"file": "lib/trader/live/signal-to-live-order.ts", "disposition": "legacy V1 implementation, rejects V2 and has no normal live caller"},
+    {"file": "lib/trader/observability/capital-path-trace-collector.ts", "disposition": "diagnostic trace label only"},
+    {"file": "lib/trader/paper/index.ts", "disposition": "legacy export only"},
+    {"file": "lib/trader/paper/paper-cycle-runner.ts", "disposition": "mock/research branch only; paper returns from canonical authority branch first"},
+    {"file": "lib/trader/paper/signal-to-order.ts", "disposition": "legacy V1 implementation, mock/research only"}
+  ],
+  "capitalEntrypoints": [
+    {"file": "lib/trader/live/run-live-cycle.ts", "mode": "live-equivalent", "missingAuthority": "FAIL_CLOSED", "legacyMapperForbidden": true},
+    {"file": "lib/trader/paper/paper-cycle-runner.ts", "mode": "paper", "missingAuthority": "FAIL_CLOSED", "legacyMapperForbiddenBeforeTerminalReturn": true}
+  ],
+  "canonicalReferences": [
+    "lib/trader/live/run-live-cycle.ts",
+    "lib/trader/paper/paper-cycle-runner.ts",
+    "lib/trader/runtime-v2/decision-capital-authority-v2.ts"
+  ],
+  "parity": {
+    "economicInputsExclude": ["executionMode", "strategySignalId", "confidence", "expectedEdge", "maxRisk"],
+    "modes": ["historical", "replay", "paper", "live-equivalent"],
+    "liveCapitalAuthorized": false
+  }
+}
