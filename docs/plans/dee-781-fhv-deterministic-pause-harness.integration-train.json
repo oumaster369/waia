@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-781",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "splitRationale": "Separate the hermetic runner boundary from its deterministic proof and full-suite closure while preserving one branch, manifest and PR.",
+  "includedChildren": [
+    {
+      "issue": "DEE-782",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Expose the existing pause-at-cycle hook through a test-only, fail-closed FHV rehearsal input without changing production behavior.",
+      "dependencies": ["DEE-755"],
+      "dependencyEvidence": ["DEE-755 squash-merged at 66ad0516 and authoritative CI output remains stable in base 0fefa5f7."],
+      "expectedFileOrSchemaSurfaces": ["lib/trader/observability/fhv-rehearsal-campaign-runner.ts", "tests/unit/fhv-rehearsal-campaign-runner.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly authorized separately scoped deterministic FHV test-harness remediation."},
+      "expectedAcceptanceEvidence": ["Test-only pause control reaches the existing internal hook and non-test invocation fails closed."],
+      "expectedTests": ["focused positive and non-test negative harness tests"],
+      "actualFiles": ["lib/trader/observability/fhv-rehearsal-campaign-runner.ts", "tests/unit/fhv-rehearsal-campaign-runner.test.ts"],
+      "integratedCommits": ["e277647c723aacab7845bf9c8453fd51ff4b1ef0"],
+      "acceptanceEvidence": ["The existing internal pause hook is reachable only through a positive-integer test-only input; production and malformed use fail closed."],
+      "tests": ["focused FHV hermetic pause/resume suite: 6/6 PASS", "pnpm typecheck: PASS", "scoped eslint: PASS"],
+      "execution": {"wave": 1, "mode": "serialized"}
+    },
+    {
+      "issue": "DEE-783",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Replace timer-racy pause injection in the resume-timeout, cross-process negative and incremental-resume guard proofs and close the literal full-suite gate.",
+      "dependencies": ["DEE-782"],
+      "dependencyEvidence": ["DEE-782 freezes the only new test-harness input consumed by this proof."],
+      "expectedFileOrSchemaSurfaces": ["tests/unit/fhv-resume-timeout.test.ts", "tests/unit/fhv-cross-process-resume-negative.test.ts", "tests/unit/fhv-incremental-resume-guards.test.ts"],
+      "riskTier": "T3",
+      "humanGate": {"status": "t3-scope-preauthorized", "evidence": "User explicitly authorized deterministic test-only remediation with no skipped assertions."},
+      "expectedAcceptanceEvidence": ["Pause occurs deterministically at cycle 45; resumed frontier timeout, identity/tamper rejection, canvas-restore rejection and zero-replay restart assertions remain intact."],
+      "expectedTests": ["affected timeout/resume/cross-process negative suite and one literal full fresh-migrated SQLite suite"],
+      "actualFiles": ["tests/unit/fhv-resume-timeout.test.ts", "tests/unit/fhv-cross-process-resume-negative.test.ts", "tests/unit/fhv-incremental-resume-guards.test.ts"],
+      "integratedCommits": ["3c2e4d535ce5e70b1f2e1d96a34205db2f505489"],
+      "acceptanceEvidence": ["The timeout and cross-process negative proofs request pause on observed cycle 45 without a wall-clock polling race and retain every frontier, timeout, marker-consumption, tamper-negative and zero-replay assertion."],
+      "tests": ["focused FHV hermetic pause/resume/negative suite: 12/12 PASS", "literal full fresh-migrated SQLite suite: 878 files and 5109 tests PASS; 0 failures; 426 skipped"],
+      "execution": {"wave": 2, "mode": "serialized"}
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {"status": "pass", "reviewer": "User-authorized controller audit of the isolated FHV timer race"},
+    "authoritativeBase": "0fefa5f71d1cf38e065419781c1e9971804487c2",
+    "duplicateOwnershipDependencyAudit": {"status": "pass", "evidence": "DEE-781/782/783 exclusively own the isolated harness stabilization; DEE-634 remains unpublished and blocked on this gate."},
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "490e1a26f8c33fa39e367e76b8bc9fb775389ec3fc01e9ddf082853a48fe78eb",
+      "manifestCommit": "802a8a47f6da798a84f7ebf61d351e3b34ef03a4",
+      "manifestPath": "docs/plans/dee-781-fhv-deterministic-pause-harness.integration-train.json",
+      "reviewer": "User-authorized isolated FHV harness stabilization"
+    },
+    "admissionReviews": [
+      {"issue": "DEE-782", "status": "pass", "reviewedCommits": ["e277647c723aacab7845bf9c8453fd51ff4b1ef0"], "reviewedFiles": ["lib/trader/observability/fhv-rehearsal-campaign-runner.ts", "tests/unit/fhv-rehearsal-campaign-runner.test.ts"]},
+      {"issue": "DEE-783", "status": "pass", "reviewedCommits": ["3c2e4d535ce5e70b1f2e1d96a34205db2f505489"], "reviewedFiles": ["tests/unit/fhv-resume-timeout.test.ts", "tests/unit/fhv-cross-process-resume-negative.test.ts", "tests/unit/fhv-incremental-resume-guards.test.ts"]}
+    ],
+    "cumulativeChecks": [
+      {"afterIssue": "DEE-782", "status": "pass", "commands": ["focused FHV hermetic boundary negative suite", "pnpm typecheck", "scoped eslint"]},
+      {"afterIssue": "DEE-783", "status": "pass", "commands": ["focused deterministic pause/resume/negative suite 12/12", "literal full fresh-migrated SQLite suite 878 files / 5109 tests PASS"]}
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "Production FHV behavior is unchanged when the hermetic input is omitted.",
+    "Hermetic pause control fails closed outside NODE_ENV=test.",
+    "No assertions, replay cycles, evidence checks or required gates are skipped.",
+    "No scientific, holdout, live, execution or capital semantics change."
+  ],
+  "rollbackStrategy": "One squash revert removes the test-only input and restores the prior timer-driven test without durable-data effects.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-781-fhv-deterministic-pause-harness.integration-train.json DEE-781 admission",
+    "focused": ["affected FHV pause/resume/timeout tests", "pnpm typecheck", "scoped eslint"],
+    "fullSuite": "one literal fresh migrated SQLite pnpm test --run",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; authoritative CI and DEE-653 before squash merge"
+  }
+}
