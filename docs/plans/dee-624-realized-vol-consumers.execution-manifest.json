@@ -6,7 +6,7 @@
     "sha": "56ba1ddc262204ca2cd2d2732756e509c856b743"
   },
   "branch": "dee-624-realized-vol-consumers",
-  "status": "admitted",
+  "status": "locally-validated",
   "riskTier": "T3",
   "humanGate": {
     "status": "preauthorized",
@@ -55,5 +55,17 @@
     "pnpm build",
     "authoritative full GitHub PR CI",
     "fresh independent exact-head P1=0/P2=0 review"
-  ]
+  ],
+  "evidence": {
+    "semanticCommit": "194f2004",
+    "runtimeLegacyIdentityCount": 0,
+    "focusedTests": "124/124 PASS",
+    "capitalAuthorityTests": "15/15 PASS",
+    "typecheck": "PASS",
+    "lint": "PASS with repository baseline warnings only",
+    "build": "PASS",
+    "canonicalGovernance": "PASS",
+    "independentReview": "required on final exact head",
+    "authoritativeCi": "required on published final exact head"
+  }
 }

@@ -8,10 +8,10 @@ executionSurfaces: [local, github-pr-ci]
 requiredValidation: [focused-rv-and-consumer-tests, typecheck, lint, build, canonical-governance, exact-head-review]
 approvalGates: [human-ratified-dee-624m-split, dee-653-exact-head-admission]
 state:
-  status: admitted
-  currentWorkPackage: DEE-624
-  completedWorkPackages: []
-  remainingWorkPackages: [DEE-624]
+  status: locally-validated
+  currentWorkPackage: null
+  completedWorkPackages: [DEE-624]
+  remainingWorkPackages: []
 provenance:
   authoritativeBase: 56ba1ddc262204ca2cd2d2732756e509c856b743
   predecessor: docs/plans/dee-742-rv-measurement-schema.md
