@@ -14,7 +14,7 @@ const EXPECTED_ARGS = [
   "/opt/waia/waia-hostqual",
 ];
 
-function run(args: string[], env: NodeJS.ProcessEnv = {}) {
+function run(args: string[], env: Record<string, string | undefined> = {}) {
   return spawnSync("bash", [SCRIPT, ...args], {
     encoding: "utf8",
     env: { ...process.env, ...env },
