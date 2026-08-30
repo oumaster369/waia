@@ -68,10 +68,47 @@ for (const window of REAL_HTX_PREFLIGHT_WINDOWS) {
 }
 
 export function assertHtxAmountBaseVolQuote(row: HtxKlineRow): void {
+  const prices = [row.open, row.high, row.low, row.close];
+  if (prices.some((price) => !Number.isFinite(price) || price <= 0)) {
+    throw new RealHtxPreflightError(
+      "OHLC_NON_POSITIVE_OR_NON_FINITE",
+      "HTX OHLC must be finite and positive",
+    );
+  }
+  if (!Number.isFinite(row.amount) || !Number.isFinite(row.vol)) {
+    throw new RealHtxPreflightError(
+      "AMOUNT_VOL_NON_POSITIVE",
+      "HTX amount (base) and vol (quote) must be finite",
+    );
+  }
+
+  const pairedZero = row.amount === 0 && row.vol === 0;
+  if (pairedZero) {
+    if (row.count !== 0) {
+      throw new RealHtxPreflightError(
+        "ZERO_TRADE_COUNT_NON_ZERO",
+        "paired-zero HTX candle must have count=0",
+      );
+    }
+    if (!(row.open === row.high && row.open === row.low && row.open === row.close)) {
+      throw new RealHtxPreflightError(
+        "ZERO_TRADE_OHLC_NOT_FLAT",
+        "paired-zero HTX candle must have flat carried-forward OHLC",
+      );
+    }
+    return;
+  }
+
   if (!(row.amount > 0) || !(row.vol > 0)) {
     throw new RealHtxPreflightError(
       "AMOUNT_VOL_NON_POSITIVE",
       "HTX amount (base) and vol (quote) must both be positive",
+    );
+  }
+  if (!Number.isSafeInteger(row.count) || row.count <= 0) {
+    throw new RealHtxPreflightError(
+      "TRADE_COUNT_NON_POSITIVE",
+      "positive-volume HTX candle must have a positive integer trade count",
     );
   }
   const vwap = row.vol / row.amount;
