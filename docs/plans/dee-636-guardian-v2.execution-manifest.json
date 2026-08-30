@@ -6,7 +6,7 @@
     "sha": "d6e09ffa3d1b93180910148c51d8c5cd6ce344cf"
   },
   "branch": "dee-636-guardian-v2",
-  "status": "local-validation",
+  "status": "exact-head-review-pending",
   "riskTier": "T3",
   "dependencies": {
     "DEE-635": "Merged; Linear closure evidence pending",
@@ -47,7 +47,7 @@
   "externalEvidence": {
     "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
     "localFocused": "49/49 affected Guardian, Reality inventory and migration-identity tests passed after truthful 0181/Reality-consumer pin repair.",
-    "localFullFresh": "Pending rerun after exact pinned-inventory repair; the preceding literal full run passed 5207 tests and failed only the two now-repaired truthful inventories.",
+    "localFullFresh": "PASS on implementation head f8c4444e: 898 files/5209 tests passed; 85 files/433 tests skipped; duration 1560.60s. Skips are environment-gated PostgreSQL/live suites; authoritative PostgreSQL CI remains required.",
     "postgres": "Local PostgreSQL URLs are unavailable; authoritative PostgreSQL CI remains required.",
     "independentReview": "Pending exact-head P1=0/P2=0 review."
   }
