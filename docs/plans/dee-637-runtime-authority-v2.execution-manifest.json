@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-637",
+  "base": {
+    "ref": "origin/main",
+    "sha": "0d6e15db0c3d176b63b4f80e95690ad1c83534e8"
+  },
+  "branch": "dee-637-runtime-authority-v2",
+  "status": "admitted",
+  "riskTier": "T3",
+  "dependencies": {
+    "DEE-636": "Merged at 0d6e15db0c3d176b63b4f80e95690ad1c83534e8; Linear closure evidence pending",
+    "DEE-652": "Done",
+    "DEE-634": "Done"
+  },
+  "ownedGlobs": [
+    "lib/trader/runtime-authority/v2/**",
+    "db/**",
+    "tests/unit/**",
+    "tests/integration/**",
+    "app/api/trader/runtime-authority/**",
+    "app/api/trader/admin/runtime-authority/**",
+    "app/(trader)/trader/**",
+    "app/(trader)/admin/runtime-authority/**",
+    "components/trader/runtime-authority/**",
+    "docs/plans/dee-637-*"
+  ],
+  "forbiddenGlobs": [
+    "lib/trader/intelligence/forecast-decision/**",
+    "lib/trader/billing/**",
+    "lib/trader/connectors/**",
+    "replay-runs/**"
+  ],
+  "frozenInvariants": [
+    "Runtime Authority V2 is an additional upper bound and never creates Decision, Risk, Execution, Reality, live-enable or capital authority.",
+    "Posture is one of FULL_ANALYSIS_AND_NEW_RISK, NO_NEW_RISK, CLOSE_ONLY or HALT and may only become more restrictive when evidence is missing, stale, mismatched or ambiguous.",
+    "FULL_ANALYSIS_AND_NEW_RISK requires canonical Reality rebuild, resolved execution uncertainty, complete Guardian coverage, allowance validity, release/promotion/credential/persistence readiness and an exclusive valid control lease.",
+    "Assessments and lease epochs are tenant-scoped, immutable, content-addressed and restart/replay deterministic.",
+    "Admin and tenant observability are separate read-only projections with no action controls or secret disclosure.",
+    "Heartbeat, deployment and process liveness are never treated as runtime or capital authority."
+  ],
+  "validation": [
+    "canonical known-answer and mutation tests",
+    "missing, stale, mismatch, ambiguity and cross-tenant fail-closed matrix",
+    "restart/replay, concurrent lease and append-only persistence proof",
+    "SQLite/PostgreSQL parity and tenant RLS",
+    "Admin versus tenant read-only isolation",
+    "full fresh-migrated suite",
+    "independent exact-head P1=0/P2=0 review",
+    "authoritative CI and DEE-653 admission"
+  ],
+  "serverBoundary": {
+    "requiredNow": false,
+    "reason": "Contract, persistence, deterministic recovery, failure injection and read-model validation are local/CI-capable.",
+    "firstRequiredGate": "Concrete deployed startup/recovery plus observable historical rehearsal in both Admin Console and tenant cabinet after all local/CI gates pass."
+  },
+  "externalEvidence": {
+    "linear": "DEE-637 linkage and DEE-636 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
+    "local": "Semantic implementation passed the literal elevated full suite at 966ac85d: 903 files passed, 85 skipped, 5235 tests passed, 433 skipped, duration 1543.17s. Review remediation at c3a22fc0 replaced forced PostgreSQL RLS with the repository service-owner/browser-deny convention; focused Runtime Authority tests 14/14, typecheck and production build PASS after remediation. Playwright tenant/Admin observability 3/3 PASS before the migration-only remediation.",
+    "postgres": "Authoritative PostgreSQL CI required before merge.",
+    "independentReview": "Fresh independent exact-head review at c3a22fc0e4b59709bcb2bf76ca7e9b0d49797c3c reports P1=0/P2=0 after remediation of the initially identified forced-RLS service-role blocker."
+  }
+}

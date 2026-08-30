@@ -1978,6 +1978,49 @@ export const traderGuardianProtectiveConsumptionsV2 = sqliteTable(
   ],
 );
 
+/** Immutable Runtime Authority V2 assessment ledger (DEE-637). */
+export const traderRuntimeAuthorityAssessmentsV2 = sqliteTable(
+  "trader_runtime_authority_assessments_v2",
+  {
+    assessmentId: text("assessment_id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runtimeInstanceId: text("runtime_instance_id").notNull(),
+    posture: text("posture").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    canonicalJson: text("canonical_json").notNull(),
+    adjudicatedAtUtc: text("adjudicated_at_utc").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_runtime_authority_assessments_v2_org_digest_unique").on(t.organizationId, t.contentDigest),
+    index("trader_runtime_authority_assessments_v2_org_runtime_idx").on(t.organizationId, t.runtimeInstanceId, t.createdAt),
+  ],
+);
+
+/** Sole mutable per-tenant CAS row. History is retained separately and immutably. */
+export const traderRuntimeControlLeaseHeadsV2 = sqliteTable(
+  "trader_runtime_control_lease_heads_v2",
+  {
+    organizationId: text("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+    runtimeInstanceId: text("runtime_instance_id").notNull(),
+    leaseEpoch: integer("lease_epoch").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    validUntilUtc: text("valid_until_utc").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  },
+);
+
+export const traderRuntimeControlLeaseEpochHistoryV2 = sqliteTable("trader_runtime_control_lease_epoch_history_v2", {
+  contentDigest: text("content_digest").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  runtimeInstanceId: text("runtime_instance_id").notNull(),
+  leaseEpoch: integer("lease_epoch").notNull(),
+  priorContentDigest: text("prior_content_digest"),
+  validUntilUtc: text("valid_until_utc").notNull(),
+  adjudicatedAtUtc: text("adjudicated_at_utc").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (t) => [unique("trader_runtime_control_lease_epoch_history_v2_org_epoch_unique").on(t.organizationId, t.leaseEpoch)]);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = sqliteTable(
   "trader_trade_legs",
