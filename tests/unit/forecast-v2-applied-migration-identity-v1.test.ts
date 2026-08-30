@@ -67,6 +67,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0179_dee635_execution_plan_causal_projection",
       "0180_dee635_trade_leg_reference_guards",
       "0181_dee636_guardian_assessment_v2",
+      "0182_dee637_runtime_authority_v2",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
