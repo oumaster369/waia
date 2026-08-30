@@ -20,6 +20,8 @@ export {
   InMemoryGuardianAssessmentRepositoryV2,
 } from "@/lib/trader/guardian/v2/guardian-assessment-repository-v2";
 export type { GuardianAssessmentRepositoryV2 } from "@/lib/trader/guardian/v2/guardian-assessment-repository-v2";
+export { createSqliteGuardianAssessmentRepositoryV2 } from "@/lib/trader/guardian/v2/guardian-assessment-repository-sqlite-v2";
+export { createPostgresGuardianAssessmentRepositoryV2 } from "@/lib/trader/guardian/v2/guardian-assessment-repository-postgres-v2";
 export { routeGuardianOrdinaryAssessmentV2 } from "@/lib/trader/guardian/v2/guardian-action-authority-v2";
 export type { GuardianOrdinaryRouteV2 } from "@/lib/trader/guardian/v2/guardian-action-authority-v2";
 export {
