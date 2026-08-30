@@ -20,7 +20,10 @@ import {
 import type { TestOnlyExecutionV2AuthorityPort } from "@/lib/trader/execution/v2/test-only-authority-port";
 import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
 import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
-import { writeFhvControlReplayReceiptAtomic } from "@/lib/trader/observability/fhv-control-replay-receipt";
+import {
+  FHV_CONTROL_REPLAY_PRE_HOLDOUT_STATUS,
+  writeFhvControlReplayReceiptAtomic,
+} from "@/lib/trader/observability/fhv-control-replay-receipt";
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -118,6 +121,7 @@ export function resolveFhvControlReplayCliConfig(
   checkoutIdentityProofPathRunOne?: string;
   checkoutIdentityProofPathRunTwo?: string;
   controlReplayReceiptOutput?: string;
+  maxCycles?: number;
   boundedFixture: boolean;
   resume?: boolean;
 } {
@@ -142,6 +146,7 @@ export function resolveFhvControlReplayCliConfig(
     "--control-replay-receipt-output",
     "--bounded-fixture",
     "--resume",
+    "--max-cycles",
   ]);
   for (const key of flags.keys()) {
     if (!allowed.has(key)) {
@@ -191,6 +196,12 @@ export function resolveFhvControlReplayCliConfig(
   const controlReplayReceiptOutput =
     (flags.get("--control-replay-receipt-output") as string | undefined) ??
     env.FHV_CONTROL_REPLAY_RECEIPT_OUTPUT?.trim();
+  const maxCyclesRaw =
+    (flags.get("--max-cycles") as string | undefined) ?? env.FHV_MAX_CYCLES?.trim();
+  const maxCycles = maxCyclesRaw === undefined ? undefined : Number(maxCyclesRaw);
+  if (maxCycles !== undefined && (!Number.isSafeInteger(maxCycles) || maxCycles <= 0)) {
+    throw new Error("--max-cycles must be a positive safe integer");
+  }
 
   if (!releaseSha) {
     throw new Error("FHV_RELEASE_SHA or --release-sha required");
@@ -246,6 +257,7 @@ export function resolveFhvControlReplayCliConfig(
       controlReplayReceiptOutput,
       boundedFixture,
       resume,
+      maxCycles,
     };
   }
 
@@ -317,6 +329,7 @@ export function resolveFhvControlReplayCliConfig(
     controlReplayReceiptOutput,
     boundedFixture,
     resume,
+    maxCycles,
   };
 }
 
@@ -490,6 +503,10 @@ export async function runFhvControlReplay(input: {
           : "0000000000000000000000000000000000000000000000000000000000000000",
         runOneCycleCount: resultOne.backtest!.cycleCount,
         runTwoCycleCount: resultTwo.backtest!.cycleCount,
+        holdoutStatus:
+          qualificationReceipt.qualificationMode === "OFFICIAL_PRE_HOLDOUT_REAL_DATA"
+            ? FHV_CONTROL_REPLAY_PRE_HOLDOUT_STATUS
+            : undefined,
         runOneAccountingStateDigest: resultOne.backtest?.accountingState
           ? computeAccountingSemanticDigest(resultOne.backtest.accountingState)
           : undefined,

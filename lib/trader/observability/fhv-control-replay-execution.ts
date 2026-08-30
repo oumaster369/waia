@@ -10,6 +10,7 @@ import { assertFhvOfficialV2DatasetArtifactsPresent } from "@/lib/trader/market-
 import { streamOfficialPreHoldoutWalkForwardBars } from "@/lib/trader/market-data/fhv-bounded-bar-stream";
 import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import { runChronologicalControlReplayV2 } from "@/lib/trader/observability/control-replay-chronological-v2-driver-v1";
+import { writeFhvOfficialCampaignIdentity } from "@/lib/trader/observability/fhv-official-campaign-identity";
 import type { FhvConfigurationFreezeV1 } from "@/lib/trader/observability/fhv-configuration-freeze";
 import {
   loadOfficialSharedPortfolioBars,
@@ -47,6 +48,12 @@ import { V2_CAPITAL_AUTHORITY_PATH } from "@/lib/trader/risk/authority-chain";
 import type { TestOnlyExecutionV2AuthorityPort } from "@/lib/trader/execution/v2/test-only-authority-port";
 
 export const FHV_CONTROL_REPLAY_EXECUTION_PURPOSE = "CONTROL_REPLAY" as const;
+
+export function resolveFhvControlReplayCycleBound(input: {
+  maxCycles?: number;
+}): number | undefined {
+  return input.maxCycles;
+}
 
 export type FhvControlReplayLaunchInput = FhvFullHistoricalLaunchInput & {
   executionPurpose: typeof FHV_CONTROL_REPLAY_EXECUTION_PURPOSE;
@@ -108,6 +115,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
       executionBarStream: streamOfficialPreHoldoutWalkForwardBars(datasetRoot),
       economicReplayStartUtc: "2023-01-01T00:00:00.000Z",
       resumeFromCheckpoint: input.resumeFromCheckpoint === true,
+      maxCycles: resolveFhvControlReplayCycleBound(input.launchInput),
       htxVolumeAuthorityByInstrument: {
         BTCUSDT: readControlReplayVolumeReceipt(datasetRoot, "BTCUSDT"),
         ETHUSDT: readControlReplayVolumeReceipt(datasetRoot, "ETHUSDT"),
@@ -143,7 +151,7 @@ async function runFhvControlReplayLaunchBacktest(input: {
         scientificAdmissionReceiptDigest: chronological.scientificAdmissionReceiptDigest,
         executablePolicyDigest: "UNAVAILABLE",
         fullHistoryRescanCount: getFullHistoryRescanCount(),
-        holdoutStatus: "SEALED_NOT_ACCESSED" as const,
+        holdoutStatus: "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED" as const,
         runDir: input.runDir,
       },
       accountingFrontierState: undefined,
@@ -271,6 +279,13 @@ export async function executeFhvControlReplayLaunch(
     artifactRoot: input.artifactRoot,
     runId: input.runId,
     boundedFixture: input.boundedFixture,
+  });
+  writeFhvOfficialCampaignIdentity({
+    runDir,
+    releaseSha: input.releaseSha.trim().toLowerCase(),
+    runId: input.runId,
+    organizationId: input.organizationId,
+    launchReceiptDigest: receipt.launchReceiptDigest,
   });
 
   consumeFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -10,6 +10,10 @@ import {
   materializeFhvRehearsalManifest,
 } from "@/lib/trader/observability/fhv-rehearsal-launcher";
 import * as observerCore from "@/lib/trader/observability/fhv-observer-core";
+import { buildFhvConfigurationFreeze } from "@/lib/trader/observability/fhv-configuration-freeze";
+import { writeFhvFullLaunchReceipt } from "@/lib/trader/observability/fhv-full-historical-launch";
+import { writeFhvOfficialCampaignIdentity } from "@/lib/trader/observability/fhv-official-campaign-identity";
+import { resolveFhvOperatorStatusPath } from "@/lib/trader/observability/fhv-status-writer";
 
 const TARGET_SHA = "cccccccccccccccccccccccccccccccccccccccc";
 const RUN_ID = "fhv-observer-runtime";
@@ -88,5 +92,91 @@ describe("FHV observer runtime error handling (DEE-431)", () => {
     const callsBefore = tickSpy.mock.calls.length;
     await runtime.runTickOnce();
     expect(tickSpy.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("never clobbers the chronological driver's authoritative official status", async () => {
+    root = mkdtempSync(join(tmpdir(), "fhv-observer-official-"));
+    const freeze = buildFhvConfigurationFreeze({
+      releaseSha: TARGET_SHA,
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+      operatorId: "op",
+      datasetDigest: "d".repeat(64),
+      manifestDigest: "e".repeat(64),
+      strategyVersions: ["v1"],
+      strategyDigests: ["f".repeat(64)],
+      checkpointDigest: "a".repeat(64),
+    });
+    const { receiptPath, receipt } = writeFhvFullLaunchReceipt({
+      configurationFreeze: freeze,
+      authorizationReceiptDigest: "b".repeat(64),
+      datasetQualificationReceiptDigest: "c".repeat(64),
+      artifactRoot: root,
+      runId: RUN_ID,
+    });
+    const runDir = join(receiptPath, "..");
+    writeFhvOfficialCampaignIdentity({
+      runDir,
+      releaseSha: TARGET_SHA,
+      runId: RUN_ID,
+      organizationId: ORG_ID,
+      launchReceiptDigest: receipt.launchReceiptDigest,
+    });
+    const statusPath = resolveFhvOperatorStatusPath(runDir);
+    mkdirSync(join(statusPath, ".."), { recursive: true });
+    const authoritative = {
+      campaign: {
+        barsProcessed: 41,
+        phase: "CONTROL_REPLAY",
+        codeSha: TARGET_SHA,
+        datasetDigest: "d".repeat(64),
+      },
+      accountingFrontierState: { cash: "123" },
+      positions: [{ symbol: "BTC/USDT" }],
+      fills: [{ id: "fill-1" }],
+    };
+    writeFileSync(statusPath, `${JSON.stringify(authoritative)}\n`);
+    const emergencyExecute = vi.fn(async () => ({
+      outcome: "executed" as const,
+      message: "stopped",
+      enforcementApplied: true,
+    }));
+    runtime = createFhvObserverRuntime({
+      env: buildEnv(runDir),
+      startServer: false,
+      campaignControlExecutor: { execute: emergencyExecute },
+    });
+    await runtime.runTickOnce();
+    expect(JSON.parse(readFileSync(statusPath, "utf8"))).toEqual(authoritative);
+    const safety = await observerCore.runFhvObserverTick(runtime.state, {
+      cyclesProcessed: 41,
+      preserveAuthoritativeStatus: true,
+      hostTelemetryOverride: {
+        cpuPct: null,
+        loadAvg1: null,
+        loadAvg5: null,
+        loadAvg15: null,
+        ramUsedPct: null,
+        swapUsedPct: null,
+        diskFreeBytes: 1,
+        diskTotalBytes: 100,
+        artifactDirBytes: null,
+        artifactGrowthBytesPerHour: null,
+        inodeUsedPct: null,
+        processStatus: "running",
+        serviceStatus: "running",
+        postgresConnectivity: "unknown",
+        datasetReadable: true,
+        openFiles: null,
+        ntpHealthy: null,
+        diskSoftBreached: true,
+        diskHardBreached: true,
+      },
+    });
+    expect(safety.hostSafetyEscalation).toBe(true);
+    expect(emergencyExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "EMERGENCY_STOP" }),
+    );
+    expect(JSON.parse(readFileSync(statusPath, "utf8"))).toEqual(authoritative);
   });
 });

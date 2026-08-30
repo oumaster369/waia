@@ -73,6 +73,7 @@
     "trader:fhv:revision-risk": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-revision-risk-cli.ts",
     "trader:fhv:pre-holdout-qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-pre-holdout-qualify-cli.ts",
     "trader:fhv:pre-holdout-verify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-pre-holdout-verify-cli.ts",
+    "trader:fhv:pre-holdout-runtime-requalify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-pre-holdout-runtime-requalify-cli.ts",
     "trader:fhv:acquire-htx-v2": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-acquire-htx-v2.ts",
     "trader:fhv:seal-v2-dataset": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-seal-v2-dataset.ts",
     "trader:fhv:validate-v2-dataset": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-validate-bars-v2-dataset.ts",

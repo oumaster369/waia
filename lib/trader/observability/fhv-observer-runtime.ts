@@ -1,6 +1,6 @@
 import type http from "node:http";
 
-import { assertFhvCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
+import { assertFhvObserverCampaignRuntimeIdentity } from "@/lib/trader/observability/fhv-campaign-runtime-identity";
 import {
   isFhvCommandEnforcementActive,
   resolveFhvObserverRuntimeEnv,
@@ -35,6 +35,7 @@ import {
   type FhvSystemdShowReader,
 } from "@/lib/trader/observability/fhv-systemd-supervisor-state";
 import { readFhvRehearsalCampaignProgress } from "@/lib/trader/observability/fhv-rehearsal-campaign-runner";
+import { readFhvOperatorStatusTolerant } from "@/lib/trader/observability/fhv-status-writer";
 import { writeFileAtomic } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
 import { join } from "node:path";
 
@@ -111,7 +112,7 @@ export function createFhvObserverRuntime(
   input: CreateFhvObserverRuntimeInput = {},
 ): FhvObserverRuntime {
   const env = resolveFhvObserverRuntimeEnv(input.env);
-  assertFhvCampaignRuntimeIdentity({
+  const campaignIdentity = assertFhvObserverCampaignRuntimeIdentity({
     runRoot: env.runRoot,
     targetSha: env.targetSha,
     runId: env.runId,
@@ -169,7 +170,18 @@ export function createFhvObserverRuntime(
       return;
     }
     tickInFlight = (async () => {
-      const progress = readFhvRehearsalCampaignProgress(env.runRoot);
+      const progress =
+        campaignIdentity.kind === "REHEARSAL"
+          ? readFhvRehearsalCampaignProgress(env.runRoot)
+          : (() => {
+              const status = readFhvOperatorStatusTolerant(env.runRoot);
+              return status
+                ? {
+                    cyclesProcessed: status.campaign.barsProcessed ?? undefined,
+                    phase: status.campaign.phase,
+                  }
+                : null;
+            })();
       if (systemdShowReader) {
         const unitState = await readCampaignSystemdState(systemdShowReader);
         if (unitState && classifyHostEnforcedCampaignTimeout(unitState)) {
@@ -189,6 +201,9 @@ export function createFhvObserverRuntime(
         cyclesProcessed: progress?.cyclesProcessed,
         phase: progress?.phase,
         terminalState: progress?.phase === "timeout" ? "REHEARSAL_TIMEOUT" : undefined,
+        // The chronological V2 driver owns the accounting-rich status stream. Official
+        // observer ticks retain alerting, disk safety and progress duties without writing it.
+        preserveAuthoritativeStatus: campaignIdentity.kind === "OFFICIAL_CONTROL_REPLAY",
       });
     })().finally(() => {
       tickInFlight = null;

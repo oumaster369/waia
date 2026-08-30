@@ -67,7 +67,19 @@ async function main(): Promise<void> {
   }
 
   const capability = assertHtxOfficialSourceCapabilityProven();
-  const acquisitionReceiptPaths = readdirSync(receiptDir)
+  const receiptNames = readdirSync(receiptDir);
+  const preHoldoutV2Receipts = receiptNames.filter(
+    (name) => name.startsWith("fhv-acquisition-receipt.") && name.endsWith(".v2.json"),
+  );
+  if (preHoldoutV2Receipts.length > 0) {
+    throw new Error(
+      "PRE_HOLDOUT_REQUIRES_QUALIFICATION_FLOW: four real-provider v2 receipts must use " +
+        "trader:fhv:pre-holdout-qualify then trader:fhv:dataset-qualify with " +
+        "OFFICIAL_PRE_HOLDOUT_REAL_DATA; full sealing requires six receipts including a " +
+        "separately authorized blind holdout and is forbidden here.",
+    );
+  }
+  const acquisitionReceiptPaths = receiptNames
     .filter((name) => name.startsWith("fhv-acquisition-receipt.") && name.endsWith(".v1.json"))
     .map((name) => join(receiptDir, name))
     .sort();

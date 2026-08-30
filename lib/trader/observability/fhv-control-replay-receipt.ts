@@ -9,6 +9,11 @@ import {
 
 export const FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION = "fhv-control-replay-receipt/v1" as const;
 export const FHV_CONTROL_REPLAY_HOLDOUT_STATUS = "SEALED_NOT_ACCESSED" as const;
+export const FHV_CONTROL_REPLAY_PRE_HOLDOUT_STATUS =
+  "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED" as const;
+export type FhvControlReplayHoldoutStatus =
+  | typeof FHV_CONTROL_REPLAY_HOLDOUT_STATUS
+  | typeof FHV_CONTROL_REPLAY_PRE_HOLDOUT_STATUS;
 
 export type FhvControlReplayReceiptV1 = Readonly<{
   schemaVersion: typeof FHV_CONTROL_REPLAY_RECEIPT_SCHEMA_VERSION;
@@ -37,7 +42,7 @@ export type FhvControlReplayReceiptV1 = Readonly<{
   runTwoAccountingStateDigest?: string;
   runOneHtrPnlReportDigest?: string;
   runTwoHtrPnlReportDigest?: string;
-  holdoutStatus: typeof FHV_CONTROL_REPLAY_HOLDOUT_STATUS;
+  holdoutStatus: FhvControlReplayHoldoutStatus;
   capturedAtUtc: string;
   controlReplayReceiptDigest: string;
 }>;
@@ -83,10 +88,13 @@ export function readFhvControlReplayReceipt(receiptPath: string): FhvControlRepl
       "Control replay receipt must classify PASS.",
     );
   }
-  if (parsed.holdoutStatus !== FHV_CONTROL_REPLAY_HOLDOUT_STATUS) {
+  if (
+    parsed.holdoutStatus !== FHV_CONTROL_REPLAY_HOLDOUT_STATUS &&
+    parsed.holdoutStatus !== FHV_CONTROL_REPLAY_PRE_HOLDOUT_STATUS
+  ) {
     throw new FhvControlReplayReceiptError(
       "CONTROL_REPLAY_HOLDOUT_STATUS_MISMATCH",
-      "Control replay receipt must declare holdoutStatus SEALED_NOT_ACCESSED.",
+      "Control replay receipt has an invalid holdout status.",
     );
   }
   return parsed;
@@ -147,6 +155,7 @@ export function writeFhvControlReplayReceiptAtomic(input: {
   runTwoAccountingStateDigest?: string;
   runOneHtrPnlReportDigest?: string;
   runTwoHtrPnlReportDigest?: string;
+  holdoutStatus?: FhvControlReplayHoldoutStatus;
   capturedAtUtc?: string;
 }): FhvControlReplayReceiptV1 {
   const body = {
@@ -184,7 +193,7 @@ export function writeFhvControlReplayReceiptAtomic(input: {
     ...(input.runTwoHtrPnlReportDigest
       ? { runTwoHtrPnlReportDigest: input.runTwoHtrPnlReportDigest }
       : {}),
-    holdoutStatus: FHV_CONTROL_REPLAY_HOLDOUT_STATUS,
+    holdoutStatus: input.holdoutStatus ?? FHV_CONTROL_REPLAY_HOLDOUT_STATUS,
     capturedAtUtc: input.capturedAtUtc ?? new Date().toISOString(),
   };
 

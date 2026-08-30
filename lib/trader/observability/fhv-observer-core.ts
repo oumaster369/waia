@@ -23,6 +23,7 @@ import {
   type FhvCommandResultV1,
 } from "@/lib/trader/observability/fhv-command-ledger";
 import { collectFhvHostTelemetry } from "@/lib/trader/observability/fhv-host-telemetry";
+import type { FhvHostTelemetrySnapshot } from "@/lib/trader/observability/fhv-host-telemetry";
 import {
   FhvCommandVerificationError,
   verifyFhvOperatorCommandV1,
@@ -92,6 +93,8 @@ export type FhvObserverTickInput = Readonly<{
   heartbeatAt?: string;
   terminalState?: string;
   sendTelegram?: (text: string) => Promise<{ ok: boolean; error?: string }>;
+  preserveAuthoritativeStatus?: boolean;
+  hostTelemetryOverride?: FhvHostTelemetrySnapshot;
 }>;
 
 export type FhvObserverTickResult = Readonly<{
@@ -164,12 +167,14 @@ export async function runFhvObserverTick(
   const checkpoint = readFhvCampaignCheckpoint(state.config.runRoot);
   const checkpointPath = join(state.config.runRoot, "replay-checkpoint.json");
   const checkpointWrittenAt = resolveCheckpointWrittenAtUtc(checkpointPath);
-  const hostTelemetry = collectFhvHostTelemetry({
-    runRoot: state.config.runRoot,
-    filesystemPath: state.config.runRoot,
-    postgresConnectivity: "unknown",
-    datasetReadable: null,
-  });
+  const hostTelemetry =
+    input.hostTelemetryOverride ??
+    collectFhvHostTelemetry({
+      runRoot: state.config.runRoot,
+      filesystemPath: state.config.runRoot,
+      postgresConnectivity: "unknown",
+      datasetReadable: null,
+    });
 
   const barsProcessed =
     input.cyclesProcessed ??
@@ -263,40 +268,42 @@ export async function runFhvObserverTick(
     hostSafetyEscalation = enforcement.enforcementApplied;
   }
 
-  buildAndWriteFhvOperatorStatus(state.config.runRoot, {
-    observedAt,
-    organizationId: state.config.organizationId,
-    runId: state.config.runId,
-    phase: input.phase ?? checkpoint?.activePhase ?? "validation",
-    codeSha: checkpoint?.codeSha ?? "unknown",
-    artifactDigest: checkpoint?.checkpointDigest ?? "unknown",
-    datasetSeal: checkpoint?.datasetContentDigest ?? "unknown",
-    datasetDigest: checkpoint?.datasetContentDigest ?? "unknown",
-    configurationDigest: checkpoint?.checkpointDigest ?? "unknown",
-    barsProcessed,
-    barsTotal: barsTotal ?? undefined,
-    startedAt: input.startedAt ?? observedAt,
-    lastCheckpointAt: checkpointWrittenAt,
-    heartbeatAt: heartbeatValidation.ok ? heartbeatValidation.heartbeat.heartbeatAtUtc : null,
-    heartbeatState: heartbeatValidation.ok ? "OK" : heartbeatValidation.heartbeatState,
-    heartbeatAgeMs: heartbeatValidation.ok ? heartbeatValidation.heartbeatAgeSec * 1000 : null,
-    processRestartCount,
-    terminalState: resolveCampaignTerminalState({
-      explicitTerminalState: input.terminalState ?? null,
-      checkpointTerminalState: checkpoint?.replayTerminalState ?? null,
-      campaignRunning: !checkpoint?.replayTerminalState,
-    }),
-    terminalReason: null,
-    checkpoint,
-    hostTelemetry,
-    evidenceHealth,
-    recentAlerts: alertsFired.map((alertId) => ({
-      id: alertId,
-      label: alertId,
-      atUtc: observedAt,
-      artifactRef: `fhv-artifact/v1/alert/${state.config.runId}/${alertId}#0`,
-    })),
-  });
+  if (!input.preserveAuthoritativeStatus) {
+    buildAndWriteFhvOperatorStatus(state.config.runRoot, {
+      observedAt,
+      organizationId: state.config.organizationId,
+      runId: state.config.runId,
+      phase: input.phase ?? checkpoint?.activePhase ?? "validation",
+      codeSha: checkpoint?.codeSha ?? "unknown",
+      artifactDigest: checkpoint?.checkpointDigest ?? "unknown",
+      datasetSeal: checkpoint?.datasetContentDigest ?? "unknown",
+      datasetDigest: checkpoint?.datasetContentDigest ?? "unknown",
+      configurationDigest: checkpoint?.checkpointDigest ?? "unknown",
+      barsProcessed,
+      barsTotal: barsTotal ?? undefined,
+      startedAt: input.startedAt ?? observedAt,
+      lastCheckpointAt: checkpointWrittenAt,
+      heartbeatAt: heartbeatValidation.ok ? heartbeatValidation.heartbeat.heartbeatAtUtc : null,
+      heartbeatState: heartbeatValidation.ok ? "OK" : heartbeatValidation.heartbeatState,
+      heartbeatAgeMs: heartbeatValidation.ok ? heartbeatValidation.heartbeatAgeSec * 1000 : null,
+      processRestartCount,
+      terminalState: resolveCampaignTerminalState({
+        explicitTerminalState: input.terminalState ?? null,
+        checkpointTerminalState: checkpoint?.replayTerminalState ?? null,
+        campaignRunning: !checkpoint?.replayTerminalState,
+      }),
+      terminalReason: null,
+      checkpoint,
+      hostTelemetry,
+      evidenceHealth,
+      recentAlerts: alertsFired.map((alertId) => ({
+        id: alertId,
+        label: alertId,
+        atUtc: observedAt,
+        artifactRef: `fhv-artifact/v1/alert/${state.config.runId}/${alertId}#0`,
+      })),
+    });
+  }
 
   persistFhvObserverProgressFromTick({
     runRoot: state.config.runRoot,
@@ -312,7 +319,7 @@ export async function runFhvObserverTick(
 
   void measureBoundedDirectoryBytes;
 
-  return { statusWritten: true, alertsFired, hostSafetyEscalation };
+  return { statusWritten: !input.preserveAuthoritativeStatus, alertsFired, hostSafetyEscalation };
 }
 
 export async function handleFhvObserverCommand(

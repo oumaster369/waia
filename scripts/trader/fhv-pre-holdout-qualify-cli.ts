@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 
 import { assertPathDoesNotAccessBlindHoldoutPayload } from "@/lib/trader/market-data/fhv-blind-holdout-firewall";
 import {
+  discoverFhvPreHoldoutAcquisitionReceiptV2Paths,
   qualifyFhvPreHoldoutRealData,
   writeFhvPreHoldoutQualificationReceipt,
 } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
@@ -54,6 +55,7 @@ export function resolveFhvPreHoldoutQualifyCliConfig(
       env.FHV_SOURCE_CAPABILITY_DIGEST?.trim(),
     revisionRiskEvidence: flags.get("--revision-risk-evidence") as string | undefined,
     acquisitionReceipts: flags.get("--acquisition-receipts") as string | undefined,
+    acquisitionReceiptDir: flags.get("--acquisition-receipt-dir") as string | undefined,
     outDir: (flags.get("--out-dir") as string | undefined) ?? env.FHV_RECEIPT_DIR?.trim(),
   };
 }
@@ -69,12 +71,15 @@ async function main(): Promise<void> {
     !config.datasetRoot ||
     !config.sourceCapabilityDigest ||
     !config.revisionRiskEvidence ||
-    !config.acquisitionReceipts ||
+    (!config.acquisitionReceipts && !config.acquisitionReceiptDir) ||
     !config.outDir
   ) {
     throw new Error(
-      "--organization-id, --operator-id, --dataset-root, --source-capability-digest, --revision-risk-evidence, --acquisition-receipts, and --out-dir are required",
+      "--organization-id, --operator-id, --dataset-root, --source-capability-digest, --revision-risk-evidence, one of --acquisition-receipts/--acquisition-receipt-dir, and --out-dir are required",
     );
+  }
+  if (config.acquisitionReceipts && config.acquisitionReceiptDir) {
+    throw new Error("--acquisition-receipts and --acquisition-receipt-dir are mutually exclusive");
   }
   assertPathDoesNotAccessBlindHoldoutPayload(config.datasetRoot);
   assertPathDoesNotAccessBlindHoldoutPayload(config.revisionRiskEvidence);
@@ -82,7 +87,9 @@ async function main(): Promise<void> {
   const parsedEvidence = JSON.parse(readFileSync(config.revisionRiskEvidence, "utf8")) as {
     samples?: readonly FhvRevisionRiskSampleEvidenceV1[];
   };
-  const receipts = config.acquisitionReceipts.split(",").map((path) => path.trim());
+  const receipts = config.acquisitionReceipts
+    ? config.acquisitionReceipts.split(",").map((path) => path.trim())
+    : discoverFhvPreHoldoutAcquisitionReceiptV2Paths(config.acquisitionReceiptDir!);
   for (const receiptPath of receipts) {
     assertPathDoesNotAccessBlindHoldoutPayload(receiptPath);
   }

@@ -33,9 +33,9 @@
       "lib/trader/execution/historical-simulated-exchange.ts",
       "lib/trader/connectors/mock-exchange-connector.ts"
     ],
-    "expectedFileCount": 153,
-    "sortedPathDigestHex": "0b632e7c93b0091b54a558581b136cef8df97b9159e1041786a6251225db68d3",
-    "sortedContentDigestHex": "b2f152abc8214ec1f3e6ddfe4088c5b5479a51c75f1874429875b0fb9c8270b7"
+    "expectedFileCount": 154,
+    "sortedPathDigestHex": "d5f2b4b0f3642e52cb8aa1270105d66a4e3286b1d29ae26472bb3a02b951fd31",
+    "sortedContentDigestHex": "4909c195885ba16a988513f8f7cc1739ee7e1e0581fe33a9afe24ce4c15bd054"
   },
   "sourceRules": [
     {
@@ -116,7 +116,7 @@
     ],
     "expectedFileCount": 116,
     "sortedPathDigestHex": "f41f4393f0da83dd1ed9e0569434aff8cdf12cc5fee38e16fdcf4480e5a6c928",
-    "sortedContentDigestHex": "22297c3e3bbc41d55a1a3298cd93ff9dfc8f32fc52075d79d37cd164540ff27f"
+    "sortedContentDigestHex": "3a95f3c647a9867cacb48fe43e0294e93fb524690f8d46f0047501197bf97a37"
   },
   "consumerRules": [
     {
