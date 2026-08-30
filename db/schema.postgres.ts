@@ -4265,6 +4265,39 @@ export const traderGuardianProtectiveConsumptionsV2 = pgTable(
   ],
 );
 
+/** Immutable Runtime Authority V2 assessment ledger (DEE-637). */
+export const traderRuntimeAuthorityAssessmentsV2 = pgTable(
+  "trader_runtime_authority_assessments_v2",
+  {
+    assessmentId: text("assessment_id").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runtimeInstanceId: text("runtime_instance_id").notNull(),
+    posture: text("posture").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    canonicalJson: text("canonical_json").notNull(),
+    adjudicatedAtUtc: timestamp("adjudicated_at_utc", { withTimezone: true, mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_runtime_authority_assessments_v2_org_digest_unique").on(t.organizationId, t.contentDigest),
+    index("trader_runtime_authority_assessments_v2_org_runtime_idx").on(t.organizationId, t.runtimeInstanceId, t.createdAt),
+  ],
+);
+
+/** Exclusive append-only Runtime Authority control lease epochs (DEE-637). */
+export const traderRuntimeControlLeasesV2 = pgTable(
+  "trader_runtime_control_leases_v2",
+  {
+    contentDigest: text("content_digest").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runtimeInstanceId: text("runtime_instance_id").notNull(),
+    leaseEpoch: integer("lease_epoch").notNull(),
+    validUntilUtc: timestamp("valid_until_utc", { withTimezone: true, mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("trader_runtime_control_leases_v2_org_epoch_unique").on(t.organizationId, t.leaseEpoch)],
+);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = pgTable(
   "trader_trade_legs",
