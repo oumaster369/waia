@@ -136,8 +136,47 @@ describe("FHV observer runtime error handling (DEE-431)", () => {
       fills: [{ id: "fill-1" }],
     };
     writeFileSync(statusPath, `${JSON.stringify(authoritative)}\n`);
-    runtime = createFhvObserverRuntime({ env: buildEnv(runDir), startServer: false });
+    const emergencyExecute = vi.fn(async () => ({
+      outcome: "executed" as const,
+      message: "stopped",
+      enforcementApplied: true,
+    }));
+    runtime = createFhvObserverRuntime({
+      env: buildEnv(runDir),
+      startServer: false,
+      campaignControlExecutor: { execute: emergencyExecute },
+    });
     await runtime.runTickOnce();
+    expect(JSON.parse(readFileSync(statusPath, "utf8"))).toEqual(authoritative);
+    const safety = await observerCore.runFhvObserverTick(runtime.state, {
+      cyclesProcessed: 41,
+      preserveAuthoritativeStatus: true,
+      hostTelemetryOverride: {
+        cpuPct: null,
+        loadAvg1: null,
+        loadAvg5: null,
+        loadAvg15: null,
+        ramUsedPct: null,
+        swapUsedPct: null,
+        diskFreeBytes: 1,
+        diskTotalBytes: 100,
+        artifactDirBytes: null,
+        artifactGrowthBytesPerHour: null,
+        inodeUsedPct: null,
+        processStatus: "running",
+        serviceStatus: "running",
+        postgresConnectivity: "unknown",
+        datasetReadable: true,
+        openFiles: null,
+        ntpHealthy: null,
+        diskSoftBreached: true,
+        diskHardBreached: true,
+      },
+    });
+    expect(safety.hostSafetyEscalation).toBe(true);
+    expect(emergencyExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "EMERGENCY_STOP" }),
+    );
     expect(JSON.parse(readFileSync(statusPath, "utf8"))).toEqual(authoritative);
   });
 });
