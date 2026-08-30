@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
@@ -40,6 +40,43 @@ export const FHV_PRE_HOLDOUT_QUALIFICATION_SCHEMA =
 export const FHV_PRE_HOLDOUT_QUALIFICATION_MODE = "OFFICIAL_PRE_HOLDOUT_REAL_DATA" as const;
 export const FHV_PRE_HOLDOUT_HOLDOUT_STATUS = "SEALED_NOT_ACCESSED" as const;
 export const FHV_PRE_HOLDOUT_PARTITIONS = ["development", "walk-forward"] as const;
+
+const PRE_HOLDOUT_RECEIPT_V2_PATTERN =
+  /^fhv-acquisition-receipt\.(development|walk-forward)\.(BTCUSDT|ETHUSDT)\.[a-zA-Z0-9._-]+\.v2\.json$/;
+
+/**
+ * Discover the one immutable real-provider v2 receipt for every admitted
+ * pre-holdout partition/symbol pair.  Discovery is deliberately strict: a
+ * missing or duplicate identity fails closed, and v1/holdout receipts are
+ * never silently admitted.
+ */
+export function discoverFhvPreHoldoutAcquisitionReceiptV2Paths(receiptDir: string): string[] {
+  const byIdentity = new Map<string, string[]>();
+  for (const name of readdirSync(receiptDir).sort()) {
+    const match = PRE_HOLDOUT_RECEIPT_V2_PATTERN.exec(name);
+    if (!match) continue;
+    const key = `${match[1]}:${match[2]}`;
+    const paths = byIdentity.get(key) ?? [];
+    paths.push(join(receiptDir, name));
+    byIdentity.set(key, paths);
+  }
+
+  const expected = FHV_PRE_HOLDOUT_PARTITIONS.flatMap((partition) =>
+    FHV_OFFICIAL_SYMBOLS.map((symbol) => `${partition}:${symbol}`),
+  );
+  const discovered: string[] = [];
+  for (const key of expected) {
+    const paths = byIdentity.get(key) ?? [];
+    if (paths.length !== 1) {
+      fail(
+        paths.length === 0 ? "ACQUISITION_RECEIPT_MISSING" : "ACQUISITION_RECEIPT_DUPLICATE",
+        `${key} requires exactly one fhv-acquisition-receipt/v2; found ${paths.length}`,
+      );
+    }
+    discovered.push(paths[0]!);
+  }
+  return discovered;
+}
 
 export type FhvPreHoldoutQualificationMode = typeof FHV_PRE_HOLDOUT_QUALIFICATION_MODE;
 

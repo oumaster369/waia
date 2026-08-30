@@ -24,6 +24,7 @@ import {
 } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
 import {
   FHV_PRE_HOLDOUT_QUALIFICATION_MODE,
+  discoverFhvPreHoldoutAcquisitionReceiptV2Paths,
   qualifyFhvPreHoldoutRealData,
 } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
 import {
@@ -49,6 +50,7 @@ import {
   resolveFhvAcquireHtxV2CliConfig,
   assertFhvAcquireHtxV2Mode,
 } from "@/scripts/trader/fhv-acquire-htx-v2";
+import { resolveFhvPreHoldoutQualifyCliConfig } from "@/scripts/trader/fhv-pre-holdout-qualify-cli";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { CONTROL_REPLAY_AUTHORITY_IDENTITY } from "@/lib/trader/observability/control-replay-test-authority";
 import { runScientificControlReplayV2Ceremony } from "@/lib/trader/observability/control-replay-scientific-v2-driver-v1";
@@ -456,6 +458,63 @@ describe("real vs synthetic receipts and revision risk", () => {
 });
 
 describe("pre-holdout qualification and holdout firewall", () => {
+  it("accepts an explicit v2 receipt directory for launch preparation", () => {
+    const config = resolveFhvPreHoldoutQualifyCliConfig({ NODE_ENV: "test" }, [
+      "--acquisition-receipt-dir",
+      "/qualified/control/acquisition",
+    ]);
+    expect(config.acquisitionReceiptDir).toBe("/qualified/control/acquisition");
+    expect(config.acquisitionReceipts).toBeUndefined();
+  });
+
+  it("discovers exactly one v2 receipt per pre-holdout identity and ignores v1/holdout", () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-v2-discovery-"));
+    roots.push(root);
+    const receiptDir = join(root, "control", "acquisition");
+    mkdirSync(receiptDir, { recursive: true });
+    for (const [partition, symbol] of [
+      ["development", "BTCUSDT"],
+      ["development", "ETHUSDT"],
+      ["walk-forward", "BTCUSDT"],
+      ["walk-forward", "ETHUSDT"],
+    ] as const) {
+      writeFileSync(
+        join(receiptDir, `fhv-acquisition-receipt.${partition}.${symbol}.run.v2.json`),
+        "{}\n",
+      );
+    }
+    writeFileSync(
+      join(receiptDir, "fhv-acquisition-receipt.development.BTCUSDT.legacy.v1.json"),
+      "{}\n",
+    );
+    writeFileSync(
+      join(receiptDir, "fhv-acquisition-receipt.blind-holdout.BTCUSDT.forbidden.v2.json"),
+      "{}\n",
+    );
+
+    const paths = discoverFhvPreHoldoutAcquisitionReceiptV2Paths(receiptDir);
+    expect(paths).toHaveLength(4);
+    expect(paths.every((path) => path.endsWith(".v2.json"))).toBe(true);
+    expect(paths.some((path) => path.includes("blind-holdout"))).toBe(false);
+
+    writeFileSync(
+      join(receiptDir, "fhv-acquisition-receipt.development.BTCUSDT.duplicate.v2.json"),
+      "{}\n",
+    );
+    expect(() => discoverFhvPreHoldoutAcquisitionReceiptV2Paths(receiptDir)).toThrow(
+      /requires exactly one.*found 2/i,
+    );
+  });
+
+  it("fails closed when a pre-holdout v2 receipt identity is missing", () => {
+    const root = mkdtempSync(join(tmpdir(), "fhv-v2-discovery-missing-"));
+    roots.push(root);
+    writeFileSync(join(root, "fhv-acquisition-receipt.development.BTCUSDT.run.v2.json"), "{}\n");
+    expect(() => discoverFhvPreHoldoutAcquisitionReceiptV2Paths(root)).toThrow(
+      /requires exactly one.*found 0/i,
+    );
+  });
+
   it("never qualifies a tiny partial multi-year file as canonical PASS", () => {
     const root = mkdtempSync(join(tmpdir(), "fhv-preholdout-"));
     roots.push(root);
