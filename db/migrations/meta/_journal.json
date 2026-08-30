@@ -316,6 +316,13 @@
       "when": 1780000000044,
       "tag": "0044_dee635_trade_leg_reference_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1780000000045,
+      "tag": "0045_dee636_guardian_assessment_v2",
+      "breakpoints": true
     }
   ]
 }

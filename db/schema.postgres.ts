@@ -4215,6 +4215,39 @@ export const traderPositionLots = pgTable(
   ],
 );
 
+/** Immutable Guardian V2 assessment ledger (DEE-636). */
+export const traderGuardianAssessmentsV2 = pgTable(
+  "trader_guardian_assessments_v2",
+  {
+    assessmentId: text("assessment_id").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    positionId: uuid("position_id").notNull(),
+    lotId: uuid("lot_id").notNull(),
+    symbol: text("symbol").notNull(),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest").notNull(),
+    realityFrontierId: text("reality_frontier_id").notNull(),
+    realityContentDigest: text("reality_content_digest").notNull(),
+    qualifiedEvidenceBundleId: text("qualified_evidence_bundle_id").notNull(),
+    qualifiedEvidenceContentDigest: text("qualified_evidence_content_digest").notNull(),
+    informationSufficiencyProfile: text("information_sufficiency_profile").notNull(),
+    openPositionSufficiency: text("open_position_sufficiency").notNull(),
+    newOpportunitySufficiency: text("new_opportunity_sufficiency").notNull(),
+    recommendation: text("recommendation").notNull(),
+    targetReductionBps: integer("target_reduction_bps").notNull(),
+    reasonCodesJson: jsonb("reason_codes_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    canonicalJson: text("canonical_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_guardian_assessments_v2_id_org_unique").on(t.assessmentId, t.organizationId),
+    foreignKey({ columns: [t.positionId, t.organizationId], foreignColumns: [traderTrades.id, traderTrades.organizationId] }),
+    foreignKey({ columns: [t.lotId, t.organizationId], foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId] }),
+    uniqueIndex("trader_guardian_assessments_v2_org_digest_unique").on(t.organizationId, t.contentDigest),
+    index("trader_guardian_assessments_v2_org_lot_idx").on(t.organizationId, t.lotId, t.createdAt),
+  ],
+);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = pgTable(
   "trader_trade_legs",
