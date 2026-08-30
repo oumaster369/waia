@@ -49,4 +49,28 @@ BEGIN SELECT RAISE(ABORT, 'GUARDIAN_ASSESSMENT_V2_APPEND_ONLY'); END;
 CREATE TRIGGER `trader_guardian_assessments_v2_append_only_delete_guard`
 BEFORE DELETE ON `trader_guardian_assessments_v2` FOR EACH ROW
 BEGIN SELECT RAISE(ABORT, 'GUARDIAN_ASSESSMENT_V2_APPEND_ONLY'); END;
-
+--> statement-breakpoint
+CREATE TABLE `trader_guardian_protective_consumptions_v2` (
+  `content_digest` text PRIMARY KEY NOT NULL,
+  `organization_id` text NOT NULL,
+  `mandate_id` text NOT NULL,
+  `mandate_content_digest` text NOT NULL,
+  `trigger_proof_content_digest` text NOT NULL,
+  `adjudicated_at_utc` text NOT NULL,
+  `created_at` integer NOT NULL,
+  FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON DELETE cascade,
+  CHECK (length(`content_digest`) = 64 AND `content_digest` NOT GLOB '*[^0-9a-f]*'),
+  CHECK (length(`mandate_content_digest`) = 64 AND `mandate_content_digest` NOT GLOB '*[^0-9a-f]*'),
+  CHECK (length(`trigger_proof_content_digest`) = 64 AND `trigger_proof_content_digest` NOT GLOB '*[^0-9a-f]*')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `trader_guardian_protective_consumptions_v2_org_mandate_unique`
+  ON `trader_guardian_protective_consumptions_v2` (`organization_id`,`mandate_id`);
+--> statement-breakpoint
+CREATE TRIGGER `trader_guardian_protective_consumptions_v2_append_only_update_guard`
+BEFORE UPDATE ON `trader_guardian_protective_consumptions_v2` FOR EACH ROW
+BEGIN SELECT RAISE(ABORT, 'GUARDIAN_PROTECTIVE_CONSUMPTION_V2_APPEND_ONLY'); END;
+--> statement-breakpoint
+CREATE TRIGGER `trader_guardian_protective_consumptions_v2_append_only_delete_guard`
+BEFORE DELETE ON `trader_guardian_protective_consumptions_v2` FOR EACH ROW
+BEGIN SELECT RAISE(ABORT, 'GUARDIAN_PROTECTIVE_CONSUMPTION_V2_APPEND_ONLY'); END;

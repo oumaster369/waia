@@ -7,7 +7,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { getDb, getRawSqliteDatabase, resetWaiaSqliteSingleton } from "@/db/client";
 import {
   buildGuardianAssessmentV2,
+  buildProtectiveMandateConsumptionV2,
   createSqliteGuardianAssessmentRepositoryV2,
+  createSqliteProtectiveMandateConsumptionRepositoryV2,
 } from "@/lib/trader/guardian/v2";
 import {
   createSqliteLifecycleRepository,
@@ -102,5 +104,23 @@ describe("GuardianAssessmentRepositoryV2 SQLite", () => {
     expect(() => raw.prepare(
       "UPDATE trader_guardian_assessments_v2 SET organization_id = ? WHERE assessment_id = ?",
     ).run(crypto.randomUUID(), value.assessmentId)).toThrow();
+  });
+
+  it("atomically consumes a mandate once across concurrency and restart", async () => {
+    const value = buildProtectiveMandateConsumptionV2({
+      organizationId, mandateId: "protective-mandate-v2:once",
+      mandateContentDigest: hex("4"), triggerProofContentDigest: hex("5"),
+      adjudicatedAtUtc: "2026-08-30T00:00:31.000Z",
+    });
+    const repository = createSqliteProtectiveMandateConsumptionRepositoryV2(getDb());
+    const results = await Promise.all(Array.from({ length: 8 }, () => repository.claimOnce(value)));
+    expect(results.filter((result) => result === "CLAIMED")).toHaveLength(1);
+    expect(results.filter((result) => result === "ALREADY_CONSUMED")).toHaveLength(7);
+    resetWaiaSqliteSingleton();
+    await expect(createSqliteProtectiveMandateConsumptionRepositoryV2(getDb()).claimOnce(value))
+      .resolves.toBe("ALREADY_CONSUMED");
+    expect(() => getRawSqliteDatabase().prepare(
+      "DELETE FROM trader_guardian_protective_consumptions_v2 WHERE mandate_id = ?",
+    ).run(value.mandateId)).toThrow(/GUARDIAN_PROTECTIVE_CONSUMPTION_V2_APPEND_ONLY/);
   });
 });

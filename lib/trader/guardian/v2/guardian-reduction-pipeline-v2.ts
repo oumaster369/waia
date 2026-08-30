@@ -21,6 +21,10 @@ import {
 import { assertGuardianAssessmentV2, type GuardianAssessmentV2 } from "./guardian-assessment-v2";
 import { assertProtectiveActionMandateV2, type ProtectiveActionMandateV2 } from "./protective-action-mandate-v2";
 import { assertProtectiveTriggerProofV2, type ProtectiveTriggerProofV2 } from "./protective-trigger-proof-v2";
+import {
+  buildProtectiveMandateConsumptionV2,
+  type ProtectiveMandateConsumptionRepositoryV2,
+} from "./protective-mandate-consumption-v2";
 
 export type GuardianDecisionSealV2 = Readonly<{
   organizationId: string;
@@ -234,6 +238,7 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
   lot: PositionLotRow;
   openingLineage: OpeningCausalLineageV1;
   ports: Omit<GuardianReductionPipelinePortsV2, "decision">;
+  consumptionRepository: ProtectiveMandateConsumptionRepositoryV2;
 }>): Promise<GuardianReductionPipelineResultV2> {
   assertGuardianAssessmentV2(input.assessment);
   assertProtectiveActionMandateV2(input.mandate);
@@ -264,6 +269,16 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
     adjudicatedAtMs < new Date(input.triggerProof.observedAtUtc).getTime() ||
     adjudicatedAtMs > new Date(input.mandate.validUntilUtc).getTime()
   ) throw new Error("GUARDIAN_PROTECTIVE_TRIGGER_BINDING_MISMATCH");
+  const consumption = buildProtectiveMandateConsumptionV2({
+    organizationId: input.assessment.organizationId,
+    mandateId: input.mandate.mandateId,
+    mandateContentDigest: input.mandate.contentDigest,
+    triggerProofContentDigest: input.triggerProof.contentDigest,
+    adjudicatedAtUtc: input.adjudicatedAtUtc,
+  });
+  if (await input.consumptionRepository.claimOnce(consumption) !== "CLAIMED") {
+    throw new Error("GUARDIAN_PROTECTIVE_MANDATE_ALREADY_CONSUMED");
+  }
   const action = input.mandate.actionKind === "CLOSE_FULL" ? "CLOSE" : "REDUCE";
   const approvedQuantity = input.mandate.actionKind === "CLOSE_FULL"
     ? input.lot.remainingQty

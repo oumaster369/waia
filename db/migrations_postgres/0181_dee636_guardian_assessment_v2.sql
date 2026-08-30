@@ -66,3 +66,44 @@ CREATE TRIGGER trader_guardian_assessments_v2_block_update
 CREATE TRIGGER trader_guardian_assessments_v2_block_delete
   BEFORE DELETE ON public.trader_guardian_assessments_v2
   FOR EACH ROW EXECUTE FUNCTION public.waia_guardian_assessment_v2_block_mutation();
+--> statement-breakpoint
+CREATE TABLE public.trader_guardian_protective_consumptions_v2 (
+  content_digest text PRIMARY KEY CHECK (content_digest ~ '^[0-9a-f]{64}$'),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  mandate_id text NOT NULL,
+  mandate_content_digest text NOT NULL CHECK (mandate_content_digest ~ '^[0-9a-f]{64}$'),
+  trigger_proof_content_digest text NOT NULL CHECK (trigger_proof_content_digest ~ '^[0-9a-f]{64}$'),
+  adjudicated_at_utc timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT trader_guardian_protective_consumptions_v2_org_mandate_unique UNIQUE (organization_id, mandate_id)
+);
+--> statement-breakpoint
+ALTER TABLE public.trader_guardian_protective_consumptions_v2 ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+CREATE POLICY trader_guardian_protective_consumptions_v2_deny_authenticated_select
+  ON public.trader_guardian_protective_consumptions_v2 FOR SELECT TO authenticated, anon USING (false);
+--> statement-breakpoint
+CREATE POLICY trader_guardian_protective_consumptions_v2_deny_authenticated_insert
+  ON public.trader_guardian_protective_consumptions_v2 FOR INSERT TO authenticated, anon WITH CHECK (false);
+--> statement-breakpoint
+CREATE POLICY trader_guardian_protective_consumptions_v2_deny_authenticated_update
+  ON public.trader_guardian_protective_consumptions_v2 FOR UPDATE TO authenticated, anon USING (false);
+--> statement-breakpoint
+CREATE POLICY trader_guardian_protective_consumptions_v2_deny_authenticated_delete
+  ON public.trader_guardian_protective_consumptions_v2 FOR DELETE TO authenticated, anon USING (false);
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.waia_guardian_protective_consumption_v2_block_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'trader_guardian_protective_consumptions_v2 is append-only (no % allowed)', TG_OP
+    USING ERRCODE = 'check_violation';
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trader_guardian_protective_consumptions_v2_block_update
+  BEFORE UPDATE ON public.trader_guardian_protective_consumptions_v2
+  FOR EACH ROW EXECUTE FUNCTION public.waia_guardian_protective_consumption_v2_block_mutation();
+--> statement-breakpoint
+CREATE TRIGGER trader_guardian_protective_consumptions_v2_block_delete
+  BEFORE DELETE ON public.trader_guardian_protective_consumptions_v2
+  FOR EACH ROW EXECUTE FUNCTION public.waia_guardian_protective_consumption_v2_block_mutation();

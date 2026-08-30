@@ -31,6 +31,7 @@
     "Ordinary Guardian recommendations re-enter Decision V2 and Guardian has no direct capital-effect authority.",
     "A Decision-sealed protective mandate is deterministic, reduction-only and still passes Risk V2 and Execution V2.",
     "REDUCE_PARTIAL and CLOSE_FULL are the only executable protective actions in this slice; TIGHTEN_PROTECTION fails closed pending a separately admitted non-amplifying executor.",
+    "Each protective mandate is claimed exactly once through a tenant-scoped append-only SQLite/PostgreSQL consumption ledger before Risk; concurrent or restart replay fails closed.",
     "Admin and tenant observability are separate read-only library projections; no UI/API completeness is claimed.",
     "Guardian never increases exposure, reverses, averages down, derives position truth from order status or weakens live/capital gates."
   ],
@@ -46,9 +47,9 @@
   ],
   "externalEvidence": {
     "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
-    "localFocused": "52/52 affected Guardian, Reality inventory and migration-identity tests pass after exact P1 repairs; typecheck and canonical validation pass.",
+    "localFocused": "P1 authority repairs pass focused tests, including exact quantity boundary, foreign attempt/report rejection, stale adjudication, and atomic SQLite concurrent/restart mandate consumption; typecheck passes.",
     "localFullFresh": "The pre-review implementation head f8c4444e passed 898 files/5209 tests (85 files/433 environment-gated skips) in 1560.60s. A fresh literal full rerun is required after the material P1 repair before publication.",
     "postgres": "Local PostgreSQL URLs are unavailable; authoritative PostgreSQL CI remains required.",
-    "independentReview": "Head 3a08a747 review found P1=3/P2=0: recommendation quantity cap, exact execution-attempt/report-chain binding, and trusted protective expiry adjudication. All three are repaired with focused negative/boundary tests; fresh exact-head re-review is pending."
+    "independentReview": "Head 3a08a747 review found P1=3/P2=0; head 98507bf7 closed those findings but re-review found P1=1/P2=0 for pre-expiry replay. The pipeline now requires atomic one-shot tenant/mandate consumption backed by append-only SQLite/PostgreSQL ledgers; fresh exact-head re-review is pending."
   }
 }

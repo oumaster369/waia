@@ -4248,6 +4248,23 @@ export const traderGuardianAssessmentsV2 = pgTable(
   ],
 );
 
+/** One-shot append-only protective mandate consumption ledger (DEE-636). */
+export const traderGuardianProtectiveConsumptionsV2 = pgTable(
+  "trader_guardian_protective_consumptions_v2",
+  {
+    contentDigest: text("content_digest").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    mandateId: text("mandate_id").notNull(),
+    mandateContentDigest: text("mandate_content_digest").notNull(),
+    triggerProofContentDigest: text("trigger_proof_content_digest").notNull(),
+    adjudicatedAtUtc: timestamp("adjudicated_at_utc", { withTimezone: true, mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_guardian_protective_consumptions_v2_org_mandate_unique").on(t.organizationId, t.mandateId),
+  ],
+);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = pgTable(
   "trader_trade_legs",

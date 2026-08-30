@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildGuardianAssessmentV2,
   buildProtectiveActionMandateV2,
+  buildProtectiveMandateConsumptionV2,
   buildProtectiveTriggerProofV2,
+  createInMemoryProtectiveMandateConsumptionRepositoryV2,
   runGuardianOrdinaryReductionPipelineV2,
   runGuardianProtectiveReductionPipelineV2,
   type GuardianReductionPipelinePortsV2,
@@ -208,7 +210,45 @@ describe("Guardian V2 ordinary reduction pipeline", () => {
     await expect(runGuardianProtectiveReductionPipelineV2({
       assessment: value, mandate, triggerProof, adjudicatedAtUtc: "2026-08-30T00:01:00.001Z",
       lot, openingLineage: lineage, ports: protectivePorts,
+      consumptionRepository: createInMemoryProtectiveMandateConsumptionRepositoryV2(),
     })).rejects.toThrow("GUARDIAN_PROTECTIVE_TRIGGER_BINDING_MISMATCH");
+    expect(protectivePorts.risk.authorizeReduction).not.toHaveBeenCalled();
+  });
+
+  it("atomically consumes a protective mandate once and blocks pre-expiry replay before Risk", async () => {
+    const value = assessment("HOLD");
+    const mandate = buildProtectiveActionMandateV2({
+      organizationId: ORG, positionId: value.positionId, lotId: value.lotId, symbol: value.symbol,
+      openingCausalLineageDigest: value.openingCausalLineageDigest,
+      guardianAssessmentId: value.assessmentId, guardianAssessmentContentDigest: value.contentDigest,
+      decisionId: "decision-protective", decisionContentDigest: hex("7"), actionKind: "REDUCE_PARTIAL",
+      maximumReductionBps: 2_500, deterministicTriggerSpecDigest: hex("8"),
+      validUntilUtc: "2026-08-30T00:01:00.000Z",
+    });
+    const triggerProof = buildProtectiveTriggerProofV2({
+      mandateId: mandate.mandateId, mandateContentDigest: mandate.contentDigest,
+      deterministicTriggerSpecDigest: mandate.deterministicTriggerSpecDigest,
+      realityProjectionId: value.realityFrontierId, realityContentDigest: value.realityContentDigest,
+      evaluatorVersion: "guardian-trigger-v2", evaluatorDigest: hex("9"),
+      observedAtUtc: "2026-08-30T00:00:30.000Z",
+    });
+    const adjudicatedAtUtc = "2026-08-30T00:00:31.000Z";
+    const consumption = buildProtectiveMandateConsumptionV2({
+      organizationId: ORG, mandateId: mandate.mandateId,
+      mandateContentDigest: mandate.contentDigest, triggerProofContentDigest: triggerProof.contentDigest,
+      adjudicatedAtUtc,
+    });
+    const repository = createInMemoryProtectiveMandateConsumptionRepositoryV2();
+    expect((await Promise.all([repository.claimOnce(consumption), repository.claimOnce(consumption)])).sort())
+      .toEqual(["ALREADY_CONSUMED", "CLAIMED"]);
+    const protectivePorts = {
+      risk: { authorizeReduction: vi.fn() }, execution: { executeReduction: vi.fn() },
+      reality: { ingestExecutionReports: vi.fn() },
+    } as unknown as Omit<GuardianReductionPipelinePortsV2, "decision">;
+    await expect(runGuardianProtectiveReductionPipelineV2({
+      assessment: value, mandate, triggerProof, adjudicatedAtUtc, lot, openingLineage: lineage,
+      ports: protectivePorts, consumptionRepository: repository,
+    })).rejects.toThrow("GUARDIAN_PROTECTIVE_MANDATE_ALREADY_CONSUMED");
     expect(protectivePorts.risk.authorizeReduction).not.toHaveBeenCalled();
   });
 });
