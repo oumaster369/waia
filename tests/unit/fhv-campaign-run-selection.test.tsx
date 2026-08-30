@@ -36,7 +36,7 @@ describe("DEE-785 streaming FHV Admin Console", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Refresh")).not.toBeInTheDocument();
     expect(screen.queryByText("Sync balances")).not.toBeInTheDocument();
-    expect(screen.getAllByText(RUN_ID)).toHaveLength(2);
+    expect(screen.getAllByText(RUN_ID)).toHaveLength(1);
     expect(screen.getByText(/Open positions only/i)).toBeInTheDocument();
   });
 

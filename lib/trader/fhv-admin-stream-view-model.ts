@@ -13,6 +13,15 @@ export type FhvAdminAccountRow = Readonly<{
   openPositions: number | null;
 }>;
 
+export type FhvAdminAccountEvent = Readonly<{
+  schemaVersion: "fhv-realtime-event/v1";
+  kind: "account.balance";
+  organizationId: string;
+  campaignRunId: string;
+  source: "HISTORICAL_SIMULATION";
+  payload: Readonly<Record<string, unknown>>;
+}>;
+
 export function parseFhvStatus(value: Record<string, unknown>): FhvOperatorStatusV1 | null {
   return value.schemaVersion === "fhv-operator-status/v1"
     ? (value as unknown as FhvOperatorStatusV1)
@@ -44,25 +53,67 @@ export function connectionState(input: {
  * rather than fabricating exchange/user accounts that are not present in the observer contract.
  */
 export function buildAdminAccountRows(status: FhvOperatorStatusV1): readonly FhvAdminAccountRow[] {
-  const netPnl = parseFiniteDecimal(status.tradingSimulation.netPnl);
   return [
     {
-      id: status.campaign.runId,
+      id: `historical:${status.campaign.organizationId}`,
       label: `${status.campaign.currentSymbol ?? "Campaign"} simulated account`,
       cash: status.tradingSimulation.cash,
       equity: status.tradingSimulation.equity,
       pnl: status.tradingSimulation.netPnl,
       pnl24h: null,
-      direction24h: netPnl === null ? "unavailable" : netPnl > 0 ? "up" : netPnl < 0 ? "down" : "flat",
+      direction24h: "unavailable",
       openPositions: status.tradingSimulation.openPositionsCount,
     },
   ];
 }
 
-export function sumKnownAccountEquity(rows: readonly FhvAdminAccountRow[]): number | null {
-  const values = rows.map((row) => parseFiniteDecimal(row.equity));
-  return values.some((value) => value === null)
-    ? null
-    : values.reduce<number>((total, value) => total + (value ?? 0), 0);
+function decimalString(value: unknown): string | null {
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
+  if (typeof value !== "string") return null;
+  return parseFiniteDecimal(value) === null ? null : value;
 }
 
+/** Retains independently identified historical virtual accounts; never accepts live/exchange data. */
+export function reduceAdminAccountEvent(
+  rows: readonly FhvAdminAccountRow[],
+  event: FhvAdminAccountEvent,
+): readonly FhvAdminAccountRow[] {
+  if (
+    event.schemaVersion !== "fhv-realtime-event/v1" ||
+    event.kind !== "account.balance" ||
+    event.source !== "HISTORICAL_SIMULATION"
+  ) return rows;
+  const accountId = typeof event.payload.accountId === "string" ? event.payload.accountId.trim() : "";
+  if (!accountId || event.payload.accountKind !== "HISTORICAL_VIRTUAL") return rows;
+  const delta24h = decimalString(event.payload.delta24h);
+  const deltaNumber = parseFiniteDecimal(delta24h);
+  const next: FhvAdminAccountRow = {
+    id: accountId,
+    label: typeof event.payload.label === "string" && event.payload.label.trim()
+      ? event.payload.label.trim()
+      : `${accountId} simulated account`,
+    cash: decimalString(event.payload.cash),
+    equity: decimalString(event.payload.equity),
+    pnl: decimalString(event.payload.netPnl),
+    pnl24h: delta24h,
+    direction24h: deltaNumber === null ? "unavailable" : deltaNumber > 0 ? "up" : deltaNumber < 0 ? "down" : "flat",
+    openPositions: typeof event.payload.openPositionsCount === "number" && Number.isInteger(event.payload.openPositionsCount)
+      ? event.payload.openPositionsCount
+      : null,
+  };
+  return [...rows.filter((row) => row.id !== accountId), next];
+}
+
+export function sumKnownAccountMetric(
+  rows: readonly FhvAdminAccountRow[],
+  field: "cash" | "equity" | "pnl" | "pnl24h",
+): number | null {
+  const values = rows.map((row) => parseFiniteDecimal(row[field]));
+  return values.length > 0 && values.every((value) => value !== null)
+    ? values.reduce<number>((total, value) => total + (value ?? 0), 0)
+    : null;
+}
+
+export function sumKnownAccountEquity(rows: readonly FhvAdminAccountRow[]): number | null {
+  return sumKnownAccountMetric(rows, "equity");
+}

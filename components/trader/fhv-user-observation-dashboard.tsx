@@ -31,8 +31,7 @@ function num(v: unknown) { return typeof v === "number" && Number.isFinite(v) ? 
 function Metric({ label, value, accent = "" }: { label: string; value: React.ReactNode; accent?: string }) { return <div className="border-border/70 bg-background/40 rounded-xl border p-4"><dt className="text-muted-foreground text-xs tracking-wide uppercase">{label}</dt><dd className={`mt-2 text-2xl font-semibold tabular-nums ${accent}`}>{value}</dd></div>; }
 function Feed({ title, items, empty }: { title: string; items: readonly Summary[]; empty: string }) { return <WaiaSurface variant="raised" className="min-h-56 p-5"><h3 className="font-medium">{title}</h3>{items.length === 0 ? <p className="text-muted-foreground mt-6 text-sm">{empty}</p> : <ol className="divide-border mt-3 divide-y">{items.slice(0, 12).map((item, i) => <li key={item.id ?? i} className="flex justify-between gap-4 py-3 text-sm"><span>{item.label ?? "Observed event"}</span><time className="text-muted-foreground shrink-0 text-xs">{item.atUtc ? new Date(item.atUtc).toLocaleTimeString() : "—"}</time></li>)}</ol>}</WaiaSurface>; }
 
-export function FhvUserObservationDashboard(): React.ReactNode {
-  const runId = useSearchParams().get("campaign_run_id")?.trim() ?? "";
+function FhvUserObservationDashboardForRun({ runId }: { runId: string }): React.ReactNode {
   const [view, dispatch] = React.useReducer(reduceFhvUserStreamEvent, EMPTY_USER_STREAM_VIEW);
   const [connected, setConnected] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -67,4 +66,10 @@ export function FhvUserObservationDashboard(): React.ReactNode {
     <div className="border-border bg-muted/10 flex flex-wrap justify-between gap-3 rounded-xl border p-4 text-xs"><span>Heartbeat: {text(view.gate.heartbeatState)}</span><span>Stream lag: {num(view.checkpoint.eventStreamLagMs) == null ? "—" : `${num(view.checkpoint.eventStreamLagMs)} ms`}</span><span>Evidence: {text(view.checkpoint.evidenceHealth)}</span><span className="text-muted-foreground">Last update: {view.observedAt ? new Date(view.observedAt).toLocaleTimeString() : "—"}</span></div>
     <p className="text-muted-foreground text-xs">Read-only historical simulation. No real HTX balance, live trading, capital or administrative controls are exposed.</p>
   </section>;
+}
+
+/** The key remount is deliberate: no state, connection error, or last event may cross run IDs. */
+export function FhvUserObservationDashboard(): React.ReactNode {
+  const runId = useSearchParams().get("campaign_run_id")?.trim() ?? "";
+  return <FhvUserObservationDashboardForRun key={runId || "awaiting-campaign"} runId={runId} />;
 }

@@ -345,9 +345,7 @@ function TradeHistoryPanel({
   );
 }
 
-export function TraderWorkspace() {
-  const searchParams = useSearchParams();
-  const observingHistoricalCampaign = Boolean(searchParams.get("campaign_run_id")?.trim());
+function ExchangeTraderWorkspace() {
   const [credentials, setCredentials] = React.useState<CredentialMetadataDto[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [connecting, setConnecting] = React.useState(false);
@@ -549,12 +547,10 @@ export function TraderWorkspace() {
         </p>
       ) : null}
 
-      <FhvUserObservationDashboard />
-
-      {!observingHistoricalCampaign && loading ? (
+      {loading ? (
         <p className="text-muted-foreground text-sm">Loading account…</p>
       ) : activeCredential ? (
-        <div className={observingHistoricalCampaign ? "hidden" : "space-y-6"}>
+        <div className="space-y-6">
           <section aria-labelledby="trader-account-heading" className="space-y-4">
             <div>
               <p className="text-muted-foreground text-xs tracking-wide uppercase">Account</p>
@@ -649,11 +645,7 @@ export function TraderWorkspace() {
           </aside>
         </div>
       ) : (
-        <div
-          className={
-            observingHistoricalCampaign ? "hidden" : "mx-auto w-full max-w-lg space-y-6"
-          }
-        >
+        <div className="mx-auto w-full max-w-lg space-y-6">
           <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
             <h2 className="text-lg font-medium">Connect HTX</h2>
             <p className="text-muted-foreground mt-1 text-sm">
@@ -721,4 +713,26 @@ export function TraderWorkspace() {
       )}
     </div>
   );
+}
+
+function HistoricalTraderWorkspace(): React.ReactNode {
+  return (
+    <div data-testid="trader-workspace" className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10">
+      <header className="border-border mb-10 border-b pb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
+          <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">Historical simulation workspace</span>
+        </div>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">AI-TRADER</h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm">Observe your tenant-scoped historical simulation automatically. No exchange credentials, real balances, live trading, or capital controls are loaded.</p>
+      </header>
+      <FhvUserObservationDashboard />
+    </div>
+  );
+}
+
+/** Historical mode is a separate component boundary so exchange effects never mount. */
+export function TraderWorkspace(): React.ReactNode {
+  const runId = useSearchParams().get("campaign_run_id")?.trim() ?? "";
+  return runId ? <HistoricalTraderWorkspace key={runId} /> : <ExchangeTraderWorkspace />;
 }

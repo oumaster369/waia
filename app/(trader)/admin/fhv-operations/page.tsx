@@ -7,7 +7,7 @@ import { FhvOperationsDashboard, type FhvChartSample } from "@/components/trader
 import { AdminErrorState, AdminLoadingState, AdminOrgSelector, useAdminOrganizations } from "@/components/trader/admin/admin-org-selector";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { buildFhvAdminStatusPath, FHV_CAMPAIGN_RUN_ID_MAX_LENGTH, FHV_CAMPAIGN_RUN_ID_PATTERN } from "@/lib/trader/fhv-campaign-run-id";
-import { connectionState, parseFiniteDecimal, parseFhvStatus } from "@/lib/trader/fhv-admin-stream-view-model";
+import { buildAdminAccountRows, connectionState, parseFiniteDecimal, parseFhvStatus, reduceAdminAccountEvent, type FhvAdminAccountEvent, type FhvAdminAccountRow } from "@/lib/trader/fhv-admin-stream-view-model";
 
 const LIVE_INTERVAL_MS = 2_000;
 const MAX_BACKOFF_MS = 15_000;
@@ -41,6 +41,7 @@ export default function FhvOperationsAdminPage() {
   const [campaignRunId, setCampaignRunId] = React.useState(() => searchParams.get("campaign_run_id")?.trim() ?? "");
   const [status, setStatus] = React.useState<Record<string, unknown> | null>(null);
   const [samples, setSamples] = React.useState<readonly FhvChartSample[]>([]);
+  const [accountRows, setAccountRows] = React.useState<readonly FhvAdminAccountRow[]>([]);
   const [requestPending, setRequestPending] = React.useState(false);
   const [consecutiveFailures, setConsecutiveFailures] = React.useState(0);
   const [pageError, setPageError] = React.useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function FhvOperationsAdminPage() {
   const resetStream = React.useCallback(() => {
     setStatus(null);
     setSamples([]);
+    setAccountRows([]);
     setPageError(null);
     setConsecutiveFailures(0);
     setLastReceivedAt(null);
@@ -97,6 +99,7 @@ export default function FhvOperationsAdminPage() {
         if (disposed || sequence !== requestSequence.current) return;
         const receivedAt = Date.now();
         setStatus(body.status);
+        setAccountRows((current) => current.length > 0 ? current : buildAdminAccountRows(parsed));
         setLastReceivedAt(receivedAt);
         setNowMs(receivedAt);
         setConsecutiveFailures(0);
@@ -123,7 +126,17 @@ export default function FhvOperationsAdminPage() {
       if (!disposed && !source) timer = window.setTimeout(fallbackPoll, LIVE_INTERVAL_MS);
     };
 
-    const scheduleSnapshot = () => {
+    const scheduleSnapshot = (raw?: Event) => {
+      if (raw instanceof MessageEvent && raw.type === "account.balance") {
+        try {
+          const event = JSON.parse(raw.data as string) as FhvAdminAccountEvent;
+          if (event.organizationId === organizationId && event.campaignRunId === trimmedRunId) {
+            setAccountRows((current) => reduceAdminAccountEvent(current, event));
+          }
+        } catch {
+          setPageError("An invalid account stream event was rejected.");
+        }
+      }
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(() => void refreshSnapshot(), 50);
     };
@@ -156,6 +169,6 @@ export default function FhvOperationsAdminPage() {
       {runError ? <AdminErrorState message={runError} /> : null}
     </WaiaSurface>
     {pageError && !status ? <AdminErrorState message={`${pageError} Reconnecting automatically…`} /> : null}
-    {status ? <FhvOperationsDashboard status={status} connectionState={streamState} lastReceivedAt={lastReceivedAt} samples={samples} /> : !runError && organizationId ? <AdminLoadingState label="Connecting to the historical-test observer…" /> : null}
+    {status ? <FhvOperationsDashboard status={status} connectionState={streamState} lastReceivedAt={lastReceivedAt} samples={samples} accountRows={accountRows} /> : !runError && organizationId ? <AdminLoadingState label="Connecting to the historical-test observer…" /> : null}
   </div>;
 }
