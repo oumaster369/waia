@@ -81,6 +81,15 @@ describe("GuardianAssessmentRepositoryV2 SQLite", () => {
     await expect(restarted.getById(requireOrgContext(crypto.randomUUID()), value.assessmentId)).resolves.toBeNull();
   });
 
+  it("converges concurrent replays to the same immutable row", async () => {
+    const context = requireOrgContext(organizationId);
+    const value = makeAssessment();
+    const repository = createSqliteGuardianAssessmentRepositoryV2(getDb());
+    const results = await Promise.all(Array.from({ length: 8 }, () => repository.append(context, value)));
+    expect(results).toEqual(Array.from({ length: 8 }, () => value));
+    await expect(repository.listByLot(context, lotId)).resolves.toEqual([value]);
+  });
+
   it("blocks update, delete and cross-tenant foreign-key substitution in the database", () => {
     const raw = getRawSqliteDatabase();
     const value = makeAssessment();

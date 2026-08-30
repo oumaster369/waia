@@ -30,6 +30,24 @@ export {
   buildProtectiveActionMandateV2,
   protectiveActionKindV2Values,
 } from "@/lib/trader/guardian/v2/protective-action-mandate-v2";
+export { runGuardianOrdinaryReductionPipelineV2 } from "@/lib/trader/guardian/v2/guardian-reduction-pipeline-v2";
+export type {
+  GuardianDecisionPortV2,
+  GuardianDecisionSealV2,
+  GuardianExecutionPortV2,
+  GuardianRealityPortV2,
+  GuardianReductionPipelinePortsV2,
+  GuardianReductionPipelineResultV2,
+  GuardianRiskPortV2,
+} from "@/lib/trader/guardian/v2/guardian-reduction-pipeline-v2";
+export {
+  buildAdminGuardianAssessmentViewV2,
+  buildTenantGuardianAssessmentViewV2,
+} from "@/lib/trader/guardian/v2/guardian-observability-v2";
+export type {
+  AdminGuardianAssessmentViewV2,
+  TenantGuardianAssessmentViewV2,
+} from "@/lib/trader/guardian/v2/guardian-observability-v2";
 export type {
   ProtectiveActionKindV2,
   ProtectiveActionMandateV2,
