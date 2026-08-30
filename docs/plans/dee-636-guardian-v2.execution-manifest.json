@@ -6,7 +6,7 @@
     "sha": "d6e09ffa3d1b93180910148c51d8c5cd6ce344cf"
   },
   "branch": "dee-636-guardian-v2",
-  "status": "p1-repair-review-pending",
+  "status": "prepublication-gates-passed",
   "riskTier": "T3",
   "dependencies": {
     "DEE-635": "Merged; Linear closure evidence pending",
@@ -47,9 +47,9 @@
   ],
   "externalEvidence": {
     "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
-    "localFocused": "P1 authority repairs pass focused tests, including exact quantity boundary, foreign attempt/report rejection, stale adjudication, and atomic SQLite concurrent/restart mandate consumption; typecheck passes.",
-    "localFullFresh": "The pre-review implementation head f8c4444e passed 898 files/5209 tests (85 files/433 environment-gated skips) in 1560.60s. A fresh literal full rerun is required after the material P1 repair before publication.",
+    "localFocused": "Exact implementation head 1164076590bb7f821d45e3db9ef779cfe492282e passes 54/54 affected Guardian/Reality/migration tests, including exact quantity boundary, foreign attempt/report rejection, stale adjudication, and atomic SQLite concurrent/restart mandate consumption; typecheck and canonical validation pass.",
+    "localFullFresh": "Exact reviewed implementation head 1164076590bb7f821d45e3db9ef779cfe492282e passed the literal fresh full suite: 898 files and 5214 tests passed; 85 files and 433 environment-gated tests skipped; zero failures; 1541.34s.",
     "postgres": "Local PostgreSQL URLs are unavailable; authoritative PostgreSQL CI remains required.",
-    "independentReview": "Head 3a08a747 review found P1=3/P2=0; head 98507bf7 closed those findings but re-review found P1=1/P2=0 for pre-expiry replay. The pipeline now requires atomic one-shot tenant/mandate consumption backed by append-only SQLite/PostgreSQL ledgers; fresh exact-head re-review is pending."
+    "independentReview": "Fresh independent exact-head review at 1164076590bb7f821d45e3db9ef779cfe492282e found P1=0/P2=0 and independently passed 21/21 focused tests. It confirmed atomic one-shot tenant/mandate consumption and preservation of quantity, attempt/report, expiry and TIGHTEN_PROTECTION fail-closed invariants."
   }
 }
