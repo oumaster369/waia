@@ -11,6 +11,9 @@ import {
   type RuntimeControlLeaseClaimV2,
   type RuntimeControlLeaseRepositoryV2,
 } from "./runtime-authority-repository-v2";
+import { serializeRuntimeAuthorityAssessmentV2 } from "./runtime-authority-assessment-v2";
+import { RuntimeAuthorityPersistenceConflictV2 } from "./runtime-authority-repository-v2";
+import type { RuntimeAuthorityStartupWriterV2 } from "./runtime-authority-startup-service-v2";
 
 function mapHead(row: typeof pgSchema.traderRuntimeControlLeaseHeadsV2.$inferSelect): RuntimeControlLeaseClaimV2 {
   return Object.freeze({
@@ -22,6 +25,38 @@ function mapHead(row: typeof pgSchema.traderRuntimeControlLeaseHeadsV2.$inferSel
     adjudicatedAtUtc: "",
     expectedPreviousDigest: null,
   });
+}
+
+export function createPostgresRuntimeAuthorityStartupWriterV2(db: WaiaPostgresDb): RuntimeAuthorityStartupWriterV2 {
+  return {
+    async commitAssessment(context, assessment) {
+      if (assessment.organizationId !== context.organizationId) throw new Error("RUNTIME_AUTHORITY_TENANT_MISMATCH");
+      const canonicalJson = serializeRuntimeAuthorityAssessmentV2(assessment);
+      return db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${assessment.organizationId}, 637))`);
+        const heads = await tx.select().from(pgSchema.traderRuntimeControlLeaseHeadsV2)
+          .where(eq(pgSchema.traderRuntimeControlLeaseHeadsV2.organizationId, assessment.organizationId)).limit(1);
+        const head = heads[0];
+        const now = Date.parse(assessment.adjudicatedAtUtc);
+        if (!head || head.runtimeInstanceId !== assessment.runtimeInstanceId ||
+          head.leaseEpoch !== assessment.controlLeaseEpoch || head.contentDigest !== assessment.controlLeaseContentDigest ||
+          !Number.isFinite(now) || now > Date.parse(head.validUntilUtc)) {
+          throw new Error("RUNTIME_CONTROL_LEASE_STALE_HOLDER");
+        }
+        await tx.insert(pgSchema.traderRuntimeAuthorityAssessmentsV2).values({
+          assessmentId: assessment.assessmentId, organizationId: assessment.organizationId,
+          runtimeInstanceId: assessment.runtimeInstanceId, posture: assessment.posture,
+          contentDigest: assessment.contentDigest, canonicalJson, adjudicatedAtUtc: assessment.adjudicatedAtUtc,
+        }).onConflictDoNothing();
+        const rows = await tx.select().from(pgSchema.traderRuntimeAuthorityAssessmentsV2)
+          .where(eq(pgSchema.traderRuntimeAuthorityAssessmentsV2.assessmentId, assessment.assessmentId)).limit(1);
+        if (!rows[0] || rows[0].organizationId !== context.organizationId || rows[0].canonicalJson !== canonicalJson) {
+          throw new RuntimeAuthorityPersistenceConflictV2();
+        }
+        return assessment;
+      });
+    },
+  };
 }
 
 export function createPostgresRuntimeControlLeaseRepositoryV2(db: WaiaPostgresDb): RuntimeControlLeaseRepositoryV2 {

@@ -21,6 +21,7 @@ import {
   type RuntimeControlLeaseRepositoryV2,
   type RuntimeAuthorityAssessmentRepositoryV2,
 } from "./runtime-authority-repository-v2";
+import type { RuntimeAuthorityStartupWriterV2 } from "./runtime-authority-startup-service-v2";
 
 function mapRow(row: typeof traderRuntimeAuthorityAssessmentsV2.$inferSelect): RuntimeAuthorityAssessmentV2 {
   const value = parseRuntimeAuthorityAssessmentV2(row.canonicalJson);
@@ -112,6 +113,44 @@ export function createSqliteRuntimeControlLeaseRepositoryV2(
       if (!row || row.runtime_instance_id !== value.runtimeInstanceId || row.lease_epoch !== value.leaseEpoch ||
         row.content_digest !== value.leaseContentDigest || !Number.isFinite(trustedNow) || trustedNow > Date.parse(row.valid_until_utc)) {
         throw new Error("RUNTIME_CONTROL_LEASE_STALE_HOLDER");
+      }
+    },
+  };
+}
+
+/** Atomic startup write: lease fencing and append occur under the same IMMEDIATE lock. */
+export function createSqliteRuntimeAuthorityStartupWriterV2(
+  sqlite: Database.Database,
+  testing?: { afterLeaseCheck?: () => void },
+): RuntimeAuthorityStartupWriterV2 {
+  const selectHead = sqlite.prepare("SELECT runtime_instance_id, lease_epoch, content_digest, valid_until_utc FROM trader_runtime_control_lease_heads_v2 WHERE organization_id = ?");
+  const insert = sqlite.prepare(`INSERT OR IGNORE INTO trader_runtime_authority_assessments_v2
+    (assessment_id, organization_id, runtime_instance_id, posture, content_digest, canonical_json, adjudicated_at_utc, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const select = sqlite.prepare("SELECT canonical_json FROM trader_runtime_authority_assessments_v2 WHERE organization_id = ? AND assessment_id = ?");
+  return {
+    async commitAssessment(context, assessment) {
+      if (assessment.organizationId !== context.organizationId) throw new Error("RUNTIME_AUTHORITY_TENANT_MISMATCH");
+      const canonical = serializeRuntimeAuthorityAssessmentV2(assessment);
+      sqlite.exec("BEGIN IMMEDIATE");
+      try {
+        const head = selectHead.get(context.organizationId) as Omit<LeaseHeadRow, "organization_id"> | undefined;
+        const now = Date.parse(assessment.adjudicatedAtUtc);
+        if (!head || head.runtime_instance_id !== assessment.runtimeInstanceId ||
+          head.lease_epoch !== assessment.controlLeaseEpoch || head.content_digest !== assessment.controlLeaseContentDigest ||
+          !Number.isFinite(now) || now > Date.parse(head.valid_until_utc)) {
+          throw new Error("RUNTIME_CONTROL_LEASE_STALE_HOLDER");
+        }
+        testing?.afterLeaseCheck?.();
+        insert.run(assessment.assessmentId, assessment.organizationId, assessment.runtimeInstanceId,
+          assessment.posture, assessment.contentDigest, canonical, assessment.adjudicatedAtUtc, now);
+        const stored = select.get(context.organizationId, assessment.assessmentId) as { canonical_json: string } | undefined;
+        if (!stored || stored.canonical_json !== canonical) throw new RuntimeAuthorityPersistenceConflictV2();
+        sqlite.exec("COMMIT");
+        return assessment;
+      } catch (error) {
+        if (sqlite.inTransaction) sqlite.exec("ROLLBACK");
+        throw error;
       }
     },
   };
