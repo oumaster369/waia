@@ -120,6 +120,31 @@ describe("HTR-WP10 lifecycle determinism", () => {
     expect(first.trades[0]?.id).toBe("00000000-0000-4000-8000-000000920001");
   });
 
+  it("propagates persisted opening lineage bytes and digest into the trade and lot", () => {
+    const orgId = "00000000-0000-4000-8000-0000000410l";
+    const lineageJson = '{"schemaVersion":"opening-causal-lineage-v1","symbol":"BTC/USDT"}';
+    const lineageDigest = "a".repeat(64);
+    const order = makeOrder(orgId, {
+      id: "order-lineage",
+      side: "buy",
+      openingCausalLineageJson: lineageJson,
+      openingCausalLineageDigest: lineageDigest,
+    });
+    const fill = makeFill(orgId, { id: "fill-lineage", orderId: order.id });
+    const snapshot = deriveTradesFromFills({
+      organizationId: orgId,
+      strategySignalId: "sig-1",
+      fillEvents: [{ order, fill }],
+      newId: createDeterministicReplayIdFactory(925_000),
+      now: new Date(RESEARCH_REPLAY_CLOCK_START_MS),
+    });
+
+    expect(snapshot.trades[0]?.openingCausalLineageJson).toBe(lineageJson);
+    expect(snapshot.trades[0]?.openingCausalLineageDigest).toBe(lineageDigest);
+    expect(snapshot.lots[0]?.openingCausalLineageJson).toBe(lineageJson);
+    expect(snapshot.lots[0]?.openingCausalLineageDigest).toBe(lineageDigest);
+  });
+
   it("lifecycle recorder buy/sell uses injected nowMs for frozenAt", async () => {
     const orgId = seedDb();
     const db = getDb();

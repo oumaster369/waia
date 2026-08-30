@@ -6,10 +6,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import * as pgSchema from "@/db/schema.postgres";
-import {
-  runWaiaPostgresTransaction,
-  type WaiaPostgresDb,
-} from "@/db/waia-postgres-transaction";
+import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   createExecutionAttemptV2,
   createExecutionPlanV2,
@@ -17,6 +14,7 @@ import {
   type ExecutionPlanV2,
 } from "@/lib/trader/execution/v2/contracts";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { parseOpeningCausalLineageV1 } from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 import {
   bindExecutionAuthorityV2Postgres,
   dispatchCommittedExecutionAttemptV2,
@@ -68,11 +66,13 @@ function account(accountId: string) {
     realitySnapshotId: `reality-${accountId}`,
     realityContentDigestHex: hex64(`reality-${accountId}`),
     reconciliationAuthorityDigestHex: hex64(`reconciliation-${accountId}`),
-    reconciledInstrumentExposures: [{
-      instrumentIdentityDigestHex: hex64("BTCUSDT-SPOT"),
-      symbol: "BTCUSDT",
-      baseQuantity: "0",
-    }],
+    reconciledInstrumentExposures: [
+      {
+        instrumentIdentityDigestHex: hex64("BTCUSDT-SPOT"),
+        symbol: "BTCUSDT",
+        baseQuantity: "0",
+      },
+    ],
     accounting: {
       reconciledExposureNotional: "0",
       worstCasePendingExposureNotional: "0",
@@ -104,6 +104,9 @@ function admission(accountId: string): AdmitRiskAllowanceV2Input {
         action: "ENTER_LONG",
         economicSizeSetId: "decision-execution-v2-sizes",
         economicSizeSetDigestHex: hex64("decision-execution-v2-sizes"),
+        forecastId: "forecast-execution-v2",
+        forecastContentDigestHex: hex64("forecast-execution-v2"),
+        canonicalCausalLineageDigestHex: hex64("causal-lineage-execution-v2"),
       },
       riskPolicyVersion: "risk-v2-integration",
       riskPolicyDigestHex: hex64("risk-v2-integration"),
@@ -260,26 +263,30 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       sealedAtUtc: "2026-08-21T00:00:00.000Z",
     });
     const orderId = uuid(667_203);
-    const consumed = await consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, {
-      accountId,
-      riskAllowanceId: allowance.riskAllowanceId,
-      nonce: allowance.nonce,
-      consumptionEventId: uuid(667_204),
-      order: {
-        id: orderId,
-        executionMode: "paper",
-        symbol: "BTCUSDT",
-        side: "buy",
-        type: "limit",
-        price: "25000",
-        quantity: "0.001",
-        clientOrderId: "legacy-placeholder",
-        idempotencyKey: `execution-v2-${plan.contentDigestHex}`,
-        strategySignalId: null,
-        allocationDecisionId: null,
-        credentialId: null,
+    const consumed = await consumeRiskAllowanceForOrderV2Postgres(
+      db,
+      { organizationId: orgA },
+      {
+        accountId,
+        riskAllowanceId: allowance.riskAllowanceId,
+        nonce: allowance.nonce,
+        consumptionEventId: uuid(667_204),
+        order: {
+          id: orderId,
+          executionMode: "paper",
+          symbol: "BTCUSDT",
+          side: "buy",
+          type: "limit",
+          price: "25000",
+          quantity: "0.001",
+          clientOrderId: "legacy-placeholder",
+          idempotencyKey: `execution-v2-${plan.contentDigestHex}`,
+          strategySignalId: null,
+          allocationDecisionId: null,
+          credentialId: null,
+        },
       },
-    });
+    );
     expect(consumed.status).toBe("CONSUMED");
     const attempt = createExecutionAttemptV2({
       executionAttemptId: uuid(667_205),
@@ -291,16 +298,21 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     await insertExecutionPolicyV2Postgres(db, { organizationId: orgA }, policy);
     await runWaiaPostgresTransaction(db, async (tx) => {
       await insertExecutionPlanV2Postgres(tx, { organizationId: orgA }, plan);
-      await tx.update(pgSchema.traderOrders).set({
-        clientOrderId: attempt.clientOrderId,
-        executionPlanId: plan.executionPlanId,
-        executionPlanDigest: plan.contentDigestHex,
-        executionAttemptId: attempt.executionAttemptId,
-        executionAttemptDigest: attempt.contentDigestHex,
-      }).where(and(
-        eq(pgSchema.traderOrders.id, orderId),
-        eq(pgSchema.traderOrders.organizationId, orgA),
-      ));
+      await tx
+        .update(pgSchema.traderOrders)
+        .set({
+          clientOrderId: attempt.clientOrderId,
+          executionPlanId: plan.executionPlanId,
+          executionPlanDigest: plan.contentDigestHex,
+          executionAttemptId: attempt.executionAttemptId,
+          executionAttemptDigest: attempt.contentDigestHex,
+        })
+        .where(
+          and(
+            eq(pgSchema.traderOrders.id, orderId),
+            eq(pgSchema.traderOrders.organizationId, orgA),
+          ),
+        );
       await insertExecutionAttemptV2Postgres(tx, { organizationId: orgA }, attempt);
     });
     return { accountId, allowance, attempt, plan, policy };
@@ -381,32 +393,55 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
 
   it("persists tenant-scoped immutable authority and a raw append-only report chain", async () => {
     const { accountId, attempt } = await persistAuthority();
-    expect(await readExecutionAttemptV2Postgres(db, { organizationId: orgA }, attempt.executionAttemptId))
-      .toEqual(attempt);
-    expect(await readExecutionAttemptV2Postgres(db, { organizationId: orgB }, attempt.executionAttemptId))
-      .toBeNull();
+    expect(
+      await readExecutionAttemptV2Postgres(
+        db,
+        { organizationId: orgA },
+        attempt.executionAttemptId,
+      ),
+    ).toEqual(attempt);
+    expect(
+      await readExecutionAttemptV2Postgres(
+        db,
+        { organizationId: orgB },
+        attempt.executionAttemptId,
+      ),
+    ).toBeNull();
 
-    const first = await appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
-      executionReportId: uuid(667_301),
-      accountId,
-      executionAttemptId: attempt.executionAttemptId,
-      reportType: "ATTEMPT_BOUND",
-      source: "EXECUTION",
-      rawObservation: { committed: true },
-      observedAtUtc: "2026-08-21T00:00:00.002Z",
-    });
-    const second = await appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
-      executionReportId: uuid(667_302),
-      accountId,
-      executionAttemptId: attempt.executionAttemptId,
-      reportType: "CONNECTOR_UNCERTAIN",
-      source: "CONNECTOR",
-      rawObservation: { timeout: true, body: null },
-      observedAtUtc: "2026-08-21T00:00:05.000Z",
-    });
+    const first = await appendExecutionReportV2Postgres(
+      db,
+      { organizationId: orgA },
+      {
+        executionReportId: uuid(667_301),
+        accountId,
+        executionAttemptId: attempt.executionAttemptId,
+        reportType: "ATTEMPT_BOUND",
+        source: "EXECUTION",
+        rawObservation: { committed: true },
+        observedAtUtc: "2026-08-21T00:00:00.002Z",
+      },
+    );
+    const second = await appendExecutionReportV2Postgres(
+      db,
+      { organizationId: orgA },
+      {
+        executionReportId: uuid(667_302),
+        accountId,
+        executionAttemptId: attempt.executionAttemptId,
+        reportType: "CONNECTOR_UNCERTAIN",
+        source: "CONNECTOR",
+        rawObservation: { timeout: true, body: null },
+        observedAtUtc: "2026-08-21T00:00:05.000Z",
+      },
+    );
     expect(second.previousReportDigestHex).toBe(first.contentDigestHex);
-    expect(await listExecutionReportsV2Postgres(db, { organizationId: orgA }, attempt.executionAttemptId))
-      .toEqual([first, second]);
+    expect(
+      await listExecutionReportsV2Postgres(
+        db,
+        { organizationId: orgA },
+        attempt.executionAttemptId,
+      ),
+    ).toEqual([first, second]);
     await expect(sql`
       UPDATE trader_execution_reports_v2 SET raw_observation = '{}'::jsonb
       WHERE id = ${first.executionReportId}::uuid
@@ -425,11 +460,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       observedAtUtc: "2026-08-21T00:00:00.002Z",
       lifecycleState: "FILLED",
     } as const;
-    await appendExecutionReportV2Postgres(
-      db,
-      { organizationId: orgA },
-      forgedProjection,
-    );
+    await appendExecutionReportV2Postgres(db, { organizationId: orgA }, forgedProjection);
     const projection = await readExecutionAttemptProjectionV2Postgres(
       db,
       { organizationId: orgA },
@@ -440,15 +471,19 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
 
   it("refuses caller-labeled terminal reports without exact matching raw evidence", async () => {
     const { accountId, attempt } = await persistAuthority();
-    await appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
-      executionReportId: uuid(667_304),
-      accountId,
-      executionAttemptId: attempt.executionAttemptId,
-      reportType: "SUBMIT_STARTED",
-      source: "EXECUTION",
-      rawObservation: { effectIdentityDigestHex: attempt.effectIdentityDigestHex },
-      observedAtUtc: "2026-08-21T00:00:00.002Z",
-    });
+    await appendExecutionReportV2Postgres(
+      db,
+      { organizationId: orgA },
+      {
+        executionReportId: uuid(667_304),
+        accountId,
+        executionAttemptId: attempt.executionAttemptId,
+        reportType: "SUBMIT_STARTED",
+        source: "EXECUTION",
+        rawObservation: { effectIdentityDigestHex: attempt.effectIdentityDigestHex },
+        observedAtUtc: "2026-08-21T00:00:00.002Z",
+      },
+    );
     const openOrder = {
       orderId: "venue-order-forged-terminal",
       clientOrderId: attempt.clientOrderId,
@@ -460,32 +495,44 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       quantity: attempt.exactRequestPayload.quantity,
       filledQuantity: "0",
     };
-    await expect(appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
-      executionReportId: uuid(667_305),
-      accountId,
-      executionAttemptId: attempt.executionAttemptId,
-      reportType: "VENUE_REJECTED",
-      source: "CONNECTOR",
-      rawObservation: { order: openOrder },
-      venueOrderId: openOrder.orderId,
-      observedAtUtc: "2026-08-21T00:00:00.003Z",
-    })).rejects.toThrow(/exact bound order evidence/);
-    await expect(appendExecutionReportV2Postgres(db, { organizationId: orgA }, {
-      executionReportId: uuid(667_306),
-      accountId,
-      executionAttemptId: attempt.executionAttemptId,
-      reportType: "FILL_REPORT_OBSERVED",
-      source: "CONNECTOR",
-      rawObservation: {
-        order: {
-          ...openOrder,
-          status: "filled",
-          filledQuantity: attempt.exactRequestPayload.quantity,
+    await expect(
+      appendExecutionReportV2Postgres(
+        db,
+        { organizationId: orgA },
+        {
+          executionReportId: uuid(667_305),
+          accountId,
+          executionAttemptId: attempt.executionAttemptId,
+          reportType: "VENUE_REJECTED",
+          source: "CONNECTOR",
+          rawObservation: { order: openOrder },
+          venueOrderId: openOrder.orderId,
+          observedAtUtc: "2026-08-21T00:00:00.003Z",
         },
-      },
-      venueOrderId: openOrder.orderId,
-      observedAtUtc: "2026-08-21T00:00:00.004Z",
-    })).rejects.toThrow(/exact raw trade evidence/);
+      ),
+    ).rejects.toThrow(/exact bound order evidence/);
+    await expect(
+      appendExecutionReportV2Postgres(
+        db,
+        { organizationId: orgA },
+        {
+          executionReportId: uuid(667_306),
+          accountId,
+          executionAttemptId: attempt.executionAttemptId,
+          reportType: "FILL_REPORT_OBSERVED",
+          source: "CONNECTOR",
+          rawObservation: {
+            order: {
+              ...openOrder,
+              status: "filled",
+              filledQuantity: attempt.exactRequestPayload.quantity,
+            },
+          },
+          venueOrderId: openOrder.orderId,
+          observedAtUtc: "2026-08-21T00:00:00.004Z",
+        },
+      ),
+    ).rejects.toThrow(/exact raw trade evidence/);
     const projection = await readExecutionAttemptProjectionV2Postgres(
       db,
       { organizationId: orgA },
@@ -505,7 +552,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(metadata).toHaveLength(4);
     expect(metadata.every((row) => row.relrowsecurity)).toBe(true);
 
-    await sql.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${executionTables.join(", ")} TO authenticated, anon`);
+    await sql.unsafe(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ${executionTables.join(", ")} TO authenticated, anon`,
+    );
     try {
       for (const role of ["authenticated", "anon"] as const) {
         const roleSql = postgres(url!, { max: 1 });
@@ -513,13 +562,17 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
           await roleSql.unsafe(`SET ROLE ${role}`);
           for (const table of executionTables) {
             await expect(roleSql.unsafe(`SELECT * FROM ${table}`)).resolves.toEqual([]);
-            await expect(roleSql.unsafe(
-              `UPDATE ${table} SET organization_id = organization_id RETURNING organization_id`,
-            )).resolves.toEqual([]);
-            await expect(roleSql.unsafe(`DELETE FROM ${table} RETURNING organization_id`))
-              .resolves.toEqual([]);
+            await expect(
+              roleSql.unsafe(
+                `UPDATE ${table} SET organization_id = organization_id RETURNING organization_id`,
+              ),
+            ).resolves.toEqual([]);
+            await expect(
+              roleSql.unsafe(`DELETE FROM ${table} RETURNING organization_id`),
+            ).resolves.toEqual([]);
           }
-          await expect(roleSql.unsafe(`
+          await expect(
+            roleSql.unsafe(`
             INSERT INTO trader_execution_policies_v2 (
               id, organization_id, policy_version, decision_id, decision_content_digest,
               decision_execution_policy_digest, economic_size_set_digest, venue, market,
@@ -534,9 +587,12 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
               'RECONCILIATION_REQUIRED', now(), now() + interval '1 minute',
               '${hex64("d5")}', '${hex64("d6")}', 'execution-policy-binding/v2'
             )
-          `)).rejects.toThrow(/row-level security/);
+          `),
+          ).rejects.toThrow(/row-level security/);
         } finally {
-          try { await roleSql.unsafe("RESET ROLE"); } catch {}
+          try {
+            await roleSql.unsafe("RESET ROLE");
+          } catch {}
           await roleSql.end({ timeout: 5 });
         }
       }
@@ -556,7 +612,21 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(outcomes.filter((value) => value.consumedNow)).toHaveLength(1);
     expect(outcomes[0]?.plan.contentDigestHex).toBe(outcomes[1]?.plan.contentDigestHex);
     expect(outcomes[0]?.attempt).toEqual(outcomes[1]?.attempt);
-    const counts = await sql<{ order_count: string; attempt_count: string; report_count: string }[]>`
+    expect(outcomes[0]?.order.openingCausalLineageJson).toBeTruthy();
+    const openingLineage = parseOpeningCausalLineageV1(
+      outcomes[0]!.order.openingCausalLineageJson!,
+    );
+    expect(openingLineage).toMatchObject({
+      forecastId: input.allowance.decision.forecastId,
+      forecastContentDigest: input.allowance.decision.forecastContentDigestHex,
+      canonicalCausalLineageDigest: input.allowance.decision.canonicalCausalLineageDigestHex,
+      decisionId: input.allowance.decision.decisionId,
+      riskAllowanceId: input.allowance.riskAllowanceId,
+    });
+    expect(outcomes[0]?.order.openingCausalLineageDigest).toBe(openingLineage.contentDigest);
+    const counts = await sql<
+      { order_count: string; attempt_count: string; report_count: string }[]
+    >`
       SELECT
         (SELECT count(*)::text FROM trader_orders
           WHERE organization_id = ${orgA}::uuid
@@ -568,10 +638,12 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
           WHERE organization_id = ${orgA}::uuid) AS report_count
     `;
     expect(counts[0]).toEqual({ order_count: "1", attempt_count: "1", report_count: "3" });
-    const riskState = await sql<{
-      outstanding: string;
-      pending: string;
-    }[]>`
+    const riskState = await sql<
+      {
+        outstanding: string;
+        pending: string;
+      }[]
+    >`
       SELECT outstanding_reservation_notional::text AS outstanding,
         worst_case_pending_exposure_notional::text AS pending
       FROM trader_risk_account_state_v2
@@ -615,11 +687,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       policy: input.policy,
       approvedNotionalCeiling: "250",
     });
-    await expect(insertExecutionPlanV2Postgres(
-      db,
-      { organizationId: orgA },
-      forgedPlan,
-    )).rejects.toThrow(/locked Risk allowance/);
+    await expect(
+      insertExecutionPlanV2Postgres(db, { organizationId: orgA }, forgedPlan),
+    ).rejects.toThrow(/locked Risk allowance/);
   });
 
   it("refuses a self-consistent plan whose exact effect exceeds its claimed ceiling", async () => {
@@ -650,11 +720,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       contentDigestHex: computeStableJsonDigest({ ...forgedPayload, semanticDigestHex }),
     } as ExecutionPlanV2;
 
-    await expect(insertExecutionPlanV2Postgres(
-      db,
-      { organizationId: orgA },
-      forgedPlan,
-    )).rejects.toThrow(/stored Execution policy or notional authority/);
+    await expect(
+      insertExecutionPlanV2Postgres(db, { organizationId: orgA }, forgedPlan),
+    ).rejects.toThrow(/stored Execution policy or notional authority/);
   });
 
   it("reconstructs the complete durable effect binding before any network call", async () => {
@@ -665,15 +733,17 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid
     `;
     let networkCalls = 0;
-    await expect(dispatchCommittedExecutionAttemptV2(
-      db,
-      { organizationId: orgA },
-      bound.attempt.executionAttemptId,
-      async () => {
-        networkCalls += 1;
-        return { forbidden: true };
-      },
-    )).rejects.toThrow(/INCOMPLETE_DURABLE_EFFECT_BINDING/);
+    await expect(
+      dispatchCommittedExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          networkCalls += 1;
+          return { forbidden: true };
+        },
+      ),
+    ).rejects.toThrow(/INCOMPLETE_DURABLE_EFFECT_BINDING/);
     expect(networkCalls).toBe(0);
   });
 
@@ -692,15 +762,17 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
     await sql`select pg_sleep(1.2)`;
     let networkCalls = 0;
-    await expect(dispatchCommittedExecutionAttemptV2(
-      db,
-      { organizationId: orgA },
-      bound.attempt.executionAttemptId,
-      async () => {
-        networkCalls += 1;
-        return { forbidden: true };
-      },
-    )).rejects.toThrow(/EXECUTION_WINDOW_CLOSED/);
+    await expect(
+      dispatchCommittedExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          networkCalls += 1;
+          return { forbidden: true };
+        },
+      ),
+    ).rejects.toThrow(/EXECUTION_WINDOW_CLOSED/);
     expect(networkCalls).toBe(0);
   });
 
@@ -788,14 +860,17 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       UPDATE trader_risk_account_state_v2 SET kill_state = 'TRIPPED'
       WHERE organization_id = ${orgA}::uuid AND account_id = ${input.allowance.accountId}
     `;
-    await expect(bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input))
-      .rejects.toThrow(/CURRENT_AUTHORITY_BINDING_MISMATCH/);
-    const rows = await sql<{
-      lifecycle_state: string;
-      plan_count: string;
-      order_count: string;
-      attempt_count: string;
-    }[]>`
+    await expect(
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+    ).rejects.toThrow(/CURRENT_AUTHORITY_BINDING_MISMATCH/);
+    const rows = await sql<
+      {
+        lifecycle_state: string;
+        plan_count: string;
+        order_count: string;
+        attempt_count: string;
+      }[]
+    >`
       SELECT a.lifecycle_state,
         (SELECT count(*)::text FROM trader_execution_plans_v2
           WHERE organization_id = ${orgA}::uuid) AS plan_count,
@@ -826,11 +901,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         childSlices: [{ sequence: 1, quantity: "0.001", limitPrice: "26000" }],
       },
     } as BindExecutionAuthorityV2Input;
-    await expect(bindExecutionAuthorityV2Postgres(
-      db,
-      { organizationId: orgA },
-      forgedInput,
-    )).rejects.toThrow(/locked Risk allowance|EFFECT_NOTIONAL_EXCEEDS_ALLOWANCE_RESERVATION/);
+    await expect(
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, forgedInput),
+    ).rejects.toThrow(/locked Risk allowance|EFFECT_NOTIONAL_EXCEEDS_ALLOWANCE_RESERVATION/);
     const counts = await sql<{ plans: string; orders: string; attempts: string }[]>`
       SELECT
         (SELECT count(*)::text FROM trader_execution_plans_v2
@@ -897,7 +970,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       db,
       { organizationId: orgA },
       bound.attempt.executionAttemptId,
-      async () => { throw unknownState; },
+      async () => {
+        throw unknownState;
+      },
     );
     expect(result.status).toBe("RECONCILIATION_REQUIRED");
     const reports = await listExecutionReportsV2Postgres(
@@ -992,26 +1067,28 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
       async () => ({
         order,
-        trades: [{
-          tradeId: "htx-trade-over-notional",
-          orderId: order.orderId,
-          clientOrderId: bound.attempt.clientOrderId,
-          symbol: bound.attempt.exactRequestPayload.symbol,
-          side: bound.attempt.exactRequestPayload.side,
-          price: "26000",
-          quantity: bound.attempt.exactRequestPayload.quantity,
-          fee: "0.01",
-          feeAsset: "USDT",
-          executedAt: "2026-08-21T00:00:01.000Z",
-          rawVenueObservation: {
-            "trade-id": "htx-trade-over-notional",
-            "order-id": order.orderId,
+        trades: [
+          {
+            tradeId: "htx-trade-over-notional",
+            orderId: order.orderId,
+            clientOrderId: bound.attempt.clientOrderId,
+            symbol: bound.attempt.exactRequestPayload.symbol,
+            side: bound.attempt.exactRequestPayload.side,
             price: "26000",
-            "filled-amount": bound.attempt.exactRequestPayload.quantity,
-            "filled-fees": "0.01",
-            "fee-currency": "usdt",
+            quantity: bound.attempt.exactRequestPayload.quantity,
+            fee: "0.01",
+            feeAsset: "USDT",
+            executedAt: "2026-08-21T00:00:01.000Z",
+            rawVenueObservation: {
+              "trade-id": "htx-trade-over-notional",
+              "order-id": order.orderId,
+              price: "26000",
+              "filled-amount": bound.attempt.exactRequestPayload.quantity,
+              "filled-fees": "0.01",
+              "fee-currency": "usdt",
+            },
           },
-        }],
+        ],
         raw: { state: "filled", price: "25000", filledAmount: "0.001" },
       }),
     );
@@ -1022,13 +1099,15 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
     );
     expect(reports.at(-2)?.rawObservation).toMatchObject({
-      trades: [{
-        tradeId: "htx-trade-over-notional",
-        rawVenueObservation: {
-          "trade-id": "htx-trade-over-notional",
-          price: "26000",
+      trades: [
+        {
+          tradeId: "htx-trade-over-notional",
+          rawVenueObservation: {
+            "trade-id": "htx-trade-over-notional",
+            price: "26000",
+          },
         },
-      }],
+      ],
     });
   });
 
@@ -1051,18 +1130,20 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
       async () => ({
         order: partialOrder,
-        trades: [{
-          tradeId: "htx-trade-partial",
-          orderId: partialOrder.orderId,
-          clientOrderId: bound.attempt.clientOrderId,
-          symbol: bound.attempt.exactRequestPayload.symbol,
-          side: bound.attempt.exactRequestPayload.side,
-          price: "25000",
-          quantity: "0.0005",
-          fee: "0.01",
-          feeAsset: "USDT",
-          executedAt: "2026-08-21T00:00:01.000Z",
-        }],
+        trades: [
+          {
+            tradeId: "htx-trade-partial",
+            orderId: partialOrder.orderId,
+            clientOrderId: bound.attempt.clientOrderId,
+            symbol: bound.attempt.exactRequestPayload.symbol,
+            side: bound.attempt.exactRequestPayload.side,
+            price: "25000",
+            quantity: "0.0005",
+            fee: "0.01",
+            feeAsset: "USDT",
+            executedAt: "2026-08-21T00:00:01.000Z",
+          },
+        ],
         raw: { status: "partial" },
       }),
     );

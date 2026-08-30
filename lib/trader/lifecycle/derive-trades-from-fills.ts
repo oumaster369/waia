@@ -32,6 +32,8 @@ function lineageFromOrder(order: OrderRow, strategySignal?: StrategySignal): Tra
     signalConfidence: strategySignal?.confidence ?? null,
     openingMsvId: strategySignal?.msvId ?? null,
     openingFeatureSetId: strategySignal?.featureSetId ?? null,
+    openingCausalLineageJson: order.openingCausalLineageJson ?? null,
+    openingCausalLineageDigest: order.openingCausalLineageDigest ?? null,
   };
 }
 

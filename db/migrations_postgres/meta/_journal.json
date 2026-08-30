@@ -1233,6 +1233,41 @@
       "when": 1780000000175,
       "tag": "0175_waia_admin_hr_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1780000000176,
+      "tag": "0176_dee635_order_opening_causal_lineage",
+      "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "7",
+      "when": 1780000000177,
+      "tag": "0177_dee635_lifecycle_opening_causal_lineage",
+      "breakpoints": true
+    },
+    {
+      "idx": 178,
+      "version": "7",
+      "when": 1780000000178,
+      "tag": "0178_dee635_risk_causal_projection",
+      "breakpoints": true
+    },
+    {
+      "idx": 179,
+      "version": "7",
+      "when": 1780000000179,
+      "tag": "0179_dee635_execution_plan_causal_projection",
+      "breakpoints": true
+    },
+    {
+      "idx": 180,
+      "version": "7",
+      "when": 1780000000180,
+      "tag": "0180_dee635_trade_leg_reference_guards",
+      "breakpoints": true
     }
   ]
 }

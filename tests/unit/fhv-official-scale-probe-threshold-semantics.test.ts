@@ -11,6 +11,7 @@ import {
   evaluateFhvOfficialScaleTimeFeasibility,
   MAX_PROJECTED_FULL_CORPUS_RUNTIME_S,
   MIN_THROUGHPUT_CPS,
+  resolveFhvHistoricalExecutionInstrument,
   resolveProbeTargetCps,
 } from "@/tests/fhv/official-scale/blocking/fhv-official-scale-harness";
 import { FHV_OFFICIAL_TOTAL_BARS } from "@/lib/trader/market-data/fhv-official-scale-corpus";
@@ -134,6 +135,23 @@ describe("FHV official-scale probe threshold semantics (plan §8 / Phase 10)", (
     expect(metrics.probeTargetCps).toBe(1000);
     expect(metrics.probeTargetPass).toBe(false);
     expect(metrics.probeGateClassification).not.toBe("BLOCKED_BY_CI_SCALE_TIME_FEASIBILITY");
+  });
+});
+
+describe("FHV historical Execution V2 instrument boundary", () => {
+  it.each([
+    ["BTC/USDT", "BTCUSDT", "BTC"],
+    ["ETH/USDT", "ETHUSDT", "ETH"],
+  ])("normalizes %s for Risk/Execution while retaining research notation", (
+    historicalSymbol,
+    venueSymbol,
+    baseAsset,
+  ) => {
+    expect(resolveFhvHistoricalExecutionInstrument(historicalSymbol)).toEqual({
+      historicalSymbol,
+      venueSymbol,
+      baseAsset,
+    });
   });
 });
 

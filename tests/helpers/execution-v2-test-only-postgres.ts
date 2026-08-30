@@ -143,6 +143,10 @@ export const postgresTestOnlyExecutionV2Authority: TestOnlyExecutionV2AuthorityP
           decisionId: request.decision.decisionId,
           semanticDigestHex: request.decision.semanticDigestHex,
           contentDigestHex: request.decision.contentDigestHex,
+          forecastId: request.decision.forecastId,
+          forecastContentDigestHex: request.decision.forecastContentDigestHex,
+          canonicalCausalLineageDigestHex:
+            request.decision.canonicalCausalLineageDigestHex,
           action: "ENTER_LONG",
           economicSizeSetId: request.decision.economicSizeSetId,
           economicSizeSetDigestHex: request.decision.economicSizeSetDigestHex,

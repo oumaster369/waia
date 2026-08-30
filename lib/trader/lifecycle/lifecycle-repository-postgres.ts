@@ -27,6 +27,7 @@ import type {
   TradeRow,
 } from "@/lib/trader/lifecycle/trade-lifecycle.types";
 import { isTerminalTradeState } from "@/lib/trader/lifecycle/trade-lifecycle.types";
+import { assertLifecycleOpeningCausalLineage } from "@/lib/trader/lifecycle/assert-opening-causal-lineage";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -60,6 +61,8 @@ function mapTradeRow(row: typeof pgSchema.traderTrades.$inferSelect): TradeRow {
     openingRegime: (row.openingRegime as Regime | null) ?? null,
     openingMsvId: row.openingMsvId,
     openingFeatureSetId: row.openingFeatureSetId,
+    openingCausalLineageJson: row.openingCausalLineageJson,
+    openingCausalLineageDigest: row.openingCausalLineageDigest,
     closingMsvId: row.closingMsvId,
     closingFeatureSetId: row.closingFeatureSetId,
     closingRegime: (row.closingRegime as Regime | null) ?? null,
@@ -79,6 +82,8 @@ function mapLotRow(row: typeof pgSchema.traderPositionLots.$inferSelect): Positi
     positionSide: row.positionSide,
     instrumentKind: row.instrumentKind,
     strategySignalId: row.strategySignalId,
+    openingCausalLineageJson: row.openingCausalLineageJson,
+    openingCausalLineageDigest: row.openingCausalLineageDigest,
     state: row.state,
     openQty: row.openQty,
     remainingQty: row.remainingQty,
@@ -142,9 +147,16 @@ function createPostgresLifecycleRepositoryImpl(
   return {
     async insertTrade(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      assertLifecycleOpeningCausalLineage({
+        ...input.trade,
+        organizationId: scoped.organizationId,
+        symbol: input.trade.symbol,
+      });
       const now = new Date();
       const row = {
         ...input.trade,
+        openingCausalLineageJson: input.trade.openingCausalLineageJson ?? null,
+        openingCausalLineageDigest: input.trade.openingCausalLineageDigest ?? null,
         organizationId: scoped.organizationId,
         createdAt: now,
         updatedAt: now,
@@ -235,9 +247,16 @@ function createPostgresLifecycleRepositoryImpl(
 
     async insertPositionLot(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      assertLifecycleOpeningCausalLineage({
+        ...input.lot,
+        organizationId: scoped.organizationId,
+        symbol: input.lot.symbol,
+      });
       const now = new Date();
       const row = {
         ...input.lot,
+        openingCausalLineageJson: input.lot.openingCausalLineageJson ?? null,
+        openingCausalLineageDigest: input.lot.openingCausalLineageDigest ?? null,
         organizationId: scoped.organizationId,
         createdAt: now,
         updatedAt: now,
@@ -308,6 +327,34 @@ function createPostgresLifecycleRepositoryImpl(
 
     async insertTradeLeg(context, input) {
       const scoped = requireOrgContext(context.organizationId);
+      if (input.leg.kind === "FORCED_FLAT") {
+        if (input.leg.orderId !== null || input.leg.fillId !== null || !input.leg.syntheticId) {
+          throw new Error("TRADE_LEG_SYNTHETIC_REFERENCE_INVALID");
+        }
+      } else {
+        if (!input.leg.fillId || !input.leg.orderId) {
+          throw new Error("TRADE_LEG_EXECUTION_REFERENCE_INCOMPLETE");
+        }
+        const refs = await db
+          .select({ orderId: pgSchema.traderFills.orderId })
+          .from(pgSchema.traderFills)
+          .innerJoin(
+            pgSchema.traderOrders,
+            and(
+              eq(pgSchema.traderOrders.id, pgSchema.traderFills.orderId),
+              eq(pgSchema.traderOrders.organizationId, pgSchema.traderFills.organizationId),
+            ),
+          )
+          .where(
+            and(
+              eq(pgSchema.traderFills.id, input.leg.fillId),
+              eq(pgSchema.traderFills.orderId, input.leg.orderId),
+              orgScopedWhere(pgSchema.traderFills.organizationId, scoped),
+            ),
+          )
+          .limit(1);
+        if (!refs[0]) throw new Error("TRADE_LEG_EXECUTION_REFERENCE_INVALID");
+      }
       const row = {
         ...input.leg,
         organizationId: scoped.organizationId,

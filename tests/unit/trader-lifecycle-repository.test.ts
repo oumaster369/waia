@@ -2,8 +2,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
+import { traderTradeLegs } from "@/db/schema";
 import {
   assertLifecycleFillWalkTaxonomyParity,
   assertTradeLineageImmutable,
@@ -18,18 +20,23 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
+import {
+  buildOpeningCausalLineageV1,
+  serializeOpeningCausalLineageV1,
+} from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 
 const USER_A = "00000000-0000-4000-8000-0000000376a";
 
 describe("trader lifecycle repository (M1 / DEE-376)", () => {
   let orgA: string;
+  let db: ReturnType<typeof getDb>;
   let lifecycleRepo: ReturnType<typeof createSqliteLifecycleRepository>;
 
   beforeAll(() => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "waia-lifecycle-repo-"));
     process.env.DATABASE_URL = `file:${path.join(tmpDir, "lifecycle-repo.sqlite")}`;
     migrateDatabaseFromEnv();
-    const db = getDb();
+    db = getDb();
 
     insertEmailPasswordUser(db, {
       id: USER_A,
@@ -111,10 +118,10 @@ describe("trader lifecycle repository (M1 / DEE-376)", () => {
         organizationId: orgA,
         tradeId,
         positionLotId: lotId,
-        kind: "OPEN_FILL",
-        orderId: crypto.randomUUID(),
-        fillId: crypto.randomUUID(),
-        syntheticId: null,
+        kind: "FORCED_FLAT",
+        orderId: null,
+        fillId: null,
+        syntheticId: "synthetic-repository-proof",
         quantity: "1",
         price: "100",
         fee: "0",
@@ -122,6 +129,20 @@ describe("trader lifecycle repository (M1 / DEE-376)", () => {
         legPnl: "0",
       },
     });
+
+    await expect(lifecycleRepo.insertTradeLeg(context, {
+      leg: {
+        id: crypto.randomUUID(), organizationId: orgA, tradeId,
+        positionLotId: lotId, kind: "OPEN_FILL", orderId: crypto.randomUUID(),
+        fillId: crypto.randomUUID(), syntheticId: null, quantity: "1", price: "100",
+        fee: "0", executedAt: openedAt, legPnl: "0",
+      },
+    })).rejects.toThrow("TRADE_LEG_EXECUTION_REFERENCE_INVALID");
+
+    expect(() => db.update(traderTradeLegs)
+      .set({ orderId: crypto.randomUUID() })
+      .where(eq(traderTradeLegs.id, legId))
+      .run()).toThrow("TRADE_LEG_APPEND_ONLY");
 
     const frozenAt = new Date("2026-01-01T01:00:00.000Z");
     await lifecycleRepo.updateTradeOperational(context, {
@@ -185,6 +206,12 @@ describe("trader lifecycle repository (M1 / DEE-376)", () => {
     expect(() =>
       assertTradeLineageImmutable(baseTrade, { ...baseTrade, strategyId: "mutated" }),
     ).toThrow(/immutable/);
+    expect(() =>
+      assertTradeLineageImmutable(baseTrade, {
+        ...baseTrade,
+        openingCausalLineageDigest: "b".repeat(64),
+      }),
+    ).toThrow(/openingCausalLineageDigest/);
   });
 });
 
@@ -217,6 +244,19 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
   it("records buy fill into trade + lot rows via lifecycle recorder", async () => {
     const context = requireOrgContext(orgA);
     const recorder = createLifecycleRecorder({ repository: lifecycleRepo });
+    const openingLineage = buildOpeningCausalLineageV1({
+      organizationId: orgA,
+      symbol: "BTC/USDT",
+      canonicalCausalLineageDigest: "1".repeat(64),
+      forecastId: "forecast-wire",
+      forecastContentDigest: "2".repeat(64),
+      decisionId: "decision-wire",
+      decisionContentDigest: "3".repeat(64),
+      riskVerdictId: "risk-wire-buy",
+      riskAllowanceId: "allowance-wire",
+      riskAllowanceContentDigest: "4".repeat(64),
+    });
+    const openingLineageJson = serializeOpeningCausalLineageV1(openingLineage);
 
     const order = await orderRepo.createOrder(context, {
       venue: "mock",
@@ -228,6 +268,9 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
       clientOrderId: "client-lifecycle-wire-buy",
       idempotencyKey: "idem-lifecycle-wire-buy",
       riskDecisionId: "risk-wire-buy",
+      riskAllowanceId: openingLineage.riskAllowanceId,
+      openingCausalLineageJson: openingLineageJson,
+      openingCausalLineageDigest: openingLineage.contentDigest,
       strategySignalId: "signal-wire",
     });
 
@@ -251,18 +294,24 @@ describe("trader lifecycle execution wire (M1 / DEE-376)", () => {
         riskDecisionId: order.riskDecisionId,
         openingMsvId: "msv-wire",
         openingFeatureSetId: "fs-wire",
+        openingCausalLineageJson: openingLineageJson,
+        openingCausalLineageDigest: openingLineage.contentDigest,
       },
     });
 
     const trades = await lifecycleRepo.listTrades(context, { strategySignalId: "signal-wire" });
     expect(trades).toHaveLength(1);
     expect(trades[0]?.state).toBe("OPEN");
+    expect(trades[0]?.openingCausalLineageJson).toBe(openingLineageJson);
+    expect(trades[0]?.openingCausalLineageDigest).toBe(openingLineage.contentDigest);
 
     const lots = await lifecycleRepo.listOpenPositionLots(context, {
       strategySignalId: "signal-wire",
     });
     expect(lots).toHaveLength(1);
     expect(lots[0]?.remainingQty).toBe("1");
+    expect(lots[0]?.openingCausalLineageJson).toBe(openingLineageJson);
+    expect(lots[0]?.openingCausalLineageDigest).toBe(openingLineage.contentDigest);
 
     const events = await lifecycleRepo.listLifecycleEvents(context, {
       entityType: "TRADE",

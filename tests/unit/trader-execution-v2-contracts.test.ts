@@ -36,6 +36,9 @@ function allowance() {
       action: "ENTER_LONG",
       economicSizeSetId: "sizes-667",
       economicSizeSetDigestHex: digest("5"),
+      forecastId: "forecast-667",
+      forecastContentDigestHex: digest("f"),
+      canonicalCausalLineageDigestHex: digest("c"),
     },
     riskPolicyVersion: "risk-v2-test",
     riskPolicyDigestHex: digest("6"),
@@ -130,101 +133,120 @@ describe("Execution V2 immutable contracts (DEE-667)", () => {
     void _s;
     void _sd;
     void _cd;
-    expect(() => createExecutionPolicyBindingV2({
-      ...draft,
-      retryPolicy: { ...draft.retryPolicy, sameIdentityRetryAllowed: true } as never,
-    })).toThrow(/unproven venue idempotency/);
+    expect(() =>
+      createExecutionPolicyBindingV2({
+        ...draft,
+        retryPolicy: { ...draft.retryPolicy, sameIdentityRetryAllowed: true } as never,
+      }),
+    ).toThrow(/unproven venue idempotency/);
   });
 
   it("accepts only explicit discrete economic membership and complete sealed slices", () => {
     const value = plan();
     expect(validateExecutionPlanV2(value)).toBe(true);
-    expect(value).toMatchObject({ plannedQuantity: "0.08", side: "buy", action: "ENTER_LONG" });
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066707",
-      allowance: allowance(),
-      policy: policy(),
-      approvedNotionalCeiling: "2500",
-      plannedQuantity: "0.09",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "25000",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.09", limitPrice: "25000" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/qualified discrete membership/);
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066708",
-      allowance: allowance(),
-      policy: policy(),
-      approvedNotionalCeiling: "2500",
+    expect(value).toMatchObject({
       plannedQuantity: "0.08",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "25000",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.07", limitPrice: "25000" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/slice total mismatch/);
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066722",
-      allowance: allowance(),
-      policy: policy(),
-      approvedNotionalCeiling: "2500",
-      plannedQuantity: "0.08",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "25000",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "24000" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/sole child slice must exactly match/);
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066717",
-      allowance: allowance(),
-      policy: policy(),
-      approvedNotionalCeiling: "2600",
-      plannedQuantity: "0.08",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "25000",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "25000" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/exceeds the Risk allowance reservation/);
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066718",
-      allowance: allowance(),
-      policy: policy(),
-      approvedNotionalCeiling: "2500",
-      plannedQuantity: "0.1",
-      orderType: "limit",
-      liquidityRole: "TAKER",
-      limitPrice: "26000",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.1", limitPrice: "26000" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/planned effect notional/);
+      side: "buy",
+      action: "ENTER_LONG",
+      forecastId: "forecast-667",
+      forecastContentDigestHex: digest("f"),
+      canonicalCausalLineageDigestHex: digest("c"),
+    });
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066707",
+        allowance: allowance(),
+        policy: policy(),
+        approvedNotionalCeiling: "2500",
+        plannedQuantity: "0.09",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.09", limitPrice: "25000" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/qualified discrete membership/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066708",
+        allowance: allowance(),
+        policy: policy(),
+        approvedNotionalCeiling: "2500",
+        plannedQuantity: "0.08",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.07", limitPrice: "25000" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/slice total mismatch/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066722",
+        allowance: allowance(),
+        policy: policy(),
+        approvedNotionalCeiling: "2500",
+        plannedQuantity: "0.08",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "24000" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/sole child slice must exactly match/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066717",
+        allowance: allowance(),
+        policy: policy(),
+        approvedNotionalCeiling: "2600",
+        plannedQuantity: "0.08",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "25000" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/exceeds the Risk allowance reservation/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066718",
+        allowance: allowance(),
+        policy: policy(),
+        approvedNotionalCeiling: "2500",
+        plannedQuantity: "0.1",
+        orderType: "limit",
+        liquidityRole: "TAKER",
+        limitPrice: "26000",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.1", limitPrice: "26000" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/planned effect notional/);
   });
 
   it("rounds notional authority checks upward instead of truncating sub-scale exposure", () => {
@@ -269,23 +291,25 @@ describe("Execution V2 immutable contracts (DEE-667)", () => {
         economicQualifiedQuantities: ["0.00000001"],
       },
     });
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066721",
-      allowance: tinyAllowance,
-      policy: tinyPolicy,
-      approvedNotionalCeiling: "0.00000001",
-      plannedQuantity: "0.00000001",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "1.5",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.00000001", limitPrice: "1.5" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/planned effect notional/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066721",
+        allowance: tinyAllowance,
+        policy: tinyPolicy,
+        approvedNotionalCeiling: "0.00000001",
+        plannedQuantity: "0.00000001",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "1.5",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.00000001", limitPrice: "1.5" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/planned effect notional/);
   });
 
   it("refuses venue, order type, TIF, policy digest, and price-chase mismatches", () => {
@@ -295,40 +319,44 @@ describe("Execution V2 immutable contracts (DEE-667)", () => {
     void _sd;
     void _cd;
     const wrongVenue = createExecutionPolicyBindingV2({ ...draft, venue: "MOCK" });
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066709",
-      allowance: allowance(),
-      policy: wrongVenue,
-      approvedNotionalCeiling: "2500",
-      plannedQuantity: "0.08",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "25000",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "25000" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/not bound/);
-    expect(() => createExecutionPlanV2({
-      executionPlanId: "00000000-0000-4000-8000-000000066710",
-      allowance: allowance(),
-      policy: base,
-      approvedNotionalCeiling: "2500",
-      plannedQuantity: "0.08",
-      orderType: "limit",
-      liquidityRole: "MAKER",
-      limitPrice: "26000.01",
-      timeInForce: "GTC",
-      timingWindow: {
-        opensAtUtc: "2026-08-21T00:00:01.000Z",
-        closesAtUtc: "2026-08-21T00:00:20.000Z",
-      },
-      childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "26000.01" }],
-      sealedAtUtc: "2026-08-21T00:00:00.500Z",
-    })).toThrow(/outside the qualified collar/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066709",
+        allowance: allowance(),
+        policy: wrongVenue,
+        approvedNotionalCeiling: "2500",
+        plannedQuantity: "0.08",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "25000" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/not bound/);
+    expect(() =>
+      createExecutionPlanV2({
+        executionPlanId: "00000000-0000-4000-8000-000000066710",
+        allowance: allowance(),
+        policy: base,
+        approvedNotionalCeiling: "2500",
+        plannedQuantity: "0.08",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "26000.01",
+        timeInForce: "GTC",
+        timingWindow: {
+          opensAtUtc: "2026-08-21T00:00:01.000Z",
+          closesAtUtc: "2026-08-21T00:00:20.000Z",
+        },
+        childSlices: [{ sequence: 1, quantity: "0.08", limitPrice: "26000.01" }],
+        sealedAtUtc: "2026-08-21T00:00:00.500Z",
+      }),
+    ).toThrow(/outside the qualified collar/);
   });
 
   it("binds one deterministic exact request payload and replays the same identity", () => {

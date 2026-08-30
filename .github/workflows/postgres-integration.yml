@@ -31,6 +31,7 @@ on:
       - "tests/unit/fhv-real-htx-preholdout-control-replay.test.ts"
       - "tests/unit/fhv-btc-eth-execution-evidence.test.ts"
       - "tests/integration/trader-capital-path-trace-evidence.test.ts"
+      - "tests/integration/fhv-execution-v2-historical-symbol-boundary.test.ts"
       - "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts"
       - "lib/trader/research/execopp-qualification/scientific-admission-v2.ts"
       - "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"
@@ -78,6 +79,7 @@ jobs:
       - name: DEE-651 TEST_ONLY Decision → Risk → Execution V2 proof
         env:
           WAIA_PG_INTEGRATION: "1"
+          FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY: "1"
         run: >-
           pnpm test --run --no-file-parallelism
           tests/unit/control-replay-scientific-v2-driver-v1.test.ts
@@ -89,5 +91,6 @@ jobs:
           tests/unit/fhv-real-htx-preholdout-control-replay.test.ts
           tests/unit/fhv-btc-eth-execution-evidence.test.ts
           tests/integration/trader-capital-path-trace-evidence.test.ts
+          tests/integration/fhv-execution-v2-historical-symbol-boundary.test.ts
           tests/integration/postgres-scientific-admission-receipt-v1.test.ts
           tests/integration/postgres-forecast-contract-binding-v1.test.ts

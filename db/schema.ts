@@ -1697,6 +1697,8 @@ export const traderOrders = sqliteTable(
     clientOrderId: text("client_order_id").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     riskDecisionId: text("risk_decision_id").notNull(),
+    openingCausalLineageJson: text("opening_causal_lineage_json"),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest"),
     strategySignalId: text("strategy_signal_id"),
     allocationDecisionId: text("allocation_decision_id"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -1776,6 +1778,7 @@ export const traderFills = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => [
+    unique("trader_fills_id_organization_unique").on(t.id, t.organizationId),
     foreignKey({
       columns: [t.orderId, t.organizationId],
       foreignColumns: [traderOrders.id, traderOrders.organizationId],
@@ -1858,6 +1861,8 @@ export const traderTrades = sqliteTable(
     openingRegime: text("opening_regime"),
     openingMsvId: text("opening_msv_id"),
     openingFeatureSetId: text("opening_feature_set_id"),
+    openingCausalLineageJson: text("opening_causal_lineage_json"),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest"),
     closingMsvId: text("closing_msv_id"),
     closingFeatureSetId: text("closing_feature_set_id"),
     closingRegime: text("closing_regime"),
@@ -1890,6 +1895,8 @@ export const traderPositionLots = sqliteTable(
     positionSide: text("position_side", { enum: [...positionSideEnum] }).notNull(),
     instrumentKind: text("instrument_kind", { enum: [...instrumentKindEnum] }).notNull(),
     strategySignalId: text("strategy_signal_id").notNull(),
+    openingCausalLineageJson: text("opening_causal_lineage_json"),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest"),
     state: text("state", { enum: [...positionLotStateEnum] }).notNull(),
     openQty: text("open_qty").notNull(),
     remainingQty: text("remaining_qty").notNull(),
@@ -1932,7 +1939,7 @@ export const traderTradeLegs = sqliteTable(
     tradeId: text("trade_id").notNull(),
     positionLotId: text("position_lot_id").notNull(),
     kind: text("kind", { enum: [...tradeLegKindEnum] }).notNull(),
-    orderId: text("order_id").notNull(),
+    orderId: text("order_id"),
     fillId: text("fill_id"),
     syntheticId: text("synthetic_id"),
     quantity: text("quantity").notNull(),
@@ -1954,6 +1961,14 @@ export const traderTradeLegs = sqliteTable(
       columns: [t.positionLotId, t.organizationId],
       foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId],
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.orderId, t.organizationId],
+      foreignColumns: [traderOrders.id, traderOrders.organizationId],
+    }),
+    foreignKey({
+      columns: [t.fillId, t.organizationId],
+      foreignColumns: [traderFills.id, traderFills.organizationId],
+    }),
     index("trader_trade_legs_org_trade_idx").on(t.organizationId, t.tradeId),
   ],
 );

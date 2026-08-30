@@ -1,0 +1,66 @@
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM trader_trade_legs leg
+    LEFT JOIN trader_fills fill
+      ON fill.id = leg.fill_id AND fill.organization_id = leg.organization_id
+    WHERE (leg.kind = 'FORCED_FLAT' AND (
+      leg.order_id IS NOT NULL OR leg.fill_id IS NOT NULL OR leg.synthetic_id IS NULL
+    )) OR (leg.kind <> 'FORCED_FLAT' AND (
+      leg.order_id IS NULL OR leg.fill_id IS NULL OR fill.id IS NULL
+      OR fill.order_id <> leg.order_id
+    ))
+  ) THEN
+    RAISE EXCEPTION 'TRADE_LEG_LEGACY_REFERENCE_INVALID';
+  END IF;
+END;
+$$;
+
+ALTER TABLE trader_trade_legs ALTER COLUMN order_id DROP NOT NULL;
+ALTER TABLE trader_trade_legs
+  ADD CONSTRAINT trader_trade_legs_order_org_fk
+  FOREIGN KEY (order_id, organization_id) REFERENCES trader_orders(id, organization_id);
+ALTER TABLE trader_trade_legs
+  ADD CONSTRAINT trader_trade_legs_fill_org_fk
+  FOREIGN KEY (fill_id, organization_id) REFERENCES trader_fills(id, organization_id);
+
+CREATE FUNCTION waia_trader_trade_leg_reference_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.kind = 'FORCED_FLAT' THEN
+    IF NEW.order_id IS NOT NULL OR NEW.fill_id IS NOT NULL OR NEW.synthetic_id IS NULL THEN
+      RAISE EXCEPTION 'TRADE_LEG_SYNTHETIC_REFERENCE_INVALID';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.fill_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM trader_fills f
+    JOIN trader_orders o ON o.id = f.order_id AND o.organization_id = f.organization_id
+    WHERE f.id = NEW.fill_id
+      AND f.order_id = NEW.order_id
+      AND f.organization_id = NEW.organization_id
+  ) THEN
+    RAISE EXCEPTION 'TRADE_LEG_EXECUTION_REFERENCE_INVALID';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trader_trade_legs_execution_reference_insert_guard
+BEFORE INSERT ON trader_trade_legs
+FOR EACH ROW EXECUTE FUNCTION waia_trader_trade_leg_reference_guard();
+
+CREATE FUNCTION waia_trader_trade_leg_append_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'TRADE_LEG_APPEND_ONLY';
+END;
+$$;
+
+CREATE TRIGGER trader_trade_legs_append_only_update_guard
+BEFORE UPDATE ON trader_trade_legs
+FOR EACH ROW EXECUTE FUNCTION waia_trader_trade_leg_append_only();
+CREATE TRIGGER trader_trade_legs_append_only_delete_guard
+BEFORE DELETE ON trader_trade_legs
+FOR EACH ROW EXECUTE FUNCTION waia_trader_trade_leg_append_only();

@@ -5,16 +5,14 @@ enforceServerOnly();
 import { and, eq, sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
-import {
-  runWaiaPostgresTransaction,
-  type WaiaPostgresDb,
-} from "@/db/waia-postgres-transaction";
+import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
-import { createOrderPostgres, getOrderByIdPostgres } from "@/lib/trader/execution/repository-postgres";
-import type {
-  CreateOrderInput,
-  OrderRow,
-} from "@/lib/trader/execution/order-repository.types";
+import { parseOpeningCausalLineageV1 } from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
+import {
+  createOrderPostgres,
+  getOrderByIdPostgres,
+} from "@/lib/trader/execution/repository-postgres";
+import type { CreateOrderInput, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import {
   compareDecimal,
   DECIMAL_SCALE_FACTOR,
@@ -108,10 +106,7 @@ export type ConsumeRiskAllowanceForOrderV2Input = Readonly<{
   consumptionEventId: string;
   order: Omit<
     CreateOrderInput,
-    | "venue"
-    | "riskDecisionId"
-    | "riskAllowanceId"
-    | "riskAllowanceBindingDigest"
+    "venue" | "riskDecisionId" | "riskAllowanceId" | "riskAllowanceBindingDigest"
   > & { id: string };
 }>;
 
@@ -189,9 +184,8 @@ function multiplyPositiveDecimalConservatively(a: string, b: string): string {
   }
   const exactProduct = left * right;
   const scaledProduct = exactProduct / DECIMAL_SCALE_FACTOR;
-  const conservativeProduct = exactProduct % DECIMAL_SCALE_FACTOR === 0n
-    ? scaledProduct
-    : scaledProduct + 1n;
+  const conservativeProduct =
+    exactProduct % DECIMAL_SCALE_FACTOR === 0n ? scaledProduct : scaledProduct + 1n;
   return formatDecimal(conservativeProduct);
 }
 
@@ -215,20 +209,22 @@ function canonicalInstrumentExposures(
       baseQuantity: canonicalNonnegative(entry.baseQuantity),
     });
   });
-  result.sort((a, b) =>
-    a.instrumentIdentityDigestHex.localeCompare(b.instrumentIdentityDigestHex) ||
-    a.symbol.localeCompare(b.symbol));
+  result.sort(
+    (a, b) =>
+      a.instrumentIdentityDigestHex.localeCompare(b.instrumentIdentityDigestHex) ||
+      a.symbol.localeCompare(b.symbol),
+  );
   return Object.freeze(result);
 }
 
 function deriveStrictExposureReductionV2(input: {
   state: RiskAccountStateV2;
-  verdict: Pick<RiskVerdictV2Draft, "instrumentIdentityDigestHex" | "symbol" | "decision" | "approvedQualifiedQuantity">;
+  verdict: Pick<
+    RiskVerdictV2Draft,
+    "instrumentIdentityDigestHex" | "symbol" | "decision" | "approvedQualifiedQuantity"
+  >;
 }): boolean {
-  if (
-    input.verdict.decision.action !== "REDUCE" &&
-    input.verdict.decision.action !== "CLOSE"
-  ) {
+  if (input.verdict.decision.action !== "REDUCE" && input.verdict.decision.action !== "CLOSE") {
     return false;
   }
   if (input.verdict.approvedQualifiedQuantity === null) return false;
@@ -256,8 +252,7 @@ function deriveReservationNotionalV2(input: {
     throw new RiskV2AdmissionRefusedError("VERDICT_ACTION_DOES_NOT_PERMIT_ALLOWANCE");
   }
   const reductionAction =
-    input.verdict.decision.action === "REDUCE" ||
-    input.verdict.decision.action === "CLOSE";
+    input.verdict.decision.action === "REDUCE" || input.verdict.decision.action === "CLOSE";
   if (reductionAction !== input.strictExposureReduction) {
     throw new RiskV2AdmissionRefusedError("STRICT_REDUCTION_PROOF_INVALID");
   }
@@ -316,6 +311,13 @@ function verdictFromRow(row: VerdictRow): RiskVerdictV2 {
       action: row.decisionAction as RiskVerdictV2["decision"]["action"],
       economicSizeSetId: row.economicSizeSetId,
       economicSizeSetDigestHex: row.economicSizeSetDigest,
+      ...(row.forecastId
+        ? {
+            forecastId: row.forecastId,
+            forecastContentDigestHex: row.forecastContentDigest!,
+            canonicalCausalLineageDigestHex: row.canonicalCausalLineageDigest!,
+          }
+        : {}),
     },
     riskPolicyVersion: row.riskPolicyVersion,
     riskPolicyDigestHex: row.riskPolicyDigest,
@@ -397,10 +399,16 @@ async function lockAccountState(
   organizationId: string,
   accountId: string,
 ): Promise<RiskAccountStateV2> {
-  const rows = await ex.select().from(pgSchema.traderRiskAccountStateV2).where(and(
-    eq(pgSchema.traderRiskAccountStateV2.organizationId, organizationId),
-    eq(pgSchema.traderRiskAccountStateV2.accountId, accountId),
-  )).for("update");
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderRiskAccountStateV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAccountStateV2.organizationId, organizationId),
+        eq(pgSchema.traderRiskAccountStateV2.accountId, accountId),
+      ),
+    )
+    .for("update");
   if (!rows[0]) throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
   return mapAccountState(rows[0]);
 }
@@ -433,21 +441,26 @@ async function appendEventAndAdvanceAccount(input: {
     contentDigest: event.contentDigestHex,
     schemaVersion: event.schemaVersion,
   });
-  await tx.update(pgSchema.traderRiskAccountStateV2).set({
-    nextAdmissionSequence: BigInt(input.nextAdmissionSequence),
-    nextEnforcementEventSequence: BigInt(event.eventSequence) + 1n,
-    lastEnforcementEventDigest: event.contentDigestHex,
-    outstandingReservationNotional: canonicalNonnegative(input.outstandingReservationNotional),
-    worstCasePendingExposureNotional: canonicalNonnegative(
-      input.worstCasePendingExposureNotional ?? state.accounting.worstCasePendingExposureNotional,
-    ),
-    stateVersion: BigInt(state.stateVersion) + 1n,
-    updatedAt: new Date(event.occurredAtUtc),
-  }).where(and(
-    eq(pgSchema.traderRiskAccountStateV2.organizationId, state.organizationId),
-    eq(pgSchema.traderRiskAccountStateV2.accountId, state.accountId),
-    eq(pgSchema.traderRiskAccountStateV2.stateVersion, BigInt(state.stateVersion)),
-  ));
+  await tx
+    .update(pgSchema.traderRiskAccountStateV2)
+    .set({
+      nextAdmissionSequence: BigInt(input.nextAdmissionSequence),
+      nextEnforcementEventSequence: BigInt(event.eventSequence) + 1n,
+      lastEnforcementEventDigest: event.contentDigestHex,
+      outstandingReservationNotional: canonicalNonnegative(input.outstandingReservationNotional),
+      worstCasePendingExposureNotional: canonicalNonnegative(
+        input.worstCasePendingExposureNotional ?? state.accounting.worstCasePendingExposureNotional,
+      ),
+      stateVersion: BigInt(state.stateVersion) + 1n,
+      updatedAt: new Date(event.occurredAtUtc),
+    })
+    .where(
+      and(
+        eq(pgSchema.traderRiskAccountStateV2.organizationId, state.organizationId),
+        eq(pgSchema.traderRiskAccountStateV2.accountId, state.accountId),
+        eq(pgSchema.traderRiskAccountStateV2.stateVersion, BigInt(state.stateVersion)),
+      ),
+    );
 }
 
 export async function initializeRiskAccountStateV2Postgres(
@@ -484,10 +497,16 @@ export async function initializeRiskAccountStateV2Postgres(
     stateVersion: 1n,
   };
   await db.insert(pgSchema.traderRiskAccountStateV2).values(values).onConflictDoNothing();
-  const rows = await db.select().from(pgSchema.traderRiskAccountStateV2).where(and(
-    eq(pgSchema.traderRiskAccountStateV2.organizationId, scoped.organizationId),
-    eq(pgSchema.traderRiskAccountStateV2.accountId, input.accountId),
-  )).limit(1);
+  const rows = await db
+    .select()
+    .from(pgSchema.traderRiskAccountStateV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAccountStateV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAccountStateV2.accountId, input.accountId),
+      ),
+    )
+    .limit(1);
   if (!rows[0]) throw new RiskV2PersistenceConflictError();
   const stored = mapAccountState(rows[0]);
   const expected = mapAccountState({
@@ -507,10 +526,16 @@ export async function readRiskAccountStateV2Postgres(
   accountId: string,
 ): Promise<RiskAccountStateV2 | null> {
   const scoped = requireOrgContext(context.organizationId);
-  const rows = await ex.select().from(pgSchema.traderRiskAccountStateV2).where(and(
-    eq(pgSchema.traderRiskAccountStateV2.organizationId, scoped.organizationId),
-    eq(pgSchema.traderRiskAccountStateV2.accountId, accountId),
-  )).limit(1);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderRiskAccountStateV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAccountStateV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAccountStateV2.accountId, accountId),
+      ),
+    )
+    .limit(1);
   return rows[0] ? mapAccountState(rows[0]) : null;
 }
 
@@ -539,17 +564,32 @@ export async function admitRiskAllowanceV2Postgres(
     if (state.posture === "CLOSE_ONLY" && input.verdict.verdict !== "CLOSE_ONLY") {
       throw new RiskV2AdmissionRefusedError("CURRENT_POSTURE_RESTRICTED");
     }
-    const existingVerdicts = await tx.select().from(pgSchema.traderRiskVerdictsV2).where(and(
-      eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
-      eq(pgSchema.traderRiskVerdictsV2.decisionContentDigest, input.verdict.decision.contentDigestHex),
-    )).limit(1);
+    const existingVerdicts = await tx
+      .select()
+      .from(pgSchema.traderRiskVerdictsV2)
+      .where(
+        and(
+          eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
+          eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
+          eq(
+            pgSchema.traderRiskVerdictsV2.decisionContentDigest,
+            input.verdict.decision.contentDigestHex,
+          ),
+        ),
+      )
+      .limit(1);
     if (existingVerdicts[0]) {
       const verdict = verdictFromRow(existingVerdicts[0]);
-      const rows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
-        eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
-        eq(pgSchema.traderRiskAllowancesV2.riskVerdictId, verdict.riskVerdictId),
-      )).limit(1);
+      const rows = await tx
+        .select()
+        .from(pgSchema.traderRiskAllowancesV2)
+        .where(
+          and(
+            eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+            eq(pgSchema.traderRiskAllowancesV2.riskVerdictId, verdict.riskVerdictId),
+          ),
+        )
+        .limit(1);
       if (!rows[0]) throw new RiskV2PersistenceConflictError();
       if (rows[0].lifecycleState !== "ISSUED") {
         throw new RiskV2PersistenceConflictError("idempotent admission found terminal allowance");
@@ -648,6 +688,9 @@ export async function admitRiskAllowanceV2Postgres(
       decisionAction: verdict.decision.action,
       economicSizeSetId: verdict.decision.economicSizeSetId,
       economicSizeSetDigest: verdict.decision.economicSizeSetDigestHex,
+      forecastId: verdict.decision.forecastId ?? null,
+      forecastContentDigest: verdict.decision.forecastContentDigestHex ?? null,
+      canonicalCausalLineageDigest: verdict.decision.canonicalCausalLineageDigestHex ?? null,
       riskPolicyVersion: verdict.riskPolicyVersion,
       riskPolicyDigest: verdict.riskPolicyDigestHex,
       limitVersions: [...verdict.limitVersions],
@@ -673,7 +716,7 @@ export async function admitRiskAllowanceV2Postgres(
       id: allowance.riskAllowanceId,
       organizationId: allowance.organizationId,
       accountId: allowance.accountId,
-    riskVerdictId: allowance.riskVerdictId,
+      riskVerdictId: allowance.riskVerdictId,
       riskVerdictContentDigest: allowance.riskVerdictContentDigestHex,
       admissionSequence: BigInt(allowance.admissionSequence),
       nonce: allowance.nonce,
@@ -689,6 +732,9 @@ export async function admitRiskAllowanceV2Postgres(
       decisionAction: allowance.decision.action,
       economicSizeSetId: allowance.decision.economicSizeSetId,
       economicSizeSetDigest: allowance.decision.economicSizeSetDigestHex,
+      forecastId: allowance.decision.forecastId ?? null,
+      forecastContentDigest: allowance.decision.forecastContentDigestHex ?? null,
+      canonicalCausalLineageDigest: allowance.decision.canonicalCausalLineageDigestHex ?? null,
       riskPolicyVersion: allowance.riskPolicyVersion,
       riskPolicyDigest: allowance.riskPolicyDigestHex,
       realitySnapshotId: allowance.realitySnapshotId,
@@ -737,11 +783,17 @@ async function releaseIssuedAllowance(input: {
   const scoped = requireOrgContext(input.context.organizationId);
   return runWaiaPostgresTransaction(input.db, async (tx) => {
     const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
-    const rows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
-      eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
-      eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
-    )).for("update");
+    const rows = await tx
+      .select()
+      .from(pgSchema.traderRiskAllowancesV2)
+      .where(
+        and(
+          eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+          eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
+          eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
+        ),
+      )
+      .for("update");
     const allowance = rows[0];
     if (!allowance) throw new RiskV2PersistenceConflictError("Risk allowance not found");
     if (allowance.lifecycleState !== "ISSUED") return false;
@@ -766,19 +818,24 @@ async function releaseIssuedAllowance(input: {
       occurredAtUtc: durableAt.toISOString(),
       previousEventDigestHex: state.lastEnforcementEventDigestHex,
     });
-    await tx.update(pgSchema.traderRiskAllowancesV2).set({
-      lifecycleState: input.transition,
-      revokedAt: input.transition === "REVOKED" ? durableAt : null,
-      expiredAt: input.transition === "EXPIRED" ? durableAt : null,
-      terminalReasonCode: input.reasonCode,
-      lastEnforcementEventSequence: BigInt(event.eventSequence),
-      lastEnforcementEventDigest: event.contentDigestHex,
-      updatedAt: durableAt,
-    }).where(and(
-      eq(pgSchema.traderRiskAllowancesV2.id, allowance.id),
-      eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskAllowancesV2.lifecycleState, "ISSUED"),
-    ));
+    await tx
+      .update(pgSchema.traderRiskAllowancesV2)
+      .set({
+        lifecycleState: input.transition,
+        revokedAt: input.transition === "REVOKED" ? durableAt : null,
+        expiredAt: input.transition === "EXPIRED" ? durableAt : null,
+        terminalReasonCode: input.reasonCode,
+        lastEnforcementEventSequence: BigInt(event.eventSequence),
+        lastEnforcementEventDigest: event.contentDigestHex,
+        updatedAt: durableAt,
+      })
+      .where(
+        and(
+          eq(pgSchema.traderRiskAllowancesV2.id, allowance.id),
+          eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+          eq(pgSchema.traderRiskAllowancesV2.lifecycleState, "ISSUED"),
+        ),
+      );
     await appendEventAndAdvanceAccount({
       tx,
       state,
@@ -851,9 +908,11 @@ export function computeRiskAllowanceOrderBindingDigestV2(input: {
     decisionId: input.allowance.decision.decisionId,
     decisionContentDigestHex: input.allowance.decision.contentDigestHex,
     instrumentIdentityDigestHex: input.allowance.instrumentIdentityDigestHex,
-    ...(input.effectNotionalCeiling === undefined ? {} : {
-      effectNotionalCeiling: formatDecimal(parseDecimal(input.effectNotionalCeiling)),
-    }),
+    ...(input.effectNotionalCeiling === undefined
+      ? {}
+      : {
+          effectNotionalCeiling: formatDecimal(parseDecimal(input.effectNotionalCeiling)),
+        }),
     order: {
       id: input.order.id,
       venue: input.order.venue,
@@ -881,7 +940,7 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
   durableAt: Date;
 }): Promise<RefusedRiskAllowanceForOrderV2> {
   const expired = input.reason === "ALLOWANCE_EXPIRED";
-  const toState = expired ? "EXPIRED" as const : "REVOKED" as const;
+  const toState = expired ? ("EXPIRED" as const) : ("REVOKED" as const);
   const event = buildEnforcementEventV2({
     id: input.eventId,
     organizationId: input.state.organizationId,
@@ -895,23 +954,31 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
     reasonCode: input.reason,
     boundOrderId: null,
     boundOrderDigestHex: null,
-    eventPayload: { refusalReason: input.reason, reservationReleased: input.row.reservedExposureNotional },
+    eventPayload: {
+      refusalReason: input.reason,
+      reservationReleased: input.row.reservedExposureNotional,
+    },
     occurredAtUtc: input.durableAt.toISOString(),
     previousEventDigestHex: input.state.lastEnforcementEventDigestHex,
   });
-  await input.tx.update(pgSchema.traderRiskAllowancesV2).set({
-    lifecycleState: toState,
-    revokedAt: expired ? null : input.durableAt,
-    expiredAt: expired ? input.durableAt : null,
-    terminalReasonCode: input.reason,
-    lastEnforcementEventSequence: BigInt(event.eventSequence),
-    lastEnforcementEventDigest: event.contentDigestHex,
-    updatedAt: input.durableAt,
-  }).where(and(
-    eq(pgSchema.traderRiskAllowancesV2.id, input.row.id),
-    eq(pgSchema.traderRiskAllowancesV2.organizationId, input.state.organizationId),
-    eq(pgSchema.traderRiskAllowancesV2.lifecycleState, "ISSUED"),
-  ));
+  await input.tx
+    .update(pgSchema.traderRiskAllowancesV2)
+    .set({
+      lifecycleState: toState,
+      revokedAt: expired ? null : input.durableAt,
+      expiredAt: expired ? input.durableAt : null,
+      terminalReasonCode: input.reason,
+      lastEnforcementEventSequence: BigInt(event.eventSequence),
+      lastEnforcementEventDigest: event.contentDigestHex,
+      updatedAt: input.durableAt,
+    })
+    .where(
+      and(
+        eq(pgSchema.traderRiskAllowancesV2.id, input.row.id),
+        eq(pgSchema.traderRiskAllowancesV2.organizationId, input.state.organizationId),
+        eq(pgSchema.traderRiskAllowancesV2.lifecycleState, "ISSUED"),
+      ),
+    );
   await appendEventAndAdvanceAccount({
     tx: input.tx,
     state: input.state,
@@ -942,13 +1009,26 @@ function requireOrderMatchesAllowanceV2(input: {
   if (input.nonce !== input.allowance.nonce) {
     throw new RiskV2AdmissionRefusedError("ALLOWANCE_NONCE_MISMATCH");
   }
-  if (input.riskAllowanceContentDigestHex !== undefined &&
-    input.riskAllowanceContentDigestHex !== input.allowance.contentDigestHex) {
+  if (
+    input.riskAllowanceContentDigestHex !== undefined &&
+    input.riskAllowanceContentDigestHex !== input.allowance.contentDigestHex
+  ) {
     throw new RiskV2AdmissionRefusedError("ALLOWANCE_CONTENT_DIGEST_MISMATCH");
   }
-  if (input.effectNotionalCeiling !== undefined &&
+  if (input.order.openingCausalLineageJson) {
+    const lineage = parseOpeningCausalLineageV1(input.order.openingCausalLineageJson);
+    if (
+      lineage.riskAllowanceId !== input.allowance.riskAllowanceId ||
+      lineage.riskAllowanceContentDigest !== input.allowance.contentDigestHex
+    ) {
+      throw new RiskV2AdmissionRefusedError("OPENING_CAUSAL_LINEAGE_ALLOWANCE_MISMATCH");
+    }
+  }
+  if (
+    input.effectNotionalCeiling !== undefined &&
     input.allowance.decision.action === "ENTER_LONG" &&
-    compareDecimal(input.effectNotionalCeiling, input.allowance.reservedExposureNotional) > 0) {
+    compareDecimal(input.effectNotionalCeiling, input.allowance.reservedExposureNotional) > 0
+  ) {
     throw new RiskV2AdmissionRefusedError("EFFECT_NOTIONAL_EXCEEDS_ALLOWANCE_RESERVATION");
   }
   if (input.durableAt.getTime() >= new Date(input.allowance.validUntilUtc).getTime()) {
@@ -959,7 +1039,8 @@ function requireOrderMatchesAllowanceV2(input: {
     input.state.reconciliationStatus !== "RECONCILED" ||
     input.state.realitySnapshotId !== input.allowance.realitySnapshotId ||
     input.state.realityContentDigestHex !== input.allowance.realityContentDigestHex ||
-    input.state.reconciliationAuthorityDigestHex !== input.allowance.reconciliationAuthorityDigestHex
+    input.state.reconciliationAuthorityDigestHex !==
+      input.allowance.reconciliationAuthorityDigestHex
   ) {
     throw new RiskV2AdmissionRefusedError("CURRENT_AUTHORITY_BINDING_MISMATCH");
   }
@@ -969,8 +1050,7 @@ function requireOrderMatchesAllowanceV2(input: {
       entry.symbol === input.allowance.symbol,
   );
   const currentStrictExposureReduction =
-    (input.allowance.decision.action === "REDUCE" ||
-      input.allowance.decision.action === "CLOSE") &&
+    (input.allowance.decision.action === "REDUCE" || input.allowance.decision.action === "CLOSE") &&
     input.order.side === "sell" &&
     exposure !== undefined &&
     evaluateLongOnlyExposureReductionV2({
@@ -986,7 +1066,9 @@ function requireOrderMatchesAllowanceV2(input: {
     actionIsStrictExposureReduction: currentStrictExposureReduction,
   });
   if (posture.consumptionDisposition === "REFUSE") {
-    throw new RiskV2AdmissionRefusedError(posture.refusalReasonCode ?? "CURRENT_POSTURE_RESTRICTED");
+    throw new RiskV2AdmissionRefusedError(
+      posture.refusalReasonCode ?? "CURRENT_POSTURE_RESTRICTED",
+    );
   }
   const requiredSide = input.allowance.decision.action === "ENTER_LONG" ? "buy" : "sell";
   if (
@@ -1010,79 +1092,63 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
 ): Promise<ConsumeRiskAllowanceForOrderV2Result> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
-    const rows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
-      eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
-      eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
-    )).for("update");
-    const row = rows[0];
-    if (!row) throw new RiskV2AdmissionRefusedError("ALLOWANCE_NOT_FOUND");
-    const verdictRows = await tx.select().from(pgSchema.traderRiskVerdictsV2).where(and(
-      eq(pgSchema.traderRiskVerdictsV2.id, row.riskVerdictId),
-      eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
-    )).limit(1);
-    if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
-    const verdict = verdictFromRow(verdictRows[0]);
-    const allowance = allowanceAuthorityFromRow(row, verdict);
-    const durableAt = await durableTransactionTime(tx);
-    if (row.lifecycleState === "CONSUMED") {
-      let bindingDigest: string;
-      try {
-        bindingDigest = computeRiskAllowanceOrderBindingDigestV2({
-          organizationId: scoped.organizationId,
-          accountId: input.accountId,
-          allowance,
-          effectNotionalCeiling: input.effectNotionalCeiling,
-          order: { ...input.order, venue: allowance.venue },
-        });
-      } catch {
-        throw new RiskV2AdmissionRefusedError("ORDER_DOES_NOT_MATCH_ALLOWANCE");
-      }
-      if (
-        row.boundOrderId !== input.order.id ||
-        row.boundOrderDigest !== bindingDigest ||
-        input.nonce !== allowance.nonce
-      ) {
-        throw new RiskV2AdmissionRefusedError("ALLOWANCE_ALREADY_CONSUMED_BY_DIFFERENT_ORDER");
-      }
-      const order = await getOrderByIdPostgres(tx, scoped, input.order.id);
-      if (
-        !order ||
-        order.riskAllowanceId !== allowance.riskAllowanceId ||
-        order.riskAllowanceBindingDigest !== bindingDigest
-      ) {
-        throw new RiskV2PersistenceConflictError("consumed allowance order binding is missing");
-      }
-      if (order.state === "CREATED" || order.state === "RISK_APPROVED") {
-        requireOrderMatchesAllowanceV2({
-          state,
-          allowance,
-          riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
-          effectNotionalCeiling: input.effectNotionalCeiling,
-          order: input.order,
-          nonce: input.nonce,
-          durableAt,
-        });
-      }
-      return {
-        status: "CONSUMED",
-        order,
-        riskAllowanceId: allowance.riskAllowanceId,
-        orderBindingDigestHex: bindingDigest,
-        consumedNow: false,
-      };
-    }
-    if (row.lifecycleState !== "ISSUED") {
-      return {
-        status: "REFUSED",
-        order: null,
-        riskAllowanceId: allowance.riskAllowanceId,
-        reason: `ALLOWANCE_${row.lifecycleState}`,
-      };
-    }
+  const rows = await tx
+    .select()
+    .from(pgSchema.traderRiskAllowancesV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
+        eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
+      ),
+    )
+    .for("update");
+  const row = rows[0];
+  if (!row) throw new RiskV2AdmissionRefusedError("ALLOWANCE_NOT_FOUND");
+  const verdictRows = await tx
+    .select()
+    .from(pgSchema.traderRiskVerdictsV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskVerdictsV2.id, row.riskVerdictId),
+        eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
+      ),
+    )
+    .limit(1);
+  if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
+  const verdict = verdictFromRow(verdictRows[0]);
+  const allowance = allowanceAuthorityFromRow(row, verdict);
+  const durableAt = await durableTransactionTime(tx);
+  if (row.lifecycleState === "CONSUMED") {
     let bindingDigest: string;
     try {
+      bindingDigest = computeRiskAllowanceOrderBindingDigestV2({
+        organizationId: scoped.organizationId,
+        accountId: input.accountId,
+        allowance,
+        effectNotionalCeiling: input.effectNotionalCeiling,
+        order: { ...input.order, venue: allowance.venue },
+      });
+    } catch {
+      throw new RiskV2AdmissionRefusedError("ORDER_DOES_NOT_MATCH_ALLOWANCE");
+    }
+    if (
+      row.boundOrderId !== input.order.id ||
+      row.boundOrderDigest !== bindingDigest ||
+      input.nonce !== allowance.nonce
+    ) {
+      throw new RiskV2AdmissionRefusedError("ALLOWANCE_ALREADY_CONSUMED_BY_DIFFERENT_ORDER");
+    }
+    const order = await getOrderByIdPostgres(tx, scoped, input.order.id);
+    if (
+      !order ||
+      order.riskAllowanceId !== allowance.riskAllowanceId ||
+      order.riskAllowanceBindingDigest !== bindingDigest
+    ) {
+      throw new RiskV2PersistenceConflictError("consumed allowance order binding is missing");
+    }
+    if (order.state === "CREATED" || order.state === "RISK_APPROVED") {
       requireOrderMatchesAllowanceV2({
         state,
         allowance,
@@ -1092,56 +1158,86 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
         nonce: input.nonce,
         durableAt,
       });
-      bindingDigest = computeRiskAllowanceOrderBindingDigestV2({
-        organizationId: scoped.organizationId,
-        accountId: input.accountId,
-        allowance,
-        effectNotionalCeiling: input.effectNotionalCeiling,
-        order: { ...input.order, venue: allowance.venue },
-      });
-    } catch (error) {
-      const reason =
-        error instanceof RiskV2AdmissionRefusedError
-          ? error.reason
-          : "ORDER_DOES_NOT_MATCH_ALLOWANCE";
-      return refuseIssuedAllowanceConsumptionV2({
-        tx,
-        state,
-        row,
-        eventId: input.consumptionEventId,
-        reason,
-        durableAt,
-      });
     }
-    const order = await createOrderPostgres(tx, scoped, {
-      ...input.order,
-      venue: allowance.venue,
-      riskDecisionId: allowance.riskVerdictId,
+    return {
+      status: "CONSUMED",
+      order,
       riskAllowanceId: allowance.riskAllowanceId,
-      riskAllowanceBindingDigest: bindingDigest,
+      orderBindingDigestHex: bindingDigest,
+      consumedNow: false,
+    };
+  }
+  if (row.lifecycleState !== "ISSUED") {
+    return {
+      status: "REFUSED",
+      order: null,
+      riskAllowanceId: allowance.riskAllowanceId,
+      reason: `ALLOWANCE_${row.lifecycleState}`,
+    };
+  }
+  let bindingDigest: string;
+  try {
+    requireOrderMatchesAllowanceV2({
+      state,
+      allowance,
+      riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+      effectNotionalCeiling: input.effectNotionalCeiling,
+      order: input.order,
+      nonce: input.nonce,
+      durableAt,
     });
-    const event = buildEnforcementEventV2({
-      id: input.consumptionEventId,
+    bindingDigest = computeRiskAllowanceOrderBindingDigestV2({
       organizationId: scoped.organizationId,
       accountId: input.accountId,
-      eventSequence: state.nextEnforcementEventSequence,
-      riskVerdictId: allowance.riskVerdictId,
-      riskAllowanceId: allowance.riskAllowanceId,
-      eventType: "ALLOWANCE_CONSUMED",
-      fromState: "ISSUED",
-      toState: "CONSUMED",
-      reasonCode: null,
-      boundOrderId: order.id,
-      boundOrderDigestHex: bindingDigest,
-      eventPayload: {
-        orderId: order.id,
-        orderBindingDigestHex: bindingDigest,
-        reservationMovedToPendingNotional: allowance.reservedExposureNotional,
-      },
-      occurredAtUtc: durableAt.toISOString(),
-      previousEventDigestHex: state.lastEnforcementEventDigestHex,
+      allowance,
+      effectNotionalCeiling: input.effectNotionalCeiling,
+      order: { ...input.order, venue: allowance.venue },
     });
-    await tx.update(pgSchema.traderRiskAllowancesV2).set({
+  } catch (error) {
+    const reason =
+      error instanceof RiskV2AdmissionRefusedError
+        ? error.reason
+        : "ORDER_DOES_NOT_MATCH_ALLOWANCE";
+    return refuseIssuedAllowanceConsumptionV2({
+      tx,
+      state,
+      row,
+      eventId: input.consumptionEventId,
+      reason,
+      durableAt,
+    });
+  }
+  const order = await createOrderPostgres(tx, scoped, {
+    ...input.order,
+    venue: allowance.venue,
+    riskDecisionId: allowance.riskVerdictId,
+    riskAllowanceId: allowance.riskAllowanceId,
+    riskAllowanceBindingDigest: bindingDigest,
+  });
+  const event = buildEnforcementEventV2({
+    id: input.consumptionEventId,
+    organizationId: scoped.organizationId,
+    accountId: input.accountId,
+    eventSequence: state.nextEnforcementEventSequence,
+    riskVerdictId: allowance.riskVerdictId,
+    riskAllowanceId: allowance.riskAllowanceId,
+    eventType: "ALLOWANCE_CONSUMED",
+    fromState: "ISSUED",
+    toState: "CONSUMED",
+    reasonCode: null,
+    boundOrderId: order.id,
+    boundOrderDigestHex: bindingDigest,
+    eventPayload: {
+      orderId: order.id,
+      orderBindingDigestHex: bindingDigest,
+      reservationMovedToPendingNotional: allowance.reservedExposureNotional,
+    },
+    occurredAtUtc: durableAt.toISOString(),
+    previousEventDigestHex: state.lastEnforcementEventDigestHex,
+  });
+  await tx
+    .update(pgSchema.traderRiskAllowancesV2)
+    .set({
       lifecycleState: "CONSUMED",
       boundOrderId: order.id,
       boundOrderDigest: bindingDigest,
@@ -1150,25 +1246,28 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
       lastEnforcementEventSequence: BigInt(event.eventSequence),
       lastEnforcementEventDigest: event.contentDigestHex,
       updatedAt: durableAt,
-    }).where(and(
-      eq(pgSchema.traderRiskAllowancesV2.id, allowance.riskAllowanceId),
-      eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskAllowancesV2.lifecycleState, "ISSUED"),
-    ));
-    await appendEventAndAdvanceAccount({
-      tx,
-      state,
-      event,
-      nextAdmissionSequence: state.nextAdmissionSequence,
-      outstandingReservationNotional: formatDecimal(
-        parseDecimal(state.accounting.outstandingReservationNotional) -
-          parseDecimal(allowance.reservedExposureNotional),
+    })
+    .where(
+      and(
+        eq(pgSchema.traderRiskAllowancesV2.id, allowance.riskAllowanceId),
+        eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAllowancesV2.lifecycleState, "ISSUED"),
       ),
-      worstCasePendingExposureNotional: formatDecimal(
-        parseDecimal(state.accounting.worstCasePendingExposureNotional) +
-          parseDecimal(allowance.reservedExposureNotional),
-      ),
-    });
+    );
+  await appendEventAndAdvanceAccount({
+    tx,
+    state,
+    event,
+    nextAdmissionSequence: state.nextAdmissionSequence,
+    outstandingReservationNotional: formatDecimal(
+      parseDecimal(state.accounting.outstandingReservationNotional) -
+        parseDecimal(allowance.reservedExposureNotional),
+    ),
+    worstCasePendingExposureNotional: formatDecimal(
+      parseDecimal(state.accounting.worstCasePendingExposureNotional) +
+        parseDecimal(allowance.reservedExposureNotional),
+    ),
+  });
   return {
     status: "CONSUMED",
     order,
@@ -1185,5 +1284,6 @@ export async function consumeRiskAllowanceForOrderV2Postgres(
   input: ConsumeRiskAllowanceForOrderV2Input,
 ): Promise<ConsumeRiskAllowanceForOrderV2Result> {
   return runWaiaPostgresTransaction(db, (tx) =>
-    consumeRiskAllowanceForOrderV2FromTransaction(tx, context, input));
+    consumeRiskAllowanceForOrderV2FromTransaction(tx, context, input),
+  );
 }

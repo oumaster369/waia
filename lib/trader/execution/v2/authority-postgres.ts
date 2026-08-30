@@ -5,15 +5,14 @@ enforceServerOnly();
 import { and, eq, sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
-import {
-  runWaiaPostgresTransaction,
-  type WaiaPostgresDb,
-} from "@/db/waia-postgres-transaction";
+import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
-import { compareDecimal } from "@/lib/trader/risk/numeric";
 import {
-  consumeRiskAllowanceForOrderV2FromTransaction,
-} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+  buildOpeningCausalLineageFromRiskAllowanceV2,
+  serializeOpeningCausalLineageV1,
+} from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { consumeRiskAllowanceForOrderV2FromTransaction } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
@@ -38,10 +37,7 @@ import {
   readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
 
-type PlanMechanicsV2 = Omit<
-  CreateExecutionPlanV2Input,
-  "executionPlanId" | "allowance" | "policy"
->;
+type PlanMechanicsV2 = Omit<CreateExecutionPlanV2Input, "executionPlanId" | "allowance" | "policy">;
 
 export type BindExecutionAuthorityV2Input = Readonly<{
   allowance: RiskAllowanceV2;
@@ -56,12 +52,13 @@ export type BindExecutionAuthorityV2Input = Readonly<{
 export type BoundExecutionAuthorityV2 = Readonly<{
   plan: ExecutionPlanV2;
   attempt: ExecutionAttemptV2;
-  order: OrderRow & Readonly<{
-    executionPlanId: string;
-    executionPlanDigest: string;
-    executionAttemptId: string;
-    executionAttemptDigest: string;
-  }>;
+  order: OrderRow &
+    Readonly<{
+      executionPlanId: string;
+      executionPlanDigest: string;
+      executionAttemptId: string;
+      executionAttemptDigest: string;
+    }>;
   consumedNow: boolean;
 }>;
 
@@ -95,12 +92,18 @@ async function durableTransactionTime(
   return value;
 }
 
-function requireCurrentWindow(plan: ExecutionPlanV2, policy: ExecutionPolicyBindingV2, now: Date): void {
+function requireCurrentWindow(
+  plan: ExecutionPlanV2,
+  policy: ExecutionPolicyBindingV2,
+  now: Date,
+): void {
   const instant = now.getTime();
-  if (instant < new Date(policy.effectiveFromUtc).getTime() ||
+  if (
+    instant < new Date(policy.effectiveFromUtc).getTime() ||
     instant >= new Date(policy.effectiveUntilUtc).getTime() ||
     instant < new Date(plan.timingWindow.opensAtUtc).getTime() ||
-    instant >= new Date(plan.timingWindow.closesAtUtc).getTime()) {
+    instant >= new Date(plan.timingWindow.closesAtUtc).getTime()
+  ) {
     throw new ExecutionV2AuthorityRefusedError("EXECUTION_WINDOW_CLOSED");
   }
 }
@@ -115,8 +118,10 @@ export async function bindExecutionAuthorityV2Postgres(
   input: BindExecutionAuthorityV2Input,
 ): Promise<BoundExecutionAuthorityV2> {
   const scoped = requireOrgContext(context.organizationId);
-  if (input.allowance.organizationId !== scoped.organizationId ||
-    input.policy.organizationId !== scoped.organizationId) {
+  if (
+    input.allowance.organizationId !== scoped.organizationId ||
+    input.policy.organizationId !== scoped.organizationId
+  ) {
     throw new ExecutionV2AuthorityRefusedError("TENANT_SCOPE_MISMATCH");
   }
   const plan = createExecutionPlanV2({
@@ -140,6 +145,20 @@ export async function bindExecutionAuthorityV2Postgres(
     orderId,
   });
   const clientOrderId = deterministicExecutionClientOrderId(plan.contentDigestHex);
+  const openingLineage =
+    plan.action === "ENTER_LONG"
+      ? buildOpeningCausalLineageFromRiskAllowanceV2({
+          allowance: input.allowance,
+          organizationId: plan.organizationId,
+          symbol: plan.symbol,
+          canonicalCausalLineageDigest: plan.canonicalCausalLineageDigestHex!,
+          forecastId: plan.forecastId!,
+          forecastContentDigest: plan.forecastContentDigestHex!,
+          decisionId: plan.decisionId,
+          decisionContentDigest: plan.decisionContentDigestHex,
+          riskVerdictId: plan.riskVerdictId,
+        })
+      : null;
 
   return runWaiaPostgresTransaction(db, async (tx) => {
     const durableAt = await durableTransactionTime(tx);
@@ -169,6 +188,10 @@ export async function bindExecutionAuthorityV2Postgres(
         strategySignalId: input.strategySignalId,
         allocationDecisionId: input.allocationDecisionId,
         credentialId: input.credentialId,
+        openingCausalLineageJson: openingLineage
+          ? serializeOpeningCausalLineageV1(openingLineage)
+          : null,
+        openingCausalLineageDigest: openingLineage?.contentDigest ?? null,
       },
     });
     if (consumed.status !== "CONSUMED") {
@@ -177,23 +200,32 @@ export async function bindExecutionAuthorityV2Postgres(
 
     if (!consumed.consumedNow) {
       const existing = await readExecutionAttemptProjectionV2Postgres(tx, scoped, attemptId, true);
-      const orderRows = await tx.select({
-        executionPlanId: pgSchema.traderOrders.executionPlanId,
-        executionPlanDigest: pgSchema.traderOrders.executionPlanDigest,
-        executionAttemptId: pgSchema.traderOrders.executionAttemptId,
-        executionAttemptDigest: pgSchema.traderOrders.executionAttemptDigest,
-      }).from(pgSchema.traderOrders).where(and(
-        eq(pgSchema.traderOrders.id, consumed.order.id),
-        eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
-      )).limit(1);
+      const orderRows = await tx
+        .select({
+          executionPlanId: pgSchema.traderOrders.executionPlanId,
+          executionPlanDigest: pgSchema.traderOrders.executionPlanDigest,
+          executionAttemptId: pgSchema.traderOrders.executionAttemptId,
+          executionAttemptDigest: pgSchema.traderOrders.executionAttemptDigest,
+        })
+        .from(pgSchema.traderOrders)
+        .where(
+          and(
+            eq(pgSchema.traderOrders.id, consumed.order.id),
+            eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+          ),
+        )
+        .limit(1);
       const orderProjection = orderRows[0];
-      if (!existing || !orderProjection ||
+      if (
+        !existing ||
+        !orderProjection ||
         existing.attempt.executionPlanContentDigestHex !== storedPlan.contentDigestHex ||
         existing.attempt.orderId !== consumed.order.id ||
         orderProjection.executionPlanId !== storedPlan.executionPlanId ||
         orderProjection.executionPlanDigest !== storedPlan.contentDigestHex ||
         orderProjection.executionAttemptId !== existing.attempt.executionAttemptId ||
-        orderProjection.executionAttemptDigest !== existing.attempt.contentDigestHex) {
+        orderProjection.executionAttemptDigest !== existing.attempt.contentDigestHex
+      ) {
         throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_OR_CONFLICTING_RESTART_BINDING");
       }
       return Object.freeze({
@@ -217,15 +249,20 @@ export async function bindExecutionAuthorityV2Postgres(
       riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
       boundAtUtc: durableAt.toISOString(),
     });
-    await tx.update(pgSchema.traderOrders).set({
-      executionPlanId: storedPlan.executionPlanId,
-      executionPlanDigest: storedPlan.contentDigestHex,
-      executionAttemptId: attempt.executionAttemptId,
-      executionAttemptDigest: attempt.contentDigestHex,
-    }).where(and(
-      eq(pgSchema.traderOrders.id, orderId),
-      eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
-    ));
+    await tx
+      .update(pgSchema.traderOrders)
+      .set({
+        executionPlanId: storedPlan.executionPlanId,
+        executionPlanDigest: storedPlan.contentDigestHex,
+        executionAttemptId: attempt.executionAttemptId,
+        executionAttemptDigest: attempt.contentDigestHex,
+      })
+      .where(
+        and(
+          eq(pgSchema.traderOrders.id, orderId),
+          eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+        ),
+      );
     const storedAttempt = await insertExecutionAttemptV2Postgres(tx, scoped, attempt);
     for (const [reportType, rawObservation] of [
       ["PLAN_SEALED", { executionPlanContentDigestHex: storedPlan.contentDigestHex }],
@@ -292,26 +329,37 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     );
     if (!projection) throw new ExecutionV2AuthorityRefusedError("ATTEMPT_NOT_FOUND");
     if (projection.lifecycleState !== "BOUND") {
-      return { status: "REFUSED_ALREADY_STARTED" as const, lifecycleState: projection.lifecycleState };
+      return {
+        status: "REFUSED_ALREADY_STARTED" as const,
+        lifecycleState: projection.lifecycleState,
+      };
     }
-    const plan = await readExecutionPlanV2Postgres(
-      tx,
-      scoped,
-      projection.attempt.executionPlanId,
-    );
+    const plan = await readExecutionPlanV2Postgres(tx, scoped, projection.attempt.executionPlanId);
     const policy = plan
       ? await readExecutionPolicyV2Postgres(tx, scoped, plan.executionPolicyId)
       : null;
-    const allowanceRows = await tx.select().from(pgSchema.traderRiskAllowancesV2).where(and(
-      eq(pgSchema.traderRiskAllowancesV2.id, projection.attempt.riskAllowanceId),
-      eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
-      eq(pgSchema.traderRiskAllowancesV2.accountId, projection.attempt.accountId),
-    )).for("update");
+    const allowanceRows = await tx
+      .select()
+      .from(pgSchema.traderRiskAllowancesV2)
+      .where(
+        and(
+          eq(pgSchema.traderRiskAllowancesV2.id, projection.attempt.riskAllowanceId),
+          eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+          eq(pgSchema.traderRiskAllowancesV2.accountId, projection.attempt.accountId),
+        ),
+      )
+      .for("update");
     const allowance = allowanceRows[0];
-    const orderRows = await tx.select().from(pgSchema.traderOrders).where(and(
-      eq(pgSchema.traderOrders.id, projection.attempt.orderId),
-      eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
-    )).for("update");
+    const orderRows = await tx
+      .select()
+      .from(pgSchema.traderOrders)
+      .where(
+        and(
+          eq(pgSchema.traderOrders.id, projection.attempt.orderId),
+          eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+        ),
+      )
+      .for("update");
     const order = orderRows[0];
     if (!plan || !policy || !allowance || !order) {
       throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
@@ -330,9 +378,11 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     });
     const priceMatches =
       (order.price === null && projection.attempt.exactRequestPayload.price === null) ||
-      (order.price !== null && projection.attempt.exactRequestPayload.price !== null &&
+      (order.price !== null &&
+        projection.attempt.exactRequestPayload.price !== null &&
         compareDecimal(order.price, projection.attempt.exactRequestPayload.price) === 0);
-    if (expectedAttempt.contentDigestHex !== projection.attempt.contentDigestHex ||
+    if (
+      expectedAttempt.contentDigestHex !== projection.attempt.contentDigestHex ||
       expectedAttempt.effectIdentityDigestHex !== projection.attempt.effectIdentityDigestHex ||
       plan.contentDigestHex !== projection.attempt.executionPlanContentDigestHex ||
       policy.contentDigestHex !== plan.executionPolicyContentDigestHex ||
@@ -344,17 +394,20 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       compareDecimal(plan.plannedQuantity, allowance.exactQualifiedQuantity) > 0 ||
       !["CREATED", "RISK_APPROVED"].includes(order.state) ||
       order.riskAllowanceId !== allowance.id ||
-      order.riskDecisionId !== allowance.riskVerdictId || order.venue !== plan.venue ||
+      order.riskDecisionId !== allowance.riskVerdictId ||
+      order.venue !== plan.venue ||
       order.symbol !== projection.attempt.exactRequestPayload.symbol ||
       order.side !== projection.attempt.exactRequestPayload.side ||
-      order.type !== projection.attempt.exactRequestPayload.type || !priceMatches ||
+      order.type !== projection.attempt.exactRequestPayload.type ||
+      !priceMatches ||
       compareDecimal(order.quantity, projection.attempt.exactRequestPayload.quantity) !== 0 ||
       order.clientOrderId !== projection.attempt.clientOrderId ||
       order.idempotencyKey !== `execution-v2-${plan.contentDigestHex}` ||
       order.executionPlanId !== plan.executionPlanId ||
       order.executionPlanDigest !== plan.contentDigestHex ||
       order.executionAttemptId !== projection.attempt.executionAttemptId ||
-      order.executionAttemptDigest !== projection.attempt.contentDigestHex) {
+      order.executionAttemptDigest !== projection.attempt.contentDigestHex
+    ) {
       throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_DURABLE_EFFECT_BINDING");
     }
     const durableAt = await durableTransactionTime(tx);

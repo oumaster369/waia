@@ -489,6 +489,11 @@ export async function runScientificControlReplayV2Ceremony(
           decisionId: economics.id,
           semanticDigestHex: economics.contentDigest,
           contentDigestHex: economics.contentDigest,
+          forecastId,
+          forecastContentDigestHex: packageContentDigestHex,
+          canonicalCausalLineageDigestHex: sha256Hex(
+            `control-replay-causal-lineage:${forecastId}:${packageContentDigestHex}`,
+          ),
           executionPolicyDigestHex: sha256Hex(
             `control-replay-execution-policy:${economics.contentDigest}:HTX:limit:GTC:MAKER`,
           ),

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-635",
+  "base": {
+    "ref": "origin/main",
+    "sha": "446eb88c8e8ca70525b9d591275883721d08dba1"
+  },
+  "branch": "dee-635-causal-lineage",
+  "status": "ready-for-publication",
+  "riskTier": "T3",
+  "dependencies": {
+    "DEE-624": "Done",
+    "DEE-634": "Done",
+    "DEE-652": "Done"
+  },
+  "ownedGlobs": [
+    "lib/trader/execution/**",
+    "lib/trader/lifecycle/**",
+    "lib/trader/decision-v2/**",
+    "lib/trader/risk/v2/**",
+    "db/**",
+    "app/admin/**",
+    "app/api/admin/**",
+    "app/api/dashboard/**",
+    "app/dashboard/**",
+    "tests/unit/**",
+    "tests/integration/**",
+    "docs/plans/dee-635-*"
+  ],
+  "forbiddenGlobs": [
+    "lib/trader/intelligence/forecast-decision/**",
+    "lib/trader/billing/**",
+    "replay-runs/**"
+  ],
+  "frozenInvariants": [
+    "Opening causal lineage is content-addressed and immutable on the opening order, trade and lot; fills and legs retain direct immutable references without reconstructing intent.",
+    "Exposure-increasing submission fails closed on absent or mismatched Decision V2, Risk V2, Forecast V2 or canonical causal lineage authority.",
+    "Accounting, PnL, HWM, scientific formula, holdout, live and capital policy semantics are unchanged."
+  ],
+  "scopeExpansion": {
+    "status": "controller-authorized",
+    "reason": "Execution V2 lacked exact Forecast V2 and canonical-causal-lineage identities required for truthful persistence.",
+    "constraint": "Additive pass-through only; no retrospective lookup, invented refs, economics, permission, live or capital-policy change."
+  },
+  "validation": [
+    "schema and digest known-answer/mutation tests",
+    "open/partial/multi-fill/close lifecycle parity",
+    "restart and reconciliation preservation",
+    "SQLite and PostgreSQL persistence parity",
+    "full fresh-migrated suite",
+    "independent exact-head P1=0/P2=0 review",
+    "authoritative CI and DEE-653 admission"
+  ],
+  "prepublicationEvidence": {
+    "semanticHead": "a287a48f5fa21bfbb6c5c50f74a78bd1d9a441d2",
+    "freshFullSuite": "890 files passed / 84 skipped; 5170 tests passed / 431 skipped; 0 failures; 1847.18s",
+    "postgres": "fresh full migration chain PASS with tenant-composite order/fill foreign keys and insert/update/delete guards introspected",
+    "focused": "trade-leg migration and lifecycle repository proofs 9/9 PASS",
+    "quality": "typecheck, lint (0 errors), production build and canonical validation PASS",
+    "independentReview": "exact semantic head P1=0/P2=0"
+  }
+}
