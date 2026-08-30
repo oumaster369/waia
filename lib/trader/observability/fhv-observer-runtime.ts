@@ -197,6 +197,12 @@ export function createFhvObserverRuntime(
           );
         }
       }
+      if (campaignIdentity.kind === "OFFICIAL_CONTROL_REPLAY") {
+        // The chronological V2 driver owns this immutable, accounting-rich status stream.
+        // The rehearsal observer cannot reconstruct it from replay-checkpoint.json and must
+        // never replace it with a null-checkpoint/unknown-identity projection.
+        return;
+      }
       await runFhvObserverTick(state, {
         cyclesProcessed: progress?.cyclesProcessed,
         phase: progress?.phase,
