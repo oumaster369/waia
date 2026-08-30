@@ -56,6 +56,17 @@ export type RuntimeControlLeaseClaimV2 = Readonly<{
   expectedPreviousDigest: string | null;
 }>;
 
+export function validateRuntimeControlLeaseClaimV2(value: RuntimeControlLeaseClaimV2): void {
+  const now = Date.parse(value.adjudicatedAtUtc);
+  const expiry = Date.parse(value.validUntilUtc);
+  if (!Number.isFinite(now) || !Number.isFinite(expiry) || expiry <= now) {
+    throw new Error("RUNTIME_CONTROL_LEASE_INVALID_TIME");
+  }
+  if (!Number.isSafeInteger(value.leaseEpoch) || value.leaseEpoch < 1) {
+    throw new Error("RUNTIME_CONTROL_LEASE_INVALID_EPOCH");
+  }
+}
+
 export interface RuntimeControlLeaseRepositoryV2 {
   claimExclusive(value: RuntimeControlLeaseClaimV2): Promise<"CLAIMED" | "CONFLICT">;
   current(organizationId: string): Promise<RuntimeControlLeaseClaimV2 | null>;
@@ -67,14 +78,8 @@ export function createInMemoryRuntimeControlLeaseRepositoryV2(): RuntimeControlL
   return {
     async claimExclusive(value) {
       const current = claims.get(value.organizationId);
+      validateRuntimeControlLeaseClaimV2(value);
       const now = Date.parse(value.adjudicatedAtUtc);
-      const expiry = Date.parse(value.validUntilUtc);
-      if (!Number.isFinite(now) || !Number.isFinite(expiry) || expiry <= now) {
-        throw new Error("RUNTIME_CONTROL_LEASE_INVALID_TIME");
-      }
-      if (!Number.isSafeInteger(value.leaseEpoch) || value.leaseEpoch < 1) {
-        throw new Error("RUNTIME_CONTROL_LEASE_INVALID_EPOCH");
-      }
       if (!current) {
         if (value.leaseEpoch !== 1 || value.expectedPreviousDigest !== null) return "CONFLICT";
       } else {
