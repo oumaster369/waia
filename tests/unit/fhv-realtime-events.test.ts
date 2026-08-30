@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildFhvOperatorStatusV1 } from "@/lib/trader/observability/build-fhv-operator-status-v1";
+import { reduceAdminAccountEvent, type FhvAdminAccountEvent } from "@/lib/trader/fhv-admin-stream-view-model";
 import {
   encodeFhvSseEvent,
   FhvSseFrameBuffer,
@@ -39,10 +40,17 @@ describe("DEE-785 realtime observer event contract", () => {
     expect(events.every((item) => item.organizationId === ORG_ID)).toBe(true);
     expect(events.every((item) => item.campaignRunId === RUN_ID)).toBe(true);
     expect(events.every((item) => item.source === "HISTORICAL_SIMULATION")).toBe(true);
-    expect(events.find((item) => item.kind === "account.balance")?.payload).toMatchObject({
+    const accountEvent = events.find((item) => item.kind === "account.balance");
+    expect(accountEvent?.payload).toMatchObject({
       accountKind: "HISTORICAL_VIRTUAL",
       delta24h: null,
       delta24hPct: null,
+      openPositionsCount: status.tradingSimulation.openPositionsCount,
+    });
+    expect(reduceAdminAccountEvent([], accountEvent as FhvAdminAccountEvent)[0]).toMatchObject({
+      id: `historical:${ORG_ID}`,
+      openPositions: status.tradingSimulation.openPositionsCount,
+      direction24h: "unavailable",
     });
     expect(events.find((item) => item.kind === "gate")?.payload).toMatchObject({
       holdout: { state: "SEALED_NOT_ACCESSED", gate: "CLOSED" },

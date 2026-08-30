@@ -82,6 +82,7 @@ export function projectFhvRealtimeEvents(status: FhvOperatorStatusV1): readonly 
       grossPnl: simulation.grossPnl,
       netPnl: simulation.netPnl,
       exposure: simulation.exposure,
+      openPositionsCount: simulation.openPositionsCount,
     }),
     event(status, "position.snapshot", 2, {
       accountId: virtualAccountId,
