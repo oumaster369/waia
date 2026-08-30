@@ -40,6 +40,7 @@ import {
   FHV_PRE_HOLDOUT_QUALIFICATION_MODE,
   readFhvPreHoldoutQualificationReceipt,
 } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
+import { readFhvPreHoldoutRuntimeRequalification } from "@/lib/trader/market-data/fhv-pre-holdout-runtime-requalification";
 import {
   buildFhvScientificPartitionReceiptSet,
   computeFhvScientificPartitionsDigest,
@@ -112,6 +113,7 @@ export type FhvDatasetQualificationReceiptV1 = Readonly<{
     >
   >;
   scientificPartitionsDigest?: string;
+  runtimeRequalificationReceiptDigest?: string;
   failureReason?: string;
 }>;
 
@@ -745,6 +747,7 @@ export function qualifyFhvOfficialDataset(input: {
   releaseTag?: string;
   organizationId?: string;
   operatorId?: string;
+  runtimeRequalificationReceiptPath?: string;
 }): Omit<FhvDatasetQualificationReceiptV1, "qualificationReceiptDigest" | "qualifiedAtUtc"> {
   const datasetRoot = input.datasetRoot.trim();
   const manifestPath = input.manifestPath.trim();
@@ -782,11 +785,32 @@ export function qualifyFhvOfficialDataset(input: {
       }
       throw error;
     }
+    let runtimeRequalificationReceiptDigest: string | undefined;
     if (input.releaseSha && input.releaseSha.trim().toLowerCase() !== preHoldout.releaseSha) {
-      throw new FhvDatasetQualificationError(
-        "RELEASE_MISMATCH",
-        "pre-holdout qualification releaseSha mismatch",
+      if (!input.runtimeRequalificationReceiptPath) {
+        throw new FhvDatasetQualificationError(
+          "RELEASE_MISMATCH",
+          "pre-holdout qualification releaseSha mismatch",
+        );
+      }
+      const requalification = readFhvPreHoldoutRuntimeRequalification(
+        input.runtimeRequalificationReceiptPath,
       );
+      if (
+        requalification.sourceQualificationReceiptDigest !==
+          preHoldout.qualificationReceiptDigest ||
+        requalification.sourceReleaseSha !== preHoldout.releaseSha ||
+        requalification.targetReleaseSha !== input.releaseSha.trim().toLowerCase() ||
+        requalification.datasetContentDigest !== preHoldout.developmentWalkForwardContentDigest ||
+        requalification.organizationId !== preHoldout.organizationId ||
+        requalification.operatorId !== preHoldout.operatorId
+      ) {
+        throw new FhvDatasetQualificationError(
+          "RUNTIME_REQUALIFICATION_MISMATCH",
+          "runtime requalification does not bind the exact source receipt, bytes, identity and target SHA",
+        );
+      }
+      runtimeRequalificationReceiptDigest = requalification.requalificationReceiptDigest;
     }
     if (input.organizationId && input.organizationId !== preHoldout.organizationId) {
       throw new FhvDatasetQualificationError(
@@ -823,6 +847,7 @@ export function qualifyFhvOfficialDataset(input: {
         firstBarOpenTime: entry.firstBarOpen,
         lastBarOpenTime: entry.lastBarClose,
       })),
+      ...(runtimeRequalificationReceiptDigest ? { runtimeRequalificationReceiptDigest } : {}),
     };
   }
 
@@ -934,6 +959,7 @@ const DATASET_QUALIFICATION_RECEIPT_COMPARE_KEYS = [
   "holdoutSealDigest",
   "partitionReceipts",
   "scientificPartitionsDigest",
+  "runtimeRequalificationReceiptDigest",
 ] as const satisfies readonly (keyof FhvDatasetQualificationReceiptV1)[];
 
 export function writeFhvDatasetQualificationReceiptAtomic(input: {
@@ -946,6 +972,7 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
   releaseTag?: string;
   organizationId?: string;
   operatorId?: string;
+  runtimeRequalificationReceiptPath?: string;
 }): FhvDatasetQualificationReceiptV1 {
   mkdirSync(input.receiptDir, { recursive: true });
   const receiptPath = join(input.receiptDir, FHV_DATASET_QUALIFICATION_RECEIPT_FILENAME);
@@ -966,6 +993,7 @@ export function writeFhvDatasetQualificationReceiptAtomic(input: {
         releaseTag: input.releaseTag,
         organizationId: input.organizationId,
         operatorId: input.operatorId,
+        runtimeRequalificationReceiptPath: input.runtimeRequalificationReceiptPath,
       });
 
   if (existsSync(receiptPath)) {

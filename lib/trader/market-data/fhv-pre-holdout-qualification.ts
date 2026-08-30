@@ -38,7 +38,8 @@ import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 export const FHV_PRE_HOLDOUT_QUALIFICATION_SCHEMA =
   "fhv-pre-holdout-qualification-receipt/v1" as const;
 export const FHV_PRE_HOLDOUT_QUALIFICATION_MODE = "OFFICIAL_PRE_HOLDOUT_REAL_DATA" as const;
-export const FHV_PRE_HOLDOUT_HOLDOUT_STATUS = "SEALED_NOT_ACCESSED" as const;
+export const FHV_PRE_HOLDOUT_HOLDOUT_STATUS =
+  "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED" as const;
 export const FHV_PRE_HOLDOUT_PARTITIONS = ["development", "walk-forward"] as const;
 
 const PRE_HOLDOUT_RECEIPT_V2_PATTERN =
@@ -546,7 +547,7 @@ export function readFhvPreHoldoutQualificationReceipt(
     fail("MODE_MISMATCH", "receipt is not OFFICIAL_PRE_HOLDOUT_REAL_DATA");
   }
   if (parsed.holdout.status !== FHV_PRE_HOLDOUT_HOLDOUT_STATUS) {
-    fail("HOLDOUT_STATUS_INVALID", "holdout must remain SEALED_NOT_ACCESSED");
+    fail("HOLDOUT_STATUS_INVALID", "blind holdout must be absent and not accessed");
   }
   if ("blindPayloadDigest" in parsed || "holdoutRawSha256" in parsed) {
     fail(
