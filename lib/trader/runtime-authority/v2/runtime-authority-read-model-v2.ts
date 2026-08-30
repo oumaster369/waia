@@ -32,6 +32,18 @@ export async function readTenantRuntimeAuthorityV2(
     adjudicatedAtUtc: latest.adjudicatedAtUtc });
 }
 
+export async function readLatestTenantRuntimeAuthorityV2(
+  repository: RuntimeAuthorityAssessmentRepositoryV2,
+  context: OrgContext,
+): Promise<RuntimeAuthorityReadModelV2> {
+  const rows = await repository.listByOrganization(context);
+  const latest = [...rows].sort((a, b) => b.adjudicatedAtUtc.localeCompare(a.adjudicatedAtUtc) ||
+    b.assessmentId.localeCompare(a.assessmentId))[0];
+  return latest
+    ? readTenantRuntimeAuthorityV2(repository, context, latest.runtimeInstanceId)
+    : unavailable(context.organizationId, "UNAVAILABLE");
+}
+
 /** Operator projection is deliberately explicit and cannot infer or widen tenant scope. */
 export async function readAdminRuntimeAuthoritiesV2(
   repository: RuntimeAuthorityAssessmentRepositoryV2,

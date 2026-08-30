@@ -18,6 +18,11 @@
     "db/**",
     "tests/unit/**",
     "tests/integration/**",
+    "app/api/trader/runtime-authority/**",
+    "app/api/trader/admin/runtime-authority/**",
+    "app/(trader)/trader/**",
+    "app/(trader)/admin/runtime-authority/**",
+    "components/trader/runtime-authority/**",
     "docs/plans/dee-637-*"
   ],
   "forbiddenGlobs": [
@@ -51,7 +56,7 @@
   },
   "externalEvidence": {
     "linear": "DEE-637 linkage and DEE-636 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
-    "local": "Admission-only; semantic implementation has not started.",
+    "local": "Runtime contract, atomic SQLite/PostgreSQL lease CAS, fenced startup writes, deterministic orchestration and separate tenant/Admin read models implemented through e4ae67cb; controller authorized read-only HTTP/UI observability as the remaining local slice.",
     "postgres": "Authoritative PostgreSQL CI required before merge.",
     "independentReview": "Required at exact implementation head before publication."
   }

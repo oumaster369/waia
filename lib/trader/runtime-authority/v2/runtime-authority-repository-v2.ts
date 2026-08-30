@@ -18,6 +18,7 @@ export interface RuntimeAuthorityAssessmentRepositoryV2 {
   ): Promise<RuntimeAuthorityAssessmentV2>;
   getById(context: OrgContext, assessmentId: string): Promise<RuntimeAuthorityAssessmentV2 | null>;
   listByRuntime(context: OrgContext, runtimeInstanceId: string): Promise<readonly RuntimeAuthorityAssessmentV2[]>;
+  listByOrganization(context: OrgContext): Promise<readonly RuntimeAuthorityAssessmentV2[]>;
 }
 
 export function createInMemoryRuntimeAuthorityAssessmentRepositoryV2(): RuntimeAuthorityAssessmentRepositoryV2 {
@@ -42,6 +43,9 @@ export function createInMemoryRuntimeAuthorityAssessmentRepositoryV2(): RuntimeA
       return [...rows.values()]
         .filter((row) => row.organizationId === context.organizationId && row.runtimeInstanceId === runtimeInstanceId)
         .sort((left, right) => left.assessmentId.localeCompare(right.assessmentId));
+    },
+    async listByOrganization(context) {
+      return [...rows.values()].filter((row) => row.organizationId === context.organizationId);
     },
   };
 }

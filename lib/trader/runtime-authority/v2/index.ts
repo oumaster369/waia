@@ -5,3 +5,5 @@ export * from "./runtime-authority-repository-postgres-v2";
 export * from "./runtime-authority-startup-service-v2";
 export * from "./runtime-authority-orchestrator-v2";
 export * from "./runtime-authority-read-model-v2";
+export * from "./runtime-authority-http-v2";
+export * from "./runtime-authority-admin-http-v2";

@@ -12,8 +12,11 @@ import {
   type RuntimeControlLeaseRepositoryV2,
 } from "./runtime-authority-repository-v2";
 import { serializeRuntimeAuthorityAssessmentV2 } from "./runtime-authority-assessment-v2";
+import { parseRuntimeAuthorityAssessmentV2 } from "./runtime-authority-assessment-v2";
 import { RuntimeAuthorityPersistenceConflictV2 } from "./runtime-authority-repository-v2";
 import type { RuntimeAuthorityStartupWriterV2 } from "./runtime-authority-startup-service-v2";
+import type { RuntimeAuthorityAssessmentRepositoryV2 } from "./runtime-authority-repository-v2";
+import { and } from "drizzle-orm";
 
 function mapHead(row: typeof pgSchema.traderRuntimeControlLeaseHeadsV2.$inferSelect): RuntimeControlLeaseClaimV2 {
   return Object.freeze({
@@ -25,6 +28,36 @@ function mapHead(row: typeof pgSchema.traderRuntimeControlLeaseHeadsV2.$inferSel
     adjudicatedAtUtc: "",
     expectedPreviousDigest: null,
   });
+}
+
+export function createPostgresRuntimeAuthorityAssessmentRepositoryV2(db: WaiaPostgresDb): RuntimeAuthorityAssessmentRepositoryV2 {
+  const mapped = (row: typeof pgSchema.traderRuntimeAuthorityAssessmentsV2.$inferSelect) => {
+    const value = parseRuntimeAuthorityAssessmentV2(row.canonicalJson);
+    if (value.organizationId !== row.organizationId || value.assessmentId !== row.assessmentId) {
+      throw new RuntimeAuthorityPersistenceConflictV2();
+    }
+    return value;
+  };
+  return {
+    async append() { throw new Error("RUNTIME_AUTHORITY_WRITES_REQUIRE_FENCED_STARTUP_WRITER"); },
+    async getById(context, assessmentId) {
+      const rows = await db.select().from(pgSchema.traderRuntimeAuthorityAssessmentsV2).where(and(
+        eq(pgSchema.traderRuntimeAuthorityAssessmentsV2.organizationId, context.organizationId),
+        eq(pgSchema.traderRuntimeAuthorityAssessmentsV2.assessmentId, assessmentId))).limit(1);
+      return rows[0] ? mapped(rows[0]) : null;
+    },
+    async listByRuntime(context, runtimeInstanceId) {
+      const rows = await db.select().from(pgSchema.traderRuntimeAuthorityAssessmentsV2).where(and(
+        eq(pgSchema.traderRuntimeAuthorityAssessmentsV2.organizationId, context.organizationId),
+        eq(pgSchema.traderRuntimeAuthorityAssessmentsV2.runtimeInstanceId, runtimeInstanceId)));
+      return rows.map(mapped);
+    },
+    async listByOrganization(context) {
+      const rows = await db.select().from(pgSchema.traderRuntimeAuthorityAssessmentsV2).where(
+        eq(pgSchema.traderRuntimeAuthorityAssessmentsV2.organizationId, context.organizationId));
+      return rows.map(mapped);
+    },
+  };
 }
 
 export function createPostgresRuntimeAuthorityStartupWriterV2(db: WaiaPostgresDb): RuntimeAuthorityStartupWriterV2 {

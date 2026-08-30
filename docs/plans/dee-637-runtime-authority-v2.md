@@ -55,6 +55,14 @@ Runtime Authority never invents a trade, Decision, allowance, execution effect, 
 5. Persist assessments and lease epochs append-only with restart/replay/concurrency and tenant isolation.
 6. Expose separate read-only Admin and tenant projections; introduce no action control.
 
+## Read-only observability admission (2026-08-30)
+
+The Program Controller explicitly admitted two non-authoritative observability bindings: an authenticated
+Trader view derived only from the session user's personal organization, and a separately Admin-authorized
+operator aggregate/drill-down view. Browser input never supplies tenant authority. Both views expose explicit
+`UNAVAILABLE` and restrictive posture/recovery/lease reason states, contain no mutations or secrets, and grant
+no production, live or capital authority.
+
 ## Acceptance
 
 - The same canonical evidence yields the same assessment id/digest and posture; any consumed mutation changes identity or fails closed.

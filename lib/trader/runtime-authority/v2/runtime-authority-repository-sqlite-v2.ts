@@ -197,5 +197,11 @@ export function createSqliteRuntimeAuthorityAssessmentRepositoryV2(
       ));
       return rows.map(mapRow).sort((left, right) => left.assessmentId.localeCompare(right.assessmentId));
     },
+    async listByOrganization(context) {
+      const scoped = requireOrgContext(context.organizationId);
+      const rows = await db.select().from(traderRuntimeAuthorityAssessmentsV2).where(
+        eq(traderRuntimeAuthorityAssessmentsV2.organizationId, scoped.organizationId));
+      return rows.map(mapRow);
+    },
   };
 }
