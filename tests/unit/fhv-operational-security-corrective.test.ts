@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildFhvAdminCsrfSetCookieHeader,
@@ -27,6 +27,7 @@ import {
   FhvRuntimeConfigError,
   requireFhvCommandSecret,
   requireFhvCsrfSecret,
+  requireFhvObserverAccessCredentials,
 } from "@/lib/trader/observability/fhv-runtime-secrets";
 import { FhvRuntimeResponseValidationError } from "@/lib/trader/observability/fhv-runtime-response-validators";
 import { assertFhvStatusOrganizationBinding } from "@/lib/trader/observability/fhv-telemetry-probes";
@@ -57,6 +58,7 @@ describe("DEE-416 operational security corrective", () => {
     const env = { NODE_ENV: "production" } as NodeJS.ProcessEnv;
     expect(() => requireFhvCommandSecret(env)).toThrow(FhvRuntimeConfigError);
     expect(() => requireFhvCsrfSecret(env)).toThrow(FhvRuntimeConfigError);
+    expect(() => requireFhvObserverAccessCredentials(env)).toThrow(FhvRuntimeConfigError);
 
     const bridge = resolveFhvObserverBridge(env);
     expect(bridge.kind).toBe("AUTHENTICATED_OBSERVER_TUNNEL_ADAPTER");
@@ -66,6 +68,38 @@ describe("DEE-416 operational security corrective", () => {
         campaignRunId: RUN_ID,
       }),
     ).rejects.toThrow(FhvRuntimeConfigError);
+  });
+
+  it("presents Cloudflare Access credentials in addition to HMAC", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(sampleStatus(ORG_A)), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const env = {
+      NODE_ENV: "production",
+      FHV_OBSERVER_TUNNEL_BASE_URL: "https://observer.trader.waia.life",
+      FHV_OBSERVER_TUNNEL_SECRET: "fhv-test-tunnel-secret",
+      FHV_OBSERVER_ACCESS_CLIENT_ID: "access-client-id",
+      FHV_OBSERVER_ACCESS_CLIENT_SECRET: "access-client-secret",
+    } as NodeJS.ProcessEnv;
+
+    try {
+      await resolveFhvObserverBridge(env).fetchStatus({
+        organizationId: ORG_A,
+        campaignRunId: RUN_ID,
+      });
+      const request = fetchMock.mock.calls[0];
+      const init = request?.[1] as RequestInit;
+      expect(init.headers).toMatchObject({
+        "CF-Access-Client-Id": "access-client-id",
+        "CF-Access-Client-Secret": "access-client-secret",
+      });
+      expect((init.headers as Record<string, string>)["x-fhv-observer-auth"]).toBeTruthy();
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it("rejects cross-organization status binding", () => {

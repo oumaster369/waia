@@ -47,6 +47,20 @@ export function requireFhvObserverTunnelSecret(env: NodeJS.ProcessEnv = process.
   return secret;
 }
 
+export function requireFhvObserverAccessCredentials(
+  env: NodeJS.ProcessEnv = process.env,
+): Readonly<{ clientId: string; clientSecret: string }> {
+  const clientId = env.FHV_OBSERVER_ACCESS_CLIENT_ID?.trim();
+  const clientSecret = env.FHV_OBSERVER_ACCESS_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) {
+    throw new FhvRuntimeConfigError(
+      "FHV_OBSERVER_ACCESS_CREDENTIALS_MISSING",
+      "FHV_OBSERVER_ACCESS_CLIENT_ID and FHV_OBSERVER_ACCESS_CLIENT_SECRET are required.",
+    );
+  }
+  return { clientId, clientSecret };
+}
+
 export function requireFhvObserverTunnelBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   const baseUrl = env.FHV_OBSERVER_TUNNEL_BASE_URL?.trim();
   if (!baseUrl) {

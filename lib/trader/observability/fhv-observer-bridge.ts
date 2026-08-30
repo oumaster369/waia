@@ -14,6 +14,7 @@ import {
   FhvRuntimeConfigError,
   isFhvProductionRuntime,
   isLocalDevelopmentStatusAdapterEnabled,
+  requireFhvObserverAccessCredentials,
   requireFhvObserverTunnelBaseUrl,
   requireFhvObserverTunnelSecret,
   requireLocalDevelopmentStatusPath,
@@ -106,6 +107,7 @@ async function signedObserverFetch(input: {
   body?: unknown;
 }): Promise<Response> {
   const secret = requireFhvObserverTunnelSecret(input.env);
+  const access = requireFhvObserverAccessCredentials(input.env);
   const baseUrl = requireFhvObserverTunnelBaseUrl(input.env);
   const bodyText = input.body === undefined ? "" : JSON.stringify(input.body);
   const payload: FhvObserverAuthPayload = {
@@ -125,6 +127,8 @@ async function signedObserverFetch(input: {
       "x-fhv-observer-auth": authToken,
       "x-fhv-organization-id": input.organizationId,
       "x-fhv-campaign-run-id": input.campaignRunId,
+      "CF-Access-Client-Id": access.clientId,
+      "CF-Access-Client-Secret": access.clientSecret,
     },
     body: bodyText.length > 0 ? bodyText : undefined,
     signal: AbortSignal.timeout(Number(input.env.FHV_OBSERVER_TUNNEL_TIMEOUT_MS ?? 10_000)),
