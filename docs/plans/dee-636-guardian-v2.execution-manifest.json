@@ -6,7 +6,7 @@
     "sha": "d6e09ffa3d1b93180910148c51d8c5cd6ce344cf"
   },
   "branch": "dee-636-guardian-v2",
-  "status": "admitted-local",
+  "status": "local-validation",
   "riskTier": "T3",
   "dependencies": {
     "DEE-635": "Merged; Linear closure evidence pending",
@@ -15,16 +15,9 @@
   },
   "ownedGlobs": [
     "lib/trader/guardian/v2/**",
-    "lib/trader/decision-v2/**",
-    "lib/trader/risk/v2/**",
-    "lib/trader/lifecycle/**",
     "db/**",
-    "app/admin/**",
-    "app/api/admin/**",
-    "app/api/dashboard/**",
-    "app/dashboard/**",
+    "docs/ai-trader/reality-v2-source-consumer-inventory.json",
     "tests/unit/**",
-    "tests/integration/**",
     "docs/plans/dee-636-*"
   ],
   "forbiddenGlobs": [
@@ -37,6 +30,8 @@
     "GuardianAssessmentV2 is immutable and content-addressed over exact tenant, open-position/lot, DEE-635 opening lineage, Reality frontier, qualified evidence and information-sufficiency inputs.",
     "Ordinary Guardian recommendations re-enter Decision V2 and Guardian has no direct capital-effect authority.",
     "A Decision-sealed protective mandate is deterministic, reduction-only and still passes Risk V2 and Execution V2.",
+    "REDUCE_PARTIAL and CLOSE_FULL are the only executable protective actions in this slice; TIGHTEN_PROTECTION fails closed pending a separately admitted non-amplifying executor.",
+    "Admin and tenant observability are separate read-only library projections; no UI/API completeness is claimed.",
     "Guardian never increases exposure, reverses, averages down, derives position truth from order status or weakens live/capital gates."
   ],
   "validation": [
@@ -50,6 +45,10 @@
     "authoritative CI and DEE-653 admission"
   ],
   "externalEvidence": {
-    "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here."
+    "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
+    "localFocused": "49/49 affected Guardian, Reality inventory and migration-identity tests passed after truthful 0181/Reality-consumer pin repair.",
+    "localFullFresh": "Pending rerun after exact pinned-inventory repair; the preceding literal full run passed 5207 tests and failed only the two now-repaired truthful inventories.",
+    "postgres": "Local PostgreSQL URLs are unavailable; authoritative PostgreSQL CI remains required.",
+    "independentReview": "Pending exact-head P1=0/P2=0 review."
   }
 }

@@ -9,7 +9,7 @@ executionSurfaces: [local, github-pr-ci, postgres-ci]
 requiredValidation: [focused-negative-tests, lifecycle-parity, tenant-isolation, typecheck, production-build, one-full-fresh-migrated-sqlite-suite, independent-exact-head-review, authoritative-postgres-and-dee-653]
 approvalGates: [ratified-dee-636-contract, exact-head-independent-review, dee-653-exact-head-admission]
 authoritativeBase: d6e09ffa3d1b93180910148c51d8c5cd6ce344cf
-state: admitted-local
+state: local-validation
 provenance:
   createdFrom: post-dee-635-merge-admission
   authoritativeBase: d6e09ffa3d1b93180910148c51d8c5cd6ce344cf
@@ -26,6 +26,8 @@ The ordinary change path remains `Reality + fresh evidence → GuardianAssessmen
 
 The only narrow exception is a previously Decision-sealed `ProtectiveActionMandateV2` whose exact deterministic trigger is satisfied by canonical Reality. That exception still flows through Risk and Execution, is reduction-only, and fails closed on missing/mismatched/stale mandate, trigger, lineage, tenant or Reality identity.
 
+This slice executes only `REDUCE_PARTIAL` and `CLOSE_FULL`. `TIGHTEN_PROTECTION` is a sealed recommendation/mandate value but is deliberately non-executable: the authority and pipeline fail closed with `GUARDIAN_PROTECTIVE_TIGHTEN_REQUIRES_DEDICATED_EXECUTOR` until a separately admitted executor can prove that a venue-side protection change cannot add, reverse or amplify exposure. No Admin or tenant action control is introduced here.
+
 Loss of `NEW_OPPORTUNITY` information sufficiency does not by itself blind an open-position reassessment. Guardian uses the separately versioned `OPEN_POSITION_REASSESSMENT` sufficiency profile and records its exact result.
 
 ## Owned surfaces
@@ -35,7 +37,7 @@ Loss of `NEW_OPPORTUNITY` information sufficiency does not by itself blind an op
 - additive persistence/schema required for immutable assessments and deterministic replay
 - Decision V2 input projection for ordinary Guardian recommendations
 - reduction-only protective-mandate validation before Risk V2
-- separate Admin operator and tenant-scoped read-only observability
+- separate Admin operator and tenant-scoped read-only observability projections (library read models only; no UI/API surface is claimed in this slice)
 - focused unit/integration/PostgreSQL tests
 - this plan and execution manifest
 
@@ -53,8 +55,8 @@ Loss of `NEW_OPPORTUNITY` information sufficiency does not by itself blind an op
 2. Bind each assessment to an existing tenant-scoped canonically open position/lot, its immutable DEE-635 opening lineage, exact Reality frontier and qualified evidence.
 3. Implement deterministic idempotent assessment persistence, replay/restart parity and tenant isolation.
 4. Project ordinary recommendations into Decision V2 without direct Risk/Execution access.
-5. Add the narrow, Decision-sealed, deterministic and reduction-only protective mandate validator.
-6. Expose separate Admin and tenant read-only assessment/coverage views.
+5. Add the narrow, Decision-sealed, deterministic and reduction-only protective mandate validator; keep `TIGHTEN_PROTECTION` fail-closed pending a dedicated executor.
+6. Expose separate Admin and tenant read-only assessment/coverage projections without introducing action controls.
 
 ## Acceptance
 
@@ -63,5 +65,5 @@ Loss of `NEW_OPPORTUNITY` information sufficiency does not by itself blind an op
 - Missing/cross-tenant/stale Reality, evidence, opening lineage or protective mandate blocks action.
 - Guardian cannot increase/reverse/average down or submit directly to a connector.
 - Ordinary changes re-enter Decision V2; protective actions remain reduction-only and still pass Risk V2 and Execution V2.
+- `TIGHTEN_PROTECTION` remains non-executable and visibly blocked by contract/read-model status until a separately admitted executor exists.
 - SQLite/PostgreSQL, restart/replay, tenant isolation, full fresh suite, exact-head review, authoritative CI and DEE-653 pass before merge.
-
