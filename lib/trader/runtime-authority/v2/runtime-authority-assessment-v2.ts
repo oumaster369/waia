@@ -176,3 +176,17 @@ export function serializeRuntimeAuthorityAssessmentV2(
   assertRuntimeAuthorityAssessmentV2(value);
   return canonicalizeSemanticJsonString(value);
 }
+
+export function parseRuntimeAuthorityAssessmentV2(json: string): RuntimeAuthorityAssessmentV2 {
+  let value: RuntimeAuthorityAssessmentV2;
+  try {
+    value = JSON.parse(json) as RuntimeAuthorityAssessmentV2;
+  } catch {
+    throw new Error("RUNTIME_AUTHORITY_INVALID_JSON");
+  }
+  assertRuntimeAuthorityAssessmentV2(value);
+  if (serializeRuntimeAuthorityAssessmentV2(value) !== json) {
+    throw new Error("RUNTIME_AUTHORITY_NON_CANONICAL_JSON");
+  }
+  return value;
+}

@@ -4,6 +4,7 @@ import {
   assertRuntimeAuthorityAssessmentV2,
   buildRuntimeAuthorityAssessmentV2,
   serializeRuntimeAuthorityAssessmentV2,
+  parseRuntimeAuthorityAssessmentV2,
 } from "@/lib/trader/runtime-authority/v2";
 
 const digest = (character: string) => character.repeat(64);
@@ -41,6 +42,7 @@ describe("RuntimeAuthorityAssessmentV2", () => {
     expect(first.posture).toBe("FULL_ANALYSIS_AND_NEW_RISK");
     expect(first.reasonCodes).toEqual(["RUNTIME_AUTHORITY_READY"]);
     expect(serializeRuntimeAuthorityAssessmentV2(first)).toBe(serializeRuntimeAuthorityAssessmentV2(second));
+    expect(parseRuntimeAuthorityAssessmentV2(serializeRuntimeAuthorityAssessmentV2(first))).toEqual(first);
   });
 
   it.each([
