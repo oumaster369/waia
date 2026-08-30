@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
+import { FhvUserObservationDashboard } from "@/components/trader/fhv-user-observation-dashboard";
 import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
 import type { BalanceSnapshotDto } from "@/lib/trader/balances/types";
 import type { PositionSnapshotDto } from "@/lib/trader/positions/types";
@@ -344,6 +346,8 @@ function TradeHistoryPanel({
 }
 
 export function TraderWorkspace() {
+  const searchParams = useSearchParams();
+  const observingHistoricalCampaign = Boolean(searchParams.get("campaign_run_id")?.trim());
   const [credentials, setCredentials] = React.useState<CredentialMetadataDto[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [connecting, setConnecting] = React.useState(false);
@@ -545,10 +549,12 @@ export function TraderWorkspace() {
         </p>
       ) : null}
 
-      {loading ? (
+      <FhvUserObservationDashboard />
+
+      {!observingHistoricalCampaign && loading ? (
         <p className="text-muted-foreground text-sm">Loading account…</p>
       ) : activeCredential ? (
-        <div className="space-y-6">
+        <div className={observingHistoricalCampaign ? "hidden" : "space-y-6"}>
           <section aria-labelledby="trader-account-heading" className="space-y-4">
             <div>
               <p className="text-muted-foreground text-xs tracking-wide uppercase">Account</p>
@@ -643,7 +649,11 @@ export function TraderWorkspace() {
           </aside>
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-lg space-y-6">
+        <div
+          className={
+            observingHistoricalCampaign ? "hidden" : "mx-auto w-full max-w-lg space-y-6"
+          }
+        >
           <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
             <h2 className="text-lg font-medium">Connect HTX</h2>
             <p className="text-muted-foreground mt-1 text-sm">
