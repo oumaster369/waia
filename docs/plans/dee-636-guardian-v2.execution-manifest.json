@@ -6,7 +6,7 @@
     "sha": "d6e09ffa3d1b93180910148c51d8c5cd6ce344cf"
   },
   "branch": "dee-636-guardian-v2",
-  "status": "exact-head-review-pending",
+  "status": "p1-repair-review-pending",
   "riskTier": "T3",
   "dependencies": {
     "DEE-635": "Merged; Linear closure evidence pending",
@@ -46,9 +46,9 @@
   ],
   "externalEvidence": {
     "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
-    "localFocused": "49/49 affected Guardian, Reality inventory and migration-identity tests passed after truthful 0181/Reality-consumer pin repair.",
-    "localFullFresh": "PASS on implementation head f8c4444e: 898 files/5209 tests passed; 85 files/433 tests skipped; duration 1560.60s. Skips are environment-gated PostgreSQL/live suites; authoritative PostgreSQL CI remains required.",
+    "localFocused": "52/52 affected Guardian, Reality inventory and migration-identity tests pass after exact P1 repairs; typecheck and canonical validation pass.",
+    "localFullFresh": "The pre-review implementation head f8c4444e passed 898 files/5209 tests (85 files/433 environment-gated skips) in 1560.60s. A fresh literal full rerun is required after the material P1 repair before publication.",
     "postgres": "Local PostgreSQL URLs are unavailable; authoritative PostgreSQL CI remains required.",
-    "independentReview": "Pending exact-head P1=0/P2=0 review."
+    "independentReview": "Head 3a08a747 review found P1=3/P2=0: recommendation quantity cap, exact execution-attempt/report-chain binding, and trusted protective expiry adjudication. All three are repaired with focused negative/boundary tests; fresh exact-head re-review is pending."
   }
 }

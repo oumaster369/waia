@@ -1,6 +1,8 @@
 import {
   validateExecutionPlanV2,
+  validateExecutionAttemptV2,
   validateExecutionReportV2,
+  type ExecutionAttemptV2,
   type ExecutionPlanV2,
   type ExecutionReportV2,
 } from "@/lib/trader/execution/v2/contracts";
@@ -51,7 +53,11 @@ export interface GuardianExecutionPortV2 {
     decision: GuardianDecisionSealV2;
     allowance: RiskAllowanceV2;
     lot: PositionLotRow;
-  }>): Promise<Readonly<{ plan: ExecutionPlanV2; reports: readonly ExecutionReportV2[] }>>;
+  }>): Promise<Readonly<{
+    plan: ExecutionPlanV2;
+    attempt: ExecutionAttemptV2;
+    reports: readonly ExecutionReportV2[];
+  }>>;
 }
 
 export interface GuardianRealityPortV2 {
@@ -74,6 +80,7 @@ export type GuardianReductionPipelineResultV2 = Readonly<{
   decision: GuardianDecisionSealV2;
   allowance: RiskAllowanceV2;
   plan: ExecutionPlanV2;
+  attempt: ExecutionAttemptV2;
   reports: readonly ExecutionReportV2[];
   reality: RealityProjectionV2;
 }>;
@@ -110,6 +117,17 @@ function assertDecision(
   if (!isPositiveDecimal(decision.approvedQuantity) || compareDecimal(decision.approvedQuantity, lot.remainingQty) > 0) {
     throw new Error("GUARDIAN_PIPELINE_DECISION_WOULD_INCREASE_OR_REVERSE");
   }
+  if (assessment.recommendation === "REDUCE_FULL" && compareDecimal(decision.approvedQuantity, lot.remainingQty) !== 0) {
+    throw new Error("GUARDIAN_PIPELINE_CLOSE_QUANTITY_MISMATCH");
+  }
+  if (assessment.recommendation === "REDUCE_PARTIAL") {
+    const maximum = formatDecimal(
+      (parseDecimal(lot.remainingQty) * BigInt(assessment.targetReductionBps)) / 10_000n,
+    );
+    if (compareDecimal(decision.approvedQuantity, maximum) > 0) {
+      throw new Error("GUARDIAN_PIPELINE_DECISION_EXCEEDS_RECOMMENDATION");
+    }
+  }
 }
 
 function assertAllowance(
@@ -136,6 +154,7 @@ function assertExecution(
   lot: PositionLotRow,
   allowance: RiskAllowanceV2,
   plan: ExecutionPlanV2,
+  attempt: ExecutionAttemptV2,
   reports: readonly ExecutionReportV2[],
 ): void {
   if (!validateExecutionPlanV2(plan)) throw new Error("GUARDIAN_PIPELINE_EXECUTION_PLAN_INVALID");
@@ -150,9 +169,26 @@ function assertExecution(
     plan.canonicalCausalLineageDigestHex !== openingLineage.canonicalCausalLineageDigest
   ) throw new Error("GUARDIAN_PIPELINE_EXECUTION_BINDING_MISMATCH");
   if (
-    reports.length === 0 || reports.some((report) =>
+    !validateExecutionAttemptV2(attempt) ||
+    attempt.organizationId !== assessment.organizationId || attempt.accountId !== lot.accountKey ||
+    attempt.executionPlanId !== plan.executionPlanId ||
+    attempt.executionPlanContentDigestHex !== plan.contentDigestHex ||
+    attempt.riskAllowanceId !== allowance.riskAllowanceId ||
+    attempt.riskAllowanceContentDigestHex !== allowance.contentDigestHex
+  ) throw new Error("GUARDIAN_PIPELINE_EXECUTION_ATTEMPT_MISMATCH");
+  let previousDigest: string | null = null;
+  if (
+    reports.length === 0 || reports.some((report, index) => {
+      const invalid =
       !validateExecutionReportV2(report) || report.organizationId !== assessment.organizationId ||
-      report.accountId !== lot.accountKey)
+      report.accountId !== lot.accountKey ||
+      report.executionAttemptId !== attempt.executionAttemptId ||
+      report.executionAttemptContentDigestHex !== attempt.contentDigestHex ||
+      report.reportSequence !== String(index + 1) ||
+      report.previousReportDigestHex !== previousDigest;
+      previousDigest = report.contentDigestHex;
+      return invalid;
+    })
   ) throw new Error("GUARDIAN_PIPELINE_EXECUTION_REPORT_INVALID");
 }
 
@@ -174,7 +210,7 @@ export async function runGuardianOrdinaryReductionPipelineV2(input: Readonly<{
   const execution = await input.ports.execution.executeReduction({
     assessment: input.assessment, decision, allowance, lot: input.lot,
   });
-  assertExecution(input.assessment, input.openingLineage, input.lot, allowance, execution.plan, execution.reports);
+  assertExecution(input.assessment, input.openingLineage, input.lot, allowance, execution.plan, execution.attempt, execution.reports);
   const reality = await input.ports.reality.ingestExecutionReports({
     organizationId: input.assessment.organizationId,
     accountId: input.lot.accountKey,
@@ -185,7 +221,7 @@ export async function runGuardianOrdinaryReductionPipelineV2(input: Readonly<{
     reality.accountId !== input.lot.accountKey
   ) throw new Error("GUARDIAN_PIPELINE_REALITY_BINDING_MISMATCH");
   return Object.freeze({
-    assessment: input.assessment, decision, allowance, plan: execution.plan,
+    assessment: input.assessment, decision, allowance, plan: execution.plan, attempt: execution.attempt,
     reports: Object.freeze([...execution.reports]), reality,
   });
 }
@@ -194,6 +230,7 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
   assessment: GuardianAssessmentV2;
   mandate: ProtectiveActionMandateV2;
   triggerProof: ProtectiveTriggerProofV2;
+  adjudicatedAtUtc: string;
   lot: PositionLotRow;
   openingLineage: OpeningCausalLineageV1;
   ports: Omit<GuardianReductionPipelinePortsV2, "decision">;
@@ -201,6 +238,10 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
   assertGuardianAssessmentV2(input.assessment);
   assertProtectiveActionMandateV2(input.mandate);
   assertProtectiveTriggerProofV2(input.triggerProof);
+  const adjudicatedAtMs = new Date(input.adjudicatedAtUtc).getTime();
+  if (!Number.isFinite(adjudicatedAtMs) || new Date(adjudicatedAtMs).toISOString() !== input.adjudicatedAtUtc) {
+    throw new Error("GUARDIAN_PROTECTIVE_INVALID_ADJUDICATION_TIME");
+  }
   assertLotBinding(input.assessment, input.lot, input.openingLineage);
   if (input.mandate.actionKind === "TIGHTEN_PROTECTION") {
     throw new Error("GUARDIAN_PROTECTIVE_TIGHTEN_REQUIRES_DEDICATED_EXECUTOR");
@@ -219,7 +260,9 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
     input.triggerProof.deterministicTriggerSpecDigest !== input.mandate.deterministicTriggerSpecDigest ||
     input.triggerProof.realityProjectionId !== input.assessment.realityFrontierId ||
     input.triggerProof.realityContentDigest !== input.assessment.realityContentDigest ||
-    new Date(input.triggerProof.observedAtUtc).getTime() > new Date(input.mandate.validUntilUtc).getTime()
+    new Date(input.triggerProof.observedAtUtc).getTime() > new Date(input.mandate.validUntilUtc).getTime() ||
+    adjudicatedAtMs < new Date(input.triggerProof.observedAtUtc).getTime() ||
+    adjudicatedAtMs > new Date(input.mandate.validUntilUtc).getTime()
   ) throw new Error("GUARDIAN_PROTECTIVE_TRIGGER_BINDING_MISMATCH");
   const action = input.mandate.actionKind === "CLOSE_FULL" ? "CLOSE" : "REDUCE";
   const approvedQuantity = input.mandate.actionKind === "CLOSE_FULL"
@@ -238,12 +281,12 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
   const allowance = await input.ports.risk.authorizeReduction({ assessment: input.assessment, decision, lot: input.lot });
   assertAllowance(input.assessment, decision, input.lot, allowance);
   const execution = await input.ports.execution.executeReduction({ assessment: input.assessment, decision, allowance, lot: input.lot });
-  assertExecution(input.assessment, input.openingLineage, input.lot, allowance, execution.plan, execution.reports);
+  assertExecution(input.assessment, input.openingLineage, input.lot, allowance, execution.plan, execution.attempt, execution.reports);
   const reality = await input.ports.reality.ingestExecutionReports({
     organizationId: input.assessment.organizationId, accountId: input.lot.accountKey, reports: execution.reports,
   });
   if (!validateRealityProjectionV2(reality) || reality.organizationId !== input.assessment.organizationId || reality.accountId !== input.lot.accountKey) {
     throw new Error("GUARDIAN_PIPELINE_REALITY_BINDING_MISMATCH");
   }
-  return Object.freeze({ assessment: input.assessment, decision, allowance, plan: execution.plan, reports: Object.freeze([...execution.reports]), reality });
+  return Object.freeze({ assessment: input.assessment, decision, allowance, plan: execution.plan, attempt: execution.attempt, reports: Object.freeze([...execution.reports]), reality });
 }
