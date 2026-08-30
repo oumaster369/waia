@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/trader/admin/admin-shell";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
-import { buildModuleUrl } from "@/lib/hosts/resolve";
-import { hasTraderAccessForUser } from "@/lib/trader/access-gate";
 import { assertAdminPermission } from "@/lib/trader/admin-route-shared";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 
@@ -16,11 +14,6 @@ export default async function TraderAdminLayout({
   const userId = await getOptionalSessionUserId();
   if (!userId) {
     redirect("/");
-  }
-
-  const allowed = await hasTraderAccessForUser(userId);
-  if (!allowed) {
-    redirect(buildModuleUrl("primary", "/dashboard"));
   }
 
   let runtime;
