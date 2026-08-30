@@ -52,11 +52,14 @@ export type RuntimeControlLeaseClaimV2 = Readonly<{
   leaseEpoch: number;
   leaseContentDigest: string;
   validUntilUtc: string;
+  adjudicatedAtUtc: string;
+  expectedPreviousDigest: string | null;
 }>;
 
 export interface RuntimeControlLeaseRepositoryV2 {
   claimExclusive(value: RuntimeControlLeaseClaimV2): Promise<"CLAIMED" | "CONFLICT">;
   current(organizationId: string): Promise<RuntimeControlLeaseClaimV2 | null>;
+  assertCurrentHolder(value: Pick<RuntimeControlLeaseClaimV2, "organizationId" | "runtimeInstanceId" | "leaseEpoch" | "leaseContentDigest" | "adjudicatedAtUtc">): Promise<void>;
 }
 
 export function createInMemoryRuntimeControlLeaseRepositoryV2(): RuntimeControlLeaseRepositoryV2 {
@@ -64,12 +67,41 @@ export function createInMemoryRuntimeControlLeaseRepositoryV2(): RuntimeControlL
   return {
     async claimExclusive(value) {
       const current = claims.get(value.organizationId);
-      if (current) return "CONFLICT";
+      const now = Date.parse(value.adjudicatedAtUtc);
+      const expiry = Date.parse(value.validUntilUtc);
+      if (!Number.isFinite(now) || !Number.isFinite(expiry) || expiry <= now) {
+        throw new Error("RUNTIME_CONTROL_LEASE_INVALID_TIME");
+      }
+      if (!Number.isSafeInteger(value.leaseEpoch) || value.leaseEpoch < 1) {
+        throw new Error("RUNTIME_CONTROL_LEASE_INVALID_EPOCH");
+      }
+      if (!current) {
+        if (value.leaseEpoch !== 1 || value.expectedPreviousDigest !== null) return "CONFLICT";
+      } else {
+        const currentExpiry = Date.parse(current.validUntilUtc);
+        if (
+          now <= currentExpiry ||
+          value.leaseEpoch !== current.leaseEpoch + 1 ||
+          value.expectedPreviousDigest !== current.leaseContentDigest
+        ) return "CONFLICT";
+      }
       claims.set(value.organizationId, Object.freeze({ ...value }));
       return "CLAIMED";
     },
     async current(organizationId) {
       return claims.get(organizationId) ?? null;
+    },
+    async assertCurrentHolder(value) {
+      const current = claims.get(value.organizationId);
+      const now = Date.parse(value.adjudicatedAtUtc);
+      if (
+        !current ||
+        current.runtimeInstanceId !== value.runtimeInstanceId ||
+        current.leaseEpoch !== value.leaseEpoch ||
+        current.leaseContentDigest !== value.leaseContentDigest ||
+        !Number.isFinite(now) ||
+        now > Date.parse(current.validUntilUtc)
+      ) throw new Error("RUNTIME_CONTROL_LEASE_STALE_HOLDER");
     },
   };
 }
