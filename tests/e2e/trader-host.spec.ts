@@ -5,6 +5,40 @@ import { signInOnLanding } from "./helpers/trader-host-auth";
 import { grantTraderEntitlementByUserEmail } from "./helpers/trader-sqlite";
 
 const TRADER_PASSWORD = "password123!";
+const STATIC_SHELL_RUN_ID = "e2e-static-shell";
+const FOREIGN_ORGANIZATION_ID = "00000000-0000-4000-8000-000000000999";
+
+async function expectProtectedObserverApisFailClosed(page: Page, expectedStatus: 401 | 403) {
+  const requestFromPage = (path: string) =>
+    page.evaluate(async (requestPath) => {
+      const response = await fetch(requestPath, { credentials: "include" });
+      return { status: response.status, body: await response.text() };
+    }, path);
+  const tenantResponse = await requestFromPage(
+    `/api/trader/research/stream?campaign_run_id=${STATIC_SHELL_RUN_ID}`,
+  );
+  expect(tenantResponse.status).toBe(expectedStatus);
+  expect(tenantResponse.body).not.toMatch(
+    /"(?:organizationId|accountId|balances|positions|trades)"\s*:/i,
+  );
+
+  const adminResponse = await requestFromPage(
+    `/api/trader/admin/fhv-operations/status?organization_id=${FOREIGN_ORGANIZATION_ID}` +
+      `&campaign_run_id=${STATIC_SHELL_RUN_ID}`,
+  );
+  expect(adminResponse.status).toBe(expectedStatus);
+  expect(adminResponse.body).not.toMatch(
+    /"(?:organizationId|accountId|balances|positions|trades)"\s*:/i,
+  );
+}
+
+async function expectStaticShellContainsNoProtectedData(page: Page) {
+  await expect(page.getByTestId("trader-workspace")).toBeVisible();
+  await expect(page.getByTestId("trader-credential-account-id")).toHaveCount(0);
+  await expect(page.getByTestId("trader-balance-list")).toHaveCount(0);
+  await expect(page.getByTestId("trader-position-list")).toHaveCount(0);
+  await expect(page.getByTestId("trader-trade-list")).toHaveCount(0);
+}
 
 function primaryBaseUrl(traderBaseUrl: string | undefined): string {
   return traderBaseUrl?.replace("trader.localhost", "127.0.0.1") ?? "http://127.0.0.1:3199";
@@ -48,11 +82,13 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await expect(page.getByTestId("landing-auth-submit")).toHaveText("Sign in");
   });
 
-  test("redirects unauthenticated /trader to landing on trader host", async ({ page }) => {
+  test("renders an unauthenticated static shell while protected APIs remain fail-closed", async ({
+    page,
+  }) => {
     await page.goto("/trader");
-    await expect(page).toHaveURL("/");
-    await expect(page.getByTestId("trader-landing")).toBeVisible();
-    await expect(page.getByTestId("landing-auth")).toBeVisible();
+    await expect(page).toHaveURL("/trader");
+    await expectStaticShellContainsNoProtectedData(page);
+    await expectProtectedObserverApisFailClosed(page, 401);
   });
 
   test("keeps the sign-in hero usable on a narrow viewport", async ({ page }) => {
@@ -94,7 +130,7 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await expect(page.getByTestId("trader-workspace")).toBeVisible();
   });
 
-  test("redirects user without entitlement from trader host to primary dashboard", async ({
+  test("keeps a non-entitled user in a data-empty shell while APIs reject access", async ({
     page,
     baseURL,
     browser,
@@ -110,9 +146,10 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL(primaryLandingUrlPattern(baseURL));
 
-    await gotoExpectingCrossHostRedirect(page, "/trader", primaryLandingUrlPattern(baseURL));
-    await expect(page.getByTestId("trader-workspace")).not.toBeVisible();
-    await expect(page.getByTestId("landing-auth")).toBeVisible();
+    await page.goto("/trader");
+    await expect(page).toHaveURL("/trader");
+    await expectStaticShellContainsNoProtectedData(page);
+    await expectProtectedObserverApisFailClosed(page, 403);
   });
 
   test("redirects trader host /dashboard to primary landing", async ({ page, baseURL }) => {
