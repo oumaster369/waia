@@ -56,8 +56,8 @@
   },
   "externalEvidence": {
     "linear": "DEE-637 linkage and DEE-636 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
-    "local": "Implementation through 966ac85d: focused Runtime Authority unit suite 13/13 PASS; Playwright tenant/Admin observability 3/3 PASS; lint, typecheck and production build PASS; literal elevated full suite PASS at 966ac85d with 903 files passed, 85 skipped, 5235 tests passed, 433 skipped, duration 1543.17s.",
+    "local": "Semantic implementation passed the literal elevated full suite at 966ac85d: 903 files passed, 85 skipped, 5235 tests passed, 433 skipped, duration 1543.17s. Review remediation at c3a22fc0 replaced forced PostgreSQL RLS with the repository service-owner/browser-deny convention; focused Runtime Authority tests 14/14, typecheck and production build PASS after remediation. Playwright tenant/Admin observability 3/3 PASS before the migration-only remediation.",
     "postgres": "Authoritative PostgreSQL CI required before merge.",
-    "independentReview": "Required at exact implementation head before publication."
+    "independentReview": "Fresh independent exact-head review at c3a22fc0e4b59709bcb2bf76ca7e9b0d49797c3c reports P1=0/P2=0 after remediation of the initially identified forced-RLS service-role blocker."
   }
 }
