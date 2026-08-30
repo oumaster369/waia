@@ -3,9 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { snapshotAgeText, TraderWorkspace } from "@/components/trader/trader-workspace";
 
+const { mockSearchParams } = vi.hoisted(() => ({ mockSearchParams: new URLSearchParams() }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => mockSearchParams }));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  mockSearchParams.delete("campaign_run_id");
 });
 
 describe("Trader Dashboard V2", () => {
@@ -119,5 +123,19 @@ describe("Trader Dashboard V2", () => {
     );
     expect(screen.queryByRole("button", { name: /enable live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kill switch/i })).not.toBeInTheDocument();
+  });
+
+  it("does not fetch or render real HTX workspace state while observing a historical campaign", async () => {
+    mockSearchParams.set("campaign_run_id", "historical-run-1");
+    const fetchMock = vi.fn();
+    const source = { addEventListener: vi.fn(), removeEventListener: vi.fn(), close: vi.fn(), onopen: null, onerror: null };
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("EventSource", vi.fn(() => source));
+    render(<TraderWorkspace />);
+    expect(await screen.findByTestId("fhv-user-streaming-dashboard")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("trader-error-message")).not.toBeInTheDocument();
   });
 });

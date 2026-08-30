@@ -15,6 +15,12 @@ import {
   verifyFhvObserverAuthToken,
 } from "@/lib/trader/observability/fhv-observer-transport-auth";
 import { createFhvObserverTransportNonceCacheForRunRoot } from "@/lib/trader/observability/fhv-observer-transport-nonce-cache";
+import {
+  encodeFhvSseEvent,
+  encodeFhvSseHeartbeat,
+  FhvSseFrameBuffer,
+  projectFhvRealtimeEvents,
+} from "@/lib/trader/observability/fhv-realtime-events";
 
 const OBSERVER_RATE_LIMIT_PER_MINUTE = 120;
 
@@ -158,6 +164,81 @@ export function createFhvObserverHttpServer(
         const status = buildFhvObserverStatusSnapshot(state);
         res.writeHead(status ? 200 : 404, { "Content-Type": "application/json" });
         res.end(JSON.stringify(status ?? { error: "status_unavailable" }));
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/v1/stream") {
+        verifyRequestAuth({
+          req,
+          method: "GET",
+          pathWithQuery,
+          organizationId: tenant.organizationId,
+          campaignRunId: tenant.campaignRunId,
+          body: Buffer.alloc(0),
+          nowMs,
+        });
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "private, no-cache, no-store, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+        res.write("retry: 2000\n\n");
+
+        let closed = false;
+        let writing = false;
+        const pendingFrames = new FhvSseFrameBuffer(64);
+        let lastFingerprint = "";
+        let lastHeartbeatMs = 0;
+        const flushFrames = (): void => {
+          if (closed || writing) return;
+          while (pendingFrames.length > 0) {
+            const frame = pendingFrames.shift();
+            if (!frame) break;
+            if (!res.write(frame)) {
+              writing = true;
+              res.once("drain", () => {
+                writing = false;
+                flushFrames();
+              });
+              return;
+            }
+          }
+        };
+        const enqueueFrames = (frames: readonly string[]): void => {
+          if (closed) return;
+          // A slow browser receives the newest complete snapshot rather than an
+          // unbounded history. Eight event batches is the hard memory ceiling.
+          pendingFrames.enqueueSnapshot(frames);
+          flushFrames();
+        };
+        const publish = (): void => {
+          if (closed || writing) return;
+          const status = buildFhvObserverStatusSnapshot(state);
+          if (status) {
+            const fingerprint = [
+              status.observedAt,
+              status.campaign.barsProcessed,
+              status.evidence.eventSequence,
+              status.campaign.terminalState,
+            ].join(":");
+            if (fingerprint !== lastFingerprint) {
+              lastFingerprint = fingerprint;
+              enqueueFrames(projectFhvRealtimeEvents(status).map(encodeFhvSseEvent));
+            }
+          }
+          const currentMs = Date.now();
+          if (!writing && currentMs - lastHeartbeatMs >= 15_000) {
+            lastHeartbeatMs = currentMs;
+            enqueueFrames([encodeFhvSseHeartbeat(new Date(currentMs).toISOString())]);
+          }
+        };
+        const timer = setInterval(publish, 1_000);
+        publish();
+        req.on("close", () => {
+          closed = true;
+          clearInterval(timer);
+        });
         return;
       }
 

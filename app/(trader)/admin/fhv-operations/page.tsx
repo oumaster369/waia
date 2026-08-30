@@ -3,58 +3,34 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 
-import { FhvOperationsDashboard } from "@/components/trader/admin/fhv-operations-dashboard";
-import {
-  AdminErrorState,
-  AdminLoadingState,
-  AdminOrgSelector,
-  useAdminOrganizations,
-} from "@/components/trader/admin/admin-org-selector";
-import { Button } from "@/components/ui/button";
+import { FhvOperationsDashboard, type FhvChartSample } from "@/components/trader/admin/fhv-operations-dashboard";
+import { AdminErrorState, AdminLoadingState, AdminOrgSelector, useAdminOrganizations } from "@/components/trader/admin/admin-org-selector";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import {
-  buildFhvAdminCommandPath,
-  buildFhvAdminStatusPath,
-  FHV_CAMPAIGN_RUN_ID_MAX_LENGTH,
-  FHV_CAMPAIGN_RUN_ID_PATTERN,
-} from "@/lib/trader/fhv-campaign-run-id";
-import { buildRequiredConfirmationPhrase } from "@/lib/trader/observability/fhv-command-confirmation";
-import { FHV_ADMIN_CSRF_HEADER, FHV_ADMIN_CSRF_COOKIE } from "@/lib/trader/fhv-admin-csrf";
+import { buildFhvAdminStatusPath, FHV_CAMPAIGN_RUN_ID_MAX_LENGTH, FHV_CAMPAIGN_RUN_ID_PATTERN } from "@/lib/trader/fhv-campaign-run-id";
+import { buildAdminAccountRows, connectionState, parseFiniteDecimal, parseFhvStatus, reduceAdminAccountEvent, type FhvAdminAccountEvent, type FhvAdminAccountRow } from "@/lib/trader/fhv-admin-stream-view-model";
 
-const APPROVED_ACTIONS = [
-  "PAUSE_AT_CHECKPOINT",
-  "RESUME_FROM_CHECKPOINT",
-  "GRACEFUL_STOP",
-  "EMERGENCY_STOP",
-  "CREATE_DIAGNOSTIC_BUNDLE",
-] as const;
+const LIVE_INTERVAL_MS = 2_000;
+const MAX_BACKOFF_MS = 15_000;
+const MAX_SAMPLES = 180;
+const REALTIME_EVENT_KINDS = ["campaign.progress", "account.balance", "position.snapshot", "trade.snapshot", "decision.snapshot", "checkpoint", "risk", "gate", "error"] as const;
 
-type CommandCapabilities = Readonly<{
-  commandContractFailClosed: boolean;
-  commandsActuallyEnforced: boolean;
-  supervisorExecutorImplemented: boolean;
-  supervisorQualificationRequired: boolean;
-}>;
-
-const DEFAULT_CAPABILITIES: CommandCapabilities = {
-  commandContractFailClosed: true,
-  commandsActuallyEnforced: false,
-  supervisorExecutorImplemented: true,
-  supervisorQualificationRequired: true,
-};
-
-function validateRunIdInput(value: string): string | null {
+function validateRunId(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return "Campaign run ID is required.";
-  }
-  if (trimmed.length > FHV_CAMPAIGN_RUN_ID_MAX_LENGTH) {
-    return "Campaign run ID is too long.";
-  }
-  if (!FHV_CAMPAIGN_RUN_ID_PATTERN.test(trimmed)) {
-    return "Campaign run ID format is invalid.";
-  }
-  return null;
+  if (!trimmed) return "Campaign run ID is required.";
+  if (trimmed.length > FHV_CAMPAIGN_RUN_ID_MAX_LENGTH) return "Campaign run ID is too long.";
+  return FHV_CAMPAIGN_RUN_ID_PATTERN.test(trimmed) ? null : "Campaign run ID format is invalid.";
+}
+
+function chartSample(status: Record<string, unknown>, at: number): FhvChartSample | null {
+  const parsed = parseFhvStatus(status);
+  if (!parsed) return null;
+  return {
+    at,
+    equity: parseFiniteDecimal(parsed.tradingSimulation.equity),
+    netPnl: parseFiniteDecimal(parsed.tradingSimulation.netPnl),
+    drawdownBps: parsed.tradingSimulation.accountDrawdownBps,
+    throughput: parsed.campaign.throughputRolling,
+  };
 }
 
 export default function FhvOperationsAdminPage() {
@@ -62,267 +38,137 @@ export default function FhvOperationsAdminPage() {
   const { organizations, loading, error } = useAdminOrganizations();
   const [selectedOrganizationId, setSelectedOrganizationId] = React.useState("");
   const organizationId = selectedOrganizationId || organizations[0]?.id || "";
-  const [campaignRunId, setCampaignRunId] = React.useState(
-    () => searchParams.get("campaign_run_id")?.trim() ?? "",
-  );
+  const [campaignRunId, setCampaignRunId] = React.useState(() => searchParams.get("campaign_run_id")?.trim() ?? "");
   const [status, setStatus] = React.useState<Record<string, unknown> | null>(null);
-  const [capabilities, setCapabilities] = React.useState<CommandCapabilities>(DEFAULT_CAPABILITIES);
-  const [csrfToken, setCsrfToken] = React.useState("");
-  const [confirmationInput, setConfirmationInput] = React.useState("");
+  const [samples, setSamples] = React.useState<readonly FhvChartSample[]>([]);
+  const [accountRows, setAccountRows] = React.useState<readonly FhvAdminAccountRow[]>([]);
+  const [requestPending, setRequestPending] = React.useState(false);
+  const [consecutiveFailures, setConsecutiveFailures] = React.useState(0);
   const [pageError, setPageError] = React.useState<string | null>(null);
-  const [pageLoading, setPageLoading] = React.useState(false);
-  const [showRawJson, setShowRawJson] = React.useState(false);
-  const [action, setAction] =
-    React.useState<(typeof APPROVED_ACTIONS)[number]>("PAUSE_AT_CHECKPOINT");
-  const [reason, setReason] = React.useState("Operator-requested campaign control");
-
-  const runValidationError = validateRunIdInput(campaignRunId);
+  const [lastReceivedAt, setLastReceivedAt] = React.useState<number | null>(null);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const requestSequence = React.useRef(0);
   const trimmedRunId = campaignRunId.trim();
-  const requiredConfirmationPhrase =
-    !runValidationError && trimmedRunId
-      ? buildRequiredConfirmationPhrase(trimmedRunId, action)
-      : "";
-  const confirmationMatches =
-    requiredConfirmationPhrase.length > 0 && confirmationInput === requiredConfirmationPhrase;
-  const commandsAvailable =
-    capabilities.commandsActuallyEnforced && capabilities.supervisorExecutorImplemented;
+  const runError = validateRunId(campaignRunId);
 
-  const clearLoadedState = React.useCallback(() => {
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const resetStream = React.useCallback(() => {
     setStatus(null);
-    setCsrfToken("");
+    setSamples([]);
+    setAccountRows([]);
     setPageError(null);
-    setConfirmationInput("");
+    setConsecutiveFailures(0);
+    setLastReceivedAt(null);
+    requestSequence.current += 1;
   }, []);
 
-  const handleOrganizationChange = React.useCallback(
-    (value: string) => {
-      setSelectedOrganizationId(value);
-      clearLoadedState();
-    },
-    [clearLoadedState],
-  );
+  const handleOrganizationChange = React.useCallback((value: string) => {
+    setSelectedOrganizationId(value);
+    resetStream();
+  }, [resetStream]);
 
-  const handleRunIdChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setCampaignRunId(event.target.value);
-      clearLoadedState();
-    },
-    [clearLoadedState],
-  );
+  const handleRunIdChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setCampaignRunId(event.target.value);
+    resetStream();
+  }, [resetStream]);
 
-  const handleActionChange = React.useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
-    setAction(event.target.value as (typeof APPROVED_ACTIONS)[number]);
-    setConfirmationInput("");
-  }, []);
+  React.useEffect(() => {
+    if (!organizationId || runError) return;
+    let disposed = false;
+    let timer: number | null = null;
+    let source: EventSource | null = null;
+    const sequence = requestSequence.current;
 
-  const loadStatus = React.useCallback(async () => {
-    if (!organizationId) return;
-    const validationError = validateRunIdInput(campaignRunId);
-    if (validationError) {
-      setPageError(validationError);
-      return;
-    }
-    setPageLoading(true);
-    setPageError(null);
-    const path = buildFhvAdminStatusPath(organizationId, trimmedRunId);
-    const response = await fetch(path, { cache: "no-store", credentials: "include" });
-    const body = (await response.json()) as {
-      status?: Record<string, unknown>;
-      capabilities?: CommandCapabilities;
-      error?: { message?: string };
-    };
-    if (!response.ok) {
-      setPageError(body.error?.message ?? "Request failed.");
-      setStatus(null);
-      setCsrfToken("");
-    } else {
-      const returnedStatus = body.status ?? null;
-      const returnedRunId =
-        returnedStatus &&
-        typeof returnedStatus.campaign === "object" &&
-        returnedStatus.campaign &&
-        "runId" in (returnedStatus.campaign as object)
-          ? (returnedStatus.campaign as { runId: string }).runId
-          : null;
-      if (returnedRunId && returnedRunId !== trimmedRunId) {
-        setPageError("Returned status run ID does not match selection.");
-        setStatus(null);
-        setCsrfToken("");
-      } else {
-        setStatus(returnedStatus);
-        setCapabilities(body.capabilities ?? DEFAULT_CAPABILITIES);
-        setCsrfToken(response.headers.get(FHV_ADMIN_CSRF_HEADER) ?? "");
+    const refreshSnapshot = async () => {
+      if (disposed || document.visibilityState === "hidden") return false;
+      setRequestPending(true);
+      try {
+        const response = await fetch(buildFhvAdminStatusPath(organizationId, trimmedRunId), {
+          cache: "no-store",
+          credentials: "include",
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = (await response.json()) as { status?: Record<string, unknown>; error?: { message?: string } };
+        if (!response.ok || !body.status) throw new Error(body.error?.message ?? "Observer stream unavailable.");
+        const parsed = parseFhvStatus(body.status);
+        if (!parsed || parsed.campaign.runId !== trimmedRunId || parsed.campaign.organizationId !== organizationId) throw new Error("Observer identity does not match the selected campaign.");
+        if (disposed || sequence !== requestSequence.current) return;
+        const receivedAt = Date.now();
+        setStatus(body.status);
+        setAccountRows((current) => current.length > 0 ? current : buildAdminAccountRows(parsed));
+        setLastReceivedAt(receivedAt);
+        setNowMs(receivedAt);
+        setConsecutiveFailures(0);
+        setPageError(null);
+        const sample = chartSample(body.status, receivedAt);
+        if (sample) setSamples((current) => [...current, sample].slice(-MAX_SAMPLES));
+        return true;
+      } catch (pollError) {
+        if (disposed || sequence !== requestSequence.current) return;
+        setConsecutiveFailures((current) => {
+          const next = current + 1;
+          if (!source) timer = window.setTimeout(fallbackPoll, Math.min(MAX_BACKOFF_MS, LIVE_INTERVAL_MS * 2 ** Math.min(next, 3)));
+          return next;
+        });
+        setPageError(pollError instanceof Error ? pollError.message : "Observer stream unavailable.");
+        return false;
+      } finally {
+        if (!disposed && sequence === requestSequence.current) setRequestPending(false);
       }
-    }
-    setPageLoading(false);
-  }, [organizationId, campaignRunId, trimmedRunId]);
+    };
 
-  const submitCommand = React.useCallback(async () => {
-    if (!organizationId || !csrfToken || runValidationError || !confirmationMatches) return;
-    setPageLoading(true);
-    setPageError(null);
-    const path = buildFhvAdminCommandPath(organizationId, trimmedRunId);
-    const response = await fetch(path, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        [FHV_ADMIN_CSRF_HEADER]: csrfToken,
-      },
-      body: JSON.stringify({
-        organization_id: organizationId,
-        campaign_run_id: trimmedRunId,
-        action,
-        reason,
-        confirmation_phrase: confirmationInput,
-        expected_phase:
-          typeof status?.campaign === "object" &&
-          status.campaign &&
-          "phase" in (status.campaign as object)
-            ? (status.campaign as { phase: string }).phase
-            : "validation",
-      }),
-    });
-    const body = (await response.json()) as { error?: { message?: string } };
-    setConfirmationInput("");
-    if (!response.ok) {
-      setPageError(body.error?.message ?? "Command failed.");
+    const fallbackPoll = async () => {
+      await refreshSnapshot();
+      if (!disposed && !source) timer = window.setTimeout(fallbackPoll, LIVE_INTERVAL_MS);
+    };
+
+    const scheduleSnapshot = (raw?: Event) => {
+      if (raw instanceof MessageEvent && raw.type === "account.balance") {
+        try {
+          const event = JSON.parse(raw.data as string) as FhvAdminAccountEvent;
+          if (event.organizationId === organizationId && event.campaignRunId === trimmedRunId) {
+            setAccountRows((current) => reduceAdminAccountEvent(current, event));
+          }
+        } catch {
+          setPageError("An invalid account stream event was rejected.");
+        }
+      }
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => void refreshSnapshot(), 50);
+    };
+
+    void refreshSnapshot();
+    if (typeof EventSource === "function") {
+      const streamPath = `/api/trader/admin/fhv-operations/stream?organization_id=${encodeURIComponent(organizationId)}&campaign_run_id=${encodeURIComponent(trimmedRunId)}`;
+      source = new EventSource(streamPath, { withCredentials: true });
+      source.onopen = () => { if (!disposed) { setConsecutiveFailures(0); setPageError(null); } };
+      source.onerror = () => { if (!disposed) { setConsecutiveFailures((current) => current + 1); setPageError("Realtime stream interrupted. Reconnecting automatically…"); } };
+      for (const kind of REALTIME_EVENT_KINDS) source.addEventListener(kind, scheduleSnapshot);
     } else {
-      await loadStatus();
+      timer = window.setTimeout(fallbackPoll, LIVE_INTERVAL_MS);
     }
-    setPageLoading(false);
-  }, [
-    organizationId,
-    csrfToken,
-    action,
-    reason,
-    status,
-    loadStatus,
-    trimmedRunId,
-    runValidationError,
-    confirmationMatches,
-    confirmationInput,
-  ]);
+    const resume = () => { if (document.visibilityState === "visible") scheduleSnapshot(); };
+    document.addEventListener("visibilitychange", resume);
+    return () => { disposed = true; source?.close(); if (timer !== null) window.clearTimeout(timer); document.removeEventListener("visibilitychange", resume); };
+  }, [organizationId, trimmedRunId, runError]);
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">FHV Operations</h1>
+  const observedAt = status && parseFhvStatus(status)?.observedAt || null;
+  const streamState = connectionState({ hasStatus: Boolean(status), requestPending, consecutiveFailures, observedAt, nowMs });
+
+  return <div className="space-y-5">
+    <WaiaSurface variant="raised" className="space-y-4 p-5">
+      <div><h1 className="text-lg font-semibold">Observation target</h1><p className="text-muted-foreground mt-1 text-sm">The console connects automatically and keeps itself current. No refresh or sync action is required.</p></div>
       {loading ? <AdminLoadingState label="Loading organizations…" /> : null}
       {error ? <AdminErrorState message={error} /> : null}
-      {!loading && !error ? (
-        <AdminOrgSelector
-          organizations={organizations}
-          value={organizationId}
-          onChange={handleOrganizationChange}
-        />
-      ) : null}
-
-      <WaiaSurface variant="raised" className="space-y-3 p-4">
-        <h2 className="text-lg font-medium">Campaign selection</h2>
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">Campaign run ID</span>
-          <input
-            data-testid="fhv-campaign-run-id"
-            className="border-border bg-background w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm"
-            value={campaignRunId}
-            onChange={handleRunIdChange}
-            maxLength={FHV_CAMPAIGN_RUN_ID_MAX_LENGTH}
-            placeholder="dee-416-rehearsal-run"
-          />
-        </label>
-        {runValidationError ? <AdminErrorState message={runValidationError} /> : null}
-        <p className="text-muted-foreground text-xs">
-          Selected org: <span className="font-mono">{organizationId || "—"}</span> · run:{" "}
-          <span className="font-mono">{trimmedRunId || "—"}</span>
-        </p>
-      </WaiaSurface>
-
-      <WaiaSurface variant="raised" className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">Campaign status</h2>
-          <Button
-            type="button"
-            variant="outline"
-            data-testid="fhv-refresh-status"
-            onClick={() => void loadStatus()}
-            disabled={Boolean(runValidationError)}
-          >
-            Refresh
-          </Button>
-        </div>
-        {pageLoading ? <AdminLoadingState label="Loading FHV status…" /> : null}
-        {pageError ? <AdminErrorState message={pageError} /> : null}
-        {status ? (
-          <FhvOperationsDashboard
-            status={status}
-            showRawJson={showRawJson}
-            onToggleRawJson={() => setShowRawJson((value) => !value)}
-          />
-        ) : null}
-      </WaiaSurface>
-
-      <WaiaSurface variant="raised" className="space-y-3 p-4">
-        <h2 className="text-lg font-medium">Operator actions</h2>
-        {!commandsAvailable ? (
-          <p className="text-muted-foreground text-sm" data-testid="fhv-executor-unavailable">
-            Control executor unavailable — supervisor qualification required (T4). Commands are
-            disabled until HOST_OS rehearsal completes.
-          </p>
-        ) : null}
-        <p className="text-muted-foreground text-xs">
-          CSRF cookie ({FHV_ADMIN_CSRF_COOKIE}) is set by the server; only the matching header is
-          sent from JavaScript.
-        </p>
-        <select
-          data-testid="fhv-action-select"
-          className="border-border bg-background w-full max-w-md rounded-md border px-3 py-2 text-sm"
-          value={action}
-          onChange={handleActionChange}
-          disabled={!commandsAvailable}
-        >
-          {APPROVED_ACTIONS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <textarea
-          className="border-border bg-background min-h-20 w-full rounded-md border px-3 py-2 text-sm"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          disabled={!commandsAvailable}
-        />
-        {requiredConfirmationPhrase ? (
-          <p
-            className="text-muted-foreground text-sm"
-            data-testid="fhv-required-confirmation-phrase"
-          >
-            Type exactly: <span className="font-mono">{requiredConfirmationPhrase}</span>
-          </p>
-        ) : null}
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">Confirmation phrase</span>
-          <input
-            data-testid="fhv-confirmation-input"
-            className="border-border bg-background w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm"
-            value={confirmationInput}
-            onChange={(event) => setConfirmationInput(event.target.value)}
-            disabled={!commandsAvailable}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
-        <Button
-          type="button"
-          data-testid="fhv-submit-command"
-          onClick={() => void submitCommand()}
-          disabled={
-            !csrfToken || Boolean(runValidationError) || !commandsAvailable || !confirmationMatches
-          }
-        >
-          Submit signed command
-        </Button>
-      </WaiaSurface>
-    </div>
-  );
+      {!loading && !error ? <AdminOrgSelector organizations={organizations} value={organizationId} onChange={handleOrganizationChange} /> : null}
+      <label className="block space-y-1 text-sm"><span className="font-medium">Campaign run ID</span><input data-testid="fhv-campaign-run-id" className="border-border bg-background w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm" value={campaignRunId} onChange={handleRunIdChange} maxLength={FHV_CAMPAIGN_RUN_ID_MAX_LENGTH} placeholder="campaign-run-id" /></label>
+      {runError ? <AdminErrorState message={runError} /> : null}
+    </WaiaSurface>
+    {pageError && !status ? <AdminErrorState message={`${pageError} Reconnecting automatically…`} /> : null}
+    {status ? <FhvOperationsDashboard status={status} connectionState={streamState} lastReceivedAt={lastReceivedAt} samples={samples} accountRows={accountRows} /> : !runError && organizationId ? <AdminLoadingState label="Connecting to the historical-test observer…" /> : null}
+  </div>;
 }

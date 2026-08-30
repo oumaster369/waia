@@ -1,218 +1,56 @@
 "use client";
 
 import * as React from "react";
+import { Activity, AlertTriangle, BarChart3, CheckCircle2, CircleDollarSign, Clock3, Database, Gauge, Layers3, Radio, Server, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import type { FhvOperatorStatusV1 } from "@/lib/trader/observability/fhv-operator-status-v1.types";
+import { buildAdminAccountRows, parseFhvStatus, sumKnownAccountMetric, type FhvAdminAccountRow, type FhvStreamConnectionState } from "@/lib/trader/fhv-admin-stream-view-model";
 
-type FhvOperationsDashboardProps = Readonly<{
-  status: Record<string, unknown>;
-  showRawJson: boolean;
-  onToggleRawJson: () => void;
-}>;
+export type FhvChartSample = Readonly<{ at: number; equity: number | null; netPnl: number | null; drawdownBps: number | null; throughput: number | null }>;
+type Props = Readonly<{ status: Record<string, unknown>; connectionState: FhvStreamConnectionState; lastReceivedAt: number | null; samples: readonly FhvChartSample[]; accountRows?: readonly FhvAdminAccountRow[] }>;
 
-function asStatus(value: Record<string, unknown>): FhvOperatorStatusV1 | null {
-  if (value.schemaVersion !== "fhv-operator-status/v1") {
-    return null;
-  }
-  return value as unknown as FhvOperatorStatusV1;
+const money = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const formatMoney = (value: string | number | null) => value === null ? "—" : Number.isFinite(Number(value)) ? `$${money.format(Number(value))}` : String(value);
+const formatNumber = (value: number | null) => value === null ? "—" : integer.format(value);
+const stateTone = (state: FhvStreamConnectionState) => state === "live" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : state === "connecting" ? "border-sky-400/30 bg-sky-400/10 text-sky-300" : "border-amber-400/30 bg-amber-400/10 text-amber-300";
+
+function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return <WaiaSurface variant="raised" className="overflow-hidden p-0"><div className="border-border/60 flex items-center gap-2 border-b px-5 py-4"><span className="text-cyan-300">{icon}</span><h2 className="text-sm font-semibold tracking-wide uppercase">{title}</h2></div><div className="p-5">{children}</div></WaiaSurface>;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <WaiaSurface variant="raised" className="space-y-2 p-4">
-      <h3 className="text-sm font-semibold tracking-wide uppercase opacity-80">{title}</h3>
-      {children}
-    </WaiaSurface>
-  );
+function Metric({ label, value, hint, tone = "default" }: { label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: "default" | "positive" | "negative" | "warning" }) {
+  const toneClass = tone === "positive" ? "text-emerald-300" : tone === "negative" ? "text-rose-300" : tone === "warning" ? "text-amber-300" : "text-foreground";
+  return <div className="min-w-0 space-y-1"><p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">{label}</p><p className={`truncate text-xl font-semibold tabular-nums ${toneClass}`}>{value}</p>{hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}</div>;
 }
 
-function MetricGrid({ items }: { items: Array<{ label: string; value: React.ReactNode }> }) {
-  return (
-    <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => (
-        <div key={item.label} className="space-y-0.5">
-          <dt className="text-muted-foreground text-xs">{item.label}</dt>
-          <dd className="text-sm font-medium">{item.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+function Sparkline({ samples, field, color, emptyLabel }: { samples: readonly FhvChartSample[]; field: "equity" | "netPnl" | "drawdownBps" | "throughput"; color: string; emptyLabel: string }) {
+  const values = samples.map((sample) => sample[field]).filter((value): value is number => value !== null);
+  if (values.length < 2) return <div className="text-muted-foreground flex h-32 items-center justify-center text-sm">{emptyLabel}</div>;
+  const min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
+  const points = values.map((value, index) => `${(index / (values.length - 1)) * 100},${92 - ((value - min) / span) * 76}`).join(" ");
+  return <div><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-32 w-full" aria-label={`${field} live chart`}><line x1="0" y1="92" x2="100" y2="92" stroke="currentColor" className="text-border" strokeWidth="0.6" /><polyline points={points} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg><div className="text-muted-foreground flex justify-between text-[11px] tabular-nums"><span>{money.format(min)}</span><span>live window</span><span>{money.format(max)}</span></div></div>;
 }
 
-export function FhvOperationsDashboard({
-  status,
-  showRawJson,
-  onToggleRawJson,
-}: FhvOperationsDashboardProps) {
-  const parsed = asStatus(status);
+function SummaryList({ items, empty }: { items: readonly { id: string; label: string; atUtc: string }[]; empty: string }) {
+  if (items.length === 0) return <p className="text-muted-foreground text-sm">{empty}</p>;
+  return <ul className="divide-border/60 divide-y">{items.slice(0, 8).map((item) => <li key={item.id} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1fr_auto]"><span className="text-sm">{item.label}</span><time className="text-muted-foreground text-xs tabular-nums">{new Date(item.atUtc).toLocaleTimeString()}</time></li>)}</ul>;
+}
 
-  if (!parsed) {
-    return (
-      <WaiaSurface variant="raised" className="p-4">
-        <p className="text-destructive text-sm">Status payload is unavailable or invalid.</p>
-      </WaiaSurface>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <Section title="Campaign progress">
-        <MetricGrid
-          items={[
-            { label: "Run ID", value: parsed.campaign.runId },
-            { label: "Phase", value: parsed.campaign.phase },
-            { label: "Terminal state", value: parsed.campaign.terminalState },
-            {
-              label: "Bars processed / total",
-              value: `${parsed.campaign.barsProcessed} / ${parsed.campaign.barsTotal ?? "unknown"}`,
-            },
-            {
-              label: "Completion",
-              value:
-                parsed.campaign.completionPct !== null
-                  ? `${parsed.campaign.completionPct.toFixed(1)}%`
-                  : "unknown",
-            },
-            { label: "Heartbeat age (ms)", value: parsed.campaign.heartbeatAgeMs },
-            {
-              label: "Checkpoint age (ms)",
-              value: parsed.campaign.checkpointAgeMs ?? "unknown",
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="Host health">
-        <MetricGrid
-          items={[
-            { label: "Process", value: parsed.host.processStatus },
-            { label: "Service", value: parsed.host.serviceStatus },
-            { label: "RAM used %", value: parsed.host.ramUsedPct ?? "unknown" },
-            { label: "Disk free (bytes)", value: parsed.host.diskFreeBytes ?? "unknown" },
-            { label: "Artifact dir (bytes)", value: parsed.host.artifactDirBytes ?? "unknown" },
-            { label: "Postgres", value: parsed.host.postgresConnectivity },
-            {
-              label: "Dataset readable",
-              value:
-                parsed.host.datasetReadable === null
-                  ? "unknown"
-                  : String(parsed.host.datasetReadable),
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="Market intelligence">
-        <MetricGrid
-          items={[
-            { label: "Regime", value: parsed.marketIntelligence.regime ?? "unknown" },
-            {
-              label: "Data quality",
-              value: parsed.marketIntelligence.dataQualityScore ?? "unknown",
-            },
-            { label: "Conviction", value: parsed.marketIntelligence.conviction ?? "unknown" },
-            {
-              label: "Active hypotheses",
-              value: parsed.marketIntelligence.activeHypothesesSummary.length,
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="Strategies">
-        <MetricGrid
-          items={[
-            { label: "Eligibility", value: parsed.strategies.eligibility },
-            { label: "Signals created", value: parsed.strategies.signalsCreated },
-            { label: "Signals rejected", value: parsed.strategies.signalsRejected },
-            { label: "Active versions", value: parsed.strategies.activeVersions.join(", ") || "—" },
-          ]}
-        />
-      </Section>
-
-      <Section title="Simulated positions & trades">
-        <MetricGrid
-          items={[
-            { label: "Orders", value: parsed.tradingSimulation.ordersCount },
-            { label: "Fills", value: parsed.tradingSimulation.fillsCount },
-            { label: "Open positions", value: parsed.tradingSimulation.openPositionsCount },
-            { label: "Equity", value: parsed.tradingSimulation.equity ?? "unknown" },
-            { label: "Gross PnL", value: parsed.tradingSimulation.grossPnl ?? "unknown" },
-            { label: "Net PnL", value: parsed.tradingSimulation.netPnl ?? "unknown" },
-            {
-              label: "Drawdown (bps)",
-              value: parsed.tradingSimulation.accountDrawdownBps ?? "unknown",
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="Risk & Guardian">
-        <MetricGrid
-          items={[
-            { label: "Guardian state", value: parsed.tradingSimulation.guardianState ?? "unknown" },
-            {
-              label: "Reconciliation",
-              value: parsed.tradingSimulation.reconciliationState ?? "unknown",
-            },
-            { label: "Exposure", value: parsed.tradingSimulation.exposure ?? "unknown" },
-          ]}
-        />
-      </Section>
-
-      <Section title="Alerts">
-        {parsed.recentAlerts.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No recent alerts.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {parsed.recentAlerts.slice(0, 10).map((alert) => (
-              <li key={alert.id}>
-                <span className="font-medium">{alert.id}</span> — {alert.label}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="Evidence & checkpoint health">
-        <MetricGrid
-          items={[
-            {
-              label: "Evidence health",
-              value: parsed.evidence.evidenceHealth ?? parsed.evidence.artifactWriteHealth,
-            },
-            { label: "Checkpoint integrity", value: parsed.evidence.checkpointIntegrity },
-            { label: "Digest state", value: parsed.evidence.digestState },
-            { label: "Event sequence", value: parsed.evidence.eventSequence },
-          ]}
-        />
-      </Section>
-
-      <Section title="Holdout confidentiality">
-        <MetricGrid
-          items={[
-            { label: "Holdout gate", value: parsed.holdout.holdoutGate },
-            { label: "Holdout state", value: parsed.holdout.holdoutState },
-            { label: "Access", value: parsed.holdout.holdoutAccess },
-          ]}
-        />
-      </Section>
-
-      <div className="flex justify-end">
-        <Button type="button" variant="ghost" size="sm" onClick={onToggleRawJson}>
-          {showRawJson ? "Hide diagnostic JSON" : "Show diagnostic JSON"}
-        </Button>
-      </div>
-
-      {showRawJson ? (
-        <WaiaSurface variant="raised" className="p-4">
-          <pre className="bg-muted/30 overflow-auto rounded-md p-3 text-xs">
-            {JSON.stringify(status, null, 2)}
-          </pre>
-        </WaiaSurface>
-      ) : null}
-    </div>
-  );
+export function FhvOperationsDashboard({ status, connectionState, lastReceivedAt, samples, accountRows }: Props) {
+  const parsed = parseFhvStatus(status);
+  if (!parsed) return <WaiaSurface variant="raised" className="border-destructive/40 p-5 text-sm text-rose-300">Observer returned an invalid status contract.</WaiaSurface>;
+  const rows = accountRows && accountRows.length > 0 ? accountRows : buildAdminAccountRows(parsed);
+  const totalEquity = sumKnownAccountMetric(rows, "equity"), totalCash = sumKnownAccountMetric(rows, "cash"), totalPnl = sumKnownAccountMetric(rows, "pnl");
+  const netPnl = totalPnl, completion = parsed.campaign.completionPct ?? 0;
+  return <div className="space-y-4" data-testid="fhv-streaming-console">
+    <div className="grid gap-3 xl:grid-cols-[1fr_auto]"><div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold">Historical Test Command Center</h1><span data-testid="fhv-stream-state" className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold uppercase ${stateTone(connectionState)}`}><Radio className={connectionState === "live" ? "h-3.5 w-3.5 animate-pulse" : "h-3.5 w-3.5"} /> {connectionState}</span></div><p className="text-muted-foreground mt-1 text-sm">Read-only operator telemetry · automatic refresh · no live or capital controls</p></div><div className="text-muted-foreground text-right text-xs tabular-nums"><div>campaign_run_id</div><div className="text-foreground font-mono">{parsed.campaign.runId}</div><div className="mt-1">last update {lastReceivedAt ? new Date(lastReceivedAt).toLocaleTimeString() : "—"}</div></div></div>
+    <WaiaSurface variant="raised" className="p-5"><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7"><Metric label="Total equity" value={formatMoney(totalEquity)} /><Metric label="Net P&L" value={formatMoney(totalPnl)} tone={netPnl === null ? "default" : netPnl >= 0 ? "positive" : "negative"} /><Metric label="Total cash" value={formatMoney(totalCash)} /><Metric label="Open positions" value={formatNumber(parsed.tradingSimulation.openPositionsCount)} hint="currently open" /><Metric label="Completed trades" value={formatNumber(parsed.tradingSimulation.closedPositionsCount)} /><Metric label="Drawdown" value={parsed.tradingSimulation.accountDrawdownBps === null ? "—" : `${(parsed.tradingSimulation.accountDrawdownBps / 100).toFixed(2)}%`} tone="warning" /><Metric label="Exposure" value={parsed.tradingSimulation.exposure ?? "—"} /></div></WaiaSurface>
+    <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]"><Section title="Campaign execution" icon={<Activity className="h-4 w-4" />}><div className="space-y-4"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-muted-foreground text-xs uppercase">{parsed.campaign.phase}</p><p className="mt-1 text-lg font-semibold">{parsed.campaign.currentSymbol ?? "Preparing data"} · {parsed.campaign.partition}</p></div><div className="text-right"><p className="text-3xl font-semibold tabular-nums">{completion.toFixed(1)}%</p><p className="text-muted-foreground text-xs">ETA {parsed.campaign.etaUtc ? new Date(parsed.campaign.etaUtc).toLocaleString() : "calculating"}</p></div></div><div className="bg-muted h-2 overflow-hidden rounded-full"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-[width] duration-700" style={{ width: `${Math.max(0, Math.min(100, completion))}%` }} /></div><div className="grid gap-4 sm:grid-cols-3"><Metric label="Bars processed" value={`${formatNumber(parsed.campaign.barsProcessed)} / ${formatNumber(parsed.campaign.barsTotal)}`} /><Metric label="Rolling throughput" value={parsed.campaign.throughputRolling === null ? "—" : `${money.format(parsed.campaign.throughputRolling)} bars/s`} /><Metric label="Checkpoint" value={parsed.campaign.lastCheckpointAt ? new Date(parsed.campaign.lastCheckpointAt).toLocaleTimeString() : "Waiting"} hint={parsed.campaign.checkpointAgeMs === null ? undefined : `${Math.round(parsed.campaign.checkpointAgeMs / 1000)}s ago`} /></div></div></Section><Section title="Runtime & data health" icon={<Server className="h-4 w-4" />}><div className="grid gap-4 sm:grid-cols-2"><Metric label="Campaign process" value={parsed.host.processStatus ?? "unknown"} /><Metric label="Observer service" value={parsed.host.serviceStatus ?? "unknown"} /><Metric label="Heartbeat" value={parsed.campaign.heartbeatState} hint={parsed.campaign.heartbeatAgeMs === null ? "age unavailable" : `${parsed.campaign.heartbeatAgeMs} ms old`} /><Metric label="Event stream lag" value={parsed.evidence.eventStreamLagMs === null ? "—" : `${parsed.evidence.eventStreamLagMs} ms`} /><Metric label="CPU / RAM" value={`${parsed.host.cpuPct ?? "—"}% / ${parsed.host.ramUsedPct ?? "—"}%`} /><Metric label="PostgreSQL" value={parsed.host.postgresConnectivity} /></div></Section></div>
+    <Section title="Balances — all accounts exposed by this campaign" icon={<CircleDollarSign className="h-4 w-4" />}><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-muted-foreground border-border border-b text-[11px] uppercase"><tr><th className="pb-3 font-medium">Account</th><th className="pb-3 font-medium">Cash</th><th className="pb-3 font-medium">Equity</th><th className="pb-3 font-medium">Net P&amp;L</th><th className="pb-3 font-medium">24h change</th><th className="pb-3 text-right font-medium">Open positions</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-border/60 border-b last:border-0"><td className="py-4"><div className="font-medium">{row.label}</div><div className="text-muted-foreground font-mono text-xs">{row.id}</div></td><td className="py-4 tabular-nums">{formatMoney(row.cash)}</td><td className="py-4 font-semibold tabular-nums">{formatMoney(row.equity)}</td><td className="py-4 tabular-nums">{formatMoney(row.pnl)}</td><td className="py-4"><span className="text-muted-foreground inline-flex items-center gap-1">{row.direction24h === "up" ? <TrendingUp className="h-4 w-4 text-emerald-300" /> : row.direction24h === "down" ? <TrendingDown className="h-4 w-4 text-rose-300" /> : null}{row.pnl24h === null ? "baseline pending" : formatMoney(row.pnl24h)}</span></td><td className="py-4 text-right tabular-nums">{formatNumber(row.openPositions)}</td></tr>)}</tbody></table></div><p className="text-muted-foreground mt-3 text-xs">The table retains and aggregates every HISTORICAL_VIRTUAL account published by the stream. The current campaign producer emits one authoritative simulated account; no exchange or tenant account is inferred. A true 24-hour delta remains unavailable until each account publishes a retained baseline.</p></Section>
+    <div className="grid gap-4 xl:grid-cols-3"><Section title="Equity" icon={<BarChart3 className="h-4 w-4" />}><Sparkline samples={samples} field="equity" color="#22d3ee" emptyLabel="Collecting live equity samples…" /></Section><Section title="Net P&L" icon={<TrendingUp className="h-4 w-4" />}><Sparkline samples={samples} field="netPnl" color="#34d399" emptyLabel="Collecting live P&L samples…" /></Section><Section title="Drawdown" icon={<TrendingDown className="h-4 w-4" />}><Sparkline samples={samples} field="drawdownBps" color="#fb7185" emptyLabel="Collecting live drawdown samples…" /></Section></div>
+    <div className="grid gap-4 xl:grid-cols-3"><Section title="Open positions" icon={<Layers3 className="h-4 w-4" />}><p className="text-muted-foreground mb-3 text-xs">Current open positions only — not historical trades.</p><SummaryList items={parsed.tradingSimulation.openPositionsSummary} empty="No open simulated positions." /></Section><Section title="Recent trades / fills" icon={<Database className="h-4 w-4" />}><p className="text-muted-foreground mb-3 text-xs">Most recent executed simulated fills.</p><SummaryList items={parsed.tradingSimulation.recentFillsSummary} empty="No simulated fills yet." /></Section><Section title="Recent decisions / orders" icon={<Gauge className="h-4 w-4" />}><p className="text-muted-foreground mb-3 text-xs">Most recent orders emitted by strategy decisions.</p><SummaryList items={parsed.tradingSimulation.recentOrdersSummary} empty="No simulated orders yet." /></Section></div>
+    <div className="grid gap-4 xl:grid-cols-3"><Section title="Risk & Guardian" icon={<ShieldCheck className="h-4 w-4" />}><div className="grid gap-4"><Metric label="Guardian" value={parsed.tradingSimulation.guardianState ?? "unknown"} /><Metric label="Reconciliation" value={parsed.tradingSimulation.reconciliationState ?? "unknown"} /><Metric label="Monthly drawdown" value={parsed.tradingSimulation.monthlyDrawdownBps === null ? "—" : `${(parsed.tradingSimulation.monthlyDrawdownBps / 100).toFixed(2)}%`} /></div></Section><Section title="Evidence & gates" icon={<CheckCircle2 className="h-4 w-4" />}><div className="grid gap-4"><Metric label="Evidence" value={parsed.evidence.evidenceHealth} /><Metric label="Checkpoint integrity" value={parsed.evidence.checkpointIntegrity} /><Metric label="Holdout gate" value={`${parsed.holdout.holdoutGate} · ${parsed.holdout.holdoutState}`} /><Metric label="Event sequence" value={formatNumber(parsed.evidence.eventSequence)} /></div></Section><Section title="Alerts & errors" icon={<AlertTriangle className="h-4 w-4" />}><SummaryList items={parsed.recentAlerts} empty="No recent alerts or runtime errors." /></Section></div>
+    <WaiaSurface variant="raised" className="flex flex-wrap items-center justify-between gap-3 p-4 text-xs"><span className="text-muted-foreground inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" /> observed {new Date(parsed.observedAt).toLocaleString()} · event #{parsed.evidence.eventSequence ?? "—"}</span><span className="text-muted-foreground">read-only · blind holdout remains sealed · no live trading · no capital controls</span></WaiaSurface>
+  </div>;
 }
