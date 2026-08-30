@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-636",
+  "base": {
+    "ref": "origin/main",
+    "sha": "d6e09ffa3d1b93180910148c51d8c5cd6ce344cf"
+  },
+  "branch": "dee-636-guardian-v2",
+  "status": "admitted-local",
+  "riskTier": "T3",
+  "dependencies": {
+    "DEE-635": "Merged; Linear closure evidence pending",
+    "DEE-652": "Done",
+    "DEE-634": "Done"
+  },
+  "ownedGlobs": [
+    "lib/trader/guardian/v2/**",
+    "lib/trader/decision-v2/**",
+    "lib/trader/risk/v2/**",
+    "lib/trader/lifecycle/**",
+    "db/**",
+    "app/admin/**",
+    "app/api/admin/**",
+    "app/api/dashboard/**",
+    "app/dashboard/**",
+    "tests/unit/**",
+    "tests/integration/**",
+    "docs/plans/dee-636-*"
+  ],
+  "forbiddenGlobs": [
+    "lib/trader/intelligence/forecast-decision/**",
+    "lib/trader/billing/**",
+    "lib/trader/connectors/**",
+    "replay-runs/**"
+  ],
+  "frozenInvariants": [
+    "GuardianAssessmentV2 is immutable and content-addressed over exact tenant, open-position/lot, DEE-635 opening lineage, Reality frontier, qualified evidence and information-sufficiency inputs.",
+    "Ordinary Guardian recommendations re-enter Decision V2 and Guardian has no direct capital-effect authority.",
+    "A Decision-sealed protective mandate is deterministic, reduction-only and still passes Risk V2 and Execution V2.",
+    "Guardian never increases exposure, reverses, averages down, derives position truth from order status or weakens live/capital gates."
+  ],
+  "validation": [
+    "canonical known-answer and mutation tests",
+    "missing, stale, mismatch and cross-tenant fail-closed tests",
+    "reduction-only and no-direct-submission structural proof",
+    "restart/replay and SQLite/PostgreSQL parity",
+    "Admin versus tenant read-only isolation",
+    "full fresh-migrated suite",
+    "independent exact-head P1=0/P2=0 review",
+    "authoritative CI and DEE-653 admission"
+  ],
+  "externalEvidence": {
+    "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here."
+  }
+}
