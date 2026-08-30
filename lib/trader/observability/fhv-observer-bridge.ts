@@ -53,6 +53,9 @@ export type FhvObserverBridge = Readonly<{
     operatorId: string;
     command: FhvOperatorCommandV1;
   }): Promise<FhvCommandResultV1>;
+  openEventStream?(
+    input: FhvObserverBridgeRequest & { signal?: AbortSignal; lastEventId?: string | null },
+  ): Promise<Response>;
 }>;
 
 function readStatusFile(path: string): FhvOperatorStatusV1 {
@@ -95,6 +98,12 @@ function createLocalDevelopmentStatusAdapter(env: NodeJS.ProcessEnv): FhvObserve
         "Local development adapter cannot forward commands.",
       );
     },
+    async openEventStream() {
+      throw new FhvRuntimeConfigError(
+        "FHV_OBSERVER_UNAVAILABLE",
+        "Local development adapter does not expose a streaming transport.",
+      );
+    },
   };
 }
 
@@ -105,6 +114,9 @@ async function signedObserverFetch(input: {
   organizationId: string;
   campaignRunId: string;
   body?: unknown;
+  signal?: AbortSignal;
+  streaming?: boolean;
+  lastEventId?: string | null;
 }): Promise<Response> {
   const secret = requireFhvObserverTunnelSecret(input.env);
   const access = requireFhvObserverAccessCredentials(input.env);
@@ -129,9 +141,14 @@ async function signedObserverFetch(input: {
       "x-fhv-campaign-run-id": input.campaignRunId,
       "CF-Access-Client-Id": access.clientId,
       "CF-Access-Client-Secret": access.clientSecret,
+      ...(input.lastEventId ? { "Last-Event-ID": input.lastEventId } : {}),
     },
     body: bodyText.length > 0 ? bodyText : undefined,
-    signal: AbortSignal.timeout(Number(input.env.FHV_OBSERVER_TUNNEL_TIMEOUT_MS ?? 10_000)),
+    signal:
+      input.signal ??
+      (input.streaming
+        ? undefined
+        : AbortSignal.timeout(Number(input.env.FHV_OBSERVER_TUNNEL_TIMEOUT_MS ?? 10_000))),
   });
   return response;
 }
@@ -212,6 +229,31 @@ function createAuthenticatedObserverTunnelAdapter(env: NodeJS.ProcessEnv): FhvOb
         contentType: response.headers.get("content-type"),
       });
       return validateFhvCommandResultV1Response({ payload });
+    },
+    async openEventStream(input) {
+      const path = `/v1/stream?organization_id=${encodeURIComponent(input.organizationId)}&campaign_run_id=${encodeURIComponent(input.campaignRunId)}`;
+      const response = await signedObserverFetch({
+        env,
+        method: "GET",
+        path,
+        organizationId: input.organizationId,
+        campaignRunId: input.campaignRunId,
+        signal: input.signal,
+        streaming: true,
+        lastEventId: input.lastEventId,
+      });
+      if (!response.ok || !response.body) {
+        throw new FhvRuntimeConfigError("FHV_OBSERVER_UNAVAILABLE", "Observer stream unavailable.");
+      }
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.toLowerCase().startsWith("text/event-stream")) {
+        await response.body.cancel();
+        throw new FhvRuntimeConfigError(
+          "FHV_OBSERVER_UNAVAILABLE",
+          "Observer returned an invalid stream content type.",
+        );
+      }
+      return response;
     },
   };
 }
