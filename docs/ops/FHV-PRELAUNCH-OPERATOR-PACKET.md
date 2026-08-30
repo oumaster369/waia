@@ -13,17 +13,25 @@ export FHV_RELEASE_SHA="<combined-main-sha>"
 export FHV_RELEASE_TAG="<single-combined-tag>"
 export FHV_ORGANIZATION_ID="<org-uuid>"
 export FHV_OPERATOR_ID="<operator-id>"
-git -C /opt/waia/waia-dee536-hostqual rev-parse HEAD   # must equal $FHV_RELEASE_SHA
+export FHV_EXECUTION_IP="<approved-candidate-ipv4>"
+export FHV_EXECUTION_HOSTNAME="<approved-candidate-hostname>"
+export FHV_EXECUTION_CHECKOUT="<approved-absolute-checkout-path>"
+git -C "$FHV_EXECUTION_CHECKOUT" rev-parse HEAD   # must equal $FHV_RELEASE_SHA
 ```
 
 ## 1. EXECUTION_SERVER_PREFLIGHT (before WP3B)
 
-Candidate only: `185.189.46.53` / `waia-dee536-execution-candidate`.
-SSH identity: `$HOME/.ssh/waia_cherry_dee536`.
-Checkout: `/opt/waia/waia-dee536-hostqual`. Work root: `/opt/waia/fhv-work` (XFS). Node: `v22.23.0`.
+Bind the approved candidate explicitly. The preflight has no fallback IP, hostname, or checkout.
+SSH identity defaults to `$HOME/.ssh/waia_cherry_dee536` and can be overridden with
+`FHV_EXECUTION_SERVER_SSH_IDENTITY`. Work root remains `/opt/waia/fhv-work` (XFS), and Node must be `v22.23.0`.
 
 ```bash
-./scripts/ops/fhv-execution-server-preflight.sh --execute --release-sha "$FHV_RELEASE_SHA"
+./scripts/ops/fhv-execution-server-preflight.sh \
+  --execute \
+  --release-sha "$FHV_RELEASE_SHA" \
+  --expected-ip "$FHV_EXECUTION_IP" \
+  --expected-hostname "$FHV_EXECUTION_HOSTNAME" \
+  --expected-checkout "$FHV_EXECUTION_CHECKOUT"
 # required: EXECUTION_SERVER_PREFLIGHT=PASS
 ```
 
@@ -47,7 +55,7 @@ pnpm trader:fhv:throughput-host-qualification -- --run-dir "<representative-run-
 ## 4. T4 host preflight + aggregate HOST_QUALIFIED
 
 ```bash
-# existing T4 preflight proof JSON with {"status":"PASS","hostname":"waia-dee536-execution-candidate"}
+# existing T4 preflight proof JSON with {"status":"PASS","hostname":"<approved-candidate-hostname>"}
 pnpm trader:fhv:host-qualify -- \
   --release-sha "$FHV_RELEASE_SHA" \
   --wp3b-receipt /opt/waia/fhv-work/fhv-wp3b-host-qualification.v2.json \

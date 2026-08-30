@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
-# Candidate-neutral Execution Server preflight (DEE-536).
+# Candidate-neutral Execution Server preflight (DEE-536 / DEE-785).
 #
 # Prepare only during software Build. Do not SSH to the candidate unless --execute
 # is explicitly supplied by a Human on the operational host path.
 #
-# Target candidate only:
-#   IP: 185.189.46.53
-#   hostname: waia-dee536-execution-candidate
-#   SSH identity: $HOME/.ssh/waia_cherry_dee536
-#   checkout: /opt/waia/waia-dee536-hostqual
-#   work root: /opt/waia/fhv-work (must be XFS)
-#   Node: v22.23.0
-#
 # Usage:
-#   ./scripts/ops/fhv-execution-server-preflight.sh --prepare-only
-#   ./scripts/ops/fhv-execution-server-preflight.sh --fixture-local
-#   ./scripts/ops/fhv-execution-server-preflight.sh --execute --release-sha <40hex>
+#   ./scripts/ops/fhv-execution-server-preflight.sh --prepare-only \
+#     --expected-ip <ip> --expected-hostname <hostname> --expected-checkout </absolute/path>
+#   ./scripts/ops/fhv-execution-server-preflight.sh --fixture-local \
+#     --expected-ip <ip> --expected-hostname <hostname> --expected-checkout </absolute/path>
+#   ./scripts/ops/fhv-execution-server-preflight.sh --execute --release-sha <40hex> \
+#     --expected-ip <ip> --expected-hostname <hostname> --expected-checkout </absolute/path>
 #
 # Terminal result (fixture-local or execute):
 #   EXECUTION_SERVER_PREFLIGHT=PASS
@@ -23,9 +18,6 @@
 
 set -euo pipefail
 
-readonly EXPECTED_IP="185.189.46.53"
-readonly EXPECTED_HOSTNAME="waia-dee536-execution-candidate"
-readonly EXPECTED_CHECKOUT="/opt/waia/waia-dee536-hostqual"
 readonly EXPECTED_WORK_ROOT="/opt/waia/fhv-work"
 readonly EXPECTED_NODE="v22.23.0"
 readonly FORBIDDEN_PRODUCTION_HOSTNAME_RE='(prod|production|waia-live)'
@@ -33,14 +25,35 @@ SSH_IDENTITY="${FHV_EXECUTION_SERVER_SSH_IDENTITY:-$HOME/.ssh/waia_cherry_dee536
 
 MODE=""
 RELEASE_SHA="${EXECUTION_SERVER_TARGET_SHA:-}"
+EXPECTED_IP=""
+EXPECTED_HOSTNAME=""
+EXPECTED_CHECKOUT=""
 
 usage() {
   cat >&2 <<EOF
 Usage:
-  $0 --prepare-only
-  $0 --fixture-local
-  $0 --execute --release-sha <40hex>
+  $0 --prepare-only --expected-ip <ip> --expected-hostname <hostname> --expected-checkout </absolute/path>
+  $0 --fixture-local --expected-ip <ip> --expected-hostname <hostname> --expected-checkout </absolute/path>
+  $0 --execute --release-sha <40hex> --expected-ip <ip> --expected-hostname <hostname> --expected-checkout </absolute/path>
 EOF
+}
+
+emit_pass() {
+  printf 'EXECUTION_SERVER_PREFLIGHT=PASS\n'
+}
+
+emit_blocked() {
+  printf 'EXECUTION_SERVER_PREFLIGHT=BLOCKED_%s\n' "$1"
+  exit 1
+}
+
+read_flag_value() {
+  local flag="$1"
+  local value="${2:-}"
+  if [[ -z "${value}" ]]; then
+    emit_blocked "${flag}_REQUIRED"
+  fi
+  printf '%s' "${value}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -49,7 +62,19 @@ while [[ $# -gt 0 ]]; do
     --fixture-local) MODE="fixture"; shift ;;
     --execute) MODE="execute"; shift ;;
     --release-sha)
-      RELEASE_SHA="${2:-}"
+      RELEASE_SHA="$(read_flag_value RELEASE_SHA "${2:-}")"
+      shift 2
+      ;;
+    --expected-ip)
+      EXPECTED_IP="$(read_flag_value EXPECTED_IP "${2:-}")"
+      shift 2
+      ;;
+    --expected-hostname)
+      EXPECTED_HOSTNAME="$(read_flag_value EXPECTED_HOSTNAME "${2:-}")"
+      shift 2
+      ;;
+    --expected-checkout)
+      EXPECTED_CHECKOUT="$(read_flag_value EXPECTED_CHECKOUT "${2:-}")"
       shift 2
       ;;
     -h|--help) usage; exit 2 ;;
@@ -61,18 +86,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${MODE}" ]]; then
-  printf 'EXECUTION_SERVER_PREFLIGHT=BLOCKED_MODE_REQUIRED\n'
-  exit 1
+  emit_blocked "MODE_REQUIRED"
 fi
 
-emit_pass() {
-  printf 'EXECUTION_SERVER_PREFLIGHT=PASS\n'
-}
+[[ -n "${EXPECTED_IP}" ]] || emit_blocked "EXPECTED_IP_REQUIRED"
+[[ -n "${EXPECTED_HOSTNAME}" ]] || emit_blocked "EXPECTED_HOSTNAME_REQUIRED"
+[[ -n "${EXPECTED_CHECKOUT}" ]] || emit_blocked "EXPECTED_CHECKOUT_REQUIRED"
 
-emit_blocked() {
-  printf 'EXECUTION_SERVER_PREFLIGHT=BLOCKED_%s\n' "$1"
-  exit 1
-}
+if ! python3 -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "${EXPECTED_IP}" 2>/dev/null; then
+  emit_blocked "EXPECTED_IP_INVALID"
+fi
+if [[ ! "${EXPECTED_HOSTNAME}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]]; then
+  emit_blocked "EXPECTED_HOSTNAME_INVALID"
+fi
+if [[ ! "${EXPECTED_CHECKOUT}" =~ ^/[A-Za-z0-9._/-]+$ ]] || [[ "${EXPECTED_CHECKOUT}" =~ (^|/)\.\.(/|$) ]]; then
+  emit_blocked "EXPECTED_CHECKOUT_INVALID"
+fi
 
 if [[ "${MODE}" == "prepare" ]]; then
   cat <<EOF
@@ -156,7 +185,7 @@ if [[ -z "${RELEASE_SHA}" || ! "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 # Human operational path only. Software Build must not reach here.
-REMOTE_FACTS="$(ssh -i "${SSH_IDENTITY}" -o StrictHostKeyChecking=yes -o BatchMode=yes "root@${EXPECTED_IP}" \
+if ! REMOTE_FACTS="$(ssh -i "${SSH_IDENTITY}" -o StrictHostKeyChecking=yes -o BatchMode=yes "root@${EXPECTED_IP}" \
   "python3 - <<'PY'
 import os, socket, subprocess, json
 def sh(cmd):
@@ -164,9 +193,18 @@ def sh(cmd):
         return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
     except Exception:
         return ''
+def primary_ipv4():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(('1.1.1.1', 80))
+        return sock.getsockname()[0]
+    except Exception:
+        return ''
+    finally:
+        sock.close()
 facts = {
   'hostname': socket.gethostname(),
-  'ip': '${EXPECTED_IP}',
+  'ip': primary_ipv4(),
   'node': sh('node -v'),
   'fstype': sh('findmnt -no FSTYPE ${EXPECTED_WORK_ROOT} || stat -f -c %T ${EXPECTED_WORK_ROOT}'),
   'checkout_exists': 'yes' if os.path.isdir('${EXPECTED_CHECKOUT}') else 'no',
@@ -174,9 +212,22 @@ facts = {
   'checkout_sha': sh('git -C ${EXPECTED_CHECKOUT} rev-parse HEAD'),
 }
 print(json.dumps(facts))
-PY")"
+PY")"; then
+  emit_blocked "SSH_UNREACHABLE"
+fi
+
+if ! python3 -c '
+import json, sys
+facts = json.loads(sys.argv[1])
+required = {"hostname", "ip", "node", "fstype", "checkout_exists", "work_exists", "checkout_sha"}
+assert required == set(facts)
+assert all(isinstance(facts[key], str) for key in required)
+' "${REMOTE_FACTS}" 2>/dev/null; then
+  emit_blocked "REMOTE_FACTS_INVALID"
+fi
 
 HOSTNAME_VALUE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["hostname"])' "${REMOTE_FACTS}")"
+IP_VALUE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["ip"])' "${REMOTE_FACTS}")"
 NODE_VALUE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["node"])' "${REMOTE_FACTS}")"
 FSTYPE_VALUE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["fstype"])' "${REMOTE_FACTS}")"
 CHECKOUT_EXISTS="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["checkout_exists"])' "${REMOTE_FACTS}")"
@@ -185,7 +236,7 @@ CHECKOUT_SHA="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["chec
 
 evaluate_facts \
   "${HOSTNAME_VALUE}" \
-  "${EXPECTED_IP}" \
+  "${IP_VALUE}" \
   "${NODE_VALUE}" \
   "${FSTYPE_VALUE}" \
   "${CHECKOUT_EXISTS}" \
