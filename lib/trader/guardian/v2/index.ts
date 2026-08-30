@@ -20,3 +20,16 @@ export {
   InMemoryGuardianAssessmentRepositoryV2,
 } from "@/lib/trader/guardian/v2/guardian-assessment-repository-v2";
 export type { GuardianAssessmentRepositoryV2 } from "@/lib/trader/guardian/v2/guardian-assessment-repository-v2";
+export { routeGuardianOrdinaryAssessmentV2 } from "@/lib/trader/guardian/v2/guardian-action-authority-v2";
+export type { GuardianOrdinaryRouteV2 } from "@/lib/trader/guardian/v2/guardian-action-authority-v2";
+export {
+  PROTECTIVE_ACTION_MANDATE_V2_SCHEMA_VERSION,
+  assertProtectiveActionMandateV2,
+  buildProtectiveActionMandateV2,
+  protectiveActionKindV2Values,
+} from "@/lib/trader/guardian/v2/protective-action-mandate-v2";
+export type {
+  ProtectiveActionKindV2,
+  ProtectiveActionMandateV2,
+  ProtectiveActionMandateV2Draft,
+} from "@/lib/trader/guardian/v2/protective-action-mandate-v2";
