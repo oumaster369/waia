@@ -13,4 +13,5 @@ export type {
   GuardianV2Recommendation,
   GuardianV2Sufficiency,
 } from "@/lib/trader/guardian/v2/guardian-assessment-v2";
-
+export { buildGuardianAssessmentFromCanonicalInputsV2 } from "@/lib/trader/guardian/v2/build-assessment-from-canonical-inputs-v2";
+export type { QualifiedGuardianEvidenceV2 } from "@/lib/trader/guardian/v2/build-assessment-from-canonical-inputs-v2";
