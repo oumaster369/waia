@@ -10,13 +10,15 @@ import {
   validateRealityProjectionV2,
   type RealityProjectionV2,
 } from "@/lib/trader/reality/v2/contracts";
-import { compareDecimal, isPositiveDecimal } from "@/lib/trader/risk/numeric";
+import { compareDecimal, formatDecimal, isPositiveDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   validateRiskAllowanceV2,
   type RiskAllowanceV2,
 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 
 import { assertGuardianAssessmentV2, type GuardianAssessmentV2 } from "./guardian-assessment-v2";
+import { assertProtectiveActionMandateV2, type ProtectiveActionMandateV2 } from "./protective-action-mandate-v2";
+import { assertProtectiveTriggerProofV2, type ProtectiveTriggerProofV2 } from "./protective-trigger-proof-v2";
 
 export type GuardianDecisionSealV2 = Readonly<{
   organizationId: string;
@@ -188,3 +190,60 @@ export async function runGuardianOrdinaryReductionPipelineV2(input: Readonly<{
   });
 }
 
+export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
+  assessment: GuardianAssessmentV2;
+  mandate: ProtectiveActionMandateV2;
+  triggerProof: ProtectiveTriggerProofV2;
+  lot: PositionLotRow;
+  openingLineage: OpeningCausalLineageV1;
+  ports: Omit<GuardianReductionPipelinePortsV2, "decision">;
+}>): Promise<GuardianReductionPipelineResultV2> {
+  assertGuardianAssessmentV2(input.assessment);
+  assertProtectiveActionMandateV2(input.mandate);
+  assertProtectiveTriggerProofV2(input.triggerProof);
+  assertLotBinding(input.assessment, input.lot, input.openingLineage);
+  if (input.mandate.actionKind === "TIGHTEN_PROTECTION") {
+    throw new Error("GUARDIAN_PROTECTIVE_TIGHTEN_REQUIRES_DEDICATED_EXECUTOR");
+  }
+  if (
+    input.mandate.organizationId !== input.assessment.organizationId ||
+    input.mandate.positionId !== input.assessment.positionId || input.mandate.lotId !== input.assessment.lotId ||
+    input.mandate.symbol !== input.assessment.symbol ||
+    input.mandate.openingCausalLineageDigest !== input.assessment.openingCausalLineageDigest ||
+    input.mandate.guardianAssessmentId !== input.assessment.assessmentId ||
+    input.mandate.guardianAssessmentContentDigest !== input.assessment.contentDigest
+  ) throw new Error("GUARDIAN_PROTECTIVE_MANDATE_BINDING_MISMATCH");
+  if (
+    input.triggerProof.mandateId !== input.mandate.mandateId ||
+    input.triggerProof.mandateContentDigest !== input.mandate.contentDigest ||
+    input.triggerProof.deterministicTriggerSpecDigest !== input.mandate.deterministicTriggerSpecDigest ||
+    input.triggerProof.realityProjectionId !== input.assessment.realityFrontierId ||
+    input.triggerProof.realityContentDigest !== input.assessment.realityContentDigest ||
+    new Date(input.triggerProof.observedAtUtc).getTime() > new Date(input.mandate.validUntilUtc).getTime()
+  ) throw new Error("GUARDIAN_PROTECTIVE_TRIGGER_BINDING_MISMATCH");
+  const action = input.mandate.actionKind === "CLOSE_FULL" ? "CLOSE" : "REDUCE";
+  const approvedQuantity = input.mandate.actionKind === "CLOSE_FULL"
+    ? input.lot.remainingQty
+    : formatDecimal((parseDecimal(input.lot.remainingQty) * BigInt(input.mandate.maximumReductionBps)) / 10_000n);
+  const decision: GuardianDecisionSealV2 = Object.freeze({
+    organizationId: input.mandate.organizationId,
+    guardianAssessmentId: input.assessment.assessmentId,
+    guardianAssessmentContentDigest: input.assessment.contentDigest,
+    decisionId: input.mandate.decisionId,
+    decisionContentDigest: input.mandate.decisionContentDigest,
+    action,
+    approvedQuantity,
+  });
+  assertDecision(input.assessment, input.lot, decision);
+  const allowance = await input.ports.risk.authorizeReduction({ assessment: input.assessment, decision, lot: input.lot });
+  assertAllowance(input.assessment, decision, input.lot, allowance);
+  const execution = await input.ports.execution.executeReduction({ assessment: input.assessment, decision, allowance, lot: input.lot });
+  assertExecution(input.assessment, input.openingLineage, input.lot, allowance, execution.plan, execution.reports);
+  const reality = await input.ports.reality.ingestExecutionReports({
+    organizationId: input.assessment.organizationId, accountId: input.lot.accountKey, reports: execution.reports,
+  });
+  if (!validateRealityProjectionV2(reality) || reality.organizationId !== input.assessment.organizationId || reality.accountId !== input.lot.accountKey) {
+    throw new Error("GUARDIAN_PIPELINE_REALITY_BINDING_MISMATCH");
+  }
+  return Object.freeze({ assessment: input.assessment, decision, allowance, plan: execution.plan, reports: Object.freeze([...execution.reports]), reality });
+}

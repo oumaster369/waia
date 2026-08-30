@@ -30,7 +30,9 @@ export {
   buildProtectiveActionMandateV2,
   protectiveActionKindV2Values,
 } from "@/lib/trader/guardian/v2/protective-action-mandate-v2";
-export { runGuardianOrdinaryReductionPipelineV2 } from "@/lib/trader/guardian/v2/guardian-reduction-pipeline-v2";
+export { runGuardianOrdinaryReductionPipelineV2, runGuardianProtectiveReductionPipelineV2 } from "@/lib/trader/guardian/v2/guardian-reduction-pipeline-v2";
+export { assertProtectiveTriggerProofV2, buildProtectiveTriggerProofV2 } from "@/lib/trader/guardian/v2/protective-trigger-proof-v2";
+export type { ProtectiveTriggerProofV2 } from "@/lib/trader/guardian/v2/protective-trigger-proof-v2";
 export type {
   GuardianDecisionPortV2,
   GuardianDecisionSealV2,
