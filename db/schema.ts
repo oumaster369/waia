@@ -1928,6 +1928,56 @@ export const traderPositionLots = sqliteTable(
   ],
 );
 
+/** Immutable Guardian V2 assessment ledger (DEE-636). */
+export const traderGuardianAssessmentsV2 = sqliteTable(
+  "trader_guardian_assessments_v2",
+  {
+    assessmentId: text("assessment_id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    positionId: text("position_id").notNull(),
+    lotId: text("lot_id").notNull(),
+    symbol: text("symbol").notNull(),
+    openingCausalLineageDigest: text("opening_causal_lineage_digest").notNull(),
+    realityFrontierId: text("reality_frontier_id").notNull(),
+    realityContentDigest: text("reality_content_digest").notNull(),
+    qualifiedEvidenceBundleId: text("qualified_evidence_bundle_id").notNull(),
+    qualifiedEvidenceContentDigest: text("qualified_evidence_content_digest").notNull(),
+    informationSufficiencyProfile: text("information_sufficiency_profile").notNull(),
+    openPositionSufficiency: text("open_position_sufficiency").notNull(),
+    newOpportunitySufficiency: text("new_opportunity_sufficiency").notNull(),
+    recommendation: text("recommendation").notNull(),
+    targetReductionBps: integer("target_reduction_bps").notNull(),
+    reasonCodesJson: text("reason_codes_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    canonicalJson: text("canonical_json").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_guardian_assessments_v2_id_org_unique").on(t.assessmentId, t.organizationId),
+    foreignKey({ columns: [t.positionId, t.organizationId], foreignColumns: [traderTrades.id, traderTrades.organizationId] }),
+    foreignKey({ columns: [t.lotId, t.organizationId], foreignColumns: [traderPositionLots.id, traderPositionLots.organizationId] }),
+    uniqueIndex("trader_guardian_assessments_v2_org_digest_unique").on(t.organizationId, t.contentDigest),
+    index("trader_guardian_assessments_v2_org_lot_idx").on(t.organizationId, t.lotId, t.createdAt),
+  ],
+);
+
+/** One-shot append-only protective mandate consumption ledger (DEE-636). */
+export const traderGuardianProtectiveConsumptionsV2 = sqliteTable(
+  "trader_guardian_protective_consumptions_v2",
+  {
+    contentDigest: text("content_digest").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    mandateId: text("mandate_id").notNull(),
+    mandateContentDigest: text("mandate_content_digest").notNull(),
+    triggerProofContentDigest: text("trigger_proof_content_digest").notNull(),
+    adjudicatedAtUtc: text("adjudicated_at_utc").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    unique("trader_guardian_protective_consumptions_v2_org_mandate_unique").on(t.organizationId, t.mandateId),
+  ],
+);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = sqliteTable(
   "trader_trade_legs",

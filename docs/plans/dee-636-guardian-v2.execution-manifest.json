@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "waia-execution-manifest/v1",
+  "issue": "DEE-636",
+  "base": {
+    "ref": "origin/main",
+    "sha": "d6e09ffa3d1b93180910148c51d8c5cd6ce344cf"
+  },
+  "branch": "dee-636-guardian-v2",
+  "status": "prepublication-gates-passed",
+  "riskTier": "T3",
+  "dependencies": {
+    "DEE-635": "Merged; Linear closure evidence pending",
+    "DEE-652": "Done",
+    "DEE-634": "Done"
+  },
+  "ownedGlobs": [
+    "lib/trader/guardian/v2/**",
+    "db/**",
+    "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+    "tests/unit/**",
+    "docs/plans/dee-636-*"
+  ],
+  "forbiddenGlobs": [
+    "lib/trader/intelligence/forecast-decision/**",
+    "lib/trader/billing/**",
+    "lib/trader/connectors/**",
+    "replay-runs/**"
+  ],
+  "frozenInvariants": [
+    "GuardianAssessmentV2 is immutable and content-addressed over exact tenant, open-position/lot, DEE-635 opening lineage, Reality frontier, qualified evidence and information-sufficiency inputs.",
+    "Ordinary Guardian recommendations re-enter Decision V2 and Guardian has no direct capital-effect authority.",
+    "A Decision-sealed protective mandate is deterministic, reduction-only and still passes Risk V2 and Execution V2.",
+    "REDUCE_PARTIAL and CLOSE_FULL are the only executable protective actions in this slice; TIGHTEN_PROTECTION fails closed pending a separately admitted non-amplifying executor.",
+    "Each protective mandate is claimed exactly once through a tenant-scoped append-only SQLite/PostgreSQL consumption ledger before Risk; concurrent or restart replay fails closed.",
+    "Admin and tenant observability are separate read-only library projections; no UI/API completeness is claimed.",
+    "Guardian never increases exposure, reverses, averages down, derives position truth from order status or weakens live/capital gates."
+  ],
+  "validation": [
+    "canonical known-answer and mutation tests",
+    "missing, stale, mismatch and cross-tenant fail-closed tests",
+    "reduction-only and no-direct-submission structural proof",
+    "restart/replay and SQLite/PostgreSQL parity",
+    "Admin versus tenant read-only isolation",
+    "full fresh-migrated suite",
+    "independent exact-head P1=0/P2=0 review",
+    "authoritative CI and DEE-653 admission"
+  ],
+  "externalEvidence": {
+    "linear": "DEE-636 linkage and DEE-635 closure must be recorded when a Linear mechanism is available; neither is claimed complete here.",
+    "localFocused": "Exact implementation head 1164076590bb7f821d45e3db9ef779cfe492282e passes 54/54 affected Guardian/Reality/migration tests, including exact quantity boundary, foreign attempt/report rejection, stale adjudication, and atomic SQLite concurrent/restart mandate consumption; typecheck and canonical validation pass.",
+    "localFullFresh": "Exact reviewed implementation head 1164076590bb7f821d45e3db9ef779cfe492282e passed the literal fresh full suite: 898 files and 5214 tests passed; 85 files and 433 environment-gated tests skipped; zero failures; 1541.34s.",
+    "postgres": "Local PostgreSQL URLs are unavailable; authoritative PostgreSQL CI remains required.",
+    "independentReview": "Fresh independent exact-head review at 1164076590bb7f821d45e3db9ef779cfe492282e found P1=0/P2=0 and independently passed 21/21 focused tests. It confirmed atomic one-shot tenant/mandate consumption and preservation of quantity, attempt/report, expiry and TIGHTEN_PROTECTION fail-closed invariants."
+  }
+}
