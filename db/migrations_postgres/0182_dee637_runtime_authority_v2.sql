@@ -43,30 +43,30 @@ CREATE TRIGGER "trader_runtime_control_lease_epoch_history_v2_update_guard" BEFO
 --> statement-breakpoint
 ALTER TABLE "trader_runtime_authority_assessments_v2" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_authority_assessments_v2_deny_authenticated_select" ON "trader_runtime_authority_assessments_v2" FOR SELECT TO authenticated, anon USING (false);
+CREATE POLICY "runtime_authority_assessments_v2_browser_select_deny" ON "trader_runtime_authority_assessments_v2" FOR SELECT TO authenticated, anon USING (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_authority_assessments_v2_deny_authenticated_insert" ON "trader_runtime_authority_assessments_v2" FOR INSERT TO authenticated, anon WITH CHECK (false);
+CREATE POLICY "runtime_authority_assessments_v2_browser_insert_deny" ON "trader_runtime_authority_assessments_v2" FOR INSERT TO authenticated, anon WITH CHECK (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_authority_assessments_v2_deny_authenticated_update" ON "trader_runtime_authority_assessments_v2" FOR UPDATE TO authenticated, anon USING (false);
+CREATE POLICY "runtime_authority_assessments_v2_browser_update_deny" ON "trader_runtime_authority_assessments_v2" FOR UPDATE TO authenticated, anon USING (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_authority_assessments_v2_deny_authenticated_delete" ON "trader_runtime_authority_assessments_v2" FOR DELETE TO authenticated, anon USING (false);
+CREATE POLICY "runtime_authority_assessments_v2_browser_delete_deny" ON "trader_runtime_authority_assessments_v2" FOR DELETE TO authenticated, anon USING (false);
 --> statement-breakpoint
 ALTER TABLE "trader_runtime_control_lease_heads_v2" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_heads_v2_deny_authenticated_select" ON "trader_runtime_control_lease_heads_v2" FOR SELECT TO authenticated, anon USING (false);
+CREATE POLICY "runtime_lease_heads_v2_browser_select_deny" ON "trader_runtime_control_lease_heads_v2" FOR SELECT TO authenticated, anon USING (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_heads_v2_deny_authenticated_insert" ON "trader_runtime_control_lease_heads_v2" FOR INSERT TO authenticated, anon WITH CHECK (false);
+CREATE POLICY "runtime_lease_heads_v2_browser_insert_deny" ON "trader_runtime_control_lease_heads_v2" FOR INSERT TO authenticated, anon WITH CHECK (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_heads_v2_deny_authenticated_update" ON "trader_runtime_control_lease_heads_v2" FOR UPDATE TO authenticated, anon USING (false);
+CREATE POLICY "runtime_lease_heads_v2_browser_update_deny" ON "trader_runtime_control_lease_heads_v2" FOR UPDATE TO authenticated, anon USING (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_heads_v2_deny_authenticated_delete" ON "trader_runtime_control_lease_heads_v2" FOR DELETE TO authenticated, anon USING (false);
+CREATE POLICY "runtime_lease_heads_v2_browser_delete_deny" ON "trader_runtime_control_lease_heads_v2" FOR DELETE TO authenticated, anon USING (false);
 --> statement-breakpoint
 ALTER TABLE "trader_runtime_control_lease_epoch_history_v2" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_epoch_history_v2_deny_authenticated_select" ON "trader_runtime_control_lease_epoch_history_v2" FOR SELECT TO authenticated, anon USING (false);
+CREATE POLICY "runtime_lease_history_v2_browser_select_deny" ON "trader_runtime_control_lease_epoch_history_v2" FOR SELECT TO authenticated, anon USING (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_epoch_history_v2_deny_authenticated_insert" ON "trader_runtime_control_lease_epoch_history_v2" FOR INSERT TO authenticated, anon WITH CHECK (false);
+CREATE POLICY "runtime_lease_history_v2_browser_insert_deny" ON "trader_runtime_control_lease_epoch_history_v2" FOR INSERT TO authenticated, anon WITH CHECK (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_epoch_history_v2_deny_authenticated_update" ON "trader_runtime_control_lease_epoch_history_v2" FOR UPDATE TO authenticated, anon USING (false);
+CREATE POLICY "runtime_lease_history_v2_browser_update_deny" ON "trader_runtime_control_lease_epoch_history_v2" FOR UPDATE TO authenticated, anon USING (false);
 --> statement-breakpoint
-CREATE POLICY "trader_runtime_control_lease_epoch_history_v2_deny_authenticated_delete" ON "trader_runtime_control_lease_epoch_history_v2" FOR DELETE TO authenticated, anon USING (false);
+CREATE POLICY "runtime_lease_history_v2_browser_delete_deny" ON "trader_runtime_control_lease_epoch_history_v2" FOR DELETE TO authenticated, anon USING (false);
