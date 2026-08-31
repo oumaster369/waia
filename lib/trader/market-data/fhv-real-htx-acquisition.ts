@@ -60,6 +60,23 @@ export const FHV_REAL_HTX_NORMALIZATION_IDENTITY =
 const ONE_MINUTE_SECONDS = 60;
 const ONE_MINUTE_MS = 60_000;
 
+export function resolveFhvRealHtxPageToSeconds(input: {
+  fromSeconds: number;
+  endExclusiveSeconds: number;
+  pageSize: number;
+}): number {
+  if (!Number.isSafeInteger(input.fromSeconds) || !Number.isSafeInteger(input.endExclusiveSeconds)) {
+    throw new Error("HTX page boundaries must be safe integer seconds");
+  }
+  if (!Number.isSafeInteger(input.pageSize) || input.pageSize <= 0) {
+    throw new Error("HTX page size must be a positive integer");
+  }
+  return Math.min(
+    input.endExclusiveSeconds - 1,
+    input.fromSeconds + (input.pageSize - 1) * ONE_MINUTE_SECONDS,
+  );
+}
+
 export class FhvRealHtxAcquisitionError extends Error {
   constructor(
     readonly code: string,
@@ -417,7 +434,11 @@ export async function acquireFhvRealHtxPartition(input: {
         period: "1min",
         size: pageSize,
         from: cursor.nextProviderTimestampSeconds,
-        to: endSeconds - 1,
+        to: resolveFhvRealHtxPageToSeconds({
+          fromSeconds: cursor.nextProviderTimestampSeconds,
+          endExclusiveSeconds: endSeconds,
+          pageSize,
+        }),
       });
     } catch (error) {
       cursor = { ...cursor, retryCount: cursor.retryCount + 1 };

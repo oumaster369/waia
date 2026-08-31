@@ -18,12 +18,41 @@ import {
   FHV_TEST_RELEASE_TAG,
 } from "@/tests/helpers/fhv-official-path-test-fixtures";
 import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
+import { resolveFhvControlReplayCycleBound } from "@/lib/trader/observability/fhv-control-replay-execution";
 
 const RELEASE_SHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 
 const pgEnabled =
   process.env.WAIA_PG_INTEGRATION === "1" && !!process.env.DATABASE_URL_POSTGRES?.trim();
+
+describe("FHV control-replay bounded official CLI", () => {
+  it("parses and validates a positive max-cycles bound", () => {
+    const base = [
+      "--release-sha",
+      RELEASE_SHA,
+      "--organization-id",
+      ORG_ID,
+      "--operator-id",
+      "op",
+      "--configuration-freeze-path",
+      "/tmp/f",
+      "--authorization-receipt-path",
+      "/tmp/a",
+      "--dataset-qualification-receipt-path",
+      "/tmp/q",
+      "--artifact-root",
+      "/tmp/r",
+      "--bounded-fixture",
+    ];
+    expect(resolveFhvControlReplayCliConfig({}, [...base, "--max-cycles", "7"]).maxCycles).toBe(7);
+    expect(() => resolveFhvControlReplayCliConfig({}, [...base, "--max-cycles", "0"])).toThrow(
+      /positive safe integer/,
+    );
+    expect(resolveFhvControlReplayCycleBound({ maxCycles: 7 })).toBe(7);
+    expect(resolveFhvControlReplayCycleBound({})).toBeUndefined();
+  });
+});
 
 describe.skipIf(!pgEnabled)("DEE-436 FHV control-replay CLI", () => {
   it("parses --release-sha from argv (not argv[3] positional)", () => {

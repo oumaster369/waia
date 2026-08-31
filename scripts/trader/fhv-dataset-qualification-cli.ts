@@ -68,6 +68,7 @@ export function resolveFhvDatasetQualificationCliConfig(
   releaseTag?: string;
   organizationId?: string;
   operatorId?: string;
+  runtimeRequalificationReceiptPath?: string;
 } {
   const flags = parseArgv(argv);
   const boundedFixture = flags.has("--bounded-fixture");
@@ -86,6 +87,9 @@ export function resolveFhvDatasetQualificationCliConfig(
     (flags.get("--organization-id") as string | undefined) ?? env.FHV_ORGANIZATION_ID?.trim();
   const operatorId =
     (flags.get("--operator-id") as string | undefined) ?? env.FHV_OPERATOR_ID?.trim();
+  const runtimeRequalificationReceiptPath =
+    (flags.get("--runtime-requalification-receipt-path") as string | undefined) ??
+    env.FHV_RUNTIME_REQUALIFICATION_RECEIPT_PATH?.trim();
 
   if (!boundedFixture) {
     if (!datasetRoot || !manifestPath) {
@@ -121,6 +125,7 @@ export function resolveFhvDatasetQualificationCliConfig(
     releaseTag,
     organizationId,
     operatorId,
+    runtimeRequalificationReceiptPath,
   };
 }
 
@@ -134,6 +139,7 @@ export function runFhvDatasetQualification(input?: {
   releaseTag?: string;
   organizationId?: string;
   operatorId?: string;
+  runtimeRequalificationReceiptPath?: string;
 }): FhvDatasetQualificationResult {
   const config = input ?? resolveFhvDatasetQualificationCliConfig();
   try {
@@ -147,6 +153,7 @@ export function runFhvDatasetQualification(input?: {
           releaseTag: config.releaseTag,
           organizationId: config.organizationId,
           operatorId: config.operatorId,
+          runtimeRequalificationReceiptPath: config.runtimeRequalificationReceiptPath,
         });
 
     let receipt: FhvDatasetQualificationReceiptV1 | undefined;
@@ -162,6 +169,7 @@ export function runFhvDatasetQualification(input?: {
         releaseTag: config.releaseTag,
         organizationId: config.organizationId,
         operatorId: config.operatorId,
+        runtimeRequalificationReceiptPath: config.runtimeRequalificationReceiptPath,
       });
     }
 
