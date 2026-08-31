@@ -32,6 +32,9 @@ export type PersistDee659AuthorityBundleV2Input = PersistedDecisionEconomicsAuth
   accountId: string;
   cycleId: string;
   forecastAuthorityContentDigestHex: string;
+  runId: string;
+  datasetSealDigestHex: string;
+  dee659PreregistrationId: string;
   pitAnchor: string;
 }>;
 
@@ -41,10 +44,15 @@ export type CanonicalDecisionVerificationReceiptPortV2 = Readonly<{
     organizationId: string; forecastId: string; subjectContentDigestHex: string;
   }>): Promise<Readonly<{ verificationReceiptDigestHex: string }>>;
   loadScientificVerification(input: Readonly<{
-    organizationId: string; scientificAdmissionContentDigestHex: string;
+    organizationId: string; forecastId: string; scientificAdmissionContentDigestHex: string;
   }>): Promise<Readonly<{ verificationReceiptDigestHex: string }>>;
   loadExecutionPayoffVerification(input: Readonly<{
     organizationId: string; accountId: string; instrumentIdentityDigestHex: string;
+    runId: string; datasetSealDigestHex: string; dee659PreregistrationId: string; forecastId: string;
+    pitAnchor: string;
+    subjectContentDigestHex: Readonly<{
+      anchor: string; executablePolicy: string; economicSize: string; cash: string;
+    }>;
   }>): Promise<ExecutionPayoffAuthorityVerificationV1>;
 }>;
 
@@ -52,6 +60,9 @@ type AuthorityRow = Readonly<{
   organization_id: string;
   account_id: string;
   cycle_id: string;
+  run_id: string;
+  dataset_seal_digest_hex: string;
+  dee659_preregistration_id: string;
   forecast_authority_content_digest_hex: string;
   forecast_id: string;
   forecast_issuance_receipt_digest_hex: string;
@@ -93,7 +104,7 @@ function parseObject<T>(value: unknown, field: string): T {
 
 function validateBundle(input: PersistDee659AuthorityBundleV2Input): void {
   if (!input.organizationId.trim() || !input.accountId.trim() || !input.cycleId.trim() ||
-      !input.forecastId.trim()) {
+      !input.forecastId.trim() || !input.runId.trim() || !input.dee659PreregistrationId.trim()) {
     throw new Error("DEE659_DURABLE_AUTHORITY_INVALID:identity");
   }
   canonicalUtc(input.pitAnchor, "pitAnchor");
@@ -102,6 +113,7 @@ function validateBundle(input: PersistDee659AuthorityBundleV2Input): void {
     [input.forecastIssuanceReceiptDigestHex, "forecastIssuanceReceiptDigestHex"],
     [input.forecastVerificationReceiptDigestHex, "forecastVerificationReceiptDigestHex"],
     [input.scientificVerificationReceiptDigestHex, "scientificVerificationReceiptDigestHex"],
+    [input.datasetSealDigestHex, "datasetSealDigestHex"],
   ].forEach(([value, field]) => requireDigest(value, field));
   const anchor = input.anchorAuthority;
   const authorities = [input.executablePolicy, input.economicSizeSet, input.cashAuthority];
@@ -179,18 +191,30 @@ async function assertCanonicalVerificationReceipts(
     }),
     port.loadScientificVerification({
       organizationId: input.organizationId,
+      forecastId: input.forecastId,
       scientificAdmissionContentDigestHex: input.scientificAdmission.contentDigest,
     }),
     port.loadExecutionPayoffVerification({
       organizationId: input.organizationId,
       accountId: input.accountId,
       instrumentIdentityDigestHex: input.anchorAuthority.instrumentIdentityDigestHex,
+      runId: input.runId,
+      datasetSealDigestHex: input.datasetSealDigestHex,
+      dee659PreregistrationId: input.dee659PreregistrationId,
+      forecastId: input.forecastId,
+      pitAnchor: input.pitAnchor,
+      subjectContentDigestHex: {
+        anchor: input.anchorAuthority.contentDigestHex,
+        executablePolicy: input.executablePolicy.contentDigestHex,
+        economicSize: input.economicSizeSet.contentDigestHex,
+        cash: input.cashAuthority.contentDigestHex,
+      },
     }),
   ]);
   if (
     forecast.verificationReceiptDigestHex !== input.forecastVerificationReceiptDigestHex ||
     scientific.verificationReceiptDigestHex !== input.scientificVerificationReceiptDigestHex ||
-    JSON.stringify(execution) !== JSON.stringify(input.executionPayoffVerification)
+    computeStableJsonDigest(execution) !== computeStableJsonDigest(input.executionPayoffVerification)
   ) throw new Error("DEE659_DURABLE_AUTHORITY_INVALID:canonicalVerificationReceiptBinding");
 }
 
@@ -210,6 +234,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
       const inserted = await config.sql<{ bundle_content_digest_hex: string }[]>`
         INSERT INTO trader_dee659_authority_bundle_v2 (
           organization_id, account_id, cycle_id, forecast_authority_content_digest_hex,
+          run_id, dataset_seal_digest_hex, dee659_preregistration_id,
           forecast_id, forecast_issuance_receipt_digest_hex,
           forecast_verification_receipt_digest_hex, scientific_admission_evidence_digest_hex,
           scientific_verification_receipt_digest_hex, anchor_authority_json,
@@ -218,7 +243,8 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           bundle_content_digest_hex
         ) VALUES (
           ${input.organizationId}::uuid, ${input.accountId}, ${input.cycleId},
-          ${input.forecastAuthorityContentDigestHex}, ${input.forecastId},
+          ${input.forecastAuthorityContentDigestHex}, ${input.runId},
+          ${input.datasetSealDigestHex}, ${input.dee659PreregistrationId}::uuid, ${input.forecastId},
           ${input.forecastIssuanceReceiptDigestHex}, ${input.forecastVerificationReceiptDigestHex},
           ${input.scientificAdmission.evidenceSemanticDigest},
           ${input.scientificVerificationReceiptDigestHex}, ${config.sql.json(asJsonValue(input.anchorAuthority))},
@@ -226,7 +252,8 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           ${config.sql.json(asJsonValue(input.cashAuthority))},
           ${config.sql.json(asJsonValue(input.executionPayoffVerification))}, ${input.pitAnchor}::timestamptz,
           ${DEE659_DURABLE_AUTHORITY_BUNDLE_V2}, ${digest}
-        ) ON CONFLICT (organization_id, account_id, cycle_id, forecast_authority_content_digest_hex)
+        ) ON CONFLICT (organization_id, account_id, run_id, cycle_id, dataset_seal_digest_hex,
+          dee659_preregistration_id, forecast_id, forecast_authority_content_digest_hex, pit_anchor)
           DO NOTHING
         RETURNING bundle_content_digest_hex
       `;
@@ -238,6 +265,9 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           SELECT bundle_content_digest_hex FROM trader_dee659_authority_bundle_v2
           WHERE organization_id = ${input.organizationId}::uuid AND account_id = ${input.accountId}
             AND cycle_id = ${input.cycleId}
+            AND run_id = ${input.runId} AND dataset_seal_digest_hex = ${input.datasetSealDigestHex}
+            AND dee659_preregistration_id = ${input.dee659PreregistrationId}::uuid
+            AND forecast_id = ${input.forecastId} AND pit_anchor = ${input.pitAnchor}::timestamptz
             AND forecast_authority_content_digest_hex = ${input.forecastAuthorityContentDigestHex}
         `;
         if (existing[0]?.bundle_content_digest_hex !== digest) {
@@ -247,7 +277,8 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
     },
     async load(identity) {
       const rows = await config.sql<AuthorityRow[]>`
-        SELECT organization_id::text, account_id, cycle_id,
+        SELECT organization_id::text, account_id, cycle_id, run_id, dataset_seal_digest_hex,
+               dee659_preregistration_id::text,
                forecast_authority_content_digest_hex, forecast_id,
                forecast_issuance_receipt_digest_hex, forecast_verification_receipt_digest_hex,
                scientific_admission_evidence_digest_hex,
@@ -260,8 +291,11 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           AND cycle_id = ${identity.cycleId}
           AND forecast_authority_content_digest_hex = ${identity.forecastAuthorityContentDigestHex}
       `;
-      const row = rows[0];
-      if (!row) throw new Error("DEE659_DURABLE_AUTHORITY_NOT_FOUND");
+      if (rows.length !== 1) {
+        throw new Error(rows.length === 0 ? "DEE659_DURABLE_AUTHORITY_NOT_FOUND" :
+          "DEE659_DURABLE_AUTHORITY_AMBIGUOUS_IDENTITY");
+      }
+      const row = rows[0]!;
       const scientificAdmission = await readScientificAdmissionReceiptV1(config.sql, {
         organizationId: identity.organizationId,
         evidenceSemanticDigestHex: row.scientific_admission_evidence_digest_hex,
@@ -271,6 +305,9 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
         organizationId: row.organization_id,
         accountId: row.account_id,
         cycleId: row.cycle_id,
+        runId: row.run_id,
+        datasetSealDigestHex: row.dataset_seal_digest_hex,
+        dee659PreregistrationId: row.dee659_preregistration_id,
         forecastAuthorityContentDigestHex: row.forecast_authority_content_digest_hex,
         pitAnchor: new Date(row.pit_anchor).toISOString(),
         forecastId: row.forecast_id,

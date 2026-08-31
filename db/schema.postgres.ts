@@ -4379,6 +4379,9 @@ export const traderDee659AuthorityBundleV2 = pgTable(
     organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     accountId: text("account_id").notNull(),
     cycleId: text("cycle_id").notNull(),
+    runId: text("run_id").notNull(),
+    datasetSealDigestHex: text("dataset_seal_digest_hex").notNull(),
+    dee659PreregistrationId: uuid("dee659_preregistration_id").notNull(),
     forecastAuthorityContentDigestHex: text("forecast_authority_content_digest_hex").notNull(),
     forecastId: text("forecast_id").notNull(),
     forecastIssuanceReceiptDigestHex: text("forecast_issuance_receipt_digest_hex").notNull(),
@@ -4396,9 +4399,150 @@ export const traderDee659AuthorityBundleV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.organizationId, t.accountId, t.cycleId, t.forecastAuthorityContentDigestHex], name: "dee659_authority_bundle_pk" }),
+    primaryKey({ columns: [t.organizationId, t.accountId, t.runId, t.cycleId,
+      t.datasetSealDigestHex, t.dee659PreregistrationId, t.forecastId,
+      t.forecastAuthorityContentDigestHex, t.pitAnchor], name: "dee659_authority_bundle_pk" }),
     index("dee659_authority_bundle_pit_idx").on(t.organizationId, t.accountId, t.pitAnchor, t.cycleId),
     check("dee659_authority_bundle_schema", sql`${t.schemaVersion} = 'waia.trader.dee659_durable_authority_bundle.v2'`),
+  ],
+);
+
+export const traderHistoricalSimulationPolicyConfigV2 = pgTable(
+  "trader_historical_simulation_policy_config_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(), policyConfigDigestHex: text("policy_config_digest_hex").notNull(),
+    policyConfigJson: jsonb("policy_config_json").notNull(), verifierCodeDigestHex: text("verifier_code_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    registeredAt: timestamp("registered_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.runId, t.policyConfigDigestHex] })],
+);
+
+export const traderCanonicalDecisionVerificationSubjectV2 = pgTable(
+  "trader_canonical_decision_verification_subject_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id"),
+    instrumentIdentityDigestHex: text("instrument_identity_digest_hex"),
+    subjectKind: text("subject_kind").notNull(),
+    subjectContentDigestHex: text("subject_content_digest_hex").notNull(),
+    subjectJson: jsonb("subject_json").notNull(),
+    pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.subjectKind, t.subjectContentDigestHex], name: "canonical_decision_verification_subject_v2_pk" }),
+    check("canonical_decision_verification_subject_v2_schema", sql`${t.schemaVersion} = 'waia.trader.canonical_decision_verification_subject.v2'`),
+  ],
+);
+
+export const traderCanonicalDecisionVerificationReceiptV2 = pgTable(
+  "trader_canonical_decision_verification_receipt_v2",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id"),
+    instrumentIdentityDigestHex: text("instrument_identity_digest_hex"),
+    purpose: text("purpose").notNull(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectContentDigestHex: text("subject_content_digest_hex").notNull(),
+    sourceRecordKind: text("source_record_kind").notNull(),
+    sourceRecordId: text("source_record_id").notNull(),
+    forecastId: uuid("forecast_id"),
+    forecastBundleId: uuid("forecast_bundle_id"),
+    scientificAdmissionReceiptId: uuid("scientific_admission_receipt_id"),
+    dee659PreregistrationId: uuid("dee659_preregistration_id"),
+    sourceRecordContentDigestHex: text("source_record_content_digest_hex").notNull(),
+    verifierVersion: text("verifier_version").notNull(),
+    verifierCodeDigestHex: text("verifier_code_digest_hex").notNull(),
+    pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+    verified: boolean("verified").notNull(),
+    verificationReceiptDigestHex: text("verification_receipt_digest_hex").notNull(),
+    receiptJson: jsonb("receipt_json").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.subjectKind, t.subjectContentDigestHex],
+      foreignColumns: [traderCanonicalDecisionVerificationSubjectV2.organizationId, traderCanonicalDecisionVerificationSubjectV2.subjectKind, traderCanonicalDecisionVerificationSubjectV2.subjectContentDigestHex],
+    }),
+    index("canonical_decision_verification_receipt_v2_lookup_idx").on(t.organizationId, t.accountId, t.instrumentIdentityDigestHex, t.purpose, t.pitAnchor),
+    check("canonical_decision_verification_receipt_v2_schema", sql`${t.schemaVersion} = 'waia.trader.canonical_decision_verification_receipt.v2'`),
+  ],
+);
+
+export const traderHistoricalDatasetAuthorityV2 = pgTable(
+  "trader_historical_dataset_authority_v2",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(), cycleId: text("cycle_id").notNull(),
+    datasetSealDigestHex: text("dataset_seal_digest_hex").notNull(),
+    membershipContentDigestHex: text("membership_content_digest_hex").notNull(),
+    sealedCycleContentDigestHex: text("sealed_cycle_content_digest_hex").notNull(),
+    membershipJson: jsonb("membership_json").notNull(), sealedCycleJson: jsonb("sealed_cycle_json").notNull(),
+    authorityContentDigestHex: text("authority_content_digest_hex").notNull(),
+    registeredAt: timestamp("registered_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+    schemaVersion: text("schema_version").notNull(),
+  },
+  (t) => [
+    unique("historical_dataset_authority_v2_natural").on(t.organizationId, t.runId, t.cycleId),
+    unique("historical_dataset_authority_v2_lineage_unique").on(t.id, t.organizationId, t.runId, t.cycleId, t.datasetSealDigestHex),
+  ],
+);
+
+export const traderDee659AuthorityPreregistrationV2 = pgTable(
+  "trader_dee659_authority_preregistration_v2",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(), runId: text("run_id").notNull(), cycleId: text("cycle_id").notNull(),
+    forecastId: uuid("forecast_id").notNull(),
+    instrumentIdentityDigestHex: text("instrument_identity_digest_hex").notNull(),
+    datasetAuthorityId: uuid("dataset_authority_id").notNull(),
+    datasetSealDigestHex: text("dataset_seal_digest_hex").notNull(),
+    policyConfigDigestHex: text("policy_config_digest_hex").notNull(),
+    anchorSubjectDigestHex: text("anchor_subject_digest_hex").notNull(),
+    policySubjectDigestHex: text("policy_subject_digest_hex").notNull(),
+    sizeSubjectDigestHex: text("size_subject_digest_hex").notNull(),
+    cashSubjectDigestHex: text("cash_subject_digest_hex").notNull(),
+    authorityBundleJson: jsonb("authority_bundle_json").notNull(),
+    authorityBundleDigestHex: text("authority_bundle_digest_hex").notNull(),
+    effectiveMarketFrom: timestamp("effective_market_from", { withTimezone: true, mode: "string" }).notNull(),
+    registeredAt: timestamp("registered_at", { withTimezone: true, mode: "string" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.datasetAuthorityId, t.organizationId, t.runId, t.cycleId, t.datasetSealDigestHex],
+      foreignColumns: [traderHistoricalDatasetAuthorityV2.id, traderHistoricalDatasetAuthorityV2.organizationId,
+        traderHistoricalDatasetAuthorityV2.runId, traderHistoricalDatasetAuthorityV2.cycleId,
+        traderHistoricalDatasetAuthorityV2.datasetSealDigestHex],
+    }),
+    unique("dee659_authority_preregistration_v2_natural").on(t.organizationId, t.accountId, t.runId, t.forecastId, t.authorityBundleDigestHex),
+    unique("dee659_authority_preregistration_v2_id_org_unique").on(t.id, t.organizationId),
+    check("dee659_authority_preregistration_v2_schema", sql`${t.schemaVersion} = 'waia.trader.dee659_authority_preregistration.v2'`),
+  ],
+);
+
+export const traderHistoricalSimulationRunStartV2 = pgTable(
+  "trader_historical_simulation_run_start_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    accountId: text("account_id").notNull(),
+    datasetSealDigestHex: text("dataset_seal_digest_hex").notNull(),
+    policyConfigDigestHex: text("policy_config_digest_hex").notNull(),
+    initialDee659PreregistrationId: uuid("initial_dee659_preregistration_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+    schemaVersion: text("schema_version").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.runId] }),
+    check("historical_simulation_run_start_v2_schema", sql`${t.schemaVersion} = 'waia.trader.historical_simulation_run_start.v2'`),
   ],
 );
 

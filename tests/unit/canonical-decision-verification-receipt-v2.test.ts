@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCanonicalDecisionVerificationReceiptServiceV2,
@@ -9,7 +9,31 @@ const ORG = "00000000-0000-4000-8000-000000000001";
 const DIGEST = "a".repeat(64);
 
 describe("canonical decision verification receipt V2", () => {
-  it("issues a receipt only from the exact persisted Forecast authorization", async () => {
+  beforeEach(() => { process.env.WAIA_RELEASE_SHA = "1".repeat(40); });
+  it("fails closed without an exact immutable release SHA", () => {
+    delete process.env.WAIA_RELEASE_SHA;
+    delete process.env.VERCEL_GIT_COMMIT_SHA;
+    expect(() => createCanonicalDecisionVerificationReceiptServiceV2(vi.fn() as never))
+      .toThrow("CANONICAL_DECISION_VERIFIER_RELEASE_SHA_MISSING");
+  });
+
+  it("fails closed when independent deployment SHA authorities disagree", () => {
+    process.env.WAIA_RELEASE_SHA = "1".repeat(40);
+    process.env.VERCEL_GIT_COMMIT_SHA = "2".repeat(40);
+    expect(() => createCanonicalDecisionVerificationReceiptServiceV2(vi.fn() as never))
+      .toThrow("CANONICAL_DECISION_VERIFIER_RELEASE_SHA_CONFLICT");
+    delete process.env.VERCEL_GIT_COMMIT_SHA;
+  });
+
+  it("refuses to start a run from a preregistration with the wrong account, run, or dataset", async () => {
+    const sql = vi.fn(async () => []);
+    await expect(createCanonicalDecisionVerificationReceiptServiceV2(sql as never).startRun({
+      organizationId: ORG, accountId: "account-B", runId: "run-B",
+      preregistrationId: ORG, datasetSealDigestHex: DIGEST,
+    })).rejects.toThrow("HISTORICAL_SIMULATION_RUN_START_PREREGISTRATION_MISMATCH");
+    expect(sql).toHaveBeenCalledOnce();
+  });
+  it("refuses a digest-shaped Forecast row that fails canonical replay validation", async () => {
     let inserted: { verificationReceiptDigestHex: string } | undefined;
     const sql = Object.assign(vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const query = strings.join(" ");
@@ -34,15 +58,9 @@ describe("canonical decision verification receipt V2", () => {
       return [];
     }), { json: (value: unknown) => value });
 
-    const receipt = await createCanonicalDecisionVerificationReceiptServiceV2(sql as never)
-      .issueForecast({ organizationId: ORG, forecastId: "forecast-1", subjectContentDigestHex: DIGEST });
-    expect(receipt).toMatchObject({
-      verified: true,
-      purpose: "FORECAST_RUNTIME_AUTHORIZED",
-      sourceRecordKind: "FORECAST_BUNDLE_V2",
-      subjectContentDigestHex: DIGEST,
-    });
-    expect(receipt.verificationReceiptDigestHex).toMatch(/^[0-9a-f]{64}$/);
+    await expect(createCanonicalDecisionVerificationReceiptServiceV2(sql as never)
+      .issueForecast({ organizationId: ORG, forecastId: "forecast-1", subjectContentDigestHex: DIGEST }))
+      .rejects.toThrow("FORECAST_RUNTIME_AUTHORITY_INVALID");
   });
 
   it("refuses a subject digest not present in the persisted authorized outcome", async () => {
@@ -54,6 +72,19 @@ describe("canonical decision verification receipt V2", () => {
     }]);
     await expect(createCanonicalDecisionVerificationReceiptServiceV2(sql as never).issueForecast({
       organizationId: ORG, forecastId: "forecast-1", subjectContentDigestHex: "c".repeat(64),
-    })).rejects.toThrow("FORECAST_SOURCE");
+    })).rejects.toThrow("FORECAST_RUNTIME_AUTHORITY_INVALID");
+  });
+
+  it("cannot bypass the transaction and refuses an unknown durable dataset authority", async () => {
+    const sql = Object.assign(vi.fn(async () => []), {
+      begin: vi.fn(async (_level: string, callback: (tx: unknown) => Promise<unknown>) => callback(sql)),
+    });
+    await expect(createCanonicalDecisionVerificationReceiptServiceV2(sql as never)
+      .preregisterExecution({
+        organizationId: ORG, accountId: "account", runId: "run", forecastId: ORG,
+        datasetAuthorityId: ORG, cycleId: "cycle-1", policyConfig: {},
+        defaultQuantity: "1", initialAccountingFrontierId: ORG,
+      } as never)).rejects.toThrow("CANONICAL_DECISION_PREREGISTRATION_REFUSED:DATASET_AUTHORITY");
+    expect(sql.begin).toHaveBeenCalledOnce();
   });
 });
