@@ -74,6 +74,7 @@ import { computeHistoricalForecastPitKnowledgeDigestV2,
   createPostgresHistoricalForecastInputPitProducerV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
 import { createPostgresHistoricalForecastInputPitLoaderV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-loader-v2";
 import { runHistoricalSimulationNextCyclePostgresV2 } from "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
+import { runHistoricalSimulationProductionLoopV2 } from "@/lib/trader/historical-simulation-v2/production-runner-v2";
 import { getPostgresDrizzle } from "@/db/postgres-client";
 import { createAccountingFrontierRepositoryPostgres, createInitialAccountingState,
   computeAccountingSemanticDigest, type AccountingFrontierV1 } from "@/lib/trader/accounting";
@@ -1358,6 +1359,44 @@ describe.skipIf(!integrationEnabled || !url)(
           expect(await runHistoricalSimulationNextCyclePostgresV2({ sql,
             organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
             partition: "DEVELOPMENT", symbol: "BTCUSDT", expectedCycleSequence: 1 })).toEqual(secondCommittedCycle);
+          const runnerProgress: string[] = [];
+          await expect(runHistoricalSimulationProductionLoopV2({ sql, organizationId: orgId,
+            accountId: "dee633-real", runId: "dee633-real-backtest", partition: "DEVELOPMENT",
+            symbol: "BTCUSDT", initialCycleSequence: 0, terminalCycleSequenceExclusive: 2 },
+            { onProgress: (event) => runnerProgress.push(event.event) }))
+            .resolves.toEqual({ status: "TERMINAL", committedCycles: 2, nextCycleSequence: 2 });
+          expect(runnerProgress).toEqual(["START", "CYCLE_COMMITTED", "CYCLE_COMMITTED", "TERMINAL"]);
+          const graphCountBeforeRetry = await sql<{ count: number }[]>`
+            SELECT count(*)::int count FROM trader_historical_simulation_reason_ledger_v2
+            WHERE organization_id=${orgId}::uuid AND account_id='dee633-real' AND run_id='dee633-real-backtest'`;
+          let injectSerializationFailure = true;
+          const transientSql = new Proxy(sql as unknown as (...args: unknown[]) => unknown, {
+            apply(target, thisArg, args) {
+              if (injectSerializationFailure) {
+                injectSerializationFailure = false;
+                throw Object.assign(new Error("injected serialization retry"), { code: "40001" });
+              }
+              return Reflect.apply(target, thisArg, args);
+            },
+            get(target, property, receiver) {
+              const value = Reflect.get(target, property, receiver);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          }) as unknown as postgres.Sql;
+          const stopAfterExactRetry = new AbortController(); const transientProgress: string[] = [];
+          await expect(runHistoricalSimulationProductionLoopV2({ sql: transientSql, organizationId: orgId,
+            accountId: "dee633-real", runId: "dee633-real-backtest", partition: "DEVELOPMENT",
+            symbol: "BTCUSDT", initialCycleSequence: 0, terminalCycleSequenceExclusive: 2 },
+            { signal: stopAfterExactRetry.signal,
+            wait: async () => undefined, onProgress: (event) => {
+              transientProgress.push(event.event);
+              if (event.event === "CYCLE_COMMITTED") stopAfterExactRetry.abort();
+            } })).resolves.toEqual({ status: "STOPPED", committedCycles: 1, nextCycleSequence: 1 });
+          expect(transientProgress).toEqual(["START", "TRANSIENT_RETRY", "CYCLE_COMMITTED", "STOPPED"]);
+          const graphCountAfterRetry = await sql<{ count: number }[]>`
+            SELECT count(*)::int count FROM trader_historical_simulation_reason_ledger_v2
+            WHERE organization_id=${orgId}::uuid AND account_id='dee633-real' AND run_id='dee633-real-backtest'`;
+          expect(graphCountAfterRetry).toEqual(graphCountBeforeRetry);
           const chronology = await sql<{ cycle_sequence: number; forecast_status: string; forecast_reasons: unknown;
             decision_status: string; decision_reasons: unknown; risk_status: string;
             execution_status: string; accounting_status: string; effect_count: number }[]>`

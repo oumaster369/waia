@@ -1067,8 +1067,11 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
         throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:IMMUTABLE_SOURCE_RETRY_DIVERGENCE");
       }
       await verifyCommitRequestSources(tx, request);
-      const exact = await transactionPort(tx, request).loadResumeCursor(scope);
-      if (!exact || exact.contentDigestHex !== exactRows[0].checkpoint_json.contentDigestHex) {
+      const exact = exactRows[0].checkpoint_json;
+      validateHistoricalSimulationResumeCursorV2(exact, scope);
+      if (exact.nextCycleSequence !== request.cycleSequence + 1 ||
+          exact.committedCycleId !== request.cycleId ||
+          exact.ledgerHeadContentDigestHex !== request.ledgerEntryContentDigestHex) {
         throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PERSISTED_RETRY_DIVERGENCE");
       }
       return exact;
