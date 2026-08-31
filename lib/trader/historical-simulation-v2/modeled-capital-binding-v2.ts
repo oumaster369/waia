@@ -17,6 +17,7 @@ import type {
 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 import { calculateRiskAdmissionV2, type RiskAccountAccountingV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
 import type { ProtectivePostureV2 } from "@/lib/trader/risk/v2/protective-posture-v2";
+import type { HistoricalSimulationReasonLedgerV2Draft } from "./reason-ledger-v2";
 
 export const HISTORICAL_MODELED_RISK_V2_SCHEMA = "waia.trader.historical_modeled_risk.v2" as const;
 export const HISTORICAL_MODELED_EXECUTION_V2_SCHEMA = "waia.trader.historical_modeled_execution.v2" as const;
@@ -45,6 +46,9 @@ export type HistoricalModeledExecutionReceiptV2 = ModeledSource & Readonly<{
   executionPlanId: string;
   executionAttemptId: string;
   orderId: string;
+  orderContentDigestHex: string;
+  decisionId: string;
+  decisionContentDigestHex: string;
   riskReceiptContentDigestHex: string;
   symbol: string;
   side: "buy" | "sell";
@@ -53,6 +57,25 @@ export type HistoricalModeledExecutionReceiptV2 = ModeledSource & Readonly<{
   acceptedAtUtc: string;
   contentDigestHex: string;
 }>;
+
+export type HistoricalModeledExecutionRegistryV2 = Readonly<{
+  register(receipt: HistoricalModeledExecutionReceiptV2): void;
+  get(orderId: string): HistoricalModeledExecutionReceiptV2 | null;
+}>;
+
+export function createHistoricalModeledExecutionRegistryV2(): HistoricalModeledExecutionRegistryV2 {
+  const receipts = new Map<string, HistoricalModeledExecutionReceiptV2>();
+  return Object.freeze({
+    register(receipt: HistoricalModeledExecutionReceiptV2) {
+      const existing = receipts.get(receipt.orderId);
+      if (existing && existing.contentDigestHex !== receipt.contentDigestHex) {
+        throw new Error("HISTORICAL_MODELED_EXECUTION_REGISTRY_CONFLICT");
+      }
+      receipts.set(receipt.orderId, receipt);
+    },
+    get(orderId: string) { return receipts.get(orderId) ?? null; },
+  });
+}
 
 export type HistoricalModeledGuardianReceiptV2 = ModeledSource & Readonly<{
   schemaVersion: typeof HISTORICAL_MODELED_GUARDIAN_V2_SCHEMA;
@@ -79,6 +102,7 @@ export type HistoricalModeledCapitalBindingV2Input = Readonly<{
   decide(request: DecisionQualificationRequestV2): Promise<DecisionStageOutcomeV2>;
   loadAccounting(cycle: HistoricalSimulationV2Cycle): Promise<HistoricalModeledAccountingSnapshotV2>;
   exchange: HistoricalSimulatedExchange;
+  executionRegistry: HistoricalModeledExecutionRegistryV2;
   decisionBarIndex(cycle: HistoricalSimulationV2Cycle): number;
   evaluateGuardian(input: Readonly<{
     cycle: HistoricalSimulationV2Cycle;
@@ -86,7 +110,10 @@ export type HistoricalModeledCapitalBindingV2Input = Readonly<{
   }>): Promise<Readonly<{ status: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT"; reasonCodes: readonly string[] }>>;
   persistEvidence(evidence: PersistedModeledEvidence): Promise<void>;
   /** Advances eligible mock orders, applies modeled fills, and persists accounting. */
-  advanceModeledExecution(cycle: HistoricalSimulationV2Cycle): Promise<void>;
+  advanceModeledExecution(cycle: HistoricalSimulationV2Cycle): Promise<Readonly<{
+    execution?: HistoricalSimulationReasonLedgerV2Draft["execution"];
+    observedExecutionEffects: HistoricalSimulationReasonLedgerV2Draft["observedExecutionEffects"];
+  }>>;
   learningProjection: RunHistoricalSimulationV2Input["resolveLedgerProjection"] extends
     (input: infer I) => Promise<infer O> ? (input: I) => Promise<O extends { learning: infer L } ? L : never> : never;
 }>;
@@ -253,6 +280,17 @@ export function createHistoricalModeledCapitalBindingV2(
     });
     const executionAttemptId = deterministicExecutionUuidV2("attempt", { executionPlanId });
     const orderId = deterministicExecutionUuidV2("order", { executionAttemptId });
+    const orderContentDigestHex = computeSemanticSha256Hex({
+      schemaVersion: "waia.trader.historical_modeled_order.v2",
+      source: "MODELED_HISTORICAL",
+      capitalEligible: false,
+      orderId,
+      executionAttemptId,
+      decisionContentDigestHex: args.decisionContentDigestHex,
+      symbol: args.cycle.symbol,
+      side: args.side,
+      quantity: args.quantity,
+    });
     const receipt = seal({
       schemaVersion: HISTORICAL_MODELED_EXECUTION_V2_SCHEMA,
       source: "MODELED_HISTORICAL" as const,
@@ -260,6 +298,9 @@ export function createHistoricalModeledCapitalBindingV2(
       executionPlanId,
       executionAttemptId,
       orderId,
+      orderContentDigestHex,
+      decisionId: args.decisionId,
+      decisionContentDigestHex: args.decisionContentDigestHex,
       riskReceiptContentDigestHex: risk.contentDigestHex,
       symbol: args.cycle.symbol,
       side: args.side,
@@ -275,6 +316,7 @@ export function createHistoricalModeledCapitalBindingV2(
       receipt,
     });
     input.exchange.registerOrder(order, receipt.decisionBarIndex, Date.parse(receipt.acceptedAtUtc));
+    input.executionRegistry.register(receipt);
     executionByCycle.set(args.cycle.cycleId, receipt);
     await input.persistEvidence(receipt);
     return receipt;
@@ -341,7 +383,7 @@ export function createHistoricalModeledCapitalBindingV2(
   };
 
   const resolveLedgerProjection: RunHistoricalSimulationV2Input["resolveLedgerProjection"] = async (context) => {
-    await input.advanceModeledExecution(context.cycle);
+    const observed = await input.advanceModeledExecution(context.cycle);
     const accounting = await input.loadAccounting(context.cycle);
     const evaluated = await input.evaluateGuardian({ cycle: context.cycle, accounting });
     const guardian = seal({
@@ -359,6 +401,8 @@ export function createHistoricalModeledCapitalBindingV2(
       accounting: { status: executionByCycle.has(context.cycle.cycleId) ? "APPLIED" : "UNCHANGED", reasonCodes: [], frontierContentDigestHex: accounting.frontierContentDigestHex },
       guardian: { status: guardian.status, reasonCodes: guardian.reasonCodes, assessmentContentDigestHex: guardian.contentDigestHex },
       learning: await input.learningProjection(context),
+      execution: observed.execution,
+      observedExecutionEffects: observed.observedExecutionEffects,
     };
   };
 

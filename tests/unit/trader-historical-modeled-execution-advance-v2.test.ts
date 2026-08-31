@@ -9,6 +9,7 @@ import {
   createAdvanceHistoricalModeledExecutionV2,
   sealHistoricalMarketCycleV2,
 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
+import { createHistoricalModeledExecutionRegistryV2 } from "@/lib/trader/historical-simulation-v2/modeled-capital-binding-v2";
 import { qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 
 const observedAt = "2026-08-30T10:01:00.000Z";
@@ -45,8 +46,20 @@ describe("historical modeled execution advance v2", () => {
     const repository = createAccountingFrontierRepositoryMemory();
     const fillEvidence: unknown[] = [];
     const sourceOrder = order();
+    const executionRegistry = createHistoricalModeledExecutionRegistryV2();
+    executionRegistry.register({
+      schemaVersion: "waia.trader.historical_modeled_execution.v2",
+      source: "MODELED_HISTORICAL", capitalEligible: false,
+      executionPlanId: "plan-1", executionAttemptId: "attempt-1", orderId: sourceOrder.id,
+      orderContentDigestHex: "d".repeat(64),
+      decisionId: "decision-0", decisionContentDigestHex: "c".repeat(64),
+      riskReceiptContentDigestHex: "a".repeat(64), symbol: "BTCUSDT", side: "buy", quantity: "0.1",
+      decisionBarIndex: 0, acceptedAtUtc: sourceOrder.createdAt.toISOString(), contentDigestHex: "b".repeat(64),
+    });
     const model = createHistoricalExecutionModelV1();
+    let openOrderReads = 0;
     const exchange = {
+      listOpenOrders: () => openOrderReads++ === 0 ? [{ order: sourceOrder }] : [],
       async advanceOnClosedBar(input: Parameters<import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange["advanceOnClosedBar"]>[0]) {
         const event = {
           orderId: sourceOrder.id, organizationId: "org-1", symbol: "BTCUSDT", side: "buy" as const,
@@ -57,7 +70,7 @@ describe("historical modeled execution advance v2", () => {
         await input.persistence.recordSimulatedFill(input.context, sourceOrder, event, true);
         return { fillEvents: [event], accountState: await input.refreshAccountState() };
       },
-    } as import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange;
+    } as unknown as import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange;
     const initial = advanceAccountingFrontier({
       state: createInitialAccountingState({ organizationId: "org-1", accountKey: "account-1", runId: "run-1", startingCash: "1000" }),
       marks: { BTCUSDT: { price: "100", barCloseTime: "2026-08-30T10:00:00.000Z" } },
@@ -65,7 +78,7 @@ describe("historical modeled execution advance v2", () => {
     });
     const advance = createAdvanceHistoricalModeledExecutionV2({
       context: { organizationId: "org-1" }, accountKey: "account-1", runId: "run-1",
-      exchange, model,
+      exchange, executionRegistry, model,
       persistence: {
         async recordSimulatedFill(_context, current, event) { return { ...current, filledQuantity: event.sliceQuantity, avgFillPrice: event.grossFillPrice, state: "FILLED", stateVersion: 2 }; },
         async transitionOrderExpired(_context, current) { return current; },
@@ -80,6 +93,11 @@ describe("historical modeled execution advance v2", () => {
     });
     const result = await advance("cycle-1");
     expect(result.fillCount).toBe(1);
+    expect(result.effects).toEqual([expect.objectContaining({
+      cycleId: "cycle-1", orderId: "order-1", executionPlanId: "plan-1", status: "FILLED",
+      decisionId: "decision-0", decisionContentDigestHex: "c".repeat(64),
+      fillEvidenceContentDigestHexes: [result.fillEvidence[0]!.contentDigestHex],
+    })]);
     expect(fillEvidence).toHaveLength(1);
     const frontier = await repository.loadLatest({ organizationId: "org-1" }, { accountKey: "account-1", runId: "run-1" });
     expect(frontier?.positions.BTCUSDT?.quantity).toBe("0.1");

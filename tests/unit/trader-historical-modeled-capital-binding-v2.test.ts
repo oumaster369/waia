@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createHistoricalModeledCapitalBindingV2 } from "@/lib/trader/historical-simulation-v2/modeled-capital-binding-v2";
+import { createHistoricalModeledCapitalBindingV2, createHistoricalModeledExecutionRegistryV2 } from "@/lib/trader/historical-simulation-v2/modeled-capital-binding-v2";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 
 const digest = (value: string) => value.repeat(64);
@@ -37,10 +37,11 @@ describe("historical modeled capital binding v2", () => {
         },
       }),
       exchange: { registerOrder: (order: OrderRow) => { registered.push(order); } } as never,
+      executionRegistry: createHistoricalModeledExecutionRegistryV2(),
       decisionBarIndex: () => 7,
       evaluateGuardian: async () => ({ status: "NONE", reasonCodes: [] }),
       persistEvidence: async (value) => { evidence.push(value as unknown as Record<string, unknown>); },
-      advanceModeledExecution: advance,
+      advanceModeledExecution: async (value) => { await advance(value); return { observedExecutionEffects: [] }; },
       learningProjection: async () => ({
         status: "NO_UPDATE",
         reasonCodes: ["NO_MATURED_OUTCOME"],

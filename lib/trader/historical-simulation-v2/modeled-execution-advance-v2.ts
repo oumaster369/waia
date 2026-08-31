@@ -15,6 +15,8 @@ import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/v
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { addDecimal } from "@/lib/trader/risk/numeric";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { HistoricalModeledExecutionRegistryV2 } from "./modeled-capital-binding-v2";
+import type { HistoricalSimulationReasonLedgerV2Draft } from "./reason-ledger-v2";
 
 export const HISTORICAL_SEALED_MARKET_CYCLE_V2_SCHEMA =
   "waia.trader.historical_sealed_market_cycle.v2" as const;
@@ -49,6 +51,7 @@ export type AdvanceHistoricalModeledExecutionV2Input = Readonly<{
   accountKey: string;
   runId: string;
   exchange: HistoricalSimulatedExchange;
+  executionRegistry: HistoricalModeledExecutionRegistryV2;
   model: HistoricalExecutionModelV1;
   persistence: HistoricalExecutionPersistencePort;
   accountingRepository: AccountingFrontierRepository;
@@ -64,7 +67,46 @@ export type AdvanceHistoricalModeledExecutionV2Result = Readonly<{
   fillCount: number;
   fillEvidence: readonly HistoricalModeledFillEvidenceV2[];
   accountingFrontierContentDigestHex: string;
+  effects: readonly HistoricalModeledObservedEffectV2[];
 }>;
+
+export type HistoricalModeledObservedEffectV2 = Readonly<{
+  effectId: string;
+  cycleId: string;
+  decisionId: string;
+  decisionContentDigestHex: string;
+  riskReceiptContentDigestHex: string;
+  executionPlanId: string;
+  executionPlanContentDigestHex: string;
+  executionAttemptId: string;
+  executionAttemptContentDigestHex: string;
+  orderId: string;
+  orderContentDigestHex: string;
+  status: "NO_FILL" | "PARTIAL_FILL" | "FILLED" | "EXPIRED" | "CANCELLED";
+  fillEvidenceContentDigestHexes: readonly string[];
+  reportContentDigestHexes: readonly string[];
+  reasonCodes: readonly string[];
+}>;
+
+export function projectHistoricalModeledEffectsToReasonLedgerV2(
+  result: AdvanceHistoricalModeledExecutionV2Result,
+): HistoricalSimulationReasonLedgerV2Draft["observedExecutionEffects"] {
+  return Object.freeze(result.effects.map((effect) => Object.freeze({
+    effectId: effect.effectId,
+    originatingDecisionId: effect.decisionId,
+    originatingDecisionContentDigestHex: effect.decisionContentDigestHex,
+    originatingPlanId: effect.executionPlanId,
+    originatingPlanContentDigestHex: effect.executionPlanContentDigestHex,
+    originatingAttemptId: effect.executionAttemptId,
+    originatingAttemptContentDigestHex: effect.executionAttemptContentDigestHex,
+    originatingOrderId: effect.orderId,
+    originatingOrderContentDigestHex: effect.orderContentDigestHex,
+    status: effect.status,
+    reportContentDigestHexes: effect.reportContentDigestHexes,
+    fillContentDigestHexes: effect.fillEvidenceContentDigestHexes,
+    reasonCodes: effect.reasonCodes,
+  })));
+}
 
 const DIGEST = /^[0-9a-f]{64}$/;
 
@@ -118,6 +160,9 @@ export function createAdvanceHistoricalModeledExecutionV2(
       runId: input.runId,
     }) ?? await input.initialAccountingFrontier(market);
     const fillEvidence: HistoricalModeledFillEvidenceV2[] = [];
+    const ordersBefore = input.exchange.listOpenOrders().map((entry) => entry.order);
+    const expired = new Set<string>();
+    const cancelled = new Set<string>();
 
     const persistence: HistoricalExecutionPersistencePort = {
       ...input.persistence,
@@ -157,8 +202,25 @@ export function createAdvanceHistoricalModeledExecutionV2(
         await input.persistFillEvidence(evidence);
         return updated;
       },
+      async transitionOrderExpired(context, order) {
+        const updated = await input.persistence.transitionOrderExpired(context, order);
+        expired.add(order.id);
+        return updated;
+      },
+      async transitionOrderCancelled(context, order) {
+        const updated = await input.persistence.transitionOrderCancelled(context, order);
+        cancelled.add(order.id);
+        return updated;
+      },
+      ...(input.persistence.transitionOrderCancelledFromRequested
+        ? { async transitionOrderCancelledFromRequested(context: OrgContext, order: OrderRow) {
+            const updated = await input.persistence.transitionOrderCancelledFromRequested!(context, order);
+            cancelled.add(order.id);
+            return updated;
+          } }
+        : {}),
     };
-    await input.exchange.advanceOnClosedBar({
+    const advanced = await input.exchange.advanceOnClosedBar({
       context: input.context,
       closedBar: market.closedBar,
       barIndex: market.barIndex,
@@ -174,10 +236,48 @@ export function createAdvanceHistoricalModeledExecutionV2(
     if (!DIGEST.test(accounting.semanticContentDigest)) {
       throw new Error("HISTORICAL_MODELED_ACCOUNTING_FRONTIER_UNSEALED");
     }
+    const openAfter = new Set(input.exchange.listOpenOrders().map((entry) => entry.order.id));
+    const evidenceByOrder = new Map<string, HistoricalModeledFillEvidenceV2[]>();
+    for (const evidence of fillEvidence) {
+      const values = evidenceByOrder.get(evidence.orderId) ?? [];
+      values.push(evidence);
+      evidenceByOrder.set(evidence.orderId, values);
+    }
+    const effects = ordersBefore.map((order): HistoricalModeledObservedEffectV2 => {
+      const receipt = input.executionRegistry.get(order.id);
+      if (!receipt) throw new Error("HISTORICAL_MODELED_EXECUTION_LINEAGE_MISSING");
+      const fills = evidenceByOrder.get(order.id) ?? [];
+      const status = expired.has(order.id) ? "EXPIRED" as const
+        : cancelled.has(order.id) ? "CANCELLED" as const
+        : fills.length === 0 ? "NO_FILL" as const
+        : openAfter.has(order.id) ? "PARTIAL_FILL" as const
+        : "FILLED" as const;
+      return Object.freeze({
+        effectId: computeSemanticSha256Hex({ cycleId, orderId: order.id, status, fills: fills.map((value) => value.contentDigestHex) }),
+        cycleId,
+        decisionId: receipt.decisionId,
+        decisionContentDigestHex: receipt.decisionContentDigestHex,
+        riskReceiptContentDigestHex: receipt.riskReceiptContentDigestHex,
+        executionPlanId: receipt.executionPlanId,
+        executionPlanContentDigestHex: receipt.contentDigestHex,
+        executionAttemptId: receipt.executionAttemptId,
+        executionAttemptContentDigestHex: receipt.contentDigestHex,
+        orderId: order.id,
+        orderContentDigestHex: receipt.orderContentDigestHex,
+        status,
+        fillEvidenceContentDigestHexes: Object.freeze(fills.map((value) => value.contentDigestHex)),
+        reportContentDigestHexes: Object.freeze([]),
+        reasonCodes: Object.freeze(status === "NO_FILL" ? ["NO_FILL_ON_CURRENT_BAR"] : []),
+      });
+    });
+    if (advanced.fillEvents.length !== fillEvidence.length) {
+      throw new Error("HISTORICAL_MODELED_FILL_EVIDENCE_INCOMPLETE");
+    }
     return Object.freeze({
       fillCount: fillEvidence.length,
       fillEvidence: Object.freeze(fillEvidence),
       accountingFrontierContentDigestHex: accounting.semanticContentDigest,
+      effects: Object.freeze(effects),
     });
   };
 }
