@@ -60,32 +60,7 @@ function OverviewInner() {
 
   const query = React.useCallback(async (): Promise<TreasuryApiResult<OverviewBundle>> => {
     if (!organizationId) return missingOrganizationResult();
-    const [previewResult, countsResult, settingsResult, allocationResult] = await Promise.all([
-      treasuryGet<{ preview: BreathAdminPreviewDto }>(
-        "/api/admin/treasury/breath-preview",
-        organizationId,
-      ),
-      treasuryGet<TreasuryOverviewCountsDto>("/api/admin/treasury/overview-counts", organizationId),
-      treasuryGet<{ settings: TreasurySettingsDto | null }>(
-        "/api/admin/treasury/settings",
-        organizationId,
-      ),
-      treasuryGet<{ allocation: TreasuryFundAllocationDto }>(
-        "/api/admin/treasury/fund-allocation",
-        organizationId,
-      ),
-    ]);
-    if (!previewResult.ok) return previewResult;
-    if (!countsResult.ok) return countsResult;
-    return {
-      ok: true,
-      data: {
-        preview: previewResult.data.preview,
-        counts: countsResult.data,
-        settings: settingsResult.ok ? (settingsResult.data.settings ?? null) : null,
-        allocation: allocationResult.ok ? allocationResult.data.allocation : null,
-      },
-    };
+    return treasuryGet<OverviewBundle>("/api/admin/treasury/overview", organizationId);
   }, [organizationId]);
   const { data, error, loading, reload } = useTreasuryQuery(
     Boolean(organizationId),

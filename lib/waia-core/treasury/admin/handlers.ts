@@ -215,11 +215,13 @@ async function withTreasuryAdmin(input: {
         err.code === "ASSISTANT_WRITES_DISABLED" ||
         err.code === "ASSISTANT_PROVIDER_UNAVAILABLE"
           ? 503
-          : err.code === "ASSISTANT_CONFIRMATION_ALREADY_USED"
-            ? 409
-            : err.code === "INVALID_MODEL_OUTPUT"
-              ? 502
-              : 400;
+          : err.code === "ASSISTANT_PERMISSION_REQUIRED"
+            ? 403
+            : err.code === "ASSISTANT_CONFIRMATION_ALREADY_USED"
+              ? 409
+              : err.code === "INVALID_MODEL_OUTPUT"
+                ? 502
+                : 400;
       return adminClientError(status, err.code, err.message);
     }
     return mapTreasuryHttpError(err);
@@ -250,6 +252,14 @@ function validateAssistantWritePlan(
     case "CREATE_COUNTERPARTY":
       requiredAssistantField(plan, "displayName");
       break;
+    case "UPDATE_COUNTERPARTY":
+    case "UPDATE_ACCOUNT":
+    case "UPDATE_CATEGORY":
+    case "UPDATE_PROJECT":
+      if (!plan.fields.targetId?.trim() && !plan.fields.targetName?.trim()) {
+        requiredAssistantField(plan, "targetName");
+      }
+      break;
     case "CREATE_ACCOUNT":
       requiredAssistantField(plan, "displayName");
       parseEnum(requiredAssistantField(plan, "kind"), treasuryAccountKindEnum, "kind");
@@ -263,8 +273,93 @@ function validateAssistantWritePlan(
     case "CREATE_PROJECT":
       requiredAssistantField(plan, "name");
       break;
+    case "SET_CATEGORY_BUDGET":
+      if (!plan.fields.targetId?.trim() && !plan.fields.categoryName?.trim()) {
+        requiredAssistantField(plan, "categoryName");
+      }
+      requiredAssistantField(plan, "monthlyBudget");
+      break;
     case "CREATE_TRANSACTION":
       requiredAssistantField(plan, "signedAmount");
+      if (!plan.fields.accountId?.trim() && !plan.fields.accountName?.trim()) {
+        requiredAssistantField(plan, "accountName");
+      }
+      if (
+        plan.fields.status?.trim() &&
+        !["NEEDS_REVIEW", "PLANNED"].includes(plan.fields.status.trim())
+      ) {
+        throw new FinanceAssistantError(
+          "ASSISTANT_FIELD_INVALID",
+          "status must be NEEDS_REVIEW or PLANNED.",
+        );
+      }
+      break;
+    case "SUBMIT_TRANSACTION_FOR_REVIEW":
+    case "CLASSIFY_TRANSACTION":
+    case "VERIFY_TRANSACTION":
+    case "REJECT_TRANSACTION":
+    case "REOPEN_TRANSACTION_RECONCILIATION":
+      requiredAssistantField(plan, "transactionId");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "CONFIRM_DUPLICATE_TRANSACTION":
+      requiredAssistantField(plan, "transactionId");
+      requiredAssistantField(plan, "duplicateOfTransactionId");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "RETURN_TRANSACTION_FROM_RECONCILIATION":
+      requiredAssistantField(plan, "transactionId");
+      requiredAssistantField(plan, "toStatus");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "LINK_TRANSACTION_CORRECTION":
+      requiredAssistantField(plan, "originalTransactionId");
+      requiredAssistantField(plan, "correctionTransactionId");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "SET_TRANSACTION_DETAIL_PUBLICATION":
+      requiredAssistantField(plan, "transactionId");
+      requiredAssistantField(plan, "detailPublication");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "CONFIRM_BALANCE_CHECKPOINT":
+      requiredAssistantField(plan, "confirmedBalance");
+      requiredAssistantField(plan, "asOf");
+      requiredAssistantField(plan, "note");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "UPDATE_FINANCE_SETTINGS":
+      requiredAssistantField(plan, "reason");
+      if (
+        ![
+          "breathEnabled",
+          "stageLabel",
+          "workSummary",
+          "methodologyNote",
+          "recentActivityLimit",
+        ].some((field) => plan.fields[field]?.trim())
+      ) {
+        requiredAssistantField(plan, "workSummary");
+      }
+      break;
+    case "CREATE_WATCHED_ADDRESS":
+      requiredAssistantField(plan, "network");
+      requiredAssistantField(plan, "address");
+      requiredAssistantField(plan, "tokenContract");
+      requiredAssistantField(plan, "assetCode");
+      requiredAssistantField(plan, "directionScope");
+      requiredAssistantField(plan, "label");
+      requiredAssistantField(plan, "reason");
+      break;
+    case "UPDATE_WATCHED_ADDRESS":
+      requiredAssistantField(plan, "targetId");
+      requiredAssistantField(plan, "reason");
+      if (plan.fields.isActive !== null) {
+        throw new FinanceAssistantError(
+          "ASSISTANT_INTENT_NOT_WRITABLE",
+          "Finance Assistant cannot activate or deactivate watcher inputs.",
+        );
+      }
       break;
     default:
       throw new FinanceAssistantError(
@@ -273,6 +368,21 @@ function validateAssistantWritePlan(
       );
   }
   return plan;
+}
+
+function missingAssistantFields(
+  plan: FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent },
+): string[] {
+  try {
+    validateAssistantWritePlan(plan);
+    return [];
+  } catch (error) {
+    if (error instanceof FinanceAssistantError && error.code === "ASSISTANT_FIELD_REQUIRED") {
+      const match = error.message.match(/missing ([A-Za-z0-9_]+)/);
+      return match?.[1] ? [match[1]] : ["required information"];
+    }
+    throw error;
+  }
 }
 
 async function resolveAssistantTransactionReferences(
@@ -286,7 +396,7 @@ async function resolveAssistantTransactionReferences(
     kind: "counterparty" | "account" | "category" | "project",
     idField: "counterpartyId" | "accountId" | "categoryId" | "projectId",
     nameField: "counterpartyName" | "accountName" | "categoryName" | "projectName",
-  ): Promise<string> {
+  ): Promise<string | null> {
     const suppliedId = plan.fields[idField]?.trim();
     if (suppliedId) {
       const row =
@@ -306,7 +416,8 @@ async function resolveAssistantTransactionReferences(
       return suppliedId;
     }
 
-    const suppliedName = requiredAssistantField(plan, nameField);
+    const suppliedName = plan.fields[nameField]?.trim();
+    if (!suppliedName) return null;
     const query = { q: suppliedName, active: true, limit: 20 };
     const rows =
       kind === "counterparty"
@@ -354,6 +465,97 @@ async function resolveAssistantTransactionReferences(
   };
 }
 
+type AssistantCatalogKind = "counterparty" | "account" | "category" | "project";
+
+async function resolveAssistantCatalogTarget(input: {
+  plan: FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent };
+  services: TreasuryAdminServices;
+  organizationId: string;
+  kind: AssistantCatalogKind;
+  nameField?: "targetName" | "categoryName";
+}): Promise<FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent }> {
+  const suppliedId = input.plan.fields.targetId?.trim();
+  if (suppliedId) return input.plan;
+  const nameField = input.nameField ?? "targetName";
+  const suppliedName = requiredAssistantField(input.plan, nameField);
+  const context = requireOrgContext(input.organizationId);
+  const query = { q: suppliedName, active: undefined, limit: 20 };
+  const rows =
+    input.kind === "counterparty"
+      ? (await input.services.ledgerCatalog.listCounterparties(context, query)).items.map(
+          (row) => ({
+            id: row.id,
+            name: row.displayName,
+          }),
+        )
+      : input.kind === "account"
+        ? (await input.services.ledgerCatalog.listAccounts(context, query)).items.map((row) => ({
+            id: row.id,
+            name: row.displayName,
+          }))
+        : input.kind === "category"
+          ? (await input.services.ledgerCatalog.listCategories(context, query)).items.map(
+              (row) => ({
+                id: row.id,
+                name: row.name,
+              }),
+            )
+          : (await input.services.ledgerCatalog.listProjects(context, query)).items.map((row) => ({
+              id: row.id,
+              name: row.name,
+            }));
+  const exact = rows.filter(
+    (row) => row.name.localeCompare(suppliedName, undefined, { sensitivity: "accent" }) === 0,
+  );
+  if (exact.length !== 1) {
+    throw new FinanceAssistantError(
+      "ASSISTANT_REFERENCE_NOT_UNIQUE",
+      exact.length === 0
+        ? `No ${input.kind} named “${suppliedName}” was found.`
+        : `More than one ${input.kind} matches “${suppliedName}”. Use its exact id.`,
+    );
+  }
+  return {
+    ...input.plan,
+    fields: { ...input.plan.fields, targetId: exact[0]!.id },
+  };
+}
+
+async function resolveAssistantClassificationReferences(
+  plan: FinanceAssistantPlan & { intent: "CLASSIFY_TRANSACTION" },
+  services: TreasuryAdminServices,
+  organizationId: string,
+): Promise<FinanceAssistantPlan & { intent: "CLASSIFY_TRANSACTION" }> {
+  let fields = { ...plan.fields };
+  for (const [kind, idField, nameField] of [
+    ["counterparty", "counterpartyId", "counterpartyName"],
+    ["account", "accountId", "accountName"],
+    ["category", "categoryId", "categoryName"],
+    ["project", "projectId", "projectName"],
+  ] as const) {
+    if (fields[idField]?.trim() || !fields[nameField]?.trim()) continue;
+    const resolved = await resolveAssistantCatalogTarget({
+      plan: { ...plan, fields: { ...fields, targetName: fields[nameField] } },
+      services,
+      organizationId,
+      kind,
+    });
+    fields = { ...fields, [idField]: resolved.fields.targetId };
+  }
+  return { ...plan, fields };
+}
+
+function assistantBoolean(
+  fields: Record<string, string | null>,
+  field: string,
+): boolean | undefined {
+  const raw = assistantOptional(fields, field);
+  if (raw === null) return undefined;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new FinanceAssistantError("ASSISTANT_FIELD_INVALID", `${field} must be true or false.`);
+}
+
 function assistantOptional(fields: Record<string, string | null>, field: string): string | null {
   return fields[field]?.trim() || null;
 }
@@ -392,6 +594,24 @@ async function executeAssistantWrite(input: {
       });
       return { entityType: "counterparty", entity: serializeCounterpartyDetail(created) };
     }
+    case "UPDATE_COUNTERPARTY": {
+      const updated = await services.ledgerCatalog.updateCounterparty(
+        context,
+        admin,
+        requiredAssistantValue(fields, "targetId"),
+        {
+          displayName: assistantOptional(fields, "newName") ?? undefined,
+          websiteUrl: assistantOptional(fields, "websiteUrl") ?? undefined,
+          email: assistantOptional(fields, "email") ?? undefined,
+          phone: assistantOptional(fields, "phone") ?? undefined,
+          paymentInstructions: assistantOptional(fields, "paymentInstructions") ?? undefined,
+          waiaUsername: assistantOptional(fields, "waiaUsername") ?? undefined,
+          isActive: assistantBoolean(fields, "isActive"),
+          reason,
+        },
+      );
+      return { entityType: "counterparty", entity: serializeCounterpartyDetail(updated) };
+    }
     case "CREATE_ACCOUNT": {
       const kind = parseEnum(
         requiredAssistantValue(fields, "kind"),
@@ -410,6 +630,26 @@ async function executeAssistantWrite(input: {
       });
       return { entityType: "account", entity: serializeAccountDetail(created) };
     }
+    case "UPDATE_ACCOUNT": {
+      const kindRaw = assistantOptional(fields, "kind");
+      const updated = await services.ledgerCatalog.updateAccount(
+        context,
+        admin,
+        requiredAssistantValue(fields, "targetId"),
+        {
+          displayName: assistantOptional(fields, "newName") ?? undefined,
+          kind: kindRaw ? parseEnum(kindRaw, treasuryAccountKindEnum, "kind") : undefined,
+          currency: assistantOptional(fields, "currency") ?? undefined,
+          network: assistantOptional(fields, "network") ?? undefined,
+          address: assistantOptional(fields, "address") ?? undefined,
+          maskedRequisites: assistantOptional(fields, "maskedRequisites") ?? undefined,
+          watchedAddressId: assistantOptional(fields, "watchedAddressId") ?? undefined,
+          isActive: assistantBoolean(fields, "isActive"),
+          reason,
+        },
+      );
+      return { entityType: "account", entity: serializeAccountDetail(updated) };
+    }
     case "CREATE_CATEGORY": {
       const monthlyBudget = requiredAssistantValue(fields, "monthlyBudget");
       const created = await services.ledgerCatalog.createCategory(context, admin, {
@@ -422,6 +662,28 @@ async function executeAssistantWrite(input: {
       });
       return { entityType: "category", entity: serializeCategory(created) };
     }
+    case "UPDATE_CATEGORY":
+    case "SET_CATEGORY_BUDGET": {
+      const budget = assistantOptional(fields, "monthlyBudget");
+      const updated = await services.ledgerCatalog.updateCategory(
+        context,
+        admin,
+        requiredAssistantValue(fields, "targetId"),
+        {
+          name: assistantOptional(fields, "newName") ?? undefined,
+          groupName: assistantOptional(fields, "groupName") ?? undefined,
+          description: assistantOptional(fields, "description") ?? undefined,
+          monthlyBudgetMicros: budget
+            ? assistantAtomicAmount(budget, { allowZero: true })
+            : undefined,
+          currency: assistantOptional(fields, "currency") ?? undefined,
+          effectiveMonth: assistantOptional(fields, "effectiveMonth") ?? undefined,
+          isActive: assistantBoolean(fields, "isActive"),
+          reason,
+        },
+      );
+      return { entityType: "category", entity: serializeCategory(updated) };
+    }
     case "CREATE_PROJECT": {
       const created = await services.ledgerCatalog.createProject(context, admin, {
         name: requiredAssistantValue(fields, "name"),
@@ -432,21 +694,49 @@ async function executeAssistantWrite(input: {
       });
       return { entityType: "project", entity: serializeProject(created) };
     }
+    case "UPDATE_PROJECT": {
+      const updated = await services.ledgerCatalog.updateProject(
+        context,
+        admin,
+        requiredAssistantValue(fields, "targetId"),
+        {
+          name: assistantOptional(fields, "newName") ?? undefined,
+          description: assistantOptional(fields, "description") ?? undefined,
+          startsOn: assistantOptional(fields, "startsOn") ?? undefined,
+          endsOn: assistantOptional(fields, "endsOn") ?? undefined,
+          isActive: assistantBoolean(fields, "isActive"),
+          reason,
+        },
+      );
+      return { entityType: "project", entity: serializeProject(updated) };
+    }
     case "CREATE_TRANSACTION": {
       const signedRaw = requiredAssistantValue(fields, "signedAmount");
       const negative = signedRaw.startsWith("-");
       const magnitude = assistantAtomicAmount(negative ? signedRaw.slice(1) : signedRaw);
       const refs = {
-        counterpartyId: requiredAssistantValue(fields, "counterpartyId"),
+        counterpartyId: assistantOptional(fields, "counterpartyId"),
         accountId: requiredAssistantValue(fields, "accountId"),
-        categoryId: requiredAssistantValue(fields, "categoryId"),
-        projectId: requiredAssistantValue(fields, "projectId"),
+        categoryId: assistantOptional(fields, "categoryId"),
+        projectId: assistantOptional(fields, "projectId"),
       };
       await assertActiveLedgerReferences(services, context, refs);
       const account = await services.ledgerCatalog.getAccount(context, refs.accountId);
       const kindRaw = assistantOptional(fields, "kind");
-      const kind = kindRaw ? parseEnum(kindRaw, treasuryTxKindEnum, "kind") : null;
+      const correctsTransactionId = assistantOptional(fields, "correctsTransactionId");
+      const kind = correctsTransactionId
+        ? "CORRECTION"
+        : kindRaw
+          ? parseEnum(kindRaw, treasuryTxKindEnum, "kind")
+          : null;
       const occurredAt = requireIsoDate(requiredAssistantValue(fields, "occurredAt"), "occurredAt");
+      const status = assistantOptional(fields, "status") ?? "NEEDS_REVIEW";
+      if (status !== "NEEDS_REVIEW" && status !== "PLANNED") {
+        throw new FinanceAssistantError(
+          "ASSISTANT_FIELD_INVALID",
+          "status must be NEEDS_REVIEW or PLANNED.",
+        );
+      }
       const created = await services.domain.transactions.createManualDraft(context, admin, {
         direction: negative ? "OUTFLOW" : "INFLOW",
         kind,
@@ -458,11 +748,184 @@ async function executeAssistantWrite(input: {
           account.currency === "USDT" ? USDT_NOMINAL_USD_POLICY_V1 : MANUAL_ACCOUNTING_CURRENCY_V1,
         occurredAt,
         ...refs,
+        purpose: assistantOptional(fields, "purpose"),
+        correctsTransactionId,
         internalNotes: assistantOptional(fields, "notes"),
-        initialStatus: "NEEDS_REVIEW",
+        initialStatus: status,
         reason,
       });
       return { entityType: "transaction", entity: serializeTransaction(created) };
+    }
+    case "SUBMIT_TRANSACTION_FOR_REVIEW": {
+      const transaction = await services.domain.transactions.submitForReview(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "CLASSIFY_TRANSACTION": {
+      const kindRaw = assistantOptional(fields, "kind");
+      const patch = compactDefined({
+        kind: kindRaw ? parseEnum(kindRaw, treasuryTxKindEnum, "kind") : undefined,
+        purpose: assistantOptional(fields, "purpose") ?? undefined,
+        counterpartyId: assistantOptional(fields, "counterpartyId") ?? undefined,
+        accountId: assistantOptional(fields, "accountId") ?? undefined,
+        categoryId: assistantOptional(fields, "categoryId") ?? undefined,
+        projectId: assistantOptional(fields, "projectId") ?? undefined,
+        internalNotes: assistantOptional(fields, "notes") ?? undefined,
+      });
+      await assertActiveLedgerReferences(services, context, patch);
+      const transaction = await services.domain.transactions.classify(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+        patch,
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "VERIFY_TRANSACTION": {
+      const transaction = await services.domain.transactions.verify(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "REJECT_TRANSACTION": {
+      const transaction = await services.domain.transactions.reject(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "CONFIRM_DUPLICATE_TRANSACTION": {
+      const transaction = await services.domain.transactions.confirmDuplicate(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        duplicateOfTransactionId: requiredAssistantValue(fields, "duplicateOfTransactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "REOPEN_TRANSACTION_RECONCILIATION": {
+      const transaction = await services.domain.transactions.reopenReconciliation(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "RETURN_TRANSACTION_FROM_RECONCILIATION": {
+      const toStatus = requiredAssistantValue(fields, "toStatus");
+      if (!["NEEDS_REVIEW", "REJECTED", "DUPLICATE", "VERIFIED"].includes(toStatus)) {
+        throw new FinanceAssistantError("ASSISTANT_FIELD_INVALID", "toStatus is not permitted.");
+      }
+      const transaction = await services.domain.transactions.returnFromReconciliation(
+        context,
+        admin,
+        {
+          transactionId: requiredAssistantValue(fields, "transactionId"),
+          toStatus: toStatus as "NEEDS_REVIEW" | "REJECTED" | "DUPLICATE" | "VERIFIED",
+          duplicateOfTransactionId:
+            assistantOptional(fields, "duplicateOfTransactionId") ?? undefined,
+          reason: requiredAssistantValue(fields, "reason"),
+        },
+      );
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "LINK_TRANSACTION_CORRECTION": {
+      const transaction = await services.domain.transactions.linkCorrection(context, admin, {
+        originalTransactionId: requiredAssistantValue(fields, "originalTransactionId"),
+        correctionTransactionId: requiredAssistantValue(fields, "correctionTransactionId"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "SET_TRANSACTION_DETAIL_PUBLICATION": {
+      const transaction = await services.domain.transactions.setDetailPublication(context, admin, {
+        transactionId: requiredAssistantValue(fields, "transactionId"),
+        detailPublication: parseDetailPublication(
+          requiredAssistantValue(fields, "detailPublication"),
+        ),
+        supersededById: assistantOptional(fields, "supersededById") ?? undefined,
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "transaction", entity: serializeTransaction(transaction) };
+    }
+    case "CONFIRM_BALANCE_CHECKPOINT": {
+      const checkpoint = await services.breath.confirmBalanceCheckpoint(context, admin, {
+        currency: assistantOptional(fields, "currency") ?? "USD",
+        confirmedBalanceMicros: assistantAtomicAmount(
+          requiredAssistantValue(fields, "confirmedBalance"),
+          { allowZero: true },
+        ),
+        asOf: requireIsoDate(requiredAssistantValue(fields, "asOf"), "asOf"),
+        note: requiredAssistantValue(fields, "note"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "balance checkpoint", entity: serializeBalanceCheckpoint(checkpoint) };
+    }
+    case "UPDATE_FINANCE_SETTINGS": {
+      const recentActivityLimitRaw = assistantOptional(fields, "recentActivityLimit");
+      if (recentActivityLimitRaw && !/^\d+$/.test(recentActivityLimitRaw)) {
+        throw new FinanceAssistantError(
+          "ASSISTANT_FIELD_INVALID",
+          "recentActivityLimit must be a whole number.",
+        );
+      }
+      const settings = await services.catalog.updateSettings(
+        context,
+        admin,
+        {
+          breathEnabled: assistantBoolean(fields, "breathEnabled"),
+          stageLabel: assistantOptional(fields, "stageLabel") ?? undefined,
+          workSummary: assistantOptional(fields, "workSummary") ?? undefined,
+          methodologyNote: assistantOptional(fields, "methodologyNote") ?? undefined,
+          recentActivityLimit: recentActivityLimitRaw
+            ? requireInt(Number.parseInt(recentActivityLimitRaw, 10), "recentActivityLimit")
+            : undefined,
+          reason: requiredAssistantValue(fields, "reason"),
+        },
+        fields.breathEnabled?.trim() ? "publish" : "mutate",
+      );
+      return { entityType: "Finance settings", entity: serializeSettings(settings) };
+    }
+    case "CREATE_WATCHED_ADDRESS": {
+      const directionScope = requiredAssistantValue(fields, "directionScope");
+      if (!["INBOUND", "OUTBOUND", "BOTH"].includes(directionScope)) {
+        throw new FinanceAssistantError(
+          "ASSISTANT_FIELD_INVALID",
+          "directionScope is not permitted.",
+        );
+      }
+      const watchedAddress = await services.catalog.createWatchedAddress(context, admin, {
+        network: requiredAssistantValue(fields, "network"),
+        address: requiredAssistantValue(fields, "address"),
+        tokenContract: requiredAssistantValue(fields, "tokenContract"),
+        assetCode: requiredAssistantValue(fields, "assetCode"),
+        directionScope: directionScope as "INBOUND" | "OUTBOUND" | "BOTH",
+        includeInBalanceRecon: assistantBoolean(fields, "includeInBalanceRecon") ?? true,
+        label: requiredAssistantValue(fields, "label"),
+        reason: requiredAssistantValue(fields, "reason"),
+      });
+      return { entityType: "watched address", entity: serializeWatchedAddress(watchedAddress) };
+    }
+    case "UPDATE_WATCHED_ADDRESS": {
+      const directionScope = assistantOptional(fields, "directionScope");
+      if (directionScope && !["INBOUND", "OUTBOUND", "BOTH"].includes(directionScope)) {
+        throw new FinanceAssistantError(
+          "ASSISTANT_FIELD_INVALID",
+          "directionScope is not permitted.",
+        );
+      }
+      const watchedAddress = await services.catalog.updateWatchedAddress(
+        context,
+        admin,
+        requiredAssistantValue(fields, "targetId"),
+        {
+          directionScope: directionScope as "INBOUND" | "OUTBOUND" | "BOTH" | undefined,
+          includeInBalanceRecon: assistantBoolean(fields, "includeInBalanceRecon"),
+          label: assistantOptional(fields, "label") ?? undefined,
+        },
+        requiredAssistantValue(fields, "reason"),
+      );
+      return { entityType: "watched address", entity: serializeWatchedAddress(watchedAddress) };
     }
   }
 }
@@ -571,6 +1034,35 @@ export async function handleTreasuryOverviewCountsGet(
         requireOrgContext(organizationId),
       );
       return adminSuccess(countTreasuryOverview(rows));
+    },
+  });
+}
+
+/** One authenticated runtime for the whole Overview instead of four parallel Worker requests. */
+export async function handleTreasuryOverviewGet(
+  request: Request,
+  deps: TreasuryAdminHandlerDeps,
+): Promise<AdminRouteHandlerResult> {
+  const organizationId = orgFromQuery(request);
+  if (typeof organizationId !== "string") return organizationId;
+  return withTreasuryAdmin({
+    deps,
+    organizationId,
+    permission: "admin.treasury.read",
+    fn: async ({ services }) => {
+      const context = requireOrgContext(organizationId);
+      const [preview, transactions, settings, allocation] = await Promise.all([
+        services.breath.getAdminPreview(context),
+        services.domain.repository.listTransactions(context),
+        services.catalog.getSettings(context),
+        services.allocation.getCurrent(context),
+      ]);
+      return adminSuccess({
+        preview,
+        counts: countTreasuryOverview(transactions),
+        settings: settings ? serializeSettings(settings) : null,
+        allocation: serializeFundAllocation(allocation),
+      });
     },
   });
 }
@@ -2320,6 +2812,7 @@ export async function handleFinanceAssistantPlanPost(
               organizationId,
               services,
               now: requestedAt,
+              language: plan.language,
             }),
           });
         }
@@ -2335,18 +2828,69 @@ export async function handleFinanceAssistantPlanPost(
           intent: plan.intent,
           fields:
             plan.intent === "CREATE_TRANSACTION"
-              ? { ...plan.fields, occurredAt: requestedAt.toISOString() }
+              ? {
+                  ...plan.fields,
+                  occurredAt: plan.fields.occurredAt ?? requestedAt.toISOString(),
+                }
               : plan.fields,
         };
+        if (plan.question) {
+          return adminSuccess({
+            mode: "needs_input",
+            summary: plan.summary,
+            question: plan.question,
+            missingFields: [],
+          });
+        }
+        const missingFields = missingAssistantFields(writePlan);
+        if (missingFields.length > 0) {
+          return adminSuccess({
+            mode: "needs_input",
+            summary: plan.summary,
+            question:
+              plan.question ??
+              (plan.language === "ru"
+                ? `Уточните: ${missingFields.join(", ")}.`
+                : `Please provide: ${missingFields.join(", ")}.`),
+            missingFields,
+          });
+        }
         const validated = validateAssistantWritePlan(writePlan);
-        const preview =
-          validated.intent === "CREATE_TRANSACTION"
-            ? await resolveAssistantTransactionReferences(
-                validated as FinanceAssistantPlan & { intent: "CREATE_TRANSACTION" },
-                services,
-                organizationId,
-              )
-            : validated;
+        let preview: FinanceAssistantPlan & { intent: FinanceAssistantWriteIntent } = validated;
+        if (validated.intent === "CREATE_TRANSACTION") {
+          preview = await resolveAssistantTransactionReferences(
+            validated as FinanceAssistantPlan & { intent: "CREATE_TRANSACTION" },
+            services,
+            organizationId,
+          );
+        } else if (validated.intent === "CLASSIFY_TRANSACTION") {
+          preview = await resolveAssistantClassificationReferences(
+            validated as FinanceAssistantPlan & { intent: "CLASSIFY_TRANSACTION" },
+            services,
+            organizationId,
+          );
+        } else {
+          const targetKind: AssistantCatalogKind | null =
+            validated.intent === "UPDATE_COUNTERPARTY"
+              ? "counterparty"
+              : validated.intent === "UPDATE_ACCOUNT"
+                ? "account"
+                : validated.intent === "UPDATE_CATEGORY" ||
+                    validated.intent === "SET_CATEGORY_BUDGET"
+                  ? "category"
+                  : validated.intent === "UPDATE_PROJECT"
+                    ? "project"
+                    : null;
+          if (targetKind) {
+            preview = await resolveAssistantCatalogTarget({
+              plan: validated,
+              services,
+              organizationId,
+              kind: targetKind,
+              nameField: validated.intent === "SET_CATEGORY_BUDGET" ? "categoryName" : "targetName",
+            });
+          }
+        }
         const writesEnabled = process.env.WAIA_FINANCE_ASSISTANT_WRITES_ENABLED === "true";
         const secretReady =
           (process.env.WAIA_FINANCE_ASSISTANT_CONFIRMATION_SECRET?.trim().length ?? 0) >= 32;
@@ -2413,6 +2957,33 @@ export async function handleFinanceAssistantExecutePost(
       permission: "admin.treasury.mutate",
       fn: async ({ userId, services, runtime }) => {
         const payload = await verifyFinanceConfirmation(token, { userId, organizationId });
+        const requiresPublicationPermission = [
+          "CONFIRM_BALANCE_CHECKPOINT",
+          "SET_TRANSACTION_DETAIL_PUBLICATION",
+          "UPDATE_FINANCE_SETTINGS",
+        ].includes(payload.intent);
+        if (requiresPublicationPermission) {
+          const publicationAllowed = deps.testPermissionGate
+            ? deps.testPermissionGate({
+                userId,
+                organizationId,
+                permission: "admin.treasury.publish",
+              })
+            : (
+                await assertAdminPermission(
+                  runtime,
+                  userId,
+                  organizationId,
+                  "admin.treasury.publish",
+                )
+              ).allowed;
+          if (!publicationAllowed) {
+            throw new FinanceAssistantError(
+              "ASSISTANT_PERMISSION_REQUIRED",
+              "This action requires Finance publication permission.",
+            );
+          }
+        }
         for (const value of Object.values(payload.fields)) {
           if (value?.trim()) requireSafeFinanceAssistantMessage(value);
         }
@@ -2437,9 +3008,11 @@ export async function handleFinanceAssistantExecutePost(
       const status =
         err.code === "ASSISTANT_CONFIRMATION_ALREADY_USED"
           ? 409
-          : err.code.includes("NOT_CONFIGURED") || err.code.includes("NOT_READY")
-            ? 503
-            : 400;
+          : err.code === "ASSISTANT_PERMISSION_REQUIRED"
+            ? 403
+            : err.code.includes("NOT_CONFIGURED") || err.code.includes("NOT_READY")
+              ? 503
+              : 400;
       return adminClientError(status, err.code, err.message);
     }
     return mapTreasuryHttpError(err);

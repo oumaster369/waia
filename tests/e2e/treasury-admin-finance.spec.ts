@@ -96,6 +96,74 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
       return;
     }
 
+    if (pathname.endsWith("/overview") && method === "GET") {
+      await json(route, {
+        preview: {
+          status: "pending",
+          lastUpdatedAt: null,
+          stageLabel: null,
+          work: null,
+          methodologyNote: null,
+          idealAnnualBudget: null,
+          resources: {
+            entered: "1000000",
+            spent: "250000",
+            remaining: "750000",
+            allocated: "100000",
+            neededNext: null,
+          },
+          currentFreeFunds: "650000",
+          budget: {
+            code: "OPS",
+            title: "Operations",
+            currency: "USD",
+            planned: "5000000",
+            funded: "1000000",
+            committed: "100000",
+            spent: "250000",
+            remaining: "3750000",
+            fillRatio: 0.2,
+          },
+          runway: { status: "pending" },
+          recentActivity: [],
+          pendingReasons: ["BREATH_DISABLED"],
+          componentStatus: {
+            breathEnabled: false,
+            idealBudget: "missing",
+            materialReconciliation: false,
+            balanceReconciliation: "missing",
+            budget: "ok",
+            fundingNeed: "absent",
+            verifiedFinancialComplete: true,
+          },
+          reconciliationGate: { latestId: null, status: null, createdAt: null },
+          runwayStatus: { status: "pending", reason: "IDEAL_BUDGET_MISSING", snapshotId: null },
+        },
+        counts: { reviewRequiredCount: 1, publicationPendingCount: 1 },
+        settings: {
+          organizationId: ORG_A,
+          breathEnabled: false,
+          stageLabel: null,
+          workSummary: null,
+          methodologyNote: null,
+          recentActivityLimit: 5,
+          updatedAt: null,
+        },
+        allocation: {
+          status: "available",
+          accountingCurrency: "USD",
+          canonicalFreeFundsMicros: "25000000",
+          protectedAnnualBudgetMicros: "12000000",
+          operatingAllocationMicros: "12000000",
+          developmentAllocationMicros: "13000000",
+          policyCode: "ANNUAL_BUDGET_THEN_DEVELOPMENT",
+          policyVersion: 1,
+          accountingAsOf: "2026-08-24T12:00:00.000Z",
+        },
+      });
+      return;
+    }
+
     if (pathname.endsWith("/breath-preview") && method === "GET") {
       await json(route, {
         preview: {
@@ -152,7 +220,7 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
       await json(route, {
         allocation: {
           status: "available",
-          currency: "USD",
+          accountingCurrency: "USD",
           canonicalFreeFundsMicros: "25000000",
           protectedAnnualBudgetMicros: "12000000",
           operatingAllocationMicros: "12000000",
@@ -704,6 +772,26 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(page.getByTestId("finance-unavailable")).toContainText("Postgres");
   });
 
+  test("HR resolves to an explicit empty funnel instead of an endless loading state", async ({
+    page,
+  }) => {
+    const email = `e2e-hr-loading-${Date.now()}@example.com`;
+    await signUpAndOpenDashboard(page, email);
+    grantPlatformAdminByUserEmail(email);
+    await page.route("**/api/admin/hr/applications", async (route) => {
+      await json(route, {
+        applications: [],
+        assignees: [],
+        statuses: ["NEW_APPLICATION", "INTERVIEW", "CONTRACT", "WORK", "PAYMENT", "DISMISSAL"],
+      });
+    });
+
+    await page.goto("/hr");
+    await expect(page.getByRole("heading", { name: "Team applications" })).toBeVisible();
+    await expect(page.getByText("No applications in this view.")).toBeVisible();
+    await expect(page.getByText("Loading HR…")).toHaveCount(0);
+  });
+
   test("complete Human workflow against DEE-672 Finance contracts", async ({ page }) => {
     const email = `e2e-finance-flow-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);
@@ -753,10 +841,10 @@ test.describe("WAIA Admin Finance Console", () => {
       .getByTestId("finance-assistant")
       .getByRole("button", { name: "Ask Finance" })
       .click();
-    await expect(page.getByRole("button", { name: "Confirm and create" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm and apply" })).toBeVisible();
     await expect(page.getByTestId("finance-assistant")).not.toContainText("e2e-confirmation-token");
-    await page.getByRole("button", { name: "Confirm and create" }).click();
-    await expect(page.getByTestId("finance-assistant")).toContainText("Created Project");
+    await page.getByRole("button", { name: "Confirm and apply" }).click();
+    await expect(page.getByTestId("finance-assistant")).toContainText("Completed: Project");
     await expect.poll(() => capture.assistantPlanPosts.length).toBe(2);
     await expect.poll(() => capture.assistantExecutePosts.length).toBe(1);
     await page.getByRole("button", { name: "Close Finance Assistant" }).click();

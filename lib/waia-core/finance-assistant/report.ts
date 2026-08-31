@@ -10,6 +10,7 @@ import {
 import {
   serializeFundAllocation,
   serializeTransaction,
+  serializeWatchedAddress,
 } from "@/lib/waia-core/treasury/admin/serialize";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import type {
@@ -22,6 +23,7 @@ export async function buildFinanceAssistantReport(input: {
   organizationId: string;
   services: TreasuryAdminServices;
   now?: Date;
+  language?: "ru" | "en";
 }): Promise<FinanceAssistantReport> {
   const now = input.now ?? new Date();
   const context = requireOrgContext(input.organizationId);
@@ -31,11 +33,21 @@ export async function buildFinanceAssistantReport(input: {
       input.services.breath.getAdminPreview(context),
       input.services.allocation.getCurrent(context),
     ]);
+    const funds = serializeFundAllocation(allocation);
     return {
       kind: "overview",
-      title: "Finance overview",
+      title: input.language === "ru" ? "Финансовый обзор" : "Finance overview",
       generatedAt: now.toISOString(),
-      data: { preview, funds: serializeFundAllocation(allocation) },
+      data: {
+        availableNowMicros: preview.currentFreeFunds,
+        annualBudget: preview.idealAnnualBudget,
+        runway: preview.runway,
+        operatingFundMicros: funds.status === "available" ? funds.operatingAllocationMicros : null,
+        developmentFundMicros:
+          funds.status === "available" ? funds.developmentAllocationMicros : null,
+        accountingCurrency: funds.status === "available" ? funds.accountingCurrency : "USD",
+        pendingReasons: preview.pendingReasons,
+      },
     };
   }
 
@@ -46,13 +58,43 @@ export async function buildFinanceAssistantReport(input: {
       input.services.ledgerCatalog.getBudgetMonthSummary(context, month),
       input.services.ledgerCatalog.getBudgetAnnualSummary(context, year),
     ]);
+    const monthlyDto = serializeCategoryBudgetMonth(monthly);
+    const annualDto = serializeCategoryBudgetAnnual(annual);
     return {
       kind: "budget",
-      title: `Budget report for ${month}`,
+      title: input.language === "ru" ? `Бюджет за ${month}` : `Budget report for ${month}`,
       generatedAt: now.toISOString(),
       data: {
-        monthly: serializeCategoryBudgetMonth(monthly),
-        annual: serializeCategoryBudgetAnnual(annual),
+        month: monthlyDto.month,
+        currentMonthTotals: monthlyDto.totals,
+        groups: monthlyDto.groups,
+        annualTotals: annualDto.totals,
+        recordedMonths: annualDto.months.map((row) => row.month),
+      },
+    };
+  }
+
+  if (input.intent === "REPORT_WALLET") {
+    const watched = await input.services.catalog.listWatchedAddresses(context);
+    return {
+      kind: "wallet",
+      title: input.language === "ru" ? "Наблюдаемые кошельки" : "Observed wallets",
+      generatedAt: now.toISOString(),
+      data: {
+        count: watched.length,
+        wallets: watched.map((row) => {
+          const serialized = serializeWatchedAddress(row);
+          return {
+            id: serialized.id,
+            label: serialized.label,
+            network: serialized.network,
+            assetCode: serialized.assetCode,
+            address: serialized.address,
+            directionScope: serialized.directionScope,
+            includeInBalanceRecon: serialized.includeInBalanceRecon,
+            isActive: serialized.isActive,
+          };
+        }),
       },
     };
   }
@@ -62,11 +104,23 @@ export async function buildFinanceAssistantReport(input: {
   });
   return {
     kind: "transactions",
-    title: "Recent transactions",
+    title: input.language === "ru" ? "Последние транзакции" : "Recent transactions",
     generatedAt: now.toISOString(),
     data: {
       count: transactions.length,
-      transactions: transactions.map(serializeTransaction),
+      transactions: transactions.map((transaction) => {
+        const row = serializeTransaction(transaction);
+        return {
+          id: row.id,
+          occurredAt: row.occurredAt,
+          signedAmountMicros: row.signedAmountMicros,
+          status: row.status,
+          counterparty: row.counterpartyDisplay,
+          category: row.category,
+          purpose: row.purpose,
+          notes: row.internalNotes,
+        };
+      }),
     },
   };
 }

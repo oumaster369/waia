@@ -6,14 +6,14 @@ import { SidebarSignOut } from "@/components/dashboard/sidebar-sign-out";
 import { buttonVariants } from "@/components/ui/button";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
-import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { cn } from "@/lib/utils";
 import { resolveWaiaAdminAccess } from "@/lib/waia-core/permissions/waia-admin";
 
 export const dynamic = "force-dynamic";
 
 export default async function WaiaAdminPage() {
-  const userId = await getOptionalSessionUserId();
+  const userId = await getOptionalAdminSessionUserId();
   if (!userId) redirect("/");
 
   let runtime;

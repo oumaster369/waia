@@ -9,12 +9,10 @@ import {
   type FinanceAssistantConfirmationPayload,
   type FinanceAssistantWriteIntent,
 } from "@/lib/waia-core/finance-assistant/types";
+import { isWriteIntent } from "@/lib/waia-core/finance-assistant/planner";
 
 const writeIntents = new Set<FinanceAssistantWriteIntent>(
-  FINANCE_ASSISTANT_INTENTS.filter(
-    (intent): intent is FinanceAssistantWriteIntent =>
-      intent.startsWith("CREATE_") && intent !== "UNSUPPORTED",
-  ),
+  FINANCE_ASSISTANT_INTENTS.filter(isWriteIntent),
 );
 
 function encode(bytes: Uint8Array): string {

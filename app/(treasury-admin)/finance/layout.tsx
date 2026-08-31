@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { FinanceShell } from "@/components/treasury/admin/finance-shell";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
-import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
 import { resolveWaiaAdminAccess } from "@/lib/waia-core/permissions/waia-admin";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -27,7 +27,7 @@ export default async function FinanceLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const userId = await getOptionalSessionUserId();
+  const userId = await getOptionalAdminSessionUserId();
   if (!userId) {
     redirect("/");
   }
