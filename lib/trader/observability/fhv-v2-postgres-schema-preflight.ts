@@ -6,7 +6,7 @@ import type postgres from "postgres";
 
 import { getPostgresSql } from "@/db/postgres-client";
 
-export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 182 as const;
+export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 183 as const;
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
@@ -63,6 +63,8 @@ export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_runtime_authority_assessments_v2",
   "trader_runtime_control_lease_heads_v2",
   "trader_runtime_control_lease_epoch_history_v2",
+  "trader_historical_simulation_reason_ledger_v2",
+  "trader_historical_simulation_modeled_evidence_v2",
 ] as const;
 
 type Journal = {
@@ -102,7 +104,7 @@ export function readFhvV2CanonicalMigrations(repoRoot: string): FhvV2CanonicalMi
   if (required.length !== FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX + 1) {
     throw new FhvV2PostgresSchemaPreflightError(
       "CANONICAL_JOURNAL_RANGE_INVALID",
-      `expected migrations 0000..0182, found ${required.length}`,
+      `expected migrations 0000..${String(FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX).padStart(4, "0")}, found ${required.length}`,
     );
   }
   return required.map((entry, expectedIdx) => {

@@ -4308,6 +4308,67 @@ export const traderRuntimeControlLeaseEpochHistoryV2 = pgTable("trader_runtime_c
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 }, (t) => [unique("trader_runtime_control_lease_epoch_history_v2_org_epoch_unique").on(t.organizationId, t.leaseEpoch)]);
 
+/** Capital-ineligible, pre-holdout Historical Simulation V2 reason ledger. Not canonical Reality. */
+export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
+  "trader_historical_simulation_reason_ledger_v2",
+  {
+    entryId: text("entry_id").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    cycleSequence: integer("cycle_sequence").notNull(),
+    symbol: text("symbol").notNull(),
+    partition: text("partition").notNull(),
+    capitalEligible: boolean("capital_eligible").notNull().default(false),
+    replayBarClosedAtUtc: timestamp("replay_bar_closed_at_utc", { withTimezone: true, mode: "string" }).notNull(),
+    previousContentDigestHex: text("previous_content_digest_hex"),
+    forecastJson: jsonb("forecast_json").notNull(),
+    decisionJson: jsonb("decision_json").notNull(),
+    portfolioJson: jsonb("portfolio_json").notNull(),
+    riskJson: jsonb("risk_json").notNull(),
+    executionJson: jsonb("execution_json").notNull(),
+    accountingJson: jsonb("accounting_json").notNull(),
+    guardianJson: jsonb("guardian_json").notNull(),
+    learningJson: jsonb("learning_json").notNull(),
+    contentDigestHex: text("content_digest_hex").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("historical_sim_v2_org_run_sequence_unique").on(t.organizationId, t.runId, t.cycleSequence),
+    unique("historical_sim_v2_entry_org_unique").on(t.entryId, t.organizationId),
+    uniqueIndex("historical_sim_v2_org_digest_unique").on(t.organizationId, t.contentDigestHex),
+    index("historical_sim_v2_org_run_bar_idx").on(t.organizationId, t.runId, t.replayBarClosedAtUtc),
+    check("historical_sim_v2_preholdout_only", sql`${t.partition} IN ('DEVELOPMENT','WALK_FORWARD')`),
+    check("historical_sim_v2_never_capital", sql`${t.capitalEligible} = false`),
+    check("historical_sim_v2_nonnegative_sequence", sql`${t.cycleSequence} >= 0`),
+  ],
+);
+
+/** Typed modeled evidence emitted by Historical Simulation V2; never exchange/canonical Reality evidence. */
+export const traderHistoricalSimulationModeledEvidenceV2 = pgTable(
+  "trader_historical_simulation_modeled_evidence_v2",
+  {
+    evidenceId: text("evidence_id").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    reasonLedgerEntryId: text("reason_ledger_entry_id").notNull(),
+    evidenceKind: text("evidence_kind").notNull(),
+    evidenceOrdinal: integer("evidence_ordinal").notNull(),
+    sourceContentDigestHex: text("source_content_digest_hex"),
+    evidenceContentDigestHex: text("evidence_content_digest_hex").notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    capitalEligible: boolean("capital_eligible").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ columns: [t.reasonLedgerEntryId, t.organizationId], foreignColumns: [traderHistoricalSimulationReasonLedgerV2.entryId, traderHistoricalSimulationReasonLedgerV2.organizationId] }),
+    unique("historical_sim_modeled_evidence_entry_kind_ordinal_unique").on(t.reasonLedgerEntryId, t.evidenceKind, t.evidenceOrdinal),
+    index("historical_sim_modeled_evidence_org_entry_idx").on(t.organizationId, t.reasonLedgerEntryId, t.evidenceKind),
+    check("historical_sim_modeled_evidence_kind", sql`${t.evidenceKind} IN ('RISK','EXECUTION','GUARDIAN','FILL')`),
+    check("historical_sim_modeled_evidence_never_capital", sql`${t.capitalEligible} = false`),
+    check("historical_sim_modeled_evidence_nonnegative_ordinal", sql`${t.evidenceOrdinal} >= 0`),
+  ],
+);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = pgTable(
   "trader_trade_legs",
