@@ -44,7 +44,7 @@ describe("historical modeled execution advance v2", () => {
     expect(() => assertHistoricalMarketCycleV2({ ...market, barIndex: 2 }, "cycle-1")).toThrow("HISTORICAL_SEALED_MARKET_CYCLE_V2_INVALID");
 
     const repository = createAccountingFrontierRepositoryMemory();
-    const fillEvidence: unknown[] = [];
+    const committedBundles: unknown[] = [];
     const sourceOrder = order();
     const executionRegistry = createHistoricalModeledExecutionRegistryV2();
     executionRegistry.register({
@@ -56,10 +56,20 @@ describe("historical modeled execution advance v2", () => {
       riskReceiptContentDigestHex: "a".repeat(64), symbol: "BTCUSDT", side: "buy", quantity: "0.1",
       decisionBarIndex: 0, acceptedAtUtc: sourceOrder.createdAt.toISOString(), contentDigestHex: "b".repeat(64),
     });
+    const currentOrder = { ...sourceOrder, id: "order-current", allocationDecisionId: "decision-current" };
+    executionRegistry.register({
+      schemaVersion: "waia.trader.historical_modeled_execution.v2",
+      source: "MODELED_HISTORICAL", capitalEligible: false,
+      executionPlanId: "plan-current", executionAttemptId: "attempt-current", orderId: currentOrder.id,
+      orderContentDigestHex: "e".repeat(64), decisionId: "decision-current",
+      decisionContentDigestHex: "f".repeat(64), riskReceiptContentDigestHex: "a".repeat(64),
+      symbol: "BTCUSDT", side: "buy", quantity: "0.1", decisionBarIndex: 1,
+      acceptedAtUtc: observedAt, contentDigestHex: "9".repeat(64),
+    });
     const model = createHistoricalExecutionModelV1();
     let openOrderReads = 0;
     const exchange = {
-      listOpenOrders: () => openOrderReads++ === 0 ? [{ order: sourceOrder }] : [],
+      listOpenOrders: () => openOrderReads++ === 0 ? [{ order: sourceOrder }, { order: currentOrder }] : [],
       async advanceOnClosedBar(input: Parameters<import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange["advanceOnClosedBar"]>[0]) {
         const event = {
           orderId: sourceOrder.id, organizationId: "org-1", symbol: "BTCUSDT", side: "buy" as const,
@@ -89,7 +99,7 @@ describe("historical modeled execution advance v2", () => {
       initialAccountingFrontier: async () => initial,
       refreshAccountState: async () => ({ positions: [], openOrderCount: 0, dailyPnl: "0", drawdown: "0", quoteExposureByCurrency: {} }),
       reconcileOrder: async () => undefined,
-      persistFillEvidence: async (value) => { fillEvidence.push(value); },
+      persistAdvanceEvidence: async (value) => { committedBundles.push(value); },
     });
     const result = await advance("cycle-1");
     expect(result.fillCount).toBe(1);
@@ -97,8 +107,10 @@ describe("historical modeled execution advance v2", () => {
       cycleId: "cycle-1", orderId: "order-1", executionPlanId: "plan-1", status: "FILLED",
       decisionId: "decision-0", decisionContentDigestHex: "c".repeat(64),
       fillEvidenceContentDigestHexes: [result.fillEvidence[0]!.contentDigestHex],
+      reportContentDigestHexes: [expect.stringMatching(/^[0-9a-f]{64}$/)],
     })]);
-    expect(fillEvidence).toHaveLength(1);
+    expect(result.effects.some((effect) => effect.orderId === "order-current")).toBe(false);
+    expect(committedBundles).toHaveLength(1);
     const frontier = await repository.loadLatest({ organizationId: "org-1" }, { accountKey: "account-1", runId: "run-1" });
     expect(frontier?.positions.BTCUSDT?.quantity).toBe("0.1");
     expect(frontier?.cash).not.toBe("1000");

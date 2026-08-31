@@ -41,7 +41,7 @@ describe("historical modeled capital binding v2", () => {
       decisionBarIndex: () => 7,
       evaluateGuardian: async () => ({ status: "NONE", reasonCodes: [] }),
       persistEvidence: async (value) => { evidence.push(value as unknown as Record<string, unknown>); },
-      advanceModeledExecution: async (value) => { await advance(value); return { observedExecutionEffects: [] }; },
+      advanceModeledExecution: async (value) => { await advance(value); return { observedExecutionEffects: [], accountingAdvanced: false }; },
       learningProjection: async () => ({
         status: "NO_UPDATE",
         reasonCodes: ["NO_MATURED_OUTCOME"],

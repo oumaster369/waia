@@ -113,6 +113,7 @@ export type HistoricalModeledCapitalBindingV2Input = Readonly<{
   advanceModeledExecution(cycle: HistoricalSimulationV2Cycle): Promise<Readonly<{
     execution?: HistoricalSimulationReasonLedgerV2Draft["execution"];
     observedExecutionEffects: HistoricalSimulationReasonLedgerV2Draft["observedExecutionEffects"];
+    accountingAdvanced: boolean;
   }>>;
   learningProjection: RunHistoricalSimulationV2Input["resolveLedgerProjection"] extends
     (input: infer I) => Promise<infer O> ? (input: I) => Promise<O extends { learning: infer L } ? L : never> : never;
@@ -398,7 +399,7 @@ export function createHistoricalModeledCapitalBindingV2(
     guardianByCycle.set(context.cycle.cycleId, guardian);
     await input.persistEvidence(guardian);
     return {
-      accounting: { status: executionByCycle.has(context.cycle.cycleId) ? "APPLIED" : "UNCHANGED", reasonCodes: [], frontierContentDigestHex: accounting.frontierContentDigestHex },
+      accounting: { status: observed.accountingAdvanced ? "APPLIED" : "UNCHANGED", reasonCodes: [], frontierContentDigestHex: accounting.frontierContentDigestHex },
       guardian: { status: guardian.status, reasonCodes: guardian.reasonCodes, assessmentContentDigestHex: guardian.contentDigestHex },
       learning: await input.learningProjection(context),
       execution: observed.execution,
