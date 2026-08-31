@@ -417,6 +417,7 @@ export async function runHistoricalSimulationV2(
     const authorityExecution = authority.status === "EXECUTION_BOUND" ? authority : null;
     const ledgerEntry = appendHistoricalSimulationReasonLedgerV2(reasonLedger.at(-1) ?? null, {
       organizationId: input.organizationId,
+      accountId: input.accountId,
       runId: input.runId,
       cycleId: cycle.cycleId,
       symbol: cycle.symbol,

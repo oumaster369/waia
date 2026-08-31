@@ -16,6 +16,7 @@ export type HistoricalSimulationReasonLedgerV2 = Readonly<{
   schemaVersion: typeof HISTORICAL_SIMULATION_REASON_LEDGER_V2_SCHEMA;
   entryId: string;
   organizationId: string;
+  accountId: string;
   runId: string;
   cycleId: string;
   cycleSequence: number;
@@ -123,6 +124,7 @@ function deepFreeze<T>(value: T): T {
 function assertComplete(input: HistoricalSimulationReasonLedgerV2Draft): void {
   [
     [input.organizationId, "organizationId"],
+    [input.accountId, "accountId"],
     [input.runId, "runId"],
     [input.cycleId, "cycleId"],
     [input.symbol, "symbol"],
@@ -248,6 +250,7 @@ export function createHistoricalSimulationReasonLedgerV2(
   const entryId = draft.entryId ?? deterministicExecutionUuidV2("report", {
     kind: "historical-simulation-reason-ledger-v2",
     organizationId: draft.organizationId,
+    accountId: draft.accountId,
     runId: draft.runId,
     cycleId: draft.cycleId,
     cycleSequence: draft.cycleSequence,
@@ -267,7 +270,8 @@ export function appendHistoricalSimulationReasonLedgerV2(
   previous: HistoricalSimulationReasonLedgerV2 | null,
   draft: Omit<HistoricalSimulationReasonLedgerV2Draft, "cycleSequence" | "previousContentDigestHex">,
 ): HistoricalSimulationReasonLedgerV2 {
-  if (previous && (previous.organizationId !== draft.organizationId || previous.runId !== draft.runId)) {
+  if (previous && (previous.organizationId !== draft.organizationId || previous.accountId !== draft.accountId ||
+      previous.runId !== draft.runId)) {
     throw new Error("reason-ledger chain scope mismatch");
   }
   return createHistoricalSimulationReasonLedgerV2({
@@ -301,7 +305,8 @@ export function assertHistoricalSimulationReasonLedgerChainV2(
     if (entry.previousContentDigestHex !== (previous?.contentDigestHex ?? null)) {
       throw new Error(`broken digest chain at ${index}`);
     }
-    if (previous && (entry.organizationId !== previous.organizationId || entry.runId !== previous.runId)) {
+    if (previous && (entry.organizationId !== previous.organizationId || entry.accountId !== previous.accountId ||
+        entry.runId !== previous.runId)) {
       throw new Error(`reason-ledger chain scope mismatch at ${index}`);
     }
   });

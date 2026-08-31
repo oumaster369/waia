@@ -12,7 +12,7 @@ describe("Historical Simulation V2 PostgreSQL persistence", () => {
   it("derives explicitly modeled risk/execution/guardian/fill evidence without capital authority", () => {
     const membershipBody = { schemaVersion: "waia.trader.historical_dataset_membership.v2" as const, organizationId: "22222222-2222-4222-8222-222222222222", cycleId: "cycle", manifestSemanticDigestHex: digest("1"), sealReceiptDigestHex: digest("2"), partitionDigestHex: digest("3"), partitionRawSha256Hex: digest("4"), partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const, recordIndex: 0, barContentDigestHex: digest("5"), sealedCycleContentDigestHex: digest("6") };
     const entry = createHistoricalSimulationReasonLedgerV2({
-      entryId: "11111111-1111-4111-8111-111111111111", organizationId: "22222222-2222-4222-8222-222222222222",
+      entryId: "11111111-1111-4111-8111-111111111111", organizationId: "22222222-2222-4222-8222-222222222222", accountId: "33333333-3333-4333-8333-333333333333",
       runId: "run", cycleId: "cycle", cycleSequence: 0, symbol: "BTCUSDT", partition: "DEVELOPMENT",
       replayBarClosedAtUtc: "2026-08-01T00:00:00.000Z", previousContentDigestHex: null,
       datasetMembership: { ...membershipBody, contentDigestHex: computeSemanticSha256Hex(membershipBody) },

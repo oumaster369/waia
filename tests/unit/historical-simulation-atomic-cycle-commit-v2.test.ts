@@ -53,6 +53,7 @@ function ledger(index: number, previous: HistoricalSimulationReasonLedgerV2 | nu
   const cycleId = `cycle-${index}`;
   return createHistoricalSimulationReasonLedgerV2({
     organizationId: scope.organizationId,
+    accountId: scope.accountId,
     runId: scope.runId,
     cycleId,
     cycleSequence: index,
@@ -211,7 +212,10 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
       expect(crashed.durable.stages).toEqual([]);
 
       const retry = inMemoryRepository();
-      await expect(commit(retry.repository, first)).resolves.toMatchObject({ nextCycleSequence: 1 });
+      const recomputedAfterRollback = ledger(0, null);
+      expect(recomputedAfterRollback.entryId).toBe(first.entryId);
+      expect(recomputedAfterRollback.contentDigestHex).toBe(first.contentDigestHex);
+      await expect(commit(retry.repository, recomputedAfterRollback)).resolves.toMatchObject({ nextCycleSequence: 1 });
       expect(retry.durable.ledger).toEqual([first]);
     },
   );

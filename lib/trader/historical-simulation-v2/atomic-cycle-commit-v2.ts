@@ -295,11 +295,11 @@ export function restoreHistoricalSimulationDurableStateSnapshotV2<Kind extends H
 
 export function loadValidatedHistoricalSimulationLedgerHeadV2(
   entries: readonly HistoricalSimulationReasonLedgerV2[],
-  scope: Pick<HistoricalSimulationAtomicScopeV2, "organizationId" | "runId" | "split">,
+  scope: Pick<HistoricalSimulationAtomicScopeV2, "organizationId" | "runId" | "accountId" | "split">,
 ): HistoricalSimulationReasonLedgerV2 | null {
   assertHistoricalSimulationReasonLedgerChainV2(entries);
   for (const entry of entries) {
-    if (entry.organizationId !== scope.organizationId || entry.runId !== scope.runId ||
+    if (entry.organizationId !== scope.organizationId || entry.accountId !== scope.accountId || entry.runId !== scope.runId ||
         entry.partition !== scope.split) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:LEDGER_SCOPE");
     }
@@ -419,6 +419,11 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
 }>): Promise<HistoricalSimulationResumeCursorV2> {
   if (!validateHistoricalSimulationReasonLedgerV2(input.ledgerEntry)) {
     throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:LEDGER_ENTRY");
+  }
+  if (input.ledgerEntry.organizationId !== input.scope.organizationId ||
+      input.ledgerEntry.accountId !== input.scope.accountId || input.ledgerEntry.runId !== input.scope.runId ||
+      input.ledgerEntry.partition !== input.scope.split) {
+    throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:LEDGER_SCOPE");
   }
   const snapshotScope = { ...input.scope, cycleId: input.ledgerEntry.cycleId };
   for (const snapshot of [input.knowledgeSnapshot, input.modeledExecutionRegistrySnapshot,
