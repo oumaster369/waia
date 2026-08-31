@@ -7,7 +7,7 @@ import {
   type HistoricalExecutionPersistencePort,
   type HistoricalSimulatedExchange,
 } from "@/lib/trader/execution/historical-simulated-exchange";
-import type { HistoricalExecutionModelV1, SimulatedFillEvent } from "@/lib/trader/execution/historical-execution-model.types";
+import type { CostedFillEconomics, HistoricalExecutionModelV1, SimulatedFillEvent } from "@/lib/trader/execution/historical-execution-model.types";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
@@ -46,6 +46,19 @@ export type HistoricalModeledFillEvidenceV2 = Readonly<{
   contentDigestHex: string;
 }>;
 
+export type HistoricalModeledFillDetailV2 = Readonly<{
+  schemaVersion: "waia.trader.historical_modeled_fill_detail.v2";
+  evidence: HistoricalModeledFillEvidenceV2;
+  event: Readonly<Omit<SimulatedFillEvent, "acceptedAt" | "fillTimestamp"> & {
+    acceptedAt: string; fillTimestamp: string;
+  }>;
+  economics: Readonly<Omit<CostedFillEconomics, "sourceBarTimestamp" | "acceptedAt" | "fillTimestamp"> & {
+    sourceBarTimestamp: string; acceptedAt: string; fillTimestamp: string;
+  }>;
+  accountingFrontier: AccountingFrontierV1;
+  contentDigestHex: string;
+}>;
+
 export type AdvanceHistoricalModeledExecutionV2Input = Readonly<{
   context: OrgContext;
   accountKey: string;
@@ -64,6 +77,7 @@ export type AdvanceHistoricalModeledExecutionV2Input = Readonly<{
   persistAdvanceEvidence(bundle: Readonly<{
     cycleId: string;
     fillEvidence: readonly HistoricalModeledFillEvidenceV2[];
+    fillDetails: readonly HistoricalModeledFillDetailV2[];
     effects: readonly HistoricalModeledObservedEffectV2[];
   }>): Promise<void>;
 }>;
@@ -71,6 +85,7 @@ export type AdvanceHistoricalModeledExecutionV2Input = Readonly<{
 export type AdvanceHistoricalModeledExecutionV2Result = Readonly<{
   fillCount: number;
   fillEvidence: readonly HistoricalModeledFillEvidenceV2[];
+  fillDetails: readonly HistoricalModeledFillDetailV2[];
   accountingFrontierContentDigestHex: string;
   accountingAdvanced: boolean;
   effects: readonly HistoricalModeledObservedEffectV2[];
@@ -182,6 +197,7 @@ export function createAdvanceHistoricalModeledExecutionV2(
       runId: input.runId,
     }) ?? await input.initialAccountingFrontier(market);
     const fillEvidence: HistoricalModeledFillEvidenceV2[] = [];
+    const fillDetails: HistoricalModeledFillDetailV2[] = [];
     const ordersBefore = input.exchange.listOpenOrders().map((entry) => entry.order).filter((order) => {
       const receipt = input.executionRegistry.get(order.id);
       if (!receipt) throw new Error("HISTORICAL_MODELED_EXECUTION_LINEAGE_MISSING");
@@ -225,6 +241,12 @@ export function createAdvanceHistoricalModeledExecutionV2(
         };
         const evidence = Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
         fillEvidence.push(evidence);
+        const detailBody = { schemaVersion: "waia.trader.historical_modeled_fill_detail.v2" as const,
+          evidence, event: { ...event, acceptedAt: event.acceptedAt.toISOString(),
+            fillTimestamp: event.fillTimestamp.toISOString() }, economics: { ...economics,
+            sourceBarTimestamp: economics.sourceBarTimestamp.toISOString(), acceptedAt: economics.acceptedAt.toISOString(),
+            fillTimestamp: economics.fillTimestamp.toISOString() }, accountingFrontier: accounting };
+        fillDetails.push(Object.freeze({ ...detailBody, contentDigestHex: computeSemanticSha256Hex(detailBody) }));
         return updated;
       },
       async transitionOrderExpired(context, order) {
@@ -283,9 +305,9 @@ export function createAdvanceHistoricalModeledExecutionV2(
         decisionContentDigestHex: receipt.decisionContentDigestHex,
         riskReceiptContentDigestHex: receipt.riskReceiptContentDigestHex,
         executionPlanId: receipt.executionPlanId,
-        executionPlanContentDigestHex: receipt.contentDigestHex,
+        executionPlanContentDigestHex: receipt.executionPlanContentDigestHex,
         executionAttemptId: receipt.executionAttemptId,
-        executionAttemptContentDigestHex: receipt.contentDigestHex,
+        executionAttemptContentDigestHex: receipt.executionAttemptContentDigestHex,
         orderId: order.id,
         orderContentDigestHex: receipt.orderContentDigestHex,
         status,
@@ -295,8 +317,14 @@ export function createAdvanceHistoricalModeledExecutionV2(
           source: "MODELED_HISTORICAL",
           capitalEligible: false,
           cycleId,
+          decisionId: receipt.decisionId,
+          decisionContentDigestHex: receipt.decisionContentDigestHex,
+          executionPlanId: receipt.executionPlanId,
+          executionPlanContentDigestHex: receipt.executionPlanContentDigestHex,
           orderId: order.id,
+          orderContentDigestHex: receipt.orderContentDigestHex,
           executionAttemptId: receipt.executionAttemptId,
+          executionAttemptContentDigestHex: receipt.executionAttemptContentDigestHex,
           status,
           fillEvidenceContentDigestHexes: fills.map((value) => value.contentDigestHex),
         })]),
@@ -314,11 +342,13 @@ export function createAdvanceHistoricalModeledExecutionV2(
     await input.persistAdvanceEvidence({
       cycleId,
       fillEvidence: Object.freeze([...fillEvidence]),
+      fillDetails: Object.freeze([...fillDetails]),
       effects: Object.freeze([...effects]),
     });
     return Object.freeze({
       fillCount: fillEvidence.length,
       fillEvidence: Object.freeze(fillEvidence),
+      fillDetails: Object.freeze(fillDetails),
       accountingFrontierContentDigestHex: accounting.semanticContentDigest,
       accountingAdvanced: fillEvidence.length > 0,
       effects: Object.freeze(effects),

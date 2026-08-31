@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
+import { commitHistoricalSimulationCyclePostgresV2, createHistoricalSimulationCommitRequestV2,
+  createHistoricalSimulationModeledAtomicArtifactV2, validateHistoricalSimulationCommitRequestV2,
+  validateHistoricalSimulationModeledAtomicArtifactV2,
+  assertHistoricalSimulationLearningSnapshotTransitionV2,
+} from "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
 import {
   assertHistoricalSimulationResumeAtMembershipV2,
   commitHistoricalSimulationCycleAtomicallyV2,
@@ -8,6 +15,8 @@ import {
   createHistoricalSimulationDurableStateSnapshotV2,
   HISTORICAL_SIMULATION_ATOMIC_STAGES_V2,
   loadValidatedHistoricalSimulationLedgerHeadV2,
+  restoreHistoricalModeledExchangeOrdersV2,
+  validateHistoricalSimulationDurableStateSnapshotV2,
   type HistoricalSimulationAtomicCycleRepositoryV2,
   type HistoricalSimulationAtomicCycleTransactionV2,
   type HistoricalSimulationAtomicScopeV2,
@@ -124,6 +133,17 @@ function inMemoryRepository(failurePoint: FailurePoint = null) {
 
 function snapshots(cycleId: string, sequence: number) {
   const identity = { ...scope, cycleId };
+  const accountingBody = {
+    schemaVersion: "htr-accounting-frontier/v1" as const, engineId: "CANONICAL_CROSS_BACKEND_ACCOUNTING_ENGINE_V1" as const,
+    basisMethod: "DUAL_GROSS_NET_WEIGHTED_AVERAGE_BASIS_V1" as const, organizationId: scope.organizationId,
+    accountKey: scope.accountId, runId: scope.runId, accountingSequence: sequence,
+    frontierAsOf: new Date(1_700_000_000_000 + sequence * 60_000).toISOString(), monthKey: "2023-11",
+    cash: "1000.00000000", positions: {}, grossRealizedPnl: "0.00000000", netRealizedPnl: "0.00000000",
+    marks: {}, markedPositionValue: "0.00000000", equity: "1000.00000000", equityHwm: "1000.00000000",
+    accountDrawdownBps: 0, consumedFillIds: [], id: `frontier-${sequence}`, sourceFillId: null,
+    sourceEconomicsDigest: D, idempotencyKey: `frontier-${sequence}`,
+  };
+  const accounting = { ...accountingBody, semanticContentDigest: computeAccountingSemanticDigest(accountingBody) };
   return {
     knowledgeSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
       ...identity, stateKind: "KNOWLEDGE", state: {
@@ -139,19 +159,10 @@ function snapshots(cycleId: string, sequence: number) {
       ...identity, stateKind: "MODELED_EXCHANGE", state: { checkpoint: {
         schemaVersion: "htr-wp17-execution-checkpoint/v1", openOrders: [],
         executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
-      }, openOrderContentDigestHexById: {} },
+      }, openOrders: [] },
     }),
     accountingFrontierSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      ...identity, stateKind: "ACCOUNTING_FRONTIER", state: {
-        schemaVersion: "htr-accounting-frontier/v1", engineId: "CANONICAL_CROSS_BACKEND_ACCOUNTING_ENGINE_V1",
-        basisMethod: "DUAL_GROSS_NET_WEIGHTED_AVERAGE_BASIS_V1", organizationId: scope.organizationId,
-        accountKey: scope.accountId, runId: scope.runId, accountingSequence: sequence,
-        frontierAsOf: new Date(1_700_000_000_000 + sequence * 60_000).toISOString(), monthKey: "2023-11",
-        cash: "1000.00000000", positions: {}, grossRealizedPnl: "0.00000000", netRealizedPnl: "0.00000000",
-        marks: {}, markedPositionValue: "0.00000000", equity: "1000.00000000", equityHwm: "1000.00000000",
-        accountDrawdownBps: 0, consumedFillIds: [], id: `frontier-${sequence}`, sourceFillId: null,
-        sourceEconomicsDigest: D, semanticContentDigest: D, idempotencyKey: `frontier-${sequence}`,
-      },
+      ...identity, stateKind: "ACCOUNTING_FRONTIER", state: accounting,
     }),
     guardianSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
       ...identity, stateKind: "GUARDIAN", state: { posture: "NONE", assessmentContentDigestHex: D,
@@ -166,9 +177,16 @@ function snapshots(cycleId: string, sequence: number) {
 }
 
 function stageBundles(cycleId: string, ledgerEntryContentDigestHex: string) {
+  const kinds = {
+    FORECAST_LIFECYCLE: "FORECAST_ISSUANCE", CANONICAL_VERIFICATION: "CANONICAL_VERIFICATION_RECEIPT",
+    MODELED_RISK: "MODELED_RISK_VERDICT", MODELED_EXECUTION: "MODELED_EXECUTION_SUBMISSION",
+    OBSERVED_EXECUTION_EFFECTS: "MODELED_EXECUTION_EFFECT", ACCOUNTING: "ACCOUNTING_FRONTIER",
+    GUARDIAN: "GUARDIAN_ASSESSMENT", KNOWLEDGE: "KNOWLEDGE_CHECKPOINT", LEARNING: "LEARNING_UPDATE",
+  } as const;
   return Object.fromEntries(HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => [stage,
     createHistoricalSimulationAtomicStageBundleV2({ ...scope, stage, cycleId, ledgerEntryContentDigestHex,
-      artifacts: [{ artifactKind: `${stage}_RECEIPT`, artifactId: `${cycleId}:${stage}`, contentDigestHex: D }] }),
+      artifacts: [{ artifactKind: kinds[stage], artifactId: `${cycleId}:${stage}`,
+        contentDigestHex: stage === "KNOWLEDGE" ? "b".repeat(64) : D }] }),
   ])) as Parameters<typeof commitHistoricalSimulationCycleAtomicallyV2>[0]["stageBundles"];
 }
 
@@ -183,6 +201,60 @@ async function commit(repository: HistoricalSimulationAtomicCycleRepositoryV2, e
 }
 
 describe("Historical Simulation V2 atomic cycle commit and durable resume foundation", () => {
+  it("content-addresses every immutable commit input and full modeled payload", () => {
+    const first = ledger(0, null);
+    const bundles = stageBundles(first.cycleId, first.contentDigestHex);
+    const persistedInput = snapshots(first.cycleId, first.cycleSequence);
+    const request = createHistoricalSimulationCommitRequestV2({ ...scope, cycleSequence: 0, cycleId: first.cycleId,
+      replayBarClosedAtUtc: first.replayBarClosedAtUtc,
+      datasetMembership: first.datasetMembership, datasetMembershipContentDigestHex: first.datasetMembership.contentDigestHex,
+      forecastInputAuthorityContentDigestHex: "1".repeat(64), policyConfigContentDigestHex: "2".repeat(64),
+      codeSha: "3".repeat(40), ledgerEntryContentDigestHex: first.contentDigestHex,
+      stageBundleDigestHexByStage: Object.fromEntries(HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) =>
+        [stage, bundles[stage].contentDigestHex])) as HistoricalSimulationResumeCursorV2["cycleStageBundleDigestHexByStage"],
+      snapshotContentDigestHexByKind: { KNOWLEDGE: persistedInput.knowledgeSnapshot.contentDigestHex,
+        MODELED_EXECUTION_REGISTRY: persistedInput.modeledExecutionRegistrySnapshot.contentDigestHex,
+        MODELED_EXCHANGE: persistedInput.modeledExchangeSnapshot.contentDigestHex,
+        ACCOUNTING_FRONTIER: persistedInput.accountingFrontierSnapshot.contentDigestHex,
+        GUARDIAN: persistedInput.guardianSnapshot.contentDigestHex,
+        LEARNING: persistedInput.learningSnapshot.contentDigestHex },
+    });
+    for (const mutation of [
+      { cycleId: "changed" }, { datasetMembershipContentDigestHex: "4".repeat(64) },
+      { forecastInputAuthorityContentDigestHex: "5".repeat(64) }, { policyConfigContentDigestHex: "6".repeat(64) },
+      { codeSha: "7".repeat(40) }, { ledgerEntryContentDigestHex: "8".repeat(64) },
+    ]) expect(() => validateHistoricalSimulationCommitRequestV2({ ...request, ...mutation })).toThrow("COMMIT_REQUEST");
+    const sourcePayload = { posture: "NONE" };
+    const modeled = createHistoricalSimulationModeledAtomicArtifactV2({ artifactKind: "GUARDIAN_ASSESSMENT",
+      artifactId: "guardian-0", ...scope, cycleId: first.cycleId, pitAnchor: first.replayBarClosedAtUtc,
+      sourceContentDigestHex: computeSemanticSha256Hex(sourcePayload), sourcePayload });
+    expect(modeled.sourcePayloadSemanticDigestHex).toBe(computeSemanticSha256Hex(sourcePayload));
+    expect(modeled.contentDigestHex).toMatch(/^[0-9a-f]{64}$/);
+    expect(validateHistoricalSimulationModeledAtomicArtifactV2(scope, first.cycleId, {
+      artifactKind: modeled.artifactKind, artifactId: modeled.artifactId,
+      contentDigestHex: modeled.contentDigestHex, payload: modeled,
+    })).toEqual(modeled);
+    expect(() => validateHistoricalSimulationModeledAtomicArtifactV2(scope, first.cycleId, {
+      artifactKind: modeled.artifactKind, artifactId: modeled.artifactId,
+      contentDigestHex: modeled.contentDigestHex,
+      payload: { ...modeled, sourceContentDigestHex: "9".repeat(64) },
+    })).toThrow("MODELED_ARTIFACT_PAYLOAD");
+    const learningSnapshot = persistedInput.learningSnapshot;
+    const learning = createHistoricalSimulationModeledAtomicArtifactV2({ artifactKind: "LEARNING_UPDATE",
+      artifactId: "learning-0", ...scope, cycleId: first.cycleId, pitAnchor: first.replayBarClosedAtUtc,
+      sourceContentDigestHex: computeSemanticSha256Hex({ status: "NO_UPDATE", previousState: null,
+        nextState: learningSnapshot.state }),
+      sourcePayload: { status: "NO_UPDATE", previousState: null, nextState: learningSnapshot.state }, lineagePayload: {
+        previousSnapshotContentDigestHex: null, nextSnapshotContentDigestHex: learningSnapshot.contentDigestHex,
+        previousState: null, nextState: learningSnapshot.state,
+      } });
+    expect(() => assertHistoricalSimulationLearningSnapshotTransitionV2({
+      previousSnapshot: null, nextSnapshot: learningSnapshot,
+      artifacts: [{ ...learning, lineagePayload: { ...learning.lineagePayload, nextState: {
+        ...learningSnapshot.state, pendingForecastAuthorityContentDigestHexes: ["9".repeat(64)],
+      } } }],
+    })).toThrow("LEARNING_SNAPSHOT_TRANSITION");
+  });
   it("atomically advances the exact ledger, dataset, knowledge, registry and accounting frontier", async () => {
     const memory = inMemoryRepository();
     const first = ledger(0, null);
@@ -235,18 +307,60 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
     const openOrder = { orderId: "order-1", acceptedAtTs: 1_700_000_000_000,
       firstEligibleTs: 1_700_000_060_000, windowEndBarIndex: 3, sameSymbolEligibleBarsSeen: 0,
       remainingQty: "1.00000000", filledQty: "0.00000000", fillSequence: 0 };
+    const durableOrderBody = { id: "order-1", organizationId: scope.organizationId, credentialId: null,
+      venue: "HTX", executionMode: "paper" as const, symbol: "BTCUSDT", side: "buy" as const,
+      type: "market" as const, price: null, quantity: "1.00000000", filledQuantity: "0.00000000",
+      avgFillPrice: null, state: "ACCEPTED" as const, stateVersion: 1, exchangeOrderId: null,
+      clientOrderId: "order-1", idempotencyKey: "order-1", riskDecisionId: "risk-1",
+      strategySignalId: null, allocationDecisionId: null,
+      createdAt: "2023-11-14T22:13:20.000Z", updatedAt: "2023-11-14T22:13:20.000Z" };
+    const durableOrder = { ...durableOrderBody, contentDigestHex: computeSemanticSha256Hex(durableOrderBody) };
+    const executionPlanContentDigestHex = computeSemanticSha256Hex({
+      schemaVersion: "waia.trader.historical_modeled_execution_plan.v2", source: "MODELED_HISTORICAL",
+      capitalEligible: false, executionPlanId: "plan-1", decisionId: "decision-1",
+      decisionContentDigestHex: D, riskReceiptContentDigestHex: D,
+      symbol: "BTCUSDT", side: "buy", quantity: "1.00000000",
+    });
+    const executionAttemptContentDigestHex = computeSemanticSha256Hex({
+      schemaVersion: "waia.trader.historical_modeled_execution_attempt.v2", source: "MODELED_HISTORICAL",
+      capitalEligible: false, executionAttemptId: "attempt-1", executionPlanId: "plan-1",
+      executionPlanContentDigestHex, acceptedAtUtc: "2023-11-14T22:13:20.000Z",
+    });
+    const receiptBody = { source: "MODELED_HISTORICAL" as const, capitalEligible: false as const,
+      schemaVersion: "waia.trader.historical_modeled_execution.v2" as const,
+      executionPlanId: "plan-1", executionPlanContentDigestHex,
+      executionAttemptId: "attempt-1", executionAttemptContentDigestHex, orderId: "order-1",
+      orderContentDigestHex: computeSemanticSha256Hex({ schemaVersion: "waia.trader.historical_modeled_order.v2",
+        source: "MODELED_HISTORICAL", capitalEligible: false, orderId: "order-1",
+        executionAttemptId: "attempt-1", executionAttemptContentDigestHex,
+        decisionContentDigestHex: D, symbol: "BTCUSDT", side: "buy", quantity: "1.00000000" }),
+      decisionId: "decision-1",
+      decisionContentDigestHex: D, riskReceiptContentDigestHex: D, symbol: "BTCUSDT",
+      side: "buy" as const, quantity: "1.00000000", decisionBarIndex: 0,
+      acceptedAtUtc: "2023-11-14T22:13:20.000Z" };
+    const receipt = { ...receiptBody, contentDigestHex: computeSemanticSha256Hex(receiptBody) };
     const first = ledger(0, null);
+    const duplicateRegistry = createHistoricalSimulationDurableStateSnapshotV2({
+      ...scope, cycleId: first.cycleId, stateKind: "MODELED_EXECUTION_REGISTRY",
+      state: { receipts: [receipt, receipt] },
+    });
+    expect(() => validateHistoricalSimulationDurableStateSnapshotV2(duplicateRegistry,
+      "MODELED_EXECUTION_REGISTRY")).toThrow("MODELED_EXECUTION_REGISTRY_STATE");
     const modeledExchangeSnapshot = createHistoricalSimulationDurableStateSnapshotV2({
       ...scope, cycleId: first.cycleId, stateKind: "MODELED_EXCHANGE", state: { checkpoint: {
         schemaVersion: "htr-wp17-execution-checkpoint/v1", openOrders: [openOrder],
         executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
-      }, openOrderContentDigestHexById: { "order-1": D } },
+      }, openOrders: [durableOrder] },
     });
     const memory = inMemoryRepository();
+    const modeledExecutionRegistrySnapshot = createHistoricalSimulationDurableStateSnapshotV2({
+      ...scope, cycleId: first.cycleId, stateKind: "MODELED_EXECUTION_REGISTRY", state: { receipts: [receipt] },
+    });
     const cursor = await commitHistoricalSimulationCycleAtomicallyV2({
       repository: memory.repository, scope, ledgerEntry: first,
       stageBundles: stageBundles(first.cycleId, first.contentDigestHex), knowledgeCheckpointSequence: 0,
-      knowledgeCheckpointContentDigestHex: "b".repeat(64), ...snapshots(first.cycleId, 0), modeledExchangeSnapshot,
+      knowledgeCheckpointContentDigestHex: "b".repeat(64), ...snapshots(first.cycleId, 0),
+      modeledExchangeSnapshot, modeledExecutionRegistrySnapshot,
     });
     const advanceNextBar = (state: unknown) => {
       const restored = state as { checkpoint: { openOrders: typeof openOrder[] } };
@@ -260,5 +374,122 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
     const afterRestart = advanceNextBar(cursor.modeledExchangeSnapshot.state);
     expect(afterRestart).toEqual(uninterrupted);
     expect(afterRestart).toEqual([{ fillId: "order-1:1", quantity: "1.00000000", barIndex: 1 }]);
+    const restoredOrders = restoreHistoricalModeledExchangeOrdersV2(
+      cursor.modeledExchangeSnapshot as never, { ...scope, cycleId: first.cycleId });
+    expect(restoredOrders.get("order-1")).toMatchObject({ id: "order-1", quantity: "1.00000000" });
+    expect(restoredOrders.get("order-1")?.createdAt).toBeInstanceOf(Date);
+    const inconsistentExchange = createHistoricalSimulationDurableStateSnapshotV2({
+      ...scope, cycleId: first.cycleId, stateKind: "MODELED_EXCHANGE", state: { checkpoint: {
+        schemaVersion: "htr-wp17-execution-checkpoint/v1", openOrders: [{ ...openOrder,
+          remainingQty: "0.50000000" }], executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
+      }, openOrders: [durableOrder] },
+    });
+    await expect(commitHistoricalSimulationCycleAtomicallyV2({
+      repository: inMemoryRepository().repository, scope, ledgerEntry: first,
+      stageBundles: stageBundles(first.cycleId, first.contentDigestHex), knowledgeCheckpointSequence: 0,
+      knowledgeCheckpointContentDigestHex: "b".repeat(64), ...snapshots(first.cycleId, 0),
+      modeledExchangeSnapshot: inconsistentExchange, modeledExecutionRegistrySnapshot,
+    })).rejects.toThrow("EXCHANGE_REGISTRY_PARITY");
+  });
+
+  it("refuses a typed-stage substitution and an account splice before persistence", async () => {
+    const first = ledger(0, null);
+    expect(() => createHistoricalSimulationAtomicStageBundleV2({ ...scope, stage: "ACCOUNTING",
+      cycleId: first.cycleId, ledgerEntryContentDigestHex: first.contentDigestHex,
+      artifacts: [{ artifactKind: "GUARDIAN_ASSESSMENT", artifactId: "forged", contentDigestHex: D }],
+    })).toThrow("ACCOUNTING_REQUIRED_ARTIFACT");
+    const memory = inMemoryRepository();
+    await expect(commitHistoricalSimulationCycleAtomicallyV2({ repository: memory.repository,
+      scope: { ...scope, accountId: "another-account" }, ledgerEntry: first,
+      stageBundles: stageBundles(first.cycleId, first.contentDigestHex), knowledgeCheckpointSequence: 0,
+      knowledgeCheckpointContentDigestHex: "b".repeat(64), ...snapshots(first.cycleId, 0),
+    })).rejects.toThrow("LEDGER_SCOPE");
+    expect(memory.durable.ledger).toEqual([]);
+  });
+
+  it("deep-freezes durable state and refuses a forged accounting semantic digest", () => {
+    const state = snapshots("cycle-0", 0).modeledExchangeSnapshot;
+    expect(Object.isFrozen(state.state)).toBe(true);
+    expect(Object.isFrozen((state.state as { checkpoint: object }).checkpoint)).toBe(true);
+    const accounting = snapshots("cycle-0", 0).accountingFrontierSnapshot;
+    const forged = createHistoricalSimulationDurableStateSnapshotV2({ ...scope, cycleId: "cycle-0",
+      stateKind: "ACCOUNTING_FRONTIER", state: {
+        ...(accounting.state as Record<string, unknown>), semanticContentDigest: D,
+      },
+    } as never);
+    expect(() => validateHistoricalSimulationDurableStateSnapshotV2(forged, "ACCOUNTING_FRONTIER"))
+      .toThrow("ACCOUNTING_STATE");
+  });
+
+  it("detects an exact committed retry before constructing ports or invoking producers", async () => {
+    process.env.WAIA_RELEASE_SHA = "3".repeat(40);
+    const first = ledger(0, null);
+    const bundles = stageBundles(first.cycleId, first.contentDigestHex);
+    const persisted = await commit(inMemoryRepository().repository, first);
+    const request = createHistoricalSimulationCommitRequestV2({ ...scope, cycleSequence: 0, cycleId: first.cycleId,
+      replayBarClosedAtUtc: first.replayBarClosedAtUtc,
+      datasetMembership: first.datasetMembership, datasetMembershipContentDigestHex: first.datasetMembership.contentDigestHex,
+      forecastInputAuthorityContentDigestHex: "1".repeat(64), policyConfigContentDigestHex: "2".repeat(64),
+      codeSha: "3".repeat(40), ledgerEntryContentDigestHex: first.contentDigestHex,
+      stageBundleDigestHexByStage: Object.fromEntries(HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) =>
+        [stage, bundles[stage].contentDigestHex])) as typeof persisted.cycleStageBundleDigestHexByStage,
+      snapshotContentDigestHexByKind: { KNOWLEDGE: persisted.knowledgeSnapshot.contentDigestHex,
+        MODELED_EXECUTION_REGISTRY: persisted.modeledExecutionRegistrySnapshot.contentDigestHex,
+        MODELED_EXCHANGE: persisted.modeledExchangeSnapshot.contentDigestHex,
+        ACCOUNTING_FRONTIER: persisted.accountingFrontierSnapshot.contentDigestHex,
+        GUARDIAN: persisted.guardianSnapshot.contentDigestHex, LEARNING: persisted.learningSnapshot.contentDigestHex },
+    });
+    const query = async (strings: TemplateStringsArray) => {
+      const text = strings.join("?");
+      if (text.includes("FROM trader_dee659_authority_preregistration_v2")) return [{
+        authority_bundle_digest_hex: request.forecastInputAuthorityContentDigestHex,
+        policy_config_digest_hex: request.policyConfigContentDigestHex,
+        membership_content_digest_hex: request.datasetMembershipContentDigestHex,
+        membership_json: request.datasetMembership,
+        verifier_code_digest_hex: computeStableJsonDigest({
+          verifierVersion: "historical-simulation-v2-canonical-verifier/1", releaseSha: process.env.WAIA_RELEASE_SHA,
+        }),
+      }];
+      if (text.includes("commit_request_digest_hex,commit_request_json")) return [{ checkpoint_json: persisted,
+        commit_request_digest_hex: request.contentDigestHex, commit_request_json: request, committed_cycle_id: first.cycleId,
+        committed_cycle_sequence: 0, ledger_head_content_digest_hex: first.contentDigestHex }];
+      if (text.includes("SELECT checkpoint_json, committed_cycle_sequence")) {
+        return [{ checkpoint_json: persisted, committed_cycle_sequence: 0 }];
+      }
+      if (text.includes("resume_stage_link_v2 l")) return HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => ({
+        stage, bundle_content_digest_hex: bundles[stage].contentDigestHex, cycle_id: first.cycleId,
+        ledger_entry_content_digest_hex: first.contentDigestHex, artifacts_json: bundles[stage].artifacts,
+      }));
+      if (text.includes("resume_snapshot_link_v2 l")) {
+        const values = { KNOWLEDGE: persisted.knowledgeSnapshot,
+          MODELED_EXECUTION_REGISTRY: persisted.modeledExecutionRegistrySnapshot,
+          MODELED_EXCHANGE: persisted.modeledExchangeSnapshot, ACCOUNTING_FRONTIER: persisted.accountingFrontierSnapshot,
+          GUARDIAN: persisted.guardianSnapshot, LEARNING: persisted.learningSnapshot } as const;
+        return Object.entries(values).map(([state_kind, snapshot]) => ({ state_kind,
+          snapshot_content_digest_hex: snapshot.contentDigestHex, state_json: snapshot.state }));
+      }
+      return [];
+    };
+    const fake = ((strings: TemplateStringsArray) => query(strings)) as unknown as import("postgres").Sql;
+    (fake as unknown as { begin: Function }).begin = async (_level: string, callback: Function) => callback(fake);
+    (fake as unknown as { reserve: Function }).reserve = async () => {
+      (fake as unknown as { release: Function }).release = () => undefined;
+      return fake;
+    };
+    let portsCreated = 0;
+    let produced = 0;
+    const result = await commitHistoricalSimulationCyclePostgresV2({ sql: fake, scope,
+      request,
+      createPorts() { portsCreated += 1; return {}; },
+      async produce() { produced += 1; throw new Error("must not run"); },
+    });
+    expect(result).toEqual(persisted);
+    expect({ portsCreated, produced }).toEqual({ portsCreated: 0, produced: 0 });
+    const { schemaVersion: _schemaVersion, contentDigestHex: _contentDigestHex, ...requestSeed } = request;
+    await expect(commitHistoricalSimulationCyclePostgresV2({ sql: fake, scope,
+      request: createHistoricalSimulationCommitRequestV2({ ...requestSeed,
+        policyConfigContentDigestHex: "8".repeat(64) }), createPorts: () => ({}),
+      async produce() { throw new Error("must not run"); },
+    })).rejects.toThrow("AMBIGUOUS_RETRY");
   });
 });

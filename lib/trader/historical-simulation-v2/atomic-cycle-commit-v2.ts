@@ -1,6 +1,10 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
 import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
+import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import type { HistoricalModeledExecutionReceiptV2 } from "./modeled-capital-binding-v2";
+import { parseDecimal } from "@/lib/trader/risk/numeric";
 import type { HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
 import {
   assertHistoricalSimulationReasonLedgerChainV2,
@@ -28,16 +32,18 @@ export type HistoricalSimulationAtomicScopeV2 = Readonly<{
 type DurableStatePayloadV2 = Readonly<{
   KNOWLEDGE: Readonly<{ checkpointSequence: number; checkpointContentDigestHex: string;
     knowledgeContentDigestHex: string; visibleThroughPitAnchor: string }>;
-  MODELED_EXECUTION_REGISTRY: Readonly<{ receipts: ReadonlyArray<Readonly<{
-    orderId: string; receiptContentDigestHex: string; decisionBarIndex: number;
-  }>> }>;
+  MODELED_EXECUTION_REGISTRY: Readonly<{ receipts: readonly HistoricalModeledExecutionReceiptV2[] }>;
   MODELED_EXCHANGE: Readonly<{ checkpoint: HistoricalExecutionCheckpointSlice;
-    openOrderContentDigestHexById: Readonly<Record<string, string>> }>;
+    openOrders: readonly HistoricalSimulationDurableOrderV2[] }>;
   ACCOUNTING_FRONTIER: AccountingFrontierV1;
   GUARDIAN: Readonly<{ assessmentContentDigestHex: string; posture: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT";
     assessedAt: string }>;
   LEARNING: Readonly<{ appliedClosureWatermarkUtc: string | null;
     pendingForecastAuthorityContentDigestHexes: readonly string[] }>;
+}>;
+
+export type HistoricalSimulationDurableOrderV2 = Readonly<Omit<OrderRow, "createdAt" | "updatedAt"> & {
+  createdAt: string; updatedAt: string; contentDigestHex: string;
 }>;
 
 export type HistoricalSimulationDurableStateKindV2 = keyof DurableStatePayloadV2;
@@ -79,10 +85,29 @@ export type HistoricalSimulationAtomicStageBundleV2 = Readonly<{
 }>;
 
 export type HistoricalSimulationAtomicArtifactReferenceV2 = Readonly<{
-  artifactKind: string;
+  artifactKind: HistoricalSimulationAtomicArtifactKindV2;
   artifactId: string;
   contentDigestHex: string;
+  /** Required and canonically recomputed for modeled historical artifact kinds at the PostgreSQL boundary. */
+  payload?: Readonly<Record<string, unknown>>;
 }>;
+
+export type HistoricalSimulationAtomicArtifactKindV2 =
+  | "FORECAST_ISSUANCE" | "CANONICAL_VERIFICATION_RECEIPT" | "MODELED_RISK_VERDICT"
+  | "MODELED_EXECUTION_SUBMISSION" | "MODELED_EXECUTION_EFFECT" | "ACCOUNTING_FRONTIER"
+  | "GUARDIAN_ASSESSMENT" | "KNOWLEDGE_CHECKPOINT" | "LEARNING_UPDATE";
+
+const REQUIRED_ARTIFACT_KIND_BY_STAGE = Object.freeze({
+  FORECAST_LIFECYCLE: "FORECAST_ISSUANCE",
+  CANONICAL_VERIFICATION: "CANONICAL_VERIFICATION_RECEIPT",
+  MODELED_RISK: "MODELED_RISK_VERDICT",
+  MODELED_EXECUTION: "MODELED_EXECUTION_SUBMISSION",
+  OBSERVED_EXECUTION_EFFECTS: "MODELED_EXECUTION_EFFECT",
+  ACCOUNTING: "ACCOUNTING_FRONTIER",
+  GUARDIAN: "GUARDIAN_ASSESSMENT",
+  KNOWLEDGE: "KNOWLEDGE_CHECKPOINT",
+  LEARNING: "LEARNING_UPDATE",
+} as const satisfies Readonly<Record<HistoricalSimulationAtomicStageV2, HistoricalSimulationAtomicArtifactKindV2>>);
 
 export type HistoricalSimulationAtomicStageBundlesV2 = Readonly<Record<
   HistoricalSimulationAtomicStageV2,
@@ -155,6 +180,14 @@ function canonicalClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 export function createHistoricalSimulationDurableStateSnapshotV2<Kind extends HistoricalSimulationDurableStateKindV2>(
   input: HistoricalSimulationAtomicScopeV2 & Readonly<{
     cycleId: string;
@@ -172,7 +205,7 @@ export function createHistoricalSimulationDurableStateSnapshotV2<Kind extends Hi
     stateKind: input.stateKind,
     state,
   };
-  return Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
+  return deepFreeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
 }
 
 export function createHistoricalSimulationAtomicStageBundleV2(input: Readonly<{
@@ -190,11 +223,21 @@ export function createHistoricalSimulationAtomicStageBundleV2(input: Readonly<{
   requireText(input.runId, "stageBundle.runId");
   requireText(input.accountId, "stageBundle.accountId");
   requireDigest(input.ledgerEntryContentDigestHex, "stageBundle.ledgerEntryContentDigestHex");
+  const seen = new Set<string>();
   for (const artifact of input.artifacts) {
     requireText(artifact.artifactKind, "stageBundle.artifactKind");
     requireText(artifact.artifactId, "stageBundle.artifactId");
     requireDigest(artifact.contentDigestHex, "stageBundle.artifactContentDigestHex");
+    const identity = `${artifact.artifactKind}:${artifact.artifactId}`;
+    if (seen.has(identity)) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:stageBundle.duplicateArtifact");
+    seen.add(identity);
   }
+  if (!input.artifacts.some((artifact) => artifact.artifactKind === REQUIRED_ARTIFACT_KIND_BY_STAGE[input.stage])) {
+    throw new Error(`HISTORICAL_SIMULATION_RESUME_REFUSED:${input.stage}_REQUIRED_ARTIFACT`);
+  }
+  const artifacts = [...input.artifacts].sort((left, right) =>
+    `${left.artifactKind}:${left.artifactId}`.localeCompare(`${right.artifactKind}:${right.artifactId}`)) as unknown as
+    readonly [HistoricalSimulationAtomicArtifactReferenceV2, ...HistoricalSimulationAtomicArtifactReferenceV2[]];
   const body = {
     schemaVersion: HISTORICAL_SIMULATION_ATOMIC_STAGE_BUNDLE_V2,
     organizationId: input.organizationId,
@@ -203,9 +246,9 @@ export function createHistoricalSimulationAtomicStageBundleV2(input: Readonly<{
     stage: input.stage,
     cycleId: input.cycleId,
     ledgerEntryContentDigestHex: input.ledgerEntryContentDigestHex,
-    artifacts: input.artifacts,
+    artifacts,
   };
-  return Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
+  return deepFreeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
 }
 
 function validateStageBundle(
@@ -247,25 +290,62 @@ export function validateHistoricalSimulationDurableStateSnapshotV2(
     }
     requireUtc(String(state.visibleThroughPitAnchor), "knowledge.visibleThroughPitAnchor");
   } else if (expectedKind === "MODELED_EXECUTION_REGISTRY") {
+    const orderIds = new Set<string>(); const planIds = new Set<string>(); const attemptIds = new Set<string>();
     if (!Array.isArray(state.receipts) || state.receipts.some((value) => {
       const receipt = value as Record<string, unknown>;
-      return typeof receipt.orderId !== "string" || !DIGEST.test(String(receipt.receiptContentDigestHex)) ||
-        !Number.isSafeInteger(receipt.decisionBarIndex);
+      const { contentDigestHex, ...body } = receipt;
+      const duplicate = orderIds.has(String(receipt.orderId)) || planIds.has(String(receipt.executionPlanId)) ||
+        attemptIds.has(String(receipt.executionAttemptId));
+      orderIds.add(String(receipt.orderId)); planIds.add(String(receipt.executionPlanId));
+      attemptIds.add(String(receipt.executionAttemptId));
+      const expectedPlan = computeSemanticSha256Hex({
+        schemaVersion: "waia.trader.historical_modeled_execution_plan.v2", source: "MODELED_HISTORICAL",
+        capitalEligible: false, executionPlanId: receipt.executionPlanId, decisionId: receipt.decisionId,
+        decisionContentDigestHex: receipt.decisionContentDigestHex,
+        riskReceiptContentDigestHex: receipt.riskReceiptContentDigestHex,
+        symbol: receipt.symbol, side: receipt.side, quantity: receipt.quantity,
+      });
+      const expectedAttempt = computeSemanticSha256Hex({
+        schemaVersion: "waia.trader.historical_modeled_execution_attempt.v2", source: "MODELED_HISTORICAL",
+        capitalEligible: false, executionAttemptId: receipt.executionAttemptId,
+        executionPlanId: receipt.executionPlanId, executionPlanContentDigestHex: receipt.executionPlanContentDigestHex,
+        acceptedAtUtc: receipt.acceptedAtUtc,
+      });
+      return duplicate || receipt.schemaVersion !== "waia.trader.historical_modeled_execution.v2" ||
+        receipt.source !== "MODELED_HISTORICAL" || receipt.capitalEligible !== false ||
+        typeof receipt.orderId !== "string" || !DIGEST.test(String(contentDigestHex)) ||
+        !DIGEST.test(String(receipt.executionPlanContentDigestHex)) ||
+        !DIGEST.test(String(receipt.executionAttemptContentDigestHex)) ||
+        receipt.executionPlanContentDigestHex !== expectedPlan || receipt.executionAttemptContentDigestHex !== expectedAttempt ||
+        computeSemanticSha256Hex(body) !== contentDigestHex || !Number.isSafeInteger(receipt.decisionBarIndex);
     })) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:MODELED_EXECUTION_REGISTRY_STATE");
   } else if (expectedKind === "MODELED_EXCHANGE") {
     const checkpoint = state.checkpoint as HistoricalExecutionCheckpointSlice | undefined;
     if (checkpoint?.schemaVersion !== "htr-wp17-execution-checkpoint/v1" ||
-        !Array.isArray(checkpoint.openOrders) || typeof state.openOrderContentDigestHexById !== "object") {
+        !Array.isArray(checkpoint.openOrders) || !Array.isArray(state.openOrders)) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:MODELED_EXCHANGE_STATE");
     }
-    for (const order of checkpoint.openOrders) {
-      const digest = (state.openOrderContentDigestHexById as Record<string, string>)[order.orderId];
-      if (!DIGEST.test(digest ?? "")) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:OPEN_ORDER_BINDING");
+    const orders = state.openOrders as HistoricalSimulationDurableOrderV2[];
+    const byId = new Map(orders.map((order) => [order.id, order]));
+    if (byId.size !== orders.length || checkpoint.openOrders.length !== orders.length) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:OPEN_ORDER_BINDING");
+    }
+    for (const checkpointOrder of checkpoint.openOrders) {
+      const order = byId.get(checkpointOrder.orderId);
+      if (!order) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:OPEN_ORDER_BINDING");
+      const { contentDigestHex, ...body } = order;
+      requireUtc(order.createdAt, "modeledExchange.order.createdAt");
+      requireUtc(order.updatedAt, "modeledExchange.order.updatedAt");
+      if (!DIGEST.test(contentDigestHex) || computeSemanticSha256Hex(body) !== contentDigestHex ||
+          order.organizationId !== snapshot.organizationId) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:OPEN_ORDER_BINDING");
+      }
     }
   } else if (expectedKind === "ACCOUNTING_FRONTIER") {
     const frontier = state as unknown as AccountingFrontierV1;
     if (frontier.organizationId !== snapshot.organizationId || frontier.accountKey !== snapshot.accountId ||
-        frontier.runId !== snapshot.runId || !DIGEST.test(frontier.semanticContentDigest)) {
+        frontier.runId !== snapshot.runId || !DIGEST.test(frontier.semanticContentDigest) ||
+        computeAccountingSemanticDigest(frontier) !== frontier.semanticContentDigest) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:ACCOUNTING_STATE");
     }
   } else if (expectedKind === "GUARDIAN") {
@@ -291,6 +371,16 @@ export function restoreHistoricalSimulationDurableStateSnapshotV2<Kind extends H
 ): DurableStatePayloadV2[Kind] {
   validateHistoricalSimulationDurableStateSnapshotV2(snapshot, snapshot.stateKind, scope);
   return canonicalClone(snapshot.state);
+}
+
+export function restoreHistoricalModeledExchangeOrdersV2(
+  snapshot: HistoricalSimulationDurableStateSnapshotV2<"MODELED_EXCHANGE">,
+  scope: HistoricalSimulationAtomicScopeV2 & Readonly<{ cycleId: string }>,
+): Map<string, OrderRow> {
+  const state = restoreHistoricalSimulationDurableStateSnapshotV2(snapshot, scope);
+  return new Map(state.openOrders.map(({ contentDigestHex: _digest, createdAt, updatedAt, ...order }) => [
+    order.id, { ...order, createdAt: new Date(createdAt), updatedAt: new Date(updatedAt) },
+  ]));
 }
 
 export function loadValidatedHistoricalSimulationLedgerHeadV2(
@@ -436,8 +526,43 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
       knowledge.checkpointContentDigestHex !== input.knowledgeCheckpointContentDigestHex) {
     throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:KNOWLEDGE_CHECKPOINT_BINDING");
   }
+  const exchange = input.modeledExchangeSnapshot.state as DurableStatePayloadV2["MODELED_EXCHANGE"];
+  const registry = input.modeledExecutionRegistrySnapshot.state as DurableStatePayloadV2["MODELED_EXECUTION_REGISTRY"];
+  const receipts = new Map(registry.receipts.map((receipt) => [receipt.orderId, receipt]));
+  if (receipts.size !== registry.receipts.length) {
+    throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:EXECUTION_REGISTRY_DUPLICATE");
+  }
+  const orders = new Map(exchange.openOrders.map((order) => [order.id, order]));
+  for (const checkpointOrder of exchange.checkpoint.openOrders) {
+    const order = orders.get(checkpointOrder.orderId);
+    const receipt = receipts.get(checkpointOrder.orderId);
+    const expectedModeledOrderDigest = receipt ? computeSemanticSha256Hex({
+      schemaVersion: "waia.trader.historical_modeled_order.v2", source: "MODELED_HISTORICAL",
+      capitalEligible: false, orderId: receipt.orderId, executionAttemptId: receipt.executionAttemptId,
+      executionAttemptContentDigestHex: receipt.executionAttemptContentDigestHex,
+      decisionContentDigestHex: receipt.decisionContentDigestHex, symbol: receipt.symbol,
+      side: receipt.side, quantity: receipt.quantity,
+    }) : null;
+    if (!order || !receipt || receipt.orderContentDigestHex !== expectedModeledOrderDigest ||
+        receipt.quantity !== order.quantity || receipt.side !== order.side || receipt.symbol !== order.symbol ||
+        receipt.decisionBarIndex !== checkpointOrder.windowEndBarIndex - 3 ||
+        Date.parse(receipt.acceptedAtUtc) !== checkpointOrder.acceptedAtTs ||
+        parseDecimal(checkpointOrder.remainingQty) + parseDecimal(checkpointOrder.filledQty) !== parseDecimal(order.quantity) ||
+        parseDecimal(checkpointOrder.filledQty) !== parseDecimal(order.filledQuantity) ||
+        checkpointOrder.fillSequence < 0 ||
+        !["ACCEPTED", "PARTIALLY_FILLED", "CANCEL_REQUESTED"].includes(order.state)) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:EXCHANGE_REGISTRY_PARITY");
+    }
+  }
   for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) {
     validateStageBundle(input.stageBundles[stage], stage, input.ledgerEntry, input.scope);
+  }
+  const hasArtifactDigest = (stage: HistoricalSimulationAtomicStageV2, digest: string) =>
+    input.stageBundles[stage].artifacts.some((artifact) => artifact.contentDigestHex === digest);
+  if (!hasArtifactDigest("ACCOUNTING", input.ledgerEntry.accounting.frontierContentDigestHex) ||
+      !hasArtifactDigest("GUARDIAN", input.ledgerEntry.guardian.assessmentContentDigestHex) ||
+      !hasArtifactDigest("KNOWLEDGE", input.knowledgeCheckpointContentDigestHex)) {
+    throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:DOMAIN_STAGE_BINDING");
   }
   return input.repository.transaction(async (tx) => {
     const entries = await tx.loadLedgerChain(input.scope);
@@ -511,11 +636,11 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
     };
     const cursor = Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
     validateHistoricalSimulationResumeCursorV2(cursor, input.scope);
+    await tx.appendLedger(input.ledgerEntry);
     for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) {
       const bundle = input.stageBundles[stage];
       await tx.persistStageBundle(bundle);
     }
-    await tx.appendLedger(input.ledgerEntry);
     await tx.saveResumeCursor(cursor);
     return cursor;
   });

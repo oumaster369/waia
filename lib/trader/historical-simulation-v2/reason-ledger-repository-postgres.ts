@@ -60,7 +60,8 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
     const sql = tx as unknown as postgres.Sql;
     const existing = await sql<{ content_digest_hex: string }[]>`
       SELECT content_digest_hex FROM trader_historical_simulation_reason_ledger_v2
-      WHERE organization_id=${entry.organizationId} AND run_id=${entry.runId} AND cycle_sequence=${entry.cycleSequence}
+      WHERE organization_id=${entry.organizationId} AND account_id=${entry.accountId}
+        AND run_id=${entry.runId} AND cycle_sequence=${entry.cycleSequence}
       FOR UPDATE
     `;
     if (existing[0]) {
@@ -69,7 +70,8 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
     }
     const prior = entry.cycleSequence === 0 ? [] : await sql<{ content_digest_hex: string }[]>`
       SELECT content_digest_hex FROM trader_historical_simulation_reason_ledger_v2
-      WHERE organization_id=${entry.organizationId} AND run_id=${entry.runId} AND cycle_sequence=${entry.cycleSequence - 1}
+      WHERE organization_id=${entry.organizationId} AND account_id=${entry.accountId}
+        AND run_id=${entry.runId} AND cycle_sequence=${entry.cycleSequence - 1}
       FOR UPDATE
     `;
     if (entry.cycleSequence === 0 ? entry.previousContentDigestHex !== null : prior[0]?.content_digest_hex !== entry.previousContentDigestHex) {
@@ -77,11 +79,11 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
     }
     await sql`
       INSERT INTO trader_historical_simulation_reason_ledger_v2 (
-        entry_id, organization_id, run_id, cycle_id, cycle_sequence, symbol, partition, capital_eligible,
+        entry_id, organization_id, account_id, run_id, cycle_id, cycle_sequence, symbol, partition, capital_eligible,
         replay_bar_closed_at_utc, dataset_membership_content_digest_hex, dataset_membership_json, previous_content_digest_hex, forecast_json, decision_json, portfolio_json,
         risk_json, execution_json, observed_execution_effects_json, accounting_json, guardian_json, learning_json, content_digest_hex
       ) VALUES (
-        ${entry.entryId}, ${entry.organizationId}, ${entry.runId}, ${entry.cycleId}, ${entry.cycleSequence}, ${entry.symbol},
+        ${entry.entryId}, ${entry.organizationId}, ${entry.accountId}, ${entry.runId}, ${entry.cycleId}, ${entry.cycleSequence}, ${entry.symbol},
         ${entry.partition}, false, ${entry.replayBarClosedAtUtc}, ${entry.datasetMembership.contentDigestHex}, ${sql.json(entry.datasetMembership)}, ${entry.previousContentDigestHex},
         ${sql.json(entry.forecast)}, ${sql.json(entry.decision)}, ${sql.json(entry.portfolio)}, ${sql.json(entry.risk)},
         ${sql.json(entry.execution)}, ${sql.json(entry.observedExecutionEffects)}, ${sql.json(entry.accounting)}, ${sql.json(entry.guardian)}, ${sql.json(entry.learning)},
@@ -106,10 +108,11 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
 export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
   sql: postgres.Sql;
   organizationId: string;
+  accountId: string;
   runId: string;
 }): Promise<readonly HistoricalSimulationReasonLedgerV2[]> {
   type LedgerRow = Record<string, unknown> & {
-    entry_id: string; organization_id: string; run_id: string; cycle_id: string; cycle_sequence: number;
+    entry_id: string; organization_id: string; account_id: string; run_id: string; cycle_id: string; cycle_sequence: number;
     symbol: string; partition: "DEVELOPMENT" | "WALK_FORWARD"; replay_bar_closed_at_utc: string | Date;
     dataset_membership_content_digest_hex: string;
     dataset_membership_json: HistoricalSimulationReasonLedgerV2["datasetMembership"];
@@ -122,7 +125,7 @@ export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
   };
   const rows = await input.sql<LedgerRow[]>`
     SELECT * FROM trader_historical_simulation_reason_ledger_v2
-    WHERE organization_id=${input.organizationId} AND run_id=${input.runId}
+    WHERE organization_id=${input.organizationId} AND account_id=${input.accountId} AND run_id=${input.runId}
     ORDER BY cycle_sequence
   `;
   return rows.map((row) => {
@@ -130,6 +133,7 @@ export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
       schemaVersion: "waia.trader.historical_simulation_reason_ledger.v2",
       entryId: row.entry_id,
       organizationId: row.organization_id,
+      accountId: row.account_id,
       runId: row.run_id,
       cycleId: row.cycle_id,
       cycleSequence: row.cycle_sequence,

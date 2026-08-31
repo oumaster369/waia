@@ -4314,6 +4314,7 @@ export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
   {
     entryId: text("entry_id").primaryKey(),
     organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
     runId: text("run_id").notNull(),
     cycleId: text("cycle_id").notNull(),
     cycleSequence: integer("cycle_sequence").notNull(),
@@ -4337,8 +4338,10 @@ export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    unique("historical_sim_v2_org_run_sequence_unique").on(t.organizationId, t.runId, t.cycleSequence),
+    unique("historical_sim_v2_scope_sequence_unique").on(t.organizationId, t.accountId, t.runId, t.cycleSequence),
     unique("historical_sim_v2_entry_org_unique").on(t.entryId, t.organizationId),
+    unique("historical_sim_v2_entry_scope_unique").on(t.entryId, t.organizationId, t.accountId),
+    unique("historical_sim_v2_atomic_lineage_unique").on(t.entryId, t.organizationId, t.accountId, t.runId, t.cycleSequence, t.cycleId, t.contentDigestHex),
     uniqueIndex("historical_sim_v2_org_digest_unique").on(t.organizationId, t.contentDigestHex),
     index("historical_sim_v2_org_run_bar_idx").on(t.organizationId, t.runId, t.replayBarClosedAtUtc),
     check("historical_sim_v2_preholdout_only", sql`${t.partition} IN ('DEVELOPMENT','WALK_FORWARD')`),
@@ -4369,6 +4372,95 @@ export const traderHistoricalSimulationModeledEvidenceV2 = pgTable(
     check("historical_sim_modeled_evidence_kind", sql`${t.evidenceKind} IN ('RISK','EXECUTION','GUARDIAN','FILL')`),
     check("historical_sim_modeled_evidence_never_capital", sql`${t.capitalEligible} = false`),
     check("historical_sim_modeled_evidence_nonnegative_ordinal", sql`${t.evidenceOrdinal} >= 0`),
+  ],
+);
+
+export const traderHistoricalSimulationAtomicStageV2 = pgTable(
+  "trader_historical_simulation_atomic_stage_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(), runId: text("run_id").notNull(),
+    cycleSequence: integer("cycle_sequence").notNull(), cycleId: text("cycle_id").notNull(),
+    stage: text("stage").notNull(), ledgerEntryId: text("ledger_entry_id").notNull(),
+    ledgerEntryContentDigestHex: text("ledger_entry_content_digest_hex").notNull(),
+    artifactsJson: jsonb("artifacts_json").notNull(), bundleContentDigestHex: text("bundle_content_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId, t.runId, t.cycleSequence, t.stage] }),
+    unique("historical_sim_atomic_stage_digest_unique").on(t.organizationId, t.accountId, t.runId, t.cycleSequence, t.stage, t.bundleContentDigestHex),
+    foreignKey({ columns: [t.ledgerEntryId, t.organizationId, t.accountId, t.runId, t.cycleSequence, t.cycleId, t.ledgerEntryContentDigestHex], foreignColumns: [traderHistoricalSimulationReasonLedgerV2.entryId, traderHistoricalSimulationReasonLedgerV2.organizationId, traderHistoricalSimulationReasonLedgerV2.accountId, traderHistoricalSimulationReasonLedgerV2.runId, traderHistoricalSimulationReasonLedgerV2.cycleSequence, traderHistoricalSimulationReasonLedgerV2.cycleId, traderHistoricalSimulationReasonLedgerV2.contentDigestHex] }),
+  ],
+);
+
+export const traderHistoricalSimulationDurableSnapshotV2 = pgTable(
+  "trader_historical_simulation_durable_snapshot_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(), runId: text("run_id").notNull(),
+    cycleSequence: integer("cycle_sequence").notNull(), cycleId: text("cycle_id").notNull(),
+    stateKind: text("state_kind").notNull(), ledgerEntryId: text("ledger_entry_id").notNull(),
+    ledgerEntryContentDigestHex: text("ledger_entry_content_digest_hex").notNull(),
+    stateJson: jsonb("state_json").notNull(), snapshotContentDigestHex: text("snapshot_content_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId, t.runId, t.cycleSequence, t.stateKind] }),
+    unique("historical_sim_snapshot_digest_unique").on(t.organizationId, t.accountId, t.runId, t.cycleSequence, t.stateKind, t.snapshotContentDigestHex),
+    foreignKey({ columns: [t.ledgerEntryId, t.organizationId, t.accountId, t.runId, t.cycleSequence, t.cycleId, t.ledgerEntryContentDigestHex], foreignColumns: [traderHistoricalSimulationReasonLedgerV2.entryId, traderHistoricalSimulationReasonLedgerV2.organizationId, traderHistoricalSimulationReasonLedgerV2.accountId, traderHistoricalSimulationReasonLedgerV2.runId, traderHistoricalSimulationReasonLedgerV2.cycleSequence, traderHistoricalSimulationReasonLedgerV2.cycleId, traderHistoricalSimulationReasonLedgerV2.contentDigestHex] }),
+  ],
+);
+
+export const traderHistoricalSimulationResumeCheckpointV2 = pgTable(
+  "trader_historical_simulation_resume_checkpoint_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(), runId: text("run_id").notNull(), split: text("split").notNull(),
+    committedCycleSequence: integer("committed_cycle_sequence").notNull(), committedCycleId: text("committed_cycle_id").notNull(),
+    ledgerEntryId: text("ledger_entry_id").notNull(), ledgerHeadContentDigestHex: text("ledger_head_content_digest_hex").notNull(),
+    nextRecordIndex: integer("next_record_index").notNull(), nextCycleSequence: integer("next_cycle_sequence").notNull(),
+    datasetAuthorityJson: jsonb("dataset_authority_json").notNull(), stageDigestJson: jsonb("stage_digest_json").notNull(),
+    snapshotDigestJson: jsonb("snapshot_digest_json").notNull(), checkpointJson: jsonb("checkpoint_json").notNull(),
+    checkpointContentDigestHex: text("checkpoint_content_digest_hex").notNull(), schemaVersion: text("schema_version").notNull(),
+    commitRequestDigestHex: text("commit_request_digest_hex").notNull(),
+    commitRequestJson: jsonb("commit_request_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence] }),
+    unique("historical_sim_resume_next_sequence_unique").on(t.organizationId, t.accountId, t.runId, t.nextCycleSequence),
+    foreignKey({ columns: [t.ledgerEntryId, t.organizationId, t.accountId, t.runId, t.committedCycleSequence, t.committedCycleId, t.ledgerHeadContentDigestHex], foreignColumns: [traderHistoricalSimulationReasonLedgerV2.entryId, traderHistoricalSimulationReasonLedgerV2.organizationId, traderHistoricalSimulationReasonLedgerV2.accountId, traderHistoricalSimulationReasonLedgerV2.runId, traderHistoricalSimulationReasonLedgerV2.cycleSequence, traderHistoricalSimulationReasonLedgerV2.cycleId, traderHistoricalSimulationReasonLedgerV2.contentDigestHex] }),
+    index("historical_sim_resume_latest_idx").on(t.organizationId, t.accountId, t.runId, t.committedCycleSequence),
+  ],
+);
+
+export const traderHistoricalSimulationResumeStageLinkV2 = pgTable(
+  "trader_historical_simulation_resume_stage_link_v2",
+  {
+    organizationId: uuid("organization_id").notNull(), accountId: text("account_id").notNull(),
+    runId: text("run_id").notNull(), committedCycleSequence: integer("committed_cycle_sequence").notNull(),
+    stage: text("stage").notNull(), bundleContentDigestHex: text("bundle_content_digest_hex").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence, t.stage] }),
+    foreignKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence], foreignColumns: [traderHistoricalSimulationResumeCheckpointV2.organizationId, traderHistoricalSimulationResumeCheckpointV2.accountId, traderHistoricalSimulationResumeCheckpointV2.runId, traderHistoricalSimulationResumeCheckpointV2.committedCycleSequence] }),
+    foreignKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence, t.stage, t.bundleContentDigestHex], foreignColumns: [traderHistoricalSimulationAtomicStageV2.organizationId, traderHistoricalSimulationAtomicStageV2.accountId, traderHistoricalSimulationAtomicStageV2.runId, traderHistoricalSimulationAtomicStageV2.cycleSequence, traderHistoricalSimulationAtomicStageV2.stage, traderHistoricalSimulationAtomicStageV2.bundleContentDigestHex] }),
+  ],
+);
+
+export const traderHistoricalSimulationResumeSnapshotLinkV2 = pgTable(
+  "trader_historical_simulation_resume_snapshot_link_v2",
+  {
+    organizationId: uuid("organization_id").notNull(), accountId: text("account_id").notNull(),
+    runId: text("run_id").notNull(), committedCycleSequence: integer("committed_cycle_sequence").notNull(),
+    stateKind: text("state_kind").notNull(), snapshotContentDigestHex: text("snapshot_content_digest_hex").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence, t.stateKind] }),
+    foreignKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence], foreignColumns: [traderHistoricalSimulationResumeCheckpointV2.organizationId, traderHistoricalSimulationResumeCheckpointV2.accountId, traderHistoricalSimulationResumeCheckpointV2.runId, traderHistoricalSimulationResumeCheckpointV2.committedCycleSequence] }),
+    foreignKey({ columns: [t.organizationId, t.accountId, t.runId, t.committedCycleSequence, t.stateKind, t.snapshotContentDigestHex], foreignColumns: [traderHistoricalSimulationDurableSnapshotV2.organizationId, traderHistoricalSimulationDurableSnapshotV2.accountId, traderHistoricalSimulationDurableSnapshotV2.runId, traderHistoricalSimulationDurableSnapshotV2.cycleSequence, traderHistoricalSimulationDurableSnapshotV2.stateKind, traderHistoricalSimulationDurableSnapshotV2.snapshotContentDigestHex] }),
   ],
 );
 

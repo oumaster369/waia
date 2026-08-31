@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createHistoricalModeledCapitalBindingV2, createHistoricalModeledExecutionRegistryV2 } from "@/lib/trader/historical-simulation-v2/modeled-capital-binding-v2";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { createHistoricalSimulationDurableStateSnapshotV2,
+  validateHistoricalSimulationDurableStateSnapshotV2,
+} from "@/lib/trader/historical-simulation-v2/atomic-cycle-commit-v2";
 
 const digest = (value: string) => value.repeat(64);
 const membershipBody = { schemaVersion: "waia.trader.historical_dataset_membership.v2" as const, organizationId: "org-1", cycleId: "cycle-1", manifestSemanticDigestHex: digest("1"), sealReceiptDigestHex: digest("2"), partitionDigestHex: digest("3"), partitionRawSha256Hex: digest("4"), partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const, recordIndex: 0, barContentDigestHex: digest("5"), sealedCycleContentDigestHex: digest("6") };
@@ -73,6 +76,14 @@ describe("historical modeled capital binding v2", () => {
     expect(registered).toHaveLength(2);
     expect(evidence.every((row) => row.source === "MODELED_HISTORICAL" && row.capitalEligible === false)).toBe(true);
     expect(new Set(evidence.map((row) => row.schemaVersion))).not.toContain("reality-projection/v2");
+    const executionReceipts = evidence.filter((row) =>
+      row.schemaVersion === "waia.trader.historical_modeled_execution.v2");
+    expect(executionReceipts).toHaveLength(2);
+    const registrySnapshot = createHistoricalSimulationDurableStateSnapshotV2({ organizationId: "org-1",
+      accountId: "account-1", runId: "run-1", split: "DEVELOPMENT", cycleId: "cycle-1",
+      stateKind: "MODELED_EXECUTION_REGISTRY", state: { receipts: [executionReceipts[0]!] as never } });
+    expect(() => validateHistoricalSimulationDurableStateSnapshotV2(registrySnapshot,
+      "MODELED_EXECUTION_REGISTRY")).not.toThrow();
     expect(canonicalReality).not.toHaveBeenCalled();
     expect(canonicalRisk).not.toHaveBeenCalled();
     expect(canonicalGuardian).not.toHaveBeenCalled();

@@ -44,7 +44,9 @@ export type HistoricalModeledRiskReceiptV2 = ModeledSource & Readonly<{
 export type HistoricalModeledExecutionReceiptV2 = ModeledSource & Readonly<{
   schemaVersion: typeof HISTORICAL_MODELED_EXECUTION_V2_SCHEMA;
   executionPlanId: string;
+  executionPlanContentDigestHex: string;
   executionAttemptId: string;
+  executionAttemptContentDigestHex: string;
   orderId: string;
   orderContentDigestHex: string;
   decisionId: string;
@@ -281,12 +283,24 @@ export function createHistoricalModeledCapitalBindingV2(
     });
     const executionAttemptId = deterministicExecutionUuidV2("attempt", { executionPlanId });
     const orderId = deterministicExecutionUuidV2("order", { executionAttemptId });
+    const executionPlanContentDigestHex = computeSemanticSha256Hex({
+      schemaVersion: "waia.trader.historical_modeled_execution_plan.v2", source: "MODELED_HISTORICAL",
+      capitalEligible: false, executionPlanId, decisionId: args.decisionId,
+      decisionContentDigestHex: args.decisionContentDigestHex, riskReceiptContentDigestHex: risk.contentDigestHex,
+      symbol: args.cycle.symbol, side: args.side, quantity: args.quantity,
+    });
+    const executionAttemptContentDigestHex = computeSemanticSha256Hex({
+      schemaVersion: "waia.trader.historical_modeled_execution_attempt.v2", source: "MODELED_HISTORICAL",
+      capitalEligible: false, executionAttemptId, executionPlanId, executionPlanContentDigestHex,
+      acceptedAtUtc: args.cycle.observedAt,
+    });
     const orderContentDigestHex = computeSemanticSha256Hex({
       schemaVersion: "waia.trader.historical_modeled_order.v2",
       source: "MODELED_HISTORICAL",
       capitalEligible: false,
       orderId,
       executionAttemptId,
+      executionAttemptContentDigestHex,
       decisionContentDigestHex: args.decisionContentDigestHex,
       symbol: args.cycle.symbol,
       side: args.side,
@@ -297,7 +311,9 @@ export function createHistoricalModeledCapitalBindingV2(
       source: "MODELED_HISTORICAL" as const,
       capitalEligible: false as const,
       executionPlanId,
+      executionPlanContentDigestHex,
       executionAttemptId,
+      executionAttemptContentDigestHex,
       orderId,
       orderContentDigestHex,
       decisionId: args.decisionId,
@@ -345,9 +361,9 @@ export function createHistoricalModeledCapitalBindingV2(
         riskAllowanceContentDigestHex: permission.riskAllowanceContentDigestHex,
         riskAllowanceOrderBindingDigestHex: receipt.riskReceiptContentDigestHex,
         executionPlanId: receipt.executionPlanId,
-        executionPlanContentDigestHex: receipt.contentDigestHex,
+        executionPlanContentDigestHex: receipt.executionPlanContentDigestHex,
         executionAttemptId: receipt.executionAttemptId,
-        executionAttemptContentDigestHex: receipt.contentDigestHex,
+        executionAttemptContentDigestHex: receipt.executionAttemptContentDigestHex,
         submittedQuantity: receipt.quantity,
         execution: { status: "submitted" as const, order },
       });
@@ -378,7 +394,10 @@ export function createHistoricalModeledCapitalBindingV2(
       const execution = await executeModeled({ cycle, decisionId: proposal.decisionContentDigestHex, decisionContentDigestHex: proposal.decisionContentDigestHex, allowanceId: risk.riskAllowanceId!, side: "sell", quantity: proposal.quantity! });
       return Object.freeze({
         risk: { status: "APPROVE", reasonCodes: [], verdictContentDigestHex: risk.contentDigestHex, allowanceContentDigestHex: risk.riskAllowanceContentDigestHex },
-        execution: { status: "COMMITTED", reasonCodes: [], planContentDigestHex: execution.contentDigestHex, attemptContentDigestHex: execution.contentDigestHex, reportContentDigestHex: null, fillContentDigestHexes: [] },
+        execution: { status: "COMMITTED", reasonCodes: [],
+          planContentDigestHex: execution.executionPlanContentDigestHex,
+          attemptContentDigestHex: execution.executionAttemptContentDigestHex,
+          reportContentDigestHex: null, fillContentDigestHexes: [] },
       });
     },
   };

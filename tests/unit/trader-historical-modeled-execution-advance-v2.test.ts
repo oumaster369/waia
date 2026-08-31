@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { assertHistoricalSimulationFillDetailParityV2 } from "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
 
 import { createAccountingFrontierRepositoryMemory } from "@/lib/trader/accounting/accounting-frontier-repository-postgres";
 import { advanceAccountingFrontier, createInitialAccountingState } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
@@ -50,7 +52,8 @@ describe("historical modeled execution advance v2", () => {
     executionRegistry.register({
       schemaVersion: "waia.trader.historical_modeled_execution.v2",
       source: "MODELED_HISTORICAL", capitalEligible: false,
-      executionPlanId: "plan-1", executionAttemptId: "attempt-1", orderId: sourceOrder.id,
+      executionPlanId: "plan-1", executionPlanContentDigestHex: "1".repeat(64),
+      executionAttemptId: "attempt-1", executionAttemptContentDigestHex: "2".repeat(64), orderId: sourceOrder.id,
       orderContentDigestHex: "d".repeat(64),
       decisionId: "decision-0", decisionContentDigestHex: "c".repeat(64),
       riskReceiptContentDigestHex: "a".repeat(64), symbol: "BTCUSDT", side: "buy", quantity: "0.1",
@@ -60,7 +63,8 @@ describe("historical modeled execution advance v2", () => {
     executionRegistry.register({
       schemaVersion: "waia.trader.historical_modeled_execution.v2",
       source: "MODELED_HISTORICAL", capitalEligible: false,
-      executionPlanId: "plan-current", executionAttemptId: "attempt-current", orderId: currentOrder.id,
+      executionPlanId: "plan-current", executionPlanContentDigestHex: "3".repeat(64),
+      executionAttemptId: "attempt-current", executionAttemptContentDigestHex: "4".repeat(64), orderId: currentOrder.id,
       orderContentDigestHex: "e".repeat(64), decisionId: "decision-current",
       decisionContentDigestHex: "f".repeat(64), riskReceiptContentDigestHex: "a".repeat(64),
       symbol: "BTCUSDT", side: "buy", quantity: "0.1", decisionBarIndex: 1,
@@ -103,6 +107,24 @@ describe("historical modeled execution advance v2", () => {
     });
     const result = await advance("cycle-1");
     expect(result.fillCount).toBe(1);
+    expect(result.fillDetails).toEqual([expect.objectContaining({
+      evidence: result.fillEvidence[0],
+      event: expect.objectContaining({ orderId: "order-1", sliceQuantity: "0.1", fillSequence: 1,
+        acceptedAt: sourceOrder.createdAt.toISOString(), fillTimestamp: observedAt }),
+      economics: expect.objectContaining({ quantity: "0.1", grossFillPrice: "100",
+        economicsContentDigest: result.fillEvidence[0]!.economicsContentDigestHex }),
+      contentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
+    })]);
+    const detail = result.fillDetails[0]!;
+    expect(() => assertHistoricalSimulationFillDetailParityV2({ organizationId: "org-1", cycleId: "cycle-1",
+      orderId: "order-1", symbol: "BTCUSDT", side: "buy", evidence: detail.evidence,
+      detail, consumedFillIds: detail.accountingFrontier.consumedFillIds })).not.toThrow();
+    const divergentBody = { ...detail, event: { ...detail.event, sliceQuantity: "0.2" } };
+    delete (divergentBody as { contentDigestHex?: string }).contentDigestHex;
+    const divergent = { ...divergentBody, contentDigestHex: computeSemanticSha256Hex(divergentBody) };
+    expect(() => assertHistoricalSimulationFillDetailParityV2({ organizationId: "org-1", cycleId: "cycle-1",
+      orderId: "order-1", symbol: "BTCUSDT", side: "buy", evidence: detail.evidence,
+      detail: divergent, consumedFillIds: detail.accountingFrontier.consumedFillIds })).toThrow("MODELED_FILL_DETAIL_SOURCE");
     expect(result.effects).toEqual([expect.objectContaining({
       cycleId: "cycle-1", orderId: "order-1", executionPlanId: "plan-1", status: "FILLED",
       decisionId: "decision-0", decisionContentDigestHex: "c".repeat(64),

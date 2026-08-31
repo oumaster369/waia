@@ -1317,6 +1317,13 @@
       "when": 1780000000187,
       "tag": "0187_canonical_decision_verification_receipt_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1780000000188,
+      "tag": "0188_historical_simulation_atomic_cycle_resume_v2",
+      "breakpoints": true
     }
   ]
 }
