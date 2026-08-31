@@ -3,19 +3,19 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  createHistoricalSimulationV2ProductionGraphFoundation,
-  type HistoricalSimulationV2ProductionGraphFoundationInput,
+  createHistoricalSimulationV2ProductionGraphPrerequisite,
+  type HistoricalSimulationV2ProductionGraphPrerequisiteInput,
 } from "@/lib/trader/historical-simulation-v2/production-graph-foundation-v2";
 
 const base = {
   sql: vi.fn() as never,
   repoRoot: "/repo", datasetRoot: "/dataset", organizationId: "org", accountId: "account",
   runId: "run", partition: "DEVELOPMENT", symbol: "BTCUSDT", defaultQuantity: "0.01",
-} satisfies HistoricalSimulationV2ProductionGraphFoundationInput;
+} satisfies HistoricalSimulationV2ProductionGraphPrerequisiteInput;
 
-describe("Historical Simulation V2 closed production graph foundation", () => {
+describe("Historical Simulation V2 production graph prerequisite", () => {
   it("accepts only data configuration and exposes a frozen branded graph", () => {
-    const graph = createHistoricalSimulationV2ProductionGraphFoundation(base);
+    const graph = createHistoricalSimulationV2ProductionGraphPrerequisite(base);
     expect(Object.isFrozen(graph)).toBe(true);
     expect(Object.isFrozen(graph.scope)).toBe(true);
     expect(graph.scope).toEqual(expect.objectContaining({ runId: "run", partition: "DEVELOPMENT" }));
@@ -29,12 +29,11 @@ describe("Historical Simulation V2 closed production graph foundation", () => {
   });
 
   it("does not admit arbitrary production closures at the type boundary", () => {
-    const injected: HistoricalSimulationV2ProductionGraphFoundationInput = {
+    const injected: HistoricalSimulationV2ProductionGraphPrerequisiteInput = {
       ...base,
       // @ts-expect-error production graph never accepts an injected capital implementation
       capital: { resolveLedgerProjection: async () => ({}) },
     };
-    expect("capital" in createHistoricalSimulationV2ProductionGraphFoundation(injected)).toBe(false);
+    expect("capital" in createHistoricalSimulationV2ProductionGraphPrerequisite(injected)).toBe(false);
   });
 });
-
