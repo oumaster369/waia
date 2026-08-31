@@ -78,11 +78,11 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
     await sql`
       INSERT INTO trader_historical_simulation_reason_ledger_v2 (
         entry_id, organization_id, run_id, cycle_id, cycle_sequence, symbol, partition, capital_eligible,
-        replay_bar_closed_at_utc, previous_content_digest_hex, forecast_json, decision_json, portfolio_json,
+        replay_bar_closed_at_utc, dataset_membership_content_digest_hex, dataset_membership_json, previous_content_digest_hex, forecast_json, decision_json, portfolio_json,
         risk_json, execution_json, observed_execution_effects_json, accounting_json, guardian_json, learning_json, content_digest_hex
       ) VALUES (
         ${entry.entryId}, ${entry.organizationId}, ${entry.runId}, ${entry.cycleId}, ${entry.cycleSequence}, ${entry.symbol},
-        ${entry.partition}, false, ${entry.replayBarClosedAtUtc}, ${entry.previousContentDigestHex},
+        ${entry.partition}, false, ${entry.replayBarClosedAtUtc}, ${entry.datasetMembership.contentDigestHex}, ${sql.json(entry.datasetMembership)}, ${entry.previousContentDigestHex},
         ${sql.json(entry.forecast)}, ${sql.json(entry.decision)}, ${sql.json(entry.portfolio)}, ${sql.json(entry.risk)},
         ${sql.json(entry.execution)}, ${sql.json(entry.observedExecutionEffects)}, ${sql.json(entry.accounting)}, ${sql.json(entry.guardian)}, ${sql.json(entry.learning)},
         ${entry.contentDigestHex}
@@ -111,6 +111,8 @@ export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
   type LedgerRow = Record<string, unknown> & {
     entry_id: string; organization_id: string; run_id: string; cycle_id: string; cycle_sequence: number;
     symbol: string; partition: "DEVELOPMENT" | "WALK_FORWARD"; replay_bar_closed_at_utc: string | Date;
+    dataset_membership_content_digest_hex: string;
+    dataset_membership_json: HistoricalSimulationReasonLedgerV2["datasetMembership"];
     previous_content_digest_hex: string | null; forecast_json: HistoricalSimulationReasonLedgerV2["forecast"];
     decision_json: HistoricalSimulationReasonLedgerV2["decision"]; portfolio_json: HistoricalSimulationReasonLedgerV2["portfolio"];
     risk_json: HistoricalSimulationReasonLedgerV2["risk"]; execution_json: HistoricalSimulationReasonLedgerV2["execution"];
@@ -135,6 +137,7 @@ export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
       partition: row.partition,
       capitalEligible: false,
       replayBarClosedAtUtc: new Date(row.replay_bar_closed_at_utc).toISOString(),
+      datasetMembership: row.dataset_membership_json,
       previousContentDigestHex: row.previous_content_digest_hex,
       forecast: row.forecast_json,
       decision: row.decision_json,

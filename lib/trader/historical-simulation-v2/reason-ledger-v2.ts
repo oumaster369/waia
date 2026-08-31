@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { HISTORICAL_DATASET_MEMBERSHIP_V2, type HistoricalDatasetMembershipV2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 
 export const HISTORICAL_SIMULATION_REASON_LEDGER_V2_SCHEMA =
   "waia.trader.historical_simulation_reason_ledger.v2" as const;
@@ -23,6 +24,7 @@ export type HistoricalSimulationReasonLedgerV2 = Readonly<{
   partition: HistoricalSimulationPreHoldoutPartitionV2;
   capitalEligible: false;
   replayBarClosedAtUtc: string;
+  datasetMembership: HistoricalDatasetMembershipV2;
   previousContentDigestHex: string | null;
   forecast: EvidenceStageV2<"AUTHORIZED" | "NON_ACTIONABLE"> &
     Readonly<{ authorityContentDigestHex: string | null }>;
@@ -133,6 +135,15 @@ function assertComplete(input: HistoricalSimulationReasonLedgerV2Draft): void {
     throw new Error("only DEVELOPMENT/WALK_FORWARD partitions are permitted");
   }
   const replayEpoch = requireUtc(input.replayBarClosedAtUtc, "replayBarClosedAtUtc")!;
+  const membership = input.datasetMembership;
+  const { contentDigestHex: membershipDigest, ...membershipBody } = membership;
+  requireDigest(membershipDigest, "datasetMembership.contentDigestHex");
+  if (membership.schemaVersion !== HISTORICAL_DATASET_MEMBERSHIP_V2 ||
+      computeSemanticSha256Hex(membershipBody) !== membershipDigest ||
+      membership.organizationId !== input.organizationId || membership.cycleId !== input.cycleId ||
+      membership.symbol !== input.symbol.replace("/", "") || membership.partition !== input.partition) {
+    throw new Error("dataset membership scope/content mismatch");
+  }
   requireDigest(input.previousContentDigestHex, "previousContentDigestHex", true);
 
   requireDigest(input.forecast.authorityContentDigestHex, "forecast.authorityContentDigestHex", true);

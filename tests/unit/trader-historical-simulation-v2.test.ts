@@ -28,6 +28,7 @@ import type {
 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import type { HistoricalSimulationReasonLedgerV2 } from "@/lib/trader/historical-simulation-v2/reason-ledger-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const digest = (character: string) => character.repeat(64);
@@ -37,13 +38,16 @@ const times = [
   "2026-01-01T00:02:00.000Z",
 ];
 
-function cycles() {
-  return times.map((observedAt, index) => ({
+function cycles(partition: "DEVELOPMENT" | "WALK_FORWARD" = "WALK_FORWARD") {
+  return times.map((observedAt, index) => {
+    const membershipBody = { schemaVersion: "waia.trader.historical_dataset_membership.v2" as const, organizationId: ORG, cycleId: `cycle-${index}`, manifestSemanticDigestHex: digest("1"), sealReceiptDigestHex: digest("2"), partitionDigestHex: digest("3"), partitionRawSha256Hex: digest("4"), partition, symbol: "BTCUSDT" as const, recordIndex: index, barContentDigestHex: digest("5"), sealedCycleContentDigestHex: digest("6") };
+    return {
     cycleId: `cycle-${index}`,
     observedAt,
     symbol: "BTCUSDT",
     referencePrice: "50000",
-  }));
+    datasetMembership: { ...membershipBody, contentDigestHex: computeSemanticSha256Hex(membershipBody) },
+  }; });
 }
 
 function knowledge(): HistoricalKnowledgePortV2 {
@@ -230,7 +234,7 @@ describe("Historical Simulation V2 composition boundary", () => {
       accountId: "historical-account",
       runId: "run-1",
       authority: "HISTORICAL_SIMULATION_V2" as const,
-      cycles: cycles().slice(0, 1),
+      cycles: cycles("DEVELOPMENT").slice(0, 1),
       defaultQuantity: "0.01",
       knowledge: knowledge(),
       resolveForecastInput: vi.fn(async () => emptyForecast(digest("1"))),
@@ -293,7 +297,7 @@ describe("Historical Simulation V2 composition boundary", () => {
       runId: "run-close",
       split: "development",
       authority: "HISTORICAL_SIMULATION_V2",
-      cycles: cycles().slice(0, 1),
+      cycles: cycles("DEVELOPMENT").slice(0, 1),
       defaultQuantity: "0.01",
       knowledge: knowledge(),
       resolveForecastInput: async () => emptyForecast(digest("1")),

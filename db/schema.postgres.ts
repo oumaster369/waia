@@ -4321,6 +4321,8 @@ export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
     partition: text("partition").notNull(),
     capitalEligible: boolean("capital_eligible").notNull().default(false),
     replayBarClosedAtUtc: timestamp("replay_bar_closed_at_utc", { withTimezone: true, mode: "string" }).notNull(),
+    datasetMembershipContentDigestHex: text("dataset_membership_content_digest_hex").notNull(),
+    datasetMembershipJson: jsonb("dataset_membership_json").notNull(),
     previousContentDigestHex: text("previous_content_digest_hex"),
     forecastJson: jsonb("forecast_json").notNull(),
     decisionJson: jsonb("decision_json").notNull(),

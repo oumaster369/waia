@@ -7,8 +7,13 @@ import {
   validateHistoricalSimulationReasonLedgerV2,
   type HistoricalSimulationReasonLedgerV2Draft,
 } from "@/lib/trader/historical-simulation-v2/reason-ledger-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 const digest = (character: string) => character.repeat(64);
+const membership = () => {
+  const body = { schemaVersion: "waia.trader.historical_dataset_membership.v2" as const, organizationId: "22222222-2222-4222-8222-222222222222", cycleId: "cycle-0", manifestSemanticDigestHex: digest("1"), sealReceiptDigestHex: digest("2"), partitionDigestHex: digest("3"), partitionRawSha256Hex: digest("4"), partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const, recordIndex: 0, barContentDigestHex: digest("5"), sealedCycleContentDigestHex: digest("6") };
+  return { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
+};
 
 function completeDraft(
   patch: Partial<HistoricalSimulationReasonLedgerV2Draft> = {},
@@ -22,6 +27,7 @@ function completeDraft(
     symbol: "BTCUSDT",
     partition: "DEVELOPMENT",
     replayBarClosedAtUtc: "2026-08-01T00:00:00.000Z",
+    datasetMembership: membership(),
     previousContentDigestHex: null,
     forecast: { status: "AUTHORIZED", authorityContentDigestHex: digest("a"), reasonCodes: [] },
     decision: {
@@ -70,6 +76,7 @@ describe("Historical Simulation V2 reason ledger", () => {
       ...genesisDraft,
       entryId: "33333333-3333-4333-8333-333333333333",
       cycleId: "cycle-1",
+      datasetMembership: (() => { const value = membership(); const body = { ...value, cycleId: "cycle-1", partition: "WALK_FORWARD" as const }; const { contentDigestHex: _old, ...unsigned } = body; void _old; return { ...unsigned, contentDigestHex: computeSemanticSha256Hex(unsigned) }; })(),
       replayBarClosedAtUtc: "2026-08-01T00:01:00.000Z",
       partition: "WALK_FORWARD",
     });

@@ -9,7 +9,6 @@ import {
   type RunHistoricalSimulationV2Result,
 } from "@/lib/trader/backtest/historical-simulation-v2";
 import type { HistoricalSimulationReasonLedgerV2 } from "@/lib/trader/historical-simulation-v2/reason-ledger-v2";
-import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
   assertHtxVolumeAuthorityQualified,
 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
@@ -25,6 +24,7 @@ import {
   assertHistoricalMarketCycleV2,
   type HistoricalSealedMarketCycleV2,
 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
+import { bindHistoricalCyclesToSealedDatasetV2, type HistoricalDatasetMembershipV2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 
 export type HistoricalSimulationV2ProductionComposerInput = Readonly<{
   sql: postgres.Sql;
@@ -54,6 +54,7 @@ export type HistoricalSimulationV2ProductionComposerInput = Readonly<{
 function validateCycle(
   cycle: HistoricalSealedMarketCycleV2,
   expected: Pick<HistoricalSimulationV2ProductionComposerInput, "partition" | "symbol">,
+  membership: HistoricalDatasetMembershipV2,
 ): HistoricalSimulationV2Cycle {
   assertHistoricalMarketCycleV2(cycle, cycle.cycleId);
   if (cycle.closedBar.symbol.replace("/", "") !== expected.symbol) {
@@ -75,6 +76,7 @@ function validateCycle(
     observedAt: cycle.closedBar.barCloseTime,
     symbol: cycle.closedBar.symbol,
     referencePrice: String(cycle.closedBar.close),
+    datasetMembership: membership,
   });
 }
 
@@ -91,21 +93,16 @@ export async function runHistoricalSimulationV2Production(
   if (input.partition !== "DEVELOPMENT" && input.partition !== "WALK_FORWARD") {
     throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:BLIND_HOLDOUT");
   }
-  const sealed = assertFhvDatasetSealed(input.datasetRoot);
-  if (
-    sealed.manifest.organizationId !== input.organizationId ||
-    !sealed.manifest.partitions.some((entry) =>
-      entry.partition === (input.partition === "DEVELOPMENT" ? "development" : "walk-forward") &&
-      entry.symbol === input.symbol)
-  ) {
-    throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:SEALED_DATASET_SCOPE");
-  }
-
   const cycleById = new Map(input.cycles.map((cycle) => [cycle.cycleId, cycle]));
   if (cycleById.size !== input.cycles.length) {
     throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DUPLICATE_CYCLE");
   }
-  const cycles = input.cycles.map((cycle) => validateCycle(cycle, input));
+  const memberships = await bindHistoricalCyclesToSealedDatasetV2(input);
+  const cycles = input.cycles.map((cycle) => {
+    const membership = memberships.get(cycle.cycleId);
+    if (!membership) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DATASET_MEMBERSHIP_MISSING");
+    return validateCycle(cycle, input, membership);
+  });
   const knowledge = createHistoricalSimulationPostgresKnowledgePortV2({
     sql: input.sql,
     organizationId: input.organizationId,

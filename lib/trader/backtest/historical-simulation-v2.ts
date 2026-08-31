@@ -17,6 +17,7 @@ import {
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { evaluateDecisionEconomicsV2ForSemanticMode } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
 import type { DecisionEconomicEvaluationInputV2 } from "@/lib/trader/intelligence/decision-economics/dee660-decision-evaluation-contract-v1";
+import type { HistoricalDatasetMembershipV2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 
 export const HISTORICAL_SIMULATION_V2_SCHEMA_VERSION =
   "waia.trader.historical_simulation.v2" as const;
@@ -26,6 +27,7 @@ export type HistoricalSimulationV2Cycle = Readonly<{
   observedAt: string;
   symbol: string;
   referencePrice: string;
+  datasetMembership: HistoricalDatasetMembershipV2;
 }>;
 
 export type HistoricalKnowledgeSnapshotV2 = Readonly<{
@@ -224,6 +226,9 @@ function requireChronology(cycles: readonly HistoricalSimulationV2Cycle[]): void
   for (const cycle of cycles) {
     requireIdentity(cycle.cycleId, "cycleId");
     requireIdentity(cycle.symbol, "symbol");
+    if (!DIGEST.test(cycle.datasetMembership.contentDigestHex)) {
+      throw new Error("HISTORICAL_SIMULATION_V2_INVALID:datasetMembership");
+    }
     const epoch = Date.parse(cycle.observedAt);
     if (!Number.isSafeInteger(epoch) || new Date(epoch).toISOString() !== cycle.observedAt) {
       throw new Error("HISTORICAL_SIMULATION_V2_INVALID:observedAt");
@@ -417,6 +422,7 @@ export async function runHistoricalSimulationV2(
       symbol: cycle.symbol,
       partition: input.split === "development" ? "DEVELOPMENT" : "WALK_FORWARD",
       replayBarClosedAtUtc: cycle.observedAt,
+      datasetMembership: cycle.datasetMembership,
       forecast: forecast.status === "FORECAST_AUTHORIZED"
         ? { status: "AUTHORIZED", reasonCodes: [], authorityContentDigestHex: forecast.authority.contentDigestHex }
         : { status: "NON_ACTIONABLE", reasonCodes: [forecast.reason], authorityContentDigestHex: null },

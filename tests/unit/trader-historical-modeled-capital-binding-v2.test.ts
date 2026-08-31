@@ -2,13 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createHistoricalModeledCapitalBindingV2, createHistoricalModeledExecutionRegistryV2 } from "@/lib/trader/historical-simulation-v2/modeled-capital-binding-v2";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 const digest = (value: string) => value.repeat(64);
+const membershipBody = { schemaVersion: "waia.trader.historical_dataset_membership.v2" as const, organizationId: "org-1", cycleId: "cycle-1", manifestSemanticDigestHex: digest("1"), sealReceiptDigestHex: digest("2"), partitionDigestHex: digest("3"), partitionRawSha256Hex: digest("4"), partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const, recordIndex: 0, barContentDigestHex: digest("5"), sealedCycleContentDigestHex: digest("6") };
 const cycle = Object.freeze({
   cycleId: "cycle-1",
   observedAt: "2026-08-30T10:00:00.000Z",
   symbol: "BTCUSDT",
   referencePrice: "100",
+  datasetMembership: { ...membershipBody, contentDigestHex: computeSemanticSha256Hex(membershipBody) },
 });
 
 describe("historical modeled capital binding v2", () => {
