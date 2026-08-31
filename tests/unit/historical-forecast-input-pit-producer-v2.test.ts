@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from "@/lib/trader/historical-simulation-v2/knowledge-port-postgres";
+import { HISTORICAL_DATASET_MEMBERSHIP_V2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 
-const mocked = vi.hoisted(() => ({ issue: vi.fn(), readBinding: vi.fn() }));
+const mocked = vi.hoisted(() => ({ issue: vi.fn(), readBinding: vi.fn(), requireScientific: vi.fn() }));
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", () => ({ issueForecastRuntimeV2: mocked.issue }));
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1", () => ({ readForecastContractBindingV1: mocked.readBinding }));
+vi.mock("@/lib/trader/research/execopp-qualification/scientific-admission-v2", () => ({ requireScientificAdmissionV2: mocked.requireScientific }));
 
 import { createPostgresHistoricalForecastInputPitProducerV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
 
@@ -20,6 +22,25 @@ const binding = {
   selectedPredictivePackageContentDigestHex: "c".repeat(64),
 };
 const runtimeInput = { forecastContractBinding: binding, knowledgeContentDigestHex: knowledge };
+const membershipBody = {
+  schemaVersion: HISTORICAL_DATASET_MEMBERSHIP_V2, organizationId: "org", cycleId: "cycle",
+  manifestSemanticDigestHex: "1".repeat(64), sealReceiptDigestHex: "2".repeat(64),
+  partitionDigestHex: "3".repeat(64), partitionRawSha256Hex: "4".repeat(64),
+  partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const, recordIndex: 0,
+  barContentDigestHex: "5".repeat(64), sealedCycleContentDigestHex: "6".repeat(64),
+};
+const datasetMembership = { ...membershipBody, contentDigestHex: computeSemanticSha256Hex(membershipBody) };
+const scientificReceipt = {
+  organizationId: "org", contentDigestHex: "b".repeat(64),
+  predictiveTerminalReceipt: {
+    developmentDatasetDigestHex: "1".repeat(64), targetGridReceiptDigestHex: "2".repeat(64),
+    predictivePackageGenerationIdentityDigestHex: "3".repeat(64), predictivePackageContentDigestHex: "c".repeat(64),
+    runtimeContractDigestHex: "4".repeat(64), scoringContractVersion: "multiclass-log-score/v1",
+    evaluationPartitionReceiptDigestHex: "5".repeat(64), contentDigestHex: "6".repeat(64),
+  },
+  kmConvergenceReceipt: { evidenceSemanticDigestHex: "7".repeat(64) },
+  epistemicParameterRatificationReceipt: { contentDigestHex: "8".repeat(64) },
+};
 
 function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: string; bindingVisible?: boolean } = {}) {
   let insertedDigest = options.persistedDigest;
@@ -27,16 +48,18 @@ function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: stri
     const query = strings.join(" ");
     if (query.includes("FROM trader_forecast_v2")) return [{
       organization_id: "org", run_id: "run", cycle_id: "cycle", symbol: "BTCUSDT",
+      forecast_schema: "waia.trader.forecast.v2", forecast_content_digest: "7".repeat(64),
       anchor_epoch_ms: Date.parse(pit),
       authorized_outcome: { status: "FORECAST_AUTHORIZED", authority: { contentDigestHex: "a".repeat(64) } },
     }];
     if (query.includes("FROM trader_forecast_contract_binding_v1 cb")) return options.bindingVisible === false ? [] : [{ content_digest: undefined }];
     if (query.includes("FROM trader_scientific_admission_receipt_v1")) return [{
       id: "receipt", content_digest: "b".repeat(64), selected_package_content_digest: "c".repeat(64),
+      receipt_json: JSON.stringify(scientificReceipt),
     }];
     if (query.includes("FROM trader_knowledge_confidence_update_record")) return options.knowledgeRows ?? [];
     if (query.includes("INSERT INTO trader_historical_forecast_input_pit_v2")) {
-      insertedDigest ??= values.find((value) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value) && value !== knowledge && value !== "a".repeat(64)) as string;
+      insertedDigest ??= values.at(-2) as string;
       return [];
     }
     if (query.includes("SELECT content_digest_hex FROM trader_historical_forecast_input_pit_v2")) return [{ content_digest_hex: insertedDigest }];
@@ -46,6 +69,7 @@ function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: stri
 }
 
 describe("historical Forecast V2 PIT producer", () => {
+  mocked.requireScientific.mockImplementation((value) => value);
   it("persists an idempotent row only after canonical Forecast/scientific/knowledge replay", async () => {
     mocked.issue.mockReturnValue({ status: "FORECAST_AUTHORIZED", authority: {
       organizationId: "org", anchorClosedBarAt: pit, knowledgeContentDigestHex: knowledge,
@@ -55,7 +79,7 @@ describe("historical Forecast V2 PIT producer", () => {
     const sql = sqlHarness();
     const record = await createPostgresHistoricalForecastInputPitProducerV2(sql as never)({
       organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
-      symbol: "BTCUSDT", pitAnchor: pit, runtimeInput: runtimeInput as never,
+      symbol: "BTCUSDT", pitAnchor: pit, datasetMembership, runtimeInput: runtimeInput as never,
     });
     expect(record).toMatchObject({ visibleFrom: pit, knowledgeContentDigestHex: knowledge });
     expect(record.contentDigestHex).toMatch(/^[0-9a-f]{64}$/);
@@ -77,8 +101,8 @@ describe("historical Forecast V2 PIT producer", () => {
     }] });
     await expect(createPostgresHistoricalForecastInputPitProducerV2(sql as never)({
       organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
-      symbol: "BTCUSDT", pitAnchor: pit, runtimeInput: runtimeInput as never,
-    })).rejects.toThrow("KNOWLEDGE_SOURCE");
+      symbol: "BTCUSDT", pitAnchor: pit, datasetMembership, runtimeInput: runtimeInput as never,
+    })).rejects.toThrow("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED");
   });
 
   it("rejects a contract binding or package that was not durable by the PIT", async () => {
@@ -89,7 +113,7 @@ describe("historical Forecast V2 PIT producer", () => {
     mocked.readBinding.mockResolvedValue(binding);
     await expect(createPostgresHistoricalForecastInputPitProducerV2(sqlHarness({ bindingVisible: false }) as never)({
       organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
-      symbol: "BTCUSDT", pitAnchor: pit, runtimeInput: runtimeInput as never,
+      symbol: "BTCUSDT", pitAnchor: pit, datasetMembership, runtimeInput: runtimeInput as never,
     })).rejects.toThrow("FUTURE_BINDING_OR_PACKAGE");
   });
 
@@ -102,7 +126,34 @@ describe("historical Forecast V2 PIT producer", () => {
     const sql = sqlHarness({ persistedDigest: "9".repeat(64) });
     await expect(createPostgresHistoricalForecastInputPitProducerV2(sql as never)({
       organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
-      symbol: "BTCUSDT", pitAnchor: pit, runtimeInput: runtimeInput as never,
+      symbol: "BTCUSDT", pitAnchor: pit, datasetMembership, runtimeInput: runtimeInput as never,
     })).rejects.toThrow("IDEMPOTENCY_CONFLICT");
+  });
+
+  it("rejects substituted or altered sealed-dataset membership before any durable lookup", async () => {
+    const sql = sqlHarness();
+    await expect(createPostgresHistoricalForecastInputPitProducerV2(sql as never)({
+      organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
+      symbol: "BTCUSDT", pitAnchor: pit,
+      datasetMembership: { ...datasetMembership, recordIndex: 1 }, runtimeInput: runtimeInput as never,
+    })).rejects.toThrow("DATASET_MEMBERSHIP");
+    expect(sql).not.toHaveBeenCalled();
+  });
+
+  it("returns a detached deeply immutable evidence record", async () => {
+    mocked.issue.mockReturnValue({ status: "FORECAST_AUTHORIZED", authority: {
+      organizationId: "org", anchorClosedBarAt: pit, knowledgeContentDigestHex: knowledge,
+      contentDigestHex: "a".repeat(64),
+    } });
+    mocked.readBinding.mockResolvedValue(binding);
+    const record = await createPostgresHistoricalForecastInputPitProducerV2(sqlHarness() as never)({
+      organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
+      symbol: "BTCUSDT", pitAnchor: pit, datasetMembership, runtimeInput: runtimeInput as never,
+    });
+    expect(Object.isFrozen(record)).toBe(true);
+    expect(Object.isFrozen(record.datasetMembership)).toBe(true);
+    expect(Object.isFrozen(record.runtimeInput)).toBe(true);
+    expect(record.datasetMembership).not.toBe(datasetMembership);
+    expect(record.runtimeInput).not.toBe(runtimeInput);
   });
 });
