@@ -6,9 +6,11 @@ import {
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   issueForecastRuntimeV2,
+  requireForecastRuntimeAuthorizedOutcomeV2,
   type ForecastRuntimeInputV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { readForecastContractBindingV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
+import { digestHex } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import {
   computeKnowledgeConfidenceUpdateContentDigest,
   type KnowledgeConfidenceUpdateRecord,
@@ -62,7 +64,11 @@ function validateMembership(value: HistoricalDatasetMembershipV2, input: {
 
 function mapKnowledgeRow(row: KnowledgeRow): KnowledgeConfidenceUpdateRecord {
   const source = JSON.parse(row.source_record_ids_json) as Record<string, unknown>;
-  const authority = source;
+  const requiredAuthority = ["confidence_value_class", "authority_class", "operator_disposition",
+    "capital_authority", "strategy_authority", "trade_eligibility_authority", "guardian_authority"];
+  if (requiredAuthority.some((key) => typeof source[key] !== "string")) {
+    throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:KNOWLEDGE_AUTHORITY_SOURCE");
+  }
   return {
     id: row.id, organizationId: row.organization_id, runId: row.run_id, cycleId: row.cycle_id,
     symbol: row.symbol, knowledgeEdgeId: row.knowledge_edge_id,
@@ -70,13 +76,13 @@ function mapKnowledgeRow(row: KnowledgeRow): KnowledgeConfidenceUpdateRecord {
     updateModelVersion: row.update_model_version,
     priorMachineRecommendedConfidence: row.prior_confidence,
     machineRecommendedConfidence: row.posterior_confidence, machineRecommendedDelta: row.delta,
-    confidenceValueClass: (authority.confidence_value_class ?? (row.update_kind === "DECAY" ? "DERIVED_STALENESS_EVIDENCE" : "MACHINE_RECOMMENDED_BOUNDED_DELTA")) as KnowledgeConfidenceUpdateRecord["confidenceValueClass"],
-    authorityClass: (authority.authority_class ?? "EVIDENCE_ONLY") as KnowledgeConfidenceUpdateRecord["authorityClass"],
-    operatorDisposition: (authority.operator_disposition ?? "PENDING") as KnowledgeConfidenceUpdateRecord["operatorDisposition"],
-    capitalAuthority: (authority.capital_authority ?? "NONE") as KnowledgeConfidenceUpdateRecord["capitalAuthority"],
-    strategyAuthority: (authority.strategy_authority ?? "NONE") as KnowledgeConfidenceUpdateRecord["strategyAuthority"],
-    tradeEligibilityAuthority: (authority.trade_eligibility_authority ?? "NONE") as KnowledgeConfidenceUpdateRecord["tradeEligibilityAuthority"],
-    guardianAuthority: (authority.guardian_authority ?? "NONE") as KnowledgeConfidenceUpdateRecord["guardianAuthority"],
+    confidenceValueClass: source.confidence_value_class as KnowledgeConfidenceUpdateRecord["confidenceValueClass"],
+    authorityClass: source.authority_class as KnowledgeConfidenceUpdateRecord["authorityClass"],
+    operatorDisposition: source.operator_disposition as KnowledgeConfidenceUpdateRecord["operatorDisposition"],
+    capitalAuthority: source.capital_authority as KnowledgeConfidenceUpdateRecord["capitalAuthority"],
+    strategyAuthority: source.strategy_authority as KnowledgeConfidenceUpdateRecord["strategyAuthority"],
+    tradeEligibilityAuthority: source.trade_eligibility_authority as KnowledgeConfidenceUpdateRecord["tradeEligibilityAuthority"],
+    guardianAuthority: source.guardian_authority as KnowledgeConfidenceUpdateRecord["guardianAuthority"],
     issuedAt: iso(row.issued_at), eligibleResolutionAt: iso(row.eligible_resolution_at),
     resolvedAt: iso(row.resolved_at), pitEvidenceBoundary: iso(row.pit_evidence_boundary),
     outcomeClass: row.outcome_class, score: row.score, sourceRecordIdsJson: row.source_record_ids_json,
@@ -133,11 +139,25 @@ function knowledgeDigest(organizationId: string, symbol: string, pitAnchor: stri
 export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres.Sql) {
   return async (input: Readonly<{
     organizationId: string; runId: string; cycleId: string; forecastId: string;
-    symbol: "BTCUSDT" | "ETHUSDT"; pitAnchor: string; datasetMembership: HistoricalDatasetMembershipV2;
+    symbol: "BTCUSDT" | "ETHUSDT"; pitAnchor: string; datasetAuthorityId: string;
     runtimeInput: ForecastRuntimeInputV2;
   }>): Promise<HistoricalForecastInputPitRecordV2> => {
     if (iso(input.pitAnchor) !== input.pitAnchor) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:PIT");
-    validateMembership(input.datasetMembership, input);
+    const datasets = await sql<{ membership_json: HistoricalDatasetMembershipV2;
+      authority_content_digest_hex: string; sealed_cycle_json: unknown }[]>`
+      SELECT membership_json, authority_content_digest_hex, sealed_cycle_json
+      FROM trader_historical_dataset_authority_v2
+      WHERE id=${input.datasetAuthorityId}::uuid AND organization_id=${input.organizationId}::uuid
+        AND run_id=${input.runId} AND cycle_id=${input.cycleId}
+    `;
+    const dataset = datasets[0];
+    if (!dataset || datasets.length !== 1 || computeSemanticSha256Hex({ organizationId: input.organizationId,
+      runId: input.runId, membership: dataset.membership_json, sealedCycle: dataset.sealed_cycle_json }) !==
+      dataset.authority_content_digest_hex) {
+      throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:DATASET_AUTHORITY");
+    }
+    const datasetMembership = dataset.membership_json;
+    validateMembership(datasetMembership, input);
     const outcome = issueForecastRuntimeV2(input.runtimeInput);
     if (outcome.status !== "FORECAST_AUTHORIZED" ||
         outcome.authority.organizationId !== input.organizationId ||
@@ -160,13 +180,13 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         AND f.target_role_id='EXECUTION_OPPORTUNITY'
     `;
     const forecast = forecasts[0];
-    const persistedAuthority = (forecast?.authorized_outcome as
-      { status?: unknown; authority?: { contentDigestHex?: unknown } } | undefined)?.authority;
+    const persistedOutcome = forecast ? requireForecastRuntimeAuthorizedOutcomeV2(forecast.authorized_outcome as never) : null;
     if (!forecast || forecasts.length !== 1 || forecast.run_id !== input.runId ||
         forecast.cycle_id !== input.cycleId || forecast.symbol.replace("/", "") !== input.symbol ||
-        !forecast.forecast_schema || !DIGEST.test(forecast.forecast_content_digest) ||
+        Number(forecast.forecast_schema) !== 2 || !DIGEST.test(forecast.forecast_content_digest) ||
+        forecast.forecast_content_digest !== digestHex(outcome.issuance.forecastContentDigestExec) ||
         new Date(Number(forecast.anchor_epoch_ms)).toISOString() !== input.pitAnchor ||
-        persistedAuthority?.contentDigestHex !== outcome.authority.contentDigestHex) {
+        canonicalizeSemanticJsonString(persistedOutcome) !== canonicalizeSemanticJsonString(outcome)) {
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:CANONICAL_FORECAST");
     }
 
@@ -185,19 +205,24 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       JOIN trader_forecast_predictive_package_v2 p
         ON p.organization_id=cb.organization_id
        AND p.predictive_package_content_digest=cb.selected_predictive_package_content_digest
+      JOIN trader_historical_simulation_run_start_v2 rs
+        ON rs.organization_id=cb.organization_id AND rs.run_id=${input.runId}
       WHERE cb.organization_id=${input.organizationId}::uuid
         AND cb.content_digest=${binding.contentDigestHex}
-        AND cb.created_at <= ${input.pitAnchor}::timestamptz
-        AND p.created_at <= ${input.pitAnchor}::timestamptz
+        AND cb.created_at <= rs.started_at
+        AND p.created_at <= rs.started_at
     `;
     if (bindingSources.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:FUTURE_BINDING_OR_PACKAGE");
     const scientific = await sql<{ id: string; content_digest: string; selected_package_content_digest: string | null; receipt_json: string }[]>`
       SELECT id::text, content_digest, selected_package_content_digest, receipt_json
       FROM trader_scientific_admission_receipt_v1
-      WHERE organization_id=${input.organizationId}::uuid
-        AND id=${binding.scientificAdmissionReceiptId}::uuid
-        AND content_digest=${binding.scientificAdmissionReceiptContentDigestHex}
-        AND created_at <= ${input.pitAnchor}::timestamptz
+      JOIN trader_historical_simulation_run_start_v2 rs
+        ON rs.organization_id=trader_scientific_admission_receipt_v1.organization_id
+       AND rs.run_id=${input.runId}
+      WHERE trader_scientific_admission_receipt_v1.organization_id=${input.organizationId}::uuid
+        AND trader_scientific_admission_receipt_v1.id=${binding.scientificAdmissionReceiptId}::uuid
+        AND trader_scientific_admission_receipt_v1.content_digest=${binding.scientificAdmissionReceiptContentDigestHex}
+        AND trader_scientific_admission_receipt_v1.created_at <= rs.started_at
     `;
     if (scientific.length !== 1 || scientific[0]?.selected_package_content_digest !== binding.selectedPredictivePackageContentDigestHex) {
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:SCIENTIFIC_SOURCE");
@@ -228,7 +253,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
              score, source_record_ids_json, content_digest, idempotency_key, provenance_json,
              terminal_reason, schema_version
       FROM trader_knowledge_confidence_update_record
-      WHERE organization_id=${input.organizationId}::uuid AND symbol=${input.symbol}
+      WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId} AND symbol=${input.symbol}
         AND update_model_version LIKE '%.forecast-v2-evidence-only'
         AND (source_record_ids_json::jsonb ->> 'visible_from_cycle_pit_anchor')::timestamptz
               <= ${input.pitAnchor}::timestamptz
@@ -244,7 +269,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     const body = {
       schemaVersion: HISTORICAL_FORECAST_INPUT_PIT_V2,
       organizationId: input.organizationId, runId: input.runId, cycleId: input.cycleId,
-      forecastId: input.forecastId, datasetMembership: cloneAndDeepFreeze(input.datasetMembership),
+      forecastId: input.forecastId, datasetMembership: cloneAndDeepFreeze(datasetMembership),
       symbol: input.symbol, pitAnchor: input.pitAnchor,
       visibleFrom: input.pitAnchor, knowledgeContentDigestHex,
       forecastAuthorityContentDigestHex: outcome.authority.contentDigestHex,
