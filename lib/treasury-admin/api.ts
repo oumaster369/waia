@@ -1,5 +1,7 @@
 import type { TreasuryApiError, TreasuryApiResult } from "@/lib/treasury-admin/types";
 
+export const TREASURY_REQUEST_TIMEOUT_MS = 20_000;
+
 function errorFromBody(
   status: number,
   body: unknown,
@@ -30,16 +32,38 @@ export async function treasuryRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<TreasuryApiResult<T>> {
-  const response = await fetch(path, {
-    ...init,
-    cache: "no-store",
-    credentials: "same-origin",
-  });
-  const body = await parseJson(response);
-  if (!response.ok) {
-    return errorFromBody(response.status, body);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TREASURY_REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  init?.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  try {
+    const response = await fetch(path, {
+      ...init,
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal,
+    });
+    const body = await parseJson(response);
+    if (!response.ok) {
+      return errorFromBody(response.status, body);
+    }
+    return { ok: true, data: body as T };
+  } catch (cause) {
+    const timedOut = controller.signal.aborted && !init?.signal?.aborted;
+    return {
+      ok: false,
+      status: timedOut ? 504 : 503,
+      code: timedOut ? "REQUEST_TIMEOUT" : "REQUEST_UNAVAILABLE",
+      message: timedOut
+        ? "The Finance service did not answer in time. Please retry."
+        : cause instanceof Error
+          ? cause.message
+          : "The Finance service is unavailable.",
+    };
+  } finally {
+    clearTimeout(timer);
+    init?.signal?.removeEventListener("abort", abortFromCaller);
   }
-  return { ok: true, data: body as T };
 }
 
 export function requireOrganizationId(organizationId: string | null | undefined): string {

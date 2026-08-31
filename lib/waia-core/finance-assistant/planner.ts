@@ -26,6 +26,7 @@ export const FINANCE_ASSISTANT_FIELD_NAMES = [
   "startsOn",
   "endsOn",
   "signedAmount",
+  "status",
   "counterpartyId",
   "counterpartyName",
   "accountId",
@@ -36,6 +37,34 @@ export const FINANCE_ASSISTANT_FIELD_NAMES = [
   "projectName",
   "notes",
   "occurredAt",
+  "correctsTransactionId",
+  "targetId",
+  "targetName",
+  "newName",
+  "isActive",
+  "effectiveMonth",
+  "transactionId",
+  "duplicateOfTransactionId",
+  "originalTransactionId",
+  "correctionTransactionId",
+  "toStatus",
+  "purpose",
+  "confirmedBalance",
+  "asOf",
+  "note",
+  "reason",
+  "detailPublication",
+  "supersededById",
+  "breathEnabled",
+  "stageLabel",
+  "workSummary",
+  "methodologyNote",
+  "recentActivityLimit",
+  "tokenContract",
+  "assetCode",
+  "directionScope",
+  "includeInBalanceRecon",
+  "label",
 ] as const;
 
 const INTENTS = new Set<string>(FINANCE_ASSISTANT_INTENTS);
@@ -63,6 +92,10 @@ export function parseFinanceAssistantPlan(
   const summary = nullableString(row.summary, "summary");
   if (!summary)
     throw new FinanceAssistantError("INVALID_MODEL_OUTPUT", "Planner summary is required");
+  if (row.language !== "ru" && row.language !== "en")
+    throw new FinanceAssistantError("INVALID_MODEL_OUTPUT", "Planner language is invalid");
+  const language = row.language;
+  const question = nullableString(row.question, "question");
   if (!row.fields || typeof row.fields !== "object" || Array.isArray(row.fields))
     throw new FinanceAssistantError("INVALID_MODEL_OUTPUT", "Planner fields are required");
   const rawFields = row.fields as Record<string, unknown>;
@@ -74,6 +107,8 @@ export function parseFinanceAssistantPlan(
   return {
     intent: row.intent as FinanceAssistantIntentName,
     summary,
+    language,
+    question,
     fields,
     providerRequestId: metadata.requestId ?? null,
     model: metadata.model,
@@ -82,7 +117,10 @@ export function parseFinanceAssistantPlan(
 
 export function isReportIntent(intent: FinanceAssistantIntentName): boolean {
   return (
-    intent === "REPORT_OVERVIEW" || intent === "REPORT_BUDGET" || intent === "REPORT_TRANSACTIONS"
+    intent === "REPORT_OVERVIEW" ||
+    intent === "REPORT_BUDGET" ||
+    intent === "REPORT_TRANSACTIONS" ||
+    intent === "REPORT_WALLET"
   );
 }
 
@@ -90,7 +128,7 @@ export function isWriteIntent(
   intent: FinanceAssistantIntentName,
 ): intent is Exclude<
   FinanceAssistantIntentName,
-  "REPORT_OVERVIEW" | "REPORT_BUDGET" | "REPORT_TRANSACTIONS" | "UNSUPPORTED"
+  "REPORT_OVERVIEW" | "REPORT_BUDGET" | "REPORT_TRANSACTIONS" | "REPORT_WALLET" | "UNSUPPORTED"
 > {
   return !isReportIntent(intent) && intent !== "UNSUPPORTED";
 }

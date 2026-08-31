@@ -9,11 +9,12 @@ import { formatAtomicToHumanDecimal } from "@/lib/treasury-admin/parse-human-amo
 
 type AssistantResponse =
   | { mode: "unsupported"; summary: string }
+  | { mode: "needs_input"; summary: string; question: string; missingFields: string[] }
   | {
       mode: "report";
       summary: string;
       report: {
-        kind: "overview" | "budget" | "transactions";
+        kind: "overview" | "budget" | "transactions" | "wallet";
         title: string;
         generatedAt: string;
         data: Record<string, unknown>;
@@ -104,16 +105,20 @@ export function FinanceAssistant() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AssistantResponse | null>(null);
+  const [conversationContext, setConversationContext] = useState<string | null>(null);
 
   async function submit() {
     if (!organizationId || !message.trim()) return;
     setPending(true);
     setError(null);
     setResult(null);
+    const requestText = conversationContext
+      ? `${conversationContext}\nOperator follow-up: ${message.trim()}`
+      : message.trim();
     const response = await treasuryJson<AssistantResponse>(
       "/api/admin/treasury/assistant/plan",
       "POST",
-      { organization_id: organizationId, message: message.trim() },
+      { organization_id: organizationId, message: requestText },
     );
     setPending(false);
     if (!response.ok) {
@@ -121,6 +126,12 @@ export function FinanceAssistant() {
       return;
     }
     setResult(response.data);
+    if (response.data.mode === "needs_input") {
+      setConversationContext(`${requestText}\nAssistant question: ${response.data.question}`);
+      setMessage("");
+    } else {
+      setConversationContext(null);
+    }
   }
 
   async function confirmWrite(token: string) {
@@ -152,8 +163,10 @@ export function FinanceAssistant() {
             <div>
               <h2 className="font-medium">Finance Assistant</h2>
               <p className="text-muted-foreground text-xs">
-                Ask for a report or preview one new Finance record. The assistant cannot move money,
-                verify transactions, publish data, or access AI‑TRADER.
+                Ask in Russian or English. The assistant can report and prepare the same accounting
+                records and reviews as a Finance operator. Every change requires your confirmation;
+                publication also requires the publication role. It cannot move money, manage access,
+                control watchers, or access AI‑TRADER.
               </p>
             </div>
             <button
@@ -174,7 +187,11 @@ export function FinanceAssistant() {
             value={message}
             maxLength={4000}
             rows={4}
-            placeholder="Show this month’s budget, or create a preview for a new counterparty…"
+            placeholder={
+              conversationContext
+                ? "Answer the follow-up… / Ответьте на уточнение…"
+                : "Show this month’s budget… / Покажи бюджет за этот месяц…"
+            }
             onChange={(event) => setMessage(event.target.value)}
             className="mt-1 w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm"
           />
@@ -200,6 +217,14 @@ export function FinanceAssistant() {
                   <ReportData value={result.report.data} />
                 </div>
               ) : null}
+              {result.mode === "needs_input" ? (
+                <div className="mt-3 rounded-md border p-3 text-sm">
+                  <p className="font-medium">{result.question}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Your previous request is preserved. Add only the missing information.
+                  </p>
+                </div>
+              ) : null}
               {result.mode === "write_preview" ? (
                 <div className="mt-3 space-y-3">
                   <div>
@@ -218,14 +243,14 @@ export function FinanceAssistant() {
                       disabled={pending}
                       onClick={() => void confirmWrite(result.confirmationToken!)}
                     >
-                      {pending ? "Creating…" : "Confirm and create"}
+                      {pending ? "Applying…" : "Confirm and apply"}
                     </button>
                   ) : null}
                 </div>
               ) : null}
               {result.mode === "write_result" ? (
                 <div className="mt-3 space-y-2">
-                  <p className="text-sm font-medium">Created {label(result.entityType)}</p>
+                  <p className="text-sm font-medium">Completed: {label(result.entityType)}</p>
                   <ReportData value={result.entity} />
                   <p className="text-muted-foreground text-xs">{result.notice}</p>
                 </div>

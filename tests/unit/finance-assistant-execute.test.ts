@@ -104,4 +104,75 @@ describe("Finance Assistant confirmed execution", () => {
     );
     expect(response.status).toBe(503);
   });
+
+  it("registers a public watched address through the same audited Finance service", async () => {
+    vi.stubEnv("WAIA_FINANCE_ASSISTANT_WRITES_ENABLED", "true");
+    vi.stubEnv("WAIA_FINANCE_ASSISTANT_CONFIRMATION_SECRET", secret);
+    const { services, audits } = createWp4Bundle();
+    const token = await createFinanceConfirmation({
+      userId: ADMIN_USER,
+      organizationId: ORG_A,
+      intent: "CREATE_WATCHED_ADDRESS",
+      fields: {
+        network: "TRC-20",
+        address: "TE1BrKebw9AAYGUpztgn7xG9hMujTePkzD",
+        tokenContract: "USDT",
+        assetCode: "USDT",
+        directionScope: "INBOUND",
+        includeInBalanceRecon: "true",
+        label: "WAIA Treasury",
+        reason: "Register the public Finance observer input",
+      },
+      secret,
+    });
+
+    const response = await handleFinanceAssistantExecutePost(
+      jsonRequest("/api/admin/treasury/assistant/execute", {
+        organization_id: ORG_A,
+        confirmation_token: token,
+      }),
+      {
+        ...createWp4Deps({ services }),
+        consumeFinanceAssistantConfirmation: async () => undefined,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect((response.body as { entityType: string }).entityType).toBe("watched address");
+    expect(audits.some((row) => row.action === "treasury.watched_address.create")).toBe(true);
+  });
+
+  it("requires publication permission before a confirmed public Finance change", async () => {
+    vi.stubEnv("WAIA_FINANCE_ASSISTANT_WRITES_ENABLED", "true");
+    vi.stubEnv("WAIA_FINANCE_ASSISTANT_CONFIRMATION_SECRET", secret);
+    const { services } = createWp4Bundle();
+    let consumed = false;
+    const token = await createFinanceConfirmation({
+      userId: ADMIN_USER,
+      organizationId: ORG_A,
+      intent: "SET_TRANSACTION_DETAIL_PUBLICATION",
+      fields: {
+        transactionId: "tx-public",
+        detailPublication: "DETAIL_PUBLIC",
+        reason: "Publish the confirmed public detail",
+      },
+      secret,
+    });
+
+    const response = await handleFinanceAssistantExecutePost(
+      jsonRequest("/api/admin/treasury/assistant/execute", {
+        organization_id: ORG_A,
+        confirmation_token: token,
+      }),
+      {
+        ...createWp4Deps({ services, permissions: ["admin.treasury.mutate"] }),
+        consumeFinanceAssistantConfirmation: async () => {
+          consumed = true;
+        },
+      },
+    );
+
+    expect(response).toMatchObject({ status: 403 });
+    expect(consumed).toBe(false);
+  });
 });

@@ -14,6 +14,7 @@ import {
   handleTreasuryCommitmentsGet,
   handleTreasuryFundingNeedsGet,
   handleTreasuryOrganizationsGet,
+  handleTreasuryOverviewGet,
   handleTreasuryOverviewCountsGet,
   handleTreasuryTransactionCommandsPost,
   handleTreasuryTransactionsGet,
@@ -373,6 +374,23 @@ describe("DEE-615 WP-2 authoritative filters and overview counts", () => {
         ),
       ),
     ).toThrow(TreasuryValidationError);
+  });
+
+  it("loads the complete Overview through one authorized handler runtime", async () => {
+    const { services } = createWp4Bundle();
+    const deps = createWp4Deps({ services });
+    const result = await handleTreasuryOverviewGet(
+      getRequest(`/api/admin/treasury/overview?organization_id=${ORG_A}`),
+      deps,
+    );
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      preview: { status: "pending" },
+      counts: { reviewRequiredCount: 0, publicationPendingCount: 0 },
+    });
+    expect(result.body as Record<string, unknown>).toHaveProperty("settings");
+    expect(result.body as Record<string, unknown>).toHaveProperty("allocation");
+    expect(deps.authorizedOrgsSeen).toEqual([ORG_A]);
   });
 });
 

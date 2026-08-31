@@ -16,6 +16,8 @@ describe("Finance Assistant typed planner boundary", () => {
       {
         intent: "REPORT_BUDGET",
         summary: "Current budget report",
+        language: "en",
+        question: null,
         fields: emptyFields(),
       },
       { model: "test-model", requestId: "request-1" },
@@ -27,7 +29,13 @@ describe("Finance Assistant typed planner boundary", () => {
   it("rejects unknown intents and fields", () => {
     expect(() =>
       parseFinanceAssistantPlan(
-        { intent: "RUN_SQL", summary: "No", fields: emptyFields() },
+        {
+          intent: "RUN_SQL",
+          summary: "No",
+          language: "en",
+          question: null,
+          fields: emptyFields(),
+        },
         { model: "test" },
       ),
     ).toThrow(/intent/i);
@@ -36,11 +44,28 @@ describe("Finance Assistant typed planner boundary", () => {
         {
           intent: "REPORT_OVERVIEW",
           summary: "No",
+          language: "en",
+          question: null,
           fields: { ...emptyFields(), sql: "drop table" },
         },
         { model: "test" },
       ),
     ).toThrow(/unknown field/i);
+  });
+
+  it("preserves Russian language and a precise follow-up", () => {
+    const plan = parseFinanceAssistantPlan(
+      {
+        intent: "CREATE_TRANSACTION",
+        summary: "Подготовлю расход.",
+        language: "ru",
+        question: "С какого счета списать средства?",
+        fields: { ...emptyFields(), signedAmount: "-25" },
+      },
+      { model: "test" },
+    );
+    expect(plan.language).toBe("ru");
+    expect(plan.question).toMatch(/счета/i);
   });
 
   it("rejects secrets and card-shaped values before provider egress", () => {

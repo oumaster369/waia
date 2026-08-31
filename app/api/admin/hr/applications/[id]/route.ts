@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
-import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { HrApplicationError, mutateHrApplication } from "@/lib/waia-core/hr/service";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
@@ -15,7 +15,7 @@ export async function POST(request: Request, context: RouteContext) {
   if (origin && origin !== new URL(request.url).origin) {
     return NextResponse.json({ error: { code: "ORIGIN_MISMATCH" } }, { status: 403 });
   }
-  const userId = await getOptionalSessionUserId();
+  const userId = await getOptionalAdminSessionUserId();
   if (!userId) return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
   let body: Record<string, unknown>;
   try {

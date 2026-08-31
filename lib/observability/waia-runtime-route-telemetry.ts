@@ -88,6 +88,7 @@ export type WaiaRuntimeRouteKey =
   | "admin_treasury_fund_allocation"
   | "admin_treasury_finance_assistant_plan"
   | "admin_treasury_finance_assistant_execute"
+  | "admin_treasury_overview"
   | "admin_treasury_overview_counts"
   | "admin_treasury_organizations"
   | "public_treasury"
