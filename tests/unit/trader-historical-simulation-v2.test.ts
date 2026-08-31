@@ -27,6 +27,7 @@ import type {
   DecisionAuthorityV2,
 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import type { HistoricalSimulationReasonLedgerV2 } from "@/lib/trader/historical-simulation-v2/reason-ledger-v2";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const digest = (character: string) => character.repeat(64);
@@ -184,6 +185,8 @@ describe("Historical Simulation V2 composition boundary", () => {
   it("emits ENTER_LONG, economic CASH and risk-veto CASH with future-only learning", async () => {
     const knowledgePort = knowledge();
     const stages = authority();
+    const forecastLifecycleSink = vi.fn(async () => undefined);
+    const reasonLedgerSink = vi.fn(async (_entry: HistoricalSimulationReasonLedgerV2) => undefined);
     const result = await runHistoricalSimulationV2({
       organizationId: ORG,
       accountId: "historical-account",
@@ -196,10 +199,12 @@ describe("Historical Simulation V2 composition boundary", () => {
       resolveForecastInput: vi.fn(async ({ knowledge: snapshot }) =>
         emptyForecast(snapshot.contentDigestHex),
       ),
+      forecastLifecycleSink,
       decisionCapitalAuthorityV2: stages,
       resolvePortfolioProposal: vi.fn(async ({ cycle }) => proposal(Number(cycle.cycleId.at(-1)))),
       resolveLedgerProjection: ledgerProjection,
       postgresSchemaPreflight: vi.fn(async () => undefined),
+      reasonLedgerSink,
     });
 
     expect(result).toMatchObject({ cycleCount: 3, enterLongCount: 1, cashCount: 2 });
@@ -213,6 +218,10 @@ describe("Historical Simulation V2 composition boundary", () => {
     expect(result.evidence[2]?.knowledgeAfterClosureDigestHex).toBe(digest("3"));
     expect(result.evidence[2]?.maturedClosureDigestsHex).toEqual([digest("2")]);
     expect(stages.execute).toHaveBeenCalledTimes(1);
+    expect(forecastLifecycleSink).toHaveBeenCalledTimes(3);
+    expect(reasonLedgerSink).toHaveBeenCalledTimes(3);
+    expect(reasonLedgerSink.mock.calls[2]?.[0].previousContentDigestHex)
+      .toBe(reasonLedgerSink.mock.calls[1]?.[0].contentDigestHex);
   });
 
   it("rejects blind holdout and any same-cycle/future outcome closure", async () => {

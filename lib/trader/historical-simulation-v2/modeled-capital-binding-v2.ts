@@ -174,7 +174,7 @@ export function createHistoricalModeledCapitalBindingV2(
     );
     // This maps modeled-accounting coherence into the pure envelope calculator. It does not
     // create or assert a venue Reality reconciliation record.
-    const modeledAccountingCoherence: "CURRENT_MODELED_FRONTIER" = "CURRENT_MODELED_FRONTIER";
+    const modeledAccountingCoherence = "CURRENT_MODELED_FRONTIER" as const;
     const calculation = calculateRiskAdmissionV2({
       accounting: accounting.accounting,
       requestedReservationNotional: requested,

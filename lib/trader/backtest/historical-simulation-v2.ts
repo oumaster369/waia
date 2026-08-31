@@ -145,7 +145,7 @@ export function createHistoricalDecisionEconomicsPortfolioResolverV2(input: Read
 type LedgerProjection = Pick<
   HistoricalSimulationReasonLedgerV2Draft,
   "accounting" | "guardian" | "learning"
->;
+> & Readonly<{ execution?: HistoricalSimulationReasonLedgerV2Draft["execution"] }>;
 
 export type HistoricalModeledExitV2 = Readonly<{
   risk: HistoricalSimulationReasonLedgerV2Draft["risk"];
@@ -165,6 +165,11 @@ export type RunHistoricalSimulationV2Input = Readonly<{
     cycle: HistoricalSimulationV2Cycle;
     knowledge: HistoricalKnowledgeSnapshotV2;
   }>): Promise<ForecastRuntimeInputV2>;
+  /** Persists the issuance and advances future-only closure state after current PIT issuance. */
+  forecastLifecycleSink?: (input: Readonly<{
+    cycle: HistoricalSimulationV2Cycle;
+    forecast: ForecastRuntimeOutcomeV2;
+  }>) => Promise<void>;
   decisionCapitalAuthorityV2: CanonicalDecisionCapitalAuthorityV2Deps;
   /** Must call Decision Economics V2 in semantic mode HISTORICAL and inspect current portfolio. */
   resolvePortfolioProposal(input: Readonly<{
@@ -190,6 +195,8 @@ export type RunHistoricalSimulationV2Input = Readonly<{
   /** Production default is the exact schema/hash/table preflight; injection exists for isolated tests. */
   postgresSchemaPreflight?: () => Promise<void>;
   evidenceSink?: (evidence: HistoricalSimulationV2Evidence) => Promise<void> | void;
+  /** Durable append-only sink. Called only after the entry is hash-linked and complete. */
+  reasonLedgerSink?: (entry: HistoricalSimulationReasonLedgerV2) => Promise<void> | void;
 }>;
 
 export type RunHistoricalSimulationV2Result = Readonly<{
@@ -341,6 +348,7 @@ export async function runHistoricalSimulationV2(
 
     const forecastInput = await input.resolveForecastInput({ cycle, knowledge: after });
     const forecast = issueForecastRuntimeV2(forecastInput);
+    await input.forecastLifecycleSink?.({ cycle, forecast });
     const proposal = await input.resolvePortfolioProposal({ cycle, forecast, knowledge: after });
     if (proposal.decisionSemanticMode !== "HISTORICAL" ||
         !DIGEST.test(proposal.proposalContentDigestHex) || !DIGEST.test(proposal.decisionContentDigestHex) ||
@@ -436,7 +444,7 @@ export async function runHistoricalSimulationV2(
             verdictContentDigestHex: null,
             allowanceContentDigestHex: null,
           }),
-      execution: exit?.execution ?? (authorityExecution
+      execution: projection.execution ?? exit?.execution ?? (authorityExecution
         ? {
             status: "COMMITTED",
             reasonCodes: [],
@@ -458,6 +466,7 @@ export async function runHistoricalSimulationV2(
       learning: projection.learning,
     });
     reasonLedger.push(ledgerEntry);
+    await input.reasonLedgerSink?.(ledgerEntry);
   }
 
   const enterLongCount = evidence.filter((row) => row.action === "ENTER_LONG").length;
