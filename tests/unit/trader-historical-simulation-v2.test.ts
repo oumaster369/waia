@@ -278,11 +278,11 @@ describe("Historical Simulation V2 composition boundary", () => {
           allowanceContentDigestHex: digest("b"),
         },
         execution: {
-          status: "NO_FILL" as const,
-          reasonCodes: ["MODELED_LIMIT_NOT_REACHED"],
+          status: "COMMITTED" as const,
+          reasonCodes: [],
           planContentDigestHex: digest("d"),
           attemptContentDigestHex: digest("e"),
-          reportContentDigestHex: digest("f"),
+          reportContentDigestHex: null,
           fillContentDigestHexes: [],
         },
       })),
@@ -308,7 +308,7 @@ describe("Historical Simulation V2 composition boundary", () => {
       action: "CLOSE",
       riskVerdictContentDigestHex: digest("a"),
       executionPlanContentDigestHex: digest("d"),
-      reasonCodes: ["MODELED_LIMIT_NOT_REACHED"],
+      reasonCodes: [],
     });
     expect(modeledExit.execute).toHaveBeenCalledTimes(1);
   });

@@ -4327,6 +4327,7 @@ export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
     portfolioJson: jsonb("portfolio_json").notNull(),
     riskJson: jsonb("risk_json").notNull(),
     executionJson: jsonb("execution_json").notNull(),
+    observedExecutionEffectsJson: jsonb("observed_execution_effects_json").notNull(),
     accountingJson: jsonb("accounting_json").notNull(),
     guardianJson: jsonb("guardian_json").notNull(),
     learningJson: jsonb("learning_json").notNull(),

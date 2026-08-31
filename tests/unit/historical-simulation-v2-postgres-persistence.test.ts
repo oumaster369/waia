@@ -17,13 +17,14 @@ describe("Historical Simulation V2 PostgreSQL persistence", () => {
       decision: { status: "ENTER_LONG", decisionContentDigestHex: digest("b"), whyNotCashReceiptDigestHex: digest("c"), evLower: "1", evBase: "2", evUpper: "3", reasonCodes: [] },
       portfolio: { status: "PROPOSED", proposalContentDigestHex: digest("d"), reasonCodes: [] },
       risk: { status: "APPROVE", verdictContentDigestHex: digest("e"), allowanceContentDigestHex: digest("f"), reasonCodes: [] },
-      execution: { status: "FILLED", planContentDigestHex: digest("1"), attemptContentDigestHex: digest("2"), reportContentDigestHex: digest("3"), fillContentDigestHexes: [digest("4"), digest("5")], reasonCodes: [] },
+      execution: { status: "COMMITTED", planContentDigestHex: digest("1"), attemptContentDigestHex: digest("2"), reportContentDigestHex: null, fillContentDigestHexes: [], reasonCodes: [] },
+      observedExecutionEffects: [{ effectId: "effect", originatingDecisionId: "decision", originatingDecisionContentDigestHex: digest("a"), originatingPlanId: "plan", originatingPlanContentDigestHex: digest("b"), originatingAttemptId: "attempt", originatingAttemptContentDigestHex: digest("c"), originatingOrderId: "order", originatingOrderContentDigestHex: digest("d"), status: "FILLED", reportContentDigestHexes: [digest("3")], fillContentDigestHexes: [digest("4"), digest("5")], reasonCodes: [] }],
       accounting: { status: "APPLIED", frontierContentDigestHex: digest("6"), reasonCodes: [] },
       guardian: { status: "NONE", assessmentContentDigestHex: digest("7"), reasonCodes: [] },
       learning: { status: "PENDING", calibrationObservationContentDigestHex: null, knowledgeUpdateContentDigestHex: null, eligibleResolutionAtUtc: null, visibleFromPitAnchorUtc: null, reasonCodes: ["FUTURE_ONLY"] },
     });
     const evidence = deriveHistoricalSimulationModeledEvidenceV2(entry);
-    expect(evidence.map((item) => item.evidenceKind)).toEqual(["RISK", "EXECUTION", "GUARDIAN", "FILL", "FILL"]);
+    expect(evidence.map((item) => item.evidenceKind)).toEqual(["RISK", "EXECUTION", "GUARDIAN", "EXECUTION", "FILL", "FILL"]);
     expect(evidence.every((item) => item.capitalEligible === false)).toBe(true);
     expect(new Set(evidence.map((item) => item.evidenceContentDigestHex)).size).toBe(evidence.length);
     expect(evidence.filter((item) => item.evidenceKind === "FILL").map((item) => item.evidenceOrdinal)).toEqual([0, 1]);
@@ -45,5 +46,14 @@ describe("Historical Simulation V2 PostgreSQL persistence", () => {
       expect(sql).toContain(required);
     }
     expect(sql).not.toMatch(/trader_reality_(events|truth_records)_v2.*INSERT/is);
+  });
+
+  it("adds observed execution effects only through the corrective 0184 migration", () => {
+    const sql183 = readFileSync(join(process.cwd(), "db/migrations_postgres/0183_historical_simulation_v2_evidence.sql"), "utf8");
+    const sql184 = readFileSync(join(process.cwd(), "db/migrations_postgres/0184_historical_simulation_observed_execution_effects_v2.sql"), "utf8");
+    expect(sql183).not.toContain("observed_execution_effects_json");
+    expect(sql184).toContain("ADD COLUMN \"observed_execution_effects_json\"");
+    expect(sql184).toContain("prior decisions");
+    expect(sql184).toContain("never canonical Reality V2");
   });
 });

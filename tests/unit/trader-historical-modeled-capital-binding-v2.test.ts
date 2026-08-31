@@ -15,7 +15,7 @@ describe("historical modeled capital binding v2", () => {
   it("creates deterministic non-capital exit evidence and never calls canonical Reality/Risk/Guardian", async () => {
     const registered: unknown[] = [];
     const evidence: Array<Record<string, unknown>> = [];
-    const advance = vi.fn(async () => undefined);
+    const advance = vi.fn(async (_cycle: unknown) => undefined);
     const canonicalReality = vi.fn(() => { throw new Error("must not be called"); });
     const canonicalRisk = vi.fn(() => { throw new Error("must not be called"); });
     const canonicalGuardian = vi.fn(() => { throw new Error("must not be called"); });

@@ -35,9 +35,10 @@ function completeDraft(
       allowanceContentDigestHex: digest("f"), reasonCodes: [],
     },
     execution: {
-      status: "FILLED", planContentDigestHex: digest("1"), attemptContentDigestHex: digest("2"),
-      reportContentDigestHex: digest("3"), fillContentDigestHexes: [digest("4")], reasonCodes: [],
+      status: "COMMITTED", planContentDigestHex: digest("1"), attemptContentDigestHex: digest("2"),
+      reportContentDigestHex: null, fillContentDigestHexes: [], reasonCodes: [],
     },
+    observedExecutionEffects: [],
     accounting: { status: "APPLIED", frontierContentDigestHex: digest("5"), reasonCodes: [] },
     guardian: { status: "NONE", assessmentContentDigestHex: digest("6"), reasonCodes: [] },
     learning: {
@@ -116,5 +117,22 @@ describe("Historical Simulation V2 reason ledger", () => {
       ...entry,
       decision: { ...entry.decision, evLower: "999" },
     })).toBe(false);
+  });
+
+  it("separates prior-decision realized fills from current-decision submission", () => {
+    const effect = {
+      effectId: "effect-1", originatingDecisionId: "decision-previous",
+      originatingDecisionContentDigestHex: digest("a"), originatingPlanId: "plan-previous",
+      originatingPlanContentDigestHex: digest("b"), originatingAttemptId: "attempt-previous",
+      originatingAttemptContentDigestHex: digest("c"), originatingOrderId: "order-previous",
+      originatingOrderContentDigestHex: digest("d"), status: "FILLED" as const,
+      reportContentDigestHexes: [digest("e")], fillContentDigestHexes: [digest("f")], reasonCodes: [],
+    };
+    expect(validateHistoricalSimulationReasonLedgerV2(createHistoricalSimulationReasonLedgerV2(completeDraft({
+      observedExecutionEffects: [effect],
+    })))).toBe(true);
+    expect(() => createHistoricalSimulationReasonLedgerV2(completeDraft({
+      execution: { ...completeDraft().execution, status: "FILLED" as "COMMITTED", reportContentDigestHex: digest("e"), fillContentDigestHexes: [digest("f")] },
+    }))).toThrow(/submission-only/);
   });
 });

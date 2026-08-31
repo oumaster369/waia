@@ -32,7 +32,14 @@ export function deriveHistoricalSimulationModeledEvidenceV2(entry: HistoricalSim
     evidence({ ...common, evidenceKind: "RISK", evidenceOrdinal: 0, sourceContentDigestHex: entry.risk.verdictContentDigestHex, payload: entry.risk }),
     evidence({ ...common, evidenceKind: "EXECUTION", evidenceOrdinal: 0, sourceContentDigestHex: entry.execution.reportContentDigestHex, payload: entry.execution }),
     evidence({ ...common, evidenceKind: "GUARDIAN", evidenceOrdinal: 0, sourceContentDigestHex: entry.guardian.assessmentContentDigestHex, payload: entry.guardian }),
-    ...entry.execution.fillContentDigestHexes.map((digest, evidenceOrdinal) => evidence({
+    ...entry.observedExecutionEffects.map((effect, index) => evidence({
+      ...common,
+      evidenceKind: "EXECUTION",
+      evidenceOrdinal: index + 1,
+      sourceContentDigestHex: effect.reportContentDigestHexes.at(-1) ?? null,
+      payload: { ...effect, sourceClass: "HISTORICAL_SIMULATION_V2_OBSERVED_EXECUTION_EFFECT" },
+    })),
+    ...entry.observedExecutionEffects.flatMap((effect) => effect.fillContentDigestHexes).map((digest, evidenceOrdinal) => evidence({
       ...common,
       evidenceKind: "FILL",
       evidenceOrdinal,
@@ -72,12 +79,12 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
       INSERT INTO trader_historical_simulation_reason_ledger_v2 (
         entry_id, organization_id, run_id, cycle_id, cycle_sequence, symbol, partition, capital_eligible,
         replay_bar_closed_at_utc, previous_content_digest_hex, forecast_json, decision_json, portfolio_json,
-        risk_json, execution_json, accounting_json, guardian_json, learning_json, content_digest_hex
+        risk_json, execution_json, observed_execution_effects_json, accounting_json, guardian_json, learning_json, content_digest_hex
       ) VALUES (
         ${entry.entryId}, ${entry.organizationId}, ${entry.runId}, ${entry.cycleId}, ${entry.cycleSequence}, ${entry.symbol},
         ${entry.partition}, false, ${entry.replayBarClosedAtUtc}, ${entry.previousContentDigestHex},
         ${sql.json(entry.forecast)}, ${sql.json(entry.decision)}, ${sql.json(entry.portfolio)}, ${sql.json(entry.risk)},
-        ${sql.json(entry.execution)}, ${sql.json(entry.accounting)}, ${sql.json(entry.guardian)}, ${sql.json(entry.learning)},
+        ${sql.json(entry.execution)}, ${sql.json(entry.observedExecutionEffects)}, ${sql.json(entry.accounting)}, ${sql.json(entry.guardian)}, ${sql.json(entry.learning)},
         ${entry.contentDigestHex}
       )
     `;
@@ -107,6 +114,7 @@ export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
     previous_content_digest_hex: string | null; forecast_json: HistoricalSimulationReasonLedgerV2["forecast"];
     decision_json: HistoricalSimulationReasonLedgerV2["decision"]; portfolio_json: HistoricalSimulationReasonLedgerV2["portfolio"];
     risk_json: HistoricalSimulationReasonLedgerV2["risk"]; execution_json: HistoricalSimulationReasonLedgerV2["execution"];
+    observed_execution_effects_json: HistoricalSimulationReasonLedgerV2["observedExecutionEffects"];
     accounting_json: HistoricalSimulationReasonLedgerV2["accounting"]; guardian_json: HistoricalSimulationReasonLedgerV2["guardian"];
     learning_json: HistoricalSimulationReasonLedgerV2["learning"]; content_digest_hex: string;
   };
@@ -133,6 +141,7 @@ export async function readHistoricalSimulationReasonLedgerV2Postgres(input: {
       portfolio: row.portfolio_json,
       risk: row.risk_json,
       execution: row.execution_json,
+      observedExecutionEffects: row.observed_execution_effects_json,
       accounting: row.accounting_json,
       guardian: row.guardian_json,
       learning: row.learning_json,

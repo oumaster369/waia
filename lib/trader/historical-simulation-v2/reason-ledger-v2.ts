@@ -41,15 +41,30 @@ export type HistoricalSimulationReasonLedgerV2 = Readonly<{
       verdictContentDigestHex: string | null;
       allowanceContentDigestHex: string | null;
     }>;
-  execution: EvidenceStageV2<
-    "COMMITTED" | "PARTIAL_FILL" | "FILLED" | "NO_FILL" | "NOT_DISPATCHED"
-  > &
+  /** Submission caused by this cycle's decision; realized effects belong below. */
+  execution: EvidenceStageV2<"COMMITTED" | "NOT_DISPATCHED"> &
     Readonly<{
       planContentDigestHex: string | null;
       attemptContentDigestHex: string | null;
       reportContentDigestHex: string | null;
       fillContentDigestHexes: readonly string[];
     }>;
+  /** Effects observed on this bar from orders submitted by prior decisions. */
+  observedExecutionEffects: ReadonlyArray<Readonly<{
+    effectId: string;
+    originatingDecisionId: string;
+    originatingDecisionContentDigestHex: string;
+    originatingPlanId: string;
+    originatingPlanContentDigestHex: string;
+    originatingAttemptId: string;
+    originatingAttemptContentDigestHex: string;
+    originatingOrderId: string;
+    originatingOrderContentDigestHex: string;
+    status: "NO_FILL" | "PARTIAL_FILL" | "FILLED" | "EXPIRED" | "CANCELLED";
+    reportContentDigestHexes: readonly string[];
+    fillContentDigestHexes: readonly string[];
+    reasonCodes: readonly string[];
+  }>>;
   accounting: EvidenceStageV2<"APPLIED" | "UNCHANGED" | "NOT_APPLICABLE"> &
     Readonly<{ frontierContentDigestHex: string }>;
   guardian: EvidenceStageV2<"NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT"> &
@@ -148,8 +163,8 @@ function assertComplete(input: HistoricalSimulationReasonLedgerV2Draft): void {
   }
   requireReasons("risk", input.risk.status, input.risk.reasonCodes, riskPermitted);
 
-  for (const digest of input.execution.fillContentDigestHexes) {
-    requireDigest(digest, "execution.fillContentDigestHexes[]");
+  if (input.execution.fillContentDigestHexes.length !== 0 || input.execution.reportContentDigestHex !== null) {
+    throw new Error("current decision execution is submission-only; observed effects belong in observedExecutionEffects");
   }
   const dispatched = input.execution.status !== "NOT_DISPATCHED";
   for (const [value, field] of [
@@ -160,12 +175,34 @@ function assertComplete(input: HistoricalSimulationReasonLedgerV2Draft): void {
     if (dispatched && value === null) throw new Error(`${field} required for dispatched execution`);
   }
   requireDigest(input.execution.reportContentDigestHex, "execution.reportContentDigestHex", true);
-  if ((input.execution.status === "PARTIAL_FILL" || input.execution.status === "FILLED") &&
-      input.execution.fillContentDigestHexes.length === 0) {
-    throw new Error("filled execution requires fill evidence");
-  }
   requireReasons("execution", input.execution.status, input.execution.reasonCodes,
-    input.execution.status === "COMMITTED" || input.execution.status === "FILLED");
+    input.execution.status === "COMMITTED");
+
+  const effectIds = new Set<string>();
+  for (const [index, effect] of input.observedExecutionEffects.entries()) {
+    for (const [value, field] of [
+      [effect.effectId, "effectId"], [effect.originatingDecisionId, "originatingDecisionId"],
+      [effect.originatingPlanId, "originatingPlanId"], [effect.originatingAttemptId, "originatingAttemptId"],
+      [effect.originatingOrderId, "originatingOrderId"],
+    ] as const) requireText(value, `observedExecutionEffects[${index}].${field}`);
+    if (effectIds.has(effect.effectId)) throw new Error("observedExecutionEffects effectId must be unique per ledger entry");
+    effectIds.add(effect.effectId);
+    for (const [value, field] of [
+      [effect.originatingDecisionContentDigestHex, "originatingDecisionContentDigestHex"],
+      [effect.originatingPlanContentDigestHex, "originatingPlanContentDigestHex"],
+      [effect.originatingAttemptContentDigestHex, "originatingAttemptContentDigestHex"],
+      [effect.originatingOrderContentDigestHex, "originatingOrderContentDigestHex"],
+    ] as const) requireDigest(value, `observedExecutionEffects[${index}].${field}`);
+    if (effect.originatingDecisionContentDigestHex === input.decision.decisionContentDigestHex) {
+      throw new Error("observed execution effect must originate from a prior decision");
+    }
+    effect.reportContentDigestHexes.forEach((value) => requireDigest(value, `observedExecutionEffects[${index}].reportContentDigestHexes[]`));
+    effect.fillContentDigestHexes.forEach((value) => requireDigest(value, `observedExecutionEffects[${index}].fillContentDigestHexes[]`));
+    if (effect.reportContentDigestHexes.length === 0) throw new Error("observed execution effect requires report evidence");
+    const filled = effect.status === "PARTIAL_FILL" || effect.status === "FILLED";
+    if (filled !== (effect.fillContentDigestHexes.length > 0)) throw new Error("observed execution effect fill/status mismatch");
+    requireReasons("observedExecutionEffects", effect.status, effect.reasonCodes, filled);
+  }
 
   requireDigest(input.accounting.frontierContentDigestHex, "accounting.frontierContentDigestHex");
   requireReasons("accounting", input.accounting.status, input.accounting.reasonCodes,

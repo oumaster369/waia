@@ -145,7 +145,10 @@ export function createHistoricalDecisionEconomicsPortfolioResolverV2(input: Read
 type LedgerProjection = Pick<
   HistoricalSimulationReasonLedgerV2Draft,
   "accounting" | "guardian" | "learning"
-> & Readonly<{ execution?: HistoricalSimulationReasonLedgerV2Draft["execution"] }>;
+> & Readonly<{
+  execution?: HistoricalSimulationReasonLedgerV2Draft["execution"];
+  observedExecutionEffects?: HistoricalSimulationReasonLedgerV2Draft["observedExecutionEffects"];
+}>;
 
 export type HistoricalModeledExitV2 = Readonly<{
   risk: HistoricalSimulationReasonLedgerV2Draft["risk"];
@@ -461,6 +464,7 @@ export async function runHistoricalSimulationV2(
             reportContentDigestHex: null,
             fillContentDigestHexes: [],
           }),
+      observedExecutionEffects: projection.observedExecutionEffects ?? [],
       accounting: projection.accounting,
       guardian: projection.guardian,
       learning: projection.learning,
