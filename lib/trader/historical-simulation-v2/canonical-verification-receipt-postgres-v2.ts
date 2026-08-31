@@ -30,6 +30,7 @@ export type CanonicalDecisionVerificationReceiptV2 = Readonly<{
   schemaVersion: typeof CANONICAL_DECISION_VERIFICATION_RECEIPT_V2;
   organizationId: string;
   accountId: string | null;
+  instrumentIdentityDigestHex: string | null;
   purpose: Purpose;
   subjectContentDigestHex: string;
   sourceRecordKind: "FORECAST_BUNDLE_V2" | "SCIENTIFIC_ADMISSION_V1" | "DEE659_AUTHORITY";
@@ -62,11 +63,11 @@ function hasValidDigest(receipt: CanonicalDecisionVerificationReceiptV2): boolea
 async function persist(sql: postgres.Sql, receipt: CanonicalDecisionVerificationReceiptV2): Promise<void> {
   await sql`
     INSERT INTO trader_canonical_decision_verification_receipt_v2 (
-      organization_id, account_id, purpose, subject_content_digest_hex, source_record_kind,
+      organization_id, account_id, instrument_identity_digest_hex, purpose, subject_content_digest_hex, source_record_kind,
       source_record_id, source_record_content_digest_hex, pit_anchor, verified,
       verification_receipt_digest_hex, receipt_json, schema_version
     ) VALUES (
-      ${receipt.organizationId}::uuid, ${receipt.accountId}, ${receipt.purpose},
+      ${receipt.organizationId}::uuid, ${receipt.accountId}, ${receipt.instrumentIdentityDigestHex}, ${receipt.purpose},
       ${receipt.subjectContentDigestHex}, ${receipt.sourceRecordKind}, ${receipt.sourceRecordId},
       ${receipt.sourceRecordContentDigestHex}, ${receipt.pitAnchor}::timestamptz, true,
       ${receipt.verificationReceiptDigestHex}, ${sql.json(JSON.parse(JSON.stringify(receipt)) as postgres.JSONValue)},
@@ -123,6 +124,7 @@ export function createCanonicalDecisionVerificationReceiptServiceV2(sql: postgre
     const receipt = seal({
       schemaVersion: CANONICAL_DECISION_VERIFICATION_RECEIPT_V2,
       organizationId: input.organizationId, accountId: null,
+      instrumentIdentityDigestHex: null,
       purpose: "FORECAST_RUNTIME_AUTHORIZED", subjectContentDigestHex: input.subjectContentDigestHex,
       sourceRecordKind: "FORECAST_BUNDLE_V2", sourceRecordId: row.bundle_id,
       sourceRecordContentDigestHex: row.bundle_content_digest_hex, pitAnchor, verified: true,
@@ -146,6 +148,7 @@ export function createCanonicalDecisionVerificationReceiptServiceV2(sql: postgre
     const receipt = seal({
       schemaVersion: CANONICAL_DECISION_VERIFICATION_RECEIPT_V2,
       organizationId: input.organizationId, accountId: null, purpose: "SCIENTIFIC_ADMISSION",
+      instrumentIdentityDigestHex: null,
       subjectContentDigestHex: row.content_digest, sourceRecordKind: "SCIENTIFIC_ADMISSION_V1",
       sourceRecordId: row.id, sourceRecordContentDigestHex: row.content_digest,
       pitAnchor: input.pitAnchor, verified: true,
@@ -168,6 +171,7 @@ export function createCanonicalDecisionVerificationReceiptServiceV2(sql: postgre
       const receipt = seal({
         schemaVersion: CANONICAL_DECISION_VERIFICATION_RECEIPT_V2,
         organizationId: a.organizationId, accountId: a.accountId, purpose,
+        instrumentIdentityDigestHex: a.instrumentIdentityDigestHex,
         subjectContentDigestHex: authority.contentDigestHex, sourceRecordKind: "DEE659_AUTHORITY",
         sourceRecordId: authority.contentDigestHex, sourceRecordContentDigestHex: sourceDigest,
         pitAnchor: input.pitAnchor, verified: true,
@@ -211,16 +215,21 @@ export function createPostgresCanonicalDecisionVerificationReceiptPortV2(
         const rows = await sql<{ receipt_json: CanonicalDecisionVerificationReceiptV2 }[]>`
           SELECT receipt_json FROM trader_canonical_decision_verification_receipt_v2
           WHERE organization_id=${value.organizationId}::uuid AND account_id=${value.accountId}
+            AND instrument_identity_digest_hex=${value.instrumentIdentityDigestHex}
             AND purpose=${purpose} ORDER BY pit_anchor DESC LIMIT 1
         `;
         return rows[0]?.receipt_json;
       }));
-      if (receipts.some((receipt) => !receipt || receipt.accountId !== value.accountId)) {
+      const pitAnchor = receipts[0]?.pitAnchor;
+      if (receipts.some((receipt) => !receipt || !hasValidDigest(receipt) ||
+          receipt.accountId !== value.accountId ||
+          receipt.instrumentIdentityDigestHex !== value.instrumentIdentityDigestHex ||
+          receipt.pitAnchor !== pitAnchor)) {
         throw new Error("CANONICAL_DECISION_VERIFICATION_RECEIPT_MISSING_OR_CORRUPT");
       }
       return Object.fromEntries(receipts.map((r, index) => [index === 0 ? "anchor" : index === 1 ? "executablePolicy" : index === 2 ? "economicSize" : "cash", {
         schemaVersion: "dee659-authority-verification/v1", verified: true, purpose: r!.purpose,
-        organizationId: r!.organizationId, accountId: r!.accountId!, instrumentIdentityDigestHex: value.instrumentIdentityDigestHex,
+        organizationId: r!.organizationId, accountId: r!.accountId!, instrumentIdentityDigestHex: r!.instrumentIdentityDigestHex!,
         subjectContentDigestHex: r!.subjectContentDigestHex, verificationReceiptDigestHex: r!.verificationReceiptDigestHex,
       }])) as ExecutionPayoffAuthorityVerificationV1;
     },
