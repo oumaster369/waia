@@ -412,7 +412,11 @@ function sameDatasetAuthority(
   left: HistoricalSimulationDatasetAuthorityV2,
   right: HistoricalSimulationDatasetAuthorityV2,
 ): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return left.manifestSemanticDigestHex === right.manifestSemanticDigestHex &&
+    left.sealReceiptDigestHex === right.sealReceiptDigestHex &&
+    left.partitionDigestHex === right.partitionDigestHex &&
+    left.partitionRawSha256Hex === right.partitionRawSha256Hex &&
+    left.split === right.split && left.symbol === right.symbol;
 }
 
 function validateDatasetMembership(membership: HistoricalDatasetMembershipV2): void {
@@ -558,7 +562,9 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
     validateStageBundle(input.stageBundles[stage], stage, input.ledgerEntry, input.scope);
   }
   const hasArtifactDigest = (stage: HistoricalSimulationAtomicStageV2, digest: string) =>
-    input.stageBundles[stage].artifacts.some((artifact) => artifact.contentDigestHex === digest);
+    input.stageBundles[stage].artifacts.some((artifact) => artifact.contentDigestHex === digest ||
+      (artifact.payload !== null && typeof artifact.payload === "object" &&
+        (artifact.payload as Readonly<{ sourceContentDigestHex?: unknown }>).sourceContentDigestHex === digest));
   if (!hasArtifactDigest("ACCOUNTING", input.ledgerEntry.accounting.frontierContentDigestHex) ||
       !hasArtifactDigest("GUARDIAN", input.ledgerEntry.guardian.assessmentContentDigestHex) ||
       !hasArtifactDigest("KNOWLEDGE", input.knowledgeCheckpointContentDigestHex)) {
@@ -599,15 +605,16 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
     const expectedSequence = head ? head.cycleSequence + 1 : 0;
     const membership = input.ledgerEntry.datasetMembership;
     validateDatasetMembership(membership);
-    if (input.ledgerEntry.organizationId !== input.scope.organizationId ||
-        input.ledgerEntry.runId !== input.scope.runId || input.ledgerEntry.partition !== input.scope.split ||
-        input.ledgerEntry.cycleSequence !== expectedSequence ||
-        input.ledgerEntry.previousContentDigestHex !== (head?.contentDigestHex ?? null) ||
-        membership.recordIndex !== expectedSequence ||
-        (previousCursor && !sameDatasetAuthority(
-          previousCursor.datasetAuthority, datasetAuthority(membership),
-        ))) {
-      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:NEXT_SEQUENCE_OR_BINDING");
+    const nextBindingFailure = input.ledgerEntry.organizationId !== input.scope.organizationId ? "ORGANIZATION"
+      : input.ledgerEntry.runId !== input.scope.runId ? "RUN"
+      : input.ledgerEntry.partition !== input.scope.split ? "SPLIT"
+      : input.ledgerEntry.cycleSequence !== expectedSequence ? "CYCLE_SEQUENCE"
+      : input.ledgerEntry.previousContentDigestHex !== (head?.contentDigestHex ?? null) ? "PREVIOUS_LEDGER"
+      : membership.recordIndex !== expectedSequence ? "RECORD_INDEX"
+      : previousCursor && !sameDatasetAuthority(previousCursor.datasetAuthority, datasetAuthority(membership))
+        ? "DATASET_AUTHORITY" : null;
+    if (nextBindingFailure) {
+      throw new Error(`HISTORICAL_SIMULATION_RESUME_REFUSED:NEXT_SEQUENCE_OR_BINDING:${nextBindingFailure}`);
     }
     requireDigest(input.knowledgeCheckpointContentDigestHex, "knowledgeCheckpointContentDigestHex");
     if (!Number.isSafeInteger(input.knowledgeCheckpointSequence) || input.knowledgeCheckpointSequence < 0) {

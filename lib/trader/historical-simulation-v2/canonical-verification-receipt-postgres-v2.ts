@@ -39,6 +39,7 @@ import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { requireForecastRuntimeAuthorizedOutcomeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import {
   requireScientificAdmissionV2,
+  SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION,
   type ScientificAdmissionReceiptV2,
 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 import type { CanonicalDecisionVerificationReceiptPortV2 } from "./dee659-authority-repository-postgres-v2";
@@ -175,8 +176,8 @@ async function persistSubject(sql: postgres.Sql, input: Readonly<{
   if (!existing || computeStableJsonDigest(existing.subject_json) !== computeStableJsonDigest(input.subject) ||
       existing.account_id !== input.accountId ||
       existing.instrument_identity_digest_hex !== input.instrumentIdentityDigestHex ||
-      new Date(existing.pit_anchor).toISOString() !== input.pitAnchor) {
-    throw new Error("CANONICAL_DECISION_VERIFICATION_SUBJECT_CONFLICT");
+      Date.parse(new Date(existing.pit_anchor).toISOString()) > Date.parse(input.pitAnchor)) {
+    throw new Error(`CANONICAL_DECISION_VERIFICATION_SUBJECT_CONFLICT:${input.subjectKind}`);
   }
 }
 
@@ -257,7 +258,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         ON rs.organization_id=s.organization_id AND rs.run_id=${input.runId}
       WHERE s.organization_id=${input.organizationId}::uuid
         AND s.content_digest=${input.scientificAdmissionContentDigestHex}
-        AND s.schema_version='waia.trader.scientific_admission_receipt.v2'
+        AND s.schema_version=${SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION}
         AND s.created_at <= rs.started_at
     `;
     const row = rows[0];
@@ -684,7 +685,8 @@ export function createPostgresCanonicalDecisionVerificationReceiptPortV2(
   sql: postgres.Sql,
 ): CanonicalDecisionVerificationReceiptPortV2 {
   const verifierDigest = verifierCodeDigestHex();
-  async function load(purpose: Purpose, organizationId: string, subject: string, sourceRecordId?: string) {
+  async function load(purpose: Purpose, organizationId: string, subject: string,
+    sourceRecordId?: string, forecastId?: string) {
     const rows = await sql<{ receipt_json: CanonicalDecisionVerificationReceiptV2 }[]>`
       SELECT r.receipt_json FROM trader_canonical_decision_verification_receipt_v2 r
       JOIN trader_canonical_decision_verification_subject_v2 s
@@ -693,6 +695,7 @@ export function createPostgresCanonicalDecisionVerificationReceiptPortV2(
       WHERE r.organization_id=${organizationId}::uuid AND r.purpose=${purpose}
         AND r.subject_content_digest_hex=${subject}
         AND (${sourceRecordId ?? null}::text IS NULL OR r.source_record_id=${sourceRecordId ?? null})
+        AND (${forecastId ?? null}::text IS NULL OR r.forecast_id::text=${forecastId ?? null})
         AND r.schema_version=${CANONICAL_DECISION_VERIFICATION_RECEIPT_V2}
         AND r.verifier_version=${VERIFIER_VERSION}
         AND r.verifier_code_digest_hex=${verifierDigest} AND r.verified=true
@@ -708,12 +711,14 @@ export function createPostgresCanonicalDecisionVerificationReceiptPortV2(
     return receipt;
   }
   return {
-    loadForecastVerification: (value) => load("FORECAST_RUNTIME_AUTHORIZED", value.organizationId, value.subjectContentDigestHex)
+    loadForecastVerification: (value) => load("FORECAST_RUNTIME_AUTHORIZED", value.organizationId,
+      value.subjectContentDigestHex, undefined, value.forecastId)
       .then((receipt) => {
         if (receipt.forecastId !== value.forecastId) throw new Error("CANONICAL_DECISION_VERIFICATION_RECEIPT_FORECAST_MISMATCH");
         return receipt;
       }),
-    loadScientificVerification: (value) => load("SCIENTIFIC_ADMISSION", value.organizationId, value.scientificAdmissionContentDigestHex)
+    loadScientificVerification: (value) => load("SCIENTIFIC_ADMISSION", value.organizationId,
+      value.scientificAdmissionContentDigestHex, undefined, value.forecastId)
       .then((receipt) => {
         if (receipt.forecastId !== value.forecastId) throw new Error("CANONICAL_DECISION_VERIFICATION_RECEIPT_FORECAST_MISMATCH");
         return receipt;

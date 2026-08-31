@@ -203,10 +203,10 @@ function canonicalMembershipDigest(value: HistoricalDatasetMembershipV2): string
  * organization/run/cycle/symbol/PIT identity; no "latest" lookup or caller-provided closure exists.
  * Its migration is a prerequisite of the final production graph, not part of this foundation.
  */
-export function createPostgresHistoricalForecastInputPitLoaderV2(sql: postgres.Sql) {
-  return async (expected: HistoricalForecastInputPitIdentityV2): Promise<ForecastRuntimeInputV2> => {
-    return sql.begin("isolation level repeatable read read only", async (transaction) => {
-    const sql = transaction as unknown as postgres.Sql;
+export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
+  sql: postgres.Sql,
+  expected: HistoricalForecastInputPitIdentityV2,
+): Promise<ForecastRuntimeInputV2> {
     const rows = await sql<PitInputRow[]>`
       SELECT p.organization_id::text, p.run_id, p.cycle_id, p.forecast_id::text, p.bundle_id::text,
              p.forecast_target_role_id, encode(p.forecast_content_digest, 'hex') AS forecast_content_digest_hex,
@@ -270,7 +270,12 @@ export function createPostgresHistoricalForecastInputPitLoaderV2(sql: postgres.S
       expected.pitAnchor, knowledgeRows) !== expected.knowledgeContentDigestHex) {
       throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:KNOWLEDGE_CLOSURE_MISMATCH");
     }
-    return assertHistoricalForecastInputPitBindingV2(rows[0]!, expected);
-    });
+  return assertHistoricalForecastInputPitBindingV2(rows[0]!, expected);
+}
+
+export function createPostgresHistoricalForecastInputPitLoaderV2(sql: postgres.Sql) {
+  return async (expected: HistoricalForecastInputPitIdentityV2): Promise<ForecastRuntimeInputV2> => {
+    return sql.begin("isolation level repeatable read read only", async (transaction) =>
+      loadPostgresHistoricalForecastInputPitInTransactionV2(transaction as unknown as postgres.Sql, expected));
   };
 }

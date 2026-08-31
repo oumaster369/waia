@@ -24,11 +24,12 @@ import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/
 import { scoreForecastV2MulticlassObservation } from "@/lib/trader/intelligence/calibration/calibration-scorer";
 import { persistForecastV2TerminalClosurePostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
-import { qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import { assertHtxVolumeAuthorityQualified, qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import { persistHtxVolumeQualificationReceipt } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification-receipt-service";
 import { buildKmConvergenceReceiptV1 } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
 import { buildEpistemicParameterRatificationReceiptV1, buildPredictiveTerminalReceiptV1 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 import { buildScientificAdmissionReceiptRecordV2, persistScientificAdmissionReceiptV2 } from "@/lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2";
+import { readScientificAdmissionReceiptV1 } from "@/lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v1";
 import { bucketIndexForReturn, computeTerminalTargetGridFromDevelopmentReturns } from "@/lib/trader/research/benchmark/target-grid-ceremony-v1";
 import { quantizeScale8HalfUp } from "@/lib/trader/intelligence/forecast-v2/quantize-scale8-half-up-v1";
 import { buildForecastContractBindingV1, buildForecastContractBindingRecordV1,
@@ -38,7 +39,7 @@ import {
   buildForecastModelArtifactV2,
   buildForecastModelSpecV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-foundation-v2";
-import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import { issueForecastRuntimeV2, type ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { buildMarketStateSnapshotV2 } from "@/lib/trader/intelligence/predictive-admission";
 import type { PredictiveAdmissionReceiptV1 } from "@/lib/trader/intelligence/predictive-admission";
 import { runBacktest } from "@/lib/trader/backtest/backtest-runner";
@@ -66,15 +67,37 @@ import { computeFhvFileRawSha256, sealFhvV2Dataset, writeFhvAcquisitionReceipt }
 import { FHV_OFFICIAL_PARTITION_NAMES, FHV_OFFICIAL_SYMBOLS, fhvOfficialPartitionFileRelativePath,
   resolveFhvCanonicalPartitionInterval } from "@/lib/trader/market-data/fhv-partition-boundaries";
 import { sealHistoricalMarketCycleV2 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
-import { createCanonicalDecisionVerificationReceiptServiceV2 } from "@/lib/trader/historical-simulation-v2/canonical-verification-receipt-postgres-v2";
+import { createCanonicalDecisionVerificationReceiptServiceV2,
+  createPostgresCanonicalDecisionVerificationReceiptPortV2 } from "@/lib/trader/historical-simulation-v2/canonical-verification-receipt-postgres-v2";
+import { createPostgresDee659AuthorityRepositoryV2 } from "@/lib/trader/historical-simulation-v2/dee659-authority-repository-postgres-v2";
 import { computeHistoricalForecastPitKnowledgeDigestV2,
   createPostgresHistoricalForecastInputPitProducerV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
 import { createPostgresHistoricalForecastInputPitLoaderV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-loader-v2";
+import { runHistoricalSimulationNextCyclePostgresV2 } from "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
 import { getPostgresDrizzle } from "@/db/postgres-client";
 import { createAccountingFrontierRepositoryPostgres, createInitialAccountingState,
   computeAccountingSemanticDigest, type AccountingFrontierV1 } from "@/lib/trader/accounting";
 
 const WP518_PG_USER = "00000000-0000-4000-8000-000000051802";
+
+async function cleanupForecastV2TestOrg(url: string, userId: string): Promise<void> {
+  const cleanupSql = postgres(url, { max: 1 });
+  const triggers = [
+    ["trader_fill_execution_economics", "waia_trader_fill_execution_economics_block_delete"],
+    ["trader_accounting_frontier", "trader_accounting_frontier_block_delete"],
+  ] as const;
+  try {
+    for (const [table, trigger] of triggers) {
+      await cleanupSql.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`);
+    }
+    await cleanupWp13Org(url, userId);
+  } finally {
+    for (const [table, trigger] of triggers.toReversed()) {
+      await cleanupSql.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`);
+    }
+    await cleanupSql.end({ timeout: 5 });
+  }
+}
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -115,6 +138,7 @@ function buildRuntimeInput(
   predictivePackage: ReturnType<typeof buildPredictivePackageV1>,
   pitAnchor: string,
   scientific: Readonly<{ id: string; contentDigestHex: string }>,
+  anchorRealizedVol20m1m = 0.018,
 ): ForecastRuntimeInputV2 {
   const family = predictivePackage.family;
   const hex = (char: string) => char.repeat(64);
@@ -177,7 +201,7 @@ function buildRuntimeInput(
     }],
     sourceProfileDigestHex: hex("f"),
     representationProfileDigestHex: hex("1"),
-    anchorRealizedVol20m_1m: 0.018,
+    anchorRealizedVol20m_1m: anchorRealizedVol20m1m,
     forecastContractBinding,
   });
   const receiptBody = {
@@ -265,10 +289,13 @@ async function persistScientificForPackage(sql: postgres.Sql, organizationId: st
   const record = buildScientificAdmissionReceiptRecordV2({ organizationId, predictiveTerminalReceipt: predictive,
     kmConvergenceReceipt: km, epistemicParameterRatificationReceipt: ratification, htxVolumeQualificationReceipt: volume });
   await persistScientificAdmissionReceiptV2(sql, record);
-  return { id: record.id, contentDigestHex: record.contentDigest };
+  return { id: record.id, contentDigestHex: record.contentDigest,
+    evidenceSemanticDigestHex: record.evidenceSemanticDigest };
 }
 
-function createCanonicalDatasetFixture(organizationId: string, selectedBar: Bar) {
+function createCanonicalDatasetFixture(organizationId: string, selectedBarInput: Bar | readonly Bar[]) {
+  const selectedBars = Array.isArray(selectedBarInput) ? selectedBarInput : [selectedBarInput];
+  const selectedBar = selectedBars[0]!;
   const root = mkdtempSync(join(tmpdir(), "waia-0189-pg-"));
   const receipts = join(root, "receipts"); mkdirSync(receipts);
   const releaseSha = "1".repeat(40); const operatorId = "0189-integration";
@@ -283,12 +310,15 @@ function createCanonicalDatasetFixture(organizationId: string, selectedBar: Bar)
       barOpenTime: interval.startUtc,
       barCloseTime: new Date(Date.parse(interval.startUtc) + 60_000).toISOString(),
     } as Bar;
-    writeFileSync(path, serializeFhvBarsV2Record(barToFhvBarsV2Record(bar)));
+    writeFileSync(path, partition === "development" && symbol === "BTCUSDT"
+      ? selectedBars.map((selected) => serializeFhvBarsV2Record(barToFhvBarsV2Record(selected))).join("")
+      : serializeFhvBarsV2Record(barToFhvBarsV2Record(bar)));
     receiptPaths.push(writeFhvAcquisitionReceipt({ receiptDir: receipts,
       acquisitionRunId: `0189-${partition}-${symbol}`, releaseSha, organizationId, operatorId,
       sourceCapabilityReceiptDigest: capability, partition, symbol, startUtc: interval.startUtc,
       endUtc: interval.endUtc, outputRoot: root, fileRelativePath: relative,
-      rawSha256: computeFhvFileRawSha256(path), actualBarCount: 1 }).receiptPath);
+      rawSha256: computeFhvFileRawSha256(path),
+      actualBarCount: partition === "development" && symbol === "BTCUSDT" ? selectedBars.length : 1 }).receiptPath);
   }
   sealFhvV2Dataset({ datasetRoot: root, acquisitionReceiptPaths: receiptPaths, releaseSha,
     organizationId, operatorId, sourceCapabilityReceiptDigest: capability,
@@ -321,10 +351,19 @@ describe.skipIf(!integrationEnabled || !url)(
     }
     async function cleanupForecastRows(): Promise<void> {
       const tables = [
+        "trader_historical_simulation_resume_snapshot_link_v2",
+        "trader_historical_simulation_resume_stage_link_v2",
+        "trader_historical_simulation_resume_checkpoint_v2",
+        "trader_historical_simulation_durable_snapshot_v2",
+        "trader_historical_simulation_atomic_stage_v2",
+        "trader_historical_simulation_modeled_evidence_v2",
+        "trader_historical_simulation_reason_ledger_v2",
+        "trader_knowledge_state_checkpoint_v2",
         "trader_historical_forecast_input_knowledge_link_v2",
         "trader_historical_forecast_input_pit_v2",
         "trader_canonical_decision_verification_receipt_v2",
         "trader_historical_simulation_run_start_v2",
+        "trader_dee659_authority_bundle_v2",
         "trader_dee659_authority_preregistration_v2",
         "trader_canonical_decision_verification_subject_v2",
         "trader_historical_dataset_authority_v2",
@@ -365,7 +404,19 @@ describe.skipIf(!integrationEnabled || !url)(
           );
         }
       });
-      await cleanupWp13Org(url!, WP518_PG_USER);
+      await sql.begin(async (tx) => {
+        await tx.unsafe(
+          "ALTER TABLE trader_knowledge_state_checkpoint_v2 DISABLE TRIGGER trader_knowledge_state_checkpoint_v2_block_delete",
+        );
+        try {
+          await tx`DELETE FROM trader_knowledge_state_checkpoint_v2`;
+        } finally {
+          await tx.unsafe(
+            "ALTER TABLE trader_knowledge_state_checkpoint_v2 ENABLE TRIGGER trader_knowledge_state_checkpoint_v2_block_delete",
+          );
+        }
+      });
+      await cleanupForecastV2TestOrg(url!, WP518_PG_USER);
       orgId = await seedWp13User(url!, WP518_PG_USER, "Forecast V2 Persistence");
       await cleanupForecastRows();
     }, 600_000);
@@ -379,7 +430,7 @@ describe.skipIf(!integrationEnabled || !url)(
       await cleanupKnowledgeFeedback();
       await cleanupForecastRows();
       await sql.end({ timeout: 10 });
-      await cleanupWp13Org(url!, WP518_PG_USER);
+      await cleanupForecastV2TestOrg(url!, WP518_PG_USER);
     });
 
     it("persists package, replica artifacts, bundle and dual-role forecasts", async () => {
@@ -621,48 +672,29 @@ describe.skipIf(!integrationEnabled || !url)(
       const eligibleIso = new Date(
         issuance.anchorClosedBarEpochMs + (family.primaryHorizonMinutes + 3) * 60_000 + 1,
       ).toISOString();
-      const authorityBody = {
-        schemaVersion: "waia.trader.forecast_runtime_authority.v2" as const,
-        organizationId: orgId,
-        analysisPurpose: "NEW_OPPORTUNITY" as const,
-        anchorClosedBarAt: new Date(issuance.anchorClosedBarEpochMs).toISOString(),
-        anchorClosedBarEpochMs: issuance.anchorClosedBarEpochMs,
-        anchorRealizedVol20m_1m: issuance.anchorRealizedVol20m_1m,
-        executionHorizonMinutes: issuance.executionHorizonMinutes,
-        normalizationVersionDigestHex: issuance.normalizationVersionDigestHex,
-        marketStateSnapshotContentDigestHex: "1".repeat(64),
-        predictiveAdmissionReceiptContentDigestHex: "2".repeat(64),
-        forecastContractBindingContentDigestHex: "3".repeat(64),
-        scientificAdmissionReceiptContentDigestHex: "4".repeat(64),
-        selectedPredictivePackageContentDigestHex: digestHex(
-          issuance.package.predictivePackageContentDigest,
-        ),
-        inputContractDigestHex: "5".repeat(64),
-        modelSpecDigestHex: "6".repeat(64),
-        modelArtifactDigestHex: "7".repeat(64),
-        qualifiedInputBindingDigestHex: "8".repeat(64),
-        runtimeContractDigestHex: digestHex(issuance.package.runtimeContractDigest),
-        terminalTargetDefinitionDigestHex: family.terminalTargetDefinitionDigestHex,
-        executionOpportunityTargetDefinitionDigestHex:
-          family.executionOpportunityTargetDefinitionDigestHex,
-        forecastGenerationIdentityDigestHex: digestHex(issuance.forecastGenerationIdentityDigest),
-        terminalDistributionSemanticDigestHex: digestHex(
-          issuance.distributionSemanticDigestTerminal,
-        ),
-        executionDistributionSemanticDigestHex: digestHex(issuance.distributionSemanticDigestExec),
-        terminalForecastContentDigestHex: digestHex(issuance.forecastContentDigestTerminal),
-        executionForecastContentDigestHex: digestHex(issuance.forecastContentDigestExec),
-        knowledgeEdgeId: "00000000-0000-4000-8000-000000063300",
-        knowledgeContentDigestHex: "6".repeat(64),
-      };
-      const authorizedOutcome = {
-        status: "FORECAST_AUTHORIZED" as const,
-        authority: {
-          ...authorityBody,
-          contentDigestHex: computeSemanticSha256Hex(authorityBody),
-        },
-        issuance,
-      };
+      const scientific = await persistScientificForPackage(sql, orgId, pkg, "durable-runtime-input");
+      const runtimeInput = buildRuntimeInput(orgId, pkg,
+        new Date(issuance.anchorClosedBarEpochMs).toISOString(), scientific,
+        issuance.anchorRealizedVol20m_1m);
+      const runtimeBinding = runtimeInput.forecastContractBinding;
+      if (!runtimeBinding) throw new Error("canonical runtime binding missing");
+      await persistForecastContractBindingV1(sql, {
+        ...buildForecastContractBindingRecordV1({
+          organizationId: orgId,
+          scientificAdmissionReceiptId: scientific.id,
+          scientificAdmissionReceiptContentDigestHex: scientific.contentDigestHex,
+          selectedPredictivePackageContentDigestHex: runtimeBinding.selectedPredictivePackageContentDigestHex,
+          inputContract: runtimeBinding.inputContract,
+          modelSpec: runtimeBinding.modelSpec,
+          modelArtifact: runtimeBinding.modelArtifact,
+        }),
+        binding: runtimeBinding,
+        bindingJson: canonicalizeSemanticJsonString(runtimeBinding),
+      });
+      const authorizedOutcome = issueForecastRuntimeV2(runtimeInput);
+      if (authorizedOutcome.status !== "FORECAST_AUTHORIZED") {
+        throw new Error("expected exact authorized runtime input fixture");
+      }
       const objectiveEvidence = {
         organizationId: orgId,
         symbol: family.symbol,
@@ -737,6 +769,7 @@ describe.skipIf(!integrationEnabled || !url)(
           bars: offset === 5 ? [bar, { ...bar, interval: "15m" }] : [bar],
           sequence: offset,
           outcome: offset === 0 ? authorizedOutcome : null,
+          runtimeInput: offset === 0 ? runtimeInput : undefined,
         });
         const counts = await sql<{ count: string }[]>`
           SELECT count(*)::text AS count FROM trader_forecast_outcome_v2 o
@@ -754,6 +787,7 @@ describe.skipIf(!integrationEnabled || !url)(
         anchorClosedBarEpochMs: authorizedOutcome.authority.anchorClosedBarEpochMs,
         issuance: authorizedOutcome.issuance,
         authorizedOutcome,
+        runtimeInput,
         issuanceSequence: 0,
       });
       expect(durableRetry.retriedExisting).toBe(true);
@@ -781,9 +815,10 @@ describe.skipIf(!integrationEnabled || !url)(
               contentDigestHex: computeSemanticSha256Hex(changedKnowledgeAuthority),
             },
           },
+          runtimeInput,
           issuanceSequence: 0,
         }),
-      ).rejects.toThrow(/package\/runtime issuance mismatch/);
+      ).rejects.toThrow(/runtime input does not reproduce authorized outcome/);
       const wrongReceipt = qualifyHtxKlineVolumeAuthority({
         symbol: "ETHUSDT",
         qualifiedAtUtc: new Date(issuance.anchorClosedBarEpochMs).toISOString(),
@@ -805,6 +840,7 @@ describe.skipIf(!integrationEnabled || !url)(
           bars: [barAt(offset)],
           sequence: offset,
           outcome: offset === 0 ? authorizedOutcome : null,
+          runtimeInput: offset === 0 ? runtimeInput : undefined,
         });
       }
       await expect(
@@ -827,6 +863,7 @@ describe.skipIf(!integrationEnabled || !url)(
         bars: [barAt(0)],
         sequence: 0,
         outcome: authorizedOutcome,
+        runtimeInput,
       });
       await partitionedProducer.processCycle({
         organizationId: orgId,
@@ -1045,13 +1082,24 @@ describe.skipIf(!integrationEnabled || !url)(
         const family = { ...buildFamily(), organizationId: orgId };
         const pkg = buildPredictivePackageV1({
           family,
-          sourceCorpus: Array.from({ length: 120 }, (_, i) => anchor(i)),
+          sourceCorpus: Array.from({ length: 120 }, (_, i) => {
+            const source = anchor(i);
+            const outcome13d = [...source.outcome13d];
+            for (let component = 0; component <= 2; component += 1) outcome13d[component] = 0;
+            for (let component = 3; component <= 6; component += 1) {
+              outcome13d[component] = 0.05 + (i % 7) * 0.0004;
+            }
+            for (let component = 7; component <= 12; component += 1) outcome13d[component] = 10;
+            return { ...source, outcome13d };
+          }),
           kConfigDec: 3,
           mConfigDec: 4,
         });
         const issuanceBar = bars[19]!;
+        const secondIssuanceBar = bars[20]!;
         const scientific = await persistScientificForPackage(sql, orgId, pkg, "real-backtest");
         const runtimeInput = buildRuntimeInput(orgId, pkg, issuanceBar.barCloseTime, scientific);
+        const secondRuntimeInput = buildRuntimeInput(orgId, pkg, secondIssuanceBar.barCloseTime, scientific);
         const runtimeBinding = runtimeInput.forecastContractBinding;
         if (!runtimeBinding) throw new Error("canonical runtime binding missing");
         await persistForecastContractBindingV1(sql, {
@@ -1101,6 +1149,7 @@ describe.skipIf(!integrationEnabled || !url)(
             priorMachineRecommendedConfidence: "0.5000",
             runtimeInputsByAnchorClosedBarEpochMs: new Map([
               [Date.parse(issuanceBar.barCloseTime), runtimeInput],
+              [Date.parse(secondIssuanceBar.barCloseTime), secondRuntimeInput],
             ]),
             provenance: {
               codeSha: "d".repeat(40),
@@ -1120,23 +1169,32 @@ describe.skipIf(!integrationEnabled || !url)(
             ON c.organization_id = b.organization_id AND c.bundle_id = b.id
           WHERE b.organization_id = ${orgId}::uuid AND b.run_id = 'dee633-real-backtest'
         `;
-        expect(rows[0]).toMatchObject({ outcomes: "1", calibrations: "1" });
+        expect(rows[0]).toMatchObject({ outcomes: "2", calibrations: "2" });
 
-        const issued = await sql<{ forecast_id: string; cycle_id: string; authority_digest: string }[]>`
+        const issued = await sql<{ forecast_id: string; cycle_id: string; authority_digest: string; pit_anchor: Date | string }[]>`
           SELECT s.execution_forecast_id::text AS forecast_id, s.cycle_id,
-                 s.forecast_authority_content_digest_hex AS authority_digest
+                 s.forecast_authority_content_digest_hex AS authority_digest, s.pit_anchor
           FROM trader_forecast_runtime_input_source_v2 s
           WHERE s.organization_id=${orgId}::uuid AND s.run_id='dee633-real-backtest'
-            AND s.pit_anchor=${issuanceBar.barCloseTime}::timestamptz`;
-        expect(issued).toHaveLength(1);
+          ORDER BY s.pit_anchor`;
+        expect(issued).toHaveLength(2);
+        // The backtest session owns its mutable profile receipt.  The sealed
+        // historical graph receives a separate immutable qualification receipt.
+        const modeledReceipt = qualifyHtxKlineVolumeAuthority({ symbol: "BTCUSDT",
+          qualifiedAtUtc: issuanceBar.barCloseTime,
+          rows: [{ id: 1, open: 100, high: 101, low: 99, close: 100, amount: 2, vol: 200, count: 1 }] });
+        assertHtxVolumeAuthorityQualified(modeledReceipt);
         const cycle = sealHistoricalMarketCycleV2({ cycleId: issued[0]!.cycle_id, barIndex: 0,
-          closedBar: issuanceBar, htxVolumeAuthorityReceipt: receipt,
+          closedBar: issuanceBar, htxVolumeAuthorityReceipt: modeledReceipt,
           htxVolumeRaw: { amount: 2, vol: 200 } });
-        const datasetRoot = createCanonicalDatasetFixture(orgId, issuanceBar);
+        const secondCycle = sealHistoricalMarketCycleV2({ cycleId: issued[1]!.cycle_id, barIndex: 1,
+          closedBar: secondIssuanceBar, htxVolumeAuthorityReceipt: modeledReceipt,
+          htxVolumeRaw: { amount: 2, vol: 200 } });
+        const datasetRoot = createCanonicalDatasetFixture(orgId, [issuanceBar, secondIssuanceBar]);
         try {
           const verification = createCanonicalDecisionVerificationReceiptServiceV2(sql);
           const datasetIds = await verification.registerDatasetAuthority({ datasetRoot, organizationId: orgId,
-            runId: "dee633-real-backtest", partition: "DEVELOPMENT", symbol: "BTCUSDT", cycles: [cycle] });
+            runId: "dee633-real-backtest", partition: "DEVELOPMENT", symbol: "BTCUSDT", cycles: [cycle, secondCycle] });
           const datasetAuthorityId = datasetIds.get(cycle.cycleId)!;
           const state = createInitialAccountingState({ organizationId: orgId,
             accountKey: "dee633-real", runId: "dee633-real-backtest", frontierAsOf: issuanceBar.barCloseTime });
@@ -1144,9 +1202,7 @@ describe.skipIf(!integrationEnabled || !url)(
             sourceEconomicsDigest: "0".repeat(64), idempotencyKey: randomUUID() };
           const frontier = { ...base, semanticContentDigest: computeAccountingSemanticDigest(base as AccountingFrontierV1) } as AccountingFrontierV1;
           await createAccountingFrontierRepositoryPostgres(getPostgresDrizzle()).append(requireOrgContext(orgId), frontier);
-          const prereg = await verification.preregisterExecution({ organizationId: orgId, accountId: "dee633-real",
-            runId: "dee633-real-backtest", forecastId: issued[0]!.forecast_id,
-            datasetAuthorityId, cycleId: cycle.cycleId, policyConfig: {
+          const policyConfig = {
               policyInstanceId: "0189-policy", interimPositionPolicyId: "fixed-horizon-qualification/unrepresentable-normal-exits-disabled/v1",
               sliceAllocationPolicy: "explicit-weights-last-slice-remainder-no-top-up/v1", roundingPolicy: "scale8-floor-step-truncate-half-up/v1",
               entrySliceOffsets: [1, 2, 3], entrySliceWeights: ["0.4", "0.3", "0.3"],
@@ -1156,11 +1212,55 @@ describe.skipIf(!integrationEnabled || !url)(
               exitCosts: { feeBps: "0", spreadBps: "0", impactBps: "0", slippageBps: "0", conservativeStressBps: "0" },
               partialFillPolicy: "EXPLICIT_CAPACITY_BOUNDED_NO_TOP_UP", unfilledEntryPolicy: "RETAIN_AS_CASH",
               postExitResidualPolicy: "SIZE_ECONOMICALLY_INADMISSIBLE",
-            }, defaultQuantity: "0.01",
+            } as const;
+          const prereg = await verification.preregisterExecution({ organizationId: orgId, accountId: "dee633-real",
+            runId: "dee633-real-backtest", forecastId: issued[0]!.forecast_id,
+            datasetAuthorityId, cycleId: cycle.cycleId, policyConfig, defaultQuantity: "0.1",
             initialAccountingFrontierId: frontier.id });
           await verification.startRun({ organizationId: orgId, accountId: "dee633-real",
             runId: "dee633-real-backtest", preregistrationId: prereg.preregistrationId,
             datasetSealDigestHex: prereg.datasetSealDigestHex });
+          await verification.issueForecast({ organizationId: orgId, forecastId: issued[0]!.forecast_id,
+            subjectContentDigestHex: issued[0]!.authority_digest });
+          await verification.issueScientific({ organizationId: orgId, runId: "dee633-real-backtest",
+            forecastId: issued[0]!.forecast_id,
+            scientificAdmissionContentDigestHex: scientific.contentDigestHex });
+          const executionPayoffVerification = await verification.issueExecution({ preregistrationId: prereg.preregistrationId,
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            forecastId: issued[0]!.forecast_id, datasetSealDigestHex: prereg.datasetSealDigestHex,
+            pitAnchor: issuanceBar.barCloseTime, subjectContentDigestHex: {
+              anchor: prereg.authorities.anchor.contentDigestHex,
+              executablePolicy: prereg.authorities.executablePolicy.contentDigestHex,
+              economicSize: prereg.authorities.economicSize.contentDigestHex,
+              cash: prereg.authorities.cash.contentDigestHex,
+            } });
+          const verificationPort = createPostgresCanonicalDecisionVerificationReceiptPortV2(sql);
+          const forecastVerification = await verificationPort.loadForecastVerification({ organizationId: orgId,
+            forecastId: issued[0]!.forecast_id, subjectContentDigestHex: issued[0]!.authority_digest });
+          const scientificAdmission = await readScientificAdmissionReceiptV1(sql, { organizationId: orgId,
+            evidenceSemanticDigestHex: scientific.evidenceSemanticDigestHex });
+          if (!scientificAdmission) throw new Error("scientific admission missing");
+          const scientificVerification = await verificationPort.loadScientificVerification({ organizationId: orgId,
+            forecastId: issued[0]!.forecast_id,
+            scientificAdmissionContentDigestHex: scientificAdmission.contentDigest });
+          const issuance = await sql<{ digest: string }[]>`
+            SELECT encode(bundle_content_digest,'hex') digest FROM trader_forecast_bundle_v2
+            WHERE organization_id=${orgId}::uuid AND cycle_id=${cycle.cycleId}`;
+          await createPostgresDee659AuthorityRepositoryV2({ sql, verificationReceipts: verificationPort }).persist({
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            cycleId: cycle.cycleId, forecastId: issued[0]!.forecast_id,
+            forecastAuthorityContentDigestHex: issued[0]!.authority_digest,
+            datasetSealDigestHex: prereg.datasetSealDigestHex,
+            dee659PreregistrationId: prereg.preregistrationId, pitAnchor: issuanceBar.barCloseTime,
+            forecastIssuanceReceiptDigestHex: issuance[0]!.digest,
+            forecastVerificationReceiptDigestHex: forecastVerification.verificationReceiptDigestHex,
+            scientificAdmission,
+            scientificVerificationReceiptDigestHex: scientificVerification.verificationReceiptDigestHex,
+            anchorAuthority: prereg.authorities.anchor,
+            executablePolicy: prereg.authorities.executablePolicy,
+            economicSizeSet: prereg.authorities.economicSize,
+            cashAuthority: prereg.authorities.cash, executionPayoffVerification,
+          });
           const produce = createPostgresHistoricalForecastInputPitProducerV2(sql);
           const firstProductionInput = { organizationId: orgId, runId: "dee633-real-backtest",
             cycleId: cycle.cycleId, forecastId: issued[0]!.forecast_id, symbol: "BTCUSDT",
@@ -1179,6 +1279,138 @@ describe.skipIf(!integrationEnabled || !url)(
             forecastAuthorityContentDigestHex: record.forecastAuthorityContentDigestHex,
             datasetAuthorityId: record.datasetAuthorityId });
           expect(loaded).toEqual(runtimeInput);
+          const committedCycle = await runHistoricalSimulationNextCyclePostgresV2({ sql,
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            partition: "DEVELOPMENT", symbol: "BTCUSDT", expectedCycleSequence: 0 });
+          expect(committedCycle).toMatchObject({ committedCycleId: cycle.cycleId,
+            nextCycleSequence: 1, nextRecordIndex: 1 });
+          const exactRetry = await runHistoricalSimulationNextCyclePostgresV2({ sql,
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            partition: "DEVELOPMENT", symbol: "BTCUSDT", expectedCycleSequence: 0 });
+          expect(exactRetry).toEqual(committedCycle);
+          const secondDatasetAuthorityId = datasetIds.get(secondCycle.cycleId)!;
+          const secondPrereg = await verification.preregisterExecution({ organizationId: orgId, accountId: "dee633-real",
+            runId: "dee633-real-backtest", forecastId: issued[1]!.forecast_id,
+            datasetAuthorityId: secondDatasetAuthorityId, cycleId: secondCycle.cycleId, policyConfig,
+            defaultQuantity: "0.1", initialAccountingFrontierId: frontier.id });
+          await verification.issueForecast({ organizationId: orgId, forecastId: issued[1]!.forecast_id,
+            subjectContentDigestHex: issued[1]!.authority_digest });
+          await verification.issueScientific({ organizationId: orgId, runId: "dee633-real-backtest",
+            forecastId: issued[1]!.forecast_id, scientificAdmissionContentDigestHex: scientific.contentDigestHex });
+          const secondExecutionVerification = await verification.issueExecution({ preregistrationId: secondPrereg.preregistrationId,
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            forecastId: issued[1]!.forecast_id, datasetSealDigestHex: secondPrereg.datasetSealDigestHex,
+            pitAnchor: secondIssuanceBar.barCloseTime, subjectContentDigestHex: {
+              anchor: secondPrereg.authorities.anchor.contentDigestHex,
+              executablePolicy: secondPrereg.authorities.executablePolicy.contentDigestHex,
+              economicSize: secondPrereg.authorities.economicSize.contentDigestHex,
+              cash: secondPrereg.authorities.cash.contentDigestHex,
+            } });
+          const secondForecastVerification = await verificationPort.loadForecastVerification({ organizationId: orgId,
+            forecastId: issued[1]!.forecast_id, subjectContentDigestHex: issued[1]!.authority_digest });
+          const secondScientificVerification = await verificationPort.loadScientificVerification({ organizationId: orgId,
+            forecastId: issued[1]!.forecast_id, scientificAdmissionContentDigestHex: scientificAdmission.contentDigest });
+          const secondIssuance = await sql<{ digest: string }[]>`
+            SELECT encode(bundle_content_digest,'hex') digest FROM trader_forecast_bundle_v2
+            WHERE organization_id=${orgId}::uuid AND cycle_id=${secondCycle.cycleId}`;
+          await createPostgresDee659AuthorityRepositoryV2({ sql, verificationReceipts: verificationPort }).persist({
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            cycleId: secondCycle.cycleId, forecastId: issued[1]!.forecast_id,
+            forecastAuthorityContentDigestHex: issued[1]!.authority_digest,
+            datasetSealDigestHex: secondPrereg.datasetSealDigestHex,
+            dee659PreregistrationId: secondPrereg.preregistrationId, pitAnchor: secondIssuanceBar.barCloseTime,
+            forecastIssuanceReceiptDigestHex: secondIssuance[0]!.digest,
+            forecastVerificationReceiptDigestHex: secondForecastVerification.verificationReceiptDigestHex,
+            scientificAdmission, scientificVerificationReceiptDigestHex: secondScientificVerification.verificationReceiptDigestHex,
+            anchorAuthority: secondPrereg.authorities.anchor,
+            executablePolicy: secondPrereg.authorities.executablePolicy,
+            economicSizeSet: secondPrereg.authorities.economicSize,
+            cashAuthority: secondPrereg.authorities.cash, executionPayoffVerification: secondExecutionVerification,
+          });
+          const secondProductionInput = { organizationId: orgId, runId: "dee633-real-backtest",
+            cycleId: secondCycle.cycleId, forecastId: issued[1]!.forecast_id, symbol: "BTCUSDT",
+            pitAnchor: secondIssuanceBar.barCloseTime, datasetAuthorityId: secondDatasetAuthorityId } as const;
+          await produce(secondProductionInput);
+          const datasetParity = await sql<{ previous_authority: unknown; next_membership: unknown;
+            volume_receipt: unknown }[]>`
+            SELECT c.checkpoint_json->'datasetAuthority' previous_authority, d.membership_json next_membership,
+              d.sealed_cycle_json->'htxVolumeAuthorityReceipt' volume_receipt
+            FROM trader_historical_simulation_resume_checkpoint_v2 c
+            JOIN trader_historical_dataset_authority_v2 d ON d.id=${secondDatasetAuthorityId}::uuid
+            WHERE c.organization_id=${orgId}::uuid AND c.run_id='dee633-real-backtest'
+              AND c.committed_cycle_sequence=0`;
+          expect(datasetParity).toHaveLength(1);
+          expect(datasetParity[0]!.volume_receipt).toEqual(modeledReceipt);
+          const nextMembership = datasetParity[0]!.next_membership as Record<string, unknown>;
+          expect(datasetParity[0]!.previous_authority).toEqual({
+            manifestSemanticDigestHex: nextMembership.manifestSemanticDigestHex,
+            sealReceiptDigestHex: nextMembership.sealReceiptDigestHex,
+            partitionDigestHex: nextMembership.partitionDigestHex,
+            partitionRawSha256Hex: nextMembership.partitionRawSha256Hex,
+            split: nextMembership.partition,
+            symbol: nextMembership.symbol,
+          });
+          const secondCommittedCycle = await runHistoricalSimulationNextCyclePostgresV2({ sql,
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            partition: "DEVELOPMENT", symbol: "BTCUSDT", expectedCycleSequence: 1 });
+          expect(secondCommittedCycle).toMatchObject({ committedCycleId: secondCycle.cycleId,
+            nextCycleSequence: 2, nextRecordIndex: 2 });
+          expect(await runHistoricalSimulationNextCyclePostgresV2({ sql,
+            organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
+            partition: "DEVELOPMENT", symbol: "BTCUSDT", expectedCycleSequence: 1 })).toEqual(secondCommittedCycle);
+          const chronology = await sql<{ cycle_sequence: number; forecast_status: string; forecast_reasons: unknown;
+            decision_status: string; decision_reasons: unknown; risk_status: string;
+            execution_status: string; accounting_status: string; effect_count: number }[]>`
+            SELECT cycle_sequence,forecast_json->>'status' forecast_status,forecast_json->'reasonCodes' forecast_reasons,
+              decision_json->>'status' decision_status,decision_json->'reasonCodes' decision_reasons,risk_json->>'status' risk_status,
+              execution_json->>'status' execution_status,accounting_json->>'status' accounting_status,
+              jsonb_array_length(observed_execution_effects_json) effect_count
+            FROM trader_historical_simulation_reason_ledger_v2
+            WHERE organization_id=${orgId}::uuid AND account_id='dee633-real' AND run_id='dee633-real-backtest'
+            ORDER BY cycle_sequence`;
+          expect(chronology[0]).toMatchObject({ cycle_sequence: 0, decision_status: "ENTER_LONG",
+            risk_status: "APPROVE", execution_status: "COMMITTED", accounting_status: "UNCHANGED", effect_count: 0 });
+          expect(chronology[1]).toMatchObject({ cycle_sequence: 1, decision_status: "ENTER_LONG",
+            risk_status: "APPROVE", accounting_status: "APPLIED" });
+          expect(chronology[1]!.effect_count).toBeGreaterThan(0);
+          const semanticChronology = await sql<{ accounting_digest: string; risk_accounting_digest: string | null;
+            effect_status: string; report_count: number; fill_count: number;
+            originating_decision_id: string; order_id: string }[]>`
+            SELECT r.accounting_json->>'frontierContentDigestHex' accounting_digest,
+              risk_artifact->'payload'->'sourcePayload'->>'accountingFrontierContentDigestHex' risk_accounting_digest,
+              r.observed_execution_effects_json->0->>'status' effect_status,
+              jsonb_array_length(r.observed_execution_effects_json->0->'reportContentDigestHexes') report_count,
+              jsonb_array_length(r.observed_execution_effects_json->0->'fillContentDigestHexes') fill_count,
+              r.observed_execution_effects_json->0->>'originatingDecisionId' originating_decision_id,
+              r.observed_execution_effects_json->0->>'originatingOrderId' order_id
+            FROM trader_historical_simulation_reason_ledger_v2 r
+            JOIN trader_historical_simulation_atomic_stage_v2 s
+              ON s.organization_id=r.organization_id AND s.account_id=r.account_id AND s.run_id=r.run_id
+             AND s.cycle_sequence=r.cycle_sequence AND s.stage='MODELED_RISK'
+            LEFT JOIN LATERAL (
+              SELECT artifact risk_artifact FROM jsonb_array_elements(s.artifacts_json) artifact
+              WHERE artifact->'payload'->>'sourceContentDigestHex'=r.risk_json->>'verdictContentDigestHex'
+              LIMIT 1
+            ) risk ON true
+            WHERE r.organization_id=${orgId}::uuid AND r.account_id='dee633-real'
+              AND r.run_id='dee633-real-backtest' AND r.cycle_sequence=1`;
+          expect(semanticChronology).toHaveLength(1);
+          expect(semanticChronology[0]!.risk_accounting_digest).not.toBeNull();
+          expect(semanticChronology[0]!.risk_accounting_digest).toBe(semanticChronology[0]!.accounting_digest);
+          expect(semanticChronology[0]).toMatchObject({ effect_status: "FILLED", report_count: 1, fill_count: 1 });
+          expect(semanticChronology[0]!.originating_decision_id).toMatch(/^[0-9a-f-]{36}$/);
+          expect(semanticChronology[0]!.order_id).toMatch(/^[0-9a-f-]{36}$/);
+          const graphCounts = await sql<{ checkpoints: string; ledgers: string; stages: string; snapshots: string }[]>`
+            SELECT
+              (SELECT count(*)::text FROM trader_historical_simulation_resume_checkpoint_v2
+                WHERE organization_id=${orgId}::uuid AND run_id='dee633-real-backtest') checkpoints,
+              (SELECT count(*)::text FROM trader_historical_simulation_reason_ledger_v2
+                WHERE organization_id=${orgId}::uuid AND run_id='dee633-real-backtest') ledgers,
+              (SELECT count(*)::text FROM trader_historical_simulation_atomic_stage_v2
+                WHERE organization_id=${orgId}::uuid AND run_id='dee633-real-backtest') stages,
+              (SELECT count(*)::text FROM trader_historical_simulation_durable_snapshot_v2
+                WHERE organization_id=${orgId}::uuid AND run_id='dee633-real-backtest') snapshots`;
+          expect(graphCounts[0]).toEqual({ checkpoints: "2", ledgers: "2", stages: "18", snapshots: "12" });
           await expect(produce({ ...firstProductionInput, datasetAuthorityId: randomUUID() }))
             .rejects.toThrow(/IDEMPOTENCY_CONFLICT/);
           expect(await load({ organizationId: orgId, runId: record.runId, cycleId: record.cycleId,
@@ -1215,7 +1447,7 @@ describe.skipIf(!integrationEnabled || !url)(
 
           const ownerVisible = await sql<{ count: string }[]>`SELECT count(*)::text AS count
             FROM trader_historical_forecast_input_pit_v2 WHERE organization_id=${orgId}::uuid`;
-          expect(ownerVisible[0]?.count).toBe("1");
+          expect(ownerVisible[0]?.count).toBe("2");
           await expect(sql.begin(async (tx) => {
             await tx.unsafe("SET LOCAL ROLE authenticated");
             return tx<{ count: string }[]>`SELECT count(*)::text AS count

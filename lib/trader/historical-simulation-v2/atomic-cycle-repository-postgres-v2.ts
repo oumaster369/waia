@@ -7,6 +7,9 @@ import { computeEconomicsContentDigest } from "@/lib/trader/execution/fill-econo
 import type { CostedFillEconomics } from "@/lib/trader/execution/historical-execution-model.types";
 import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
+import { validateDecisionEvaluationReceiptV1, validateWhyNotCashReceiptV2,
+  type DecisionEvaluationReceiptV1, type WhyNotCashReceiptV2 } from
+  "@/lib/trader/intelligence/decision-economics/dee660-why-not-cash-receipt-v2";
 
 import {
   HISTORICAL_SIMULATION_ATOMIC_STAGES_V2,
@@ -22,6 +25,32 @@ import {
 } from "./atomic-cycle-commit-v2";
 import type { HistoricalSimulationReasonLedgerV2 } from "./reason-ledger-v2";
 import { deriveHistoricalSimulationModeledEvidenceV2 } from "./reason-ledger-repository-postgres";
+import { assertHistoricalSimulationV2ClosedGraphRequest,
+  type HistoricalSimulationV2ClosedGraphRequest } from "./production-graph-boundary-v2";
+import { createHistoricalSimulationProductionCyclePortV2 } from "./production-cycle-port-v2";
+import { assertFhvV2PostgresSchemaPreflight } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
+import { createHistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model";
+import { createHistoricalSimulatedExchange } from "@/lib/trader/execution/historical-simulated-exchange";
+import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
+import { createHistoricalDecisionEconomicsCapitalCoordinatorV2, runHistoricalSimulationV2,
+  type HistoricalSimulationV2Cycle } from "@/lib/trader/backtest/historical-simulation-v2";
+import { createHistoricalDecisionEconomicsProductionInputBuilderV2,
+  type PersistedDecisionEconomicsAuthoritiesV2 } from "./decision-economics-production-adapter-v2";
+import { createHistoricalSimulationPostgresKnowledgeReadPortV2 } from "./knowledge-port-postgres";
+import { createHistoricalModeledCapitalBindingV2, createHistoricalModeledExecutionRegistryV2,
+  type HistoricalModeledGuardianReceiptV2, type HistoricalModeledRiskReceiptV2 } from "./modeled-capital-binding-v2";
+import { createAdvanceHistoricalModeledExecutionV2, projectHistoricalModeledEffectsToReasonLedgerV2,
+  type AdvanceHistoricalModeledExecutionV2Result, type HistoricalSealedMarketCycleV2 } from "./modeled-execution-advance-v2";
+import { createHistoricalSimulationExecutionPersistenceV2,
+  createHistoricalSimulationProductionTransactionRepositoriesV2,
+  persistHistoricalModeledExecutionSubmissionV2 } from "./production-transaction-adapters-v2";
+import { loadHistoricalSimulationInceptionAccountingV2, restoreHistoricalSimulationProductionRuntimeStateV2,
+  snapshotHistoricalSimulationProductionRuntimeStateV2, type HistoricalSimulationProductionRuntimeStateV2 } from
+  "./production-runtime-state-v2";
+import { buildHistoricalSimulationModeledCapitalArtifactsV2, buildHistoricalSimulationModeledNoopArtifactsV2,
+  buildHistoricalSimulationModeledStateArtifactsV2, buildHistoricalSimulationModeledVetoArtifactsV2,
+  buildHistoricalSimulationProductionStageBundlesV2 } from "./production-stage-builder-v2";
+import { closeHistoricalSimulationProducedCycleV2 } from "./production-produced-cycle-v2";
 
 const STATE_KINDS = ["KNOWLEDGE", "MODELED_EXECUTION_REGISTRY", "MODELED_EXCHANGE",
   "ACCOUNTING_FRONTIER", "GUARDIAN", "LEARNING"] as const;
@@ -186,10 +215,10 @@ type ProducedCycle = Omit<Parameters<typeof commitHistoricalSimulationCycleAtomi
 async function verifyCanonicalStageArtifacts(sql: postgres.Sql, scope: HistoricalSimulationAtomicScopeV2,
   produced: ProducedCycle, previousCursor: HistoricalSimulationResumeCursorV2 | null): Promise<void> {
   for (const artifact of produced.stageBundles.FORECAST_LIFECYCLE.artifacts) {
-    const rows = await sql<{ forecast_content_digest: string }[]>`
-      SELECT forecast_content_digest FROM trader_forecast_v2
+    const rows = await sql<{ forecast_content_digest_hex: string }[]>`
+      SELECT encode(forecast_content_digest,'hex') AS forecast_content_digest_hex FROM trader_forecast_v2
       WHERE id=${artifact.artifactId}::uuid AND organization_id=${scope.organizationId}::uuid
-        AND forecast_content_digest=${artifact.contentDigestHex}`;
+        AND encode(forecast_content_digest,'hex')=${artifact.contentDigestHex}`;
     if (rows.length !== 1) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:FORECAST_ARTIFACT_SOURCE");
   }
   for (const artifact of produced.stageBundles.CANONICAL_VERIFICATION.artifacts) {
@@ -227,7 +256,9 @@ async function verifyCanonicalStageArtifacts(sql: postgres.Sql, scope: Historica
     LEARNING: new Set(([produced.ledgerEntry.learning.calibrationObservationContentDigestHex,
       produced.ledgerEntry.learning.knowledgeUpdateContentDigestHex].filter((value): value is string => value !== null)
       .concat(produced.ledgerEntry.learning.knowledgeUpdateContentDigestHex ? [] :
-        [computeSemanticSha256Hex(produced.ledgerEntry.learning)]))),
+        [computeSemanticSha256Hex({ schemaVersion: "waia.trader.historical_learning_transition.v2",
+          previousState: previousCursor?.learningSnapshot.state ?? null,
+          nextState: produced.learningSnapshot.state })]))),
   } as const;
   for (const [stage, expected] of Object.entries(exactDigestSets)) {
     const artifacts = produced.stageBundles[stage as keyof typeof exactDigestSets].artifacts;
@@ -248,6 +279,12 @@ async function verifyCanonicalStageArtifacts(sql: postgres.Sql, scope: Historica
     receipts: readonly HistoricalModeledExecutionReceiptV2[];
   }>).receipts;
   for (const artifact of executionPayloads.filter((value) => value.artifactKind === "MODELED_EXECUTION_SUBMISSION")) {
+    if (produced.ledgerEntry.execution.planContentDigestHex === null &&
+        artifact.sourceContentDigestHex === computeSemanticSha256Hex(produced.ledgerEntry.execution) &&
+        canonicalizeSemanticJsonString(artifact.sourcePayload) ===
+          canonicalizeSemanticJsonString(produced.ledgerEntry.execution)) {
+      continue;
+    }
     const receipt = receipts.find((candidate) => candidate.executionPlanContentDigestHex === artifact.sourceContentDigestHex ||
       candidate.executionAttemptContentDigestHex === artifact.sourceContentDigestHex);
     if (!receipt) {
@@ -276,6 +313,31 @@ async function verifyCanonicalStageArtifacts(sql: postgres.Sql, scope: Historica
       verdictArtifact.sourcePayload.decisionContentDigestHex !== produced.ledgerEntry.decision.decisionContentDigestHex ||
       verdictArtifact.sourcePayload.riskAllowanceContentDigestHex !== produced.ledgerEntry.risk.allowanceContentDigestHex)) {
     throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:MODELED_RISK_PAYLOAD_SOURCE");
+  }
+  const decisionCarrier = verdictArtifact ?? riskArtifacts.find((artifact) =>
+    artifact.sourceContentDigestHex === computeSemanticSha256Hex(produced.ledgerEntry.risk));
+  if (decisionCarrier) {
+    if (produced.ledgerEntry.forecast.status === "NON_ACTIONABLE") {
+      const terminal = decisionCarrier.lineagePayload?.forecastTerminal;
+      if (!terminal || canonicalizeSemanticJsonString(terminal) !== canonicalizeSemanticJsonString({
+        forecast: produced.ledgerEntry.forecast, decision: produced.ledgerEntry.decision }) ||
+          produced.ledgerEntry.decision.status !== "CASH" || produced.ledgerEntry.risk.status !== "NOT_EVALUATED" ||
+          produced.ledgerEntry.execution.status !== "NOT_DISPATCHED" ||
+          produced.ledgerEntry.observedExecutionEffects.length !== 0 ||
+          decisionCarrier.lineagePayload?.decisionReceipt || decisionCarrier.lineagePayload?.whyNotCashReceipt) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:FORECAST_TERMINAL_LINEAGE");
+      }
+    } else {
+      const decisionReceipt = decisionCarrier.lineagePayload?.decisionReceipt as DecisionEvaluationReceiptV1 | undefined;
+      const whyNotCashReceipt = decisionCarrier.lineagePayload?.whyNotCashReceipt as WhyNotCashReceiptV2 | undefined;
+      if (!decisionReceipt || !whyNotCashReceipt || validateDecisionEvaluationReceiptV1(decisionReceipt).length !== 0 ||
+          validateWhyNotCashReceiptV2(whyNotCashReceipt).length !== 0 ||
+          decisionReceipt.contentDigestHex !== produced.ledgerEntry.decision.decisionContentDigestHex ||
+          whyNotCashReceipt.contentDigestHex !== produced.ledgerEntry.decision.whyNotCashReceiptDigestHex ||
+          decisionReceipt.whyNotCashReceiptDigestHex !== whyNotCashReceipt.contentDigestHex) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:DECISION_RECEIPT_LINEAGE");
+      }
+    }
   }
   const learningArtifacts = produced.stageBundles.LEARNING.artifacts.map((artifact) =>
     validateHistoricalSimulationModeledAtomicArtifactV2(scope, produced.ledgerEntry.cycleId, artifact));
@@ -555,6 +617,17 @@ function transactionPort(sql: postgres.Sql, commitRequest: HistoricalSimulationC
   };
 }
 
+export async function prepareHistoricalSimulationProductionPortsV2<Ports>(input: Readonly<{
+  tx: postgres.Sql; request: HistoricalSimulationCommitRequestV2; scope: HistoricalSimulationAtomicScopeV2;
+  createPorts(tx: postgres.Sql, previousCursor: HistoricalSimulationResumeCursorV2 | null): Ports;
+}>): Promise<Readonly<{ transaction: HistoricalSimulationAtomicCycleTransactionV2;
+  previousCursor: HistoricalSimulationResumeCursorV2 | null; ports: Ports }>> {
+  const transaction = transactionPort(input.tx, input.request);
+  const previousCursor = await transaction.loadResumeCursor(input.scope);
+  const ports = input.createPorts(input.tx, previousCursor);
+  return Object.freeze({ transaction, previousCursor, ports });
+}
+
 /**
  * Durable repository boundary used by the cycle committer.  Keeping the
  * SERIALIZABLE transaction and scope lock here lets crash/restart tests (and
@@ -582,6 +655,21 @@ async function withHistoricalSimulationSerializableScopeLockV2<T>(sql: postgres.
   // SERIALIZABLE transaction can wait while retaining a pre-winner snapshot.
   const reserved = await sql.reserve();
   const connection = reserved as unknown as postgres.Sql;
+  // postgres.js reserved handles intentionally omit the top-level parser options object,
+  // while drizzle's transaction-scoped executor requires it only to configure codecs.
+  // Bind the same immutable client options to the reserved query function; all queries
+  // still execute on this one locked connection and therefore remain in the cycle tx.
+  if (!(connection as unknown as { options?: unknown }).options) {
+    const baseOptions = (sql as unknown as { options?: { parsers?: Record<string, unknown>;
+      serializers?: Record<string, unknown>; [key: string]: unknown } }).options ?? {};
+    Object.defineProperty(connection, "options", {
+      value: { ...baseOptions, parsers: { ...(baseOptions.parsers ?? {}) },
+        serializers: { ...(baseOptions.serializers ?? {}) } },
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
   const key = `${request.organizationId}:${request.accountId}:${request.runId}`;
   try {
     await connection`SELECT pg_advisory_lock(hashtextextended(${key},0))`;
@@ -606,7 +694,7 @@ async function withHistoricalSimulationSerializableScopeLockV2<T>(sql: postgres.
 export async function commitHistoricalSimulationCyclePostgresV2<Ports>(input: Readonly<{
   sql: postgres.Sql; scope: HistoricalSimulationAtomicScopeV2;
   request: HistoricalSimulationCommitRequestV2;
-  createPorts(tx: postgres.Sql): Ports;
+  createPorts(tx: postgres.Sql, previousCursor: HistoricalSimulationResumeCursorV2 | null): Ports;
   produce(ports: Ports): Promise<Omit<Parameters<typeof commitHistoricalSimulationCycleAtomicallyV2>[0], "repository" | "scope">>;
 }>): Promise<HistoricalSimulationResumeCursorV2> {
   validateHistoricalSimulationCommitRequestV2(input.request);
@@ -640,7 +728,10 @@ export async function commitHistoricalSimulationCyclePostgresV2<Ports>(input: Re
       }
       return exact;
     }
-    const produced = await input.produce(input.createPorts(tx));
+    const prepared = await prepareHistoricalSimulationProductionPortsV2({ tx, request: input.request,
+      scope: input.scope, createPorts: input.createPorts });
+    const { transaction, previousCursor } = prepared;
+    const produced = await input.produce(prepared.ports);
     if (produced.ledgerEntry.cycleSequence !== input.request.cycleSequence ||
         produced.ledgerEntry.cycleId !== input.request.cycleId ||
         produced.ledgerEntry.contentDigestHex !== input.request.ledgerEntryContentDigestHex ||
@@ -659,12 +750,387 @@ export async function commitHistoricalSimulationCyclePostgresV2<Ports>(input: Re
         })) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:COMMIT_REQUEST_BINDING");
     }
-    const transaction = transactionPort(tx, input.request);
-    const previousCursor = await transaction.loadResumeCursor(input.scope);
     await verifyCanonicalStageArtifacts(tx, input.scope, produced, previousCursor);
     const repository: HistoricalSimulationAtomicCycleRepositoryV2 = {
       transaction: (callback) => callback(transaction),
     };
     return commitHistoricalSimulationCycleAtomicallyV2({ repository, scope: input.scope, ...produced });
+  });
+}
+
+type ClosedCycleIdentityV2 = Readonly<{
+  cycleSequence: number; cycleId: string; datasetMembershipContentDigestHex: string;
+  forecastInputAuthorityContentDigestHex: string; policyConfigContentDigestHex: string; codeSha: string;
+}>;
+
+/**
+ * Internal production boundary: source load, resume restoration, deterministic production and the
+ * 0188 commit all run under one reserved SERIALIZABLE scope lock. Exact committed retries return
+ * before producer execution using the immutable source identity stored in the prior request.
+ */
+async function commitHistoricalSimulationProducedCycleInsideLockV2(input: Readonly<{
+  sql: postgres.Sql; scope: HistoricalSimulationAtomicScopeV2; identity: ClosedCycleIdentityV2;
+  produce(tx: postgres.Sql, previousCursor: HistoricalSimulationResumeCursorV2 | null): Promise<Readonly<{
+    request: HistoricalSimulationCommitRequestV2; produced: ProducedCycle;
+  }>>;
+}>): Promise<HistoricalSimulationResumeCursorV2> {
+  return withHistoricalSimulationSerializableScopeLockV2(input.sql, input.scope, async (tx) => {
+    const committed = await tx<{ checkpoint_json: HistoricalSimulationResumeCursorV2;
+      commit_request_json: HistoricalSimulationCommitRequestV2 }[]>`
+      SELECT checkpoint_json,commit_request_json FROM trader_historical_simulation_resume_checkpoint_v2
+      WHERE organization_id=${input.scope.organizationId}::uuid AND account_id=${input.scope.accountId}
+        AND run_id=${input.scope.runId} AND committed_cycle_sequence=${input.identity.cycleSequence} FOR UPDATE`;
+    if (committed[0]) {
+      const request = committed[0].commit_request_json;
+      if (request.cycleId !== input.identity.cycleId ||
+          request.datasetMembershipContentDigestHex !== input.identity.datasetMembershipContentDigestHex ||
+          request.forecastInputAuthorityContentDigestHex !== input.identity.forecastInputAuthorityContentDigestHex ||
+          request.policyConfigContentDigestHex !== input.identity.policyConfigContentDigestHex ||
+          request.codeSha !== input.identity.codeSha) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:IMMUTABLE_SOURCE_RETRY_DIVERGENCE");
+      }
+      await verifyCommitRequestSources(tx, request);
+      const exact = await transactionPort(tx, request).loadResumeCursor(input.scope);
+      if (!exact || exact.contentDigestHex !== committed[0].checkpoint_json.contentDigestHex) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PERSISTED_RETRY_DIVERGENCE");
+      }
+      return exact;
+    }
+    const prior = await tx<{ commit_request_json: HistoricalSimulationCommitRequestV2 }[]>`
+      SELECT commit_request_json FROM trader_historical_simulation_resume_checkpoint_v2
+      WHERE organization_id=${input.scope.organizationId}::uuid AND account_id=${input.scope.accountId}
+        AND run_id=${input.scope.runId} ORDER BY committed_cycle_sequence DESC LIMIT 1 FOR UPDATE`;
+    if (prior[0]) {
+      validateHistoricalSimulationCommitRequestV2(prior[0].commit_request_json);
+      await verifyCommitRequestSources(tx, prior[0].commit_request_json);
+    }
+    const previousCursor = prior[0]
+      ? await transactionPort(tx, prior[0].commit_request_json).loadResumeCursor(input.scope) : null;
+    if ((previousCursor === null && input.identity.cycleSequence !== 0) ||
+        (previousCursor !== null && previousCursor.nextCycleSequence !== input.identity.cycleSequence)) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:SKIPPED_CYCLE_SEQUENCE");
+    }
+    const closed = await input.produce(tx, previousCursor);
+    validateHistoricalSimulationCommitRequestV2(closed.request);
+    const request = closed.request; const produced = closed.produced;
+    if (request.organizationId !== input.scope.organizationId || request.accountId !== input.scope.accountId ||
+        request.runId !== input.scope.runId || request.split !== input.scope.split ||
+        request.cycleSequence !== input.identity.cycleSequence || request.cycleId !== input.identity.cycleId ||
+        request.datasetMembershipContentDigestHex !== input.identity.datasetMembershipContentDigestHex ||
+        request.forecastInputAuthorityContentDigestHex !== input.identity.forecastInputAuthorityContentDigestHex ||
+        request.policyConfigContentDigestHex !== input.identity.policyConfigContentDigestHex ||
+        request.codeSha !== input.identity.codeSha) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PRODUCED_SOURCE_IDENTITY");
+    }
+    await verifyCommitRequestSources(tx, request);
+    if (produced.ledgerEntry.cycleSequence !== request.cycleSequence ||
+        produced.ledgerEntry.cycleId !== request.cycleId ||
+        produced.ledgerEntry.replayBarClosedAtUtc !== request.replayBarClosedAtUtc ||
+        produced.ledgerEntry.datasetMembership.contentDigestHex !== request.datasetMembershipContentDigestHex ||
+        produced.ledgerEntry.contentDigestHex !== request.ledgerEntryContentDigestHex ||
+        HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.some((stage) =>
+          produced.stageBundles[stage].contentDigestHex !== request.stageBundleDigestHexByStage[stage]) ||
+        STATE_KINDS.some((kind) => {
+          const snapshot = ({ KNOWLEDGE: produced.knowledgeSnapshot,
+            MODELED_EXECUTION_REGISTRY: produced.modeledExecutionRegistrySnapshot,
+            MODELED_EXCHANGE: produced.modeledExchangeSnapshot,
+            ACCOUNTING_FRONTIER: produced.accountingFrontierSnapshot,
+            GUARDIAN: produced.guardianSnapshot, LEARNING: produced.learningSnapshot } as const)[kind];
+          return snapshot.contentDigestHex !== request.snapshotContentDigestHexByKind[kind];
+        })) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PRODUCED_REQUEST_BINDING");
+    }
+    await verifyCanonicalStageArtifacts(tx, input.scope, produced, previousCursor);
+    const transaction = transactionPort(tx, request);
+    return commitHistoricalSimulationCycleAtomicallyV2({ repository: { transaction: (callback) => callback(transaction) },
+      scope: input.scope, ...produced });
+  });
+}
+
+/**
+ * Sole public next-cycle production entry. The caller supplies identity only; source selection,
+ * release/policy binding, fresh retry-local runtime construction and persistence remain behind
+ * the reserved SERIALIZABLE scope lock.
+ */
+type HistoricalSimulationLoadedProductionCycleV2 = Readonly<{
+  membership: HistoricalSimulationV2Cycle["datasetMembership"];
+  sealedCycle: HistoricalSealedMarketCycleV2;
+  forecastInput: Parameters<typeof import("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2").issueForecastRuntimeV2>[0];
+  forecastId: string; forecastContentDigestHex: string; forecastAuthorityContentDigestHex: string;
+  knowledgeContentDigestHex: string; dee659PreregistrationId: string; dee659BundleContentDigestHex: string;
+  canonicalVerificationReceiptId: string;
+  decisionAuthorities: PersistedDecisionEconomicsAuthoritiesV2;
+}>;
+
+type Source = HistoricalSimulationLoadedProductionCycleV2;
+
+function initialRuntime(accounting: Awaited<ReturnType<typeof loadHistoricalSimulationInceptionAccountingV2>>):
+HistoricalSimulationProductionRuntimeStateV2 {
+  const model = createHistoricalExecutionModelV1();
+  return Object.freeze({ model, exchange: createHistoricalSimulatedExchange(model),
+    executionRegistry: createHistoricalModeledExecutionRegistryV2(), executionReceipts: Object.freeze([]), accounting,
+    knowledge: Object.freeze({ checkpointSequence: 0, checkpointContentDigestHex: computeSemanticSha256Hex({ inception: true }),
+      durableCheckpointContentDigestHex: computeSemanticSha256Hex({ durableInception: true }),
+      knowledgeContentDigestHex: computeSemanticSha256Hex({ inception: true }), visibleThroughPitAnchor: accounting.frontierAsOf }),
+    guardian: Object.freeze({ assessmentContentDigestHex: computeSemanticSha256Hex({ posture: "NONE", inception: true }),
+      posture: "NONE" as const, assessedAt: accounting.frontierAsOf }),
+    learning: Object.freeze({ appliedClosureWatermarkUtc: null, pendingForecastAuthorityContentDigestHexes: Object.freeze([]) }) });
+}
+
+/**
+ * @internal Package-private deterministic producer used only by the locked
+ * identity entrypoint. It is intentionally absent from every public barrel.
+ * It accepts canonical data loaded by that entrypoint, never caller ports.
+ */
+async function produceHistoricalSimulationNextCycleV2(input: Readonly<{ tx: postgres.Sql;
+  scope: HistoricalSimulationAtomicScopeV2; source: Source; previousCursor: HistoricalSimulationResumeCursorV2 | null;
+  defaultQuantity: string; codeSha: string; policyConfigContentDigestHex: string;
+  forecastInputAuthorityContentDigestHex: string }>) {
+  const { source, scope } = input; const cycleId = source.sealedCycle.cycleId;
+  const cycle: HistoricalSimulationV2Cycle = Object.freeze({ cycleId, observedAt: source.sealedCycle.closedBar.barCloseTime,
+    symbol: source.sealedCycle.closedBar.symbol.replace("/", ""), referencePrice: String(source.sealedCycle.closedBar.close),
+    datasetMembership: source.membership });
+  const repos = createHistoricalSimulationProductionTransactionRepositoriesV2(input.tx);
+  let runtime = input.previousCursor ? restoreHistoricalSimulationProductionRuntimeStateV2({ scope, cursor: input.previousCursor }) :
+    initialRuntime(await loadHistoricalSimulationInceptionAccountingV2({ tx: input.tx, scope,
+      preregistrationId: source.dee659PreregistrationId,
+      expectedAuthorityBundleContentDigestHex: source.dee659BundleContentDigestHex }));
+  const previousLedger = input.previousCursor ? (await input.tx<{ entry_json: HistoricalSimulationReasonLedgerV2 }[]>`
+    SELECT jsonb_build_object('schemaVersion','waia.trader.historical_simulation_reason_ledger.v2','entryId',entry_id,
+      'organizationId',organization_id::text,'accountId',account_id,'runId',run_id,'cycleId',cycle_id,
+      'cycleSequence',cycle_sequence,'symbol',symbol,'partition',partition,'capitalEligible',false,
+      'replayBarClosedAtUtc',to_char(replay_bar_closed_at_utc AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'datasetMembership',dataset_membership_json,'previousContentDigestHex',previous_content_digest_hex,'forecast',forecast_json,
+      'decision',decision_json,'portfolio',portfolio_json,'risk',risk_json,'execution',execution_json,
+      'observedExecutionEffects',observed_execution_effects_json,'accounting',accounting_json,'guardian',guardian_json,
+      'learning',learning_json,'contentDigestHex',content_digest_hex) entry_json
+    FROM trader_historical_simulation_reason_ledger_v2 WHERE organization_id=${scope.organizationId}::uuid
+      AND account_id=${scope.accountId} AND run_id=${scope.runId} AND cycle_sequence=${input.previousCursor.nextCycleSequence - 1}`)[0]?.entry_json ?? null : null;
+  const knowledge = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: input.tx,
+    organizationId: scope.organizationId, symbol: scope.split === "DEVELOPMENT" || scope.split === "WALK_FORWARD"
+      ? source.sealedCycle.closedBar.symbol.replace("/", "") : "",
+    appliedClosureWatermarkUtc: runtime.learning.appliedClosureWatermarkUtc });
+  const authorityPort = Object.freeze({ async load() { return source.decisionAuthorities; } });
+  const decisionBuilder = createHistoricalDecisionEconomicsProductionInputBuilderV2({ organizationId: scope.organizationId,
+    accountId: scope.accountId, authorities: authorityPort });
+  const coordinator = createHistoricalDecisionEconomicsCapitalCoordinatorV2({ organizationId: scope.organizationId,
+    accountId: scope.accountId, buildEvaluationInput: decisionBuilder });
+  const modeledEvidence: Array<HistoricalModeledRiskReceiptV2 | HistoricalModeledExecutionReceiptV2 |
+    HistoricalModeledGuardianReceiptV2> = [];
+  let currentAccounting = runtime.accounting;
+  let advanceResult: AdvanceHistoricalModeledExecutionV2Result | null = null;
+  const advance = createAdvanceHistoricalModeledExecutionV2({ context: { organizationId: scope.organizationId },
+    accountKey: scope.accountId, runId: scope.runId, exchange: runtime.exchange,
+    executionRegistry: runtime.executionRegistry, model: runtime.model,
+    persistence: createHistoricalSimulationExecutionPersistenceV2({ orders: repos.orders, model: runtime.model }),
+    accountingRepository: Object.freeze({
+      loadLatest: async () => runtime.accounting,
+      append: async (context, frontier) => {
+        await repos.accounting.append(context, frontier);
+        return frontier;
+      },
+    }), resolveMarketCycle: async (id) => {
+      if (id !== cycleId) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:CYCLE_ID"); return source.sealedCycle; },
+    initialAccountingFrontier: async () => runtime.accounting,
+    refreshAccountState: async () => ({
+      positions: Object.entries(currentAccounting.positions).map(([symbol, position]) => ({ symbol, quantity: position.quantity })),
+      openOrderCount: runtime.exchange.listOpenOrders().length,
+      dailyPnl: currentAccounting.netRealizedPnl,
+      drawdown: String(currentAccounting.accountDrawdownBps),
+      quoteExposureByCurrency: Object.freeze({}),
+      availableBalanceUsdt: currentAccounting.cash, equityUsdt: currentAccounting.equity,
+      openPositionCount: Object.values(currentAccounting.positions).filter((position) => position.quantity !== "0").length,
+    }),
+    reconcileOrder: async () => undefined, resolveLatestOrder: (id) => repos.orders.getOrderById({ organizationId: scope.organizationId }, id),
+    persistAdvanceEvidence: async (bundle) => { advanceResult = Object.freeze({ fillCount: bundle.fillEvidence.length,
+      fillEvidence: bundle.fillEvidence, fillDetails: bundle.fillDetails,
+      accountingFrontierContentDigestHex: bundle.fillDetails.at(-1)?.accountingFrontier.semanticContentDigest ?? runtime.accounting.semanticContentDigest,
+      accountingFrontier: bundle.fillDetails.at(-1)?.accountingFrontier ?? runtime.accounting,
+      accountingAdvanced: bundle.fillEvidence.length > 0, effects: bundle.effects }); } });
+  // Chronology is strict: orders accepted on earlier bars are advanced on the
+  // current closed bar before Forecast/Decision/Risk observe capital.  The
+  // ledger projection below consumes this exact result and must never advance
+  // the exchange a second time for the same bar.
+  const currentBarAdvance = await advance(cycleId);
+  advanceResult = currentBarAdvance;
+  currentAccounting = currentBarAdvance.accountingFrontier;
+  let currentBarAdvanceConsumed = false;
+  const binding = createHistoricalModeledCapitalBindingV2({ organizationId: scope.organizationId, accountId: scope.accountId,
+    runId: scope.runId, resolveCycle: (id) => { if (id !== cycleId) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:CYCLE_ID"); return cycle; },
+    decide: coordinator.decide, loadAccounting: async () => ({ frontierContentDigestHex: currentAccounting.semanticContentDigest,
+      accounting: { reconciledExposureNotional: "0", worstCasePendingExposureNotional: "0",
+        outstandingReservationNotional: "0", exposureLimitNotional: currentAccounting.equity },
+      posture: runtime.guardian.posture === "NONE" ? "NORMAL" : runtime.guardian.posture === "STOP_ACCOUNT" ? "HALT" : "CLOSE_ONLY" }),
+    exchange: runtime.exchange, executionRegistry: runtime.executionRegistry, decisionBarIndex: () => source.sealedCycle.barIndex,
+    evaluateGuardian: async () => ({ status: runtime.guardian.posture, reasonCodes: runtime.guardian.posture === "NONE" ? [] : ["RESTORED_GUARDIAN_POSTURE"] }),
+    persistEvidence: async (e) => { modeledEvidence.push(e); },
+    persistExecutionSubmission: async ({ receipt, riskAllowanceId }) => persistHistoricalModeledExecutionSubmissionV2({
+      context: { organizationId: scope.organizationId }, orders: repos.orders, organizationId: scope.organizationId,
+      accountId: scope.accountId, decisionId: receipt.decisionId, riskAllowanceId, receipt }),
+    advanceModeledExecution: async () => {
+      if (currentBarAdvanceConsumed) {
+        throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:ADVANCE_ALREADY_CONSUMED");
+      }
+      currentBarAdvanceConsumed = true;
+      return { observedExecutionEffects: projectHistoricalModeledEffectsToReasonLedgerV2(currentBarAdvance),
+        accountingAdvanced: currentBarAdvance.accountingAdvanced };
+    },
+    learningProjection: async () => ({ status: "PENDING", reasonCodes: ["FUTURE_OUTCOME_NOT_YET_ELIGIBLE"],
+      calibrationObservationContentDigestHex: null, knowledgeUpdateContentDigestHex: null,
+      eligibleResolutionAtUtc: null, visibleFromPitAnchorUtc: null }) });
+  const result = await runHistoricalSimulationV2({ organizationId: scope.organizationId, accountId: scope.accountId,
+    runId: scope.runId, split: scope.split === "DEVELOPMENT" ? "development" : "walk_forward",
+    authority: "HISTORICAL_SIMULATION_V2", cycles: [cycle], defaultQuantity: input.defaultQuantity, knowledge,
+    resolveForecastInput: async () => source.forecastInput, resolvePortfolioProposal: coordinator.resolvePortfolioProposal,
+    decisionCapitalAuthorityV2: binding.decisionCapitalAuthorityV2, modeledExit: binding.modeledExit,
+    resolveLedgerProjection: binding.resolveLedgerProjection, postgresSchemaPreflight: async () => undefined,
+    previousReasonLedger: previousLedger });
+  const ledger = result.reasonLedger[0];
+  if (!ledger || !advanceResult) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:INCOMPLETE_CYCLE");
+  const completedAdvance = advanceResult as AdvanceHistoricalModeledExecutionV2Result;
+  const risk = modeledEvidence.find((e): e is HistoricalModeledRiskReceiptV2 => "riskVerdictId" in e);
+  const execution = modeledEvidence.find((e): e is HistoricalModeledExecutionReceiptV2 => "executionPlanId" in e);
+  const guardian = modeledEvidence.find((e): e is HistoricalModeledGuardianReceiptV2 => "accountingFrontierContentDigestHex" in e && "cycleId" in e);
+  const decisionEvidence = ledger.forecast.status === "AUTHORIZED" ? coordinator.takeDecisionEvidence(cycleId) : null;
+  const atomicScope = { organizationId: scope.organizationId, accountId: scope.accountId, runId: scope.runId,
+    cycleId, pitAnchor: cycle.observedAt };
+  const capital = risk?.verdict === "VETO" && decisionEvidence ? buildHistoricalSimulationModeledVetoArtifactsV2({ scope: atomicScope, ledgerEntry: ledger, risk, decisionEvidence, advance: completedAdvance })
+    : risk && execution && decisionEvidence ? buildHistoricalSimulationModeledCapitalArtifactsV2({ scope: atomicScope, risk, execution, advance: completedAdvance, decisionEvidence })
+    : buildHistoricalSimulationModeledNoopArtifactsV2({ scope: atomicScope, ledgerEntry: ledger, decisionEvidence,
+      advance: completedAdvance });
+  const checkpoint = await knowledge.checkpoint({ runId: scope.runId, checkpointSeq: ledger.cycleSequence + 1,
+    pitAnchor: cycle.observedAt, modelVersion: "historical-simulation-v2" });
+  const knowledgePayloadBody = { schemaVersion: "waia.trader.historical_knowledge_checkpoint.v2", cycleId,
+    checkpointSequence: ledger.cycleSequence + 1,
+    durableCheckpointContentDigestHex: checkpoint.checkpointContentDigest,
+    snapshotContentDigestHex: checkpoint.snapshot.contentDigestHex };
+  const knowledgeDigest = computeSemanticSha256Hex(knowledgePayloadBody);
+  runtime = Object.freeze({ ...runtime, accounting: currentAccounting,
+    executionReceipts: Object.freeze([...runtime.executionReceipts, ...modeledEvidence.filter((e): e is HistoricalModeledExecutionReceiptV2 => "executionPlanId" in e)]),
+    knowledge: Object.freeze({ checkpointSequence: ledger.cycleSequence + 1,
+      checkpointContentDigestHex: knowledgeDigest, knowledgeContentDigestHex: checkpoint.snapshot.contentDigestHex,
+      durableCheckpointContentDigestHex: checkpoint.checkpointContentDigest,
+      visibleThroughPitAnchor: cycle.observedAt }), guardian: Object.freeze({ assessmentContentDigestHex: guardian?.contentDigestHex ?? ledger.guardian.assessmentContentDigestHex,
+      posture: ledger.guardian.status, assessedAt: cycle.observedAt }),
+    learning: Object.freeze({ appliedClosureWatermarkUtc: cycle.observedAt,
+      pendingForecastAuthorityContentDigestHexes: ledger.forecast.authorityContentDigestHex ? [ledger.forecast.authorityContentDigestHex] : [] }) });
+  const snapshots = snapshotHistoricalSimulationProductionRuntimeStateV2({ scope, cycleId, runtime });
+  const transitionPayload = Object.freeze({ schemaVersion: "waia.trader.historical_learning_transition.v2",
+    previousState: input.previousCursor?.learningSnapshot.state ?? null, nextState: snapshots.learningSnapshot.state });
+  const learningDigest = computeSemanticSha256Hex(transitionPayload);
+  const guardianPayload = Object.freeze({ schemaVersion: "waia.trader.historical_modeled_guardian.v2", source: "MODELED_HISTORICAL",
+    capitalEligible: false, cycleId, accountingFrontierContentDigestHex: ledger.accounting.frontierContentDigestHex,
+    status: ledger.guardian.status, reasonCodes: ledger.guardian.reasonCodes, contentDigestHex: ledger.guardian.assessmentContentDigestHex });
+  const state = buildHistoricalSimulationModeledStateArtifactsV2({ scope: atomicScope,
+    guardian: { id: deterministicExecutionUuidV2("report", { kind: "guardian", cycleId }), contentDigestHex: guardianPayload.contentDigestHex,
+      payload: guardianPayload }, knowledge: { id: deterministicExecutionUuidV2("report", { kind: "knowledge", cycleId }),
+      contentDigestHex: knowledgeDigest, payload: Object.freeze({ ...knowledgePayloadBody, contentDigestHex: knowledgeDigest }) },
+    learning: [{ id: deterministicExecutionUuidV2("report", { kind: "learning", cycleId }), contentDigestHex: learningDigest,
+      payload: Object.freeze({ ...transitionPayload, contentDigestHex: learningDigest }) }],
+    previousLearningSnapshot: (input.previousCursor?.learningSnapshot ?? null) as
+      import("./atomic-cycle-commit-v2").HistoricalSimulationDurableStateSnapshotV2<"LEARNING"> | null,
+    nextLearningSnapshot: snapshots.learningSnapshot });
+  const stageBundles = buildHistoricalSimulationProductionStageBundlesV2({ ledgerEntry: ledger,
+    forecast: { id: source.forecastId, contentDigestHex: source.forecastContentDigestHex },
+    canonicalVerification: { id: source.canonicalVerificationReceiptId,
+      contentDigestHex: source.decisionAuthorities.forecastVerificationReceiptDigestHex },
+    accounting: { id: completedAdvance.accountingFrontier.id, contentDigestHex: completedAdvance.accountingFrontier.semanticContentDigest },
+    modeled: Object.freeze({ ...capital, ...state }) });
+  return closeHistoricalSimulationProducedCycleV2({ scope, codeSha: input.codeSha,
+    forecastInputAuthorityContentDigestHex: input.forecastInputAuthorityContentDigestHex,
+    policyConfigContentDigestHex: input.policyConfigContentDigestHex,
+    knowledgeCheckpointSequence: ledger.cycleSequence + 1,
+    knowledgeCheckpointContentDigestHex: knowledgeDigest,
+    ledgerEntry: ledger, stageBundles, snapshots });
+}
+
+
+export async function runHistoricalSimulationNextCyclePostgresV2(
+  input: HistoricalSimulationV2ClosedGraphRequest,
+): Promise<HistoricalSimulationResumeCursorV2> {
+  assertHistoricalSimulationV2ClosedGraphRequest(input);
+  await assertFhvV2PostgresSchemaPreflight({ sql: input.sql, repoRoot: process.cwd() });
+  const scope: HistoricalSimulationAtomicScopeV2 = { organizationId: input.organizationId,
+    accountId: input.accountId, runId: input.runId, split: input.partition };
+  return withHistoricalSimulationSerializableScopeLockV2(input.sql, scope, async (tx) => {
+    const exactRows = await tx<{ checkpoint_json: HistoricalSimulationResumeCursorV2;
+      commit_request_json: HistoricalSimulationCommitRequestV2 }[]>`
+      SELECT checkpoint_json,commit_request_json FROM trader_historical_simulation_resume_checkpoint_v2
+      WHERE organization_id=${scope.organizationId}::uuid AND account_id=${scope.accountId} AND run_id=${scope.runId}
+        AND committed_cycle_sequence=${input.expectedCycleSequence} FOR UPDATE`;
+    if (exactRows[0]) {
+      const request = exactRows[0].commit_request_json;
+      validateHistoricalSimulationCommitRequestV2(request);
+      if (request.organizationId !== scope.organizationId || request.accountId !== scope.accountId ||
+          request.runId !== scope.runId || request.split !== scope.split ||
+          request.cycleSequence !== input.expectedCycleSequence || request.datasetMembership.symbol !== input.symbol) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:IMMUTABLE_SOURCE_RETRY_DIVERGENCE");
+      }
+      await verifyCommitRequestSources(tx, request);
+      const exact = await transactionPort(tx, request).loadResumeCursor(scope);
+      if (!exact || exact.contentDigestHex !== exactRows[0].checkpoint_json.contentDigestHex) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PERSISTED_RETRY_DIVERGENCE");
+      }
+      return exact;
+    }
+    const latest = await tx<{ checkpoint_json: HistoricalSimulationResumeCursorV2;
+      commit_request_json: HistoricalSimulationCommitRequestV2 }[]>`
+      SELECT checkpoint_json,commit_request_json FROM trader_historical_simulation_resume_checkpoint_v2
+      WHERE organization_id=${scope.organizationId}::uuid AND account_id=${scope.accountId} AND run_id=${scope.runId}
+      ORDER BY committed_cycle_sequence DESC LIMIT 1 FOR UPDATE`;
+    const previousCursor = latest[0]?.checkpoint_json ?? null;
+    if (previousCursor) {
+      validateHistoricalSimulationResumeCursorV2(previousCursor, scope);
+      validateHistoricalSimulationCommitRequestV2(latest[0]!.commit_request_json);
+      await verifyCommitRequestSources(tx, latest[0]!.commit_request_json);
+    }
+    const cycleSequence = input.expectedCycleSequence;
+    if ((previousCursor === null && cycleSequence !== 0) ||
+        (previousCursor !== null && previousCursor.nextCycleSequence !== cycleSequence)) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:SKIPPED_CYCLE_SEQUENCE");
+    }
+    const expectedRecordIndex = previousCursor?.nextRecordIndex ?? 0;
+    // A retry of the latest request is identified by its immutable PIT identity. A normal call
+    // advances to nextRecordIndex, so it never silently replays a previously committed cycle.
+    const source = await createHistoricalSimulationProductionCyclePortV2(tx).loadNextExact({
+      organizationId: scope.organizationId, accountId: scope.accountId, runId: scope.runId,
+      partition: scope.split, symbol: input.symbol, expectedRecordIndex });
+    const defaultQuantity = source.decisionAuthorities.economicSizeSet.exactQuantities[0];
+    if (!defaultQuantity) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:QUANTITY_AUTHORITY");
+    const prereg = await tx<{ authority_bundle_digest_hex: string; policy_config_digest_hex: string }[]>`
+      SELECT authority_bundle_digest_hex,policy_config_digest_hex
+      FROM trader_dee659_authority_preregistration_v2
+      WHERE id=${source.dee659PreregistrationId}::uuid AND organization_id=${scope.organizationId}::uuid
+        AND account_id=${scope.accountId} AND run_id=${scope.runId} AND cycle_id=${source.sealedCycle.cycleId}
+        AND dataset_seal_digest_hex=${source.datasetSealDigestHex} FOR SHARE`;
+    if (prereg.length !== 1 || prereg[0]!.authority_bundle_digest_hex !== source.dee659BundleContentDigestHex) {
+      throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:PREREGISTRATION_IDENTITY");
+    }
+    const waiaSha = process.env.WAIA_RELEASE_SHA?.toLowerCase();
+    const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA?.toLowerCase();
+    if (waiaSha && vercelSha && waiaSha !== vercelSha) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA_CONFLICT");
+    }
+    const codeSha = waiaSha ?? vercelSha ?? "";
+    if (!/^[0-9a-f]{40}$/.test(codeSha)) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA");
+
+    const closed = await produceHistoricalSimulationNextCycleV2({ tx, scope, source,
+      previousCursor, defaultQuantity, codeSha,
+      policyConfigContentDigestHex: prereg[0]!.policy_config_digest_hex,
+      forecastInputAuthorityContentDigestHex: prereg[0]!.authority_bundle_digest_hex });
+    const { request, produced } = closed;
+    validateHistoricalSimulationCommitRequestV2(request);
+    if (request.organizationId !== scope.organizationId || request.accountId !== scope.accountId ||
+        request.runId !== scope.runId || request.split !== scope.split || request.cycleSequence !== cycleSequence ||
+        request.cycleId !== source.sealedCycle.cycleId || request.datasetMembershipContentDigestHex !== source.membership.contentDigestHex ||
+        request.forecastInputAuthorityContentDigestHex !== prereg[0]!.authority_bundle_digest_hex ||
+        request.policyConfigContentDigestHex !== prereg[0]!.policy_config_digest_hex || request.codeSha !== codeSha) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PRODUCED_SOURCE_IDENTITY");
+    }
+    await verifyCommitRequestSources(tx, request);
+    await verifyCanonicalStageArtifacts(tx, scope, produced, previousCursor);
+    const transaction = transactionPort(tx, request);
+    return commitHistoricalSimulationCycleAtomicallyV2({ repository: {
+      transaction: (callback) => callback(transaction) }, scope, ...produced });
   });
 }

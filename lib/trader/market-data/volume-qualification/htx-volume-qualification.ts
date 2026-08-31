@@ -64,7 +64,23 @@ const VWAP_RANGE_RELATIVE_TOLERANCE = 1e-6;
 function computeReceiptDigest(
   receipt: Omit<HtxVolumeQualificationReceiptV1, "qualificationReceiptDigest">,
 ): string {
-  return computePayloadDigest(receipt);
+  // Receipts are persisted in PostgreSQL jsonb, which does not preserve object
+  // key insertion order. Reconstruct the versioned canonical field order before
+  // applying the legacy hot-path digest so durable reload remains byte-stable.
+  const body = {
+    schemaVersion: receipt.schemaVersion,
+    verdict: receipt.verdict,
+    authorityField: receipt.authorityField,
+    quoteTurnoverField: receipt.quoteTurnoverField,
+    venue: receipt.venue,
+    marketType: receipt.marketType,
+    symbol: receipt.symbol,
+    interval: receipt.interval,
+    sampleCount: receipt.sampleCount,
+    divergenceCount: receipt.divergenceCount,
+    qualifiedAtUtc: receipt.qualifiedAtUtc,
+  };
+  return computePayloadDigest(receipt.detail === undefined ? body : { ...body, detail: receipt.detail });
 }
 
 function isPositiveFinite(value: number): boolean {

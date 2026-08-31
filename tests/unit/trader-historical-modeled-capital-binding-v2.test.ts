@@ -18,8 +18,47 @@ const cycle = Object.freeze({
 });
 
 describe("historical modeled capital binding v2", () => {
+  it("uses the one pre-advanced accounting frontier for current Risk and cannot fill the current order on that bar", async () => {
+    let exposureLimit = "50";
+    const advance = vi.fn(async () => { exposureLimit = "200"; return {
+      observedExecutionEffects: [], accountingAdvanced: true } as const; });
+    const registered: OrderRow[] = [];
+    const binding = createHistoricalModeledCapitalBindingV2({ organizationId: "org-1", accountId: "account-1",
+      runId: "run-1", resolveCycle: () => cycle,
+      decide: async () => { throw new Error("not exercised"); },
+      loadAccounting: async () => ({ frontierContentDigestHex: digest("a"), posture: "NORMAL",
+        accounting: { reconciledExposureNotional: "0", worstCasePendingExposureNotional: "0",
+          outstandingReservationNotional: "0", exposureLimitNotional: exposureLimit } }),
+      exchange: { registerOrder: (order: OrderRow) => { registered.push(order); } } as never,
+      executionRegistry: createHistoricalModeledExecutionRegistryV2(), decisionBarIndex: () => 9,
+      evaluateGuardian: async () => ({ status: "NONE", reasonCodes: [] }), persistEvidence: async () => undefined,
+      persistExecutionSubmission: async ({ order }) => ({ ...order, state: "ACCEPTED", stateVersion: 2 }),
+      advanceModeledExecution: advance,
+      learningProjection: async () => ({ status: "NO_UPDATE", reasonCodes: ["NO_MATURED_OUTCOME"],
+        calibrationObservationContentDigestHex: null, knowledgeUpdateContentDigestHex: null,
+        eligibleResolutionAtUtc: null, visibleFromPitAnchorUtc: null }) });
+    // This is the production ordering: the already-open order is advanced before current Decision/Risk.
+    await advance();
+    const decision = { decisionId: "decision-1", semanticDigestHex: digest("b"), contentDigestHex: digest("c"),
+      forecastAuthorityContentDigestHex: digest("d"), action: "ENTER_LONG" as const, evLower: "1", evBase: "2",
+      evUpper: "3", economicSizeSetId: "size-1", economicSizeSetDigestHex: digest("e"), qualifiedQuantity: "1" };
+    const request = { organizationId: "org-1", accountId: "account-1", cycleId: cycle.cycleId,
+      symbol: cycle.symbol, referencePrice: cycle.referencePrice, forecastOutcome: {} as never,
+      proposal: { action: "ENTER_LONG" as const, quantity: "1", strategySignalId: null } };
+    const permission = await binding.decisionCapitalAuthorityV2.assessRisk({ request, decision });
+    expect(permission.status).toBe("PERMITTED");
+    expect(advance).toHaveBeenCalledOnce();
+    expect(registered).toHaveLength(0);
+    if (permission.status !== "PERMITTED") throw new Error("expected permitted");
+    await binding.decisionCapitalAuthorityV2.execute({ request: { ...request, executionMode: "historical" },
+      decision, permission });
+    expect(registered).toHaveLength(1);
+    expect(advance).toHaveBeenCalledOnce();
+  });
+
   it("creates deterministic non-capital exit evidence and never calls canonical Reality/Risk/Guardian", async () => {
     const registered: unknown[] = [];
+    const persistedOrders: string[] = [];
     const evidence: Array<Record<string, unknown>> = [];
     const advance = vi.fn(async (_cycle: unknown) => undefined);
     const canonicalReality = vi.fn(() => { throw new Error("must not be called"); });
@@ -47,6 +86,8 @@ describe("historical modeled capital binding v2", () => {
       decisionBarIndex: () => 7,
       evaluateGuardian: async () => ({ status: "NONE", reasonCodes: [] }),
       persistEvidence: async (value) => { evidence.push(value as unknown as Record<string, unknown>); },
+      persistExecutionSubmission: async ({ order }) => { persistedOrders.push(order.id);
+        return { ...order, state: "ACCEPTED", stateVersion: 2 }; },
       advanceModeledExecution: async (value) => { await advance(value); return { observedExecutionEffects: [], accountingAdvanced: false }; },
       learningProjection: async () => ({
         status: "NO_UPDATE",
@@ -74,6 +115,7 @@ describe("historical modeled capital binding v2", () => {
 
     expect(first).toEqual(second);
     expect(registered).toHaveLength(2);
+    expect(persistedOrders).toHaveLength(2);
     expect(evidence.every((row) => row.source === "MODELED_HISTORICAL" && row.capitalEligible === false)).toBe(true);
     expect(new Set(evidence.map((row) => row.schemaVersion))).not.toContain("reality-projection/v2");
     const executionReceipts = evidence.filter((row) =>

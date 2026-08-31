@@ -5,7 +5,8 @@ import { assertHistoricalForecastPitAuthorityReceiptV2, assertHistoricalSimulati
 
 const sql = Object.assign(() => undefined, { reserve: () => undefined }) as never;
 const safe = { sql, organizationId: "org", accountId: "account", runId: "run",
-  partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const, defaultQuantity: "0.01000000",
+  partition: "DEVELOPMENT" as const, symbol: "BTCUSDT" as const,
+  expectedCycleSequence: 0,
 };
 const identity = { organizationId: "org", accountId: "account", runId: "run", cycleId: "cycle-1",
   pitAnchor: "2026-08-30T00:00:00.000Z", datasetMembershipContentDigestHex: "1".repeat(64),
@@ -23,8 +24,12 @@ describe("Historical Simulation V2 closed production graph boundary", () => {
   it.each([null, undefined, [], "request"])("rejects non-object %s", (value) => {
     expect(() => assertHistoricalSimulationV2ClosedGraphRequest(value)).toThrow("UNSAFE_LAUNCH_REQUEST");
   });
-  it.each(["-1", "0", "NaN", "1e-3", "01", "0.000000001", "1000000001"])("rejects quantity %s", (quantity) => {
-    expect(() => assertHistoricalSimulationV2ClosedGraphRequest({ ...safe, defaultQuantity: quantity }))
+  it("rejects caller-supplied quantity authority", () => {
+    expect(() => assertHistoricalSimulationV2ClosedGraphRequest({ ...safe, defaultQuantity: "0.01" }))
+      .toThrow("UNSAFE_LAUNCH_REQUEST");
+  });
+  it.each([-1, 0.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])("rejects cycle sequence %s", (expectedCycleSequence) => {
+    expect(() => assertHistoricalSimulationV2ClosedGraphRequest({ ...safe, expectedCycleSequence }))
       .toThrow("UNSAFE_LAUNCH_REQUEST");
   });
   it("seals and validates exact PIT scope and rejects cross-cycle substitution", () => {

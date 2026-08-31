@@ -3,28 +3,58 @@ import { describe, expect, it } from "vitest";
 import { computeKnowledgeCheckpointContentDigest, computeKnowledgeSemanticDigest,
   type KnowledgeCheckpointInput } from "@/lib/trader/intelligence/knowledge-state/knowledge-state-checkpoint-v2";
 import { createHistoricalSimulationPostgresKnowledgePortV2,
+  createHistoricalSimulationPostgresKnowledgeReadPortV2,
   type HistoricalSimulationKnowledgeCheckpointStoreV2 } from "@/lib/trader/historical-simulation-v2/knowledge-port-postgres";
+import { computeKnowledgeConfidenceUpdateContentDigest, KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION,
+  type KnowledgeConfidenceUpdateRecord } from "@/lib/trader/knowledge/knowledge-confidence-update";
+import type { HistoricalForecastPitKnowledgeRowV2 } from
+  "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const digest = (value: string) => value.repeat(64);
 
-type Row = {
-  id: string; knowledge_edge_id: string; content_digest: string; resolved_at: string;
-  pit_evidence_boundary: string; source_record_ids_json: string;
-};
+type Row = HistoricalForecastPitKnowledgeRowV2;
 
 function row(input: { id: string; visible: string; resolved: string; digestChar: string }): Row {
+  const source = {
+    visible_from_cycle_pit_anchor: input.visible,
+    forecast_runtime_authority_content_digest_hex: digest("a"),
+    forecast_outcome_content_digest_hex: digest(input.digestChar),
+    confidence_value_class: "MACHINE_RECOMMENDED_BOUNDED_DELTA",
+    authority_class: "EPISTEMIC_EVIDENCE_ONLY", operator_disposition: "OBSERVE_ONLY",
+    capital_authority: "NONE", strategy_authority: "NONE", trade_eligibility_authority: "NONE",
+    guardian_authority: "NONE",
+  };
+  const id = `00000000-0000-4000-8000-${input.digestChar.repeat(12)}`;
+  const canonical = { id, organizationId: ORG, runId: "run", cycleId: "cycle", symbol: "BTCUSDT",
+    knowledgeEdgeId: "22222222-2222-4222-8222-222222222222", updateKind: "FORECAST_V2_EVIDENCE_ONLY",
+    updateModelVersion: "waia.knowledge.forecast-v2-evidence-only", priorMachineRecommendedConfidence: "0.5000",
+    machineRecommendedConfidence: "0.5000", machineRecommendedDelta: "0.0000",
+    confidenceValueClass: source.confidence_value_class, authorityClass: source.authority_class,
+    operatorDisposition: source.operator_disposition, capitalAuthority: source.capital_authority,
+    strategyAuthority: source.strategy_authority, tradeEligibilityAuthority: source.trade_eligibility_authority,
+    guardianAuthority: source.guardian_authority, issuedAt: input.resolved,
+    eligibleResolutionAt: input.resolved, resolvedAt: input.resolved, pitEvidenceBoundary: input.resolved,
+    outcomeClass: "FLAT", score: null, sourceRecordIdsJson: JSON.stringify(source),
+    contentDigest: "", idempotencyKey: `knowledge-${input.digestChar}`,
+    provenance: { codeSha: digest("c"), datasetContentDigest: digest("d"), profileDigest: digest("e"),
+      canonicalizer: "HTR_SEMANTIC_CANONICAL_JSON_V1" }, terminalReason: "FORECAST_V2_EVIDENCE_ONLY",
+    schemaVersion: KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION } as unknown as KnowledgeConfidenceUpdateRecord;
+  const contentDigest = computeKnowledgeConfidenceUpdateContentDigest(canonical);
   return {
-    id: input.id,
+    id,
+    organization_id: ORG, run_id: "run", cycle_id: "cycle", symbol: "BTCUSDT",
     knowledge_edge_id: "22222222-2222-4222-8222-222222222222",
-    content_digest: digest(input.digestChar),
+    update_kind: canonical.updateKind, update_model_version: canonical.updateModelVersion,
+    prior_confidence: canonical.priorMachineRecommendedConfidence,
+    posterior_confidence: canonical.machineRecommendedConfidence, delta: canonical.machineRecommendedDelta,
+    issued_at: input.resolved, eligible_resolution_at: input.resolved,
+    content_digest: contentDigest,
     resolved_at: input.resolved,
     pit_evidence_boundary: input.resolved,
-    source_record_ids_json: JSON.stringify({
-      visible_from_cycle_pit_anchor: input.visible,
-      forecast_runtime_authority_content_digest_hex: digest("a"),
-      forecast_outcome_content_digest_hex: digest(input.digestChar),
-    }),
+    outcome_class: canonical.outcomeClass, score: null, source_record_ids_json: canonical.sourceRecordIdsJson,
+    idempotency_key: canonical.idempotencyKey, provenance_json: JSON.stringify(canonical.provenance),
+    terminal_reason: canonical.terminalReason, schema_version: canonical.schemaVersion,
   };
 }
 
@@ -74,6 +104,30 @@ function port(rows: readonly Row[], store = memoryCheckpoints()) {
 }
 
 describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
+  it("provides a replay-only PIT port without any Forecast issuance capability", async () => {
+    const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: fakeSql([]),
+      organizationId: ORG, symbol: "BTCUSDT", checkpointStore: memoryCheckpoints() });
+    expect("processForecastCycle" in read).toBe(false);
+    await expect(read.snapshotAsOf("2026-08-01T00:00:00.000Z")).resolves.toMatchObject({
+      asOf: "2026-08-01T00:00:00.000Z",
+    });
+  });
+  it("seeds closure visibility from the restored learning watermark", async () => {
+    const prior = row({ id: "prior", visible: "2026-08-01T00:02:00.000Z",
+      resolved: "2026-08-01T00:01:00.000Z", digestChar: "4" });
+    const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: fakeSql([prior]),
+      organizationId: ORG, symbol: "BTCUSDT", checkpointStore: memoryCheckpoints(),
+      appliedClosureWatermarkUtc: "2026-08-01T00:02:00.000Z" });
+    await expect(read.closeMaturedForecasts("2026-08-01T00:03:00.000Z")).resolves.toEqual([]);
+  });
+
+  it("rejects a row whose resolution or evidence boundary is in the future", async () => {
+    const future = row({ id: "future", visible: "2026-08-01T00:02:00.000Z",
+      resolved: "2026-08-01T00:04:00.000Z", digestChar: "5" });
+    const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: fakeSql([future]),
+      organizationId: ORG, symbol: "BTCUSDT", checkpointStore: memoryCheckpoints() });
+    await expect(read.snapshotAsOf("2026-08-01T00:03:00.000Z")).rejects.toThrow("PIT_LEAKAGE");
+  });
   it("does not expose future knowledge at an earlier PIT anchor", async () => {
     const early = row({ id: "early", visible: "2026-08-01T00:02:00.000Z",
       resolved: "2026-08-01T00:01:00.000Z", digestChar: "1" });

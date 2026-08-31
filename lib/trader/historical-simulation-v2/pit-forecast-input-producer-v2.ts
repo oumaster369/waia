@@ -373,7 +373,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         ${source.runtime_input_content_digest_hex}, ${source.verifier_build_digest_hex},
         ${sql.json(JSON.parse(JSON.stringify(record.runtimeInput)) as postgres.JSONValue)},
         ${record.contentDigestHex}, ${record.schemaVersion}
-      ) ON CONFLICT (organization_id, run_id, cycle_id) DO NOTHING
+      ) ON CONFLICT DO NOTHING
     `;
     const persisted = await sql<{ content_digest_hex: string }[]>`
       SELECT content_digest_hex FROM trader_historical_forecast_input_pit_v2

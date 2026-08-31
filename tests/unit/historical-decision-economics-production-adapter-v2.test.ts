@@ -5,6 +5,8 @@ import {
   type PersistedDecisionEconomicsAuthoritiesV2,
 } from "@/lib/trader/historical-simulation-v2/decision-economics-production-adapter-v2";
 import { evaluateDecisionEconomicsV2ForSemanticMode } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
+import { createHistoricalDecisionEconomicsCapitalCoordinatorV2 } from
+  "@/lib/trader/backtest/historical-simulation-v2";
 import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { TARGET_ROLE_EXECUTION } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { distributionSemanticDigestHex } from "@/lib/trader/intelligence/forecast-v2/distribution-semantic-digest-v1";
@@ -27,8 +29,9 @@ import {
 const ORG = "00000000-0000-4000-8000-000000000001";
 const ACCOUNT = "00000000-0000-4000-8000-000000000003";
 
-function forecast(admissionDigest: string): ForecastRuntimeAuthorizedOutcomeV2 {
-  const samples = [[[...dee659Sample13d({ exitPrices: [110, 110, 110] })]]];
+function forecast(admissionDigest: string,
+  exitPrices: readonly [number, number, number] = [110, 110, 110]): ForecastRuntimeAuthorizedOutcomeV2 {
+  const samples = [[[...dee659Sample13d({ exitPrices })]]];
   const distributionDigest = distributionSemanticDigestHex({
     forecastGenerationIdentityDigestHex: DEE659_TEST_DIGEST_D,
     predictivePackageContentDigestHex: DEE659_TEST_DIGEST_C,
@@ -144,5 +147,53 @@ describe("Historical Decision Economics production adapter V2", () => {
     });
     await expect(build({ cycle: { cycleId: "cycle-1" }, forecast: forecast(rows.scientificAdmission.contentDigest) }))
       .rejects.toThrow("HISTORICAL_DECISION_ADAPTER_INVALID:scientificAdmissionMismatch");
+  });
+
+  it("binds DEE-660 portfolio evidence one-shot to the exact Decision V2 qualification request", async () => {
+    const rows = persisted(); const authorized = forecast(rows.scientificAdmission.contentDigest);
+    const build = createHistoricalDecisionEconomicsProductionInputBuilderV2({ organizationId: ORG,
+      accountId: ACCOUNT, authorities: { load: async () => rows } });
+    const coordinator = createHistoricalDecisionEconomicsCapitalCoordinatorV2({ organizationId: ORG,
+      accountId: ACCOUNT, buildEvaluationInput: ({ cycle, forecast: outcome }) => build({ cycle, forecast: outcome }) });
+    const cycle = { cycleId: "cycle-1", observedAt: "2026-08-01T00:00:00.000Z", symbol: "BTCUSDT",
+      referencePrice: "100", datasetMembership: { contentDigestHex: DEE659_TEST_DIGEST_A } as never };
+    const proposal = await coordinator.resolvePortfolioProposal({ cycle, forecast: authorized,
+      knowledge: { asOf: cycle.observedAt, contentDigestHex: DEE659_TEST_DIGEST_B } });
+    const request = { organizationId: ORG, accountId: ACCOUNT, cycleId: cycle.cycleId, symbol: cycle.symbol,
+      referencePrice: cycle.referencePrice, forecastOutcome: authorized,
+      proposal: { action: "ENTER_LONG" as const, quantity: proposal.quantity! } };
+    await expect(coordinator.decide(request)).resolves.toMatchObject({ status: "ACTIONABLE",
+      decision: { contentDigestHex: proposal.decisionContentDigestHex } });
+    const durableEvidence = coordinator.takeDecisionEvidence(cycle.cycleId);
+    expect(durableEvidence.decisionReceipt.contentDigestHex).toBe(proposal.decisionContentDigestHex);
+    expect(durableEvidence.whyNotCashReceipt.contentDigestHex).toBe(proposal.whyNotCashReceiptDigestHex);
+    expect(() => coordinator.takeDecisionEvidence(cycle.cycleId))
+      .toThrow("DECISION_EVIDENCE_UNAVAILABLE");
+    await expect(coordinator.decide(request)).rejects.toThrow("DECISION_COORDINATOR_BINDING");
+
+    const spliced = createHistoricalDecisionEconomicsCapitalCoordinatorV2({ organizationId: ORG,
+      accountId: ACCOUNT, buildEvaluationInput: ({ cycle, forecast: outcome }) => build({ cycle, forecast: outcome }) });
+    const secondProposal = await spliced.resolvePortfolioProposal({ cycle, forecast: authorized,
+      knowledge: { asOf: cycle.observedAt, contentDigestHex: DEE659_TEST_DIGEST_B } });
+    await expect(spliced.decide({ ...request, accountId: "another-account",
+      proposal: { action: "ENTER_LONG", quantity: secondProposal.quantity! } }))
+      .rejects.toThrow("DECISION_COORDINATOR_BINDING");
+  });
+
+  it("finalizes full one-shot evidence for a nonactionable CASH cycle without capital admission", async () => {
+    const rows = persisted(); const authorized = forecast(rows.scientificAdmission.contentDigest, [90, 90, 90]);
+    const build = createHistoricalDecisionEconomicsProductionInputBuilderV2({ organizationId: ORG,
+      accountId: ACCOUNT, authorities: { load: async () => rows } });
+    const coordinator = createHistoricalDecisionEconomicsCapitalCoordinatorV2({ organizationId: ORG,
+      accountId: ACCOUNT, buildEvaluationInput: ({ cycle, forecast: outcome }) => build({ cycle, forecast: outcome }) });
+    const cycle = { cycleId: "cash-cycle", observedAt: "2026-08-01T00:00:00.000Z", symbol: "BTCUSDT",
+      referencePrice: "100", datasetMembership: { contentDigestHex: DEE659_TEST_DIGEST_A } as never };
+    const proposal = await coordinator.resolvePortfolioProposal({ cycle, forecast: authorized,
+      knowledge: { asOf: cycle.observedAt, contentDigestHex: DEE659_TEST_DIGEST_B } });
+    expect(proposal.action).toBe("CASH");
+    const evidence = coordinator.takeDecisionEvidence(cycle.cycleId);
+    expect(evidence.decisionReceipt.contentDigestHex).toBe(proposal.decisionContentDigestHex);
+    expect(evidence.whyNotCashReceipt.contentDigestHex).toBe(proposal.whyNotCashReceiptDigestHex);
+    expect(() => coordinator.takeDecisionEvidence(cycle.cycleId)).toThrow("DECISION_EVIDENCE_UNAVAILABLE");
   });
 });

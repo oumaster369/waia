@@ -150,6 +150,7 @@ type PendingCancel = {
 type OpenHistoricalOrder = {
   order: OrderRow;
   acceptedAtTs: number;
+  firstEligibleTs: number;
   decisionBarIndex: number;
   firstEligibleBarIndex: number;
   windowEndBarIndex: number;
@@ -224,6 +225,7 @@ export function createHistoricalSimulatedExchange(
     openOrders.set(order.id, {
       order,
       acceptedAtTs,
+      firstEligibleTs: acceptedAtTs,
       decisionBarIndex,
       firstEligibleBarIndex,
       windowEndBarIndex,
@@ -255,7 +257,7 @@ export function createHistoricalSimulatedExchange(
       openOrders: [...openOrders.values()].map((entry) => ({
         orderId: entry.order.id,
         acceptedAtTs: entry.acceptedAtTs,
-        firstEligibleTs: entry.acceptedAtTs,
+        firstEligibleTs: entry.firstEligibleTs,
         windowEndBarIndex: entry.windowEndBarIndex,
         sameSymbolEligibleBarsSeen: entry.sameSymbolEligibleBarsSeen,
         remainingQty: entry.remainingQty,
@@ -278,6 +280,7 @@ export function createHistoricalSimulatedExchange(
       openOrders.set(row.orderId, {
         order,
         acceptedAtTs: row.acceptedAtTs,
+        firstEligibleTs: row.firstEligibleTs,
         decisionBarIndex: row.windowEndBarIndex - model.maxEligibleClosedBars,
         firstEligibleBarIndex: row.windowEndBarIndex - model.maxEligibleClosedBars + 1,
         windowEndBarIndex: row.windowEndBarIndex,

@@ -5,36 +5,26 @@ import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic
 export type HistoricalSimulationV2ClosedGraphRequest = Readonly<{
   sql: postgres.Sql; organizationId: string; accountId: string; runId: string;
   partition: "DEVELOPMENT" | "WALK_FORWARD"; symbol: "BTCUSDT" | "ETHUSDT";
-  defaultQuantity: string;
+  expectedCycleSequence: number;
 }>;
 
 const ALLOWED = new Set(["sql", "organizationId", "accountId", "runId", "partition", "symbol",
-  "defaultQuantity"]);
-const FORBIDDEN = /(credential|secret|private|connector|exchangeClient|live|capitalAuthority|reality|blind.?holdout|resolve|persist|sink|cycle|root|path)/i;
-const QTY = /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,8})?$/;
-function quantityUnits(value: string): bigint {
-  const [whole, fraction = ""] = value.split(".");
-  return BigInt(whole) * 100_000_000n + BigInt(fraction.padEnd(8, "0") || "0");
-}
-
+  "expectedCycleSequence"]);
+const FORBIDDEN = /(credential|secret|private|connector|exchangeClient|live|capitalAuthority|reality|blind.?holdout|resolve|persist|sink|root|path)/i;
 export function assertHistoricalSimulationV2ClosedGraphRequest(value: unknown): asserts value is HistoricalSimulationV2ClosedGraphRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_GRAPH_REFUSED:UNSAFE_LAUNCH_REQUEST");
   }
   const input = value as Record<string, unknown>;
   const keys = Object.keys(input);
-  const quantity = input.defaultQuantity;
   const sql = input.sql as { reserve?: unknown } | undefined;
-  const parsedQuantityUnits = typeof quantity === "string" && QTY.test(quantity)
-    ? quantityUnits(quantity)
-    : null;
   if (keys.length !== ALLOWED.size || [...ALLOWED].some((key) => !Object.hasOwn(input, key)) ||
       keys.some((key) => !ALLOWED.has(key) || FORBIDDEN.test(key)) ||
       keys.some((key) => key !== "sql" && typeof input[key] === "function") ||
       typeof input.sql !== "function" || typeof sql?.reserve !== "function" ||
       typeof input.organizationId !== "string" || !input.organizationId ||
       typeof input.accountId !== "string" || !input.accountId || typeof input.runId !== "string" || !input.runId ||
-      parsedQuantityUnits === null || parsedQuantityUnits <= 0n || parsedQuantityUnits > 100_000_000_000_000_000n ||
+      !Number.isSafeInteger(input.expectedCycleSequence) || (input.expectedCycleSequence as number) < 0 ||
       !["DEVELOPMENT", "WALK_FORWARD"].includes(input.partition as string) ||
       !["BTCUSDT", "ETHUSDT"].includes(input.symbol as string)) {
     throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_GRAPH_REFUSED:UNSAFE_LAUNCH_REQUEST");

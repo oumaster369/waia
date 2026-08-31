@@ -11,13 +11,19 @@ import {
 import { assertFhvV2PostgresSchemaPreflight } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
 import {
   appendHistoricalSimulationReasonLedgerV2,
+  validateHistoricalSimulationReasonLedgerV2,
   type HistoricalSimulationReasonLedgerV2,
   type HistoricalSimulationReasonLedgerV2Draft,
 } from "@/lib/trader/historical-simulation-v2/reason-ledger-v2";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { evaluateDecisionEconomicsV2ForSemanticMode } from "@/lib/trader/intelligence/decision-economics/decision-economic-evaluator-v2";
+import type { DecisionEvaluationReceiptV1, WhyNotCashReceiptV2 } from
+  "@/lib/trader/intelligence/decision-economics/dee660-why-not-cash-receipt-v2";
 import type { DecisionEconomicEvaluationInputV2 } from "@/lib/trader/intelligence/decision-economics/dee660-decision-evaluation-contract-v1";
 import type { HistoricalDatasetMembershipV2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
+import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
+import type { DecisionStageOutcomeV2, DecisionQualificationRequestV2 } from
+  "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 
 export const HISTORICAL_SIMULATION_V2_SCHEMA_VERSION =
   "waia.trader.historical_simulation.v2" as const;
@@ -144,10 +150,103 @@ export function createHistoricalDecisionEconomicsPortfolioResolverV2(input: Read
   };
 }
 
+/** One exact DEE-660 evaluation feeds both portfolio selection and Decision V2 capital admission. */
+export function createHistoricalDecisionEconomicsCapitalCoordinatorV2(input: Readonly<{
+  organizationId: string; accountId: string;
+  buildEvaluationInput(context: Readonly<{ cycle: HistoricalSimulationV2Cycle;
+    forecast: Extract<ForecastRuntimeOutcomeV2, { status: "FORECAST_AUTHORIZED" }>;
+    knowledge: HistoricalKnowledgeSnapshotV2 }>): Promise<DecisionEconomicEvaluationInputV2>;
+}>): Readonly<{ resolvePortfolioProposal: RunHistoricalSimulationV2Input["resolvePortfolioProposal"];
+  decide(request: DecisionQualificationRequestV2): Promise<DecisionStageOutcomeV2>;
+  takeDecisionEvidence(cycleId: string): Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1;
+    whyNotCashReceipt: WhyNotCashReceiptV2 }> }> {
+  const evaluations = new Map<string, Readonly<{ result: ReturnType<typeof evaluateDecisionEconomicsV2ForSemanticMode>;
+    binding: Readonly<{ organizationId: string; accountId: string; cycleId: string; symbol: string;
+      referencePrice: string; forecastAuthorityContentDigestHex: string; action: "ENTER_LONG" | "CASH";
+      quantity: string | null; decisionContentDigestHex: string; whyNotCashReceiptDigestHex: string }> }>>();
+  const completedEvidence = new Map<string, Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1;
+    whyNotCashReceipt: WhyNotCashReceiptV2 }>>();
+  const resolvePortfolioProposal: RunHistoricalSimulationV2Input["resolvePortfolioProposal"] = async (context) => {
+    if (context.forecast.status !== "FORECAST_AUTHORIZED") {
+      return createHistoricalDecisionEconomicsPortfolioResolverV2(input)(context);
+    }
+    const result = evaluateDecisionEconomicsV2ForSemanticMode(await input.buildEvaluationInput({
+      ...context, forecast: context.forecast }), "HISTORICAL");
+    const quantity = result.economicAdmissibleSizeSet?.exactQuantities[0] ?? null;
+    if (evaluations.has(context.cycle.cycleId)) {
+      throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DUPLICATE_DECISION_EVALUATION");
+    }
+    evaluations.set(context.cycle.cycleId, Object.freeze({ result, binding: Object.freeze({
+      organizationId: input.organizationId, accountId: input.accountId, cycleId: context.cycle.cycleId,
+      symbol: context.cycle.symbol, referencePrice: context.cycle.referencePrice,
+      forecastAuthorityContentDigestHex: context.forecast.authority.contentDigestHex,
+      action: result.action, quantity, decisionContentDigestHex: result.decisionReceipt.contentDigestHex,
+      whyNotCashReceiptDigestHex: result.receipt.contentDigestHex }) }));
+    return Object.freeze({ decisionSemanticMode: "HISTORICAL" as const, action: result.action, quantity,
+      proposalContentDigestHex: computeSemanticSha256Hex({ cycleId: context.cycle.cycleId, action: result.action,
+        quantity, decisionReceiptContentDigestHex: result.decisionReceipt.contentDigestHex,
+        knowledgeContentDigestHex: context.knowledge.contentDigestHex }), reasonCodes: result.receipt.reasonCodes,
+      decisionContentDigestHex: result.decisionReceipt.contentDigestHex,
+      whyNotCashReceiptDigestHex: result.receipt.contentDigestHex,
+      evLower: result.evRange?.evLowerScale8 ?? null, evBase: result.evRange?.evBaseScale8 ?? null,
+      evUpper: result.evRange?.evUpperScale8 ?? null });
+  };
+  return Object.freeze({ resolvePortfolioProposal,
+    takeDecisionEvidence(cycleId) {
+      let evidence = completedEvidence.get(cycleId);
+      if (!evidence) {
+        const pending = evaluations.get(cycleId);
+        if (pending?.binding.action === "CASH") {
+          evidence = Object.freeze({ decisionReceipt: pending.result.decisionReceipt,
+            whyNotCashReceipt: pending.result.receipt });
+          evaluations.delete(cycleId);
+        }
+      }
+      if (!evidence) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DECISION_EVIDENCE_UNAVAILABLE");
+      completedEvidence.delete(cycleId);
+      return evidence;
+    },
+    async decide(request): Promise<DecisionStageOutcomeV2> {
+      const stored = evaluations.get(request.cycleId); const binding = stored?.binding; const result = stored?.result;
+      if (!result || !binding || binding.organizationId !== request.organizationId || binding.accountId !== request.accountId ||
+          binding.cycleId !== request.cycleId || binding.symbol !== request.symbol ||
+          binding.referencePrice !== request.referencePrice || binding.action !== request.proposal.action ||
+          binding.forecastAuthorityContentDigestHex !== request.forecastOutcome.authority.contentDigestHex ||
+          binding.quantity !== request.proposal.quantity ||
+          binding.decisionContentDigestHex !== result.decisionReceipt.contentDigestHex ||
+          binding.whyNotCashReceiptDigestHex !== result.receipt.contentDigestHex) {
+        throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DECISION_COORDINATOR_BINDING");
+      }
+      evaluations.delete(request.cycleId);
+      if (completedEvidence.has(request.cycleId)) {
+        throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DUPLICATE_DECISION_EVIDENCE");
+      }
+      completedEvidence.set(request.cycleId, Object.freeze({ decisionReceipt: result.decisionReceipt,
+        whyNotCashReceipt: result.receipt }));
+      if (!result.decisionActionable || !result.evRange || !result.economicAdmissibleSizeSet) {
+        return Object.freeze({ status: "NO_TRADE", decisionId: deterministicExecutionUuidV2("risk-event", {
+          kind: "decision", cycleId: request.cycleId, digest: result.decisionReceipt.contentDigestHex }),
+        decisionContentDigestHex: result.decisionReceipt.contentDigestHex,
+        forecastAuthorityContentDigestHex: request.forecastOutcome.authority.contentDigestHex,
+        reasonCodes: result.receipt.reasonCodes });
+      }
+      return Object.freeze({ status: "ACTIONABLE", decision: Object.freeze({
+        decisionId: deterministicExecutionUuidV2("risk-event", { kind: "decision", cycleId: request.cycleId,
+          digest: result.decisionReceipt.contentDigestHex }), semanticDigestHex: result.receipt.contentDigestHex,
+        contentDigestHex: result.decisionReceipt.contentDigestHex,
+        forecastAuthorityContentDigestHex: request.forecastOutcome.authority.contentDigestHex,
+        action: "ENTER_LONG", evLower: result.evRange.evLowerScale8, evBase: result.evRange.evBaseScale8,
+        evUpper: result.evRange.evUpperScale8, economicSizeSetId: result.economicAdmissibleSizeSet.sizeSetId,
+        economicSizeSetDigestHex: result.economicAdmissibleSizeSet.contentDigestHex,
+        qualifiedQuantity: request.proposal.quantity }) });
+    } });
+}
+
 type LedgerProjection = Pick<
   HistoricalSimulationReasonLedgerV2Draft,
   "accounting" | "guardian" | "learning"
 > & Readonly<{
+  risk?: HistoricalSimulationReasonLedgerV2Draft["risk"];
   execution?: HistoricalSimulationReasonLedgerV2Draft["execution"];
   observedExecutionEffects?: HistoricalSimulationReasonLedgerV2Draft["observedExecutionEffects"];
 }>;
@@ -203,6 +302,8 @@ export type RunHistoricalSimulationV2Input = Readonly<{
   evidenceSink?: (evidence: HistoricalSimulationV2Evidence) => Promise<void> | void;
   /** Durable append-only sink. Called only after the entry is hash-linked and complete. */
   reasonLedgerSink?: (entry: HistoricalSimulationReasonLedgerV2) => Promise<void> | void;
+  /** Internal durable resume seed. Production callers must load this from the validated 0188 cursor/ledger. */
+  previousReasonLedger?: HistoricalSimulationReasonLedgerV2 | null;
 }>;
 
 export type RunHistoricalSimulationV2Result = Readonly<{
@@ -336,6 +437,15 @@ export async function runHistoricalSimulationV2(
 
   const evidence: HistoricalSimulationV2Evidence[] = [];
   const reasonLedger: HistoricalSimulationReasonLedgerV2[] = [];
+  let previousReasonLedger = input.previousReasonLedger ?? null;
+  if (previousReasonLedger) {
+    validateHistoricalSimulationReasonLedgerV2(previousReasonLedger);
+    if (previousReasonLedger.organizationId !== input.organizationId || previousReasonLedger.accountId !== input.accountId ||
+        previousReasonLedger.runId !== input.runId || previousReasonLedger.partition !==
+          (input.split === "development" ? "DEVELOPMENT" : "WALK_FORWARD")) {
+      throw new Error("HISTORICAL_SIMULATION_V2_FORBIDDEN:resumeLedgerScope");
+    }
+  }
   for (const cycle of input.cycles) {
     const before = await input.knowledge.snapshotAsOf(cycle.observedAt);
     requireKnowledgeSnapshot(before, cycle.observedAt);
@@ -416,7 +526,7 @@ export async function runHistoricalSimulationV2(
       closures,
     });
     const authorityExecution = authority.status === "EXECUTION_BOUND" ? authority : null;
-    const ledgerEntry = appendHistoricalSimulationReasonLedgerV2(reasonLedger.at(-1) ?? null, {
+    const ledgerEntry = appendHistoricalSimulationReasonLedgerV2(previousReasonLedger, {
       organizationId: input.organizationId,
       accountId: input.accountId,
       runId: input.runId,
@@ -442,7 +552,7 @@ export async function runHistoricalSimulationV2(
         reasonCodes: proposal.action === "CASH" ? proposal.reasonCodes : [],
         proposalContentDigestHex: proposal.proposalContentDigestHex,
       },
-      risk: exit?.risk ?? (authorityExecution
+      risk: projection.risk ?? exit?.risk ?? (authorityExecution
         ? {
             status: authorityExecution.permission.approvedQualifiedQuantity === authorityExecution.decision.qualifiedQuantity ? "APPROVE" : "RESIZE",
             reasonCodes: [],
@@ -478,6 +588,7 @@ export async function runHistoricalSimulationV2(
       learning: projection.learning,
     });
     reasonLedger.push(ledgerEntry);
+    previousReasonLedger = ledgerEntry;
     await input.reasonLedgerSink?.(ledgerEntry);
   }
 

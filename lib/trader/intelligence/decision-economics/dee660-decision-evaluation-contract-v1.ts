@@ -1,4 +1,5 @@
 import { SCIENTIFIC_ADMISSION_RECEIPT_VERSION } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
+import { SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 
 import type {
@@ -77,7 +78,8 @@ export type ForecastEconomicAuthorityV1 = Dee659AuthorityBindingV1 & {
 
 export type ScientificAdmissionAuthorityV1 = {
   schemaVersion: typeof DEE660_SCIENTIFIC_ADMISSION_AUTHORITY_VERSION;
-  sourceReceiptSchemaVersion: typeof SCIENTIFIC_ADMISSION_RECEIPT_VERSION;
+  sourceReceiptSchemaVersion: typeof SCIENTIFIC_ADMISSION_RECEIPT_VERSION |
+    typeof SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION;
   organizationId: string;
   wfPartition: "WF_PREDICTIVE";
   terminalStatus: "QUALIFIED";
@@ -171,7 +173,8 @@ export function createScientificAdmissionAuthorityV1(
   const payload = { ...input, schemaVersion: DEE660_SCIENTIFIC_ADMISSION_AUTHORITY_VERSION };
   const candidate = { ...payload, contentDigestHex: computeStableJsonDigest(payload) };
   if (
-    candidate.sourceReceiptSchemaVersion !== SCIENTIFIC_ADMISSION_RECEIPT_VERSION ||
+    ![SCIENTIFIC_ADMISSION_RECEIPT_VERSION, SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION]
+      .includes(candidate.sourceReceiptSchemaVersion) ||
     candidate.organizationId.trim() === "" ||
     candidate.wfPartition !== "WF_PREDICTIVE" ||
     candidate.terminalStatus !== "QUALIFIED" ||

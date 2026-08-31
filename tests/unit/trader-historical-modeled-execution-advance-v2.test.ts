@@ -56,6 +56,7 @@ describe("historical modeled execution advance v2", () => {
       executionAttemptId: "attempt-1", executionAttemptContentDigestHex: "2".repeat(64), orderId: sourceOrder.id,
       orderContentDigestHex: "d".repeat(64),
       decisionId: "decision-0", decisionContentDigestHex: "c".repeat(64),
+      riskVerdictId: "risk-1",
       riskReceiptContentDigestHex: "a".repeat(64), symbol: "BTCUSDT", side: "buy", quantity: "0.1",
       decisionBarIndex: 0, acceptedAtUtc: sourceOrder.createdAt.toISOString(), contentDigestHex: "b".repeat(64),
     });
@@ -66,7 +67,8 @@ describe("historical modeled execution advance v2", () => {
       executionPlanId: "plan-current", executionPlanContentDigestHex: "3".repeat(64),
       executionAttemptId: "attempt-current", executionAttemptContentDigestHex: "4".repeat(64), orderId: currentOrder.id,
       orderContentDigestHex: "e".repeat(64), decisionId: "decision-current",
-      decisionContentDigestHex: "f".repeat(64), riskReceiptContentDigestHex: "a".repeat(64),
+      decisionContentDigestHex: "f".repeat(64), riskVerdictId: "risk-current",
+      riskReceiptContentDigestHex: "a".repeat(64),
       symbol: "BTCUSDT", side: "buy", quantity: "0.1", decisionBarIndex: 1,
       acceptedAtUtc: observedAt, contentDigestHex: "9".repeat(64),
     });

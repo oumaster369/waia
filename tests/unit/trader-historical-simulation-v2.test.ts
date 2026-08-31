@@ -316,4 +316,22 @@ describe("Historical Simulation V2 composition boundary", () => {
     });
     expect(modeledExit.execute).toHaveBeenCalledTimes(1);
   });
+
+  it("continues the reason ledger from an exact durable resume seed", async () => {
+    const base = { organizationId: ORG, accountId: "historical-account", runId: "run-resume",
+      split: "development" as const, authority: "HISTORICAL_SIMULATION_V2" as const, defaultQuantity: "0.01",
+      knowledge: knowledge(), resolveForecastInput: async () => emptyForecast(digest("1")),
+      decisionCapitalAuthorityV2: authority(), resolvePortfolioProposal: async () => proposal(0),
+      resolveLedgerProjection: ledgerProjection, postgresSchemaPreflight: async () => undefined };
+    const first = await runHistoricalSimulationV2({ ...base, cycles: cycles("DEVELOPMENT").slice(0, 1) });
+    const previous = first.reasonLedger[0]!;
+    const resumed = await runHistoricalSimulationV2({ ...base, cycles: cycles("DEVELOPMENT").slice(1, 2),
+      previousReasonLedger: previous });
+    expect(resumed.reasonLedger).toHaveLength(1);
+    expect(resumed.reasonLedger[0]?.cycleSequence).toBe(previous.cycleSequence + 1);
+    expect(resumed.reasonLedger[0]?.previousContentDigestHex).toBe(previous.contentDigestHex);
+    await expect(runHistoricalSimulationV2({ ...base, accountId: "spliced-account",
+      cycles: cycles("DEVELOPMENT").slice(1, 2), previousReasonLedger: previous }))
+      .rejects.toThrow("resumeLedgerScope");
+  });
 });

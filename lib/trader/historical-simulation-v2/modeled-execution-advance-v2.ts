@@ -15,6 +15,7 @@ import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic
 import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { addDecimal } from "@/lib/trader/risk/numeric";
+import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { HistoricalModeledExecutionRegistryV2 } from "./modeled-capital-binding-v2";
 import type { HistoricalSimulationReasonLedgerV2Draft } from "./reason-ledger-v2";
@@ -88,6 +89,7 @@ export type AdvanceHistoricalModeledExecutionV2Result = Readonly<{
   fillEvidence: readonly HistoricalModeledFillEvidenceV2[];
   fillDetails: readonly HistoricalModeledFillDetailV2[];
   accountingFrontierContentDigestHex: string;
+  accountingFrontier: AccountingFrontierV1;
   accountingAdvanced: boolean;
   effects: readonly HistoricalModeledObservedEffectV2[];
 }>;
@@ -226,6 +228,17 @@ export function createAdvanceHistoricalModeledExecutionV2(
           },
           marks: { [event.symbol]: { price: event.sourceBar.close, barCloseTime: event.sourceBar.barCloseTime } },
           frontierAsOf: event.fillTimestamp.toISOString(),
+          // PostgreSQL accounting frontiers use UUID primary keys.  The generic
+          // accounting engine's human-readable fallback is useful in memory but
+          // is not a durable identity authority.
+          frontierId: deterministicExecutionUuidV2("report", {
+            kind: "historical-modeled-accounting-frontier",
+            organizationId: input.context.organizationId,
+            accountKey: accounting.accountKey,
+            runId: input.runId,
+            previousSequence: accounting.accountingSequence,
+            fillId: payload.fillId!,
+          }),
           idempotencyKey: `historical-v2:${input.runId}:${payload.fillId}`,
         });
         accounting = await input.accountingRepository.append(input.context, accounting);
@@ -351,6 +364,7 @@ export function createAdvanceHistoricalModeledExecutionV2(
       fillEvidence: Object.freeze(fillEvidence),
       fillDetails: Object.freeze(fillDetails),
       accountingFrontierContentDigestHex: accounting.semanticContentDigest,
+      accountingFrontier: accounting,
       accountingAdvanced: fillEvidence.length > 0,
       effects: Object.freeze(effects),
     });

@@ -51,6 +51,7 @@ export type HistoricalModeledExecutionReceiptV2 = ModeledSource & Readonly<{
   orderContentDigestHex: string;
   decisionId: string;
   decisionContentDigestHex: string;
+  riskVerdictId: string;
   riskReceiptContentDigestHex: string;
   symbol: string;
   side: "buy" | "sell";
@@ -111,6 +112,9 @@ export type HistoricalModeledCapitalBindingV2Input = Readonly<{
     accounting: HistoricalModeledAccountingSnapshotV2;
   }>): Promise<Readonly<{ status: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT"; reasonCodes: readonly string[] }>>;
   persistEvidence(evidence: PersistedModeledEvidence): Promise<void>;
+  /** Persists the exact credential-free mock order before in-memory exchange registration. */
+  persistExecutionSubmission(input: Readonly<{ receipt: HistoricalModeledExecutionReceiptV2;
+    order: OrderRow; riskAllowanceId: string }>): Promise<OrderRow>;
   /** Advances eligible mock orders, applies modeled fills, and persists accounting. */
   advanceModeledExecution(cycle: HistoricalSimulationV2Cycle): Promise<Readonly<{
     execution?: HistoricalSimulationReasonLedgerV2Draft["execution"];
@@ -137,7 +141,7 @@ function requireDigest(value: string, field: string): void {
   if (!DIGEST.test(value)) throw new Error(`HISTORICAL_MODELED_BINDING_INVALID:${field}`);
 }
 
-function orderFromReceipt(input: {
+export function createHistoricalModeledOrderFromReceiptV2(input: {
   organizationId: string;
   accountId: string;
   decisionId: string;
@@ -163,7 +167,7 @@ function orderFromReceipt(input: {
     exchangeOrderId: null,
     clientOrderId: `hsv2-${input.receipt.executionAttemptId}`,
     idempotencyKey: `historical-modeled-v2-${input.receipt.contentDigestHex}`,
-    riskDecisionId: input.decisionId,
+    riskDecisionId: input.receipt.riskVerdictId,
     riskAllowanceId: input.allowanceId,
     riskAllowanceBindingDigest: input.receipt.riskReceiptContentDigestHex,
     openingCausalLineageJson: null,
@@ -318,6 +322,7 @@ export function createHistoricalModeledCapitalBindingV2(
       orderContentDigestHex,
       decisionId: args.decisionId,
       decisionContentDigestHex: args.decisionContentDigestHex,
+      riskVerdictId: risk.riskVerdictId,
       riskReceiptContentDigestHex: risk.contentDigestHex,
       symbol: args.cycle.symbol,
       side: args.side,
@@ -325,14 +330,19 @@ export function createHistoricalModeledCapitalBindingV2(
       decisionBarIndex: input.decisionBarIndex(args.cycle),
       acceptedAtUtc: args.cycle.observedAt,
     }) as HistoricalModeledExecutionReceiptV2;
-    const order = orderFromReceipt({
+    const order = createHistoricalModeledOrderFromReceiptV2({
       organizationId: input.organizationId,
       accountId: input.accountId,
       decisionId: args.decisionId,
       allowanceId: args.allowanceId,
       receipt,
     });
-    input.exchange.registerOrder(order, receipt.decisionBarIndex, Date.parse(receipt.acceptedAtUtc));
+    const acceptedOrder = await input.persistExecutionSubmission({ receipt, order,
+      riskAllowanceId: args.allowanceId });
+    if (acceptedOrder.id !== order.id || acceptedOrder.state !== "ACCEPTED") {
+      throw new Error("HISTORICAL_MODELED_BINDING_REFUSED:ORDER_NOT_ACCEPTED");
+    }
+    input.exchange.registerOrder(acceptedOrder, receipt.decisionBarIndex, Date.parse(receipt.acceptedAtUtc));
     input.executionRegistry.register(receipt);
     executionByCycle.set(args.cycle.cycleId, receipt);
     await input.persistEvidence(receipt);
@@ -354,7 +364,9 @@ export function createHistoricalModeledCapitalBindingV2(
         side: "buy",
         quantity: permission.approvedQualifiedQuantity,
       });
-      const order = orderFromReceipt({ organizationId: input.organizationId, accountId: input.accountId, decisionId: decision.decisionId, allowanceId: permission.riskAllowanceId, receipt });
+      const order = Object.freeze({ ...createHistoricalModeledOrderFromReceiptV2({ organizationId: input.organizationId,
+        accountId: input.accountId, decisionId: decision.decisionId, allowanceId: permission.riskAllowanceId,
+        receipt }), state: "ACCEPTED" as const, stateVersion: 2 });
       return Object.freeze({
         decisionContentDigestHex: decision.contentDigestHex,
         riskAllowanceId: permission.riskAllowanceId,
@@ -418,6 +430,12 @@ export function createHistoricalModeledCapitalBindingV2(
     guardianByCycle.set(context.cycle.cycleId, guardian);
     await input.persistEvidence(guardian);
     return {
+      ...(riskByDecision.get(context.proposal.decisionContentDigestHex)
+        ? { risk: (() => { const receipt = riskByDecision.get(context.proposal.decisionContentDigestHex)!;
+          return { status: receipt.verdict === "APPROVE" ? "APPROVE" as const : "VETO" as const,
+            reasonCodes: receipt.reasonCodes, verdictContentDigestHex: receipt.contentDigestHex,
+            allowanceContentDigestHex: receipt.riskAllowanceContentDigestHex }; })() }
+        : {}),
       accounting: { status: observed.accountingAdvanced ? "APPLIED" : "UNCHANGED", reasonCodes: [], frontierContentDigestHex: accounting.frontierContentDigestHex },
       guardian: { status: guardian.status, reasonCodes: guardian.reasonCodes, assessmentContentDigestHex: guardian.contentDigestHex },
       learning: await input.learningProjection(context),
