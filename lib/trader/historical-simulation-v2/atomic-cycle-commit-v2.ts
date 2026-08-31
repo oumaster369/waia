@@ -1,4 +1,6 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import type { HistoricalExecutionCheckpointSlice } from "@/lib/trader/execution/historical-execution-model.types";
 import type { HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
 import {
   assertHistoricalSimulationReasonLedgerChainV2,
@@ -23,13 +25,35 @@ export type HistoricalSimulationAtomicScopeV2 = Readonly<{
   split: HistoricalSimulationPreHoldoutPartitionV2;
 }>;
 
-export type HistoricalSimulationDurableStateSnapshotV2 = Readonly<{
+type DurableStatePayloadV2 = Readonly<{
+  KNOWLEDGE: Readonly<{ checkpointSequence: number; checkpointContentDigestHex: string;
+    knowledgeContentDigestHex: string; visibleThroughPitAnchor: string }>;
+  MODELED_EXECUTION_REGISTRY: Readonly<{ receipts: ReadonlyArray<Readonly<{
+    orderId: string; receiptContentDigestHex: string; decisionBarIndex: number;
+  }>> }>;
+  MODELED_EXCHANGE: Readonly<{ checkpoint: HistoricalExecutionCheckpointSlice;
+    openOrderContentDigestHexById: Readonly<Record<string, string>> }>;
+  ACCOUNTING_FRONTIER: AccountingFrontierV1;
+  GUARDIAN: Readonly<{ assessmentContentDigestHex: string; posture: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT";
+    assessedAt: string }>;
+  LEARNING: Readonly<{ appliedClosureWatermarkUtc: string | null;
+    pendingForecastAuthorityContentDigestHexes: readonly string[] }>;
+}>;
+
+export type HistoricalSimulationDurableStateKindV2 = keyof DurableStatePayloadV2;
+
+export type HistoricalSimulationDurableStateSnapshotV2<
+  Kind extends HistoricalSimulationDurableStateKindV2 = HistoricalSimulationDurableStateKindV2,
+> = Readonly<{
   schemaVersion: typeof HISTORICAL_SIMULATION_DURABLE_STATE_SNAPSHOT_V2;
-  stateKind: "KNOWLEDGE" | "MODELED_EXECUTION_REGISTRY" | "MODELED_EXCHANGE" |
-    "ACCOUNTING_FRONTIER" | "GUARDIAN" | "LEARNING";
-  state: unknown;
+  organizationId: string;
+  runId: string;
+  accountId: string;
+  cycleId: string;
+  stateKind: Kind;
+  state: DurableStatePayloadV2[Kind];
   contentDigestHex: string;
-}>; 
+}>;
 
 export type HistoricalSimulationAtomicStageV2 =
   | "FORECAST_LIFECYCLE" | "CANONICAL_VERIFICATION" | "MODELED_RISK"
@@ -45,7 +69,18 @@ export type HistoricalSimulationAtomicStageBundleV2 = Readonly<{
   schemaVersion: typeof HISTORICAL_SIMULATION_ATOMIC_STAGE_BUNDLE_V2;
   stage: HistoricalSimulationAtomicStageV2;
   cycleId: string;
-  artifacts: readonly unknown[];
+  organizationId: string;
+  runId: string;
+  accountId: string;
+  ledgerEntryContentDigestHex: string;
+  artifacts: readonly [HistoricalSimulationAtomicArtifactReferenceV2,
+    ...HistoricalSimulationAtomicArtifactReferenceV2[]];
+  contentDigestHex: string;
+}>;
+
+export type HistoricalSimulationAtomicArtifactReferenceV2 = Readonly<{
+  artifactKind: string;
+  artifactId: string;
   contentDigestHex: string;
 }>;
 
@@ -75,6 +110,7 @@ export type HistoricalSimulationResumeCursorV2 = Readonly<{
   nextRecordIndex: number;
   nextCycleSequence: number;
   ledgerHeadContentDigestHex: string;
+  cycleStageBundleDigestHexByStage: Readonly<Record<HistoricalSimulationAtomicStageV2, string>>;
   knowledgeCheckpointSequence: number;
   knowledgeCheckpointContentDigestHex: string;
   knowledgeSnapshot: HistoricalSimulationDurableStateSnapshotV2;
@@ -115,28 +151,58 @@ function requireUtc(value: string, field: string): void {
   }
 }
 
-export function createHistoricalSimulationDurableStateSnapshotV2(input: Readonly<{
-  stateKind: HistoricalSimulationDurableStateSnapshotV2["stateKind"];
-  state: unknown;
-}>): HistoricalSimulationDurableStateSnapshotV2 {
+function canonicalClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export function createHistoricalSimulationDurableStateSnapshotV2<Kind extends HistoricalSimulationDurableStateKindV2>(
+  input: HistoricalSimulationAtomicScopeV2 & Readonly<{
+    cycleId: string;
+    stateKind: Kind;
+    state: DurableStatePayloadV2[Kind];
+  }>,
+): HistoricalSimulationDurableStateSnapshotV2<Kind> {
+  const state = canonicalClone(input.state);
   const body = {
     schemaVersion: HISTORICAL_SIMULATION_DURABLE_STATE_SNAPSHOT_V2,
+    organizationId: input.organizationId,
+    runId: input.runId,
+    accountId: input.accountId,
+    cycleId: input.cycleId,
     stateKind: input.stateKind,
-    state: input.state,
+    state,
   };
   return Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
 }
 
 export function createHistoricalSimulationAtomicStageBundleV2(input: Readonly<{
+  organizationId: string;
+  runId: string;
+  accountId: string;
   stage: HistoricalSimulationAtomicStageV2;
   cycleId: string;
-  artifacts: readonly unknown[];
+  ledgerEntryContentDigestHex: string;
+  artifacts: readonly [HistoricalSimulationAtomicArtifactReferenceV2,
+    ...HistoricalSimulationAtomicArtifactReferenceV2[]];
 }>): HistoricalSimulationAtomicStageBundleV2 {
   requireText(input.cycleId, "stageBundle.cycleId");
+  requireText(input.organizationId, "stageBundle.organizationId");
+  requireText(input.runId, "stageBundle.runId");
+  requireText(input.accountId, "stageBundle.accountId");
+  requireDigest(input.ledgerEntryContentDigestHex, "stageBundle.ledgerEntryContentDigestHex");
+  for (const artifact of input.artifacts) {
+    requireText(artifact.artifactKind, "stageBundle.artifactKind");
+    requireText(artifact.artifactId, "stageBundle.artifactId");
+    requireDigest(artifact.contentDigestHex, "stageBundle.artifactContentDigestHex");
+  }
   const body = {
     schemaVersion: HISTORICAL_SIMULATION_ATOMIC_STAGE_BUNDLE_V2,
+    organizationId: input.organizationId,
+    runId: input.runId,
+    accountId: input.accountId,
     stage: input.stage,
     cycleId: input.cycleId,
+    ledgerEntryContentDigestHex: input.ledgerEntryContentDigestHex,
     artifacts: input.artifacts,
   };
   return Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
@@ -145,11 +211,15 @@ export function createHistoricalSimulationAtomicStageBundleV2(input: Readonly<{
 function validateStageBundle(
   bundle: HistoricalSimulationAtomicStageBundleV2,
   expectedStage: HistoricalSimulationAtomicStageV2,
-  cycleId: string,
+  entry: HistoricalSimulationReasonLedgerV2,
+  scope: HistoricalSimulationAtomicScopeV2,
 ): void {
   const { contentDigestHex, ...body } = bundle;
   if (bundle.schemaVersion !== HISTORICAL_SIMULATION_ATOMIC_STAGE_BUNDLE_V2 ||
-      bundle.stage !== expectedStage || bundle.cycleId !== cycleId ||
+      bundle.stage !== expectedStage || bundle.cycleId !== entry.cycleId ||
+      bundle.organizationId !== scope.organizationId || bundle.runId !== scope.runId ||
+      bundle.accountId !== scope.accountId ||
+      bundle.ledgerEntryContentDigestHex !== entry.contentDigestHex || bundle.artifacts.length === 0 ||
       !DIGEST.test(contentDigestHex) || computeSemanticSha256Hex(body) !== contentDigestHex) {
     throw new Error(`HISTORICAL_SIMULATION_RESUME_REFUSED:${expectedStage}_STAGE_BUNDLE`);
   }
@@ -157,14 +227,70 @@ function validateStageBundle(
 
 export function validateHistoricalSimulationDurableStateSnapshotV2(
   snapshot: HistoricalSimulationDurableStateSnapshotV2,
-  expectedKind: HistoricalSimulationDurableStateSnapshotV2["stateKind"],
+  expectedKind: HistoricalSimulationDurableStateKindV2,
+  scope?: HistoricalSimulationAtomicScopeV2 & Readonly<{ cycleId: string }>,
 ): void {
   const { contentDigestHex, ...body } = snapshot;
   if (snapshot.schemaVersion !== HISTORICAL_SIMULATION_DURABLE_STATE_SNAPSHOT_V2 ||
       snapshot.stateKind !== expectedKind || !DIGEST.test(contentDigestHex) ||
+      (scope !== undefined && (snapshot.organizationId !== scope.organizationId ||
+        snapshot.runId !== scope.runId || snapshot.accountId !== scope.accountId ||
+        snapshot.cycleId !== scope.cycleId)) ||
       computeSemanticSha256Hex(body) !== contentDigestHex) {
     throw new Error(`HISTORICAL_SIMULATION_RESUME_REFUSED:${expectedKind}_SNAPSHOT`);
   }
+  const state = snapshot.state as Record<string, unknown>;
+  if (expectedKind === "KNOWLEDGE") {
+    if (!Number.isSafeInteger(state.checkpointSequence) || !DIGEST.test(String(state.checkpointContentDigestHex)) ||
+        !DIGEST.test(String(state.knowledgeContentDigestHex))) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:KNOWLEDGE_STATE");
+    }
+    requireUtc(String(state.visibleThroughPitAnchor), "knowledge.visibleThroughPitAnchor");
+  } else if (expectedKind === "MODELED_EXECUTION_REGISTRY") {
+    if (!Array.isArray(state.receipts) || state.receipts.some((value) => {
+      const receipt = value as Record<string, unknown>;
+      return typeof receipt.orderId !== "string" || !DIGEST.test(String(receipt.receiptContentDigestHex)) ||
+        !Number.isSafeInteger(receipt.decisionBarIndex);
+    })) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:MODELED_EXECUTION_REGISTRY_STATE");
+  } else if (expectedKind === "MODELED_EXCHANGE") {
+    const checkpoint = state.checkpoint as HistoricalExecutionCheckpointSlice | undefined;
+    if (checkpoint?.schemaVersion !== "htr-wp17-execution-checkpoint/v1" ||
+        !Array.isArray(checkpoint.openOrders) || typeof state.openOrderContentDigestHexById !== "object") {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:MODELED_EXCHANGE_STATE");
+    }
+    for (const order of checkpoint.openOrders) {
+      const digest = (state.openOrderContentDigestHexById as Record<string, string>)[order.orderId];
+      if (!DIGEST.test(digest ?? "")) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:OPEN_ORDER_BINDING");
+    }
+  } else if (expectedKind === "ACCOUNTING_FRONTIER") {
+    const frontier = state as unknown as AccountingFrontierV1;
+    if (frontier.organizationId !== snapshot.organizationId || frontier.accountKey !== snapshot.accountId ||
+        frontier.runId !== snapshot.runId || !DIGEST.test(frontier.semanticContentDigest)) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:ACCOUNTING_STATE");
+    }
+  } else if (expectedKind === "GUARDIAN") {
+    if (!DIGEST.test(String(state.assessmentContentDigestHex)) ||
+        !["NONE", "CLOSE_ONLY", "STOP_ACCOUNT"].includes(String(state.posture))) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:GUARDIAN_STATE");
+    }
+    requireUtc(String(state.assessedAt), "guardian.assessedAt");
+  } else if (expectedKind === "LEARNING") {
+    if (state.appliedClosureWatermarkUtc !== null) {
+      requireUtc(String(state.appliedClosureWatermarkUtc), "learning.appliedClosureWatermarkUtc");
+    }
+    if (!Array.isArray(state.pendingForecastAuthorityContentDigestHexes) ||
+        state.pendingForecastAuthorityContentDigestHexes.some((value) => !DIGEST.test(String(value)))) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:LEARNING_STATE");
+    }
+  }
+}
+
+export function restoreHistoricalSimulationDurableStateSnapshotV2<Kind extends HistoricalSimulationDurableStateKindV2>(
+  snapshot: HistoricalSimulationDurableStateSnapshotV2<Kind>,
+  scope: HistoricalSimulationAtomicScopeV2 & Readonly<{ cycleId: string }>,
+): DurableStatePayloadV2[Kind] {
+  validateHistoricalSimulationDurableStateSnapshotV2(snapshot, snapshot.stateKind, scope);
+  return canonicalClone(snapshot.state);
 }
 
 export function loadValidatedHistoricalSimulationLedgerHeadV2(
@@ -238,6 +364,10 @@ export function validateHistoricalSimulationResumeCursorV2(
     [cursor.datasetAuthority.partitionDigestHex, "partitionDigestHex"],
     [cursor.datasetAuthority.partitionRawSha256Hex, "partitionRawSha256Hex"],
   ] as const) requireDigest(value, field);
+  for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) {
+    requireDigest(cursor.cycleStageBundleDigestHexByStage[stage], `stageBundle.${stage}`);
+  }
+  const snapshotScope = { ...scope, cycleId: cursor.committedCycleId };
   validateHistoricalSimulationDurableStateSnapshotV2(cursor.knowledgeSnapshot, "KNOWLEDGE");
   validateHistoricalSimulationDurableStateSnapshotV2(
     cursor.modeledExecutionRegistrySnapshot, "MODELED_EXECUTION_REGISTRY",
@@ -246,6 +376,16 @@ export function validateHistoricalSimulationResumeCursorV2(
   validateHistoricalSimulationDurableStateSnapshotV2(cursor.accountingFrontierSnapshot, "ACCOUNTING_FRONTIER");
   validateHistoricalSimulationDurableStateSnapshotV2(cursor.guardianSnapshot, "GUARDIAN");
   validateHistoricalSimulationDurableStateSnapshotV2(cursor.learningSnapshot, "LEARNING");
+  for (const snapshot of [cursor.knowledgeSnapshot, cursor.modeledExecutionRegistrySnapshot,
+    cursor.modeledExchangeSnapshot, cursor.accountingFrontierSnapshot, cursor.guardianSnapshot,
+    cursor.learningSnapshot]) {
+    validateHistoricalSimulationDurableStateSnapshotV2(snapshot, snapshot.stateKind, snapshotScope);
+  }
+  const knowledge = cursor.knowledgeSnapshot.state as DurableStatePayloadV2["KNOWLEDGE"];
+  if (knowledge.checkpointSequence !== cursor.knowledgeCheckpointSequence ||
+      knowledge.checkpointContentDigestHex !== cursor.knowledgeCheckpointContentDigestHex) {
+    throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:KNOWLEDGE_CHECKPOINT_BINDING");
+  }
 }
 
 export function assertHistoricalSimulationResumeAtMembershipV2(input: Readonly<{
@@ -280,6 +420,20 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
   if (!validateHistoricalSimulationReasonLedgerV2(input.ledgerEntry)) {
     throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:LEDGER_ENTRY");
   }
+  const snapshotScope = { ...input.scope, cycleId: input.ledgerEntry.cycleId };
+  for (const snapshot of [input.knowledgeSnapshot, input.modeledExecutionRegistrySnapshot,
+    input.modeledExchangeSnapshot, input.accountingFrontierSnapshot, input.guardianSnapshot,
+    input.learningSnapshot]) {
+    validateHistoricalSimulationDurableStateSnapshotV2(snapshot, snapshot.stateKind, snapshotScope);
+  }
+  const knowledge = input.knowledgeSnapshot.state as DurableStatePayloadV2["KNOWLEDGE"];
+  if (knowledge.checkpointSequence !== input.knowledgeCheckpointSequence ||
+      knowledge.checkpointContentDigestHex !== input.knowledgeCheckpointContentDigestHex) {
+    throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:KNOWLEDGE_CHECKPOINT_BINDING");
+  }
+  for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) {
+    validateStageBundle(input.stageBundles[stage], stage, input.ledgerEntry, input.scope);
+  }
   return input.repository.transaction(async (tx) => {
     const entries = await tx.loadLedgerChain(input.scope);
     const head = loadValidatedHistoricalSimulationLedgerHeadV2(entries, input.scope);
@@ -292,6 +446,25 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
       }
     } else if (head) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:MISSING_CURSOR");
+    }
+    if (head && previousCursor && input.ledgerEntry.cycleSequence === head.cycleSequence) {
+      const snapshotDigests = [input.knowledgeSnapshot, input.modeledExecutionRegistrySnapshot,
+        input.modeledExchangeSnapshot, input.accountingFrontierSnapshot, input.guardianSnapshot,
+        input.learningSnapshot].map((value) => value.contentDigestHex);
+      const persistedSnapshotDigests = [previousCursor.knowledgeSnapshot,
+        previousCursor.modeledExecutionRegistrySnapshot, previousCursor.modeledExchangeSnapshot,
+        previousCursor.accountingFrontierSnapshot, previousCursor.guardianSnapshot,
+        previousCursor.learningSnapshot].map((value) => value.contentDigestHex);
+      const sameStages = HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.every((stage) =>
+        input.stageBundles[stage].contentDigestHex === previousCursor.cycleStageBundleDigestHexByStage[stage]);
+      if (input.ledgerEntry.contentDigestHex !== head.contentDigestHex ||
+          input.ledgerEntry.cycleId !== head.cycleId || !sameStages ||
+          snapshotDigests.some((digest, index) => digest !== persistedSnapshotDigests[index]) ||
+          input.knowledgeCheckpointSequence !== previousCursor.knowledgeCheckpointSequence ||
+          input.knowledgeCheckpointContentDigestHex !== previousCursor.knowledgeCheckpointContentDigestHex) {
+        throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:AMBIGUOUS_RETRY");
+      }
+      return previousCursor;
     }
     const expectedSequence = head ? head.cycleSequence + 1 : 0;
     const membership = input.ledgerEntry.datasetMembership;
@@ -306,14 +479,6 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
         ))) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:NEXT_SEQUENCE_OR_BINDING");
     }
-    validateHistoricalSimulationDurableStateSnapshotV2(input.knowledgeSnapshot, "KNOWLEDGE");
-    validateHistoricalSimulationDurableStateSnapshotV2(
-      input.modeledExecutionRegistrySnapshot, "MODELED_EXECUTION_REGISTRY",
-    );
-    validateHistoricalSimulationDurableStateSnapshotV2(input.modeledExchangeSnapshot, "MODELED_EXCHANGE");
-    validateHistoricalSimulationDurableStateSnapshotV2(input.accountingFrontierSnapshot, "ACCOUNTING_FRONTIER");
-    validateHistoricalSimulationDurableStateSnapshotV2(input.guardianSnapshot, "GUARDIAN");
-    validateHistoricalSimulationDurableStateSnapshotV2(input.learningSnapshot, "LEARNING");
     requireDigest(input.knowledgeCheckpointContentDigestHex, "knowledgeCheckpointContentDigestHex");
     if (!Number.isSafeInteger(input.knowledgeCheckpointSequence) || input.knowledgeCheckpointSequence < 0) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:KNOWLEDGE_SEQUENCE");
@@ -327,6 +492,9 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
       nextRecordIndex: membership.recordIndex + 1,
       nextCycleSequence: expectedSequence + 1,
       ledgerHeadContentDigestHex: input.ledgerEntry.contentDigestHex,
+      cycleStageBundleDigestHexByStage: Object.freeze(Object.fromEntries(
+        HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => [stage, input.stageBundles[stage].contentDigestHex]),
+      )) as Readonly<Record<HistoricalSimulationAtomicStageV2, string>>,
       knowledgeCheckpointSequence: input.knowledgeCheckpointSequence,
       knowledgeCheckpointContentDigestHex: input.knowledgeCheckpointContentDigestHex,
       knowledgeSnapshot: input.knowledgeSnapshot,
@@ -340,7 +508,6 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
     validateHistoricalSimulationResumeCursorV2(cursor, input.scope);
     for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) {
       const bundle = input.stageBundles[stage];
-      validateStageBundle(bundle, stage, input.ledgerEntry.cycleId);
       await tx.persistStageBundle(bundle);
     }
     await tx.appendLedger(input.ledgerEntry);

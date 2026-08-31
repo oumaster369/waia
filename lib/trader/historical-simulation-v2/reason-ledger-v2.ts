@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
-
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
 import { HISTORICAL_DATASET_MEMBERSHIP_V2, type HistoricalDatasetMembershipV2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 
 export const HISTORICAL_SIMULATION_REASON_LEDGER_V2_SCHEMA =
@@ -246,10 +245,18 @@ export function createHistoricalSimulationReasonLedgerV2(
   draft: HistoricalSimulationReasonLedgerV2Draft,
 ): HistoricalSimulationReasonLedgerV2 {
   assertComplete(draft);
+  const entryId = draft.entryId ?? deterministicExecutionUuidV2("report", {
+    kind: "historical-simulation-reason-ledger-v2",
+    organizationId: draft.organizationId,
+    runId: draft.runId,
+    cycleId: draft.cycleId,
+    cycleSequence: draft.cycleSequence,
+    datasetMembershipContentDigestHex: draft.datasetMembership.contentDigestHex,
+  });
   const body = {
     ...draft,
     schemaVersion: HISTORICAL_SIMULATION_REASON_LEDGER_V2_SCHEMA,
-    entryId: draft.entryId ?? randomUUID(),
+    entryId,
     capitalEligible: false as const,
   };
   const entry = { ...body, contentDigestHex: computeSemanticSha256Hex(body) };

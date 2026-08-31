@@ -121,42 +121,63 @@ function inMemoryRepository(failurePoint: FailurePoint = null) {
   return { durable, repository };
 }
 
-function snapshots() {
+function snapshots(cycleId: string, sequence: number) {
+  const identity = { ...scope, cycleId };
   return {
     knowledgeSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "KNOWLEDGE", state: { visibleUpdateIds: ["knowledge-1"] },
+      ...identity, stateKind: "KNOWLEDGE", state: {
+        checkpointSequence: sequence, checkpointContentDigestHex: "b".repeat(64),
+        knowledgeContentDigestHex: "c".repeat(64),
+        visibleThroughPitAnchor: new Date(1_700_000_000_000 + sequence * 60_000).toISOString(),
+      },
     }),
     modeledExecutionRegistrySnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "MODELED_EXECUTION_REGISTRY", state: { orders: [] },
+      ...identity, stateKind: "MODELED_EXECUTION_REGISTRY", state: { receipts: [] },
     }),
     modeledExchangeSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "MODELED_EXCHANGE", state: { openOrders: [] },
+      ...identity, stateKind: "MODELED_EXCHANGE", state: { checkpoint: {
+        schemaVersion: "htr-wp17-execution-checkpoint/v1", openOrders: [],
+        executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
+      }, openOrderContentDigestHexById: {} },
     }),
     accountingFrontierSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "ACCOUNTING_FRONTIER", state: { cash: "1000.00", positions: [] },
+      ...identity, stateKind: "ACCOUNTING_FRONTIER", state: {
+        schemaVersion: "htr-accounting-frontier/v1", engineId: "CANONICAL_CROSS_BACKEND_ACCOUNTING_ENGINE_V1",
+        basisMethod: "DUAL_GROSS_NET_WEIGHTED_AVERAGE_BASIS_V1", organizationId: scope.organizationId,
+        accountKey: scope.accountId, runId: scope.runId, accountingSequence: sequence,
+        frontierAsOf: new Date(1_700_000_000_000 + sequence * 60_000).toISOString(), monthKey: "2023-11",
+        cash: "1000.00000000", positions: {}, grossRealizedPnl: "0.00000000", netRealizedPnl: "0.00000000",
+        marks: {}, markedPositionValue: "0.00000000", equity: "1000.00000000", equityHwm: "1000.00000000",
+        accountDrawdownBps: 0, consumedFillIds: [], id: `frontier-${sequence}`, sourceFillId: null,
+        sourceEconomicsDigest: D, semanticContentDigest: D, idempotencyKey: `frontier-${sequence}`,
+      },
     }),
     guardianSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "GUARDIAN", state: { posture: "NONE" },
+      ...identity, stateKind: "GUARDIAN", state: { posture: "NONE", assessmentContentDigestHex: D,
+        assessedAt: new Date(1_700_000_000_000 + sequence * 60_000).toISOString() },
     }),
     learningSnapshot: createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "LEARNING", state: { closureWatermark: null },
+      ...identity, stateKind: "LEARNING", state: {
+        appliedClosureWatermarkUtc: null, pendingForecastAuthorityContentDigestHexes: [],
+      },
     }),
   };
 }
 
-function stageBundles(cycleId: string) {
+function stageBundles(cycleId: string, ledgerEntryContentDigestHex: string) {
   return Object.fromEntries(HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => [stage,
-    createHistoricalSimulationAtomicStageBundleV2({ stage, cycleId, artifacts: [{ stage }] }),
+    createHistoricalSimulationAtomicStageBundleV2({ ...scope, stage, cycleId, ledgerEntryContentDigestHex,
+      artifacts: [{ artifactKind: `${stage}_RECEIPT`, artifactId: `${cycleId}:${stage}`, contentDigestHex: D }] }),
   ])) as Parameters<typeof commitHistoricalSimulationCycleAtomicallyV2>[0]["stageBundles"];
 }
 
 async function commit(repository: HistoricalSimulationAtomicCycleRepositoryV2, entry: HistoricalSimulationReasonLedgerV2) {
   return commitHistoricalSimulationCycleAtomicallyV2({
     repository, scope, ledgerEntry: entry,
-    stageBundles: stageBundles(entry.cycleId),
+    stageBundles: stageBundles(entry.cycleId, entry.contentDigestHex),
     knowledgeCheckpointSequence: entry.cycleSequence,
     knowledgeCheckpointContentDigestHex: "b".repeat(64),
-    ...snapshots(),
+    ...snapshots(entry.cycleId, entry.cycleSequence),
   });
 }
 
@@ -195,11 +216,11 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
     },
   );
 
-  it("fails closed on a divergent sequence, cursor or sealed dataset authority", async () => {
+  it("returns the durable cursor on an exact retry and rejects a changed sealed dataset authority", async () => {
     const memory = inMemoryRepository();
     const first = ledger(0, null);
     const cursor = await commit(memory.repository, first);
-    await expect(commit(memory.repository, ledger(0, null))).rejects.toThrow("NEXT_SEQUENCE_OR_BINDING");
+    await expect(commit(memory.repository, ledger(0, null))).resolves.toEqual(cursor);
     expect(() => assertHistoricalSimulationResumeAtMembershipV2({
       cursor, scope, membership: { ...membership(1), partitionDigestHex: "f".repeat(64) },
     })).toThrow("DATASET_MEMBERSHIP");
@@ -207,23 +228,28 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
   });
 
   it("restores an outstanding modeled order and produces the identical next-bar fill", async () => {
-    const openOrder = { orderId: "order-1", remainingQty: "1.00000000", firstEligibleBarIndex: 1 };
+    const openOrder = { orderId: "order-1", acceptedAtTs: 1_700_000_000_000,
+      firstEligibleTs: 1_700_000_060_000, windowEndBarIndex: 3, sameSymbolEligibleBarsSeen: 0,
+      remainingQty: "1.00000000", filledQty: "0.00000000", fillSequence: 0 };
+    const first = ledger(0, null);
     const modeledExchangeSnapshot = createHistoricalSimulationDurableStateSnapshotV2({
-      stateKind: "MODELED_EXCHANGE", state: { openOrders: [openOrder], fillSequence: 0 },
+      ...scope, cycleId: first.cycleId, stateKind: "MODELED_EXCHANGE", state: { checkpoint: {
+        schemaVersion: "htr-wp17-execution-checkpoint/v1", openOrders: [openOrder],
+        executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
+      }, openOrderContentDigestHexById: { "order-1": D } },
     });
     const memory = inMemoryRepository();
-    const first = ledger(0, null);
     const cursor = await commitHistoricalSimulationCycleAtomicallyV2({
       repository: memory.repository, scope, ledgerEntry: first,
-      stageBundles: stageBundles(first.cycleId), knowledgeCheckpointSequence: 0,
-      knowledgeCheckpointContentDigestHex: "b".repeat(64), ...snapshots(), modeledExchangeSnapshot,
+      stageBundles: stageBundles(first.cycleId, first.contentDigestHex), knowledgeCheckpointSequence: 0,
+      knowledgeCheckpointContentDigestHex: "b".repeat(64), ...snapshots(first.cycleId, 0), modeledExchangeSnapshot,
     });
     const advanceNextBar = (state: unknown) => {
-      const restored = state as { openOrders: typeof openOrder[]; fillSequence: number };
-      return restored.openOrders.map((order) => ({
-        fillId: `${order.orderId}:${restored.fillSequence + 1}`,
+      const restored = state as { checkpoint: { openOrders: typeof openOrder[] } };
+      return restored.checkpoint.openOrders.map((order) => ({
+        fillId: `${order.orderId}:${order.fillSequence + 1}`,
         quantity: order.remainingQty,
-        barIndex: order.firstEligibleBarIndex,
+        barIndex: 1,
       }));
     };
     const uninterrupted = advanceNextBar(modeledExchangeSnapshot.state);
