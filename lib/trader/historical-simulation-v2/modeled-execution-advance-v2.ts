@@ -9,6 +9,7 @@ import {
 } from "@/lib/trader/execution/historical-simulated-exchange";
 import type { CostedFillEconomics, HistoricalExecutionModelV1, SimulatedFillEvent } from "@/lib/trader/execution/historical-execution-model.types";
 import type { OrderRow } from "@/lib/trader/execution/order-repository.types";
+import { historicalExecutionInstrumentsMatch } from "@/lib/trader/execution/historical-execution-symbol";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { HtxVolumeQualificationReceiptV1 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
@@ -173,7 +174,7 @@ export function assertHistoricalMarketCycleV2(
     value.cycleId !== cycleId ||
     !Number.isSafeInteger(value.barIndex) || value.barIndex < 0 ||
     !DIGEST.test(contentDigestHex) || computeSemanticSha256Hex(bodyOfMarketCycle(body)) !== contentDigestHex ||
-    value.closedBar.symbol !== value.htxVolumeAuthorityReceipt.symbol ||
+    !historicalExecutionInstrumentsMatch(value.closedBar.symbol, value.htxVolumeAuthorityReceipt.symbol) ||
     value.closedBar.interval !== "1m" || value.htxVolumeAuthorityReceipt.interval !== "1m" ||
     value.closedBar.barCloseTime !== new Date(value.closedBar.barCloseTime).toISOString() ||
     value.htxVolumeAuthorityReceipt.verdict !== "HTX_VOLUME_AUTHORITY_QUALIFIED" ||

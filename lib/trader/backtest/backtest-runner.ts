@@ -1054,11 +1054,12 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
     const paperCycleTimer = benchmarkObserver.beginStage("paper-cycle", cycleIndex);
     input.deps.researchReplayDeterminism?.setDecisionBarIndex?.(cycleIndex);
     let result: PaperCycleResult;
+    let forecastRuntimeInput: ForecastRuntimeInputV2 | undefined;
     try {
       const forecastAnchorEpochMs = Date.parse(
         snapshot.bars.at(-1)?.barCloseTime ?? snapshot.evaluatedAt,
       );
-      const forecastRuntimeInput = input.forecastV2Producer?.runtimeInputsByAnchorClosedBarEpochMs.get(
+      forecastRuntimeInput = input.forecastV2Producer?.runtimeInputsByAnchorClosedBarEpochMs.get(
         forecastAnchorEpochMs,
       );
       result = await runPaperCycleOnce(input.deps, {
@@ -1122,6 +1123,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
         bars: bars1mPrefix,
         sequence: cycleIndex,
         outcome: authorizedForecast?.status === "FORECAST_AUTHORIZED" ? authorizedForecast : null,
+        runtimeInput: authorizedForecast?.status === "FORECAST_AUTHORIZED" ? forecastRuntimeInput : undefined,
       });
     benchmarkObserver.sampleMemory("paper-cycle", cycleIndex);
 

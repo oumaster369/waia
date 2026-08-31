@@ -489,6 +489,14 @@ export function requireForecastRuntimeAuthorityV2(
 export function requireForecastRuntimeAuthorizedOutcomeV2(
   value: ForecastRuntimeAuthorizedOutcomeV2,
 ): ForecastRuntimeAuthorizedOutcomeV2 {
+  // PostgreSQL jsonb receives Node Buffers through their standard
+  // `{ type: "Buffer", data: [...] }` JSON representation. Rehydrate that canonical wire form
+  // before replay validation; accepting it here keeps every durable loader on the same validator.
+  value = JSON.parse(JSON.stringify(value), (_key, candidate) =>
+    candidate && candidate.type === "Buffer" && Array.isArray(candidate.data)
+      ? Buffer.from(candidate.data)
+      : candidate,
+  ) as ForecastRuntimeAuthorizedOutcomeV2;
   const authority = requireForecastRuntimeAuthorityV2(value.authority);
   let regenerated: ForecastIssuanceV1;
   try {
@@ -571,6 +579,15 @@ export function requireForecastRuntimeAuthorizedOutcomeV2(
     throw new Error("FORECAST_RUNTIME_AUTHORIZED_OUTCOME_INVALID:binding");
   }
   return value;
+}
+
+/** Rehydrates the canonical Node Buffer JSON wire representation used by PostgreSQL jsonb. */
+export function reviveForecastRuntimeJsonV2<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value), (_key, candidate) =>
+    candidate && candidate.type === "Buffer" && Array.isArray(candidate.data)
+      ? Buffer.from(candidate.data)
+      : candidate,
+  ) as T;
 }
 
 export function serializeForecastRuntimeAuthorityV2(value: ForecastRuntimeAuthorityV2): string {

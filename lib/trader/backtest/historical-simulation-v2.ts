@@ -174,6 +174,7 @@ export type RunHistoricalSimulationV2Input = Readonly<{
   forecastLifecycleSink?: (input: Readonly<{
     cycle: HistoricalSimulationV2Cycle;
     forecast: ForecastRuntimeOutcomeV2;
+    forecastInput: ForecastRuntimeInputV2;
   }>) => Promise<void>;
   decisionCapitalAuthorityV2: CanonicalDecisionCapitalAuthorityV2Deps;
   /** Must call Decision Economics V2 in semantic mode HISTORICAL and inspect current portfolio. */
@@ -356,7 +357,7 @@ export async function runHistoricalSimulationV2(
 
     const forecastInput = await input.resolveForecastInput({ cycle, knowledge: after });
     const forecast = issueForecastRuntimeV2(forecastInput);
-    await input.forecastLifecycleSink?.({ cycle, forecast });
+    await input.forecastLifecycleSink?.({ cycle, forecast, forecastInput });
     const proposal = await input.resolvePortfolioProposal({ cycle, forecast, knowledge: after });
     if (proposal.decisionSemanticMode !== "HISTORICAL" ||
         !DIGEST.test(proposal.proposalContentDigestHex) || !DIGEST.test(proposal.decisionContentDigestHex) ||

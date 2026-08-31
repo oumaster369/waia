@@ -1035,6 +1035,7 @@ export async function runFixturePaperCycles(
       );
     }
 
+    const forecastRuntimeInput = (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot: next.snapshot,
@@ -1050,7 +1051,7 @@ export async function runFixturePaperCycles(
       newId: input.newId,
       informationSufficiencyAuthority: input.informationSufficiencyAuthority,
       informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
-      forecastRuntimeInput: (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined,
+      forecastRuntimeInput,
       hypothesisSessionState,
       miCoreEnabled: input.miCoreEnabled,
     });
@@ -1065,6 +1066,8 @@ export async function runFixturePaperCycles(
         result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
           ? result.evaluation.forecastRuntimeOutcome
           : null,
+      runtimeInput: result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
+        ? forecastRuntimeInput : undefined,
     });
 
     hypothesisSessionState = result.hypothesisSessionState;
@@ -1102,6 +1105,7 @@ export async function runPollPaperCycles(
       snapshot = await input.poll.fetchSnapshot();
     }
 
+    const forecastRuntimeInput = (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,
@@ -1114,7 +1118,7 @@ export async function runPollPaperCycles(
       newId: input.newId,
       informationSufficiencyAuthority,
       informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
-      forecastRuntimeInput: (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined,
+      forecastRuntimeInput,
     });
     await forecastV2DurableProducer?.processCycle({
       organizationId: input.context.organizationId,
@@ -1127,6 +1131,8 @@ export async function runPollPaperCycles(
         result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
           ? result.evaluation.forecastRuntimeOutcome
           : null,
+      runtimeInput: result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
+        ? forecastRuntimeInput : undefined,
     });
 
     results.push(result);

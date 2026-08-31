@@ -24,9 +24,9 @@ import {
   sameDee659AuthorityBindingV1,
 } from "@/lib/trader/intelligence/decision-economics/dee659-execution-payoff-contract-v1";
 import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import { historicalExecutionInstrumentsMatch } from "@/lib/trader/execution/historical-execution-symbol";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
-import { accountingRowToFrontier } from "@/lib/trader/accounting/accounting-frontier-serialization";
-import { computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
+import { createInitialAccountingState, computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import {
@@ -397,28 +397,38 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       SELECT * FROM trader_accounting_frontier
       WHERE id=${input.initialAccountingFrontierId}::uuid
         AND organization_id=${input.organizationId}::uuid AND account_key=${input.accountId}
-        AND run_id=${input.runId} AND accounting_sequence=0
+        AND run_id=${input.runId} AND accounting_sequence=1
+        AND NOT EXISTS (
+          SELECT 1 FROM trader_accounting_frontier earlier
+          WHERE earlier.organization_id=${input.organizationId}::uuid
+            AND earlier.account_key=${input.accountId}
+            AND earlier.run_id=${input.runId}
+            AND earlier.accounting_sequence < trader_accounting_frontier.accounting_sequence
+        )
     `;
     const ar = accountingRows[0] as Record<string, unknown> | undefined;
-    if (!ar) throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:INITIAL_ACCOUNTING");
-    const initialAccounting = accountingRowToFrontier({
-      id: String(ar.id), organizationId: String(ar.organization_id), accountKey: String(ar.account_key),
-      runId: String(ar.run_id), accountingSequence: Number(ar.accounting_sequence),
-      frontierAsOf: new Date(ar.frontier_as_of as string | Date).toISOString(), cash: String(ar.cash),
-      positionQuantityJson: ar.position_quantity_json as Record<string, string>,
-      grossPositionBasisJson: ar.gross_position_basis_json as Record<string, string>,
-      netPositionBasisJson: ar.net_position_basis_json as Record<string, string>,
-      grossRealizedPnl: String(ar.gross_realized_pnl), netRealizedPnl: String(ar.net_realized_pnl),
-      marksJson: ar.marks_json as AccountingFrontierV1["marks"], equity: String(ar.equity),
-      equityHwm: String(ar.equity_hwm), accountDrawdownBps: Number(ar.account_drawdown_bps),
-      sourceFillId: ar.source_fill_id === null ? null : String(ar.source_fill_id),
-      sourceEconomicsDigest: String(ar.source_economics_digest),
-      semanticContentDigest: String(ar.semantic_content_digest), idempotencyKey: String(ar.idempotency_key),
-      schemaVersion: String(ar.schema_version),
-    }, []);
-    if (computeAccountingSemanticDigest(initialAccounting) !== initialAccounting.semanticContentDigest) {
+    if (!ar) throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:INITIAL_ACCOUNTING_INCEPTION");
+    // The 0100 frontier row intentionally stores the compact accounting projection, while the
+    // semantic digest also covers deterministic drawdown inception fields. Rebuild sequence-one
+    // inception from its durable identity/cash/time instead of pretending the compact row carries
+    // those omitted fields.
+    const inception = createInitialAccountingState({ organizationId: String(ar.organization_id),
+      accountKey: String(ar.account_key), runId: String(ar.run_id), startingCash: String(ar.cash),
+      frontierAsOf: new Date(ar.frontier_as_of as string | Date).toISOString() });
+    const empty = (value: unknown) => value !== null && typeof value === "object" && Object.keys(value).length === 0;
+    const inceptionDigest = computeAccountingSemanticDigest(inception);
+    if (inceptionDigest !== String(ar.semantic_content_digest) ||
+        String(ar.schema_version) !== inception.schemaVersion ||
+        String(ar.gross_realized_pnl) !== "0" || String(ar.net_realized_pnl) !== "0" ||
+        String(ar.equity) !== inception.equity || String(ar.equity_hwm) !== inception.equityHwm ||
+        Number(ar.account_drawdown_bps) !== 0 || ar.source_fill_id !== null ||
+        !empty(ar.position_quantity_json) || !empty(ar.gross_position_basis_json) ||
+        !empty(ar.net_position_basis_json) || !empty(ar.marks_json)) {
       throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:ACCOUNTING_DIGEST");
     }
+    const initialAccounting: AccountingFrontierV1 = { ...inception, id: String(ar.id),
+      sourceFillId: null, sourceEconomicsDigest: String(ar.source_economics_digest),
+      semanticContentDigest: inceptionDigest, idempotencyKey: String(ar.idempotency_key) };
     const forecastRows = await sql<{ authorized_outcome_json: unknown; anchor_closed_bar_epoch_ms: string | number }[]>`
       SELECT b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json,
              b.anchor_closed_bar_epoch_ms
@@ -434,7 +444,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     if (forecast.authority.organizationId !== input.organizationId ||
         forecast.authority.anchorClosedBarEpochMs !== barEpoch ||
         Number(forecastRow.anchor_closed_bar_epoch_ms) !== barEpoch ||
-        forecast.issuance.package.family.symbol !== sealedCycle.closedBar.symbol) {
+        !historicalExecutionInstrumentsMatch(forecast.issuance.package.family.symbol, sealedCycle.closedBar.symbol)) {
       throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:FORECAST_BINDING");
     }
     const symbol = sealedCycle.closedBar.symbol.replace("/", "");

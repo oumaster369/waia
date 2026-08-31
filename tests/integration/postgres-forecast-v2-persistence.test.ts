@@ -2,7 +2,10 @@
  * DEE-527 — Forecast V2 package/bundle Postgres persistence roundtrip (opt-in).
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 
@@ -17,13 +20,19 @@ import {
 } from "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
 import type { ReplicaRootFamilyInput } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { digestHex } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { scoreForecastV2MulticlassObservation } from "@/lib/trader/intelligence/calibration/calibration-scorer";
 import { persistForecastV2TerminalClosurePostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
+import { persistHtxVolumeQualificationReceipt } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification-receipt-service";
+import { buildKmConvergenceReceiptV1 } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
+import { buildEpistemicParameterRatificationReceiptV1, buildPredictiveTerminalReceiptV1 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
+import { buildScientificAdmissionReceiptRecordV2, persistScientificAdmissionReceiptV2 } from "@/lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2";
+import { bucketIndexForReturn, computeTerminalTargetGridFromDevelopmentReturns } from "@/lib/trader/research/benchmark/target-grid-ceremony-v1";
 import { quantizeScale8HalfUp } from "@/lib/trader/intelligence/forecast-v2/quantize-scale8-half-up-v1";
-import { buildForecastContractBindingV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
+import { buildForecastContractBindingV1, buildForecastContractBindingRecordV1,
+  persistForecastContractBindingV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
 import {
   buildForecastInputContractV2,
   buildForecastModelArtifactV2,
@@ -52,6 +61,18 @@ import {
 import type { SourceAnchor } from "@/lib/trader/intelligence/forecast-v2/source-anchor-v1";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
+import { barToFhvBarsV2Record, serializeFhvBarsV2Record } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
+import { computeFhvFileRawSha256, sealFhvV2Dataset, writeFhvAcquisitionReceipt } from "@/lib/trader/market-data/fhv-dataset-seal";
+import { FHV_OFFICIAL_PARTITION_NAMES, FHV_OFFICIAL_SYMBOLS, fhvOfficialPartitionFileRelativePath,
+  resolveFhvCanonicalPartitionInterval } from "@/lib/trader/market-data/fhv-partition-boundaries";
+import { sealHistoricalMarketCycleV2 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
+import { createCanonicalDecisionVerificationReceiptServiceV2 } from "@/lib/trader/historical-simulation-v2/canonical-verification-receipt-postgres-v2";
+import { computeHistoricalForecastPitKnowledgeDigestV2,
+  createPostgresHistoricalForecastInputPitProducerV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
+import { createPostgresHistoricalForecastInputPitLoaderV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-loader-v2";
+import { getPostgresDrizzle } from "@/db/postgres-client";
+import { createAccountingFrontierRepositoryPostgres, createInitialAccountingState,
+  computeAccountingSemanticDigest, type AccountingFrontierV1 } from "@/lib/trader/accounting";
 
 const WP518_PG_USER = "00000000-0000-4000-8000-000000051802";
 
@@ -93,6 +114,7 @@ function buildRuntimeInput(
   organizationId: string,
   predictivePackage: ReturnType<typeof buildPredictivePackageV1>,
   pitAnchor: string,
+  scientific: Readonly<{ id: string; contentDigestHex: string }>,
 ): ForecastRuntimeInputV2 {
   const family = predictivePackage.family;
   const hex = (char: string) => char.repeat(64);
@@ -117,8 +139,8 @@ function buildRuntimeInput(
   });
   const forecastContractBinding = buildForecastContractBindingV1({
     organizationId,
-    scientificAdmissionReceiptId: "22222222-2222-4222-8222-222222222222",
-    scientificAdmissionReceiptContentDigestHex: hex("1"),
+    scientificAdmissionReceiptId: scientific.id,
+    scientificAdmissionReceiptContentDigestHex: scientific.contentDigestHex,
     selectedPredictivePackageContentDigestHex: digestHex(
       predictivePackage.predictivePackageContentDigest,
     ),
@@ -187,8 +209,91 @@ function buildRuntimeInput(
     executionHorizonMinutes: family.executionHorizonMinutes,
     normalizationVersionDigestHex: family.normalizationVersionDigestHex,
     knowledgeEdgeId: "00000000-0000-4000-8000-000000063300",
-    knowledgeContentDigestHex: hex("6"),
+    knowledgeContentDigestHex: computeHistoricalForecastPitKnowledgeDigestV2(
+      organizationId, family.symbol, pitAnchor, [],
+    ),
   };
+}
+
+async function persistScientificForPackage(sql: postgres.Sql, organizationId: string,
+  pkg: ReturnType<typeof buildPredictivePackageV1>, seed: string) {
+  const h = (value: string) => createHash("sha256").update(value).digest("hex");
+  const developmentReturns = Array.from({ length: 400 }, (_, i) => Math.sin(i / 17) * 0.02 + (i % 9) * 0.0005);
+  const historyReturns = Array.from({ length: 2500 }, (_, i) => developmentReturns[i % developmentReturns.length]!);
+  const grid = computeTerminalTargetGridFromDevelopmentReturns(developmentReturns);
+  const identities = {
+    developmentDatasetDigestHex: pkg.family.developmentDatasetDigestHex,
+    targetGridReceiptDigestHex: h(`${seed}-grid`),
+    predictivePackageGenerationIdentityDigestHex: digestHex(pkg.predictivePackageGenerationIdentityDigest),
+    predictivePackageContentDigestHex: digestHex(pkg.predictivePackageContentDigest),
+    runtimeContractDigestHex: digestHex(pkg.runtimeContractDigest),
+    scoringContractVersion: "multiclass-log-score/v1" as const,
+    evaluationPartitionReceiptDigestHex: h(`${seed}-partition`),
+  };
+  const predictive = buildPredictiveTerminalReceiptV1({ identities, harnessInput: {
+    venue: "htx", market: "spot", symbol: "BTCUSDT", primaryHorizonMinutes: 30,
+    challengerPackageContentDigestHex: identities.predictivePackageContentDigestHex,
+    comparisonFamilyId: "mandatory-baseline-family/v1",
+    evaluationPartitionReceiptDigestHex: identities.evaluationPartitionReceiptDigestHex,
+    purgeDurationMinutes: 30, embargoDurationMinutes: 30, developmentReturns, historyReturns,
+    historyReturnMinuteOpenTimesMs: historyReturns.map((_, i) => 1_700_000_000_000 + i * 60_000),
+    anchors: developmentReturns.slice(0, 24).map((observedReturn, i) => {
+      const bucket = bucketIndexForReturn(observedReturn, grid);
+      return { anchorId: `anchor-${i}`, observedReturn,
+        challengerProbabilities: Array.from({ length: 7 }, (_, j) => j === bucket ? 0.999 : 0.001 / 6) };
+    }),
+  }});
+  const km = buildKmConvergenceReceiptV1({
+    replicaRootFamilyIdentityDigestHex: digestHex(pkg.replicaRootFamilyIdentityDigest),
+    kmGlobalAnchorSetDigestHex: h(`${seed}-global-anchor`), candidateGenerationDigestsHex: [h(`${seed}-candidate`)],
+    configurations: [{ kConfig: pkg.kConfigDec, mConfig: pkg.mConfigDec, evLowerRelativeErrorP95: 0.001,
+      evBaseRelativeErrorP95: 0.001, evUpperRelativeErrorP95: 0.001, mcEsRelativeErrorP95: 0.001, qualifies: true }],
+    selectedPackageGenerationIdentityDigestHex: identities.predictivePackageGenerationIdentityDigestHex,
+    selectedPackageContentDigestHex: identities.predictivePackageContentDigestHex,
+  });
+  const ratification = buildEpistemicParameterRatificationReceiptV1({
+    kmConvergenceEvidenceSemanticDigestHex: km.evidenceSemanticDigestHex, selectedK: km.selectedK!, selectedM: km.selectedM!,
+    alphaEpiConfigScale8: km.alphaEpiConfigScale8,
+    selectedPackageGenerationIdentityDigestHex: identities.predictivePackageGenerationIdentityDigestHex,
+    selectedPackageContentDigestHex: identities.predictivePackageContentDigestHex, humanReceiptIdentityDigestHex: h(`${seed}-human`),
+  });
+  const volume = qualifyHtxKlineVolumeAuthority({ symbol: "BTCUSDT", rows: [
+    { id: 1, open: 100, high: 101, low: 99, close: 100, amount: 10, vol: 1000, count: 1 },
+    { id: 2, open: 50, high: 51, low: 49, close: 50, amount: 10, vol: 500, count: 1 },
+  ]});
+  await persistHtxVolumeQualificationReceipt(sql, { organizationId, receipt: volume });
+  const record = buildScientificAdmissionReceiptRecordV2({ organizationId, predictiveTerminalReceipt: predictive,
+    kmConvergenceReceipt: km, epistemicParameterRatificationReceipt: ratification, htxVolumeQualificationReceipt: volume });
+  await persistScientificAdmissionReceiptV2(sql, record);
+  return { id: record.id, contentDigestHex: record.contentDigest };
+}
+
+function createCanonicalDatasetFixture(organizationId: string, selectedBar: Bar) {
+  const root = mkdtempSync(join(tmpdir(), "waia-0189-pg-"));
+  const receipts = join(root, "receipts"); mkdirSync(receipts);
+  const releaseSha = "1".repeat(40); const operatorId = "0189-integration";
+  const capability = createHash("sha256").update("0189-capability").digest("hex");
+  const receiptPaths: string[] = [];
+  for (const partition of FHV_OFFICIAL_PARTITION_NAMES) for (const symbol of FHV_OFFICIAL_SYMBOLS) {
+    const relative = fhvOfficialPartitionFileRelativePath({ partition, symbol });
+    const path = join(root, relative); mkdirSync(join(path, ".."), { recursive: true });
+    const interval = resolveFhvCanonicalPartitionInterval(partition);
+    const bar = partition === "development" && symbol === "BTCUSDT" ? selectedBar : {
+      ...selectedBar, symbol: symbol === "BTCUSDT" ? "BTC/USDT" : "ETH/USDT",
+      barOpenTime: interval.startUtc,
+      barCloseTime: new Date(Date.parse(interval.startUtc) + 60_000).toISOString(),
+    } as Bar;
+    writeFileSync(path, serializeFhvBarsV2Record(barToFhvBarsV2Record(bar)));
+    receiptPaths.push(writeFhvAcquisitionReceipt({ receiptDir: receipts,
+      acquisitionRunId: `0189-${partition}-${symbol}`, releaseSha, organizationId, operatorId,
+      sourceCapabilityReceiptDigest: capability, partition, symbol, startUtc: interval.startUtc,
+      endUtc: interval.endUtc, outputRoot: root, fileRelativePath: relative,
+      rawSha256: computeFhvFileRawSha256(path), actualBarCount: 1 }).receiptPath);
+  }
+  sealFhvV2Dataset({ datasetRoot: root, acquisitionReceiptPaths: receiptPaths, releaseSha,
+    organizationId, operatorId, sourceCapabilityReceiptDigest: capability,
+    writerVersion: "0189-integration", minimumReaderVersion: "0189-integration", sealRunId: "0189-seal" });
+  return root;
 }
 
 describe.skipIf(!integrationEnabled || !url)(
@@ -216,6 +321,16 @@ describe.skipIf(!integrationEnabled || !url)(
     }
     async function cleanupForecastRows(): Promise<void> {
       const tables = [
+        "trader_historical_forecast_input_knowledge_link_v2",
+        "trader_historical_forecast_input_pit_v2",
+        "trader_canonical_decision_verification_receipt_v2",
+        "trader_historical_simulation_run_start_v2",
+        "trader_dee659_authority_preregistration_v2",
+        "trader_canonical_decision_verification_subject_v2",
+        "trader_historical_dataset_authority_v2",
+        "trader_historical_simulation_policy_config_v2",
+        "trader_accounting_frontier",
+        "trader_forecast_runtime_input_source_v2",
         "trader_forecast_pit_bar_retention_audit_v2",
         "trader_forecast_pit_bar_v2",
         "trader_forecast_scenario_v2", "trader_forecast_calibration_observation_v2",
@@ -223,6 +338,9 @@ describe.skipIf(!integrationEnabled || !url)(
         "trader_forecast_replica_artifact_v2", "trader_forecast_predictive_package_target_v2",
         "trader_forecast_target_bucket_v2", "trader_forecast_target_definition_v2",
         "trader_forecast_predictive_package_v2",
+        "trader_forecast_contract_binding_v1",
+        "trader_scientific_admission_receipt_v1",
+        "trader_htx_volume_qualification_receipt_v1",
       ];
       await sql.begin(async (tx) => {
         for (const table of tables) {
@@ -932,7 +1050,20 @@ describe.skipIf(!integrationEnabled || !url)(
           mConfigDec: 4,
         });
         const issuanceBar = bars[19]!;
-        const runtimeInput = buildRuntimeInput(orgId, pkg, issuanceBar.barCloseTime);
+        const scientific = await persistScientificForPackage(sql, orgId, pkg, "real-backtest");
+        const runtimeInput = buildRuntimeInput(orgId, pkg, issuanceBar.barCloseTime, scientific);
+        const runtimeBinding = runtimeInput.forecastContractBinding;
+        if (!runtimeBinding) throw new Error("canonical runtime binding missing");
+        await persistForecastContractBindingV1(sql, {
+          ...buildForecastContractBindingRecordV1({
+            organizationId: orgId,
+            scientificAdmissionReceiptId: scientific.id,
+            scientificAdmissionReceiptContentDigestHex: scientific.contentDigestHex,
+            selectedPredictivePackageContentDigestHex: runtimeBinding.selectedPredictivePackageContentDigestHex,
+            inputContract: runtimeBinding.inputContract, modelSpec: runtimeBinding.modelSpec,
+            modelArtifact: runtimeBinding.modelArtifact,
+          }), binding: runtimeBinding, bindingJson: canonicalizeSemanticJsonString(runtimeBinding),
+        });
         const receipt = qualifyHtxKlineVolumeAuthority({
           symbol: "BTCUSDT",
             qualifiedAtUtc: issuanceBar.barCloseTime,
@@ -990,6 +1121,107 @@ describe.skipIf(!integrationEnabled || !url)(
           WHERE b.organization_id = ${orgId}::uuid AND b.run_id = 'dee633-real-backtest'
         `;
         expect(rows[0]).toMatchObject({ outcomes: "1", calibrations: "1" });
+
+        const issued = await sql<{ forecast_id: string; cycle_id: string; authority_digest: string }[]>`
+          SELECT s.execution_forecast_id::text AS forecast_id, s.cycle_id,
+                 s.forecast_authority_content_digest_hex AS authority_digest
+          FROM trader_forecast_runtime_input_source_v2 s
+          WHERE s.organization_id=${orgId}::uuid AND s.run_id='dee633-real-backtest'
+            AND s.pit_anchor=${issuanceBar.barCloseTime}::timestamptz`;
+        expect(issued).toHaveLength(1);
+        const cycle = sealHistoricalMarketCycleV2({ cycleId: issued[0]!.cycle_id, barIndex: 0,
+          closedBar: issuanceBar, htxVolumeAuthorityReceipt: receipt,
+          htxVolumeRaw: { amount: 2, vol: 200 } });
+        const datasetRoot = createCanonicalDatasetFixture(orgId, issuanceBar);
+        try {
+          const verification = createCanonicalDecisionVerificationReceiptServiceV2(sql);
+          const datasetIds = await verification.registerDatasetAuthority({ datasetRoot, organizationId: orgId,
+            runId: "dee633-real-backtest", partition: "DEVELOPMENT", symbol: "BTCUSDT", cycles: [cycle] });
+          const datasetAuthorityId = datasetIds.get(cycle.cycleId)!;
+          const state = createInitialAccountingState({ organizationId: orgId,
+            accountKey: "dee633-real", runId: "dee633-real-backtest", frontierAsOf: issuanceBar.barCloseTime });
+          const base = { ...state, id: randomUUID(), sourceFillId: null,
+            sourceEconomicsDigest: "0".repeat(64), idempotencyKey: randomUUID() };
+          const frontier = { ...base, semanticContentDigest: computeAccountingSemanticDigest(base as AccountingFrontierV1) } as AccountingFrontierV1;
+          await createAccountingFrontierRepositoryPostgres(getPostgresDrizzle()).append(requireOrgContext(orgId), frontier);
+          const prereg = await verification.preregisterExecution({ organizationId: orgId, accountId: "dee633-real",
+            runId: "dee633-real-backtest", forecastId: issued[0]!.forecast_id,
+            datasetAuthorityId, cycleId: cycle.cycleId, policyConfig: {
+              policyInstanceId: "0189-policy", interimPositionPolicyId: "fixed-horizon-qualification/unrepresentable-normal-exits-disabled/v1",
+              sliceAllocationPolicy: "explicit-weights-last-slice-remainder-no-top-up/v1", roundingPolicy: "scale8-floor-step-truncate-half-up/v1",
+              entrySliceOffsets: [1, 2, 3], entrySliceWeights: ["0.4", "0.3", "0.3"],
+              exitSliceOffsetsAfterHorizon: [1, 2, 3], exitSliceWeights: ["0.4", "0.3", "0.3"],
+              participationCapFraction: "0.1", quantityStep: "0.0001", minimumQuantity: "0.0001",
+              minimumNotionalUsdt: "1", entryCosts: { feeBps: "0", spreadBps: "0", impactBps: "0", slippageBps: "0", conservativeStressBps: "0" },
+              exitCosts: { feeBps: "0", spreadBps: "0", impactBps: "0", slippageBps: "0", conservativeStressBps: "0" },
+              partialFillPolicy: "EXPLICIT_CAPACITY_BOUNDED_NO_TOP_UP", unfilledEntryPolicy: "RETAIN_AS_CASH",
+              postExitResidualPolicy: "SIZE_ECONOMICALLY_INADMISSIBLE",
+            }, defaultQuantity: "0.01",
+            initialAccountingFrontierId: frontier.id });
+          await verification.startRun({ organizationId: orgId, accountId: "dee633-real",
+            runId: "dee633-real-backtest", preregistrationId: prereg.preregistrationId,
+            datasetSealDigestHex: prereg.datasetSealDigestHex });
+          const produce = createPostgresHistoricalForecastInputPitProducerV2(sql);
+          const firstProductionInput = { organizationId: orgId, runId: "dee633-real-backtest",
+            cycleId: cycle.cycleId, forecastId: issued[0]!.forecast_id, symbol: "BTCUSDT",
+            pitAnchor: issuanceBar.barCloseTime, datasetAuthorityId } as const;
+          const firstRace = await Promise.all([produce(firstProductionInput), produce(firstProductionInput)]);
+          expect(firstRace[0].contentDigestHex).toBe(firstRace[1].contentDigestHex);
+          const record = firstRace[0];
+          const persistedCount = await sql<{ count: string }[]>`SELECT count(*)::text AS count
+            FROM trader_historical_forecast_input_pit_v2 WHERE organization_id=${orgId}::uuid
+              AND run_id=${record.runId} AND cycle_id=${record.cycleId}`;
+          expect(persistedCount[0]?.count).toBe("1");
+          const load = createPostgresHistoricalForecastInputPitLoaderV2(sql);
+          const loaded = await load({ organizationId: orgId, runId: record.runId, cycleId: record.cycleId,
+            forecastId: record.forecastId, symbol: record.symbol, pitAnchor: record.pitAnchor,
+            knowledgeContentDigestHex: record.knowledgeContentDigestHex,
+            forecastAuthorityContentDigestHex: record.forecastAuthorityContentDigestHex,
+            datasetAuthorityId: record.datasetAuthorityId });
+          expect(loaded).toEqual(runtimeInput);
+          await expect(produce({ ...firstProductionInput, datasetAuthorityId: randomUUID() }))
+            .rejects.toThrow(/IDEMPOTENCY_CONFLICT/);
+          expect(await load({ organizationId: orgId, runId: record.runId, cycleId: record.cycleId,
+            forecastId: record.forecastId, symbol: record.symbol, pitAnchor: record.pitAnchor,
+            knowledgeContentDigestHex: record.knowledgeContentDigestHex,
+            forecastAuthorityContentDigestHex: record.forecastAuthorityContentDigestHex,
+            datasetAuthorityId: record.datasetAuthorityId })).toEqual(runtimeInput);
+
+          await expect(load({ organizationId: orgId, runId: record.runId, cycleId: record.cycleId,
+            forecastId: record.forecastId, symbol: record.symbol, pitAnchor: record.pitAnchor,
+            knowledgeContentDigestHex: record.knowledgeContentDigestHex,
+            forecastAuthorityContentDigestHex: record.forecastAuthorityContentDigestHex,
+            datasetAuthorityId: randomUUID() })).rejects.toThrow(/HISTORICAL_FORECAST_PIT_REFUSED/);
+          const savedRelease = process.env.WAIA_RELEASE_SHA;
+          process.env.WAIA_RELEASE_SHA = "2".repeat(40);
+          try {
+            await expect(load({ organizationId: orgId, runId: record.runId, cycleId: record.cycleId,
+              forecastId: record.forecastId, symbol: record.symbol, pitAnchor: record.pitAnchor,
+              knowledgeContentDigestHex: record.knowledgeContentDigestHex,
+              forecastAuthorityContentDigestHex: record.forecastAuthorityContentDigestHex,
+              datasetAuthorityId: record.datasetAuthorityId })).rejects.toThrow(/SOURCE_BUILD|SCOPE_OR_PIT/);
+          } finally { process.env.WAIA_RELEASE_SHA = savedRelease; }
+
+          await expect(sql`UPDATE trader_forecast_runtime_input_source_v2 SET cycle_id='substituted'
+            WHERE organization_id=${orgId}::uuid`).rejects.toThrow(/append-only/);
+          await expect(sql`UPDATE trader_historical_forecast_input_pit_v2 SET cycle_id='substituted'
+            WHERE organization_id=${orgId}::uuid`).rejects.toThrow(/append-only/);
+          await expect(sql`DELETE FROM trader_historical_forecast_input_pit_v2
+            WHERE organization_id=${orgId}::uuid`).rejects.toThrow(/append-only/);
+          await expect(sql`INSERT INTO trader_historical_forecast_input_knowledge_link_v2
+            (organization_id, run_id, cycle_id, knowledge_update_id, knowledge_update_content_digest_hex)
+            VALUES (${orgId}::uuid, ${record.runId}, ${record.cycleId}, ${randomUUID()}::uuid, ${"3".repeat(64)})`
+          ).rejects.toThrow(/foreign key/);
+
+          const ownerVisible = await sql<{ count: string }[]>`SELECT count(*)::text AS count
+            FROM trader_historical_forecast_input_pit_v2 WHERE organization_id=${orgId}::uuid`;
+          expect(ownerVisible[0]?.count).toBe("1");
+          await expect(sql.begin(async (tx) => {
+            await tx.unsafe("SET LOCAL ROLE authenticated");
+            return tx<{ count: string }[]>`SELECT count(*)::text AS count
+              FROM trader_historical_forecast_input_pit_v2 WHERE organization_id=${orgId}::uuid`;
+          })).rejects.toThrow(/permission denied/);
+        } finally { rmSync(datasetRoot, { recursive: true, force: true }); }
       } finally {
         session.cleanup();
       }
@@ -1027,7 +1259,20 @@ describe.skipIf(!integrationEnabled || !url)(
           kConfigDec: 3,
           mConfigDec: 4,
         });
-        const runtimeInput = buildRuntimeInput(orgId, pkg, bars[0]!.barCloseTime);
+        const scientific = await persistScientificForPackage(sql, orgId, pkg, "real-paper");
+        const runtimeInput = buildRuntimeInput(orgId, pkg, bars[0]!.barCloseTime, scientific);
+        const runtimeBinding = runtimeInput.forecastContractBinding;
+        if (!runtimeBinding) throw new Error("canonical runtime binding missing");
+        await persistForecastContractBindingV1(sql, {
+          ...buildForecastContractBindingRecordV1({
+            organizationId: orgId,
+            scientificAdmissionReceiptId: scientific.id,
+            scientificAdmissionReceiptContentDigestHex: scientific.contentDigestHex,
+            selectedPredictivePackageContentDigestHex: runtimeBinding.selectedPredictivePackageContentDigestHex,
+            inputContract: runtimeBinding.inputContract, modelSpec: runtimeBinding.modelSpec,
+            modelArtifact: runtimeBinding.modelArtifact,
+          }), binding: runtimeBinding, bindingJson: canonicalizeSemanticJsonString(runtimeBinding),
+        });
         const receipt = qualifyHtxKlineVolumeAuthority({
           symbol: "BTCUSDT",
           qualifiedAtUtc: bars[0]!.barCloseTime,

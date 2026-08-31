@@ -133,7 +133,7 @@ export async function runHistoricalSimulationV2Production(
       return input.resolveForecastInput({ cycle: sealedCycle, knowledge });
     },
     resolvePortfolioProposal,
-    forecastLifecycleSink: async ({ cycle, forecast }) => {
+    forecastLifecycleSink: async ({ cycle, forecast, forecastInput }) => {
       const sequence = cycles.findIndex((candidate) => candidate.cycleId === cycle.cycleId);
       if (sequence < 0) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:CYCLE_NOT_FOUND");
       await knowledge.processForecastCycle({
@@ -144,6 +144,7 @@ export async function runHistoricalSimulationV2Production(
         bars: input.cycles.slice(0, sequence + 1).map((value) => value.closedBar),
         sequence,
         outcome: forecast.status === "FORECAST_AUTHORIZED" ? forecast : null,
+        runtimeInput: forecast.status === "FORECAST_AUTHORIZED" ? forecastInput : undefined,
       });
     },
     ...input.capital,

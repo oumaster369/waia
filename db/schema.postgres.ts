@@ -4486,6 +4486,7 @@ export const traderDee659AuthorityBundleV2 = pgTable(
     cashAuthorityJson: jsonb("cash_authority_json").notNull(),
     executionPayoffVerificationJson: jsonb("execution_payoff_verification_json").notNull(),
     pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+    anchorClosedBarEpochMs: bigint("anchor_closed_bar_epoch_ms", { mode: "number" }).notNull(),
     schemaVersion: text("schema_version").notNull(),
     bundleContentDigestHex: text("bundle_content_digest_hex").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -4636,6 +4637,47 @@ export const traderHistoricalSimulationRunStartV2 = pgTable(
     primaryKey({ columns: [t.organizationId, t.runId] }),
     check("historical_simulation_run_start_v2_schema", sql`${t.schemaVersion} = 'waia.trader.historical_simulation_run_start.v2'`),
   ],
+);
+
+export const traderForecastRuntimeInputSourceV2 = pgTable(
+  "trader_forecast_runtime_input_source_v2",
+  {
+    id: uuid("id").primaryKey().defaultRandom(), organizationId: uuid("organization_id").notNull(),
+    bundleId: uuid("bundle_id").notNull(), executionForecastId: uuid("execution_forecast_id").notNull(),
+    executionForecastTargetRoleId: text("execution_forecast_target_role_id").notNull(),
+    executionForecastContentDigest: bytea("execution_forecast_content_digest").notNull(),
+    runId: text("run_id").notNull(), cycleId: text("cycle_id").notNull(), symbol: text("symbol").notNull(),
+    pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+    predictivePackageId: uuid("predictive_package_id").notNull(), predictivePackageContentDigestHex: text("predictive_package_content_digest_hex").notNull(),
+    scientificAdmissionReceiptId: uuid("scientific_admission_receipt_id").notNull(), scientificAdmissionContentDigestHex: text("scientific_admission_content_digest_hex").notNull(),
+    contractBindingContentDigestHex: text("contract_binding_content_digest_hex").notNull(), knowledgeEdgeId: uuid("knowledge_edge_id"),
+    knowledgeContentDigestHex: text("knowledge_content_digest_hex").notNull(), marketSnapshotContentDigestHex: text("market_snapshot_content_digest_hex").notNull(),
+    predictiveAdmissionContentDigestHex: text("predictive_admission_content_digest_hex").notNull(), forecastAuthorityContentDigestHex: text("forecast_authority_content_digest_hex").notNull(),
+    authorizedOutcomeContentDigestHex: text("authorized_outcome_content_digest_hex").notNull(), runtimeInputContentDigestHex: text("runtime_input_content_digest_hex").notNull(),
+    runtimeInputJson: jsonb("runtime_input_json").notNull(), authorizedOutcomeJson: jsonb("authorized_outcome_json").notNull(),
+    verifierVersion: text("verifier_version").notNull(), verifierBuildDigestHex: text("verifier_build_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(), createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  },
+  (t) => [unique("forecast_runtime_input_source_v2_org_bundle_unique").on(t.organizationId, t.bundleId),
+    index("forecast_runtime_input_source_lookup_idx").on(t.organizationId, t.runId, t.symbol, t.pitAnchor)],
+);
+
+export const traderHistoricalForecastInputPitV2 = pgTable(
+  "trader_historical_forecast_input_pit_v2",
+  {
+    organizationId: uuid("organization_id").notNull(), runId: text("run_id").notNull(), cycleId: text("cycle_id").notNull(),
+    forecastId: uuid("forecast_id").notNull(), bundleId: uuid("bundle_id").notNull(), runtimeInputSourceId: uuid("runtime_input_source_id").notNull(),
+    forecastTargetRoleId: text("forecast_target_role_id").notNull(), forecastContentDigest: bytea("forecast_content_digest").notNull(),
+    datasetAuthorityId: uuid("dataset_authority_id").notNull(), symbol: text("symbol").notNull(), partition: text("partition").notNull(), recordIndex: integer("record_index").notNull(),
+    datasetSealDigestHex: text("dataset_seal_digest_hex").notNull(), datasetMembershipContentDigestHex: text("dataset_membership_content_digest_hex").notNull(),
+    datasetMembershipJson: jsonb("dataset_membership_json").notNull(), pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+    visibleFrom: timestamp("visible_from", { withTimezone: true, mode: "string" }).notNull(), knowledgeContentDigestHex: text("knowledge_content_digest_hex").notNull(),
+    forecastAuthorityContentDigestHex: text("forecast_authority_content_digest_hex").notNull(), runtimeInputContentDigestHex: text("runtime_input_content_digest_hex").notNull(),
+    verifierBuildDigestHex: text("verifier_build_digest_hex").notNull(), runtimeInputJson: jsonb("runtime_input_json").notNull(), contentDigestHex: text("content_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(), createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.runId, t.cycleId] }),
+    index("historical_forecast_pit_lookup_idx").on(t.organizationId, t.runId, t.symbol, t.pitAnchor, t.cycleId)],
 );
 
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */

@@ -21,6 +21,7 @@ import {
   persistObjectiveForecastOutcomeResolutionV2,
   persistPredictivePackageV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
+import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { TARGET_ROLE_TERMINAL } from "@/lib/trader/intelligence/forecast-v2/constants";
 import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
@@ -154,6 +155,7 @@ export function createForecastV2DurableProducerV1(config: ForecastV2DurableProdu
       bars: readonly Bar[];
       sequence: number;
       outcome: ForecastRuntimeAuthorizedOutcomeV2 | null;
+      runtimeInput?: ForecastRuntimeInputV2;
     }>) {
       const runKey = `${input.organizationId}|${input.runId}`;
       if (hydratedRunKey !== runKey) {
@@ -302,6 +304,7 @@ export function createForecastV2DurableProducerV1(config: ForecastV2DurableProdu
           anchorClosedBarEpochMs: input.outcome.authority.anchorClosedBarEpochMs,
           issuance: input.outcome.issuance,
           authorizedOutcome: input.outcome,
+          runtimeInput: input.runtimeInput,
           issuanceSequence: input.sequence,
         });
         if (!pending.some((row) => row.bundleId === bundle.bundleId)) {
