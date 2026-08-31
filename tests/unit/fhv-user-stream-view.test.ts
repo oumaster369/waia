@@ -12,10 +12,11 @@ const base = { schemaVersion: "fhv-realtime-event/v1" as const, eventId: "e1", o
 describe("DEE-785 user realtime projection", () => {
   it("accumulates the canonical typed stream without manual sync", () => {
     const balance = reduceFhvUserStreamEvent(EMPTY_USER_STREAM_VIEW, { ...base, kind: "account.balance", payload: { cash: "9000", equity: "10100", netPnl: "100", delta24h: null } });
-    const trades = reduceFhvUserStreamEvent(balance, { ...base, eventId: "e2", kind: "trade.snapshot", payload: { recentFills: [{ id: "fill-1", label: "BUY" }], recentOrders: [{ id: "order-1", label: "BUY LIMIT" }] } });
+    const trades = reduceFhvUserStreamEvent(balance, { ...base, eventId: "e2", kind: "trade.snapshot", payload: { fillsCount: 174, ordersCount: 120, recentFills: [{ id: "fill-1", label: "BUY" }], recentOrders: [{ id: "order-1", label: "BUY LIMIT" }] } });
     expect(trades.balance).toMatchObject({ equity: "10100", delta24h: null });
     expect(trades.trades).toHaveLength(1);
     expect(trades.orders).toHaveLength(1);
+    expect(trades.tradeCounts).toEqual({ fills: 174, orders: 120 });
   });
   it("rejects non-historical sources", () => {
     const malicious = { ...base, source: "LIVE" as never, kind: "account.balance" as const, payload: { equity: "leak" } };
