@@ -163,6 +163,7 @@ export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonl
   }
   const producer = createForecastV2DurableProducerV1({ ...input.forecastProducer, sql: input.sql });
   const checkpointStore = input.checkpointStore ?? createPostgresCheckpointStore(input.sql);
+  let appliedClosureWatermarkEpoch = Number.NEGATIVE_INFINITY;
 
   const rowsVisibleAsOf = async (asOf: string): Promise<readonly KnowledgeRowV2[]> => {
     canonicalUtc(asOf, "asOf");
@@ -208,7 +209,8 @@ export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonl
         const resolvedAt = postgresTimestampIso(row.resolved_at, "resolvedAt");
         const maturedAt = canonicalUtc(resolvedAt, "resolvedAt");
         if (maturedAt >= boundary) return [];
-        if (evidence.visibleFromPitAnchor !== strictlyBefore) return [];
+        const visibleEpoch = canonicalUtc(evidence.visibleFromPitAnchor, "visibleFromPitAnchor");
+        if (visibleEpoch <= appliedClosureWatermarkEpoch || visibleEpoch > boundary) return [];
         return [{
           forecastAuthorityContentDigestHex: evidence.forecastAuthorityContentDigestHex,
           maturedAt: resolvedAt,
@@ -229,6 +231,7 @@ export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonl
     if (identity(expected) !== identity(closures)) {
       throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CLOSURE_MISMATCH");
     }
+    appliedClosureWatermarkEpoch = canonicalUtc(strictlyBefore, "strictlyBefore");
     return snapshotAsOf(strictlyBefore);
   };
 
@@ -269,6 +272,9 @@ export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonl
       ) {
         throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_RESUME_PARITY_MISMATCH");
       }
+      // The restored checkpoint already contains every update visible at this PIT anchor.
+      // Future closure calls must emit only newly-visible rows, including skipped anchors.
+      appliedClosureWatermarkEpoch = canonicalUtc(restoreInput.pitAnchor, "pitAnchor");
       return Object.freeze({ snapshot, checkpointContentDigest: restored.contentDigest });
     },
   });

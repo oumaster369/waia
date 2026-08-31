@@ -83,10 +83,28 @@ describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
     const before = await knowledge.snapshotAsOf("2026-08-01T00:03:00.000Z");
     const after = await knowledge.snapshotAsOf("2026-08-01T00:04:00.000Z");
     expect(before.contentDigestHex).not.toBe(after.contentDigestHex);
-    expect(await knowledge.closeMaturedForecasts("2026-08-01T00:03:00.000Z")).toEqual([]);
+    const earlyClosures = await knowledge.closeMaturedForecasts("2026-08-01T00:03:00.000Z");
+    expect(earlyClosures).toEqual([
+      expect.objectContaining({ outcomeContentDigestHex: digest("1") }),
+    ]);
+    await knowledge.applyMaturedClosures({
+      strictlyBefore: "2026-08-01T00:03:00.000Z", closures: earlyClosures,
+    });
     expect(await knowledge.closeMaturedForecasts("2026-08-01T00:04:00.000Z")).toEqual([
       expect.objectContaining({ outcomeContentDigestHex: digest("2") }),
     ]);
+  });
+
+  it("emits every newly visible closure once across skipped anchors and resume", async () => {
+    const rows = [
+      row({ id: "one", visible: "2026-08-01T00:02:00.000Z", resolved: "2026-08-01T00:01:00.000Z", digestChar: "1" }),
+      row({ id: "two", visible: "2026-08-01T00:04:00.000Z", resolved: "2026-08-01T00:03:00.000Z", digestChar: "2" }),
+    ];
+    const knowledge = port(rows);
+    const skipped = await knowledge.closeMaturedForecasts("2026-08-01T00:05:00.000Z");
+    expect(skipped.map((value) => value.outcomeContentDigestHex).sort()).toEqual([digest("1"), digest("2")]);
+    await knowledge.applyMaturedClosures({ strictlyBefore: "2026-08-01T00:05:00.000Z", closures: skipped });
+    expect(await knowledge.closeMaturedForecasts("2026-08-01T00:06:00.000Z")).toEqual([]);
   });
 
   it("rejects closure injection instead of admitting unverified future evidence", async () => {
