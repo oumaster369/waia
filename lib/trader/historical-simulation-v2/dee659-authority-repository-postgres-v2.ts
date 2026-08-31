@@ -35,6 +35,19 @@ export type PersistDee659AuthorityBundleV2Input = PersistedDecisionEconomicsAuth
   pitAnchor: string;
 }>;
 
+/** Must be backed by upstream append-only receipt storage; this repository never mints receipts. */
+export type CanonicalDecisionVerificationReceiptPortV2 = Readonly<{
+  loadForecastVerification(input: Readonly<{
+    organizationId: string; forecastId: string; subjectContentDigestHex: string;
+  }>): Promise<Readonly<{ verificationReceiptDigestHex: string }>>;
+  loadScientificVerification(input: Readonly<{
+    organizationId: string; scientificAdmissionContentDigestHex: string;
+  }>): Promise<Readonly<{ verificationReceiptDigestHex: string }>>;
+  loadExecutionPayoffVerification(input: Readonly<{
+    organizationId: string; accountId: string; instrumentIdentityDigestHex: string;
+  }>): Promise<ExecutionPayoffAuthorityVerificationV1>;
+}>;
+
 type AuthorityRow = Readonly<{
   organization_id: string;
   account_id: string;
@@ -51,6 +64,7 @@ type AuthorityRow = Readonly<{
   cash_authority_json: unknown;
   execution_payoff_verification_json: unknown;
   pit_anchor: Date | string;
+  bundle_content_digest_hex: string;
 }>;
 
 const DIGEST = /^[0-9a-f]{64}$/;
@@ -117,15 +131,83 @@ function bundleDigest(input: PersistDee659AuthorityBundleV2Input): string {
   });
 }
 
-export function createPostgresDee659AuthorityRepositoryV2(sql: postgres.Sql):
+async function assertCanonicalForecastAndScientificSources(
+  sql: postgres.Sql,
+  input: PersistDee659AuthorityBundleV2Input,
+): Promise<void> {
+  const rows = await sql<Readonly<{
+    cycle_id: string;
+    anchor_closed_bar_epoch_ms: string | number;
+    bundle_content_digest_hex: string;
+    authorized_outcome_json: unknown;
+    target_role_id: string;
+  }>[]>`
+    SELECT b.cycle_id, b.anchor_closed_bar_epoch_ms,
+           encode(b.bundle_content_digest, 'hex') AS bundle_content_digest_hex,
+           b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json,
+           f.target_role_id
+    FROM trader_forecast_v2 f
+    JOIN trader_forecast_bundle_v2 b
+      ON b.organization_id = f.organization_id AND b.id = f.bundle_id
+    WHERE f.organization_id = ${input.organizationId}::uuid
+      AND f.id = ${input.forecastId}::uuid
+  `;
+  const row = rows[0];
+  const outcome = row?.authorized_outcome_json as
+    | { status?: unknown; authority?: { contentDigestHex?: unknown } }
+    | undefined;
+  if (
+    !row || row.target_role_id !== "EXECUTION_OPPORTUNITY" || row.cycle_id !== input.cycleId ||
+    Number(row.anchor_closed_bar_epoch_ms) !== Date.parse(input.pitAnchor) ||
+    row.bundle_content_digest_hex !== input.forecastIssuanceReceiptDigestHex ||
+    outcome?.status !== "FORECAST_AUTHORIZED" ||
+    outcome.authority?.contentDigestHex !== input.forecastAuthorityContentDigestHex
+  ) {
+    throw new Error("DEE659_DURABLE_AUTHORITY_INVALID:canonicalSourceBinding");
+  }
+}
+
+async function assertCanonicalVerificationReceipts(
+  port: CanonicalDecisionVerificationReceiptPortV2,
+  input: PersistDee659AuthorityBundleV2Input,
+): Promise<void> {
+  const [forecast, scientific, execution] = await Promise.all([
+    port.loadForecastVerification({
+      organizationId: input.organizationId,
+      forecastId: input.forecastId,
+      subjectContentDigestHex: input.forecastAuthorityContentDigestHex,
+    }),
+    port.loadScientificVerification({
+      organizationId: input.organizationId,
+      scientificAdmissionContentDigestHex: input.scientificAdmission.contentDigest,
+    }),
+    port.loadExecutionPayoffVerification({
+      organizationId: input.organizationId,
+      accountId: input.accountId,
+      instrumentIdentityDigestHex: input.anchorAuthority.instrumentIdentityDigestHex,
+    }),
+  ]);
+  if (
+    forecast.verificationReceiptDigestHex !== input.forecastVerificationReceiptDigestHex ||
+    scientific.verificationReceiptDigestHex !== input.scientificVerificationReceiptDigestHex ||
+    JSON.stringify(execution) !== JSON.stringify(input.executionPayoffVerification)
+  ) throw new Error("DEE659_DURABLE_AUTHORITY_INVALID:canonicalVerificationReceiptBinding");
+}
+
+export function createPostgresDee659AuthorityRepositoryV2(config: Readonly<{
+  sql: postgres.Sql;
+  verificationReceipts: CanonicalDecisionVerificationReceiptPortV2;
+}>):
 PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
   persist(input: PersistDee659AuthorityBundleV2Input): Promise<void>;
 }> {
   return Object.freeze({
     async persist(input) {
       validateBundle(input);
+      await assertCanonicalForecastAndScientificSources(config.sql, input);
+      await assertCanonicalVerificationReceipts(config.verificationReceipts, input);
       const digest = bundleDigest(input);
-      const inserted = await sql<{ bundle_content_digest_hex: string }[]>`
+      const inserted = await config.sql<{ bundle_content_digest_hex: string }[]>`
         INSERT INTO trader_dee659_authority_bundle_v2 (
           organization_id, account_id, cycle_id, forecast_authority_content_digest_hex,
           forecast_id, forecast_issuance_receipt_digest_hex,
@@ -139,10 +221,10 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           ${input.forecastAuthorityContentDigestHex}, ${input.forecastId},
           ${input.forecastIssuanceReceiptDigestHex}, ${input.forecastVerificationReceiptDigestHex},
           ${input.scientificAdmission.evidenceSemanticDigest},
-          ${input.scientificVerificationReceiptDigestHex}, ${sql.json(asJsonValue(input.anchorAuthority))},
-          ${sql.json(asJsonValue(input.executablePolicy))}, ${sql.json(asJsonValue(input.economicSizeSet))},
-          ${sql.json(asJsonValue(input.cashAuthority))},
-          ${sql.json(asJsonValue(input.executionPayoffVerification))}, ${input.pitAnchor}::timestamptz,
+          ${input.scientificVerificationReceiptDigestHex}, ${config.sql.json(asJsonValue(input.anchorAuthority))},
+          ${config.sql.json(asJsonValue(input.executablePolicy))}, ${config.sql.json(asJsonValue(input.economicSizeSet))},
+          ${config.sql.json(asJsonValue(input.cashAuthority))},
+          ${config.sql.json(asJsonValue(input.executionPayoffVerification))}, ${input.pitAnchor}::timestamptz,
           ${DEE659_DURABLE_AUTHORITY_BUNDLE_V2}, ${digest}
         ) ON CONFLICT (organization_id, account_id, cycle_id, forecast_authority_content_digest_hex)
           DO NOTHING
@@ -152,7 +234,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
         throw new Error("DEE659_DURABLE_AUTHORITY_CORRUPTION:insertedDigest");
       }
       if (inserted.length === 0) {
-        const existing = await sql<{ bundle_content_digest_hex: string }[]>`
+        const existing = await config.sql<{ bundle_content_digest_hex: string }[]>`
           SELECT bundle_content_digest_hex FROM trader_dee659_authority_bundle_v2
           WHERE organization_id = ${input.organizationId}::uuid AND account_id = ${input.accountId}
             AND cycle_id = ${input.cycleId}
@@ -164,14 +246,14 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
       }
     },
     async load(identity) {
-      const rows = await sql<AuthorityRow[]>`
+      const rows = await config.sql<AuthorityRow[]>`
         SELECT organization_id::text, account_id, cycle_id,
                forecast_authority_content_digest_hex, forecast_id,
                forecast_issuance_receipt_digest_hex, forecast_verification_receipt_digest_hex,
                scientific_admission_evidence_digest_hex,
                scientific_verification_receipt_digest_hex, anchor_authority_json,
                executable_policy_json, economic_size_set_json, cash_authority_json,
-               execution_payoff_verification_json, pit_anchor
+               execution_payoff_verification_json, pit_anchor, bundle_content_digest_hex
         FROM trader_dee659_authority_bundle_v2
         WHERE organization_id = ${identity.organizationId}::uuid
           AND account_id = ${identity.accountId}
@@ -180,7 +262,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
       `;
       const row = rows[0];
       if (!row) throw new Error("DEE659_DURABLE_AUTHORITY_NOT_FOUND");
-      const scientificAdmission = await readScientificAdmissionReceiptV1(sql, {
+      const scientificAdmission = await readScientificAdmissionReceiptV1(config.sql, {
         organizationId: identity.organizationId,
         evidenceSemanticDigestHex: row.scientific_admission_evidence_digest_hex,
       });
@@ -203,6 +285,11 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
         executionPayoffVerification: parseObject<ExecutionPayoffAuthorityVerificationV1>(row.execution_payoff_verification_json, "verification"),
       };
       validateBundle(loaded);
+      if (bundleDigest(loaded) !== row.bundle_content_digest_hex) {
+        throw new Error("DEE659_DURABLE_AUTHORITY_CORRUPTION:bundleDigest");
+      }
+      await assertCanonicalForecastAndScientificSources(config.sql, loaded);
+      await assertCanonicalVerificationReceipts(config.verificationReceipts, loaded);
       const { organizationId: _o, accountId: _a, cycleId: _c,
         forecastAuthorityContentDigestHex: _f, pitAnchor: _p, ...result } = loaded;
       void [_o, _a, _c, _f, _p];
