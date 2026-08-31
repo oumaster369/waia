@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import FhvOperationsAdminPage from "@/app/(trader)/admin/fhv-operations/page";
-import { buildFhvAdminStatusPath } from "@/lib/trader/fhv-campaign-run-id";
-import { buildFhvOperatorStatusV1 } from "@/lib/trader/observability/build-fhv-operator-status-v1";
 
 const ORG_ID = "00000000-0000-4000-8000-0000000416a1";
 const RUN_ID = "dee-416-ui-run";
@@ -18,7 +16,10 @@ vi.mock("@/components/trader/admin/admin-org-selector", () => ({
 }));
 
 function statusResponse() {
-  return JSON.stringify({ status: buildFhvOperatorStatusV1({ organizationId: ORG_ID, runId: RUN_ID, phase: "validation", codeSha: "sha", artifactDigest: "artifact", datasetSeal: "seal", datasetDigest: "digest", configurationDigest: "config" }) });
+  return JSON.stringify({schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,
+    organizationId:ORG_ID,runId:RUN_ID,eventId:"0:head",observedAt:"2026-09-01T00:00:00.000Z",
+    aggregate:{accountCount:1,cash:"100.00000000",equity:"101.00000000",netPnl:"1.00000000",cycles:1,decisions:1,riskVetoes:0,orders:0,fills:0,processedRecords:1,latestCycleSequence:0},
+    accounts:[{accountId:"historical:a",cycleSequence:0,cycleId:"c0",symbol:"BTCUSDT",partition:"DEVELOPMENT",replayBarClosedAtUtc:"2026-01-01T00:00:00.000Z",cash:"100.00000000",equity:"101.00000000",netPnl:"1.00000000",grossRealizedPnl:"1.25000000",netRealizedPnl:"1.00000000",netUnrealizedPnl:"0.00000000",openPositionsCount:1,decisionsCount:1,riskVetoCount:0,ordersCount:0,fillsCount:0,lastDecision:{reasonCodes:["CASH"]},lastRisk:{status:"PERMITTED"},lastExecution:{status:"NO_TRADE"},lastAccounting:{positions:{BTCUSDT:{quantity:"0.00000000"},ETHUSDT:{quantity:"2.00000000"}}},lastGuardian:{},lastLearning:{},observedExecutionEffects:[],stages:["KNOWLEDGE"],snapshots:["ACCOUNTING_FRONTIER"],checkpoint:{committedCycleSequence:0,nextRecordIndex:1,nextCycleSequence:1,contentDigestHex:"a".repeat(64)},ledgerHeadContentDigestHex:"b".repeat(64)}]});
 }
 
 describe("DEE-785 streaming FHV Admin Console", () => {
@@ -27,17 +28,22 @@ describe("DEE-785 streaming FHV Admin Console", () => {
   it("connects automatically with exact organization and campaign binding", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      expect(url).toBe(buildFhvAdminStatusPath(ORG_ID, RUN_ID));
+      expect(url).toBe(`/api/trader/admin/historical-v2/stream?organization_id=${encodeURIComponent(ORG_ID)}&run_id=${encodeURIComponent(RUN_ID)}&transport=poll`);
       return new Response(statusResponse(), { status: 200, headers: { "Content-Type": "application/json" } });
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<FhvOperationsAdminPage />);
-    await waitFor(() => expect(screen.getByTestId("fhv-streaming-console")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("historical-v2-streaming-dashboard")).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Refresh")).not.toBeInTheDocument();
     expect(screen.queryByText("Sync balances")).not.toBeInTheDocument();
     expect(screen.getAllByText(RUN_ID)).toHaveLength(1);
-    expect(screen.getByText(/Open positions only/i)).toBeInTheDocument();
+    expect(screen.getByText(/committed records/i)).toBeInTheDocument();
+    expect(screen.getByText("Gross realized P&L")).toBeInTheDocument();
+    expect(screen.getByText("Net realized P&L")).toBeInTheDocument();
+    expect(screen.getByText("Net unrealized P&L")).toBeInTheDocument();
+    expect(screen.getByText("ETHUSDT: qty 2.00000000")).toBeInTheDocument();
+    expect(screen.queryByText("BTCUSDT: qty 0.00000000")).not.toBeInTheDocument();
   });
 
   it("does not connect until a valid campaign run ID is supplied", async () => {
@@ -60,8 +66,8 @@ describe("DEE-785 streaming FHV Admin Console", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<FhvOperationsAdminPage />);
-    await waitFor(() => expect(screen.getByTestId("fhv-streaming-console")).toBeInTheDocument());
-    expect(screen.getByText("Historical Test Command Center")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("historical-v2-streaming-dashboard")).toBeInTheDocument());
+    expect(screen.getByText("Historical V2 · live observation")).toBeInTheDocument();
   });
 
   it("uses the authenticated admin SSE endpoint and subscribes to the full event contract", async () => {
@@ -72,7 +78,33 @@ describe("DEE-785 streaming FHV Admin Console", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(statusResponse(), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<FhvOperationsAdminPage />);
     await waitFor(() => expect(EventSourceMock).toHaveBeenCalledTimes(1));
-    expect(EventSourceMock).toHaveBeenCalledWith(`/api/trader/admin/fhv-operations/stream?organization_id=${encodeURIComponent(ORG_ID)}&campaign_run_id=${encodeURIComponent(RUN_ID)}`, { withCredentials: true });
-    expect(listeners).toEqual(expect.arrayContaining(["campaign.progress", "account.balance", "position.snapshot", "trade.snapshot", "decision.snapshot", "checkpoint", "risk", "gate", "error"]));
+    expect(EventSourceMock).toHaveBeenCalledWith(`/api/trader/admin/historical-v2/stream?organization_id=${encodeURIComponent(ORG_ID)}&run_id=${encodeURIComponent(RUN_ID)}`, { withCredentials: true });
+    expect(listeners).toEqual(["historical.snapshot"]);
+  });
+
+  it("starts only one polling fallback after duplicate SSE errors", async () => {
+    const source = { onopen: null as (() => void) | null, onerror: null as (() => void) | null, addEventListener: vi.fn(), close: vi.fn() };
+    vi.stubGlobal("EventSource", vi.fn(() => source));
+    const fetchMock = vi.fn(async () => new Response(statusResponse(), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FhvOperationsAdminPage />);
+    await waitFor(() => expect(source.onerror).toBeTypeOf("function"));
+    source.onerror?.();
+    source.onerror?.();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("refuses a wrong-organization projection and permanently stops polling", async () => {
+    vi.useFakeTimers();
+    const wrongOrganization = JSON.parse(statusResponse()) as Record<string, unknown>;
+    wrongOrganization.organizationId = "00000000-0000-4000-8000-0000000416ff";
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(wrongOrganization), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FhvOperationsAdminPage />);
+    await vi.waitFor(() => expect(screen.getByText(/identity mismatch/i)).toBeInTheDocument());
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("historical-v2-streaming-dashboard")).not.toBeInTheDocument();
+    vi.useRealTimers();
   });
 });
