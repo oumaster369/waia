@@ -6,7 +6,7 @@ import type postgres from "postgres";
 
 import { getPostgresSql } from "@/db/postgres-client";
 
-export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 184 as const;
+export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 185 as const;
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
@@ -65,6 +65,7 @@ export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_runtime_control_lease_epoch_history_v2",
   "trader_historical_simulation_reason_ledger_v2",
   "trader_historical_simulation_modeled_evidence_v2",
+  "trader_dee659_authority_bundle_v2",
 ] as const;
 
 type Journal = {

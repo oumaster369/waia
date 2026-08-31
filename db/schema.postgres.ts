@@ -4370,6 +4370,36 @@ export const traderHistoricalSimulationModeledEvidenceV2 = pgTable(
   ],
 );
 
+/** Append-only, PIT-bound DEE-659 authorities consumed by Historical Decision Economics V2. */
+export const traderDee659AuthorityBundleV2 = pgTable(
+  "trader_dee659_authority_bundle_v2",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    cycleId: text("cycle_id").notNull(),
+    forecastAuthorityContentDigestHex: text("forecast_authority_content_digest_hex").notNull(),
+    forecastId: text("forecast_id").notNull(),
+    forecastIssuanceReceiptDigestHex: text("forecast_issuance_receipt_digest_hex").notNull(),
+    forecastVerificationReceiptDigestHex: text("forecast_verification_receipt_digest_hex").notNull(),
+    scientificAdmissionEvidenceDigestHex: text("scientific_admission_evidence_digest_hex").notNull(),
+    scientificVerificationReceiptDigestHex: text("scientific_verification_receipt_digest_hex").notNull(),
+    anchorAuthorityJson: jsonb("anchor_authority_json").notNull(),
+    executablePolicyJson: jsonb("executable_policy_json").notNull(),
+    economicSizeSetJson: jsonb("economic_size_set_json").notNull(),
+    cashAuthorityJson: jsonb("cash_authority_json").notNull(),
+    executionPayoffVerificationJson: jsonb("execution_payoff_verification_json").notNull(),
+    pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    bundleContentDigestHex: text("bundle_content_digest_hex").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.accountId, t.cycleId, t.forecastAuthorityContentDigestHex], name: "dee659_authority_bundle_pk" }),
+    index("dee659_authority_bundle_pit_idx").on(t.organizationId, t.accountId, t.pitAnchor, t.cycleId),
+    check("dee659_authority_bundle_schema", sql`${t.schemaVersion} = 'waia.trader.dee659_durable_authority_bundle.v2'`),
+  ],
+);
+
 /** AI-TRADER: append-only trade legs (M1 / DEE-376). */
 export const traderTradeLegs = pgTable(
   "trader_trade_legs",
