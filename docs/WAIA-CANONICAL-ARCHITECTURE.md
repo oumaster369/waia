@@ -1,7 +1,7 @@
 <!--
 Status: CANONICAL REFERENCE (orientation + architecture synthesis)
-Version: 1.0
-Date: 2026-07-03
+Version: 1.1
+Date: 2026-09-01
 Authority: Human Architect–maintained. Subordinate to binding tiers on conflict — see §0.
 -->
 
@@ -10,6 +10,8 @@ Authority: Human Architect–maintained. Subordinate to binding tiers on conflic
 ## 0. Document status and authority
 
 This document is the **first canonical architecture synthesis** of the WAIA project. It describes WAIA as it exists today and its long-term direction, grounded in repository documentation, architecture decisions, implementation history, and current code.
+
+**AI-TWIN reconciliation:** this synthesis contains legacy runtime descriptions for the shipped `{0,33,67,100}` readiness journey. Target product meaning and implementation order are now owned by the [`AI-TWIN Product Constitution`](product/AI-TWIN-PRODUCT-CONSTITUTION.md), [`canonical algorithm`](ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md), [ADR-0032](adr/0032-ai-twin-epistemic-formation-and-authority-separation.md) and [program roadmap](roadmaps/ai-twin-program-roadmap.md). Where an AI-TWIN future statement below conflicts, that corpus wins.
 
 **Purpose:** Single reference from which the public WAIA page, module pages, documentation, investor materials, and future implementation planning can be derived.
 
@@ -138,7 +140,7 @@ The closing landing narrative states the sequence:
 
 ## Human self-knowledge
 
-AI-Twin models six readiness dimensions—**Values, Behavior, Thinking, Emotions, Interests, Goals**—each progressing from 0% to 100%. Total Readiness aggregates these indicators and gates product surfaces (Diary at ≥60%, Socialization at 100%).
+The shipped AI-Twin runtime models **Values, Behavior, Thinking, Emotions, Interests, Goals** using legacy monotonic readiness and old Diary/Socialization gates. The Human-ratified target retains six visible domains but makes them evidence maturity across Meaning/Values/Boundaries; Needs/Motives/Attractors; Perception/Thinking/Decision; Emotion/Self-Regulation; Action/Adaptation; Relationships/Reciprocity. Goals become temporal trajectories. Diary is available from consent; `100%` requires Human ratification of an initial Formation Contract and then yields to Model Health and Adviser.
 
 Self-knowledge is **earned through dialogue**, not extracted through forms. The Twin asks, reflects, identifies patterns, and gradually builds a structured personality model. The user may refine, restrict, or redirect Twin behavior at any time.
 
@@ -325,11 +327,11 @@ Each module follows the same template: **Purpose · Problem solved · Role insid
 
 ## 4.1 AI-Twin
 
-**Purpose.** Digital reflection of a living human—a structured personality model built through dialogue and diary, scored across six readiness dimensions, progressing toward governed socialization.
+**Purpose.** Private longitudinal co-researcher of a living Human—a temporal, relational, evidence-backed model built through dialogue, Diary, outcomes and Human correction, always subordinate to free will.
 
 **Problem solved.** People lack a durable, private, intelligent mirror for self-knowledge and alignment between stated values and observed behavior.
 
-**Role inside WAIA.** Heart of current delivery. First module every user enters. Gates access to Diary, Socialization, and Society. Personal intelligence layer of the ecosystem.
+**Role inside WAIA.** Heart of current delivery and personal intelligence layer. Canonical Formation, embodiment and Adviser precede separately authorized connected actions and Society.
 
 **Current implementation state.** **Operational** (core journey) / **Prototype** (avatar, predictions tab, socialization stub).
 
@@ -345,26 +347,28 @@ Each module follows the same template: **Purpose · Problem solved · Role insid
 | Avatar | **Prototype** — placeholder only |
 | Predictions / Personality tabs | **Stub** |
 
-**How it is created.** Visitor authenticates → enters dashboard in Twin mode → engages in dialogue → readiness indicators progress → Diary unlocks at ≥60% Total Readiness → at 100%, Socialization action appears → user performs Socialization → Society unlocks.
+**Current runtime journey.** Visitor authenticates → dashboard/Twin dialogue → legacy readiness → Diary at ≥60% → Socialization at 100% → Society preview. This is retained until the reversible DEE-884 migration.
 
-**How it evolves.** Dialogue and diary continuously refine the Twin model. Future: semi-autonomous Twin agency in Society, drawing on derived (not raw diary) behavioral outputs, within user-shaped boundaries.
+**Target journey.** Consent → dialogue and Diary observations → projection-aware evidence and competing hypotheses → deterministic six-domain Formation → Avatar Studio eligibility at 20% under separate trust controls → Initial Model Review and explicit Human ratification at 100% → continual Model Health and Personal Adviser. Connected actions and Society are later capability gates, not Formation unlocks.
+
+**How it evolves.** Dialogue, Diary, outcomes and corrections continuously revise the model. Advice exposes evidence, assumptions, options, consequences and unknowns. Any future social exploration or external action uses purpose-bound, revocable authority and Human decisions; Formation alone grants nothing.
 
 **How it differs from ordinary AI assistants.** Not task-first; builds a **persistent structured model** of one person with explicit readiness semantics, privacy invariants, and gated modes—not open-ended chat.
 
-**Future evolution.** Realistic animated avatar generation (separate feature); deeper autonomy in Society; cross-module consent bridges (future).
+**Future evolution.** v1 Formation/Embodiment/Adviser; v2 consented connected context and bounded delegated actions with Reality receipts; v3 purpose-specific compatibility and mutual Alignment Contracts. No likes, followers, popularity ranks, inferred consent or general autonomous sovereignty.
 
 **Interactions.**
 
 | Module | Relationship |
 |--------|--------------|
 | WAIA Core | Identity, profile, org provisioning |
-| WAIA Social/Society | Unlocks after Socialization; derived outputs only |
+| WAIA Social/Society | v3 only: purpose-bound derived disclosure + dual-Human consent + Alignment Contracts |
 | AI-Trader | **No behavioral coupling in MVP** — independent domains, shared identity only |
 | 3P / Marketplace | Future; Twin data may inform matching with explicit consent |
 | Knowledge System | Twin operational memory separate from trader research memory |
 | DEV OS | Built and governed through Linear/Git workflow |
 
-**Dependencies.** WAIA Core identity; AI Gateway for dialogue; persistence (SQLite/Postgres); readiness model spec (DEE-22).
+**Dependencies.** WAIA Core identity/tenancy/audit; AI Gateway; epistemic ledger; canonical algorithm; DEE-130 and v1 epic DEE-868. AI-TRADER is an epistemic precedent, not a runtime dependency.
 
 **Expected readiness.** **Operational** for MVP partner-preview path; **Prototype** for Society network and avatar.
 
@@ -392,17 +396,17 @@ Privacy invariant (product canon):
 
 *( [`docs/product/ai-twin-user-flow.md`](product/ai-twin-user-flow.md) §8 )*
 
-**Future evolution.** Multi-user social graph, Twin activity feeds, matches, recommendations, semi-autonomous Twin interactions consistent with user values and boundaries.
+**Future evolution.** A consent-first network where compatibility is a plural, uncertain, relationship-purpose-specific hypothesis and each connection is a mutual, versioned, revocable Alignment Contract. Feeds, likes, follower/popularity statistics, public compatibility scores and engagement ranking are prohibited.
 
 **Interactions.**
 
 | Module | Relationship |
 |--------|--------------|
-| AI-Twin | Source of derived presence; gated by Socialization |
+| AI-Twin | Source of minimally derived, Human-approved disclosure; Formation never implies social consent |
 | Marketplace | Future value exchange between Twins and businesses |
 | Consensus | Future collective decision surfaces (vision-tier) |
 
-**Dependencies.** AI-Twin readiness = 100%; Socialization action completed; DEE-53 (Socialization contract), DEE-55 (Society UI).
+**Dependencies.** Canonical AI-TWIN v1/v2 authority boundary, DEE-894 detailed spec, purpose-specific Social Readiness, dual consent, privacy/safety review. Legacy DEE-53/DEE-55 remain prototype history.
 
 **Expected readiness.** **Prototype** now; **Operational** when social graph and publishing ship.
 
@@ -973,21 +977,22 @@ These are **open research questions**, not bugs.
 
 ### AI-Twin
 
-1. **Avatar generation pipeline** — Placeholder only; no algorithm or architecture ratified for realistic animated avatars.
-2. **Readiness validity** — Do six indicators and Total Readiness correlate with meaningful self-knowledge outcomes? No external validation study in repo.
-3. **Twin autonomy bounds in Society** — How much semi-autonomous agency is safe, desirable, and user-controllable at scale?
-4. **Diary → derived behavior firewall** — Can derived outputs be guaranteed non-invertible to raw diary content under adversarial analysis?
+1. **Formation validity/calibration** — The six domains and provisional `19/49/74/99` caps require shadow evaluation and Human-reviewed longitudinal evidence before cutover.
+2. **Avatar provider and residual risk** — The liveness/passkey/privacy architecture is ratified, but vendor, DPIA/legal posture, retention and measured false-rejection/bias remain Human gates.
+3. **Adviser outcome quality** — Grounding and calibration can be tested, but meaningful life benefit and harm need longitudinal Human-defined measures.
+4. **Derived disclosure inversion** — No summary can be assumed non-invertible; disclosure minimization and adversarial testing remain required.
+5. **Society safety and compatibility validity** — Purpose-specific hypotheses and Alignment Contracts require bounded pilots; no launch inference follows from technical completion.
 
 ### AI-Trader
 
-5. **Edge vs plumbing** — AHR and replay prove execution plumbing; do current strategies possess durable edge net of costs across regimes? RI-P7 campaign pending real multi-regime evidence.
-6. **Full LD-8/LD-9 implementation** — Risk verdict records and bitemporal Reality layer remain doctrine ahead of code.
-7. **External client live** — Regulatory posture (ADR-0009) unresolved for beyond Org-0.
+6. **Edge vs plumbing** — AHR and replay prove execution plumbing; do current strategies possess durable edge net of costs across regimes? RI-P7 campaign pending real multi-regime evidence.
+7. **Full LD-8/LD-9 implementation** — Risk verdict records and bitemporal Reality layer remain doctrine ahead of code.
+8. **External client live** — Regulatory posture (ADR-0009) unresolved for beyond Org-0.
 
 ### Cross-module
 
-8. **Twin–Trader integration contracts** — What Core-mediated, consent-gated data flows are appropriate without safety bypass?
-9. **Business Twin ontology** — No product spec for mapping Provision/Promotion/Production to AI employees and operational memory.
+9. **Twin–Trader integration contracts** — What Core-mediated, consent-gated data flows are appropriate without safety bypass?
+10. **Business Twin ontology** — No product spec for mapping Provision/Promotion/Production to AI employees and operational memory.
 10. **Marketplace matching without manipulation** — Need-driven recommendation at scale without reverting to engagement optimization.
 
 ### Governance

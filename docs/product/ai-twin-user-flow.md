@@ -1,6 +1,6 @@
 # WAIA AI-Twin v1 — User Flow
 
-**Status:** Product Source of Truth for AI-Twin v1 user flow.
+**Status:** Legacy shipped-runtime user-flow truth. Superseded for future AI-TWIN implementation by the [AI-TWIN Product Constitution](AI-TWIN-PRODUCT-CONSTITUTION.md), [v1 completion spec](../product-specs/ai-twin-v1-completion.md) and [program roadmap](../roadmaps/ai-twin-program-roadmap.md). Retained below for migration and regression evidence.
 
 This document is the canonical, system-level definition of the AI-Twin v1 MVP user flow. All frontend, backend, and AI tasks consume this document as the single source of truth. Conflicts with downstream issues are resolved here first, then propagated.
 

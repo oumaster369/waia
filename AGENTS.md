@@ -44,6 +44,8 @@ Module/platform architecture (the "how it's built" canon, distinct from governan
 | AI-TRADER Master Spec v2 (governing technical spec) | [`docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md`](docs/ai-trader/AI-TRADER-MASTER-SPEC-v2.md) |
 | AI-TRADER Target Runtime Architecture (completed-system runtime topology and end-to-end algorithm; subordinate to Product Constitution and Master Spec; documentation target only, not implementation scope) | [`docs/ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md`](docs/ai-trader/AI-TRADER-TARGET-ARCHITECTURE.md) |
 | AI-TRADER Implementation Program v1.2 (execution blueprint → Linear) | [`docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md`](docs/ai-trader/AI-TRADER-IMPLEMENTATION-PROGRAM.md) |
+| AI-TWIN corpus (product constitution → canonical algorithm → completion/gaps/roadmap) | [`docs/ai-twin/README.md`](docs/ai-twin/README.md) |
+| AI-TWIN Product Constitution (Human-ratified target meaning and sovereignty boundary) | [`docs/product/AI-TWIN-PRODUCT-CONSTITUTION.md`](docs/product/AI-TWIN-PRODUCT-CONSTITUTION.md) |
 | ADR corpus (AI-TRADER decisions = ADR-0005 … ADR-0023) | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ---
@@ -74,9 +76,9 @@ Recovery order — then escalate per [`EXECUTION-CONTRACT.md`](docs/waia-governa
 
 ## WAIA context
 
-Delivery focus: **AI-Twin v1** + backend/runtime stabilization. Other ecosystem layers deferred — [`NON-GOALS.md`](docs/waia-governance/NON-GOALS.md).
+Delivery focus: **AI-TWIN v1 — Formation, Embodiment & Adviser** + backend/runtime stabilization. Connected actions and Society remain separately gated v2/v3 programs — [`docs/roadmaps/ai-twin-program-roadmap.md`](docs/roadmaps/ai-twin-program-roadmap.md).
 
-AI-Twin builds a structured digital personality via dialogue, diary, and behavioral reflection. Core outputs: readiness (0–100%), personality structure, memory state, socialization readiness. Treat every feature as part of this system.
+AI-TWIN maintains a private, temporal, evidence-backed and Human-correctable model through dialogue, Diary and calibrated reflection. Formation Progress, Model Health, presence/account trust, Social Readiness and action authority are separate states. The legacy `{0,33,67,100}` readiness and old Diary/Society locks describe the current runtime until an approved migration; future AI-TWIN work follows the [Product Constitution](docs/product/AI-TWIN-PRODUCT-CONSTITUTION.md).
 
 **Subsystem context:** [`app/AGENTS.md`](app/AGENTS.md) · [`db/AGENTS.md`](db/AGENTS.md) · [`lib/AGENTS.md`](lib/AGENTS.md)
 

@@ -9,12 +9,15 @@
 | **Completion specs** | [`../product-specs/`](../product-specs/) — module *done* layer ([`PRODUCT-COMPLETION-SPEC-STANDARD`](../waia-governance/PRODUCT-COMPLETION-SPEC-STANDARD.md)) |
 | **Gaps & roadmaps** | [`../gaps/`](../gaps/), [`../roadmaps/`](../roadmaps/) — intake → batch sequencing |
 | **Architectural WHY** | [`../adr/`](../adr/README.md) |
+| **AI-TWIN target canon** | [`AI-TWIN-PRODUCT-CONSTITUTION.md`](AI-TWIN-PRODUCT-CONSTITUTION.md), [`../ai-twin/README.md`](../ai-twin/README.md), [`../product-specs/ai-twin-v1-completion.md`](../product-specs/ai-twin-v1-completion.md) |
 
 ---
 
 ## Human-centered scope (v1)
 
-WAIA is a **human-centered AI ecosystem**: the person, their stated intent, and ongoing alignment are primary. The **current MVP** concentrates on **AI-Twin creation**—dialogue, reflection, **Diary** interaction where unlocked, and **readiness** progression toward Socialization and Society. **Runtime stabilization** (split SQLite/Postgres, routing, telemetry) is an **enabling engineering phase** in service of that product outcome, not the defining narrative of WAIA. **Business**, **AI-Trader**, **AI-Marketplace**, and other ecosystem modules remain **explicitly deferred**; see [`NON-GOALS`](../waia-governance/NON-GOALS.md).
+WAIA is a **human-centered AI ecosystem**: the person, their stated intent, free will and ongoing alignment are primary. The shipped MVP concentrates on dialogue, reflection, Diary and legacy readiness progression. The Human-ratified target is **AI-TWIN v1 — Formation, Embodiment & Adviser**: a private, temporal and evidence-backed co-researcher with Diary available from consent, explicit initial-model ratification and a separate post-formation Model Health/Adviser state. Runtime stabilization remains enabling infrastructure.
+
+> **Current/target boundary:** the legacy journey and `{0,33,67,100}` thresholds below remain current-runtime evidence until DEE-884 cutover. They must not be extended as target semantics. New work follows [`AI-TWIN-PRODUCT-CONSTITUTION.md`](AI-TWIN-PRODUCT-CONSTITUTION.md).
 
 ## North Star
 
@@ -24,13 +27,13 @@ WAIA is a **human-centered AI ecosystem**: the person, their stated intent, and 
 
 ## Vision (now)
 
-**Primary outcome:** Deliver **AI-Twin v1** (dashboard journey, Twin dialogue, readiness model, Diary and Society gates, Socialization). **Engineering in parallel:** stabilize split SQLite/Postgres runtime and phased routing/telemetry (**`DEE-64` / `DEE-95*`** family) so those product surfaces remain reliable and evolvable. Deferred modules and scope guards unchanged (`NON-GOALS`).
+**Primary outcome:** Deliver canonical **AI-TWIN v1** (Formation, Embodiment & Adviser) through DEE-868/DEE-871..DEE-885. Connected context/actions are v2; Society/Alignment Contracts are v3. **Engineering in parallel:** stabilize shared runtime and complete AI-TRADER without coupling domain state or authority.
 
 ---
 
 ## AI-Twin v1 is NOT
 
-WAIA’s direction **includes** purposeful **AI-Twin agency** inside the product: over time, AI-Twins may operate **semi-autonomously** in **Society**; draw on **Diary** and dialogue memory for posts and reflections **the user has shaped**; and form **connections and interactions** consistent with the user’s interests, values, goals, and behavioral patterns. **Autonomy is expected to deepen progressively**—always **aligned, bounded, and user-shaped.**
+WAIA’s direction includes purposeful AI-TWIN assistance, but knowledge never grants authority. Society exploration, disclosure, consent and real-world action are separate capability systems. The invariant is `request != plan != permission != execution attempt != factual real-world result`.
 
 - The **human user** remains the **primary authority.**
 - **Diary** and dialogue act as continuing **alignment and preference surfaces**, not ornament.
@@ -52,9 +55,10 @@ WAIA’s direction **includes** purposeful **AI-Twin agency** inside the product
 
 | Slice | Canonical doc |
 |-------|----------------|
-| Ordered user journey **Steps 1–11** | [`ai-twin-user-flow.md`](ai-twin-user-flow.md) |
-| Six indicators + thresholds + formulae context | [`ai-twin-readiness-model.md`](ai-twin-readiness-model.md) |
-| Dashboard regions & states | [`ai-twin-dashboard-shell.md`](ai-twin-dashboard-shell.md) |
+| Target product meaning and Human sovereignty | [`AI-TWIN-PRODUCT-CONSTITUTION.md`](AI-TWIN-PRODUCT-CONSTITUTION.md) |
+| Epistemic/formation/advice/action/Society algorithm | [`../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md`](../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md) |
+| v1 completion, gaps and batches | [`../product-specs/ai-twin-v1-completion.md`](../product-specs/ai-twin-v1-completion.md), [`../gaps/ai-twin-v1-gap-registry.md`](../gaps/ai-twin-v1-gap-registry.md), [`../roadmaps/ai-twin-program-roadmap.md`](../roadmaps/ai-twin-program-roadmap.md) |
+| Legacy current-runtime flow/readiness/dashboard | [`ai-twin-user-flow.md`](ai-twin-user-flow.md), [`ai-twin-readiness-model.md`](ai-twin-readiness-model.md), [`ai-twin-dashboard-shell.md`](ai-twin-dashboard-shell.md) |
 | Twin dialogue *training modes* | [`../DIALOGUE_MODES_V1.md`](../DIALOGUE_MODES_V1.md) |
 | Landing (if differentiated) | [`waia-landing.md`](waia-landing.md) |
 | User stewardship, universal access & mutual support | [`waia-user-stewardship-doctrine.md`](waia-user-stewardship-doctrine.md) |
@@ -64,7 +68,7 @@ WAIA’s direction **includes** purposeful **AI-Twin agency** inside the product
 
 ---
 
-## MVP journey snapshot (abbrev.)
+## Legacy current-runtime journey snapshot (migration evidence)
 
 | Phase | Highlights |
 |-------|-------------|
@@ -80,7 +84,7 @@ Detailed triggers / edge handling: **same table expanded** upstream—do not rei
 
 ## Unlock logic (observe only)
 
-Source of thresholds: **`ai-twin-user-flow.md` §5–6** (+ readiness model numerical mapping). **If ambiguity:** escalate vs inventing percentages here.
+Source of legacy thresholds: **`ai-twin-user-flow.md` §5–6**. Target Formation caps, Diary-from-consent, Avatar `20%` eligibility and Human-ratified `100%` are owned by the AI-TWIN canon. Never mix the two models in one computation.
 
 ---
 
@@ -121,6 +125,7 @@ Refer to live Linear for status. **Common structural parents** referenced in spe
 | Dialogue modes | [`DEE-20`](https://linear.app/deepsense/issue/DEE-20) |
 | Readiness model | [`DEE-22`](https://linear.app/deepsense/issue/DEE-22) |
 | Society / Socialization | [`DEE-53`](https://linear.app/deepsense/issue/DEE-53)+ |
+| Canonical AI-TWIN program | [`DEE-130`](https://linear.app/deepsense/issue/DEE-130), DEE-868 / DEE-870 / DEE-869 |
 | Persistence / Postgres slices | **`DEE-72`** family |
 | Runtime routing / telemetry backbone | **`DEE-92`**, **`DEE-95*`** lineage |
 
