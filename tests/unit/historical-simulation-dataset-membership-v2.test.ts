@@ -37,13 +37,15 @@ type MockedPreHoldoutReceipt = {
   organizationId: string;
   releaseSha: string;
   qualificationReceiptDigest: string;
+  developmentWalkForwardContentDigest?: string;
   holdout: { status: string };
   partitions: Array<{ partition: string; symbol: string; rawSha256: string;
     semanticContentDigest: string; barCount: number }>;
 };
 const mocked = vi.hoisted(() => ({ computeRaw: vi.fn(),
   sealed: {} as MockedSealedDataset,
-  preHoldout: {} as MockedPreHoldoutReceipt }));
+  preHoldout: {} as MockedPreHoldoutReceipt,
+  runtimeRequalification: {} as Record<string, string> }));
 vi.mock("@/lib/trader/market-data/fhv-dataset-seal", () => ({
   computeFhvFileRawSha256: mocked.computeRaw,
   assertFhvDatasetSealed: () => mocked.sealed as never,
@@ -54,6 +56,9 @@ vi.mock("@/lib/trader/market-data/fhv-pre-holdout-qualification", () => ({
     if (receipt.classification !== "PRE_HOLDOUT_QUALIFICATION=PASS") throw new Error("QUALIFICATION_NOT_PASS");
   },
   assertFhvPreHoldoutFilesMatchReceipt: vi.fn(),
+}));
+vi.mock("@/lib/trader/market-data/fhv-pre-holdout-runtime-requalification", () => ({
+  readFhvPreHoldoutRuntimeRequalification: () => mocked.runtimeRequalification,
 }));
 
 function resetMocks() {
@@ -76,6 +81,10 @@ function resetMocks() {
     holdout: { status: "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED" },
     partitions: [{ partition: "development", symbol: "BTCUSDT", rawSha256: rawHash,
       semanticContentDigest: semanticDigest, barCount: 2 }],
+  };
+  mocked.runtimeRequalification = {
+    sourceQualificationReceiptDigest: digest("9"), sourceReleaseSha: "1".repeat(40),
+    targetReleaseSha: "2".repeat(40), datasetContentDigest: digest("6"), organizationId: "org",
   };
 }
 
@@ -122,6 +131,27 @@ describe("Historical Simulation V2 exact dataset membership", () => {
     expect([...result.keys()]).toEqual(["cycle-1"]);
     expect(result.get("cycle-1")).toMatchObject({ recordIndex: 1,
       datasetAuthorityClass: "PRE_HOLDOUT_QUALIFICATION_V1" });
+  });
+
+  it("accepts an exact target release only through a scope-bound runtime requalification", async () => {
+    mocked.preHoldout.developmentWalkForwardContentDigest = digest("6");
+    const result = await bindHistoricalCyclesToPreHoldoutDatasetV2({ datasetRoot,
+      qualificationReceiptPath: join(datasetRoot, "qualification.json"),
+      runtimeRequalificationReceiptPath: join(datasetRoot, "runtime-requalification.json"),
+      releaseSha: "2".repeat(40), organizationId: "org", partition: "DEVELOPMENT",
+      symbol: "BTCUSDT", cycles: validCycles() });
+    expect(result).toHaveProperty("size", 2);
+  });
+
+  it("rejects a runtime requalification that is not bound to the qualification and target", async () => {
+    mocked.preHoldout.developmentWalkForwardContentDigest = digest("6");
+    const base = { datasetRoot, qualificationReceiptPath: join(datasetRoot, "qualification.json"),
+      runtimeRequalificationReceiptPath: join(datasetRoot, "runtime-requalification.json"),
+      releaseSha: "2".repeat(40), organizationId: "org", partition: "DEVELOPMENT" as const,
+      symbol: "BTCUSDT" as const, cycles: validCycles() };
+    mocked.runtimeRequalification.targetReleaseSha = "3".repeat(40);
+    await expect(bindHistoricalCyclesToPreHoldoutDatasetV2(base))
+      .rejects.toThrow("RUNTIME_REQUALIFICATION_SCOPE");
   });
 
   it("rejects pre-holdout release, organization and qualification substitution", async () => {

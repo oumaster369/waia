@@ -10,6 +10,8 @@ import {
   assertFhvPreHoldoutQualificationPass,
   readFhvPreHoldoutQualificationReceipt,
 } from "@/lib/trader/market-data/fhv-pre-holdout-qualification";
+import { readFhvPreHoldoutRuntimeRequalification } from
+  "@/lib/trader/market-data/fhv-pre-holdout-runtime-requalification";
 import { fhvOfficialPartitionFileRelativePath } from "@/lib/trader/market-data/fhv-partition-boundaries";
 import { StreamingBarSetDigestHasher } from "@/lib/trader/market-data/fhv-streaming-bar-set-digest";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
@@ -118,6 +120,7 @@ export async function bindHistoricalCyclesToSealedDatasetV2(input: Readonly<{
 export async function bindHistoricalCyclesToPreHoldoutDatasetV2(input: Readonly<{
   datasetRoot: string;
   qualificationReceiptPath: string;
+  runtimeRequalificationReceiptPath?: string;
   releaseSha: string;
   organizationId: string;
   partition: "DEVELOPMENT" | "WALK_FORWARD";
@@ -128,7 +131,17 @@ export async function bindHistoricalCyclesToPreHoldoutDatasetV2(input: Readonly<
   assertFhvPreHoldoutQualificationPass(receipt);
   assertFhvPreHoldoutFilesMatchReceipt({ datasetRoot: input.datasetRoot, receipt });
   if (receipt.organizationId !== input.organizationId) fail("ORGANIZATION_SCOPE");
-  if (receipt.releaseSha !== input.releaseSha.trim().toLowerCase()) fail("RELEASE_SCOPE");
+  const releaseSha = input.releaseSha.trim().toLowerCase();
+  if (receipt.releaseSha !== releaseSha) {
+    if (!input.runtimeRequalificationReceiptPath) fail("RELEASE_SCOPE");
+    const runtime = readFhvPreHoldoutRuntimeRequalification(input.runtimeRequalificationReceiptPath);
+    if (runtime.sourceQualificationReceiptDigest !== receipt.qualificationReceiptDigest ||
+        runtime.sourceReleaseSha !== receipt.releaseSha || runtime.targetReleaseSha !== releaseSha ||
+        runtime.datasetContentDigest !== receipt.developmentWalkForwardContentDigest ||
+        runtime.organizationId !== receipt.organizationId) {
+      fail("RUNTIME_REQUALIFICATION_SCOPE");
+    }
+  }
   if (receipt.holdout.status !== "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED") {
     fail("HOLDOUT_STATUS");
   }
