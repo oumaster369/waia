@@ -604,9 +604,14 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
       return [];
     };
     const fake = ((strings: TemplateStringsArray) => query(strings)) as unknown as import("postgres").Sql;
-    (fake as unknown as { begin: Function }).begin = async (_level: string, callback: Function) => callback(fake);
-    (fake as unknown as { reserve: Function }).reserve = async () => {
-      (fake as unknown as { release: Function }).release = () => undefined;
+    type FakeSqlExtensions = {
+      begin: (_level: string, callback: (sql: import("postgres").Sql) => Promise<unknown>) => Promise<unknown>;
+      reserve: () => Promise<import("postgres").Sql>;
+      release: () => void;
+    };
+    (fake as unknown as FakeSqlExtensions).begin = async (_level, callback) => callback(fake);
+    (fake as unknown as FakeSqlExtensions).reserve = async () => {
+      (fake as unknown as FakeSqlExtensions).release = () => undefined;
       return fake;
     };
     let portsCreated = 0;

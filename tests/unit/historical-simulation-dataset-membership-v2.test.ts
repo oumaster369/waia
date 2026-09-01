@@ -23,13 +23,33 @@ for (const value of bars) semantic.appendBarDigest(computeBarContentDigest(value
 const semanticDigest = semantic.finalize();
 const rawHash = digest("a");
 
-const mocked = vi.hoisted(() => ({ computeRaw: vi.fn(), sealed: {} as any, preHoldout: {} as any }));
+type MockedSealedDataset = {
+  manifest: {
+    organizationId: string;
+    manifestSemanticDigest: string;
+    partitions: Array<{ partition: string; symbol: string; filePath: string; rawSha256: string;
+      semanticDigest: string; actualBarCount: number; partitionDigest: string }>;
+  };
+  sealReceipt: { sealReceiptDigest: string };
+};
+type MockedPreHoldoutReceipt = {
+  classification: string;
+  organizationId: string;
+  releaseSha: string;
+  qualificationReceiptDigest: string;
+  holdout: { status: string };
+  partitions: Array<{ partition: string; symbol: string; rawSha256: string;
+    semanticContentDigest: string; barCount: number }>;
+};
+const mocked = vi.hoisted(() => ({ computeRaw: vi.fn(),
+  sealed: {} as MockedSealedDataset,
+  preHoldout: {} as MockedPreHoldoutReceipt }));
 vi.mock("@/lib/trader/market-data/fhv-dataset-seal", () => ({
   computeFhvFileRawSha256: mocked.computeRaw,
-  assertFhvDatasetSealed: () => mocked.sealed,
+  assertFhvDatasetSealed: () => mocked.sealed as never,
 }));
 vi.mock("@/lib/trader/market-data/fhv-pre-holdout-qualification", () => ({
-  readFhvPreHoldoutQualificationReceipt: () => mocked.preHoldout,
+  readFhvPreHoldoutQualificationReceipt: () => mocked.preHoldout as never,
   assertFhvPreHoldoutQualificationPass: (receipt: { classification: string }) => {
     if (receipt.classification !== "PRE_HOLDOUT_QUALIFICATION=PASS") throw new Error("QUALIFICATION_NOT_PASS");
   },
