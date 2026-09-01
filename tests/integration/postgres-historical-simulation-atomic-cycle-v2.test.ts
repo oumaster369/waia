@@ -5,7 +5,8 @@ import { computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonic
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { HISTORICAL_SIMULATION_ATOMIC_STAGES_V2, commitHistoricalSimulationCycleAtomicallyV2,
   createHistoricalSimulationAtomicStageBundleV2, createHistoricalSimulationDurableStateSnapshotV2,
-  type HistoricalSimulationAtomicScopeV2 } from "@/lib/trader/historical-simulation-v2/atomic-cycle-commit-v2";
+  type HistoricalSimulationAtomicScopeV2, type HistoricalSimulationAtomicStageBundlesV2 }
+  from "@/lib/trader/historical-simulation-v2/atomic-cycle-commit-v2";
 import { createHistoricalSimulationAtomicCyclePostgresRepositoryV2, createHistoricalSimulationCommitRequestV2 }
   from "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
 import { HISTORICAL_DATASET_MEMBERSHIP_V2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
@@ -48,10 +49,12 @@ function fixture(runId: string) {
     MODELED_RISK: "MODELED_RISK_VERDICT", MODELED_EXECUTION: "MODELED_EXECUTION_SUBMISSION",
     OBSERVED_EXECUTION_EFFECTS: "MODELED_EXECUTION_EFFECT", ACCOUNTING: "ACCOUNTING_FRONTIER",
     GUARDIAN: "GUARDIAN_ASSESSMENT", KNOWLEDGE: "KNOWLEDGE_CHECKPOINT", LEARNING: "LEARNING_UPDATE" } as const;
-  const bundles = Object.fromEntries(HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => [stage,
+  const bundles: HistoricalSimulationAtomicStageBundlesV2 = Object.fromEntries(
+    HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => [stage,
     createHistoricalSimulationAtomicStageBundleV2({ ...scope, cycleId, stage,
       ledgerEntryContentDigestHex: entry.contentDigestHex, artifacts: [{ artifactKind: artifactKind[stage],
-        artifactId: `${cycleId}:${stage}`, contentDigestHex: stage === "KNOWLEDGE" ? "b".repeat(64) : D }] })])) as any;
+        artifactId: `${cycleId}:${stage}`, contentDigestHex: stage === "KNOWLEDGE" ? "b".repeat(64) : D }] })]),
+  ) as HistoricalSimulationAtomicStageBundlesV2;
   const identity = { ...scope, cycleId };
   const accountingBody = { schemaVersion: "htr-accounting-frontier/v1" as const,
     engineId: "CANONICAL_CROSS_BACKEND_ACCOUNTING_ENGINE_V1" as const,
@@ -84,7 +87,7 @@ function fixture(runId: string) {
     policyConfigContentDigestHex: "8".repeat(64), codeSha: "9".repeat(40),
     ledgerEntryContentDigestHex: entry.contentDigestHex,
     stageBundleDigestHexByStage: Object.fromEntries(HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) =>
-      [stage, bundles[stage].contentDigestHex])) as any,
+      [stage, bundles[stage].contentDigestHex])) as Record<(typeof HISTORICAL_SIMULATION_ATOMIC_STAGES_V2)[number], string>,
     snapshotContentDigestHexByKind: { KNOWLEDGE: snapshots.knowledgeSnapshot.contentDigestHex,
       MODELED_EXECUTION_REGISTRY: snapshots.modeledExecutionRegistrySnapshot.contentDigestHex,
       MODELED_EXCHANGE: snapshots.modeledExchangeSnapshot.contentDigestHex,
