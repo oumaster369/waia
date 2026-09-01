@@ -1,7 +1,7 @@
 import type postgres from "postgres";
 
-import { historicalExecutionInstrumentsMatch } from
-  "@/lib/trader/execution/historical-execution-symbol";
+import { historicalInstrumentsMatch } from
+  "@/lib/trader/symbols/historical-instrument";
 import {
   issueForecastRuntimeV2,
   requireForecastRuntimeAuthorizedOutcomeV2,
@@ -40,7 +40,7 @@ export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input:
   if (outcome.authority.organizationId !== input.organizationId) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:ORGANIZATION");
   }
-  if (!historicalExecutionInstrumentsMatch(
+  if (!historicalInstrumentsMatch(
     input.symbol,
     outcome.issuance.package.family.symbol,
   )) {

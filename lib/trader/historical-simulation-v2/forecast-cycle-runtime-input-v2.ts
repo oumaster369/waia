@@ -22,8 +22,8 @@ import type { HypothesisSet } from
   "@/lib/trader/intelligence/hypothesis/hypothesis.types";
 import type { CanonicalRuntimeIntelligenceStateV1 } from
   "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
-import { historicalExecutionInstrumentsMatch } from
-  "@/lib/trader/execution/historical-execution-symbol";
+import { historicalInstrumentsMatch } from
+  "@/lib/trader/symbols/historical-instrument";
 import type {
   ScientificAdmissionExpectedBindingsV2,
   ScientificAdmissionReceiptV2,
@@ -138,8 +138,8 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:REALIZED_VOL");
   }
   if (
-    !historicalExecutionInstrumentsMatch(input.symbol, evaluation.features.instrumentId) ||
-    !historicalExecutionInstrumentsMatch(input.symbol, input.predictivePackage.family.symbol)
+    !historicalInstrumentsMatch(input.symbol, evaluation.features.instrumentId) ||
+    !historicalInstrumentsMatch(input.symbol, input.predictivePackage.family.symbol)
   ) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:SYMBOL_SCOPE");
   }

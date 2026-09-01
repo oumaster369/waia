@@ -3,8 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 
 import type postgres from "postgres";
 
-import { historicalExecutionInstrumentsMatch } from
-  "@/lib/trader/execution/historical-execution-symbol";
+import { historicalInstrumentsMatch } from
+  "@/lib/trader/symbols/historical-instrument";
 import { orgScopedPostgresPredicate } from "@/lib/waia-core/scope/org-context";
 
 import {
@@ -641,7 +641,7 @@ export async function persistForecastBundleV2(
   input: PersistForecastBundleV2Input,
 ): Promise<PersistForecastBundleV2Result> {
   if (
-    !historicalExecutionInstrumentsMatch(input.symbol, input.issuance.package.family.symbol) ||
+    !historicalInstrumentsMatch(input.symbol, input.issuance.package.family.symbol) ||
     input.symbol !== input.issuance.package.family.symbol
   ) {
     throw new Error(
