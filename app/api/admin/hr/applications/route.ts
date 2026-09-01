@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
-import { getOptionalSessionUserId } from "@/lib/auth/session-user";
+import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { listHrApplications } from "@/lib/waia-core/hr/service";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
@@ -9,7 +9,7 @@ import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const userId = await getOptionalSessionUserId();
+  const userId = await getOptionalAdminSessionUserId();
   if (!userId) return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
   let runtime;
   try {

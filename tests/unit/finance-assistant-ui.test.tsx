@@ -87,16 +87,52 @@ describe("Finance Assistant operator dialog", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Ask Finance" })[0]!);
 
-    const confirm = await screen.findByRole("button", { name: "Confirm and create" });
+    const confirm = await screen.findByRole("button", { name: "Confirm and apply" });
     expect(screen.getByTestId("finance-assistant")).not.toHaveTextContent(token);
     fireEvent.click(confirm);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("Created Project")).toBeInTheDocument();
+    expect(await screen.findByText("Completed: Project")).toBeInTheDocument();
     const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>;
     expect(calls[1]?.[0]).toBe("/api/admin/treasury/assistant/execute");
     expect(JSON.parse(String(calls[1]?.[1].body))).toEqual({
       organization_id: organizationId,
       confirmation_token: token,
     });
+  });
+
+  it("keeps context while asking for missing information in Russian", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          mode: "needs_input",
+          summary: "Нужны данные счета.",
+          question: "С какого счета списать средства?",
+          missingFields: ["accountName"],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          mode: "unsupported",
+          summary: "Контекст получен.",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FinanceAssistant />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask Finance" }));
+    fireEvent.change(screen.getByLabelText("Request"), {
+      target: { value: "Внеси расход 25 долларов" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Ask Finance" })[0]!);
+    expect(await screen.findByText("С какого счета списать средства?")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Request"), { target: { value: "Карта 0137" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Ask Finance" })[0]!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>;
+    const body = JSON.parse(String(calls[1]?.[1].body)) as { message: string };
+    expect(body.message).toContain("Внеси расход 25 долларов");
+    expect(body.message).toContain("Карта 0137");
   });
 });

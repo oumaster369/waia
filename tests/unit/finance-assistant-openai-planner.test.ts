@@ -27,6 +27,8 @@ describe("Finance Assistant OpenAI boundary", () => {
                 arguments: JSON.stringify({
                   intent: "REPORT_OVERVIEW",
                   summary: "Current overview",
+                  language: "en",
+                  question: null,
                   fields: fields(),
                 }),
               },

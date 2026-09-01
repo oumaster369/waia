@@ -44,15 +44,31 @@ function allowedNextStatuses(current: string, statuses: string[]) {
 }
 
 async function fetchHrData() {
-  const response = await fetch("/api/admin/hr/applications", { cache: "no-store" });
-  if (!response.ok) throw new Error("Could not load HR applications.");
-  return (await response.json()) as HrData;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch("/api/admin/hr/applications", {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("Could not load HR applications.");
+    return (await response.json()) as HrData;
+  } catch (cause) {
+    if (controller.signal.aborted) {
+      throw new Error("HR did not answer in time. Please retry.");
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function HrWorkspace() {
   const [data, setData] = useState<HrData | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [generation, setGeneration] = useState(0);
   useEffect(() => {
     let active = true;
     fetchHrData()
@@ -65,7 +81,7 @@ export function HrWorkspace() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [generation]);
 
   const rows = useMemo(
     () => data?.applications.filter((row) => filter === "ALL" || row.status === filter) ?? [],
@@ -106,7 +122,21 @@ export function HrWorkspace() {
           ))}
         </select>
       </div>
-      {error ? <p className="text-destructive text-sm">{error}</p> : null}
+      {error ? (
+        <WaiaSurface className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <p className="text-destructive text-sm">{error}</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setError("");
+              setGeneration((value) => value + 1);
+            }}
+          >
+            Retry
+          </Button>
+        </WaiaSurface>
+      ) : null}
       {rows.length === 0 ? (
         <WaiaSurface className="p-5 text-sm">No applications in this view.</WaiaSurface>
       ) : null}
