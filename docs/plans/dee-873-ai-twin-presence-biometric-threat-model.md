@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr, human-security-review]
 requiredValidation: [canon, security-review, diff-check, pr-governance]
 approvalGates: [plan-approved, human-dpia-vendor-retention-decision, human-merge]
 includedIssues: []
-state: { status: approved, currentWorkPackage: null, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2, WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: "DEE-130 must be merged and implementation explicitly started by the Human.", nextAction: "Prepare the threat/DPIA/vendor evidence packet; stop for Human decision before DEE-882." }
+state: { status: in_progress, currentWorkPackage: null, completedWorkPackages: [WP-1, WP-2, WP-3], remainingWorkPackages: [], prNumber: 542, prUrl: "https://github.com/oumaster369/waia/pull/542", lastValidatedGitSha: "77b842dfe36505221b6847466dfa6c51f53b8dd7", lastValidationAt: "2026-09-01", blockedReason: "Human review/merge and explicit D1-D5 presence/privacy decision are required before DEE-882.", nextAction: "Wait for PR #542 CI/review and the Human D1-D5 decision; do not activate or select biometric processing." }
 provenance: { createdFrom: ROADMAP-AI-TWIN, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -35,7 +35,12 @@ Present alternatives, residual risk, DARK-by-default activation and explicit go/
 - No face deduplication, emotion/personality inference or identity/uniqueness claim.
 - DEE-882 stays blocked until the Human records approval.
 
+## Safe-execution boundary
+
+- Base: `origin/main@8170dc3878d4cade59cc02422d2df022ee300c88`.
+- This batch is documentation/security-analysis only and owns no runtime, schema, migration, dependency, authentication, deployment or production surface.
+- AI-TRADER has unconditional priority. Any discovered overlap with its active work stops this batch rather than changing either program.
+
 ## Validation matrix
 
 `pnpm validate:canon`; `git diff --check`; security/privacy traceability review; PR governance.
-
