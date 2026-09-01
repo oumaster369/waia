@@ -33,8 +33,13 @@ import {
   assertHistoricalMarketCycleV2,
   type HistoricalSealedMarketCycleV2,
 } from "./modeled-execution-advance-v2";
-import { bindHistoricalCyclesToSealedDatasetV2, HISTORICAL_DATASET_MEMBERSHIP_V2,
-  type HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
+import {
+  bindHistoricalCyclesToPreHoldoutDatasetV2,
+  bindHistoricalCyclesToSealedDatasetV2,
+  HISTORICAL_DATASET_MEMBERSHIP_V2,
+  type HistoricalDatasetMembershipV2,
+  type HistoricalPreHoldoutDatasetMembershipV2,
+} from "./dataset-membership-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { requireForecastRuntimeAuthorizedOutcomeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import {
@@ -316,24 +321,36 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     datasetRoot: string; organizationId: string; runId: string;
     partition: "DEVELOPMENT" | "WALK_FORWARD"; symbol: "BTCUSDT" | "ETHUSDT";
     cycles: readonly HistoricalSealedMarketCycleV2[];
+    qualificationReceiptPath?: string;
+    releaseSha?: string;
   }>): Promise<ReadonlyMap<string, string>> {
-    const memberships = await bindHistoricalCyclesToSealedDatasetV2(input);
+    const memberships: ReadonlyMap<string,
+      HistoricalDatasetMembershipV2 | HistoricalPreHoldoutDatasetMembershipV2> =
+      input.qualificationReceiptPath
+        ? await bindHistoricalCyclesToPreHoldoutDatasetV2({ ...input,
+            qualificationReceiptPath: input.qualificationReceiptPath,
+            releaseSha: input.releaseSha ?? "" })
+        : await bindHistoricalCyclesToSealedDatasetV2(input);
     return sql.begin("isolation level serializable", async (transaction) => {
       const tx = transaction as unknown as postgres.Sql;
       const ids = new Map<string, string>();
       for (const cycle of input.cycles) {
         const membership = memberships.get(cycle.cycleId);
         if (!membership) throw new Error("HISTORICAL_DATASET_AUTHORITY_MISSING_MEMBERSHIP");
+        const datasetAuthorityDigestHex = membership.datasetAuthorityDigestHex ??
+          ("sealReceiptDigestHex" in membership ? membership.sealReceiptDigestHex : undefined);
+        if (!datasetAuthorityDigestHex) throw new Error("HISTORICAL_DATASET_AUTHORITY_MISSING_DIGEST");
         const body = { organizationId: input.organizationId, runId: input.runId,
           membership, sealedCycle: cycle };
         const authorityDigest = computeStableJsonDigest(body);
         const inserted = await tx<{ id: string }[]>`
         INSERT INTO trader_historical_dataset_authority_v2 (
-          organization_id, run_id, cycle_id, dataset_seal_digest_hex,
+          organization_id, run_id, cycle_id, dataset_authority_class, dataset_authority_digest_hex,
           membership_content_digest_hex, sealed_cycle_content_digest_hex,
           membership_json, sealed_cycle_json, authority_content_digest_hex, schema_version
         ) VALUES (
-          ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId}, ${membership.sealReceiptDigestHex},
+          ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId},
+          ${membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2"}, ${datasetAuthorityDigestHex},
           ${membership.contentDigestHex}, ${cycle.contentDigestHex},
           ${tx.json(JSON.parse(JSON.stringify(membership)) as postgres.JSONValue)},
           ${tx.json(JSON.parse(JSON.stringify(cycle)) as postgres.JSONValue)},
@@ -358,7 +375,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     policyConfig: HistoricalPolicyConfigV2; defaultQuantity: string;
     initialAccountingFrontierId: string;
   }>): Promise<Readonly<{ preregistrationId: string; authorities: ExecutionAuthorities;
-    datasetSealDigestHex: string }>> {
+    datasetAuthorityDigestHex: string }>> {
     if (transactionalPreregistration) {
       return sql.begin("isolation level serializable", (tx) =>
         createCanonicalDecisionVerificationReceiptServiceInternalV2(
@@ -367,8 +384,11 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         ).preregisterExecution(input));
     }
     const datasetRows = await sql<{ membership_json: HistoricalDatasetMembershipV2;
-      sealed_cycle_json: HistoricalSealedMarketCycleV2; authority_content_digest_hex: string }[]>`
-      SELECT membership_json, sealed_cycle_json, authority_content_digest_hex
+      sealed_cycle_json: HistoricalSealedMarketCycleV2; authority_content_digest_hex: string;
+      dataset_authority_class: "FULL_SEALED_DATASET_V2" | "PRE_HOLDOUT_QUALIFICATION_V1";
+      dataset_authority_digest_hex: string }[]>`
+      SELECT membership_json, sealed_cycle_json, authority_content_digest_hex,
+             dataset_authority_class, dataset_authority_digest_hex
       FROM trader_historical_dataset_authority_v2
       WHERE id=${input.datasetAuthorityId}::uuid AND organization_id=${input.organizationId}::uuid
         AND run_id=${input.runId} AND cycle_id=${input.cycleId}
@@ -381,6 +401,9 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:DATASET_AUTHORITY");
     }
     const membership = dataset.membership_json;
+    const datasetAuthorityClass = membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2";
+    const datasetAuthorityDigestHex = membership.datasetAuthorityDigestHex ??
+      ("sealReceiptDigestHex" in membership ? membership.sealReceiptDigestHex : undefined);
     const sealedCycle = dataset.sealed_cycle_json;
     assertHistoricalMarketCycleV2(sealedCycle, input.cycleId);
     const membershipBody = { ...membership } as Record<string, unknown>;
@@ -391,7 +414,9 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         membership.cycleId !== sealedCycle.cycleId ||
         membership.sealedCycleContentDigestHex !== sealedCycle.contentDigestHex ||
         membership.barContentDigestHex !== computeBarContentDigest(sealedCycle.closedBar) ||
-        !input.initialAccountingFrontierId.trim()) {
+        datasetAuthorityClass !== dataset.dataset_authority_class ||
+        datasetAuthorityDigestHex !== dataset.dataset_authority_digest_hex ||
+        !datasetAuthorityDigestHex || !input.initialAccountingFrontierId.trim()) {
       throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:SOURCE_BINDING");
     }
     const accountingRows = await sql<Record<string, unknown>[]>`
@@ -454,7 +479,8 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       baseAsset: symbol.endsWith("USDT") ? symbol.slice(0, -4) : symbol, quoteAsset: "USDT" as const };
     const binding = { ...identity, instrumentIdentityDigestHex: computeDee659InstrumentIdentityDigestV1(identity) };
     const qualificationReceiptDigestHex = computeStableJsonDigest({
-      source: "SEALED_DATASET_BAR", sealedCycleContentDigestHex: sealedCycle.contentDigestHex,
+      source: "DATASET_AUTHORITY_BAR", datasetAuthorityClass, datasetAuthorityDigestHex,
+      sealedCycleContentDigestHex: sealedCycle.contentDigestHex,
       datasetMembershipContentDigestHex: membership.contentDigestHex,
       forecastAuthorityContentDigestHex: forecast.authority.contentDigestHex,
     });
@@ -465,7 +491,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       forecastAnchorClosePrice: close, qualifiedAnchorClosePrice: close,
       qualificationReceiptDigestHex });
     const policyEvidence = { policyConfig: input.policyConfig, binding,
-      datasetSealReceiptDigestHex: membership.sealReceiptDigestHex };
+      datasetAuthorityClass, datasetAuthorityDigestHex };
     const policyConfigDigestHex = computeStableJsonDigest(input.policyConfig);
     await sql`
       INSERT INTO trader_historical_simulation_policy_config_v2 (
@@ -533,12 +559,12 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     const rows = await sql<{ id: string }[]>`
       INSERT INTO trader_dee659_authority_preregistration_v2 (
         organization_id, account_id, run_id, cycle_id, forecast_id, instrument_identity_digest_hex, dataset_authority_id,
-        dataset_seal_digest_hex, policy_config_digest_hex, anchor_subject_digest_hex, policy_subject_digest_hex,
+        dataset_authority_digest_hex, policy_config_digest_hex, anchor_subject_digest_hex, policy_subject_digest_hex,
         size_subject_digest_hex, cash_subject_digest_hex, authority_bundle_json,
         authority_bundle_digest_hex, effective_market_from, schema_version
       ) VALUES (
         ${a.organizationId}::uuid, ${a.accountId}, ${input.runId}, ${input.cycleId}, ${input.forecastId}::uuid,
-        ${a.instrumentIdentityDigestHex}, ${input.datasetAuthorityId}::uuid, ${membership.sealReceiptDigestHex}, ${policyConfigDigestHex}, ${a.contentDigestHex},
+        ${a.instrumentIdentityDigestHex}, ${input.datasetAuthorityId}::uuid, ${datasetAuthorityDigestHex}, ${policyConfigDigestHex}, ${a.contentDigestHex},
         ${authorities.executablePolicy.contentDigestHex}, ${authorities.economicSize.contentDigestHex},
         ${authorities.cash.contentDigestHex}, ${sql.json(JSON.parse(JSON.stringify(body)) as postgres.JSONValue)},
         ${bundleDigest}, ${sealedCycle.closedBar.barCloseTime}::timestamptz,
@@ -547,7 +573,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         DO NOTHING RETURNING id::text
     `;
     if (rows[0]) return Object.freeze({ preregistrationId: rows[0].id, authorities,
-      datasetSealDigestHex: membership.sealReceiptDigestHex });
+      datasetAuthorityDigestHex });
     const existing = await sql<{ id: string }[]>`
       SELECT id::text FROM trader_dee659_authority_preregistration_v2
       WHERE organization_id=${a.organizationId}::uuid AND account_id=${a.accountId}
@@ -556,12 +582,12 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     `;
     if (!existing[0]) throw new Error("CANONICAL_DECISION_PREREGISTRATION_CONFLICT");
     return Object.freeze({ preregistrationId: existing[0].id, authorities,
-      datasetSealDigestHex: membership.sealReceiptDigestHex });
+      datasetAuthorityDigestHex });
   }
 
   async function issueExecution(input: Readonly<{
     preregistrationId: string; organizationId: string; accountId: string; runId: string;
-    forecastId: string; datasetSealDigestHex: string; pitAnchor: string;
+    forecastId: string; datasetAuthorityDigestHex: string; pitAnchor: string;
     subjectContentDigestHex: Readonly<{ anchor: string; executablePolicy: string; economicSize: string; cash: string }>;
   }>) {
     const rows = await sql<{ authority_bundle_json: { authorities: ExecutionAuthorities };
@@ -571,11 +597,11 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       JOIN trader_historical_simulation_run_start_v2 rs
         ON rs.organization_id=p.organization_id AND rs.run_id=p.run_id
        AND rs.account_id=p.account_id
-       AND rs.dataset_seal_digest_hex=p.dataset_seal_digest_hex
+       AND rs.dataset_authority_digest_hex=p.dataset_authority_digest_hex
        AND rs.policy_config_digest_hex=p.policy_config_digest_hex
       WHERE p.id=${input.preregistrationId}::uuid AND p.organization_id=${input.organizationId}::uuid
         AND p.account_id=${input.accountId} AND p.run_id=${input.runId} AND p.forecast_id=${input.forecastId}::uuid
-        AND p.dataset_seal_digest_hex=${input.datasetSealDigestHex}
+        AND p.dataset_authority_digest_hex=${input.datasetAuthorityDigestHex}
         AND p.anchor_subject_digest_hex=${input.subjectContentDigestHex.anchor}
         AND p.policy_subject_digest_hex=${input.subjectContentDigestHex.executablePolicy}
         AND p.size_subject_digest_hex=${input.subjectContentDigestHex.economicSize}
@@ -638,35 +664,35 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
 
   async function startRun(input: Readonly<{
     organizationId: string; accountId: string; runId: string; preregistrationId: string;
-    datasetSealDigestHex: string;
+    datasetAuthorityDigestHex: string;
   }>): Promise<void> {
     const prereg = await sql<{ policy_config_digest_hex: string }[]>`
       SELECT policy_config_digest_hex
       FROM trader_dee659_authority_preregistration_v2
       WHERE id=${input.preregistrationId}::uuid AND organization_id=${input.organizationId}::uuid
         AND account_id=${input.accountId} AND run_id=${input.runId}
-        AND dataset_seal_digest_hex=${input.datasetSealDigestHex}
+        AND dataset_authority_digest_hex=${input.datasetAuthorityDigestHex}
       FOR SHARE
     `;
     if (!prereg[0]) throw new Error("HISTORICAL_SIMULATION_RUN_START_PREREGISTRATION_MISMATCH");
     await sql`
       INSERT INTO trader_historical_simulation_run_start_v2 (
-        organization_id, run_id, account_id, dataset_seal_digest_hex,
+        organization_id, run_id, account_id, dataset_authority_digest_hex,
         policy_config_digest_hex, initial_dee659_preregistration_id, schema_version
       ) VALUES (
-        ${input.organizationId}::uuid, ${input.runId}, ${input.accountId}, ${input.datasetSealDigestHex},
+        ${input.organizationId}::uuid, ${input.runId}, ${input.accountId}, ${input.datasetAuthorityDigestHex},
         ${prereg[0].policy_config_digest_hex}, ${input.preregistrationId}::uuid,
         'waia.trader.historical_simulation_run_start.v2'
       ) ON CONFLICT (organization_id, run_id) DO NOTHING
     `;
-    const rows = await sql<{ account_id: string; dataset_seal_digest_hex: string;
+    const rows = await sql<{ account_id: string; dataset_authority_digest_hex: string;
       policy_config_digest_hex: string }[]>`
-      SELECT account_id, dataset_seal_digest_hex, policy_config_digest_hex
+      SELECT account_id, dataset_authority_digest_hex, policy_config_digest_hex
       FROM trader_historical_simulation_run_start_v2
       WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
     `;
     if (!rows[0] || rows[0].account_id !== input.accountId ||
-        rows[0].dataset_seal_digest_hex !== input.datasetSealDigestHex ||
+        rows[0].dataset_authority_digest_hex !== input.datasetAuthorityDigestHex ||
         rows[0].policy_config_digest_hex !== prereg[0].policy_config_digest_hex) {
       throw new Error("HISTORICAL_SIMULATION_RUN_START_CONFLICT");
     }
@@ -742,7 +768,7 @@ export function createPostgresCanonicalDecisionVerificationReceiptPortV2(
             AND r.dee659_preregistration_id=${value.dee659PreregistrationId}::uuid
             AND r.source_record_id=${value.dee659PreregistrationId}
             AND r.forecast_id=${value.forecastId}::uuid
-            AND p.run_id=${value.runId} AND p.dataset_seal_digest_hex=${value.datasetSealDigestHex}
+            AND p.run_id=${value.runId} AND p.dataset_authority_digest_hex=${value.datasetAuthorityDigestHex}
             AND r.pit_anchor=${value.pitAnchor}::timestamptz
             AND r.schema_version=${CANONICAL_DECISION_VERIFICATION_RECEIPT_V2}
             AND r.verifier_version=${VERIFIER_VERSION}

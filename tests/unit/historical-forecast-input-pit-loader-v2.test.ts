@@ -55,7 +55,7 @@ const row = (patch: Record<string, unknown> = {}) => {
  const base = {
   organization_id: "org", run_id: "run", cycle_id: "cycle", forecast_id: "forecast", symbol: "BTCUSDT",
   forecast_target_role_id: "EXECUTION_OPPORTUNITY", forecast_content_digest_hex: "f".repeat(64),
-  bundle_id: "bundle", runtime_input_source_id: "source", dataset_seal_digest_hex: "2".repeat(64),
+  bundle_id: "bundle", runtime_input_source_id: "source", dataset_authority_digest_hex: "2".repeat(64),
   verifier_build_digest_hex: computeSemanticSha256Hex({ verifierVersion:
     "waia.forecast-runtime-input-source.verifier.v2", sourceSha: "1".repeat(40) }),
   partition: "DEVELOPMENT", record_index: 0, dataset_membership_content_digest_hex: datasetMembership.contentDigestHex,
@@ -79,7 +79,7 @@ const row = (patch: Record<string, unknown> = {}) => {
    forecastTargetRoleId: merged.forecast_target_role_id,
    forecastContentDigestHex: merged.forecast_content_digest_hex,
    runtimeInputSourceId: merged.runtime_input_source_id, datasetAuthorityId: merged.dataset_authority_id,
-   datasetSealDigestHex: merged.dataset_seal_digest_hex, datasetMembership: merged.dataset_membership_json,
+   datasetAuthorityDigestHex: merged.dataset_authority_digest_hex, datasetMembership: merged.dataset_membership_json,
    symbol: merged.symbol, pitAnchor: merged.pit_anchor, visibleFrom: merged.visible_from,
    knowledgeContentDigestHex: merged.knowledge_content_digest_hex,
    forecastAuthorityContentDigestHex: merged.forecast_authority_content_digest_hex,

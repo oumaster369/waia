@@ -445,7 +445,7 @@ async function verifyCommitRequestSources(sql: postgres.Sql, request: Historical
     FROM trader_dee659_authority_preregistration_v2 p
     JOIN trader_historical_dataset_authority_v2 d
       ON d.id=p.dataset_authority_id AND d.organization_id=p.organization_id AND d.run_id=p.run_id
-     AND d.cycle_id=p.cycle_id AND d.dataset_seal_digest_hex=p.dataset_seal_digest_hex
+     AND d.cycle_id=p.cycle_id AND d.dataset_authority_digest_hex=p.dataset_authority_digest_hex
     JOIN trader_historical_simulation_policy_config_v2 c
       ON c.organization_id=p.organization_id AND c.run_id=p.run_id
      AND c.policy_config_digest_hex=p.policy_config_digest_hex
@@ -1105,7 +1105,7 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
       FROM trader_dee659_authority_preregistration_v2
       WHERE id=${source.dee659PreregistrationId}::uuid AND organization_id=${scope.organizationId}::uuid
         AND account_id=${scope.accountId} AND run_id=${scope.runId} AND cycle_id=${source.sealedCycle.cycleId}
-        AND dataset_seal_digest_hex=${source.datasetSealDigestHex} FOR SHARE`;
+        AND dataset_authority_digest_hex=${source.datasetAuthorityDigestHex} FOR SHARE`;
     if (prereg.length !== 1 || prereg[0]!.authority_bundle_digest_hex !== source.dee659BundleContentDigestHex) {
       throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:PREREGISTRATION_IDENTITY");
     }

@@ -99,7 +99,7 @@ describe("historical simulation production stage builder v2", () => {
     expect(submittedWithoutPriorOrderEffect.OBSERVED_EXECUTION_EFFECTS[0].sourcePayload)
       .toEqual({ effects: [] });
     const scope = { organizationId: id("11"), accountId: "account", runId: "run",
-      split: "DEVELOPMENT" as const, datasetSealDigestHex: d("9") };
+      split: "DEVELOPMENT" as const, datasetAuthorityDigestHex: d("9") };
     for (const artifact of [...modeled.MODELED_RISK, ...modeled.MODELED_EXECUTION,
       ...modeled.OBSERVED_EXECUTION_EFFECTS]) {
       expect(() => validateHistoricalSimulationModeledAtomicArtifactV2(scope, "cycle-1", { artifactKind: artifact.artifactKind,

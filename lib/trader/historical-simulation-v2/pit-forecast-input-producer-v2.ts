@@ -35,7 +35,7 @@ export type HistoricalForecastInputPitRecordV2 = Readonly<{
   bundleId: string;
   runtimeInputSourceId: string;
   datasetAuthorityId: string;
-  datasetSealDigestHex: string;
+  datasetAuthorityDigestHex: string;
   datasetMembership: HistoricalDatasetMembershipV2;
   symbol: "BTCUSDT" | "ETHUSDT";
   pitAnchor: string;
@@ -181,9 +181,9 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId} FOR SHARE
     `;
     if (runRows.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUN_BOUNDARY");
-    const datasets = await sql<{ membership_json: HistoricalDatasetMembershipV2; dataset_seal_digest_hex: string;
+    const datasets = await sql<{ membership_json: HistoricalDatasetMembershipV2; dataset_authority_digest_hex: string;
       authority_content_digest_hex: string; sealed_cycle_json: unknown }[]>`
-      SELECT membership_json, dataset_seal_digest_hex, authority_content_digest_hex, sealed_cycle_json
+      SELECT membership_json, dataset_authority_digest_hex, authority_content_digest_hex, sealed_cycle_json
       FROM trader_historical_dataset_authority_v2
       WHERE id=${input.datasetAuthorityId}::uuid AND organization_id=${input.organizationId}::uuid
         AND run_id=${input.runId} AND cycle_id=${input.cycleId}
@@ -342,7 +342,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       forecastTargetRoleId: "EXECUTION_OPPORTUNITY" as const,
       forecastContentDigestHex: forecast.forecast_content_digest,
       bundleId: source.bundle_id, runtimeInputSourceId: source.id,
-      datasetAuthorityId: input.datasetAuthorityId, datasetSealDigestHex: dataset.dataset_seal_digest_hex,
+      datasetAuthorityId: input.datasetAuthorityId, datasetAuthorityDigestHex: dataset.dataset_authority_digest_hex,
       symbol: input.symbol, pitAnchor: input.pitAnchor,
       visibleFrom: input.pitAnchor, knowledgeContentDigestHex,
       forecastAuthorityContentDigestHex: outcome.authority.contentDigestHex,
@@ -355,7 +355,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       INSERT INTO trader_historical_forecast_input_pit_v2 (
         organization_id, run_id, cycle_id, forecast_id, bundle_id,
         forecast_target_role_id, forecast_content_digest, runtime_input_source_id,
-        dataset_authority_id, dataset_seal_digest_hex, symbol, partition, record_index,
+        dataset_authority_id, dataset_authority_digest_hex, symbol, partition, record_index,
         dataset_membership_content_digest_hex, dataset_membership_json, pit_anchor, visible_from,
         knowledge_content_digest_hex, forecast_authority_content_digest_hex,
         runtime_input_content_digest_hex, verifier_build_digest_hex,
@@ -365,7 +365,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         ${source.bundle_id}::uuid, ${record.forecastTargetRoleId},
         ${Buffer.from(record.forecastContentDigestHex, "hex")}, ${source.id}::uuid,
         ${input.datasetAuthorityId}::uuid,
-        ${dataset.dataset_seal_digest_hex},
+        ${dataset.dataset_authority_digest_hex},
         ${record.symbol}, ${record.datasetMembership.partition}, ${record.datasetMembership.recordIndex},
         ${record.datasetMembership.contentDigestHex}, ${sql.json(JSON.parse(JSON.stringify(record.datasetMembership)) as postgres.JSONValue)},
         ${record.pitAnchor}::timestamptz, ${record.visibleFrom}::timestamptz,

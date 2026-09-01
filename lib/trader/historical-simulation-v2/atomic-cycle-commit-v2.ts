@@ -115,8 +115,8 @@ export type HistoricalSimulationAtomicStageBundlesV2 = Readonly<Record<
 >>;
 
 export type HistoricalSimulationDatasetAuthorityV2 = Readonly<{
-  manifestSemanticDigestHex: string;
-  sealReceiptDigestHex: string;
+  authorityClass: "FULL_SEALED_DATASET_V2" | "PRE_HOLDOUT_QUALIFICATION_V1";
+  authorityDigestHex: string;
   partitionDigestHex: string;
   partitionRawSha256Hex: string;
   split: HistoricalSimulationPreHoldoutPartitionV2;
@@ -399,8 +399,9 @@ export function loadValidatedHistoricalSimulationLedgerHeadV2(
 
 function datasetAuthority(membership: HistoricalDatasetMembershipV2): HistoricalSimulationDatasetAuthorityV2 {
   return Object.freeze({
-    manifestSemanticDigestHex: membership.manifestSemanticDigestHex,
-    sealReceiptDigestHex: membership.sealReceiptDigestHex,
+    authorityClass: membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2",
+    authorityDigestHex: membership.datasetAuthorityDigestHex ??
+      ("sealReceiptDigestHex" in membership ? membership.sealReceiptDigestHex : ""),
     partitionDigestHex: membership.partitionDigestHex,
     partitionRawSha256Hex: membership.partitionRawSha256Hex,
     split: membership.partition,
@@ -412,8 +413,8 @@ function sameDatasetAuthority(
   left: HistoricalSimulationDatasetAuthorityV2,
   right: HistoricalSimulationDatasetAuthorityV2,
 ): boolean {
-  return left.manifestSemanticDigestHex === right.manifestSemanticDigestHex &&
-    left.sealReceiptDigestHex === right.sealReceiptDigestHex &&
+  return left.authorityClass === right.authorityClass &&
+    left.authorityDigestHex === right.authorityDigestHex &&
     left.partitionDigestHex === right.partitionDigestHex &&
     left.partitionRawSha256Hex === right.partitionRawSha256Hex &&
     left.split === right.split && left.symbol === right.symbol;
@@ -453,11 +454,14 @@ export function validateHistoricalSimulationResumeCursorV2(
   for (const [value, field] of [
     [cursor.ledgerHeadContentDigestHex, "ledgerHeadContentDigestHex"],
     [cursor.knowledgeCheckpointContentDigestHex, "knowledgeCheckpointContentDigestHex"],
-    [cursor.datasetAuthority.manifestSemanticDigestHex, "manifestSemanticDigestHex"],
-    [cursor.datasetAuthority.sealReceiptDigestHex, "sealReceiptDigestHex"],
+    [cursor.datasetAuthority.authorityDigestHex, "authorityDigestHex"],
     [cursor.datasetAuthority.partitionDigestHex, "partitionDigestHex"],
     [cursor.datasetAuthority.partitionRawSha256Hex, "partitionRawSha256Hex"],
   ] as const) requireDigest(value, field);
+  if (cursor.datasetAuthority.authorityClass !== "FULL_SEALED_DATASET_V2" &&
+      cursor.datasetAuthority.authorityClass !== "PRE_HOLDOUT_QUALIFICATION_V1") {
+    throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:DATASET_AUTHORITY_CLASS");
+  }
   for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) {
     requireDigest(cursor.cycleStageBundleDigestHexByStage[stage], `stageBundle.${stage}`);
   }

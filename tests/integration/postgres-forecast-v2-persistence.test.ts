@@ -21,6 +21,7 @@ import {
 import type { ReplicaRootFamilyInput } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { digestHex } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { scoreForecastV2MulticlassObservation } from "@/lib/trader/intelligence/calibration/calibration-scorer";
 import { persistForecastV2TerminalClosurePostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
@@ -64,6 +65,7 @@ import type { Bar } from "@/lib/trader/intelligence/types";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 import { barToFhvBarsV2Record, serializeFhvBarsV2Record } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
 import { computeFhvFileRawSha256, sealFhvV2Dataset, writeFhvAcquisitionReceipt } from "@/lib/trader/market-data/fhv-dataset-seal";
+import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import { FHV_OFFICIAL_PARTITION_NAMES, FHV_OFFICIAL_SYMBOLS, fhvOfficialPartitionFileRelativePath,
   resolveFhvCanonicalPartitionInterval } from "@/lib/trader/market-data/fhv-partition-boundaries";
 import { sealHistoricalMarketCycleV2 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
@@ -1051,7 +1053,7 @@ describe.skipIf(!integrationEnabled || !url)(
       expect(rolledBackRows[0]).toEqual({ outcome_count: "0", calibration_count: "0" });
     });
 
-    it("closes a sealed Forecast-V2 issuance through the real runBacktest caller", async () => {
+    it("closes a pre-holdout-authorized Forecast-V2 issuance through the real runBacktest caller", async () => {
       const session = await createInMemoryResearchBacktestSession();
       try {
         const db = getDb();
@@ -1194,8 +1196,32 @@ describe.skipIf(!integrationEnabled || !url)(
         const datasetRoot = createCanonicalDatasetFixture(orgId, [issuanceBar, secondIssuanceBar]);
         try {
           const verification = createCanonicalDecisionVerificationReceiptServiceV2(sql);
-          const datasetIds = await verification.registerDatasetAuthority({ datasetRoot, organizationId: orgId,
-            runId: "dee633-real-backtest", partition: "DEVELOPMENT", symbol: "BTCUSDT", cycles: [cycle, secondCycle] });
+          const qualificationDigest = "9".repeat(64);
+          const datasetIds = new Map<string, string>();
+          for (const currentCycle of [cycle, secondCycle]) {
+            const membershipBody = { schemaVersion: "waia.trader.historical_dataset_membership.v2",
+              organizationId: orgId, cycleId: currentCycle.cycleId,
+              datasetAuthorityClass: "PRE_HOLDOUT_QUALIFICATION_V1",
+              datasetAuthorityDigestHex: qualificationDigest,
+              qualificationReceiptDigestHex: qualificationDigest,
+              partitionDigestHex: "7".repeat(64), partitionRawSha256Hex: "8".repeat(64),
+              partition: "DEVELOPMENT", symbol: "BTCUSDT", recordIndex: currentCycle.barIndex,
+              barContentDigestHex: computeBarContentDigest(currentCycle.closedBar),
+              sealedCycleContentDigestHex: currentCycle.contentDigestHex };
+            const membership = { ...membershipBody,
+              contentDigestHex: computeSemanticSha256Hex(membershipBody) };
+            const authorityContentDigestHex = computeStableJsonDigest({ organizationId: orgId,
+              runId: "dee633-real-backtest", membership, sealedCycle: currentCycle });
+            const inserted = await sql<{ id: string }[]>`INSERT INTO trader_historical_dataset_authority_v2 (
+              organization_id, run_id, cycle_id, dataset_authority_class, dataset_authority_digest_hex,
+              membership_content_digest_hex, sealed_cycle_content_digest_hex, membership_json,
+              sealed_cycle_json, authority_content_digest_hex, schema_version
+            ) VALUES (${orgId}::uuid, 'dee633-real-backtest', ${currentCycle.cycleId},
+              'PRE_HOLDOUT_QUALIFICATION_V1', ${qualificationDigest}, ${membership.contentDigestHex},
+              ${currentCycle.contentDigestHex}, ${sql.json(membership)}, ${sql.json(currentCycle)},
+              ${authorityContentDigestHex}, 'waia.trader.historical_dataset_authority.v2') RETURNING id::text`;
+            datasetIds.set(currentCycle.cycleId, inserted[0]!.id);
+          }
           const datasetAuthorityId = datasetIds.get(cycle.cycleId)!;
           const state = createInitialAccountingState({ organizationId: orgId,
             accountKey: "dee633-real", runId: "dee633-real-backtest", frontierAsOf: issuanceBar.barCloseTime });
@@ -1218,9 +1244,16 @@ describe.skipIf(!integrationEnabled || !url)(
             runId: "dee633-real-backtest", forecastId: issued[0]!.forecast_id,
             datasetAuthorityId, cycleId: cycle.cycleId, policyConfig, defaultQuantity: "0.1",
             initialAccountingFrontierId: frontier.id });
+          expect(prereg.datasetAuthorityDigestHex).toBe(qualificationDigest);
+          const preregEvidence = await sql<{ dataset_authority_digest_hex: string; authority_bundle_json: Record<string, unknown> }[]>`
+            SELECT dataset_authority_digest_hex, authority_bundle_json
+            FROM trader_dee659_authority_preregistration_v2 WHERE id=${prereg.preregistrationId}::uuid`;
+          expect(preregEvidence[0]!.dataset_authority_digest_hex).toBe(qualificationDigest);
+          expect(JSON.stringify(preregEvidence[0]!.authority_bundle_json)).toContain("PRE_HOLDOUT_QUALIFICATION_V1");
+          expect(JSON.stringify(preregEvidence[0]!.authority_bundle_json)).not.toContain("sealReceiptDigestHex");
           await verification.startRun({ organizationId: orgId, accountId: "dee633-real",
             runId: "dee633-real-backtest", preregistrationId: prereg.preregistrationId,
-            datasetSealDigestHex: prereg.datasetSealDigestHex });
+            datasetAuthorityDigestHex: prereg.datasetAuthorityDigestHex });
           await verification.issueForecast({ organizationId: orgId, forecastId: issued[0]!.forecast_id,
             subjectContentDigestHex: issued[0]!.authority_digest });
           await verification.issueScientific({ organizationId: orgId, runId: "dee633-real-backtest",
@@ -1228,7 +1261,7 @@ describe.skipIf(!integrationEnabled || !url)(
             scientificAdmissionContentDigestHex: scientific.contentDigestHex });
           const executionPayoffVerification = await verification.issueExecution({ preregistrationId: prereg.preregistrationId,
             organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
-            forecastId: issued[0]!.forecast_id, datasetSealDigestHex: prereg.datasetSealDigestHex,
+            forecastId: issued[0]!.forecast_id, datasetAuthorityDigestHex: prereg.datasetAuthorityDigestHex,
             pitAnchor: issuanceBar.barCloseTime, subjectContentDigestHex: {
               anchor: prereg.authorities.anchor.contentDigestHex,
               executablePolicy: prereg.authorities.executablePolicy.contentDigestHex,
@@ -1251,7 +1284,7 @@ describe.skipIf(!integrationEnabled || !url)(
             organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
             cycleId: cycle.cycleId, forecastId: issued[0]!.forecast_id,
             forecastAuthorityContentDigestHex: issued[0]!.authority_digest,
-            datasetSealDigestHex: prereg.datasetSealDigestHex,
+            datasetAuthorityDigestHex: prereg.datasetAuthorityDigestHex,
             dee659PreregistrationId: prereg.preregistrationId, pitAnchor: issuanceBar.barCloseTime,
             forecastIssuanceReceiptDigestHex: issuance[0]!.digest,
             forecastVerificationReceiptDigestHex: forecastVerification.verificationReceiptDigestHex,
@@ -1300,7 +1333,7 @@ describe.skipIf(!integrationEnabled || !url)(
             forecastId: issued[1]!.forecast_id, scientificAdmissionContentDigestHex: scientific.contentDigestHex });
           const secondExecutionVerification = await verification.issueExecution({ preregistrationId: secondPrereg.preregistrationId,
             organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
-            forecastId: issued[1]!.forecast_id, datasetSealDigestHex: secondPrereg.datasetSealDigestHex,
+            forecastId: issued[1]!.forecast_id, datasetAuthorityDigestHex: secondPrereg.datasetAuthorityDigestHex,
             pitAnchor: secondIssuanceBar.barCloseTime, subjectContentDigestHex: {
               anchor: secondPrereg.authorities.anchor.contentDigestHex,
               executablePolicy: secondPrereg.authorities.executablePolicy.contentDigestHex,
@@ -1318,7 +1351,7 @@ describe.skipIf(!integrationEnabled || !url)(
             organizationId: orgId, accountId: "dee633-real", runId: "dee633-real-backtest",
             cycleId: secondCycle.cycleId, forecastId: issued[1]!.forecast_id,
             forecastAuthorityContentDigestHex: issued[1]!.authority_digest,
-            datasetSealDigestHex: secondPrereg.datasetSealDigestHex,
+            datasetAuthorityDigestHex: secondPrereg.datasetAuthorityDigestHex,
             dee659PreregistrationId: secondPrereg.preregistrationId, pitAnchor: secondIssuanceBar.barCloseTime,
             forecastIssuanceReceiptDigestHex: secondIssuance[0]!.digest,
             forecastVerificationReceiptDigestHex: secondForecastVerification.verificationReceiptDigestHex,
@@ -1344,8 +1377,8 @@ describe.skipIf(!integrationEnabled || !url)(
           expect(datasetParity[0]!.volume_receipt).toEqual(modeledReceipt);
           const nextMembership = datasetParity[0]!.next_membership as Record<string, unknown>;
           expect(datasetParity[0]!.previous_authority).toEqual({
-            manifestSemanticDigestHex: nextMembership.manifestSemanticDigestHex,
-            sealReceiptDigestHex: nextMembership.sealReceiptDigestHex,
+            authorityClass: nextMembership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2",
+            authorityDigestHex: nextMembership.datasetAuthorityDigestHex ?? nextMembership.sealReceiptDigestHex,
             partitionDigestHex: nextMembership.partitionDigestHex,
             partitionRawSha256Hex: nextMembership.partitionRawSha256Hex,
             split: nextMembership.partition,

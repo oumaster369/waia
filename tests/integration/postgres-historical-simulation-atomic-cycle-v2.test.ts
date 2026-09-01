@@ -22,7 +22,8 @@ function fixture(runId: string) {
     split: "DEVELOPMENT" };
   const cycleId = `${runId}:cycle:0`;
   const membershipBody = { schemaVersion: HISTORICAL_DATASET_MEMBERSHIP_V2, organizationId, cycleId,
-    manifestSemanticDigestHex: "1".repeat(64), sealReceiptDigestHex: "2".repeat(64),
+    datasetAuthorityClass: "PRE_HOLDOUT_QUALIFICATION_V1" as const,
+    datasetAuthorityDigestHex: "2".repeat(64), qualificationReceiptDigestHex: "2".repeat(64),
     partitionDigestHex: "3".repeat(64), partitionRawSha256Hex: "4".repeat(64), partition: "DEVELOPMENT" as const,
     symbol: "BTCUSDT" as const, recordIndex: 0, barContentDigestHex: "5".repeat(64),
     sealedCycleContentDigestHex: "6".repeat(64) };

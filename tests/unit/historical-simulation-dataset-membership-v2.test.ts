@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import { barToFhvBarsV2Record, serializeFhvBarsV2Record } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
 import { StreamingBarSetDigestHasher } from "@/lib/trader/market-data/fhv-streaming-bar-set-digest";
-import { bindHistoricalCyclesToSealedDatasetV2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
+import {
+  bindHistoricalCyclesToPreHoldoutDatasetV2,
+  bindHistoricalCyclesToSealedDatasetV2,
+} from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 import type { HistoricalSealedMarketCycleV2 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
 
 const digest = (c: string) => c.repeat(64);
@@ -20,10 +23,17 @@ for (const value of bars) semantic.appendBarDigest(computeBarContentDigest(value
 const semanticDigest = semantic.finalize();
 const rawHash = digest("a");
 
-const mocked = vi.hoisted(() => ({ computeRaw: vi.fn(), sealed: {} as any }));
+const mocked = vi.hoisted(() => ({ computeRaw: vi.fn(), sealed: {} as any, preHoldout: {} as any }));
 vi.mock("@/lib/trader/market-data/fhv-dataset-seal", () => ({
   computeFhvFileRawSha256: mocked.computeRaw,
   assertFhvDatasetSealed: () => mocked.sealed,
+}));
+vi.mock("@/lib/trader/market-data/fhv-pre-holdout-qualification", () => ({
+  readFhvPreHoldoutQualificationReceipt: () => mocked.preHoldout,
+  assertFhvPreHoldoutQualificationPass: (receipt: { classification: string }) => {
+    if (receipt.classification !== "PRE_HOLDOUT_QUALIFICATION=PASS") throw new Error("QUALIFICATION_NOT_PASS");
+  },
+  assertFhvPreHoldoutFilesMatchReceipt: vi.fn(),
 }));
 
 function resetMocks() {
@@ -37,6 +47,15 @@ function resetMocks() {
       ],
     },
     sealReceipt: { sealReceiptDigest: digest("7") },
+  };
+  mocked.preHoldout = {
+    classification: "PRE_HOLDOUT_QUALIFICATION=PASS",
+    organizationId: "org",
+    releaseSha: "1".repeat(40),
+    qualificationReceiptDigest: digest("9"),
+    holdout: { status: "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED" },
+    partitions: [{ partition: "development", symbol: "BTCUSDT", rawSha256: rawHash,
+      semanticContentDigest: semanticDigest, barCount: 2 }],
   };
 }
 
@@ -52,6 +71,8 @@ describe("Historical Simulation V2 exact dataset membership", () => {
     datasetRoot = mkdtempSync(join(tmpdir(), "historical-membership-"));
     mkdirSync(join(datasetRoot, "development"));
     writeFileSync(join(datasetRoot, "development/BTCUSDT.ndjson"), raw);
+    mkdirSync(join(datasetRoot, "partitions/development/BTCUSDT"), { recursive: true });
+    writeFileSync(join(datasetRoot, "partitions/development/BTCUSDT/bars.v2.ndjson"), raw);
   });
   afterEach(() => rmSync(datasetRoot, { recursive: true, force: true }));
 
@@ -61,6 +82,38 @@ describe("Historical Simulation V2 exact dataset membership", () => {
     expect(mocked.computeRaw).toHaveBeenCalledTimes(1);
     expect(mocked.computeRaw.mock.calls[0]?.[0]).toBe(join(datasetRoot, "development/BTCUSDT.ndjson"));
     expect(mocked.computeRaw.mock.calls.flat().join(" ")).not.toContain("blind-holdout");
+  });
+
+  it("binds qualified pre-holdout cycles without substituting a seal digest", async () => {
+    const result = await bindHistoricalCyclesToPreHoldoutDatasetV2({ datasetRoot,
+      qualificationReceiptPath: join(datasetRoot, "qualification.json"), releaseSha: "1".repeat(40),
+      organizationId: "org", partition: "DEVELOPMENT", symbol: "BTCUSDT", cycles: validCycles() });
+    const membership = result.get("cycle-0");
+    expect(membership).toMatchObject({ datasetAuthorityClass: "PRE_HOLDOUT_QUALIFICATION_V1",
+      datasetAuthorityDigestHex: digest("9"), qualificationReceiptDigestHex: digest("9") });
+    expect(membership).not.toHaveProperty("sealReceiptDigestHex");
+    expect(membership).not.toHaveProperty("manifestSemanticDigestHex");
+  });
+
+  it("binds only the requested contiguous pre-holdout range after full receipt verification", async () => {
+    const result = await bindHistoricalCyclesToPreHoldoutDatasetV2({ datasetRoot,
+      qualificationReceiptPath: join(datasetRoot, "qualification.json"), releaseSha: "1".repeat(40),
+      organizationId: "org", partition: "DEVELOPMENT", symbol: "BTCUSDT", cycles: [cycle(1)] });
+    expect([...result.keys()]).toEqual(["cycle-1"]);
+    expect(result.get("cycle-1")).toMatchObject({ recordIndex: 1,
+      datasetAuthorityClass: "PRE_HOLDOUT_QUALIFICATION_V1" });
+  });
+
+  it("rejects pre-holdout release, organization and qualification substitution", async () => {
+    const base = { datasetRoot, qualificationReceiptPath: join(datasetRoot, "qualification.json"),
+      releaseSha: "1".repeat(40), organizationId: "org", partition: "DEVELOPMENT" as const,
+      symbol: "BTCUSDT" as const, cycles: validCycles() };
+    await expect(bindHistoricalCyclesToPreHoldoutDatasetV2({ ...base, releaseSha: "2".repeat(40) }))
+      .rejects.toThrow("RELEASE_SCOPE");
+    await expect(bindHistoricalCyclesToPreHoldoutDatasetV2({ ...base, organizationId: "other" }))
+      .rejects.toThrow("ORGANIZATION_SCOPE");
+    mocked.preHoldout.classification = "PRE_HOLDOUT_QUALIFICATION=HUMAN_DECISION_REQUIRED";
+    await expect(bindHistoricalCyclesToPreHoldoutDatasetV2(base)).rejects.toThrow("QUALIFICATION_NOT_PASS");
   });
 
   it("rejects a self-shaped but non-member bar", async () => {

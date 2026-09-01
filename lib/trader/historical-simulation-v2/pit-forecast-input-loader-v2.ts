@@ -35,7 +35,7 @@ type PitInputRow = Readonly<{
   dataset_authority_id: string;
   bundle_id: string;
   runtime_input_source_id: string;
-  dataset_seal_digest_hex: string;
+  dataset_authority_digest_hex: string;
   verifier_build_digest_hex: string;
   dataset_authority_content_digest_hex: string;
   sealed_cycle_json: unknown;
@@ -159,7 +159,7 @@ export function assertHistoricalForecastInputPitBindingV2(
     forecastTargetRoleId: "EXECUTION_OPPORTUNITY" as const,
     forecastContentDigestHex: row.forecast_content_digest_hex,
     bundleId: row.bundle_id, runtimeInputSourceId: row.runtime_input_source_id,
-    datasetAuthorityId: row.dataset_authority_id, datasetSealDigestHex: row.dataset_seal_digest_hex,
+    datasetAuthorityId: row.dataset_authority_id, datasetAuthorityDigestHex: row.dataset_authority_digest_hex,
     datasetMembership: row.dataset_membership_json, symbol: row.symbol, pitAnchor,
     visibleFrom: utc(row.visible_from), knowledgeContentDigestHex: row.knowledge_content_digest_hex,
     forecastAuthorityContentDigestHex: row.forecast_authority_content_digest_hex,
@@ -210,7 +210,7 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
     const rows = await sql<PitInputRow[]>`
       SELECT p.organization_id::text, p.run_id, p.cycle_id, p.forecast_id::text, p.bundle_id::text,
              p.forecast_target_role_id, encode(p.forecast_content_digest, 'hex') AS forecast_content_digest_hex,
-             p.runtime_input_source_id::text, p.dataset_seal_digest_hex, p.verifier_build_digest_hex,
+             p.runtime_input_source_id::text, p.dataset_authority_digest_hex, p.verifier_build_digest_hex,
              p.symbol, p.partition, p.record_index,
              p.dataset_membership_content_digest_hex, p.dataset_membership_json, p.pit_anchor, p.visible_from,
              p.knowledge_content_digest_hex, p.forecast_authority_content_digest_hex, p.runtime_input_json,

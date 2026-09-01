@@ -33,7 +33,7 @@ export type PersistDee659AuthorityBundleV2Input = PersistedDecisionEconomicsAuth
   cycleId: string;
   forecastAuthorityContentDigestHex: string;
   runId: string;
-  datasetSealDigestHex: string;
+  datasetAuthorityDigestHex: string;
   dee659PreregistrationId: string;
   pitAnchor: string;
 }>;
@@ -48,7 +48,7 @@ export type CanonicalDecisionVerificationReceiptPortV2 = Readonly<{
   }>): Promise<Readonly<{ verificationReceiptDigestHex: string }>>;
   loadExecutionPayoffVerification(input: Readonly<{
     organizationId: string; accountId: string; instrumentIdentityDigestHex: string;
-    runId: string; datasetSealDigestHex: string; dee659PreregistrationId: string; forecastId: string;
+    runId: string; datasetAuthorityDigestHex: string; dee659PreregistrationId: string; forecastId: string;
     pitAnchor: string;
     subjectContentDigestHex: Readonly<{
       anchor: string; executablePolicy: string; economicSize: string; cash: string;
@@ -61,7 +61,7 @@ type AuthorityRow = Readonly<{
   account_id: string;
   cycle_id: string;
   run_id: string;
-  dataset_seal_digest_hex: string;
+  dataset_authority_digest_hex: string;
   dee659_preregistration_id: string;
   forecast_authority_content_digest_hex: string;
   forecast_id: string;
@@ -113,7 +113,7 @@ function validateBundle(input: PersistDee659AuthorityBundleV2Input): void {
     [input.forecastIssuanceReceiptDigestHex, "forecastIssuanceReceiptDigestHex"],
     [input.forecastVerificationReceiptDigestHex, "forecastVerificationReceiptDigestHex"],
     [input.scientificVerificationReceiptDigestHex, "scientificVerificationReceiptDigestHex"],
-    [input.datasetSealDigestHex, "datasetSealDigestHex"],
+    [input.datasetAuthorityDigestHex, "datasetAuthorityDigestHex"],
   ].forEach(([value, field]) => requireDigest(value, field));
   const anchor = input.anchorAuthority;
   const authorities = [input.executablePolicy, input.economicSizeSet, input.cashAuthority];
@@ -199,7 +199,7 @@ async function assertCanonicalVerificationReceipts(
       accountId: input.accountId,
       instrumentIdentityDigestHex: input.anchorAuthority.instrumentIdentityDigestHex,
       runId: input.runId,
-      datasetSealDigestHex: input.datasetSealDigestHex,
+      datasetAuthorityDigestHex: input.datasetAuthorityDigestHex,
       dee659PreregistrationId: input.dee659PreregistrationId,
       forecastId: input.forecastId,
       pitAnchor: input.pitAnchor,
@@ -234,7 +234,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
       const inserted = await config.sql<{ bundle_content_digest_hex: string }[]>`
         INSERT INTO trader_dee659_authority_bundle_v2 (
           organization_id, account_id, cycle_id, forecast_authority_content_digest_hex,
-          run_id, dataset_seal_digest_hex, dee659_preregistration_id,
+          run_id, dataset_authority_digest_hex, dee659_preregistration_id,
           forecast_id, forecast_issuance_receipt_digest_hex,
           forecast_verification_receipt_digest_hex, scientific_admission_evidence_digest_hex,
           scientific_verification_receipt_digest_hex, anchor_authority_json,
@@ -244,7 +244,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
         ) VALUES (
           ${input.organizationId}::uuid, ${input.accountId}, ${input.cycleId},
           ${input.forecastAuthorityContentDigestHex}, ${input.runId},
-          ${input.datasetSealDigestHex}, ${input.dee659PreregistrationId}::uuid, ${input.forecastId},
+          ${input.datasetAuthorityDigestHex}, ${input.dee659PreregistrationId}::uuid, ${input.forecastId},
           ${input.forecastIssuanceReceiptDigestHex}, ${input.forecastVerificationReceiptDigestHex},
           ${input.scientificAdmission.evidenceSemanticDigest},
           ${input.scientificVerificationReceiptDigestHex}, ${config.sql.json(asJsonValue(input.anchorAuthority))},
@@ -252,7 +252,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           ${config.sql.json(asJsonValue(input.cashAuthority))},
           ${config.sql.json(asJsonValue(input.executionPayoffVerification))}, ${input.pitAnchor}::timestamptz,
           ${DEE659_DURABLE_AUTHORITY_BUNDLE_V2}, ${digest}
-        ) ON CONFLICT (organization_id, account_id, run_id, cycle_id, dataset_seal_digest_hex,
+        ) ON CONFLICT (organization_id, account_id, run_id, cycle_id, dataset_authority_digest_hex,
           dee659_preregistration_id, forecast_id, forecast_authority_content_digest_hex, pit_anchor)
           DO NOTHING
         RETURNING bundle_content_digest_hex
@@ -265,7 +265,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           SELECT bundle_content_digest_hex FROM trader_dee659_authority_bundle_v2
           WHERE organization_id = ${input.organizationId}::uuid AND account_id = ${input.accountId}
             AND cycle_id = ${input.cycleId}
-            AND run_id = ${input.runId} AND dataset_seal_digest_hex = ${input.datasetSealDigestHex}
+            AND run_id = ${input.runId} AND dataset_authority_digest_hex = ${input.datasetAuthorityDigestHex}
             AND dee659_preregistration_id = ${input.dee659PreregistrationId}::uuid
             AND forecast_id = ${input.forecastId} AND pit_anchor = ${input.pitAnchor}::timestamptz
             AND forecast_authority_content_digest_hex = ${input.forecastAuthorityContentDigestHex}
@@ -277,7 +277,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
     },
     async load(identity) {
       const rows = await config.sql<AuthorityRow[]>`
-        SELECT organization_id::text, account_id, cycle_id, run_id, dataset_seal_digest_hex,
+        SELECT organization_id::text, account_id, cycle_id, run_id, dataset_authority_digest_hex,
                dee659_preregistration_id::text,
                forecast_authority_content_digest_hex, forecast_id,
                forecast_issuance_receipt_digest_hex, forecast_verification_receipt_digest_hex,
@@ -306,7 +306,7 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
         accountId: row.account_id,
         cycleId: row.cycle_id,
         runId: row.run_id,
-        datasetSealDigestHex: row.dataset_seal_digest_hex,
+        datasetAuthorityDigestHex: row.dataset_authority_digest_hex,
         dee659PreregistrationId: row.dee659_preregistration_id,
         forecastAuthorityContentDigestHex: row.forecast_authority_content_digest_hex,
         pitAnchor: new Date(row.pit_anchor).toISOString(),

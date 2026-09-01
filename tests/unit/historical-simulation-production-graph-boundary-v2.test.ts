@@ -10,7 +10,7 @@ const safe = { sql, organizationId: "org", accountId: "account", runId: "run",
 };
 const identity = { organizationId: "org", accountId: "account", runId: "run", cycleId: "cycle-1",
   pitAnchor: "2026-08-30T00:00:00.000Z", datasetMembershipContentDigestHex: "1".repeat(64),
-  datasetSealDigestHex: "2".repeat(64), buildSha: "a".repeat(40) };
+  datasetAuthorityDigestHex: "2".repeat(64), buildSha: "a".repeat(40) };
 
 describe("Historical Simulation V2 closed production graph boundary", () => {
   it("accepts only the pre-holdout identity-only launch request", () => {
@@ -42,7 +42,7 @@ describe("Historical Simulation V2 closed production graph boundary", () => {
     expect(() => assertHistoricalForecastPitAuthorityReceiptV2(receipt, { ...identity, cycleId: "cycle-2" }))
       .toThrow("HISTORICAL_PIT_AUTHORITY_REFUSED");
     expect(() => assertHistoricalForecastPitAuthorityReceiptV2({ ...receipt,
-      datasetSealDigestHex: "9".repeat(64) }, identity)).toThrow("HISTORICAL_PIT_AUTHORITY_REFUSED");
+      datasetAuthorityDigestHex: "9".repeat(64) }, identity)).toThrow("HISTORICAL_PIT_AUTHORITY_REFUSED");
     for (const extra of [{ privateCredential: "secret" }, { connector: () => undefined }]) {
       const body = { ...receipt, ...extra } as Record<string, unknown>;
       delete body.contentDigestHex;

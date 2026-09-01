@@ -29,7 +29,7 @@ const membershipBody = { schemaVersion: HISTORICAL_DATASET_MEMBERSHIP_V2, organi
 const membership = { ...membershipBody, contentDigestHex: computeSemanticSha256Hex(membershipBody) };
 const row = { forecast_id: "forecast", forecast_content_digest_hex: "f".repeat(64),
   forecast_authority_content_digest_hex: "7".repeat(64),
-  knowledge_content_digest_hex: "8".repeat(64), dataset_authority_id: "dataset", dataset_seal_digest_hex: "2".repeat(64),
+  knowledge_content_digest_hex: "8".repeat(64), dataset_authority_id: "dataset", dataset_authority_digest_hex: "2".repeat(64),
   dataset_membership_content_digest_hex: membership.contentDigestHex, dataset_membership_json: membership,
   pit_anchor: "2026-08-30T00:00:00.000Z", symbol: "BTCUSDT", partition: "DEVELOPMENT", record_index: 0,
   sealed_cycle_json: { cycleId: "cycle", contentDigestHex: "6".repeat(64),

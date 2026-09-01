@@ -73,7 +73,7 @@ function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: stri
     }];
     if (query.includes("FROM trader_historical_dataset_authority_v2")) return [{
       membership_json: datasetMembership, sealed_cycle_json: sealedCycle,
-      dataset_seal_digest_hex: "2".repeat(64),
+      dataset_authority_digest_hex: "2".repeat(64),
       authority_content_digest_hex: options.datasetAuthorityDigest ?? datasetAuthorityDigest,
     }];
     if (query.includes("FROM trader_forecast_v2")) return [{

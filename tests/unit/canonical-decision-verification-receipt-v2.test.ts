@@ -29,7 +29,7 @@ describe("canonical decision verification receipt V2", () => {
     const sql = vi.fn(async () => []);
     await expect(createCanonicalDecisionVerificationReceiptServiceV2(sql as never).startRun({
       organizationId: ORG, accountId: "account-B", runId: "run-B",
-      preregistrationId: ORG, datasetSealDigestHex: DIGEST,
+      preregistrationId: ORG, datasetAuthorityDigestHex: DIGEST,
     })).rejects.toThrow("HISTORICAL_SIMULATION_RUN_START_PREREGISTRATION_MISMATCH");
     expect(sql).toHaveBeenCalledOnce();
   });
