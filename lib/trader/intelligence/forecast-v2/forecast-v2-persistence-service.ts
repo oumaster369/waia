@@ -61,6 +61,8 @@ import {
   type HistoricalForecastKnowledgeBootstrapV2,
 } from
   "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
+import { HISTORICAL_FORECAST_FAMILY_BOOTSTRAP_V2 } from
+  "@/lib/trader/historical-simulation-v2/forecast-family-bootstrap-v2";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -413,6 +415,44 @@ export type PersistForecastBundleV2Input = {
 const FORECAST_RUNTIME_INPUT_SOURCE_V2 = "waia.trader.forecast_runtime_input_source.v2" as const;
 const FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2 = "waia.forecast-runtime-input-source.verifier.v2" as const;
 
+type ForecastRuntimeAuthorityClassV2 =
+  "GENERAL_FORECAST_V2" | "HISTORICAL_SIMULATION_V2";
+
+/** Authority is package provenance, never a caller-selected privilege discriminator. */
+function deriveRuntimeAuthorityClass(
+  input: PersistForecastBundleV2Input,
+): ForecastRuntimeAuthorityClassV2 {
+  const packageSubjectVersion = input.issuance.package.family.packageSubjectVersion;
+  const runtimePackageSubjectVersion =
+    input.runtimeInput?.predictivePackage?.family.packageSubjectVersion;
+  if (
+    runtimePackageSubjectVersion !== undefined &&
+    runtimePackageSubjectVersion !== packageSubjectVersion
+  ) {
+    throw new Error(
+      "[forecast-v2/persistence] runtime package provenance mismatch (fail closed)",
+    );
+  }
+  const derived: ForecastRuntimeAuthorityClassV2 =
+    packageSubjectVersion === HISTORICAL_FORECAST_FAMILY_BOOTSTRAP_V2
+      ? "HISTORICAL_SIMULATION_V2"
+      : "GENERAL_FORECAST_V2";
+  if (input.runtimeAuthorityClass && input.runtimeAuthorityClass !== derived) {
+    throw new Error(
+      "[forecast-v2/persistence] runtime authority class contradicts package provenance (fail closed)",
+    );
+  }
+  if (
+    derived === "HISTORICAL_SIMULATION_V2" &&
+    (!input.runtimeInput || !input.authorizedOutcome)
+  ) {
+    throw new Error(
+      "[forecast-v2/persistence] historical package requires exact runtime authority source (fail closed)",
+    );
+  }
+  return derived;
+}
+
 function forecastRuntimeInputVerifierBuildDigest(): string {
   const release = process.env.WAIA_RELEASE_SHA;
   const vercel = process.env.VERCEL_GIT_COMMIT_SHA;
@@ -426,21 +466,21 @@ function forecastRuntimeInputVerifierBuildDigest(): string {
   return computeSemanticSha256Hex({ verifierVersion: FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2, sourceSha: sha.toLowerCase() });
 }
 
-function validateRuntimeInputSource(input: PersistForecastBundleV2Input): Readonly<{
+function validateRuntimeInputSource(
+  input: PersistForecastBundleV2Input,
+  runtimeAuthorityClass: ForecastRuntimeAuthorityClassV2,
+): Readonly<{
   runtimeInput: ForecastRuntimeInputV2; outcomeDigestHex: string; inputDigestHex: string; buildDigestHex: string;
 }> | null {
   if (input.authorizedOutcome && !input.runtimeInput) {
     throw new Error("[forecast-v2/persistence] authorized outcome requires exact runtime input source (fail closed)");
   }
   if (!input.runtimeInput) return null;
-  if (!input.runtimeAuthorityClass) {
-    throw new Error("[forecast-v2/persistence] runtime authority class required (fail closed)");
-  }
-  if (input.runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2" &&
+  if (runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2" &&
       !input.historicalKnowledgeBootstrap) {
     throw new Error("[forecast-v2/persistence] historical knowledge proof required (fail closed)");
   }
-  if (input.runtimeAuthorityClass === "GENERAL_FORECAST_V2" &&
+  if (runtimeAuthorityClass === "GENERAL_FORECAST_V2" &&
       input.historicalKnowledgeBootstrap) {
     throw new Error("[forecast-v2/persistence] historical proof on general runtime refused");
   }
@@ -512,6 +552,7 @@ export type PersistForecastBundleV2Result = {
 async function loadExistingBundleByNaturalIdentity(
   sql: postgres.Sql,
   input: PersistForecastBundleV2Input,
+  runtimeAuthorityClass: ForecastRuntimeAuthorityClassV2,
 ): Promise<PersistForecastBundleV2Result | null> {
   const rows = await sql<{
     id: string;
@@ -574,7 +615,7 @@ async function loadExistingBundleByNaturalIdentity(
     );
   }
   if (input.runtimeInput) {
-    const expectedSource = validateRuntimeInputSource(input)!;
+    const expectedSource = validateRuntimeInputSource(input, runtimeAuthorityClass)!;
     const sourceRows = await sql<{ runtime_input_content_digest_hex: string; authorized_outcome_content_digest_hex: string;
       verifier_build_digest_hex: string }[]>`
       SELECT runtime_input_content_digest_hex, authorized_outcome_content_digest_hex, verifier_build_digest_hex
@@ -607,7 +648,8 @@ export async function persistForecastBundleV2(
       "[forecast-v2/persistence] symbol mismatch vs predictive package family (fail closed)",
     );
   }
-  const runtimeSource = validateRuntimeInputSource(input);
+  const runtimeAuthorityClass = deriveRuntimeAuthorityClass(input);
+  const runtimeSource = validateRuntimeInputSource(input, runtimeAuthorityClass);
   if (input.organizationId !== input.issuance.organizationId) {
     throw new Error("[forecast-v2/persistence] organizationId mismatch vs issuance (fail closed)");
   }
@@ -621,8 +663,9 @@ export async function persistForecastBundleV2(
     id: string;
     symbol: string;
     package_content_digest: string;
+    package_subject_version: string;
   }[]>`
-    SELECT id::text AS id, symbol,
+    SELECT id::text AS id, symbol, package_subject_version,
            predictive_package_content_digest AS package_content_digest
     FROM trader_forecast_predictive_package_v2
     WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
@@ -636,6 +679,8 @@ export async function persistForecastBundleV2(
   }
   if (
     packageRows[0].symbol !== input.symbol ||
+    packageRows[0].package_subject_version !==
+      input.issuance.package.family.packageSubjectVersion ||
     packageRows[0].package_content_digest !==
       digestHex(input.issuance.package.predictivePackageContentDigest)
   ) {
@@ -644,7 +689,7 @@ export async function persistForecastBundleV2(
     );
   }
 
-  if (input.runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
+  if (runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
     await sql.begin((tx) => verifyHistoricalKnowledgeProofV2(
       tx as unknown as postgres.Sql,
       input,
@@ -652,7 +697,11 @@ export async function persistForecastBundleV2(
     ));
   }
 
-  const existing = await loadExistingBundleByNaturalIdentity(sql, input);
+  const existing = await loadExistingBundleByNaturalIdentity(
+    sql,
+    input,
+    runtimeAuthorityClass,
+  );
   if (existing) {
     return existing;
   }
@@ -771,7 +820,7 @@ export async function persistForecastBundleV2(
         if (!binding || !admission || !snapshot || !runtime.predictivePackage || !knowledgeContentDigestHex) {
           throw new Error("[forecast-v2/persistence] authorized runtime source is incomplete");
         }
-        if (input.runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
+        if (runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
           await verifyHistoricalKnowledgeProofV2(
             tx as unknown as postgres.Sql,
             input,
@@ -825,7 +874,11 @@ export async function persistForecastBundleV2(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("tfbv2_org_natural_idempotency_uq")) {
-      const raced = await loadExistingBundleByNaturalIdentity(sql, input);
+      const raced = await loadExistingBundleByNaturalIdentity(
+        sql,
+        input,
+        runtimeAuthorityClass,
+      );
       if (raced) {
         return raced;
       }

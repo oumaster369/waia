@@ -335,7 +335,7 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       evidence: [makeUnderstandingEvidence({ availableAt: cycle.pitAnchor })],
     });
     expect(informationSufficiencyReceipt.status).toBe("SUFFICIENT");
-    const runtimeInput = buildHistoricalForecastCycleRuntimeInputV2({
+    const runtimeBuilderInput = {
       releaseSha,
       organizationId,
       accountId: null,
@@ -348,9 +348,6 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       sourceProfileDigestHex: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST,
       representationProfileDigestHex: hash("representation-profile"),
       runtimeContext: { mode: "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL" },
-      activeKnowledgeState: cycle.canonicalState,
-      selectedKnowledgeClaimDigestsHex: [cycle.canonicalState.semanticDigest],
-      selectedFailureBoundaryDigestsHex: [],
       knowledgeBootstrap: buildHistoricalForecastKnowledgeBootstrapV2({
         organizationId,
         symbol: "BTCUSDT",
@@ -367,13 +364,55 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       predictivePackage: graph.predictivePackage,
       packageQuarantinedOrStale: false,
       integrityAndPitValid: true,
-    });
+    } as const;
+    const runtimeInput = buildHistoricalForecastCycleRuntimeInputV2(runtimeBuilderInput);
     expect(runtimeInput.predictiveAdmissionReceipt).toMatchObject({
       verdict: "ADMITTED",
       capitalAuthority: "NONE",
     });
+    const sealedSnapshot = runtimeInput.marketStateSnapshot!;
+    expect(sealedSnapshot).toMatchObject({
+      activeKnowledgeStateDigestHex: cycle.canonicalState.semanticDigest,
+      selectedKnowledgeClaimDigestsHex: [
+        cycle.evaluation.hypothesisSet!.activeHypothesis!.canonicalCausalLineageDigest,
+      ],
+    });
+    expect(sealedSnapshot.selectedFailureBoundaryDigestsHex)
+      .toHaveLength(1);
     const forecastOutcome = issueForecastRuntimeV2(runtimeInput);
     expect(forecastOutcome).toMatchObject({ status: "FORECAST_AUTHORIZED" });
+
+    const substitutedState = buildCanonicalRuntimeIntelligenceStateV1({
+      organizationId: cycle.canonicalState.organizationId,
+      symbol: cycle.canonicalState.symbol,
+      pitAnchor: cycle.canonicalState.pitAnchor,
+      knowledgeSemanticDigest: hash("digest-consistent-substituted-knowledge"),
+      hypotheses: cycle.canonicalState.hypotheses,
+    });
+    const attackerClaimDigest = hash("attacker-selected-knowledge-claim");
+    const attackerFailureDigest = hash("attacker-selected-failure-boundary");
+    const substitutedLegacyInput = {
+      ...runtimeBuilderInput,
+      activeKnowledgeState: substitutedState,
+      selectedKnowledgeClaimDigestsHex: [attackerClaimDigest],
+      selectedFailureBoundaryDigestsHex: [attackerFailureDigest],
+    };
+    const substitutionAttempt = buildHistoricalForecastCycleRuntimeInputV2(
+      substitutedLegacyInput,
+    );
+    const substitutionSnapshot = substitutionAttempt.marketStateSnapshot!;
+    expect(substitutionSnapshot.activeKnowledgeStateDigestHex)
+      .toBe(cycle.canonicalState.semanticDigest);
+    expect(substitutionSnapshot.selectedKnowledgeClaimDigestsHex)
+      .toEqual(sealedSnapshot.selectedKnowledgeClaimDigestsHex);
+    expect(substitutionSnapshot.selectedFailureBoundaryDigestsHex)
+      .toEqual(sealedSnapshot.selectedFailureBoundaryDigestsHex);
+    expect(substitutionSnapshot.selectedKnowledgeClaimDigestsHex)
+      .not.toContain(attackerClaimDigest);
+    expect(substitutionSnapshot.selectedFailureBoundaryDigestsHex)
+      .not.toContain(attackerFailureDigest);
+    expect(issueForecastRuntimeV2(substitutionAttempt))
+      .toMatchObject({ status: "FORECAST_AUTHORIZED" });
   });
 
   it("fails closed on contradictory canonical evidence", () => {

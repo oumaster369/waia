@@ -16,6 +16,12 @@ import type {
   RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
+import { buildCanonicalCausalLineageV1 } from
+  "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
+import type { HypothesisSet } from
+  "@/lib/trader/intelligence/hypothesis/hypothesis.types";
+import type { CanonicalRuntimeIntelligenceStateV1 } from
+  "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
 import { historicalExecutionInstrumentsMatch } from
   "@/lib/trader/execution/historical-execution-symbol";
 import type {
@@ -32,6 +38,65 @@ import {
 
 export const HISTORICAL_FORECAST_CYCLE_RUNTIME_INPUT_V2 =
   "waia.trader.historical_forecast_cycle_runtime_input.v2" as const;
+const HISTORICAL_FORECAST_FAILURE_BOUNDARY_V1 =
+  "waia.trader.historical_forecast_failure_boundary.v1" as const;
+
+function deriveSealedKnowledgeLineage(input: Readonly<{
+  canonicalState: CanonicalRuntimeIntelligenceStateV1;
+  hypothesisSet: HypothesisSet;
+  applicabilityAdmitted: boolean;
+}>): Readonly<{
+  activeKnowledgeStateDigestHex: string;
+  selectedKnowledgeClaimDigestsHex: readonly string[];
+  selectedFailureBoundaryDigestsHex: readonly string[];
+}> {
+  const active = input.hypothesisSet.activeHypothesis;
+  if (!input.applicabilityAdmitted || !active) {
+    return Object.freeze({
+      activeKnowledgeStateDigestHex: input.canonicalState.semanticDigest,
+      selectedKnowledgeClaimDigestsHex: Object.freeze([]),
+      selectedFailureBoundaryDigestsHex: Object.freeze([]),
+    });
+  }
+  if (
+    active.authority !== "CANONICAL_PIT_KNOWLEDGE" ||
+    !active.canonicalHypothesisId ||
+    !active.canonicalCausalLineageDigest ||
+    active.canonicalIntelligenceStateDigest !== input.canonicalState.semanticDigest
+  ) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_LINEAGE");
+  }
+  const source = input.canonicalState.hypotheses.find(
+    (hypothesis) => hypothesis.hypothesisId === active.canonicalHypothesisId,
+  );
+  if (!source) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_LINEAGE");
+  }
+  const canonicalLineage = buildCanonicalCausalLineageV1(input.canonicalState, source);
+  if (canonicalLineage.contentDigest !== active.canonicalCausalLineageDigest) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_LINEAGE");
+  }
+  const selectedKnowledgeClaimDigestsHex = Object.freeze([
+    canonicalLineage.contentDigest,
+  ]);
+  const selectedFailureBoundaryDigestsHex = Object.freeze(
+    canonicalLineage.invalidationConditions.map((condition, ordinal) =>
+      computeSemanticSha256Hex({
+        schemaVersion: HISTORICAL_FORECAST_FAILURE_BOUNDARY_V1,
+        canonicalIntelligenceStateDigestHex: input.canonicalState.semanticDigest,
+        canonicalCausalLineageDigestHex: canonicalLineage.contentDigest,
+        canonicalHypothesisId: canonicalLineage.hypothesisId,
+        ordinal,
+        condition,
+      }),
+    ),
+  );
+  return Object.freeze({
+    activeKnowledgeStateDigestHex: input.canonicalState.semanticDigest,
+    selectedKnowledgeClaimDigestsHex,
+    selectedFailureBoundaryDigestsHex,
+  });
+}
 
 /**
  * Closes one already-evaluated PIT cycle into the exact Forecast V2 runtime input.
@@ -51,9 +116,6 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   sourceProfileDigestHex: string;
   representationProfileDigestHex: string;
   runtimeContext: unknown;
-  activeKnowledgeState: unknown;
-  selectedKnowledgeClaimDigestsHex: readonly string[];
-  selectedFailureBoundaryDigestsHex: readonly string[];
   knowledgeBootstrap: HistoricalForecastKnowledgeBootstrapV2;
   evaluation: EvaluationCycleResult;
   requiredInformationProfile: RequiredInformationProfileV2;
@@ -111,6 +173,13 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     evaluationEnvelope: evaluation.intelligenceCycleBundle.envelope,
     hypothesisSet: evaluation.hypothesisSet,
   });
+  const knowledgeLineage = deriveSealedKnowledgeLineage({
+    canonicalState: evaluation.canonicalRuntimeIntelligenceState,
+    hypothesisSet: evaluation.hypothesisSet,
+    applicabilityAdmitted: applicability.assessments.every(
+      (assessment) => assessment.status === "APPLICABLE",
+    ),
+  });
   // Historical orchestration uses the execution-domain enum "HTX" while the
   // immutable Forecast family identity uses the canonical market-data token "htx".
   // Bind the snapshot to the package's frozen token; case must never create a
@@ -145,9 +214,9 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     understandingClaimSetDigestHex: computeSemanticSha256Hex(
       evaluation.understandingArtifact ?? evaluation.understanding ?? { status: "UNAVAILABLE" },
     ),
-    activeKnowledgeStateDigestHex: computeSemanticSha256Hex(input.activeKnowledgeState),
-    selectedKnowledgeClaimDigestsHex: input.selectedKnowledgeClaimDigestsHex,
-    selectedFailureBoundaryDigestsHex: input.selectedFailureBoundaryDigestsHex,
+    activeKnowledgeStateDigestHex: knowledgeLineage.activeKnowledgeStateDigestHex,
+    selectedKnowledgeClaimDigestsHex: knowledgeLineage.selectedKnowledgeClaimDigestsHex,
+    selectedFailureBoundaryDigestsHex: knowledgeLineage.selectedFailureBoundaryDigestsHex,
     hypothesisAssessmentSetDigestHex: applicability.contentDigestHex,
     consumedHypothesisAssessments: applicability.assessments,
     sourceProfileDigestHex: input.sourceProfileDigestHex,
