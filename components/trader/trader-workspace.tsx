@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
-import { FhvUserObservationDashboard } from "@/components/trader/fhv-user-observation-dashboard";
+import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
 import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
 import type { BalanceSnapshotDto } from "@/lib/trader/balances/types";
 import type { PositionSnapshotDto } from "@/lib/trader/positions/types";
@@ -716,6 +716,8 @@ function ExchangeTraderWorkspace() {
 }
 
 function HistoricalTraderWorkspace(): React.ReactNode {
+  const params=useSearchParams();const runId=params.get("campaign_run_id")?.trim()??"";
+  const accountId=params.get("account_id")?.trim()??"";
   return (
     <div data-testid="trader-workspace" className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10">
       <header className="border-border mb-10 border-b pb-6">
@@ -726,7 +728,9 @@ function HistoricalTraderWorkspace(): React.ReactNode {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">AI-TRADER</h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm">Observe your tenant-scoped historical simulation automatically. No exchange credentials, real balances, live trading, or capital controls are loaded.</p>
       </header>
-      <FhvUserObservationDashboard />
+      {accountId?<HistoricalV2ObservationDashboard runId={runId} accountId={accountId}
+        endpoint={`/api/trader/historical-v2/stream?run_id=${encodeURIComponent(runId)}&account_id=${encodeURIComponent(accountId)}`}/>
+        :<WaiaSurface variant="raised" className="p-5"><p className="font-medium">Account identity required</p><p className="text-muted-foreground mt-2 text-sm">Open the account-scoped historical observation link containing both campaign_run_id and account_id.</p></WaiaSurface>}
     </div>
   );
 }

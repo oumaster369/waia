@@ -22,7 +22,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(JSON.parse(output)).toEqual(expect.objectContaining({
       status: "PASS",
       sources: 154,
-      consumers: 116,
+      consumers: 121,
       connectorReferences: 25,
       sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),

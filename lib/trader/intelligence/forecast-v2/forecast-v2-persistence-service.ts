@@ -48,6 +48,11 @@ import {
   type ForecastV2CalibrationObservation,
 } from "@/lib/trader/intelligence/calibration/calibration-scorer";
 import type { ForecastRuntimeAuthorizedOutcomeV2 } from "./forecast-runtime-authority-v2";
+import {
+  issueForecastRuntimeV2,
+  type ForecastRuntimeInputV2,
+} from "./forecast-runtime-authority-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -387,10 +392,52 @@ export type PersistForecastBundleV2Input = {
   anchorClosedBarEpochMs: number;
   issuance: ForecastIssuanceV1;
   authorizedOutcome?: ForecastRuntimeAuthorizedOutcomeV2;
+  /** Exact producer-owned input persisted atomically with an authorized Forecast. */
+  runtimeInput?: ForecastRuntimeInputV2;
   issuanceSequence?: number;
   /** @deprecated Natural identity (run/cycle/symbol/anchor) is the idempotency authority. */
   idempotencyKey?: string;
 };
+
+const FORECAST_RUNTIME_INPUT_SOURCE_V2 = "waia.trader.forecast_runtime_input_source.v2" as const;
+const FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2 = "waia.forecast-runtime-input-source.verifier.v2" as const;
+
+function forecastRuntimeInputVerifierBuildDigest(): string {
+  const release = process.env.WAIA_RELEASE_SHA;
+  const vercel = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (release && vercel && release !== vercel) {
+    throw new Error("[forecast-v2/persistence] disagreeing immutable build authorities (fail closed)");
+  }
+  const sha = release ?? vercel;
+  if (!sha || !/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new Error("[forecast-v2/persistence] immutable build SHA unavailable (fail closed)");
+  }
+  return computeSemanticSha256Hex({ verifierVersion: FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2, sourceSha: sha.toLowerCase() });
+}
+
+function validateRuntimeInputSource(input: PersistForecastBundleV2Input): Readonly<{
+  runtimeInput: ForecastRuntimeInputV2; outcomeDigestHex: string; inputDigestHex: string; buildDigestHex: string;
+}> | null {
+  if (input.authorizedOutcome && !input.runtimeInput) {
+    throw new Error("[forecast-v2/persistence] authorized outcome requires exact runtime input source (fail closed)");
+  }
+  if (!input.runtimeInput) return null;
+  if (!input.authorizedOutcome) throw new Error("[forecast-v2/persistence] runtime input requires authorized outcome");
+  const replay = issueForecastRuntimeV2(input.runtimeInput);
+  if (replay.status !== "FORECAST_AUTHORIZED" || !isDeepStrictEqual(replay, input.authorizedOutcome) ||
+      replay.authority.organizationId !== input.organizationId ||
+      replay.authority.anchorClosedBarAt !== new Date(input.anchorClosedBarEpochMs).toISOString()) {
+    throw new Error("[forecast-v2/persistence] runtime input does not reproduce authorized outcome (fail closed)");
+  }
+  return {
+    runtimeInput: input.runtimeInput,
+    outcomeDigestHex: computeSemanticSha256Hex(replay),
+    // Bind the digest to the exact JSON representation that is durable in PostgreSQL, rather
+    // than to Node Buffer prototypes that jsonb cannot preserve.
+    inputDigestHex: computeSemanticSha256Hex(JSON.parse(JSON.stringify(input.runtimeInput))),
+    buildDigestHex: forecastRuntimeInputVerifierBuildDigest(),
+  };
+}
 
 export type PersistForecastBundleV2Result = {
   bundleId: string;
@@ -463,6 +510,20 @@ async function loadExistingBundleByNaturalIdentity(
       "[forecast-v2/persistence] natural-idempotent conflict: same identity, different content",
     );
   }
+  if (input.runtimeInput) {
+    const expectedSource = validateRuntimeInputSource(input)!;
+    const sourceRows = await sql<{ runtime_input_content_digest_hex: string; authorized_outcome_content_digest_hex: string;
+      verifier_build_digest_hex: string }[]>`
+      SELECT runtime_input_content_digest_hex, authorized_outcome_content_digest_hex, verifier_build_digest_hex
+      FROM trader_forecast_runtime_input_source_v2
+      WHERE organization_id=${input.organizationId}::uuid AND bundle_id=${existingId}::uuid
+    `;
+    if (sourceRows.length !== 1 || sourceRows[0]?.runtime_input_content_digest_hex !== expectedSource.inputDigestHex ||
+        sourceRows[0]?.authorized_outcome_content_digest_hex !== expectedSource.outcomeDigestHex ||
+        sourceRows[0]?.verifier_build_digest_hex !== expectedSource.buildDigestHex) {
+      throw new Error("[forecast-v2/persistence] natural-idempotent runtime source conflict (fail closed)");
+    }
+  }
   return {
     bundleId: existingId,
     terminalForecastId: terminal.id,
@@ -475,6 +536,7 @@ export async function persistForecastBundleV2(
   sql: postgres.Sql,
   input: PersistForecastBundleV2Input,
 ): Promise<PersistForecastBundleV2Result> {
+  const runtimeSource = validateRuntimeInputSource(input);
   if (input.organizationId !== input.issuance.organizationId) {
     throw new Error("[forecast-v2/persistence] organizationId mismatch vs issuance (fail closed)");
   }
@@ -607,6 +669,41 @@ export async function persistForecastBundleV2(
           ${forecastSchema}
         )
       `;
+      if (runtimeSource) {
+        const runtime = runtimeSource.runtimeInput;
+        const binding = runtime.forecastContractBinding;
+        const admission = runtime.predictiveAdmissionReceipt;
+        const snapshot = runtime.marketStateSnapshot;
+        const knowledgeContentDigestHex = runtime.knowledgeContentDigestHex;
+        if (!binding || !admission || !snapshot || !runtime.predictivePackage || !knowledgeContentDigestHex) {
+          throw new Error("[forecast-v2/persistence] authorized runtime source is incomplete");
+        }
+        await tx`
+          INSERT INTO trader_forecast_runtime_input_source_v2 (
+            organization_id, bundle_id, execution_forecast_id,
+            execution_forecast_target_role_id, execution_forecast_content_digest,
+            run_id, cycle_id, symbol, pit_anchor,
+            anchor_closed_bar_epoch_ms, predictive_package_id, predictive_package_content_digest_hex,
+            scientific_admission_receipt_id, scientific_admission_content_digest_hex,
+            contract_binding_content_digest_hex, knowledge_edge_id, knowledge_content_digest_hex,
+            market_snapshot_content_digest_hex, predictive_admission_content_digest_hex,
+            forecast_authority_content_digest_hex, authorized_outcome_content_digest_hex,
+            runtime_input_content_digest_hex, runtime_input_json, authorized_outcome_json,
+            verifier_version, verifier_build_digest_hex, schema_version
+          ) VALUES (
+            ${input.organizationId}::uuid, ${bundleId}::uuid, ${executionForecastId}::uuid,
+            ${TARGET_ROLE_EXECUTION}, ${execContent},
+            ${input.runId}, ${input.cycleId}, ${input.symbol}, ${new Date(input.anchorClosedBarEpochMs).toISOString()}::timestamptz,
+            ${input.anchorClosedBarEpochMs}, ${input.packageId}::uuid, ${binding.selectedPredictivePackageContentDigestHex},
+            ${binding.scientificAdmissionReceiptId}::uuid, ${binding.scientificAdmissionReceiptContentDigestHex},
+            ${binding.contentDigestHex}, ${runtime.knowledgeEdgeId ?? null}::uuid, ${knowledgeContentDigestHex},
+            ${snapshot.contentDigestHex}, ${admission.contentDigestHex},
+            ${input.authorizedOutcome!.authority.contentDigestHex}, ${runtimeSource.outcomeDigestHex},
+            ${runtimeSource.inputDigestHex}, ${tx.json(runtime as never)}, ${tx.json(input.authorizedOutcome as never)},
+            ${FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2}, ${runtimeSource.buildDigestHex}, ${FORECAST_RUNTIME_INPUT_SOURCE_V2}
+          )
+        `;
+      }
       for (const row of scenarioRows) {
         const lowerParam = row.lower === null ? null : row.lower.toString();
         const upperParam = row.upper === null ? null : row.upper.toString();

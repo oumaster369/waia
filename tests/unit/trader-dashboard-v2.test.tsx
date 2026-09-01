@@ -1,7 +1,8 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { snapshotAgeText, TraderWorkspace } from "@/components/trader/trader-workspace";
+import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
 
 const { mockSearchParams } = vi.hoisted(() => ({ mockSearchParams: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => mockSearchParams }));
@@ -10,6 +11,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   mockSearchParams.delete("campaign_run_id");
+  mockSearchParams.delete("account_id");
 });
 
 describe("Trader Dashboard V2", () => {
@@ -127,15 +129,31 @@ describe("Trader Dashboard V2", () => {
 
   it("does not fetch or render real HTX workspace state while observing a historical campaign", async () => {
     mockSearchParams.set("campaign_run_id", "historical-run-1");
+    mockSearchParams.set("account_id", "tenant-account-1");
     const fetchMock = vi.fn();
     const source = { addEventListener: vi.fn(), removeEventListener: vi.fn(), close: vi.fn(), onopen: null, onerror: null };
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("EventSource", vi.fn(() => source));
+    const EventSourceMock=vi.fn(() => source);vi.stubGlobal("EventSource", EventSourceMock);
     render(<TraderWorkspace />);
-    expect(await screen.findByTestId("fhv-user-streaming-dashboard")).toBeInTheDocument();
+    await waitFor(()=>expect(EventSourceMock).toHaveBeenCalledWith("/api/trader/historical-v2/stream?run_id=historical-run-1&account_id=tenant-account-1",{withCredentials:true}));
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
     expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
     expect(screen.queryByTestId("trader-error-message")).not.toBeInTheDocument();
+  });
+
+  it("waits through an empty tenant projection and renders the first exact account snapshot", async () => {
+    let snapshotListener: ((event: MessageEvent<string>) => void) | undefined;
+    const source = { addEventListener: vi.fn((kind:string,listener:(event:MessageEvent<string>)=>void)=>{if(kind==="historical.snapshot")snapshotListener=listener;}), close: vi.fn(), onopen: null, onerror: null };
+    vi.stubGlobal("EventSource",vi.fn(()=>source));
+    render(<HistoricalV2ObservationDashboard endpoint="/tenant-stream" runId="run-1" accountId="account-1"/>);
+    const base={schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,organizationId:"org-1",runId:"run-1",eventId:"empty",observedAt:"2026-09-01T00:00:00.000Z",aggregate:{accountCount:0,cash:null,equity:null,netPnl:null,cycles:0,decisions:0,riskVetoes:0,orders:0,fills:0,processedRecords:0,latestCycleSequence:null},accounts:[]};
+    await waitFor(()=>expect(snapshotListener).toBeTypeOf("function"));
+    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify(base)})));
+    expect(screen.getByTestId("historical-v2-streaming-dashboard")).toBeInTheDocument();
+    const account={accountId:"account-1",cycleSequence:0,cycleId:"c0",symbol:"BTCUSDT",partition:"DEVELOPMENT",replayBarClosedAtUtc:"2026-01-01T00:00:00.000Z",cash:"100.00000000",equity:"100.00000000",grossRealizedPnl:"0.00000000",netRealizedPnl:"0.00000000",netUnrealizedPnl:"0.00000000",netPnl:"0.00000000",openPositionsCount:0,decisionsCount:1,riskVetoCount:0,ordersCount:0,fillsCount:0,lastDecision:{reasonCodes:["CASH"]},lastRisk:{},lastExecution:{},lastAccounting:{positions:{}},lastGuardian:{},lastLearning:{},observedExecutionEffects:[],stages:[],snapshots:[],checkpoint:null,ledgerHeadContentDigestHex:"a".repeat(64)};
+    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify({...base,eventId:"first",aggregate:{...base.aggregate,accountCount:1,processedRecords:1,latestCycleSequence:0},accounts:[account]})})));
+    expect(screen.getByText("account-1")).toBeInTheDocument();
+    expect(screen.queryByText(/scope mismatch/i)).not.toBeInTheDocument();
   });
 });

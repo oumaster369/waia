@@ -175,6 +175,8 @@ describe("DEE-756 Forecast Runtime Authority V2", () => {
     expect(second).toEqual(first);
     if (first.status !== "FORECAST_AUTHORIZED") throw new Error("expected authority");
     expect(requireForecastRuntimeAuthorizedOutcomeV2(first)).toBe(first);
+    const persisted = JSON.parse(JSON.stringify(first)) as typeof first;
+    expect(requireForecastRuntimeAuthorizedOutcomeV2(persisted)).toEqual(first);
     expect(JSON.stringify(first.authority)).not.toMatch(
       /BUY|SELL|confidence|expectedEdge|riskMultiplier|capitalEligible/,
     );

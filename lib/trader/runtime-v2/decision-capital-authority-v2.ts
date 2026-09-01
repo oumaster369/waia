@@ -21,7 +21,8 @@ export type DecisionCapitalRequestV2 = Readonly<{
   cycleId: string;
   symbol: string;
   referencePrice: string;
-  executionMode: "paper" | "live-equivalent";
+  /** Historical is an isolated modeled-execution surface and can never submit capital. */
+  executionMode: "historical" | "paper" | "live-equivalent";
   forecastOutcome: ForecastRuntimeOutcomeV2;
   proposal: DecisionCapitalProposalV2;
 }>;
@@ -277,7 +278,12 @@ export async function runDecisionCapitalAuthorityV2(
       throw new DecisionCapitalAuthorityV2ViolationError("EXECUTION_QUANTITY_AMPLIFICATION_FORBIDDEN");
     }
     const order = execution.execution.order;
-    const expectedOrderMode = request.executionMode === "paper" ? "paper" : "live";
+    const expectedOrderMode =
+      request.executionMode === "historical"
+        ? "mock"
+        : request.executionMode === "paper"
+          ? "paper"
+          : "live";
     if (
       order.organizationId !== request.organizationId ||
       order.executionMode !== expectedOrderMode ||

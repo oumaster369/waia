@@ -2,6 +2,7 @@ import { quantizeScale8HalfUp } from "@/lib/trader/intelligence/forecast-v2/quan
 import { distributionSemanticDigestHex } from "@/lib/trader/intelligence/forecast-v2/distribution-semantic-digest-v1";
 import { computeForecastContentDigest } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { SCIENTIFIC_ADMISSION_RECEIPT_VERSION } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
+import { SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 
 import { validateForecastAnchorPriceAuthorityV1 } from "./dee659-execution-payoff-authorities-v1";
 import {
@@ -147,7 +148,8 @@ function scientificAdmissionReasons(
   const verification = input.authorityVerification.scientificAdmission;
   const validSubject =
     admission.schemaVersion === DEE660_SCIENTIFIC_ADMISSION_AUTHORITY_VERSION &&
-    admission.sourceReceiptSchemaVersion === SCIENTIFIC_ADMISSION_RECEIPT_VERSION &&
+    [SCIENTIFIC_ADMISSION_RECEIPT_VERSION, SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION]
+      .includes(admission.sourceReceiptSchemaVersion) &&
     admission.organizationId === forecast.organizationId &&
     admission.wfPartition === "WF_PREDICTIVE" &&
     admission.terminalStatus === "QUALIFIED" &&

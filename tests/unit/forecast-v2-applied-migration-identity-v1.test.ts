@@ -68,6 +68,15 @@ describe("Forecast V2 applied migration identity", () => {
       "0180_dee635_trade_leg_reference_guards",
       "0181_dee636_guardian_assessment_v2",
       "0182_dee637_runtime_authority_v2",
+      "0183_historical_simulation_v2_evidence",
+      "0184_historical_simulation_observed_execution_effects_v2",
+      "0185_dee659_durable_authority_bundle_v2",
+      "0186_historical_simulation_dataset_membership_v2",
+      "0187_canonical_decision_verification_receipt_v2",
+      "0188_historical_simulation_atomic_cycle_resume_v2",
+      "0189_historical_forecast_input_pit_v2",
+      "0190_internal_guardian_runtime_privilege_revoke",
+      "0191_historical_preholdout_dataset_authority_v2",
     ]);
     expect(
       identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
