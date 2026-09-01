@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: null
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
+  prNumber: 541
+  prUrl: "https://github.com/oumaster369/waia/pull/541"
+  lastValidatedGitSha: "59041d83"
   lastValidationAt: "2026-09-01"
   blockedReason: null
-  nextAction: "Obtain Human review/merge of the canonical documentation, then wait for explicit Human permission before starting DEE-871."
+  nextAction: "Obtain Human review/squash merge of PR #541, then wait for explicit Human permission before starting DEE-871."
 provenance:
   createdFrom: human-ratified-product-dialogue
   gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
