@@ -18,6 +18,13 @@ const defaultClock: HtxTransportClock = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
+function isRetryableFetchFailure(error: unknown): boolean {
+  // The Fetch standard reports DNS, socket, TLS and connection-reset failures
+  // as TypeError. Do not retry arbitrary application errors thrown by an
+  // injected fetch implementation, nor explicit abort/timeout signals.
+  return error instanceof TypeError;
+}
+
 /** Deterministic min-interval throttle with optional HTX rate-limit header adjustment. */
 export class DeterministicRequestThrottle {
   private nextAllowedAtMs: number;
@@ -84,7 +91,7 @@ export class HtxTransport {
         // retry budget to those failures as it does to transient 5xx replies.
         // The final error is rethrown unchanged so callers retain fail-closed
         // classification and never mistake exhaustion for an HTTP response.
-        if (attempt === this.policy.maxRetries) {
+        if (!isRetryableFetchFailure(error) || attempt === this.policy.maxRetries) {
           throw error;
         }
         const delayMs = computeRetryDelayMs(attempt, this.policy, undefined, this.clock.now());

@@ -114,6 +114,29 @@ describe("DeterministicRequestThrottle (DEE-346)", () => {
 });
 
 describe("HtxTransport (DEE-346)", () => {
+  it("does not retry application errors thrown by an injected fetch", async () => {
+    const applicationError = new Error("Unexpected fetch URL");
+    let attempts = 0;
+    const fetchImpl = (async () => {
+      attempts += 1;
+      throw applicationError;
+    }) as typeof fetch;
+    const clock = {
+      now: () => 1_000,
+      sleep: vi.fn(async () => undefined),
+    };
+    const transport = new HtxTransport(fetchImpl, {
+      ...DEFAULT_HTX_TRANSPORT_POLICY,
+      minIntervalMs: 0,
+      maxRetries: 4,
+    }, clock);
+
+    await expect(transport.fetch("https://api.huobi.pro/market/history/candles"))
+      .rejects.toBe(applicationError);
+    expect(attempts).toBe(1);
+    expect(clock.sleep).not.toHaveBeenCalled();
+  });
+
   it("retries transient fetch exceptions then succeeds", async () => {
     const networkError = new TypeError("fetch failed");
     let attempts = 0;

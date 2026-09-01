@@ -35,7 +35,7 @@
     ],
     "expectedFileCount": 154,
     "sortedPathDigestHex": "d5f2b4b0f3642e52cb8aa1270105d66a4e3286b1d29ae26472bb3a02b951fd31",
-    "sortedContentDigestHex": "4909c195885ba16a988513f8f7cc1739ee7e1e0581fe33a9afe24ce4c15bd054"
+    "sortedContentDigestHex": "967c4686a3f8b8147904b86584bd4a4ac6e8ab6a694db4136da2ff8ed82127fb"
   },
   "sourceRules": [
     {
@@ -114,9 +114,9 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 116,
-    "sortedPathDigestHex": "f41f4393f0da83dd1ed9e0569434aff8cdf12cc5fee38e16fdcf4480e5a6c928",
-    "sortedContentDigestHex": "3a95f3c647a9867cacb48fe43e0294e93fb524690f8d46f0047501197bf97a37"
+    "expectedFileCount": 121,
+    "sortedPathDigestHex": "62657276517859ce373afdff516f2cc8ac6ab4399dd43278766554cba0058f4e",
+    "sortedContentDigestHex": "6311e9ea6c0f195769be27357eb267ebac4664d7d0b05251b45404c13110dfba"
   },
   "consumerRules": [
     {
@@ -141,7 +141,7 @@
     },
     {
       "id": "EXCLUDED_DATA_RESEARCH_CONSUMERS",
-      "pathPattern": "^lib/trader/(market-data|market-brain|backtest|research|observability|mi)/",
+      "pathPattern": "^lib/trader/(market-data|market-brain|backtest|historical-simulation-v2|research|observability|mi)/",
       "disposition": "EXCLUDED_OR_LINEAGE_ONLY"
     },
     {
