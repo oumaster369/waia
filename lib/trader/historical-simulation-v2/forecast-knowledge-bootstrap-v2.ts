@@ -22,6 +22,38 @@ export type HistoricalForecastKnowledgeBootstrapV2 = Readonly<{
   contentDigestHex: string;
 }>;
 
+export type HistoricalForecastKnowledgeDurableRowV2 = Readonly<{
+  from_ref: string;
+  to_ref: string;
+  relation_kind: string;
+  confidence: string;
+  strength: string;
+  regime_scope: string;
+  failure_cases_json: string;
+  verified: boolean;
+}>;
+
+export function assertHistoricalForecastKnowledgeBootstrapDurableRowV2(
+  expected: HistoricalForecastKnowledgeBootstrapV2,
+  row: HistoricalForecastKnowledgeDurableRowV2 | undefined,
+): void {
+  if (
+    !row ||
+    row.from_ref !== expected.fromRef ||
+    row.to_ref !== expected.toRef ||
+    row.relation_kind !== expected.relationKind ||
+    row.confidence !== expected.confidence ||
+    row.strength !== expected.strength ||
+    row.regime_scope !== expected.regimeScope ||
+    row.failure_cases_json !== expected.failureCasesJson ||
+    row.verified !== expected.verified
+  ) {
+    throw new Error(
+      "HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE",
+    );
+  }
+}
+
 function uuidFromDigest(digest: string): string {
   const chars = digest.slice(0, 32).split("");
   chars[12] = "5";
@@ -89,12 +121,7 @@ export async function persistHistoricalForecastKnowledgeBootstrapV2(
         AND id=${edge.knowledgeEdgeId}::uuid`;
     if (existing[0]) {
       const row = existing[0];
-      if (row.from_ref !== edge.fromRef || row.to_ref !== edge.toRef ||
-          row.relation_kind !== edge.relationKind || row.confidence !== edge.confidence ||
-          row.strength !== edge.strength || row.regime_scope !== edge.regimeScope ||
-          row.failure_cases_json !== edge.failureCasesJson || row.verified !== false) {
-        throw new Error("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_CONFLICT");
-      }
+      assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, row);
       return false;
     }
     await tx`INSERT INTO trader_knowledge_edges

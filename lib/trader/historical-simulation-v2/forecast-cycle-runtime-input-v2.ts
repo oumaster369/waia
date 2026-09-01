@@ -16,6 +16,8 @@ import type {
   RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
+import { historicalExecutionInstrumentsMatch } from
+  "@/lib/trader/execution/historical-execution-symbol";
 import type {
   ScientificAdmissionExpectedBindingsV2,
   ScientificAdmissionReceiptV2,
@@ -23,6 +25,10 @@ import type {
 
 import { buildHistoricalHypothesisApplicabilitySetV2 } from
   "./hypothesis-applicability-v2";
+import {
+  buildHistoricalForecastKnowledgeBootstrapV2,
+  type HistoricalForecastKnowledgeBootstrapV2,
+} from "./forecast-knowledge-bootstrap-v2";
 
 export const HISTORICAL_FORECAST_CYCLE_RUNTIME_INPUT_V2 =
   "waia.trader.historical_forecast_cycle_runtime_input.v2" as const;
@@ -48,8 +54,7 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   activeKnowledgeState: unknown;
   selectedKnowledgeClaimDigestsHex: readonly string[];
   selectedFailureBoundaryDigestsHex: readonly string[];
-  knowledgeEdgeId: string;
-  knowledgeContentDigestHex: string;
+  knowledgeBootstrap: HistoricalForecastKnowledgeBootstrapV2;
   evaluation: EvaluationCycleResult;
   requiredInformationProfile: RequiredInformationProfileV2;
   informationSufficiencyReceipt: InformationSufficiencyReceiptV2;
@@ -70,6 +75,26 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   if (!Number.isFinite(rv) || rv < 0) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:REALIZED_VOL");
   }
+  if (
+    !historicalExecutionInstrumentsMatch(input.symbol, evaluation.features.instrumentId) ||
+    !historicalExecutionInstrumentsMatch(input.symbol, input.predictivePackage.family.symbol)
+  ) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:SYMBOL_SCOPE");
+  }
+  const expectedKnowledgeBootstrap = buildHistoricalForecastKnowledgeBootstrapV2({
+    organizationId: input.organizationId,
+    symbol: input.symbol,
+    horizonMinutes: input.predictivePackage.family.executionHorizonMinutes,
+    predictivePackageContentDigestHex:
+      input.predictivePackage.predictivePackageContentDigest.toString("hex"),
+  });
+  if (
+    computeSemanticSha256Hex(input.knowledgeBootstrap) !==
+      computeSemanticSha256Hex(expectedKnowledgeBootstrap) ||
+    input.knowledgeBootstrap.contentDigestHex !== expectedKnowledgeBootstrap.contentDigestHex
+  ) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_LINEAGE");
+  }
   const applicability = buildHistoricalHypothesisApplicabilitySetV2({
     releaseSha: input.releaseSha,
     organizationId: input.organizationId,
@@ -77,6 +102,14 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     pitAnchor: input.pitAnchor,
     hypothesisSet: evaluation.hypothesisSet,
   });
+  // Historical orchestration uses the execution-domain enum "HTX" while the
+  // immutable Forecast family identity uses the canonical market-data token "htx".
+  // Bind the snapshot to the package's frozen token; case must never create a
+  // distinct mathematical identity or make an otherwise exact package non-executable.
+  const forecastVenue = input.predictivePackage.family.venue;
+  if (input.venue !== "HTX" || forecastVenue !== "htx") {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:VENUE_IDENTITY");
+  }
   const stateRepresentationSpecDigestHex = computeSemanticSha256Hex({
     schemaVersion: HISTORICAL_FORECAST_CYCLE_RUNTIME_INPUT_V2,
     releaseSha: input.releaseSha,
@@ -88,7 +121,7 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     accountId: input.accountId,
     instrumentId: evaluation.features.instrumentId,
     symbol: input.symbol,
-    venue: input.venue,
+    venue: forecastVenue,
     analysisPurpose: "NEW_OPPORTUNITY",
     analyticalTimeframe: input.analyticalTimeframe,
     horizon: input.horizon,
@@ -123,7 +156,7 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     expected: {
       organizationId: input.organizationId,
       symbol: input.symbol,
-      venue: input.venue,
+      venue: forecastVenue,
       analyticalTimeframe: input.analyticalTimeframe,
       horizon: input.horizon,
       sourceProfileDigestHex: input.sourceProfileDigestHex,
@@ -146,7 +179,7 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     executionHorizonMinutes: input.predictivePackage.family.executionHorizonMinutes,
     normalizationVersionDigestHex:
       input.predictivePackage.family.normalizationVersionDigestHex,
-    knowledgeEdgeId: input.knowledgeEdgeId,
-    knowledgeContentDigestHex: input.knowledgeContentDigestHex,
+    knowledgeEdgeId: expectedKnowledgeBootstrap.knowledgeEdgeId,
+    knowledgeContentDigestHex: expectedKnowledgeBootstrap.contentDigestHex,
   });
 }

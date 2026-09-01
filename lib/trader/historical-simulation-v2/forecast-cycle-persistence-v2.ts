@@ -1,5 +1,7 @@
 import type postgres from "postgres";
 
+import { historicalExecutionInstrumentsMatch } from
+  "@/lib/trader/execution/historical-execution-symbol";
 import {
   issueForecastRuntimeV2,
   requireForecastRuntimeAuthorizedOutcomeV2,
@@ -7,6 +9,8 @@ import {
 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { persistForecastBundleV2 } from
   "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
+import { buildHistoricalForecastKnowledgeBootstrapV2 } from
+  "./forecast-knowledge-bootstrap-v2";
 
 /** Replays authority and atomically persists its exact source bytes with both target forecasts. */
 export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input: Readonly<{
@@ -36,6 +40,25 @@ export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input:
   if (outcome.authority.organizationId !== input.organizationId) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:ORGANIZATION");
   }
+  if (!historicalExecutionInstrumentsMatch(
+    input.symbol,
+    outcome.issuance.package.family.symbol,
+  )) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:SYMBOL");
+  }
+  const historicalKnowledgeBootstrap = buildHistoricalForecastKnowledgeBootstrapV2({
+    organizationId: input.organizationId,
+    symbol: input.symbol,
+    horizonMinutes: input.runtimeInput.executionHorizonMinutes,
+    predictivePackageContentDigestHex:
+      outcome.authority.selectedPredictivePackageContentDigestHex,
+  });
+  if (
+    input.runtimeInput.knowledgeEdgeId !== historicalKnowledgeBootstrap.knowledgeEdgeId ||
+    input.runtimeInput.knowledgeContentDigestHex !== historicalKnowledgeBootstrap.contentDigestHex
+  ) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:KNOWLEDGE_LINEAGE");
+  }
   return persistForecastBundleV2(sql, {
     organizationId: input.organizationId,
     packageId: input.packageId,
@@ -46,6 +69,7 @@ export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input:
     issuance: outcome.issuance,
     authorizedOutcome: outcome,
     runtimeInput: input.runtimeInput,
+    historicalKnowledgeBootstrap,
     issuanceSequence: input.issuanceSequence,
   });
 }

@@ -2,6 +2,8 @@ import {
   canonicalizeSemanticJsonString,
   computeSemanticSha256Hex,
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { historicalExecutionInstrumentsMatch } from
+  "@/lib/trader/execution/historical-execution-symbol";
 import type { MarketStateSnapshotV2 } from "@/lib/trader/intelligence/predictive-admission";
 import {
   requireForecastRuntimeAdmittedPredictiveAdmissionV1,
@@ -154,7 +156,8 @@ function requireSnapshotIdentity(
     snapshot.qualifiedInputBindingDigestHex !== admission.qualifiedInputBindingDigestHex ||
     snapshot.analysisPurpose !== admission.analysisPurpose ||
     snapshot.pitAnchor !== admission.pitAnchor ||
-    snapshot.organizationId !== binding.organizationId
+    snapshot.organizationId !== binding.organizationId ||
+    !historicalExecutionInstrumentsMatch(snapshot.instrumentId, snapshot.symbol)
   ) {
     throw new Error("FORECAST_RUNTIME_SNAPSHOT_MISMATCH");
   }

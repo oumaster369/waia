@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildHistoricalForecastKnowledgeBootstrapV2 } from
+import {
+  assertHistoricalForecastKnowledgeBootstrapDurableRowV2,
+  buildHistoricalForecastKnowledgeBootstrapV2,
+} from
   "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
 
 const input = {
@@ -27,5 +30,24 @@ describe("historical Forecast cold-start Knowledge authority v2", () => {
     expect(buildHistoricalForecastKnowledgeBootstrapV2({ ...input,
       predictivePackageContentDigestHex: "b".repeat(64) }).knowledgeEdgeId)
       .not.toBe(first.knowledgeEdgeId);
+  });
+
+  it("requires the exact durable edge bytes", () => {
+    const edge = buildHistoricalForecastKnowledgeBootstrapV2(input);
+    const row = {
+      from_ref: edge.fromRef, to_ref: edge.toRef, relation_kind: edge.relationKind,
+      confidence: edge.confidence, strength: edge.strength, regime_scope: edge.regimeScope,
+      failure_cases_json: edge.failureCasesJson, verified: edge.verified,
+    };
+    expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, row))
+      .not.toThrow();
+    expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, undefined))
+      .toThrowError("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE");
+    expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, {
+      ...row, to_ref: "market-horizon:ETHUSDT:30m",
+    })).toThrowError("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE");
+    expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, {
+      ...row, verified: true,
+    })).toThrowError("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE");
   });
 });

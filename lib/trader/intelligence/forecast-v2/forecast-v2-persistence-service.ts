@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 
 import type postgres from "postgres";
 
+import { historicalExecutionInstrumentsMatch } from
+  "@/lib/trader/execution/historical-execution-symbol";
 import { orgScopedPostgresPredicate } from "@/lib/waia-core/scope/org-context";
 
 import {
@@ -53,6 +55,12 @@ import {
   type ForecastRuntimeInputV2,
 } from "./forecast-runtime-authority-v2";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  assertHistoricalForecastKnowledgeBootstrapDurableRowV2,
+  buildHistoricalForecastKnowledgeBootstrapV2,
+  type HistoricalForecastKnowledgeBootstrapV2,
+} from
+  "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -394,6 +402,8 @@ export type PersistForecastBundleV2Input = {
   authorizedOutcome?: ForecastRuntimeAuthorizedOutcomeV2;
   /** Exact producer-owned input persisted atomically with an authorized Forecast. */
   runtimeInput?: ForecastRuntimeInputV2;
+  /** Historical-only durable knowledge proof, verified inside the issuance transaction. */
+  historicalKnowledgeBootstrap?: HistoricalForecastKnowledgeBootstrapV2;
   issuanceSequence?: number;
   /** @deprecated Natural identity (run/cycle/symbol/anchor) is the idempotency authority. */
   idempotencyKey?: string;
@@ -536,6 +546,14 @@ export async function persistForecastBundleV2(
   sql: postgres.Sql,
   input: PersistForecastBundleV2Input,
 ): Promise<PersistForecastBundleV2Result> {
+  if (
+    !historicalExecutionInstrumentsMatch(input.symbol, input.issuance.package.family.symbol) ||
+    input.symbol !== input.issuance.package.family.symbol
+  ) {
+    throw new Error(
+      "[forecast-v2/persistence] symbol mismatch vs predictive package family (fail closed)",
+    );
+  }
   const runtimeSource = validateRuntimeInputSource(input);
   if (input.organizationId !== input.issuance.organizationId) {
     throw new Error("[forecast-v2/persistence] organizationId mismatch vs issuance (fail closed)");
@@ -546,8 +564,13 @@ export async function persistForecastBundleV2(
     );
   }
 
-  const packageRows = await sql<{ id: string }[]>`
-    SELECT id::text AS id
+  const packageRows = await sql<{
+    id: string;
+    symbol: string;
+    package_content_digest: string;
+  }[]>`
+    SELECT id::text AS id, symbol,
+           predictive_package_content_digest AS package_content_digest
     FROM trader_forecast_predictive_package_v2
     WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
       AND id = ${input.packageId}::uuid
@@ -556,6 +579,15 @@ export async function persistForecastBundleV2(
   if (!packageRows[0]) {
     throw new Error(
       "[forecast-v2/persistence] predictive package not found for organization (fail closed)",
+    );
+  }
+  if (
+    packageRows[0].symbol !== input.symbol ||
+    packageRows[0].package_content_digest !==
+      digestHex(input.issuance.package.predictivePackageContentDigest)
+  ) {
+    throw new Error(
+      "[forecast-v2/persistence] persisted predictive package symbol/content mismatch (fail closed)",
     );
   }
 
@@ -677,6 +709,46 @@ export async function persistForecastBundleV2(
         const knowledgeContentDigestHex = runtime.knowledgeContentDigestHex;
         if (!binding || !admission || !snapshot || !runtime.predictivePackage || !knowledgeContentDigestHex) {
           throw new Error("[forecast-v2/persistence] authorized runtime source is incomplete");
+        }
+        if (input.historicalKnowledgeBootstrap) {
+          const expectedKnowledge = buildHistoricalForecastKnowledgeBootstrapV2({
+            organizationId: input.organizationId,
+            symbol: input.symbol,
+            horizonMinutes: runtime.executionHorizonMinutes,
+            predictivePackageContentDigestHex:
+              binding.selectedPredictivePackageContentDigestHex,
+          });
+          if (
+            computeSemanticSha256Hex(input.historicalKnowledgeBootstrap) !==
+              computeSemanticSha256Hex(expectedKnowledge) ||
+            runtime.knowledgeEdgeId !== expectedKnowledge.knowledgeEdgeId ||
+            knowledgeContentDigestHex !== expectedKnowledge.contentDigestHex
+          ) {
+            throw new Error(
+              "[forecast-v2/persistence] runtime knowledge lineage mismatch (fail closed)",
+            );
+          }
+          const knowledgeRows = await tx<{
+          from_ref: string;
+          to_ref: string;
+          relation_kind: string;
+          confidence: string;
+          strength: string;
+          regime_scope: string;
+          failure_cases_json: string;
+          verified: boolean;
+          }[]>`
+          SELECT from_ref, to_ref, relation_kind, confidence, strength,
+                 regime_scope, failure_cases_json, verified
+          FROM trader_knowledge_edges
+          WHERE organization_id=${input.organizationId}::uuid
+            AND id=${expectedKnowledge.knowledgeEdgeId}::uuid
+          FOR KEY SHARE
+          `;
+          assertHistoricalForecastKnowledgeBootstrapDurableRowV2(
+            expectedKnowledge,
+            knowledgeRows[0],
+          );
         }
         await tx`
           INSERT INTO trader_forecast_runtime_input_source_v2 (

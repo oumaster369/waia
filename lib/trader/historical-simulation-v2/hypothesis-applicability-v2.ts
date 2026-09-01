@@ -2,6 +2,8 @@ import { computeSemanticSha256Hex } from
   "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { HypothesisSet } from
   "@/lib/trader/intelligence/hypothesis/hypothesis.types";
+import { requireCanonicalHistoricalApplicabilityReceiptV1 } from
+  "@/lib/trader/intelligence/hypothesis/canonical-historical-applicability-v1";
 import type { HypothesisApplicabilityAssessmentV1 } from
   "@/lib/trader/intelligence/predictive-admission";
 
@@ -36,12 +38,37 @@ export function buildHistoricalHypothesisApplicabilitySetV2(input: Readonly<{
     releaseSha: input.releaseSha,
   });
   const active = input.hypothesisSet.activeHypothesis;
+  const opportunity = input.hypothesisSet.opportunity;
+  let receiptValid = false;
+  if (active && opportunity?.applicabilityReceipt) {
+    try {
+      const receipt = requireCanonicalHistoricalApplicabilityReceiptV1(
+        opportunity.applicabilityReceipt,
+      );
+      receiptValid =
+        receipt.contentDigestHex === opportunity.applicabilityReceiptContentDigestHex &&
+        receipt.organizationId === input.organizationId &&
+        receipt.symbol === input.symbol &&
+        receipt.pitAnchor === input.pitAnchor &&
+        receipt.canonicalHypothesisId === active.canonicalHypothesisId &&
+        receipt.canonicalHypothesisCausalStateDigestHex ===
+          active.canonicalHypothesisCausalStateDigest;
+    } catch {
+      receiptValid = false;
+    }
+  }
   const status: HypothesisApplicabilityAssessmentV1["status"] =
-    !active || !input.hypothesisSet.opportunity
+    !active || !opportunity
       ? "BLOCKED"
       : active.authority !== "CANONICAL_PIT_KNOWLEDGE"
         ? "BLOCKED"
-        : input.hypothesisSet.opportunity.authorized
+        : opportunity.authorized &&
+            opportunity.authority ===
+              "CANONICAL_HISTORICAL_APPLICABILITY_RECEIPT_V1" &&
+            opportunity.capitalAuthority === "NONE" &&
+            /^[0-9a-f]{64}$/.test(
+              opportunity.applicabilityReceiptContentDigestHex ?? "",
+            ) && receiptValid
           ? "APPLICABLE"
           : "NOT_APPLICABLE";
   const assessmentBody = {

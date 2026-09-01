@@ -18,6 +18,10 @@ import {
   buildCanonicalCausalLineageV1,
   serializeCanonicalCausalLineageV1,
 } from "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
+import {
+  buildCanonicalHistoricalApplicabilityReceiptV1,
+  projectCanonicalHistoricalOpportunityV1,
+} from "@/lib/trader/intelligence/hypothesis/canonical-historical-applicability-v1";
 
 export type BuildHypothesisSetInput = {
   reconstruction: ReconstructionSnapshot;
@@ -27,6 +31,8 @@ export type BuildHypothesisSetInput = {
   organizationId?: string;
   symbol?: string;
   canonicalRuntimeIntelligenceState?: CanonicalRuntimeIntelligenceStateV1;
+  /** Exact historical profile gate; never enabled by the live or paper runtime. */
+  canonicalApplicabilityPurpose?: "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL";
 };
 
 export type BuildHypothesisSetResult = {
@@ -282,9 +288,21 @@ export function buildHypothesisSet(input: BuildHypothesisSetInput): BuildHypothe
   const updatedSession = updateSessionState(input.sessionState, hypotheses);
   const ranked = [...hypotheses].sort((a, b) => b.confidence - a.confidence);
   const activeHypothesis = ranked[0] ?? null;
-  // DEE-629 is epistemic authority only. Predictive Admission owns any future
-  // numeric/opportunity receipt; ordinal Knowledge rank cannot authorize capital.
-  const opportunity: MarketOpportunity | null = null;
+  // DEE-629 remains epistemic authority only. The explicit historical profile may
+  // additionally produce a content-addressed boolean applicability receipt. It carries
+  // no numeric conviction, trading permission, expected edge, or capital authority.
+  const opportunity: MarketOpportunity | null =
+    input.canonicalApplicabilityPurpose === "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL" &&
+    activeHypothesis
+      ? projectCanonicalHistoricalOpportunityV1(
+          activeHypothesis,
+          buildCanonicalHistoricalApplicabilityReceiptV1({
+            reconstruction: input.reconstruction,
+            canonicalState: input.canonicalRuntimeIntelligenceState,
+            activeHypothesis,
+          }),
+        )
+      : null;
 
   return {
     hypothesisSet: {

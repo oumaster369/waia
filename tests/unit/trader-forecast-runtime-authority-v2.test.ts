@@ -102,7 +102,7 @@ function fixture(): ForecastRuntimeInputV2 {
   const marketStateSnapshot = buildMarketStateSnapshotV2({
     organizationId,
     accountId: null,
-    instrumentId: "BTC-USDT",
+    instrumentId: "BTC/USDT",
     symbol: "BTCUSDT",
     venue: "htx",
     analysisPurpose: "NEW_OPPORTUNITY",
@@ -200,6 +200,37 @@ describe("DEE-756 Forecast Runtime Authority V2", () => {
         },
       }),
     ).toMatchObject({ status: "NON_ACTIONABLE", reason: "MISSING_OR_NOT_ADMITTED" });
+  });
+
+  it("refuses a digest-consistent ETH instrument substituted into a BTC snapshot", () => {
+    const input = fixture();
+    const { contentDigestHex: _snapshotDigest, ...snapshotBody } =
+      input.marketStateSnapshot!;
+    void _snapshotDigest;
+    const mismatchedSnapshotBody = {
+      ...snapshotBody,
+      instrumentId: "ETH/USDT",
+    };
+    const mismatchedSnapshot = {
+      ...mismatchedSnapshotBody,
+      contentDigestHex: computeSemanticSha256Hex(mismatchedSnapshotBody),
+    };
+    const { contentDigestHex: _admissionDigest, ...admissionBody } =
+      input.predictiveAdmissionReceipt!;
+    void _admissionDigest;
+    const mismatchedAdmissionBody = {
+      ...admissionBody,
+      marketStateSnapshotContentDigestHex: mismatchedSnapshot.contentDigestHex,
+    };
+
+    expect(issueForecastRuntimeV2({
+      ...input,
+      marketStateSnapshot: mismatchedSnapshot,
+      predictiveAdmissionReceipt: {
+        ...mismatchedAdmissionBody,
+        contentDigestHex: computeSemanticSha256Hex(mismatchedAdmissionBody),
+      },
+    })).toMatchObject({ status: "NON_ACTIONABLE", reason: "PIT_OR_INPUT_MISMATCH" });
   });
 
   it.each([

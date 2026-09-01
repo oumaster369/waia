@@ -178,7 +178,7 @@ function buildRuntimeInput(
   const marketStateSnapshot = buildMarketStateSnapshotV2({
     organizationId,
     accountId: null,
-    instrumentId: "BTC-USDT",
+    instrumentId: "BTC/USDT",
     symbol: family.symbol,
     venue: "htx",
     analysisPurpose: "NEW_OPPORTUNITY",

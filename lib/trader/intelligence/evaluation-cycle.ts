@@ -178,6 +178,9 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
         organizationId: input.organizationId,
         symbol: input.symbol ?? input.bars[0]?.symbol ?? "",
         canonicalRuntimeIntelligenceState: input.canonicalRuntimeIntelligenceState,
+        canonicalApplicabilityPurpose: profileActive
+          ? "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL"
+          : undefined,
       });
 
   const msv = buildMsvEnvelope({
