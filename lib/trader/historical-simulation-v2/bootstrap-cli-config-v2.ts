@@ -9,6 +9,7 @@ export type HistoricalSimulationBootstrapCliConfigV2 = Readonly<{
   datasetRoot: string;
   qualificationReceiptPath: string;
   runtimeRequalificationReceiptPath: string;
+  htxVolumeQualificationReceiptPath: string;
   initialRecordIndex: number;
   cycleCount: number;
 }>;
@@ -63,6 +64,7 @@ export function parseHistoricalSimulationBootstrapCliEnvV2(
     datasetRoot: required(env, "FHV_DATASET_ROOT"),
     qualificationReceiptPath: required(env, "FHV_PRE_HOLDOUT_QUALIFICATION_RECEIPT_PATH"),
     runtimeRequalificationReceiptPath: required(env, "FHV_RUNTIME_REQUALIFICATION_RECEIPT_PATH"),
+    htxVolumeQualificationReceiptPath: required(env, "FHV_HTX_VOLUME_QUALIFICATION_RECEIPT_PATH"),
     initialRecordIndex,
     cycleCount,
   });
