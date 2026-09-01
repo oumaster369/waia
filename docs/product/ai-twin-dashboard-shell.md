@@ -1,6 +1,6 @@
 # WAIA AI-Twin v1 — Dashboard Shell
 
-**Status:** Product Source of Truth for the AI-Twin v1 dashboard shell.
+**Status:** Legacy shipped-runtime dashboard truth. Superseded for future AI-TWIN implementation by the [AI-TWIN Product Constitution](AI-TWIN-PRODUCT-CONSTITUTION.md), [v1 completion spec](../product-specs/ai-twin-v1-completion.md) and [program roadmap](../roadmaps/ai-twin-program-roadmap.md). Retained below for migration and regression evidence.
 
 This document is the canonical, system-level definition of the AI-Twin v1 dashboard shell content and states. All frontend, backend, and AI tasks consume this document as the single source of truth for what the dashboard shell exposes and how it behaves. Conflicts with downstream issues are resolved here first, then propagated.
 

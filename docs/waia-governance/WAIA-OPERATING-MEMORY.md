@@ -15,7 +15,7 @@
 | Fact | Source of truth |
 |------|-----------------|
 | **WAIA DEV OS** — governed human–agent–Linear–Git workflow that ships the product | [`WAIA-DEV-OS.md`](WAIA-DEV-OS.md), [`AGENTS.md`](../../AGENTS.md) |
-| **Product in flight** — AI-Twin **v1** (dashboard, Twin dialogue, readiness, Diary/Society gates, Socialization) | [`../product/WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md), [`SYSTEM-MAP.md`](SYSTEM-MAP.md) |
+| **Product in flight** — shipped legacy AI-Twin plus Human-ratified **AI-TWIN v1 Formation, Embodiment & Adviser** preparation | [`../product/AI-TWIN-PRODUCT-CONSTITUTION.md`](../product/AI-TWIN-PRODUCT-CONSTITUTION.md), [`../ai-twin/README.md`](../ai-twin/README.md), [`../roadmaps/ai-twin-program-roadmap.md`](../roadmaps/ai-twin-program-roadmap.md) |
 | **Runtime posture** — split SQLite / Postgres behind explicit policy (`getWaiaRuntimeDb()`, env gates, phased route adoption); telemetry as stdout JSON on instrumented routes | [`../migrations/DEE-64-TRACKER.md`](../migrations/DEE-64-TRACKER.md), [`../migrations/DEE-95-RUNTIME-ROUTING-STRATEGY.md`](../migrations/DEE-95-RUNTIME-ROUTING-STRATEGY.md), [`../migrations/DEE-95E-OPERATIONAL-READINESS-PLAN.md`](../migrations/DEE-95E-OPERATIONAL-READINESS-PLAN.md) |
 | **Executable work** — Linear project WAIA only; `dee-<NN>-<slug>` branches; humans merge | [`AGENTS.md`](../../AGENTS.md), [`LINEAR-GOVERNANCE.md`](LINEAR-GOVERNANCE.md) |
 
@@ -23,10 +23,11 @@
 
 ## 2. Current MVP truth
 
-- **Journey:** Landing → Auth → Dashboard; Twin tab active first; Diary locked until total readiness ≥ **60%**; at **100%** readiness, Socialization appears while Society remains gated per product flow; post-Socialization, Society usable — detail and edge cases in [`../product/ai-twin-user-flow.md`](../product/ai-twin-user-flow.md), not reinterpreted here.
+- **Current runtime journey:** Landing → Auth → Dashboard; legacy Diary `>=60%`, Socialization `100%`, Society preview. This remains true until an approved DEE-884 cutover and is documented by the legacy [`ai-twin-user-flow.md`](../product/ai-twin-user-flow.md).
+- **Target journey:** Diary from initial privacy consent; six evidence-maturity domains; Avatar Studio eligibility at Formation `20%` under separate passkey/liveness controls; Human-ratified initial model at `100%`; then Model Health and Adviser. Formation never grants social disclosure or action authority.
 - **Landing (on `dev`, post–PR #154 / `49b47a2`):** First block is a single responsive WebP hero (desktop `/brand/heap_comp_1.webp`, mobile `/brand/head_mobile_1.webp`); cinematic dark field + glass/gold auth; **Create Twin** requires **Your Name** (`fullName` maps via existing `identityLabel` / `identity_label` path — **no** schema migration); **Manrope** for UI/forms, **Cormorant Garamond** for ceremonial headings. Promotion to `main`/production is **out of band** for this memory line.
-- **Center:** Dialogue + Diary (when unlocked) + readiness model drive the MVP narrative; infrastructure work is **enabling**, not the product story ([`WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md)).
-- **Explicitly deferred:** Business / 3P, AI-Trader, AI-Marketplace, speculative multi-agent choreography ([`NON-GOALS.md`](NON-GOALS.md)).
+- **Center:** A projection-aware cognition loop—observation, sufficiency, competing hypotheses, model revision, prediction/experiment, outcome and Human correction—implemented through dialogue and private Diary. Infrastructure is enabling, not the product story.
+- **Version boundary:** v1 Formation/Embodiment/Adviser; v2 connected context/delegated actions; v3 Society/Alignment Contracts. Business/3P and AI-Marketplace remain deferred. AI-TRADER is an active independent parallel program.
 
 ---
 
@@ -43,6 +44,7 @@
 ## 4. Current roadmap reality
 
 - **Board:** Linear project WAIA is the live queue; this file does **not** mirror ticket states ([`AGENTS.md`](../../AGENTS.md) §Linear Integration).
+- **AI-TWIN program:** DEE-130 canonical root; DEE-868 (v1), DEE-870 (v2), DEE-869 (v3), sequenced by [`../roadmaps/ai-twin-program-roadmap.md`](../roadmaps/ai-twin-program-roadmap.md). No implementation starts until explicit Human permission after DEE-130 preparation.
 - **Engineering spine (names only):** DEE-64 staged persistence/runtime; **DEE-95\*** runtime routing + telemetry + ops readiness docs; **DEE-72\*** Postgres twin persistence and reasoning ports; **DEE-76–80** AI Gateway; post–DEE-105 items such as auth/OAuth `getDb()` migration called **deferred** in tracker ([`DEE-64-TRACKER.md`](../migrations/DEE-64-TRACKER.md)).
 - **Partner / production path:** Release identity and env alignment for tagged **`main` SHA** → production Worker / Execution Server documented in ops contracts (operator checklist; not a substitute for live infra state). Historical dual-branch notes may remain in older ops packets.
 - **In-repo gap:** No document titled “SENSE CODING roadmap.” Coding discipline for agents is **`AGENTS.md`** + Cursor workflow commands + [`DOCUMENTATION-STANDARDS.md`](DOCUMENTATION-STANDARDS.md) (five-memory traces).
@@ -51,7 +53,7 @@
 
 ## 5. Current operational priorities
 
-1. Ship **AI-Twin v1** behaviors against **`docs/product/**`** acceptance paths; avoid scope bleed into deferred modules ([`NON-GOALS.md`](NON-GOALS.md)).
+1. After explicit Human start permission, implement **AI-TWIN v1** against the Constitution, algorithm, completion spec and DEE-868 graph; do not extend legacy readiness semantics.
 2. Keep **runtime migrations honest**: code ↔ tracker alignment; cite trackers in PRs when touching persistence/routes/telemetry ([`MIGRATION-GOVERNANCE.md`](MIGRATION-GOVERNANCE.md)).
 3. Maintain **governance hygiene**: one execution label per Linear issue, local PR-readiness validation before handoff, no agent merge, no direct push to `main` ([`AGENTS.md`](../../AGENTS.md)). Single trunk: PR → `main`; official release = explicit Human tag of a `main` SHA.
 4. Advance **production readiness** only with ops artifacts (telemetry read path, staging checklists, rollback) per **DEE-95e** / **DEE-128** — no silent broad Postgres rollout ([`DEE-95E-OPERATIONAL-READINESS-PLAN.md`](../migrations/DEE-95E-OPERATIONAL-READINESS-PLAN.md)).
@@ -89,6 +91,8 @@
 ## 9. Current product center of gravity
 
 **Human-centered alignment** over time via Twin dialogue, Diary, and readiness — increases coherence between stated values, behavior, and trajectory ([`WAIA-V1-MVP-SPEC.md`](../product/WAIA-V1-MVP-SPEC.md) §North Star). **Privacy:** Diary literal text does not leak to Society feeds — [`../product/ai-twin-user-flow.md`](../product/ai-twin-user-flow.md) §8.
+
+The current canonical target is stronger: the Human is a changing process; the Twin is a revisable model, not identity. Formation Progress, Model Health, presence trust, Social Readiness and action authority are separate. Society uses mutual Alignment Contracts and forbids popularity mechanics. See [`../product/AI-TWIN-PRODUCT-CONSTITUTION.md`](../product/AI-TWIN-PRODUCT-CONSTITUTION.md).
 
 ---
 
@@ -147,7 +151,7 @@ From active constitutional acceptance (**binding within stated scope**): DEV OS 
 
 **Maintenance shape:** Prefer **small surgical edits** to numbered sections; bump **Last reconciled** below; avoid append-only appendices.
 
-**Last reconciled:** 2026-08-08 — single-trunk `main` operating rules (DEE-511); §15 historical dual-branch facts retained as dated memory.
+**Last reconciled:** 2026-09-01 — AI-TWIN target canon and DEE-130/v1-v3 program recorded; legacy runtime thresholds retained explicitly as current-state evidence.
 
 ---
 

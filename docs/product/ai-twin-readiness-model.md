@@ -1,6 +1,6 @@
 # WAIA AI-Twin v1 — Readiness Model
 
-**Status:** Source of Truth for the AI-Twin v1 readiness scoring model.
+**Status:** Legacy shipped-runtime source of truth. Superseded for future AI-TWIN implementation by the [AI-TWIN Product Constitution](AI-TWIN-PRODUCT-CONSTITUTION.md), [canonical algorithm](../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md) and [ADR-0032](../adr/0032-ai-twin-epistemic-formation-and-authority-separation.md). Retained unchanged below for runtime/migration traceability; do not extend its indicator semantics or unlock rules.
 
 This document is the canonical, system-level definition of how the six readiness indicators are scored, how they aggregate into Total Readiness, and where the unlock thresholds for Diary and Society sit. All `ai`, `backend`, `frontend`, and `product` tasks consume this document as the single source of truth for the readiness mechanic. Conflicts with downstream issues are resolved here first, then propagated.
 
