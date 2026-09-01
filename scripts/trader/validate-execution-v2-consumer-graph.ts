@@ -29,7 +29,6 @@ const allowedCancelCalls = new Map([
   ],
 ]);
 const expectedLegacyConsumers = new Set([
-  "lib/trader/live/run-live-cycle.ts",
   "lib/trader/paper/paper-cycle-runner.ts",
   "lib/trader/research/capital-path-trace-harness.ts",
 ]);
