@@ -402,6 +402,7 @@ export type PersistForecastBundleV2Input = {
   authorizedOutcome?: ForecastRuntimeAuthorizedOutcomeV2;
   /** Exact producer-owned input persisted atomically with an authorized Forecast. */
   runtimeInput?: ForecastRuntimeInputV2;
+  runtimeAuthorityClass?: "GENERAL_FORECAST_V2" | "HISTORICAL_SIMULATION_V2";
   /** Historical-only durable knowledge proof, verified inside the issuance transaction. */
   historicalKnowledgeBootstrap?: HistoricalForecastKnowledgeBootstrapV2;
   issuanceSequence?: number;
@@ -432,6 +433,17 @@ function validateRuntimeInputSource(input: PersistForecastBundleV2Input): Readon
     throw new Error("[forecast-v2/persistence] authorized outcome requires exact runtime input source (fail closed)");
   }
   if (!input.runtimeInput) return null;
+  if (!input.runtimeAuthorityClass) {
+    throw new Error("[forecast-v2/persistence] runtime authority class required (fail closed)");
+  }
+  if (input.runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2" &&
+      !input.historicalKnowledgeBootstrap) {
+    throw new Error("[forecast-v2/persistence] historical knowledge proof required (fail closed)");
+  }
+  if (input.runtimeAuthorityClass === "GENERAL_FORECAST_V2" &&
+      input.historicalKnowledgeBootstrap) {
+    throw new Error("[forecast-v2/persistence] historical proof on general runtime refused");
+  }
   if (!input.authorizedOutcome) throw new Error("[forecast-v2/persistence] runtime input requires authorized outcome");
   const replay = issueForecastRuntimeV2(input.runtimeInput);
   if (replay.status !== "FORECAST_AUTHORIZED" || !isDeepStrictEqual(replay, input.authorizedOutcome) ||
@@ -447,6 +459,47 @@ function validateRuntimeInputSource(input: PersistForecastBundleV2Input): Readon
     inputDigestHex: computeSemanticSha256Hex(JSON.parse(JSON.stringify(input.runtimeInput))),
     buildDigestHex: forecastRuntimeInputVerifierBuildDigest(),
   };
+}
+
+async function verifyHistoricalKnowledgeProofV2(
+  sql: postgres.Sql,
+  input: PersistForecastBundleV2Input,
+  runtime: ForecastRuntimeInputV2,
+): Promise<void> {
+  const supplied = input.historicalKnowledgeBootstrap;
+  if (!supplied) {
+    throw new Error("[forecast-v2/persistence] historical knowledge proof required (fail closed)");
+  }
+  const binding = runtime.forecastContractBinding;
+  if (!binding) {
+    throw new Error("[forecast-v2/persistence] historical contract binding required (fail closed)");
+  }
+  const expected = buildHistoricalForecastKnowledgeBootstrapV2({
+    organizationId: input.organizationId,
+    symbol: input.symbol,
+    horizonMinutes: runtime.executionHorizonMinutes,
+    predictivePackageContentDigestHex:
+      binding.selectedPredictivePackageContentDigestHex,
+  });
+  if (
+    computeSemanticSha256Hex(supplied) !== computeSemanticSha256Hex(expected) ||
+    runtime.knowledgeEdgeId !== expected.knowledgeEdgeId ||
+    runtime.knowledgeContentDigestHex !== expected.contentDigestHex
+  ) {
+    throw new Error("[forecast-v2/persistence] runtime knowledge lineage mismatch (fail closed)");
+  }
+  const rows = await sql<{
+    from_ref: string; to_ref: string; relation_kind: string; confidence: string;
+    strength: string; regime_scope: string; failure_cases_json: string; verified: boolean;
+  }[]>`
+    SELECT from_ref, to_ref, relation_kind, confidence, strength,
+           regime_scope, failure_cases_json, verified
+    FROM trader_knowledge_edges
+    WHERE organization_id=${input.organizationId}::uuid
+      AND id=${expected.knowledgeEdgeId}::uuid
+    FOR SHARE
+  `;
+  assertHistoricalForecastKnowledgeBootstrapDurableRowV2(expected, rows[0]);
 }
 
 export type PersistForecastBundleV2Result = {
@@ -591,6 +644,14 @@ export async function persistForecastBundleV2(
     );
   }
 
+  if (input.runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
+    await sql.begin((tx) => verifyHistoricalKnowledgeProofV2(
+      tx as unknown as postgres.Sql,
+      input,
+      input.runtimeInput!,
+    ));
+  }
+
   const existing = await loadExistingBundleByNaturalIdentity(sql, input);
   if (existing) {
     return existing;
@@ -710,44 +771,11 @@ export async function persistForecastBundleV2(
         if (!binding || !admission || !snapshot || !runtime.predictivePackage || !knowledgeContentDigestHex) {
           throw new Error("[forecast-v2/persistence] authorized runtime source is incomplete");
         }
-        if (input.historicalKnowledgeBootstrap) {
-          const expectedKnowledge = buildHistoricalForecastKnowledgeBootstrapV2({
-            organizationId: input.organizationId,
-            symbol: input.symbol,
-            horizonMinutes: runtime.executionHorizonMinutes,
-            predictivePackageContentDigestHex:
-              binding.selectedPredictivePackageContentDigestHex,
-          });
-          if (
-            computeSemanticSha256Hex(input.historicalKnowledgeBootstrap) !==
-              computeSemanticSha256Hex(expectedKnowledge) ||
-            runtime.knowledgeEdgeId !== expectedKnowledge.knowledgeEdgeId ||
-            knowledgeContentDigestHex !== expectedKnowledge.contentDigestHex
-          ) {
-            throw new Error(
-              "[forecast-v2/persistence] runtime knowledge lineage mismatch (fail closed)",
-            );
-          }
-          const knowledgeRows = await tx<{
-          from_ref: string;
-          to_ref: string;
-          relation_kind: string;
-          confidence: string;
-          strength: string;
-          regime_scope: string;
-          failure_cases_json: string;
-          verified: boolean;
-          }[]>`
-          SELECT from_ref, to_ref, relation_kind, confidence, strength,
-                 regime_scope, failure_cases_json, verified
-          FROM trader_knowledge_edges
-          WHERE organization_id=${input.organizationId}::uuid
-            AND id=${expectedKnowledge.knowledgeEdgeId}::uuid
-          FOR KEY SHARE
-          `;
-          assertHistoricalForecastKnowledgeBootstrapDurableRowV2(
-            expectedKnowledge,
-            knowledgeRows[0],
+        if (input.runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
+          await verifyHistoricalKnowledgeProofV2(
+            tx as unknown as postgres.Sql,
+            input,
+            runtime,
           );
         }
         await tx`

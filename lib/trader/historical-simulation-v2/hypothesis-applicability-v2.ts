@@ -1,9 +1,28 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { computeSemanticSha256Hex } from
   "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { HypothesisSet } from
   "@/lib/trader/intelligence/hypothesis/hypothesis.types";
-import { requireCanonicalHistoricalApplicabilityReceiptV1 } from
+import {
+  buildCanonicalHistoricalApplicabilityReceiptV1,
+  requireCanonicalHistoricalApplicabilityReceiptV1,
+} from
   "@/lib/trader/intelligence/hypothesis/canonical-historical-applicability-v1";
+import type { CanonicalRuntimeIntelligenceStateV1 } from
+  "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
+import type { ReconstructionSnapshot } from
+  "@/lib/trader/intelligence/reconstruction/reconstruction.types";
+import { computeReconstructionContentDigest } from
+  "@/lib/trader/intelligence/reconstruction/reconstruction-assembly";
+import {
+  computeCanonicalCycleCausalInputDigestV2,
+  parseCanonicalCycleCausalInputBundleV2,
+} from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
+import { computeCycleEnvelopeContentDigest } from
+  "@/lib/trader/intelligence/records/serialize-intelligence-records";
+import type { TraderIntelligenceCycleEnvelopeRecord } from
+  "@/lib/trader/intelligence/records/intelligence-records.types";
 import type { HypothesisApplicabilityAssessmentV1 } from
   "@/lib/trader/intelligence/predictive-admission";
 
@@ -26,13 +45,44 @@ export function buildHistoricalHypothesisApplicabilitySetV2(input: Readonly<{
   organizationId: string;
   symbol: string;
   pitAnchor: string;
+  reconstruction: ReconstructionSnapshot;
+  canonicalRuntimeIntelligenceState: CanonicalRuntimeIntelligenceStateV1;
+  evaluationEnvelope: TraderIntelligenceCycleEnvelopeRecord;
   hypothesisSet: HypothesisSet;
 }>): HistoricalHypothesisApplicabilitySetV2 {
   if (!/^[0-9a-f]{40}$/.test(input.releaseSha) || !input.organizationId.trim() ||
       !input.symbol.trim() || new Date(input.pitAnchor).toISOString() !== input.pitAnchor ||
-      input.hypothesisSet.evaluatedAt !== input.pitAnchor) {
+      input.hypothesisSet.evaluatedAt !== input.pitAnchor ||
+      input.reconstruction.evaluatedAt !== input.pitAnchor ||
+      input.canonicalRuntimeIntelligenceState.organizationId !== input.organizationId ||
+      input.canonicalRuntimeIntelligenceState.symbol !== input.symbol ||
+      input.canonicalRuntimeIntelligenceState.pitAnchor !== input.pitAnchor) {
     throw new Error("HISTORICAL_HYPOTHESIS_APPLICABILITY_REFUSED:IDENTITY");
   }
+  const envelope = input.evaluationEnvelope;
+  const causalInput = envelope.inputCausalBundleJson
+    ? parseCanonicalCycleCausalInputBundleV2(envelope.inputCausalBundleJson)
+    : null;
+  const sealedEvaluationValid =
+    causalInput !== null &&
+    computeCycleEnvelopeContentDigest(envelope) === envelope.contentDigest &&
+    computeCanonicalCycleCausalInputDigestV2(causalInput) === envelope.inputSemanticDigest &&
+    envelope.organizationId === input.organizationId &&
+    envelope.symbol === input.symbol &&
+    envelope.evaluatedAt === input.pitAnchor &&
+    causalInput.scope.organizationId === input.organizationId &&
+    causalInput.scope.instrumentId === input.reconstruction.instrumentId &&
+    causalInput.scope.evaluatedAt === input.pitAnchor &&
+    computeReconstructionContentDigest(input.reconstruction) ===
+      input.reconstruction.contentDigest &&
+    causalInput.reconstruction.schemaVersion === input.reconstruction.schemaVersion &&
+    causalInput.reconstruction.contentDigest === input.reconstruction.contentDigest &&
+    causalInput.hypothesisConstruction.hypothesisSetContentDigest ===
+      computeSemanticSha256Hex(input.hypothesisSet) &&
+    isDeepStrictEqual(
+      causalInput.hypothesisConstruction.canonicalIntelligenceStateDigests,
+      [input.canonicalRuntimeIntelligenceState.semanticDigest],
+    );
   const evaluatorIdentityDigestHex = computeSemanticSha256Hex({
     evaluatorVersion: HISTORICAL_HYPOTHESIS_APPLICABILITY_EVALUATOR_V2,
     releaseSha: input.releaseSha,
@@ -40,12 +90,18 @@ export function buildHistoricalHypothesisApplicabilitySetV2(input: Readonly<{
   const active = input.hypothesisSet.activeHypothesis;
   const opportunity = input.hypothesisSet.opportunity;
   let receiptValid = false;
-  if (active && opportunity?.applicabilityReceipt) {
+  if (sealedEvaluationValid && active && opportunity?.applicabilityReceipt) {
     try {
       const receipt = requireCanonicalHistoricalApplicabilityReceiptV1(
         opportunity.applicabilityReceipt,
       );
+      const replayedReceipt = buildCanonicalHistoricalApplicabilityReceiptV1({
+        reconstruction: input.reconstruction,
+        canonicalState: input.canonicalRuntimeIntelligenceState,
+        activeHypothesis: active,
+      });
       receiptValid =
+        isDeepStrictEqual(receipt, replayedReceipt) &&
         receipt.contentDigestHex === opportunity.applicabilityReceiptContentDigestHex &&
         receipt.organizationId === input.organizationId &&
         receipt.symbol === input.symbol &&

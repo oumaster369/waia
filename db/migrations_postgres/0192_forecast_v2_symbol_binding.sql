@@ -89,3 +89,20 @@ ALTER TABLE public.trader_forecast_runtime_input_source_v2
     runtime_input_json -> 'predictivePackage' -> 'family' ->> 'symbol' = symbol AND
     authorized_outcome_json -> 'issuance' -> 'package' -> 'family' ->> 'symbol' = symbol
   ) IS TRUE);
+
+-- Historical cold-start knowledge is a content-addressed issuance authority.
+-- Confidence evolution is recorded in its own append-only update table; the
+-- bootstrap edge itself must never be rewritten or removed after a Forecast
+-- has proven it under a row-level FOR SHARE lock.
+CREATE OR REPLACE FUNCTION public.trader_historical_forecast_bootstrap_immutable_v2()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'historical Forecast knowledge bootstrap edges are immutable';
+END;
+$$;
+
+CREATE TRIGGER trader_historical_forecast_bootstrap_immutable_v2
+  BEFORE UPDATE OR DELETE ON public.trader_knowledge_edges
+  FOR EACH ROW
+  WHEN (OLD.relation_kind = 'predictive_package_models_symbol_horizon')
+  EXECUTE FUNCTION public.trader_historical_forecast_bootstrap_immutable_v2();

@@ -95,11 +95,20 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   ) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_LINEAGE");
   }
+  if (!evaluation.canonicalRuntimeIntelligenceState) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:CANONICAL_STATE");
+  }
+  if (!evaluation.intelligenceCycleBundle) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:EVALUATION_SEAL");
+  }
   const applicability = buildHistoricalHypothesisApplicabilitySetV2({
     releaseSha: input.releaseSha,
     organizationId: input.organizationId,
     symbol: input.symbol,
     pitAnchor: input.pitAnchor,
+    reconstruction: evaluation.reconstruction,
+    canonicalRuntimeIntelligenceState: evaluation.canonicalRuntimeIntelligenceState,
+    evaluationEnvelope: evaluation.intelligenceCycleBundle.envelope,
     hypothesisSet: evaluation.hypothesisSet,
   });
   // Historical orchestration uses the execution-domain enum "HTX" while the

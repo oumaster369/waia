@@ -28,12 +28,18 @@ import {
 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { buildCanonicalRuntimeIntelligenceStateV1 } from
   "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
+import { buildHypothesisSet } from
+  "@/lib/trader/intelligence/hypothesis/build-hypothesis-set";
+import { createEmptyHypothesisSessionState } from
+  "@/lib/trader/intelligence/mi-core.types";
 import {
   defineRequiredInformationProfileV2,
   evaluateInformationSufficiencyV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
 import { buildReconstructionSnapshot } from
   "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
+import { assembleReconstructionSnapshot } from
+  "@/lib/trader/intelligence/reconstruction/reconstruction-assembly";
 import type { Bar, Quote } from "@/lib/trader/intelligence/types";
 import {
   bucketIndexForReturn,
@@ -390,6 +396,9 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       organizationId,
       symbol: "BTCUSDT",
       pitAnchor: cycle.pitAnchor,
+      reconstruction: cycle.evaluation.reconstruction!,
+      canonicalRuntimeIntelligenceState: cycle.evaluation.canonicalRuntimeIntelligenceState!,
+      evaluationEnvelope: cycle.evaluation.intelligenceCycleBundle!.envelope,
       hypothesisSet: {
         ...hypothesisSet,
         opportunity: {
@@ -405,5 +414,81 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
     expect(result.assessments).toEqual([
       expect.objectContaining({ status: "NOT_APPLICABLE" }),
     ]);
+  });
+
+  it("rejects a validly re-digested reconstruction substituted after evaluation", () => {
+    const cycle = analyticalCycle();
+    const originalReconstruction = cycle.evaluation.reconstruction!;
+    const substitutedReconstruction = assembleReconstructionSnapshot({
+      instrumentId: originalReconstruction.instrumentId,
+      evaluatedAt: originalReconstruction.evaluatedAt,
+      marketStructure: originalReconstruction.marketStructure,
+      liquidityStructure: originalReconstruction.liquidityStructure,
+      trendStructure: originalReconstruction.trendStructure,
+      volatilityStructure: originalReconstruction.volatilityStructure,
+      participationStructure: originalReconstruction.participationStructure,
+      contextStructure: {
+        ...originalReconstruction.contextStructure,
+        sessionPhase: "SUBSTITUTED_AFTER_EVALUATION",
+      },
+    });
+    expect(substitutedReconstruction.contentDigest).not.toBe(
+      originalReconstruction.contentDigest,
+    );
+    const substitutedHypothesisSet = buildHypothesisSet({
+      reconstruction: substitutedReconstruction,
+      evaluatedAt: cycle.pitAnchor,
+      organizationId,
+      symbol: "BTCUSDT",
+      sessionState: createEmptyHypothesisSessionState(),
+      canonicalRuntimeIntelligenceState: cycle.canonicalState,
+      canonicalApplicabilityPurpose: "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL",
+    }).hypothesisSet;
+    expect(substitutedHypothesisSet.opportunity?.authorized).toBe(true);
+    const result = buildHistoricalHypothesisApplicabilitySetV2({
+      releaseSha,
+      organizationId,
+      symbol: "BTCUSDT",
+      pitAnchor: cycle.pitAnchor,
+      reconstruction: substitutedReconstruction,
+      canonicalRuntimeIntelligenceState: cycle.evaluation.canonicalRuntimeIntelligenceState!,
+      evaluationEnvelope: cycle.evaluation.intelligenceCycleBundle!.envelope,
+      hypothesisSet: substitutedHypothesisSet,
+    });
+    expect(result.assessments[0]?.status).toBe("NOT_APPLICABLE");
+  });
+
+  it("rejects a validly re-digested canonical state substituted after evaluation", () => {
+    const cycle = analyticalCycle();
+    const original = cycle.canonicalState;
+    const substitutedState = buildCanonicalRuntimeIntelligenceStateV1({
+      organizationId: original.organizationId,
+      symbol: original.symbol,
+      pitAnchor: original.pitAnchor,
+      knowledgeSemanticDigest: hash("substituted-canonical-knowledge-state"),
+      hypotheses: original.hypotheses,
+    });
+    expect(substitutedState.semanticDigest).not.toBe(original.semanticDigest);
+    const substitutedHypothesisSet = buildHypothesisSet({
+      reconstruction: cycle.evaluation.reconstruction!,
+      evaluatedAt: cycle.pitAnchor,
+      organizationId,
+      symbol: "BTCUSDT",
+      sessionState: createEmptyHypothesisSessionState(),
+      canonicalRuntimeIntelligenceState: substitutedState,
+      canonicalApplicabilityPurpose: "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL",
+    }).hypothesisSet;
+    expect(substitutedHypothesisSet.opportunity?.authorized).toBe(true);
+    const result = buildHistoricalHypothesisApplicabilitySetV2({
+      releaseSha,
+      organizationId,
+      symbol: "BTCUSDT",
+      pitAnchor: cycle.pitAnchor,
+      reconstruction: cycle.evaluation.reconstruction!,
+      canonicalRuntimeIntelligenceState: substitutedState,
+      evaluationEnvelope: cycle.evaluation.intelligenceCycleBundle!.envelope,
+      hypothesisSet: substitutedHypothesisSet,
+    });
+    expect(result.assessments[0]?.status).toBe("NOT_APPLICABLE");
   });
 });

@@ -69,6 +69,7 @@ export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input:
     issuance: outcome.issuance,
     authorizedOutcome: outcome,
     runtimeInput: input.runtimeInput,
+    runtimeAuthorityClass: "HISTORICAL_SIMULATION_V2",
     historicalKnowledgeBootstrap,
     issuanceSequence: input.issuanceSequence,
   });
