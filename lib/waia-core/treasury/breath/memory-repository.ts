@@ -4,10 +4,10 @@ import type { TreasuryRepository } from "@/lib/waia-core/treasury/repository.typ
 import type { TreasuryWatcherRepository } from "@/lib/waia-core/treasury/watcher/repository.types";
 import { treasuryAuditActions, treasuryEntityTypes } from "@/lib/waia-core/treasury/audit";
 import type {
+  BreathExclusiveStore,
   BreathFactsRepository,
   BreathIdealAuditEvent,
   BreathLoadedFacts,
-  BreathSnapshotStore,
 } from "@/lib/waia-core/treasury/breath/repository.types";
 import type { TreasuryRunwaySnapshotRecord } from "@/lib/waia-core/treasury/breath/types";
 import type { TreasuryBalanceCheckpointRecord } from "@/lib/waia-core/treasury/breath/types";
@@ -35,7 +35,47 @@ export function createMemoryTreasuryBreathFactsRepository(deps: {
   const balanceCheckpoints: TreasuryBalanceCheckpointRecord[] = [];
   const locks = new Map<string, Promise<unknown>>();
 
-  const store: BreathSnapshotStore = {
+  async function loadFacts(context: OrgContext): Promise<BreathLoadedFacts> {
+    const org = scoped(context);
+    const [
+      settings,
+      transactions,
+      commitments,
+      budgets,
+      fundingNeeds,
+      idealBudgets,
+      runwayPlans,
+      reconciliations,
+      inceptions,
+    ] = await Promise.all([
+      deps.catalog.getPublicationSettings(org),
+      deps.treasury.listTransactions(org),
+      deps.treasury.listCommitments(org),
+      deps.catalog.listBudgets(org),
+      deps.catalog.listFundingNeeds(org),
+      deps.catalog.listIdealBudgets(org),
+      deps.catalog.listRunwayPlans(org),
+      deps.watcher.listBalanceReconciliations(org),
+      deps.treasury.listInceptions(org),
+    ]);
+    return {
+      settings,
+      transactions,
+      commitments,
+      budgets,
+      fundingNeeds,
+      idealBudgets,
+      runwayPlans,
+      reconciliations,
+      inceptions,
+      balanceCheckpoints: balanceCheckpoints
+        .filter((row) => row.organizationId === org.organizationId)
+        .map(clone),
+    };
+  }
+
+  const store: BreathExclusiveStore = {
+    loadFacts,
     async getLatestRunwaySnapshot(context, runwayPlanId) {
       const org = scoped(context);
       const rows = snapshots
@@ -62,44 +102,7 @@ export function createMemoryTreasuryBreathFactsRepository(deps: {
     recordAuditEvent(event) {
       auditEvents.push({ ...event });
     },
-    async loadFacts(context): Promise<BreathLoadedFacts> {
-      const org = scoped(context);
-      const [
-        settings,
-        transactions,
-        commitments,
-        budgets,
-        fundingNeeds,
-        idealBudgets,
-        runwayPlans,
-        reconciliations,
-        inceptions,
-      ] = await Promise.all([
-        deps.catalog.getPublicationSettings(org),
-        deps.treasury.listTransactions(org),
-        deps.treasury.listCommitments(org),
-        deps.catalog.listBudgets(org),
-        deps.catalog.listFundingNeeds(org),
-        deps.catalog.listIdealBudgets(org),
-        deps.catalog.listRunwayPlans(org),
-        deps.watcher.listBalanceReconciliations(org),
-        deps.treasury.listInceptions(org),
-      ]);
-      return {
-        settings,
-        transactions,
-        commitments,
-        budgets,
-        fundingNeeds,
-        idealBudgets,
-        runwayPlans,
-        reconciliations,
-        inceptions,
-        balanceCheckpoints: balanceCheckpoints
-          .filter((row) => row.organizationId === org.organizationId)
-          .map(clone),
-      };
-    },
+    loadFacts,
     getLatestRunwaySnapshot: store.getLatestRunwaySnapshot,
     insertRunwaySnapshot: store.insertRunwaySnapshot,
     insertBalanceCheckpoint: store.insertBalanceCheckpoint,

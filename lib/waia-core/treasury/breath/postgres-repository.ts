@@ -13,6 +13,7 @@ import {
 } from "@/lib/waia-core/scope/org-context";
 import { treasuryAuditActions, treasuryEntityTypes } from "@/lib/waia-core/treasury/audit";
 import type {
+  BreathExclusiveStore,
   BreathFactsRepository,
   BreathLoadedFacts,
   BreathSnapshotStore,
@@ -65,6 +66,90 @@ function snapshotStore(ex: PgExecutor): BreathSnapshotStore {
   };
 }
 
+async function loadFactsFromExecutor(
+  ex: PgExecutor,
+  context: OrgContext,
+): Promise<BreathLoadedFacts> {
+  const org = scoped(context);
+  const [
+    settingsRows,
+    transactions,
+    commitments,
+    budgets,
+    fundingNeeds,
+    idealBudgets,
+    runwayPlans,
+    reconciliations,
+    inceptions,
+    balanceCheckpoints,
+  ] = await Promise.all([
+    ex
+      .select()
+      .from(pgSchema.treasuryPublicationSettings)
+      .where(orgScopedWhere(pgSchema.treasuryPublicationSettings.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryTransactions)
+      .where(orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryCommitments)
+      .where(orgScopedWhere(pgSchema.treasuryCommitments.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryBudgets)
+      .where(orgScopedWhere(pgSchema.treasuryBudgets.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryFundingNeeds)
+      .where(orgScopedWhere(pgSchema.treasuryFundingNeeds.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryIdealAnnualBudgets)
+      .where(orgScopedWhere(pgSchema.treasuryIdealAnnualBudgets.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryRunwayPlans)
+      .where(orgScopedWhere(pgSchema.treasuryRunwayPlans.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryBalanceReconciliations)
+      .where(orgScopedWhere(pgSchema.treasuryBalanceReconciliations.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryLedgerInceptions)
+      .where(orgScopedWhere(pgSchema.treasuryLedgerInceptions.organizationId, org)),
+    ex
+      .select()
+      .from(pgSchema.treasuryBalanceCheckpoints)
+      .where(orgScopedWhere(pgSchema.treasuryBalanceCheckpoints.organizationId, org)),
+  ]);
+  return {
+    settings: settingsRows[0] ?? null,
+    transactions,
+    commitments,
+    budgets,
+    fundingNeeds,
+    idealBudgets,
+    runwayPlans,
+    reconciliations,
+    inceptions,
+    balanceCheckpoints: balanceCheckpoints.map((row) => ({
+      ...row,
+      sourceLabel: "HUMAN_CONFIRMED" as const,
+    })),
+  };
+}
+
+function exclusiveStore(ex: PgExecutor): BreathExclusiveStore {
+  return {
+    ...snapshotStore(ex),
+    loadFacts(context) {
+      return loadFactsFromExecutor(ex, context);
+    },
+  };
+}
+
 /**
  * Postgres Breath facts. Every financial query is org-scoped and unpaginated.
  * Do not add LIMIT/OFFSET to transaction, commitment, budget, or recon loads.
@@ -76,75 +161,7 @@ export function createPostgresTreasuryBreathFactsRepository(
 
   return {
     async loadFacts(context): Promise<BreathLoadedFacts> {
-      const org = scoped(context);
-      const [
-        settingsRows,
-        transactions,
-        commitments,
-        budgets,
-        fundingNeeds,
-        idealBudgets,
-        runwayPlans,
-        reconciliations,
-        inceptions,
-        balanceCheckpoints,
-      ] = await Promise.all([
-        db
-          .select()
-          .from(pgSchema.treasuryPublicationSettings)
-          .where(orgScopedWhere(pgSchema.treasuryPublicationSettings.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryTransactions)
-          .where(orgScopedWhere(pgSchema.treasuryTransactions.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryCommitments)
-          .where(orgScopedWhere(pgSchema.treasuryCommitments.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryBudgets)
-          .where(orgScopedWhere(pgSchema.treasuryBudgets.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryFundingNeeds)
-          .where(orgScopedWhere(pgSchema.treasuryFundingNeeds.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryIdealAnnualBudgets)
-          .where(orgScopedWhere(pgSchema.treasuryIdealAnnualBudgets.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryRunwayPlans)
-          .where(orgScopedWhere(pgSchema.treasuryRunwayPlans.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryBalanceReconciliations)
-          .where(orgScopedWhere(pgSchema.treasuryBalanceReconciliations.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryLedgerInceptions)
-          .where(orgScopedWhere(pgSchema.treasuryLedgerInceptions.organizationId, org)),
-        db
-          .select()
-          .from(pgSchema.treasuryBalanceCheckpoints)
-          .where(orgScopedWhere(pgSchema.treasuryBalanceCheckpoints.organizationId, org)),
-      ]);
-      return {
-        settings: settingsRows[0] ?? null,
-        transactions,
-        commitments,
-        budgets,
-        fundingNeeds,
-        idealBudgets,
-        runwayPlans,
-        reconciliations,
-        inceptions,
-        balanceCheckpoints: balanceCheckpoints.map((row) => ({
-          ...row,
-          sourceLabel: "HUMAN_CONFIRMED" as const,
-        })),
-      };
+      return loadFactsFromExecutor(db, context);
     },
     getLatestRunwaySnapshot: rootStore.getLatestRunwaySnapshot,
     insertRunwaySnapshot: rootStore.insertRunwaySnapshot,
@@ -171,7 +188,7 @@ export function createPostgresTreasuryBreathFactsRepository(
       const org = requireOrgContext(organizationId);
       return runWaiaPostgresTransaction(db, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${org.organizationId}))`);
-        return fn(snapshotStore(tx));
+        return fn(exclusiveStore(tx));
       });
     },
   };
