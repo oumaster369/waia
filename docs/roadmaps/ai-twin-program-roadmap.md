@@ -5,8 +5,8 @@ horizon: v1-v3
 owner: Architect
 linkedSpec: docs/product-specs/ai-twin-v1-completion.md
 linkedGapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
-lastReviewed: 2026-09-01
-version: 1.0.0
+lastReviewed: 2026-09-02
+version: 1.1.0
 ---
 
 # AI-TWIN — canonical implementation roadmap
@@ -26,10 +26,13 @@ Each issue row below is an integration batch with one branch, one canonical plan
 ```text
 DEE-130 canon
   -> v1 Formation / Embodiment / Adviser
+  -> governed cost evidence + pre-billing disclosure
   -> Human v1 cutover + biometric + rollout decisions
   -> v2 Connected Context / Delegated Actions
   -> Human bounded-action pilot decision
   -> v3 Society / Alignment Contracts
+  -> Human price disclosure + Society connection + subscription consent
+  -> optional community-sponsored subscription fulfillment
   -> Human Society pilot and launch decision
 ```
 
@@ -111,6 +114,28 @@ DEE-894 is the detailed Society Human gate. Canonical plans for DEE-895..DEE-901
 | 3 | DEE-901 | Consent-first Society/contract experience | DEE-895, DEE-899 | T2 |
 | 4 | DEE-900 | Integrated pilot, evaluation and Human launch gate | all v3 outcomes | T3/T4 gates |
 
+## Cross-version economics and universal access (DEE-922)
+
+These batches add cost evidence, truthful subscription activation and community-supported access without moving the v1/v2/v3 product gates. They are recorded now but remain deferred until active AI-TRADER completion work is finished and the Human explicitly resumes AI-TWIN implementation.
+
+| Order | Issue | Integration outcome | Depends on | Risk |
+|---:|---|---|---|---|
+| 0 | DEE-922 | Additive AI-TWIN subscription/pricing/access canon and Linear graph | DEE-130, DEE-612 | T1 semantic docs |
+| 1 | DEE-923 | Exact pre-billing disclosure below the Formation dialogue | DEE-922; coordinate DEE-879 | T2 frontend |
+| 1 | DEE-924 | Verified per-active-Twin cost snapshots and Human-approved `cost x 5` price book | DEE-922; WAIA Core/Treasury foundations | T3 backend |
+| 2 | DEE-925 | Consented Society connection and subscription activation lifecycle | DEE-894, DEE-895, DEE-924 | T3/T4 backend and Human gates |
+| 3 | DEE-926 | Community-sponsored subscription request, reservation, payment and entitlement fulfillment | DEE-612, DEE-925 | T3 backend |
+| 4 | DEE-927 | User-dashboard and public Support sponsorship experience | DEE-925, DEE-926; coordinate DEE-901 | T2 frontend |
+
+### Economic and access stop conditions
+
+- Do not begin billing at Formation `100%` or `READY`.
+- Do not publish or bill a calculated price until a Human approves the exact price-book version.
+- Do not activate a Society subscription without a voluntary connection choice, price disclosure and explicit Human confirmation.
+- Do not start DEE-923..DEE-927 while active AI-TRADER completion work is running or without a new Human start decision.
+- Do not apply payment, entitlement or sponsored-access production migrations inside a software merge.
+- Do not count sponsored subscriptions as ordinary donation/Patron share without a later Human-ratified policy.
+
 ## Execution rule
 
 Each row is one integration issue, branch, canonical plan, PR and merge. An issue must be refreshed from `main`, must not begin while a blocking Human gate is unresolved, and must update this roadmap/gap registry when scope or proof changes. Parallel work is allowed only for rows at the same order whose file ownership and migrations are demonstrably non-overlapping.
@@ -126,6 +151,7 @@ Every batch requires: Linear issue identifier; exactly one execution label; vers
 - Existing legacy AI-TWIN runtime as migration evidence, never as target semantic truth.
 - AI-TRADER canonical algorithm as a read-only architecture precedent. AI-TWIN implementation cannot mutate or block its active completion work.
 - Explicit Human permission to start implementation after DEE-130, plus all per-version security/production gates.
+- DEE-612 universal-access doctrine and existing WAIA Core subscription/entitlement/Treasury foundations for DEE-922..DEE-927.
 
 ## Traceability
 
@@ -136,3 +162,4 @@ Every batch requires: Linear issue identifier; exactly one execution label; vers
 | Gap registry | [`../gaps/ai-twin-v1-gap-registry.md`](../gaps/ai-twin-v1-gap-registry.md) |
 | Preparation plan | [`../plans/dee-130-ai-twin-canonical-product-epistemic-architecture.md`](../plans/dee-130-ai-twin-canonical-product-epistemic-architecture.md) |
 | Linear epics | DEE-868 (v1), DEE-870 (v2), DEE-869 (v3) |
+| Economics/access canon | DEE-922; [`../plans/dee-922-ai-twin-subscription-access-canon.md`](../plans/dee-922-ai-twin-subscription-access-canon.md) |

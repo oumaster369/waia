@@ -10,8 +10,8 @@ sourceOfTruth:
 relatedGaps:
   - docs/gaps/ai-twin-v1-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-twin-program-roadmap.md
-lastReviewed: 2026-09-01
-version: 1.0.0
+lastReviewed: 2026-09-02
+version: 1.1.0
 ---
 
 # AI-TWIN v1 — completion specification
@@ -34,6 +34,7 @@ Define observable, testable completion for the first canonical AI-TWIN release. 
 
 - General device/service connectors and real-world delegated execution (v2).
 - Multi-Human Society, matching and Alignment Contracts (v3).
+- Billable Society connection, subscription activation, sponsored-subscription fulfillment and production pricing.
 - Legal identity proof or one-person-one-account enforcement.
 - Clinical diagnosis, biometric emotion/personality inference or autonomous Human decision-making.
 - Claims of consciousness, a completed Human model or autonomous WAIA sovereignty.
@@ -88,6 +89,7 @@ Define observable, testable completion for the first canonical AI-TWIN release. 
 - [ ] F4 — Tenant isolation, purpose/consent, provider minimization, prompt injection, export/deletion and audit tests pass.
 - [ ] F5 — Integrated user journey, accessibility, failure behavior and canonical evals pass; no active AI-TRADER runtime or execution authority is modified.
 - [ ] F6 — Human separately approves merge, readiness cutover, production biometric activation and pilot/production rollout.
+- [ ] F7 — The Twin dialogue shows the canonical English pre-billing disclosure; no v1 state, including Formation `100%`, creates a bill, Society connection or subscription entitlement.
 
 ## Dependencies
 
@@ -95,6 +97,7 @@ Define observable, testable completion for the first canonical AI-TWIN release. 
 - Algorithm: [`../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md`](../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md).
 - ADR: [`../adr/0032-ai-twin-epistemic-formation-and-authority-separation.md`](../adr/0032-ai-twin-epistemic-formation-and-authority-separation.md).
 - Program root: DEE-130; v1 epic: DEE-868; final gate: DEE-885.
+- Additive economics/access canon: DEE-922; disclosure UI: DEE-923; later cost/subscription/sponsorship batches: DEE-924..DEE-927.
 - AI-TRADER is an epistemic precedent and parallel program, not a runtime prerequisite.
 
 ## Traceability
@@ -105,4 +108,3 @@ Define observable, testable completion for the first canonical AI-TWIN release. 
 | Roadmap | [`../roadmaps/ai-twin-program-roadmap.md`](../roadmaps/ai-twin-program-roadmap.md) |
 | Canonical preparation plan | [`../plans/dee-130-ai-twin-canonical-product-epistemic-architecture.md`](../plans/dee-130-ai-twin-canonical-product-epistemic-architecture.md) |
 | Linear | [DEE-130](https://linear.app/deepsense/issue/DEE-130) / DEE-868 / DEE-871..DEE-885 |
-

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { handleTreasuryRunwayPlanCommandsPost } from "@/lib/waia-core/treasury/admin/handlers";
+import { createMemoryTreasuryBreathFactsRepository } from "@/lib/waia-core/treasury/breath/memory-repository";
+import { createTreasuryBreathReadModel } from "@/lib/waia-core/treasury/breath/read-model";
+import type { BreathFactsRepository } from "@/lib/waia-core/treasury/breath/repository.types";
 import { BREATH_DAY_MS } from "@/lib/waia-core/treasury/breath/types";
 import {
   computeRunwayEndsAt,
@@ -327,5 +330,61 @@ describe("DEE-606 WP-6 deterministic runway snapshots", () => {
       expect(after.runway.runwayAsOf).toBe(body.snapshot.runwayAsOf);
       expect(after.runway.endsAt).toBe(body.snapshot.endsAt);
     }
+  });
+
+  it("loads locked runway facts through the exclusive store", async () => {
+    const { services } = createWp6Bundle();
+    await seedPublishableControl(services);
+    await seedPlan(services, { id: PLAN_A, dailyBurnMicros: 1_000_000n });
+    await seedTx(services, {
+      id: "locked-cash",
+      status: "VERIFIED",
+      direction: "INFLOW",
+      kind: "OPENING_BALANCE",
+      cashEffectMicros: 3_000_000n,
+      accountingAmountMicros: 3_000_000n,
+    });
+
+    const baseFacts = createMemoryTreasuryBreathFactsRepository({
+      treasury: services.domain.repository,
+      catalog: services.catalogRepo,
+      watcher: services.watcher,
+    });
+    let rootLoads = 0;
+    let exclusiveLoads = 0;
+    const facts: BreathFactsRepository = {
+      ...baseFacts,
+      async loadFacts(context) {
+        rootLoads += 1;
+        return baseFacts.loadFacts(context);
+      },
+      async runExclusive(organizationId, fn) {
+        return baseFacts.runExclusive(organizationId, (store) =>
+          fn({
+            ...store,
+            async loadFacts(context) {
+              exclusiveLoads += 1;
+              return store.loadFacts(context);
+            },
+          }),
+        );
+      },
+    };
+    const breath = createTreasuryBreathReadModel({
+      facts,
+      writeAudit: async () => "audit-runway-refresh",
+      now: () => NOW,
+      newId: () => "snapshot-exclusive-store",
+    });
+
+    const refreshed = await breath.refreshRunwaySnapshot(
+      ctxA,
+      { actorType: "admin", actorUserId: "user-runway-operator" },
+      "Human-approved refresh",
+    );
+
+    expect(refreshed.id).toBe("snapshot-exclusive-store");
+    expect(rootLoads).toBe(1);
+    expect(exclusiveLoads).toBe(1);
   });
 });

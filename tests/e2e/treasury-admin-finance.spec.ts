@@ -24,6 +24,7 @@ type FinanceCapture = {
   assistantPlanPosts: Array<Record<string, unknown>>;
   assistantExecutePosts: Array<Record<string, unknown>>;
   watchedAddressPosts: Array<Record<string, unknown>>;
+  runwayCommandPosts: Array<Record<string, unknown>>;
 };
 
 async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
@@ -37,6 +38,7 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
     assistantPlanPosts: [],
     assistantExecutePosts: [],
     watchedAddressPosts: [],
+    runwayCommandPosts: [],
   };
 
   await page.route("**/api/health/treasury-watcher", async (route) => {
@@ -206,6 +208,18 @@ async function installFinanceFixtures(page: Page): Promise<FinanceCapture> {
           },
           reconciliationGate: { latestId: null, status: null, createdAt: null },
           runwayStatus: { status: "pending", reason: "IDEAL_BUDGET_MISSING", snapshotId: null },
+        },
+      });
+      return;
+    }
+
+    if (pathname.endsWith("/runway-plans/commands") && method === "POST") {
+      capture.runwayCommandPosts.push(route.request().postDataJSON() as Record<string, unknown>);
+      await json(route, {
+        snapshot: {
+          id: "runway-snapshot-refreshed",
+          runwayAsOf: "2026-08-24T12:00:00.000Z",
+          endsAt: "2026-08-29T12:00:00.000Z",
         },
       });
       return;
@@ -809,6 +823,18 @@ test.describe("WAIA Admin Finance Console", () => {
     await expect(page.getByTestId("finance-overview")).toContainText("Annual budget");
     await page.getByTestId("overview-operational-details").locator("summary").click();
     await expect(page.getByTestId("watcher-dark")).toBeVisible();
+    await page.getByTestId("runway-refresh-intent").click();
+    await expect(page.getByTestId("finance-confirm-dialog")).toContainText(
+      "Refresh public runway snapshot",
+    );
+    await page.getByTestId("finance-confirm-reason").fill("Human-approved refresh");
+    await page.getByTestId("finance-confirm-submit").click();
+    await expect.poll(() => capture.runwayCommandPosts.length).toBe(1);
+    expect(capture.runwayCommandPosts[0]).toEqual({
+      organization_id: ORG_A,
+      command: "refresh_snapshot",
+      reason: "Human-approved refresh",
+    });
 
     const financeNav = page.getByTestId("finance-nav");
     await expect(financeNav.getByRole("link")).toHaveCount(7);

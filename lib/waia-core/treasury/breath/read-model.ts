@@ -217,7 +217,7 @@ export function createTreasuryBreathReadModel(deps: {
       const snapshot = await deps.facts.runExclusive(
         input.context.organizationId,
         async (store) => {
-          const facts = await deps.facts.loadFacts(input.context);
+          const facts = await store.loadFacts(input.context);
           const plans = selectActiveRunwayPlans(facts.runwayPlans, now());
           if (plans.length !== 1) {
             throw new TreasuryValidationError(
