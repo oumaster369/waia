@@ -10,10 +10,10 @@ import {
 describe("FHV V2 PostgreSQL schema preflight", () => {
   const canonical = readFhvV2CanonicalMigrations(process.cwd());
 
-  it("binds the exact contiguous canonical journal through 0191", () => {
-    expect(canonical).toHaveLength(192);
+  it("binds the exact contiguous canonical journal through 0193", () => {
+    expect(canonical).toHaveLength(194);
     expect(canonical[0]?.tag.startsWith("0000_")).toBe(true);
-    expect(canonical.at(-1)?.tag.startsWith("0191_")).toBe(true);
+    expect(canonical.at(-1)?.tag).toBe("0193_historical_runner_knowledge_state_read");
   });
 
   it("rejects a production database whose applied migration journal ends at 0109", () => {
@@ -52,6 +52,18 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
         applied: canonical.map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) })),
       }),
     ).not.toThrow();
+  });
+
+  it("still rejects an applied migration outside the ratified canonical journal", () => {
+    expect(() =>
+      assertFhvV2CanonicalMigrationsApplied({
+        canonical,
+        applied: [
+          ...canonical.map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) })),
+          { hash: "a".repeat(64), createdAt: "9999999999999" },
+        ],
+      }),
+    ).toThrowError(expect.objectContaining({ code: "UNKNOWN_APPLIED_MIGRATION" }));
   });
 
   it("rejects an exact journal when a required Reality V2 dependency table is absent", () => {
