@@ -56,6 +56,10 @@ test.describe("WAIA landing page", () => {
     await expect(page.getByTestId("landing-breath")).not.toContainText(/Resource transparency/i);
     await expect(page.getByTestId("landing-breath-media")).toHaveCount(0);
     await expect(page.getByTestId("landing-breath-time-radar")).toBeVisible();
+    await expect(page.getByTestId("landing-breath-time-radar-link")).toHaveAttribute(
+      "href",
+      "/patrons",
+    );
     await expect(page.getByTestId("landing-breath-budget-link")).toHaveAttribute("href", "/budget");
     await expect(page.getByTestId("landing-breath-patrons-link")).toHaveAttribute(
       "href",

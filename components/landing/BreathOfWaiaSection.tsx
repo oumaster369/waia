@@ -40,22 +40,26 @@ export function BreathOfWaiaSection({
   projection?: PublicTreasuryProjection | null;
 }) {
   const breath = projection?.breath;
-  const publishedBreath =
-    breath?.status === "published" &&
+  const publishedFinancials =
+    breath !== undefined &&
     breath.availableAmountMicros !== null &&
     breath.availableCurrency !== null &&
     breath.annualBudgetAmountMicros !== null &&
-    breath.annualBudgetCurrency !== null &&
-    breath.runway.status === "published"
+    breath.annualBudgetCurrency !== null
       ? {
           availableAmountMicros: breath.availableAmountMicros,
           availableCurrency: breath.availableCurrency,
           annualBudgetAmountMicros: breath.annualBudgetAmountMicros,
           annualBudgetCurrency: breath.annualBudgetCurrency,
-          runwayEndsAt: breath.runway.endsAt,
-          runwayHourlyBurnMicros: breath.runway.hourlyBurnMicros,
-          runwayCurrency: breath.runway.currency,
           lastUpdatedAt: breath.lastUpdatedAt,
+        }
+      : null;
+  const publishedRunway =
+    breath?.runway.status === "published"
+      ? {
+          endsAt: breath.runway.endsAt,
+          hourlyBurnMicros: breath.runway.hourlyBurnMicros,
+          currency: breath.runway.currency,
         }
       : null;
 
@@ -73,33 +77,33 @@ export function BreathOfWaiaSection({
         </div>
 
         <BreathFundingGauge
-          status={publishedBreath ? "published" : "pending"}
+          status={publishedFinancials ? "published" : "pending"}
           idealAnnualBudget={publicMoney(
-            publishedBreath?.annualBudgetAmountMicros ?? null,
-            publishedBreath?.annualBudgetCurrency ?? null,
+            publishedFinancials?.annualBudgetAmountMicros ?? null,
+            publishedFinancials?.annualBudgetCurrency ?? null,
           )}
           currentFreeFunds={publicMoney(
-            publishedBreath?.availableAmountMicros ?? null,
-            publishedBreath?.availableCurrency ?? null,
+            publishedFinancials?.availableAmountMicros ?? null,
+            publishedFinancials?.availableCurrency ?? null,
           )}
           runway={{
             periodLabel: null,
             value: null,
             unit: null,
-            endsAt: publishedBreath?.runwayEndsAt ?? null,
+            endsAt: publishedRunway?.endsAt ?? null,
           }}
-          hourlyBurnMicros={publishedBreath?.runwayHourlyBurnMicros ?? null}
-          runwayCurrency={publishedBreath?.runwayCurrency ?? null}
+          hourlyBurnMicros={publishedRunway?.hourlyBurnMicros ?? null}
+          runwayCurrency={publishedRunway?.currency ?? null}
         />
 
         <BreathSupportCta
           currentFreeFunds={publicMoney(
-            publishedBreath?.availableAmountMicros ?? null,
-            publishedBreath?.availableCurrency ?? null,
+            publishedFinancials?.availableAmountMicros ?? null,
+            publishedFinancials?.availableCurrency ?? null,
           )}
           idealAnnualBudget={publicMoney(
-            publishedBreath?.annualBudgetAmountMicros ?? null,
-            publishedBreath?.annualBudgetCurrency ?? null,
+            publishedFinancials?.annualBudgetAmountMicros ?? null,
+            publishedFinancials?.annualBudgetCurrency ?? null,
           )}
         />
 
@@ -145,13 +149,20 @@ export function BreathOfWaiaSection({
             >
               Foundation →
             </Link>
-            {publishedBreath?.lastUpdatedAt ? (
+            {publishedFinancials?.lastUpdatedAt ? (
               <p data-testid="landing-breath-updated" className="text-waia-fg-subtle pt-2 text-xs">
-                Updated {formatPublicDateTime(publishedBreath.lastUpdatedAt)}
+                Updated {formatPublicDateTime(publishedFinancials.lastUpdatedAt)}
               </p>
             ) : null}
           </nav>
-          <BreathTimeRadar />
+          <Link
+            data-testid="landing-breath-time-radar-link"
+            href="/patrons"
+            aria-label="View WAIA Patrons"
+            className="focus-visible:outline-waia-accent-warm block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
+            <BreathTimeRadar />
+          </Link>
         </div>
       </div>
     </HomepageSection>
