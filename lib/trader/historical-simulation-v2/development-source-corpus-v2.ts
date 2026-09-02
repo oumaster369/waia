@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import { fhvBarsV2RecordToBar, parseFhvBarsV2Line } from
@@ -108,10 +110,37 @@ export async function loadHistoricalDevelopmentSourceCorpusFromDatasetV2(input: 
   symbol: "BTCUSDT" | "ETHUSDT";
   primaryHorizonMinutes?: 30 | 60;
 }>): Promise<readonly SourceAnchor[]> {
+  const snapshot = await loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2(input);
+  return snapshot.corpus;
+}
+
+export type HistoricalDevelopmentSourceCorpusSnapshotV2 = Readonly<{
+  corpus: readonly SourceAnchor[];
+  rawSha256Hex: string;
+}>;
+
+/**
+ * Materializes the corpus and its raw digest from one byte stream. The digest therefore
+ * authenticates the exact bytes consumed by the parser rather than a separate stat/read pass.
+ */
+export async function loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2(input: Readonly<{
+  datasetRoot: string;
+  symbol: "BTCUSDT" | "ETHUSDT";
+  primaryHorizonMinutes?: 30 | 60;
+}>): Promise<HistoricalDevelopmentSourceCorpusSnapshotV2> {
   const filePath = join(input.datasetRoot, "partitions", "development", input.symbol,
     "bars.v2.ndjson");
+  const rawHasher = createHash("sha256");
+  const source = createReadStream(filePath);
+  async function* authenticatedBytes(): AsyncGenerator<Buffer> {
+    for await (const chunk of source) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      rawHasher.update(bytes);
+      yield bytes;
+    }
+  }
   async function* bars(): AsyncGenerator<Bar> {
-    const lines = createInterface({ input: createReadStream(filePath, { encoding: "utf8" }),
+    const lines = createInterface({ input: Readable.from(authenticatedBytes()),
       crlfDelay: Infinity });
     let lineNumber = 0;
     for await (const line of lines) {
@@ -119,6 +148,7 @@ export async function loadHistoricalDevelopmentSourceCorpusFromDatasetV2(input: 
       yield fhvBarsV2RecordToBar(parseFhvBarsV2Line(line, lineNumber));
     }
   }
-  return buildHistoricalDevelopmentSourceCorpusV2({ bars: bars(), symbol: input.symbol,
+  const corpus = await buildHistoricalDevelopmentSourceCorpusV2({ bars: bars(), symbol: input.symbol,
     primaryHorizonMinutes: input.primaryHorizonMinutes });
+  return Object.freeze({ corpus, rawSha256Hex: rawHasher.digest("hex") });
 }

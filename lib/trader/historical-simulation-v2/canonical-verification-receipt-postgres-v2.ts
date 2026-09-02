@@ -34,12 +34,16 @@ import {
   type HistoricalSealedMarketCycleV2,
 } from "./modeled-execution-advance-v2";
 import {
-  bindHistoricalCyclesToPreHoldoutDatasetV2,
-  bindHistoricalCyclesToSealedDatasetV2,
   HISTORICAL_DATASET_MEMBERSHIP_V2,
   type HistoricalDatasetMembershipV2,
   type HistoricalPreHoldoutDatasetMembershipV2,
 } from "./dataset-membership-v2";
+import { loadHistoricalSimulationBootstrapSourceSnapshotV2 } from
+  "./bootstrap-source-loader-v2";
+import {
+  withPostgresSerializableTransactionRetryV2,
+  withPostgresSessionTransactionV2,
+} from "./postgres-session-transaction-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { requireForecastRuntimeAuthorizedOutcomeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import {
@@ -108,6 +112,17 @@ type HistoricalPolicyConfigV2 = Omit<Dee659ExecutablePolicyDraftV1,
   "liquidityCapacityAuthorityReceiptDigestHex" | "quantityRulesAuthorityReceiptDigestHex">;
 
 const DIGEST = /^[0-9a-f]{64}$/;
+
+/** Shared session/xact advisory-lock namespace for one immutable dataset-authority run scope. */
+export function historicalDatasetAuthorityRunLockKeyV2(input: Readonly<{
+  organizationId: string;
+  runId: string;
+}>): string {
+  if (!input.organizationId.trim() || !input.runId.trim()) {
+    throw new Error("HISTORICAL_DATASET_AUTHORITY_LOCK_SCOPE_INVALID");
+  }
+  return `historical-dataset-authority-v2:${input.organizationId}:${input.runId}`;
+}
 
 function seal(body: Omit<CanonicalDecisionVerificationReceiptV2, "verificationReceiptDigestHex">):
 CanonicalDecisionVerificationReceiptV2 {
@@ -317,25 +332,48 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     return receipt;
   }
 
-  async function registerDatasetAuthority(input: Readonly<{
-    datasetRoot: string; organizationId: string; runId: string;
-    partition: "DEVELOPMENT" | "WALK_FORWARD"; symbol: "BTCUSDT" | "ETHUSDT";
+  async function persistDatasetAuthority(input: Readonly<{
+    organizationId: string;
+    runId: string;
     cycles: readonly HistoricalSealedMarketCycleV2[];
-    qualificationReceiptPath?: string;
-    releaseSha?: string;
+    memberships: ReadonlyMap<string,
+      HistoricalDatasetMembershipV2 | HistoricalPreHoldoutDatasetMembershipV2>;
   }>): Promise<ReadonlyMap<string, string>> {
-    const memberships: ReadonlyMap<string,
-      HistoricalDatasetMembershipV2 | HistoricalPreHoldoutDatasetMembershipV2> =
-      input.qualificationReceiptPath
-        ? await bindHistoricalCyclesToPreHoldoutDatasetV2({ ...input,
-            qualificationReceiptPath: input.qualificationReceiptPath,
-            releaseSha: input.releaseSha ?? "" })
-        : await bindHistoricalCyclesToSealedDatasetV2(input);
-    return sql.begin("isolation level serializable", async (transaction) => {
-      const tx = transaction as unknown as postgres.Sql;
+    return withPostgresSerializableTransactionRetryV2(sql, async (tx) => {
+      const lockKey = historicalDatasetAuthorityRunLockKeyV2(input);
+      // Compatible with the production preflight's session lock. On that same reserved
+      // connection this is re-entrant; every other writer waits until the preflight returns.
+      await tx`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey},0))`;
+      const expectedCycleIds = input.cycles.map((cycle) => cycle.cycleId).sort();
+      const sourceScopes = new Set(input.cycles.map((cycle) => {
+        const membership = input.memberships.get(cycle.cycleId);
+        return membership
+          ? `${membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2"}:${membership.partition}:${membership.symbol}`
+          : "";
+      }));
+      const firstMembership = input.memberships.get(input.cycles[0]?.cycleId ?? "");
+      if (!firstMembership || sourceScopes.size !== 1 || sourceScopes.has("") ||
+          new Set(expectedCycleIds).size !== expectedCycleIds.length) {
+        throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_SCOPE_INVALID");
+      }
+      const authorityClass = firstMembership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2";
+      const existingScope = await tx<{ cycle_id: string }[]>`
+        SELECT cycle_id FROM trader_historical_dataset_authority_v2
+        WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
+          AND dataset_authority_class=${authorityClass}
+          AND membership_json ->> 'partition'=${firstMembership.partition}
+          AND membership_json ->> 'symbol'=${firstMembership.symbol}
+        ORDER BY cycle_id
+        FOR SHARE
+      `;
+      if (existingScope.length > 0 &&
+          JSON.stringify(existingScope.map((row) => row.cycle_id)) !==
+            JSON.stringify(expectedCycleIds)) {
+        throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_CONFLICT");
+      }
       const ids = new Map<string, string>();
       for (const cycle of input.cycles) {
-        const membership = memberships.get(cycle.cycleId);
+        const membership = input.memberships.get(cycle.cycleId);
         if (!membership) throw new Error("HISTORICAL_DATASET_AUTHORITY_MISSING_MEMBERSHIP");
         const datasetAuthorityDigestHex = membership.datasetAuthorityDigestHex ??
           ("sealReceiptDigestHex" in membership ? membership.sealReceiptDigestHex : undefined);
@@ -369,6 +407,42 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     });
   }
 
+  async function registerPreHoldoutDatasetAuthorityFromSource(input: Readonly<{
+    datasetRoot: string;
+    qualificationReceiptPath: string;
+    runtimeRequalificationReceiptPath: string;
+    htxVolumeQualificationReceiptPath: string;
+    releaseSha: string;
+    organizationId: string;
+    runId: string;
+    partition: "DEVELOPMENT" | "WALK_FORWARD";
+    symbol: "BTCUSDT" | "ETHUSDT";
+    initialRecordIndex: number;
+    cycleCount: number;
+  }>): Promise<Readonly<{
+    authorityIds: ReadonlyMap<string, string>;
+    cycleIds: readonly string[];
+    qualificationReceiptDigestHex: string;
+    partitionRawSha256Hex: string;
+  }>> {
+    const snapshot = await loadHistoricalSimulationBootstrapSourceSnapshotV2(input);
+    const cycles = snapshot.sources.map((source) => source.cycle);
+    const memberships = new Map(snapshot.sources.map((source) =>
+      [source.cycle.cycleId, source.membership] as const));
+    const authorityIds = await persistDatasetAuthority({
+      organizationId: input.organizationId,
+      runId: input.runId,
+      cycles,
+      memberships,
+    });
+    return Object.freeze({
+      authorityIds,
+      cycleIds: Object.freeze(cycles.map((cycle) => cycle.cycleId)),
+      qualificationReceiptDigestHex: snapshot.qualificationReceiptDigestHex,
+      partitionRawSha256Hex: snapshot.partitionRawSha256Hex,
+    });
+  }
+
   async function preregisterExecution(input: Readonly<{
     organizationId: string; accountId: string; runId: string; forecastId: string;
     datasetAuthorityId: string; cycleId: string;
@@ -377,9 +451,9 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
   }>): Promise<Readonly<{ preregistrationId: string; authorities: ExecutionAuthorities;
     datasetAuthorityDigestHex: string }>> {
     if (transactionalPreregistration) {
-      return sql.begin("isolation level serializable", (tx) =>
+      return withPostgresSessionTransactionV2(sql, "SERIALIZABLE", (tx) =>
         createCanonicalDecisionVerificationReceiptServiceInternalV2(
-          tx as unknown as postgres.Sql,
+          tx,
           false,
         ).preregisterExecution(input));
     }
@@ -698,7 +772,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     }
   }
 
-  return Object.freeze({ registerDatasetAuthority, issueForecast, issueScientific,
+  return Object.freeze({ registerPreHoldoutDatasetAuthorityFromSource, issueForecast, issueScientific,
     preregisterExecution, startRun, issueExecution });
 }
 
