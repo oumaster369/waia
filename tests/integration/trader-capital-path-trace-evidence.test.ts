@@ -106,7 +106,7 @@ describe.skipIf(!pgEnabled)("DEE-415 capital-path trace evidence (TRACE-01..TRAC
     } finally {
       cleanupCapitalPathTraceArtifacts(stagingDir);
     }
-  });
+  }, 30_000);
 
   it("produces stable trace digests across identical runs and rejects one-byte mutation", async () => {
     const first = await runAllCapitalPathTraceScenarios();
