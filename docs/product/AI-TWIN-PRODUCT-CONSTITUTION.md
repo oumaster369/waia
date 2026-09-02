@@ -1,7 +1,7 @@
 # AI-TWIN Product Constitution
 
 **Status:** Human-ratified target canon; implementation is not implied  
-**Ratified:** 2026-09-01  
+**Ratified:** 2026-09-01; economic/access extension pending Human merge under DEE-922
 **Canonical root:** [DEE-130](https://linear.app/deepsense/issue/DEE-130)  
 **Decision record:** [ADR-0032](../adr/0032-ai-twin-epistemic-formation-and-authority-separation.md)
 
@@ -150,7 +150,39 @@ The unit of connection is a **mutual Alignment Contract**:
 
 Compatibility is returned as an evidence-backed, purpose-specific hypothesis with uncertainty and potential tensions. Twins may privately explore whether an introduction is worth proposing, but neither Twin may consent, disclose private source material, negotiate a binding commitment or initiate a relationship on behalf of a Human.
 
-## 9. Version boundary
+## 9. Economics, subscription and universal access
+
+Formation and training are currently free. Reaching a Formation threshold, including Human-ratified `100%`, does not create a bill, payment permission, Society connection or subscription entitlement.
+
+The billable lifecycle is deliberately separate:
+
+```text
+FORMING -> READY -> NETWORK_CONNECTED -> SUBSCRIPTION_ACTIVE
+```
+
+Each transition requires its own server-owned evidence. A monthly subscription may begin only after all of the following are true:
+
+1. the initial Formation Contract is Human-ratified and the Twin is `READY`;
+2. the Human chooses to connect the Twin to the future Society network;
+3. WAIA shows the current Human-approved price and its effective terms;
+4. the Human gives explicit confirmation for the billable subscription;
+5. the payment and entitlement policy independently accepts the resulting evidence.
+
+The governed pricing policy is a versioned monthly price derived from verified monthly cost per active Twin multiplied by `5`. Cost includes direct and allocated infrastructure required to operate a Twin, such as model inference, memory/storage, moderation/security and Society traffic. The calculation produces a proposal, not authority: a Human must approve a price-book version before it may be disclosed or used for billing. Formation being free is an access rule, not a claim that Formation has no underlying cost.
+
+The canonical pre-billing disclosure below the Twin dialogue is:
+
+> Creating and training your AI Twin is currently free. A monthly subscription will begin only after your Twin is fully formed and you choose to connect it to the future social network of AI Twins. We will show you the current price and ask for your explicit confirmation before billing begins.
+
+Inability to pay should not permanently remove a Human perspective from WAIA. Subject to a separately implemented and sustainably funded mechanism, an eligible Human may request community support for one billable subscription period and another authenticated Human may choose to fund it. Sponsorship grants no access to, control over or influence on the supported Human or their Twin; creates no ownership or governance weight; and does not expose financial hardship, email, wallet or payment details. Public identity is limited to separately consented display information.
+
+The canonical public explanation for that future support surface is:
+
+> The more people can actively participate in WAIA, the more honest and accurate WAIA becomes—especially its collective layer. If someone cannot cover their subscription, another member of the community can help keep their voice present.
+
+A sponsored subscription is a subscription payment classification, not an ordinary donation or Patron-share contribution unless a later Human-ratified policy explicitly says otherwise. The complete universal-access boundary remains governed by [`waia-user-stewardship-doctrine.md`](waia-user-stewardship-doctrine.md).
+
+## 10. Version boundary
 
 | Version | Product outcome | Explicit boundary |
 |---|---|---|
@@ -159,7 +191,9 @@ Compatibility is returned as an evidence-backed, purpose-specific hypothesis wit
 | v3 — Society & Alignment Contracts | Mutual introductions, compatibility hypotheses and revocable contracts | No popularity mechanics or machine consent |
 | Future — Living WAIA network | Bounded collective learning and self-improvement proposals | No consciousness claim, survival imperative or self-sovereignty |
 
-## 10. Non-negotiable separations
+Economic work crosses version boundaries without changing them: v1 may explain the future billing contract and measure cost; no billable activation is permitted before the v3 Society connection gate and explicit Human confirmation.
+
+## 11. Non-negotiable separations
 
 - Formation Progress != Model Health.
 - Formation Progress != liveness/account/identity trust.
@@ -168,6 +202,8 @@ Compatibility is returned as an evidence-backed, purpose-specific hypothesis wit
 - Observation != interpretation != hypothesis != ratified Human model.
 - Twin-to-Twin exploration != Human disclosure != Human consent.
 - Advice != decision != permission != execution != verified outcome.
+- Formation/READY != Society connection != subscription consent != verified payment != entitlement.
+- Cost estimate != approved price != invoice != payment != subscription access.
+- Sponsorship != access to the supported Human/Twin != governance or Patron weight.
 
 Any implementation that collapses one of these separations is constitutionally incorrect even if its UI appears complete.
-
