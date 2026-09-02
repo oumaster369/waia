@@ -44,6 +44,15 @@ export type BreathSnapshotStore = {
   insertBalanceCheckpoint(record: TreasuryBalanceCheckpointRecord): Promise<void>;
 };
 
+/**
+ * Transaction-scoped store used while the organization runway lock is held.
+ * Facts must be loaded through this store so Postgres does not try to acquire a
+ * second pool connection from inside the transaction.
+ */
+export type BreathExclusiveStore = BreathSnapshotStore & {
+  loadFacts(context: OrgContext): Promise<BreathLoadedFacts>;
+};
+
 export type BreathIdealAuditEvent = {
   organizationId: string;
   entityType: string;
@@ -57,6 +66,6 @@ export type BreathFactsRepository = BreathSnapshotStore & {
   listIdealBudgetAuditTimes(context: OrgContext, idealId: string): Promise<Date[]>;
   runExclusive<T>(
     organizationId: string,
-    fn: (store: BreathSnapshotStore) => Promise<T>,
+    fn: (store: BreathExclusiveStore) => Promise<T>,
   ): Promise<T>;
 };

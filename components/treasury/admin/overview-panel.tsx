@@ -48,6 +48,8 @@ function OverviewInner() {
   const { organizationId } = useFinanceOrg();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [reason, setReason] = React.useState("");
+  const [runwayConfirmOpen, setRunwayConfirmOpen] = React.useState(false);
+  const [runwayReason, setRunwayReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [checkpointOpen, setCheckpointOpen] = React.useState(false);
   const [checkpointAmount, setCheckpointAmount] = React.useState("");
@@ -132,6 +134,29 @@ function OverviewInner() {
     setCheckpointAmount("");
     setCheckpointAsOf("");
     setCheckpointNote("");
+    reload();
+  }
+
+  async function confirmRunwayRefresh() {
+    if (!organizationId) return;
+    setBusy(true);
+    const result = await treasuryJson<{ snapshot: { id: string } }>(
+      "/api/admin/treasury/runway-plans/commands",
+      "POST",
+      {
+        organization_id: organizationId,
+        command: "refresh_snapshot",
+        reason: runwayReason,
+      },
+    );
+    setBusy(false);
+    setRunwayConfirmOpen(false);
+    setRunwayReason("");
+    if (!result.ok) {
+      setCommandError({ code: result.code, message: result.message });
+      return;
+    }
+    setCommandError(null);
     reload();
   }
 
@@ -298,6 +323,15 @@ function OverviewInner() {
               >
                 {settings?.breathEnabled ? "Disable publication" : "Enable publication"}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="runway-refresh-intent"
+                onClick={() => setRunwayConfirmOpen(true)}
+              >
+                Refresh runway snapshot
+              </Button>
               <Link
                 className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "inline-flex")}
                 href={financeHref("/finance/preview", organizationId)}
@@ -378,6 +412,17 @@ function OverviewInner() {
         onReasonChange={setReason}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => void confirmBreathToggle()}
+        busy={busy}
+      />
+      <ConfirmDialog
+        open={runwayConfirmOpen}
+        title="Refresh public runway snapshot"
+        impact="Creates a new audited snapshot from the active approved burn plan, the latest Human-confirmed balance, verified transactions, and active commitments. No balance or burn-rate value can be supplied here."
+        confirmLabel="Refresh snapshot"
+        reason={runwayReason}
+        onReasonChange={setRunwayReason}
+        onCancel={() => setRunwayConfirmOpen(false)}
+        onConfirm={() => void confirmRunwayRefresh()}
         busy={busy}
       />
       <ConfirmDialog
