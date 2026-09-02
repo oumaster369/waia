@@ -56,13 +56,15 @@ export function BreathFundingGauge({
   const copy = HOMEPAGE_COPY.breath;
   const clipId = useId().replace(/:/g, "");
   const ratio = deriveBreathFundingMarkerRatio(currentFreeFunds, idealAnnualBudget);
-  const gaugePending = status === "pending" || ratio === null;
+  const fundingPending = status === "pending" || ratio === null;
+  const runwayPublished = runway.endsAt !== null;
   const idealPublished = idealAnnualBudget.amount !== null && idealAnnualBudget.currency !== null;
 
   return (
     <div
       data-testid="landing-breath-runway"
-      data-runway-state={gaugePending ? "pending" : "published"}
+      data-funding-state={fundingPending ? "pending" : "published"}
+      data-runway-state={runwayPublished ? "published" : "pending"}
       data-funding-ratio={ratio === null ? "pending" : ratio.toFixed(4)}
       className={cn(
         "rounded-2xl border px-4 py-5 sm:px-5 sm:py-6",
@@ -118,12 +120,12 @@ export function BreathFundingGauge({
                 data-testid="landing-breath-runway-wave-track"
                 className={cn(
                   styles.waveTrack,
-                  gaugePending ? styles.waveTrackPending : styles.waveTrackLive,
+                  fundingPending ? styles.waveTrackPending : styles.waveTrackLive,
                 )}
               >
                 <path
                   data-testid="landing-breath-runway-wave"
-                  className={cn(styles.wave, gaugePending && styles.wavePending)}
+                  className={cn(styles.wave, fundingPending && styles.wavePending)}
                   d={WAVE_PATH}
                 />
               </g>
@@ -142,7 +144,7 @@ export function BreathFundingGauge({
           ) : null}
         </div>
 
-        {gaugePending ? (
+        {fundingPending ? (
           <p
             data-testid="landing-breath-pending"
             data-publication-status="pending"
@@ -174,7 +176,7 @@ export function BreathFundingGauge({
             </div>
             <div
               data-testid="landing-breath-countdown-region"
-              data-countdown-region="published"
+              data-countdown-region={runwayPublished ? "published" : "pending"}
               className="mt-3 border-t border-[rgba(150,195,205,0.18)] pt-4 sm:max-w-[70%]"
             >
               <BreathCountdown

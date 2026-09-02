@@ -136,6 +136,7 @@ describe("breath public copy hygiene", () => {
     expect(HOMEPAGE_COPY.breath.updatedPending).toBe("Awaiting first ledger publication");
     expect(HOMEPAGE_COPY.breath.supportCta).toBe("KEEP WAIA BREATHING");
     expect(HOMEPAGE_COPY.breath.supportFullyFunded).toBe("WAIA IS FULLY FUNDED");
+    expect(HOMEPAGE_COPY.breath.breatheForElapsed).toBe("WORK IS PAUSED. AWAITING FUNDING.");
     expect(breathBlob).not.toMatch(/Treasury figures pending publication/i);
   });
 });
