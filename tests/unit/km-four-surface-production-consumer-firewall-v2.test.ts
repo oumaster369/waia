@@ -26,6 +26,10 @@ const PREFLIGHT =
   "lib/trader/research/execopp-qualification/km-four-surface-production-preflight-v2.ts";
 const BOOTSTRAP =
   "lib/trader/research/execopp-qualification/km-four-surface-production-bootstrap-v2.ts";
+const SCIENTIFIC_ADMISSION =
+  "lib/trader/research/execopp-qualification/scientific-admission-four-surface-v2.ts";
+const SCIENTIFIC_ADMISSION_REPOSITORY =
+  "lib/trader/research/execopp-qualification/scientific-admission-four-surface-repository-postgres-v2.ts";
 
 function isSourceFile(path: string): boolean {
   return SOURCE_SUFFIXES.some((suffix) => path.endsWith(suffix));
@@ -52,6 +56,15 @@ type ModuleReference = Readonly<{
   moduleSpecifier: string;
   importedNames: readonly string[];
   namespace: boolean;
+  accessMode:
+    | "named-import"
+    | "namespace-import"
+    | "side-effect-import"
+    | "named-export"
+    | "export-star"
+    | "import-equals"
+    | "dynamic-import"
+    | "require";
 }>;
 
 function moduleReferences(path: string): readonly ModuleReference[] {
@@ -67,6 +80,9 @@ function moduleReferences(path: string): readonly ModuleReference[] {
           ? bindings.elements.map((element) => (element.propertyName ?? element.name).text)
           : [],
         namespace: Boolean(bindings && ts.isNamespaceImport(bindings)),
+        accessMode: bindings
+          ? ts.isNamedImports(bindings) ? "named-import" : "namespace-import"
+          : "side-effect-import",
       });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier &&
                ts.isStringLiteral(node.moduleSpecifier)) {
@@ -77,6 +93,9 @@ function moduleReferences(path: string): readonly ModuleReference[] {
               (element.propertyName ?? element.name).text)
           : [],
         namespace: !node.exportClause || ts.isNamespaceExport(node.exportClause),
+        accessMode: node.exportClause && ts.isNamedExports(node.exportClause)
+          ? "named-export"
+          : "export-star",
       });
     } else if (ts.isImportEqualsDeclaration(node) &&
                ts.isExternalModuleReference(node.moduleReference) &&
@@ -86,6 +105,7 @@ function moduleReferences(path: string): readonly ModuleReference[] {
         moduleSpecifier: node.moduleReference.expression.text,
         importedNames: [],
         namespace: true,
+        accessMode: "import-equals",
       });
     } else if (ts.isCallExpression(node) && node.arguments.length === 1 &&
                ts.isStringLiteral(node.arguments[0]!) &&
@@ -95,6 +115,9 @@ function moduleReferences(path: string): readonly ModuleReference[] {
         moduleSpecifier: node.arguments[0]!.text,
         importedNames: [],
         namespace: true,
+        accessMode: node.expression.kind === ts.SyntaxKind.ImportKeyword
+          ? "dynamic-import"
+          : "require",
       });
     }
     ts.forEachChild(node, visit);
@@ -147,6 +170,31 @@ function testOnlyImportOffenders(
   });
 }
 
+function scientificAdmissionInternalImportOffenders(
+  paths: readonly string[],
+  projectRoot = resolve(process.cwd()),
+): string[] {
+  return paths.flatMap((path) => {
+    const consumer = projectRelative(path, projectRoot);
+    return moduleReferences(path).flatMap(({ moduleSpecifier, accessMode }) => {
+      const normalized = normalizedModuleSpecifier(moduleSpecifier);
+      const admissionModule = normalized.endsWith("scientific-admission-four-surface-v2");
+      const repositoryModule = normalized.endsWith(
+        "scientific-admission-four-surface-repository-postgres-v2",
+      );
+      if (!admissionModule && !repositoryModule) return [];
+      const allowedConsumer = admissionModule
+        ? SCIENTIFIC_ADMISSION_REPOSITORY
+        : PREFLIGHT;
+      // The two internal capability modules may only be consumed via ordinary, statically
+      // analyzable named imports at their single trusted composition edge. Namespace/dynamic/
+      // CommonJS/re-export forms can conceal or propagate capabilities and are always refused.
+      if (consumer === allowedConsumer && accessMode === "named-import") return [];
+      return [`${consumer} -> ${moduleSpecifier}`];
+    });
+  });
+}
+
 describe("DEE-917 production consumer firewall", () => {
   let fixtureRoot = "";
   afterEach(() => {
@@ -174,18 +222,23 @@ describe("DEE-917 production consumer firewall", () => {
       /export type KmFourSurfaceProductionPreflightInputV2 = Readonly<([\s\S]*?)>;/,
     )?.[1] ?? "";
     expect(publicInput).not.toMatch(/\bsql\b|provider|loadDurableAuthority/);
-    expect(source).toContain("withWaiaPostgresClient");
+    expect(source).toContain("withRequiredSessionPostgresClient");
+    expect(source).not.toContain("withWaiaPostgresClient");
   });
 
-  it("exports only the closed production preflight and never bootstrap internals", () => {
+  it("exports only the trusted admission composition and never structural authority internals", () => {
     const index = readFileSync(resolve(
       process.cwd(),
       "lib/trader/research/execopp-qualification/index.ts",
     ), "utf8");
-    expect(index).toContain("prepareKmFourSurfaceProductionAuthorityV2");
+    expect(index).toContain("createKmFourSurfaceScientificAdmissionProductionV2");
     expect(index).toContain("KmFourSurfaceProductionPreflightInputV2");
     expect(index).not.toContain("km-four-surface-production-bootstrap-v2");
     expect(index).not.toContain("buildKmFourSurfaceProductionAuthorityV2");
+    expect(index).not.toContain("prepareKmFourSurfaceProductionAuthorityV2");
+    expect(index).not.toContain("persistScientificAdmissionFourSurfaceV2");
+    expect(index).not.toContain("buildScientificAdmissionFourSurfaceV2");
+    expect(index).not.toContain("INTERNAL_");
     expect(index).not.toMatch(/export\s+type[\s\S]*\bKmFourSurfaceProductionAuthorityV2\b/);
     expect(index).not.toContain("buildKmFourSurfaceContractV2");
   });
@@ -196,6 +249,12 @@ describe("DEE-917 production consumer firewall", () => {
 
   it("forbids TEST_ONLY and namespace escapes across every production source root", () => {
     expect(testOnlyImportOffenders(productionSourceFiles())).toEqual([]);
+  });
+
+  it("restricts DEE-918 internal admission composition to the trusted preflight path", () => {
+    expect(scientificAdmissionInternalImportOffenders(productionSourceFiles())).toEqual([]);
+    expect(readFileSync(resolve(process.cwd(), SCIENTIFIC_ADMISSION), "utf8"))
+      .not.toContain("km-four-surface-production-bootstrap-v2");
   });
 
   it("detects extension-qualified deep imports in .ts and services .mjs fixtures", () => {
@@ -220,5 +279,57 @@ describe("DEE-917 production consumer firewall", () => {
     expect(testOnlyImportOffenders(paths, fixtureRoot)).toEqual([
       "services/escape.mjs -> ../lib/km-four-surface-production-preflight-v2.mjs",
     ]);
+  });
+
+  it("rejects every opaque or propagating DEE-918 internal-module import form", () => {
+    fixtureRoot = mkdtempSync(join(tmpdir(), "dee-918-consumer-firewall-"));
+    mkdirSync(join(fixtureRoot, "components"), { recursive: true });
+    mkdirSync(join(fixtureRoot, "services"), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, "components", "admission-namespace.ts"),
+      'import * as admission from "../lib/scientific-admission-four-surface-v2";\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "components", "admission-require.cjs"),
+      'const admission = require("../lib/scientific-admission-four-surface-v2.cjs");\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "components", "admission-dynamic.mjs"),
+      'const admission = await import("../lib/scientific-admission-four-surface-v2.mjs");\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "components", "admission-export-star.mjs"),
+      'export * from "../lib/scientific-admission-four-surface-v2.mjs";\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "services", "repository-namespace.ts"),
+      'import * as repository from "../lib/scientific-admission-four-surface-repository-postgres-v2";\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "services", "repository-require.cjs"),
+      'const repository = require("../lib/scientific-admission-four-surface-repository-postgres-v2.cjs");\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "services", "repository-dynamic.mjs"),
+      'const repository = await import("../lib/scientific-admission-four-surface-repository-postgres-v2.mjs");\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "services", "repository-export-star.mjs"),
+      'export * from "../lib/scientific-admission-four-surface-repository-postgres-v2.mjs";\n',
+    );
+
+    expect(scientificAdmissionInternalImportOffenders(
+      productionSourceFiles(fixtureRoot),
+      fixtureRoot,
+    ).sort()).toEqual([
+      "components/admission-dynamic.mjs -> ../lib/scientific-admission-four-surface-v2.mjs",
+      "components/admission-export-star.mjs -> ../lib/scientific-admission-four-surface-v2.mjs",
+      "components/admission-namespace.ts -> ../lib/scientific-admission-four-surface-v2",
+      "components/admission-require.cjs -> ../lib/scientific-admission-four-surface-v2.cjs",
+      "services/repository-dynamic.mjs -> ../lib/scientific-admission-four-surface-repository-postgres-v2.mjs",
+      "services/repository-export-star.mjs -> ../lib/scientific-admission-four-surface-repository-postgres-v2.mjs",
+      "services/repository-namespace.ts -> ../lib/scientific-admission-four-surface-repository-postgres-v2",
+      "services/repository-require.cjs -> ../lib/scientific-admission-four-surface-repository-postgres-v2.cjs",
+    ].sort());
   });
 });

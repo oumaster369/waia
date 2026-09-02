@@ -12,6 +12,7 @@ import {
   TEST_ONLY_prepareKmFourSurfaceProductionAuthorityV2,
   TEST_ONLY_withKmFourSurfaceProductionSessionLockV2,
   type KmFourSurfaceProductionPreflightInputV2,
+  type KmFourSurfaceScientificAdmissionProductionResultV2,
 } from
   "@/lib/trader/research/execopp-qualification/km-four-surface-production-preflight-v2";
 
@@ -238,6 +239,28 @@ describe("DEE-917 production preflight orchestrator", () => {
     expect(source).not.toMatch(/\.startRun\s*\(/);
     expect(source).toContain("trader_historical_simulation_run_start_v2");
     expect(source).toContain("trader_dee659_authority_preregistration_v2");
+  });
+
+  it("builds and persists admission inside the same held-session callback without returning authority", () => {
+    const source = readFileSync(resolve(
+      process.cwd(),
+      "lib/trader/research/execopp-qualification/km-four-surface-production-preflight-v2.ts",
+    ), "utf8");
+    const productionFlow = source.match(
+      /export function createKmFourSurfaceScientificAdmissionProductionV2[\s\S]*?^\}/m,
+    )?.[0] ?? "";
+    expect(productionFlow).toContain("withKmFourSurfaceProductionSessionLockV2");
+    expect(productionFlow.indexOf("prepareInternal")).toBeGreaterThan(-1);
+    expect(productionFlow.indexOf("INTERNAL_persistScientificAdmissionFourSurfaceV2"))
+      .toBeGreaterThan(productionFlow.indexOf("prepareInternal"));
+    const exposesContract: "contract" extends keyof
+      KmFourSurfaceScientificAdmissionProductionResultV2 ? true : false = false;
+    const exposesAuthority: "sourceAuthority" extends keyof
+      KmFourSurfaceScientificAdmissionProductionResultV2 ? true : false = false;
+    expect({ exposesContract, exposesAuthority }).toEqual({
+      exposesContract: false,
+      exposesAuthority: false,
+    });
   });
 
   it("registers through the canonical snapshot API without accepting caller cycles", () => {

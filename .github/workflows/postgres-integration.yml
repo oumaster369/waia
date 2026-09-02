@@ -43,7 +43,10 @@ on:
       - "lib/trader/research/execopp-qualification/km-four-surface-contract-v2.ts"
       - "lib/trader/research/execopp-qualification/km-four-surface-production-bootstrap-v2.ts"
       - "lib/trader/research/execopp-qualification/km-four-surface-production-preflight-v2.ts"
+      - "lib/trader/research/execopp-qualification/scientific-admission-four-surface-v2.ts"
+      - "lib/trader/research/execopp-qualification/scientific-admission-four-surface-repository-postgres-v2.ts"
       - "tests/integration/postgres-km-four-surface-production-preflight-v2.test.ts"
+      - "tests/integration/postgres-scientific-admission-four-surface-v2.test.ts"
       - "tests/unit/postgres-session-transaction-v2.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
@@ -106,4 +109,5 @@ jobs:
           tests/integration/postgres-scientific-admission-receipt-v1.test.ts
           tests/integration/postgres-forecast-contract-binding-v1.test.ts
           tests/integration/postgres-km-four-surface-production-preflight-v2.test.ts
+          tests/integration/postgres-scientific-admission-four-surface-v2.test.ts
           tests/unit/postgres-session-transaction-v2.test.ts

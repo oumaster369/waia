@@ -126,6 +126,79 @@ export type CampaignPostgresUrlResolution = {
 };
 
 /**
+ * Resolves the mandatory direct/session PostgreSQL endpoint used by workflows that hold a
+ * session advisory lock. There is deliberately no `DATABASE_URL_POSTGRES` fallback: a
+ * transaction-pooler connection can change backend between statements and invalidate the lock.
+ */
+export function resolveRequiredSessionPostgresUrl(): string {
+  const raw = process.env.DATABASE_URL_POSTGRES_SESSION?.trim();
+  if (!raw) {
+    throw new Error(
+      "[waia] DATABASE_URL_POSTGRES_SESSION is required for session-locked production workflows; " +
+      "DATABASE_URL_POSTGRES fallback is forbidden.",
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("[waia] DATABASE_URL_POSTGRES_SESSION is not a valid PostgreSQL URL.");
+  }
+  const protocol = parsed.protocol.toLowerCase();
+  const declaredPoolMode =
+    parsed.searchParams.get("pool_mode") ?? parsed.searchParams.get("poolmode");
+  if (
+    (protocol !== "postgres:" && protocol !== "postgresql:") ||
+    !parsed.hostname ||
+    parsed.port === "6543" ||
+    declaredPoolMode?.trim().toLowerCase() === "transaction"
+  ) {
+    throw new Error(
+      "[waia] DATABASE_URL_POSTGRES_SESSION must be a direct or session-mode PostgreSQL URL; " +
+      "transaction pooling is forbidden.",
+    );
+  }
+  return raw;
+}
+
+/** Driver options that preserve one held backend for a potentially long DEE-917/918 flow. */
+export function waiaSessionLockedPostgresDriverOptions(): {
+  max: number;
+  prepare: boolean;
+  idle_timeout: number;
+  connect_timeout: number;
+  max_lifetime: null;
+  keep_alive: number;
+} {
+  return {
+    max: 1,
+    prepare: false,
+    idle_timeout: 0,
+    connect_timeout: 30,
+    max_lifetime: null,
+    keep_alive: 30,
+  };
+}
+
+/**
+ * Narrow scoped client for session-lock critical sections. Unlike campaign resolution this
+ * helper never falls back to the transaction pooler and never exposes a Drizzle/global client.
+ */
+export async function withRequiredSessionPostgresClient<T>(
+  fn: (sql: postgres.Sql) => Promise<T>,
+): Promise<T> {
+  const sql = postgres(
+    resolveRequiredSessionPostgresUrl(),
+    waiaSessionLockedPostgresDriverOptions(),
+  );
+  try {
+    return await fn(sql);
+  } finally {
+    await disposePostgresClientSafely(sql);
+  }
+}
+
+/**
  * Resolves the connection string for long-running campaign CLIs: prefers
  * `DATABASE_URL_POSTGRES_SESSION` (Supabase session-mode pooler `:5432` or a direct
  * `db.<ref>.supabase.co:5432` connection — both stable for held single connections), falling

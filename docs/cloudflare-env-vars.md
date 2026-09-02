@@ -93,9 +93,16 @@ These variables are read by [`runtime-backend.ts`](../db/runtime-backend.ts) and
 |----------|------|------|------------|
 | `WAIA_DB_BACKEND` | Set to `postgres` | Selects Postgres runtime for `getWaiaRuntimeDb()` instead of default SQLite. | Plain env (e.g. `postgres` in dashboard or `.dev.vars`) |
 | `DATABASE_URL_POSTGRES` | Required when `WAIA_DB_BACKEND=postgres` | **Secret** — Postgres connection URI for Drizzle + `postgres` driver. | `wrangler secret put DATABASE_URL_POSTGRES` or encrypted dashboard env |
+| `DATABASE_URL_POSTGRES_SESSION` | Required for DEE-918 trusted four-surface ScientificAdmission | **Secret** — direct or session-mode Postgres URI on port 5432. Session advisory-lock workflows fail closed if it is absent or identifies transaction pooling; there is no `DATABASE_URL_POSTGRES` fallback. | `wrangler secret put DATABASE_URL_POSTGRES_SESSION` or encrypted dashboard env |
 | `WAIA_POSTGRES_PER_REQUEST_CLIENT` | Optional (DEE-110) | Default **on** (`true` / `1` / `yes` / `on` / unset): one `postgres.js` client per request (recommended on Workers). Set **`false`**, **`0`**, **`no`**, or **`off`** to roll back to the legacy global singleton (emergency only). | Plain env |
 
 **First supported path (DEE-74 slice):** **Supabase transaction pooler** — use the **Transaction pooler** connection string from the Supabase dashboard (often host `…pooler.supabase.com`, port **6543**, IPv4-friendly for Workers). Paste the full URI into **`DATABASE_URL_POSTGRES`**.
+
+**DEE-918 exception:** the trusted four-surface ScientificAdmission flow holds a session advisory
+lock from authenticated DEVELOPMENT loading through admission persistence. Configure
+`DATABASE_URL_POSTGRES_SESSION` with Supabase's session pooler or direct URI on port **5432**.
+Port **6543** and an explicit `pool_mode=transaction` are rejected; the general transaction URL is
+never used as fallback for this flow.
 
 **Optional later hardening:** **Cloudflare Hyperdrive** in front of Postgres — **not** required for DEE-74; may reduce connection churn in production. Same logical contract: a **secret** connection string the Worker can use as **`DATABASE_URL_POSTGRES`** (or a binding-mapped equivalent when implemented). See [Hyperdrive docs](https://developers.cloudflare.com/hyperdrive/).
 

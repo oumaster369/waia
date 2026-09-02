@@ -31,10 +31,13 @@ export type {
   KmEligibleAnchor,
 } from "./km-convergence-gate-v1";
 export {
+  createKmFourSurfaceScientificAdmissionProductionV2,
   KM_FOUR_SURFACE_PRODUCTION_PREFLIGHT_V2,
-  prepareKmFourSurfaceProductionAuthorityV2,
 } from "./km-four-surface-production-preflight-v2";
-export type { KmFourSurfaceProductionPreflightInputV2 } from
+export type {
+  KmFourSurfaceProductionPreflightInputV2,
+  KmFourSurfaceScientificAdmissionProductionResultV2,
+} from
   "./km-four-surface-production-preflight-v2";
 export {
   assertScientificAdmissionDoesNotAuthorizeCapital,

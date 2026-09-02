@@ -36,8 +36,11 @@ import {
   createLongRunningCampaignPostgresRuntime,
   isTransientConnectionError,
   resolveCampaignPostgresUrl,
+  resolveRequiredSessionPostgresUrl,
   waiaCampaignPostgresDriverOptions,
+  waiaSessionLockedPostgresDriverOptions,
   withCampaignDbRetry,
+  withRequiredSessionPostgresClient,
 } from "@/db/postgres-client";
 
 describe("waiaCampaignPostgresDriverOptions", () => {
@@ -96,6 +99,64 @@ describe("resolveCampaignPostgresUrl", () => {
     delete process.env.DATABASE_URL_POSTGRES_SESSION;
     delete process.env.DATABASE_URL_POSTGRES;
     expect(() => resolveCampaignPostgresUrl()).toThrow(/DATABASE_URL_POSTGRES/);
+  });
+});
+
+describe("required session PostgreSQL for advisory-lock workflows", () => {
+  const savedSession = process.env.DATABASE_URL_POSTGRES_SESSION;
+  const savedTransaction = process.env.DATABASE_URL_POSTGRES;
+
+  afterEach(() => {
+    if (savedSession === undefined) delete process.env.DATABASE_URL_POSTGRES_SESSION;
+    else process.env.DATABASE_URL_POSTGRES_SESSION = savedSession;
+    if (savedTransaction === undefined) delete process.env.DATABASE_URL_POSTGRES;
+    else process.env.DATABASE_URL_POSTGRES = savedTransaction;
+    pgMocks.factory.mockClear();
+  });
+
+  it("requires the session variable and never falls back to DATABASE_URL_POSTGRES", async () => {
+    delete process.env.DATABASE_URL_POSTGRES_SESSION;
+    process.env.DATABASE_URL_POSTGRES =
+      "postgresql://postgres.ref:secret@pooler.supabase.com:6543/postgres";
+    expect(() => resolveRequiredSessionPostgresUrl()).toThrow(
+      "DATABASE_URL_POSTGRES fallback is forbidden",
+    );
+    await expect(withRequiredSessionPostgresClient(async () => "unreachable"))
+      .rejects.toThrow("DATABASE_URL_POSTGRES_SESSION is required");
+    expect(pgMocks.factory).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "postgresql://postgres.ref:secret@pooler.supabase.com:6543/postgres",
+    "postgresql://postgres.ref:secret@pooler.supabase.com:5432/postgres?pool_mode=transaction",
+    "https://db.ref.supabase.co:5432/postgres",
+  ])("refuses transaction/non-PostgreSQL session endpoint %s", (value) => {
+    process.env.DATABASE_URL_POSTGRES_SESSION = value;
+    expect(() => resolveRequiredSessionPostgresUrl()).toThrow(
+      "direct or session-mode PostgreSQL URL",
+    );
+  });
+
+  it.each([
+    "postgresql://postgres.ref:secret@pooler.supabase.com:5432/postgres",
+    "postgresql://postgres:secret@db.ref.supabase.co:5432/postgres",
+  ])("accepts a direct/session endpoint %s", (value) => {
+    process.env.DATABASE_URL_POSTGRES_SESSION = value;
+    expect(resolveRequiredSessionPostgresUrl()).toBe(value);
+  });
+
+  it("creates one non-rotating backend and disposes it after the critical section", async () => {
+    pgMocks.instances.length = 0;
+    process.env.DATABASE_URL_POSTGRES_SESSION =
+      "postgresql://postgres.ref:secret@pooler.supabase.com:5432/postgres";
+    process.env.DATABASE_URL_POSTGRES =
+      "postgresql://postgres.ref:secret@pooler.supabase.com:6543/postgres";
+    await expect(withRequiredSessionPostgresClient(async () => "ok")).resolves.toBe("ok");
+    expect(pgMocks.factory).toHaveBeenCalledWith(
+      process.env.DATABASE_URL_POSTGRES_SESSION,
+      waiaSessionLockedPostgresDriverOptions(),
+    );
+    expect(pgMocks.instances[0]?.end).toHaveBeenCalled();
   });
 });
 

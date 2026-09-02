@@ -1,6 +1,6 @@
 import type postgres from "postgres";
 
-import { withWaiaPostgresClient } from "@/db/postgres-client";
+import { withRequiredSessionPostgresClient } from "@/db/postgres-client";
 import {
   loadHistoricalSimulationBootstrapSourceCyclesV2,
   type HistoricalSimulationBootstrapSourceCycleV2,
@@ -16,6 +16,8 @@ import {
   type KmFourSurfaceProductionAuthorityV2,
   type KmFourSurfaceProductionBootstrapInputV2,
 } from "./km-four-surface-production-bootstrap-v2";
+import { INTERNAL_persistScientificAdmissionFourSurfaceV2 } from
+  "./scientific-admission-four-surface-repository-postgres-v2";
 
 export const KM_FOUR_SURFACE_PRODUCTION_PREFLIGHT_V2 =
   "km-four-surface-production-preflight/v2" as const;
@@ -34,6 +36,19 @@ export type KmFourSurfaceProductionPreflightInputV2 = Readonly<
     developmentCycleCount: number;
   }
 >;
+
+export type KmFourSurfaceScientificAdmissionProductionResultV2 = Readonly<{
+  id: string;
+  insertedNew: boolean;
+  organizationId: string;
+  releaseSha: string;
+  runId: string;
+  developmentDatasetIdentityDigestHex: string;
+  sourceQualificationReceiptDigestHex: string;
+  sourceFourSurfaceAuthorityContentDigestHex: string;
+  evidenceSemanticDigestHex: string;
+  contentDigestHex: string;
+}>;
 
 type LoadedDevelopmentSurface = Readonly<{
   symbol: "BTCUSDT" | "ETHUSDT";
@@ -275,17 +290,45 @@ async function prepareInternal(
   return authority;
 }
 
-/** Production preflight only; preregistration and run start are intentionally deferred to DEE-919. */
-export function prepareKmFourSurfaceProductionAuthorityV2(
+/**
+ * Trusted DEE-917 -> DEE-918 production composition. The byte-authenticated DEVELOPMENT
+ * load, evaluator, durable authority verification and admission INSERT all execute while
+ * the same run-scoped session advisory lock and reserved backend are held.
+ * Preregistration and run start remain intentionally deferred to DEE-919.
+ */
+export function createKmFourSurfaceScientificAdmissionProductionV2(
   input: KmFourSurfaceProductionPreflightInputV2,
-): Promise<KmFourSurfaceProductionAuthorityV2> {
+): Promise<KmFourSurfaceScientificAdmissionProductionResultV2> {
   const reserved = reserveSuppliedRunScope(input);
-  return withWaiaPostgresClient((sql) =>
+  return withRequiredSessionPostgresClient((sql) =>
     withKmFourSurfaceProductionSessionLockV2(sql, {
       organizationId: input.organizationId,
       runId: reserved.runId,
-    }, (connection) =>
-      prepareInternal(input, productionDependenciesForHeldConnection(connection))));
+    }, async (connection) => {
+      const authority = await prepareInternal(
+        input,
+        productionDependenciesForHeldConnection(connection),
+      );
+      const persisted = await INTERNAL_persistScientificAdmissionFourSurfaceV2(
+        connection,
+        authority,
+      );
+      return Object.freeze({
+        id: persisted.id,
+        insertedNew: persisted.insertedNew,
+        organizationId: persisted.receipt.organizationId,
+        releaseSha: persisted.receipt.releaseSha,
+        runId: persisted.receipt.runId,
+        developmentDatasetIdentityDigestHex:
+          persisted.receipt.developmentDatasetIdentityDigestHex,
+        sourceQualificationReceiptDigestHex:
+          persisted.receipt.sourceQualificationReceiptDigestHex,
+        sourceFourSurfaceAuthorityContentDigestHex:
+          persisted.receipt.sourceFourSurfaceAuthorityContentDigestHex,
+        evidenceSemanticDigestHex: persisted.receipt.evidenceSemanticDigestHex,
+        contentDigestHex: persisted.receipt.contentDigestHex,
+      });
+    }));
 }
 
 /** TEST_ONLY ordering seam; intentionally not re-exported from the qualification index. */
