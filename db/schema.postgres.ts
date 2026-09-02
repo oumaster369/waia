@@ -283,6 +283,64 @@ export const traderForecastPitBarRetentionGuardV2 = pgTable(
   },
 );
 
+/** Forecast-V2 immutable predictive package identity and executable family binding. */
+export const traderForecastPredictivePackageV2 = pgTable(
+  "trader_forecast_predictive_package_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venue: text("venue").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    primaryHorizonMinutes: integer("primary_horizon_minutes").notNull(),
+    executionHorizonMinutes: integer("execution_horizon_minutes").notNull(),
+    modelTransformVersion: text("model_transform_version").notNull(),
+    replicaRootFamilyIdentityDigest: text("replica_root_family_identity_digest").notNull(),
+    predictivePackageGenerationIdentityDigest: text(
+      "predictive_package_generation_identity_digest",
+    ).notNull(),
+    predictivePackageContentDigest: text("predictive_package_content_digest").notNull(),
+    kConfigDec: integer("k_config_dec").notNull(),
+    mConfigDec: integer("m_config_dec").notNull(),
+    alphaEpiConfigScale8: text("alpha_epi_config_scale8").notNull(),
+    kmGlobalAnchorSetDigest: text("km_global_anchor_set_digest").notNull(),
+    developmentDatasetDigest: text("development_dataset_digest").notNull(),
+    featureVersion: text("feature_version").notNull(),
+    samplerContractVersion: text("sampler_contract_version").notNull(),
+    quantizerVersion: text("quantizer_version").notNull(),
+    normalizationVersionDigest: text("normalization_version_digest").notNull(),
+    runtimeContractDigest: text("runtime_contract_digest").notNull(),
+    packageSubjectVersion: text("package_subject_version").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("tfppv2_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tfppv2_org_idempotency_key_uq").on(t.organizationId, t.idempotencyKey),
+    uniqueIndex("forecast_predictive_package_v2_full_lineage_unique").on(
+      t.id,
+      t.organizationId,
+      t.predictivePackageContentDigest,
+    ),
+    uniqueIndex("forecast_predictive_package_v2_symbol_lineage_unique").on(
+      t.id,
+      t.organizationId,
+      t.predictivePackageContentDigest,
+      t.symbol,
+    ),
+    uniqueIndex("forecast_predictive_package_v2_org_symbol_unique").on(
+      t.id,
+      t.organizationId,
+      t.symbol,
+    ),
+  ],
+);
+
 /** Forecast-V2 issuance seal, including DEE-633 durable authority and exact sequence. */
 export const traderForecastBundleV2 = pgTable(
   "trader_forecast_bundle_v2",
@@ -312,6 +370,15 @@ export const traderForecastBundleV2 = pgTable(
       t.symbol,
       t.anchorClosedBarEpochMs,
     ),
+    foreignKey({
+      name: "tfbv2_package_org_symbol_fk",
+      columns: [t.predictivePackageId, t.organizationId, t.symbol],
+      foreignColumns: [
+        traderForecastPredictivePackageV2.id,
+        traderForecastPredictivePackageV2.organizationId,
+        traderForecastPredictivePackageV2.symbol,
+      ],
+    }),
   ],
 );
 
@@ -4659,8 +4726,49 @@ export const traderForecastRuntimeInputSourceV2 = pgTable(
     verifierVersion: text("verifier_version").notNull(), verifierBuildDigestHex: text("verifier_build_digest_hex").notNull(),
     schemaVersion: text("schema_version").notNull(), createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
   },
-  (t) => [unique("forecast_runtime_input_source_v2_org_bundle_unique").on(t.organizationId, t.bundleId),
-    index("forecast_runtime_input_source_lookup_idx").on(t.organizationId, t.runId, t.symbol, t.pitAnchor)],
+  (t) => [
+    unique("forecast_runtime_input_source_v2_org_bundle_unique").on(
+      t.organizationId,
+      t.bundleId,
+    ),
+    index("forecast_runtime_input_source_lookup_idx").on(
+      t.organizationId,
+      t.runId,
+      t.symbol,
+      t.pitAnchor,
+    ),
+    foreignKey({
+      name: "forecast_runtime_input_source_package_symbol_fk",
+      columns: [
+        t.predictivePackageId,
+        t.organizationId,
+        t.predictivePackageContentDigestHex,
+        t.symbol,
+      ],
+      foreignColumns: [
+        traderForecastPredictivePackageV2.id,
+        traderForecastPredictivePackageV2.organizationId,
+        traderForecastPredictivePackageV2.predictivePackageContentDigest,
+        traderForecastPredictivePackageV2.symbol,
+      ],
+    }),
+    check("forecast_runtime_input_source_symbol_json_binding", sql`(
+      ${t.runtimeInputJson} ?& ARRAY['marketStateSnapshot', 'predictivePackage'] AND
+      (${t.runtimeInputJson} -> 'marketStateSnapshot') ?& ARRAY['symbol', 'instrumentId'] AND
+      (${t.runtimeInputJson} -> 'predictivePackage') ? 'family' AND
+      (${t.runtimeInputJson} -> 'predictivePackage' -> 'family') ? 'symbol' AND
+      ${t.authorizedOutcomeJson} ? 'issuance' AND
+      (${t.authorizedOutcomeJson} -> 'issuance') ? 'package' AND
+      (${t.authorizedOutcomeJson} -> 'issuance' -> 'package') ? 'family' AND
+      (${t.authorizedOutcomeJson} -> 'issuance' -> 'package' -> 'family') ? 'symbol' AND
+      ${t.runtimeInputJson} -> 'marketStateSnapshot' ->> 'symbol' = ${t.symbol} AND
+      replace(${t.runtimeInputJson} -> 'marketStateSnapshot' ->> 'instrumentId', '/', '') =
+        ${t.symbol} AND
+      ${t.runtimeInputJson} -> 'predictivePackage' -> 'family' ->> 'symbol' = ${t.symbol} AND
+      ${t.authorizedOutcomeJson} -> 'issuance' -> 'package' -> 'family' ->> 'symbol' =
+        ${t.symbol}
+    ) IS TRUE`),
+  ],
 );
 
 export const traderHistoricalForecastInputPitV2 = pgTable(

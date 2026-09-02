@@ -339,6 +339,8 @@ export type EvaluationCycleResult = {
   understandingArtifact?: MarketUnderstandingArtifactV1;
   /** PR-2 MI Core outputs (present only when miCoreEnabled). */
   reconstruction?: ReconstructionSnapshot;
+  /** Exact PIT canonical state consumed by this evaluation; never inferred downstream. */
+  canonicalRuntimeIntelligenceState?: CanonicalRuntimeIntelligenceStateV1;
   hypothesisSet?: HypothesisSet;
   marketStateSnapshot?: MarketStateSnapshot;
   decisionChain?: DecisionChain;

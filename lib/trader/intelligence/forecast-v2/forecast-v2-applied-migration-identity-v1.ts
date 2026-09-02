@@ -10,8 +10,8 @@ import type postgres from "postgres";
 
 export const FORECAST_V2_STORAGE_MIGRATION_MIN = 110 as const;
 /**
- * Physical storage-surface upper bound including Closure VI (0146/0147) and the
- * Human-ratified forward open-tail corrective 0148
+ * Human-ratified Closure VI/A3 storage-surface upper bound including 0146/0147 and
+ * the forward open-tail corrective 0148
  * (HUMAN-RATIFY-DEE-518-0148-FORWARD-CORRECTIVE-OPEN-TAILS-V1).
  */
 export const FORECAST_V2_STORAGE_MIGRATION_MAX_EXPECTED = 148 as const;
@@ -158,8 +158,9 @@ export function bindForecastV2AppliedMigrations(input: {
   const extraAppliedBeyondExpectedMax = bindings.filter(
     (b) => Number(b.tag.slice(0, 4)) > expectedMax,
   );
-  // Forecast V2 storage surface is sealed at 0148. Later Core/Treasury journal
-  // entries are extras, not a Forecast V2 identity bump (DEE-606 0149–0151).
+  // The Human-ratified Closure VI/A3 surface identity is sealed at 0148. Later
+  // journal entries are reported as extras; they may add complementary constraints
+  // but must not silently rewrite or reclassify the ratified 0148 identity.
   const surfaceBindings = bindings.filter((b) => Number(b.tag.slice(0, 4)) <= expectedMax);
 
   const nums = surfaceBindings.map((b) => Number(b.tag.slice(0, 4)));

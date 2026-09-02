@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { tryNormalizeSymbolForHistoricalExecution } from "@/lib/trader/execution/historical-execution-symbol";
+import { tryNormalizeHistoricalInstrument } from "@/lib/trader/symbols/historical-instrument";
 
 export const CONTROL_REPLAY_TEST_ONLY_INTENT_SCHEMA = "control-replay-test-only-intent/v1" as const;
 
@@ -23,7 +23,7 @@ export type ControlReplayTestOnlyIntentV1 = Readonly<{
 }>;
 
 export function compactControlReplaySymbol(symbol: string): "BTCUSDT" | "ETHUSDT" {
-  const normalized = tryNormalizeSymbolForHistoricalExecution(symbol);
+  const normalized = tryNormalizeHistoricalInstrument(symbol);
   if (normalized !== "BTCUSDT" && normalized !== "ETHUSDT") {
     throw new ControlReplayCrossSymbolForecastError(`unsupported Control Replay symbol ${symbol}`);
   }

@@ -178,7 +178,7 @@ function buildRuntimeInput(
   const marketStateSnapshot = buildMarketStateSnapshotV2({
     organizationId,
     accountId: null,
-    instrumentId: "BTC-USDT",
+    instrumentId: "BTC/USDT",
     symbol: family.symbol,
     venue: "htx",
     analysisPurpose: "NEW_OPPORTUNITY",
@@ -791,6 +791,7 @@ describe.skipIf(!integrationEnabled || !url)(
         issuance: authorizedOutcome.issuance,
         authorizedOutcome,
         runtimeInput,
+        runtimeAuthorityClass: "GENERAL_FORECAST_V2",
         issuanceSequence: 0,
       });
       expect(durableRetry.retriedExisting).toBe(true);
@@ -819,6 +820,7 @@ describe.skipIf(!integrationEnabled || !url)(
             },
           },
           runtimeInput,
+          runtimeAuthorityClass: "GENERAL_FORECAST_V2",
           issuanceSequence: 0,
         }),
       ).rejects.toThrow(/runtime input does not reproduce authorized outcome/);

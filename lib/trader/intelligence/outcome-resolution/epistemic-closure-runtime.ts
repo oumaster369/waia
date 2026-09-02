@@ -305,6 +305,7 @@ export function createForecastV2DurableProducerV1(config: ForecastV2DurableProdu
           issuance: input.outcome.issuance,
           authorizedOutcome: input.outcome,
           runtimeInput: input.runtimeInput,
+          runtimeAuthorityClass: "GENERAL_FORECAST_V2",
           issuanceSequence: input.sequence,
         });
         if (!pending.some((row) => row.bundleId === bundle.bundleId)) {

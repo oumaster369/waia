@@ -32,7 +32,8 @@ describe("Forecast V2 applied migration identity", () => {
     expect(identity.bindings.some((b) => b.tag.startsWith("0146_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0147_"))).toBe(true);
     expect(identity.bindings.some((b) => b.tag.startsWith("0148_"))).toBe(true);
-    // Forecast V2 remains 0148; later Treasury/MI/Admin migrations are extras, not V2 identity.
+    // The ratified Closure VI/A3 identity remains 0148. Later migrations, including
+    // complementary Forecast constraints, are surfaced as extras rather than rewriting it.
     expect(identity.extraAppliedBeyondExpectedMax.map((b) => b.tag)).toEqual([
       "0149_treasury_transparency_ledger_foundation",
       "0150_treasury_transparency_ledger_rls",
@@ -77,10 +78,8 @@ describe("Forecast V2 applied migration identity", () => {
       "0189_historical_forecast_input_pit_v2",
       "0190_internal_guardian_runtime_privilege_revoke",
       "0191_historical_preholdout_dataset_authority_v2",
+      "0192_forecast_v2_symbol_binding",
     ]);
-    expect(
-      identity.extraAppliedBeyondExpectedMax.every((b) => !b.tag.includes("trader_forecast_v2")),
-    ).toBe(true);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,
     );

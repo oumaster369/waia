@@ -35,6 +35,11 @@ export type MarketOpportunity = Readonly<{
   sustainedCycles: number;
   eligibleStrategyFamilies: readonly string[];
   reasonCode: string;
+  /** Present only for the explicit historical, pre-holdout, non-capital canonical path. */
+  authority?: "LEGACY_CONVICTION" | "CANONICAL_HISTORICAL_APPLICABILITY_RECEIPT_V1";
+  capitalAuthority?: "NONE";
+  applicabilityReceiptContentDigestHex?: string;
+  applicabilityReceipt?: CanonicalHistoricalApplicabilityReceiptV1;
 }>;
 
 export type HypothesisSet = Readonly<{
@@ -62,3 +67,5 @@ export const hypothesisReasonCodes = {
   convictionSustained: "HYP_CONVICTION_SUSTAINED",
   convictionInsufficient: "HYP_CONVICTION_INSUFFICIENT",
 } as const;
+import type { CanonicalHistoricalApplicabilityReceiptV1 } from
+  "@/lib/trader/intelligence/hypothesis/canonical-historical-applicability-v1";

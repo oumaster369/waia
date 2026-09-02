@@ -24,7 +24,7 @@ import {
   sameDee659AuthorityBindingV1,
 } from "@/lib/trader/intelligence/decision-economics/dee659-execution-payoff-contract-v1";
 import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
-import { historicalExecutionInstrumentsMatch } from "@/lib/trader/execution/historical-execution-symbol";
+import { historicalInstrumentsMatch } from "@/lib/trader/symbols/historical-instrument";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import { createInitialAccountingState, computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
@@ -470,7 +470,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     if (forecast.authority.organizationId !== input.organizationId ||
         forecast.authority.anchorClosedBarEpochMs !== barEpoch ||
         Number(forecastRow.anchor_closed_bar_epoch_ms) !== barEpoch ||
-        !historicalExecutionInstrumentsMatch(forecast.issuance.package.family.symbol, sealedCycle.closedBar.symbol)) {
+        !historicalInstrumentsMatch(forecast.issuance.package.family.symbol, sealedCycle.closedBar.symbol)) {
       throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:FORECAST_BINDING");
     }
     const symbol = sealedCycle.closedBar.symbol.replace("/", "");

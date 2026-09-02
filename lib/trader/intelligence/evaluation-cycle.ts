@@ -47,7 +47,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       "[trader/intelligence] runEvaluationCycle requires evaluatedAt or at least one bar with barCloseTime",
     );
   }
-  const forecastRuntimeOutcome = issueForecastRuntimeV2(
+  const issueForecast = () => issueForecastRuntimeV2(
     input.forecastRuntimeInput ?? {
       predictiveAdmissionReceipt: null,
       marketStateSnapshot: null,
@@ -105,6 +105,10 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     }
 
     const signal = selectPrimaryStrategySignal(signals);
+    // Forecast is deliberately issued only after the cycle's observable analytical
+    // state has been built. Historical callers must therefore bind an admitted
+    // runtime input to artifacts that already exist, never to a future/incomplete cycle.
+    const forecastRuntimeOutcome = issueForecast();
 
     return {
       features,
@@ -174,6 +178,9 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
         organizationId: input.organizationId,
         symbol: input.symbol ?? input.bars[0]?.symbol ?? "",
         canonicalRuntimeIntelligenceState: input.canonicalRuntimeIntelligenceState,
+        canonicalApplicabilityPurpose: profileActive
+          ? "HISTORICAL_PRE_HOLDOUT_NON_CAPITAL"
+          : undefined,
       });
 
   const msv = buildMsvEnvelope({
@@ -215,6 +222,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
   // IDHPS: STREAM_ONLY scale omits WP13/WP14 artifact assembly when no sinks consume them.
   // Signals/MSV/hypothesis economics above are unchanged.
   if (input.omitIntelligenceArtifacts) {
+    const forecastRuntimeOutcome = issueForecast();
     return {
       features,
       msv,
@@ -224,6 +232,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       understanding,
       understandingArtifact,
       reconstruction,
+      canonicalRuntimeIntelligenceState: input.canonicalRuntimeIntelligenceState,
       hypothesisSet,
       hypothesisSessionState: nextSessionState,
       forecastRuntimeOutcome,
@@ -307,6 +316,10 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
         })
       : undefined;
 
+  // The full MI path closes reconstruction, understanding, hypotheses, market state,
+  // decision chain and information sufficiency before replaying Forecast V2 authority.
+  const forecastRuntimeOutcome = issueForecast();
+
   return {
     features,
     msv,
@@ -316,6 +329,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     understanding,
     understandingArtifact,
     reconstruction,
+    canonicalRuntimeIntelligenceState: input.canonicalRuntimeIntelligenceState,
     hypothesisSet,
     marketStateSnapshot,
     decisionChain,
