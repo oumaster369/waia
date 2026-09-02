@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  status: in-review
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: []
+  prNumber: 550
+  prUrl: "https://github.com/oumaster369/waia/pull/550"
+  lastValidatedGitSha: bdfa42a879dd9ae0b1ceb57a08c25908c07dfd72
+  lastValidationAt: "2026-09-02T17:22:07Z"
   blockedReason: null
-  nextAction: "Validate the additive canon and open one documentation-only PR for Human review."
+  nextAction: "Human Architect reviews and squash-merges PR #550; agents do not merge this T1 semantic canon."
 provenance:
   createdFrom: "Human architecture dialogue on 2026-09-02"
   gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
