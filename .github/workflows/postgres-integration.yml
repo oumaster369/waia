@@ -50,6 +50,9 @@ on:
 
 env:
   DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
+  # Canonical verification is release-bound. For PRs, github.sha is the
+  # synthetic merge commit, so bind receipts to the exact reviewed head.
+  WAIA_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   integration:
