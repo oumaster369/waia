@@ -1352,6 +1352,13 @@
       "when": 1780000000192,
       "tag": "0192_forecast_v2_symbol_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "7",
+      "when": 1780000000193,
+      "tag": "0193_historical_runner_knowledge_state_read",
+      "breakpoints": true
     }
   ]
 }

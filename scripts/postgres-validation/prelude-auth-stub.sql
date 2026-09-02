@@ -25,6 +25,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
     CREATE ROLE anon NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'waia_historical_runner') THEN
+    CREATE ROLE waia_historical_runner NOLOGIN NOSUPERUSER NOBYPASSRLS;
+  END IF;
 END
 $$;
 
