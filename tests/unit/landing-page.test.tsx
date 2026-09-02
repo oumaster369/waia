@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthBlock } from "@/components/landing/AuthBlock";
+import { BreathCountdown } from "@/components/landing/BreathCountdown";
 import { BreathSupportCta } from "@/components/landing/BreathSupportCta";
 import { LandingPageContent } from "@/components/landing/landing-page-content";
 import { BreathFundingGauge } from "@/components/landing/visuals/breath-runway-pulse";
@@ -279,6 +280,112 @@ describe("LandingPage", () => {
     expect(screen.queryByTestId("landing-breath-pending")).not.toBeInTheDocument();
   });
 
+  it("keeps verified finance facts visible while the runway snapshot is being refreshed", async () => {
+    const asOf = "2026-09-02T10:00:00.000Z";
+    const projection: PublicTreasuryProjection = {
+      schemaVersion: "waia-public-treasury/v1",
+      breath: {
+        status: "pending",
+        pendingReasons: ["RUNWAY_UNAVAILABLE"],
+        availableAmountMicros: "53890000",
+        availableCurrency: "USD",
+        runway: {
+          status: "pending",
+        },
+        annualBudgetAmountMicros: "120048000000",
+        annualBudgetCurrency: "USD",
+        lastUpdatedAt: asOf,
+      },
+      budget: {
+        status: "published",
+        year: 2026,
+        currency: "USD",
+        annualBudgetAmountMicros: "120048000000",
+        months: [],
+      },
+      transactions: [],
+      transactionPagination: {
+        offset: 0,
+        limit: 100,
+        total: 0,
+        hasPrevious: false,
+        hasNext: false,
+      },
+      fundingNeeds: [],
+      patrons: {
+        status: "pending",
+        totalContributedAmountMicros: null,
+        currency: null,
+        patrons: [],
+        privateSupport: null,
+        lastUpdatedAt: null,
+      },
+      funds: {
+        status: "published",
+        currency: "USD",
+        allocationAsOf: asOf,
+        canonicalFreeFundsMicros: "53890000",
+        protectedAnnualBudgetMicros: "120048000000",
+        operatingAllocationMicros: "53890000",
+        developmentAllocationMicros: "0",
+        policyCode: "ANNUAL_BUDGET_EXCESS_V1",
+        policyVersion: 1,
+      },
+    };
+
+    render(<LandingPageContent publicTreasury={projection} />);
+    await waitFor(() => expect(screen.getByTestId("landing-auth-divider")).toBeInTheDocument());
+
+    expect(screen.getByTestId("landing-breath-free-funds-value")).toHaveTextContent("$53.89");
+    expect(screen.getByTestId("landing-breath-ideal-budget-value")).toHaveTextContent("$120,048");
+    expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
+      "data-countdown-state",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
+      "data-countdown-region",
+      "pending",
+    );
+    expect(screen.getByTestId("landing-breath-countdown-value")).toHaveTextContent(
+      "Runway calculation is being refreshed",
+    );
+    expect(screen.queryByTestId("landing-breath-pending")).not.toBeInTheDocument();
+  });
+
+  it("shows exact zero and the approved English pause message after runway elapses", () => {
+    render(
+      <BreathCountdown
+        endsAt="2020-01-01T00:00:00.000Z"
+        hourlyBurnMicros="500000"
+        currency="USD"
+      />,
+    );
+
+    expect(screen.getByTestId("landing-breath-countdown")).toHaveAttribute(
+      "data-countdown-state",
+      "elapsed",
+    );
+    expect(screen.getByTestId("landing-breath-countdown-value")).toHaveTextContent("0d 0h 0m 0s");
+    expect(screen.getByTestId("landing-breath-countdown-paused")).toHaveTextContent(
+      "WORK IS PAUSED. AWAITING FUNDING.",
+    );
+  });
+
+  it("makes the animated Breath radar an accessible link to Patrons", async () => {
+    await renderLandingPage();
+
+    expect(screen.getByTestId("landing-breath-time-radar-link")).toHaveAttribute(
+      "href",
+      "/patrons",
+    );
+    expect(screen.getByTestId("landing-breath-time-radar-link")).toHaveAccessibleName(
+      "View WAIA Patrons",
+    );
+    expect(screen.getByTestId("landing-breath-time-radar-link")).toContainElement(
+      screen.getByTestId("landing-breath-time-radar"),
+    );
+  });
+
   it("renders published funding marker and fully-funded CTA from authoritative values only", () => {
     const { unmount: unmountGauge } = render(
       <BreathFundingGauge
@@ -363,7 +470,7 @@ describe("LandingPage", () => {
       expect(screen.getByTestId("landing-breath-free-funds-value")).toBeVisible();
       expect(screen.getByTestId("landing-breath-countdown-region")).toHaveAttribute(
         "data-countdown-region",
-        "published",
+        "pending",
       );
       unmount();
     }

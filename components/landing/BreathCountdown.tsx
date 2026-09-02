@@ -53,21 +53,30 @@ export function BreathCountdown({
   const endMs = Date.parse(endsAt);
   const remainingMs = Number.isFinite(endMs) ? endMs - nowMs : 0;
   const elapsed = !Number.isFinite(endMs) || remainingMs <= 0;
-  const label = elapsed ? copy.breatheForElapsed : formatBreathCountdown(remainingMs);
+  const label = formatBreathCountdown(elapsed ? 0 : remainingMs);
 
   return (
     <div data-testid="landing-breath-countdown" data-countdown-state={elapsed ? "elapsed" : "live"}>
       <p className="text-xs font-semibold tracking-[0.14em] text-[rgba(170,210,220,0.78)] uppercase">
         {copy.breatheForLabel}
       </p>
-      <p
-        data-testid="landing-breath-countdown-value"
-        className="mt-1 font-mono text-lg text-[#e8f2f4] tabular-nums"
-        aria-live="polite"
-      >
-        <span className="sr-only">Remaining operating time: </span>
-        {label}
-      </p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1" aria-live="polite">
+        <p
+          data-testid="landing-breath-countdown-value"
+          className="font-mono text-lg text-[#e8f2f4] tabular-nums"
+        >
+          <span className="sr-only">Remaining operating time: </span>
+          {label}
+        </p>
+        {elapsed ? (
+          <p
+            data-testid="landing-breath-countdown-paused"
+            className="text-waia-accent-warm text-xs font-semibold tracking-[0.08em] uppercase"
+          >
+            {copy.breatheForElapsed}
+          </p>
+        ) : null}
+      </div>
       {hourlyBurnMicros && currency ? (
         <p
           data-testid="landing-breath-hourly-burn"
