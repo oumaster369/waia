@@ -81,6 +81,10 @@ Where safe and useful, the Twin states a falsifiable expectation or offers a rev
 | DisclosureGrant | Minimum derived information approved for a named purpose |
 | AlignmentContract | Mutual, versioned, revocable relationship agreement |
 | ActionCapability | Least-privilege authority for a bounded external action |
+| TwinCostSnapshot | Reproducible direct/allocated monthly cost evidence with measurement and allocation version |
+| TwinPriceBook | Draft, Human-approved or superseded monthly price with effective interval and source cost snapshot |
+| TwinSubscriptionEvent | Append-only Formation, network-connection, price-consent, payment and entitlement transition evidence |
+| SponsoredSubscriptionRequest | Privacy-safe request, reservation, payment and fulfillment lifecycle for one billable period |
 
 All sensitive objects require tenant isolation, subject access/export and deletion/retention semantics. A vector embedding is an index, not the authoritative fact record.
 
@@ -168,7 +172,45 @@ Authorization uses least privilege, purpose binding, short-lived credentials and
 
 The connector registry is closed and typed. Provider text, imported documents and device data are untrusted observations, never instructions that expand authority.
 
-## 10. Society algorithm
+## 10. Economics, subscription and sponsored access
+
+### 10.1 Cost and price authority
+
+Cost metering aggregates only the minimum operational facts required to reproduce direct and allocated cost per active Twin for a declared window and allocation version. It must not copy dialogue, Diary or Human-model content into Finance. Missing material inputs make the snapshot provisional or unavailable; they are never silently estimated by a language model.
+
+For an eligible verified cost snapshot, the price proposal is:
+
+`proposedMonthlyPrice = verifiedMonthlyCostPerActiveTwin * 5`
+
+The proposal has no billing authority. A Human-approved `TwinPriceBook` version records exact money, currency, source snapshot, effective interval, approval actor and reason. Historical price versions remain auditable.
+
+### 10.2 Subscription activation
+
+The lifecycle is append-only and independently evidenced:
+
+```text
+FORMING
+  -> READY                   (Human-ratified Formation Contract)
+  -> NETWORK_CONNECTED       (purpose-bound Human Society choice)
+  -> SUBSCRIPTION_ACTIVE     (approved price disclosed + explicit confirmation + accepted payment/entitlement evidence)
+```
+
+No state implies the next one. In particular, `READY`, Formation `100%`, opening Society, a prior contribution, a sponsor reservation or model inference cannot create billing consent. Duplicate, replayed or out-of-order events must not double bill or grant entitlement. Disconnect, lapse or cancellation removes only future billable network entitlement; it does not delete the private Twin or its evidence history.
+
+### 10.3 Sponsored subscription lifecycle
+
+Only a Human who is eligible for a billable subscription period may create one active support request for that period. Its lifecycle is:
+
+```text
+OPEN -> RESERVED -> PAYMENT_PENDING -> PAID
+  \-> EXPIRED | CANCELLED | REJECTED
+```
+
+A reservation is leased and idempotent so concurrent sponsors cannot pay the same request twice. The payer must authenticate; exact payment intent, observed payment, Human/governed reconciliation and entitlement activation remain separate records. Self-sponsorship is rejected. Public read models expose only allowlisted status/display fields, place open requests before paid history, and use the payer's display name only with separate consent.
+
+Sponsorship never grants the payer access to the supported Human, their Twin, evidence or relationship graph. It creates no ownership, control, governance weight or Patron-share credit by default. Corrections are append-only, and anti-abuse, rate-limit, moderation, RLS/ACL and tenant-isolation controls are release blockers.
+
+## 11. Society algorithm
 
 1. Each Human defines a relationship purpose and disclosure budget.
 2. Each Twin computes private social readiness for that purpose, including unknowns and safety constraints.
@@ -181,7 +223,7 @@ The connector registry is closed and typed. Provider text, imported documents an
 
 No system component may convert compatibility uncertainty into a public rank, recommend deception for fit, infer consent, or optimize for interaction volume.
 
-## 11. Relationship to AI-TRADER
+## 12. Relationship to AI-TRADER
 
 AI-TWIN reuses the epistemic spine, not the market ontology:
 
@@ -197,7 +239,7 @@ AI-TWIN reuses the epistemic spine, not the market ontology:
 
 AI-TWIN must not import AI-TRADER's optimization target, risk appetite or active execution authority. Shared infrastructure must expose domain-neutral evidence, hypothesis, calibration, authority and receipt interfaces without coupling the two runtime programs.
 
-## 12. Evaluation contract
+## 13. Evaluation contract
 
 Release qualification requires deterministic fixtures and Human-reviewed scenarios covering:
 
@@ -210,7 +252,8 @@ Release qualification requires deterministic fixtures and Human-reviewed scenari
 - separation of presence, identity, readiness and authority;
 - action denial, expiry, revocation and receipt reconciliation;
 - purpose-specific compatibility, mutual consent and prohibited popularity mechanics;
+- no-charge Formation, governed price approval and consented subscription activation;
+- sponsored-request eligibility, reservation concurrency, privacy and exact-payment fulfillment;
 - tenant isolation, export/deletion, prompt injection and connector compromise.
 
 Passing implementation tests is insufficient without a documented Human review of meaning, failure behavior and autonomy boundaries.
-
