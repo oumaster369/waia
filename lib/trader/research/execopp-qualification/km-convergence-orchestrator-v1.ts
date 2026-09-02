@@ -1,10 +1,6 @@
-import { createHash } from "node:crypto";
-
 import {
   computeReplicaPayoffMeans,
   computeDecisionEvRangeV1,
-  piBaseV1,
-  piLowerV1,
 } from "@/lib/trader/intelligence/decision-economics/decision-economics-v2";
 import {
   buildPredictivePackageV1,
@@ -130,6 +126,14 @@ export function runKmConvergenceOrchestratorV1(input: KmConvergenceOrchestratorI
 
   if (!(input.nRefUsdt > 0)) {
     throw new Error("KM_GATE_INVALID_ZERO_NOTIONAL");
+  }
+
+  if (input.developmentAnchors.some((anchor) =>
+    anchor.symbol !== input.family.symbol ||
+    anchor.primaryHorizonMinutes !== input.family.primaryHorizonMinutes ||
+    anchor.executionHorizonMinutes !== input.family.executionHorizonMinutes ||
+    anchor.sourceCorpus.some((source) => source.symbol !== input.family.symbol))) {
+    throw new Error("KM_GATE_SURFACE_FAMILY_IDENTITY_UNREPRESENTABLE");
   }
 
   const eligible = deriveEligibleKmAnchors(input);
