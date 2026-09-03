@@ -9,37 +9,52 @@ import { computeKnowledgeConfidenceUpdateContentDigest, KNOWLEDGE_CONFIDENCE_UPD
   type KnowledgeConfidenceUpdateRecord } from "@/lib/trader/knowledge/knowledge-confidence-update";
 import type { HistoricalForecastPitKnowledgeRowV2 } from
   "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
+import { requireHistoricalForecastPitKnowledgeRowV2 } from
+  "@/lib/trader/historical-simulation-v2/knowledge-snapshot-binding-v2";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const digest = (value: string) => value.repeat(64);
 
 type Row = HistoricalForecastPitKnowledgeRowV2;
 
-function row(input: { id: string; visible: string; resolved: string; digestChar: string }): Row {
-  const source = {
+function row(input: { id: string; visible: string; resolved: string; digestChar: string;
+  sourceOverrides?: Readonly<Record<string, unknown>>;
+  canonicalOverrides?: Readonly<Partial<KnowledgeConfidenceUpdateRecord>> }): Row {
+  const source: Record<string, unknown> = {
     visible_from_cycle_pit_anchor: input.visible,
     forecast_runtime_authority_content_digest_hex: digest("a"),
+    forecast_content_digest_hex: digest("f"),
     forecast_outcome_content_digest_hex: digest(input.digestChar),
+    calibration_observation_content_digest: digest("6"),
+    predictive_package_content_digest_hex: digest("7"),
+    terminal_target_definition_digest_hex: digest("8"),
+    pit_measurement_identity_digest_hex: digest("9"),
+    knowledge_edge_id: "22222222-2222-4222-8222-222222222222",
+    knowledge_content_digest_hex: digest("0"),
+    feedback_policy: "EVIDENCE_ONLY_ZERO_DELTA",
     confidence_value_class: "MACHINE_RECOMMENDED_BOUNDED_DELTA",
-    authority_class: "EPISTEMIC_EVIDENCE_ONLY", operator_disposition: "OBSERVE_ONLY",
+    authority_class: "EVIDENCE_ONLY", operator_disposition: "PENDING",
     capital_authority: "NONE", strategy_authority: "NONE", trade_eligibility_authority: "NONE",
     guardian_authority: "NONE",
+    ...input.sourceOverrides,
   };
   const id = `00000000-0000-4000-8000-${input.digestChar.repeat(12)}`;
   const canonical = { id, organizationId: ORG, runId: "run", cycleId: "cycle", symbol: "BTCUSDT",
-    knowledgeEdgeId: "22222222-2222-4222-8222-222222222222", updateKind: "FORECAST_V2_EVIDENCE_ONLY",
-    updateModelVersion: "waia.knowledge.forecast-v2-evidence-only", priorMachineRecommendedConfidence: "0.5000",
+    knowledgeEdgeId: "22222222-2222-4222-8222-222222222222", updateKind: "UPDATE",
+    updateModelVersion: "waia.trader.knowledge_confidence_update_model.v1.forecast-v2-evidence-only", priorMachineRecommendedConfidence: "0.5000",
     machineRecommendedConfidence: "0.5000", machineRecommendedDelta: "0.0000",
     confidenceValueClass: source.confidence_value_class, authorityClass: source.authority_class,
     operatorDisposition: source.operator_disposition, capitalAuthority: source.capital_authority,
     strategyAuthority: source.strategy_authority, tradeEligibilityAuthority: source.trade_eligibility_authority,
     guardianAuthority: source.guardian_authority, issuedAt: input.resolved,
     eligibleResolutionAt: input.resolved, resolvedAt: input.resolved, pitEvidenceBoundary: input.resolved,
-    outcomeClass: "FLAT", score: null, sourceRecordIdsJson: JSON.stringify(source),
+    outcomeClass: "FORECAST_V2_EVIDENCE_ONLY", score: "0.125", sourceRecordIdsJson: JSON.stringify(source),
     contentDigest: "", idempotencyKey: `knowledge-${input.digestChar}`,
     provenance: { codeSha: digest("c"), datasetContentDigest: digest("d"), profileDigest: digest("e"),
-      canonicalizer: "HTR_SEMANTIC_CANONICAL_JSON_V1" }, terminalReason: "FORECAST_V2_EVIDENCE_ONLY",
-    schemaVersion: KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION } as unknown as KnowledgeConfidenceUpdateRecord;
+      canonicalizer: "HTR_SEMANTIC_CANONICAL_JSON_V1" }, terminalReason: "FORECAST_V2_EVIDENCE_ONLY_ZERO_DELTA",
+    schemaVersion: KNOWLEDGE_CONFIDENCE_UPDATE_SCHEMA_VERSION,
+    ...input.canonicalOverrides,
+  } as unknown as KnowledgeConfidenceUpdateRecord;
   const contentDigest = computeKnowledgeConfidenceUpdateContentDigest(canonical);
   return {
     id,
@@ -52,7 +67,8 @@ function row(input: { id: string; visible: string; resolved: string; digestChar:
     content_digest: contentDigest,
     resolved_at: input.resolved,
     pit_evidence_boundary: input.resolved,
-    outcome_class: canonical.outcomeClass, score: null, source_record_ids_json: canonical.sourceRecordIdsJson,
+    outcome_class: canonical.outcomeClass, score: canonical.score,
+    source_record_ids_json: canonical.sourceRecordIdsJson,
     idempotency_key: canonical.idempotencyKey, provenance_json: JSON.stringify(canonical.provenance),
     terminal_reason: canonical.terminalReason, schema_version: canonical.schemaVersion,
   };
@@ -89,7 +105,7 @@ function memoryCheckpoints(): HistoricalSimulationKnowledgeCheckpointStoreV2 & {
 
 function port(rows: readonly Row[], store = memoryCheckpoints()) {
   return createHistoricalSimulationPostgresKnowledgePortV2({
-    sql: fakeSql(rows), organizationId: ORG, symbol: "BTCUSDT", checkpointStore: store,
+    sql: fakeSql(rows), organizationId: ORG, runId: "run", symbol: "BTCUSDT", checkpointStore: store,
     forecastProducer: {
       kmGlobalAnchorSetDigestHex: digest("b"), priorMachineRecommendedConfidence: "0.5000",
       provenance: {
@@ -106,7 +122,7 @@ function port(rows: readonly Row[], store = memoryCheckpoints()) {
 describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
   it("provides a replay-only PIT port without any Forecast issuance capability", async () => {
     const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: fakeSql([]),
-      organizationId: ORG, symbol: "BTCUSDT", checkpointStore: memoryCheckpoints() });
+      organizationId: ORG, runId: "run", symbol: "BTCUSDT", checkpointStore: memoryCheckpoints() });
     expect("processForecastCycle" in read).toBe(false);
     await expect(read.snapshotAsOf("2026-08-01T00:00:00.000Z")).resolves.toMatchObject({
       asOf: "2026-08-01T00:00:00.000Z",
@@ -116,7 +132,7 @@ describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
     const prior = row({ id: "prior", visible: "2026-08-01T00:02:00.000Z",
       resolved: "2026-08-01T00:01:00.000Z", digestChar: "4" });
     const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: fakeSql([prior]),
-      organizationId: ORG, symbol: "BTCUSDT", checkpointStore: memoryCheckpoints(),
+      organizationId: ORG, runId: "run", symbol: "BTCUSDT", checkpointStore: memoryCheckpoints(),
       appliedClosureWatermarkUtc: "2026-08-01T00:02:00.000Z" });
     await expect(read.closeMaturedForecasts("2026-08-01T00:03:00.000Z")).resolves.toEqual([]);
   });
@@ -125,8 +141,56 @@ describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
     const future = row({ id: "future", visible: "2026-08-01T00:02:00.000Z",
       resolved: "2026-08-01T00:04:00.000Z", digestChar: "5" });
     const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: fakeSql([future]),
-      organizationId: ORG, symbol: "BTCUSDT", checkpointStore: memoryCheckpoints() });
+      organizationId: ORG, runId: "run", symbol: "BTCUSDT", checkpointStore: memoryCheckpoints() });
     await expect(read.snapshotAsOf("2026-08-01T00:03:00.000Z")).rejects.toThrow("PIT_LEAKAGE");
+  });
+
+  it("rejects self-sealed suffix, authority and null evidence impostors", async () => {
+    const malformed = [
+      row({ id: "suffix", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "6",
+        canonicalOverrides: { updateModelVersion: "attacker.forecast-v2-evidence-only" } }),
+      row({ id: "authority", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "7",
+        sourceOverrides: { authority_class: "GENERAL" } }),
+      row({ id: "null", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "8",
+        sourceOverrides: { forecast_outcome_content_digest_hex: null } }),
+    ];
+    for (const candidate of malformed) {
+      const read = createHistoricalSimulationPostgresKnowledgeReadPortV2({
+        sql: fakeSql([candidate]), organizationId: ORG, runId: "run", symbol: "BTCUSDT",
+        checkpointStore: memoryCheckpoints(),
+      });
+      await expect(read.snapshotAsOf("2026-08-01T00:03:00.000Z"))
+        .rejects.toThrow(/KNOWLEDGE_BINDING_REFUSED/);
+    }
+  });
+
+  it("rejects noncanonical time, confidence and Brier score encodings", () => {
+    const malformed = [
+      row({ id: "numeric-time", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "3",
+        sourceOverrides: { visible_from_cycle_pit_anchor: 1785542520000 } }),
+      row({ id: "confidence-range", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "4",
+        canonicalOverrides: { priorMachineRecommendedConfidence: "2.0000",
+          machineRecommendedConfidence: "2.0000" } }),
+      row({ id: "confidence-format", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "5",
+        canonicalOverrides: { priorMachineRecommendedConfidence: "0.5",
+          machineRecommendedConfidence: "0.5" } }),
+      row({ id: "score-format", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "6",
+        canonicalOverrides: { score: "0.1250" } }),
+      row({ id: "score-range", visible: "2026-08-01T00:02:00.000Z",
+        resolved: "2026-08-01T00:01:00.000Z", digestChar: "7",
+        canonicalOverrides: { score: "2" } }),
+    ];
+    for (const candidate of malformed) {
+      expect(() => requireHistoricalForecastPitKnowledgeRowV2(candidate))
+        .toThrow(/KNOWLEDGE_BINDING_REFUSED/);
+    }
   });
   it("does not expose future knowledge at an earlier PIT anchor", async () => {
     const early = row({ id: "early", visible: "2026-08-01T00:02:00.000Z",
@@ -175,15 +239,15 @@ describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
       resolved: "2026-08-01T00:01:00.000Z", digestChar: "1" })];
     const store = memoryCheckpoints();
     const knowledge = port(rows, store);
-    const written = await knowledge.checkpoint({ runId: "run-1", checkpointSeq: 7,
+    const written = await knowledge.checkpoint({ runId: "run", checkpointSeq: 7,
       pitAnchor: "2026-08-01T00:03:00.000Z", modelVersion: "forecast-v2" });
-    const restored = await knowledge.restoreCheckpoint({ runId: "run-1", checkpointSeq: 7,
+    const restored = await knowledge.restoreCheckpoint({ runId: "run", checkpointSeq: 7,
       pitAnchor: "2026-08-01T00:03:00.000Z", modelVersion: "forecast-v2" });
     expect(restored).toEqual(written);
 
     rows.push(row({ id: "late-write", visible: "2026-08-01T00:03:00.000Z",
       resolved: "2026-08-01T00:02:00.000Z", digestChar: "2" }));
-    await expect(knowledge.restoreCheckpoint({ runId: "run-1", checkpointSeq: 7,
+    await expect(knowledge.restoreCheckpoint({ runId: "run", checkpointSeq: 7,
       pitAnchor: "2026-08-01T00:03:00.000Z", modelVersion: "forecast-v2" }))
       .rejects.toThrow(/RESUME_PARITY_MISMATCH/);
   });
@@ -191,10 +255,13 @@ describe("Historical Simulation V2 PostgreSQL knowledge port", () => {
   it("binds checkpoint restore to the exact run identity", async () => {
     const store = memoryCheckpoints();
     const knowledge = port([], store);
-    await knowledge.checkpoint({ runId: "run-1", checkpointSeq: 0,
+    await expect(knowledge.checkpoint({ runId: "run-1", checkpointSeq: 0,
+      pitAnchor: "2026-08-01T00:00:00.000Z", modelVersion: "forecast-v2" }))
+      .rejects.toThrow(/CHECKPOINT_RUN_MISMATCH/);
+    await knowledge.checkpoint({ runId: "run", checkpointSeq: 0,
       pitAnchor: "2026-08-01T00:00:00.000Z", modelVersion: "forecast-v2" });
     await expect(knowledge.restoreCheckpoint({ runId: "run-2", checkpointSeq: 0,
       pitAnchor: "2026-08-01T00:00:00.000Z", modelVersion: "forecast-v2" }))
-      .rejects.toThrow(/RESUME_IDENTITY_MISMATCH/);
+      .rejects.toThrow(/CHECKPOINT_RUN_MISMATCH/);
   });
 });

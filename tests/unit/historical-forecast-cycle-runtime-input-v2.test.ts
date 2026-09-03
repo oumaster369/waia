@@ -4,16 +4,21 @@ import { buildHistoricalForecastCycleRuntimeInputV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-cycle-runtime-input-v2";
 import { buildHistoricalForecastKnowledgeBootstrapV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
+import { buildHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
+import { computeHistoricalSimulationEmptyKnowledgeBindingDigestV2 } from
+  "@/lib/trader/historical-simulation-v2/knowledge-snapshot-binding-v2";
 
 const organizationId = "00000000-0000-4000-8000-000000000001";
 
 function invoke(evaluation: unknown, predictivePackage: unknown = {}) {
   return () => buildHistoricalForecastCycleRuntimeInputV2({
-    releaseSha: "1".repeat(40), organizationId, accountId: null,
+    releaseSha: "1".repeat(40), organizationId, runId: "test-run", accountId: null,
     symbol: "BTCUSDT", venue: "HTX", analyticalTimeframe: "1m", horizon: "33m",
     pitAnchor: "2026-01-01T00:01:00.000Z", runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
     sourceProfileDigestHex: "2".repeat(64), representationProfileDigestHex: "3".repeat(64),
     runtimeContext: {}, knowledgeBootstrap: {} as never,
+    knowledgeSnapshotAuthority: {} as never,
     evaluation: evaluation as never,
     requiredInformationProfile: {} as never, informationSufficiencyReceipt: {} as never,
     forecastContractBinding: {} as never, scientificAdmissionReceipt: {} as never,
@@ -72,11 +77,23 @@ describe("historical Forecast cycle runtime input v2", () => {
       predictivePackageContentDigestHex: "b".repeat(64),
     });
     expect(() => buildHistoricalForecastCycleRuntimeInputV2({
-      releaseSha: "1".repeat(40), organizationId, accountId: null,
+      releaseSha: "1".repeat(40), organizationId, runId: "test-run", accountId: null,
       symbol: "BTCUSDT", venue: "HTX", analyticalTimeframe: "1m", horizon: "33m",
       pitAnchor: "2026-01-01T00:01:00.000Z", runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
       sourceProfileDigestHex: "2".repeat(64), representationProfileDigestHex: "3".repeat(64),
       runtimeContext: {}, knowledgeBootstrap: wrongKnowledge,
+      knowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+        organizationId,
+        runId: "test-run",
+        symbol: "BTCUSDT",
+        pitAnchor: "2026-01-01T00:01:00.000Z",
+        visibleEvidenceCount: 0,
+        knowledgeContentDigestHex:
+          computeHistoricalSimulationEmptyKnowledgeBindingDigestV2(
+            organizationId,
+            "BTCUSDT",
+          ),
+      }),
       evaluation: {
         reconstruction: {}, hypothesisSet: {}, marketStateSnapshot: {}, decisionChain: {},
         features: { instrumentId: "BTC/USDT", evaluatedAt: "2026-01-01T00:01:00.000Z",

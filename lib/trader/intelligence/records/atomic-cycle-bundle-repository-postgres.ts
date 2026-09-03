@@ -12,6 +12,16 @@ export async function persistIntelligenceCycleBundle(
   bundle: IntelligenceCycleBundle,
   db: WaiaPostgresDb,
 ): Promise<IntelligenceCycleBundle> {
+  return runWaiaPostgresTransaction(db, (tx) =>
+    persistIntelligenceCycleBundleWithinTransaction(context, bundle, tx));
+}
+
+/** Persists into an already-held transaction; no query may escape its backend. */
+export async function persistIntelligenceCycleBundleWithinTransaction(
+  context: OrgContext,
+  bundle: IntelligenceCycleBundle,
+  tx: WaiaPostgresDb,
+): Promise<IntelligenceCycleBundle> {
   const sortedHypotheses = sortHypothesesByTypeCodePoint(bundle.hypotheses);
   const normalizedBundle: IntelligenceCycleBundle = {
     envelope: bundle.envelope,
@@ -20,21 +30,19 @@ export async function persistIntelligenceCycleBundle(
     informationSufficiencyProvenance: bundle.informationSufficiencyProvenance,
   };
 
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const envelopeRepo = createCycleEnvelopeRepositoryPostgres(tx);
-    const hypothesisRepo = createHypothesisRecordRepositoryPostgres(tx);
-    const convictionRepo = createConvictionRecordRepositoryPostgres(tx);
+  const envelopeRepo = createCycleEnvelopeRepositoryPostgres(tx);
+  const hypothesisRepo = createHypothesisRecordRepositoryPostgres(tx);
+  const convictionRepo = createConvictionRecordRepositoryPostgres(tx);
 
-    await envelopeRepo.insert(context, normalizedBundle.envelope);
+  await envelopeRepo.insert(context, normalizedBundle.envelope);
 
-    for (const hypothesis of normalizedBundle.hypotheses) {
-      await hypothesisRepo.insert(context, hypothesis);
-    }
+  for (const hypothesis of normalizedBundle.hypotheses) {
+    await hypothesisRepo.insert(context, hypothesis);
+  }
 
-    await convictionRepo.insert(context, normalizedBundle.conviction);
+  await convictionRepo.insert(context, normalizedBundle.conviction);
 
-    return normalizedBundle;
-  });
+  return normalizedBundle;
 }
 
 export function createIntelligenceCycleBundleRepositoryPostgres(

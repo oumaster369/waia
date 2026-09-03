@@ -115,7 +115,7 @@ function createService(
       const id = crypto.randomUUID();
       const source = await repo.insertSource(scoped, input, id, now);
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miSource,
@@ -145,7 +145,7 @@ function createService(
         throw new MiSourceNotFoundError();
       }
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miSource,
@@ -213,7 +213,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miSourceTrust,

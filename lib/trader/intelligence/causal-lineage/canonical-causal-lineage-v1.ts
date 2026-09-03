@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   RUNTIME_KNOWLEDGE_DERIVATION_VERSION,
+  assertCanonicalRuntimeIntelligenceStateV1,
   type CanonicalRuntimeIntelligenceStateV1,
   type RuntimeKnowledgeHypothesisV1,
 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
@@ -18,6 +19,10 @@ export type CanonicalCausalLineageV1 = Readonly<{
   organizationId: string;
   symbol: string;
   pitAnchor: string;
+  /** Historical replay only; absent preserves byte parity for live/legacy lineages. */
+  epistemicRecordCutoff?: string;
+  /** Durable authority that authenticates the historical dual-time cutoff. */
+  epistemicAuthority?: NonNullable<CanonicalRuntimeIntelligenceStateV1["epistemicAuthority"]>;
   hypothesisCausalStateDigest: string;
   hypothesisId: string;
   hypothesisDefinitionDigest: string;
@@ -32,8 +37,19 @@ export type CanonicalCausalLineageV1 = Readonly<{
 type LineageBody = Omit<CanonicalCausalLineageV1, "contentDigest">;
 
 const LINEAGE_KEYS = ["schemaVersion", "derivationVersion", "runtimeKnowledgeDerivationVersion", "organizationId", "symbol", "pitAnchor", "hypothesisCausalStateDigest", "hypothesisId", "hypothesisDefinitionDigest", "supportingEvidence", "contradictingEvidence", "knowledgeRefs", "invalidationConditions", "supersedesHypothesisIds", "contentDigest"].sort();
+const HISTORICAL_LINEAGE_KEYS = [
+  ...LINEAGE_KEYS,
+  "epistemicRecordCutoff",
+  "epistemicAuthority",
+].sort();
 const EVIDENCE_KEYS = ["evidenceId", "contentDigest", "direction", "eventTime", "ingestTime"].sort();
 const KNOWLEDGE_KEYS = ["knowledgeEdgeId", "knowledgeState"].sort();
+const EPISTEMIC_AUTHORITY_KEYS = [
+  "schemaVersion",
+  "ratifiedAdmissionId",
+  "authorityContentDigestHex",
+  "createdAt",
+].sort();
 const KNOWLEDGE_STATES = new Set(["OBSERVATION_ONLY", "RESOLVED_CORRECT", "RESOLVED_INCORRECT", "UNRESOLVED", "INSUFFICIENT_EVIDENCE", "STALE", "INELIGIBLE"]);
 
 function exactKeys(value: object, expected: readonly string[]): boolean {
@@ -65,7 +81,11 @@ export function parseCanonicalCausalLineageV1(value: string): CanonicalCausalLin
     throw new Error("CANONICAL_CAUSAL_LINEAGE_INVALID_JSON");
   }
   const lineage = parsed as CanonicalCausalLineageV1;
-  if (!exactKeys(lineage, LINEAGE_KEYS)) {
+  const expectedKeys = lineage.epistemicRecordCutoff === undefined &&
+      lineage.epistemicAuthority === undefined
+    ? LINEAGE_KEYS
+    : HISTORICAL_LINEAGE_KEYS;
+  if (!exactKeys(lineage, expectedKeys)) {
     throw new Error("CANONICAL_CAUSAL_LINEAGE_UNEXPECTED_FIELD");
   }
   assertCanonicalCausalLineageV1(lineage);
@@ -99,6 +119,41 @@ export function assertCanonicalCausalLineageV1(
   if (!Number.isFinite(cutoff) || lineage.pitAnchor !== cutoffAt) {
     throw new Error("CANONICAL_CAUSAL_LINEAGE_CUTOFF_MISMATCH");
   }
+  const epistemicRecordCutoff = lineage.epistemicRecordCutoff as unknown;
+  const epistemicAuthority = lineage.epistemicAuthority as unknown;
+  const hasEpistemicCutoff = epistemicRecordCutoff !== undefined;
+  const hasEpistemicAuthority = epistemicAuthority !== undefined;
+  if (hasEpistemicCutoff !== hasEpistemicAuthority) {
+    throw new Error("CANONICAL_CAUSAL_LINEAGE_EPISTEMIC_AUTHORITY_INVALID");
+  }
+  const epistemicCutoff = hasEpistemicCutoff
+    && typeof epistemicRecordCutoff === "string"
+    ? Date.parse(epistemicRecordCutoff)
+    : cutoff;
+  const authority = epistemicAuthority as NonNullable<
+    CanonicalCausalLineageV1["epistemicAuthority"]
+  >;
+  if (
+    (hasEpistemicCutoff && typeof epistemicRecordCutoff !== "string") ||
+    !Number.isFinite(epistemicCutoff) ||
+    epistemicCutoff < cutoff ||
+    (hasEpistemicAuthority && (
+      !epistemicAuthority ||
+      typeof epistemicAuthority !== "object" ||
+      Array.isArray(epistemicAuthority) ||
+      !exactKeys(epistemicAuthority, EPISTEMIC_AUTHORITY_KEYS) ||
+      authority.schemaVersion !==
+          "waia.trader.historical_four_surface_ratified_admission.v2" ||
+      authority.createdAt !== epistemicRecordCutoff ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(authority.ratifiedAdmissionId) ||
+        !/^[0-9a-f]{64}$/.test(
+          authority.authorityContentDigestHex,
+        )
+    ))
+  ) {
+    throw new Error("CANONICAL_CAUSAL_LINEAGE_EPISTEMIC_AUTHORITY_INVALID");
+  }
   if (!Array.isArray(lineage.supportingEvidence) || !Array.isArray(lineage.contradictingEvidence) || !Array.isArray(lineage.knowledgeRefs)) {
     throw new Error("CANONICAL_CAUSAL_LINEAGE_INCOMPLETE");
   }
@@ -116,7 +171,7 @@ export function assertCanonicalCausalLineageV1(
       !Number.isFinite(eventTime) ||
       !Number.isFinite(ingestTime) ||
       eventTime > cutoff ||
-      ingestTime > cutoff
+      ingestTime > epistemicCutoff
     ) {
       throw new Error("CANONICAL_CAUSAL_LINEAGE_EVIDENCE_INVALID");
     }
@@ -146,6 +201,7 @@ export function buildCanonicalCausalLineageV1(
   authority: CanonicalRuntimeIntelligenceStateV1,
   hypothesis: RuntimeKnowledgeHypothesisV1,
 ): CanonicalCausalLineageV1 {
+  assertCanonicalRuntimeIntelligenceStateV1(authority);
   const body: LineageBody = {
     schemaVersion: CANONICAL_CAUSAL_LINEAGE_SCHEMA_VERSION,
     derivationVersion: CANONICAL_CAUSAL_LINEAGE_DERIVATION_VERSION,
@@ -153,6 +209,12 @@ export function buildCanonicalCausalLineageV1(
     organizationId: authority.organizationId,
     symbol: authority.symbol,
     pitAnchor: authority.pitAnchor,
+    ...(authority.epistemicRecordCutoff
+      ? { epistemicRecordCutoff: authority.epistemicRecordCutoff }
+      : {}),
+    ...(authority.epistemicAuthority
+      ? { epistemicAuthority: authority.epistemicAuthority }
+      : {}),
     hypothesisCausalStateDigest: hypothesisCausalStateDigest(hypothesis),
     hypothesisId: hypothesis.hypothesisId,
     hypothesisDefinitionDigest: hypothesis.definitionDigest,

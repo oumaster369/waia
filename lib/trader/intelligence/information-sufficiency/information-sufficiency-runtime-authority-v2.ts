@@ -5,6 +5,7 @@ import {
   type InformationSufficiencyReceiptV2,
   type RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
+import { historicalInstrumentsMatch } from "@/lib/trader/symbols/historical-instrument";
 
 export const INFORMATION_SUFFICIENCY_RUNTIME_AUTHORITY_V2_SCHEMA_VERSION =
   "information-sufficiency-runtime-authority-v2" as const;
@@ -319,8 +320,10 @@ export function evaluateInformationSufficiencyRuntimeAdmissionV2(input: {
         (authority.profile.accountId !== expectedScope.accountId ||
           authority.receipt.accountId !== expectedScope.accountId)) ||
       (expectedScope?.symbol !== undefined &&
-        (authority.profile.symbol !== expectedScope.symbol ||
-          authority.receipt.symbol !== expectedScope.symbol)) ||
+        ((authority.profile.symbol !== expectedScope.symbol &&
+          !historicalInstrumentsMatch(authority.profile.symbol, expectedScope.symbol)) ||
+          (authority.receipt.symbol !== expectedScope.symbol &&
+            !historicalInstrumentsMatch(authority.receipt.symbol, expectedScope.symbol)))) ||
       (expectedScope?.analyticalTimeframe !== undefined &&
         (authority.profile.analyticalTimeframe !== expectedScope.analyticalTimeframe ||
           authority.receipt.analyticalTimeframe !== expectedScope.analyticalTimeframe))

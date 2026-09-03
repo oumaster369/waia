@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildHistoricalDevelopmentSourceCorpusV2,
   loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2,
+  loadHistoricalWalkForwardPredictiveSourceCorpusSnapshotFromDatasetV2,
 } from
   "@/lib/trader/historical-simulation-v2/development-source-corpus-v2";
 import type { Bar } from "@/lib/trader/intelligence/types";
@@ -15,6 +16,8 @@ import {
   barToFhvBarsV2Record,
   serializeFhvBarsV2Record,
 } from "@/lib/trader/market-data/fhv-bars-v2-ndjson";
+import { streamingBarSemanticDigestOf } from
+  "@/lib/trader/market-data/fhv-streaming-bar-digest";
 
 const temporaryRoots: string[] = [];
 
@@ -68,6 +71,56 @@ describe("historical DEVELOPMENT source corpus v2", () => {
 
     expect(snapshot.corpus).toHaveLength(127);
     expect(snapshot.rawSha256Hex).toBe(createHash("sha256").update(raw).digest("hex"));
+  });
+
+  it("binds WF corpus, full-file bytes and exact scientific window to one snapshot", async () => {
+    const root = mkdtempSync(join(tmpdir(), "waia-wf-corpus-"));
+    temporaryRoots.push(root);
+    const partitionDir = join(root, "partitions", "walk-forward", "BTCUSDT");
+    mkdirSync(partitionDir, { recursive: true });
+    const bars = fixtureBars(180);
+    const filePath = join(partitionDir, "bars.v2.ndjson");
+    const serialize = (values: readonly Bar[]) => values
+      .map((bar) => serializeFhvBarsV2Record(barToFhvBarsV2Record(bar)))
+      .join("");
+    const rawA = serialize(bars);
+    writeFileSync(filePath, rawA);
+    const bounds = {
+      startUtc: bars[0]!.barOpenTime,
+      endUtc: bars.at(-1)!.barCloseTime,
+    };
+    const snapshotA = await loadHistoricalWalkForwardPredictiveSourceCorpusSnapshotFromDatasetV2({
+      datasetRoot: root,
+      symbol: "BTCUSDT",
+      primaryHorizonMinutes: 30,
+      ...bounds,
+    });
+    expect(snapshotA.rawSha256Hex).toBe(createHash("sha256").update(rawA).digest("hex"));
+    expect(snapshotA.scientificWindowEvidence).toEqual({
+      ...bounds,
+      barCount: bars.length,
+      expectedBarCount: bars.length,
+      firstBarOpen: bounds.startUtc,
+      lastBarClose: bounds.endUtc,
+      semanticContentDigest: streamingBarSemanticDigestOf(bars),
+      gapDuplicateIntegrity: "PASS",
+    });
+
+    const changed = bars.map((bar, index) => index === 90
+      ? { ...bar, close: (Number(bar.close) + 1).toFixed(8) }
+      : bar);
+    const rawB = serialize(changed);
+    writeFileSync(filePath, rawB);
+    const snapshotB = await loadHistoricalWalkForwardPredictiveSourceCorpusSnapshotFromDatasetV2({
+      datasetRoot: root,
+      symbol: "BTCUSDT",
+      primaryHorizonMinutes: 30,
+      ...bounds,
+    });
+    expect(snapshotB.rawSha256Hex).not.toBe(snapshotA.rawSha256Hex);
+    expect(snapshotB.scientificWindowEvidence?.semanticContentDigest).not.toBe(
+      snapshotA.scientificWindowEvidence?.semanticContentDigest,
+    );
   });
 
   it("fails closed on a gap instead of silently fabricating a future bar", async () => {

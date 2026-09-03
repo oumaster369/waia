@@ -43,6 +43,14 @@ export type CanonicalRuntimeIntelligenceStateV1 = Readonly<{
   organizationId: string;
   symbol: string;
   pitAnchor: string;
+  /** Present only for a durable, human-ratified historical replay dual-time fold. */
+  epistemicRecordCutoff?: string;
+  epistemicAuthority?: Readonly<{
+    schemaVersion: "waia.trader.historical_four_surface_ratified_admission.v2";
+    ratifiedAdmissionId: string;
+    authorityContentDigestHex: string;
+    createdAt: string;
+  }>;
   knowledgeSemanticDigest: string;
   hypotheses: readonly RuntimeKnowledgeHypothesisV1[];
   semanticDigest: string;
@@ -61,6 +69,10 @@ function canonicalPayload(input: BuildRuntimeKnowledgeAuthorityV1Input): string 
     organizationId: input.organizationId,
     symbol: input.symbol,
     pitAnchor: input.pitAnchor,
+    ...(input.epistemicRecordCutoff
+      ? { epistemicRecordCutoff: input.epistemicRecordCutoff }
+      : {}),
+    ...(input.epistemicAuthority ? { epistemicAuthority: input.epistemicAuthority } : {}),
     knowledgeSemanticDigest: input.knowledgeSemanticDigest,
     hypotheses: input.hypotheses,
   });
@@ -89,6 +101,20 @@ export function assertCanonicalRuntimeIntelligenceStateV1(authority: CanonicalRu
   if (!authority.organizationId || !authority.symbol || !authority.knowledgeSemanticDigest) {
     throw new Error("[runtime-knowledge-authority] incomplete scope or semantic lineage");
   }
+  const recordCutoff = authority.epistemicRecordCutoff ?? authority.pitAnchor;
+  if (
+    Boolean(authority.epistemicRecordCutoff) !== Boolean(authority.epistemicAuthority) ||
+    (authority.epistemicAuthority && (
+      authority.epistemicAuthority.schemaVersion !==
+        "waia.trader.historical_four_surface_ratified_admission.v2" ||
+      authority.epistemicAuthority.createdAt !== authority.epistemicRecordCutoff ||
+      !/^[0-9a-f-]{36}$/i.test(authority.epistemicAuthority.ratifiedAdmissionId) ||
+      !/^[0-9a-f]{64}$/.test(authority.epistemicAuthority.authorityContentDigestHex)
+    ))
+  ) {
+    throw new Error("[runtime-knowledge-authority] unbound epistemic cutoff");
+  }
+  assertIsoAtOrBefore(authority.pitAnchor, recordCutoff, "pitAnchor");
   const ordinals = new Set<number>();
   const ids = new Set<string>();
   const evidenceIds = new Set<string>();
@@ -101,7 +127,7 @@ export function assertCanonicalRuntimeIntelligenceStateV1(authority: CanonicalRu
     }
     ids.add(hypothesis.hypothesisId);
     ordinals.add(hypothesis.rankOrdinal);
-    assertIsoAtOrBefore(hypothesis.createdAt, authority.pitAnchor, "hypothesis.createdAt");
+    assertIsoAtOrBefore(hypothesis.createdAt, recordCutoff, "hypothesis.createdAt");
     if (hypothesis.knowledgeRefs.some((item) => item.knowledgeState === "RESOLVED_INCORRECT" || item.knowledgeState === "STALE" || item.knowledgeState === "INELIGIBLE")) {
       throw new Error("[runtime-knowledge-authority] terminal or stale Knowledge citation is ineligible");
     }
@@ -117,13 +143,19 @@ export function assertCanonicalRuntimeIntelligenceStateV1(authority: CanonicalRu
       }
       evidenceIds.add(evidence.evidenceId);
       assertIsoAtOrBefore(evidence.eventTime, authority.pitAnchor, "eventTime");
-      assertIsoAtOrBefore(evidence.ingestTime, authority.pitAnchor, "ingestTime");
+      assertIsoAtOrBefore(evidence.ingestTime, recordCutoff, "ingestTime");
     }
   }
   const expected = digest({
     organizationId: authority.organizationId,
     symbol: authority.symbol,
     pitAnchor: authority.pitAnchor,
+    ...(authority.epistemicRecordCutoff
+      ? { epistemicRecordCutoff: authority.epistemicRecordCutoff }
+      : {}),
+    ...(authority.epistemicAuthority
+      ? { epistemicAuthority: authority.epistemicAuthority }
+      : {}),
     knowledgeSemanticDigest: authority.knowledgeSemanticDigest,
     hypotheses: authority.hypotheses,
   });

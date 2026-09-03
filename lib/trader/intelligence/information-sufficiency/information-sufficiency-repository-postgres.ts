@@ -17,6 +17,7 @@ import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-co
 
 type RepositoryExecutor = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
 type ReadExecutor = Pick<RepositoryExecutor, "select">;
+export type InformationSufficiencyHeldExecutorV2 = Pick<RepositoryExecutor, "select" | "insert">;
 
 function accountPredicate(
   column: typeof pgSchema.traderRequiredInformationProfileV2.accountId,
@@ -88,7 +89,18 @@ export async function persistRequiredInformationProfileV2Postgres(
 ): Promise<{ profile: RequiredInformationProfileV2; insertedNew: boolean }> {
   const scoped = requireOrgContext(context.organizationId);
   assertScopedProfile(scoped, profile);
-  return runWaiaPostgresTransaction(db, async (tx) => {
+  return runWaiaPostgresTransaction(db, (tx) =>
+    persistRequiredInformationProfileWithinTransactionV2Postgres(tx, scoped, profile));
+}
+
+/** Internal same-transaction primitive for a caller already holding the run publication lock. */
+export async function persistRequiredInformationProfileWithinTransactionV2Postgres(
+  tx: InformationSufficiencyHeldExecutorV2,
+  context: OrgContext,
+  profile: RequiredInformationProfileV2,
+): Promise<{ profile: RequiredInformationProfileV2; insertedNew: boolean }> {
+    const scoped = requireOrgContext(context.organizationId);
+    assertScopedProfile(scoped, profile);
     const inserted = await tx
       .insert(pgSchema.traderRequiredInformationProfileV2)
       .values({
@@ -113,7 +125,6 @@ export async function persistRequiredInformationProfileV2Postgres(
       throw new Error("INFORMATION_SUFFICIENCY_STORAGE:profileConflict");
     }
     return { profile: stored, insertedNew: inserted.length === 1 };
-  });
 }
 
 export async function findRequiredInformationProfileV2Postgres(
@@ -156,7 +167,20 @@ export async function persistInformationSufficiencyReceiptV2Postgres(
   if (receipt.organizationId !== scoped.organizationId) {
     throw new Error("INFORMATION_SUFFICIENCY_STORAGE:organizationMismatch");
   }
-  return runWaiaPostgresTransaction(db, async (tx) => {
+  return runWaiaPostgresTransaction(db, (tx) =>
+    persistInformationSufficiencyReceiptWithinTransactionV2Postgres(tx, scoped, receipt));
+}
+
+/** Internal same-transaction primitive; never opens or escapes to another PostgreSQL session. */
+export async function persistInformationSufficiencyReceiptWithinTransactionV2Postgres(
+  tx: InformationSufficiencyHeldExecutorV2,
+  context: OrgContext,
+  receipt: InformationSufficiencyReceiptV2,
+): Promise<{ receipt: InformationSufficiencyReceiptV2; insertedNew: boolean }> {
+    const scoped = requireOrgContext(context.organizationId);
+    if (receipt.organizationId !== scoped.organizationId) {
+      throw new Error("INFORMATION_SUFFICIENCY_STORAGE:organizationMismatch");
+    }
     const profile = await readProfile(tx, scoped.organizationId, receipt.profileId);
     if (!profile) throw new Error("INFORMATION_SUFFICIENCY_STORAGE:profileMissing");
     assertInformationSufficiencyReceiptV2(receipt, profile);
@@ -183,7 +207,25 @@ export async function persistInformationSufficiencyReceiptV2Postgres(
       throw new Error("INFORMATION_SUFFICIENCY_STORAGE:receiptConflict");
     }
     return { receipt: stored, insertedNew: inserted.length === 1 };
-  });
+}
+
+/** Exact durable replay used by Forecast persistence and PIT reconstruction. */
+export async function requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(
+  tx: InformationSufficiencyHeldExecutorV2,
+  context: OrgContext,
+  profile: RequiredInformationProfileV2,
+  receipt: InformationSufficiencyReceiptV2,
+): Promise<void> {
+  const scoped = requireOrgContext(context.organizationId);
+  assertScopedProfile(scoped, profile);
+  assertInformationSufficiencyReceiptV2(receipt, profile);
+  const storedProfile = await readProfile(tx, scoped.organizationId, profile.id);
+  const storedReceipt = await readReceipt(tx, scoped.organizationId, receipt.id);
+  if (!storedProfile || !storedReceipt ||
+      canonicalJsonString(storedProfile) !== canonicalJsonString(profile) ||
+      canonicalJsonString(storedReceipt) !== canonicalJsonString(receipt)) {
+    throw new Error("INFORMATION_SUFFICIENCY_STORAGE:authorityConflict");
+  }
 }
 
 export async function findInformationSufficiencyReceiptV2Postgres(

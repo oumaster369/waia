@@ -80,6 +80,8 @@ describe("Forecast V2 applied migration identity", () => {
       "0191_historical_preholdout_dataset_authority_v2",
       "0192_forecast_v2_symbol_binding",
       "0193_historical_runner_knowledge_state_read",
+      "0194_historical_four_surface_ratified_admission_v2",
+      "0195_historical_information_sufficiency_authority_v2",
     ]);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,

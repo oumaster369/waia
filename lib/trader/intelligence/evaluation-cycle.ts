@@ -28,6 +28,8 @@ import {
 import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
 import type { EvaluationCycleInput, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
+import { historicalInstrumentsMatch } from
+  "@/lib/trader/symbols/historical-instrument";
 
 /**
  * Runs one intelligence evaluation: Feature Engine → Context Fusion hook → Understanding Bridge → CDE → strategies.
@@ -64,6 +66,14 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
     evaluatedAt,
     newId,
   });
+  if (
+    profileActive && input.symbol !== undefined &&
+    !historicalInstrumentsMatch(input.symbol, features.instrumentId)
+  ) {
+    throw new Error(
+      "[trader/intelligence] historical symbol does not match the market snapshot instrument",
+    );
+  }
 
   if (!miCore) {
     const understanding = input.fusedContext
@@ -271,7 +281,10 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
           organizationId: input.organizationId,
           runId: input.runId,
           cycleId: input.cycleId,
-          symbol: input.symbol ?? input.bars[0]?.symbol ?? "BTC/USDT",
+          // The intelligence envelope is an analytical snapshot artifact. Keep its
+          // identity byte-exact to the snapshot instrument (for example BTC/USDT);
+          // exchange/package symbols (for example BTCUSDT) remain separate authorities.
+          symbol: marketStateSnapshot.instrumentId,
           accountId: input.accountId ?? null,
           analyticalTimeframe: input.bars[0]?.interval ?? "",
           marketStateSnapshot,

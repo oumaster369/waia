@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildHistoricalDatasetTrustAuthorityV2,
   defineRequiredInformationProfileV2,
   evaluateInformationSufficiencyV2,
   type InformationEvidenceV2,
@@ -86,6 +87,32 @@ function evidence(overrides: Partial<InformationEvidenceV2> = {}): InformationEv
     degradationReasonCodes: [],
     ...overrides,
   };
+}
+
+function historicalAuthority() {
+  const base = evidence();
+  return buildHistoricalDatasetTrustAuthorityV2({
+    organizationId: "org-a", symbol: "BTC/USDT", runId: "run-a",
+    releaseSha: "1".repeat(40),
+    ratifiedAdmissionId: "11111111-1111-4111-8111-111111111111",
+    ratifiedAdmissionContentDigestHex: HEX("ratified"),
+    epistemicRecordCutoff: "2026-08-24T00:00:00.000Z",
+    datasetAuthorityId: "22222222-2222-4222-8222-222222222222",
+    datasetAuthorityContentDigestHex: HEX("dataset-content"),
+    datasetAuthorityDigestHex: HEX("dataset"), partitionRawSha256Hex: HEX("raw"),
+    membershipContentDigestHex: HEX("membership"),
+    sealedCycleContentDigestHex: HEX("cycle"),
+    wfPredictiveSemanticContentDigestHex: HEX("semantic"),
+    wfPredictiveStartUtc: "2026-08-23T11:00:00.000Z",
+    wfPredictiveEndUtc: PIT, publicAvailableAt: PIT,
+    canonicalRecordAvailableAt: PIT,
+    canonicalRecordIngestTime: "2026-08-23T13:00:00.000Z",
+    sourceId: base.sourceId, trustAsOfReceiptId: base.trustAsOfReceiptId!,
+    trustRevisionId: base.trustRevisionId!,
+    trustRevisionContentDigestHex: base.trustRevisionContentDigest!,
+    trustScore: base.trustScore!, observationId: base.observationId,
+    observationContentDigestHex: base.observationContentDigest,
+  });
 }
 
 function evaluate(
@@ -193,6 +220,38 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
       status: "INSUFFICIENT",
       reasonCodes: expect.arrayContaining(["EVIDENCE_SOURCE_REVISION_MISMATCH"]),
     });
+  });
+
+  it("requires the sealed historical trust discriminator exactly for WFP evidence", () => {
+    const authority = historicalAuthority();
+    const {
+      schemaVersion: _schemaVersion,
+      contentDigestHex: _contentDigestHex,
+      ...authorityBody
+    } = authority;
+    void _schemaVersion;
+    void _contentDigestHex;
+    const selected = evidence({
+      availableAt: PIT,
+      historyScope: "WALK_FORWARD_PREDICTIVE",
+      historicalDatasetTrustAuthority: authority,
+    });
+    expect(evaluate(profile(), [selected]).status).toBe("SUFFICIENT");
+    expect(() => evaluate(profile(), [{
+      ...selected,
+      historicalDatasetTrustAuthority: undefined,
+    }])).toThrow("historicalDatasetTrustAuthority");
+    expect(() => evaluate(profile(), [{
+      ...evidence(),
+      historicalDatasetTrustAuthority: authority,
+    }])).toThrow("historicalDatasetTrustScope");
+    expect(() => evaluate(profile(), [{
+      ...selected,
+      historicalDatasetTrustAuthority: buildHistoricalDatasetTrustAuthorityV2({
+        ...authorityBody,
+        organizationId: "org-b",
+      }),
+    }])).toThrow("historicalDatasetTrustScope");
   });
 
   it("rejects empty hard-floor allowlists and forged runtime hard-floor types", () => {

@@ -35,7 +35,7 @@ export type CanonicalHistoricalApplicabilityReceiptV1 = Readonly<{
   contentDigestHex: string;
 }>;
 
-function observeApplicability(
+export function evaluateCanonicalHistoricalApplicabilityFactsV1(
   hypothesisType: HypothesisType,
   reconstruction: ReconstructionSnapshot,
 ): Readonly<{ facts: readonly string[]; applicable: boolean }> {
@@ -142,7 +142,10 @@ export function buildCanonicalHistoricalApplicabilityReceiptV1(input: Readonly<{
     throw new Error("CANONICAL_HISTORICAL_APPLICABILITY_REFUSED:ACTIVE_HYPOTHESIS");
   }
 
-  const observation = observeApplicability(source.hypothesisType, input.reconstruction);
+  const observation = evaluateCanonicalHistoricalApplicabilityFactsV1(
+    source.hypothesisType,
+    input.reconstruction,
+  );
   const reasons: string[] = [];
   if (source.lifecycleState !== "VALIDATED") reasons.push("HYPOTHESIS_NOT_VALIDATED");
   if (source.ordinalJudgment !== "SUPPORTED") reasons.push("ORDINAL_JUDGMENT_NOT_SUPPORTED");

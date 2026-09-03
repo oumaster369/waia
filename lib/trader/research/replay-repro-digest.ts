@@ -166,7 +166,8 @@ function assertCanonicalEvidenceRef(
       ] as readonly string[]
     ).includes(evidence.epistemicRole) ||
     !(
-      ["NOT_HISTORICAL", "DEVELOPMENT", "ADMISSIBLE_PATTERN_KNOWLEDGE"] as readonly string[]
+      ["NOT_HISTORICAL", "DEVELOPMENT", "WALK_FORWARD_PREDICTIVE",
+        "ADMISSIBLE_PATTERN_KNOWLEDGE"] as readonly string[]
     ).includes(evidence.historyScope) ||
     !(["NONE", "SUPPORTS", "CONTRADICTS", "UNRESOLVED"] as readonly string[]).includes(
       evidence.contradiction,

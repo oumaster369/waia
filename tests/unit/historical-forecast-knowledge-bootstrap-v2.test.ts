@@ -37,7 +37,7 @@ describe("historical Forecast cold-start Knowledge authority v2", () => {
     const row = {
       from_ref: edge.fromRef, to_ref: edge.toRef, relation_kind: edge.relationKind,
       confidence: edge.confidence, strength: edge.strength, regime_scope: edge.regimeScope,
-      failure_cases_json: edge.failureCasesJson, verified: edge.verified,
+      failure_cases_json: edge.failureCasesJson, hypothesis_id: null, verified: edge.verified,
     };
     expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, row))
       .not.toThrow();
@@ -48,6 +48,9 @@ describe("historical Forecast cold-start Knowledge authority v2", () => {
     })).toThrowError("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE");
     expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, {
       ...row, verified: true,
+    })).toThrowError("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE");
+    expect(() => assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, {
+      ...row, hypothesis_id: "00000000-0000-4000-8000-000000000099",
     })).toThrowError("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:DURABLE_LINEAGE");
   });
 });

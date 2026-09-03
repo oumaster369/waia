@@ -16,6 +16,7 @@ import {
   type UnderstandingClaimStateV1,
   type UnderstandingEvidenceRoleV1,
 } from "@/lib/trader/intelligence/market-understanding-evidence-attribution-v1";
+import { historicalInstrumentsMatch } from "@/lib/trader/symbols/historical-instrument";
 import {
   CANONICAL_MARKET_QUESTION_IDS,
   provenanceId,
@@ -761,7 +762,8 @@ function contradictionPassesEveryNonContradictionGate(
     (requirement.questionId !== "Q_WHY_HAPPENING" || evidence.epistemicRole === "CAUSAL") &&
     (requirement.questionId !== "Q_HISTORICAL_ANALOGUES" ||
       (evidence.epistemicRole === "HISTORICAL_ANALOGUE" &&
-        ["DEVELOPMENT", "ADMISSIBLE_PATTERN_KNOWLEDGE"].includes(evidence.historyScope)))
+        ["DEVELOPMENT", "WALK_FORWARD_PREDICTIVE",
+          "ADMISSIBLE_PATTERN_KNOWLEDGE"].includes(evidence.historyScope)))
   );
 }
 
@@ -784,15 +786,19 @@ export function buildExactMarketUnderstandingArtifactV1(
     authority.receipt.organizationId !== input.organizationId ||
     authority.profile.accountId !== input.accountId ||
     authority.receipt.accountId !== input.accountId ||
-    authority.profile.symbol !== input.symbol ||
-    authority.receipt.symbol !== input.symbol ||
-    input.features.instrumentId !== input.symbol ||
+    (authority.profile.symbol !== input.symbol &&
+      !historicalInstrumentsMatch(authority.profile.symbol, input.symbol)) ||
+    (authority.receipt.symbol !== input.symbol &&
+      !historicalInstrumentsMatch(authority.receipt.symbol, input.symbol)) ||
+    (input.features.instrumentId !== input.symbol &&
+      !historicalInstrumentsMatch(input.features.instrumentId, input.symbol)) ||
     authority.profile.analyticalTimeframe !== input.analyticalTimeframe ||
     authority.receipt.analyticalTimeframe !== input.analyticalTimeframe ||
     authority.receipt.pitAnchor !== input.evaluatedAt ||
     input.features.evaluatedAt !== input.evaluatedAt ||
     (input.reconstruction !== undefined &&
-      (input.reconstruction.instrumentId !== input.symbol ||
+      ((input.reconstruction.instrumentId !== input.symbol &&
+        !historicalInstrumentsMatch(input.reconstruction.instrumentId, input.symbol)) ||
         input.reconstruction.evaluatedAt !== input.evaluatedAt))
   ) {
     throw new Error("MARKET_UNDERSTANDING_ATTRIBUTION_INVALID:runtimeScope");

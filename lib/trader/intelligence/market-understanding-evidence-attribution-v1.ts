@@ -141,6 +141,7 @@ export type CanonicalUnderstandingEvidenceRefV1 = Readonly<{
   epistemicRole: InformationEvidenceV2["epistemicRole"];
   historyScope: InformationEvidenceV2["historyScope"];
   availableAt: string;
+  historicalDatasetTrustAuthority?: InformationEvidenceV2["historicalDatasetTrustAuthority"];
   degradationReasonCodes: readonly string[];
 }>;
 
@@ -371,6 +372,9 @@ function canonicalEvidenceRef(evidence: InformationEvidenceV2): CanonicalUnderst
     epistemicRole: evidence.epistemicRole,
     historyScope: evidence.historyScope,
     availableAt: evidence.availableAt,
+    ...(evidence.historicalDatasetTrustAuthority === undefined
+      ? {}
+      : { historicalDatasetTrustAuthority: evidence.historicalDatasetTrustAuthority }),
     degradationReasonCodes: sortedUniqueStrings(
       evidence.degradationReasonCodes,
       "degradationReasonCode",

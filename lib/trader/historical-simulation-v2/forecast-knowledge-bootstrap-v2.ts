@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type postgres from "postgres";
 
+import { withPostgresSessionTransaction } from "@/db/postgres-session-transaction";
 import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from
   "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
@@ -30,6 +31,7 @@ export type HistoricalForecastKnowledgeDurableRowV2 = Readonly<{
   strength: string;
   regime_scope: string;
   failure_cases_json: string;
+  hypothesis_id: string | null;
   verified: boolean;
 }>;
 
@@ -46,6 +48,7 @@ export function assertHistoricalForecastKnowledgeBootstrapDurableRowV2(
     row.strength !== expected.strength ||
     row.regime_scope !== expected.regimeScope ||
     row.failure_cases_json !== expected.failureCasesJson ||
+    row.hypothesis_id !== null ||
     row.verified !== expected.verified
   ) {
     throw new Error(
@@ -98,7 +101,7 @@ export function buildHistoricalForecastKnowledgeBootstrapV2(input: Readonly<{
 }
 
 /** Idempotently persists only the exact neutral cold-start edge; conflicting bytes fail closed. */
-export async function persistHistoricalForecastKnowledgeBootstrapV2(
+export async function persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
   sql: postgres.Sql,
   edge: HistoricalForecastKnowledgeBootstrapV2,
 ): Promise<Readonly<{ insertedNew: boolean }>> {
@@ -111,25 +114,37 @@ export async function persistHistoricalForecastKnowledgeBootstrapV2(
   if (canonicalizeSemanticJsonString(rebuilt) !== canonicalizeSemanticJsonString(edge)) {
     throw new Error("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:CONTENT");
   }
-  const result = await sql.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${edge.organizationId + "|" + edge.knowledgeEdgeId}, 903))`;
-    const existing = await tx<{ from_ref: string; to_ref: string; relation_kind: string;
-      confidence: string; strength: string; regime_scope: string; failure_cases_json: string;
-      verified: boolean }[]>`
-      SELECT from_ref,to_ref,relation_kind,confidence,strength,regime_scope,failure_cases_json,verified
-      FROM trader_knowledge_edges WHERE organization_id=${edge.organizationId}::uuid
-        AND id=${edge.knowledgeEdgeId}::uuid`;
-    if (existing[0]) {
-      const row = existing[0];
-      assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, row);
-      return false;
-    }
-    await tx`INSERT INTO trader_knowledge_edges
+  await sql`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${edge.organizationId + "|" + edge.knowledgeEdgeId}, 903)
+    )
+  `;
+  const inserted = await sql<{ id: string }[]>`
+    INSERT INTO trader_knowledge_edges
       (id,organization_id,from_ref,to_ref,relation_kind,confidence,strength,regime_scope,
        failure_cases_json,hypothesis_id,verified)
-      VALUES (${edge.knowledgeEdgeId}::uuid,${edge.organizationId}::uuid,${edge.fromRef},${edge.toRef},
-       ${edge.relationKind},${edge.confidence},${edge.strength},${edge.regimeScope},${edge.failureCasesJson},NULL,false)`;
-    return true;
-  });
-  return Object.freeze({ insertedNew: result });
+    VALUES (${edge.knowledgeEdgeId}::uuid,${edge.organizationId}::uuid,${edge.fromRef},${edge.toRef},
+      ${edge.relationKind},${edge.confidence},${edge.strength},${edge.regimeScope},
+      ${edge.failureCasesJson},NULL,false)
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id::text AS id
+  `;
+  const rows = await sql<HistoricalForecastKnowledgeDurableRowV2[]>`
+    SELECT from_ref,to_ref,relation_kind,confidence,strength,regime_scope,
+           failure_cases_json,hypothesis_id::text AS hypothesis_id,verified
+    FROM trader_knowledge_edges WHERE organization_id=${edge.organizationId}::uuid
+      AND id=${edge.knowledgeEdgeId}::uuid
+    FOR SHARE
+  `;
+  assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, rows[0]);
+  return Object.freeze({ insertedNew: inserted.length === 1 });
+}
+
+/** Standalone entry point; nested callers reuse their exact held PostgreSQL transaction. */
+export async function persistHistoricalForecastKnowledgeBootstrapV2(
+  sql: postgres.Sql,
+  edge: HistoricalForecastKnowledgeBootstrapV2,
+): Promise<Readonly<{ insertedNew: boolean }>> {
+  return withPostgresSessionTransaction(sql, "SERIALIZABLE", (transaction) =>
+    persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(transaction, edge));
 }

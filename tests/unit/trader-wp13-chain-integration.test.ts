@@ -33,4 +33,40 @@ describe("trader wp13 chain integration", () => {
       expect(hypothesis.cycleEnvelopeId).toBe(bundle.envelope.id);
     }
   });
+
+  it.each([
+    ["BTCUSDT", "BTC/USDT"],
+    ["ETHUSDT", "ETH/USDT"],
+  ] as const)(
+    "keeps exchange symbol %s distinct from exact snapshot instrument %s",
+    (exchangeSymbol, snapshotInstrumentId) => {
+      const instrumentBars = bars.map((bar) => ({
+        ...bar,
+        symbol: snapshotInstrumentId,
+      }));
+      const cycle = runEvaluationCycle({
+        organizationId: "org",
+        symbol: exchangeSymbol,
+        bars: instrumentBars,
+        historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+        runId: "run",
+        cycleId: `identity-${exchangeSymbol}`,
+        newId: createDeterministicReplayIdFactory(415_131),
+      });
+      expect(cycle.features.instrumentId).toBe(snapshotInstrumentId);
+      expect(cycle.intelligenceCycleBundle?.envelope.symbol).toBe(snapshotInstrumentId);
+    },
+  );
+
+  it("fails closed when the qualified exchange symbol names another instrument", () => {
+    expect(() => runEvaluationCycle({
+      organizationId: "org",
+      symbol: "ETHUSDT",
+      bars,
+      historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+      runId: "run",
+      cycleId: "cross-symbol",
+      newId: createDeterministicReplayIdFactory(415_132),
+    })).toThrow("historical symbol does not match the market snapshot instrument");
+  });
 });

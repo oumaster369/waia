@@ -7,15 +7,31 @@ import {
 } from "@/lib/trader/intelligence/predictive-admission";
 import type { ForecastContractBindingV1 } from
   "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
-import type { ForecastRuntimeInputV2 } from
-  "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import {
+  HISTORICAL_INTELLIGENCE_CYCLE_AUTHORITY_V2,
+  type ForecastRuntimeInputV2,
+} from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import {
+  assertHistoricalKnowledgeSnapshotAuthorityV2,
+  type HistoricalKnowledgeSnapshotAuthorityV2,
+} from "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
 import type { PredictivePackageV1 } from
   "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
 import type {
   InformationSufficiencyReceiptV2,
   RequiredInformationProfileV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
+import { bindInformationSufficiencyReceiptAuthorityV2 } from
+  "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
+import { assertMarketUnderstandingArtifactV1 } from
+  "@/lib/trader/intelligence/market-understanding-evidence-attribution-v1";
+import {
+  computeCanonicalCycleCausalInputDigestV2,
+  parseCanonicalCycleCausalInputBundleV2,
+} from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
+import { computeCycleEnvelopeContentDigest } from
+  "@/lib/trader/intelligence/records/serialize-intelligence-records";
 import { buildCanonicalCausalLineageV1 } from
   "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
 import type { HypothesisSet } from
@@ -106,6 +122,7 @@ function deriveSealedKnowledgeLineage(input: Readonly<{
 export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   releaseSha: string;
   organizationId: string;
+  runId: string;
   accountId: string | null;
   symbol: "BTCUSDT" | "ETHUSDT";
   venue: "HTX";
@@ -117,6 +134,7 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   representationProfileDigestHex: string;
   runtimeContext: unknown;
   knowledgeBootstrap: HistoricalForecastKnowledgeBootstrapV2;
+  knowledgeSnapshotAuthority: HistoricalKnowledgeSnapshotAuthorityV2;
   evaluation: EvaluationCycleResult;
   requiredInformationProfile: RequiredInformationProfileV2;
   informationSufficiencyReceipt: InformationSufficiencyReceiptV2;
@@ -143,6 +161,15 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   ) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:SYMBOL_SCOPE");
   }
+  const knowledgeSnapshotAuthority = assertHistoricalKnowledgeSnapshotAuthorityV2(
+    input.knowledgeSnapshotAuthority,
+  );
+  if (knowledgeSnapshotAuthority.organizationId !== input.organizationId ||
+      knowledgeSnapshotAuthority.runId !== input.runId ||
+      knowledgeSnapshotAuthority.pitAnchor !== input.pitAnchor ||
+      !historicalInstrumentsMatch(knowledgeSnapshotAuthority.symbol, input.symbol)) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_SNAPSHOT");
+  }
   const expectedKnowledgeBootstrap = buildHistoricalForecastKnowledgeBootstrapV2({
     organizationId: input.organizationId,
     symbol: input.symbol,
@@ -160,13 +187,87 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
   if (!evaluation.canonicalRuntimeIntelligenceState) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:CANONICAL_STATE");
   }
+  const epistemicAuthority = evaluation.canonicalRuntimeIntelligenceState.epistemicAuthority;
+  const historicalAuthorities = input.informationSufficiencyReceipt.evidenceInventory
+    .filter((evidence) => evidence.historyScope === "WALK_FORWARD_PREDICTIVE")
+    .map((evidence) => evidence.historicalDatasetTrustAuthority);
+  if (!epistemicAuthority || historicalAuthorities.length !== 1 ||
+      historicalAuthorities.some((authority) =>
+        !authority || authority.organizationId !== input.organizationId ||
+        authority.runId !== input.runId || authority.releaseSha !== input.releaseSha ||
+        authority.ratifiedAdmissionId !== epistemicAuthority.ratifiedAdmissionId ||
+        authority.ratifiedAdmissionContentDigestHex !==
+          epistemicAuthority.authorityContentDigestHex ||
+        authority.epistemicRecordCutoff !== epistemicAuthority.createdAt ||
+        authority.publicAvailableAt !== input.pitAnchor ||
+        !historicalInstrumentsMatch(authority.symbol, input.symbol))) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:INFORMATION_AUTHORITY");
+  }
   if (!evaluation.intelligenceCycleBundle) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:EVALUATION_SEAL");
   }
+  const understandingArtifact = evaluation.understandingArtifact;
+  const envelope = evaluation.intelligenceCycleBundle.envelope;
+  const causalBundleJson = envelope.inputCausalBundleJson;
+  if (!understandingArtifact || !causalBundleJson) {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:UNDERSTANDING_AUTHORITY");
+  }
+  try {
+    assertMarketUnderstandingArtifactV1(
+      understandingArtifact,
+      input.requiredInformationProfile,
+      input.informationSufficiencyReceipt,
+    );
+    const causalBundle = parseCanonicalCycleCausalInputBundleV2(causalBundleJson);
+    if (
+      envelope.organizationId !== input.organizationId ||
+      envelope.runId !== input.runId ||
+      envelope.evaluatedAt !== input.pitAnchor ||
+      !historicalInstrumentsMatch(envelope.symbol, input.symbol) ||
+      computeCycleEnvelopeContentDigest(envelope) !== envelope.contentDigest ||
+      computeCanonicalCycleCausalInputDigestV2(causalBundle) !==
+        envelope.inputSemanticDigest ||
+      causalBundle.understanding.status !== "EXACT" ||
+      causalBundle.understanding.contentDigest !== understandingArtifact.contentDigest ||
+      causalBundle.understanding.requiredInformationProfileId !==
+        input.requiredInformationProfile.id ||
+      causalBundle.understanding.requiredInformationProfileContentDigest !==
+        input.requiredInformationProfile.contentDigest ||
+      causalBundle.understanding.informationSufficiencyReceiptId !==
+        input.informationSufficiencyReceipt.id ||
+      causalBundle.understanding.informationSufficiencyReceiptContentDigest !==
+        input.informationSufficiencyReceipt.contentDigest
+    ) {
+      throw new Error("understanding authority mismatch");
+    }
+  } catch {
+    throw new Error("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:UNDERSTANDING_AUTHORITY");
+  }
+  const historicalCycleAuthorityBody = {
+    schemaVersion: HISTORICAL_INTELLIGENCE_CYCLE_AUTHORITY_V2,
+    organizationId: input.organizationId,
+    runId: input.runId,
+    cycleId: envelope.cycleId,
+    symbol: envelope.symbol,
+    pitAnchor: input.pitAnchor,
+    envelopeId: envelope.id,
+    envelopeContentDigestHex: envelope.contentDigest,
+    inputSemanticDigestHex: envelope.inputSemanticDigest,
+    understandingArtifactContentDigestHex: understandingArtifact.contentDigest,
+    understandingArtifactSemanticDigestHex: computeSemanticSha256Hex(
+      understandingArtifact,
+    ),
+  };
+  const historicalIntelligenceCycleAuthority = Object.freeze({
+    ...historicalCycleAuthorityBody,
+    contentDigestHex: computeSemanticSha256Hex(historicalCycleAuthorityBody),
+  });
   const applicability = buildHistoricalHypothesisApplicabilitySetV2({
     releaseSha: input.releaseSha,
     organizationId: input.organizationId,
-    symbol: input.symbol,
+    // Applicability seals the analytical snapshot identity. The execution/package
+    // symbol is independently bound below through the canonical instrument mapper.
+    symbol: evaluation.features.instrumentId,
     pitAnchor: input.pitAnchor,
     reconstruction: evaluation.reconstruction,
     canonicalRuntimeIntelligenceState: evaluation.canonicalRuntimeIntelligenceState,
@@ -258,6 +359,12 @@ export function buildHistoricalForecastCycleRuntimeInputV2(input: Readonly<{
     normalizationVersionDigestHex:
       input.predictivePackage.family.normalizationVersionDigestHex,
     knowledgeEdgeId: expectedKnowledgeBootstrap.knowledgeEdgeId,
-    knowledgeContentDigestHex: expectedKnowledgeBootstrap.contentDigestHex,
+    knowledgeContentDigestHex: knowledgeSnapshotAuthority.knowledgeContentDigestHex,
+    historicalKnowledgeSnapshotAuthority: knowledgeSnapshotAuthority,
+    informationSufficiencyAuthority: bindInformationSufficiencyReceiptAuthorityV2(
+      input.requiredInformationProfile,
+      input.informationSufficiencyReceipt,
+    ),
+    historicalIntelligenceCycleAuthority,
   });
 }

@@ -13,6 +13,10 @@ import { persistHistoricalForecastCycleV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-cycle-persistence-v2";
 import { buildHistoricalForecastKnowledgeBootstrapV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
+import { computeHistoricalSimulationEmptyKnowledgeBindingDigestV2 } from
+  "@/lib/trader/historical-simulation-v2/knowledge-snapshot-binding-v2";
+import { buildHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
 
 const organizationId = "00000000-0000-4000-8000-000000000001";
 const packageDigest = "a".repeat(64);
@@ -28,11 +32,28 @@ describe("historical Forecast cycle persistence v2", () => {
     const runtimeInput = {
       source: "exact", executionHorizonMinutes: 33,
       knowledgeEdgeId: knowledgeBootstrap.knowledgeEdgeId,
-      knowledgeContentDigestHex: knowledgeBootstrap.contentDigestHex,
+      knowledgeContentDigestHex:
+        computeHistoricalSimulationEmptyKnowledgeBindingDigestV2(
+          organizationId,
+          "BTCUSDT",
+        ),
+      historicalKnowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+        organizationId,
+        runId: "r",
+        symbol: "BTCUSDT",
+        pitAnchor: "1970-01-01T00:00:00.123Z",
+        visibleEvidenceCount: 0,
+        knowledgeContentDigestHex:
+          computeHistoricalSimulationEmptyKnowledgeBindingDigestV2(
+            organizationId,
+            "BTCUSDT",
+          ),
+      }),
     };
     const outcome = {
       status: "FORECAST_AUTHORIZED",
       authority: { organizationId, anchorClosedBarEpochMs: 123,
+        anchorClosedBarAt: "1970-01-01T00:00:00.123Z",
         selectedPredictivePackageContentDigestHex: packageDigest },
       issuance: { id: "issuance", package: { family: { symbol: "BTCUSDT" } } },
     };
@@ -54,6 +75,7 @@ describe("historical Forecast cycle persistence v2", () => {
     const outcome = {
       status: "FORECAST_AUTHORIZED",
       authority: { organizationId, anchorClosedBarEpochMs: 123,
+        anchorClosedBarAt: "1970-01-01T00:00:00.123Z",
         selectedPredictivePackageContentDigestHex: packageDigest },
       issuance: { package: { family: { symbol: "BTCUSDT" } } },
     };
@@ -67,6 +89,84 @@ describe("historical Forecast cycle persistence v2", () => {
         knowledgeContentDigestHex: "b".repeat(64),
       } as never, issuanceSequence: 7,
     })).rejects.toThrowError("HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:KNOWLEDGE_LINEAGE");
+    expect(mocked.persist).not.toHaveBeenCalled();
+  });
+
+  it("accepts a later-cycle nonempty run-scoped knowledge snapshot for durable replay", async () => {
+    const knowledgeBootstrap = buildHistoricalForecastKnowledgeBootstrapV2({
+      organizationId, symbol: "BTCUSDT", horizonMinutes: 33,
+      predictivePackageContentDigestHex: packageDigest,
+    });
+    const knowledgeSnapshotAuthority = buildHistoricalKnowledgeSnapshotAuthorityV2({
+      organizationId,
+      runId: "later-run",
+      symbol: "BTCUSDT",
+      pitAnchor: "2026-01-01T00:02:00.000Z",
+      visibleEvidenceCount: 1,
+      knowledgeContentDigestHex: "c".repeat(64),
+    });
+    const runtimeInput = {
+      executionHorizonMinutes: 33,
+      knowledgeEdgeId: knowledgeBootstrap.knowledgeEdgeId,
+      knowledgeContentDigestHex: knowledgeSnapshotAuthority.knowledgeContentDigestHex,
+      historicalKnowledgeSnapshotAuthority: knowledgeSnapshotAuthority,
+    };
+    const outcome = {
+      status: "FORECAST_AUTHORIZED",
+      authority: {
+        organizationId,
+        anchorClosedBarEpochMs: Date.parse(knowledgeSnapshotAuthority.pitAnchor),
+        anchorClosedBarAt: knowledgeSnapshotAuthority.pitAnchor,
+        selectedPredictivePackageContentDigestHex: packageDigest,
+      },
+      issuance: { package: { family: { symbol: "BTCUSDT" } } },
+    };
+    mocked.issue.mockReturnValue(outcome);
+    mocked.requireOutcome.mockReturnValue(outcome);
+    mocked.persist.mockResolvedValue({ bundleId: "b", terminalForecastId: "t",
+      executionForecastId: "e", retriedExisting: false });
+    await expect(persistHistoricalForecastCycleV2({} as never, {
+      organizationId, packageId: "p", runId: "later-run", cycleId: "later-cycle",
+      symbol: "BTCUSDT", runtimeInput: runtimeInput as never, issuanceSequence: 1,
+    })).resolves.toMatchObject({ bundleId: "b" });
+    expect(mocked.persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses substituting the neutral edge digest for the first-PIT knowledge snapshot", async () => {
+    const knowledgeBootstrap = buildHistoricalForecastKnowledgeBootstrapV2({
+      organizationId, symbol: "BTCUSDT", horizonMinutes: 33,
+      predictivePackageContentDigestHex: packageDigest,
+    });
+    const outcome = {
+      status: "FORECAST_AUTHORIZED",
+      authority: { organizationId, anchorClosedBarEpochMs: 123,
+        selectedPredictivePackageContentDigestHex: packageDigest },
+      issuance: { package: { family: { symbol: "BTCUSDT" } } },
+    };
+    mocked.issue.mockReturnValue(outcome);
+    mocked.requireOutcome.mockReturnValue(outcome);
+    await expect(persistHistoricalForecastCycleV2({} as never, {
+      organizationId, packageId: "p", runId: "r", cycleId: "c",
+      symbol: "BTCUSDT", runtimeInput: {
+        executionHorizonMinutes: 33,
+        knowledgeEdgeId: knowledgeBootstrap.knowledgeEdgeId,
+        knowledgeContentDigestHex: knowledgeBootstrap.contentDigestHex,
+        historicalKnowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+          organizationId,
+          runId: "r",
+          symbol: "BTCUSDT",
+          pitAnchor: "1970-01-01T00:00:00.123Z",
+          visibleEvidenceCount: 0,
+          knowledgeContentDigestHex:
+            computeHistoricalSimulationEmptyKnowledgeBindingDigestV2(
+              organizationId,
+              "BTCUSDT",
+            ),
+        }),
+      } as never, issuanceSequence: 7,
+    })).rejects.toThrowError(
+      "HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:KNOWLEDGE_LINEAGE",
+    );
     expect(mocked.persist).not.toHaveBeenCalled();
   });
 

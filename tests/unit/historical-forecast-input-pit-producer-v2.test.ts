@@ -4,15 +4,20 @@ import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic
 import { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from "@/lib/trader/historical-simulation-v2/knowledge-port-postgres";
 import { HISTORICAL_DATASET_MEMBERSHIP_V2 } from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { buildHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
 
 const mocked = vi.hoisted(() => ({ issue: vi.fn(), requireOutcome: vi.fn((value) => value),
-  readBinding: vi.fn(), requireScientific: vi.fn() }));
+  readBinding: vi.fn(), requireScientific: vi.fn(), verifyInformation: vi.fn() }));
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", () => ({
   issueForecastRuntimeV2: mocked.issue, requireForecastRuntimeAuthorizedOutcomeV2: mocked.requireOutcome,
   reviveForecastRuntimeJsonV2: (value: unknown) => value,
 }));
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1", () => ({ readForecastContractBindingV1: mocked.readBinding }));
 vi.mock("@/lib/trader/research/execopp-qualification/scientific-admission-v2", () => ({ requireScientificAdmissionV2: mocked.requireScientific }));
+vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service", () => ({
+  verifyHistoricalForecastInformationProofV2: mocked.verifyInformation,
+}));
 
 import { createPostgresHistoricalForecastInputPitProducerV2 } from "@/lib/trader/historical-simulation-v2/pit-forecast-input-producer-v2";
 
@@ -27,7 +32,18 @@ const binding = {
   scientificAdmissionReceiptContentDigestHex: "b".repeat(64),
   selectedPredictivePackageContentDigestHex: "c".repeat(64),
 };
-const runtimeInput = { forecastContractBinding: binding, knowledgeContentDigestHex: knowledge };
+const runtimeInput = {
+  forecastContractBinding: binding,
+  knowledgeContentDigestHex: knowledge,
+  historicalKnowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+    organizationId: "org",
+    runId: "run",
+    symbol: "BTCUSDT",
+    pitAnchor: pit,
+    visibleEvidenceCount: 0,
+    knowledgeContentDigestHex: knowledge,
+  }),
+};
 const membershipBody = {
   schemaVersion: HISTORICAL_DATASET_MEMBERSHIP_V2, organizationId: "org", cycleId: "cycle",
   manifestSemanticDigestHex: "1".repeat(64), sealReceiptDigestHex: "2".repeat(64),
@@ -75,6 +91,8 @@ function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: stri
       membership_json: datasetMembership, sealed_cycle_json: sealedCycle,
       dataset_authority_digest_hex: "2".repeat(64),
       authority_content_digest_hex: options.datasetAuthorityDigest ?? datasetAuthorityDigest,
+      membership_content_digest_hex: datasetMembership.contentDigestHex,
+      sealed_cycle_content_digest_hex: "6".repeat(64),
     }];
     if (query.includes("FROM trader_forecast_v2")) return [{
       organization_id: "org", run_id: "run", cycle_id: "cycle", symbol: "BTCUSDT",
@@ -111,6 +129,18 @@ describe("historical Forecast V2 PIT producer", () => {
     });
     expect(record).toMatchObject({ visibleFrom: pit, knowledgeContentDigestHex: knowledge });
     expect(record.contentDigestHex).toMatch(/^[0-9a-f]{64}$/);
+    expect(mocked.verifyInformation).toHaveBeenCalledWith(sql, expect.objectContaining({
+      runId: "run",
+      cycleId: "cycle",
+      symbol: "BTCUSDT",
+      expectedDatasetAuthority: {
+        id: "dataset-authority",
+        datasetAuthorityDigestHex: "2".repeat(64),
+        authorityContentDigestHex: datasetAuthorityDigest,
+        membershipContentDigestHex: datasetMembership.contentDigestHex,
+        sealedCycleContentDigestHex: "6".repeat(64),
+      },
+    }));
   });
 
   it("rejects knowledge evidence that becomes visible after the cycle PIT", async () => {

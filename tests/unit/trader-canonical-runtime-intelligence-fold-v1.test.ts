@@ -1,14 +1,33 @@
 import { describe, expect, it } from "vitest";
 
-import { foldCanonicalRuntimeIntelligenceStateV1 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
+import {
+  computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1,
+  foldCanonicalRuntimeIntelligenceStateV1,
+  sealHistoricalKnowledgeEdgeV1,
+  sealHistoricalMarketPredictionV1,
+} from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
 import { createInMemoryMkbReadModelSource } from "@/lib/trader/knowledge/mkb-read-model-source";
-import type { KnowledgeEdge } from "@/lib/trader/knowledge/knowledge.types";
+import type { KnowledgeEdge, MarketPrediction } from "@/lib/trader/knowledge/knowledge.types";
 import type { MiEvidence } from "@/lib/trader/mi/evidence.types";
 import type { MiHypothesis, MiHypothesisLifecycleEvent } from "@/lib/trader/mi/hypothesis.types";
-import type { MiEvidenceRepository, MiHypothesisRepository } from "@/lib/trader/mi/types";
+import type { PitObservation } from "@/lib/trader/mi/observation.types";
+import type { MiTrial } from "@/lib/trader/mi/trial.types";
+import type {
+  MiEvidenceRepository,
+  MiHypothesisRepository,
+  MiObservationRepository,
+  MiTrialRepository,
+} from "@/lib/trader/mi/types";
 
 const ORG = "org-1";
 const AS_OF = new Date("2026-01-01T12:00:00.000Z");
+const EPISTEMIC_CUTOFF = new Date("2026-09-01T10:04:00.000Z");
+const EPISTEMIC_AUTHORITY = {
+  schemaVersion: "waia.trader.historical_four_surface_ratified_admission.v2" as const,
+  ratifiedAdmissionId: "00000000-0000-4000-8000-000000000019",
+  authorityContentDigestHex: "a".repeat(64),
+  createdAt: EPISTEMIC_CUTOFF,
+};
 
 function hypothesis(id: string, key: string, versionSeq = 1, createdAt = "2026-01-01T10:00:00.000Z"): MiHypothesis {
   return {
@@ -28,7 +47,14 @@ function evidence(row: MiHypothesis, direction: MiEvidence["direction"], id: str
   return { id, organizationId: ORG, evidenceKind: "observed", direction, hypothesisId: row.id, hypothesisKey: row.hypothesisKey, hypothesisDefinitionDigest: row.definitionDigest, measurementRefsJson: "[]", observationRefsJson: "[]", eventTime: new Date("2026-01-01T10:50:00.000Z"), ingestTime: new Date(ingest), recordedBy: "test", seq: 1, contentDigest: `digest-${id}`, nullComparatorRef: null, regimeContextRef: null, trialRegistrationRef: null, createdAt: new Date(ingest) };
 }
 
-function deps(hypotheses: MiHypothesis[], evidenceRows: MiEvidence[], knowledgeEdges: readonly KnowledgeEdge[] = []) {
+function deps(
+  hypotheses: MiHypothesis[],
+  evidenceRows: MiEvidence[],
+  knowledgeEdges: readonly KnowledgeEdge[] = [],
+  marketPredictions: readonly MarketPrediction[] = [],
+  observationRows: readonly PitObservation[] = [],
+  trialRows: readonly MiTrial[] = [],
+) {
   const events = hypotheses.map((row) => lifecycle(row));
   const hypothesisRepo = {
     listHypotheses: () => hypotheses,
@@ -42,8 +68,20 @@ function deps(hypotheses: MiHypothesis[], evidenceRows: MiEvidence[], knowledgeE
     getLatestEvidence: () => null, listEvidenceByDirection: () => [], findEvidenceById: () => null,
     insertEvidence: () => { throw new Error("write forbidden"); },
   } satisfies MiEvidenceRepository;
-  const source = createInMemoryMkbReadModelSource({ snapshotsByOrganizationId: { [ORG]: { cycleEnvelopes: [], hypotheses: [], convictions: [], forecasts: [], decisions: [], links: [], entryPurposes: [], knowledgeEdges, marketPredictions: [], marketEvents: [] } } });
-  return { hypotheses: hypothesisRepo, evidence: evidenceRepo, knowledgeSource: source };
+  const source = createInMemoryMkbReadModelSource({ snapshotsByOrganizationId: { [ORG]: { cycleEnvelopes: [], hypotheses: [], convictions: [], forecasts: [], decisions: [], links: [], entryPurposes: [], knowledgeEdges, marketPredictions, marketEvents: [] } } });
+  const observations = {
+    findObservationById: (_context, id) => observationRows.find((row) => row.id === id) ?? null,
+    getLatestObservation: () => null, listObservationHistory: () => [],
+    listObservations: () => [...observationRows],
+    insertObservation: () => { throw new Error("write forbidden"); },
+  } satisfies MiObservationRepository;
+  const trials = {
+    findTrialById: (_context, id) => trialRows.find((row) => row.id === id) ?? null,
+    getLatestTrial: () => null, listTrials: () => [], listTrialsByHypothesisId: () => [],
+    insertTrial: () => { throw new Error("write forbidden"); },
+  } satisfies MiTrialRepository;
+  return { hypotheses: hypothesisRepo, evidence: evidenceRepo, knowledgeSource: source,
+    observations, trials };
 }
 
 async function fold(hypotheses: MiHypothesis[], evidenceRows: MiEvidence[]) {
@@ -94,6 +132,214 @@ describe("DEE-629 canonical PIT fold", () => {
     expect(state.hypotheses[0]?.supportingEvidence.map((row) => row.evidenceId)).toEqual(["ev-for"]);
     expect(state.hypotheses[0]?.contradictingEvidence.map((row) => row.evidenceId)).toEqual(["ev-against"]);
     expect(state.hypotheses[0]?.ordinalJudgment).toBe("CONTESTED");
+  });
+
+  it("accepts late-recorded old evidence only under a durable epistemic cutoff", async () => {
+    const a = hypothesis("00000000-0000-4000-8000-00000000000a", "a", 1, "2026-09-01T10:00:00.000Z");
+    const late = {
+      ...evidence(a, "FOR", "ev-late", "2026-09-01T10:01:00.000Z"),
+      createdAt: new Date("2026-09-01T10:01:00.000Z"),
+    };
+    const edge: KnowledgeEdge = {
+      id: "edge-confirmed", organizationId: ORG,
+      fromRef: "market_prediction:00000000-0000-4000-8000-00000000000b",
+      toRef: `hypothesis:${a.id}`, relationKind: "wf_predictive_supports_hypothesis",
+      confidence: "0.7300", strength: "1.0000", regimeScope: "",
+      failureCasesJson: "[]", hypothesisId: a.id, verified: true,
+      createdAt: new Date("2026-09-01T10:02:00.000Z"),
+      updatedAt: new Date("2026-09-01T10:03:00.000Z"),
+    };
+    const prediction: MarketPrediction = {
+      id: "00000000-0000-4000-8000-00000000000b", organizationId: ORG,
+      subjectRef: `hypothesis:${a.id}`, predictionJson: "{}",
+      predictedAt: new Date("2026-01-01T10:00:00.000Z"), outcomeJson: "{}",
+      verifiedAt: new Date("2026-01-01T11:30:00.000Z"), verificationResult: "confirmed",
+      contentDigest: "prediction-digest", createdAt: new Date("2026-09-01T10:00:30.000Z"),
+    };
+    const state = await foldCanonicalRuntimeIntelligenceStateV1({
+      context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      epistemicRecordCutoff: EPISTEMIC_CUTOFF,
+      epistemicAuthority: EPISTEMIC_AUTHORITY,
+      requireMarketTimestampedKnowledge: true,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation", expectedPath: "higher" }),
+    }, deps([a], [late], [edge], [prediction]));
+    expect(state.hypotheses[0]?.knowledgeRefs).toEqual([
+      { knowledgeEdgeId: "edge-confirmed", knowledgeState: "RESOLVED_CORRECT" },
+    ]);
+    expect(state.hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+  });
+
+  it("rejects a resolved edge whose market outcome is after the forecast PIT", async () => {
+    const a = hypothesis("00000000-0000-4000-8000-00000000000a", "a", 1, "2026-09-01T10:00:00.000Z");
+    const late = { ...evidence(a, "FOR", "ev-late"), createdAt: new Date("2026-09-01T10:01:00.000Z") };
+    const edge: KnowledgeEdge = {
+      id: "edge-future-outcome", organizationId: ORG,
+      fromRef: "market_prediction:00000000-0000-4000-8000-00000000000b",
+      toRef: `hypothesis:${a.id}`, relationKind: "wf_predictive_supports_hypothesis",
+      confidence: "0.7300", strength: "1.0000", regimeScope: "", failureCasesJson: "[]",
+      hypothesisId: a.id, verified: true, createdAt: new Date("2026-09-01T10:02:00.000Z"),
+      updatedAt: new Date("2026-09-01T10:03:00.000Z"),
+    };
+    const prediction: MarketPrediction = {
+      id: "00000000-0000-4000-8000-00000000000b", organizationId: ORG,
+      subjectRef: `hypothesis:${a.id}`, predictionJson: "{}",
+      predictedAt: new Date("2026-01-01T10:00:00.000Z"), outcomeJson: "{}",
+      verifiedAt: new Date("2026-01-01T12:00:00.001Z"), verificationResult: "confirmed",
+      contentDigest: "prediction-digest", createdAt: new Date("2026-09-01T10:00:30.000Z"),
+    };
+    const state = await foldCanonicalRuntimeIntelligenceStateV1({
+      context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      epistemicRecordCutoff: EPISTEMIC_CUTOFF,
+      epistemicAuthority: EPISTEMIC_AUTHORITY,
+      requireMarketTimestampedKnowledge: true,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation", expectedPath: "higher" }),
+    }, deps([a], [late], [edge], [prediction]));
+    expect(state.hypotheses[0]?.ordinalJudgment).toBe("WEAKENED");
+  });
+
+  it("rejects an unbound epistemic cutoff and unrelated prediction substitution", async () => {
+    const a = hypothesis("00000000-0000-4000-8000-00000000000a", "a", 1,
+      "2026-09-01T10:00:00.000Z");
+    await expect(foldCanonicalRuntimeIntelligenceStateV1({
+      context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      epistemicRecordCutoff: EPISTEMIC_CUTOFF,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation", expectedPath: "higher" }),
+    }, deps([a], []))).rejects.toThrow(/invalid dual-time cutoff/);
+
+    const edge: KnowledgeEdge = {
+      id: "edge-substitution", organizationId: ORG,
+      fromRef: "market_prediction:00000000-0000-4000-8000-00000000000b",
+      toRef: `hypothesis:${a.id}`, relationKind: "wf_predictive_supports_hypothesis",
+      confidence: "0.7300", strength: "1.0000", regimeScope: "", failureCasesJson: "[]",
+      hypothesisId: a.id, verified: true, createdAt: new Date("2026-09-01T10:02:00.000Z"),
+      updatedAt: new Date("2026-09-01T10:03:00.000Z"),
+    };
+    const unrelated: MarketPrediction = {
+      id: "00000000-0000-4000-8000-00000000000b", organizationId: "org-other",
+      subjectRef: "hypothesis:someone-else", predictionJson: "{}",
+      predictedAt: new Date("2026-01-01T10:00:00.000Z"), outcomeJson: "{}",
+      verifiedAt: new Date("2026-01-01T11:30:00.000Z"), verificationResult: "confirmed",
+      contentDigest: "prediction-digest", createdAt: new Date("2026-09-01T10:00:30.000Z"),
+    };
+    const state = await foldCanonicalRuntimeIntelligenceStateV1({
+      context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      epistemicRecordCutoff: EPISTEMIC_CUTOFF, epistemicAuthority: EPISTEMIC_AUTHORITY,
+      requireMarketTimestampedKnowledge: true,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation", expectedPath: "higher" }),
+    }, deps([a], [{ ...evidence(a, "FOR", "ev"),
+      createdAt: new Date("2026-09-01T10:01:00.000Z") }], [edge], [unrelated]));
+    expect(state.hypotheses[0]?.ordinalJudgment).toBe("WEAKENED");
+    expect(state.hypotheses[0]?.knowledgeRefs).toEqual([]);
+  });
+
+  it("exactly replays sealed knowledge and rejects mutable prediction or future observation", async () => {
+    const a = hypothesis("00000000-0000-4000-8000-00000000000a", "a", 1,
+      "2026-09-01T10:00:00.000Z");
+    const observation: PitObservation = {
+      id: "00000000-0000-4000-8000-00000000000c", organizationId: ORG,
+      sourceId: "00000000-0000-4000-8000-00000000000d",
+      observationKind: "msv_envelope", observationKey: "sealed-observation",
+      subjectRef: "BTC/USDT", schemaVersion: "mi-observation-v1", payloadJson: "{}",
+      eventTime: new Date("2026-01-01T11:30:00.000Z"),
+      ingestTime: new Date("2026-09-01T10:01:00.000Z"), observedBy: "operator",
+      revisionOf: null, revisionSeq: 1, contentDigest: "observation-digest",
+      createdAt: new Date("2026-09-01T10:01:01.000Z"),
+    };
+    const trial: MiTrial = {
+      id: "00000000-0000-4000-8000-00000000000e", organizationId: ORG,
+      hypothesisId: a.id, hypothesisKey: a.hypothesisKey,
+      hypothesisDefinitionDigest: a.definitionDigest, researchProgram: "sealed",
+      eventTime: new Date("2026-01-01T10:00:00.000Z"),
+      ingestTime: new Date("2026-09-01T10:00:30.000Z"), registeredBy: "operator",
+      seq: 1, contentDigest: "trial-digest",
+      createdAt: new Date("2026-09-01T10:00:31.000Z"),
+    };
+    const sealedEvidence = {
+      ...evidence(a, "FOR", "ev-sealed", "2026-09-01T10:01:30.000Z"),
+      observationRefsJson: JSON.stringify([{ observationId: observation.id }]),
+      trialRegistrationRef: trial.id,
+      createdAt: new Date("2026-09-01T10:01:31.000Z"),
+    };
+    const prediction: MarketPrediction = {
+      id: "00000000-0000-4000-8000-00000000000b", organizationId: ORG,
+      subjectRef: `hypothesis:${a.id}`, predictionJson: "{}",
+      predictedAt: new Date("2026-01-01T10:00:00.000Z"), outcomeJson: "{}",
+      verifiedAt: new Date("2026-01-01T11:30:00.000Z"), verificationResult: "confirmed",
+      contentDigest: "prediction-digest", createdAt: new Date("2026-09-01T10:00:30.000Z"),
+    };
+    const edge: KnowledgeEdge = {
+      id: "edge-sealed", organizationId: ORG,
+      fromRef: `market_prediction:${prediction.id}`, toRef: `hypothesis:${a.id}`,
+      relationKind: "wf_predictive_supports_hypothesis", confidence: "0.7300",
+      strength: "1.0000", regimeScope: "", failureCasesJson: "[]",
+      hypothesisId: a.id, verified: true,
+      createdAt: new Date("2026-09-01T10:02:00.000Z"),
+      updatedAt: new Date("2026-09-01T10:03:00.000Z"),
+    };
+    const sealedBody = {
+      schemaVersion: "waia.trader.historical_prerun_knowledge_bootstrap.v2" as const,
+      organizationId: ORG, runId: "sealed-run", releaseSha: "a".repeat(40),
+      surfaceKey: "BTCUSDT:30", selectedHypothesisType: "trend_continuation" as const,
+      hypothesisId: a.id, hypothesisKey: a.hypothesisKey,
+      hypothesisDefinitionDigest: a.definitionDigest,
+      hypothesisCreatedAt: a.createdAt.toISOString(), lifecycleId: `life-${a.id}`,
+      lifecycleContentDigest: `life-digest-${a.id}`, lifecycleState: "VALIDATED" as const,
+      lifecycleCreatedAt: "2026-01-01T10:10:00.000Z",
+      evidence: { id: sealedEvidence.id, contentDigest: sealedEvidence.contentDigest,
+        eventTime: sealedEvidence.eventTime.toISOString(),
+        ingestTime: sealedEvidence.ingestTime.toISOString(),
+        createdAt: sealedEvidence.createdAt.toISOString() },
+      observation: { id: observation.id, contentDigest: observation.contentDigest,
+        eventTime: observation.eventTime.toISOString(),
+        ingestTime: observation.ingestTime.toISOString(),
+        createdAt: observation.createdAt.toISOString() },
+      trial: { id: trial.id, contentDigest: trial.contentDigest,
+        eventTime: trial.eventTime.toISOString(), ingestTime: trial.ingestTime.toISOString(),
+        createdAt: trial.createdAt.toISOString() },
+      predictionId: prediction.id,
+      predictionSealDigestHex: sealHistoricalMarketPredictionV1(prediction),
+      edgeId: edge.id, edgeSealDigestHex: sealHistoricalKnowledgeEdgeV1(edge),
+      marketPitBoundary: AS_OF.toISOString(),
+    };
+    const sealed = { ...sealedBody,
+      snapshotContentDigestHex:
+        computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1(sealedBody) };
+    const input = {
+      context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      epistemicRecordCutoff: EPISTEMIC_CUTOFF, epistemicAuthority: EPISTEMIC_AUTHORITY,
+      requireMarketTimestampedKnowledge: true, sealedHistoricalKnowledge: sealed,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation" as const,
+        expectedPath: "higher" }),
+    };
+    const valid = deps([a], [sealedEvidence], [edge], [prediction], [observation], [trial]);
+    expect((await foldCanonicalRuntimeIntelligenceStateV1(input, valid))
+      .hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+
+    const mutatedPrediction = { ...prediction,
+      outcomeJson: "{\"changed\":true}",
+      verifiedAt: new Date("2026-01-01T11:00:00.000Z") };
+    await expect(foldCanonicalRuntimeIntelligenceStateV1(input,
+      deps([a], [sealedEvidence], [edge], [mutatedPrediction], [observation], [trial])))
+      .rejects.toThrow(/sealed market prediction authority mismatch/);
+
+    const futureObservation = {
+      ...observation,
+      eventTime: new Date("2026-01-01T12:00:00.001Z"),
+    };
+    await expect(foldCanonicalRuntimeIntelligenceStateV1({
+      ...input,
+      sealedHistoricalKnowledge: {
+        ...sealed,
+        observation: { ...sealed.observation,
+          eventTime: futureObservation.eventTime.toISOString() },
+        snapshotContentDigestHex: computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1({
+          ...sealedBody,
+          observation: { ...sealed.observation,
+            eventTime: futureObservation.eventTime.toISOString() },
+        }),
+      },
+    }, deps([a], [sealedEvidence], [edge], [prediction], [futureObservation], [trial])))
+      .rejects.toThrow(/sealed observation authority mismatch/);
   });
 
   it("fails closed on cross-organization and missing lifecycle rows", async () => {

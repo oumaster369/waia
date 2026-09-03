@@ -907,7 +907,8 @@ async function produceHistoricalSimulationNextCycleV2(input: Readonly<{ tx: post
     FROM trader_historical_simulation_reason_ledger_v2 WHERE organization_id=${scope.organizationId}::uuid
       AND account_id=${scope.accountId} AND run_id=${scope.runId} AND cycle_sequence=${input.previousCursor.nextCycleSequence - 1}`)[0]?.entry_json ?? null : null;
   const knowledge = createHistoricalSimulationPostgresKnowledgeReadPortV2({ sql: input.tx,
-    organizationId: scope.organizationId, symbol: scope.split === "DEVELOPMENT" || scope.split === "WALK_FORWARD"
+    organizationId: scope.organizationId, runId: scope.runId,
+    symbol: scope.split === "DEVELOPMENT" || scope.split === "WALK_FORWARD"
       ? source.sealedCycle.closedBar.symbol.replace("/", "") : "",
     appliedClosureWatermarkUtc: runtime.learning.appliedClosureWatermarkUtc });
   const authorityPort = Object.freeze({ async load() { return source.decisionAuthorities; } });

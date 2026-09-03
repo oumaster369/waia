@@ -18,6 +18,8 @@ import {
 } from "./km-four-surface-production-bootstrap-v2";
 import { INTERNAL_persistScientificAdmissionFourSurfaceV2 } from
   "./scientific-admission-four-surface-repository-postgres-v2";
+import type { ScientificAdmissionFourSurfaceReceiptV2 } from
+  "./scientific-admission-four-surface-v2";
 
 export const KM_FOUR_SURFACE_PRODUCTION_PREFLIGHT_V2 =
   "km-four-surface-production-preflight/v2" as const;
@@ -48,6 +50,15 @@ export type KmFourSurfaceScientificAdmissionProductionResultV2 = Readonly<{
   sourceFourSurfaceAuthorityContentDigestHex: string;
   evidenceSemanticDigestHex: string;
   contentDigestHex: string;
+}>;
+
+export type InternalKmFourSurfaceScientificAdmissionProductionV2 = Readonly<{
+  authority: KmFourSurfaceProductionAuthorityV2;
+  admission: Readonly<{
+    id: string;
+    insertedNew: boolean;
+    receipt: ScientificAdmissionFourSurfaceReceiptV2;
+  }>;
 }>;
 
 type LoadedDevelopmentSurface = Readonly<{
@@ -305,14 +316,11 @@ export function createKmFourSurfaceScientificAdmissionProductionV2(
       organizationId: input.organizationId,
       runId: reserved.runId,
     }, async (connection) => {
-      const authority = await prepareInternal(
-        input,
-        productionDependenciesForHeldConnection(connection),
-      );
-      const persisted = await INTERNAL_persistScientificAdmissionFourSurfaceV2(
+      const prepared = await INTERNAL_prepareKmFourSurfaceScientificAdmissionWithHeldPostgresV2(
         connection,
-        authority,
+        input,
       );
+      const persisted = prepared.admission;
       return Object.freeze({
         id: persisted.id,
         insertedNew: persisted.insertedNew,
@@ -329,6 +337,25 @@ export function createKmFourSurfaceScientificAdmissionProductionV2(
         contentDigestHex: persisted.receipt.contentDigestHex,
       });
     }));
+}
+
+/** Internal DEE-919 composition point. Caller must already hold the run lock. */
+export async function INTERNAL_prepareKmFourSurfaceScientificAdmissionWithHeldPostgresV2(
+  connection: postgres.Sql,
+  input: KmFourSurfaceProductionPreflightInputV2,
+): Promise<InternalKmFourSurfaceScientificAdmissionProductionV2> {
+  if (typeof (connection as unknown as { release?: unknown }).release !== "function") {
+    throw new Error("KM_FOUR_SURFACE_PRODUCTION_PREFLIGHT_REFUSED:DEDICATED_SESSION_REQUIRED");
+  }
+  const authority = await prepareInternal(
+    input,
+    productionDependenciesForHeldConnection(connection),
+  );
+  const admission = await INTERNAL_persistScientificAdmissionFourSurfaceV2(
+    connection,
+    authority,
+  );
+  return Object.freeze({ authority, admission });
 }
 
 /** TEST_ONLY ordering seam; intentionally not re-exported from the qualification index. */
