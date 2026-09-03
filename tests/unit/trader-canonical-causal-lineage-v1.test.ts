@@ -18,8 +18,16 @@ import {
 import { buildIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/intelligence-records-service";
 import { admitResearchForecastDecisionConstruction } from "./forecast-decision-construction-test-helper";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { parseCanonicalCausalLineageV1 } from "@/lib/trader/intelligence/causal-lineage/canonical-causal-lineage-v1";
 
 const PIT = "2026-01-01T12:00:00.000Z";
+const EPISTEMIC_CUTOFF = "2026-01-02T12:00:00.000Z";
+const EPISTEMIC_AUTHORITY = Object.freeze({
+  schemaVersion: "waia.trader.historical_four_surface_ratified_admission.v2" as const,
+  ratifiedAdmissionId: "11111111-1111-4111-8111-111111111111",
+  authorityContentDigestHex: "a".repeat(64),
+  createdAt: EPISTEMIC_CUTOFF,
+});
 
 function reconstruction(): ReconstructionSnapshot {
   return {
@@ -36,11 +44,26 @@ function reconstruction(): ReconstructionSnapshot {
   };
 }
 
-function buildFixture(includeUnrelatedEvidence = false) {
+function buildFixture(input: Readonly<{
+  includeUnrelatedEvidence?: boolean;
+  historicalDualTime?: boolean;
+}> | boolean = {}) {
+  const includeUnrelatedEvidence = typeof input === "boolean"
+    ? input
+    : input.includeUnrelatedEvidence ?? false;
+  const historicalDualTime = typeof input === "boolean"
+    ? false
+    : input.historicalDualTime ?? false;
   const authority = buildRuntimeKnowledgeAuthorityV1({
     organizationId: "org-1",
     symbol: "BTC/USDT",
     pitAnchor: PIT,
+    ...(historicalDualTime
+      ? {
+          epistemicRecordCutoff: EPISTEMIC_CUTOFF,
+          epistemicAuthority: EPISTEMIC_AUTHORITY,
+        }
+      : {}),
     knowledgeSemanticDigest: "knowledge-digest",
     hypotheses: [{
       hypothesisId: "hyp-1",
@@ -53,7 +76,7 @@ function buildFixture(includeUnrelatedEvidence = false) {
       ordinalJudgment: "SUPPORTED",
       expectedPath: "continuation_higher",
       invalidationConditions: ["structure_break"],
-      supportingEvidence: [{ evidenceId: "ev-for", contentDigest: "digest-for", direction: "FOR", eventTime: "2026-01-01T11:00:00.000Z", ingestTime: "2026-01-01T11:01:00.000Z" }],
+      supportingEvidence: [{ evidenceId: "ev-for", contentDigest: "digest-for", direction: "FOR", eventTime: "2026-01-01T11:00:00.000Z", ingestTime: historicalDualTime ? "2026-01-02T11:01:00.000Z" : "2026-01-01T11:01:00.000Z" }],
       contradictingEvidence: [{ evidenceId: "ev-against", contentDigest: "digest-against", direction: "AGAINST", eventTime: "2026-01-01T11:10:00.000Z", ingestTime: "2026-01-01T11:11:00.000Z" }],
       knowledgeRefs: [{ knowledgeEdgeId: "edge-1", knowledgeState: "RESOLVED_CORRECT" }],
       supersedesHypothesisIds: [],
@@ -157,5 +180,131 @@ describe("DEE-626 canonical causal lineage", () => {
     const first = buildFixture();
     const second = buildFixture(true);
     expect(second.hypothesisSet.activeHypothesis?.canonicalCausalLineageJson).toBe(first.hypothesisSet.activeHypothesis?.canonicalCausalLineageJson);
+  });
+
+  it("preserves legacy/live bytes by omitting historical dual-time fields", () => {
+    const lineageJson = buildFixture().hypothesisSet.activeHypothesis!
+      .canonicalCausalLineageJson!;
+    const lineage = JSON.parse(lineageJson) as Record<string, unknown>;
+    expect(lineage).not.toHaveProperty("epistemicRecordCutoff");
+    expect(lineage).not.toHaveProperty("epistemicAuthority");
+    expect(parseCanonicalCausalLineageV1(lineageJson)).toEqual(lineage);
+  });
+
+  it("binds historical evidence availability to the durable epistemic authority", () => {
+    const fixture = buildFixture({ historicalDualTime: true });
+    const active = fixture.hypothesisSet.activeHypothesis!;
+    const forecast = forecastsFor(fixture)[0]!;
+    const lineage = parseCanonicalCausalLineageV1(
+      active.canonicalCausalLineageJson!,
+    );
+    expect(forecast).toBeDefined();
+    expect(lineage.epistemicRecordCutoff).toBe(EPISTEMIC_CUTOFF);
+    expect(lineage.epistemicAuthority).toEqual(EPISTEMIC_AUTHORITY);
+    expect(lineage.supportingEvidence[0]!.eventTime).toBe(
+      "2026-01-01T11:00:00.000Z",
+    );
+    expect(lineage.supportingEvidence[0]!.ingestTime).toBe(
+      "2026-01-02T11:01:00.000Z",
+    );
+  });
+
+  it("rejects future-market evidence and evidence recorded after the epistemic cutoff", () => {
+    const lineageJson = buildFixture({ historicalDualTime: true }).hypothesisSet
+      .activeHypothesis!.canonicalCausalLineageJson!;
+    const rehash = (mutate: (lineage: Record<string, unknown>) => void) => {
+      const lineage = JSON.parse(lineageJson) as Record<string, unknown>;
+      mutate(lineage);
+      delete lineage.contentDigest;
+      lineage.contentDigest = createHash("sha256")
+        .update(canonicalizeSemanticJsonString(lineage), "utf8")
+        .digest("hex");
+      return canonicalizeSemanticJsonString(lineage);
+    };
+    const mutateFirstSupportingEvidence = (
+      lineage: Record<string, unknown>,
+      field: "eventTime" | "ingestTime",
+      value: string,
+    ) => {
+      const evidence = lineage.supportingEvidence as Array<Record<string, unknown>>;
+      evidence[0] = { ...evidence[0], [field]: value };
+    };
+
+    expect(() => parseCanonicalCausalLineageV1(rehash((lineage) =>
+      mutateFirstSupportingEvidence(
+        lineage,
+        "eventTime",
+        "2026-01-01T12:00:00.001Z",
+      ),
+    ))).toThrow("CANONICAL_CAUSAL_LINEAGE_EVIDENCE_INVALID");
+    expect(() => parseCanonicalCausalLineageV1(rehash((lineage) =>
+      mutateFirstSupportingEvidence(
+        lineage,
+        "ingestTime",
+        "2026-01-02T12:00:00.001Z",
+      ),
+    ))).toThrow("CANONICAL_CAUSAL_LINEAGE_EVIDENCE_INVALID");
+  });
+
+  it("rejects an unbound or mutated historical epistemic authority", () => {
+    const lineageJson = buildFixture({ historicalDualTime: true }).hypothesisSet
+      .activeHypothesis!.canonicalCausalLineageJson!;
+    const lineage = JSON.parse(lineageJson) as Record<string, unknown>;
+    lineage.epistemicAuthority = {
+      ...lineage.epistemicAuthority as Record<string, unknown>,
+      authorityContentDigestHex: "b".repeat(64),
+    };
+    delete lineage.contentDigest;
+    lineage.contentDigest = createHash("sha256")
+      .update(canonicalizeSemanticJsonString(lineage), "utf8")
+      .digest("hex");
+    // A valid but different authority is still a different lineage. Its content
+    // cannot be substituted while retaining the previously bound digest.
+    expect(canonicalizeSemanticJsonString(lineage)).not.toBe(lineageJson);
+
+    delete lineage.epistemicAuthority;
+    delete lineage.contentDigest;
+    lineage.contentDigest = createHash("sha256")
+      .update(canonicalizeSemanticJsonString(lineage), "utf8")
+      .digest("hex");
+    expect(() => parseCanonicalCausalLineageV1(
+      canonicalizeSemanticJsonString(lineage),
+    )).toThrow("CANONICAL_CAUSAL_LINEAGE_UNEXPECTED_FIELD");
+  });
+
+  it.each([null, false, 0, "", "not-an-authority"])(
+    "rejects a rehashed falsy/non-object epistemic authority: %j",
+    (epistemicAuthority) => {
+      const lineage = JSON.parse(
+        buildFixture({ historicalDualTime: true }).hypothesisSet
+          .activeHypothesis!.canonicalCausalLineageJson!,
+      ) as Record<string, unknown>;
+      lineage.epistemicAuthority = epistemicAuthority;
+      delete lineage.contentDigest;
+      lineage.contentDigest = createHash("sha256")
+        .update(canonicalizeSemanticJsonString(lineage), "utf8")
+        .digest("hex");
+      expect(() => parseCanonicalCausalLineageV1(
+        canonicalizeSemanticJsonString(lineage),
+      )).toThrow("CANONICAL_CAUSAL_LINEAGE_EPISTEMIC_AUTHORITY_INVALID");
+    },
+  );
+
+  it("rejects unexpected fields inside a rehashed epistemic authority", () => {
+    const lineage = JSON.parse(
+      buildFixture({ historicalDualTime: true }).hypothesisSet
+        .activeHypothesis!.canonicalCausalLineageJson!,
+    ) as Record<string, unknown>;
+    lineage.epistemicAuthority = {
+      ...lineage.epistemicAuthority as Record<string, unknown>,
+      bypass: true,
+    };
+    delete lineage.contentDigest;
+    lineage.contentDigest = createHash("sha256")
+      .update(canonicalizeSemanticJsonString(lineage), "utf8")
+      .digest("hex");
+    expect(() => parseCanonicalCausalLineageV1(
+      canonicalizeSemanticJsonString(lineage),
+    )).toThrow("CANONICAL_CAUSAL_LINEAGE_EPISTEMIC_AUTHORITY_INVALID");
   });
 });

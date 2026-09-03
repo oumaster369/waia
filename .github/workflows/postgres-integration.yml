@@ -37,11 +37,25 @@ on:
       - "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"
       - "lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1.ts"
       - "tests/integration/postgres-forecast-contract-binding-v1.test.ts"
+      - "lib/trader/historical-simulation-v2/bootstrap-source-loader-v2.ts"
+      - "lib/trader/historical-simulation-v2/canonical-verification-receipt-postgres-v2.ts"
+      - "lib/trader/historical-simulation-v2/postgres-session-transaction-v2.ts"
+      - "lib/trader/research/execopp-qualification/km-four-surface-contract-v2.ts"
+      - "lib/trader/research/execopp-qualification/km-four-surface-production-bootstrap-v2.ts"
+      - "lib/trader/research/execopp-qualification/km-four-surface-production-preflight-v2.ts"
+      - "lib/trader/research/execopp-qualification/scientific-admission-four-surface-v2.ts"
+      - "lib/trader/research/execopp-qualification/scientific-admission-four-surface-repository-postgres-v2.ts"
+      - "tests/integration/postgres-km-four-surface-production-preflight-v2.test.ts"
+      - "tests/integration/postgres-scientific-admission-four-surface-v2.test.ts"
+      - "tests/unit/postgres-session-transaction-v2.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
 
 env:
   DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
+  # Canonical verification is release-bound. For PRs, github.sha is the
+  # synthetic merge commit, so bind receipts to the exact reviewed head.
+  WAIA_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   integration:
@@ -94,3 +108,6 @@ jobs:
           tests/integration/fhv-execution-v2-historical-symbol-boundary.test.ts
           tests/integration/postgres-scientific-admission-receipt-v1.test.ts
           tests/integration/postgres-forecast-contract-binding-v1.test.ts
+          tests/integration/postgres-km-four-surface-production-preflight-v2.test.ts
+          tests/integration/postgres-scientific-admission-four-surface-v2.test.ts
+          tests/unit/postgres-session-transaction-v2.test.ts

@@ -5,6 +5,10 @@ import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import * as pgSchema from "@/db/schema.postgres";
+import {
+  bindPostgresReservedSession,
+  withPostgresSessionTransaction,
+} from "@/db/postgres-session-transaction";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/canonical-observation-v1";
 import { processCanonicalPitObservationV1Postgres } from "@/lib/trader/mi/canonical-pit-service-postgres";
@@ -13,7 +17,9 @@ import {
   listObservationsPostgres,
 } from "@/lib/trader/mi/observation-repository-postgres";
 import {
+  buildCanonicalGatewayPitReceiptV1,
   persistCanonicalAvailableGatewayV1Postgres,
+  persistCanonicalAvailableGatewayWithinTransactionV1Postgres,
   persistCanonicalMeasurementDefinitionV1Postgres,
   persistCanonicalMeasurementValueLineageV1Postgres,
 } from "@/lib/trader/mi/canonical-pit-repository-postgres";
@@ -23,6 +29,8 @@ import {
 } from "@/lib/trader/mi/measurement-lineage-v1";
 import { MI_OBSERVATION_SCHEMA_VERSION } from "@/lib/trader/mi/observation.types";
 import { resolveAndPersistTrustAsOfV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
+import { createPostgresMiSourceProvenanceService } from
+  "@/lib/trader/mi/source-provenance-service";
 import { OBSERVATION_SCHEMA_VERSION, type NormalizedObservation } from "@/lib/trader/market-data/observation-types";
 import { persistCanonicalPitReplayBatchV1Postgres } from "@/lib/trader/market-data/replay/canonical-pit-replay";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
@@ -50,6 +58,7 @@ const canonicalTables = [
 ] as const;
 
 async function clearOrg(sqlClient: postgres.Sql, organizationId: string): Promise<void> {
+  await sqlClient.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
   for (const table of canonicalTables) {
     await sqlClient.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
   }
@@ -79,6 +88,9 @@ async function clearOrg(sqlClient: postgres.Sql, organizationId: string): Promis
     await sqlClient.unsafe("DELETE FROM trader_mi_source WHERE organization_id = $1::uuid", [
       organizationId,
     ]);
+    await sqlClient.unsafe("DELETE FROM audit_logs WHERE organization_id = $1::uuid", [
+      organizationId,
+    ]);
   } finally {
     await sqlClient.unsafe(
       "ALTER TABLE trader_mi_source_trust ENABLE TRIGGER trader_mi_source_trust_block_delete",
@@ -92,6 +104,7 @@ async function clearOrg(sqlClient: postgres.Sql, organizationId: string): Promis
     for (const table of [...canonicalTables].reverse()) {
       await sqlClient.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`);
     }
+    await sqlClient.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
   }
 }
 
@@ -386,6 +399,160 @@ describe.skipIf(!enabled || !url)("PostgreSQL canonical PIT lineage V1 (DEE-682)
         `;
       }),
     ).rejects.toThrow(/MeasurementValue input lineage mismatch/);
+  });
+
+  it("persists the canonical gateway receipt through a bound reserved session", async () => {
+    const trust = await resolveAndPersistTrustAsOfV1Postgres(
+      db,
+      { organizationId: orgA },
+      { sourceId: SOURCE_A, anchorTime: ANCHOR },
+    );
+    const reserved = await sqlClient.reserve();
+    try {
+      const held = bindPostgresReservedSession(sqlClient, reserved);
+      const stored = await withPostgresSessionTransaction(
+        held,
+        "SERIALIZABLE",
+        (transaction) => persistCanonicalAvailableGatewayWithinTransactionV1Postgres(
+          drizzle(transaction, { schema: pgSchema }) as never,
+          { organizationId: orgA },
+          {
+          sourceId: SOURCE_A,
+          observationKind: "ohlcv_bar",
+          subjectRef: "BTCUSDT",
+          payloadCanonical: {
+            barCount: 1,
+            latestClose: "100.50000000",
+            latestBarCloseTime: "2026-08-23T09:59:59.000Z",
+          },
+          eventTime: new Date("2026-08-23T09:59:59.000Z"),
+          availableAt: ANCHOR,
+          ingestTime: ANCHOR,
+          canonicalProviderId: "htx_spot",
+          trustAsOfReceiptId: trust.receipt.id,
+          normalizedInputDigest: hex64("org-a-reserved-quote-input"),
+          },
+        ),
+      );
+      expect(stored.receipt).toMatchObject({ status: "AVAILABLE", reason: null });
+    } finally {
+      reserved.release();
+    }
+  });
+
+  it("persists a late-recorded historical OHLCV authority on one held backend", async () => {
+    const reserved = await sqlClient.reserve();
+    try {
+      const held = bindPostgresReservedSession(sqlClient, reserved);
+      const stored = await withPostgresSessionTransaction(
+        held,
+        "SERIALIZABLE",
+        async (transaction) => {
+          const txDb = drizzle(transaction, { schema: pgSchema }) as WaiaPostgresDb;
+          const service = createPostgresMiSourceProvenanceService(txDb, {
+            actorType: "admin",
+            actorId: USER_A,
+          });
+          const recordTime = new Date();
+          const results = [];
+          for (const symbol of ["BTCUSDT", "ETHUSDT"] as const) {
+            const source = await service.createSource({ organizationId: orgA }, {
+              venue: "htx",
+              feedKind: "ohlcv_bar",
+              symbol,
+              status: "active",
+            });
+            const revision = await service.appendTrustRevision({ organizationId: orgA }, {
+              sourceId: source.id,
+              trustScore: "1.00000000",
+              rationale: "qualified historical replay",
+              recordedBy: "historical-ratification:run:release",
+              eventTime: new Date("2026-01-01T00:01:00.000Z"),
+              ingestTime: recordTime,
+            });
+            const trust = await resolveAndPersistTrustAsOfV1Postgres(
+              txDb,
+              { organizationId: orgA },
+              { sourceId: source.id, anchorTime: recordTime },
+            );
+            expect(trust.receipt).toMatchObject({
+              status: "RESOLVED",
+              selectedTrustRevisionId: revision.id,
+            });
+            results.push(await persistCanonicalAvailableGatewayWithinTransactionV1Postgres(
+              txDb,
+              { organizationId: orgA },
+              {
+                sourceId: source.id,
+                observationKind: "ohlcv_bar",
+                subjectRef: symbol,
+                payloadCanonical: {
+                  barCount: 1,
+                  latestClose: "100.50000000",
+                  latestBarCloseTime: "2026-01-01T00:01:00.000Z",
+                },
+                eventTime: new Date("2026-01-01T00:01:00.000Z"),
+                availableAt: recordTime,
+                ingestTime: recordTime,
+                canonicalProviderId: "htx_spot",
+                trustAsOfReceiptId: trust.receipt.id,
+                normalizedInputDigest: hex64(`held-historical-ohlcv:${symbol}`),
+              },
+            ));
+          }
+          return results;
+        },
+      );
+      expect(stored).toHaveLength(2);
+      expect(stored[0]!.receipt).toMatchObject({ status: "AVAILABLE", reason: null });
+      expect(stored[1]!.receipt).toMatchObject({ status: "AVAILABLE", reason: null });
+      for (const result of stored) {
+        const { id, contentDigest, ...body } = result.receipt;
+        expect(id).toBe(contentDigest);
+        expect(contentDigest).toBe(computeStableJsonDigest(body));
+        const rows = await sqlClient<Array<Readonly<{ receipt_json: unknown }>>>`
+          SELECT receipt_json FROM trader_mi_gateway_pit_receipt_v1
+          WHERE organization_id=${orgA}::uuid AND id=${id}
+        `;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.receipt_json).toEqual(result.receipt);
+      }
+    } finally {
+      reserved.release();
+    }
+  });
+
+  it("refuses non-canonical UUIDs and invalid observation time before receipt persistence", async () => {
+    expect(() => buildCanonicalGatewayPitReceiptV1({
+      organizationId: orgA.toUpperCase(),
+      providerId: "htx_spot",
+      gatewayKind: "ohlcv_bar",
+      status: "AVAILABLE",
+      reason: null,
+      sourceId: SOURCE_A,
+      trustAsOfReceiptId: hex64("invalid-uuid-trust"),
+      observationId: randomUUID(),
+      observationContentDigest: hex64("invalid-uuid-observation"),
+      normalizedInputDigest: hex64("invalid-uuid-input"),
+    })).toThrow("CANONICAL_GATEWAY_RECEIPT_INVALID:UUID");
+
+    const trust = await resolveAndPersistTrustAsOfV1Postgres(
+      db,
+      { organizationId: orgA },
+      { sourceId: SOURCE_A, anchorTime: ANCHOR },
+    );
+    await expect(persistCanonicalAvailableGatewayV1Postgres(db, { organizationId: orgA }, {
+      sourceId: SOURCE_A,
+      observationKind: "ohlcv_bar",
+      subjectRef: "BTCUSDT",
+      payloadCanonical: { barCount: 1 },
+      eventTime: new Date(Number.NaN),
+      availableAt: ANCHOR,
+      ingestTime: ANCHOR,
+      canonicalProviderId: "htx_spot",
+      trustAsOfReceiptId: trust.receipt.id,
+      normalizedInputDigest: hex64("invalid-time-input"),
+    })).rejects.toThrow("eventTime");
   });
 
   it("persists inert Measurement lineage for the admitted internal MSV primitive", async () => {

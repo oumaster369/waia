@@ -228,6 +228,10 @@ export async function insertTrustRevisionPostgres(
     rationale: row.rationale,
     recordedBy: row.recordedBy,
     eventTime: row.eventTime,
+    // Availability is the trusted record/ingest boundary used by the canonical
+    // trust-as-of resolver. New revisions must never rely on the legacy nullable
+    // default, otherwise a genuinely persisted revision is invisible at replay.
+    availableAt: row.ingestTime,
     ingestTime: row.ingestTime,
     revisionOf: row.revisionOf,
     revisionSeq: row.revisionSeq,

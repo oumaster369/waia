@@ -21,10 +21,12 @@ import type {
   HistoricalMaturedClosureV2,
 } from "@/lib/trader/backtest/historical-simulation-v2";
 import { computeHistoricalForecastPitKnowledgeDigestV2,
-  type HistoricalForecastPitKnowledgeRowV2 } from "./pit-forecast-input-producer-v2";
-
-export const HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 =
-  "waia.trader.historical_simulation_knowledge_binding.v2" as const;
+  requireHistoricalForecastPitKnowledgeRowV2,
+  type HistoricalForecastPitKnowledgeRowV2 } from "./knowledge-snapshot-binding-v2";
+export { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from
+  "./knowledge-snapshot-binding-v2";
+import { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from
+  "./knowledge-snapshot-binding-v2";
 
 type KnowledgeRowV2 = HistoricalForecastPitKnowledgeRowV2;
 
@@ -57,23 +59,10 @@ function requireDigest(value: string, field: string): void {
 }
 
 function parseFutureEvidence(row: KnowledgeRowV2): ParsedFutureEvidenceV2 {
-  let payload: Record<string, unknown>;
-  try {
-    payload = JSON.parse(row.source_record_ids_json) as Record<string, unknown>;
-  } catch {
-    throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CORRUPTION:sourceRecordIdsJson");
-  }
-  const visibleFromPitAnchor = payload.visible_from_cycle_pit_anchor;
-  const forecastAuthorityContentDigestHex =
-    payload.forecast_runtime_authority_content_digest_hex;
-  const outcomeContentDigestHex = payload.forecast_outcome_content_digest_hex;
-  if (
-    typeof visibleFromPitAnchor !== "string" ||
-    typeof forecastAuthorityContentDigestHex !== "string" ||
-    typeof outcomeContentDigestHex !== "string"
-  ) {
-    throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CORRUPTION:futureEvidenceIdentity");
-  }
+  const required = requireHistoricalForecastPitKnowledgeRowV2(row);
+  const visibleFromPitAnchor = required.visibleFromPitAnchor;
+  const forecastAuthorityContentDigestHex = required.forecastAuthorityContentDigestHex;
+  const outcomeContentDigestHex = required.outcomeContentDigestHex;
   canonicalUtc(visibleFromPitAnchor, "visibleFromPitAnchor");
   requireDigest(forecastAuthorityContentDigestHex, "forecastAuthorityContentDigestHex");
   requireDigest(outcomeContentDigestHex, "outcomeContentDigestHex");
@@ -83,11 +72,14 @@ function parseFutureEvidence(row: KnowledgeRowV2): ParsedFutureEvidenceV2 {
 
 function snapshotDigest(input: {
   organizationId: string;
+  runId: string;
   symbol: string;
   asOf: string;
   rows: readonly KnowledgeRowV2[];
 }): string {
-  return computeHistoricalForecastPitKnowledgeDigestV2(input.organizationId, input.symbol, input.asOf, input.rows);
+  return computeHistoricalForecastPitKnowledgeDigestV2(
+    input.organizationId, input.runId, input.symbol, input.asOf, input.rows,
+  );
 }
 
 export type HistoricalSimulationKnowledgeCheckpointStoreV2 = Readonly<{
@@ -136,12 +128,13 @@ export type HistoricalSimulationPostgresKnowledgePortV2 = HistoricalKnowledgePor
 function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readonly<{
   sql: postgres.Sql;
   organizationId: string;
+  runId: string;
   symbol: string;
   forecastProducer?: Omit<ForecastV2DurableProducerConfigV1, "sql">;
   appliedClosureWatermarkUtc?: string | null;
   checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
 }>): HistoricalSimulationPostgresKnowledgePortV2 {
-  if (!input.organizationId.trim() || !input.symbol.trim()) {
+  if (!input.organizationId.trim() || !input.runId.trim() || !input.symbol.trim()) {
     throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_INVALID:scope");
   }
   const producer = input.forecastProducer
@@ -160,8 +153,10 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
              idempotency_key,provenance_json,terminal_reason,schema_version
       FROM trader_knowledge_confidence_update_record
       WHERE organization_id = ${input.organizationId}::uuid
+        AND run_id = ${input.runId}
         AND symbol = ${input.symbol}
-        AND update_model_version LIKE '%.forecast-v2-evidence-only'
+        AND update_model_version =
+          'waia.trader.knowledge_confidence_update_model.v1.forecast-v2-evidence-only'
         AND (source_record_ids_json::jsonb ->> 'visible_from_cycle_pit_anchor')::timestamptz
               <= ${asOf}::timestamptz
         AND resolved_at <= ${asOf}::timestamptz AND pit_evidence_boundary <= ${asOf}::timestamptz
@@ -183,6 +178,7 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
       asOf,
       contentDigestHex: snapshotDigest({
         organizationId: input.organizationId,
+        runId: input.runId,
         symbol: input.symbol,
         asOf,
         rows,
@@ -235,6 +231,9 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
       throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_REFUSED:READ_ONLY_FORECAST_ISSUANCE");
     }),
     async checkpoint(checkpointInput) {
+      if (checkpointInput.runId !== input.runId) {
+        throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CHECKPOINT_RUN_MISMATCH");
+      }
       const snapshot = await snapshotAsOf(checkpointInput.pitAnchor);
       const knowledgeInput: KnowledgeCheckpointInput = {
         organizationId: input.organizationId,
@@ -250,6 +249,9 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
       return Object.freeze({ snapshot, checkpointContentDigest });
     },
     async restoreCheckpoint(restoreInput) {
+      if (restoreInput.runId !== input.runId) {
+        throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CHECKPOINT_RUN_MISMATCH");
+      }
       const restored = await checkpointStore.restore({
         organizationId: input.organizationId,
         checkpointSeq: restoreInput.checkpointSeq,
@@ -275,7 +277,7 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
 }
 
 export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonly<{
-  sql: postgres.Sql; organizationId: string; symbol: string;
+  sql: postgres.Sql; organizationId: string; runId: string; symbol: string;
   forecastProducer: Omit<ForecastV2DurableProducerConfigV1, "sql">;
   checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
 }>): HistoricalSimulationPostgresKnowledgePortV2 {
@@ -284,7 +286,7 @@ export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonl
 
 /** Exact PIT read/closure/checkpoint port for replay of Forecast rows already persisted by 0189. */
 export function createHistoricalSimulationPostgresKnowledgeReadPortV2(input: Readonly<{
-  sql: postgres.Sql; organizationId: string; symbol: string;
+  sql: postgres.Sql; organizationId: string; runId: string; symbol: string;
   checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
   appliedClosureWatermarkUtc?: string | null;
 }>): Omit<HistoricalSimulationPostgresKnowledgePortV2, "processForecastCycle"> {

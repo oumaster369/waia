@@ -3,6 +3,11 @@ import { isDeepStrictEqual } from "node:util";
 
 import type postgres from "postgres";
 
+import { withPostgresSessionTransaction } from "@/db/postgres-session-transaction";
+import { withPostgresSerializableTransactionRetry } from
+  "@/db/postgres-session-transaction";
+import { parsePostgresTimestamptz } from "@/db/postgres-session-transaction";
+
 import { historicalInstrumentsMatch } from
   "@/lib/trader/symbols/historical-instrument";
 import { orgScopedPostgresPredicate } from "@/lib/waia-core/scope/org-context";
@@ -51,6 +56,7 @@ import {
 } from "@/lib/trader/intelligence/calibration/calibration-scorer";
 import type { ForecastRuntimeAuthorizedOutcomeV2 } from "./forecast-runtime-authority-v2";
 import {
+  assertHistoricalIntelligenceCycleAuthorityV2,
   issueForecastRuntimeV2,
   type ForecastRuntimeInputV2,
 } from "./forecast-runtime-authority-v2";
@@ -63,6 +69,25 @@ import {
   "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
 import { HISTORICAL_FORECAST_FAMILY_BOOTSTRAP_V2 } from
   "@/lib/trader/historical-simulation-v2/forecast-family-bootstrap-v2";
+import { loadHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/historical-simulation-v2/knowledge-snapshot-binding-v2";
+import { assertHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "./historical-knowledge-snapshot-authority-v2";
+import {
+  assertInformationSufficiencyReceiptV2,
+  assertRequiredInformationProfileV2,
+} from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
+import { canonicalJsonString } from "@/lib/trader/research/digest";
+import { requireHistoricalFourSurfaceRatifiedAdmissionV2 } from
+  "@/lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2";
+import {
+  computeCanonicalCycleCausalInputDigestV2,
+  parseCanonicalCycleCausalInputBundleV2,
+} from "@/lib/trader/intelligence/records/causal-input-bundle-v2";
+import { computeCycleEnvelopeContentDigest } from
+  "@/lib/trader/intelligence/records/serialize-intelligence-records";
+import type { TraderIntelligenceCycleEnvelopeRecord } from
+  "@/lib/trader/intelligence/records/intelligence-records.types";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -376,16 +401,14 @@ export async function persistPredictivePackageV2(
   input: PersistPredictivePackageV2Input,
 ): Promise<PersistPredictivePackageV2Result> {
   try {
-    return await sql.begin((tx) =>
-      persistPredictivePackageV2InTransaction(tx as unknown as postgres.Sql, pkg, input),
-    );
+    return await withPostgresSerializableTransactionRetry(sql, (tx) =>
+      persistPredictivePackageV2InTransaction(tx, pkg, input));
   } catch (error) {
     if ((error as { code?: string }).code !== "23505") {
       throw error;
     }
-    const recovered = await sql.begin((tx) =>
-      persistPredictivePackageV2InTransaction(tx as unknown as postgres.Sql, pkg, input),
-    );
+    const recovered = await withPostgresSerializableTransactionRetry(sql, (tx) =>
+      persistPredictivePackageV2InTransaction(tx, pkg, input));
     if (recovered.predictivePackageContentDigestHex !== digestHex(pkg.predictivePackageContentDigest)) {
       throw error;
     }
@@ -484,6 +507,22 @@ function validateRuntimeInputSource(
       input.historicalKnowledgeBootstrap) {
     throw new Error("[forecast-v2/persistence] historical proof on general runtime refused");
   }
+  const informationAuthority = input.runtimeInput.informationSufficiencyAuthority;
+  if (informationAuthority?.kind === "PROFILE_RECEIPT") {
+    const profile = assertRequiredInformationProfileV2(informationAuthority.profile);
+    const receipt = assertInformationSufficiencyReceiptV2(
+      informationAuthority.receipt,
+      profile,
+    );
+    const containsHistoricalDatasetTrust = receipt.evidenceInventory.some(
+      (evidence) => evidence.historyScope === "WALK_FORWARD_PREDICTIVE",
+    );
+    if (runtimeAuthorityClass === "GENERAL_FORECAST_V2" && containsHistoricalDatasetTrust) {
+      throw new Error(
+        "[forecast-v2/persistence] historical information proof on general runtime refused",
+      );
+    }
+  }
   if (!input.authorizedOutcome) throw new Error("[forecast-v2/persistence] runtime input requires authorized outcome");
   const replay = issueForecastRuntimeV2(input.runtimeInput);
   if (replay.status !== "FORECAST_AUTHORIZED" || !isDeepStrictEqual(replay, input.authorizedOutcome) ||
@@ -521,25 +560,248 @@ async function verifyHistoricalKnowledgeProofV2(
     predictivePackageContentDigestHex:
       binding.selectedPredictivePackageContentDigestHex,
   });
+  const snapshotAuthority = runtime.historicalKnowledgeSnapshotAuthority
+    ? assertHistoricalKnowledgeSnapshotAuthorityV2(
+        runtime.historicalKnowledgeSnapshotAuthority,
+      )
+    : null;
   if (
     computeSemanticSha256Hex(supplied) !== computeSemanticSha256Hex(expected) ||
     runtime.knowledgeEdgeId !== expected.knowledgeEdgeId ||
-    runtime.knowledgeContentDigestHex !== expected.contentDigestHex
+    !snapshotAuthority || snapshotAuthority.organizationId !== input.organizationId ||
+    snapshotAuthority.runId !== input.runId || snapshotAuthority.symbol !== input.symbol ||
+    snapshotAuthority.pitAnchor !== new Date(input.anchorClosedBarEpochMs).toISOString() ||
+    runtime.knowledgeContentDigestHex !== snapshotAuthority.knowledgeContentDigestHex
   ) {
     throw new Error("[forecast-v2/persistence] runtime knowledge lineage mismatch (fail closed)");
   }
   const rows = await sql<{
     from_ref: string; to_ref: string; relation_kind: string; confidence: string;
-    strength: string; regime_scope: string; failure_cases_json: string; verified: boolean;
+    strength: string; regime_scope: string; failure_cases_json: string;
+    hypothesis_id: string | null; verified: boolean;
   }[]>`
     SELECT from_ref, to_ref, relation_kind, confidence, strength,
-           regime_scope, failure_cases_json, verified
+           regime_scope, failure_cases_json, hypothesis_id::text AS hypothesis_id, verified
     FROM trader_knowledge_edges
     WHERE organization_id=${input.organizationId}::uuid
       AND id=${expected.knowledgeEdgeId}::uuid
     FOR SHARE
   `;
   assertHistoricalForecastKnowledgeBootstrapDurableRowV2(expected, rows[0]);
+  const durableSnapshotAuthority = await loadHistoricalKnowledgeSnapshotAuthorityV2(sql, {
+    organizationId: input.organizationId,
+    runId: input.runId,
+    symbol: input.symbol,
+    pitAnchor: snapshotAuthority.pitAnchor,
+  });
+  if (!isDeepStrictEqual(durableSnapshotAuthority, snapshotAuthority)) {
+    throw new Error("[forecast-v2/persistence] durable knowledge snapshot mismatch (fail closed)");
+  }
+}
+
+/** Replays the historical profile, receipt, source trust and 0194 dataset authority from DB. */
+export async function verifyHistoricalForecastInformationProofV2(
+  sql: postgres.Sql,
+  input: Readonly<{
+    organizationId: string;
+    runId: string;
+    cycleId: string;
+    symbol: string;
+    expectedDatasetAuthority?: Readonly<{
+      id: string;
+      datasetAuthorityDigestHex: string;
+      authorityContentDigestHex: string;
+      membershipContentDigestHex: string;
+      sealedCycleContentDigestHex: string;
+    }>;
+    runtimeInput: ForecastRuntimeInputV2;
+  }>,
+): Promise<void> {
+  const bound = input.runtimeInput.informationSufficiencyAuthority;
+  if (!bound || bound.kind !== "PROFILE_RECEIPT") {
+    throw new Error("[forecast-v2/persistence] historical information proof required (fail closed)");
+  }
+  const profile = assertRequiredInformationProfileV2(bound.profile);
+  const receipt = assertInformationSufficiencyReceiptV2(bound.receipt, profile);
+  if (bound.organizationId !== input.organizationId ||
+      profile.organizationId !== input.organizationId ||
+      receipt.organizationId !== input.organizationId ||
+      !historicalInstrumentsMatch(profile.symbol, input.symbol) ||
+      !historicalInstrumentsMatch(receipt.symbol, input.symbol)) {
+    throw new Error("[forecast-v2/persistence] historical information scope mismatch (fail closed)");
+  }
+  const historical = receipt.evidenceInventory
+    .filter((evidence) => evidence.historyScope === "WALK_FORWARD_PREDICTIVE")
+    .map((evidence) => evidence.historicalDatasetTrustAuthority);
+  if (historical.length !== 1 || historical.some((authority) =>
+    !authority || authority.organizationId !== input.organizationId ||
+    authority.runId !== input.runId ||
+    !historicalInstrumentsMatch(authority.symbol, input.symbol))) {
+    throw new Error("[forecast-v2/persistence] historical information authority mismatch (fail closed)");
+  }
+  const sealed = historical[0]!;
+  const cycleAuthority = assertHistoricalIntelligenceCycleAuthorityV2(
+    input.runtimeInput.historicalIntelligenceCycleAuthority!,
+  );
+  if (cycleAuthority.organizationId !== input.organizationId ||
+      cycleAuthority.runId !== input.runId || cycleAuthority.cycleId !== input.cycleId ||
+      !historicalInstrumentsMatch(cycleAuthority.symbol, input.symbol)) {
+    throw new Error("[forecast-v2/persistence] historical cycle substitution (fail closed)");
+  }
+  const expectedDataset = input.expectedDatasetAuthority;
+  if (expectedDataset &&
+      (sealed.datasetAuthorityId !== expectedDataset.id ||
+       sealed.datasetAuthorityDigestHex !== expectedDataset.datasetAuthorityDigestHex ||
+       sealed.datasetAuthorityContentDigestHex !== expectedDataset.authorityContentDigestHex ||
+       sealed.membershipContentDigestHex !== expectedDataset.membershipContentDigestHex ||
+       sealed.sealedCycleContentDigestHex !== expectedDataset.sealedCycleContentDigestHex)) {
+    throw new Error("[forecast-v2/persistence] historical dataset substitution (fail closed)");
+  }
+  if (historical.some((authority) =>
+    authority!.releaseSha !== sealed.releaseSha ||
+    authority!.ratifiedAdmissionId !== sealed.ratifiedAdmissionId ||
+    authority!.ratifiedAdmissionContentDigestHex !==
+      sealed.ratifiedAdmissionContentDigestHex)) {
+    throw new Error("[forecast-v2/persistence] historical information cohort mismatch (fail closed)");
+  }
+  const profileRows = await sql<Array<Readonly<{
+    profile_json: unknown; content_digest: string;
+  }>>>`
+    SELECT profile_json, content_digest
+    FROM trader_required_information_profile_v2
+    WHERE organization_id=${input.organizationId}::uuid AND id=${profile.id}
+    FOR SHARE
+  `;
+  const receiptRows = await sql<Array<Readonly<{
+    receipt_json: unknown; content_digest: string; profile_id: string;
+  }>>>`
+    SELECT receipt_json, content_digest, profile_id
+    FROM trader_information_sufficiency_receipt_v2
+    WHERE organization_id=${input.organizationId}::uuid AND id=${receipt.id}
+    FOR SHARE
+  `;
+  if (profileRows.length !== 1 || receiptRows.length !== 1 ||
+      profileRows[0]!.content_digest !== profile.contentDigest ||
+      receiptRows[0]!.content_digest !== receipt.contentDigest ||
+      receiptRows[0]!.profile_id !== profile.id ||
+      canonicalJsonString(profileRows[0]!.profile_json) !== canonicalJsonString(profile) ||
+      canonicalJsonString(receiptRows[0]!.receipt_json) !== canonicalJsonString(receipt)) {
+    throw new Error("[forecast-v2/persistence] durable information proof mismatch (fail closed)");
+  }
+  const cycleRows = await sql<Array<Readonly<{
+    id: string; organization_id: string; run_id: string; cycle_id: string; symbol: string;
+    evaluated_at: Date | string; historical_profile_id: string;
+    historical_profile_digest: string; matrix_digest: string; terminal_reason_code: string;
+    input_causal_bundle_json: string | null; input_semantic_digest: string;
+    output_semantic_digest: string; content_digest: string; schema_version: string;
+  }>>>`
+    SELECT id::text, organization_id::text, run_id, cycle_id, symbol, evaluated_at,
+           historical_profile_id, historical_profile_digest, matrix_digest,
+           terminal_reason_code, input_causal_bundle_json, input_semantic_digest,
+           output_semantic_digest, content_digest, schema_version
+    FROM trader_intelligence_cycle_envelope
+    WHERE organization_id=${input.organizationId}::uuid
+      AND run_id=${input.runId} AND cycle_id=${cycleAuthority.cycleId}
+      AND id=${cycleAuthority.envelopeId}::uuid
+    FOR SHARE
+  `;
+  const cycleRow = cycleRows[0];
+  if (!cycleRow || cycleRows.length !== 1 || !cycleRow.input_causal_bundle_json) {
+    throw new Error("[forecast-v2/persistence] durable intelligence cycle missing (fail closed)");
+  }
+  const cycleRecord: TraderIntelligenceCycleEnvelopeRecord = {
+    id: cycleRow.id,
+    organizationId: cycleRow.organization_id,
+    runId: cycleRow.run_id,
+    cycleId: cycleRow.cycle_id,
+    symbol: cycleRow.symbol,
+    evaluatedAt: parsePostgresTimestamptz(cycleRow.evaluated_at).toISOString(),
+    historicalProfileId: cycleRow.historical_profile_id,
+    historicalProfileDigest: cycleRow.historical_profile_digest,
+    matrixDigest: cycleRow.matrix_digest,
+    terminalReasonCode: cycleRow.terminal_reason_code,
+    inputCausalBundleJson: cycleRow.input_causal_bundle_json,
+    inputSemanticDigest: cycleRow.input_semantic_digest,
+    outputSemanticDigest: cycleRow.output_semantic_digest,
+    contentDigest: cycleRow.content_digest,
+    schemaVersion: cycleRow.schema_version as TraderIntelligenceCycleEnvelopeRecord["schemaVersion"],
+  };
+  const causalBundle = parseCanonicalCycleCausalInputBundleV2(
+    cycleRow.input_causal_bundle_json,
+  );
+  if (cycleAuthority.organizationId !== input.organizationId ||
+      cycleAuthority.runId !== input.runId ||
+      cycleAuthority.cycleId !== input.cycleId ||
+      cycleAuthority.envelopeId !== cycleRecord.id ||
+      cycleAuthority.cycleId !== cycleRecord.cycleId ||
+      cycleAuthority.pitAnchor !== cycleRecord.evaluatedAt ||
+      !historicalInstrumentsMatch(cycleAuthority.symbol, input.symbol) ||
+      cycleAuthority.symbol !== cycleRecord.symbol ||
+      cycleAuthority.envelopeContentDigestHex !== cycleRecord.contentDigest ||
+      cycleAuthority.inputSemanticDigestHex !== cycleRecord.inputSemanticDigest ||
+      computeCycleEnvelopeContentDigest(cycleRecord) !== cycleRecord.contentDigest ||
+      computeCanonicalCycleCausalInputDigestV2(causalBundle) !==
+        cycleRecord.inputSemanticDigest ||
+      causalBundle.understanding.status !== "EXACT" ||
+      causalBundle.understanding.contentDigest !==
+        cycleAuthority.understandingArtifactContentDigestHex ||
+      causalBundle.understanding.requiredInformationProfileId !== profile.id ||
+      causalBundle.understanding.requiredInformationProfileContentDigest !==
+        profile.contentDigest ||
+      causalBundle.understanding.informationSufficiencyReceiptId !== receipt.id ||
+      causalBundle.understanding.informationSufficiencyReceiptContentDigest !==
+        receipt.contentDigest) {
+    throw new Error("[forecast-v2/persistence] durable intelligence cycle mismatch (fail closed)");
+  }
+  const ratifiedRows = await sql<Array<Readonly<{
+    aggregate_admission_receipt_id: string;
+    authority_content_digest_hex: string;
+  }>>>`
+    SELECT aggregate_admission_receipt_id::text, authority_content_digest_hex
+    FROM trader_historical_four_surface_ratified_admission_v2
+    WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
+      AND id=${sealed.ratifiedAdmissionId}::uuid
+    FOR SHARE
+  `;
+  const ratifiedRow = ratifiedRows[0];
+  if (!ratifiedRow || ratifiedRows.length !== 1 ||
+      ratifiedRow.authority_content_digest_hex !==
+        sealed.ratifiedAdmissionContentDigestHex) {
+    throw new Error("[forecast-v2/persistence] durable ratification mismatch (fail closed)");
+  }
+  const ratified = await requireHistoricalFourSurfaceRatifiedAdmissionV2(sql, {
+    organizationId: input.organizationId,
+    runId: input.runId,
+    releaseSha: sealed.releaseSha,
+    aggregateAdmissionReceiptId: ratifiedRow.aggregate_admission_receipt_id,
+    authorityContentDigestHex: sealed.ratifiedAdmissionContentDigestHex,
+  });
+  const marketEvidence = ratified.marketEvidence.find((entry) =>
+    historicalInstrumentsMatch(entry.symbol, input.symbol));
+  if (!marketEvidence || marketEvidence.datasetAuthorityId !== sealed.datasetAuthorityId ||
+      marketEvidence.datasetAuthorityContentDigestHex !==
+        sealed.datasetAuthorityContentDigestHex ||
+      marketEvidence.datasetAuthorityDigestHex !== sealed.datasetAuthorityDigestHex ||
+      marketEvidence.partitionRawSha256Hex !== sealed.partitionRawSha256Hex ||
+      marketEvidence.membershipContentDigestHex !== sealed.membershipContentDigestHex ||
+      marketEvidence.sealedCycleContentDigestHex !== sealed.sealedCycleContentDigestHex ||
+      marketEvidence.wfPredictiveSemanticContentDigestHex !==
+        sealed.wfPredictiveSemanticContentDigestHex ||
+      marketEvidence.wfPredictiveStartUtc !== sealed.wfPredictiveStartUtc ||
+      marketEvidence.wfPredictiveEndUtc !== sealed.wfPredictiveEndUtc ||
+      marketEvidence.publicAvailableAt !== sealed.publicAvailableAt ||
+      marketEvidence.observationAvailableAt !== sealed.canonicalRecordAvailableAt ||
+      marketEvidence.observationIngestTime !== sealed.canonicalRecordIngestTime ||
+      marketEvidence.sourceId !== sealed.sourceId ||
+      marketEvidence.trustAsOfReceiptId !== sealed.trustAsOfReceiptId ||
+      marketEvidence.trustRevisionId !== sealed.trustRevisionId ||
+      marketEvidence.trustRevisionContentDigestHex !==
+        sealed.trustRevisionContentDigestHex ||
+      Number(marketEvidence.trustScore) !== sealed.trustScore ||
+      marketEvidence.observationId !== sealed.observationId ||
+      marketEvidence.observationContentDigestHex !== sealed.observationContentDigestHex) {
+    throw new Error("[forecast-v2/persistence] historical market evidence mismatch (fail closed)");
+  }
 }
 
 export type PersistForecastBundleV2Result = {
@@ -690,11 +952,16 @@ export async function persistForecastBundleV2(
   }
 
   if (runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
-    await sql.begin((tx) => verifyHistoricalKnowledgeProofV2(
-      tx as unknown as postgres.Sql,
-      input,
-      input.runtimeInput!,
-    ));
+    await withPostgresSessionTransaction(sql, "REPEATABLE READ", async (tx) => {
+      await verifyHistoricalKnowledgeProofV2(tx, input, input.runtimeInput!);
+      await verifyHistoricalForecastInformationProofV2(tx, {
+        organizationId: input.organizationId,
+        runId: input.runId,
+        cycleId: input.cycleId,
+        symbol: input.symbol,
+        runtimeInput: input.runtimeInput!,
+      });
+    });
   }
 
   const existing = await loadExistingBundleByNaturalIdentity(
@@ -763,7 +1030,7 @@ export async function persistForecastBundleV2(
   const scenarioSchema = schemaVersionTextToInt2(FORECAST_SCENARIO_SCHEMA_VERSION);
 
   try {
-    await sql.begin(async (tx) => {
+    await withPostgresSessionTransaction(sql, "SERIALIZABLE", async (tx) => {
       // Serialize new pending issuance against the tenant retention purge. The purge
       // re-checks unresolved references only after acquiring this same transaction lock.
       await tx`
@@ -822,10 +1089,17 @@ export async function persistForecastBundleV2(
         }
         if (runtimeAuthorityClass === "HISTORICAL_SIMULATION_V2") {
           await verifyHistoricalKnowledgeProofV2(
-            tx as unknown as postgres.Sql,
+            tx,
             input,
             runtime,
           );
+          await verifyHistoricalForecastInformationProofV2(tx, {
+            organizationId: input.organizationId,
+            runId: input.runId,
+            cycleId: input.cycleId,
+            symbol: input.symbol,
+            runtimeInput: runtime,
+          });
         }
         await tx`
           INSERT INTO trader_forecast_runtime_input_source_v2 (

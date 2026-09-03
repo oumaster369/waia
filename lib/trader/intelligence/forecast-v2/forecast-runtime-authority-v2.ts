@@ -4,6 +4,12 @@ import {
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { historicalInstrumentsMatch } from
   "@/lib/trader/symbols/historical-instrument";
+import {
+  assertInformationSufficiencyReceiptV2,
+  assertRequiredInformationProfileV2,
+} from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
+import type { InformationSufficiencyRuntimeAuthorityV2 } from
+  "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import type { MarketStateSnapshotV2 } from "@/lib/trader/intelligence/predictive-admission";
 import {
   requireForecastRuntimeAdmittedPredictiveAdmissionV1,
@@ -24,6 +30,10 @@ import {
   computeReplicaRootFamilyIdentityDigest,
 } from "./identity-digests";
 import { computeDistributionSemanticDigest } from "./distribution-semantic-digest-v1";
+import {
+  assertHistoricalKnowledgeSnapshotAuthorityV2,
+  type HistoricalKnowledgeSnapshotAuthorityV2,
+} from "./historical-knowledge-snapshot-authority-v2";
 import { computePoolSemanticDigest } from "./pool-semantic-digest-v1";
 import { terminalRhFromOutcome13dV1 } from "./exec-opp-outcome-materializer-v1";
 import {
@@ -46,6 +56,8 @@ const CANONICAL_KNOWLEDGE_EDGE_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const FORECAST_RUNTIME_NON_ACTIONABLE_V2_VERSION =
   "waia.trader.forecast_runtime_non_actionable.v2" as const;
+export const HISTORICAL_INTELLIGENCE_CYCLE_AUTHORITY_V2 =
+  "waia.trader.historical_intelligence_cycle_authority.v2" as const;
 
 export type ForecastRuntimeNonActionableReasonV2 =
   | "MISSING_OR_NOT_ADMITTED"
@@ -67,6 +79,10 @@ export type ForecastRuntimeAuthorityV2 = Readonly<{
   normalizationVersionDigestHex: string;
   marketStateSnapshotContentDigestHex: string;
   predictiveAdmissionReceiptContentDigestHex: string;
+  informationSufficiencyProfileContentDigestHex?: string;
+  informationSufficiencyReceiptContentDigestHex?: string;
+  historicalIntelligenceCycleAuthorityContentDigestHex?: string;
+  historicalKnowledgeSnapshotAuthorityContentDigestHex?: string;
   forecastContractBindingContentDigestHex: string;
   scientificAdmissionReceiptContentDigestHex: string;
   selectedPredictivePackageContentDigestHex: string;
@@ -84,6 +100,21 @@ export type ForecastRuntimeAuthorityV2 = Readonly<{
   executionForecastContentDigestHex: string;
   knowledgeEdgeId: string;
   knowledgeContentDigestHex: string;
+  contentDigestHex: string;
+}>;
+
+export type HistoricalIntelligenceCycleAuthorityV2 = Readonly<{
+  schemaVersion: typeof HISTORICAL_INTELLIGENCE_CYCLE_AUTHORITY_V2;
+  organizationId: string;
+  runId: string;
+  cycleId: string;
+  symbol: string;
+  pitAnchor: string;
+  envelopeId: string;
+  envelopeContentDigestHex: string;
+  inputSemanticDigestHex: string;
+  understandingArtifactContentDigestHex: string;
+  understandingArtifactSemanticDigestHex: string;
   contentDigestHex: string;
 }>;
 
@@ -109,7 +140,41 @@ export type ForecastRuntimeInputV2 = Readonly<{
   /** Issuance-time Knowledge identity; late outcome-time inference is prohibited. */
   knowledgeEdgeId?: string;
   knowledgeContentDigestHex?: string;
+  /** Exact epistemic profile/receipt used to build the admitted market state. */
+  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  /** Exact durable causal cycle consumed by a historical Forecast. */
+  historicalIntelligenceCycleAuthority?: HistoricalIntelligenceCycleAuthorityV2;
+  /** Exact run-scoped durable knowledge rows visible at this historical PIT. */
+  historicalKnowledgeSnapshotAuthority?: HistoricalKnowledgeSnapshotAuthorityV2;
 }>;
+
+export function assertHistoricalIntelligenceCycleAuthorityV2(
+  value: HistoricalIntelligenceCycleAuthorityV2,
+): HistoricalIntelligenceCycleAuthorityV2 {
+  const expectedKeys = [
+    "schemaVersion", "organizationId", "runId", "cycleId", "symbol", "pitAnchor",
+    "envelopeId", "envelopeContentDigestHex", "inputSemanticDigestHex",
+    "understandingArtifactContentDigestHex", "understandingArtifactSemanticDigestHex",
+    "contentDigestHex",
+  ].sort();
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedKeys)) {
+    throw new Error("FORECAST_RUNTIME_HISTORICAL_CYCLE_AUTHORITY_INVALID");
+  }
+  const { contentDigestHex, ...body } = value;
+  if (value.schemaVersion !== HISTORICAL_INTELLIGENCE_CYCLE_AUTHORITY_V2 ||
+      !value.organizationId || !value.runId || !value.cycleId || !value.symbol ||
+      !/^[0-9a-f-]{36}$/.test(value.envelopeId) ||
+      new Date(value.pitAnchor).toISOString() !== value.pitAnchor ||
+      [value.envelopeContentDigestHex, value.inputSemanticDigestHex,
+        value.understandingArtifactContentDigestHex,
+        value.understandingArtifactSemanticDigestHex, contentDigestHex]
+        .some((digest) => !/^[0-9a-f]{64}$/.test(digest)) ||
+      computeSemanticSha256Hex(body) !== contentDigestHex) {
+    throw new Error("FORECAST_RUNTIME_HISTORICAL_CYCLE_AUTHORITY_INVALID");
+  }
+  return value;
+}
 
 export type ForecastRuntimeOutcomeV2 =
   | Readonly<{
@@ -338,6 +403,107 @@ export function issueForecastRuntimeV2(input: ForecastRuntimeInputV2): ForecastR
     return nonActionable(input, "PIT_OR_INPUT_MISMATCH");
   }
 
+  const historicalPackage = input.predictivePackage.family.packageSubjectVersion ===
+    "waia.trader.historical_forecast_family_bootstrap.v2";
+  let informationProfileDigestHex: string | null = null;
+  let informationReceiptDigestHex: string | null = null;
+  let historicalCycleAuthorityDigestHex: string | null = null;
+  let historicalKnowledgeSnapshotAuthorityDigestHex: string | null = null;
+  try {
+    const informationAuthority = input.informationSufficiencyAuthority;
+    if (historicalPackage && (!informationAuthority ||
+        informationAuthority.kind !== "PROFILE_RECEIPT")) {
+      throw new Error("missing historical information authority");
+    }
+    if (informationAuthority?.kind === "PROFILE_RECEIPT") {
+      const profile = assertRequiredInformationProfileV2(informationAuthority.profile);
+      const receipt = assertInformationSufficiencyReceiptV2(
+        informationAuthority.receipt,
+        profile,
+      );
+      const historical = receipt.evidenceInventory
+        .filter((evidence) => evidence.historyScope === "WALK_FORWARD_PREDICTIVE")
+        .map((evidence) => evidence.historicalDatasetTrustAuthority);
+      if (informationAuthority.organizationId !== input.marketStateSnapshot.organizationId ||
+          profile.organizationId !== input.marketStateSnapshot.organizationId ||
+          receipt.organizationId !== input.marketStateSnapshot.organizationId ||
+          profile.contentDigest !== input.marketStateSnapshot.requiredInformationProfileDigestHex ||
+          receipt.contentDigest !==
+            input.marketStateSnapshot.informationSufficiencyReceiptDigestHex ||
+          receipt.pitAnchor !== input.marketStateSnapshot.pitAnchor ||
+          !historicalInstrumentsMatch(profile.symbol, input.marketStateSnapshot.symbol) ||
+          !historicalInstrumentsMatch(receipt.symbol, input.marketStateSnapshot.symbol)) {
+        throw new Error("information authority scope mismatch");
+      }
+      // The evidence itself is the authority-class discriminator. A caller may not
+      // downgrade a historical package to GENERAL while retaining a self-consistent
+      // historical profile/receipt and thereby skip its 0194 and cycle proofs.
+      if (!historicalPackage && historical.length > 0) {
+        throw new Error("historical evidence on general package");
+      }
+      if (historicalPackage) {
+        if (historical.length !== 1 || historical.some((authority) =>
+          !authority || authority.organizationId !== receipt.organizationId ||
+          !historicalInstrumentsMatch(authority.symbol, receipt.symbol) ||
+          authority.publicAvailableAt !== receipt.pitAnchor)) {
+          throw new Error("historical information authority mismatch");
+        }
+        const first = historical[0]!;
+        if (historical.some((authority) =>
+          authority!.runId !== first.runId || authority!.releaseSha !== first.releaseSha ||
+          authority!.ratifiedAdmissionId !== first.ratifiedAdmissionId ||
+          authority!.ratifiedAdmissionContentDigestHex !==
+            first.ratifiedAdmissionContentDigestHex ||
+          authority!.epistemicRecordCutoff !== first.epistemicRecordCutoff)) {
+          throw new Error("historical information authority cohort mismatch");
+        }
+      }
+      informationProfileDigestHex = profile.contentDigest;
+      informationReceiptDigestHex = receipt.contentDigest;
+    }
+    const cycleAuthority = input.historicalIntelligenceCycleAuthority;
+    if (historicalPackage && !cycleAuthority) {
+      throw new Error("missing historical intelligence cycle authority");
+    }
+    if (cycleAuthority) {
+      const sealedCycle = assertHistoricalIntelligenceCycleAuthorityV2(cycleAuthority);
+      if (!historicalPackage ||
+          sealedCycle.organizationId !== input.marketStateSnapshot.organizationId ||
+          sealedCycle.pitAnchor !== input.marketStateSnapshot.pitAnchor ||
+          !historicalInstrumentsMatch(
+            sealedCycle.symbol,
+            input.marketStateSnapshot.instrumentId,
+          ) ||
+          sealedCycle.understandingArtifactSemanticDigestHex !==
+            input.marketStateSnapshot.understandingClaimSetDigestHex) {
+        throw new Error("historical intelligence cycle authority mismatch");
+      }
+      historicalCycleAuthorityDigestHex = sealedCycle.contentDigestHex;
+    }
+    const knowledgeSnapshotAuthority = input.historicalKnowledgeSnapshotAuthority;
+    if (historicalPackage && !knowledgeSnapshotAuthority) {
+      throw new Error("missing historical knowledge snapshot authority");
+    }
+    if (knowledgeSnapshotAuthority) {
+      const sealedKnowledge = assertHistoricalKnowledgeSnapshotAuthorityV2(
+        knowledgeSnapshotAuthority,
+      );
+      if (!historicalPackage ||
+          !cycleAuthority || sealedKnowledge.runId !== cycleAuthority.runId ||
+          sealedKnowledge.organizationId !== input.marketStateSnapshot.organizationId ||
+          sealedKnowledge.pitAnchor !== input.marketStateSnapshot.pitAnchor ||
+          !historicalInstrumentsMatch(
+            sealedKnowledge.symbol,
+            input.marketStateSnapshot.instrumentId,
+          ) || sealedKnowledge.knowledgeContentDigestHex !== input.knowledgeContentDigestHex) {
+        throw new Error("historical knowledge snapshot authority mismatch");
+      }
+      historicalKnowledgeSnapshotAuthorityDigestHex = sealedKnowledge.contentDigestHex;
+    }
+  } catch {
+    return nonActionable(input, "PIT_OR_INPUT_MISMATCH");
+  }
+
   let admission: ForecastRuntimeAdmittedPredictiveAdmissionReceiptV1;
   try {
     admission = requireForecastRuntimeAdmittedPredictiveAdmissionV1(
@@ -433,6 +599,24 @@ export function issueForecastRuntimeV2(input: ForecastRuntimeInputV2): ForecastR
     normalizationVersionDigestHex: input.normalizationVersionDigestHex,
     marketStateSnapshotContentDigestHex: input.marketStateSnapshot.contentDigestHex,
     predictiveAdmissionReceiptContentDigestHex: admission.contentDigestHex,
+    ...(historicalPackage && informationProfileDigestHex && informationReceiptDigestHex
+      ? {
+          informationSufficiencyProfileContentDigestHex: informationProfileDigestHex,
+          informationSufficiencyReceiptContentDigestHex: informationReceiptDigestHex,
+        }
+      : {}),
+    ...(historicalPackage && historicalCycleAuthorityDigestHex
+      ? {
+          historicalIntelligenceCycleAuthorityContentDigestHex:
+            historicalCycleAuthorityDigestHex,
+        }
+      : {}),
+    ...(historicalPackage && historicalKnowledgeSnapshotAuthorityDigestHex
+      ? {
+          historicalKnowledgeSnapshotAuthorityContentDigestHex:
+            historicalKnowledgeSnapshotAuthorityDigestHex,
+        }
+      : {}),
     forecastContractBindingContentDigestHex: binding.contentDigestHex,
     scientificAdmissionReceiptContentDigestHex:
       binding.scientificAdmissionReceiptContentDigestHex,
@@ -500,6 +684,30 @@ export function requireForecastRuntimeAuthorizedOutcomeV2(
     value = reviveForecastRuntimeJsonV2(value);
   }
   const authority = requireForecastRuntimeAuthorityV2(value.authority);
+  const historicalPackage = value.issuance.package.family.packageSubjectVersion ===
+    "waia.trader.historical_forecast_family_bootstrap.v2";
+  const hasInformationProfile = Object.prototype.hasOwnProperty.call(
+    authority,
+    "informationSufficiencyProfileContentDigestHex",
+  );
+  const hasInformationReceipt = Object.prototype.hasOwnProperty.call(
+    authority,
+    "informationSufficiencyReceiptContentDigestHex",
+  );
+  const hasHistoricalCycleAuthority = Object.prototype.hasOwnProperty.call(
+    authority,
+    "historicalIntelligenceCycleAuthorityContentDigestHex",
+  );
+  const hasHistoricalKnowledgeSnapshotAuthority = Object.prototype.hasOwnProperty.call(
+    authority,
+    "historicalKnowledgeSnapshotAuthorityContentDigestHex",
+  );
+  if (hasInformationProfile !== hasInformationReceipt ||
+      historicalPackage !== hasInformationProfile ||
+      historicalPackage !== hasHistoricalCycleAuthority ||
+      historicalPackage !== hasHistoricalKnowledgeSnapshotAuthority) {
+    throw new Error("FORECAST_RUNTIME_AUTHORITY_INFORMATION_BINDING_INVALID");
+  }
   let regenerated: ForecastIssuanceV1;
   try {
     replayIssuance(value.issuance);

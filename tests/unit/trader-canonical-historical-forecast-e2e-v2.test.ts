@@ -7,13 +7,21 @@ import { buildHistoricalForecastCycleRuntimeInputV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-cycle-runtime-input-v2";
 import { buildHistoricalForecastKnowledgeBootstrapV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
+import { computeHistoricalSimulationEmptyKnowledgeBindingDigestV2 } from
+  "@/lib/trader/historical-simulation-v2/knowledge-snapshot-binding-v2";
+import { buildHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
 import { buildHistoricalForecastFamilyV2 } from
   "@/lib/trader/historical-simulation-v2/forecast-family-bootstrap-v2";
 import { buildHistoricalHypothesisApplicabilitySetV2 } from
   "@/lib/trader/historical-simulation-v2/hypothesis-applicability-v2";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
-import { issueForecastRuntimeV2 } from
+import { issueForecastRuntimeV2, requireForecastRuntimeAuthorizedOutcomeV2 } from
   "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import { persistForecastBundleV2, verifyHistoricalForecastInformationProofV2 } from
+  "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
+import { computeSemanticSha256Hex } from
+  "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   computeReplicaRootFamilyIdentityDigest,
   digestHex,
@@ -33,9 +41,12 @@ import { buildHypothesisSet } from
 import { createEmptyHypothesisSessionState } from
   "@/lib/trader/intelligence/mi-core.types";
 import {
+  buildHistoricalDatasetTrustAuthorityV2,
   defineRequiredInformationProfileV2,
   evaluateInformationSufficiencyV2,
 } from "@/lib/trader/intelligence/information-sufficiency";
+import { bindInformationSufficiencyReceiptAuthorityV2 } from
+  "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import { buildReconstructionSnapshot } from
   "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
 import { assembleReconstructionSnapshot } from
@@ -60,6 +71,51 @@ import {
 const organizationId = "00000000-0000-4000-8000-000000000001";
 const releaseSha = "b".repeat(40);
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+const historicalEpistemicCutoff = "2026-01-02T12:00:00.000Z";
+const historicalEpistemicAuthority = Object.freeze({
+  schemaVersion: "waia.trader.historical_four_surface_ratified_admission.v2" as const,
+  ratifiedAdmissionId: "11111111-1111-4111-8111-111111111111",
+  authorityContentDigestHex: hash("historical-ratified-authority"),
+  createdAt: historicalEpistemicCutoff,
+});
+
+function makeHistoricalUnderstandingEvidence(pitAnchor: string) {
+  const base = makeUnderstandingEvidence({ availableAt: pitAnchor });
+  const authority = buildHistoricalDatasetTrustAuthorityV2({
+    organizationId,
+    symbol: "BTCUSDT",
+    runId: "canonical-e2e-run",
+    releaseSha,
+    ratifiedAdmissionId: historicalEpistemicAuthority.ratifiedAdmissionId,
+    ratifiedAdmissionContentDigestHex:
+      historicalEpistemicAuthority.authorityContentDigestHex,
+    epistemicRecordCutoff: historicalEpistemicCutoff,
+    datasetAuthorityId: "33333333-3333-4333-8333-333333333333",
+    datasetAuthorityContentDigestHex: hash("dataset-authority-content"),
+    datasetAuthorityDigestHex: hash("dataset-authority"),
+    partitionRawSha256Hex: hash("partition-raw"),
+    membershipContentDigestHex: hash("membership"),
+    sealedCycleContentDigestHex: hash("sealed-cycle"),
+    wfPredictiveSemanticContentDigestHex: hash("wf-predictive"),
+    wfPredictiveStartUtc: new Date(Date.parse(pitAnchor) - 60_000).toISOString(),
+    wfPredictiveEndUtc: pitAnchor,
+    publicAvailableAt: pitAnchor,
+    canonicalRecordAvailableAt: pitAnchor,
+    canonicalRecordIngestTime: historicalEpistemicCutoff,
+    sourceId: base.sourceId,
+    trustAsOfReceiptId: base.trustAsOfReceiptId!,
+    trustRevisionId: base.trustRevisionId!,
+    trustRevisionContentDigestHex: base.trustRevisionContentDigest!,
+    trustScore: base.trustScore!,
+    observationId: base.observationId,
+    observationContentDigestHex: base.observationContentDigest,
+  });
+  return makeUnderstandingEvidence({
+    availableAt: pitAnchor,
+    historyScope: "WALK_FORWARD_PREDICTIVE",
+    historicalDatasetTrustAuthority: authority,
+  });
+}
 
 function marketFixture(): { bars: Bar[]; latestQuote: Quote } {
   const startMs = Date.UTC(2026, 0, 1, 0, 0);
@@ -227,6 +283,7 @@ function authorityGraph() {
 function analyticalCycle(options: Readonly<{
   contradictory?: boolean;
   historicalProfile?: boolean;
+  historicalDualTime?: boolean;
 }> = {}) {
   const fixture = marketFixture();
   const pitAnchor = fixture.bars.at(-1)!.barCloseTime;
@@ -240,12 +297,20 @@ function analyticalCycle(options: Readonly<{
     contentDigest: hash("historical-evidence-for-mean-reversion"),
     direction: "FOR" as const,
     eventTime: pitAnchor,
-    ingestTime: pitAnchor,
+    ingestTime: options.historicalDualTime
+      ? "2026-01-02T11:00:00.000Z"
+      : pitAnchor,
   }];
   const canonicalState = buildCanonicalRuntimeIntelligenceStateV1({
     organizationId,
     symbol: "BTCUSDT",
     pitAnchor,
+    ...(options.historicalDualTime
+      ? {
+          epistemicRecordCutoff: historicalEpistemicCutoff,
+          epistemicAuthority: historicalEpistemicAuthority,
+        }
+      : {}),
     knowledgeSemanticDigest: hash("canonical-knowledge-state"),
     hypotheses: [{
       hypothesisId: "canonical-mean-reversion-v1",
@@ -295,8 +360,11 @@ function analyticalCycle(options: Readonly<{
 }
 
 describe("canonical historical applicability to Forecast V2 authority", () => {
-  it("closes a real evaluation result into an admitted input and authorized Forecast", () => {
-    const cycle = analyticalCycle();
+  it("closes a real evaluation result into an admitted input and authorized Forecast", async () => {
+    // Exercise the full pure first-cycle chain with genuine historical dual
+    // time: market evidence is old, while its durable record time is later but
+    // still within the sealed pre-run ratification cutoff.
+    const cycle = analyticalCycle({ historicalDualTime: true });
     expect(cycle.evaluation.hypothesisSet?.opportunity).toMatchObject({
       authorized: true,
       conviction: 0,
@@ -332,12 +400,40 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       horizon: "30m",
       pitAnchor: cycle.pitAnchor,
       activeContextTriggers: [],
-      evidence: [makeUnderstandingEvidence({ availableAt: cycle.pitAnchor })],
+      evidence: [makeHistoricalUnderstandingEvidence(cycle.pitAnchor)],
     });
     expect(informationSufficiencyReceipt.status).toBe("SUFFICIENT");
+    const evaluationWithInformation = runEvaluationCycle({
+      organizationId,
+      symbol: "BTCUSDT",
+      bars: cycle.fixture.bars,
+      quote: cycle.fixture.latestQuote,
+      reconstruction: cycle.evaluation.reconstruction,
+      canonicalRuntimeIntelligenceState: cycle.canonicalState,
+      historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,
+      fusedContext: {
+        schemaVersion: "waia.trader.fused_context.v2",
+        fusedAtUtc: cycle.pitAnchor,
+        instrumentId: "BTC/USDT",
+        sessionPhase: "UNKNOWN",
+        mtfBars: {},
+        aggregateHealth: "HEALTHY",
+        aggregateConfidence: 1,
+        provenance: [],
+        degradationReasons: [],
+      },
+      informationSufficiencyAuthority: bindInformationSufficiencyReceiptAuthorityV2(
+        requiredInformationProfile,
+        informationSufficiencyReceipt,
+      ),
+      runId: "canonical-e2e-run",
+      cycleId: "canonical-e2e-cycle-with-information",
+      newId: () => "canonical-e2e-information-id",
+    });
     const runtimeBuilderInput = {
       releaseSha,
       organizationId,
+      runId: "canonical-e2e-run",
       accountId: null,
       symbol: "BTCUSDT",
       venue: "HTX",
@@ -355,7 +451,19 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
         predictivePackageContentDigestHex:
           digestHex(graph.predictivePackage.predictivePackageContentDigest),
       }),
-      evaluation: cycle.evaluation,
+      knowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+        organizationId,
+        runId: "canonical-e2e-run",
+        symbol: "BTCUSDT",
+        pitAnchor: cycle.pitAnchor,
+        visibleEvidenceCount: 0,
+        knowledgeContentDigestHex:
+          computeHistoricalSimulationEmptyKnowledgeBindingDigestV2(
+            organizationId,
+            "BTCUSDT",
+          ),
+      }),
+      evaluation: evaluationWithInformation,
       requiredInformationProfile,
       informationSufficiencyReceipt,
       forecastContractBinding: graph.forecastContractBinding,
@@ -366,6 +474,38 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       integrityAndPitValid: true,
     } as const;
     const runtimeInput = buildHistoricalForecastCycleRuntimeInputV2(runtimeBuilderInput);
+    expect(runtimeInput.knowledgeContentDigestHex).toBe(
+      computeHistoricalSimulationEmptyKnowledgeBindingDigestV2(
+        organizationId,
+        "BTCUSDT",
+      ),
+    );
+    expect(runtimeInput.knowledgeContentDigestHex).not.toBe(
+      runtimeBuilderInput.knowledgeBootstrap.contentDigestHex,
+    );
+    const laterKnowledgeSnapshotAuthority = buildHistoricalKnowledgeSnapshotAuthorityV2({
+      organizationId,
+      runId: "canonical-e2e-run",
+      symbol: "BTCUSDT",
+      pitAnchor: cycle.pitAnchor,
+      visibleEvidenceCount: 1,
+      knowledgeContentDigestHex: hash("later-visible-confidence-update-snapshot"),
+    });
+    const laterRuntimeInput = buildHistoricalForecastCycleRuntimeInputV2({
+      ...runtimeBuilderInput,
+      knowledgeSnapshotAuthority: laterKnowledgeSnapshotAuthority,
+    });
+    expect(laterRuntimeInput.knowledgeContentDigestHex).toBe(
+      laterKnowledgeSnapshotAuthority.knowledgeContentDigestHex,
+    );
+    expect(issueForecastRuntimeV2(laterRuntimeInput).status).toBe("FORECAST_AUTHORIZED");
+    expect(() => buildHistoricalForecastCycleRuntimeInputV2({
+      ...runtimeBuilderInput,
+      knowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+        ...laterKnowledgeSnapshotAuthority,
+        runId: "other-run",
+      }),
+    })).toThrow("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:KNOWLEDGE_SNAPSHOT");
     expect(runtimeInput.predictiveAdmissionReceipt).toMatchObject({
       verdict: "ADMITTED",
       capitalAuthority: "NONE",
@@ -381,11 +521,70 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       .toHaveLength(1);
     const forecastOutcome = issueForecastRuntimeV2(runtimeInput);
     expect(forecastOutcome).toMatchObject({ status: "FORECAST_AUTHORIZED" });
+    if (forecastOutcome.status !== "FORECAST_AUTHORIZED") throw new Error("expected forecast");
+    const historicalPackage = runtimeInput.predictivePackage!;
+    const genuineGeneralPackage = buildPredictivePackageV1({
+      family: {
+        ...historicalPackage.family,
+        packageSubjectVersion: "general-package/v1",
+      },
+      sourceCorpus: historicalPackage.canonicalSourceCorpus,
+      kConfigDec: historicalPackage.kConfigDec,
+      mConfigDec: historicalPackage.mConfigDec,
+      alphaEpiConfigScale8: historicalPackage.alphaEpiConfigScale8,
+    });
+    const downgradedPackageInput = {
+      ...runtimeInput,
+      predictivePackage: genuineGeneralPackage,
+    };
+    expect(issueForecastRuntimeV2(downgradedPackageInput)).toMatchObject({
+      status: "NON_ACTIONABLE",
+      reason: "PIT_OR_INPUT_MISMATCH",
+    });
+    const downgradedOutcome = {
+      ...forecastOutcome,
+      issuance: {
+        ...forecastOutcome.issuance,
+        package: downgradedPackageInput.predictivePackage,
+      },
+    };
+    await expect(persistForecastBundleV2(
+      (() => { throw new Error("database must not be reached"); }) as never,
+      {
+        organizationId,
+        packageId: "77777777-7777-4777-8777-777777777777",
+        runId: "canonical-e2e-run",
+        cycleId: "canonical-e2e-cycle-with-information",
+        symbol: "BTCUSDT",
+        anchorClosedBarEpochMs: Date.parse(cycle.pitAnchor),
+        issuance: downgradedOutcome.issuance,
+        authorizedOutcome: downgradedOutcome,
+        runtimeInput: downgradedPackageInput,
+      },
+    )).rejects.toThrow("historical information proof on general runtime refused");
+    const {
+      informationSufficiencyProfileContentDigestHex: _profileDigest,
+      informationSufficiencyReceiptContentDigestHex: _receiptDigest,
+      contentDigestHex: _authorityDigest,
+      ...strippedAuthorityBody
+    } = forecastOutcome.authority;
+    void _profileDigest;
+    void _receiptDigest;
+    void _authorityDigest;
+    expect(() => requireForecastRuntimeAuthorizedOutcomeV2({
+      ...forecastOutcome,
+      authority: {
+        ...strippedAuthorityBody,
+        contentDigestHex: computeSemanticSha256Hex(strippedAuthorityBody),
+      },
+    } as never)).toThrow("FORECAST_RUNTIME_AUTHORITY_INFORMATION_BINDING_INVALID");
 
     const substitutedState = buildCanonicalRuntimeIntelligenceStateV1({
       organizationId: cycle.canonicalState.organizationId,
       symbol: cycle.canonicalState.symbol,
       pitAnchor: cycle.canonicalState.pitAnchor,
+      epistemicRecordCutoff: cycle.canonicalState.epistemicRecordCutoff,
+      epistemicAuthority: cycle.canonicalState.epistemicAuthority,
       knowledgeSemanticDigest: hash("digest-consistent-substituted-knowledge"),
       hypotheses: cycle.canonicalState.hypotheses,
     });
@@ -413,6 +612,72 @@ describe("canonical historical applicability to Forecast V2 authority", () => {
       .not.toContain(attackerFailureDigest);
     expect(issueForecastRuntimeV2(substitutionAttempt))
       .toMatchObject({ status: "FORECAST_AUTHORIZED" });
+
+    const sealedDataset = informationSufficiencyReceipt.evidenceInventory
+      .find((evidence) => evidence.historyScope === "WALK_FORWARD_PREDICTIVE")!
+      .historicalDatasetTrustAuthority!;
+    await expect(verifyHistoricalForecastInformationProofV2(
+      (() => { throw new Error("database must not be reached"); }) as never,
+      {
+        organizationId,
+        runId: "canonical-e2e-run",
+        cycleId: "canonical-e2e-cycle-with-information",
+        symbol: "BTCUSDT",
+        expectedDatasetAuthority: {
+          id: "44444444-4444-4444-8444-444444444444",
+          datasetAuthorityDigestHex: sealedDataset.datasetAuthorityDigestHex,
+          authorityContentDigestHex: sealedDataset.datasetAuthorityContentDigestHex,
+          membershipContentDigestHex: sealedDataset.membershipContentDigestHex,
+          sealedCycleContentDigestHex: sealedDataset.sealedCycleContentDigestHex,
+        },
+        runtimeInput,
+      },
+    )).rejects.toThrow("historical dataset substitution");
+    await expect(verifyHistoricalForecastInformationProofV2(
+      (() => { throw new Error("database must not be reached"); }) as never,
+      {
+        organizationId,
+        runId: "canonical-e2e-run",
+        cycleId: "cross-cycle-substitution",
+        symbol: "BTCUSDT",
+        runtimeInput,
+      },
+    )).rejects.toThrow("historical cycle substitution");
+
+    const unrelatedProfile = defineRequiredInformationProfileV2({
+      organizationId,
+      accountId: null,
+      profileVersion: "canonical-historical-e2e-unrelated-v2",
+      purpose: "NEW_OPPORTUNITY",
+      symbol: "BTCUSDT",
+      venue: "htx",
+      analyticalTimeframe: "1m",
+      horizon: "30m",
+      forecastPackageId: "rv-state-conditional-empirical-joint/v1",
+      forecastPackageContentDigest:
+        graph.forecastContractBinding.selectedPredictivePackageContentDigestHex,
+      inputContractContentDigest: graph.forecastContractBinding.inputContract.contentDigestHex,
+      requirements: [makeUnderstandingRequirement()],
+      aggregateQualityContract: null,
+    });
+    const unrelatedReceipt = evaluateInformationSufficiencyV2({
+      profile: unrelatedProfile,
+      organizationId,
+      accountId: null,
+      purpose: "NEW_OPPORTUNITY",
+      symbol: "BTCUSDT",
+      venue: "htx",
+      analyticalTimeframe: "1m",
+      horizon: "30m",
+      pitAnchor: cycle.pitAnchor,
+      activeContextTriggers: [],
+      evidence: [makeHistoricalUnderstandingEvidence(cycle.pitAnchor)],
+    });
+    expect(() => buildHistoricalForecastCycleRuntimeInputV2({
+      ...runtimeBuilderInput,
+      requiredInformationProfile: unrelatedProfile,
+      informationSufficiencyReceipt: unrelatedReceipt,
+    })).toThrow("HISTORICAL_FORECAST_CYCLE_INPUT_REFUSED:UNDERSTANDING_AUTHORITY");
   });
 
   it("fails closed on contradictory canonical evidence", () => {

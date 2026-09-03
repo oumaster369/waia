@@ -1,4 +1,6 @@
 import type postgres from "postgres";
+import { isDeepStrictEqual } from "node:util";
+import { withPostgresSessionTransaction } from "@/db/postgres-session-transaction";
 
 import {
   issueForecastRuntimeV2,
@@ -7,11 +9,15 @@ import {
 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
-import { computeHistoricalForecastPitKnowledgeDigestV2, HISTORICAL_FORECAST_INPUT_PIT_V2,
+import { HISTORICAL_FORECAST_INPUT_PIT_V2,
   type HistoricalForecastPitKnowledgeRowV2 } from "./pit-forecast-input-producer-v2";
+import { buildHistoricalKnowledgeSnapshotAuthorityFromRowsV2 } from
+  "./knowledge-snapshot-binding-v2";
 import { requireScientificAdmissionV2, type ScientificAdmissionReceiptV2 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 import { digestHex } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { verifyHistoricalForecastInformationProofV2 } from
+  "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
 
 type PitInputRow = Readonly<{
   organization_id: string;
@@ -38,6 +44,8 @@ type PitInputRow = Readonly<{
   dataset_authority_digest_hex: string;
   verifier_build_digest_hex: string;
   dataset_authority_content_digest_hex: string;
+  durable_membership_content_digest_hex: string;
+  sealed_cycle_content_digest_hex: string;
   sealed_cycle_json: unknown;
   runtime_input_content_digest_hex: string;
   source_runtime_input_json: ForecastRuntimeInputV2;
@@ -107,6 +115,8 @@ export function assertHistoricalForecastInputPitBindingV2(
     row.forecast_authority_content_digest_hex !== expected.forecastAuthorityContentDigestHex ||
     row.dataset_authority_id !== expected.datasetAuthorityId ||
     canonicalMembershipDigest(row.dataset_membership_json) !== row.dataset_membership_content_digest_hex ||
+    row.dataset_membership_content_digest_hex !== row.durable_membership_content_digest_hex ||
+    !DIGEST.test(row.sealed_cycle_content_digest_hex) ||
     computeStableJsonDigest({ organizationId: expected.organizationId, runId: expected.runId,
       membership: row.dataset_membership_json, sealedCycle: row.sealed_cycle_json }) !== row.dataset_authority_content_digest_hex ||
     computeSemanticSha256Hex(row.source_runtime_input_json) !== row.runtime_input_content_digest_hex ||
@@ -215,7 +225,9 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
              p.dataset_membership_content_digest_hex, p.dataset_membership_json, p.pit_anchor, p.visible_from,
              p.knowledge_content_digest_hex, p.forecast_authority_content_digest_hex, p.runtime_input_json,
              p.content_digest_hex, p.schema_version, p.dataset_authority_id::text,
-             d.authority_content_digest_hex AS dataset_authority_content_digest_hex, d.sealed_cycle_json,
+             d.authority_content_digest_hex AS dataset_authority_content_digest_hex,
+             d.membership_content_digest_hex AS durable_membership_content_digest_hex,
+             d.sealed_cycle_content_digest_hex, d.sealed_cycle_json,
              s.runtime_input_content_digest_hex, s.runtime_input_json AS source_runtime_input_json,
              s.authorized_outcome_json AS source_authorized_outcome_json,
              s.forecast_authority_content_digest_hex AS source_forecast_authority_content_digest_hex,
@@ -266,16 +278,41 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
         AND k.organization_id=l.organization_id AND k.content_digest=l.knowledge_update_content_digest_hex
       WHERE l.organization_id=${expected.organizationId}::uuid AND l.run_id=${expected.runId}
         AND l.cycle_id=${expected.cycleId} ORDER BY k.content_digest ASC`;
-    if (computeHistoricalForecastPitKnowledgeDigestV2(expected.organizationId, expected.symbol,
-      expected.pitAnchor, knowledgeRows) !== expected.knowledgeContentDigestHex) {
+    const knowledgeSnapshotAuthority = buildHistoricalKnowledgeSnapshotAuthorityFromRowsV2({
+      organizationId: expected.organizationId,
+      runId: expected.runId,
+      symbol: expected.symbol,
+      pitAnchor: expected.pitAnchor,
+    }, knowledgeRows);
+    const runtimeInput = reviveForecastRuntimeJsonV2(rows[0]!.runtime_input_json);
+    if (knowledgeSnapshotAuthority.knowledgeContentDigestHex !== expected.knowledgeContentDigestHex ||
+        !runtimeInput.historicalKnowledgeSnapshotAuthority ||
+        !isDeepStrictEqual(
+          runtimeInput.historicalKnowledgeSnapshotAuthority,
+          knowledgeSnapshotAuthority,
+        )) {
       throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:KNOWLEDGE_CLOSURE_MISMATCH");
     }
+    await verifyHistoricalForecastInformationProofV2(sql, {
+      organizationId: expected.organizationId,
+      runId: expected.runId,
+      cycleId: expected.cycleId,
+      symbol: expected.symbol,
+      expectedDatasetAuthority: {
+        id: expected.datasetAuthorityId,
+        datasetAuthorityDigestHex: rows[0]!.dataset_authority_digest_hex,
+        authorityContentDigestHex: rows[0]!.dataset_authority_content_digest_hex,
+        membershipContentDigestHex: rows[0]!.durable_membership_content_digest_hex,
+        sealedCycleContentDigestHex: rows[0]!.sealed_cycle_content_digest_hex,
+      },
+      runtimeInput,
+    });
   return assertHistoricalForecastInputPitBindingV2(rows[0]!, expected);
 }
 
 export function createPostgresHistoricalForecastInputPitLoaderV2(sql: postgres.Sql) {
   return async (expected: HistoricalForecastInputPitIdentityV2): Promise<ForecastRuntimeInputV2> => {
-    return sql.begin("isolation level repeatable read read only", async (transaction) =>
-      loadPostgresHistoricalForecastInputPitInTransactionV2(transaction as unknown as postgres.Sql, expected));
+    return withPostgresSessionTransaction(sql, "REPEATABLE READ", (transaction) =>
+      loadPostgresHistoricalForecastInputPitInTransactionV2(transaction, expected));
   };
 }

@@ -28,6 +28,23 @@ import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluati
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
 const HEX_64 = /^[0-9a-f]{64}$/;
+const CANONICAL_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CANONICAL_GATEWAY_RECEIPT_KEYS = Object.freeze([
+  "contentDigest",
+  "gatewayKind",
+  "id",
+  "normalizedInputDigest",
+  "observationContentDigest",
+  "observationId",
+  "organizationId",
+  "providerId",
+  "reason",
+  "schemaVersion",
+  "sourceId",
+  "status",
+  "trustAsOfReceiptId",
+] as const);
 
 export type CanonicalPitObservationRecordV1 = {
   id: string;
@@ -68,7 +85,7 @@ export type CanonicalGatewayPitReceiptV1 = {
   contentDigest: string;
 };
 
-type CanonicalAvailableObservationInputV1 = {
+export type CanonicalAvailableObservationInputV1 = {
   sourceId: string;
   observationKind: CanonicalExternalObservationKindV1;
   subjectRef: string;
@@ -82,6 +99,7 @@ type CanonicalAvailableObservationInputV1 = {
 };
 
 type RepositoryExecutor = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+type CanonicalWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
 
 function sha256Canonical(value: unknown): string {
   return createHash("sha256").update(canonicalJsonString(value), "utf8").digest("hex");
@@ -153,6 +171,54 @@ function mapCanonicalObservation(
   };
 }
 
+/** Exact tenant-scoped replay of one immutable canonical external observation. */
+export async function readCanonicalPitObservationV1Postgres(
+  ex: Pick<RepositoryExecutor, "select">,
+  context: OrgContext,
+  observationId: string,
+): Promise<CanonicalPitObservationRecordV1 | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderMiObservation)
+    .where(and(
+      eq(pgSchema.traderMiObservation.id, observationId),
+      eq(pgSchema.traderMiObservation.organizationId, scoped.organizationId),
+    ))
+    .limit(1);
+  if (!rows[0]) return null;
+  const observation = mapCanonicalObservation(rows[0]);
+  let payloadCanonical: Record<string, unknown>;
+  try {
+    payloadCanonical = JSON.parse(observation.payloadJson) as Record<string, unknown>;
+  } catch {
+    throw new Error("CANONICAL_PIT_ROW_CONTENT_CONFLICT");
+  }
+  const expectedDigest = sha256Canonical({
+    schemaVersion: CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION,
+    organizationId: observation.organizationId,
+    sourceId: observation.sourceId,
+    observationKey: observation.observationKey,
+    observationKind: observation.observationKind,
+    subjectRef: observation.subjectRef,
+    eventTimeUtc: observation.eventTime.toISOString(),
+    availableAtUtc: observation.availableAt.toISOString(),
+    ingestTimeUtc: observation.ingestTime.toISOString(),
+    canonicalProviderId: observation.canonicalProviderId,
+    trustAsOfReceiptId: observation.trustAsOfReceiptId,
+    sourceTrustRevisionId: observation.sourceTrustRevisionId,
+    sourceTrustContentDigest: observation.sourceTrustContentDigest,
+    normalizedInputDigest: observation.normalizedInputDigest,
+    payloadCanonical,
+    revisionOf: observation.revisionOf,
+    revisionSeq: observation.revisionSeq,
+  });
+  if (expectedDigest !== observation.contentDigest) {
+    throw new Error("CANONICAL_PIT_ROW_CONTENT_CONFLICT");
+  }
+  return observation;
+}
+
 function mapGatewayReceipt(
   row: typeof pgSchema.traderMiGatewayPitReceiptV1.$inferSelect,
 ): CanonicalGatewayPitReceiptV1 {
@@ -181,6 +247,51 @@ async function persistGatewayReceipt(
   ex: Pick<RepositoryExecutor, "select" | "insert">,
   receipt: CanonicalGatewayPitReceiptV1,
 ): Promise<{ receipt: CanonicalGatewayPitReceiptV1; insertedNew: boolean }> {
+  const actualKeys = Object.keys(receipt).sort();
+  const rebuilt = buildCanonicalGatewayPitReceiptV1({
+    organizationId: receipt.organizationId,
+    providerId: receipt.providerId,
+    gatewayKind: receipt.gatewayKind,
+    status: receipt.status,
+    reason: receipt.reason,
+    sourceId: receipt.sourceId,
+    trustAsOfReceiptId: receipt.trustAsOfReceiptId,
+    observationId: receipt.observationId,
+    observationContentDigest: receipt.observationContentDigest,
+    normalizedInputDigest: receipt.normalizedInputDigest,
+  });
+  if (
+    canonicalJsonString(actualKeys) !==
+      canonicalJsonString(CANONICAL_GATEWAY_RECEIPT_KEYS) ||
+    !CANONICAL_UUID.test(receipt.organizationId) ||
+    (receipt.sourceId !== null && !CANONICAL_UUID.test(receipt.sourceId)) ||
+    (receipt.observationId !== null && !CANONICAL_UUID.test(receipt.observationId)) ||
+    canonicalJsonString(rebuilt) !== canonicalJsonString(receipt)
+  ) {
+    throw new Error("CANONICAL_GATEWAY_RECEIPT_ROW_PROJECTION_REFUSED");
+  }
+
+  // Build the durable JSON from the same typed scalar values as the guarded
+  // row. PostgreSQL therefore sees one canonical UUID/text projection on both
+  // sides of the immutable 0161 row/JSON equality check, independent of a
+  // driver's object/JSON codec state.
+  const receiptJson = sql`jsonb_build_object(
+    'id', ${receipt.id}::text,
+    'schemaVersion', ${receipt.schemaVersion}::text,
+    'organizationId', ${receipt.organizationId}::uuid::text,
+    'providerId', ${receipt.providerId}::text,
+    'gatewayKind', ${receipt.gatewayKind}::text,
+    'status', ${receipt.status}::text,
+    'reason', ${receipt.reason}::text,
+    'sourceId', CASE WHEN ${receipt.sourceId}::text IS NULL THEN NULL
+      ELSE to_jsonb(${receipt.sourceId}::uuid::text) END,
+    'trustAsOfReceiptId', ${receipt.trustAsOfReceiptId}::text,
+    'observationId', CASE WHEN ${receipt.observationId}::text IS NULL THEN NULL
+      ELSE to_jsonb(${receipt.observationId}::uuid::text) END,
+    'observationContentDigest', ${receipt.observationContentDigest}::text,
+    'normalizedInputDigest', ${receipt.normalizedInputDigest}::text,
+    'contentDigest', ${receipt.contentDigest}::text
+  )`;
   const inserted = await ex
     .insert(pgSchema.traderMiGatewayPitReceiptV1)
     .values({
@@ -195,7 +306,7 @@ async function persistGatewayReceipt(
       observationId: receipt.observationId,
       observationContentDigest: receipt.observationContentDigest,
       normalizedInputDigest: receipt.normalizedInputDigest,
-      receiptJson: receipt,
+      receiptJson,
       contentDigest: receipt.contentDigest,
       schemaVersion: receipt.schemaVersion,
     })
@@ -224,6 +335,11 @@ export function buildCanonicalGatewayPitReceiptV1(input: {
   requireNonEmpty(input.providerId, "providerId");
   requireNonEmpty(input.gatewayKind, "gatewayKind");
   requireDigest(input.normalizedInputDigest, "normalizedInputDigest");
+  if (!CANONICAL_UUID.test(input.organizationId) ||
+      (input.sourceId !== null && !CANONICAL_UUID.test(input.sourceId)) ||
+      (input.observationId !== null && !CANONICAL_UUID.test(input.observationId))) {
+    throw new Error("CANONICAL_GATEWAY_RECEIPT_INVALID:UUID");
+  }
   if (input.status === "AVAILABLE") {
     if (
       input.reason !== null ||
@@ -277,7 +393,7 @@ export async function persistCanonicalGatewayOutcomeV1Postgres(
 }
 
 async function persistCanonicalObservation(
-  ex: RepositoryExecutor,
+  ex: CanonicalWriteExecutor,
   organizationId: string,
   input: CanonicalAvailableObservationInputV1,
 ): Promise<{ observation: CanonicalPitObservationRecordV1; insertedNew: boolean }> {
@@ -401,28 +517,47 @@ export async function persistCanonicalAvailableGatewayV1Postgres(
   receiptInsertedNew: boolean;
 }> {
   const scoped = requireOrgContext(context.organizationId);
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const stored = await persistCanonicalObservation(tx, scoped.organizationId, input);
-    const receipt = buildCanonicalGatewayPitReceiptV1({
-      organizationId: scoped.organizationId,
-      providerId: input.canonicalProviderId,
-      gatewayKind: input.observationKind,
-      status: "AVAILABLE",
-      reason: null,
-      sourceId: input.sourceId,
-      trustAsOfReceiptId: input.trustAsOfReceiptId,
-      observationId: stored.observation.id,
-      observationContentDigest: stored.observation.contentDigest,
-      normalizedInputDigest: input.normalizedInputDigest,
-    });
-    const storedReceipt = await persistGatewayReceipt(tx, receipt);
-    return {
-      observation: stored.observation,
-      observationInsertedNew: stored.insertedNew,
-      receipt: storedReceipt.receipt,
-      receiptInsertedNew: storedReceipt.insertedNew,
-    };
+  return runWaiaPostgresTransaction(db, (tx) =>
+    persistCanonicalAvailableGatewayWithinTransactionV1Postgres(tx, scoped, input));
+}
+
+/**
+ * Same canonical observation/receipt persistence contract for callers that
+ * already hold the authoritative PostgreSQL transaction. It deliberately does
+ * not open a nested transaction, so advisory locks and all durable authority
+ * writes remain on the caller's one backend and commit atomically.
+ */
+export async function persistCanonicalAvailableGatewayWithinTransactionV1Postgres(
+  ex: CanonicalWriteExecutor,
+  context: OrgContext,
+  input: CanonicalAvailableObservationInputV1,
+): Promise<{
+  observation: CanonicalPitObservationRecordV1;
+  observationInsertedNew: boolean;
+  receipt: CanonicalGatewayPitReceiptV1;
+  receiptInsertedNew: boolean;
+}> {
+  const scoped = requireOrgContext(context.organizationId);
+  const stored = await persistCanonicalObservation(ex, scoped.organizationId, input);
+  const receipt = buildCanonicalGatewayPitReceiptV1({
+    organizationId: scoped.organizationId,
+    providerId: input.canonicalProviderId,
+    gatewayKind: input.observationKind,
+    status: "AVAILABLE",
+    reason: null,
+    sourceId: input.sourceId,
+    trustAsOfReceiptId: input.trustAsOfReceiptId,
+    observationId: stored.observation.id,
+    observationContentDigest: stored.observation.contentDigest,
+    normalizedInputDigest: input.normalizedInputDigest,
   });
+  const storedReceipt = await persistGatewayReceipt(ex, receipt);
+  return {
+    observation: stored.observation,
+    observationInsertedNew: stored.insertedNew,
+    receipt: storedReceipt.receipt,
+    receiptInsertedNew: storedReceipt.insertedNew,
+  };
 }
 
 export async function persistCanonicalMeasurementDefinitionV1Postgres(

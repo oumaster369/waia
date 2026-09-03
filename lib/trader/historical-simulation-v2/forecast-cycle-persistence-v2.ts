@@ -11,6 +11,8 @@ import { persistForecastBundleV2 } from
   "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
 import { buildHistoricalForecastKnowledgeBootstrapV2 } from
   "./forecast-knowledge-bootstrap-v2";
+import { assertHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
 
 /** Replays authority and atomically persists its exact source bytes with both target forecasts. */
 export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input: Readonly<{
@@ -53,9 +55,20 @@ export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input:
     predictivePackageContentDigestHex:
       outcome.authority.selectedPredictivePackageContentDigestHex,
   });
+  const knowledgeSnapshotAuthority = input.runtimeInput.historicalKnowledgeSnapshotAuthority
+    ? assertHistoricalKnowledgeSnapshotAuthorityV2(
+        input.runtimeInput.historicalKnowledgeSnapshotAuthority,
+      )
+    : null;
   if (
     input.runtimeInput.knowledgeEdgeId !== historicalKnowledgeBootstrap.knowledgeEdgeId ||
-    input.runtimeInput.knowledgeContentDigestHex !== historicalKnowledgeBootstrap.contentDigestHex
+    !knowledgeSnapshotAuthority ||
+    knowledgeSnapshotAuthority.organizationId !== input.organizationId ||
+    knowledgeSnapshotAuthority.runId !== input.runId ||
+    knowledgeSnapshotAuthority.symbol !== input.symbol ||
+    knowledgeSnapshotAuthority.pitAnchor !== outcome.authority.anchorClosedBarAt ||
+    input.runtimeInput.knowledgeContentDigestHex !==
+      knowledgeSnapshotAuthority.knowledgeContentDigestHex
   ) {
     throw new Error("HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:KNOWLEDGE_LINEAGE");
   }

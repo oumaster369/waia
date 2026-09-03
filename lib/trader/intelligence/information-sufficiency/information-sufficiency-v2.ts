@@ -105,9 +105,41 @@ export type InformationEvidenceRoleV2 =
 export type InformationEvidenceHistoryScopeV2 =
   | "NOT_HISTORICAL"
   | "DEVELOPMENT"
+  | "WALK_FORWARD_PREDICTIVE"
   | "ADMISSIBLE_PATTERN_KNOWLEDGE"
   | "BLIND_HOLDOUT";
 export type InformationEvidenceContradictionV2 = "NONE" | "SUPPORTS" | "CONTRADICTS" | "UNRESOLVED";
+
+export type HistoricalDatasetTrustAuthorityV2 = Readonly<{
+  schemaVersion: "historical-dataset-trust-authority-v2";
+  organizationId: string;
+  symbol: string;
+  runId: string;
+  releaseSha: string;
+  ratifiedAdmissionId: string;
+  ratifiedAdmissionContentDigestHex: string;
+  epistemicRecordCutoff: string;
+  datasetAuthorityId: string;
+  datasetAuthorityContentDigestHex: string;
+  datasetAuthorityDigestHex: string;
+  partitionRawSha256Hex: string;
+  membershipContentDigestHex: string;
+  sealedCycleContentDigestHex: string;
+  wfPredictiveSemanticContentDigestHex: string;
+  wfPredictiveStartUtc: string;
+  wfPredictiveEndUtc: string;
+  publicAvailableAt: string;
+  canonicalRecordAvailableAt: string;
+  canonicalRecordIngestTime: string;
+  sourceId: string;
+  trustAsOfReceiptId: string;
+  trustRevisionId: string;
+  trustRevisionContentDigestHex: string;
+  trustScore: number;
+  observationId: string;
+  observationContentDigestHex: string;
+  contentDigestHex: string;
+}>;
 
 export type InformationEvidenceV2 = Readonly<{
   evidenceId: string;
@@ -137,6 +169,8 @@ export type InformationEvidenceV2 = Readonly<{
   epistemicRole: InformationEvidenceRoleV2;
   historyScope: InformationEvidenceHistoryScopeV2;
   degradationReasonCodes: readonly string[];
+  /** Absent for the legacy/live contract; present only for sealed historical replay. */
+  historicalDatasetTrustAuthority?: HistoricalDatasetTrustAuthorityV2;
 }>;
 
 export type AggregateQualityEvaluationV2 = Readonly<{
@@ -216,6 +250,109 @@ function postgresCanonicalTextCompare(left: string, right: string): number {
 
 function sha256Canonical(value: unknown): string {
   return createHash("sha256").update(postgresCanonicalJsonString(value), "utf8").digest("hex");
+}
+
+const HISTORICAL_DATASET_TRUST_KEYS_V2 = [
+  "canonicalRecordAvailableAt", "canonicalRecordIngestTime", "contentDigestHex",
+  "datasetAuthorityContentDigestHex", "datasetAuthorityDigestHex", "datasetAuthorityId",
+  "epistemicRecordCutoff", "membershipContentDigestHex", "organizationId",
+  "symbol", "publicAvailableAt",
+  "partitionRawSha256Hex", "ratifiedAdmissionContentDigestHex", "ratifiedAdmissionId",
+  "releaseSha", "runId", "schemaVersion", "sealedCycleContentDigestHex",
+  "sourceId", "trustAsOfReceiptId", "trustRevisionContentDigestHex", "trustRevisionId",
+  "trustScore", "observationId", "observationContentDigestHex",
+  "wfPredictiveEndUtc", "wfPredictiveSemanticContentDigestHex", "wfPredictiveStartUtc",
+] as const;
+
+export function buildHistoricalDatasetTrustAuthorityV2(
+  input: Omit<HistoricalDatasetTrustAuthorityV2, "schemaVersion" | "contentDigestHex">,
+): HistoricalDatasetTrustAuthorityV2 {
+  const body = {
+    schemaVersion: "historical-dataset-trust-authority-v2" as const,
+    organizationId: input.organizationId,
+    runId: input.runId,
+    releaseSha: input.releaseSha,
+    ratifiedAdmissionId: input.ratifiedAdmissionId,
+    ratifiedAdmissionContentDigestHex: input.ratifiedAdmissionContentDigestHex,
+    epistemicRecordCutoff: input.epistemicRecordCutoff,
+    symbol: input.symbol,
+    datasetAuthorityId: input.datasetAuthorityId,
+    datasetAuthorityContentDigestHex: input.datasetAuthorityContentDigestHex,
+    datasetAuthorityDigestHex: input.datasetAuthorityDigestHex,
+    partitionRawSha256Hex: input.partitionRawSha256Hex,
+    membershipContentDigestHex: input.membershipContentDigestHex,
+    sealedCycleContentDigestHex: input.sealedCycleContentDigestHex,
+    wfPredictiveStartUtc: input.wfPredictiveStartUtc,
+    wfPredictiveEndUtc: input.wfPredictiveEndUtc,
+    wfPredictiveSemanticContentDigestHex: input.wfPredictiveSemanticContentDigestHex,
+    publicAvailableAt: input.publicAvailableAt,
+    sourceId: input.sourceId,
+    trustRevisionId: input.trustRevisionId,
+    trustRevisionContentDigestHex: input.trustRevisionContentDigestHex,
+    trustAsOfReceiptId: input.trustAsOfReceiptId,
+    trustScore: input.trustScore,
+    observationId: input.observationId,
+    observationContentDigestHex: input.observationContentDigestHex,
+    canonicalRecordAvailableAt: input.canonicalRecordAvailableAt,
+    canonicalRecordIngestTime: input.canonicalRecordIngestTime,
+  };
+  const authority = { ...body, contentDigestHex: sha256Canonical(body) };
+  assertHistoricalDatasetTrustAuthorityV2(authority);
+  return Object.freeze(authority);
+}
+
+export function assertHistoricalDatasetTrustAuthorityV2(
+  authority: HistoricalDatasetTrustAuthorityV2,
+): HistoricalDatasetTrustAuthorityV2 {
+  if (!authority || typeof authority !== "object" || Array.isArray(authority) ||
+      Object.keys(authority).sort(postgresCanonicalTextCompare).join("\u0000") !==
+        [...HISTORICAL_DATASET_TRUST_KEYS_V2].sort(postgresCanonicalTextCompare).join("\u0000") ||
+      authority.schemaVersion !== "historical-dataset-trust-authority-v2") {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustAuthority");
+  }
+  requireNonEmpty(authority.organizationId, "historical.organizationId");
+  requireNonEmpty(authority.runId, "historical.runId");
+  if (!/^[0-9a-f]{40}$/.test(authority.releaseSha)) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historical.releaseSha");
+  }
+  requireNonEmpty(authority.ratifiedAdmissionId, "historical.ratifiedAdmissionId");
+  requireNonEmpty(authority.datasetAuthorityId, "historical.datasetAuthorityId");
+  requireNonEmpty(authority.sourceId, "historical.sourceId");
+  requireNonEmpty(authority.trustRevisionId, "historical.trustRevisionId");
+  requireNonEmpty(authority.observationId, "historical.observationId");
+  for (const value of [authority.ratifiedAdmissionContentDigestHex,
+    authority.datasetAuthorityContentDigestHex, authority.datasetAuthorityDigestHex,
+    authority.partitionRawSha256Hex, authority.membershipContentDigestHex,
+    authority.sealedCycleContentDigestHex, authority.wfPredictiveSemanticContentDigestHex,
+    authority.trustAsOfReceiptId, authority.trustRevisionContentDigestHex,
+    authority.observationContentDigestHex]) {
+    requireDigest(value, "historical.digest");
+  }
+  if (!Number.isFinite(authority.trustScore) || authority.trustScore < 0 ||
+      authority.trustScore > 1) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historical.trustScore");
+  }
+  const times = [authority.epistemicRecordCutoff, authority.wfPredictiveStartUtc,
+    authority.wfPredictiveEndUtc, authority.publicAvailableAt,
+    authority.canonicalRecordAvailableAt,
+    authority.canonicalRecordIngestTime];
+  if (times.some((value) => !Number.isFinite(Date.parse(value)) ||
+      new Date(value).toISOString() !== value) ||
+      Date.parse(authority.wfPredictiveStartUtc) >= Date.parse(authority.wfPredictiveEndUtc) ||
+      authority.publicAvailableAt !== authority.wfPredictiveEndUtc ||
+      Date.parse(authority.publicAvailableAt) >
+        Date.parse(authority.canonicalRecordAvailableAt) ||
+      Date.parse(authority.canonicalRecordAvailableAt) >
+        Date.parse(authority.canonicalRecordIngestTime) ||
+      Date.parse(authority.canonicalRecordIngestTime) >
+        Date.parse(authority.epistemicRecordCutoff)) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustChronology");
+  }
+  const { contentDigestHex, ...body } = authority;
+  if (sha256Canonical(body) !== contentDigestHex) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustDigest");
+  }
+  return authority;
 }
 
 function expandFiniteNumber(value: number): string {
@@ -558,7 +695,8 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
       ] as readonly string[]
     ).includes(evidence.epistemicRole) ||
     !(
-      ["NOT_HISTORICAL", "DEVELOPMENT", "ADMISSIBLE_PATTERN_KNOWLEDGE"] as readonly string[]
+      ["NOT_HISTORICAL", "DEVELOPMENT", "WALK_FORWARD_PREDICTIVE",
+        "ADMISSIBLE_PATTERN_KNOWLEDGE"] as readonly string[]
     ).includes(evidence.historyScope) ||
     !(["NONE", "SUPPORTS", "CONTRADICTS", "UNRESOLVED"] as readonly string[]).includes(
       evidence.contradiction,
@@ -604,6 +742,32 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
     throw new Error("INFORMATION_SUFFICIENCY_INVALID:externalTrustLineage");
   } else {
     requireNonEmpty(evidence.trustRevisionId, "trustRevisionId");
+  }
+  const hasHistoricalAuthority = Object.prototype.hasOwnProperty.call(
+    evidence, "historicalDatasetTrustAuthority",
+  );
+  const historicalAuthority = evidence.historicalDatasetTrustAuthority;
+  if (hasHistoricalAuthority !== (evidence.historyScope === "WALK_FORWARD_PREDICTIVE")) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustScope");
+  }
+  if (hasHistoricalAuthority) {
+    if (!historicalAuthority) {
+      throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustAuthority");
+    }
+    assertHistoricalDatasetTrustAuthorityV2(historicalAuthority);
+    if (evidence.observationKind === "msv_envelope" ||
+        historicalAuthority.sourceId !== evidence.sourceId ||
+        historicalAuthority.trustAsOfReceiptId !== evidence.trustAsOfReceiptId ||
+        historicalAuthority.trustRevisionId !== evidence.trustRevisionId ||
+        historicalAuthority.trustRevisionContentDigestHex !==
+          evidence.trustRevisionContentDigest ||
+        historicalAuthority.trustScore !== evidence.trustScore ||
+        historicalAuthority.observationId !== evidence.observationId ||
+        historicalAuthority.observationContentDigestHex !==
+          evidence.observationContentDigest ||
+        historicalAuthority.publicAvailableAt !== evidence.availableAt) {
+      throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustBinding");
+    }
   }
   const measurementIdentity = [
     evidence.measurementDefinitionId,
@@ -652,6 +816,7 @@ function validateEvidence(evidence: InformationEvidenceV2): InformationEvidenceV
       evidence.degradationReasonCodes,
       "degradationReasonCode",
     ),
+    ...(historicalAuthority ? { historicalDatasetTrustAuthority: historicalAuthority } : {}),
   };
 }
 
@@ -744,7 +909,8 @@ function checkCandidate(
   }
   if (
     requirement.questionId === "Q_HISTORICAL_ANALOGUES" &&
-    !["DEVELOPMENT", "ADMISSIBLE_PATTERN_KNOWLEDGE"].includes(evidence.historyScope)
+    !["DEVELOPMENT", "WALK_FORWARD_PREDICTIVE", "ADMISSIBLE_PATTERN_KNOWLEDGE"]
+      .includes(evidence.historyScope)
   ) {
     reasonCodes.push("HISTORICAL_ANALOGUE_SCOPE_INADMISSIBLE");
   }
@@ -929,6 +1095,13 @@ export function evaluateInformationSufficiencyV2(input: {
     input.profile.venue === input.venue &&
     input.profile.analyticalTimeframe === input.analyticalTimeframe &&
     input.profile.horizon === input.horizon;
+  if (evidenceInventory.some((entry) =>
+    entry.historyScope === "WALK_FORWARD_PREDICTIVE" &&
+    (!entry.historicalDatasetTrustAuthority ||
+      entry.historicalDatasetTrustAuthority.organizationId !== input.organizationId ||
+      entry.historicalDatasetTrustAuthority.symbol !== input.symbol))) {
+    throw new Error("INFORMATION_SUFFICIENCY_INVALID:historicalDatasetTrustScope");
+  }
   const triggerSet = new Set(activeContextTriggers);
   const requirementReceipts = input.profile.requirements.map((requirement) =>
     evaluateRequirement({

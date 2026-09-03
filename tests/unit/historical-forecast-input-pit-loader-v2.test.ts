@@ -63,6 +63,8 @@ const row = (patch: Record<string, unknown> = {}) => {
   pit_anchor: pit, visible_from: pit, knowledge_content_digest_hex: digest,
   forecast_authority_content_digest_hex: authorityDigest, runtime_input_json: runtimeInput,
   dataset_authority_id: "dataset-authority", dataset_authority_content_digest_hex: datasetAuthorityDigest,
+  durable_membership_content_digest_hex: datasetMembership.contentDigestHex,
+  sealed_cycle_content_digest_hex: "6".repeat(64),
   sealed_cycle_json: sealedCycle, runtime_input_content_digest_hex: computeSemanticSha256Hex(runtimeInput),
   source_runtime_input_json: runtimeInput, source_authorized_outcome_json: replayOutcome,
   source_forecast_authority_content_digest_hex: authorityDigest,

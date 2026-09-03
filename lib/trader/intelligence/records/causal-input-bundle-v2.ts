@@ -6,6 +6,13 @@ import {
   canonicalizeSemanticJsonString,
   computeSemanticSha256Hex,
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  assertHistoricalDatasetTrustAuthorityV2,
+  type HistoricalDatasetTrustAuthorityV2,
+  type InformationEvidenceAvailabilityV2,
+  type InformationEvidenceHistoryScopeV2,
+} from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
+import { historicalInstrumentsMatch } from "@/lib/trader/symbols/historical-instrument";
 
 export const CAUSAL_INPUT_BUNDLE_SCHEMA_VERSION =
   "waia.trader.intelligence_cycle_causal_input_bundle.v2" as const;
@@ -43,6 +50,10 @@ export type CausalMarketUnderstandingArtifactV1 = Readonly<{
     measurementDefinitionContentDigest: string | null;
     measurementValueId: string | null;
     measurementValueContentDigest: string | null;
+    availability?: InformationEvidenceAvailabilityV2;
+    availableAt?: string;
+    historyScope?: InformationEvidenceHistoryScopeV2;
+    historicalDatasetTrustAuthority?: HistoricalDatasetTrustAuthorityV2;
   }>[];
 }>;
 
@@ -84,6 +95,10 @@ export type CanonicalCycleCausalInputBundleV2 = Readonly<{
           measurementDefinitionContentDigest: string | null;
           measurementValueId: string | null;
           measurementValueContentDigest: string | null;
+          availability?: InformationEvidenceAvailabilityV2;
+          availableAt?: string;
+          historyScope?: InformationEvidenceHistoryScopeV2;
+          historicalDatasetTrustAuthority?: HistoricalDatasetTrustAuthorityV2;
         }>[];
       }>;
   hypothesisConstruction: Readonly<{
@@ -199,14 +214,22 @@ function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
     requireDigest(item.contentDigest, "computationInputDigest");
   }
   for (const evidence of bundle.understanding.consumedEvidence) {
+    const hasHistoricalAuthority = Object.prototype.hasOwnProperty.call(
+      evidence,
+      "historicalDatasetTrustAuthority",
+    );
+    const expectedEvidenceKeys = [
+      "evidenceId", "sourceId", "observationId", "observationSchemaVersion",
+      "observationContentDigest", "trustAsOfReceiptId", "trustRevisionId",
+      "trustRevisionContentDigest", "measurementDefinitionId",
+      "measurementDefinitionContentDigest", "measurementValueId",
+      "measurementValueContentDigest",
+      ...(hasHistoricalAuthority
+        ? ["availability", "availableAt", "historyScope", "historicalDatasetTrustAuthority"]
+        : []),
+    ];
     if (
-      !hasExactKeys(evidence, [
-        "evidenceId", "sourceId", "observationId", "observationSchemaVersion",
-        "observationContentDigest", "trustAsOfReceiptId", "trustRevisionId",
-        "trustRevisionContentDigest", "measurementDefinitionId",
-        "measurementDefinitionContentDigest", "measurementValueId",
-        "measurementValueContentDigest",
-      ]) ||
+      !hasExactKeys(evidence, expectedEvidenceKeys) ||
       !evidence.evidenceId || !evidence.sourceId || !evidence.observationId ||
       !evidence.observationSchemaVersion
     ) throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:evidenceShape");
@@ -216,6 +239,44 @@ function assertBundleShape(bundle: CanonicalCycleCausalInputBundleV2): void {
       ["measurementDefinitionContentDigest", evidence.measurementDefinitionContentDigest],
       ["measurementValueContentDigest", evidence.measurementValueContentDigest],
     ] as const) if (digest !== null) requireDigest(digest, field);
+    const trustLineage = [
+      evidence.trustAsOfReceiptId,
+      evidence.trustRevisionId,
+      evidence.trustRevisionContentDigest,
+    ];
+    if (trustLineage.some((value) => value !== null) &&
+        trustLineage.some((value) => value === null)) {
+      throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:trustLineage");
+    }
+    if (evidence.trustAsOfReceiptId !== null) {
+      requireDigest(evidence.trustAsOfReceiptId, "trustAsOfReceiptId");
+      if (!evidence.trustRevisionId) {
+        throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:trustRevisionId");
+      }
+    }
+    if (hasHistoricalAuthority) {
+      if (evidence.availability !== "AVAILABLE" ||
+          evidence.historyScope !== "WALK_FORWARD_PREDICTIVE" ||
+          !evidence.availableAt ||
+          requireCanonicalInstant(evidence.availableAt, "evidenceAvailableAt") !==
+            evidence.availableAt) {
+        throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:historicalDatasetTrustScope");
+      }
+      const authority = assertHistoricalDatasetTrustAuthorityV2(
+        evidence.historicalDatasetTrustAuthority!,
+      );
+      if (authority.organizationId !== bundle.scope.organizationId ||
+          authority.sourceId !== evidence.sourceId ||
+          authority.observationId !== evidence.observationId ||
+          authority.observationContentDigestHex !== evidence.observationContentDigest ||
+          authority.trustAsOfReceiptId !== evidence.trustAsOfReceiptId ||
+          authority.trustRevisionId !== evidence.trustRevisionId ||
+          authority.trustRevisionContentDigestHex !== evidence.trustRevisionContentDigest ||
+          authority.publicAvailableAt !== evidence.availableAt ||
+          Date.parse(authority.publicAvailableAt) > Date.parse(bundle.scope.evaluatedAt)) {
+        throw new Error("CAUSAL_INPUT_BUNDLE_INVALID:historicalDatasetTrustBinding");
+      }
+    }
   }
 }
 
@@ -227,7 +288,8 @@ function buildUnderstandingIdentity(
   if (!artifact) return { status: "NOT_CAUSALLY_APPLICABLE" };
   if (
     artifact.scope.organizationId !== organizationId ||
-    artifact.scope.symbol !== snapshot.instrumentId ||
+    (artifact.scope.symbol !== snapshot.instrumentId &&
+      !historicalInstrumentsMatch(artifact.scope.symbol, snapshot.instrumentId)) ||
     artifact.scope.pitAnchor !== snapshot.evaluatedAt ||
     artifact.evaluatedAt !== snapshot.evaluatedAt
   ) {
@@ -252,6 +314,14 @@ function buildUnderstandingIdentity(
       measurementDefinitionContentDigest: evidence.measurementDefinitionContentDigest,
       measurementValueId: evidence.measurementValueId,
       measurementValueContentDigest: evidence.measurementValueContentDigest,
+      ...(evidence.historicalDatasetTrustAuthority === undefined
+        ? {}
+        : {
+            availability: evidence.availability,
+            availableAt: evidence.availableAt,
+            historyScope: evidence.historyScope,
+            historicalDatasetTrustAuthority: evidence.historicalDatasetTrustAuthority,
+          }),
     }))
     .sort((left, right) => compareText(left.evidenceId, right.evidenceId));
   return {

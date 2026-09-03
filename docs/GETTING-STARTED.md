@@ -51,6 +51,7 @@ For **Mode C** / production parity (`pnpm dev`):
 | Variable | Kind | Purpose |
 |----------|------|---------|
 | `DATABASE_URL_POSTGRES` | Secret | Supabase transaction pooler URI (port **6543**) |
+| `DATABASE_URL_POSTGRES_SESSION` | Secret when running DEE-918 | Supabase session pooler or direct URI (port **5432**); required for the session-locked ScientificAdmission flow, with no transaction-pooler fallback |
 | `WAIA_AI_OPENAI_API_KEY` | Secret | Twin dialogue provider |
 | `NEXT_PUBLIC_SUPABASE_URL` | Public | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public | Supabase publishable / anon key |
@@ -149,6 +150,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-or-publishable-key>
 # Postgres runtime
 WAIA_DB_BACKEND=postgres
 DATABASE_URL_POSTGRES=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+DATABASE_URL_POSTGRES_SESSION=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 
 # Twin AI (match wrangler.jsonc)
 WAIA_AI_GATEWAY_FOUNDATION=1

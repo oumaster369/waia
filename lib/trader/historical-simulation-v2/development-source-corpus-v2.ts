@@ -1,10 +1,19 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
+import { expectedOneMinuteBarCount } from
+  "@/lib/trader/market-data/fhv-canonical-coverage";
 import { fhvBarsV2RecordToBar, parseFhvBarsV2Line } from
   "@/lib/trader/market-data/fhv-bars-v2-ndjson";
+import {
+  createStreamingBarSemanticHasher,
+  finalizeStreamingBarSemanticDigest,
+  updateStreamingBarSemanticHasher,
+} from "@/lib/trader/market-data/fhv-streaming-bar-digest";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
 import { materializeExecOppOutcome13dV1, type QualifiedDevelopmentBarV1 } from
   "@/lib/trader/intelligence/forecast-v2/exec-opp-outcome-materializer-v1";
@@ -108,17 +117,129 @@ export async function loadHistoricalDevelopmentSourceCorpusFromDatasetV2(input: 
   symbol: "BTCUSDT" | "ETHUSDT";
   primaryHorizonMinutes?: 30 | 60;
 }>): Promise<readonly SourceAnchor[]> {
-  const filePath = join(input.datasetRoot, "partitions", "development", input.symbol,
-    "bars.v2.ndjson");
+  const snapshot = await loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2(input);
+  return snapshot.corpus;
+}
+
+export type HistoricalDevelopmentSourceCorpusSnapshotV2 = Readonly<{
+  corpus: readonly SourceAnchor[];
+  rawSha256Hex: string;
+  /** Exact parsed scientific-window bars from the same byte-authenticated stream. */
+  bars?: readonly Bar[];
+  scientificWindowEvidence?: Readonly<{
+    startUtc: string;
+    endUtc: string;
+    barCount: number;
+    expectedBarCount: number;
+    firstBarOpen: string;
+    lastBarClose: string;
+    semanticContentDigest: string;
+    gapDuplicateIntegrity: "PASS";
+  }>;
+}>;
+
+async function loadHistoricalSourceCorpusSnapshotFromFileV2(input: Readonly<{
+  filePath: string;
+  symbol: "BTCUSDT" | "ETHUSDT";
+  primaryHorizonMinutes?: 30 | 60;
+  startUtc?: string;
+  endUtc?: string;
+}>): Promise<HistoricalDevelopmentSourceCorpusSnapshotV2> {
+  const startMs = input.startUtc === undefined ? null : Date.parse(input.startUtc);
+  const endMs = input.endUtc === undefined ? null : Date.parse(input.endUtc);
+  if ((startMs !== null && !Number.isFinite(startMs)) ||
+      (endMs !== null && !Number.isFinite(endMs)) ||
+      (startMs !== null && endMs !== null && startMs >= endMs)) {
+    throw new Error("HISTORICAL_SOURCE_CORPUS_REFUSED:INVALID_BOUNDS");
+  }
+  const rawHasher = createHash("sha256");
+  const semanticHasher = createStreamingBarSemanticHasher();
+  let windowBarCount = 0;
+  const windowBars: Bar[] = [];
+  let firstBarOpen = "";
+  let lastBarClose = "";
+  const source = createReadStream(input.filePath);
+  async function* authenticatedBytes(): AsyncGenerator<Buffer> {
+    for await (const chunk of source) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      rawHasher.update(bytes);
+      yield bytes;
+    }
+  }
   async function* bars(): AsyncGenerator<Bar> {
-    const lines = createInterface({ input: createReadStream(filePath, { encoding: "utf8" }),
+    const lines = createInterface({ input: Readable.from(authenticatedBytes()),
       crlfDelay: Infinity });
     let lineNumber = 0;
     for await (const line of lines) {
       lineNumber += 1;
-      yield fhvBarsV2RecordToBar(parseFhvBarsV2Line(line, lineNumber));
+      const bar = fhvBarsV2RecordToBar(parseFhvBarsV2Line(line, lineNumber));
+      const openMs = Date.parse(bar.barOpenTime);
+      if ((startMs === null || openMs >= startMs) && (endMs === null || openMs < endMs)) {
+        updateStreamingBarSemanticHasher(semanticHasher, bar);
+        if (windowBarCount === 0) firstBarOpen = bar.barOpenTime;
+        lastBarClose = bar.barCloseTime;
+        windowBarCount += 1;
+        windowBars.push(bar);
+        yield bar;
+      }
     }
   }
-  return buildHistoricalDevelopmentSourceCorpusV2({ bars: bars(), symbol: input.symbol,
-    primaryHorizonMinutes: input.primaryHorizonMinutes });
+  const corpus = await buildHistoricalDevelopmentSourceCorpusV2({ bars: bars(),
+    symbol: input.symbol, primaryHorizonMinutes: input.primaryHorizonMinutes });
+  const scientificWindowEvidence = input.startUtc !== undefined && input.endUtc !== undefined
+    ? Object.freeze({
+        startUtc: input.startUtc,
+        endUtc: input.endUtc,
+        barCount: windowBarCount,
+        expectedBarCount: expectedOneMinuteBarCount(input.startUtc, input.endUtc),
+        firstBarOpen,
+        lastBarClose,
+        semanticContentDigest: finalizeStreamingBarSemanticDigest(semanticHasher),
+        gapDuplicateIntegrity: "PASS" as const,
+      })
+    : undefined;
+  if (scientificWindowEvidence && (
+    scientificWindowEvidence.barCount !== scientificWindowEvidence.expectedBarCount ||
+    scientificWindowEvidence.firstBarOpen !== scientificWindowEvidence.startUtc ||
+    scientificWindowEvidence.lastBarClose !== scientificWindowEvidence.endUtc
+  )) {
+    throw new Error("HISTORICAL_SOURCE_CORPUS_REFUSED:SCIENTIFIC_WINDOW_COVERAGE");
+  }
+  return Object.freeze({
+    corpus,
+    rawSha256Hex: rawHasher.digest("hex"),
+    bars: Object.freeze(windowBars),
+    ...(scientificWindowEvidence ? { scientificWindowEvidence } : {}),
+  });
+}
+
+/**
+ * Materializes the corpus and its raw digest from one byte stream. The digest therefore
+ * authenticates the exact bytes consumed by the parser rather than a separate stat/read pass.
+ */
+export async function loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2(input: Readonly<{
+  datasetRoot: string;
+  symbol: "BTCUSDT" | "ETHUSDT";
+  primaryHorizonMinutes?: 30 | 60;
+}>): Promise<HistoricalDevelopmentSourceCorpusSnapshotV2> {
+  const filePath = join(input.datasetRoot, "partitions", "development", input.symbol,
+    "bars.v2.ndjson");
+  return loadHistoricalSourceCorpusSnapshotFromFileV2({ ...input, filePath });
+}
+
+/** Exact WF_PREDICTIVE slice; hashes the complete WALK_FORWARD file consumed. */
+export function loadHistoricalWalkForwardPredictiveSourceCorpusSnapshotFromDatasetV2(
+  input: Readonly<{
+    datasetRoot: string;
+    symbol: "BTCUSDT" | "ETHUSDT";
+    primaryHorizonMinutes: 30 | 60;
+    startUtc: string;
+    endUtc: string;
+  }>,
+): Promise<HistoricalDevelopmentSourceCorpusSnapshotV2> {
+  return loadHistoricalSourceCorpusSnapshotFromFileV2({
+    ...input,
+    filePath: join(input.datasetRoot, "partitions", "walk-forward", input.symbol,
+      "bars.v2.ndjson"),
+  });
 }

@@ -6,8 +6,6 @@ import type { ReplicaRootFamilyInput } from "@/lib/trader/intelligence/forecast-
 import type { SourceAnchor } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
 import {
   KM_GLOBAL_ANCHOR_COUNT,
-  KM_GRID_K,
-  KM_GRID_M,
 } from "@/lib/trader/research/execopp-qualification/km-convergence-gate-v1";
 import {
   runKmConvergenceOrchestratorV1,
@@ -92,11 +90,13 @@ describe("DEE-532 km-convergence orchestrator/v1", () => {
   });
 
   it("requires sufficient eligible anchors for global 16384 set", () => {
+    const singleSurface = buildDevelopmentAnchors(100).filter((value) =>
+      value.symbol === "BTCUSDT" && value.primaryHorizonMinutes === 30);
     expect(() =>
       runKmConvergenceOrchestratorV1({
         developmentDatasetDigestRaw32: createHash("sha256").update("dev").digest(),
         family: buildFamily("BTCUSDT"),
-        developmentAnchors: buildDevelopmentAnchors(100),
+        developmentAnchors: singleSurface,
         notionalUsdt: 10_000,
         costRate: 0.001,
         slippageBufferUsdt: 5,
@@ -104,6 +104,15 @@ describe("DEE-532 km-convergence orchestrator/v1", () => {
         nRefUsdt: 10_000,
       }),
     ).toThrow(/KM_GATE_INSUFFICIENT_ELIGIBLE_ANCHORS|KM_GATE_INCOMPLETE_GLOBAL_ANCHOR_SET/);
+  });
+
+  it("refuses to emit one-family authority for four distinct market surfaces", () => {
+    expect(() => runKmConvergenceOrchestratorV1({
+      developmentDatasetDigestRaw32: createHash("sha256").update("dev-global").digest(),
+      family: buildFamily("BTCUSDT"), developmentAnchors: buildDevelopmentAnchors(4096),
+      notionalUsdt: 10_000, costRate: 0.001, slippageBufferUsdt: 5,
+      normalizationVersionDigestHex: "c".repeat(64), nRefUsdt: 10_000,
+    })).toThrow("KM_GATE_SURFACE_FAMILY_IDENTITY_UNREPRESENTABLE");
   });
 
   const fullGridEnabled = process.env.WAIA_KM_ORCHESTRATOR_FULL === "1";
@@ -114,7 +123,7 @@ describe("DEE-532 km-convergence orchestrator/v1", () => {
       const developmentAnchors = buildDevelopmentAnchors(4096);
       expect(developmentAnchors.length).toBe(KM_GLOBAL_ANCHOR_COUNT);
 
-      const { receipt, cellDigests } = runKmConvergenceOrchestratorV1({
+      expect(() => runKmConvergenceOrchestratorV1({
         developmentDatasetDigestRaw32: createHash("sha256").update("dev-global").digest(),
         family: buildFamily("BTCUSDT"),
         developmentAnchors,
@@ -123,23 +132,7 @@ describe("DEE-532 km-convergence orchestrator/v1", () => {
         slippageBufferUsdt: 5,
         normalizationVersionDigestHex: "c".repeat(64),
         nRefUsdt: 10_000,
-      });
-
-      expect(receipt.configurations).toHaveLength(KM_GRID_K.length * KM_GRID_M.length);
-      if (receipt.terminalStatus === "QUALIFIED") {
-        expect(receipt.selectedPackageGenerationIdentityDigestHex).toBeTruthy();
-        expect(receipt.selectedPackageContentDigestHex).toBeTruthy();
-        const winnerCell = cellDigests.find(
-          (c) =>
-            c.predictivePackageGenerationIdentityDigestHex ===
-            receipt.selectedPackageGenerationIdentityDigestHex,
-        );
-        expect(winnerCell?.predictivePackageContentDigestHex).toBe(
-          receipt.selectedPackageContentDigestHex,
-        );
-      } else {
-        expect(receipt.terminalStatus).toBe("NO_KM_CONFIGURATION_QUALIFIES");
-      }
+      })).toThrow("KM_GATE_SURFACE_FAMILY_IDENTITY_UNREPRESENTABLE");
     },
     900_000,
   );

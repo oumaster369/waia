@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { isDeepStrictEqual } from "node:util";
 
 import {
   canonicalizeSemanticJsonString,
@@ -11,15 +12,22 @@ import {
   type ForecastRuntimeInputV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import { readForecastContractBindingV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
+import { verifyHistoricalForecastInformationProofV2 } from
+  "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
 import { digestHex } from "@/lib/trader/intelligence/forecast-v2/identity-digests";
-import {
-  computeKnowledgeConfidenceUpdateContentDigest,
-  type KnowledgeConfidenceUpdateRecord,
-} from "@/lib/trader/knowledge/knowledge-confidence-update";
 import { requireScientificAdmissionV2, type ScientificAdmissionReceiptV2 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 import type { HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
-import { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from "./knowledge-port-postgres";
+import {
+  buildHistoricalKnowledgeSnapshotAuthorityFromRowsV2,
+  type HistoricalForecastPitKnowledgeRowV2,
+} from "./knowledge-snapshot-binding-v2";
+export { computeHistoricalForecastPitKnowledgeDigestV2 } from
+  "./knowledge-snapshot-binding-v2";
+export type { HistoricalForecastPitKnowledgeRowV2 } from
+  "./knowledge-snapshot-binding-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { withPostgresSerializableTransactionRetryV2 } from
+  "./postgres-session-transaction-v2";
 
 export const HISTORICAL_FORECAST_INPUT_PIT_V2 =
   "waia.trader.historical_forecast_input_pit.v2" as const;
@@ -48,17 +56,6 @@ export type HistoricalForecastInputPitRecordV2 = Readonly<{
   contentDigestHex: string;
 }>;
 
-export type HistoricalForecastPitKnowledgeRowV2 = Readonly<{
-  id: string; organization_id: string; run_id: string; cycle_id: string; symbol: string;
-  knowledge_edge_id: string; update_kind: string; update_model_version: string;
-  prior_confidence: string; posterior_confidence: string; delta: string;
-  issued_at: Date | string; eligible_resolution_at: Date | string; resolved_at: Date | string;
-  pit_evidence_boundary: Date | string; outcome_class: string; score: string | null;
-  source_record_ids_json: string; content_digest: string; idempotency_key: string;
-  provenance_json: string; terminal_reason: string; schema_version: string;
-}>;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DIGEST = /^[0-9a-f]{64}$/;
 
 function currentVerifierBuildDigest(): string {
@@ -81,37 +78,6 @@ function validateMembership(value: HistoricalDatasetMembershipV2, input: {
   }
 }
 
-function mapKnowledgeRow(row: HistoricalForecastPitKnowledgeRowV2): KnowledgeConfidenceUpdateRecord {
-  const source = JSON.parse(row.source_record_ids_json) as Record<string, unknown>;
-  const requiredAuthority = ["confidence_value_class", "authority_class", "operator_disposition",
-    "capital_authority", "strategy_authority", "trade_eligibility_authority", "guardian_authority"];
-  if (requiredAuthority.some((key) => typeof source[key] !== "string")) {
-    throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:KNOWLEDGE_AUTHORITY_SOURCE");
-  }
-  return {
-    id: row.id, organizationId: row.organization_id, runId: row.run_id, cycleId: row.cycle_id,
-    symbol: row.symbol, knowledgeEdgeId: row.knowledge_edge_id,
-    updateKind: row.update_kind as KnowledgeConfidenceUpdateRecord["updateKind"],
-    updateModelVersion: row.update_model_version,
-    priorMachineRecommendedConfidence: row.prior_confidence,
-    machineRecommendedConfidence: row.posterior_confidence, machineRecommendedDelta: row.delta,
-    confidenceValueClass: source.confidence_value_class as KnowledgeConfidenceUpdateRecord["confidenceValueClass"],
-    authorityClass: source.authority_class as KnowledgeConfidenceUpdateRecord["authorityClass"],
-    operatorDisposition: source.operator_disposition as KnowledgeConfidenceUpdateRecord["operatorDisposition"],
-    capitalAuthority: source.capital_authority as KnowledgeConfidenceUpdateRecord["capitalAuthority"],
-    strategyAuthority: source.strategy_authority as KnowledgeConfidenceUpdateRecord["strategyAuthority"],
-    tradeEligibilityAuthority: source.trade_eligibility_authority as KnowledgeConfidenceUpdateRecord["tradeEligibilityAuthority"],
-    guardianAuthority: source.guardian_authority as KnowledgeConfidenceUpdateRecord["guardianAuthority"],
-    issuedAt: iso(row.issued_at), eligibleResolutionAt: iso(row.eligible_resolution_at),
-    resolvedAt: iso(row.resolved_at), pitEvidenceBoundary: iso(row.pit_evidence_boundary),
-    outcomeClass: row.outcome_class, score: row.score, sourceRecordIdsJson: row.source_record_ids_json,
-    contentDigest: row.content_digest, idempotencyKey: row.idempotency_key,
-    provenance: JSON.parse(row.provenance_json) as KnowledgeConfidenceUpdateRecord["provenance"],
-    terminalReason: row.terminal_reason,
-    schemaVersion: row.schema_version as KnowledgeConfidenceUpdateRecord["schemaVersion"],
-  };
-}
-
 function iso(value: Date | string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:TIME");
@@ -129,39 +95,14 @@ function cloneAndDeepFreeze<T>(value: T): T {
   return clone;
 }
 
-export function computeHistoricalForecastPitKnowledgeDigestV2(organizationId: string, symbol: string, pitAnchor: string, rows: readonly HistoricalForecastPitKnowledgeRowV2[]): string {
-  return computeSemanticSha256Hex({
-    schemaVersion: HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2,
-    organizationId,
-    symbol,
-    visibleEvidence: rows.map((row) => {
-      const source = JSON.parse(row.source_record_ids_json) as Record<string, unknown>;
-      const visible = source.visible_from_cycle_pit_anchor;
-      const canonical = mapKnowledgeRow(row);
-      if (!UUID.test(row.id) || !UUID.test(row.knowledge_edge_id) || !DIGEST.test(row.content_digest) ||
-          computeKnowledgeConfidenceUpdateContentDigest(canonical) !== row.content_digest ||
-          typeof visible !== "string" || iso(visible) > pitAnchor || canonical.resolvedAt > pitAnchor ||
-          canonical.pitEvidenceBoundary > pitAnchor || canonical.resolvedAt > iso(visible)) {
-        throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:KNOWLEDGE_SOURCE");
-      }
-      return {
-        id: row.id, knowledgeEdgeId: row.knowledge_edge_id, contentDigestHex: row.content_digest,
-        resolvedAt: iso(row.resolved_at), pitEvidenceBoundary: iso(row.pit_evidence_boundary),
-        visibleFromPitAnchor: visible,
-        forecastAuthorityContentDigestHex: source.forecast_runtime_authority_content_digest_hex,
-        outcomeContentDigestHex: source.forecast_outcome_content_digest_hex,
-      };
-    }).sort((a, b) => a.contentDigestHex.localeCompare(b.contentDigestHex)),
-  });
-}
-
 export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres.Sql) {
   return async (input: Readonly<{
   organizationId: string; runId: string; cycleId: string; forecastId: string;
     symbol: "BTCUSDT" | "ETHUSDT"; pitAnchor: string; datasetAuthorityId: string;
   }>): Promise<HistoricalForecastInputPitRecordV2> => {
-    const produceOnce = () => sql.begin("isolation level serializable", async (transaction) => {
-    const sql = transaction as unknown as postgres.Sql;
+    return withPostgresSerializableTransactionRetryV2(
+      sql,
+      async (sql) => {
     if (iso(input.pitAnchor) !== input.pitAnchor) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:PIT");
     const priorRows = await sql<{ forecast_id: string; dataset_authority_id: string; symbol: string;
       pit_anchor: Date | string }[]>`
@@ -182,8 +123,10 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     `;
     if (runRows.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUN_BOUNDARY");
     const datasets = await sql<{ membership_json: HistoricalDatasetMembershipV2; dataset_authority_digest_hex: string;
-      authority_content_digest_hex: string; sealed_cycle_json: unknown }[]>`
-      SELECT membership_json, dataset_authority_digest_hex, authority_content_digest_hex, sealed_cycle_json
+      authority_content_digest_hex: string; membership_content_digest_hex: string;
+      sealed_cycle_content_digest_hex: string; sealed_cycle_json: unknown }[]>`
+      SELECT membership_json, dataset_authority_digest_hex, authority_content_digest_hex,
+             membership_content_digest_hex, sealed_cycle_content_digest_hex, sealed_cycle_json
       FROM trader_historical_dataset_authority_v2
       WHERE id=${input.datasetAuthorityId}::uuid AND organization_id=${input.organizationId}::uuid
         AND run_id=${input.runId} AND cycle_id=${input.cycleId}
@@ -222,6 +165,20 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         !DIGEST.test(source.execution_forecast_content_digest_hex))
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUNTIME_INPUT_SOURCE_FORECAST");
     const runtimeInput = reviveForecastRuntimeJsonV2(source.runtime_input_json);
+    await verifyHistoricalForecastInformationProofV2(sql, {
+      organizationId: input.organizationId,
+      runId: input.runId,
+      cycleId: input.cycleId,
+      symbol: input.symbol,
+      expectedDatasetAuthority: {
+        id: input.datasetAuthorityId,
+        datasetAuthorityDigestHex: dataset.dataset_authority_digest_hex,
+        authorityContentDigestHex: dataset.authority_content_digest_hex,
+        membershipContentDigestHex: dataset.membership_content_digest_hex,
+        sealedCycleContentDigestHex: dataset.sealed_cycle_content_digest_hex,
+      },
+      runtimeInput,
+    });
     const outcome = issueForecastRuntimeV2(runtimeInput);
     if (outcome.status !== "FORECAST_AUTHORIZED" ||
         outcome.authority.organizationId !== input.organizationId ||
@@ -261,7 +218,8 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     const durableBinding = await readForecastContractBindingV1(sql, {
       organizationId: input.organizationId,
       selectedPredictivePackageContentDigestHex: binding.selectedPredictivePackageContentDigestHex,
-    });
+      },
+    );
     if (!durableBinding || canonicalizeSemanticJsonString(durableBinding) !== canonicalizeSemanticJsonString(binding)) {
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:BINDING");
     }
@@ -322,7 +280,8 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
              terminal_reason, schema_version
       FROM trader_knowledge_confidence_update_record
       WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId} AND symbol=${input.symbol}
-        AND update_model_version LIKE '%.forecast-v2-evidence-only'
+        AND update_model_version =
+          'waia.trader.knowledge_confidence_update_model.v1.forecast-v2-evidence-only'
         AND (source_record_ids_json::jsonb ->> 'visible_from_cycle_pit_anchor')::timestamptz
               <= ${input.pitAnchor}::timestamptz
         AND resolved_at <= ${input.pitAnchor}::timestamptz
@@ -330,9 +289,25 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       ORDER BY content_digest ASC
       FOR SHARE
     `;
-    const knowledgeContentDigestHex = computeHistoricalForecastPitKnowledgeDigestV2(input.organizationId, input.symbol, input.pitAnchor, knowledgeRows);
+    let knowledgeSnapshotAuthority;
+    try {
+      knowledgeSnapshotAuthority = buildHistoricalKnowledgeSnapshotAuthorityFromRowsV2({
+        organizationId: input.organizationId,
+        runId: input.runId,
+        symbol: input.symbol,
+        pitAnchor: input.pitAnchor,
+      }, knowledgeRows);
+    } catch {
+      throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:KNOWLEDGE_SOURCE");
+    }
+    const knowledgeContentDigestHex = knowledgeSnapshotAuthority.knowledgeContentDigestHex;
     if (runtimeInput.knowledgeContentDigestHex !== knowledgeContentDigestHex ||
-        outcome.authority.knowledgeContentDigestHex !== knowledgeContentDigestHex) {
+        outcome.authority.knowledgeContentDigestHex !== knowledgeContentDigestHex ||
+        !runtimeInput.historicalKnowledgeSnapshotAuthority ||
+        !isDeepStrictEqual(
+          runtimeInput.historicalKnowledgeSnapshotAuthority,
+          knowledgeSnapshotAuthority,
+        )) {
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:KNOWLEDGE_SOURCE");
     }
     const body = {
@@ -393,15 +368,5 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     }
     return record;
     });
-    // Two workers may legitimately race on the same first cycle. PostgreSQL SERIALIZABLE can
-    // abort one even though both inputs are identical; retry the whole source-lock/replay
-    // transaction and let the exact digest comparison below distinguish retry from conflict.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try { return await produceOnce(); }
-      catch (error) {
-        if ((error as { code?: string }).code !== "40001" || attempt === 2) throw error;
-      }
-    }
-    throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:SERIALIZATION_RETRY_EXHAUSTED");
   };
 }

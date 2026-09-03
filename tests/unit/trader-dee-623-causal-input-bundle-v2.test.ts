@@ -78,7 +78,8 @@ function artifact(overrides: {
     measurementValueId: "measurement-value-1", measurementValueContentDigest: overrides.measurementDigest ?? d("f"),
     availability: "AVAILABLE", trust: "TRUSTED", trustScore: 1, pitQualified: true,
     replayEligible: true, dependenceGroup: "price", contradictionGroup: null,
-    contradiction: "NONE", epistemicRole: "PRIMARY", historyScope: "PIT", availableAt: evaluatedAt,
+    contradiction: "NONE", epistemicRole: "PRIMARY", historyScope: "NOT_HISTORICAL",
+    availableAt: evaluatedAt,
     degradationReasonCodes: [],
   } as const;
   return {

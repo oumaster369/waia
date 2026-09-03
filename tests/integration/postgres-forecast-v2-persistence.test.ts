@@ -237,7 +237,7 @@ function buildRuntimeInput(
     normalizationVersionDigestHex: family.normalizationVersionDigestHex,
     knowledgeEdgeId: "00000000-0000-4000-8000-000000063300",
     knowledgeContentDigestHex: computeHistoricalForecastPitKnowledgeDigestV2(
-      organizationId, family.symbol, pitAnchor, [],
+      organizationId, "dee633-real-backtest", family.symbol, pitAnchor, [],
     ),
   };
 }

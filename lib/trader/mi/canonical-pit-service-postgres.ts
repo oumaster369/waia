@@ -4,8 +4,10 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
+  persistCanonicalAvailableGatewayWithinTransactionV1Postgres,
   persistCanonicalAvailableGatewayV1Postgres,
   persistCanonicalGatewayOutcomeV1Postgres,
+  readCanonicalPitObservationV1Postgres,
   type CanonicalGatewayPitReceiptV1,
   type CanonicalPitObservationRecordV1,
 } from "@/lib/trader/mi/canonical-pit-repository-postgres";
@@ -25,6 +27,36 @@ export type CanonicalPitServiceResultV1 = {
   observation: CanonicalPitObservationRecordV1 | null;
   observationInsertedNew: boolean;
 };
+
+/**
+ * Server-only held-transaction seam for authority compositions that already own
+ * their PostgreSQL transaction. Keeping this delegation here preserves the
+ * repository boundary while guaranteeing that no second connection is opened.
+ */
+export function persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres(
+  db: WaiaPostgresDb,
+  context: OrgContext,
+  input: Parameters<typeof persistCanonicalAvailableGatewayWithinTransactionV1Postgres>[2],
+) {
+  return persistCanonicalAvailableGatewayWithinTransactionV1Postgres(
+    db,
+    requireOrgContext(context.organizationId),
+    input,
+  );
+}
+
+/** Server-only replay companion for the held-transaction persistence seam. */
+export function readCanonicalPitObservationWithinHeldTransactionV1Postgres(
+  db: WaiaPostgresDb,
+  context: OrgContext,
+  observationId: string,
+) {
+  return readCanonicalPitObservationV1Postgres(
+    db,
+    requireOrgContext(context.organizationId),
+    observationId,
+  );
+}
 
 async function persistOutcome(
   db: WaiaPostgresDb,

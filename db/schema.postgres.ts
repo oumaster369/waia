@@ -4579,6 +4579,131 @@ export const traderHistoricalSimulationPolicyConfigV2 = pgTable(
   (t) => [primaryKey({ columns: [t.organizationId, t.runId, t.policyConfigDigestHex] })],
 );
 
+/** Append-only ScientificAdmission V2 receipts (migration 0142 + lineage index 0189). */
+export const traderScientificAdmissionReceiptV1 = pgTable(
+  "trader_scientific_admission_receipt_v1",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    receiptKind: text("receipt_kind").notNull(),
+    kmGlobalAnchorSetDigest: text("km_global_anchor_set_digest").notNull(),
+    replicaRootFamilyIdentityDigest: text("replica_root_family_identity_digest").notNull(),
+    selectedKConfigDec: integer("selected_k_config_dec"),
+    selectedMConfigDec: integer("selected_m_config_dec"),
+    alphaEpiConfigScale8: text("alpha_epi_config_scale8").notNull(),
+    selectedPackageGenerationIdentityDigest:
+      text("selected_package_generation_identity_digest"),
+    selectedPackageContentDigest: text("selected_package_content_digest"),
+    evidenceSemanticDigest: text("evidence_semantic_digest").notNull(),
+    receiptJson: text("receipt_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trader_scientific_admission_receipt_v1_id_organization_unique")
+      .on(t.id, t.organizationId),
+    uniqueIndex("tsar_v1_org_evidence_digest_uq")
+      .on(t.organizationId, t.evidenceSemanticDigest),
+    uniqueIndex("scientific_admission_receipt_v1_full_lineage_unique")
+      .on(t.id, t.organizationId, t.contentDigest),
+    check("trader_scientific_admission_receipt_v1_content_digest_check",
+      sql`${t.contentDigest} ~ '^[0-9a-f]{64}$'`),
+    check("trader_scientific_admission_receipt_v1_evidence_semantic_digest_check",
+      sql`${t.evidenceSemanticDigest} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+/** DEE-919: durable composition of four genuinely admitted, human-ratified surfaces. */
+export const traderHistoricalFourSurfaceRatifiedAdmissionV2 = pgTable(
+  "trader_historical_four_surface_ratified_admission_v2",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    releaseSha: text("release_sha").notNull(),
+    aggregateAdmissionReceiptId: uuid("aggregate_admission_receipt_id").notNull(),
+    aggregateAdmissionContentDigestHex: text("aggregate_admission_content_digest_hex").notNull(),
+    developmentDatasetIdentityDigestHex: text("development_dataset_identity_digest_hex").notNull(),
+    operatorUserId: uuid("operator_user_id").notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    surfaceAdmissionsJson: jsonb("surface_admissions_json").notNull(),
+    knowledgeSnapshotsJson: jsonb("knowledge_snapshots_json").notNull(),
+    knowledgeSnapshotDigestHex: text("knowledge_snapshot_digest_hex").notNull(),
+    marketEvidenceJson: jsonb("market_evidence_json").notNull(),
+    marketEvidenceDigestHex: text("market_evidence_digest_hex").notNull(),
+    authorityJson: jsonb("authority_json").notNull(),
+    authorityContentDigestHex: text("authority_content_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("historical_four_surface_ratified_admission_v2_natural")
+      .on(t.organizationId, t.runId),
+    unique("historical_four_surface_ratified_admission_v2_full_lineage")
+      .on(t.id, t.organizationId, t.runId, t.authorityContentDigestHex),
+    foreignKey({
+      name: "historical_four_surface_ratified_admission_v2_aggregate_fk",
+      columns: [
+        t.aggregateAdmissionReceiptId,
+        t.organizationId,
+        t.aggregateAdmissionContentDigestHex,
+      ],
+      foreignColumns: [
+        traderScientificAdmissionReceiptV1.id,
+        traderScientificAdmissionReceiptV1.organizationId,
+        traderScientificAdmissionReceiptV1.contentDigest,
+      ],
+    }),
+    check("historical_four_surface_ratified_admission_v2_schema",
+      sql`${t.schemaVersion} = 'waia.trader.historical_four_surface_ratified_admission.v2'`),
+    check("historical_four_surface_ratified_admission_v2_digests", sql`(
+      ${t.releaseSha} ~ '^[0-9a-f]{40}$' AND
+      ${t.aggregateAdmissionContentDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.developmentDatasetIdentityDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.knowledgeSnapshotDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.marketEvidenceDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.authorityContentDigestHex} ~ '^[0-9a-f]{64}$'
+    )`),
+    check("historical_four_surface_ratified_admission_v2_json_binding", sql`(
+      jsonb_typeof(${t.surfaceAdmissionsJson}) = 'array' AND
+      jsonb_array_length(${t.surfaceAdmissionsJson}) = 4 AND
+      jsonb_typeof(${t.knowledgeSnapshotsJson}) = 'array' AND
+      jsonb_array_length(${t.knowledgeSnapshotsJson}) = 4 AND
+      jsonb_typeof(${t.marketEvidenceJson}) = 'array' AND
+      jsonb_array_length(${t.marketEvidenceJson}) = 2 AND
+      ${t.authorityJson} ->> 'schemaVersion' = ${t.schemaVersion} AND
+      ${t.authorityJson} ->> 'organizationId' = ${t.organizationId}::text AND
+      ${t.authorityJson} ->> 'runId' = ${t.runId} AND
+      ${t.authorityJson} ->> 'releaseSha' = ${t.releaseSha} AND
+      ${t.authorityJson} ->> 'aggregateAdmissionReceiptId' =
+        ${t.aggregateAdmissionReceiptId}::text AND
+      ${t.authorityJson} ->> 'aggregateAdmissionContentDigestHex' =
+        ${t.aggregateAdmissionContentDigestHex} AND
+      ${t.authorityJson} ->> 'developmentDatasetIdentityDigestHex' =
+        ${t.developmentDatasetIdentityDigestHex} AND
+      ${t.authorityJson} ->> 'operatorUserId' = ${t.operatorUserId}::text AND
+      ${t.authorityJson} -> 'surfaceAdmissions' = ${t.surfaceAdmissionsJson} AND
+      ${t.authorityJson} -> 'knowledgeSnapshots' = ${t.knowledgeSnapshotsJson} AND
+      ${t.authorityJson} ->> 'knowledgeSnapshotDigestHex' =
+        ${t.knowledgeSnapshotDigestHex} AND
+      ${t.authorityJson} -> 'marketEvidence' = ${t.marketEvidenceJson} AND
+      ${t.authorityJson} ->> 'marketEvidenceDigestHex' =
+        ${t.marketEvidenceDigestHex} AND
+      (${t.authorityJson} ->> 'epistemicRecordCutoff')::timestamptz = ${t.createdAt} AND
+      ${t.authorityJson} ->> 'contentDigestHex' = ${t.authorityContentDigestHex} AND
+      ${t.authorityJson} -> 'authorityBoundary' = jsonb_build_object(
+        'capitalAuthority', 'NONE',
+        'liveTradingAuthority', 'NONE',
+        'blindHoldoutAuthority', 'FORBIDDEN_NOT_PRESENT_NOT_ACCESSED'
+      )
+    ) IS TRUE`),
+  ],
+);
+
 export const traderCanonicalDecisionVerificationSubjectV2 = pgTable(
   "trader_canonical_decision_verification_subject_v2",
   {
