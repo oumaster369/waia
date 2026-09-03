@@ -16,10 +16,10 @@ import {
   type KmFourSurfaceProductionAuthorityV2,
   type KmFourSurfaceProductionBootstrapInputV2,
 } from "./km-four-surface-production-bootstrap-v2";
-import { INTERNAL_persistScientificAdmissionFourSurfaceV2 } from
-  "./scientific-admission-four-surface-repository-postgres-v2";
-import type { ScientificAdmissionFourSurfaceReceiptV2 } from
-  "./scientific-admission-four-surface-v2";
+import {
+  INTERNAL_persistScientificAdmissionFourSurfaceV2,
+  type ScientificAdmissionFourSurfaceReceiptV2,
+} from "./scientific-admission-four-surface-repository-postgres-v2";
 
 export const KM_FOUR_SURFACE_PRODUCTION_PREFLIGHT_V2 =
   "km-four-surface-production-preflight/v2" as const;

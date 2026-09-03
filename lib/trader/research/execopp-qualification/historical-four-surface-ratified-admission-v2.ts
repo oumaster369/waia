@@ -32,9 +32,9 @@ import {
 import { resolveAndPersistTrustAsOfV1Postgres, readTrustAsOfReceiptV1Postgres } from
   "@/lib/trader/mi/trust-as-of-repository-postgres";
 import {
-  persistCanonicalAvailableGatewayWithinTransactionV1Postgres,
-  readCanonicalPitObservationV1Postgres,
-} from "@/lib/trader/mi/canonical-pit-repository-postgres";
+  persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres,
+  readCanonicalPitObservationWithinHeldTransactionV1Postgres,
+} from "@/lib/trader/mi/canonical-pit-service-postgres";
 import { prepareCanonicalPitAttemptV1 } from
   "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
 import type { NormalizedObservation } from
@@ -78,9 +78,9 @@ import {
 } from "./km-four-surface-production-preflight-v2";
 
 import {
-  INTERNAL_requireScientificAdmissionFourSurfaceV2,
+  requireScientificAdmissionFourSurfaceForOrganizationV2,
   type ScientificAdmissionFourSurfaceReceiptV2,
-} from "./scientific-admission-four-surface-v2";
+} from "./scientific-admission-four-surface-repository-postgres-v2";
 import {
   requireScientificAdmissionV2,
   type ScientificAdmissionReceiptV2,
@@ -363,16 +363,17 @@ async function loadScientificRow(
   return rows[0]!;
 }
 
-function validateAggregateRow(
+async function validateAggregateRow(
+  sql: postgres.Sql,
   row: ScientificAdmissionRow,
   input: HistoricalFourSurfaceRatificationInputV2,
-): ScientificAdmissionFourSurfaceReceiptV2 {
+): Promise<ScientificAdmissionFourSurfaceReceiptV2> {
   if (row.receipt_kind !== "WF_PREDICTIVE_FOUR_SURFACE") refuse("AGGREGATE_KIND");
   const receipt = parseReceipt<ScientificAdmissionFourSurfaceReceiptV2>(
     row.receipt_json,
     "AGGREGATE_JSON",
   );
-  const rebuilt = INTERNAL_requireScientificAdmissionFourSurfaceV2(receipt, {
+  const rebuilt = await requireScientificAdmissionFourSurfaceForOrganizationV2(sql, {
     organizationId: input.organizationId,
     releaseSha: input.releaseSha,
     runId: input.runId,
@@ -662,7 +663,7 @@ async function buildCanonicalMarketEvidenceV2(input: Readonly<{
         !attempt.ingestTimeUtc || attempt.source?.symbol !== symbol) {
       refuse("MARKET_CANONICAL_ATTEMPT");
     }
-    const stored = await persistCanonicalAvailableGatewayWithinTransactionV1Postgres(
+    const stored = await persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres(
       executor, context, {
         sourceId: source.id,
         observationKind: attempt.kind,
@@ -733,7 +734,7 @@ async function replayCanonicalMarketEvidenceV2(
     );
     const revision = (await listTrustHistoryPostgres(executor, context, sealed.sourceId))
       .find((candidate) => candidate.id === sealed.trustRevisionId);
-    const observation = await readCanonicalPitObservationV1Postgres(
+    const observation = await readCanonicalPitObservationWithinHeldTransactionV1Postgres(
       executor, context, sealed.observationId,
     );
     const datasetRows = await sql<Array<Readonly<{
@@ -943,7 +944,7 @@ async function persistHistoricalFourSurfaceRatificationV2(
   const aggregateRow = await loadScientificRow(
     transaction, input.organizationId, input.aggregateAdmissionReceiptId,
   );
-  const aggregate = validateAggregateRow(aggregateRow, input);
+  const aggregate = await validateAggregateRow(transaction, aggregateRow, input);
   const surfaces: HistoricalFourSurfaceRatifiedSurfaceV2[] = [];
   for (const surfaceKey of SURFACE_KEYS) {
     const row = await loadScientificRow(
@@ -1507,7 +1508,8 @@ export async function requireHistoricalFourSurfaceRatifiedAdmissionV2(
     marketEvidence: authority.marketEvidence,
   };
   validateInput(input);
-  const aggregate = validateAggregateRow(
+  const aggregate = await validateAggregateRow(
+    sql,
     await loadScientificRow(sql, input.organizationId, input.aggregateAdmissionReceiptId), input,
   );
   const marketEvidence = await replayCanonicalMarketEvidenceV2(

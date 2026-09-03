@@ -25,6 +25,7 @@ export type MarketUnderstandingImportV1 = keyof typeof MARKET_UNDERSTANDING_IMPO
  */
 export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
   EXACT_ATTRIBUTION: [
+    "lib/trader/historical-simulation-v2/forecast-cycle-runtime-input-v2.ts",
     "lib/trader/intelligence/evaluate-canonical-market-questions.ts",
     "lib/trader/intelligence/index.ts",
     "lib/trader/intelligence/market-understanding-bridge-v0.ts",
@@ -67,6 +68,7 @@ export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
     "lib/trader/research/m9-provider-fusion-export.ts",
   ],
   EVALUATION_CYCLE: [
+    "lib/trader/historical-simulation-v2/production-first-cycle-bootstrap-v2.ts",
     "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
     "lib/trader/intelligence/index.ts",
     "lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts",

@@ -250,9 +250,15 @@ describe("DEE-917 production preflight orchestrator", () => {
       /export function createKmFourSurfaceScientificAdmissionProductionV2[\s\S]*?^\}/m,
     )?.[0] ?? "";
     expect(productionFlow).toContain("withKmFourSurfaceProductionSessionLockV2");
-    expect(productionFlow.indexOf("prepareInternal")).toBeGreaterThan(-1);
-    expect(productionFlow.indexOf("INTERNAL_persistScientificAdmissionFourSurfaceV2"))
-      .toBeGreaterThan(productionFlow.indexOf("prepareInternal"));
+    expect(productionFlow).toContain(
+      "INTERNAL_prepareKmFourSurfaceScientificAdmissionWithHeldPostgresV2",
+    );
+    const heldComposition = source.match(
+      /export async function INTERNAL_prepareKmFourSurfaceScientificAdmissionWithHeldPostgresV2[\s\S]*?^\}/m,
+    )?.[0] ?? "";
+    expect(heldComposition.indexOf("prepareInternal")).toBeGreaterThan(-1);
+    expect(heldComposition.indexOf("INTERNAL_persistScientificAdmissionFourSurfaceV2"))
+      .toBeGreaterThan(heldComposition.indexOf("prepareInternal"));
     const exposesContract: "contract" extends keyof
       KmFourSurfaceScientificAdmissionProductionResultV2 ? true : false = false;
     const exposesAuthority: "sourceAuthority" extends keyof

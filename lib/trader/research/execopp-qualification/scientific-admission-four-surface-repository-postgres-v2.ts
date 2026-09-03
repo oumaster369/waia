@@ -11,8 +11,12 @@ import {
   SCIENTIFIC_ADMISSION_FOUR_SURFACE_V2,
   type INTERNAL_ClosedKmFourSurfaceProductionAuthorityV2,
   type ScientificAdmissionFourSurfaceExpectedV2,
-  type ScientificAdmissionFourSurfaceReceiptV2,
+  type ScientificAdmissionFourSurfaceReceiptV2 as ContractScientificAdmissionFourSurfaceReceiptV2,
 } from "./scientific-admission-four-surface-v2";
+
+/** Safe durable-replay result type; this does not re-export structural build authority. */
+export type ScientificAdmissionFourSurfaceReceiptV2 =
+  ContractScientificAdmissionFourSurfaceReceiptV2;
 
 type ScientificAdmissionFourSurfaceRecordV2 = Readonly<{
   id: string;

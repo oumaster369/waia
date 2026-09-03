@@ -114,9 +114,9 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 121,
-    "sortedPathDigestHex": "62657276517859ce373afdff516f2cc8ac6ab4399dd43278766554cba0058f4e",
-    "sortedContentDigestHex": "33a5a5ff68baa1fad7bb7da7adadd582ff966b38c5cce0cad222ed33125c2f86"
+    "expectedFileCount": 123,
+    "sortedPathDigestHex": "8a65f94020d9462d6e26f211569120fea2ac77e2a9bc5f6bae806aa889d1c9c3",
+    "sortedContentDigestHex": "9de259b11f971d21daad70562311c384de98cdba1a4bf3b97de348a58e6da818"
   },
   "consumerRules": [
     {

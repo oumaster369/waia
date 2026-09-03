@@ -30,6 +30,8 @@ const SCIENTIFIC_ADMISSION =
   "lib/trader/research/execopp-qualification/scientific-admission-four-surface-v2.ts";
 const SCIENTIFIC_ADMISSION_REPOSITORY =
   "lib/trader/research/execopp-qualification/scientific-admission-four-surface-repository-postgres-v2.ts";
+const HISTORICAL_RATIFIED_ADMISSION =
+  "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts";
 
 function isSourceFile(path: string): boolean {
   return SOURCE_SUFFIXES.some((suffix) => path.endsWith(suffix));
@@ -176,20 +178,41 @@ function scientificAdmissionInternalImportOffenders(
 ): string[] {
   return paths.flatMap((path) => {
     const consumer = projectRelative(path, projectRoot);
-    return moduleReferences(path).flatMap(({ moduleSpecifier, accessMode }) => {
+    return moduleReferences(path).flatMap(({ moduleSpecifier, accessMode, importedNames }) => {
       const normalized = normalizedModuleSpecifier(moduleSpecifier);
       const admissionModule = normalized.endsWith("scientific-admission-four-surface-v2");
       const repositoryModule = normalized.endsWith(
         "scientific-admission-four-surface-repository-postgres-v2",
       );
       if (!admissionModule && !repositoryModule) return [];
-      const allowedConsumer = admissionModule
-        ? SCIENTIFIC_ADMISSION_REPOSITORY
-        : PREFLIGHT;
-      // The two internal capability modules may only be consumed via ordinary, statically
-      // analyzable named imports at their single trusted composition edge. Namespace/dynamic/
-      // CommonJS/re-export forms can conceal or propagate capabilities and are always refused.
-      if (consumer === allowedConsumer && accessMode === "named-import") return [];
+      const allowedNames = admissionModule
+        ? consumer === SCIENTIFIC_ADMISSION_REPOSITORY
+          ? [
+              "INTERNAL_buildScientificAdmissionFourSurfaceV2",
+              "INTERNAL_requireScientificAdmissionFourSurfaceV2",
+              "SCIENTIFIC_ADMISSION_FOUR_SURFACE_RECEIPT_KIND_V2",
+              "SCIENTIFIC_ADMISSION_FOUR_SURFACE_V2",
+              "INTERNAL_ClosedKmFourSurfaceProductionAuthorityV2",
+              "ScientificAdmissionFourSurfaceExpectedV2",
+              "ScientificAdmissionFourSurfaceReceiptV2",
+            ]
+          : []
+        : consumer === PREFLIGHT
+          ? [
+              "INTERNAL_persistScientificAdmissionFourSurfaceV2",
+              "ScientificAdmissionFourSurfaceReceiptV2",
+            ]
+          : consumer === HISTORICAL_RATIFIED_ADMISSION
+            ? [
+                "requireScientificAdmissionFourSurfaceForOrganizationV2",
+                "ScientificAdmissionFourSurfaceReceiptV2",
+              ]
+            : [];
+      // Internal capability and durable-reader modules may only be consumed via ordinary,
+      // statically analyzable named imports at their exact trusted composition edges.
+      // Namespace/dynamic/CommonJS/re-export forms can conceal or propagate capabilities.
+      if (accessMode === "named-import" && importedNames.length > 0 &&
+          importedNames.every((name) => allowedNames.includes(name))) return [];
       return [`${consumer} -> ${moduleSpecifier}`];
     });
   });

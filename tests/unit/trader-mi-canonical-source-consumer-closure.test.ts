@@ -87,6 +87,18 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
       )
       .map(repoRelative);
     expect(repositoryImporters).toEqual(["lib/trader/mi/canonical-pit-service-postgres.ts"]);
+    const historicalRatification = readFileSync(
+      join(root,
+        "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts"),
+      "utf8",
+    );
+    expect(historicalRatification).toContain(
+      "persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres",
+    );
+    expect(historicalRatification).toContain(
+      "readCanonicalPitObservationWithinHeldTransactionV1Postgres",
+    );
+    expect(historicalRatification).not.toContain("canonical-pit-repository-postgres");
 
     const serviceImporters = sources
       .filter((path) =>
@@ -97,6 +109,7 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
       .map(repoRelative);
     expect(serviceImporters).toEqual([
       "lib/trader/market-data/replay/canonical-pit-replay.ts",
+      "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts",
     ]);
 
     const downstreamLeaks = sources

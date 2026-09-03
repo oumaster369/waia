@@ -25,6 +25,7 @@ export type InformationSufficiencyImportV2 =
 
 export type InformationSufficiencyConsumerDispositionV2 =
   | "NEW_OPPORTUNITY_FAIL_CLOSED"
+  | "HISTORICAL_SIMULATION_FAIL_CLOSED"
   | "RESEARCH_NON_CAPITAL_EXPLICIT"
   | "PAPER_ENTRY_FAIL_CLOSED"
   | "POLL_ENTRY_FAIL_CLOSED"
@@ -52,6 +53,13 @@ export type InformationSufficiencyConsumerInventoryEntryV2 = Readonly<{
  * Wrappers remain explicit so a new importer cannot silently inherit authority.
  */
 export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
+  {
+    path: "lib/trader/historical-simulation-v2/production-first-cycle-bootstrap-v2.ts",
+    symbols: ["runEvaluationCycle", "informationSufficiencyAuthority"],
+    imports: ["RUN_EVALUATION_CYCLE"],
+    disposition: "HISTORICAL_SIMULATION_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
   {
     path: "lib/trader/intelligence/evaluation-cycle.ts",
     symbols: ["runEvaluationCycle", "buildForecastDecisionBundle"],
