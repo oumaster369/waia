@@ -123,9 +123,20 @@ DECLARE
   ];
   update_relations constant text[] := ARRAY['trader_orders'];
 BEGIN
+  -- Managed PostgreSQL administrators cannot specify NOSUPERUSER in ALTER ROLE,
+  -- even when that attribute is already false. Refuse privileged input instead
+  -- of trying to normalize it; change only ordinary attributes below.
+  SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls INTO runner
+  FROM pg_roles WHERE rolname = 'waia_historical_runner';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'waia_historical_runner role must be provisioned before migration 0199';
+  END IF;
+  IF runner.rolsuper OR runner.rolcreatedb OR runner.rolcreaterole OR
+      runner.rolreplication OR runner.rolbypassrls THEN
+    RAISE EXCEPTION 'migration 0199 refuses privileged waia_historical_runner';
+  END IF;
   ALTER ROLE waia_historical_runner
-    NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
-    CONNECTION LIMIT -1;
+    NOLOGIN NOINHERIT CONNECTION LIMIT -1;
   SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole,
     rolreplication, rolbypassrls INTO runner
   FROM pg_roles WHERE rolname = 'waia_historical_runner';

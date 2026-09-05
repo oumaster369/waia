@@ -62,8 +62,10 @@ describe("Historical V2 runner least-privilege migration", () => {
 
   it("normalizes and verifies the runner group as an exact non-login non-inheriting role", () => {
     expect(sql).toMatch(
-      /ALTER ROLE waia_historical_runner\s+NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS\s+CONNECTION LIMIT -1;/,
+      /ALTER ROLE waia_historical_runner\s+NOLOGIN NOINHERIT CONNECTION LIMIT -1;/,
     );
+    expect(sql.indexOf("migration 0199 refuses privileged"))
+      .toBeLessThan(sql.indexOf("ALTER ROLE waia_historical_runner"));
     for (const flag of ["rolcanlogin", "rolinherit", "rolsuper", "rolcreatedb", "rolcreaterole",
       "rolreplication", "rolbypassrls"]) expect(sql).toContain(flag);
   });

@@ -8,6 +8,13 @@ const LOGIN_ROLE = "waia_historical_runner_login";
 const RUNNER_ROLE = "waia_historical_runner";
 const ITERATIONS = 4096;
 
+function requireUnprivilegedRole(role, code) {
+  if (!role || ["rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"]
+    .some((flag) => role[flag] !== false)) {
+    throw new Error(`HISTORICAL_RUNNER_LOGIN_REFUSED:${code}`);
+  }
+}
+
 export function buildPostgresScramVerifier(password, salt = randomBytes(16)) {
   if (typeof password !== "string" || password.length < 32) {
     throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:PASSWORD_STRENGTH");
@@ -42,10 +49,15 @@ export async function provisionHistoricalRunnerLoginV2(env, options = {}) {
           (!authority[0]?.rolsuper && !authority[0]?.rolcreaterole)) {
         throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:ADMIN_ROLE");
       }
-      await sql.unsafe(
-        `ALTER ROLE ${RUNNER_ROLE} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB ` +
-        "NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1",
-      );
+      const runnerBefore = await sql`
+        SELECT role.rolsuper, role.rolcreatedb, role.rolcreaterole,
+               role.rolreplication, role.rolbypassrls
+        FROM pg_roles role WHERE role.rolname = ${RUNNER_ROLE}
+      `;
+      requireUnprivilegedRole(runnerBefore[0], "RUNNER_PRIVILEGED");
+      // Do not specify restricted privilege attributes in ALTER ROLE: managed
+      // administrators cannot set NOSUPERUSER even when it is already false.
+      await sql.unsafe(`ALTER ROLE ${RUNNER_ROLE} NOLOGIN NOINHERIT CONNECTION LIMIT -1`);
       const runner = await sql`
         SELECT role.rolcanlogin, role.rolinherit, role.rolsuper, role.rolcreatedb,
                role.rolcreaterole, role.rolreplication, role.rolbypassrls,
@@ -66,7 +78,13 @@ export async function provisionHistoricalRunnerLoginV2(env, options = {}) {
         throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:RUNNER_ROLE");
       }
       const existing = await sql`
-        SELECT login.oid::text AS oid,
+        SELECT login.oid::text AS oid, login.rolsuper, login.rolcreatedb,
+               login.rolcreaterole, login.rolreplication, login.rolbypassrls,
+               EXISTS (
+                 SELECT 1 FROM pg_auth_members membership
+                 WHERE membership.member=login.oid AND
+                   (membership.admin_option OR membership.inherit_option OR NOT membership.set_option)
+               ) AS unsafe_membership_options,
                COALESCE((
                  SELECT array_agg(parent.rolname::text ORDER BY parent.rolname)
                  FROM pg_auth_members membership
@@ -86,8 +104,12 @@ export async function provisionHistoricalRunnerLoginV2(env, options = {}) {
         FROM pg_roles login WHERE login.rolname = ${LOGIN_ROLE}
       `;
       if (existing.length > 0) {
+        requireUnprivilegedRole(existing[0], "LOGIN_PRIVILEGED");
         if (existing[0].memberships.some((roleName) => roleName !== RUNNER_ROLE)) {
           throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:UNEXPECTED_MEMBERSHIP");
+        }
+        if (existing[0].unsafe_membership_options !== false) {
+          throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:MEMBERSHIP_OPTIONS");
         }
         if (existing[0].has_direct_grants) {
           throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:DIRECT_GRANT");
@@ -103,14 +125,20 @@ export async function provisionHistoricalRunnerLoginV2(env, options = {}) {
       }
       // Only the SCRAM verifier, never the plaintext password, enters SQL/logging.
       await sql.unsafe(
-        `ALTER ROLE ${LOGIN_ROLE} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB ` +
-        `NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 2 PASSWORD '${verifier}'`,
+        `ALTER ROLE ${LOGIN_ROLE} LOGIN NOINHERIT CONNECTION LIMIT 2 PASSWORD '${verifier}'`,
       );
-      await sql.unsafe(`GRANT ${RUNNER_ROLE} TO ${LOGIN_ROLE}`);
+      await sql.unsafe(
+        `GRANT ${RUNNER_ROLE} TO ${LOGIN_ROLE} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`,
+      );
       const verified = await sql`
         SELECT login.rolcanlogin, login.rolinherit, login.rolsuper, login.rolcreatedb,
                login.rolcreaterole, login.rolreplication, login.rolbypassrls,
                login.rolconnlimit,
+               EXISTS (
+                 SELECT 1 FROM pg_auth_members membership
+                 WHERE membership.member=login.oid AND
+                   (membership.admin_option OR membership.inherit_option OR NOT membership.set_option)
+               ) AS unsafe_membership_options,
                database.datdba=login.oid AS owns_current_database,
                COALESCE((
                  SELECT array_agg(parent.rolname::text ORDER BY parent.rolname)
@@ -138,6 +166,7 @@ export async function provisionHistoricalRunnerLoginV2(env, options = {}) {
           posture.rolcreatedb !== false || posture.rolcreaterole !== false ||
           posture.rolreplication !== false || posture.rolbypassrls !== false ||
           posture.rolconnlimit !== 2 || posture.owns_current_database !== false ||
+          posture.unsafe_membership_options !== false ||
           posture.has_direct_grants !== false || posture.owns_objects !== false ||
           posture.memberships.length !== 1 || posture.memberships[0] !== RUNNER_ROLE) {
         throw new Error("HISTORICAL_RUNNER_LOGIN_REFUSED:POSTURE");

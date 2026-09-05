@@ -13,6 +13,7 @@ import { buildHistoricalSimulationRunLifecycleEventV2 } from
   "@/lib/trader/historical-simulation-v2/run-lifecycle-v2";
 import { provisionHistoricalRunnerLoginV2 } from
   "../../scripts/ops/provision-historical-runner-login.mjs";
+import { registerManagedHistoricalRoleTests } from "./postgres-managed-historical-role-v2.cases";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -22,6 +23,8 @@ const AUTHORIZED_ORGANIZATION = "3c50b4e9-1138-43a5-a29f-e65088124cfc";
 const provisioningEnabled = process.env.WAIA_PG_INTEGRATION_ROLE_PROVISIONING === "1";
 const provisioningAdminUrl = process.env.WAIA_POSTGRES_ADMIN_SESSION_URL?.trim();
 const provisioningPassword = process.env.WAIA_HISTORICAL_RUNNER_DB_PASSWORD;
+
+registerManagedHistoricalRoleTests(enabled, url);
 
 const requiredPrivileges = new Map<string, readonly string[]>([
   ["trader_historical_simulation_run_lifecycle_event_v2", ["INSERT", "SELECT"]],
