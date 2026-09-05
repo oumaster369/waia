@@ -1397,11 +1397,11 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(rows[0]!.governedZeroDeltaUpdates).toBe("1");
       expect(fixture.qualificationReceipt.holdout.status)
         .toBe("PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED");
-    // This is the full 35-cycle proof, not a synthetic smoke. It completes in
-    // about 20 minutes locally, while GitHub's shared runner reached the old
-    // 25-minute ceiling before completing. Preserve every assertion and give
-    // the same workload enough wall-clock budget on the slower CI host.
-    }, 2_400_000);
+      // This is the full 35-cycle proof, not a synthetic smoke. It completes in
+      // about 20 minutes locally, while GitHub's shared runner has demonstrated
+      // that it needs more than 40 minutes. Preserve every assertion and allow
+      // three local runtimes for the slower CI host to finish the same workload.
+    }, 3_600_000);
 
     it("persists valid historical evidence and rejects a rehashed receipt with tampered authority", async () => {
       const receiptRows = await heldSql<
