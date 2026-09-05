@@ -88,6 +88,16 @@ import { computeCycleEnvelopeContentDigest } from
   "@/lib/trader/intelligence/records/serialize-intelligence-records";
 import type { TraderIntelligenceCycleEnvelopeRecord } from
   "@/lib/trader/intelligence/records/intelligence-records.types";
+import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
+import {
+  HISTORICAL_DATASET_MEMBERSHIP_V2,
+  type HistoricalPreHoldoutDatasetMembershipV2,
+} from "@/lib/trader/historical-simulation-v2/dataset-membership-v2";
+import { assertHistoricalMarketCycleV2, type HistoricalSealedMarketCycleV2 } from
+  "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { verifyHistoricalObservationProofV2 } from
+  "@/lib/trader/historical-simulation-v2/historical-observation-proof-v2";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -585,7 +595,6 @@ async function verifyHistoricalKnowledgeProofV2(
     FROM trader_knowledge_edges
     WHERE organization_id=${input.organizationId}::uuid
       AND id=${expected.knowledgeEdgeId}::uuid
-    FOR SHARE
   `;
   assertHistoricalForecastKnowledgeBootstrapDurableRowV2(expected, rows[0]);
   const durableSnapshotAuthority = await loadHistoricalKnowledgeSnapshotAuthorityV2(sql, {
@@ -599,7 +608,12 @@ async function verifyHistoricalKnowledgeProofV2(
   }
 }
 
-/** Replays the historical profile, receipt, source trust and 0194 dataset authority from DB. */
+/**
+ * Replays the historical profile, receipt, source trust and 0194 dataset authority
+ * from the caller's SERIALIZABLE snapshot.  These are digest-verified reads, not
+ * row locks: `FOR SHARE` would incorrectly require mutation privileges from the
+ * deliberately read-only historical runner.
+ */
 export async function verifyHistoricalForecastInformationProofV2(
   sql: postgres.Sql,
   input: Readonly<{
@@ -664,13 +678,94 @@ export async function verifyHistoricalForecastInformationProofV2(
       sealed.ratifiedAdmissionContentDigestHex)) {
     throw new Error("[forecast-v2/persistence] historical information cohort mismatch (fail closed)");
   }
+  const datasetRows = await sql<Array<Readonly<{
+    id: string;
+    cycle_id: string;
+    dataset_authority_digest_hex: string;
+    dataset_authority_class: string;
+    membership_content_digest_hex: string;
+    sealed_cycle_content_digest_hex: string;
+    authority_content_digest_hex: string;
+    membership_json: HistoricalPreHoldoutDatasetMembershipV2;
+    sealed_cycle_json: HistoricalSealedMarketCycleV2;
+  }>>>`
+    SELECT id::text, cycle_id, dataset_authority_digest_hex,
+           dataset_authority_class, membership_content_digest_hex,
+           sealed_cycle_content_digest_hex, authority_content_digest_hex,
+           membership_json, sealed_cycle_json
+    FROM trader_historical_dataset_authority_v2
+    WHERE organization_id=${input.organizationId}::uuid
+      AND run_id=${input.runId}
+      AND cycle_id=${input.cycleId}
+      AND id=${sealed.datasetAuthorityId}::uuid
+  `;
+  const datasetRow = datasetRows[0];
+  if (!datasetRow || datasetRows.length !== 1) {
+    throw new Error("[forecast-v2/persistence] durable historical dataset missing (fail closed)");
+  }
+  const membership = datasetRow.membership_json;
+  const sealedCycle = datasetRow.sealed_cycle_json;
+  const { contentDigestHex: membershipDigest, ...membershipBody } = membership;
+  try {
+    assertHistoricalMarketCycleV2(sealedCycle, input.cycleId);
+  } catch {
+    throw new Error("[forecast-v2/persistence] durable historical cycle invalid (fail closed)");
+  }
+  if (
+    datasetRow.id !== sealed.datasetAuthorityId ||
+    datasetRow.cycle_id !== input.cycleId ||
+    datasetRow.dataset_authority_class !== "PRE_HOLDOUT_QUALIFICATION_V1" ||
+    datasetRow.dataset_authority_digest_hex !== sealed.datasetAuthorityDigestHex ||
+    datasetRow.membership_content_digest_hex !== sealed.membershipContentDigestHex ||
+    datasetRow.sealed_cycle_content_digest_hex !== sealed.sealedCycleContentDigestHex ||
+    datasetRow.authority_content_digest_hex !== sealed.datasetAuthorityContentDigestHex ||
+    membership.schemaVersion !== HISTORICAL_DATASET_MEMBERSHIP_V2 ||
+    membership.datasetAuthorityClass !== "PRE_HOLDOUT_QUALIFICATION_V1" ||
+    membership.organizationId !== input.organizationId ||
+    membership.cycleId !== input.cycleId ||
+    membership.cycleId !==
+      `${input.runId}:WALK_FORWARD:${membership.symbol}:${membership.recordIndex}` ||
+    membership.partition !== "WALK_FORWARD" ||
+    !historicalInstrumentsMatch(membership.symbol, input.symbol) ||
+    membership.datasetAuthorityDigestHex !== sealed.datasetAuthorityDigestHex ||
+    membership.qualificationReceiptDigestHex !== sealed.datasetAuthorityDigestHex ||
+    membership.partitionRawSha256Hex !== sealed.partitionRawSha256Hex ||
+    membershipDigest !== sealed.membershipContentDigestHex ||
+    computeSemanticSha256Hex(membershipBody) !== membershipDigest ||
+    membership.sealedCycleContentDigestHex !== sealedCycle.contentDigestHex ||
+    sealedCycle.barIndex !== membership.recordIndex ||
+    membership.barContentDigestHex !== computeBarContentDigest(sealedCycle.closedBar) ||
+    sealedCycle.closedBar.barCloseTime !== sealed.publicAvailableAt ||
+    computeStableJsonDigest({
+      organizationId: input.organizationId,
+      runId: input.runId,
+      membership,
+      sealedCycle,
+    }) !== sealed.datasetAuthorityContentDigestHex
+  ) {
+    throw new Error("[forecast-v2/persistence] durable historical dataset mismatch (fail closed)");
+  }
+  await verifyHistoricalObservationProofV2(sql, {
+    organizationId: input.organizationId,
+    sourceId: sealed.sourceId,
+    observationId: sealed.observationId,
+    subjectRef: membership.symbol,
+    eventTime: sealed.publicAvailableAt,
+    availableAt: sealed.canonicalRecordAvailableAt,
+    ingestTime: sealed.canonicalRecordIngestTime,
+    trustAsOfReceiptId: sealed.trustAsOfReceiptId,
+    sourceTrustRevisionId: sealed.trustRevisionId,
+    sourceTrustContentDigest: sealed.trustRevisionContentDigestHex,
+    trustScore: sealed.trustScore,
+    contentDigest: sealed.observationContentDigestHex,
+    latestClose: sealedCycle.closedBar.close,
+  });
   const profileRows = await sql<Array<Readonly<{
     profile_json: unknown; content_digest: string;
   }>>>`
     SELECT profile_json, content_digest
     FROM trader_required_information_profile_v2
     WHERE organization_id=${input.organizationId}::uuid AND id=${profile.id}
-    FOR SHARE
   `;
   const receiptRows = await sql<Array<Readonly<{
     receipt_json: unknown; content_digest: string; profile_id: string;
@@ -678,7 +773,6 @@ export async function verifyHistoricalForecastInformationProofV2(
     SELECT receipt_json, content_digest, profile_id
     FROM trader_information_sufficiency_receipt_v2
     WHERE organization_id=${input.organizationId}::uuid AND id=${receipt.id}
-    FOR SHARE
   `;
   if (profileRows.length !== 1 || receiptRows.length !== 1 ||
       profileRows[0]!.content_digest !== profile.contentDigest ||
@@ -703,7 +797,6 @@ export async function verifyHistoricalForecastInformationProofV2(
     WHERE organization_id=${input.organizationId}::uuid
       AND run_id=${input.runId} AND cycle_id=${cycleAuthority.cycleId}
       AND id=${cycleAuthority.envelopeId}::uuid
-    FOR SHARE
   `;
   const cycleRow = cycleRows[0];
   if (!cycleRow || cycleRows.length !== 1 || !cycleRow.input_causal_bundle_json) {
@@ -761,7 +854,6 @@ export async function verifyHistoricalForecastInformationProofV2(
     FROM trader_historical_four_surface_ratified_admission_v2
     WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
       AND id=${sealed.ratifiedAdmissionId}::uuid
-    FOR SHARE
   `;
   const ratifiedRow = ratifiedRows[0];
   if (!ratifiedRow || ratifiedRows.length !== 1 ||
@@ -778,28 +870,28 @@ export async function verifyHistoricalForecastInformationProofV2(
   });
   const marketEvidence = ratified.marketEvidence.find((entry) =>
     historicalInstrumentsMatch(entry.symbol, input.symbol));
-  if (!marketEvidence || marketEvidence.datasetAuthorityId !== sealed.datasetAuthorityId ||
-      marketEvidence.datasetAuthorityContentDigestHex !==
-        sealed.datasetAuthorityContentDigestHex ||
+  // The ratified receipt belongs to the predictive-boundary observation, while
+  // `sealed.trustAsOfReceiptId` belongs to this economic-cycle observation.
+  // Their ids and anchors must differ.  The common authority is the exact
+  // ratified source/revision/digest/score, verified below; the current receipt
+  // itself was already replayed from the canonical observation above.
+  if (!marketEvidence ||
+      marketEvidence.qualificationReceiptDigestHex !==
+        membership.qualificationReceiptDigestHex ||
       marketEvidence.datasetAuthorityDigestHex !== sealed.datasetAuthorityDigestHex ||
       marketEvidence.partitionRawSha256Hex !== sealed.partitionRawSha256Hex ||
-      marketEvidence.membershipContentDigestHex !== sealed.membershipContentDigestHex ||
-      marketEvidence.sealedCycleContentDigestHex !== sealed.sealedCycleContentDigestHex ||
       marketEvidence.wfPredictiveSemanticContentDigestHex !==
         sealed.wfPredictiveSemanticContentDigestHex ||
       marketEvidence.wfPredictiveStartUtc !== sealed.wfPredictiveStartUtc ||
       marketEvidence.wfPredictiveEndUtc !== sealed.wfPredictiveEndUtc ||
-      marketEvidence.publicAvailableAt !== sealed.publicAvailableAt ||
-      marketEvidence.observationAvailableAt !== sealed.canonicalRecordAvailableAt ||
-      marketEvidence.observationIngestTime !== sealed.canonicalRecordIngestTime ||
       marketEvidence.sourceId !== sealed.sourceId ||
-      marketEvidence.trustAsOfReceiptId !== sealed.trustAsOfReceiptId ||
       marketEvidence.trustRevisionId !== sealed.trustRevisionId ||
       marketEvidence.trustRevisionContentDigestHex !==
         sealed.trustRevisionContentDigestHex ||
       Number(marketEvidence.trustScore) !== sealed.trustScore ||
-      marketEvidence.observationId !== sealed.observationId ||
-      marketEvidence.observationContentDigestHex !== sealed.observationContentDigestHex) {
+      Date.parse(sealed.publicAvailableAt) < Date.parse(marketEvidence.wfPredictiveEndUtc) ||
+      Date.parse(sealed.canonicalRecordIngestTime) >
+        Date.parse(sealed.epistemicRecordCutoff)) {
     throw new Error("[forecast-v2/persistence] historical market evidence mismatch (fail closed)");
   }
 }
@@ -1050,7 +1142,7 @@ export async function persistForecastBundleV2(
           ${bundleId}::uuid, ${input.organizationId}::uuid, ${input.packageId}::uuid,
           ${input.runId}, ${input.cycleId}, ${input.symbol}, ${input.anchorClosedBarEpochMs},
           'INCOMPLETE', ${terminalContent}, ${bundleSchema},
-          ${input.authorizedOutcome ? tx.json(input.authorizedOutcome) : null},
+          ${input.authorizedOutcome ? JSON.stringify(input.authorizedOutcome) : null}::text::jsonb,
           ${input.issuanceSequence ?? null}
         )
       `;
@@ -1122,7 +1214,8 @@ export async function persistForecastBundleV2(
             ${binding.contentDigestHex}, ${runtime.knowledgeEdgeId ?? null}::uuid, ${knowledgeContentDigestHex},
             ${snapshot.contentDigestHex}, ${admission.contentDigestHex},
             ${input.authorizedOutcome!.authority.contentDigestHex}, ${runtimeSource.outcomeDigestHex},
-            ${runtimeSource.inputDigestHex}, ${tx.json(runtime as never)}, ${tx.json(input.authorizedOutcome as never)},
+            ${runtimeSource.inputDigestHex}, ${JSON.stringify(runtime)}::text::jsonb,
+            ${JSON.stringify(input.authorizedOutcome)}::text::jsonb,
             ${FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2}, ${runtimeSource.buildDigestHex}, ${FORECAST_RUNTIME_INPUT_SOURCE_V2}
           )
         `;
@@ -1428,7 +1521,7 @@ export async function persistObjectiveForecastOutcomeResolutionV2(
       ${feedback ? digestHexToBytea(input.pitMeasurementIdentityDigestHex) : null},
       ${feedback?.objectiveEvidence.observedTerminalReturn ?? null},
       ${observation?.observedBucketOrdinal ?? null},
-      ${feedback ? sql.json(feedback.objectiveEvidence as never) : null}::jsonb,
+      ${feedback ? JSON.stringify(feedback.objectiveEvidence) : null}::text::jsonb,
       ${observation ? digestHexToBytea(observation.forecastRuntimeAuthorityContentDigestHex) : null},
       ${observation?.predictivePackageContentDigestHex ?? null},
       ${observation?.terminalTargetDefinitionDigestHex ?? null},
@@ -1554,10 +1647,10 @@ export async function persistForecastCalibrationObservationV2(
       ${input.targetRoleId}, ${input.scoringEligible}, ${contentDigest}, ${calibrationSchema},
       ${input.observation?.schemaVersion ?? null},
       ${input.observation?.observedBucketOrdinal ?? null},
-      ${input.observation ? sql.json([...input.observation.probabilities] as never) : null}::jsonb,
+      ${input.observation ? JSON.stringify([...input.observation.probabilities]) : null}::text::jsonb,
       ${input.observation ? Number(input.observation.normalizedBrierScore) : null},
       ${input.observation ? Number(input.observation.logLossScore) : null},
-      ${input.observation ? sql.json(input.observation as never) : null}::jsonb
+      ${input.observation ? JSON.stringify(input.observation) : null}::text::jsonb
     )
   `;
 }

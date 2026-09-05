@@ -2,13 +2,52 @@ import { describe, expect, it } from "vitest";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { validateHistoricalSimulationModeledAtomicArtifactV2 } from
   "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
-import { buildHistoricalSimulationModeledCapitalArtifactsV2, buildHistoricalSimulationModeledNoopArtifactsV2 } from
+import { buildHistoricalSimulationModeledCapitalArtifactsV2, buildHistoricalSimulationModeledNoopArtifactsV2,
+  buildHistoricalSimulationModeledRealityArtifactsV2 } from
   "@/lib/trader/historical-simulation-v2/production-stage-builder-v2";
 
 const d = (char: string) => char.repeat(64);
 const id = (tail: string) => `00000000-0000-4000-8000-${tail.padStart(12, "0")}`;
 
 describe("historical simulation production stage builder v2", () => {
+  it("places capital-ineligible modeled Reality in its own atomic stage with portfolio lineage", () => {
+    const scope = { organizationId: id("11"), accountId: "account", runId: "run", cycleId: "cycle-1",
+      pitAnchor: "2026-08-30T10:01:00.000Z" };
+    const lifecycleBody = { schemaVersion: "waia.trader.historical_modeled_portfolio_lifecycle.v2" as const,
+      source: "MODELED_HISTORICAL" as const, capitalEligible: false as const,
+      organizationId: scope.organizationId, accountId: scope.accountId, runId: scope.runId,
+      cycleId: scope.cycleId, symbol: "BTCUSDT", action: "CASH" as const, quantity: null,
+      referencePrice: "100",
+      accountingFrontierContentDigestHex: d("a"), positionQuantityBefore: "0",
+      positionQuantityAfter: "0", exposureNotionalBefore: "0", exposureNotionalAfter: "0",
+      strictExposureReduction: false, transition: "NO_CHANGE" as const,
+      transitionStatus: "PRE_FILL_PROPOSAL" as const };
+    const lifecycle = { ...lifecycleBody, contentDigestHex: computeSemanticSha256Hex(lifecycleBody) };
+    const realityBody = { schemaVersion: "waia.trader.historical_modeled_reality.v2" as const,
+      realityClass: "HISTORICAL_MODELED_ACCOUNTING_FRONTIER" as const,
+      source: "MODELED_HISTORICAL" as const, capitalEligible: false as const,
+      organizationId: scope.organizationId, accountId: scope.accountId, runId: scope.runId,
+      cycleId: scope.cycleId, asOfUtc: scope.pitAnchor, accountingFrontierId: id("44"),
+      accountingFrontierContentDigestHex: d("a"),
+      portfolioLifecycleContentDigestHex: lifecycle.contentDigestHex, positions: [],
+      reconciledExposureNotional: "0", cash: "1000", equity: "1000", equityHighWaterMark: "1000",
+      accountDrawdownBps: 0 };
+    const reality = { ...realityBody, contentDigestHex: computeSemanticSha256Hex(realityBody) };
+    const artifacts = buildHistoricalSimulationModeledRealityArtifactsV2({ scope,
+      portfolioLifecycle: lifecycle, reality });
+    expect(Object.keys(artifacts)).toEqual(["HISTORICAL_MODELED_REALITY"]);
+    expect(artifacts.HISTORICAL_MODELED_REALITY[0]).toEqual(expect.objectContaining({
+      artifactKind: "HISTORICAL_MODELED_REALITY", sourceContentDigestHex: reality.contentDigestHex,
+      lineagePayload: { portfolioLifecycle: lifecycle },
+    }));
+    expect(() => validateHistoricalSimulationModeledAtomicArtifactV2({ organizationId: scope.organizationId,
+      accountId: scope.accountId, runId: scope.runId, split: "DEVELOPMENT" }, scope.cycleId,
+    { artifactKind: "HISTORICAL_MODELED_REALITY",
+      artifactId: artifacts.HISTORICAL_MODELED_REALITY[0].artifactId,
+      contentDigestHex: artifacts.HISTORICAL_MODELED_REALITY[0].contentDigestHex,
+      payload: artifacts.HISTORICAL_MODELED_REALITY[0] })).not.toThrow();
+  });
+
   it("creates exact no-op artifacts for a CASH/no-order cycle and retains full Decision receipts", () => {
     const scope = { organizationId: id("11"), accountId: "account", runId: "run", cycleId: "cash-cycle",
       pitAnchor: "2026-08-30T10:01:00.000Z" };
@@ -35,7 +74,10 @@ describe("historical simulation production stage builder v2", () => {
     const riskBody = { schemaVersion: "waia.trader.historical_modeled_risk.v2" as const,
       source: "MODELED_HISTORICAL" as const, capitalEligible: false as const, riskVerdictId: id("1"),
       riskAllowanceId: id("2"), riskAllowanceContentDigestHex: "", decisionContentDigestHex: d("d"),
-      accountingFrontierContentDigestHex: d("a"), verdict: "APPROVE" as const, approvedQuantity: "1",
+      accountingFrontierContentDigestHex: d("a"), portfolioLifecycleContentDigestHex: d("b"),
+      action: "ENTER_LONG" as const, reconciledExposureNotional: "0",
+      projectedSymbolExposureNotional: "100", strictExposureReduction: false,
+      verdict: "APPROVE" as const, approvedQuantity: "1",
       requestedReservationNotional: "100", remainingBeforeAdmissionNotional: "1000",
       remainingAfterAdmissionNotional: "900", reasonCodes: [] as readonly string[] };
     const allowance = { schemaVersion: "waia.trader.historical_modeled_risk_allowance.v2",
@@ -105,5 +147,42 @@ describe("historical simulation production stage builder v2", () => {
       expect(() => validateHistoricalSimulationModeledAtomicArtifactV2(scope, "cycle-1", { artifactKind: artifact.artifactKind,
         artifactId: artifact.artifactId, contentDigestHex: artifact.contentDigestHex, payload: artifact })).not.toThrow();
     }
+
+    const { contentDigestHex: _entryRiskDigest, ...entryRiskBody } = risk;
+    const exitRiskBody = { ...entryRiskBody, action: "CLOSE" as const,
+      projectedSymbolExposureNotional: "0", strictExposureReduction: true };
+    const exitRisk = { ...exitRiskBody, contentDigestHex: computeSemanticSha256Hex(exitRiskBody) };
+    const exitPlan = { ...plan, riskReceiptContentDigestHex: exitRisk.contentDigestHex,
+      side: "sell" as const };
+    const exitPlanDigest = computeSemanticSha256Hex(exitPlan);
+    const exitAttempt = { ...attempt, executionPlanContentDigestHex: exitPlanDigest };
+    const exitAttemptDigest = computeSemanticSha256Hex(exitAttempt);
+    const exitExecution = { ...execution, executionPlanContentDigestHex: exitPlanDigest,
+      executionAttemptContentDigestHex: exitAttemptDigest,
+      riskReceiptContentDigestHex: exitRisk.contentDigestHex, side: "sell" as const };
+    const terminalLedger = { forecast: { status: "NON_ACTIONABLE",
+      reasonCodes: ["HYPOTHESIS_NOT_APPLICABLE"], authorityContentDigestHex: null },
+      decision: { status: "CASH", reasonCodes: ["MISSING_OR_NOT_ADMITTED"],
+        decisionContentDigestHex: d("d"), whyNotCashReceiptDigestHex: d("c"), evLower: null,
+        evBase: null, evUpper: null }, portfolio: { status: "PROPOSED", action: "CLOSE",
+        reasonCodes: ["HISTORICAL_PORTFOLIO_DECISION_CASH_CLOSES_OPEN_POSITION"],
+        proposalContentDigestHex: d("9") }, risk: { status: "APPROVE", reasonCodes: [],
+        verdictContentDigestHex: exitRisk.contentDigestHex,
+        allowanceContentDigestHex: exitRisk.riskAllowanceContentDigestHex },
+      execution: { status: "COMMITTED", reasonCodes: [], planContentDigestHex: exitPlanDigest,
+        attemptContentDigestHex: exitAttemptDigest, reportContentDigestHex: null,
+        fillContentDigestHexes: [] }, observedExecutionEffects: [] };
+    const exitArtifacts = buildHistoricalSimulationModeledCapitalArtifactsV2({
+      scope: { organizationId: id("11"), accountId: "account", runId: "run",
+        cycleId: "cycle-exit", pitAnchor: "2026-08-30T10:02:00.000Z" },
+      risk: exitRisk, execution: exitExecution,
+      advance: { fillCount: 0, fillEvidence: [], fillDetails: [],
+        accountingFrontierContentDigestHex: d("a"), accountingFrontier: {} as never,
+        accountingAdvanced: true, effects: [] }, decisionEvidence: null,
+      ledgerEntry: terminalLedger as never,
+    });
+    expect(exitArtifacts.MODELED_RISK[0].lineagePayload).toEqual({ forecastTerminal: {
+      forecast: terminalLedger.forecast, decision: terminalLedger.decision,
+      portfolio: terminalLedger.portfolio } });
   });
 });

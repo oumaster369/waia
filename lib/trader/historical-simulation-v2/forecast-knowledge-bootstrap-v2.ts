@@ -119,6 +119,16 @@ export async function persistHistoricalForecastKnowledgeBootstrapWithinTransacti
       hashtextextended(${edge.organizationId + "|" + edge.knowledgeEdgeId}, 903)
     )
   `;
+  const existing = await sql<HistoricalForecastKnowledgeDurableRowV2[]>`
+    SELECT from_ref,to_ref,relation_kind,confidence,strength,regime_scope,
+           failure_cases_json,hypothesis_id::text AS hypothesis_id,verified
+    FROM trader_knowledge_edges WHERE organization_id=${edge.organizationId}::uuid
+      AND id=${edge.knowledgeEdgeId}::uuid
+  `;
+  if (existing.length > 0) {
+    assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, existing[0]);
+    return Object.freeze({ insertedNew: false });
+  }
   const inserted = await sql<{ id: string }[]>`
     INSERT INTO trader_knowledge_edges
       (id,organization_id,from_ref,to_ref,relation_kind,confidence,strength,regime_scope,
@@ -126,7 +136,6 @@ export async function persistHistoricalForecastKnowledgeBootstrapWithinTransacti
     VALUES (${edge.knowledgeEdgeId}::uuid,${edge.organizationId}::uuid,${edge.fromRef},${edge.toRef},
       ${edge.relationKind},${edge.confidence},${edge.strength},${edge.regimeScope},
       ${edge.failureCasesJson},NULL,false)
-    ON CONFLICT (id) DO NOTHING
     RETURNING id::text AS id
   `;
   const rows = await sql<HistoricalForecastKnowledgeDurableRowV2[]>`
@@ -134,10 +143,12 @@ export async function persistHistoricalForecastKnowledgeBootstrapWithinTransacti
            failure_cases_json,hypothesis_id::text AS hypothesis_id,verified
     FROM trader_knowledge_edges WHERE organization_id=${edge.organizationId}::uuid
       AND id=${edge.knowledgeEdgeId}::uuid
-    FOR SHARE
   `;
   assertHistoricalForecastKnowledgeBootstrapDurableRowV2(edge, rows[0]);
-  return Object.freeze({ insertedNew: inserted.length === 1 });
+  if (inserted.length !== 1) {
+    throw new Error("HISTORICAL_FORECAST_KNOWLEDGE_BOOTSTRAP_REFUSED:INSERT");
+  }
+  return Object.freeze({ insertedNew: true });
 }
 
 /** Standalone entry point; nested callers reuse their exact held PostgreSQL transaction. */

@@ -22,7 +22,7 @@
 
 | Boundary | Rule |
 |----------|------|
-| **Plane** | Execution Server = AI-TRADER live execution only; WAIA Worker = control plane |
+| **Plane** | Execution Server = AI-TRADER execution only; this image runs the bounded Historical Simulation V2 consumer, while live trading remains separately gated |
 | **Secrets** | Runtime injection at deploy; never Cloudflare Secrets Store; never in git/image |
 | **Master key** | Worker uses `AI_TRADER_MASTER_KEY` via Secrets Store — Execution Server does **not** |
 | **State** | Canonical app state in Supabase Postgres; host checkout is operational |
@@ -42,6 +42,7 @@ After every successful deploy or rollback, the operator records deployment truth
 {
   "gitSha": "40-char-full-sha",
   "imageTag": "waia-execution-host:20260710-abc1234",
+  "imageId": "sha256:64-char-lowercase-hex",
   "deployedAt": "2026-07-10T12:00:00Z",
   "operator": "human-id-or-handle",
   "previousGitSha": "optional-40-char-sha-for-rollback-chain",
@@ -53,12 +54,13 @@ After every successful deploy or rollback, the operator records deployment truth
 |-------|----------|-------|
 | `gitSha` | Yes | Must match `EXECUTION_SERVER_TARGET_SHA` / checkout `HEAD` at deploy time |
 | `imageTag` | Yes | Docker image tag or digest reference |
+| `imageId` | Yes | Immutable Docker image ID inspected after build and re-verified before and after container start |
 | `deployedAt` | Yes | ISO-8601 UTC |
 | `operator` | Yes | Who performed the deploy |
 | `previousGitSha` | Rollback only | Prior known-good SHA |
 | `notes` | No | Incident/context only — no credentials |
 
-Guarded deploy and rollback scripts write the full record on `--confirm`; sync and build merge `gitSha` / `imageTag` fields on `--confirm`.
+Guarded deploy writes the full record on `--confirm`; sync merges `gitSha`, and build records `gitSha`, `imageTag`, plus the immutable `imageId`. A tag change without a freshly inspected ID removes the stale prior ID and cannot pass deploy.
 
 ---
 
@@ -73,7 +75,8 @@ Guarded deploy and rollback scripts write the full record on `--confirm`; sync a
 On the execution host:
 
 ```bash
-./scripts/ops/execution-server-sync.sh --target-sha <full-sha> --confirm
+./scripts/ops/execution-server-sync.sh --target-sha <full-sha> \
+  [--approved-ref refs/remotes/origin/main] --confirm
 ```
 
 Without `--confirm` the script prints the planned `git fetch` / `git checkout` / preflight steps and performs no mutation.
@@ -82,15 +85,15 @@ Without `--confirm` the script prints the planned `git fetch` / `git checkout` /
 
 1. SSH to execution host as the operator service user.
 2. `cd` to the WAIA monorepo checkout (operator vault path).
-3. Record intended SHA from the approved PR merge commit on `dev` (or explicit release tag).
-4. `git fetch origin && git checkout <full-sha>` (detached HEAD or branch tracking that SHA).
+3. Record the intended SHA from `origin/main`, or name an explicit fully qualified approved ref with `--approved-ref refs/...`.
+4. Start from a worktree with zero tracked or untracked changes. The guarded sync fetches `origin`, proves the target commit is reachable from the approved ref, then checks out the full SHA.
 5. Run read-only preflight:
 
 ```bash
 EXECUTION_SERVER_TARGET_SHA=<full-sha> ./scripts/ops/execution-server-preflight.sh
 ```
 
-6. Abort if preflight reports stale or unknown code.
+6. Abort unless preflight proves clean `HEAD == target SHA` and approved-ref reachability.
 
 **Do not:** `git pull` without a pinned SHA; run campaigns on dirty or ahead/behind trees.
 
@@ -100,7 +103,7 @@ EXECUTION_SERVER_TARGET_SHA=<full-sha> ./scripts/ops/execution-server-preflight.
 
 **Classification:** HUMAN-ONLY
 
-**Goal:** Produce a runnable execution-host image and ensure trader CLI dependencies are available for `pnpm trader:live:*`.
+**Goal:** Produce a runnable execution-host image containing both health service and the exact bounded Historical Simulation V2 consumer.
 
 ### Guarded script
 
@@ -108,12 +111,17 @@ EXECUTION_SERVER_TARGET_SHA=<full-sha> ./scripts/ops/execution-server-preflight.
 ./scripts/ops/execution-server-build.sh --target-sha <full-sha> [--image-tag waia-execution-host:YYYYMMDD-<short>] --confirm
 ```
 
-Runs preflight, `docker build`, `docker history`, and `pnpm install --frozen-lockfile` on `--confirm`. Updates `deployed-revision.json` `imageTag` on success.
+Runs checkout preflight, materializes the Docker context from `git archive <target-sha>` (so ignored host residue cannot enter the image), builds with a baked `org.opencontainers.image.revision`, executes the in-image consumer-packaging preflight, checks `docker history`, and runs `pnpm install --frozen-lockfile` on `--confirm`. It records the inspected immutable Docker `imageId` with the tag and SHA; deploy refuses if the tag resolves to a different ID.
 
 ### Manual equivalent
 
 ```bash
-docker build -t waia-execution-host:<tag> services/ai-trader-execution-host/
+docker build -f services/ai-trader-execution-host/Dockerfile \
+  --build-arg WAIA_IMAGE_RELEASE_SHA=<full-sha> \
+  -t waia-execution-host:<tag> .
+docker run --rm -e WAIA_RELEASE_SHA=<full-sha> waia-execution-host:<tag> \
+  node --import tsx --conditions=react-server \
+  services/ai-trader-execution-host/entrypoint.mjs --preflight-image
 docker history waia-execution-host:<tag>   # verify no secret ENV layers
 pnpm install --frozen-lockfile
 # Trader live CLIs require WAIA_TRADER_CLI=1 — set by pnpm trader:* scripts
@@ -122,6 +130,38 @@ pnpm install --frozen-lockfile
 Tag convention: `waia-execution-host:YYYYMMDD-<short-sha>`.
 
 See [DEE-339 §2B](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) for BP-6 health scaffold acceptance.
+
+---
+
+## 4.1 Prepare the technical proposal — after Admin request, before Human ratification
+
+**Classification:** HUMAN-ONLY
+
+The Admin first records the exact run request. The execution host must then prove
+the pre-holdout dataset and create the technical proposal from the same immutable
+image that will execute the run. The command below does **not** ratify or launch.
+
+```bash
+./scripts/ops/execution-server-prepare-historical-proposal.sh \
+  --target-sha <full-sha> \
+  --image-tag waia-execution-host:<tag> \
+  --proposal-env-file /path/to/operator-vault-proposal.env \
+  --dataset-root /opt/waia/fhv-work \
+  --confirm
+```
+
+The mode-`0600` proposal env file uses the constrained
+`waia_historical_runner_login` URI and contains the exact organization/run,
+dataset and receipt paths, symbol/horizon, initial record/cycle extent, starting
+cash/default modeled quantity and preregistered economics variables required by
+`trader:historical:v2:prepare-proposal`. Mount the dataset root read-only at the
+same absolute path recorded by those variables. The runtime preflight rejects an
+owner/service-role URI, private exchange credentials, live flags and blind
+holdout authority.
+
+PASS is the printed proposal ID and digest. Open the Admin review, compare its
+exact SHA/run/extent/four surfaces and `NONE/NONE/FORBIDDEN` boundary, then perform
+the explicit Human ratification. Only after ratification proceed to §5.
 
 ---
 
@@ -138,11 +178,12 @@ See [DEE-339 §2B](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md) for BP-6 health scaf
   --target-sha <full-sha> \
   --image-tag waia-execution-host:<tag> \
   --operator <human-id> \
-  [--secrets-env-file /path/to/operator-vault.env] \
+  --secrets-env-file /path/to/operator-vault.env \
+  --dataset-root /opt/waia/fhv-work \
   --confirm
 ```
 
-On `--confirm`: replaces the container, checks `/health`, and writes `deployed-revision.json`.
+On `--confirm`: verifies baked/runtime SHA identity, verifies that the env selects the dedicated constrained database LOGIN, replaces the container, waits until the consumer has verified both `session_user` and `current_user`, proves it is `running` or `completed` through `/health`, rejects an immediate restart, and writes `deployed-revision.json`.
 
 ### Manual equivalent
 
@@ -151,8 +192,10 @@ docker run -d \
   --name ai-trader-execution-host \
   --restart unless-stopped \
   -p 8080:8080 \
+  --mount type=bind,src=/opt/waia/fhv-work,dst=/opt/waia/fhv-work,readonly \
   -e EXECUTION_HOST_PORT=8080 \
-  # ... operator-vault secrets via -e or --env-file (not committed) \
+  -e WAIA_RELEASE_SHA=<full-sha> \
+  --env-file /path/to/operator-vault.env \
   waia-execution-host:<tag>
 ```
 
@@ -160,8 +203,33 @@ docker run -d \
 |------|--------|
 | Restart policy | `unless-stopped` |
 | Port | `EXECUTION_HOST_PORT` (default 8080) |
-| Secrets | File mount or sealed env from host KMS — document location in ops vault |
+| Secrets | Mode `0600` env file from host KMS; only the constrained runner URI and durable run identity are passed to the child |
 | Forbidden | `ENV` secrets in Dockerfile; Cloudflare Secrets Store on host |
+
+The env file for this bounded lane contains only `DATABASE_URL_POSTGRES_SESSION`,
+`WAIA_HISTORICAL_ORGANIZATION_ID`, and `WAIA_HISTORICAL_RUN_ID`. The database URI
+must authenticate as `waia_historical_runner_login`; owner, `postgres`,
+`service_role`, private exchange credentials, live flags, capital authority and
+blind-holdout controls are refused or never forwarded to the consumer.
+
+### One-time constrained database LOGIN provisioning
+
+Run this as a Human database operator from a secure terminal. The command is a
+no-op without `--confirm`; neither URL nor password is written to git or image.
+The script converts the password to a SCRAM verifier before issuing SQL.
+
+```bash
+WAIA_POSTGRES_ADMIN_SESSION_URL='<temporary-admin-session-uri>' \
+WAIA_HISTORICAL_RUNNER_DB_PASSWORD='<random-32+-character-secret>' \
+node scripts/ops/provision-historical-runner-login.mjs --confirm
+```
+
+Store a separate `DATABASE_URL_POSTGRES_SESSION` for
+`waia_historical_runner_login` in the host vault, then unset both provisioning
+variables. The LOGIN is `NOINHERIT`, `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`,
+`NOREPLICATION`, `NOBYPASSRLS`, connection-limited, and is a member only of
+`waia_historical_runner`. Runtime explicitly verifies `session_user` before
+`SET ROLE`, then verifies `current_user` after downgrade.
 
 After deploy: write/update `deployed-revision.json` (§2).
 
@@ -175,7 +243,8 @@ After deploy: write/update `deployed-revision.json` (§2).
 
 ```bash
 curl -sf http://127.0.0.1:8080/health
-# Expect: {"status":"ok","service":"ai-trader-execution-host"}
+# Expect status=ok, exact releaseSha/imageReleaseSha and
+# consumer.mode=historical-v2-ratified-one-shot with state=running|completed
 ```
 
 ### Readiness (operator checklist before live path)
@@ -185,8 +254,11 @@ curl -sf http://127.0.0.1:8080/health
 | SHA match | `./scripts/ops/execution-server-preflight.sh` exit 0 |
 | `deployed-revision.json` | `gitSha` equals target SHA |
 | Postgres egress | Worker `GET /api/health/database` returns `backend: postgres` before live-enable ([DEE-339 §6](./DEE-339-BP6-EXECUTION-HOST-RUNBOOK.md)) |
-| Env on host | `WAIA_DB_BACKEND=postgres`, `DATABASE_URL_POSTGRES`, `WAIA_TRADER_ORG0_ORGANIZATION_ID` from vault |
-| Graceful shutdown | `docker stop` → SIGTERM → exit 0 |
+| Env on host | Dedicated-login `DATABASE_URL_POSTGRES_SESSION` + exact historical organization/run identity from vault |
+| Ratified launch | One child finalizes the exact Human-approved proposal, bootstraps and queues the bounded run, then claims it; health stays degraded until that durable claim |
+| Single consumer | Only the ratified one-shot entrypoint is packaged; one child per container and the durable PostgreSQL advisory lease prevent a second claimant |
+| Terminal restart | A previously `COMPLETED` lifecycle is reported healthy without another consume attempt or restart loop |
+| Graceful shutdown | `docker stop` → SIGTERM forwarded to consumer → DB session/lease close |
 
 Agents may run **read-only** preflight and `curl /health` only when the integration plan lists `execution-server` validation.
 

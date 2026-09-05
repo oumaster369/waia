@@ -29,64 +29,6 @@ type PostgresJsDriverOptions = Readonly<{
   serializers: Readonly<Record<string, PostgresJsDriverCodec>>;
 }>;
 
-class DrizzleSerializedJsonParameter {
-  readonly #serialized: string;
-  readonly #parsed: unknown;
-
-  constructor(serialized: string, parsed: unknown) {
-    this.#serialized = serialized;
-    this.#parsed = parsed;
-  }
-
-  toJSON(): unknown {
-    return this.#parsed;
-  }
-
-  toString(): string {
-    return this.#serialized;
-  }
-
-  [Symbol.toPrimitive](): string {
-    return this.#serialized;
-  }
-}
-
-function maybeBindDrizzleSerializedJsonParameter(
-  reserved: postgres.ReservedSql,
-  value: unknown,
-  requiresParsedValue: boolean,
-): unknown {
-  if (!requiresParsedValue || typeof value !== "string") return value;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    // Keep the parameter type unspecified so PostgreSQL still resolves the
-    // actual target column type. A JSON/JSONB serializer sees the parsed value
-    // via toJSON(), while text/numeric serializers retain the exact original
-    // driver string via Symbol.toPrimitive().
-    return reserved.typed(new DrizzleSerializedJsonParameter(value, parsed), 0);
-  } catch {
-    return value;
-  }
-}
-
-function sourceJsonSerializerRequiresParsedValue(
-  options: PostgresJsDriverOptions,
-): boolean {
-  const sample = "{}";
-  const modes = ["114", "3802"].map((oid) => {
-    const serializer = options.serializers[oid];
-    if (!serializer) return "DEFAULT" as const;
-    const serialized = serializer(sample as never);
-    if (serialized === sample) return "TRANSPARENT" as const;
-    if (serialized === JSON.stringify(sample)) return "DEFAULT" as const;
-    throw new Error("POSTGRES_RESERVED_SESSION_BINDING_REFUSED:JSON_SERIALIZER");
-  });
-  if (modes[0] !== modes[1]) {
-    throw new Error("POSTGRES_RESERVED_SESSION_BINDING_REFUSED:MIXED_JSON_SERIALIZERS");
-  }
-  return modes[0] === "DEFAULT";
-}
-
 function driverOptionsOf(sql: postgres.Sql): PostgresJsDriverOptions {
   const options = (sql as unknown as { options?: unknown }).options;
   if (!options || typeof options !== "object") {
@@ -122,7 +64,16 @@ export function bindPostgresReservedSession(
     throw new Error("POSTGRES_RESERVED_SESSION_BINDING_REFUSED:HANDLES");
   }
   const sourceOptions = driverOptionsOf(pool);
-  const requiresParsedJsonValue = sourceJsonSerializerRequiresParsedValue(sourceOptions);
+  // Drizzle serializes JSON column values before handing them to postgres.js.
+  // Normalize only the shared JSON codecs to Drizzle's transparent convention.
+  // This avoids heuristically parsing legitimate JSON-looking text parameters.
+  const transparentJsonSerializer: PostgresJsDriverCodec = (value) => value;
+  const sharedSerializers = sourceOptions.serializers as Record<
+    string,
+    PostgresJsDriverCodec
+  >;
+  sharedSerializers["114"] = transparentJsonSerializer;
+  sharedSerializers["3802"] = transparentJsonSerializer;
   const driverOptions = {
     ...(pool.options as unknown as Record<string, unknown>),
     parsers: { ...sourceOptions.parsers },
@@ -134,23 +85,27 @@ export function bindPostgresReservedSession(
     },
     get(target, property) {
       if (property === "options") return driverOptions;
+      if (property === "json") {
+        return (value: postgres.JSONValue) => {
+          // A ReservedSql keeps the codec snapshot of its physical connection,
+          // while Drizzle can later mutate the pool codec maps. Binding a
+          // postgres.js JSON Parameter would therefore let the pool and the
+          // reserved backend disagree about whether its value must already be
+          // serialized. Keep the OID explicit so prepared-statement reuse
+          // cannot silently change the encoding path.
+          const serialized = JSON.stringify(value);
+          return target.typed(serialized, 3802);
+        };
+      }
       if (property === "unsafe") {
         return (
           query: string,
           parameters: unknown[] = [],
           options?: unknown,
         ) => {
-          const boundParameters = Array.isArray(parameters)
-            ? parameters.map((value) =>
-                maybeBindDrizzleSerializedJsonParameter(
-                  target,
-                  value,
-                  requiresParsedJsonValue,
-                ))
-            : parameters;
           return options === undefined
-            ? target.unsafe(query, boundParameters as never[])
-            : target.unsafe(query, boundParameters as never[], options as never);
+            ? target.unsafe(query, parameters as never[])
+            : target.unsafe(query, parameters as never[], options as never);
         };
       }
       // These pool-only capabilities must not be synthesized from `pool`.

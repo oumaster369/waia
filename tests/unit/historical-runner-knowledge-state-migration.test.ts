@@ -50,8 +50,8 @@ describe("Historical runner knowledge-state migration (DEE-904)", () => {
   it("provisions the validation-only role before the migration chain", () => {
     const prelude = readFileSync(join(ROOT,
       "scripts/postgres-validation/prelude-auth-stub.sql"), "utf8");
-    expect(prelude).toContain(
-      "CREATE ROLE waia_historical_runner NOLOGIN NOSUPERUSER NOBYPASSRLS",
+    expect(prelude).toMatch(
+      /CREATE ROLE waia_historical_runner\s+NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/,
     );
   });
 });

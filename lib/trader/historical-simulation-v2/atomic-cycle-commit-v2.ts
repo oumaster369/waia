@@ -63,12 +63,12 @@ export type HistoricalSimulationDurableStateSnapshotV2<
 
 export type HistoricalSimulationAtomicStageV2 =
   | "FORECAST_LIFECYCLE" | "CANONICAL_VERIFICATION" | "MODELED_RISK"
-  | "MODELED_EXECUTION" | "OBSERVED_EXECUTION_EFFECTS" | "ACCOUNTING"
+  | "MODELED_EXECUTION" | "OBSERVED_EXECUTION_EFFECTS" | "HISTORICAL_MODELED_REALITY" | "ACCOUNTING"
   | "GUARDIAN" | "KNOWLEDGE" | "LEARNING";
 
 export const HISTORICAL_SIMULATION_ATOMIC_STAGES_V2 = Object.freeze([
   "FORECAST_LIFECYCLE", "CANONICAL_VERIFICATION", "MODELED_RISK", "MODELED_EXECUTION",
-  "OBSERVED_EXECUTION_EFFECTS", "ACCOUNTING", "GUARDIAN", "KNOWLEDGE", "LEARNING",
+  "OBSERVED_EXECUTION_EFFECTS", "HISTORICAL_MODELED_REALITY", "ACCOUNTING", "GUARDIAN", "KNOWLEDGE", "LEARNING",
 ] as const satisfies readonly HistoricalSimulationAtomicStageV2[]);
 
 export type HistoricalSimulationAtomicStageBundleV2 = Readonly<{
@@ -93,21 +93,29 @@ export type HistoricalSimulationAtomicArtifactReferenceV2 = Readonly<{
 }>;
 
 export type HistoricalSimulationAtomicArtifactKindV2 =
-  | "FORECAST_ISSUANCE" | "CANONICAL_VERIFICATION_RECEIPT" | "MODELED_RISK_VERDICT"
+  | "FORECAST_ISSUANCE" | "FORECAST_NON_ACTIONABLE"
+  | "CANONICAL_VERIFICATION_RECEIPT" | "FORECAST_NON_ACTIONABLE_VERIFICATION"
+  | "MODELED_RISK_VERDICT"
   | "MODELED_EXECUTION_SUBMISSION" | "MODELED_EXECUTION_EFFECT" | "ACCOUNTING_FRONTIER"
-  | "GUARDIAN_ASSESSMENT" | "KNOWLEDGE_CHECKPOINT" | "LEARNING_UPDATE";
+  | "HISTORICAL_MODELED_REALITY" | "GUARDIAN_ASSESSMENT" | "KNOWLEDGE_CHECKPOINT" | "LEARNING_UPDATE";
 
 const REQUIRED_ARTIFACT_KIND_BY_STAGE = Object.freeze({
-  FORECAST_LIFECYCLE: "FORECAST_ISSUANCE",
-  CANONICAL_VERIFICATION: "CANONICAL_VERIFICATION_RECEIPT",
-  MODELED_RISK: "MODELED_RISK_VERDICT",
-  MODELED_EXECUTION: "MODELED_EXECUTION_SUBMISSION",
-  OBSERVED_EXECUTION_EFFECTS: "MODELED_EXECUTION_EFFECT",
-  ACCOUNTING: "ACCOUNTING_FRONTIER",
-  GUARDIAN: "GUARDIAN_ASSESSMENT",
-  KNOWLEDGE: "KNOWLEDGE_CHECKPOINT",
-  LEARNING: "LEARNING_UPDATE",
-} as const satisfies Readonly<Record<HistoricalSimulationAtomicStageV2, HistoricalSimulationAtomicArtifactKindV2>>);
+  FORECAST_LIFECYCLE: ["FORECAST_ISSUANCE", "FORECAST_NON_ACTIONABLE"],
+  CANONICAL_VERIFICATION: [
+    "CANONICAL_VERIFICATION_RECEIPT",
+    "FORECAST_NON_ACTIONABLE_VERIFICATION",
+  ],
+  MODELED_RISK: ["MODELED_RISK_VERDICT"],
+  MODELED_EXECUTION: ["MODELED_EXECUTION_SUBMISSION"],
+  OBSERVED_EXECUTION_EFFECTS: ["MODELED_EXECUTION_EFFECT"],
+  HISTORICAL_MODELED_REALITY: ["HISTORICAL_MODELED_REALITY"],
+  ACCOUNTING: ["ACCOUNTING_FRONTIER"],
+  GUARDIAN: ["GUARDIAN_ASSESSMENT"],
+  KNOWLEDGE: ["KNOWLEDGE_CHECKPOINT"],
+  LEARNING: ["LEARNING_UPDATE"],
+} as const satisfies Readonly<
+  Record<HistoricalSimulationAtomicStageV2, readonly HistoricalSimulationAtomicArtifactKindV2[]>
+>);
 
 export type HistoricalSimulationAtomicStageBundlesV2 = Readonly<Record<
   HistoricalSimulationAtomicStageV2,
@@ -232,7 +240,8 @@ export function createHistoricalSimulationAtomicStageBundleV2(input: Readonly<{
     if (seen.has(identity)) throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:stageBundle.duplicateArtifact");
     seen.add(identity);
   }
-  if (!input.artifacts.some((artifact) => artifact.artifactKind === REQUIRED_ARTIFACT_KIND_BY_STAGE[input.stage])) {
+  if (!input.artifacts.some((artifact) =>
+    REQUIRED_ARTIFACT_KIND_BY_STAGE[input.stage].includes(artifact.artifactKind as never))) {
     throw new Error(`HISTORICAL_SIMULATION_RESUME_REFUSED:${input.stage}_REQUIRED_ARTIFACT`);
   }
   const artifacts = [...input.artifacts].sort((left, right) =>
@@ -614,7 +623,7 @@ export async function commitHistoricalSimulationCycleAtomicallyV2(input: Readonl
       : input.ledgerEntry.partition !== input.scope.split ? "SPLIT"
       : input.ledgerEntry.cycleSequence !== expectedSequence ? "CYCLE_SEQUENCE"
       : input.ledgerEntry.previousContentDigestHex !== (head?.contentDigestHex ?? null) ? "PREVIOUS_LEDGER"
-      : membership.recordIndex !== expectedSequence ? "RECORD_INDEX"
+      : previousCursor && membership.recordIndex !== previousCursor.nextRecordIndex ? "RECORD_INDEX"
       : previousCursor && !sameDatasetAuthority(previousCursor.datasetAuthority, datasetAuthority(membership))
         ? "DATASET_AUTHORITY" : null;
     if (nextBindingFailure) {

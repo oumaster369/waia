@@ -27,7 +27,7 @@ describe("historical simulation production transaction adapters v2", () => {
       riskReceiptContentDigestHex: "5".repeat(64), symbol: "BTCUSDT", side: "buy" as const, quantity: "1",
       decisionBarIndex: 0, acceptedAtUtc: order.createdAt.toISOString(), contentDigestHex: "6".repeat(64) };
     const expected = createHistoricalModeledOrderFromReceiptV2({ organizationId: context.organizationId,
-      accountId: "account", decisionId: "decision", allowanceId: "allowance", receipt });
+      accountId: "account", runId: "run", decisionId: "decision", allowanceId: "allowance", receipt });
     const persisted = { ...expected, riskAllowanceId: null, riskAllowanceBindingDigest: null };
     const createOrder = vi.fn(async () => persisted);
     const accepted = { ...persisted, state: "ACCEPTED" as const, stateVersion: 4 };
@@ -37,7 +37,7 @@ describe("historical simulation production transaction adapters v2", () => {
     }));
     await expect(persistHistoricalModeledExecutionSubmissionV2({ context,
       orders: { createOrder, transitionOrder } as unknown as OrderRepository, organizationId: context.organizationId,
-      accountId: "account", decisionId: "decision", riskAllowanceId: "allowance", receipt }))
+      accountId: "account", runId: "run", decisionId: "decision", riskAllowanceId: "allowance", receipt }))
       .resolves.toEqual(accepted);
     expect(createOrder).toHaveBeenCalledWith(context, expect.objectContaining({ id: order.id,
       credentialId: null, executionMode: "mock", venue: "HISTORICAL_SIMULATED_EXCHANGE" }));

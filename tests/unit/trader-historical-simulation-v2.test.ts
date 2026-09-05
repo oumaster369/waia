@@ -21,6 +21,7 @@ vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", a
 import {
   runHistoricalSimulationV2,
   type HistoricalKnowledgePortV2,
+  type HistoricalSimulationV2Cycle,
 } from "@/lib/trader/backtest/historical-simulation-v2";
 import type {
   CanonicalDecisionCapitalAuthorityV2Deps,
@@ -29,6 +30,8 @@ import type {
 import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import type { HistoricalSimulationReasonLedgerV2 } from "@/lib/trader/historical-simulation-v2/reason-ledger-v2";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { buildHistoricalKnowledgeSnapshotAuthorityV2 } from
+  "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const digest = (character: string) => character.repeat(64);
@@ -154,16 +157,26 @@ function authority(): CanonicalDecisionCapitalAuthorityV2Deps {
   };
 }
 
-const emptyForecast = (knowledgeDigest: string) =>
-  ({ knowledgeContentDigestHex: knowledgeDigest }) as ForecastRuntimeInputV2;
+const emptyForecast = (knowledgeDigest: string, runId: string, cycle: HistoricalSimulationV2Cycle) =>
+  ({ knowledgeContentDigestHex: knowledgeDigest,
+    historicalKnowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
+      organizationId: ORG, runId, symbol: cycle.symbol, pitAnchor: cycle.observedAt,
+      visibleEvidenceCount: knowledgeDigest === digest("3") ? 1 : 0,
+      knowledgeContentDigestHex: knowledgeDigest,
+    }) }) as ForecastRuntimeInputV2;
 
 function proposal(index: number) {
+  const rawDecisionAction = index === 1 ? ("CASH" as const) : ("ENTER_LONG" as const);
+  const rawDecisionReasonCodes = index === 1 ? ["EV_LOWER_NON_POSITIVE"] : [];
   return {
     decisionSemanticMode: "HISTORICAL" as const,
-    action: index === 1 ? ("CASH" as const) : ("ENTER_LONG" as const),
+    rawDecisionAction,
+    rawDecisionReasonCodes,
+    action: rawDecisionAction,
     quantity: index === 1 ? null : "0.01",
     proposalContentDigestHex: digest("5"),
-    reasonCodes: index === 1 ? ["EV_LOWER_NON_POSITIVE"] : [],
+    portfolioReasonCodes: index === 1 ? ["HISTORICAL_PORTFOLIO_RAW_DECISION_CASH"] : [],
+    reasonCodes: rawDecisionReasonCodes,
     decisionContentDigestHex: index === 1 ? digest("4") : digest("c"),
     whyNotCashReceiptDigestHex: digest("6"),
     evLower: index === 1 ? "-1" : "1",
@@ -190,7 +203,9 @@ describe("Historical Simulation V2 composition boundary", () => {
     const knowledgePort = knowledge();
     const stages = authority();
     const forecastLifecycleSink = vi.fn(async () => undefined);
-    const reasonLedgerSink = vi.fn(async (_entry: HistoricalSimulationReasonLedgerV2) => undefined);
+    const reasonLedgerSink = vi.fn(async (entry: HistoricalSimulationReasonLedgerV2) => {
+      void entry;
+    });
     const result = await runHistoricalSimulationV2({
       organizationId: ORG,
       accountId: "historical-account",
@@ -200,8 +215,8 @@ describe("Historical Simulation V2 composition boundary", () => {
       cycles: cycles(),
       defaultQuantity: "0.01",
       knowledge: knowledgePort,
-      resolveForecastInput: vi.fn(async ({ knowledge: snapshot }) =>
-        emptyForecast(snapshot.contentDigestHex),
+      resolveForecastInput: vi.fn(async ({ cycle, knowledge: snapshot }) =>
+        emptyForecast(snapshot.contentDigestHex, "run-1", cycle),
       ),
       forecastLifecycleSink,
       decisionCapitalAuthorityV2: stages,
@@ -237,7 +252,7 @@ describe("Historical Simulation V2 composition boundary", () => {
       cycles: cycles("DEVELOPMENT").slice(0, 1),
       defaultQuantity: "0.01",
       knowledge: knowledge(),
-      resolveForecastInput: vi.fn(async () => emptyForecast(digest("1"))),
+      resolveForecastInput: vi.fn(async ({ cycle }) => emptyForecast(digest("1"), "run-1", cycle)),
       decisionCapitalAuthorityV2: authority(),
       resolvePortfolioProposal: vi.fn(async () => proposal(0)),
       resolveLedgerProjection: ledgerProjection,
@@ -263,15 +278,19 @@ describe("Historical Simulation V2 composition boundary", () => {
     };
     await expect(
       runHistoricalSimulationV2({ ...base, split: "development", knowledge: leaking }),
-    ).rejects.toThrow("HISTORICAL_SIMULATION_V2_PIT_VIOLATION:futureClosure");
+    ).rejects.toThrow("HISTORICAL_FUTURE_ONLY_LEARNING_REFUSED:CLOSURE_AUTHORITY");
   });
 
   it("routes CLOSE through the isolated modeled exit port and preserves its evidence", async () => {
     const closeProposal = {
       ...proposal(0),
+      rawDecisionAction: "CASH" as const,
+      rawDecisionReasonCodes: ["EV_LOWER_NON_POSITIVE"],
       action: "CLOSE" as const,
       quantity: "0.005",
-      reasonCodes: ["GUARDIAN_CLOSE"],
+      portfolioReasonCodes: ["HISTORICAL_PORTFOLIO_DECISION_CASH_CLOSES_OPEN_POSITION"],
+      reasonCodes: ["EV_LOWER_NON_POSITIVE", "HISTORICAL_PORTFOLIO_DECISION_CASH_CLOSES_OPEN_POSITION"],
+      decisionContentDigestHex: digest("4"),
     };
     const modeledExit = {
       execute: vi.fn(async () => ({
@@ -300,7 +319,7 @@ describe("Historical Simulation V2 composition boundary", () => {
       cycles: cycles("DEVELOPMENT").slice(0, 1),
       defaultQuantity: "0.01",
       knowledge: knowledge(),
-      resolveForecastInput: async () => emptyForecast(digest("1")),
+      resolveForecastInput: async ({ cycle }) => emptyForecast(digest("1"), "run-close", cycle),
       decisionCapitalAuthorityV2: authority(),
       resolvePortfolioProposal: async () => closeProposal,
       modeledExit,
@@ -314,13 +333,44 @@ describe("Historical Simulation V2 composition boundary", () => {
       executionPlanContentDigestHex: digest("d"),
       reasonCodes: [],
     });
+    expect(result.reasonLedger[0]).toMatchObject({
+      decision: { status: "CASH", reasonCodes: ["EV_LOWER_NON_POSITIVE"],
+        decisionContentDigestHex: digest("4") },
+      portfolio: { status: "PROPOSED", action: "CLOSE",
+        reasonCodes: ["HISTORICAL_PORTFOLIO_DECISION_CASH_CLOSES_OPEN_POSITION"] },
+    });
     expect(modeledExit.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps raw ENTER_LONG separate when Portfolio overrides it to CASH", async () => {
+    const rawEnterPortfolioCash = {
+      ...proposal(0),
+      action: "CASH" as const,
+      quantity: null,
+      portfolioReasonCodes: ["HISTORICAL_PORTFOLIO_POSITION_ALREADY_OPEN"],
+      reasonCodes: ["HISTORICAL_PORTFOLIO_POSITION_ALREADY_OPEN"],
+      proposalContentDigestHex: digest("9"),
+    };
+    const result = await runHistoricalSimulationV2({
+      organizationId: ORG, accountId: "historical-account", runId: "run-hold",
+      split: "development", authority: "HISTORICAL_SIMULATION_V2",
+      cycles: cycles("DEVELOPMENT").slice(0, 1), defaultQuantity: "0.01", knowledge: knowledge(),
+      resolveForecastInput: async ({ cycle }) => emptyForecast(digest("1"), "run-hold", cycle),
+      decisionCapitalAuthorityV2: authority(), resolvePortfolioProposal: async () => rawEnterPortfolioCash,
+      resolveLedgerProjection: ledgerProjection, postgresSchemaPreflight: async () => undefined,
+    });
+    expect(result.reasonLedger[0]).toMatchObject({
+      decision: { status: "ENTER_LONG", reasonCodes: [], decisionContentDigestHex: digest("c") },
+      portfolio: { status: "NO_PROPOSAL", action: "CASH",
+        reasonCodes: ["HISTORICAL_PORTFOLIO_POSITION_ALREADY_OPEN"] },
+    });
   });
 
   it("continues the reason ledger from an exact durable resume seed", async () => {
     const base = { organizationId: ORG, accountId: "historical-account", runId: "run-resume",
       split: "development" as const, authority: "HISTORICAL_SIMULATION_V2" as const, defaultQuantity: "0.01",
-      knowledge: knowledge(), resolveForecastInput: async () => emptyForecast(digest("1")),
+      knowledge: knowledge(), resolveForecastInput: async ({ cycle }: { cycle: HistoricalSimulationV2Cycle }) =>
+        emptyForecast(digest("1"), "run-resume", cycle),
       decisionCapitalAuthorityV2: authority(), resolvePortfolioProposal: async () => proposal(0),
       resolveLedgerProjection: ledgerProjection, postgresSchemaPreflight: async () => undefined };
     const first = await runHistoricalSimulationV2({ ...base, cycles: cycles("DEVELOPMENT").slice(0, 1) });

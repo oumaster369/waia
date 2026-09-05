@@ -51,7 +51,16 @@ if (fs.existsSync(revisionPath)) {
   catch (err) { console.error(`error: invalid JSON in ${revisionPath}: ${err.message}`); process.exit(2); }
 }
 const merged = { ...data, ...patch };
-const req = ["gitSha", "imageTag", "deployedAt", "operator"];
+// A tag change without a freshly inspected immutable id must never retain a
+// stale image identity from a previous deployment (notably legacy rollback).
+if (Object.hasOwn(patch, "imageTag") && !Object.hasOwn(patch, "imageId")) {
+  delete merged.imageId;
+}
+if (Object.hasOwn(patch, "imageId") &&
+    (typeof patch.imageId !== "string" || !/^sha256:[0-9a-f]{64}$/.test(patch.imageId))) {
+  console.error("error: deployed-revision.json imageId must be an immutable sha256 image id"); process.exit(2);
+}
+const req = ["gitSha", "imageTag", "imageId", "deployedAt", "operator"];
 if (req.every((k) => k in patch)) {
   for (const key of req) {
     if (typeof merged[key] !== "string" || !merged[key]) {
@@ -79,7 +88,8 @@ process.exit(1);
 NODE
 }
 run_preflight() {
-  local repo_root="$1" target_sha="$2"
+  local repo_root="$1" target_sha="$2" approved_ref="${3:-${EXECUTION_SERVER_APPROVED_REF:-refs/remotes/origin/main}}"
   EXECUTION_SERVER_TARGET_SHA="$target_sha" EXECUTION_SERVER_REPO_PATH="$repo_root" \
+    EXECUTION_SERVER_APPROVED_REF="$approved_ref" \
     "${repo_root}/scripts/ops/execution-server-preflight.sh"
 }

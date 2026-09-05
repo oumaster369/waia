@@ -411,7 +411,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miHypothesis,
@@ -484,7 +484,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miHypothesis,
@@ -578,7 +578,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miHypothesisLifecycle,

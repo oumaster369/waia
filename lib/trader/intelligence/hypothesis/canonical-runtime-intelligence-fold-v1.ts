@@ -119,14 +119,20 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
     { symbol: input.symbol, regimeScope: input.regimeScope },
     epistemicRecordCutoff,
   );
-  if (input.sealedHistoricalKnowledge && (
-    input.sealedHistoricalKnowledge.organizationId !== input.context.organizationId ||
-    input.sealedHistoricalKnowledge.marketPitBoundary !== input.asOf.toISOString() ||
-    computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1(
-      input.sealedHistoricalKnowledge,
-    ) !== input.sealedHistoricalKnowledge.snapshotContentDigestHex
-  )) {
-    throw new Error("[canonical-runtime-fold] sealed knowledge snapshot binding mismatch");
+  if (input.sealedHistoricalKnowledge) {
+    const sealedBoundary = Date.parse(input.sealedHistoricalKnowledge.marketPitBoundary);
+    if (
+      input.sealedHistoricalKnowledge.organizationId !== input.context.organizationId ||
+      !Number.isFinite(sealedBoundary) ||
+      new Date(sealedBoundary).toISOString() !==
+        input.sealedHistoricalKnowledge.marketPitBoundary ||
+      sealedBoundary > input.asOf.getTime() ||
+      computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1(
+        input.sealedHistoricalKnowledge,
+      ) !== input.sealedHistoricalKnowledge.snapshotContentDigestHex
+    ) {
+      throw new Error("[canonical-runtime-fold] sealed knowledge snapshot binding mismatch");
+    }
   }
   if (input.sealedHistoricalKnowledge) {
     assertSealedKnowledgeRows(

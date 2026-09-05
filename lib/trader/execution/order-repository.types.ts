@@ -19,6 +19,8 @@ export interface OrderRow {
   credentialId: string | null;
   venue: string;
   executionMode: OrderExecutionMode;
+  historicalRunId?: string | null;
+  historicalAccountKey?: string | null;
   symbol: string;
   side: OrderSide;
   type: OrderType;
@@ -72,6 +74,8 @@ export interface CreateOrderInput {
   id?: string;
   venue: string;
   executionMode: OrderExecutionMode;
+  historicalRunId?: string | null;
+  historicalAccountKey?: string | null;
   symbol: string;
   side: OrderSide;
   type: OrderType;
@@ -163,6 +167,8 @@ export function orderPayloadMatches(existing: OrderRow, input: CreateOrderInput)
     existing.type === input.type &&
     existing.quantity === input.quantity &&
     existing.executionMode === input.executionMode &&
+    nullableStringEqual(existing.historicalRunId, input.historicalRunId) &&
+    nullableStringEqual(existing.historicalAccountKey, input.historicalAccountKey) &&
     existing.venue === input.venue &&
     existing.riskDecisionId === input.riskDecisionId &&
     nullableStringEqual(existing.riskAllowanceId, input.riskAllowanceId) &&

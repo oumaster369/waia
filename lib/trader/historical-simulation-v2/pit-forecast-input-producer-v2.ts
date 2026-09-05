@@ -109,7 +109,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       SELECT forecast_id::text, dataset_authority_id::text, symbol, pit_anchor
       FROM trader_historical_forecast_input_pit_v2
       WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
-        AND cycle_id=${input.cycleId} FOR SHARE
+        AND cycle_id=${input.cycleId}
     `;
     const prior = priorRows[0];
     if (priorRows.length > 1 || (prior && (prior.forecast_id !== input.forecastId ||
@@ -119,7 +119,7 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     }
     const runRows = await sql<{ started_at: Date | string }[]>`
       SELECT started_at FROM trader_historical_simulation_run_start_v2
-      WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId} FOR SHARE
+      WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
     `;
     if (runRows.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUN_BOUNDARY");
     const datasets = await sql<{ membership_json: HistoricalDatasetMembershipV2; dataset_authority_digest_hex: string;
@@ -130,7 +130,6 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       FROM trader_historical_dataset_authority_v2
       WHERE id=${input.datasetAuthorityId}::uuid AND organization_id=${input.organizationId}::uuid
         AND run_id=${input.runId} AND cycle_id=${input.cycleId}
-      FOR SHARE
     `;
     const dataset = datasets[0];
     if (!dataset || datasets.length !== 1 || computeStableJsonDigest({ organizationId: input.organizationId,
@@ -153,7 +152,6 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       WHERE s.organization_id=${input.organizationId}::uuid AND s.run_id=${input.runId}
         AND s.cycle_id=${input.cycleId} AND s.execution_forecast_id=${input.forecastId}::uuid
         AND s.symbol=${input.symbol} AND s.pit_anchor=${input.pitAnchor}::timestamptz
-      FOR SHARE OF s
     `;
     const source = sourceRows[0];
     if (!source || sourceRows.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUNTIME_INPUT_SOURCE_IDENTITY");
@@ -199,7 +197,6 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         ON b.organization_id=f.organization_id AND b.id=f.bundle_id
       WHERE f.organization_id=${input.organizationId}::uuid AND f.id=${input.forecastId}::uuid
         AND f.target_role_id='EXECUTION_OPPORTUNITY'
-      FOR SHARE OF f, b
     `;
     const forecast = forecasts[0];
     const persistedOutcome = forecast ? requireForecastRuntimeAuthorizedOutcomeV2(forecast.authorized_outcome as never) : null;
@@ -235,7 +232,6 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         AND cb.content_digest=${binding.contentDigestHex}
         AND cb.created_at <= rs.started_at
         AND p.created_at <= rs.started_at
-      FOR SHARE OF cb, p, rs
     `;
     if (bindingSources.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:FUTURE_BINDING_OR_PACKAGE");
     const scientific = await sql<{ id: string; content_digest: string; selected_package_content_digest: string | null; receipt_json: string }[]>`
@@ -248,7 +244,6 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         AND trader_scientific_admission_receipt_v1.id=${binding.scientificAdmissionReceiptId}::uuid
         AND trader_scientific_admission_receipt_v1.content_digest=${binding.scientificAdmissionReceiptContentDigestHex}
         AND trader_scientific_admission_receipt_v1.created_at <= rs.started_at
-      FOR SHARE OF trader_scientific_admission_receipt_v1, rs
     `;
     if (scientific.length !== 1 || scientific[0]?.selected_package_content_digest !== binding.selectedPredictivePackageContentDigestHex) {
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:SCIENTIFIC_SOURCE");
@@ -279,7 +274,8 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
              score, source_record_ids_json, content_digest, idempotency_key, provenance_json,
              terminal_reason, schema_version
       FROM trader_knowledge_confidence_update_record
-      WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId} AND symbol=${input.symbol}
+      WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
+        AND replace(symbol, '/', '')=replace(${input.symbol}, '/', '')
         AND update_model_version =
           'waia.trader.knowledge_confidence_update_model.v1.forecast-v2-evidence-only'
         AND (source_record_ids_json::jsonb ->> 'visible_from_cycle_pit_anchor')::timestamptz
@@ -287,7 +283,6 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         AND resolved_at <= ${input.pitAnchor}::timestamptz
         AND pit_evidence_boundary <= ${input.pitAnchor}::timestamptz
       ORDER BY content_digest ASC
-      FOR SHARE
     `;
     let knowledgeSnapshotAuthority;
     try {
@@ -342,11 +337,12 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         ${input.datasetAuthorityId}::uuid,
         ${dataset.dataset_authority_digest_hex},
         ${record.symbol}, ${record.datasetMembership.partition}, ${record.datasetMembership.recordIndex},
-        ${record.datasetMembership.contentDigestHex}, ${sql.json(JSON.parse(JSON.stringify(record.datasetMembership)) as postgres.JSONValue)},
+        ${record.datasetMembership.contentDigestHex},
+        ${JSON.stringify(record.datasetMembership)}::text::jsonb,
         ${record.pitAnchor}::timestamptz, ${record.visibleFrom}::timestamptz,
         ${record.knowledgeContentDigestHex}, ${record.forecastAuthorityContentDigestHex},
         ${source.runtime_input_content_digest_hex}, ${source.verifier_build_digest_hex},
-        ${sql.json(JSON.parse(JSON.stringify(record.runtimeInput)) as postgres.JSONValue)},
+        ${JSON.stringify(record.runtimeInput)}::text::jsonb,
         ${record.contentDigestHex}, ${record.schemaVersion}
       ) ON CONFLICT DO NOTHING
     `;

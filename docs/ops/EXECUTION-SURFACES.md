@@ -127,14 +127,14 @@ See [`postgres-development.md`](../postgres-development.md) and `.env.example` `
 
 ## `execution-server`
 
-**Purpose:** Off-Cloudflare AI-TRADER **execution plane** — live order path, persistent exchange sessions, and long-running `pnpm trader:live:*` CLIs. **AI-TRADER only** (ADR-0023).
+**Purpose:** Off-Cloudflare AI-TRADER **execution plane** — the bounded Historical Simulation V2 consumer today; live order paths remain separately Human-gated. **AI-TRADER only** (ADR-0023).
 
 | Aspect | Rule |
 |--------|------|
 | **Host** | Isolated VPS (reference id: `waia-org0-exec` / `waia-org0-execution`) |
-| **Service** | `services/ai-trader-execution-host/` — health endpoint today; full live path per BP-6/BP-7 runbooks |
+| **Service** | `services/ai-trader-execution-host/` — health + supervised one-shot durable Historical Simulation V2 consumer, exact-SHA bound |
 | **Code pin** | Full monorepo checkout **only** when pinned to an explicit git SHA; campaigns refuse stale/unknown code |
-| **Secrets** | Operator-injected at deploy — **separate KMS path**, not Cloudflare Secrets Store |
+| **Secrets** | Operator-injected constrained runner LOGIN URI — **separate KMS path**, not Cloudflare Secrets Store; no owner/live/exchange credential path |
 | **Agents** | Read-only preflight only when plan lists it; **HUMAN-ONLY** for sync/build/deploy/rollback |
 | **Evidence** | Committed `replay-runs/**`; host logs; `deployed-revision.json` on host |
 

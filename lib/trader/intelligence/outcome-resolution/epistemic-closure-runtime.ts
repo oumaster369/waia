@@ -1,6 +1,7 @@
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type postgres from "postgres";
 import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
+import { withPostgresSessionTransaction } from "@/db/postgres-session-transaction";
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { normalizeSymbolForHistoricalExecution } from "@/lib/trader/backtest/historical-execution-profile";
 import { createCalibrationObservationRepositoryPostgres } from "@/lib/trader/intelligence/calibration/calibration-observation-repository-postgres";
@@ -51,7 +52,10 @@ import { queryMarketKnowledgeReadModel } from "@/lib/trader/knowledge/market-mem
 import { createOutcomeResolutionReadPortPostgres } from "@/lib/trader/knowledge/outcome-resolution-read-port-postgres";
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  canonicalizeSemanticJsonString,
+  computeSemanticSha256Hex,
+} from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { materializeExecOppOutcome13dV1 } from "@/lib/trader/intelligence/forecast-v2/exec-opp-outcome-materializer-v1";
 import {
   assertHtxVolumeAuthorityQualified,
@@ -240,13 +244,14 @@ export function createForecastV2DurableProducerV1(config: ForecastV2DurableProdu
         if (!Number.isSafeInteger(closeEpochMs) || closeEpochMs > pitEpochMs) continue;
         const key = `${input.organizationId}|${bar.symbol}|${closeEpochMs}`;
         const barDigest = computeSemanticSha256Hex(bar);
+        const barJson = canonicalizeSemanticJsonString(bar);
         const inserted = await config.sql<{ bar_content_digest: string }[]>`
           INSERT INTO trader_forecast_pit_bar_v2 (
             organization_id, run_id, symbol, interval, bar_close_time,
             bar_content_digest, bar_json
           ) VALUES (
             ${input.organizationId}::uuid, ${input.runId}, ${bar.symbol}, '1m',
-            ${bar.barCloseTime}::timestamptz, ${barDigest}, ${config.sql.json(bar)}
+            ${bar.barCloseTime}::timestamptz, ${barDigest}, ${barJson}::text::jsonb
           )
           ON CONFLICT (organization_id, run_id, symbol, interval, bar_close_time)
           DO NOTHING
@@ -454,8 +459,7 @@ export async function persistForecastV2TerminalClosurePostgres(
   if (input.organizationId !== input.objectiveEvidence.organizationId) {
     throw new Error("Forecast V2 terminal closure organization mismatch");
   }
-  await sql.begin(async (tx) => {
-    const transactionSql = tx as unknown as postgres.Sql;
+  await withPostgresSessionTransaction(sql, "SERIALIZABLE", async (transactionSql) => {
     await persistObjectiveForecastOutcomeResolutionV2(transactionSql, {
       organizationId: input.organizationId,
       bundleId: input.bundleId,

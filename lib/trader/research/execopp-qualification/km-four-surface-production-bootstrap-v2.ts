@@ -310,7 +310,6 @@ async function loadDurableDatasetAuthorityWithSqlV2(input: Readonly<{
       WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
         AND dataset_authority_class='PRE_HOLDOUT_QUALIFICATION_V1'
       ORDER BY cycle_id
-      FOR SHARE
     `;
     return validateDurableDatasetAuthorityRowsV2({ ...input, rows });
   });

@@ -18,6 +18,7 @@ import {
   requireScientificAdmissionV2,
 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 import { buildScientificAdmissionReceiptRecordV2 } from "@/lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2";
+import { canonicalizeDiagnosticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 const hex = (char: string) => char.repeat(64);
 
@@ -154,6 +155,39 @@ describe("DEE-631 scientific admission receipt v2", () => {
     });
     expect(predictive.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
     expect(predictive.reasonCodes).toContain("COMMON_ANCHOR_SET_EMPTY");
+  });
+
+  it("preserves the real weak-corpus Holm rejection as a reportable fail-closed result", () => {
+    const source = harnessInput();
+    const predictive = buildPredictiveTerminalReceiptV1({
+      identities,
+      harnessInput: {
+        ...source,
+        comparisonFamilyId: "family-v2-weak-holm",
+        anchors: source.anchors.slice(0, 20).map((anchor) => {
+          const observedBucket = anchor.challengerProbabilities.indexOf(
+            Math.max(...anchor.challengerProbabilities),
+          );
+          return {
+            ...anchor,
+            challengerProbabilities: Array.from(
+              { length: 7 },
+              (_, index) => index === observedBucket ? 0.2 : 0.8 / 6,
+            ),
+          };
+        }),
+      },
+    });
+
+    expect(predictive.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
+    expect(predictive.reasonCodes).toContain("HOLM_FWER_REJECTED");
+    expect(predictive.holmResults.some((result) => !result.rejected)).toBe(true);
+    const diagnostic = canonicalizeDiagnosticJsonString({
+      reasonCodes: predictive.reasonCodes,
+      meanImprovementByBaseline: predictive.meanImprovementByBaseline,
+      holmResults: predictive.holmResults,
+    });
+    expect(JSON.parse(diagnostic).reasonCodes).toContain("HOLM_FWER_REJECTED");
   });
 
   it("rejects package or partition substitution across harness identities", () => {

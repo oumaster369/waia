@@ -6,7 +6,7 @@ import type postgres from "postgres";
 
 import { getPostgresSql } from "@/db/postgres-client";
 
-export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 195 as const;
+export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 202 as const;
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
@@ -81,6 +81,11 @@ export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_historical_forecast_input_pit_v2",
   "trader_historical_forecast_input_knowledge_link_v2",
   "trader_historical_four_surface_ratified_admission_v2",
+  "trader_historical_simulation_run_lifecycle_event_v2",
+  "trader_historical_ratification_request_v2",
+  "trader_historical_qualified_execution_extent_v2",
+  "trader_historical_technical_proposal_v2",
+  "trader_historical_proposal_ratification_v2",
 ] as const;
 
 type Journal = {
@@ -115,8 +120,12 @@ function sha256(bytes: Buffer): string {
 
 export function readFhvV2CanonicalMigrations(repoRoot: string): FhvV2CanonicalMigration[] {
   const migrationRoot = join(repoRoot, "db/migrations_postgres");
-  const journal = JSON.parse(readFileSync(join(migrationRoot, "meta/_journal.json"), "utf8")) as Journal;
-  const required = journal.entries.filter((entry) => entry.idx <= FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX);
+  const journal = JSON.parse(
+    readFileSync(join(migrationRoot, "meta/_journal.json"), "utf8"),
+  ) as Journal;
+  const required = journal.entries.filter(
+    (entry) => entry.idx <= FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX,
+  );
   if (required.length !== FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX + 1) {
     throw new FhvV2PostgresSchemaPreflightError(
       "CANONICAL_JOURNAL_RANGE_INVALID",

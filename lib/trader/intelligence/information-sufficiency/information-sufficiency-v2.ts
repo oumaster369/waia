@@ -339,7 +339,7 @@ export function assertHistoricalDatasetTrustAuthorityV2(
   if (times.some((value) => !Number.isFinite(Date.parse(value)) ||
       new Date(value).toISOString() !== value) ||
       Date.parse(authority.wfPredictiveStartUtc) >= Date.parse(authority.wfPredictiveEndUtc) ||
-      authority.publicAvailableAt !== authority.wfPredictiveEndUtc ||
+      Date.parse(authority.publicAvailableAt) < Date.parse(authority.wfPredictiveEndUtc) ||
       Date.parse(authority.publicAvailableAt) >
         Date.parse(authority.canonicalRecordAvailableAt) ||
       Date.parse(authority.canonicalRecordAvailableAt) >

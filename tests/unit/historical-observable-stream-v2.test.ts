@@ -6,9 +6,11 @@ import type { HistoricalObservableProjectionV2 } from "@/lib/trader/historical-s
 const projection = (eventId: string): HistoricalObservableProjectionV2 => ({
   schemaVersion: "waia.trader.historical_observable_read_model.v2", mode: "HISTORICAL_SIMULATION",
   capitalEligible: false, organizationId: "org", runId: "run", eventId, observedAt: "2026-01-01T00:00:00.000Z",
-  accounts: [], aggregate: { accountCount: 0, equity: null, cash: null, netPnl: null,
+  lifecycle: null, accounts: [], aggregate: { accountCount: 0, equity: null, cash: null, netPnl: null,
+    buyAndHoldGrossEquity: null, strategyMinusBuyAndHoldGross: null,
     cycles: 0, decisions: 0, riskVetoes: 0, orders: 0, fills: 0,
-    processedRecords: 0, latestCycleSequence: null },
+    processedRecords: 0, latestCycleSequence: null, qualifiedTotalCycles: null,
+    committedCycles: 0, progressBps: null, runPhase: null },
 });
 
 describe("historical observable transport v2", () => {

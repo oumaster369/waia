@@ -159,6 +159,8 @@ describe("Historical Decision Economics production adapter V2", () => {
       referencePrice: "100", datasetMembership: { contentDigestHex: DEE659_TEST_DIGEST_A } as never };
     const proposal = await coordinator.resolvePortfolioProposal({ cycle, forecast: authorized,
       knowledge: { asOf: cycle.observedAt, contentDigestHex: DEE659_TEST_DIGEST_B } });
+    expect(proposal).toMatchObject({ rawDecisionAction: "ENTER_LONG",
+      rawDecisionReasonCodes: [], portfolioReasonCodes: [] });
     const request = { organizationId: ORG, accountId: ACCOUNT, cycleId: cycle.cycleId, symbol: cycle.symbol,
       referencePrice: cycle.referencePrice, forecastOutcome: authorized,
       proposal: { action: "ENTER_LONG" as const, quantity: proposal.quantity! } };
@@ -191,9 +193,31 @@ describe("Historical Decision Economics production adapter V2", () => {
     const proposal = await coordinator.resolvePortfolioProposal({ cycle, forecast: authorized,
       knowledge: { asOf: cycle.observedAt, contentDigestHex: DEE659_TEST_DIGEST_B } });
     expect(proposal.action).toBe("CASH");
+    expect(proposal.rawDecisionAction).toBe("CASH");
+    expect(proposal.portfolioReasonCodes).toEqual(["HISTORICAL_PORTFOLIO_RAW_DECISION_CASH"]);
     const evidence = coordinator.takeDecisionEvidence(cycle.cycleId);
     expect(evidence.decisionReceipt.contentDigestHex).toBe(proposal.decisionContentDigestHex);
     expect(evidence.whyNotCashReceipt.contentDigestHex).toBe(proposal.whyNotCashReceiptDigestHex);
     expect(() => coordinator.takeDecisionEvidence(cycle.cycleId)).toThrow("DECISION_EVIDENCE_UNAVAILABLE");
+  });
+
+  it("releases actionable Decision evidence only for an explicit portfolio HOLD override", async () => {
+    const rows = persisted(); const authorized = forecast(rows.scientificAdmission.contentDigest);
+    const build = createHistoricalDecisionEconomicsProductionInputBuilderV2({ organizationId: ORG,
+      accountId: ACCOUNT, authorities: { load: async () => rows } });
+    const coordinator = createHistoricalDecisionEconomicsCapitalCoordinatorV2({ organizationId: ORG,
+      accountId: ACCOUNT, buildEvaluationInput: ({ cycle, forecast: outcome }) => build({ cycle, forecast: outcome }) });
+    const cycle = { cycleId: "portfolio-hold-cycle", observedAt: "2026-08-01T00:00:00.000Z",
+      symbol: "BTCUSDT", referencePrice: "100",
+      datasetMembership: { contentDigestHex: DEE659_TEST_DIGEST_A } as never };
+    const proposal = await coordinator.resolvePortfolioProposal({ cycle, forecast: authorized,
+      knowledge: { asOf: cycle.observedAt, contentDigestHex: DEE659_TEST_DIGEST_B } });
+    expect(proposal.action).toBe("ENTER_LONG");
+    expect(() => coordinator.takeDecisionEvidence(cycle.cycleId, "CLOSE"))
+      .toThrow("DECISION_EVIDENCE_UNAVAILABLE");
+    const evidence = coordinator.takeDecisionEvidence(cycle.cycleId, "CASH");
+    expect(evidence.decisionReceipt.contentDigestHex).toBe(proposal.decisionContentDigestHex);
+    expect(() => coordinator.takeDecisionEvidence(cycle.cycleId, "CASH"))
+      .toThrow("DECISION_EVIDENCE_UNAVAILABLE");
   });
 });

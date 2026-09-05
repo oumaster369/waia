@@ -38,7 +38,10 @@ describe("historical modeled execution advance v2", () => {
     });
     const market = sealHistoricalMarketCycleV2({
       cycleId: "cycle-1", barIndex: 1,
-      closedBar: { symbol: "BTCUSDT", interval: "1m", open: "100", high: "101", low: "99", close: "100", volume: "10", barOpenTime: "2026-08-30T10:00:00.000Z", barCloseTime: observedAt },
+      // Market data intentionally uses the slash identity while execution and
+      // accounting use BTCUSDT. The first fill must bind a mark for the newly
+      // opened canonical execution position in the same atomic advance.
+      closedBar: { symbol: "BTC/USDT", interval: "1m", open: "100", high: "101", low: "99", close: "100", volume: "10", barOpenTime: "2026-08-30T10:00:00.000Z", barCloseTime: observedAt },
       htxVolumeAuthorityReceipt: receipt,
       htxVolumeRaw: { amount: 10, vol: 1000 },
     });
@@ -137,7 +140,89 @@ describe("historical modeled execution advance v2", () => {
     expect(committedBundles).toHaveLength(1);
     const frontier = await repository.loadLatest({ organizationId: "org-1" }, { accountKey: "account-1", runId: "run-1" });
     expect(frontier?.positions.BTCUSDT?.quantity).toBe("0.1");
+    expect(frontier?.marks.BTCUSDT).toEqual({ price: "100", barCloseTime: observedAt });
     expect(frontier?.cash).not.toBe("1000");
     expect(result.accountingFrontierContentDigestHex).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("marks an open position on every closed bar when no fill occurs", async () => {
+    const receipt = qualifyHtxKlineVolumeAuthority({
+      symbol: "BTCUSDT",
+      qualifiedAtUtc: "2026-08-30T09:00:00.000Z",
+      rows: [{ id: 1, open: 100, high: 121, low: 79, close: 100, amount: 10, vol: 1000, count: 5 }],
+    });
+    const cycles = new Map([
+      ["cycle-down", sealHistoricalMarketCycleV2({
+        cycleId: "cycle-down", barIndex: 2,
+        closedBar: { symbol: "BTCUSDT", interval: "1m", open: "100", high: "101", low: "79",
+          close: "80", volume: "10", barOpenTime: "2026-08-30T10:01:00.000Z",
+          barCloseTime: "2026-08-30T10:02:00.000Z" },
+        htxVolumeAuthorityReceipt: receipt, htxVolumeRaw: { amount: 10, vol: 1000 },
+      })],
+      ["cycle-up", sealHistoricalMarketCycleV2({
+        cycleId: "cycle-up", barIndex: 3,
+        closedBar: { symbol: "BTCUSDT", interval: "1m", open: "80", high: "121", low: "79",
+          close: "120", volume: "10", barOpenTime: "2026-08-30T10:02:00.000Z",
+          barCloseTime: "2026-08-30T10:03:00.000Z" },
+        htxVolumeAuthorityReceipt: receipt, htxVolumeRaw: { amount: 10, vol: 1000 },
+      })],
+    ]);
+    const repository = createAccountingFrontierRepositoryMemory();
+    const seeded = advanceAccountingFrontier({
+      state: {
+        ...createInitialAccountingState({ organizationId: "org-1", accountKey: "account-1",
+          runId: "run-1", startingCash: "1000", frontierAsOf: "2026-08-30T10:01:00.000Z" }),
+        cash: "900",
+        positions: { BTCUSDT: { quantity: "1", grossPositionBasis: "100", netPositionBasis: "100" } },
+        marks: { BTCUSDT: { price: "100", barCloseTime: "2026-08-30T10:01:00.000Z" } },
+        markedPositionValue: "100",
+        equity: "1000",
+        equityHwm: "1000",
+        monthlyPeakHwm: "1000",
+      },
+      marks: { BTCUSDT: { price: "100", barCloseTime: "2026-08-30T10:01:00.000Z" } },
+      frontierAsOf: "2026-08-30T10:01:00.000Z",
+      idempotencyKey: "seeded-open-position",
+    });
+    await repository.append({ organizationId: "org-1" }, seeded);
+    const exchange = {
+      listOpenOrders: () => [],
+      async advanceOnClosedBar(input: Parameters<import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange["advanceOnClosedBar"]>[0]) {
+        return { fillEvents: [], accountState: await input.refreshAccountState() };
+      },
+    } as unknown as import("@/lib/trader/execution/historical-simulated-exchange").HistoricalSimulatedExchange;
+    const advance = createAdvanceHistoricalModeledExecutionV2({
+      context: { organizationId: "org-1" }, accountKey: "account-1", runId: "run-1",
+      exchange, executionRegistry: createHistoricalModeledExecutionRegistryV2(),
+      model: createHistoricalExecutionModelV1(),
+      persistence: {
+        async recordSimulatedFill(_context, current) { return current; },
+        async transitionOrderExpired(_context, current) { return current; },
+        async transitionOrderCancelled(_context, current) { return current; },
+      },
+      accountingRepository: repository,
+      resolveMarketCycle: async (cycleId) => cycles.get(cycleId)!,
+      initialAccountingFrontier: async () => seeded,
+      refreshAccountState: async () => ({ positions: [{ symbol: "BTCUSDT", quantity: "1" }],
+        openOrderCount: 0, dailyPnl: "0", drawdown: "0", quoteExposureByCurrency: {} }),
+      reconcileOrder: async () => undefined,
+      persistAdvanceEvidence: async () => undefined,
+    });
+
+    const down = await advance("cycle-down");
+    expect(down.fillCount).toBe(0);
+    expect(down.accountingAdvanced).toBe(true);
+    expect(down.accountingFrontier.frontierAsOf).toBe("2026-08-30T10:02:00.000Z");
+    expect(down.accountingFrontier.equity).toBe("980");
+    expect(down.accountingFrontier.accountDrawdownBps).toBe(200);
+
+    const up = await advance("cycle-up");
+    expect(up.fillCount).toBe(0);
+    expect(up.accountingAdvanced).toBe(true);
+    expect(up.accountingFrontier.frontierAsOf).toBe("2026-08-30T10:03:00.000Z");
+    expect(up.accountingFrontier.equity).toBe("1020");
+    expect(up.accountingFrontier.accountDrawdownBps).toBe(0);
+    expect(up.accountingFrontier.accountingSequence)
+      .toBe(down.accountingFrontier.accountingSequence + 1);
   });
 });

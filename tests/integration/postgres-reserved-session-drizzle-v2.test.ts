@@ -58,6 +58,13 @@ describe.skipIf(!enabled || !url || !disposable)(
       const rawBackend = await reserved<Array<Readonly<{ pid: number }>>>
         `SELECT pg_backend_pid()::int AS pid`;
       const db = drizzle(held);
+      // Reproduce the exact production failure: a separate Drizzle composition
+      // can install transparent JSON codecs on the pool after the reserved
+      // adapter has already been created. Raw held.json(...) must still serialize.
+      const serializers = pool.options.serializers as Record<number,
+        (value: never) => unknown>;
+      serializers[114] = (value: never) => value;
+      serializers[3802] = (value: never) => value;
       const drizzleBackend = await db.execute<{ pid: number }>(
         drizzleSql`SELECT pg_backend_pid()::int AS pid`,
       );
@@ -91,21 +98,25 @@ describe.skipIf(!enabled || !url || !disposable)(
             labels: ["d1", "d2"],
             recordedAt: drizzleRecordedAt,
           });
-          await transaction`
+          const insertRaw = async (id: number, nested: number[]) => transaction`
             INSERT INTO ${transaction(tableName)} (
               id, payload, payload_text, labels, recorded_at
             )
             VALUES (
-              2,
-              ${transaction.json({ writer: "raw", nested: [3, 4] })},
-              ${JSON.stringify({ writer: "raw-text", nested: [3, 4] })},
+              ${id},
+              ${transaction.json({ writer: "raw", nested })},
+              ${JSON.stringify({ writer: "raw-text", nested })},
               ${transaction.array(["r1", "r2"])},
               ${new Date("2026-09-03T02:00:00.000Z")}
             )
           `;
+          // The second call reuses postgres.js' prepared statement after the
+          // server has resolved the formerly unspecified JSONB parameter OID.
+          await insertRaw(2, [3, 4]);
+          await insertRaw(3, [5, 6]);
 
           const drizzleRows = await txDb.select().from(adapterTable);
-          expect(drizzleRows).toHaveLength(2);
+          expect(drizzleRows).toHaveLength(3);
           expect(drizzleRows[0]).toEqual({
             id: 1,
             payload: { writer: "drizzle", nested: [1, 2] },
@@ -138,6 +149,14 @@ describe.skipIf(!enabled || !url || !disposable)(
             payload: { writer: "raw", nested: [3, 4] },
             payload_type: "object",
             payload_text: JSON.stringify({ writer: "raw-text", nested: [3, 4] }),
+            labels: ["r1", "r2"],
+            recorded_at: new Date("2026-09-03T02:00:00.000Z"),
+          });
+          expect(rawRows[2]).toEqual({
+            id: 3,
+            payload: { writer: "raw", nested: [5, 6] },
+            payload_type: "object",
+            payload_text: JSON.stringify({ writer: "raw-text", nested: [5, 6] }),
             labels: ["r1", "r2"],
             recorded_at: new Date("2026-09-03T02:00:00.000Z"),
           });

@@ -27,6 +27,8 @@ import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import { historicalInstrumentsMatch } from "@/lib/trader/symbols/historical-instrument";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import { createInitialAccountingState, computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
+import { accountingRowToFrontier } from
+  "@/lib/trader/accounting/accounting-frontier-serialization";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
 import {
@@ -151,7 +153,7 @@ async function persist(sql: postgres.Sql, receipt: CanonicalDecisionVerification
       ${receipt.dee659PreregistrationId}::uuid,
       ${receipt.sourceRecordContentDigestHex}, ${receipt.pitAnchor}::timestamptz, true,
       ${receipt.verifierVersion}, ${receipt.verifierCodeDigestHex},
-      ${receipt.verificationReceiptDigestHex}, ${sql.json(JSON.parse(JSON.stringify(receipt)) as postgres.JSONValue)},
+      ${receipt.verificationReceiptDigestHex}, ${JSON.stringify(receipt)}::text::jsonb,
       ${receipt.schemaVersion}
     ) ON CONFLICT DO NOTHING
   `;
@@ -181,7 +183,7 @@ async function persistSubject(sql: postgres.Sql, input: Readonly<{
     ) VALUES (
       ${input.organizationId}::uuid, ${input.accountId}, ${input.instrumentIdentityDigestHex},
       ${input.subjectKind}, ${input.subjectContentDigestHex},
-      ${sql.json(JSON.parse(JSON.stringify(input.subject)) as postgres.JSONValue)},
+      ${JSON.stringify(input.subject)}::text::jsonb,
       ${input.pitAnchor}::timestamptz, ${CANONICAL_DECISION_VERIFICATION_SUBJECT_V2}
     ) ON CONFLICT (organization_id, subject_kind, subject_content_digest_hex) DO NOTHING
   `;
@@ -267,26 +269,52 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
   async function issueScientific(input: Readonly<{
     organizationId: string; runId: string; forecastId: string; scientificAdmissionContentDigestHex: string;
   }>): Promise<CanonicalDecisionVerificationReceiptV2> {
-    const rows = await sql<{ id: string; content_digest: string; receipt_json: string | ScientificAdmissionReceiptV2;
-      created_at: Date | string; anchor_closed_bar_epoch_ms: string | number; authorized_outcome_json: unknown }[]>`
-      SELECT s.id::text, s.content_digest, s.receipt_json, s.created_at,
-             b.anchor_closed_bar_epoch_ms, b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json
-      FROM trader_scientific_admission_receipt_v1 s
-      JOIN trader_forecast_v2 f ON f.organization_id=s.organization_id AND f.id=${input.forecastId}::uuid
-      JOIN trader_forecast_bundle_v2 b ON b.organization_id=f.organization_id AND b.id=f.bundle_id
-      JOIN trader_historical_simulation_run_start_v2 rs
-        ON rs.organization_id=s.organization_id AND rs.run_id=${input.runId}
-      WHERE s.organization_id=${input.organizationId}::uuid
-        AND s.content_digest=${input.scientificAdmissionContentDigestHex}
-        AND s.schema_version=${SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION}
-        AND s.created_at <= rs.started_at
+    const scientificRows = await sql<{ id: string; content_digest: string;
+      receipt_json: string | ScientificAdmissionReceiptV2; created_at: Date | string }[]>`
+      SELECT id::text, content_digest, receipt_json, created_at
+      FROM trader_scientific_admission_receipt_v1
+      WHERE organization_id=${input.organizationId}::uuid
+        AND content_digest=${input.scientificAdmissionContentDigestHex}
+        AND schema_version=${SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION}
     `;
-    const row = rows[0];
-    if (!row || !DIGEST.test(row.content_digest)) {
+    const row = scientificRows[0];
+    if (!row || scientificRows.length !== 1 || !DIGEST.test(row.content_digest)) {
       throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:SCIENTIFIC_SOURCE");
     }
-    const forecast = requireForecastRuntimeAuthorizedOutcomeV2(row.authorized_outcome_json as never);
-    const pitAnchor = new Date(Number(row.anchor_closed_bar_epoch_ms)).toISOString();
+    const runRows = await sql<Array<Readonly<{ started_at: Date | string }>>>`
+      SELECT started_at FROM trader_historical_simulation_run_start_v2
+      WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
+    `;
+    if (runRows.length !== 1) {
+      throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:RUN_START_SOURCE");
+    }
+    if (new Date(row.created_at).getTime() >
+        new Date(runRows[0]!.started_at).getTime()) {
+      throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:SCIENTIFIC_PIT");
+    }
+    const forecastRows = await sql<Array<Readonly<{
+      anchor_closed_bar_epoch_ms: string | number;
+      authorized_outcome_json: unknown;
+    }>>>`
+      SELECT b.anchor_closed_bar_epoch_ms,
+             b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json
+      FROM trader_forecast_v2 f
+      JOIN trader_forecast_bundle_v2 b
+        ON b.organization_id=f.organization_id AND b.id=f.bundle_id
+      WHERE f.organization_id=${input.organizationId}::uuid
+        AND f.id=${input.forecastId}::uuid
+        AND f.target_role_id='EXECUTION_OPPORTUNITY'
+    `;
+    const forecastRow = forecastRows[0];
+    if (!forecastRow || forecastRows.length !== 1) {
+      throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:FORECAST_SOURCE");
+    }
+    const forecast = requireForecastRuntimeAuthorizedOutcomeV2(
+      forecastRow.authorized_outcome_json as never,
+    );
+    const pitAnchor = new Date(
+      Number(forecastRow.anchor_closed_bar_epoch_ms),
+    ).toISOString();
     const raw = typeof row.receipt_json === "string" ? JSON.parse(row.receipt_json) : row.receipt_json;
     const predictive = raw.predictiveTerminalReceipt;
     const scientific = requireScientificAdmissionV2(raw, {
@@ -335,6 +363,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
   async function persistDatasetAuthority(input: Readonly<{
     organizationId: string;
     runId: string;
+    releaseSha: string;
     cycles: readonly HistoricalSealedMarketCycleV2[];
     memberships: ReadonlyMap<string,
       HistoricalDatasetMembershipV2 | HistoricalPreHoldoutDatasetMembershipV2>;
@@ -357,19 +386,144 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_SCOPE_INVALID");
       }
       const authorityClass = firstMembership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2";
-      const existingScope = await tx<{ cycle_id: string }[]>`
-        SELECT cycle_id FROM trader_historical_dataset_authority_v2
+      const datasetAuthorityDigestHex = firstMembership.datasetAuthorityDigestHex ??
+        ("sealReceiptDigestHex" in firstMembership
+          ? firstMembership.sealReceiptDigestHex
+          : undefined);
+      const volumeAuthorityDigestHex = input.cycles[0]?.htxVolumeAuthorityReceipt
+        .qualificationReceiptDigest;
+      const expectedRecordIndices = input.cycles.map((cycle) => {
+        const membership = input.memberships.get(cycle.cycleId);
+        if (!membership || cycle.cycleId !==
+            `${input.runId}:${membership.partition}:${membership.symbol}:${membership.recordIndex}` ||
+            membership.datasetAuthorityClass !== firstMembership.datasetAuthorityClass ||
+            membership.datasetAuthorityDigestHex !== firstMembership.datasetAuthorityDigestHex ||
+            membership.partitionDigestHex !== firstMembership.partitionDigestHex ||
+            membership.partitionRawSha256Hex !== firstMembership.partitionRawSha256Hex ||
+            cycle.htxVolumeAuthorityReceipt.qualificationReceiptDigest !==
+              volumeAuthorityDigestHex) {
+          throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_IDENTITY_CONFLICT");
+        }
+        return membership.recordIndex;
+      }).sort((left, right) => left - right);
+      if (!datasetAuthorityDigestHex || !volumeAuthorityDigestHex ||
+          expectedRecordIndices.some((value, index) =>
+            index > 0 && value !== expectedRecordIndices[index - 1]! + 1)) {
+        throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_SCOPE_INVALID");
+      }
+      const existingScope = await tx<Array<Readonly<{
+        cycle_id: string;
+        record_index: number;
+        dataset_authority_digest_hex: string;
+        qualification_receipt_digest_hex: string | null;
+        partition_digest_hex: string | null;
+        partition_raw_sha256_hex: string | null;
+        volume_authority_digest_hex: string | null;
+      }>>>`
+        SELECT cycle_id,(membership_json->>'recordIndex')::integer AS record_index,
+          dataset_authority_digest_hex,
+          membership_json->>'qualificationReceiptDigestHex'
+            AS qualification_receipt_digest_hex,
+          membership_json->>'partitionDigestHex' AS partition_digest_hex,
+          membership_json->>'partitionRawSha256Hex' AS partition_raw_sha256_hex,
+          sealed_cycle_json->'htxVolumeAuthorityReceipt'->>'qualificationReceiptDigest'
+            AS volume_authority_digest_hex
+        FROM trader_historical_dataset_authority_v2
         WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
           AND dataset_authority_class=${authorityClass}
           AND membership_json ->> 'partition'=${firstMembership.partition}
           AND membership_json ->> 'symbol'=${firstMembership.symbol}
         ORDER BY cycle_id
-        FOR SHARE
       `;
-      if (existingScope.length > 0 &&
+      if (existingScope.some((row) =>
+        row.cycle_id !==
+          `${input.runId}:${firstMembership.partition}:${firstMembership.symbol}:` +
+            `${row.record_index}` ||
+        row.dataset_authority_digest_hex !== datasetAuthorityDigestHex ||
+        row.qualification_receipt_digest_hex !==
+          ("qualificationReceiptDigestHex" in firstMembership
+            ? firstMembership.qualificationReceiptDigestHex
+            : null) ||
+        row.partition_digest_hex !== firstMembership.partitionDigestHex ||
+        row.partition_raw_sha256_hex !== firstMembership.partitionRawSha256Hex ||
+        row.volume_authority_digest_hex !== volumeAuthorityDigestHex)) {
+        throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_IDENTITY_CONFLICT");
+      }
+      if (firstMembership.partition === "DEVELOPMENT" && existingScope.length > 0 &&
           JSON.stringify(existingScope.map((row) => row.cycle_id)) !==
             JSON.stringify(expectedCycleIds)) {
         throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_CONFLICT");
+      }
+      if (firstMembership.partition === "WALK_FORWARD") {
+        const approvals = await tx<Array<Readonly<{
+          initial_record_index: number;
+          cycle_count: number;
+          first_economic_record_index: number;
+          finalized: boolean;
+        }>>>`
+          SELECT (proposal.launch_plan_json->>'initialRecordIndex')::integer
+              AS initial_record_index,
+            (proposal.launch_plan_json->>'cycleCount')::integer AS cycle_count,
+            (proposal.technical_candidate_json->>'firstEconomicRecordIndex')::integer
+              AS first_economic_record_index,
+            authority.id IS NOT NULL AS finalized
+          FROM trader_historical_technical_proposal_v2 proposal
+          JOIN trader_historical_proposal_ratification_v2 approval
+            ON approval.proposal_id=proposal.id
+           AND approval.organization_id=proposal.organization_id
+           AND approval.run_id=proposal.run_id
+           AND approval.release_sha=proposal.release_sha
+           AND approval.proposal_content_digest_hex=proposal.content_digest_hex
+          LEFT JOIN trader_historical_four_surface_ratified_admission_v2 authority
+            ON authority.organization_id=proposal.organization_id
+           AND authority.run_id=proposal.run_id
+           AND authority.release_sha=proposal.release_sha
+           AND authority.aggregate_admission_receipt_id::text=
+             proposal.technical_candidate_json->>'aggregateAdmissionReceiptId'
+           AND authority.aggregate_admission_content_digest_hex=
+             proposal.technical_candidate_json->>'aggregateAdmissionContentDigestHex'
+          WHERE proposal.organization_id=${input.organizationId}::uuid
+            AND proposal.run_id=${input.runId} AND proposal.release_sha=${input.releaseSha}
+            AND proposal.technical_candidate_json->>'qualificationReceiptDigestHex'=
+              ${datasetAuthorityDigestHex}
+            AND EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(proposal.technical_candidate_json->'surfaces') surface
+              WHERE surface->>'symbol'=${firstMembership.symbol}
+            )
+        `;
+        const approved = approvals[0];
+        if (!approved || approvals.length !== 1) {
+          throw new Error("HISTORICAL_DATASET_AUTHORITY_WALK_FORWARD_APPROVAL_REQUIRED");
+        }
+        // Before final authority exists the approved technical materializer may
+        // persist only the single last WF_PREDICTIVE bar used as Human-visible
+        // market-boundary evidence.  After finalization, bootstrap may expand
+        // only the exact reviewed analytical warm-up + economic run window.
+        if (!approved.finalized &&
+            (expectedRecordIndices.length !== 1 || expectedRecordIndices[0] !==
+              approved.first_economic_record_index - 1)) {
+          throw new Error("HISTORICAL_DATASET_AUTHORITY_PREFINAL_RANGE_REFUSED");
+        }
+        const lowerBound = approved.initial_record_index - 239;
+        const upperBoundExclusive = approved.initial_record_index + approved.cycle_count;
+        if (approved.finalized && (expectedRecordIndices[0]! < lowerBound ||
+            expectedRecordIndices.at(-1)! >= upperBoundExclusive)) {
+          throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_OUTSIDE_APPROVAL");
+        }
+        const existingIndices = existingScope.map((row) => row.record_index)
+          .sort((left, right) => left - right);
+        const expectedSet = new Set(expectedRecordIndices);
+        const overlap = existingIndices.filter((value) => expectedSet.has(value));
+        const exactRepeat = overlap.length === expectedRecordIndices.length;
+        if (approved.finalized && !exactRepeat) {
+          const union = [...new Set([...existingIndices, ...expectedRecordIndices])]
+            .sort((left, right) => left - right);
+          if (union[0] !== lowerBound || union.some((value, index) =>
+            index > 0 && value !== union[index - 1]! + 1)) {
+            throw new Error("HISTORICAL_DATASET_AUTHORITY_RANGE_GAP");
+          }
+        }
       }
       const ids = new Map<string, string>();
       for (const cycle of input.cycles) {
@@ -390,8 +544,8 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
           ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId},
           ${membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2"}, ${datasetAuthorityDigestHex},
           ${membership.contentDigestHex}, ${cycle.contentDigestHex},
-          ${tx.json(JSON.parse(JSON.stringify(membership)) as postgres.JSONValue)},
-          ${tx.json(JSON.parse(JSON.stringify(cycle)) as postgres.JSONValue)},
+          ${JSON.stringify(membership)}::text::jsonb,
+          ${JSON.stringify(cycle)}::text::jsonb,
           ${authorityDigest}, 'waia.trader.historical_dataset_authority.v2'
         ) ON CONFLICT (organization_id, run_id, cycle_id) DO NOTHING RETURNING id::text
       `;
@@ -432,6 +586,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     const authorityIds = await persistDatasetAuthority({
       organizationId: input.organizationId,
       runId: input.runId,
+      releaseSha: input.releaseSha,
       cycles,
       memberships,
     });
@@ -447,7 +602,8 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     organizationId: string; accountId: string; runId: string; forecastId: string;
     datasetAuthorityId: string; cycleId: string;
     policyConfig: HistoricalPolicyConfigV2; defaultQuantity: string;
-    initialAccountingFrontierId: string;
+    initialAccountingFrontierId?: string;
+    accountingFrontierId?: string;
   }>): Promise<Readonly<{ preregistrationId: string; authorities: ExecutionAuthorities;
     datasetAuthorityDigestHex: string }>> {
     if (transactionalPreregistration) {
@@ -466,7 +622,6 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       FROM trader_historical_dataset_authority_v2
       WHERE id=${input.datasetAuthorityId}::uuid AND organization_id=${input.organizationId}::uuid
         AND run_id=${input.runId} AND cycle_id=${input.cycleId}
-      FOR SHARE
     `;
     const dataset = datasetRows[0];
     if (!dataset || computeStableJsonDigest({ organizationId: input.organizationId, runId: input.runId,
@@ -490,45 +645,90 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         membership.barContentDigestHex !== computeBarContentDigest(sealedCycle.closedBar) ||
         datasetAuthorityClass !== dataset.dataset_authority_class ||
         datasetAuthorityDigestHex !== dataset.dataset_authority_digest_hex ||
-        !datasetAuthorityDigestHex || !input.initialAccountingFrontierId.trim()) {
+        !datasetAuthorityDigestHex ||
+        Boolean(input.initialAccountingFrontierId) === Boolean(input.accountingFrontierId)) {
       throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:SOURCE_BINDING");
     }
+    const accountingFrontierId = input.initialAccountingFrontierId ??
+      input.accountingFrontierId!;
     const accountingRows = await sql<Record<string, unknown>[]>`
       SELECT * FROM trader_accounting_frontier
-      WHERE id=${input.initialAccountingFrontierId}::uuid
+      WHERE id=${accountingFrontierId}::uuid
         AND organization_id=${input.organizationId}::uuid AND account_key=${input.accountId}
-        AND run_id=${input.runId} AND accounting_sequence=1
+        AND run_id=${input.runId}
+        AND (${input.initialAccountingFrontierId !== undefined}::boolean = false
+          OR accounting_sequence=1)
         AND NOT EXISTS (
           SELECT 1 FROM trader_accounting_frontier earlier
           WHERE earlier.organization_id=${input.organizationId}::uuid
             AND earlier.account_key=${input.accountId}
             AND earlier.run_id=${input.runId}
-            AND earlier.accounting_sequence < trader_accounting_frontier.accounting_sequence
+            AND (CASE WHEN ${input.initialAccountingFrontierId !== undefined}::boolean
+              THEN earlier.accounting_sequence < trader_accounting_frontier.accounting_sequence
+              ELSE earlier.accounting_sequence > trader_accounting_frontier.accounting_sequence END)
         )
     `;
     const ar = accountingRows[0] as Record<string, unknown> | undefined;
-    if (!ar) throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:INITIAL_ACCOUNTING_INCEPTION");
+    if (!ar) throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:ACCOUNTING_FRONTIER");
     // The 0100 frontier row intentionally stores the compact accounting projection, while the
     // semantic digest also covers deterministic drawdown inception fields. Rebuild sequence-one
     // inception from its durable identity/cash/time instead of pretending the compact row carries
     // those omitted fields.
-    const inception = createInitialAccountingState({ organizationId: String(ar.organization_id),
-      accountKey: String(ar.account_key), runId: String(ar.run_id), startingCash: String(ar.cash),
-      frontierAsOf: new Date(ar.frontier_as_of as string | Date).toISOString() });
     const empty = (value: unknown) => value !== null && typeof value === "object" && Object.keys(value).length === 0;
-    const inceptionDigest = computeAccountingSemanticDigest(inception);
-    if (inceptionDigest !== String(ar.semantic_content_digest) ||
-        String(ar.schema_version) !== inception.schemaVersion ||
-        String(ar.gross_realized_pnl) !== "0" || String(ar.net_realized_pnl) !== "0" ||
-        String(ar.equity) !== inception.equity || String(ar.equity_hwm) !== inception.equityHwm ||
-        Number(ar.account_drawdown_bps) !== 0 || ar.source_fill_id !== null ||
-        !empty(ar.position_quantity_json) || !empty(ar.gross_position_basis_json) ||
-        !empty(ar.net_position_basis_json) || !empty(ar.marks_json)) {
-      throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:ACCOUNTING_DIGEST");
+    let accounting: AccountingFrontierV1;
+    if (input.initialAccountingFrontierId !== undefined) {
+      const inception = createInitialAccountingState({ organizationId: String(ar.organization_id),
+        accountKey: String(ar.account_key), runId: String(ar.run_id), startingCash: String(ar.cash),
+        frontierAsOf: new Date(ar.frontier_as_of as string | Date).toISOString() });
+      const inceptionDigest = computeAccountingSemanticDigest(inception);
+      if (inceptionDigest !== String(ar.semantic_content_digest) ||
+          String(ar.schema_version) !== inception.schemaVersion ||
+          String(ar.gross_realized_pnl) !== "0" || String(ar.net_realized_pnl) !== "0" ||
+          String(ar.equity) !== inception.equity || String(ar.equity_hwm) !== inception.equityHwm ||
+          Number(ar.account_drawdown_bps) !== 0 || ar.source_fill_id !== null ||
+          !empty(ar.position_quantity_json) || !empty(ar.gross_position_basis_json) ||
+          !empty(ar.net_position_basis_json) || !empty(ar.marks_json)) {
+        throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:ACCOUNTING_DIGEST");
+      }
+      accounting = { ...inception, id: String(ar.id), sourceFillId: null,
+        sourceEconomicsDigest: String(ar.source_economics_digest),
+        semanticContentDigest: inceptionDigest, idempotencyKey: String(ar.idempotency_key) };
+    } else {
+      accounting = accountingRowToFrontier({
+        id: String(ar.id), organizationId: String(ar.organization_id),
+        accountKey: String(ar.account_key), runId: String(ar.run_id),
+        accountingSequence: Number(ar.accounting_sequence),
+        frontierAsOf: new Date(ar.frontier_as_of as string | Date).toISOString(),
+        monthKey: ar.month_key === null ? null : String(ar.month_key),
+        cash: String(ar.cash),
+        positionQuantityJson: ar.position_quantity_json as Record<string, string>,
+        grossPositionBasisJson: ar.gross_position_basis_json as Record<string, string>,
+        netPositionBasisJson: ar.net_position_basis_json as Record<string, string>,
+        grossRealizedPnl: String(ar.gross_realized_pnl),
+        netRealizedPnl: String(ar.net_realized_pnl),
+        marksJson: ar.marks_json as AccountingFrontierV1["marks"],
+        markedPositionValue:
+          ar.marked_position_value === null ? null : String(ar.marked_position_value),
+        equity: String(ar.equity), equityHwm: String(ar.equity_hwm),
+        monthlyPeakHwm:
+          ar.monthly_peak_hwm === null ? null : String(ar.monthly_peak_hwm),
+        monthlyDrawdownBps:
+          ar.monthly_drawdown_bps === null ? null : Number(ar.monthly_drawdown_bps),
+        strategyPeakHwmByKeyJson:
+          ar.strategy_peak_hwm_by_key_json as Record<string, string> | null,
+        strategyDrawdownBpsByKeyJson:
+          ar.strategy_drawdown_bps_by_key_json as Record<string, number> | null,
+        accountDrawdownBps: Number(ar.account_drawdown_bps),
+        sourceFillId: ar.source_fill_id === null ? null : String(ar.source_fill_id),
+        sourceEconomicsDigest: String(ar.source_economics_digest),
+        semanticContentDigest: String(ar.semantic_content_digest),
+        idempotencyKey: String(ar.idempotency_key), schemaVersion: String(ar.schema_version),
+      }, []);
+      if (accounting.accountingSequence < 1 ||
+          computeAccountingSemanticDigest(accounting) !== accounting.semanticContentDigest) {
+        throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:ACCOUNTING_DIGEST");
+      }
     }
-    const initialAccounting: AccountingFrontierV1 = { ...inception, id: String(ar.id),
-      sourceFillId: null, sourceEconomicsDigest: String(ar.source_economics_digest),
-      semanticContentDigest: inceptionDigest, idempotencyKey: String(ar.idempotency_key) };
     const forecastRows = await sql<{ authorized_outcome_json: unknown; anchor_closed_bar_epoch_ms: string | number }[]>`
       SELECT b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json,
              b.anchor_closed_bar_epoch_ms
@@ -573,7 +773,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         verifier_code_digest_hex, schema_version
       ) VALUES (
         ${input.organizationId}::uuid, ${input.runId}, ${policyConfigDigestHex},
-        ${sql.json(JSON.parse(JSON.stringify(input.policyConfig)) as postgres.JSONValue)},
+        ${JSON.stringify(input.policyConfig)}::text::jsonb,
         ${verifierDigest}, 'waia.trader.historical_simulation_policy_config.v2'
       ) ON CONFLICT (organization_id, run_id, policy_config_digest_hex) DO NOTHING
     `;
@@ -595,16 +795,16 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       quantityRulesAuthorityReceiptDigestHex: computeStableJsonDigest({ ...policyEvidence, purpose: "QUANTITY" }),
     });
     const economicSize = createSingletonEconomicSizeSetV1({ ...binding,
-      sizeSetId: `${input.runId}:initial-size`,
+      sizeSetId: `${input.runId}:${input.cycleId}:size`,
       unit: "BASE_ASSET_QUANTITY", exactQuantity: input.defaultQuantity,
       authorityReceiptDigestHex: computeStableJsonDigest({ defaultQuantity: input.defaultQuantity,
-        policyContentDigestHex: executablePolicy.contentDigestHex, accountingDigest: initialAccounting.semanticContentDigest }),
+        policyContentDigestHex: executablePolicy.contentDigestHex, accountingDigest: accounting.semanticContentDigest }),
     });
     const cash = createCashEconomicAuthorityV1({ ...binding,
-      availableCashUsdt: initialAccounting.cash,
-      authorityReceiptDigestHex: computeStableJsonDigest({ accountingFrontierId: initialAccounting.id,
-        accountingSemanticContentDigest: initialAccounting.semanticContentDigest,
-        cash: initialAccounting.cash }),
+      availableCashUsdt: accounting.cash,
+      authorityReceiptDigestHex: computeStableJsonDigest({ accountingFrontierId: accounting.id,
+        accountingSemanticContentDigest: accounting.semanticContentDigest,
+        cash: accounting.cash }),
     });
     const authorities = { anchor, executablePolicy, economicSize, cash };
     requireExecutionAuthorities(authorities);
@@ -627,8 +827,13 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       organizationId: input.organizationId, accountId: input.accountId, runId: input.runId,
       forecastId: input.forecastId, datasetMembership: membership,
       sealedCycle, policyConfig: input.policyConfig,
-      initialAccountingIdentity: { id: initialAccounting.id,
-        semanticContentDigest: initialAccounting.semanticContentDigest }, authorities };
+      ...(input.initialAccountingFrontierId !== undefined
+        ? { initialAccountingIdentity: { id: accounting.id,
+            semanticContentDigest: accounting.semanticContentDigest } }
+        : { accountingFrontierIdentity: { id: accounting.id,
+            sequence: accounting.accountingSequence,
+            semanticContentDigest: accounting.semanticContentDigest } }),
+      authorities };
     const bundleDigest = computeStableJsonDigest(body);
     const rows = await sql<{ id: string }[]>`
       INSERT INTO trader_dee659_authority_preregistration_v2 (
@@ -640,7 +845,7 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         ${a.organizationId}::uuid, ${a.accountId}, ${input.runId}, ${input.cycleId}, ${input.forecastId}::uuid,
         ${a.instrumentIdentityDigestHex}, ${input.datasetAuthorityId}::uuid, ${datasetAuthorityDigestHex}, ${policyConfigDigestHex}, ${a.contentDigestHex},
         ${authorities.executablePolicy.contentDigestHex}, ${authorities.economicSize.contentDigestHex},
-        ${authorities.cash.contentDigestHex}, ${sql.json(JSON.parse(JSON.stringify(body)) as postgres.JSONValue)},
+        ${authorities.cash.contentDigestHex}, ${JSON.stringify(body)}::text::jsonb,
         ${bundleDigest}, ${sealedCycle.closedBar.barCloseTime}::timestamptz,
         ${body.schemaVersion}
       ) ON CONFLICT (organization_id, account_id, run_id, forecast_id, authority_bundle_digest_hex)
@@ -746,7 +951,6 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       WHERE id=${input.preregistrationId}::uuid AND organization_id=${input.organizationId}::uuid
         AND account_id=${input.accountId} AND run_id=${input.runId}
         AND dataset_authority_digest_hex=${input.datasetAuthorityDigestHex}
-      FOR SHARE
     `;
     if (!prereg[0]) throw new Error("HISTORICAL_SIMULATION_RUN_START_PREREGISTRATION_MISMATCH");
     await sql`

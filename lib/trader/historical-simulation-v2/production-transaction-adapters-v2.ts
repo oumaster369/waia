@@ -84,6 +84,7 @@ export async function persistHistoricalModeledExecutionSubmissionV2(input: Reado
   orders: OrderRepository;
   organizationId: string;
   accountId: string;
+  runId: string;
   decisionId: string;
   riskAllowanceId: string;
   receipt: HistoricalModeledExecutionReceiptV2;
@@ -93,10 +94,11 @@ export async function persistHistoricalModeledExecutionSubmissionV2(input: Reado
     throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:ORDER_SUBMISSION_SCOPE");
   }
   const expected = createHistoricalModeledOrderFromReceiptV2({ organizationId: input.organizationId,
-    accountId: input.accountId, decisionId: input.decisionId, allowanceId: input.riskAllowanceId,
+    accountId: input.accountId, runId: input.runId, decisionId: input.decisionId, allowanceId: input.riskAllowanceId,
     receipt: input.receipt });
   const persisted = await input.orders.createOrder(input.context, { id: expected.id, venue: expected.venue,
     executionMode: expected.executionMode, symbol: expected.symbol, side: expected.side, type: expected.type,
+    historicalRunId: expected.historicalRunId, historicalAccountKey: expected.historicalAccountKey,
     price: expected.price, quantity: expected.quantity, clientOrderId: expected.clientOrderId,
     idempotencyKey: expected.idempotencyKey, riskDecisionId: expected.riskDecisionId,
     // Modeled risk is deliberately not canonical Risk V2. Never attach its
@@ -104,7 +106,7 @@ export async function persistHistoricalModeledExecutionSubmissionV2(input: Reado
     riskAllowanceId: null, riskAllowanceBindingDigest: null,
     strategySignalId: expected.strategySignalId, allocationDecisionId: expected.allocationDecisionId,
     credentialId: null });
-  const identity = ["id", "organizationId", "venue", "executionMode", "symbol", "side", "type", "price",
+  const identity = ["id", "organizationId", "venue", "executionMode", "historicalRunId", "historicalAccountKey", "symbol", "side", "type", "price",
     "quantity", "clientOrderId", "idempotencyKey", "riskDecisionId", "allocationDecisionId"] as const;
   if (identity.some((key) => persisted[key] !== expected[key]) || persisted.credentialId !== null ||
       persisted.riskAllowanceId !== null || persisted.riskAllowanceBindingDigest !== null) {

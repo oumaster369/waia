@@ -22,6 +22,14 @@ import {
   subtractDecimal,
 } from "@/lib/trader/risk/numeric";
 
+function deterministicUuidFromText(value: string): string {
+  const chars = createHash("sha256").update(value, "utf8").digest("hex").slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = "8";
+  const hex = chars.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 import {
   ACCOUNTING_BASIS_METHOD,
   ACCOUNTING_ENGINE_ID,
@@ -445,7 +453,7 @@ export function advanceAccountingFrontier(
   return {
     ...state,
     // Deterministic frontier id — avoids crypto.randomUUID() on every bar.
-    id: input.frontierId ?? `${state.runId}:${nextSequence}`,
+    id: input.frontierId ?? deterministicUuidFromText(idempotencyKey),
     sourceFillId,
     sourceEconomicsDigest,
     semanticContentDigest,

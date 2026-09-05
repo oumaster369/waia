@@ -21,6 +21,7 @@ import {
   buildHistoricalKnowledgeSnapshotAuthorityV2,
   type HistoricalKnowledgeSnapshotAuthorityV2,
 } from "@/lib/trader/intelligence/forecast-v2/historical-knowledge-snapshot-authority-v2";
+import { historicalInstrumentsMatch } from "@/lib/trader/symbols/historical-instrument";
 
 export const HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 =
   "waia.trader.historical_simulation_knowledge_binding.v2" as const;
@@ -242,7 +243,8 @@ export function computeHistoricalForecastPitKnowledgeDigestV2(
     visibleEvidence: rows.map((row) => {
       const required = requireHistoricalForecastPitKnowledgeRowV2(row);
       const canonical = required.canonical;
-      if (row.organization_id !== organizationId || row.run_id !== runId || row.symbol !== symbol ||
+      if (row.organization_id !== organizationId || row.run_id !== runId ||
+          !historicalInstrumentsMatch(row.symbol, symbol) ||
           !UUID.test(row.id) || !UUID.test(row.knowledge_edge_id) || !DIGEST.test(row.content_digest) ||
           computeKnowledgeConfidenceUpdateContentDigest(canonical) !== row.content_digest ||
           required.visibleFromPitAnchor > pitAnchor || canonical.resolvedAt > pitAnchor ||
@@ -273,14 +275,13 @@ export async function loadHistoricalKnowledgeSnapshotAuthorityV2(
            terminal_reason, schema_version
     FROM trader_knowledge_confidence_update_record
     WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
-      AND symbol=${input.symbol}
+      AND replace(symbol, '/', '')=replace(${input.symbol}, '/', '')
       AND update_model_version=${`${KNOWLEDGE_CONFIDENCE_UPDATE_MODEL_VERSION}.forecast-v2-evidence-only`}
       AND (source_record_ids_json::jsonb ->> 'visible_from_cycle_pit_anchor')::timestamptz
             <= ${input.pitAnchor}::timestamptz
       AND resolved_at <= ${input.pitAnchor}::timestamptz
       AND pit_evidence_boundary <= ${input.pitAnchor}::timestamptz
     ORDER BY content_digest ASC
-    FOR SHARE
   `;
   return buildHistoricalKnowledgeSnapshotAuthorityFromRowsV2(input, rows);
 }

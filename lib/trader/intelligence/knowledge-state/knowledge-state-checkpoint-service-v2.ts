@@ -14,7 +14,8 @@ import {
 /**
  * DEE-534 / WP-KNOWLEDGE-STATE — bounded knowledge checkpoint v2 persistence.
  *
- * Append-only, natural-idempotent on (organization_id, checkpoint_seq). Only the bounded
+ * Append-only, natural-idempotent on the GENERAL namespace's
+ * (organization_id, checkpoint_seq). Only the bounded
  * `KnowledgeCheckpointInput` fields are stored — no forecast history arrays. Restore
  * recomputes both digests from the persisted fields and fails closed on any mismatch
  * (corruption or identity tampering) rather than returning unverified state.
@@ -73,15 +74,35 @@ export class KnowledgeCheckpointCorruptionError extends Error {
   }
 }
 
+const GENERAL_CHECKPOINT_NAMESPACE = "GENERAL" as const;
+
+function requireHistoricalCheckpointNamespace(
+  checkpointNamespace: string,
+  modelVersion?: string,
+): string {
+  if (
+    !checkpointNamespace.trim() ||
+    checkpointNamespace === GENERAL_CHECKPOINT_NAMESPACE ||
+    (modelVersion !== undefined && checkpointNamespace !== modelVersion)
+  ) {
+    throw new KnowledgeCheckpointPersistConflictError(
+      "[knowledge-state-checkpoint-v2] historical namespace must equal its digest-bound model_version",
+    );
+  }
+  return checkpointNamespace;
+}
+
 async function loadExistingCheckpoint(
   sql: postgres.Sql,
   organizationId: string,
   checkpointSeq: number,
+  checkpointNamespace: string,
 ): Promise<{ id: string; contentDigest: string } | null> {
   const rows = await sql<{ id: string; content_digest: string }[]>`
     SELECT id::text AS id, content_digest
     FROM trader_knowledge_state_checkpoint_v2
     WHERE ${orgScopedPostgresPredicate(sql, organizationId)}
+      AND checkpoint_namespace = ${checkpointNamespace}
       AND checkpoint_seq = ${checkpointSeq}
   `;
   const row = rows[0];
@@ -91,15 +112,29 @@ async function loadExistingCheckpoint(
 export type WriteKnowledgeCheckpointResult = { id: string; insertedNew: boolean };
 
 /**
- * Append-only checkpoint write, natural-idempotent on (organization_id, checkpoint_seq).
+ * Append-only GENERAL checkpoint write, natural-idempotent on
+ * (organization_id, checkpoint_namespace, checkpoint_seq).
  * Fails closed on any conflicting content for the same natural identity
- * (`tksc_v2_org_checkpoint_seq_uq`).
+ * (`tksc_v2_org_namespace_checkpoint_seq_uq`).
  */
 export async function writeKnowledgeCheckpointV2(
   sql: postgres.Sql,
   record: KnowledgeCheckpointRecord,
 ): Promise<WriteKnowledgeCheckpointResult> {
-  const existing = await loadExistingCheckpoint(sql, record.organizationId, record.checkpointSeq);
+  return writeKnowledgeCheckpointInNamespaceV2(sql, record, GENERAL_CHECKPOINT_NAMESPACE);
+}
+
+async function writeKnowledgeCheckpointInNamespaceV2(
+  sql: postgres.Sql,
+  record: KnowledgeCheckpointRecord,
+  checkpointNamespace: string,
+): Promise<WriteKnowledgeCheckpointResult> {
+  const existing = await loadExistingCheckpoint(
+    sql,
+    record.organizationId,
+    record.checkpointSeq,
+    checkpointNamespace,
+  );
   if (existing) {
     if (existing.contentDigest !== record.contentDigest) {
       throw new KnowledgeCheckpointPersistConflictError(
@@ -114,6 +149,7 @@ export async function writeKnowledgeCheckpointV2(
       INSERT INTO trader_knowledge_state_checkpoint_v2 (
         id,
         organization_id,
+        checkpoint_namespace,
         checkpoint_seq,
         model_version,
         calibration_snapshot_digest,
@@ -126,6 +162,7 @@ export async function writeKnowledgeCheckpointV2(
       ) VALUES (
         ${record.id}::uuid,
         ${record.organizationId}::uuid,
+        ${checkpointNamespace},
         ${record.checkpointSeq},
         ${record.modelVersion},
         ${record.calibrationSnapshotDigest},
@@ -139,8 +176,13 @@ export async function writeKnowledgeCheckpointV2(
     `;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("tksc_v2_org_checkpoint_seq_uq")) {
-      const raced = await loadExistingCheckpoint(sql, record.organizationId, record.checkpointSeq);
+    if (message.includes("tksc_v2_org_namespace_checkpoint_seq_uq")) {
+      const raced = await loadExistingCheckpoint(
+        sql,
+        record.organizationId,
+        record.checkpointSeq,
+        checkpointNamespace,
+      );
       if (raced) {
         if (raced.contentDigest !== record.contentDigest) {
           throw new KnowledgeCheckpointPersistConflictError(
@@ -156,9 +198,30 @@ export async function writeKnowledgeCheckpointV2(
   return { id: record.id, insertedNew: true };
 }
 
+/** Historical-only namespace; the namespace must be digest-bound as modelVersion. */
+export async function writeHistoricalKnowledgeCheckpointV2(
+  sql: postgres.Sql,
+  record: KnowledgeCheckpointRecord,
+  checkpointNamespace: string,
+): Promise<WriteKnowledgeCheckpointResult> {
+  return writeKnowledgeCheckpointInNamespaceV2(
+    sql,
+    record,
+    requireHistoricalCheckpointNamespace(checkpointNamespace, record.modelVersion),
+  );
+}
+
 export async function readKnowledgeCheckpointV2(
   sql: postgres.Sql,
   input: { organizationId: string; checkpointSeq: number },
+): Promise<KnowledgeCheckpointRecord | null> {
+  return readKnowledgeCheckpointInNamespaceV2(sql, input, GENERAL_CHECKPOINT_NAMESPACE);
+}
+
+async function readKnowledgeCheckpointInNamespaceV2(
+  sql: postgres.Sql,
+  input: { organizationId: string; checkpointSeq: number },
+  checkpointNamespace: string,
 ): Promise<KnowledgeCheckpointRecord | null> {
   const rows = await sql<
     {
@@ -189,6 +252,7 @@ export async function readKnowledgeCheckpointV2(
       schema_version
     FROM trader_knowledge_state_checkpoint_v2
     WHERE ${orgScopedPostgresPredicate(sql, input.organizationId)}
+      AND checkpoint_namespace = ${checkpointNamespace}
       AND checkpoint_seq = ${input.checkpointSeq}
   `;
   const row = rows[0];
@@ -208,6 +272,17 @@ export async function readKnowledgeCheckpointV2(
   };
 }
 
+export async function readHistoricalKnowledgeCheckpointV2(
+  sql: postgres.Sql,
+  input: { organizationId: string; checkpointSeq: number; checkpointNamespace: string },
+): Promise<KnowledgeCheckpointRecord | null> {
+  return readKnowledgeCheckpointInNamespaceV2(
+    sql,
+    input,
+    requireHistoricalCheckpointNamespace(input.checkpointNamespace),
+  );
+}
+
 export type RestoredKnowledgeCheckpointV2 = {
   input: KnowledgeCheckpointInput;
   knowledgeSemanticDigest: string;
@@ -222,7 +297,15 @@ export async function restoreKnowledgeCheckpointV2(
   sql: postgres.Sql,
   input: { organizationId: string; checkpointSeq: number },
 ): Promise<RestoredKnowledgeCheckpointV2> {
-  const row = await readKnowledgeCheckpointV2(sql, input);
+  return restoreKnowledgeCheckpointInNamespaceV2(sql, input, GENERAL_CHECKPOINT_NAMESPACE);
+}
+
+async function restoreKnowledgeCheckpointInNamespaceV2(
+  sql: postgres.Sql,
+  input: { organizationId: string; checkpointSeq: number },
+  checkpointNamespace: string,
+): Promise<RestoredKnowledgeCheckpointV2> {
+  const row = await readKnowledgeCheckpointInNamespaceV2(sql, input, checkpointNamespace);
   if (!row) {
     throw new KnowledgeCheckpointCorruptionError(
       `[knowledge-state-checkpoint-v2] no checkpoint found for organization_id=${input.organizationId} checkpoint_seq=${input.checkpointSeq}`,
@@ -258,4 +341,15 @@ export async function restoreKnowledgeCheckpointV2(
     knowledgeSemanticDigest: recomputedSemanticDigest,
     contentDigest: recomputedContentDigest,
   };
+}
+
+export async function restoreHistoricalKnowledgeCheckpointV2(
+  sql: postgres.Sql,
+  input: { organizationId: string; checkpointSeq: number; checkpointNamespace: string },
+): Promise<RestoredKnowledgeCheckpointV2> {
+  return restoreKnowledgeCheckpointInNamespaceV2(
+    sql,
+    input,
+    requireHistoricalCheckpointNamespace(input.checkpointNamespace),
+  );
 }

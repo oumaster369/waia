@@ -62,7 +62,7 @@ export async function loadHistoricalSimulationInceptionAccountingV2(input: Reado
       AND f.organization_id=p.organization_id AND f.account_key=p.account_id AND f.run_id=p.run_id
     WHERE p.id=${input.preregistrationId}::uuid AND p.organization_id=${input.scope.organizationId}::uuid
       AND p.account_id=${input.scope.accountId} AND p.run_id=${input.scope.runId}
-    FOR SHARE`;
+    `;
   if (rows.length !== 1) throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:INCEPTION_NOT_FOUND");
   const row = rows[0]!; const bundle = row.authority_bundle_json as Record<string, unknown>;
   const identity = bundle.initialAccountingIdentity as Record<string, unknown> | undefined;

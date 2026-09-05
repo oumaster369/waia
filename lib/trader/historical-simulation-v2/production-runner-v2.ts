@@ -32,7 +32,7 @@ function transient(error: unknown): boolean {
 /** Sequential identity-only driver. A cycle is never skipped and a retry retains the same sequence. */
 export async function runHistoricalSimulationProductionLoopV2(input: HistoricalSimulationProductionRunnerConfigV2,
   control: Readonly<{ signal?: AbortSignal;
-    onProgress?(progress: HistoricalSimulationProductionRunnerProgressV2): void;
+    onProgress?(progress: HistoricalSimulationProductionRunnerProgressV2): unknown;
     wait?(delayMs: number, signal?: AbortSignal): Promise<void>; retryDelayMs?: number }> = {},
 ): Promise<HistoricalSimulationProductionRunnerResultV2> {
   let sequence = input.initialCycleSequence ?? 0; let committed = 0;
@@ -45,14 +45,16 @@ export async function runHistoricalSimulationProductionLoopV2(input: HistoricalS
       !Number.isSafeInteger(maxRetries) || maxRetries < 0) {
     throw new Error("HISTORICAL_SIMULATION_V2_RUNNER_REFUSED:CONFIG");
   }
-  const emit = (progress: HistoricalSimulationProductionRunnerProgressV2) => control.onProgress?.(Object.freeze(progress));
+  const emit = async (progress: HistoricalSimulationProductionRunnerProgressV2): Promise<void> => {
+    await control.onProgress?.(Object.freeze(progress));
+  };
   const wait = control.wait ?? ((delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
   const retryDelayMs = control.retryDelayMs ?? 250;
   if (!Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0) throw new Error("HISTORICAL_SIMULATION_V2_RUNNER_REFUSED:CONFIG");
-  emit({ event: "START", expectedCycleSequence: sequence, attempt: 0, committedCycleId: null });
+  await emit({ event: "START", expectedCycleSequence: sequence, attempt: 0, committedCycleId: null });
   while (!control.signal?.aborted) {
     if (sequence === input.terminalCycleSequenceExclusive) {
-      emit({ event: "TERMINAL", expectedCycleSequence: sequence, attempt: 0, committedCycleId: null });
+      await emit({ event: "TERMINAL", expectedCycleSequence: sequence, attempt: 0, committedCycleId: null });
       return Object.freeze({ status: "TERMINAL", committedCycles: committed, nextCycleSequence: sequence });
     }
     let attempt = 0;
@@ -65,18 +67,18 @@ export async function runHistoricalSimulationProductionLoopV2(input: HistoricalS
             cursor.nextCycleSequence > input.terminalCycleSequenceExclusive) {
           throw new HistoricalSimulationRunnerCursorSequenceV2Error();
         }
-        emit({ event: "CYCLE_COMMITTED", expectedCycleSequence: sequence, attempt,
+        await emit({ event: "CYCLE_COMMITTED", expectedCycleSequence: sequence, attempt,
           committedCycleId: cursor.committedCycleId });
         sequence = cursor.nextCycleSequence; committed += 1; break;
       } catch (error) {
         if (!transient(error) || attempt >= maxRetries) throw error;
         attempt += 1;
-        emit({ event: "TRANSIENT_RETRY", expectedCycleSequence: sequence, attempt, committedCycleId: null });
+        await emit({ event: "TRANSIENT_RETRY", expectedCycleSequence: sequence, attempt, committedCycleId: null });
         await wait(retryDelayMs * attempt, control.signal);
         if (control.signal?.aborted) break;
       }
     }
   }
-  emit({ event: "STOPPED", expectedCycleSequence: sequence, attempt: 0, committedCycleId: null });
+  await emit({ event: "STOPPED", expectedCycleSequence: sequence, attempt: 0, committedCycleId: null });
   return Object.freeze({ status: "STOPPED", committedCycles: committed, nextCycleSequence: sequence });
 }

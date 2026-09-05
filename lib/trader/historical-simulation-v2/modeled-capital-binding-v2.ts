@@ -15,9 +15,19 @@ import type {
   DecisionStageOutcomeV2,
   RiskStageOutcomeV2,
 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
-import { calculateRiskAdmissionV2, type RiskAccountAccountingV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
+import { calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
 import type { ProtectivePostureV2 } from "@/lib/trader/risk/v2/protective-posture-v2";
 import type { HistoricalSimulationReasonLedgerV2Draft } from "./reason-ledger-v2";
+import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import {
+  buildHistoricalModeledPortfolioLifecycleV2,
+  buildHistoricalModeledRealityV2,
+  deriveHistoricalModeledRiskAccountingV2,
+  type HistoricalModeledPortfolioLifecycleReceiptV2,
+  type HistoricalModeledRealityV2,
+  type HistoricalModeledRiskAccountingV2,
+} from "./historical-modeled-portfolio-reality-v2";
+import { evaluateHtrGuardianCycle } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
 
 export const HISTORICAL_MODELED_RISK_V2_SCHEMA = "waia.trader.historical_modeled_risk.v2" as const;
 export const HISTORICAL_MODELED_EXECUTION_V2_SCHEMA = "waia.trader.historical_modeled_execution.v2" as const;
@@ -32,6 +42,11 @@ export type HistoricalModeledRiskReceiptV2 = ModeledSource & Readonly<{
   riskAllowanceContentDigestHex: string | null;
   decisionContentDigestHex: string;
   accountingFrontierContentDigestHex: string;
+  portfolioLifecycleContentDigestHex: string;
+  action: "ENTER_LONG" | "REDUCE" | "CLOSE";
+  reconciledExposureNotional: string;
+  projectedSymbolExposureNotional: string;
+  strictExposureReduction: boolean;
   verdict: "APPROVE" | "VETO";
   approvedQuantity: string | null;
   requestedReservationNotional: string;
@@ -84,14 +99,18 @@ export type HistoricalModeledGuardianReceiptV2 = ModeledSource & Readonly<{
   schemaVersion: typeof HISTORICAL_MODELED_GUARDIAN_V2_SCHEMA;
   cycleId: string;
   accountingFrontierContentDigestHex: string;
+  reconciledExposureNotional: string;
+  exposureLimitNotional: string;
   status: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT";
   reasonCodes: readonly string[];
   contentDigestHex: string;
 }>;
 
 export type HistoricalModeledAccountingSnapshotV2 = Readonly<{
-  frontierContentDigestHex: string;
-  accounting: RiskAccountAccountingV2;
+  frontier: AccountingFrontierV1;
+  exposureLimitNotional: string;
+  worstCasePendingExposureNotional: string;
+  outstandingReservationNotional: string;
   posture: ProtectivePostureV2;
 }>;
 
@@ -109,7 +128,7 @@ export type HistoricalModeledCapitalBindingV2Input = Readonly<{
   decisionBarIndex(cycle: HistoricalSimulationV2Cycle): number;
   evaluateGuardian(input: Readonly<{
     cycle: HistoricalSimulationV2Cycle;
-    accounting: HistoricalModeledAccountingSnapshotV2;
+    accounting: HistoricalModeledRiskAccountingV2;
   }>): Promise<Readonly<{ status: "NONE" | "CLOSE_ONLY" | "STOP_ACCOUNT"; reasonCodes: readonly string[] }>>;
   persistEvidence(evidence: PersistedModeledEvidence): Promise<void>;
   /** Persists the exact credential-free mock order before in-memory exchange registration. */
@@ -129,6 +148,8 @@ export type HistoricalModeledCapitalBindingV2 = Readonly<{
   decisionCapitalAuthorityV2: CanonicalDecisionCapitalAuthorityV2Deps;
   modeledExit: NonNullable<RunHistoricalSimulationV2Input["modeledExit"]>;
   resolveLedgerProjection: RunHistoricalSimulationV2Input["resolveLedgerProjection"];
+  portfolioLifecycleForCycle(cycleId: string): HistoricalModeledPortfolioLifecycleReceiptV2 | null;
+  modeledRealityForCycle(cycleId: string): HistoricalModeledRealityV2 | null;
 }>;
 
 const DIGEST = /^[0-9a-f]{64}$/;
@@ -144,6 +165,7 @@ function requireDigest(value: string, field: string): void {
 export function createHistoricalModeledOrderFromReceiptV2(input: {
   organizationId: string;
   accountId: string;
+  runId: string;
   decisionId: string;
   allowanceId: string;
   receipt: HistoricalModeledExecutionReceiptV2;
@@ -155,6 +177,8 @@ export function createHistoricalModeledOrderFromReceiptV2(input: {
     credentialId: null,
     venue: "HISTORICAL_SIMULATED_EXCHANGE",
     executionMode: "mock",
+    historicalRunId: input.runId,
+    historicalAccountKey: input.accountId,
     symbol: input.receipt.symbol,
     side: input.receipt.side,
     type: "market",
@@ -191,6 +215,25 @@ export function createHistoricalModeledCapitalBindingV2(
   const riskByDecision = new Map<string, HistoricalModeledRiskReceiptV2>();
   const executionByCycle = new Map<string, HistoricalModeledExecutionReceiptV2>();
   const guardianByCycle = new Map<string, HistoricalModeledGuardianReceiptV2>();
+  const portfolioByCycle = new Map<string, HistoricalModeledPortfolioLifecycleReceiptV2>();
+  const realityByCycle = new Map<string, HistoricalModeledRealityV2>();
+
+  async function loadAccounting(cycle: HistoricalSimulationV2Cycle): Promise<Readonly<{
+    derived: HistoricalModeledRiskAccountingV2;
+    posture: ProtectivePostureV2;
+  }>> {
+    const snapshot = await input.loadAccounting(cycle);
+    const derived = deriveHistoricalModeledRiskAccountingV2({
+      frontier: snapshot.frontier,
+      organizationId: input.organizationId,
+      accountId: input.accountId,
+      runId: input.runId,
+      exposureLimitNotional: snapshot.exposureLimitNotional,
+      worstCasePendingExposureNotional: snapshot.worstCasePendingExposureNotional,
+      outstandingReservationNotional: snapshot.outstandingReservationNotional,
+    });
+    return Object.freeze({ derived, posture: snapshot.posture });
+  }
 
   async function assessRisk(args: Readonly<{
     request: DecisionQualificationRequestV2;
@@ -200,8 +243,14 @@ export function createHistoricalModeledCapitalBindingV2(
     if (cycle.symbol !== args.request.symbol || cycle.referencePrice !== args.request.referencePrice) {
       throw new Error("HISTORICAL_MODELED_BINDING_REFUSED:CYCLE_IDENTITY_MISMATCH");
     }
-    const accounting = await input.loadAccounting(cycle);
+    const { derived: accounting, posture } = await loadAccounting(cycle);
     requireDigest(accounting.frontierContentDigestHex, "accountingFrontierContentDigestHex");
+    const lifecycle = buildHistoricalModeledPortfolioLifecycleV2({
+      organizationId: input.organizationId, accountId: input.accountId, runId: input.runId,
+      cycleId: cycle.cycleId, symbol: cycle.symbol, action: "ENTER_LONG",
+      quantity: args.decision.qualifiedQuantity, referencePrice: cycle.referencePrice, accounting,
+    });
+    portfolioByCycle.set(cycle.cycleId, lifecycle);
     const requested = multiplyExecutionNotionalConservativelyV2(
       args.decision.qualifiedQuantity,
       args.request.referencePrice,
@@ -212,7 +261,7 @@ export function createHistoricalModeledCapitalBindingV2(
     const calculation = calculateRiskAdmissionV2({
       accounting: accounting.accounting,
       requestedReservationNotional: requested,
-      posture: accounting.posture,
+      posture,
       strictExposureReduction: false,
       reconciliationStatus:
         modeledAccountingCoherence === "CURRENT_MODELED_FRONTIER" ? "RECONCILED" : "UNAVAILABLE",
@@ -243,6 +292,11 @@ export function createHistoricalModeledCapitalBindingV2(
       riskAllowanceContentDigestHex: allowanceContentDigestHex,
       decisionContentDigestHex: args.decision.contentDigestHex,
       accountingFrontierContentDigestHex: accounting.frontierContentDigestHex,
+      portfolioLifecycleContentDigestHex: lifecycle.contentDigestHex,
+      action: "ENTER_LONG" as const,
+      reconciledExposureNotional: accounting.accounting.reconciledExposureNotional,
+      projectedSymbolExposureNotional: lifecycle.exposureNotionalAfter,
+      strictExposureReduction: false,
       verdict: calculation.status === "ADMITTED" ? "APPROVE" as const : "VETO" as const,
       approvedQuantity: calculation.status === "ADMITTED" ? args.decision.qualifiedQuantity : null,
       requestedReservationNotional: requested,
@@ -333,6 +387,7 @@ export function createHistoricalModeledCapitalBindingV2(
     const order = createHistoricalModeledOrderFromReceiptV2({
       organizationId: input.organizationId,
       accountId: input.accountId,
+      runId: input.runId,
       decisionId: args.decisionId,
       allowanceId: args.allowanceId,
       receipt,
@@ -365,7 +420,7 @@ export function createHistoricalModeledCapitalBindingV2(
         quantity: permission.approvedQualifiedQuantity,
       });
       const order = Object.freeze({ ...createHistoricalModeledOrderFromReceiptV2({ organizationId: input.organizationId,
-        accountId: input.accountId, decisionId: decision.decisionId, allowanceId: permission.riskAllowanceId,
+        accountId: input.accountId, runId: input.runId, decisionId: decision.decisionId, allowanceId: permission.riskAllowanceId,
         receipt }), state: "ACCEPTED" as const, stateVersion: 2 });
       return Object.freeze({
         decisionContentDigestHex: decision.contentDigestHex,
@@ -384,26 +439,62 @@ export function createHistoricalModeledCapitalBindingV2(
 
   const modeledExit = {
     async execute({ cycle, proposal }: { cycle: HistoricalSimulationV2Cycle; proposal: HistoricalPortfolioProposalV2 }): Promise<HistoricalModeledExitV2> {
-      const accounting = await input.loadAccounting(cycle);
+      const { derived: accounting, posture } = await loadAccounting(cycle);
+      const lifecycle = buildHistoricalModeledPortfolioLifecycleV2({
+        organizationId: input.organizationId, accountId: input.accountId, runId: input.runId,
+        cycleId: cycle.cycleId, symbol: cycle.symbol, action: proposal.action,
+        quantity: proposal.quantity, referencePrice: cycle.referencePrice, accounting,
+      });
+      portfolioByCycle.set(cycle.cycleId, lifecycle);
+      const calculation = calculateRiskAdmissionV2({ accounting: accounting.accounting,
+        requestedReservationNotional: "0", posture,
+        strictExposureReduction: lifecycle.strictExposureReduction, reconciliationStatus: "RECONCILED" });
+      const approved = calculation.status === "ADMITTED";
+      const riskVerdictId = deterministicExecutionUuidV2("risk-event", { kind: "exit-verdict",
+        runId: input.runId, cycleId: cycle.cycleId,
+        decisionContentDigestHex: proposal.decisionContentDigestHex });
+      const allowanceId = approved ? deterministicExecutionUuidV2("risk-event", { kind: "exit-allowance",
+        runId: input.runId, cycleId: cycle.cycleId,
+        decisionContentDigestHex: proposal.decisionContentDigestHex }) : null;
+      const allowanceContentDigestHex = allowanceId === null ? null : computeSemanticSha256Hex({
+        schemaVersion: "waia.trader.historical_modeled_risk_allowance.v2", source: "MODELED_HISTORICAL",
+        capitalEligible: false, allowanceId, riskVerdictId,
+        decisionContentDigestHex: proposal.decisionContentDigestHex, approvedQuantity: proposal.quantity });
       const risk = seal({
         schemaVersion: HISTORICAL_MODELED_RISK_V2_SCHEMA,
         source: "MODELED_HISTORICAL" as const,
         capitalEligible: false as const,
-        riskVerdictId: deterministicExecutionUuidV2("risk-event", { kind: "exit-verdict", runId: input.runId, cycleId: cycle.cycleId, decisionContentDigestHex: proposal.decisionContentDigestHex }),
-        riskAllowanceId: deterministicExecutionUuidV2("risk-event", { kind: "exit-allowance", runId: input.runId, cycleId: cycle.cycleId, decisionContentDigestHex: proposal.decisionContentDigestHex }),
-        riskAllowanceContentDigestHex: computeSemanticSha256Hex({ schemaVersion: "waia.trader.historical_modeled_risk_allowance.v2", source: "MODELED_HISTORICAL", capitalEligible: false, runId: input.runId, cycleId: cycle.cycleId, decisionContentDigestHex: proposal.decisionContentDigestHex }),
+        riskVerdictId,
+        riskAllowanceId: allowanceId,
+        riskAllowanceContentDigestHex: allowanceContentDigestHex,
         decisionContentDigestHex: proposal.decisionContentDigestHex,
         accountingFrontierContentDigestHex: accounting.frontierContentDigestHex,
-        verdict: "APPROVE" as const,
-        approvedQuantity: proposal.quantity,
+        portfolioLifecycleContentDigestHex: lifecycle.contentDigestHex,
+        action: proposal.action,
+        reconciledExposureNotional: accounting.accounting.reconciledExposureNotional,
+        projectedSymbolExposureNotional: lifecycle.exposureNotionalAfter,
+        strictExposureReduction: lifecycle.strictExposureReduction,
+        verdict: approved ? "APPROVE" as const : "VETO" as const,
+        approvedQuantity: approved ? proposal.quantity : null,
         requestedReservationNotional: "0",
-        remainingBeforeAdmissionNotional: "0",
-        remainingAfterAdmissionNotional: "0",
-        reasonCodes: Object.freeze(["STRICT_MODELED_EXPOSURE_REDUCTION"]),
+        remainingBeforeAdmissionNotional: calculation.remainingBeforeAdmissionNotional,
+        remainingAfterAdmissionNotional: calculation.remainingAfterAdmissionNotional,
+        reasonCodes: Object.freeze(approved ? ["STRICT_MODELED_EXPOSURE_REDUCTION"] : [calculation.reason]),
       }) as HistoricalModeledRiskReceiptV2;
       riskByDecision.set(proposal.decisionContentDigestHex, risk);
       await input.persistEvidence(risk);
-      const execution = await executeModeled({ cycle, decisionId: proposal.decisionContentDigestHex, decisionContentDigestHex: proposal.decisionContentDigestHex, allowanceId: risk.riskAllowanceId!, side: "sell", quantity: proposal.quantity! });
+      if (!approved || !allowanceId) {
+        return Object.freeze({
+          risk: { status: "VETO" as const, reasonCodes: risk.reasonCodes,
+            verdictContentDigestHex: risk.contentDigestHex, allowanceContentDigestHex: null },
+          execution: { status: "NOT_DISPATCHED" as const, reasonCodes: ["RISK_VETO"],
+            planContentDigestHex: null, attemptContentDigestHex: null,
+            reportContentDigestHex: null, fillContentDigestHexes: [] },
+        });
+      }
+      const execution = await executeModeled({ cycle, decisionId: proposal.decisionContentDigestHex,
+        decisionContentDigestHex: proposal.decisionContentDigestHex, allowanceId,
+        side: "sell", quantity: proposal.quantity! });
       return Object.freeze({
         risk: { status: "APPROVE", reasonCodes: [], verdictContentDigestHex: risk.contentDigestHex, allowanceContentDigestHex: risk.riskAllowanceContentDigestHex },
         execution: { status: "COMMITTED", reasonCodes: [],
@@ -416,16 +507,43 @@ export function createHistoricalModeledCapitalBindingV2(
 
   const resolveLedgerProjection: RunHistoricalSimulationV2Input["resolveLedgerProjection"] = async (context) => {
     const observed = await input.advanceModeledExecution(context.cycle);
-    const accounting = await input.loadAccounting(context.cycle);
-    const evaluated = await input.evaluateGuardian({ cycle: context.cycle, accounting });
+    const { derived: accounting } = await loadAccounting(context.cycle);
+    const lifecycle = portfolioByCycle.get(context.cycle.cycleId) ??
+      buildHistoricalModeledPortfolioLifecycleV2({ organizationId: input.organizationId,
+        accountId: input.accountId, runId: input.runId, cycleId: context.cycle.cycleId,
+        symbol: context.cycle.symbol, action: context.proposal.action, quantity: context.proposal.quantity,
+        referencePrice: context.cycle.referencePrice, accounting });
+    portfolioByCycle.set(context.cycle.cycleId, lifecycle);
+    const reality = buildHistoricalModeledRealityV2({ organizationId: input.organizationId,
+      accountId: input.accountId, runId: input.runId, cycleId: context.cycle.cycleId,
+      accounting, portfolioLifecycle: lifecycle });
+    realityByCycle.set(context.cycle.cycleId, reality);
+    const restored = await input.evaluateGuardian({ cycle: context.cycle, accounting });
+    const frontier = accounting.frontier;
+    const derivedGuardian = evaluateHtrGuardianCycle({
+      accountPeakHwm: frontier.equityHwm,
+      monthlyPeakHwm: frontier.monthlyPeakHwm ?? frontier.equityHwm,
+      equityUsdt: frontier.equity,
+      strategyDrawdownBps: Math.max(0, ...Object.values(frontier.strategyDrawdownBpsByKey ?? {})),
+      skipReconciliationAssert: true,
+      missingMark: accounting.openPositionCount > Object.keys(frontier.marks).length,
+    });
+    const statusRank = { NONE: 0, CLOSE_ONLY: 1, STOP_ACCOUNT: 2 } as const;
+    const derivedStatus = derivedGuardian.breachState === "STOP_ACCOUNT" ? "STOP_ACCOUNT" as const :
+      derivedGuardian.breachState === "CLOSE_ONLY" ? "CLOSE_ONLY" as const : "NONE" as const;
+    const status = statusRank[derivedStatus] >= statusRank[restored.status] ? derivedStatus : restored.status;
+    const guardianReasons = Object.freeze([...restored.reasonCodes,
+      ...(derivedGuardian.reason === null ? [] : [derivedGuardian.reason])]);
     const guardian = seal({
       schemaVersion: HISTORICAL_MODELED_GUARDIAN_V2_SCHEMA,
       source: "MODELED_HISTORICAL" as const,
       capitalEligible: false as const,
       cycleId: context.cycle.cycleId,
       accountingFrontierContentDigestHex: accounting.frontierContentDigestHex,
-      status: evaluated.status,
-      reasonCodes: Object.freeze([...evaluated.reasonCodes]),
+      reconciledExposureNotional: accounting.accounting.reconciledExposureNotional,
+      exposureLimitNotional: accounting.accounting.exposureLimitNotional,
+      status,
+      reasonCodes: guardianReasons,
     }) as HistoricalModeledGuardianReceiptV2;
     guardianByCycle.set(context.cycle.cycleId, guardian);
     await input.persistEvidence(guardian);
@@ -444,5 +562,7 @@ export function createHistoricalModeledCapitalBindingV2(
     };
   };
 
-  return Object.freeze({ decisionCapitalAuthorityV2, modeledExit, resolveLedgerProjection });
+  return Object.freeze({ decisionCapitalAuthorityV2, modeledExit, resolveLedgerProjection,
+    portfolioLifecycleForCycle: (cycleId: string) => portfolioByCycle.get(cycleId) ?? null,
+    modeledRealityForCycle: (cycleId: string) => realityByCycle.get(cycleId) ?? null });
 }

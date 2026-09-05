@@ -12,6 +12,7 @@ export type AccountingFrontierRowV1 = {
   runId: string;
   accountingSequence: number;
   frontierAsOf: string;
+  monthKey: string | null;
   cash: string;
   positionQuantityJson: Record<string, string>;
   grossPositionBasisJson: Record<string, string>;
@@ -19,8 +20,13 @@ export type AccountingFrontierRowV1 = {
   grossRealizedPnl: string;
   netRealizedPnl: string;
   marksJson: AccountingStateV1["marks"];
+  markedPositionValue: string | null;
   equity: string;
   equityHwm: string;
+  monthlyPeakHwm: string | null;
+  monthlyDrawdownBps: number | null;
+  strategyPeakHwmByKeyJson: Record<string, string> | null;
+  strategyDrawdownBpsByKeyJson: Record<string, number> | null;
   accountDrawdownBps: number;
   sourceFillId: string | null;
   sourceEconomicsDigest: string;
@@ -45,6 +51,7 @@ export function accountingFrontierToRow(frontier: AccountingFrontierV1): Account
     runId: frontier.runId,
     accountingSequence: frontier.accountingSequence,
     frontierAsOf: frontier.frontierAsOf,
+    monthKey: frontier.monthKey,
     cash: frontier.cash,
     positionQuantityJson,
     grossPositionBasisJson,
@@ -52,8 +59,13 @@ export function accountingFrontierToRow(frontier: AccountingFrontierV1): Account
     grossRealizedPnl: frontier.grossRealizedPnl,
     netRealizedPnl: frontier.netRealizedPnl,
     marksJson: frontier.marks,
+    markedPositionValue: frontier.markedPositionValue,
     equity: frontier.equity,
     equityHwm: frontier.equityHwm,
+    monthlyPeakHwm: frontier.monthlyPeakHwm ?? null,
+    monthlyDrawdownBps: frontier.monthlyDrawdownBps ?? null,
+    strategyPeakHwmByKeyJson: frontier.strategyPeakHwmByKey ?? null,
+    strategyDrawdownBpsByKeyJson: frontier.strategyDrawdownBpsByKey ?? null,
     accountDrawdownBps: frontier.accountDrawdownBps,
     sourceFillId: frontier.sourceFillId,
     sourceEconomicsDigest: frontier.sourceEconomicsDigest,
@@ -80,17 +92,20 @@ export function accountingRowToFrontier(
       netPositionBasis: row.netPositionBasisJson[symbol] ?? "0",
     };
   }
-  let markedPositionValue = "0";
-  for (const [symbol, position] of Object.entries(positions)) {
-    if (compareDecimal(position.quantity, "0") <= 0) {
-      continue;
-    }
-    const mark = row.marksJson[symbol];
-    if (mark) {
-      markedPositionValue = addDecimal(
-        markedPositionValue,
-        multiplyDecimal(position.quantity, mark.price),
-      );
+  let markedPositionValue = row.markedPositionValue;
+  if (markedPositionValue === null) {
+    markedPositionValue = "0";
+    for (const [symbol, position] of Object.entries(positions)) {
+      if (compareDecimal(position.quantity, "0") <= 0) {
+        continue;
+      }
+      const mark = row.marksJson[symbol];
+      if (mark) {
+        markedPositionValue = addDecimal(
+          markedPositionValue,
+          multiplyDecimal(position.quantity, mark.price),
+        );
+      }
     }
   }
   return {
@@ -102,7 +117,7 @@ export function accountingRowToFrontier(
     runId: row.runId,
     accountingSequence: row.accountingSequence,
     frontierAsOf: row.frontierAsOf,
-    monthKey: resolveMonthKeyUtc(row.frontierAsOf),
+    monthKey: row.monthKey ?? resolveMonthKeyUtc(row.frontierAsOf),
     cash: row.cash,
     positions,
     grossRealizedPnl: row.grossRealizedPnl,
@@ -111,6 +126,14 @@ export function accountingRowToFrontier(
     markedPositionValue,
     equity: row.equity,
     equityHwm: row.equityHwm,
+    ...(row.monthlyPeakHwm === null ? {} : { monthlyPeakHwm: row.monthlyPeakHwm }),
+    ...(row.monthlyDrawdownBps === null ? {} : { monthlyDrawdownBps: row.monthlyDrawdownBps }),
+    ...(row.strategyPeakHwmByKeyJson === null
+      ? {}
+      : { strategyPeakHwmByKey: row.strategyPeakHwmByKeyJson }),
+    ...(row.strategyDrawdownBpsByKeyJson === null
+      ? {}
+      : { strategyDrawdownBpsByKey: row.strategyDrawdownBpsByKeyJson }),
     accountDrawdownBps: row.accountDrawdownBps,
     consumedFillIds,
     id: row.id,

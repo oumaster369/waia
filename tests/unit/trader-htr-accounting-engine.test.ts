@@ -416,7 +416,15 @@ describe("HTR-WP18 canonical cross-backend accounting engine", () => {
     expect(roundTripped.marks).toEqual(frontier.marks);
     expect(roundTripped.semanticContentDigest).toBe(frontier.semanticContentDigest);
     expect(roundTripped.equity).toBe(frontier.equity);
+    expect(roundTripped.monthKey).toBe(frontier.monthKey);
+    expect(roundTripped.markedPositionValue).toBe(frontier.markedPositionValue);
+    expect(roundTripped.monthlyPeakHwm).toBe(frontier.monthlyPeakHwm);
+    expect(roundTripped.monthlyDrawdownBps).toBe(frontier.monthlyDrawdownBps);
+    expect(roundTripped.strategyPeakHwmByKey).toEqual(frontier.strategyPeakHwmByKey);
+    expect(roundTripped.strategyDrawdownBpsByKey).toEqual(frontier.strategyDrawdownBpsByKey);
+    expect(computeAccountingSemanticDigest(roundTripped)).toBe(frontier.semanticContentDigest);
     expect(roundTripped.accountDrawdownBps).toBe(frontier.accountDrawdownBps);
+    expect(frontier.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it("idempotency same key same content", async () => {

@@ -27,7 +27,7 @@ function completeDraft(
     cycleSequence: 0,
     symbol: "BTCUSDT",
     partition: "DEVELOPMENT",
-    replayBarClosedAtUtc: "2026-08-01T00:00:00.000Z",
+    replayBarClosedAtUtc: "2026-08-01T00:31:00.000Z",
     datasetMembership: membership(),
     previousContentDigestHex: null,
     forecast: { status: "AUTHORIZED", authorityContentDigestHex: digest("a"), reasonCodes: [] },
@@ -36,7 +36,8 @@ function completeDraft(
       whyNotCashReceiptDigestHex: digest("c"), evLower: "1", evBase: "2", evUpper: "3",
       reasonCodes: [],
     },
-    portfolio: { status: "PROPOSED", proposalContentDigestHex: digest("d"), reasonCodes: [] },
+    portfolio: { status: "PROPOSED", action: "ENTER_LONG",
+      proposalContentDigestHex: digest("d"), reasonCodes: [] },
     risk: {
       status: "APPROVE", verdictContentDigestHex: digest("e"),
       allowanceContentDigestHex: digest("f"), reasonCodes: [],
@@ -78,7 +79,7 @@ describe("Historical Simulation V2 reason ledger", () => {
       entryId: "33333333-3333-4333-8333-333333333333",
       cycleId: "cycle-1",
       datasetMembership: (() => { const value = membership(); const body = { ...value, cycleId: "cycle-1", partition: "WALK_FORWARD" as const }; const { contentDigestHex: _old, ...unsigned } = body; void _old; return { ...unsigned, contentDigestHex: computeSemanticSha256Hex(unsigned) }; })(),
-      replayBarClosedAtUtc: "2026-08-01T00:01:00.000Z",
+      replayBarClosedAtUtc: "2026-08-01T00:32:00.000Z",
       partition: "WALK_FORWARD",
     });
     expect(second.cycleSequence).toBe(1);
@@ -105,7 +106,7 @@ describe("Historical Simulation V2 reason ledger", () => {
     }))).toThrow(/execution.NOT_DISPATCHED requires reasonCodes/);
   });
 
-  it("rejects holdout, capital eligibility substitution and same-cycle learning visibility", () => {
+  it("rejects holdout, capital eligibility substitution and future learning visibility", () => {
     expect(() => createHistoricalSimulationReasonLedgerV2({
       ...completeDraft(), partition: "BLIND_HOLDOUT" as "DEVELOPMENT",
     })).toThrow(/only DEVELOPMENT\/WALK_FORWARD/);
@@ -114,9 +115,9 @@ describe("Historical Simulation V2 reason ledger", () => {
     expect(() => createHistoricalSimulationReasonLedgerV2(completeDraft({
       learning: {
         ...completeDraft().learning,
-        visibleFromPitAnchorUtc: "2026-08-01T00:00:00.000Z",
+        visibleFromPitAnchorUtc: "2026-08-01T00:32:00.000Z",
       },
-    }))).toThrow(/strictly future PIT anchor/);
+    }))).toThrow(/non-future PIT anchor/);
   });
 
   it("detects semantic tampering", () => {
@@ -125,6 +126,31 @@ describe("Historical Simulation V2 reason ledger", () => {
       ...entry,
       decision: { ...entry.decision, evLower: "999" },
     })).toBe(false);
+  });
+
+  it("keeps raw Decision distinct from position-aware Portfolio overrides", () => {
+    const cashToClose = createHistoricalSimulationReasonLedgerV2(completeDraft({
+      decision: { ...completeDraft().decision, status: "CASH",
+        reasonCodes: ["EV_LOWER_NON_POSITIVE"], evLower: null, evBase: null, evUpper: null },
+      portfolio: { status: "PROPOSED", action: "CLOSE",
+        proposalContentDigestHex: digest("d"),
+        reasonCodes: ["HISTORICAL_PORTFOLIO_DECISION_CASH_CLOSES_OPEN_POSITION"] },
+    }));
+    expect(cashToClose.decision.status).toBe("CASH");
+    expect(cashToClose.portfolio.action).toBe("CLOSE");
+    expect(cashToClose.decision.decisionContentDigestHex).toBe(digest("b"));
+
+    const enterToCash = createHistoricalSimulationReasonLedgerV2(completeDraft({
+      portfolio: { status: "NO_PROPOSAL", action: "CASH",
+        proposalContentDigestHex: digest("d"),
+        reasonCodes: ["HISTORICAL_PORTFOLIO_POSITION_ALREADY_OPEN"] },
+    }));
+    expect(enterToCash.decision.status).toBe("ENTER_LONG");
+    expect(enterToCash.portfolio.action).toBe("CASH");
+    expect(() => createHistoricalSimulationReasonLedgerV2(completeDraft({
+      portfolio: { status: "NO_PROPOSAL", action: "CLOSE",
+        proposalContentDigestHex: digest("d"), reasonCodes: ["FORGED_OVERRIDE"] },
+    }))).toThrow("portfolio status/action mismatch");
   });
 
   it("separates prior-decision realized fills from current-decision submission", () => {
