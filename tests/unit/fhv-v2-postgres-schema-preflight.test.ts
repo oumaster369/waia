@@ -10,12 +10,10 @@ import {
 describe("FHV V2 PostgreSQL schema preflight", () => {
   const canonical = readFhvV2CanonicalMigrations(process.cwd());
 
-  it("binds the exact contiguous canonical journal through 0195", () => {
-    expect(canonical).toHaveLength(196);
+  it("binds the exact contiguous canonical journal through 0202", () => {
+    expect(canonical).toHaveLength(203);
     expect(canonical[0]?.tag.startsWith("0000_")).toBe(true);
-    expect(canonical.at(-1)?.tag).toBe(
-      "0195_historical_information_sufficiency_authority_v2",
-    );
+    expect(canonical.at(-1)?.tag).toBe("0202_historical_accounting_semantic_state_v2");
   });
 
   it("rejects a production database whose applied migration journal ends at 0109", () => {

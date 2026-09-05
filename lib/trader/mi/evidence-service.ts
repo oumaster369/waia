@@ -330,7 +330,7 @@ function createService(
             createdAt: now,
           });
 
-          writeAudit(
+          await writeAudit(
             buildAuditInput(
               scoped,
               evidence.id,

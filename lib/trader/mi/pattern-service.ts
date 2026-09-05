@@ -219,7 +219,7 @@ function createService(
       createdAt: now,
     });
 
-    writeAudit(
+    await writeAudit(
       buildAuditInput(
         scoped,
         traderEntityTypes.miPatternLifecycle,
@@ -319,7 +319,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miPattern,
@@ -400,7 +400,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           traderEntityTypes.miPattern,

@@ -299,7 +299,7 @@ describe("DEE-629 canonical PIT fold", () => {
       predictionId: prediction.id,
       predictionSealDigestHex: sealHistoricalMarketPredictionV1(prediction),
       edgeId: edge.id, edgeSealDigestHex: sealHistoricalKnowledgeEdgeV1(edge),
-      marketPitBoundary: AS_OF.toISOString(),
+      marketPitBoundary: observation.eventTime.toISOString(),
     };
     const sealed = { ...sealedBody,
       snapshotContentDigestHex:
@@ -314,6 +314,26 @@ describe("DEE-629 canonical PIT fold", () => {
     const valid = deps([a], [sealedEvidence], [edge], [prediction], [observation], [trial]);
     expect((await foldCanonicalRuntimeIntelligenceStateV1(input, valid))
       .hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+
+    await expect(foldCanonicalRuntimeIntelligenceStateV1({
+      ...input,
+      sealedHistoricalKnowledge: {
+        ...sealed,
+        marketPitBoundary: "2026-01-01T12:00:00.001Z",
+        snapshotContentDigestHex: computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1({
+          ...sealedBody,
+          marketPitBoundary: "2026-01-01T12:00:00.001Z",
+        }),
+      },
+    }, valid)).rejects.toThrow(/sealed knowledge snapshot binding mismatch/);
+
+    await expect(foldCanonicalRuntimeIntelligenceStateV1({
+      ...input,
+      sealedHistoricalKnowledge: {
+        ...sealed,
+        marketPitBoundary: "2026-01-01T11:29:00.000Z",
+      },
+    }, valid)).rejects.toThrow(/sealed knowledge snapshot binding mismatch/);
 
     const mutatedPrediction = { ...prediction,
       outcomeJson: "{\"changed\":true}",

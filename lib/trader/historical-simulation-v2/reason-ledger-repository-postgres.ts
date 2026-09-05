@@ -62,7 +62,6 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
       SELECT content_digest_hex FROM trader_historical_simulation_reason_ledger_v2
       WHERE organization_id=${entry.organizationId} AND account_id=${entry.accountId}
         AND run_id=${entry.runId} AND cycle_sequence=${entry.cycleSequence}
-      FOR UPDATE
     `;
     if (existing[0]) {
       if (existing[0].content_digest_hex !== entry.contentDigestHex) throw new Error("reason-ledger sequence conflict");
@@ -72,7 +71,6 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
       SELECT content_digest_hex FROM trader_historical_simulation_reason_ledger_v2
       WHERE organization_id=${entry.organizationId} AND account_id=${entry.accountId}
         AND run_id=${entry.runId} AND cycle_sequence=${entry.cycleSequence - 1}
-      FOR UPDATE
     `;
     if (entry.cycleSequence === 0 ? entry.previousContentDigestHex !== null : prior[0]?.content_digest_hex !== entry.previousContentDigestHex) {
       throw new Error("reason-ledger predecessor/digest mismatch");
@@ -84,9 +82,19 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
         risk_json, execution_json, observed_execution_effects_json, accounting_json, guardian_json, learning_json, content_digest_hex
       ) VALUES (
         ${entry.entryId}, ${entry.organizationId}, ${entry.accountId}, ${entry.runId}, ${entry.cycleId}, ${entry.cycleSequence}, ${entry.symbol},
-        ${entry.partition}, false, ${entry.replayBarClosedAtUtc}, ${entry.datasetMembership.contentDigestHex}, ${sql.json(entry.datasetMembership)}, ${entry.previousContentDigestHex},
-        ${sql.json(entry.forecast)}, ${sql.json(entry.decision)}, ${sql.json(entry.portfolio)}, ${sql.json(entry.risk)},
-        ${sql.json(entry.execution)}, ${sql.json(entry.observedExecutionEffects)}, ${sql.json(entry.accounting)}, ${sql.json(entry.guardian)}, ${sql.json(entry.learning)},
+        ${entry.partition}, false, ${entry.replayBarClosedAtUtc},
+        ${entry.datasetMembership.contentDigestHex},
+        ${JSON.stringify(entry.datasetMembership)}::text::jsonb,
+        ${entry.previousContentDigestHex},
+        ${JSON.stringify(entry.forecast)}::text::jsonb,
+        ${JSON.stringify(entry.decision)}::text::jsonb,
+        ${JSON.stringify(entry.portfolio)}::text::jsonb,
+        ${JSON.stringify(entry.risk)}::text::jsonb,
+        ${JSON.stringify(entry.execution)}::text::jsonb,
+        ${JSON.stringify(entry.observedExecutionEffects)}::text::jsonb,
+        ${JSON.stringify(entry.accounting)}::text::jsonb,
+        ${JSON.stringify(entry.guardian)}::text::jsonb,
+        ${JSON.stringify(entry.learning)}::text::jsonb,
         ${entry.contentDigestHex}
       )
     `;
@@ -97,7 +105,8 @@ export async function appendHistoricalSimulationReasonLedgerV2Postgres(input: {
           source_content_digest_hex, evidence_content_digest_hex, payload_json, capital_eligible
         ) VALUES (
           ${item.evidenceId}, ${item.organizationId}, ${item.reasonLedgerEntryId}, ${item.evidenceKind}, ${item.evidenceOrdinal},
-          ${item.sourceContentDigestHex}, ${item.evidenceContentDigestHex}, ${sql.json(item.payload as postgres.JSONValue)}, false
+          ${item.sourceContentDigestHex}, ${item.evidenceContentDigestHex},
+          ${JSON.stringify(item.payload)}::text::jsonb, false
         )
       `;
     }

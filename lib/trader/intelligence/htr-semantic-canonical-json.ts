@@ -44,6 +44,25 @@ export function canonicalizeSemanticJsonString(value: unknown): string {
   return JSON.stringify(canonicalizeValue(value));
 }
 
+function diagnosticSafeValue(value: unknown): unknown {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    if (Number.isNaN(value)) return "NON_FINITE_NUMBER:NaN";
+    return value > 0 ? "NON_FINITE_NUMBER:+Infinity" : "NON_FINITE_NUMBER:-Infinity";
+  }
+  if (Array.isArray(value)) return value.map((item) => diagnosticSafeValue(item));
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, diagnosticSafeValue(item)]),
+    );
+  }
+  return value;
+}
+
+/** Diagnostic-only canonicalization that preserves non-finite failures as explicit text. */
+export function canonicalizeDiagnosticJsonString(value: unknown): string {
+  return canonicalizeSemanticJsonString(diagnosticSafeValue(value));
+}
+
 export function computeSemanticSha256Hex(value: unknown): string {
   return createHash("sha256").update(canonicalizeSemanticJsonString(value), "utf8").digest("hex");
 }

@@ -252,6 +252,23 @@ describe("DEE-686 Required Information Profile V2 contracts", () => {
         organizationId: "org-b",
       }),
     }])).toThrow("historicalDatasetTrustScope");
+
+    const nextPit = "2026-08-23T12:01:00.000Z";
+    const nextAuthority = buildHistoricalDatasetTrustAuthorityV2({
+      ...authorityBody,
+      publicAvailableAt: nextPit,
+      canonicalRecordAvailableAt: nextPit,
+    });
+    expect(evaluate(profile(), [{
+      ...selected,
+      availableAt: nextPit,
+      historicalDatasetTrustAuthority: nextAuthority,
+    }], { pitAnchor: nextPit }).status).toBe("SUFFICIENT");
+    expect(() => buildHistoricalDatasetTrustAuthorityV2({
+      ...authorityBody,
+      publicAvailableAt: "2026-08-23T11:59:00.000Z",
+      canonicalRecordAvailableAt: "2026-08-23T11:59:00.000Z",
+    })).toThrow("historicalDatasetTrustChronology");
   });
 
   it("rejects empty hard-floor allowlists and forged runtime hard-floor types", () => {

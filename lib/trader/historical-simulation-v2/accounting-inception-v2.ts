@@ -100,6 +100,7 @@ type DurableAccountingInceptionRowV2 = Readonly<{
   run_id: string;
   accounting_sequence: string | number;
   frontier_as_of: Date | string;
+  month_key: string | null;
   cash: string;
   position_quantity_json: Record<string, string>;
   gross_position_basis_json: Record<string, string>;
@@ -107,8 +108,13 @@ type DurableAccountingInceptionRowV2 = Readonly<{
   gross_realized_pnl: string;
   net_realized_pnl: string;
   marks_json: Record<string, unknown>;
+  marked_position_value: string | null;
   equity: string;
   equity_hwm: string;
+  monthly_peak_hwm: string | null;
+  monthly_drawdown_bps: number | null;
+  strategy_peak_hwm_by_key_json: Record<string, string> | null;
+  strategy_drawdown_bps_by_key_json: Record<string, number> | null;
   account_drawdown_bps: number;
   source_fill_id: string | null;
   source_economics_digest: string;
@@ -123,18 +129,27 @@ function durableRowMatches(
 ): boolean {
   const serialized = accountingFrontierToRow(expected);
   const asOf = parsePostgresTimestamptz(row.frontier_as_of).toISOString();
+  const sameJson = (left: unknown, right: unknown) =>
+    computeSemanticSha256Hex(left) === computeSemanticSha256Hex(right);
   return row.id === serialized.id &&
     row.organization_id === serialized.organizationId &&
     row.account_key === serialized.accountKey && row.run_id === serialized.runId &&
     Number(row.accounting_sequence) === 1 && asOf === serialized.frontierAsOf &&
+    row.month_key === serialized.monthKey &&
     row.cash === serialized.cash &&
-    JSON.stringify(row.position_quantity_json) === JSON.stringify(serialized.positionQuantityJson) &&
-    JSON.stringify(row.gross_position_basis_json) === JSON.stringify(serialized.grossPositionBasisJson) &&
-    JSON.stringify(row.net_position_basis_json) === JSON.stringify(serialized.netPositionBasisJson) &&
+    sameJson(row.position_quantity_json, serialized.positionQuantityJson) &&
+    sameJson(row.gross_position_basis_json, serialized.grossPositionBasisJson) &&
+    sameJson(row.net_position_basis_json, serialized.netPositionBasisJson) &&
     row.gross_realized_pnl === serialized.grossRealizedPnl &&
     row.net_realized_pnl === serialized.netRealizedPnl &&
-    JSON.stringify(row.marks_json) === JSON.stringify(serialized.marksJson) &&
+    sameJson(row.marks_json, serialized.marksJson) &&
+    row.marked_position_value === serialized.markedPositionValue &&
     row.equity === serialized.equity && row.equity_hwm === serialized.equityHwm &&
+    row.monthly_peak_hwm === serialized.monthlyPeakHwm &&
+    row.monthly_drawdown_bps === serialized.monthlyDrawdownBps &&
+    sameJson(row.strategy_peak_hwm_by_key_json, serialized.strategyPeakHwmByKeyJson) &&
+    sameJson(row.strategy_drawdown_bps_by_key_json,
+      serialized.strategyDrawdownBpsByKeyJson) &&
     row.account_drawdown_bps === 0 && row.source_fill_id === null &&
     row.source_economics_digest === serialized.sourceEconomicsDigest &&
     row.semantic_content_digest === serialized.semanticContentDigest &&
@@ -148,9 +163,11 @@ async function loadInception(
 ): Promise<DurableAccountingInceptionRowV2 | null> {
   const rows = await sql<DurableAccountingInceptionRowV2[]>`
     SELECT id::text AS id, organization_id::text AS organization_id, account_key, run_id,
-      accounting_sequence, frontier_as_of, cash, position_quantity_json,
+      accounting_sequence, frontier_as_of, month_key, cash, position_quantity_json,
       gross_position_basis_json, net_position_basis_json, gross_realized_pnl,
-      net_realized_pnl, marks_json, equity, equity_hwm, account_drawdown_bps,
+      net_realized_pnl, marks_json, marked_position_value, equity, equity_hwm,
+      monthly_peak_hwm, monthly_drawdown_bps, strategy_peak_hwm_by_key_json,
+      strategy_drawdown_bps_by_key_json, account_drawdown_bps,
       source_fill_id::text AS source_fill_id, source_economics_digest,
       semantic_content_digest, idempotency_key, schema_version
     FROM trader_accounting_frontier
@@ -181,16 +198,26 @@ export async function ensureHistoricalAccountingInceptionV2(
   await sql`
     INSERT INTO trader_accounting_frontier (
       id, organization_id, account_key, run_id, accounting_sequence, frontier_as_of,
-      cash, position_quantity_json, gross_position_basis_json, net_position_basis_json,
-      gross_realized_pnl, net_realized_pnl, marks_json, equity, equity_hwm,
+      month_key, cash, position_quantity_json, gross_position_basis_json,
+      net_position_basis_json, gross_realized_pnl, net_realized_pnl, marks_json,
+      marked_position_value, equity, equity_hwm, monthly_peak_hwm,
+      monthly_drawdown_bps, strategy_peak_hwm_by_key_json,
+      strategy_drawdown_bps_by_key_json,
       account_drawdown_bps, source_fill_id, source_economics_digest,
       semantic_content_digest, idempotency_key, schema_version
     ) VALUES (
       ${row.id}::uuid, ${row.organizationId}::uuid, ${row.accountKey}, ${row.runId},
-      1, ${row.frontierAsOf}::timestamptz, ${row.cash}, ${sql.json(row.positionQuantityJson)},
-      ${sql.json(row.grossPositionBasisJson)}, ${sql.json(row.netPositionBasisJson)},
-      ${row.grossRealizedPnl}, ${row.netRealizedPnl}, ${sql.json(row.marksJson)},
-      ${row.equity}, ${row.equityHwm}, ${row.accountDrawdownBps}, NULL,
+      1, ${row.frontierAsOf}::timestamptz, ${row.monthKey}, ${row.cash},
+      ${JSON.stringify(row.positionQuantityJson)}::text::jsonb,
+      ${JSON.stringify(row.grossPositionBasisJson)}::text::jsonb,
+      ${JSON.stringify(row.netPositionBasisJson)}::text::jsonb,
+      ${row.grossRealizedPnl}, ${row.netRealizedPnl},
+      ${JSON.stringify(row.marksJson)}::text::jsonb, ${row.markedPositionValue},
+      ${row.equity}, ${row.equityHwm}, ${row.monthlyPeakHwm},
+      ${row.monthlyDrawdownBps},
+      ${JSON.stringify(row.strategyPeakHwmByKeyJson)}::text::jsonb,
+      ${JSON.stringify(row.strategyDrawdownBpsByKeyJson)}::text::jsonb,
+      ${row.accountDrawdownBps}, NULL,
       ${row.sourceEconomicsDigest}, ${row.semanticContentDigest}, ${row.idempotencyKey},
       ${row.schemaVersion}
     ) ON CONFLICT DO NOTHING

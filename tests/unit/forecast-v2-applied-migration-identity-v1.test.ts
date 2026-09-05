@@ -82,6 +82,13 @@ describe("Forecast V2 applied migration identity", () => {
       "0193_historical_runner_knowledge_state_read",
       "0194_historical_four_surface_ratified_admission_v2",
       "0195_historical_information_sufficiency_authority_v2",
+      "0196_historical_dynamic_cycle_information_authority_v2",
+      "0197_historical_modeled_reality_stage_v2",
+      "0198_historical_simulation_run_lifecycle_v2",
+      "0199_historical_runner_least_privilege_v2",
+      "0200_historical_knowledge_checkpoint_namespace_v2",
+      "0201_historical_ratification_split_v2",
+      "0202_historical_accounting_semantic_state_v2",
     ]);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,

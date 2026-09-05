@@ -147,13 +147,29 @@ describe("Trader Dashboard V2", () => {
     const source = { addEventListener: vi.fn((kind:string,listener:(event:MessageEvent<string>)=>void)=>{if(kind==="historical.snapshot")snapshotListener=listener;}), close: vi.fn(), onopen: null, onerror: null };
     vi.stubGlobal("EventSource",vi.fn(()=>source));
     render(<HistoricalV2ObservationDashboard endpoint="/tenant-stream" runId="run-1" accountId="account-1"/>);
-    const base={schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,organizationId:"org-1",runId:"run-1",eventId:"empty",observedAt:"2026-09-01T00:00:00.000Z",aggregate:{accountCount:0,cash:null,equity:null,netPnl:null,cycles:0,decisions:0,riskVetoes:0,orders:0,fills:0,processedRecords:0,latestCycleSequence:null},accounts:[]};
+    const base={schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,organizationId:"org-1",runId:"run-1",eventId:"empty",observedAt:"2026-09-01T00:00:00.000Z",lifecycle:{phase:"QUEUED",qualifiedTotalCycles:10,committedCycles:0,remainingCycles:10,progressBps:0,nextCycleSequence:0,latestCommittedCycleId:null,observedAt:"2026-09-01T00:00:00.000Z",errorCode:null,contentDigestHex:"f".repeat(64)},aggregate:{accountCount:0,cash:null,equity:null,netPnl:null,cycles:0,decisions:0,riskVetoes:0,orders:0,fills:0,processedRecords:0,latestCycleSequence:null,qualifiedTotalCycles:10,committedCycles:0,progressBps:0,runPhase:"QUEUED"},accounts:[]};
     await waitFor(()=>expect(snapshotListener).toBeTypeOf("function"));
     act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify(base)})));
     expect(screen.getByTestId("historical-v2-streaming-dashboard")).toBeInTheDocument();
-    const account={accountId:"account-1",cycleSequence:0,cycleId:"c0",symbol:"BTCUSDT",partition:"DEVELOPMENT",replayBarClosedAtUtc:"2026-01-01T00:00:00.000Z",cash:"100.00000000",equity:"100.00000000",grossRealizedPnl:"0.00000000",netRealizedPnl:"0.00000000",netUnrealizedPnl:"0.00000000",netPnl:"0.00000000",openPositionsCount:0,decisionsCount:1,riskVetoCount:0,ordersCount:0,fillsCount:0,lastDecision:{reasonCodes:["CASH"]},lastRisk:{},lastExecution:{},lastAccounting:{positions:{}},lastGuardian:{},lastLearning:{},observedExecutionEffects:[],stages:[],snapshots:[],checkpoint:null,ledgerHeadContentDigestHex:"a".repeat(64)};
+    expect(screen.getByText("Qualified progress · 0 / 10 cycles")).toBeInTheDocument();
+    const account={accountId:"account-1",cycleSequence:0,cycleId:"c0",symbol:"BTCUSDT",partition:"DEVELOPMENT",replayBarClosedAtUtc:"2026-01-01T00:00:00.000Z",cash:"100.00000000",equity:"100.00000000",grossRealizedPnl:"0.00000000",netRealizedPnl:"0.00000000",netUnrealizedPnl:"0.00000000",netPnl:"0.00000000",buyAndHoldGrossEquity:"100.00000000",strategyMinusBuyAndHoldGross:"0.00000000",buyAndHoldConvention:"GROSS_MARK_TO_MARKET_NO_FEES",openPositionsCount:0,decisionsCount:1,riskVetoCount:0,ordersCount:0,fillsCount:0,lastForecast:{reasonCodes:["FORECAST_READY"]},lastDecision:{reasonCodes:["CASH"]},lastPortfolio:{reasonCodes:["PORTFOLIO_CASH"]},lastRisk:{reasonCodes:["RISK_NOT_EVALUATED"]},lastExecution:{reasonCodes:["NO_DISPATCH"]},lastAccounting:{positions:{}},lastGuardian:{reasonCodes:["GUARDIAN_NONE"]},lastLearning:{reasonCodes:["NO_UPDATE"]},observedExecutionEffects:[],modeledRealityArtifacts:[{sourcePayload:{reasonCodes:["REALITY_RECONCILED"]}}],knowledgeArtifacts:[{sourcePayload:{reasonCodes:["KNOWLEDGE_BOUND"]}}],stages:[],snapshots:[],checkpoint:null,ledgerHeadContentDigestHex:"a".repeat(64)};
     act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify({...base,eventId:"first",aggregate:{...base.aggregate,accountCount:1,processedRecords:1,latestCycleSequence:0},accounts:[account]})})));
     expect(screen.getByText("account-1")).toBeInTheDocument();
+    expect(screen.getAllByText(/FORECAST_READY/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/PORTFOLIO_CASH/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/REALITY_RECONCILED/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/KNOWLEDGE_BOUND/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/scope mismatch/i)).not.toBeInTheDocument();
+  });
+
+  it("surfaces the durable lifecycle stop/refusal code", async () => {
+    let snapshotListener: ((event: MessageEvent<string>) => void) | undefined;
+    const source = { addEventListener: vi.fn((kind:string,listener:(event:MessageEvent<string>)=>void)=>{if(kind==="historical.snapshot")snapshotListener=listener;}), close: vi.fn(), onopen: null, onerror: null };
+    vi.stubGlobal("EventSource",vi.fn(()=>source));
+    render(<HistoricalV2ObservationDashboard endpoint="/tenant-stream" runId="run-1"/>);
+    await waitFor(()=>expect(snapshotListener).toBeTypeOf("function"));
+    const projection={schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,organizationId:"org-1",runId:"run-1",eventId:"failed",observedAt:"2026-09-01T00:00:00.000Z",lifecycle:{phase:"FAILED",qualifiedTotalCycles:35,committedCycles:4,remainingCycles:31,progressBps:1142,nextCycleSequence:4,latestCommittedCycleId:"c3",observedAt:"2026-09-01T00:04:00.000Z",errorCode:"FORECAST_PERSISTED_REFUSED",contentDigestHex:"f".repeat(64)},aggregate:{accountCount:0,cash:null,equity:null,netPnl:null,buyAndHoldGrossEquity:null,strategyMinusBuyAndHoldGross:null,cycles:0,decisions:0,riskVetoes:0,orders:0,fills:0,processedRecords:0,latestCycleSequence:null,qualifiedTotalCycles:35,committedCycles:4,progressBps:1142,runPhase:"FAILED"},accounts:[]};
+    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify(projection)})));
+    expect(screen.getByTestId("historical-lifecycle-error")).toHaveTextContent("FORECAST_PERSISTED_REFUSED");
   });
 });

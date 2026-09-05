@@ -61,6 +61,13 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
     authorityPurpose: "NEW_OPPORTUNITY",
   },
   {
+    path: "lib/trader/historical-simulation-v2/production-next-cycle-forecast-v2.ts",
+    symbols: ["runEvaluationCycle", "informationSufficiencyAuthority"],
+    imports: ["RUN_EVALUATION_CYCLE"],
+    disposition: "HISTORICAL_SIMULATION_FAIL_CLOSED",
+    authorityPurpose: "NEW_OPPORTUNITY",
+  },
+  {
     path: "lib/trader/intelligence/evaluation-cycle.ts",
     symbols: ["runEvaluationCycle", "buildForecastDecisionBundle"],
     imports: ["BUILD_FORECAST_DECISION_BUNDLE"],

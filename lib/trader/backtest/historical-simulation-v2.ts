@@ -24,6 +24,8 @@ import type { HistoricalDatasetMembershipV2 } from "@/lib/trader/historical-simu
 import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
 import type { DecisionStageOutcomeV2, DecisionQualificationRequestV2 } from
   "@/lib/trader/runtime-v2/decision-capital-authority-v2";
+import { prepareHistoricalFutureOnlyForecastV2 } from
+  "@/lib/trader/historical-simulation-v2/future-only-learning-v2";
 
 export const HISTORICAL_SIMULATION_V2_SCHEMA_VERSION =
   "waia.trader.historical_simulation.v2" as const;
@@ -82,9 +84,14 @@ export type HistoricalSimulationV2Evidence = Readonly<{
 
 export type HistoricalPortfolioProposalV2 = Readonly<{
   decisionSemanticMode: "HISTORICAL";
+  /** Exact DEE-660 output, before the portfolio layer applies position-aware overrides. */
+  rawDecisionAction: "ENTER_LONG" | "CASH";
+  rawDecisionReasonCodes: readonly string[];
   action: "ENTER_LONG" | "CASH" | "REDUCE" | "CLOSE";
   quantity: string | null;
   proposalContentDigestHex: string;
+  /** Portfolio-only reasons; never substituted for the raw Decision explanation. */
+  portfolioReasonCodes: readonly string[];
   reasonCodes: readonly string[];
   decisionContentDigestHex: string;
   whyNotCashReceiptDigestHex: string;
@@ -112,9 +119,12 @@ export function createHistoricalDecisionEconomicsPortfolioResolverV2(input: Read
       const contentDigestHex = computeSemanticSha256Hex(body);
       return {
         decisionSemanticMode: "HISTORICAL",
+        rawDecisionAction: "CASH",
+        rawDecisionReasonCodes: body.reasonCodes,
         action: "CASH",
         quantity: null,
         proposalContentDigestHex: contentDigestHex,
+        portfolioReasonCodes: ["HISTORICAL_PORTFOLIO_RAW_DECISION_CASH"],
         reasonCodes: body.reasonCodes,
         decisionContentDigestHex: contentDigestHex,
         whyNotCashReceiptDigestHex: contentDigestHex,
@@ -137,9 +147,13 @@ export function createHistoricalDecisionEconomicsPortfolioResolverV2(input: Read
     };
     return {
       decisionSemanticMode: "HISTORICAL",
+      rawDecisionAction: result.action,
+      rawDecisionReasonCodes: result.receipt.reasonCodes,
       action: result.action,
       quantity,
       proposalContentDigestHex: computeSemanticSha256Hex(proposalBody),
+      portfolioReasonCodes: result.action === "CASH"
+        ? ["HISTORICAL_PORTFOLIO_RAW_DECISION_CASH"] : [],
       reasonCodes: result.receipt.reasonCodes,
       decisionContentDigestHex: result.decisionReceipt.contentDigestHex,
       whyNotCashReceiptDigestHex: result.receipt.contentDigestHex,
@@ -158,8 +172,8 @@ export function createHistoricalDecisionEconomicsCapitalCoordinatorV2(input: Rea
     knowledge: HistoricalKnowledgeSnapshotV2 }>): Promise<DecisionEconomicEvaluationInputV2>;
 }>): Readonly<{ resolvePortfolioProposal: RunHistoricalSimulationV2Input["resolvePortfolioProposal"];
   decide(request: DecisionQualificationRequestV2): Promise<DecisionStageOutcomeV2>;
-  takeDecisionEvidence(cycleId: string): Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1;
-    whyNotCashReceipt: WhyNotCashReceiptV2 }> }> {
+  takeDecisionEvidence(cycleId: string, portfolioAction?: "ENTER_LONG" | "CASH" | "REDUCE" | "CLOSE"):
+    Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1; whyNotCashReceipt: WhyNotCashReceiptV2 }> }> {
   const evaluations = new Map<string, Readonly<{ result: ReturnType<typeof evaluateDecisionEconomicsV2ForSemanticMode>;
     binding: Readonly<{ organizationId: string; accountId: string; cycleId: string; symbol: string;
       referencePrice: string; forecastAuthorityContentDigestHex: string; action: "ENTER_LONG" | "CASH";
@@ -182,21 +196,29 @@ export function createHistoricalDecisionEconomicsCapitalCoordinatorV2(input: Rea
       forecastAuthorityContentDigestHex: context.forecast.authority.contentDigestHex,
       action: result.action, quantity, decisionContentDigestHex: result.decisionReceipt.contentDigestHex,
       whyNotCashReceiptDigestHex: result.receipt.contentDigestHex }) }));
-    return Object.freeze({ decisionSemanticMode: "HISTORICAL" as const, action: result.action, quantity,
+    return Object.freeze({ decisionSemanticMode: "HISTORICAL" as const,
+      rawDecisionAction: result.action, rawDecisionReasonCodes: result.receipt.reasonCodes,
+      action: result.action, quantity,
       proposalContentDigestHex: computeSemanticSha256Hex({ cycleId: context.cycle.cycleId, action: result.action,
         quantity, decisionReceiptContentDigestHex: result.decisionReceipt.contentDigestHex,
-        knowledgeContentDigestHex: context.knowledge.contentDigestHex }), reasonCodes: result.receipt.reasonCodes,
+        knowledgeContentDigestHex: context.knowledge.contentDigestHex }),
+      portfolioReasonCodes: result.action === "CASH"
+        ? ["HISTORICAL_PORTFOLIO_RAW_DECISION_CASH"] : [],
+      reasonCodes: result.receipt.reasonCodes,
       decisionContentDigestHex: result.decisionReceipt.contentDigestHex,
       whyNotCashReceiptDigestHex: result.receipt.contentDigestHex,
       evLower: result.evRange?.evLowerScale8 ?? null, evBase: result.evRange?.evBaseScale8 ?? null,
       evUpper: result.evRange?.evUpperScale8 ?? null });
   };
   return Object.freeze({ resolvePortfolioProposal,
-    takeDecisionEvidence(cycleId) {
+    takeDecisionEvidence(cycleId, portfolioAction) {
       let evidence = completedEvidence.get(cycleId);
       if (!evidence) {
         const pending = evaluations.get(cycleId);
-        if (pending?.binding.action === "CASH") {
+        const portfolioOverride = (pending?.binding.action === "CASH" &&
+          (portfolioAction === undefined || portfolioAction === "CASH" || portfolioAction === "CLOSE")) ||
+          (pending?.binding.action === "ENTER_LONG" && portfolioAction === "CASH");
+        if (pending && portfolioOverride) {
           evidence = Object.freeze({ decisionReceipt: pending.result.decisionReceipt,
             whyNotCashReceipt: pending.result.receipt });
           evaluations.delete(cycleId);
@@ -340,15 +362,6 @@ function requireChronology(cycles: readonly HistoricalSimulationV2Cycle[]): void
   }
 }
 
-function requireKnowledgeSnapshot(
-  snapshot: HistoricalKnowledgeSnapshotV2,
-  expectedAsOf: string,
-): void {
-  if (snapshot.asOf !== expectedAsOf || !DIGEST.test(snapshot.contentDigestHex)) {
-    throw new Error("HISTORICAL_SIMULATION_V2_PIT_VIOLATION:knowledgeSnapshot");
-  }
-}
-
 function projectEvidence(input: {
   cycle: HistoricalSimulationV2Cycle;
   before: HistoricalKnowledgeSnapshotV2;
@@ -447,29 +460,24 @@ export async function runHistoricalSimulationV2(
     }
   }
   for (const cycle of input.cycles) {
-    const before = await input.knowledge.snapshotAsOf(cycle.observedAt);
-    requireKnowledgeSnapshot(before, cycle.observedAt);
-    const closures = await input.knowledge.closeMaturedForecasts(cycle.observedAt);
-    for (const closure of closures) {
-      if (
-        Date.parse(closure.maturedAt) >= Date.parse(cycle.observedAt) ||
-        !DIGEST.test(closure.forecastAuthorityContentDigestHex) ||
-        !DIGEST.test(closure.outcomeContentDigestHex)
-      ) {
-        throw new Error("HISTORICAL_SIMULATION_V2_PIT_VIOLATION:futureClosure");
-      }
-    }
-    const after = await input.knowledge.applyMaturedClosures({
-      strictlyBefore: cycle.observedAt,
-      closures,
+    const prepared = await prepareHistoricalFutureOnlyForecastV2({
+      organizationId: input.organizationId,
+      runId: input.runId,
+      split: input.split,
+      cycle,
+      knowledge: input.knowledge,
+      resolveForecastInput: input.resolveForecastInput,
     });
-    requireKnowledgeSnapshot(after, cycle.observedAt);
-
-    const forecastInput = await input.resolveForecastInput({ cycle, knowledge: after });
+    const before = prepared.knowledgeBefore;
+    const after = prepared.knowledgeAfterClosure;
+    const closures = prepared.closures;
+    const forecastInput = prepared.forecastInput;
     const forecast = issueForecastRuntimeV2(forecastInput);
     await input.forecastLifecycleSink?.({ cycle, forecast, forecastInput });
     const proposal = await input.resolvePortfolioProposal({ cycle, forecast, knowledge: after });
     if (proposal.decisionSemanticMode !== "HISTORICAL" ||
+        (proposal.rawDecisionAction !== "ENTER_LONG" && proposal.rawDecisionAction !== "CASH") ||
+        !Array.isArray(proposal.rawDecisionReasonCodes) || !Array.isArray(proposal.portfolioReasonCodes) ||
         !DIGEST.test(proposal.proposalContentDigestHex) || !DIGEST.test(proposal.decisionContentDigestHex) ||
         !DIGEST.test(proposal.whyNotCashReceiptDigestHex)) {
       throw new Error("HISTORICAL_SIMULATION_V2_INVALID:portfolioProposalEvidence");
@@ -539,8 +547,8 @@ export async function runHistoricalSimulationV2(
         ? { status: "AUTHORIZED", reasonCodes: [], authorityContentDigestHex: forecast.authority.contentDigestHex }
         : { status: "NON_ACTIONABLE", reasonCodes: [forecast.reason], authorityContentDigestHex: null },
       decision: {
-        status: proposal.action,
-        reasonCodes: proposal.action === "CASH" ? proposal.reasonCodes : [],
+        status: proposal.rawDecisionAction,
+        reasonCodes: proposal.rawDecisionReasonCodes,
         decisionContentDigestHex: proposal.decisionContentDigestHex,
         whyNotCashReceiptDigestHex: proposal.whyNotCashReceiptDigestHex,
         evLower: proposal.evLower,
@@ -549,7 +557,8 @@ export async function runHistoricalSimulationV2(
       },
       portfolio: {
         status: proposal.action === "CASH" ? "NO_PROPOSAL" : "PROPOSED",
-        reasonCodes: proposal.action === "CASH" ? proposal.reasonCodes : [],
+        action: proposal.action,
+        reasonCodes: proposal.portfolioReasonCodes,
         proposalContentDigestHex: proposal.proposalContentDigestHex,
       },
       risk: projection.risk ?? exit?.risk ?? (authorityExecution

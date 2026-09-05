@@ -247,10 +247,13 @@ PersistedDecisionEconomicsAuthorityPortV2 & Readonly<{
           ${input.datasetAuthorityDigestHex}, ${input.dee659PreregistrationId}::uuid, ${input.forecastId},
           ${input.forecastIssuanceReceiptDigestHex}, ${input.forecastVerificationReceiptDigestHex},
           ${input.scientificAdmission.evidenceSemanticDigest},
-          ${input.scientificVerificationReceiptDigestHex}, ${config.sql.json(asJsonValue(input.anchorAuthority))},
-          ${config.sql.json(asJsonValue(input.executablePolicy))}, ${config.sql.json(asJsonValue(input.economicSizeSet))},
-          ${config.sql.json(asJsonValue(input.cashAuthority))},
-          ${config.sql.json(asJsonValue(input.executionPayoffVerification))}, ${input.pitAnchor}::timestamptz,
+          ${input.scientificVerificationReceiptDigestHex},
+          ${JSON.stringify(asJsonValue(input.anchorAuthority))}::text::jsonb,
+          ${JSON.stringify(asJsonValue(input.executablePolicy))}::text::jsonb,
+          ${JSON.stringify(asJsonValue(input.economicSizeSet))}::text::jsonb,
+          ${JSON.stringify(asJsonValue(input.cashAuthority))}::text::jsonb,
+          ${JSON.stringify(asJsonValue(input.executionPayoffVerification))}::text::jsonb,
+          ${input.pitAnchor}::timestamptz,
           ${DEE659_DURABLE_AUTHORITY_BUNDLE_V2}, ${digest}
         ) ON CONFLICT (organization_id, account_id, run_id, cycle_id, dataset_authority_digest_hex,
           dee659_preregistration_id, forecast_id, forecast_authority_content_digest_hex, pit_anchor)

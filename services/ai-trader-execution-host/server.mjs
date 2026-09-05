@@ -11,7 +11,7 @@ export function buildHealthBody() {
 }
 
 /**
- * @param {{ port?: number }} [options]
+ * @param {{ port?: number; getHealthBody?: () => Record<string, unknown> }} [options]
  * @returns {{ server: import('node:http').Server; port: number }}
  */
 export function createHealthServer(options = {}) {
@@ -19,8 +19,10 @@ export function createHealthServer(options = {}) {
 
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(buildHealthBody()));
+      const body = options.getHealthBody?.() ?? buildHealthBody();
+      res.writeHead(body.status === "degraded" ? 503 : 200,
+        { "Content-Type": "application/json" });
+      res.end(JSON.stringify(body));
       return;
     }
 

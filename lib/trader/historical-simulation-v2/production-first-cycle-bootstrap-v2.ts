@@ -59,6 +59,12 @@ import {
   "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
 import { CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION } from
   "@/lib/trader/mi/canonical-observation-v1";
+import { persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres } from
+  "@/lib/trader/mi/canonical-pit-service-postgres";
+import { resolveAndPersistTrustAsOfV1Postgres } from
+  "@/lib/trader/mi/trust-as-of-repository-postgres";
+import { prepareCanonicalPitAttemptV1 } from
+  "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
 import {
   assertFhvPreHoldoutQualificationPass,
   readFhvPreHoldoutQualificationReceipt,
@@ -72,6 +78,8 @@ import {
 } from "@/lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2";
 import { projectHistoricalPrerunHypothesisV2 } from
   "@/lib/trader/research/execopp-qualification/historical-prerun-knowledge-bootstrap-v2";
+import { requireHistoricalApprovedOperatorRoleV2 } from
+  "@/lib/trader/historical-simulation-v2/historical-runner-role-v2";
 import {
   requireScientificAdmissionV2,
   type ScientificAdmissionExpectedBindingsV2,
@@ -109,12 +117,17 @@ import {
 } from
   "./forecast-knowledge-bootstrap-v2";
 import { persistHistoricalForecastCycleV2 } from "./forecast-cycle-persistence-v2";
+import { assertHistoricalEconomicTrustAsOfV2 } from "./economic-trust-as-of-v2";
 import { loadHistoricalKnowledgeSnapshotAuthorityV2 } from
   "./knowledge-snapshot-binding-v2";
 import {
   createPostgresHistoricalForecastInputPitProducerV2,
   type HistoricalForecastInputPitRecordV2,
 } from "./pit-forecast-input-producer-v2";
+import {
+  assumeHistoricalSimulationRunnerRoleV2,
+  resetHistoricalSimulationRunnerRoleV2,
+} from "./historical-runner-role-v2";
 
 export const HISTORICAL_PRODUCTION_FIRST_CYCLE_BOOTSTRAP_V2 =
   "waia.trader.historical_production_first_cycle_bootstrap.v2" as const;
@@ -130,6 +143,8 @@ export type HistoricalProductionFirstCycleBootstrapInputV2 = Readonly<{
   primaryHorizonMinutes: 30 | 60;
   startingCashUsdt: string;
   defaultQuantity: string;
+  initialRecordIndex: number;
+  cycleCount: number;
   policyConfig: HistoricalPolicyConfigV2;
 }>;
 
@@ -174,6 +189,120 @@ function refuse(code: string): never {
   throw new Error(`HISTORICAL_PRODUCTION_FIRST_CYCLE_REFUSED:${code}`);
 }
 
+export function assertHistoricalFirstCyclePredictiveBoundaryV2(input: Readonly<{
+  boundaryRecordIndex: number;
+  firstEconomicRecordIndex: number;
+  boundaryBarCloseTime: string;
+  evidencePublicAvailableAt: string;
+  evidenceObservationEventTime: string;
+  sealedKnowledgeMarketPitBoundary: string;
+  economicBarOpenTime: string;
+  economicBarCloseTime: string;
+}>): void {
+  const times = [
+    input.boundaryBarCloseTime,
+    input.evidencePublicAvailableAt,
+    input.evidenceObservationEventTime,
+    input.sealedKnowledgeMarketPitBoundary,
+    input.economicBarOpenTime,
+    input.economicBarCloseTime,
+  ].map(Date.parse);
+  if (!Number.isSafeInteger(input.boundaryRecordIndex) ||
+      !Number.isSafeInteger(input.firstEconomicRecordIndex) ||
+      input.boundaryRecordIndex + 1 !== input.firstEconomicRecordIndex ||
+      times.some((value) => !Number.isFinite(value)) ||
+      input.evidencePublicAvailableAt !== input.boundaryBarCloseTime ||
+      input.evidenceObservationEventTime !== input.boundaryBarCloseTime ||
+      input.sealedKnowledgeMarketPitBoundary !== input.boundaryBarCloseTime ||
+      times[0]! > times[4]! || times[0]! >= times[5]!) {
+    refuse("HISTORICAL_DATASET_TRUST_BOUNDARY_CHRONOLOGY");
+  }
+}
+
+export function assertHistoricalFirstCycleCurrentInformationBindingV2(input: Readonly<{
+  pitAnchor: string;
+  normalizedInputDigestHex: string;
+  normalizedEventTimeUtc: string;
+  normalizedIngestTimeUtc: string;
+  normalizedLatestBarCloseTime: string;
+  attemptNormalizedInputDigestHex: string;
+  attemptEventTimeUtc: string;
+  attemptAvailableAtUtc: string;
+  attemptIngestTimeUtc: string;
+  storedNormalizedInputDigestHex: string;
+  storedEventTimeUtc: string;
+  storedAvailableAtUtc: string;
+  storedIngestTimeUtc: string;
+  epistemicRecordCutoff: string;
+  storedSourceId: string;
+  trustRootSourceId: string;
+  currentDataset: Readonly<{
+    id: string;
+    authorityContentDigestHex: string;
+    datasetAuthorityDigestHex: string;
+    membershipContentDigestHex: string;
+    sealedCycleContentDigestHex: string;
+  }>;
+  informationAuthority: Readonly<{
+    datasetAuthorityId: string;
+    datasetAuthorityContentDigestHex: string;
+    datasetAuthorityDigestHex: string;
+    membershipContentDigestHex: string;
+    sealedCycleContentDigestHex: string;
+    publicAvailableAt: string;
+    canonicalRecordAvailableAt: string;
+    canonicalRecordIngestTime: string;
+    observationId: string;
+    observationContentDigestHex: string;
+  }>;
+  storedObservationId: string;
+  storedObservationContentDigestHex: string;
+}>): void {
+  const marketTimes = [
+    input.pitAnchor,
+    input.normalizedEventTimeUtc,
+    input.normalizedLatestBarCloseTime,
+    input.attemptEventTimeUtc,
+    input.storedEventTimeUtc,
+    input.informationAuthority.publicAvailableAt,
+  ];
+  const recordTimes = [
+    input.normalizedIngestTimeUtc,
+    input.attemptAvailableAtUtc,
+    input.attemptIngestTimeUtc,
+    input.storedAvailableAtUtc,
+    input.storedIngestTimeUtc,
+    input.informationAuthority.canonicalRecordAvailableAt,
+    input.informationAuthority.canonicalRecordIngestTime,
+  ];
+  const cutoff = Date.parse(input.epistemicRecordCutoff);
+  if (
+    [...marketTimes, ...recordTimes, input.epistemicRecordCutoff].some((value) =>
+      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) ||
+    marketTimes.some((value) => value !== input.pitAnchor) ||
+    recordTimes.some((value) => value !== input.normalizedIngestTimeUtc) ||
+    Date.parse(input.pitAnchor) > Date.parse(input.normalizedIngestTimeUtc) ||
+    Date.parse(input.normalizedIngestTimeUtc) > cutoff ||
+    input.normalizedInputDigestHex !== input.attemptNormalizedInputDigestHex ||
+    input.attemptNormalizedInputDigestHex !== input.storedNormalizedInputDigestHex ||
+    input.storedSourceId !== input.trustRootSourceId ||
+    input.informationAuthority.datasetAuthorityId !== input.currentDataset.id ||
+    input.informationAuthority.datasetAuthorityContentDigestHex !==
+      input.currentDataset.authorityContentDigestHex ||
+    input.informationAuthority.datasetAuthorityDigestHex !==
+      input.currentDataset.datasetAuthorityDigestHex ||
+    input.informationAuthority.membershipContentDigestHex !==
+      input.currentDataset.membershipContentDigestHex ||
+    input.informationAuthority.sealedCycleContentDigestHex !==
+      input.currentDataset.sealedCycleContentDigestHex ||
+    input.informationAuthority.observationId !== input.storedObservationId ||
+    input.informationAuthority.observationContentDigestHex !==
+      input.storedObservationContentDigestHex
+  ) {
+    refuse("CURRENT_INFORMATION_AUTHORITY_BINDING");
+  }
+}
+
 function deterministicUuid(seed: Readonly<Record<string, unknown>>): string {
   return deterministicExecutionUuidV2("report", seed);
 }
@@ -192,6 +321,9 @@ function validateInput(input: HistoricalProductionFirstCycleBootstrapInputV2): v
       .test(input.ratifiedAuthorityId) ||
     input.accountId.trim() === "" || input.startingCashUsdt.trim() === "" ||
     input.defaultQuantity.trim() === "" ||
+    !Number.isSafeInteger(input.initialRecordIndex) || input.initialRecordIndex < 239 ||
+    !Number.isSafeInteger(input.cycleCount) || input.cycleCount < 1 ||
+    input.cycleCount > 10_000 ||
     input.preflight.releaseSha !== input.preflight.releaseSha.toLowerCase()
   ) refuse("INPUT");
 }
@@ -210,7 +342,6 @@ async function loadExistingRatification(
     WHERE organization_id=${input.preflight.organizationId}::uuid
       AND run_id=${input.preflight.runId}
       AND id=${input.ratifiedAuthorityId}::uuid
-    FOR SHARE
   `;
   if (rows.length > 1) refuse("RATIFICATION_AMBIGUOUS");
   const row = rows[0];
@@ -231,24 +362,30 @@ async function requireRatification(
 ): Promise<HistoricalFourSurfaceRatifiedAdmissionV2> {
   const existing = await loadExistingRatification(sql, input);
   if (!existing) refuse("HUMAN_RATIFICATION_REQUIRED");
+  if (existing.executionExtent.initialRecordIndex !== input.initialRecordIndex ||
+      existing.executionExtent.cycleCount !== input.cycleCount) {
+    refuse("HUMAN_REVIEWED_EXECUTION_EXTENT");
+  }
   return existing;
 }
 
 async function requireAuthenticatedOperatorMembership(
   sql: postgres.Sql,
   organizationId: string,
+  runId: string,
+  releaseSha: string,
   authenticatedOperatorUserId: string,
 ): Promise<void> {
-  const rows = await sql<Array<Readonly<{ member_role: string }>>>`
-    SELECT member_role FROM organization_members
-    WHERE organization_id=${organizationId}::uuid
-      AND user_id=${authenticatedOperatorUserId}::uuid
-    FOR SHARE
-  `;
-  if (
-    rows.length !== 1 ||
-    (rows[0]?.member_role !== "owner" && rows[0]?.member_role !== "manager")
-  ) refuse("AUTHENTICATED_OPERATOR_MEMBERSHIP");
+  try {
+    await requireHistoricalApprovedOperatorRoleV2(sql, {
+      organizationId,
+      runId,
+      releaseSha,
+      operatorUserId: authenticatedOperatorUserId,
+    });
+  } catch {
+    refuse("AUTHENTICATED_OPERATOR_MEMBERSHIP");
+  }
 }
 
 async function loadScientific(
@@ -266,7 +403,6 @@ async function loadScientific(
     FROM trader_scientific_admission_receipt_v1
     WHERE organization_id=${authority.organizationId}::uuid
       AND id=${surface.scientificAdmissionReceiptId}::uuid
-    FOR SHARE
   `;
   if (rows.length !== 1) refuse("SCIENTIFIC_ROW");
   let receipt: ScientificAdmissionReceiptV2;
@@ -333,6 +469,8 @@ async function prepareFirstCycleWithHeldPostgres(
   await requireAuthenticatedOperatorMembership(
     sql,
     input.preflight.organizationId,
+    input.preflight.runId,
+    input.preflight.releaseSha,
     authenticatedOperatorUserId,
   );
   const existingStart = await sql<Array<Readonly<{ started: boolean }>>>`
@@ -398,9 +536,13 @@ async function prepareFirstCycleWithHeldPostgres(
       surface.predictivePackageGenerationIdentityDigestHex
   ) refuse("PACKAGE_REPLAY");
 
-  // Forecast is issued exactly at the epistemically sealed boundary: the close of the
-  // final WF_PREDICTIVE bar. The next bar is the first WF_ECONOMIC execution observation.
-  const firstRecordIndex = predictivePartition.barCount - 1;
+  // The first observable Forecast uses the first WF_ECONOMIC bar.  Its PIT is therefore
+  // strictly later than the sealed WF_PREDICTIVE corpus that qualified the package.
+  const firstRecordIndex = predictivePartition.barCount;
+  if (input.initialRecordIndex !== firstRecordIndex ||
+      input.cycleCount > economicPartition.barCount) {
+    refuse("HUMAN_REVIEWED_EXECUTION_EXTENT");
+  }
   const warmup = await loadHistoricalSimulationBootstrapSourceSnapshotV2({
     datasetRoot: input.preflight.datasetRoot,
     qualificationReceiptPath: input.preflight.qualificationReceiptPath,
@@ -433,26 +575,49 @@ async function prepareFirstCycleWithHeldPostgres(
   if (current.cycle.cycleId !== cycleId || current.membership.recordIndex !== firstRecordIndex) {
     refuse("FIRST_CYCLE_IDENTITY");
   }
-  if (current.cycle.closedBar.barCloseTime !== wfEconomic.startUtc) {
+  if (current.cycle.closedBar.barOpenTime !== wfEconomic.startUtc ||
+      Date.parse(current.cycle.closedBar.barCloseTime) <= Date.parse(wfPredictive.endUtc)) {
     refuse("FIRST_FORECAST_NOT_AT_ECONOMIC_BOUNDARY");
   }
   const verification = createCanonicalDecisionVerificationReceiptServiceV2(sql);
-  const registration = await verification.registerPreHoldoutDatasetAuthorityFromSource({
-    datasetRoot: input.preflight.datasetRoot,
-    qualificationReceiptPath: input.preflight.qualificationReceiptPath,
-    runtimeRequalificationReceiptPath: input.preflight.runtimeRequalificationReceiptPath,
-    htxVolumeQualificationReceiptPath:
-      input.preflight.htxVolumeQualificationReceiptPaths[input.symbol],
-    releaseSha: authority.releaseSha,
-    organizationId: authority.organizationId,
-    runId: authority.runId,
-    partition: "WALK_FORWARD",
-    symbol: input.symbol,
-    initialRecordIndex: firstRecordIndex,
-    cycleCount: 1,
-  });
-  if (registration.cycleIds.length !== 1 || registration.cycleIds[0] !== cycleId ||
-      registration.partitionRawSha256Hex !== warmup.partitionRawSha256Hex) {
+  // Authenticate and persist the complete executable window once, from the 240-bar
+  // analytical warm-up through the final WF_ECONOMIC bar. Later production cycles
+  // may consume only these durable rows; they never reopen the source file or accept
+  // future bars/Forecasts from a runner caller.
+  const executableRangeStart = input.initialRecordIndex - 239;
+  const executableRangeCount = 239 + input.cycleCount;
+  const registeredCycleIds: string[] = [];
+  let registeredPartitionRawSha256Hex: string | null = null;
+  for (let offset = 0; offset < executableRangeCount; offset += 10_000) {
+    const chunkCount = Math.min(10_000, executableRangeCount - offset);
+    const registration = await verification.registerPreHoldoutDatasetAuthorityFromSource({
+      datasetRoot: input.preflight.datasetRoot,
+      qualificationReceiptPath: input.preflight.qualificationReceiptPath,
+      runtimeRequalificationReceiptPath: input.preflight.runtimeRequalificationReceiptPath,
+      htxVolumeQualificationReceiptPath:
+        input.preflight.htxVolumeQualificationReceiptPaths[input.symbol],
+      releaseSha: authority.releaseSha,
+      organizationId: authority.organizationId,
+      runId: authority.runId,
+      partition: "WALK_FORWARD",
+      symbol: input.symbol,
+      initialRecordIndex: executableRangeStart + offset,
+      cycleCount: chunkCount,
+    });
+    if (registration.cycleIds.length !== chunkCount ||
+        (registeredPartitionRawSha256Hex !== null &&
+          registration.partitionRawSha256Hex !== registeredPartitionRawSha256Hex)) {
+      refuse("WALK_FORWARD_DATASET_REGISTRATION");
+    }
+    registeredPartitionRawSha256Hex ??= registration.partitionRawSha256Hex;
+    registeredCycleIds.push(...registration.cycleIds);
+  }
+  if (registeredCycleIds.length !== executableRangeCount ||
+      registeredCycleIds[239] !== cycleId ||
+      registeredCycleIds.at(-1) !==
+        `${authority.runId}:WALK_FORWARD:${input.symbol}:` +
+          `${input.initialRecordIndex + input.cycleCount - 1}` ||
+      registeredPartitionRawSha256Hex !== warmup.partitionRawSha256Hex) {
     refuse("WALK_FORWARD_DATASET_REGISTRATION");
   }
   const datasetRows = await sql<Array<Readonly<{
@@ -472,7 +637,6 @@ async function prepareFirstCycleWithHeldPostgres(
     FROM trader_historical_dataset_authority_v2
     WHERE organization_id=${authority.organizationId}::uuid AND run_id=${authority.runId}
       AND cycle_id=${cycleId} AND dataset_authority_class='PRE_HOLDOUT_QUALIFICATION_V1'
-    FOR SHARE
   `;
   const dataset = datasetRows[0];
   if (
@@ -487,25 +651,73 @@ async function prepareFirstCycleWithHeldPostgres(
   ) refuse("DATASET_AUTHORITY");
   const sealedMarketEvidence = authority.marketEvidence.find((entry) =>
     entry.symbol === input.symbol);
-  if (!sealedMarketEvidence ||
+  if (!sealedMarketEvidence) refuse("HISTORICAL_DATASET_TRUST_AUTHORITY");
+  const boundaryCycleId = `${authority.runId}:WALK_FORWARD:${input.symbol}:` +
+    `${firstRecordIndex - 1}`;
+  const boundaryRows = await sql<Array<Readonly<{
+    id: string;
+    dataset_authority_digest_hex: string;
+    partition_raw_sha256_hex: string;
+    membership_content_digest_hex: string;
+    sealed_cycle_content_digest_hex: string;
+    authority_content_digest_hex: string;
+    membership_json: unknown;
+    sealed_cycle_json: unknown;
+    bar_close_time: string;
+  }>>>`
+    SELECT id::text, dataset_authority_digest_hex,
+      membership_json->>'partitionRawSha256Hex' AS partition_raw_sha256_hex,
+      membership_content_digest_hex, sealed_cycle_content_digest_hex,
+      authority_content_digest_hex, membership_json, sealed_cycle_json,
+      sealed_cycle_json->'closedBar'->>'barCloseTime' AS bar_close_time
+    FROM trader_historical_dataset_authority_v2
+    WHERE organization_id=${authority.organizationId}::uuid AND run_id=${authority.runId}
+      AND cycle_id=${boundaryCycleId}
+      AND dataset_authority_class='PRE_HOLDOUT_QUALIFICATION_V1'
+  `;
+  const boundaryDataset = boundaryRows[0];
+  const sealedKnowledge = authority.knowledgeSnapshots.find((snapshot) =>
+    snapshot.surfaceKey === key);
+  if (boundaryDataset) {
+    assertHistoricalFirstCyclePredictiveBoundaryV2({
+      boundaryRecordIndex: firstRecordIndex - 1,
+      firstEconomicRecordIndex: firstRecordIndex,
+      boundaryBarCloseTime: boundaryDataset.bar_close_time,
+      evidencePublicAvailableAt: sealedMarketEvidence.publicAvailableAt,
+      evidenceObservationEventTime: sealedMarketEvidence.observationEventTime,
+      sealedKnowledgeMarketPitBoundary:
+        sealedKnowledge?.marketPitBoundary ?? "INVALID",
+      economicBarOpenTime: current.cycle.closedBar.barOpenTime,
+      economicBarCloseTime: current.cycle.closedBar.barCloseTime,
+    });
+  }
+  if (boundaryRows.length !== 1 || !boundaryDataset ||
+      boundaryDataset.authority_content_digest_hex !== computeStableJsonDigest({
+        organizationId: authority.organizationId,
+        runId: authority.runId,
+        membership: boundaryDataset.membership_json,
+        sealedCycle: boundaryDataset.sealed_cycle_json,
+      }) ||
       sealedMarketEvidence.trustAuthorityKind !== "HISTORICAL_DATASET_TRUST" ||
       sealedMarketEvidence.qualificationReceiptDigestHex !==
         qualification.qualificationReceiptDigest ||
-      sealedMarketEvidence.datasetAuthorityId !== dataset.id ||
+      sealedMarketEvidence.datasetAuthorityId !== boundaryDataset.id ||
       sealedMarketEvidence.datasetAuthorityContentDigestHex !==
-        dataset.authority_content_digest_hex ||
-      sealedMarketEvidence.datasetAuthorityDigestHex !== dataset.dataset_authority_digest_hex ||
-      sealedMarketEvidence.partitionRawSha256Hex !== dataset.partition_raw_sha256_hex ||
+        boundaryDataset.authority_content_digest_hex ||
+      sealedMarketEvidence.datasetAuthorityDigestHex !==
+        boundaryDataset.dataset_authority_digest_hex ||
+      sealedMarketEvidence.partitionRawSha256Hex !==
+        boundaryDataset.partition_raw_sha256_hex ||
       sealedMarketEvidence.membershipContentDigestHex !==
-        dataset.membership_content_digest_hex ||
+        boundaryDataset.membership_content_digest_hex ||
       sealedMarketEvidence.sealedCycleContentDigestHex !==
-        dataset.sealed_cycle_content_digest_hex ||
+        boundaryDataset.sealed_cycle_content_digest_hex ||
       sealedMarketEvidence.wfPredictiveSemanticContentDigestHex !==
         predictivePartition.semanticContentDigest ||
       sealedMarketEvidence.wfPredictiveStartUtc !== wfPredictive.startUtc ||
       sealedMarketEvidence.wfPredictiveEndUtc !== wfPredictive.endUtc ||
-      sealedMarketEvidence.publicAvailableAt !== current.cycle.closedBar.barCloseTime ||
-      sealedMarketEvidence.observationEventTime !== current.cycle.closedBar.barCloseTime) {
+      sealedMarketEvidence.publicAvailableAt !== boundaryDataset.bar_close_time ||
+      sealedMarketEvidence.observationEventTime !== boundaryDataset.bar_close_time) {
     refuse("HISTORICAL_DATASET_TRUST_AUTHORITY");
   }
 
@@ -524,7 +736,6 @@ async function prepareFirstCycleWithHeldPostgres(
     FROM trader_historical_four_surface_ratified_admission_v2
     WHERE organization_id=${authority.organizationId}::uuid
       AND run_id=${authority.runId} AND id=${input.ratifiedAuthorityId}::uuid
-    FOR SHARE
   `;
   const ratificationRow = ratificationRows[0];
   const ratificationCreatedAt = ratificationRow
@@ -537,12 +748,84 @@ async function prepareFirstCycleWithHeldPostgres(
       authority.epistemicRecordCutoff !== ratificationCreatedAt.toISOString()) {
     refuse("EPISTEMIC_AUTHORITY");
   }
-  const sealedKnowledge = authority.knowledgeSnapshots.find((snapshot) =>
-    snapshot.surfaceKey === key);
-  if (!sealedKnowledge || sealedKnowledge.marketPitBoundary !== pitAnchor) {
+  if (!sealedKnowledge) {
     refuse("SEALED_KNOWLEDGE_AUTHORITY");
   }
   const executor = drizzle(sql, { schema: pgSchema });
+  const normalizedBoundaryObservation = Object.freeze({
+    schemaVersion: "waia.trader.observation.v1" as const,
+    kind: "ohlcv_bar" as const,
+    interval: "1m" as const,
+    sessionPhase: "UNKNOWN" as const,
+    provenance: Object.freeze({
+      providerId: "htx_spot" as const,
+      venue: "htx",
+      feedKind: "ohlcv_bar",
+      symbol: input.symbol,
+      eventTimeUtc: pitAnchor,
+      ingestTimeUtc: authority.epistemicRecordCutoff,
+    }),
+    health: "HEALTHY" as const,
+    freshnessMs: 0,
+    latencyMs: Math.max(0,
+      Date.parse(authority.epistemicRecordCutoff) - Date.parse(pitAnchor)),
+    confidence: Number(sealedMarketEvidence.trustScore),
+    payload: Object.freeze({
+      barCount: 1,
+      latestClose: current.cycle.closedBar.close,
+      latestBarCloseTime: pitAnchor,
+    }),
+  });
+  const canonicalAttempt = prepareCanonicalPitAttemptV1(normalizedBoundaryObservation);
+  if (canonicalAttempt.status !== "AVAILABLE" || !canonicalAttempt.kind ||
+      !canonicalAttempt.subjectRef || !canonicalAttempt.payloadCanonical ||
+      !canonicalAttempt.eventTimeUtc || !canonicalAttempt.availableAtUtc ||
+      !canonicalAttempt.ingestTimeUtc ||
+      canonicalAttempt.source?.symbol !== input.symbol) {
+    refuse("CANONICAL_MARKET_OBSERVATION_ATTEMPT");
+  }
+  const normalizedInputDigestHex = computeStableJsonDigest(normalizedBoundaryObservation);
+  if (canonicalAttempt.normalizedInputDigest !== normalizedInputDigestHex) {
+    refuse("CANONICAL_MARKET_OBSERVATION_ATTEMPT_DIGEST");
+  }
+  const currentTrust = await resolveAndPersistTrustAsOfV1Postgres(
+    executor,
+    { organizationId: authority.organizationId },
+    {
+      sourceId: sealedMarketEvidence.sourceId,
+      anchorTime: new Date(canonicalAttempt.availableAtUtc),
+    },
+  );
+  assertHistoricalEconomicTrustAsOfV2({
+    organizationId: authority.organizationId,
+    sourceId: sealedMarketEvidence.sourceId,
+    economicPitAnchor: pitAnchor,
+    canonicalRecordAvailableAt: canonicalAttempt.availableAtUtc,
+    canonicalRecordIngestTime: canonicalAttempt.ingestTimeUtc,
+    epistemicRecordCutoff: authority.epistemicRecordCutoff,
+    ratifiedTrustRevisionId: sealedMarketEvidence.trustRevisionId,
+    ratifiedTrustRevisionContentDigestHex:
+      sealedMarketEvidence.trustRevisionContentDigestHex,
+    ratifiedTrustScore: sealedMarketEvidence.trustScore,
+    receipt: currentTrust.receipt,
+  });
+  const storedCurrentObservation =
+    await persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres(
+      executor,
+      { organizationId: authority.organizationId },
+      {
+        sourceId: sealedMarketEvidence.sourceId,
+        observationKind: canonicalAttempt.kind,
+        subjectRef: canonicalAttempt.subjectRef,
+        payloadCanonical: canonicalAttempt.payloadCanonical,
+        eventTime: new Date(canonicalAttempt.eventTimeUtc),
+        availableAt: new Date(canonicalAttempt.availableAtUtc),
+        ingestTime: new Date(canonicalAttempt.ingestTimeUtc),
+        canonicalProviderId: canonicalAttempt.providerId,
+        trustAsOfReceiptId: currentTrust.receipt.id,
+        normalizedInputDigest: canonicalAttempt.normalizedInputDigest,
+      },
+    );
   const canonicalState = await foldCanonicalRuntimeIntelligenceStateV1({
     context: { organizationId: authority.organizationId },
     symbol: evaluationInstrumentId,
@@ -631,37 +914,72 @@ async function prepareFirstCycleWithHeldPostgres(
     ratifiedAdmissionId: input.ratifiedAuthorityId,
     ratifiedAdmissionContentDigestHex: authority.contentDigestHex,
     epistemicRecordCutoff: authority.epistemicRecordCutoff,
-    datasetAuthorityId: sealedMarketEvidence.datasetAuthorityId,
-    datasetAuthorityContentDigestHex: sealedMarketEvidence.datasetAuthorityContentDigestHex,
-    datasetAuthorityDigestHex: sealedMarketEvidence.datasetAuthorityDigestHex,
-    partitionRawSha256Hex: sealedMarketEvidence.partitionRawSha256Hex,
-    membershipContentDigestHex: sealedMarketEvidence.membershipContentDigestHex,
-    sealedCycleContentDigestHex: sealedMarketEvidence.sealedCycleContentDigestHex,
+    datasetAuthorityId: dataset.id,
+    datasetAuthorityContentDigestHex: dataset.authority_content_digest_hex,
+    datasetAuthorityDigestHex: dataset.dataset_authority_digest_hex,
+    partitionRawSha256Hex: dataset.partition_raw_sha256_hex,
+    membershipContentDigestHex: dataset.membership_content_digest_hex,
+    sealedCycleContentDigestHex: dataset.sealed_cycle_content_digest_hex,
     wfPredictiveSemanticContentDigestHex:
       sealedMarketEvidence.wfPredictiveSemanticContentDigestHex,
     wfPredictiveStartUtc: sealedMarketEvidence.wfPredictiveStartUtc,
     wfPredictiveEndUtc: sealedMarketEvidence.wfPredictiveEndUtc,
-    publicAvailableAt: sealedMarketEvidence.publicAvailableAt,
-    canonicalRecordAvailableAt: sealedMarketEvidence.observationAvailableAt,
-    canonicalRecordIngestTime: sealedMarketEvidence.observationIngestTime,
+    publicAvailableAt: pitAnchor,
+    canonicalRecordAvailableAt:
+      storedCurrentObservation.observation.availableAt.toISOString(),
+    canonicalRecordIngestTime:
+      storedCurrentObservation.observation.ingestTime.toISOString(),
     sourceId: sealedMarketEvidence.sourceId,
-    trustAsOfReceiptId: sealedMarketEvidence.trustAsOfReceiptId,
+    trustAsOfReceiptId: currentTrust.receipt.id,
     trustRevisionId: sealedMarketEvidence.trustRevisionId,
     trustRevisionContentDigestHex: sealedMarketEvidence.trustRevisionContentDigestHex,
     trustScore: Number(sealedMarketEvidence.trustScore),
-    observationId: sealedMarketEvidence.observationId,
-    observationContentDigestHex: sealedMarketEvidence.observationContentDigestHex,
+    observationId: storedCurrentObservation.observation.id,
+    observationContentDigestHex: storedCurrentObservation.observation.contentDigest,
+  });
+  assertHistoricalFirstCycleCurrentInformationBindingV2({
+    pitAnchor,
+    normalizedInputDigestHex,
+    normalizedEventTimeUtc: normalizedBoundaryObservation.provenance.eventTimeUtc,
+    normalizedIngestTimeUtc: normalizedBoundaryObservation.provenance.ingestTimeUtc,
+    normalizedLatestBarCloseTime:
+      normalizedBoundaryObservation.payload.latestBarCloseTime,
+    attemptNormalizedInputDigestHex: canonicalAttempt.normalizedInputDigest,
+    attemptEventTimeUtc: canonicalAttempt.eventTimeUtc,
+    attemptAvailableAtUtc: canonicalAttempt.availableAtUtc,
+    attemptIngestTimeUtc: canonicalAttempt.ingestTimeUtc,
+    storedNormalizedInputDigestHex:
+      storedCurrentObservation.observation.normalizedInputDigest,
+    storedEventTimeUtc: storedCurrentObservation.observation.eventTime.toISOString(),
+    storedAvailableAtUtc:
+      storedCurrentObservation.observation.availableAt.toISOString(),
+    storedIngestTimeUtc:
+      storedCurrentObservation.observation.ingestTime.toISOString(),
+    epistemicRecordCutoff: authority.epistemicRecordCutoff,
+    storedSourceId: storedCurrentObservation.observation.sourceId,
+    trustRootSourceId: sealedMarketEvidence.sourceId,
+    currentDataset: {
+      id: dataset.id,
+      authorityContentDigestHex: dataset.authority_content_digest_hex,
+      datasetAuthorityDigestHex: dataset.dataset_authority_digest_hex,
+      membershipContentDigestHex: dataset.membership_content_digest_hex,
+      sealedCycleContentDigestHex: dataset.sealed_cycle_content_digest_hex,
+    },
+    informationAuthority: historicalDatasetTrustAuthority,
+    storedObservationId: storedCurrentObservation.observation.id,
+    storedObservationContentDigestHex:
+      storedCurrentObservation.observation.contentDigest,
   });
   const evidence: InformationEvidenceV2 = Object.freeze({
     evidenceId: deterministicUuid({ runId: authority.runId, cycleId, kind: "price-evidence" }),
     evidenceFamily: "qualified_historical_price",
     providerId: "htx_spot_qualified_dataset",
-    sourceId: sealedMarketEvidence.sourceId,
-    observationId: sealedMarketEvidence.observationId,
+    sourceId: storedCurrentObservation.observation.sourceId,
+    observationId: storedCurrentObservation.observation.id,
     observationKind: "ohlcv_bar",
     observationSchemaVersion: CANONICAL_PIT_OBSERVATION_SCHEMA_VERSION,
-    observationContentDigest: sealedMarketEvidence.observationContentDigestHex,
-    trustAsOfReceiptId: sealedMarketEvidence.trustAsOfReceiptId,
+    observationContentDigest: storedCurrentObservation.observation.contentDigest,
+    trustAsOfReceiptId: currentTrust.receipt.id,
     trustRevisionId: sealedMarketEvidence.trustRevisionId,
     trustRevisionContentDigest: sealedMarketEvidence.trustRevisionContentDigestHex,
     measurementDefinitionId: null,
@@ -674,7 +992,7 @@ async function prepareFirstCycleWithHeldPostgres(
     trustScore: Number(sealedMarketEvidence.trustScore),
     pitQualified: true,
     replayEligible: true,
-    dependenceGroup: `qualified-wf-predictive-boundary:${input.symbol}`,
+    dependenceGroup: `qualified-walk-forward:${input.symbol}`,
     contradictionGroup: null,
     contradiction: "NONE",
     epistemicRole: "PRICE_STATE",
@@ -716,34 +1034,6 @@ async function prepareFirstCycleWithHeldPostgres(
     requiredInformationProfile,
     informationSufficiencyReceipt,
   );
-  const normalizedBoundaryObservation = Object.freeze({
-    schemaVersion: "waia.trader.observation.v1" as const,
-    kind: "ohlcv_bar" as const,
-    interval: "1m" as const,
-    sessionPhase: "UNKNOWN" as const,
-    provenance: Object.freeze({
-      providerId: "htx_spot" as const,
-      venue: "htx",
-      feedKind: "ohlcv_bar",
-      symbol: input.symbol,
-      eventTimeUtc: pitAnchor,
-      ingestTimeUtc: sealedMarketEvidence.observationIngestTime,
-    }),
-    health: "HEALTHY" as const,
-    freshnessMs: 0,
-    latencyMs: Math.max(0,
-      Date.parse(sealedMarketEvidence.observationIngestTime) - Date.parse(pitAnchor)),
-    confidence: Number(sealedMarketEvidence.trustScore),
-    payload: Object.freeze({
-      barCount: 1,
-      latestClose: current.cycle.closedBar.close,
-      latestBarCloseTime: pitAnchor,
-    }),
-  });
-  if (computeStableJsonDigest(normalizedBoundaryObservation) !==
-      sealedMarketEvidence.normalizedInputDigestHex) {
-    refuse("CANONICAL_MARKET_OBSERVATION_REPLAY");
-  }
   let idOrdinal = 0;
   const evaluation = runEvaluationCycle({
     organizationId: authority.organizationId,
@@ -1044,6 +1334,67 @@ export function prepareHistoricalProductionFirstCycleV2(
     }
     });
   });
+}
+
+export type HistoricalProductionFirstCycleExecutionServerResultV2 = Readonly<{
+  bootstrap: HistoricalProductionFirstCycleBootstrapResultV2;
+  ratifiedOperatorUserId: string;
+}>;
+
+/**
+ * Execution-host counterpart to the authenticated Admin action.  It does not
+ * accept an operator identity: the actor is recovered from the already sealed
+ * four-surface ratification and is checked for current organization membership
+ * by the same bootstrap transaction before any first-cycle state is committed.
+ *
+ * The caller supplies only a postgres.js pool and must close it.  This function
+ * owns a dedicated backend and the canonical org/run advisory lock for the
+ * complete idempotent bootstrap.
+ */
+export async function INTERNAL_prepareHistoricalProductionFirstCycleOnExecutionServerV2(
+  pool: postgres.Sql,
+  input: HistoricalProductionFirstCycleBootstrapInputV2,
+): Promise<HistoricalProductionFirstCycleExecutionServerResultV2> {
+  validateInput(input);
+  if (typeof (pool as unknown as { reserve?: unknown }).reserve !== "function") {
+    refuse("DATABASE_POOL_REQUIRED");
+  }
+  const reserved = await pool.reserve();
+  const sql = bindPostgresReservedSession(pool, reserved);
+  const lockKey = historicalDatasetAuthorityRunLockKeyV2({
+    organizationId: input.preflight.organizationId,
+    runId: input.preflight.runId,
+  });
+  let locked = false;
+  let runnerRoleAssumed = false;
+  try {
+    await assumeHistoricalSimulationRunnerRoleV2(sql);
+    runnerRoleAssumed = true;
+    await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
+    locked = true;
+    return await withPostgresSerializableTransactionRetry(sql, async (transaction) => {
+      const authority = await requireRatification(transaction, input);
+      const bootstrap = await prepareFirstCycleWithHeldPostgres(
+        transaction,
+        input,
+        authority.operatorUserId,
+      );
+      return Object.freeze({
+        bootstrap,
+        ratifiedOperatorUserId: authority.operatorUserId,
+      });
+    });
+  } finally {
+    try {
+      if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
+    } finally {
+      try {
+        if (runnerRoleAssumed) await resetHistoricalSimulationRunnerRoleV2(sql);
+      } finally {
+        reserved.release();
+      }
+    }
+  }
 }
 
 /**

@@ -1,0 +1,16 @@
+.git
+.github
+.next
+.open-next
+.ops
+.env
+.env.*
+*.key
+*.pem
+*.log
+node_modules
+sources
+tests
+docs
+replay-runs
+tmp

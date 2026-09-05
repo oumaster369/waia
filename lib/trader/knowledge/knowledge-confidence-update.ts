@@ -278,6 +278,8 @@ export function computeForecastV2EvidenceOnlyKnowledgeUpdate(input: {
       knowledge_content_digest_hex: observation.knowledgeContentDigestHex,
       visible_from_cycle_pit_anchor: input.futureCyclePitAnchor,
       feedback_policy: "EVIDENCE_ONLY_ZERO_DELTA",
+      confidence_value_class:
+        KNOWLEDGE_CONFIDENCE_VALUE_CLASS.machineRecommendedBoundedDelta,
       authority_class: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.authorityClass,
       operator_disposition: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.operatorDisposition,
       capital_authority: WP21_EPISTEMIC_AUTHORITY_DEFAULTS.knowledgeUpdate.capitalAuthority,

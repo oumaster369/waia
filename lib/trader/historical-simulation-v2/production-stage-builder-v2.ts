@@ -13,9 +13,12 @@ import type { DecisionEvaluationReceiptV1, WhyNotCashReceiptV2 } from
 import type { HistoricalSimulationDurableStateSnapshotV2 } from "./atomic-cycle-commit-v2";
 import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { projectHistoricalModeledEffectsToReasonLedgerV2 } from "./modeled-execution-advance-v2";
+import { assertHistoricalModeledRealityV2,
+  type HistoricalModeledPortfolioLifecycleReceiptV2,
+  type HistoricalModeledRealityV2 } from "./historical-modeled-portfolio-reality-v2";
 
 type ModeledStage = "MODELED_RISK" | "MODELED_EXECUTION" | "OBSERVED_EXECUTION_EFFECTS" |
-  "GUARDIAN" | "KNOWLEDGE" | "LEARNING";
+  "HISTORICAL_MODELED_REALITY" | "GUARDIAN" | "KNOWLEDGE" | "LEARNING";
 type ModeledArtifacts = Readonly<Record<ModeledStage,
   readonly [HistoricalSimulationModeledAtomicArtifactV2, ...HistoricalSimulationModeledAtomicArtifactV2[]]>>;
 
@@ -65,6 +68,28 @@ readonly [HistoricalSimulationModeledAtomicArtifactV2, ...HistoricalSimulationMo
   return artifacts as [HistoricalSimulationModeledAtomicArtifactV2, ...HistoricalSimulationModeledAtomicArtifactV2[]];
 }
 
+function decisionLineageForModeledRisk(input: Readonly<{
+  decisionEvidence: Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1;
+    whyNotCashReceipt: WhyNotCashReceiptV2 }> | null;
+  ledgerEntry?: HistoricalSimulationReasonLedgerV2;
+  riskAction: HistoricalModeledRiskReceiptV2["action"];
+  executionSide?: HistoricalModeledExecutionReceiptV2["side"];
+}>): Readonly<Record<string, unknown>> {
+  if (input.decisionEvidence) {
+    return Object.freeze({ decisionReceipt: input.decisionEvidence.decisionReceipt,
+      whyNotCashReceipt: input.decisionEvidence.whyNotCashReceipt });
+  }
+  const ledger = input.ledgerEntry;
+  if (!ledger || ledger.forecast.status !== "NON_ACTIONABLE" || ledger.decision.status !== "CASH" ||
+      (ledger.portfolio.action !== "CLOSE" && ledger.portfolio.action !== "REDUCE") ||
+      ledger.portfolio.action !== input.riskAction ||
+      (input.executionSide !== undefined && input.executionSide !== "sell")) {
+    throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:EXIT_DECISION_LINEAGE");
+  }
+  return Object.freeze({ forecastTerminal: Object.freeze({ forecast: ledger.forecast,
+    decision: ledger.decision, portfolio: ledger.portfolio }) });
+}
+
 /** Exact modeled capital/effect projection; no caller-created digest or evidence sink is accepted. */
 export function buildHistoricalSimulationModeledCapitalArtifactsV2(input: Readonly<{
   scope: AtomicScope;
@@ -72,10 +97,23 @@ export function buildHistoricalSimulationModeledCapitalArtifactsV2(input: Readon
   execution: HistoricalModeledExecutionReceiptV2;
   advance: AdvanceHistoricalModeledExecutionV2Result;
   decisionEvidence: Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1;
-    whyNotCashReceipt: WhyNotCashReceiptV2 }>;
+    whyNotCashReceipt: WhyNotCashReceiptV2 }> | null;
+  ledgerEntry?: HistoricalSimulationReasonLedgerV2;
 }>): Readonly<Pick<ModeledArtifacts, "MODELED_RISK" | "MODELED_EXECUTION" | "OBSERVED_EXECUTION_EFFECTS">> {
-  const decisionLineage = Object.freeze({ decisionReceipt: input.decisionEvidence.decisionReceipt,
-    whyNotCashReceipt: input.decisionEvidence.whyNotCashReceipt });
+  if (input.risk.decisionContentDigestHex !== input.execution.decisionContentDigestHex ||
+      input.risk.riskVerdictId !== input.execution.riskVerdictId ||
+      input.risk.contentDigestHex !== input.execution.riskReceiptContentDigestHex ||
+      (input.risk.action === "ENTER_LONG" ? input.execution.side !== "buy" : input.execution.side !== "sell")) {
+    throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:CAPITAL_LINEAGE_IDENTITY");
+  }
+  if (!input.decisionEvidence && (!input.ledgerEntry ||
+      input.ledgerEntry.risk.verdictContentDigestHex !== input.risk.contentDigestHex ||
+      input.ledgerEntry.execution.planContentDigestHex !== input.execution.executionPlanContentDigestHex ||
+      input.ledgerEntry.execution.attemptContentDigestHex !== input.execution.executionAttemptContentDigestHex)) {
+    throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:EXIT_LEDGER_IDENTITY");
+  }
+  const decisionLineage = decisionLineageForModeledRisk({ decisionEvidence: input.decisionEvidence,
+    ledgerEntry: input.ledgerEntry, riskAction: input.risk.action, executionSide: input.execution.side });
   const riskArtifacts: HistoricalSimulationModeledAtomicArtifactV2[] = [modeled(input.scope,
     "MODELED_RISK_VERDICT", input.risk.riskVerdictId, input.risk.contentDigestHex, input.risk, decisionLineage)];
   if (input.risk.riskAllowanceId && input.risk.riskAllowanceContentDigestHex) {
@@ -155,7 +193,7 @@ export function buildHistoricalSimulationModeledVetoArtifactsV2(input: Readonly<
   scope: AtomicScope; ledgerEntry: HistoricalSimulationReasonLedgerV2;
   risk: HistoricalModeledRiskReceiptV2;
   decisionEvidence: Readonly<{ decisionReceipt: DecisionEvaluationReceiptV1;
-    whyNotCashReceipt: WhyNotCashReceiptV2 }>;
+    whyNotCashReceipt: WhyNotCashReceiptV2 }> | null;
   advance?: AdvanceHistoricalModeledExecutionV2Result;
 }>): Readonly<Pick<ModeledArtifacts, "MODELED_RISK" | "MODELED_EXECUTION" | "OBSERVED_EXECUTION_EFFECTS">> {
   if (input.risk.verdict !== "VETO" || input.risk.riskAllowanceId !== null ||
@@ -163,8 +201,8 @@ export function buildHistoricalSimulationModeledVetoArtifactsV2(input: Readonly<
       input.ledgerEntry.execution.planContentDigestHex !== null) {
     throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:VETO_STAGE_IDENTITY");
   }
-  const lineage = Object.freeze({ decisionReceipt: input.decisionEvidence.decisionReceipt,
-    whyNotCashReceipt: input.decisionEvidence.whyNotCashReceipt });
+  const lineage = decisionLineageForModeledRisk({ decisionEvidence: input.decisionEvidence,
+    ledgerEntry: input.ledgerEntry, riskAction: input.risk.action });
   const executionPayload = input.ledgerEntry.execution;
   const effectsPayload = Object.freeze({ effects: input.ledgerEntry.observedExecutionEffects });
   if (input.advance && canonicalizeSemanticJsonString(projectHistoricalModeledEffectsToReasonLedgerV2(input.advance)) !==
@@ -188,6 +226,29 @@ function requireDomainPayloadDigest(payload: Readonly<Record<string, unknown>>, 
   if (!DIGEST.test(digest) || computed !== digest || (typeof embedded === "string" && embedded !== digest)) {
     throw new Error(`HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:${field}`);
   }
+}
+
+/** Separate modeled-Reality stage. It is sealed to Accounting and cannot satisfy canonical Reality V2. */
+export function buildHistoricalSimulationModeledRealityArtifactsV2(input: Readonly<{
+  scope: AtomicScope;
+  reality: HistoricalModeledRealityV2;
+  portfolioLifecycle: HistoricalModeledPortfolioLifecycleReceiptV2;
+}>): Readonly<Pick<ModeledArtifacts, "HISTORICAL_MODELED_REALITY">> {
+  assertHistoricalModeledRealityV2(input.reality);
+  requireDomainPayloadDigest(input.portfolioLifecycle, input.portfolioLifecycle.contentDigestHex,
+    "PORTFOLIO_LIFECYCLE_PAYLOAD");
+  if (input.reality.organizationId !== input.scope.organizationId ||
+      input.reality.accountId !== input.scope.accountId || input.reality.runId !== input.scope.runId ||
+      input.reality.cycleId !== input.scope.cycleId ||
+      input.reality.portfolioLifecycleContentDigestHex !== input.portfolioLifecycle.contentDigestHex ||
+      input.portfolioLifecycle.accountingFrontierContentDigestHex !==
+        input.reality.accountingFrontierContentDigestHex) {
+    throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:MODELED_REALITY_SCOPE");
+  }
+  const artifact = modeled(input.scope, "HISTORICAL_MODELED_REALITY",
+    `historical-modeled-reality:${input.scope.cycleId}`, input.reality.contentDigestHex,
+    input.reality, Object.freeze({ portfolioLifecycle: input.portfolioLifecycle }));
+  return Object.freeze({ HISTORICAL_MODELED_REALITY: [artifact] });
 }
 
 /** Completes the remaining Guardian/Knowledge/Learning modeled stages from sealed component outputs. */
@@ -224,11 +285,16 @@ export function buildHistoricalSimulationModeledStateArtifactsV2(input: Readonly
   return Object.freeze({ GUARDIAN: [guardian], KNOWLEDGE: [knowledge], LEARNING: learning });
 }
 
-/** Mechanical 9-stage projection only; every modeled payload must already be content-addressed domain evidence. */
+/** Mechanical 10-stage projection only; every modeled payload must already be content-addressed domain evidence. */
 export function buildHistoricalSimulationProductionStageBundlesV2(input: Readonly<{
   ledgerEntry: HistoricalSimulationReasonLedgerV2;
-  forecast: Readonly<{ id: string; contentDigestHex: string }>;
-  canonicalVerification: Readonly<{ id: string; contentDigestHex: string }>;
+  forecast: Readonly<{ id: string; contentDigestHex: string;
+    artifactKind?: "FORECAST_ISSUANCE" | "FORECAST_NON_ACTIONABLE";
+    payload?: Readonly<Record<string, unknown>> }>;
+  canonicalVerification: Readonly<{ id: string; contentDigestHex: string;
+    artifactKind?: "CANONICAL_VERIFICATION_RECEIPT" |
+      "FORECAST_NON_ACTIONABLE_VERIFICATION";
+    payload?: Readonly<Record<string, unknown>> }>;
   accounting: Readonly<{ id: string; contentDigestHex: string }>;
   modeled: ModeledArtifacts;
 }>): HistoricalSimulationAtomicStageBundlesV2 {
@@ -242,10 +308,13 @@ export function buildHistoricalSimulationProductionStageBundlesV2(input: Readonl
   const scope = { organizationId: ledger.organizationId, accountId: ledger.accountId, runId: ledger.runId,
     cycleId: ledger.cycleId, ledgerEntryContentDigestHex: ledger.contentDigestHex };
   const canonical = {
-    FORECAST_LIFECYCLE: [{ artifactKind: "FORECAST_ISSUANCE" as const,
-      artifactId: input.forecast.id, contentDigestHex: input.forecast.contentDigestHex }],
-    CANONICAL_VERIFICATION: [{ artifactKind: "CANONICAL_VERIFICATION_RECEIPT" as const,
-      artifactId: input.canonicalVerification.id, contentDigestHex: input.canonicalVerification.contentDigestHex }],
+    FORECAST_LIFECYCLE: [{ artifactKind: input.forecast.artifactKind ?? "FORECAST_ISSUANCE",
+      artifactId: input.forecast.id, contentDigestHex: input.forecast.contentDigestHex,
+      ...(input.forecast.payload ? { payload: input.forecast.payload } : {}) }],
+    CANONICAL_VERIFICATION: [{ artifactKind: input.canonicalVerification.artifactKind ??
+      "CANONICAL_VERIFICATION_RECEIPT", artifactId: input.canonicalVerification.id,
+      contentDigestHex: input.canonicalVerification.contentDigestHex,
+      ...(input.canonicalVerification.payload ? { payload: input.canonicalVerification.payload } : {}) }],
     ACCOUNTING: [{ artifactKind: "ACCOUNTING_FRONTIER" as const,
       artifactId: input.accounting.id, contentDigestHex: input.accounting.contentDigestHex }],
   };

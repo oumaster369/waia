@@ -110,6 +110,14 @@ describe("trader wp21 same-run no-feedback proof", () => {
     };
     const first = computeForecastV2EvidenceOnlyKnowledgeUpdate(input);
     expect(computeForecastV2EvidenceOnlyKnowledgeUpdate(input)).toEqual(first);
+    expect(JSON.parse(first.sourceRecordIdsJson)).toMatchObject({
+      confidence_value_class: "MACHINE_RECOMMENDED_BOUNDED_DELTA",
+      authority_class: "EVIDENCE_ONLY",
+      capital_authority: "NONE",
+      strategy_authority: "NONE",
+      trade_eligibility_authority: "NONE",
+      guardian_authority: "NONE",
+    });
     expect(first.machineRecommendedDelta).toBe("0.0000");
     expect(first.machineRecommendedConfidence).toBe(first.priorMachineRecommendedConfidence);
     expect(first.capitalAuthority).toBe("NONE");

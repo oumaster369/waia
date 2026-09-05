@@ -7,6 +7,10 @@ const migration = readFileSync(join(
   process.cwd(),
   "db/migrations_postgres/0195_historical_information_sufficiency_authority_v2.sql",
 ), "utf8");
+const dynamicMigration = readFileSync(join(
+  process.cwd(),
+  "db/migrations_postgres/0196_historical_dynamic_cycle_information_authority_v2.sql",
+), "utf8");
 
 describe("DEE-919 historical InformationSufficiency PostgreSQL guard", () => {
   it("keeps legacy evidence exact while requiring the historical discriminator for WFP", () => {
@@ -31,6 +35,18 @@ describe("DEE-919 historical InformationSufficiency PostgreSQL guard", () => {
     );
     expect(migration).toContain(
       "(authority ->> 'canonicalRecordIngestTime')::timestamptz <=\n      (authority ->> 'epistemicRecordCutoff')::timestamptz",
+    );
+  });
+
+  it("admits only current-cycle evidence at or after the immutable predictive boundary", () => {
+    expect(dynamicMigration).toContain(
+      "(authority ->> 'wfPredictiveEndUtc')::timestamptz <=\n      (authority ->> 'publicAvailableAt')::timestamptz",
+    );
+    expect(dynamicMigration).toContain(
+      "(authority ->> 'publicAvailableAt')::timestamptz <= receipt_pit_anchor::timestamptz",
+    );
+    expect(dynamicMigration).not.toContain(
+      "authority ->> 'publicAvailableAt' = authority ->> 'wfPredictiveEndUtc'",
     );
   });
 });

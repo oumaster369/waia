@@ -69,6 +69,7 @@ export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
   ],
   EVALUATION_CYCLE: [
     "lib/trader/historical-simulation-v2/production-first-cycle-bootstrap-v2.ts",
+    "lib/trader/historical-simulation-v2/production-next-cycle-forecast-v2.ts",
     "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
     "lib/trader/intelligence/index.ts",
     "lib/trader/intelligence/records/wp13-intelligence-evidence-harness.ts",

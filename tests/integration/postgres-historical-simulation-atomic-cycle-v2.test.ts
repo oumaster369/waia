@@ -36,7 +36,7 @@ function fixture(runId: string) {
     forecast: { status: "NON_ACTIONABLE", reasonCodes: ["NO_EDGE"], authorityContentDigestHex: null },
     decision: { status: "CASH", reasonCodes: ["NO_EDGE"], decisionContentDigestHex: D,
       whyNotCashReceiptDigestHex: D, evLower: null, evBase: null, evUpper: null },
-    portfolio: { status: "NO_PROPOSAL", reasonCodes: ["CASH"], proposalContentDigestHex: D },
+    portfolio: { status: "NO_PROPOSAL", action: "CASH", reasonCodes: ["CASH"], proposalContentDigestHex: D },
     risk: { status: "NOT_EVALUATED", reasonCodes: ["CASH"], verdictContentDigestHex: null,
       allowanceContentDigestHex: null },
     execution: { status: "NOT_DISPATCHED", reasonCodes: ["CASH"], planContentDigestHex: null,
@@ -47,7 +47,8 @@ function fixture(runId: string) {
       knowledgeUpdateContentDigestHex: null, eligibleResolutionAtUtc: null, visibleFromPitAnchorUtc: null } });
   const artifactKind = { FORECAST_LIFECYCLE: "FORECAST_ISSUANCE", CANONICAL_VERIFICATION: "CANONICAL_VERIFICATION_RECEIPT",
     MODELED_RISK: "MODELED_RISK_VERDICT", MODELED_EXECUTION: "MODELED_EXECUTION_SUBMISSION",
-    OBSERVED_EXECUTION_EFFECTS: "MODELED_EXECUTION_EFFECT", ACCOUNTING: "ACCOUNTING_FRONTIER",
+    OBSERVED_EXECUTION_EFFECTS: "MODELED_EXECUTION_EFFECT",
+    HISTORICAL_MODELED_REALITY: "HISTORICAL_MODELED_REALITY", ACCOUNTING: "ACCOUNTING_FRONTIER",
     GUARDIAN: "GUARDIAN_ASSESSMENT", KNOWLEDGE: "KNOWLEDGE_CHECKPOINT", LEARNING: "LEARNING_UPDATE" } as const;
   const bundles: HistoricalSimulationAtomicStageBundlesV2 = Object.fromEntries(
     HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.map((stage) => [stage,

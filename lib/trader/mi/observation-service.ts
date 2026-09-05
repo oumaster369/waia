@@ -215,7 +215,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           observation.id,
@@ -295,7 +295,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           observation.id,

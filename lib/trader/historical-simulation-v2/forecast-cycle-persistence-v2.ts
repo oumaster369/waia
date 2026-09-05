@@ -34,8 +34,11 @@ export async function persistHistoricalForecastCycleV2(sql: postgres.Sql, input:
   }
   const issued = issueForecastRuntimeV2(input.runtimeInput);
   if (issued.status !== "FORECAST_AUTHORIZED") {
+    const upstream = issued.upstreamReasonCodes.length > 0
+      ? `:${issued.upstreamReasonCodes.join(",")}`
+      : "";
     throw new Error(
-      `HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:${issued.reason}`,
+      `HISTORICAL_FORECAST_CYCLE_PERSISTENCE_REFUSED:${issued.reason}${upstream}`,
     );
   }
   const outcome = requireForecastRuntimeAuthorizedOutcomeV2(issued);

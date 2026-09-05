@@ -28,7 +28,8 @@ export type HistoricalSimulationReasonLedgerV2 = Readonly<{
   previousContentDigestHex: string | null;
   forecast: EvidenceStageV2<"AUTHORIZED" | "NON_ACTIONABLE"> &
     Readonly<{ authorityContentDigestHex: string | null }>;
-  decision: EvidenceStageV2<"ENTER_LONG" | "CASH" | "REDUCE" | "CLOSE"> &
+  /** Raw DEE-660 decision, before any position-aware Portfolio override. */
+  decision: EvidenceStageV2<"ENTER_LONG" | "CASH"> &
     Readonly<{
       decisionContentDigestHex: string;
       whyNotCashReceiptDigestHex: string;
@@ -37,7 +38,10 @@ export type HistoricalSimulationReasonLedgerV2 = Readonly<{
       evUpper: string | null;
     }>;
   portfolio: EvidenceStageV2<"PROPOSED" | "NO_PROPOSAL"> &
-    Readonly<{ proposalContentDigestHex: string }>;
+    Readonly<{
+      action: "ENTER_LONG" | "CASH" | "REDUCE" | "CLOSE";
+      proposalContentDigestHex: string;
+    }>;
   risk: EvidenceStageV2<"APPROVE" | "RESIZE" | "VETO" | "NOT_EVALUATED"> &
     Readonly<{
       verdictContentDigestHex: string | null;
@@ -162,6 +166,9 @@ function assertComplete(input: HistoricalSimulationReasonLedgerV2Draft): void {
   requireReasons("decision", input.decision.status, input.decision.reasonCodes, input.decision.status !== "CASH");
 
   requireDigest(input.portfolio.proposalContentDigestHex, "portfolio.proposalContentDigestHex");
+  if ((input.portfolio.status === "NO_PROPOSAL") !== (input.portfolio.action === "CASH")) {
+    throw new Error("portfolio status/action mismatch");
+  }
   requireReasons("portfolio", input.portfolio.status, input.portfolio.reasonCodes, input.portfolio.status === "PROPOSED");
 
   requireDigest(input.risk.verdictContentDigestHex, "risk.verdictContentDigestHex", true);
@@ -235,8 +242,11 @@ function assertComplete(input: HistoricalSimulationReasonLedgerV2Draft): void {
         !input.learning.knowledgeUpdateContentDigestHex || eligibleEpoch === null || visibleEpoch === null) {
       throw new Error("APPLIED learning requires calibration, update and PIT timing evidence");
     }
-    if (eligibleEpoch > visibleEpoch || visibleEpoch <= replayEpoch) {
-      throw new Error("learning must become visible only from a strictly future PIT anchor");
+    // APPLIED describes prior Forecast evidence consumed by this cycle. Its
+    // resolution must precede the visibility PIT, and that visibility PIT may
+    // be this replay bar (or an earlier one after a safe resume), never future.
+    if (eligibleEpoch >= visibleEpoch || visibleEpoch > replayEpoch) {
+      throw new Error("applied learning must be resolved before a non-future PIT anchor");
     }
   }
   requireReasons("learning", input.learning.status, input.learning.reasonCodes,

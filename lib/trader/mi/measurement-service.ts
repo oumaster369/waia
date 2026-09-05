@@ -162,7 +162,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           measurement.id,
@@ -232,7 +232,7 @@ function createService(
         createdAt: now,
       });
 
-      writeAudit(
+      await writeAudit(
         buildAuditInput(
           scoped,
           measurement.id,

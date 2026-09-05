@@ -209,7 +209,7 @@ function createService(
             createdAt: now,
           });
 
-          writeAudit(
+          await writeAudit(
             buildAuditInput(
               scoped,
               trial.id,

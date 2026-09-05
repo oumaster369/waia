@@ -6,8 +6,8 @@ import {
 } from "@/lib/trader/intelligence/knowledge-state/knowledge-state-checkpoint-v2";
 import {
   buildKnowledgeCheckpointRecord,
-  restoreKnowledgeCheckpointV2,
-  writeKnowledgeCheckpointV2,
+  restoreHistoricalKnowledgeCheckpointV2,
+  writeHistoricalKnowledgeCheckpointV2,
   type RestoredKnowledgeCheckpointV2,
 } from "@/lib/trader/intelligence/knowledge-state/knowledge-state-checkpoint-service-v2";
 import {
@@ -20,13 +20,13 @@ import type {
   HistoricalKnowledgeSnapshotV2,
   HistoricalMaturedClosureV2,
 } from "@/lib/trader/backtest/historical-simulation-v2";
-import { computeHistoricalForecastPitKnowledgeDigestV2,
+import {
+  computeHistoricalForecastPitKnowledgeDigestV2,
   requireHistoricalForecastPitKnowledgeRowV2,
-  type HistoricalForecastPitKnowledgeRowV2 } from "./knowledge-snapshot-binding-v2";
-export { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from
-  "./knowledge-snapshot-binding-v2";
-import { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from
-  "./knowledge-snapshot-binding-v2";
+  type HistoricalForecastPitKnowledgeRowV2,
+} from "./knowledge-snapshot-binding-v2";
+export { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from "./knowledge-snapshot-binding-v2";
+import { HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2 } from "./knowledge-snapshot-binding-v2";
 
 type KnowledgeRowV2 = HistoricalForecastPitKnowledgeRowV2;
 
@@ -78,71 +78,101 @@ function snapshotDigest(input: {
   rows: readonly KnowledgeRowV2[];
 }): string {
   return computeHistoricalForecastPitKnowledgeDigestV2(
-    input.organizationId, input.runId, input.symbol, input.asOf, input.rows,
+    input.organizationId,
+    input.runId,
+    input.symbol,
+    input.asOf,
+    input.rows,
   );
 }
 
 export type HistoricalSimulationKnowledgeCheckpointStoreV2 = Readonly<{
-  write(input: KnowledgeCheckpointInput): Promise<void>;
-  restore(input: { organizationId: string; checkpointSeq: number }): Promise<RestoredKnowledgeCheckpointV2>;
+  write(input: KnowledgeCheckpointInput, checkpointNamespace: string): Promise<void>;
+  restore(
+    input: { organizationId: string; checkpointSeq: number },
+    checkpointNamespace: string,
+  ): Promise<RestoredKnowledgeCheckpointV2>;
 }>;
 
 function createPostgresCheckpointStore(
   sql: postgres.Sql,
 ): HistoricalSimulationKnowledgeCheckpointStoreV2 {
   return {
-    async write(input) {
-      await writeKnowledgeCheckpointV2(sql, buildKnowledgeCheckpointRecord(input));
+    async write(input, checkpointNamespace) {
+      await writeHistoricalKnowledgeCheckpointV2(
+        sql,
+        buildKnowledgeCheckpointRecord(input),
+        checkpointNamespace,
+      );
     },
-    restore(input) {
-      return restoreKnowledgeCheckpointV2(sql, input);
+    restore(input, checkpointNamespace) {
+      return restoreHistoricalKnowledgeCheckpointV2(sql, {
+        ...input,
+        checkpointNamespace,
+      });
     },
   };
 }
 
-function checkpointModelVersion(input: { runId: string; modelVersion: string }): string {
-  if (!input.runId.trim() || !input.modelVersion.trim()) {
+function checkpointModelVersion(input: {
+  runId: string;
+  symbol: string;
+  modelVersion: string;
+}): string {
+  if (!input.runId.trim() || !input.symbol.trim() || !input.modelVersion.trim()) {
     throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_INVALID:checkpointIdentity");
   }
-  return `${HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2}|${input.runId}|${input.modelVersion}`;
+  return `${HISTORICAL_SIMULATION_KNOWLEDGE_BINDING_V2}|${input.runId}|${input.symbol}|${input.modelVersion}`;
 }
 
 export type HistoricalSimulationPostgresKnowledgePortV2 = HistoricalKnowledgePortV2 &
   Readonly<{
     processForecastCycle: ReturnType<typeof createForecastV2DurableProducerV1>["processCycle"];
-    checkpoint(input: Readonly<{
-      runId: string;
-      checkpointSeq: number;
-      pitAnchor: string;
-      modelVersion: string;
-      forecastPackageGenerationDigest?: string;
-    }>): Promise<Readonly<{ snapshot: HistoricalKnowledgeSnapshotV2; checkpointContentDigest: string }>>;
-    restoreCheckpoint(input: Readonly<{
-      runId: string;
-      checkpointSeq: number;
-      pitAnchor: string;
-      modelVersion: string;
-    }>): Promise<Readonly<{ snapshot: HistoricalKnowledgeSnapshotV2; checkpointContentDigest: string }>>;
+    checkpoint(
+      input: Readonly<{
+        runId: string;
+        checkpointSeq: number;
+        pitAnchor: string;
+        modelVersion: string;
+        forecastPackageGenerationDigest?: string;
+      }>,
+    ): Promise<
+      Readonly<{ snapshot: HistoricalKnowledgeSnapshotV2; checkpointContentDigest: string }>
+    >;
+    restoreCheckpoint(
+      input: Readonly<{
+        runId: string;
+        checkpointSeq: number;
+        pitAnchor: string;
+        modelVersion: string;
+      }>,
+    ): Promise<
+      Readonly<{ snapshot: HistoricalKnowledgeSnapshotV2; checkpointContentDigest: string }>
+    >;
   }>;
 
-function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readonly<{
-  sql: postgres.Sql;
-  organizationId: string;
-  runId: string;
-  symbol: string;
-  forecastProducer?: Omit<ForecastV2DurableProducerConfigV1, "sql">;
-  appliedClosureWatermarkUtc?: string | null;
-  checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
-}>): HistoricalSimulationPostgresKnowledgePortV2 {
+function createHistoricalSimulationPostgresKnowledgePortInternalV2(
+  input: Readonly<{
+    sql: postgres.Sql;
+    organizationId: string;
+    runId: string;
+    symbol: string;
+    forecastProducer?: Omit<ForecastV2DurableProducerConfigV1, "sql">;
+    appliedClosureWatermarkUtc?: string | null;
+    checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
+  }>,
+): HistoricalSimulationPostgresKnowledgePortV2 {
   if (!input.organizationId.trim() || !input.runId.trim() || !input.symbol.trim()) {
     throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_INVALID:scope");
   }
   const producer = input.forecastProducer
-    ? createForecastV2DurableProducerV1({ ...input.forecastProducer, sql: input.sql }) : null;
+    ? createForecastV2DurableProducerV1({ ...input.forecastProducer, sql: input.sql })
+    : null;
   const checkpointStore = input.checkpointStore ?? createPostgresCheckpointStore(input.sql);
-  let appliedClosureWatermarkEpoch = input.appliedClosureWatermarkUtc === undefined ||
-    input.appliedClosureWatermarkUtc === null ? Number.NEGATIVE_INFINITY :
-    canonicalUtc(input.appliedClosureWatermarkUtc, "appliedClosureWatermarkUtc");
+  let appliedClosureWatermarkEpoch =
+    input.appliedClosureWatermarkUtc === undefined || input.appliedClosureWatermarkUtc === null
+      ? Number.NEGATIVE_INFINITY
+      : canonicalUtc(input.appliedClosureWatermarkUtc, "appliedClosureWatermarkUtc");
 
   const rowsVisibleAsOf = async (asOf: string): Promise<readonly KnowledgeRowV2[]> => {
     canonicalUtc(asOf, "asOf");
@@ -154,7 +184,7 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
       FROM trader_knowledge_confidence_update_record
       WHERE organization_id = ${input.organizationId}::uuid
         AND run_id = ${input.runId}
-        AND symbol = ${input.symbol}
+        AND replace(symbol, '/', '') = replace(${input.symbol}, '/', '')
         AND update_model_version =
           'waia.trader.knowledge_confidence_update_model.v1.forecast-v2-evidence-only'
         AND (source_record_ids_json::jsonb ->> 'visible_from_cycle_pit_anchor')::timestamptz
@@ -168,9 +198,12 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
     const rows = await rowsVisibleAsOf(asOf);
     for (const row of rows) {
       const evidence = parseFutureEvidence(row);
-      if (canonicalUtc(evidence.visibleFromPitAnchor, "visibleFromPitAnchor") > Date.parse(asOf) ||
-          Date.parse(postgresTimestampIso(row.resolved_at, "resolvedAt")) > Date.parse(asOf) ||
-          Date.parse(postgresTimestampIso(row.pit_evidence_boundary, "pitEvidenceBoundary")) > Date.parse(asOf)) {
+      if (
+        canonicalUtc(evidence.visibleFromPitAnchor, "visibleFromPitAnchor") > Date.parse(asOf) ||
+        Date.parse(postgresTimestampIso(row.resolved_at, "resolvedAt")) > Date.parse(asOf) ||
+        Date.parse(postgresTimestampIso(row.pit_evidence_boundary, "pitEvidenceBoundary")) >
+          Date.parse(asOf)
+      ) {
         throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_PIT_LEAKAGE");
       }
     }
@@ -199,11 +232,13 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
         if (maturedAt >= boundary) return [];
         const visibleEpoch = canonicalUtc(evidence.visibleFromPitAnchor, "visibleFromPitAnchor");
         if (visibleEpoch <= appliedClosureWatermarkEpoch || visibleEpoch > boundary) return [];
-        return [{
-          forecastAuthorityContentDigestHex: evidence.forecastAuthorityContentDigestHex,
-          maturedAt: resolvedAt,
-          outcomeContentDigestHex: evidence.outcomeContentDigestHex,
-        }];
+        return [
+          {
+            forecastAuthorityContentDigestHex: evidence.forecastAuthorityContentDigestHex,
+            maturedAt: resolvedAt,
+            outcomeContentDigestHex: evidence.outcomeContentDigestHex,
+          },
+        ];
       }),
     );
   };
@@ -214,8 +249,11 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
   }) => {
     const expected = await closeMaturedForecasts(strictlyBefore);
     const identity = (values: readonly HistoricalMaturedClosureV2[]) =>
-      computeSemanticSha256Hex([...values].sort((a, b) =>
-        a.outcomeContentDigestHex.localeCompare(b.outcomeContentDigestHex)));
+      computeSemanticSha256Hex(
+        [...values].sort((a, b) =>
+          a.outcomeContentDigestHex.localeCompare(b.outcomeContentDigestHex),
+        ),
+      );
     if (identity(expected) !== identity(closures)) {
       throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CLOSURE_MISMATCH");
     }
@@ -227,9 +265,11 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
     snapshotAsOf,
     closeMaturedForecasts,
     applyMaturedClosures,
-    processForecastCycle: producer?.processCycle ?? (async () => {
-      throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_REFUSED:READ_ONLY_FORECAST_ISSUANCE");
-    }),
+    processForecastCycle:
+      producer?.processCycle ??
+      (async () => {
+        throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_REFUSED:READ_ONLY_FORECAST_ISSUANCE");
+      }),
     async checkpoint(checkpointInput) {
       if (checkpointInput.runId !== input.runId) {
         throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CHECKPOINT_RUN_MISMATCH");
@@ -238,13 +278,13 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
       const knowledgeInput: KnowledgeCheckpointInput = {
         organizationId: input.organizationId,
         checkpointSeq: checkpointInput.checkpointSeq,
-        modelVersion: checkpointModelVersion(checkpointInput),
+        modelVersion: checkpointModelVersion({ ...checkpointInput, symbol: input.symbol }),
         calibrationSnapshotDigest: snapshot.contentDigestHex,
         rejectedResearchStates: [],
         promotedResearchStates: [snapshot.contentDigestHex],
         forecastPackageGenerationDigest: checkpointInput.forecastPackageGenerationDigest,
       };
-      await checkpointStore.write(knowledgeInput);
+      await checkpointStore.write(knowledgeInput, knowledgeInput.modelVersion);
       const checkpointContentDigest = computeKnowledgeCheckpointContentDigest(knowledgeInput);
       return Object.freeze({ snapshot, checkpointContentDigest });
     },
@@ -252,11 +292,17 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
       if (restoreInput.runId !== input.runId) {
         throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_CHECKPOINT_RUN_MISMATCH");
       }
-      const restored = await checkpointStore.restore({
-        organizationId: input.organizationId,
-        checkpointSeq: restoreInput.checkpointSeq,
+      const restored = await checkpointStore.restore(
+        {
+          organizationId: input.organizationId,
+          checkpointSeq: restoreInput.checkpointSeq,
+        },
+        checkpointModelVersion({ ...restoreInput, symbol: input.symbol }),
+      );
+      const expectedModelVersion = checkpointModelVersion({
+        ...restoreInput,
+        symbol: input.symbol,
       });
-      const expectedModelVersion = checkpointModelVersion(restoreInput);
       if (restored.input.modelVersion !== expectedModelVersion) {
         throw new Error("HISTORICAL_SIMULATION_KNOWLEDGE_RESUME_IDENTITY_MISMATCH");
       }
@@ -276,20 +322,30 @@ function createHistoricalSimulationPostgresKnowledgePortInternalV2(input: Readon
   });
 }
 
-export function createHistoricalSimulationPostgresKnowledgePortV2(input: Readonly<{
-  sql: postgres.Sql; organizationId: string; runId: string; symbol: string;
-  forecastProducer: Omit<ForecastV2DurableProducerConfigV1, "sql">;
-  checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
-}>): HistoricalSimulationPostgresKnowledgePortV2 {
+export function createHistoricalSimulationPostgresKnowledgePortV2(
+  input: Readonly<{
+    sql: postgres.Sql;
+    organizationId: string;
+    runId: string;
+    symbol: string;
+    forecastProducer: Omit<ForecastV2DurableProducerConfigV1, "sql">;
+    checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
+  }>,
+): HistoricalSimulationPostgresKnowledgePortV2 {
   return createHistoricalSimulationPostgresKnowledgePortInternalV2(input);
 }
 
 /** Exact PIT read/closure/checkpoint port for replay of Forecast rows already persisted by 0189. */
-export function createHistoricalSimulationPostgresKnowledgeReadPortV2(input: Readonly<{
-  sql: postgres.Sql; organizationId: string; runId: string; symbol: string;
-  checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
-  appliedClosureWatermarkUtc?: string | null;
-}>): Omit<HistoricalSimulationPostgresKnowledgePortV2, "processForecastCycle"> {
+export function createHistoricalSimulationPostgresKnowledgeReadPortV2(
+  input: Readonly<{
+    sql: postgres.Sql;
+    organizationId: string;
+    runId: string;
+    symbol: string;
+    checkpointStore?: HistoricalSimulationKnowledgeCheckpointStoreV2;
+    appliedClosureWatermarkUtc?: string | null;
+  }>,
+): Omit<HistoricalSimulationPostgresKnowledgePortV2, "processForecastCycle"> {
   const { processForecastCycle: _forbidden, ...readPort } =
     createHistoricalSimulationPostgresKnowledgePortInternalV2(input);
   return Object.freeze(readPort);

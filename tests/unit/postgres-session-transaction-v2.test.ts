@@ -73,6 +73,8 @@ describe("postgres session transaction V2", () => {
     expect(bound.options.serializers).not.toBe(pool.options.serializers);
     expect(pool.options.parsers[1184]).toBeUndefined();
     expect(pool.options.serializers[1184]).toBeUndefined();
+    expect(pool.options.serializers[114]?.('{"ok":true}' as never)).toBe('{"ok":true}');
+    expect(pool.options.serializers[3802]?.('{"ok":true}' as never)).toBe('{"ok":true}');
     expect(pool.notify).not.toHaveBeenCalled();
   });
 
@@ -96,7 +98,7 @@ describe("postgres session transaction V2", () => {
     expect(pool.options.parsers[1184]).toBeUndefined();
   });
 
-  it("binds Drizzle-serialized JSON for target-type-aware reserved serialization", () => {
+  it("does not reinterpret JSON-looking text in Drizzle unsafe parameters", () => {
     const pool = Object.assign(vi.fn(), {
       options: { parsers: {}, serializers: {} },
     }) as unknown as postgres.Sql;
@@ -114,18 +116,11 @@ describe("postgres session transaction V2", () => {
       "plain-text",
       "1",
     ])).toBe("reserved-unsafe-query");
-    expect(typed).toHaveBeenCalledTimes(2);
-    expect(typed.mock.calls.map((call) => call[1])).toEqual([0, 0]);
-    const objectWrapper = typed.mock.calls[0]![0];
-    const scalarWrapper = typed.mock.calls[1]![0];
-    expect(JSON.stringify(objectWrapper)).toBe('{"nested":[1,2]}');
-    expect(String(objectWrapper)).toBe('{"nested":[1,2]}');
-    expect(JSON.stringify(scalarWrapper)).toBe("1");
-    expect(String(scalarWrapper)).toBe("1");
+    expect(typed).not.toHaveBeenCalled();
     expect(unsafe).toHaveBeenCalledWith("SELECT $1, $2, $3", [
-      expect.any(Object),
+      JSON.stringify({ nested: [1, 2] }),
       "plain-text",
-      expect.any(Object),
+      "1",
     ]);
   });
 
@@ -150,6 +145,42 @@ describe("postgres session transaction V2", () => {
     expect(bound.unsafe("SELECT $1", [serialized])).toBe("reserved-unsafe-query");
     expect(unsafe).toHaveBeenCalledWith("SELECT $1", [serialized]);
     expect(typed).not.toHaveBeenCalled();
+  });
+
+  it("adapts raw JSON binds when Drizzle makes the source codec transparent later", () => {
+    const nativeJson = (value: never) => JSON.stringify(value);
+    const transparent = (value: never) => value;
+    const serializers: Record<number, (value: never) => unknown> = {
+      114: nativeJson,
+      3802: nativeJson,
+    };
+    const pool = Object.assign(vi.fn(), {
+      options: { parsers: {}, serializers },
+    }) as unknown as postgres.Sql;
+    const typed = vi.fn((value: unknown, type: number) => ({ value, type }));
+    const reserved = Object.assign(vi.fn(), {
+      typed,
+      unsafe: vi.fn(),
+      release: vi.fn(),
+    }) as unknown as postgres.ReservedSql;
+    const bound = bindPostgresReservedSession(pool, reserved);
+    const payload = { nested: [1, 2] };
+
+    const nativeBound = bound.json(payload as never) as unknown as {
+      value: unknown;
+      type: number;
+    };
+    expect(nativeBound.type).toBe(3802);
+    expect(nativeBound.value).toBe(JSON.stringify(payload));
+    serializers[114] = transparent;
+    serializers[3802] = transparent;
+    const transparentBound = bound.json(payload as never) as unknown as {
+      value: unknown;
+      type: number;
+    };
+    expect(transparentBound.type).toBe(3802);
+    expect(transparentBound.value).toBe(JSON.stringify(payload));
+    expect(typed).toHaveBeenCalledTimes(2);
   });
 
   it("uses postgres.js native begin on a normal pool handle", async () => {

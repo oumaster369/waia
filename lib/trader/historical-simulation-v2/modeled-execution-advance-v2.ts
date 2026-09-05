@@ -159,6 +159,28 @@ function bodyOfMarketCycle(input: Omit<HistoricalSealedMarketCycleV2, "contentDi
   };
 }
 
+function marksForClosedHistoricalBar(
+  accounting: AccountingFrontierV1,
+  bar: Bar,
+  openingPositionSymbol?: string,
+): AccountingFrontierV1["marks"] {
+  const mark = { price: bar.close, barCloseTime: bar.barCloseTime };
+  const marks = { ...accounting.marks, [bar.symbol]: mark };
+  // A first fill can create the canonical execution position (for example
+  // BTCUSDT) from a market-data bar using the slash form (BTC/USDT).  The
+  // pre-fill frontier does not contain that position yet, so bind its exact
+  // execution symbol before accounting attaches marks to the new position.
+  if (openingPositionSymbol && historicalInstrumentsMatch(openingPositionSymbol, bar.symbol)) {
+    marks[openingPositionSymbol] = mark;
+  }
+  for (const positionSymbol of Object.keys(accounting.positions)) {
+    if (historicalInstrumentsMatch(positionSymbol, bar.symbol)) {
+      marks[positionSymbol] = mark;
+    }
+  }
+  return marks;
+}
+
 export function sealHistoricalMarketCycleV2(
   input: Omit<HistoricalSealedMarketCycleV2, "schemaVersion" | "contentDigestHex">,
 ): HistoricalSealedMarketCycleV2 {
@@ -226,7 +248,7 @@ export function createAdvanceHistoricalModeledExecutionV2(
             economics,
             executedAt: event.fillTimestamp.toISOString(),
           },
-          marks: { [event.symbol]: { price: event.sourceBar.close, barCloseTime: event.sourceBar.barCloseTime } },
+          marks: marksForClosedHistoricalBar(accounting, event.sourceBar, order.symbol),
           frontierAsOf: event.fillTimestamp.toISOString(),
           // PostgreSQL accounting frontiers use UUID primary keys.  The generic
           // accounting engine's human-readable fallback is useful in memory but
@@ -294,6 +316,26 @@ export function createAdvanceHistoricalModeledExecutionV2(
       refreshAccountState: input.refreshAccountState,
       reconcileOrder: input.reconcileOrder,
     });
+    // Fill frontiers capture execution economics, but capital, Guardian and Reality must observe
+    // the current closed-bar mark even when no order fills. Persist one deterministic terminal
+    // mark frontier per cycle after all fills so the next Forecast/Risk sees exact current equity.
+    accounting = advanceAccountingFrontier({
+      state: accounting,
+      marks: marksForClosedHistoricalBar(accounting, market.closedBar),
+      frontierAsOf: market.closedBar.barCloseTime,
+      frontierId: deterministicExecutionUuidV2("report", {
+        kind: "historical-modeled-accounting-closed-bar-mark",
+        organizationId: input.context.organizationId,
+        accountKey: input.accountKey,
+        runId: input.runId,
+        cycleId,
+        barIndex: market.barIndex,
+        sealedMarketCycleContentDigestHex: market.contentDigestHex,
+      }),
+      idempotencyKey:
+        `historical-v2:${input.runId}:${input.accountKey}:${cycleId}:closed-bar-mark`,
+    });
+    accounting = await input.accountingRepository.append(input.context, accounting);
     if (!DIGEST.test(accounting.semanticContentDigest)) {
       throw new Error("HISTORICAL_MODELED_ACCOUNTING_FRONTIER_UNSEALED");
     }
@@ -365,7 +407,7 @@ export function createAdvanceHistoricalModeledExecutionV2(
       fillDetails: Object.freeze(fillDetails),
       accountingFrontierContentDigestHex: accounting.semanticContentDigest,
       accountingFrontier: accounting,
-      accountingAdvanced: fillEvidence.length > 0,
+      accountingAdvanced: true,
       effects: Object.freeze(effects),
     });
   };
