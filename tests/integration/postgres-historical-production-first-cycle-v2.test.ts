@@ -124,6 +124,11 @@ const WF_ECONOMIC_BAR_COUNT = 200;
 const WF_BAR_COUNT = WF_PREDICTIVE_BAR_COUNT + WF_ECONOMIC_BAR_COUNT;
 const INITIAL_DEVELOPMENT_RECORD_INDEX = 239;
 const INITIAL_RECORD_INDEX = WF_PREDICTIVE_BAR_COUNT;
+// Separate opt-in continuation proof. The extent is ratified before any cycle;
+// existing 35-cycle coverage and its assertions remain unchanged by default.
+const PROVE_KNOWLEDGE_CONTINUATION =
+  process.env.WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF === "1";
+const APPROVED_CYCLE_COUNT = PROVE_KNOWLEDGE_CONTINUATION ? 80 : 35;
 const QUALIFIED_AT = "2026-08-01T00:00:00.000Z";
 const SYMBOLS = ["BTCUSDT", "ETHUSDT"] as const;
 
@@ -615,7 +620,7 @@ describe.skipIf(!enabled || !url || !disposable)(
         startingCashUsdt: "100000",
         defaultQuantity: "0.01",
         initialRecordIndex: WF_PREDICTIVE_BAR_COUNT,
-        cycleCount: 35,
+        cycleCount: APPROVED_CYCLE_COUNT,
       });
       await createHistoricalRatificationRequestV2(pool, {
         organizationId,
@@ -835,7 +840,7 @@ describe.skipIf(!enabled || !url || !disposable)(
         cycleCount: 2,
       })).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_GAP");
       await expect(registration({
-        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT + 35,
+        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT + APPROVED_CYCLE_COUNT,
         cycleCount: 1,
       })).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_OUTSIDE_APPROVAL");
       const mismatchedVolume = qualifyHtxKlineVolumeAuthority({
@@ -1067,6 +1072,18 @@ describe.skipIf(!enabled || !url || !disposable)(
           Array<Readonly<{ current_user: string }>>
         >`SELECT current_user`;
         expect(identity[0]?.current_user).toBe(HISTORICAL_RUNNER_ROLE);
+        const knowledgeNamespace = `waia.trader.historical_prerun_knowledge_bootstrap.v2:${runId}`;
+        const namespaceChecks = await runnerSql`
+          SELECT public.waia_historical_approved_knowledge_namespace_v2(
+            ${organizationId}::uuid,${`${knowledgeNamespace}:BTCUSDT:30:liquidity_sweep`}) AS own,
+            public.waia_historical_approved_knowledge_namespace_v2(
+              ${organizationId}::uuid,${`${knowledgeNamespace}:`}) AS trial,
+            public.waia_historical_approved_knowledge_namespace_v2(
+              ${organizationId}::uuid,${`${knowledgeNamespace}:UNAPPROVED:BTCUSDT:30:liquidity_sweep`}) AS child,
+            public.waia_historical_approved_knowledge_namespace_v2(
+              ${organizationId}::uuid,${`${knowledgeNamespace}:UNAPPROVED:`}) AS child_trial
+        `;
+        expect(namespaceChecks).toEqual([{ own: true, trial: true, child: false, child_trial: false }]);
         await lifecyclePort.queue(launchScope);
         let lifecycleEvent = await lifecyclePort.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
 
@@ -1119,7 +1136,8 @@ describe.skipIf(!enabled || !url || !disposable)(
             expectedCycleSequence: sequence,
           });
           lifecycleEvent = await lifecyclePort.append({ previous: lifecycleEvent,
-            phase: sequence === 34 ? "COMPLETED" : "RUNNING", committedCycles: sequence + 1,
+            phase: sequence === APPROVED_CYCLE_COUNT - 1 ? "COMPLETED" : "RUNNING",
+            committedCycles: sequence + 1,
             latestCommittedCycleId: latest.committedCycleId, errorCode: null });
         }
 
@@ -1133,7 +1151,7 @@ describe.skipIf(!enabled || !url || !disposable)(
           expectedCycleSequence: 34,
         });
         expect(retry).toEqual(latest);
-        expect(lifecycleEvent.phase).toBe("COMPLETED");
+        expect(lifecycleEvent.phase).toBe(PROVE_KNOWLEDGE_CONTINUATION ? "RUNNING" : "COMPLETED");
 
         // 0202 is NOT VALID so legacy compact rows remain readable, but PostgreSQL
         // must still reject every new incomplete accounting row — including an
@@ -1447,6 +1465,115 @@ describe.skipIf(!enabled || !url || !disposable)(
       // that it needs more than 40 minutes. Preserve every assertion and allow
       // three local runtimes for the slower CI host to finish the same workload.
     }, 3_600_000);
+
+    it.skipIf(!PROVE_KNOWLEDGE_CONTINUATION)(
+      "continues the upfront 80-cycle extent and binds matured knowledge to an authorized Forecast",
+      async () => {
+        const connection = await pool.reserve();
+        const sql = bindPostgresReservedSession(pool, connection);
+        const lifecycle = createHistoricalSimulationRunLifecyclePostgresV2(sql);
+        const scope = { organizationId, accountId: productionInput.accountId, runId,
+          partition: "WALK_FORWARD" as const, symbol: "BTCUSDT" as const,
+          requestedByOperatorId: ratified.operatorUserId };
+        try {
+          await assumeHistoricalSimulationRunnerRoleV2(sql);
+          const identity = await sql`SELECT current_user`;
+          expect(identity[0]?.current_user).toBe(HISTORICAL_RUNNER_ROLE);
+          await lifecycle.queue(scope);
+          let event = await lifecycle.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
+          expect(event.committedCycles).toBe(35);
+          let latest: Awaited<ReturnType<typeof runHistoricalSimulationNextCyclePostgresV2>> | undefined;
+          for (let sequence = 35; sequence < APPROVED_CYCLE_COUNT; sequence += 1) {
+            latest = await runHistoricalSimulationNextCyclePostgresV2({ sql, organizationId,
+              accountId: productionInput.accountId, runId, partition: "WALK_FORWARD",
+              symbol: "BTCUSDT", expectedCycleSequence: sequence });
+            expect(latest.nextCycleSequence).toBe(sequence + 1);
+            event = await lifecycle.append({ previous: event,
+              phase: sequence === APPROVED_CYCLE_COUNT - 1 ? "COMPLETED" : "RUNNING",
+              committedCycles: sequence + 1, latestCommittedCycleId: latest.committedCycleId,
+              errorCode: null });
+          }
+          expect(event.phase).toBe("COMPLETED");
+          expect(event.committedCycles).toBe(80);
+          const finalCycleId = `${runId}:WALK_FORWARD:BTCUSDT:${INITIAL_RECORD_INDEX + 79}`;
+          const links = await sql<Array<{
+            cycle_id: string; knowledge_update_id: string;
+            resolved_at: Date; pit_anchor: Date; visible_from: Date;
+            posterior_confidence: string; prior_confidence: string; delta: string;
+            pit_evidence_boundary: Date; forecast_status: string; binding_matches: boolean;
+          }>>`
+            SELECT pit.cycle_id, link.knowledge_update_id, knowledge.resolved_at,
+              pit.pit_anchor,
+              (knowledge.source_record_ids_json::jsonb ->>
+                'visible_from_cycle_pit_anchor')::timestamptz AS visible_from,
+              knowledge.posterior_confidence, knowledge.prior_confidence, knowledge.delta,
+              knowledge.pit_evidence_boundary,
+              bundle.forecast_runtime_authorized_outcome_json->>'status' AS forecast_status,
+              (bundle.forecast_runtime_authorized_outcome_json #>>
+                 '{authority,historicalKnowledgeSnapshotAuthorityContentDigestHex}' =
+                   pit.runtime_input_json #>> '{historicalKnowledgeSnapshotAuthority,contentDigestHex}'
+               AND pit.knowledge_content_digest_hex=pit.runtime_input_json->>'knowledgeContentDigestHex'
+               AND pit.knowledge_content_digest_hex=pit.runtime_input_json #>>
+                 '{historicalKnowledgeSnapshotAuthority,knowledgeContentDigestHex}') AS binding_matches
+            FROM trader_historical_forecast_input_knowledge_link_v2 link
+            JOIN trader_historical_forecast_input_pit_v2 pit
+              ON pit.organization_id=link.organization_id AND pit.run_id=link.run_id
+              AND pit.cycle_id=link.cycle_id
+            JOIN trader_knowledge_confidence_update_record knowledge
+              ON knowledge.organization_id=link.organization_id
+              AND knowledge.id=link.knowledge_update_id
+              AND knowledge.content_digest=link.knowledge_update_content_digest_hex
+            JOIN trader_forecast_bundle_v2 bundle
+              ON bundle.organization_id=pit.organization_id AND bundle.run_id=pit.run_id
+              AND bundle.id=pit.bundle_id AND bundle.cycle_id=pit.cycle_id
+              AND bundle.symbol=pit.symbol
+              AND bundle.forecast_runtime_authorized_outcome_json IS NOT NULL
+            WHERE link.organization_id=${organizationId}::uuid AND link.run_id=${runId}
+            ORDER BY pit.pit_anchor, link.knowledge_update_id
+          `;
+          expect(links.length).toBeGreaterThan(0);
+          expect(links.some((link) => link.cycle_id === finalCycleId)).toBe(true);
+          for (const link of links) {
+            expect(link.forecast_status).toBe("FORECAST_AUTHORIZED");
+            expect(link.binding_matches).toBe(true);
+            expect(new Date(link.resolved_at).getTime()).toBeLessThan(new Date(link.pit_anchor).getTime());
+            expect(new Date(link.visible_from).getTime()).toBeLessThanOrEqual(new Date(link.pit_anchor).getTime());
+            expect(new Date(link.pit_evidence_boundary).getTime()).toBeLessThanOrEqual(new Date(link.pit_anchor).getTime());
+            expect(link.posterior_confidence).toBe(link.prior_confidence);
+            expect(Number(link.delta)).toBe(0);
+          }
+          const evidenceCounts = () => sql`
+            SELECT
+              (SELECT count(*)::int FROM trader_historical_forecast_input_knowledge_link_v2
+                WHERE organization_id=${organizationId}::uuid AND run_id=${runId}) AS links,
+              (SELECT count(*)::int FROM trader_knowledge_confidence_update_record
+                WHERE organization_id=${organizationId}::uuid AND run_id=${runId}) AS updates,
+              (SELECT count(*)::int FROM trader_forecast_outcome_v2 outcome
+                JOIN trader_forecast_bundle_v2 bundle ON bundle.organization_id=outcome.organization_id
+                  AND bundle.id=outcome.bundle_id
+                WHERE bundle.organization_id=${organizationId}::uuid AND bundle.run_id=${runId}) AS outcomes
+          `;
+          const beforeRetry = await evidenceCounts();
+          const retry = await runHistoricalSimulationNextCyclePostgresV2({ sql, organizationId,
+            accountId: productionInput.accountId, runId, partition: "WALK_FORWARD",
+            symbol: "BTCUSDT", expectedCycleSequence: 79 });
+          expect(retry).toEqual(latest);
+          expect(await evidenceCounts()).toEqual(beforeRetry);
+          const checkpoints = await sql`
+            SELECT count(*)::int AS count, min(committed_cycle_sequence)::int AS first,
+              max(committed_cycle_sequence)::int AS last
+            FROM trader_historical_simulation_resume_checkpoint_v2
+            WHERE organization_id=${organizationId}::uuid AND run_id=${runId}
+              AND account_id=${productionInput.accountId}
+          `;
+          expect(checkpoints).toEqual([{ count: 80, first: 0, last: 79 }]);
+        } finally {
+          await releaseHistoricalSimulationConsumerLeasePostgresV2(sql, scope);
+          await resetHistoricalSimulationRunnerRoleV2(sql);
+          connection.release();
+        }
+      }, 3_600_000,
+    );
 
     it("persists valid historical evidence and rejects a rehashed receipt with tampered authority", async () => {
       const receiptRows = await heldSql<

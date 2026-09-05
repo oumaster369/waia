@@ -92,6 +92,7 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
   });
   await input.onClaimed?.(current);
   let latestCommittedCycleId = current.latestCommittedCycleId;
+  let observedCommittedCycles = current.committedCycles;
   try {
     const result = await runHistoricalSimulationProductionLoopV2({
       sql: input.sql,
@@ -109,6 +110,7 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
         if (progress.event === "CYCLE_COMMITTED") {
           latestCommittedCycleId = progress.committedCycleId;
           const committedCycles = progress.expectedCycleSequence + 1;
+          observedCommittedCycles = committedCycles;
           current = await input.lifecycle.append({
             previous: current,
             phase: committedCycles === current.qualifiedTotalCycles ? "COMPLETED" : "RUNNING",
@@ -117,6 +119,10 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
             errorCode: null,
           });
         } else if (progress.event === "TRANSIENT_RETRY") {
+          // An atomic checkpoint may be ahead of the last acknowledged event.
+          // Retrying that same cycle is idempotent; publishing stale progress is
+          // not. Leave RUNNING intact for lease-owning claim reconciliation.
+          if (observedCommittedCycles > current.committedCycles) return;
           current = await input.lifecycle.append({
             previous: current,
             phase: "RUNNING",
@@ -128,6 +134,9 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
       },
     });
     if (result.status === "TERMINAL" && current.phase === "COMPLETED") return current;
+    if (observedCommittedCycles > current.committedCycles) {
+      throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:COMMITTED_PROGRESS_NOT_PUBLISHED");
+    }
     current = await input.lifecycle.append({
       previous: current,
       phase: result.status === "TERMINAL" ? "COMPLETED" : "STOPPED",
@@ -137,6 +146,10 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
     });
     return current;
   } catch (error) {
+    // Do not turn a recoverable post-commit publication failure into FAILED at
+    // the old frontier. The caller still receives the error; restart reconciles
+    // the durable checkpoint under the consumer lease before executing again.
+    if (observedCommittedCycles > current.committedCycles) throw error;
     const code = typeof (error as { code?: unknown } | null)?.code === "string"
       ? String((error as { code: string }).code)
       : error instanceof Error ? error.message.split(":")[0]! : "UNKNOWN";

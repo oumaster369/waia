@@ -740,9 +740,24 @@ SET search_path=pg_catalog,public AS $fn$
      AND proposal.run_id=approval.run_id
      AND proposal.content_digest_hex=approval.proposal_content_digest_hex
     WHERE proposal.organization_id=requested_organization
-      AND left(requested_value,length(
-        'waia.trader.historical_prerun_knowledge_bootstrap.v2:' || proposal.run_id || ':'
-      ))='waia.trader.historical_prerun_knowledge_bootstrap.v2:' || proposal.run_id || ':'
+      AND requested_organization='3c50b4e9-1138-43a5-a29f-e65088124cfc'::uuid
+      AND (
+        -- Trial research-program identity, including its caller-added separator.
+        requested_value='waia.trader.historical_prerun_knowledge_bootstrap.v2:' ||
+          proposal.run_id || ':'
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(proposal.technical_candidate_json->'surfaces') surface,
+            unnest(ARRAY['msv','trend_continuation','reversal','accumulation',
+              'distribution','breakout','false_breakout','liquidity_sweep',
+              'mean_reversion']) AS suffix(value)
+          WHERE requested_value='waia.trader.historical_prerun_knowledge_bootstrap.v2:' ||
+              proposal.run_id || ':' || (surface->>'surfaceKey') || ':' || suffix.value
+            OR (suffix.value <> 'msv' AND requested_value=
+              'waia.trader.historical_prerun_knowledge_bootstrap.v2:' || proposal.run_id ||
+              ':' || (surface->>'surfaceKey') || ':' || suffix.value || ':pattern')
+        )
+      )
   )
 $fn$;
 REVOKE ALL ON FUNCTION public.waia_historical_approved_knowledge_namespace_v2(uuid,text)

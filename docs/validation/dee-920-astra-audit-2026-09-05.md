@@ -90,3 +90,62 @@ These statuses do not validate the subsequent corrections.
 Tenant observer currently requires `account_id` as well as `campaign_run_id`; a final
 link must contain the actual modeled account identity. Neither a generic link nor local
 projection parity establishes production observation readiness.
+
+## Follow-up at 13:30 UTC — e9a887ea plus uncommitted corrections
+
+User explicitly accepted the first observed test within the evidence-only / zero-delta
+contract. Adaptive numerical learning is a separate scientifically specified stage.
+This does not waive nonempty subsequent authorized knowledge-consumption evidence,
+nor grant merge or deployment authority. Recorded in DEE-920 comment
+`ad95dd9a-1f1e-487f-a982-578466c8e7c8`.
+
+Whole-scope independent review found two further P2 cases after the initial corrections:
+
+- Repeated lifecycle publication errors after an atomic commit could append FAILED at
+  the old frontier, preventing recovery. The orchestrator now tracks observed committed
+  progress separately, suppresses stale retry/STOPPED/FAILED publication and propagates
+  the error while preserving lease-owning restart reconciliation. Three new cases failed
+  before the fix and pass afterwards; orchestrator + restart tests 14/14, typecheck PASS.
+- Knowledge namespace prefix matching admitted an unapproved colon-prefixed child run.
+  SQL now compares exact approved trial identity or approved surface and finite bootstrap
+  names. Existing colon-containing run IDs remain supported. Actual constrained-role
+  positive/negative checks on four surfaces PASS in a disposable clone with rollback.
+
+Both bounded corrections have independent read-only review with no remaining P1/P2 in
+those scopes, but are not yet committed or CI-validated.
+
+The opt-in `WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF=1` test sets an 80-cycle extent
+before its local request/ratification fixture, preserves all original first35 assertions,
+then continues sequences35..79 without changing OHLCV or skipping cycles. Expected
+nonempty authorized knowledge consumption at79 is NOT yet proven. Local process started
+with `/tmp/waia-astra-learning-validation.cjs`, new DB `waia_hsv2_it_astralearning`;
+fresh migrations through0202 PASS (2049ms), targeted continuation suite IN PROGRESS.
+Do not restart this process or represent the optional test as a completed CI gate.
+
+GitHub e9a887ea CI33967223941 and PostgreSQL33967223934 remain in progress. E2E is a
+downstream real CI job, not yet established by short-check success. Same-cycle retry is
+idempotency, not an independent fresh-state deterministic repeat; that proof and actual
+Historical V2 browser parity still remain mandatory.
+
+Read-only production inventory corrects the rollout packet: Supabase history/catalog
+show0191/0192 applied, but Drizzle's canonical journal ends0190. Before0193–0202, verify
+equivalence and request explicit journal reconciliation rather than rerun already-applied
+DDL. Cloudflare still reports WAIA_RELEASE_SHA920b9609151b48dcbc15947547bec67c3be546cc;
+execution-server current remains0d19765d766818733dab7f3161380eea4f8a55a1 with no active
+historical container. No production writes were performed.
+
+13:46 UTC update: PostgreSQL CI33967223934 on e9a887ea is SUCCESS, completed13:41:07;
+20/20 files,143 passed/2 skipped,2923.32s total,35-cycle body1841072ms. Regular CI unit
+job remains active. Local80 proof reached checkpoint23 by13:48 UTC. A read-only progress
+query caught a column-name typo in the newly added final continuation assertion:
+`cycle_sequence` must be `committed_cycle_sequence`. Working-tree assertion is corrected;
+the running Vitest process already loaded the old assertion. Do not interrupt its costly
+contiguous graph: validate the corrected final query independently against its persisted
+result, and do not label that process exit PASS if its stale assertion subsequently fails.
+The new authorized Forecast/knowledge join was separately executed against the actual
+local schema and is syntactically valid; currently no links exist before eligible cycle79.
+
+13:57 UTC: all reported CI checks on e9a887ea SUCCESS, including unit/build/E2E in
+33967223941 and PostgreSQL33967223934. Local continuation reached45 committed cycles
+(last sequence44); it remains IN PROGRESS. Publishing the bounded corrections now starts
+their exact-head gates in parallel and does not imply continuation or production PASS.

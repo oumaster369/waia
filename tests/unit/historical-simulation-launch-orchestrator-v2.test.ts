@@ -148,6 +148,58 @@ describe("Historical Simulation V2 authenticated launch orchestration", () => {
     });
   });
 
+  it("preserves recoverable RUNNING when publication repeatedly fails after an atomic commit", async () => {
+    const port = lifecycle();
+    vi.mocked(port.append).mockRejectedValue(Object.assign(new Error("serialization"), { code: "40001" }));
+    runner.mockImplementationOnce(async (_config, control) => {
+      await control.onProgress({ event: "CYCLE_COMMITTED", expectedCycleSequence: 0,
+        attempt: 0, committedCycleId: "cycle-0" });
+    });
+    await expect(executeQueuedHistoricalSimulationLaunchV2({
+      sql: vi.fn() as never, organizationId: identity.organizationId,
+      runId: identity.runId, releaseSha, lifecycle: port,
+    })).rejects.toThrow("serialization");
+    expect(vi.mocked(port.append).mock.calls.map(([call]) =>
+      [call.phase, call.committedCycles])).toEqual([["RUNNING", 1]]);
+  });
+
+  it("retries unpublished committed progress without writing an older retry event", async () => {
+    const port = lifecycle();
+    vi.mocked(port.append).mockRejectedValueOnce(Object.assign(new Error("serialization"), { code: "40001" }));
+    runner.mockImplementationOnce(async (_config, control) => {
+      await expect(control.onProgress({ event: "CYCLE_COMMITTED", expectedCycleSequence: 0,
+        attempt: 0, committedCycleId: "cycle-0" })).rejects.toThrow("serialization");
+      await control.onProgress({ event: "TRANSIENT_RETRY", expectedCycleSequence: 0,
+        attempt: 1, committedCycleId: null });
+      await control.onProgress({ event: "CYCLE_COMMITTED", expectedCycleSequence: 0,
+        attempt: 1, committedCycleId: "cycle-0" });
+      return { status: "STOPPED", committedCycles: 1, nextCycleSequence: 1 };
+    });
+    const result = await executeQueuedHistoricalSimulationLaunchV2({
+      sql: vi.fn() as never, organizationId: identity.organizationId,
+      runId: identity.runId, releaseSha, lifecycle: port,
+    });
+    expect(result).toMatchObject({ phase: "STOPPED", committedCycles: 1 });
+    expect(vi.mocked(port.append).mock.calls.map(([call]) =>
+      [call.phase, call.committedCycles])).toEqual([["RUNNING", 1], ["RUNNING", 1], ["STOPPED", 1]]);
+  });
+
+  it("does not publish stale STOPPED or FAILED after abort with an unpublished commit", async () => {
+    const port = lifecycle();
+    vi.mocked(port.append).mockRejectedValueOnce(Object.assign(new Error("serialization"), { code: "40001" }));
+    runner.mockImplementationOnce(async (_config, control) => {
+      await expect(control.onProgress({ event: "CYCLE_COMMITTED", expectedCycleSequence: 0,
+        attempt: 0, committedCycleId: "cycle-0" })).rejects.toThrow("serialization");
+      return { status: "STOPPED", committedCycles: 0, nextCycleSequence: 0 };
+    });
+    await expect(executeQueuedHistoricalSimulationLaunchV2({
+      sql: vi.fn() as never, organizationId: identity.organizationId,
+      runId: identity.runId, releaseSha, lifecycle: port,
+    })).rejects.toThrow("COMMITTED_PROGRESS_NOT_PUBLISHED");
+    expect(vi.mocked(port.append).mock.calls.map(([call]) =>
+      [call.phase, call.committedCycles])).toEqual([["RUNNING", 1]]);
+  });
+
   it("refuses execution when the deployed release is not the ratified run release", async () => {
     const port = lifecycle();
     const onClaimed = vi.fn();
