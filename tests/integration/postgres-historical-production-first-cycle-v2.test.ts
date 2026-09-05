@@ -788,7 +788,11 @@ describe.skipIf(!enabled || !url || !disposable)(
       });
       // Full executable K/M replay is verified by the dedicated DEE-917 suite. Keep this
       // persistence/cycle scenario bounded while retaining all 4,096 × 15 contract rows.
-    }, 600_000);
+    // GitHub's shared runner can take more than ten minutes to build and
+    // persist the deterministic 5,440-bar dual-symbol authority fixture.
+    // Keep the hook budget aligned with the full 35-cycle production proof so
+    // CI executes the assertions instead of timing out during preparation.
+    }, 1_500_000);
 
     afterAll(async () => {
       if (reserved) {
