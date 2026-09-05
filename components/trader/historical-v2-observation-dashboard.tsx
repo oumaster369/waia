@@ -8,7 +8,13 @@ const scalar=(value:unknown)=>typeof value==="string"||typeof value==="number"?S
 const reasons=(value:unknown):string=>{
   if(!value||typeof value!=="object")return "—";
   const v=value as Record<string,unknown>;const raw=v.reasonCodes??v.reasons;
-  return Array.isArray(raw)?raw.map(String).join(", "):scalar(v.action??v.direction??v.reason??v.status??v.verdict);
+  const summary=Array.isArray(raw)&&raw.length?raw.map(String).join(", "):scalar(v.action??v.direction??v.reason??v.status??v.verdict);
+  const masses=record(v.terminalScenarioMasses);
+  if(!Array.isArray(masses.probabilities))return summary;
+  const lower=Array.isArray(masses.lowerBoundsScale8)?masses.lowerBoundsScale8:[];
+  const upper=Array.isArray(masses.upperBoundsScale8)?masses.upperBoundsScale8:[];
+  const distribution=masses.probabilities.map((p,i)=>`${lower[i]===null?"−∞":scalar(lower[i])}…${upper[i]===null?"+∞":scalar(upper[i])}: ${typeof p==="number"?(p*100).toFixed(2):"—"}%`).join("; ");
+  return `${summary} · Terminal return distribution (${scalar(v.primaryHorizonMinutes)} min; execution ${scalar(v.executionHorizonMinutes)} min): ${distribution}`;
 };
 const record=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const artifactReasons=(values:readonly unknown[]|undefined):string=>values?.length

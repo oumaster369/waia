@@ -126,6 +126,10 @@ CREATE TABLE public.trader_historical_technical_proposal_v2 (
   CHECK ((proposal_json ->> 'requestContentDigestHex') = request_content_digest_hex),
   CHECK ((proposal_json ->> 'technicalCandidateContentDigestHex') =
     technical_candidate_content_digest_hex),
+  CONSTRAINT historical_proposal_displayed_candidate_matches_v2 CHECK (
+    jsonb_typeof(technical_candidate_json) IS NOT DISTINCT FROM 'object'::text
+    AND (proposal_json -> 'technicalCandidate') IS NOT DISTINCT FROM technical_candidate_json
+  ),
   CHECK (((launch_plan_json ->> 'initialRecordIndex')::integer) >= 240),
   CHECK (((launch_plan_json ->> 'cycleCount')::integer) BETWEEN 1 AND 10000),
   CHECK ((proposal_json -> 'launchPlan') = launch_plan_json),
@@ -305,6 +309,7 @@ AS $function$
     ON member.organization_id=approval.organization_id
    AND member.user_id=approval.operator_user_id
   WHERE request.organization_id=p_organization_id
+    AND p_organization_id='3c50b4e9-1138-43a5-a29f-e65088124cfc'::uuid
     AND request.run_id=p_run_id
     AND request.release_sha=p_release_sha
     AND request.operator_user_id=p_operator_user_id
@@ -1519,6 +1524,7 @@ BEGIN
   SELECT * INTO STRICT proposal_row
   FROM public.trader_historical_technical_proposal_v2
   WHERE id=p_proposal_id AND content_digest_hex=p_proposal_content_digest_hex
+    AND organization_id='3c50b4e9-1138-43a5-a29f-e65088124cfc'::uuid
     AND technical_candidate_content_digest_hex=p_technical_candidate_content_digest_hex;
   SELECT * INTO STRICT approval_row
   FROM public.trader_historical_proposal_ratification_v2
@@ -2135,3 +2141,41 @@ REVOKE ALL ON FUNCTION public.waia_finalize_historical_four_surface_authority_v2
   uuid,text,text,jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.waia_finalize_historical_four_surface_authority_v2(
   uuid,text,text,jsonb) TO waia_historical_runner;
+--> statement-breakpoint
+-- Historical computation cannot occupy the live/paper GENERAL namespace or
+-- manufacture a checkpoint for an unapproved run. This is invoker-side RLS;
+-- the authority table itself only exposes an exact Human-approved authority.
+DROP POLICY IF EXISTS waia_historical_runner_org_select_v2
+  ON public.trader_knowledge_state_checkpoint_v2;
+DROP POLICY IF EXISTS waia_historical_runner_org_insert_v2
+  ON public.trader_knowledge_state_checkpoint_v2;
+CREATE POLICY historical_approved_checkpoint_select_v2
+  ON public.trader_knowledge_state_checkpoint_v2
+  FOR SELECT TO waia_historical_runner
+  USING (
+    organization_id='3c50b4e9-1138-43a5-a29f-e65088124cfc'::uuid
+    AND checkpoint_namespace=model_version
+    AND EXISTS (
+      SELECT 1 FROM public.trader_historical_four_surface_ratified_admission_v2 authority
+      CROSS JOIN LATERAL jsonb_array_elements(authority.surface_admissions_json) surface(value)
+      WHERE authority.organization_id=trader_knowledge_state_checkpoint_v2.organization_id
+        AND surface.value->>'surfaceKey' IN ('BTCUSDT:30','BTCUSDT:60','ETHUSDT:30','ETHUSDT:60')
+        AND checkpoint_namespace='waia.trader.historical_simulation_knowledge_binding.v2|'
+          ||authority.run_id||'|'||split_part(surface.value->>'surfaceKey',':',1)||'|historical-simulation-v2'
+    )
+  );
+CREATE POLICY historical_approved_checkpoint_insert_v2
+  ON public.trader_knowledge_state_checkpoint_v2
+  FOR INSERT TO waia_historical_runner
+  WITH CHECK (
+    organization_id='3c50b4e9-1138-43a5-a29f-e65088124cfc'::uuid
+    AND checkpoint_namespace=model_version
+    AND EXISTS (
+      SELECT 1 FROM public.trader_historical_four_surface_ratified_admission_v2 authority
+      CROSS JOIN LATERAL jsonb_array_elements(authority.surface_admissions_json) surface(value)
+      WHERE authority.organization_id=trader_knowledge_state_checkpoint_v2.organization_id
+        AND surface.value->>'surfaceKey' IN ('BTCUSDT:30','BTCUSDT:60','ETHUSDT:30','ETHUSDT:60')
+        AND checkpoint_namespace='waia.trader.historical_simulation_knowledge_binding.v2|'
+          ||authority.run_id||'|'||split_part(surface.value->>'surfaceKey',':',1)||'|historical-simulation-v2'
+    )
+  );

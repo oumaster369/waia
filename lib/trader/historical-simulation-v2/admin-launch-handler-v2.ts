@@ -64,8 +64,8 @@ export async function handleHistoricalSimulationAdminLaunchPostV2(
   let opened: ReturnType<typeof productionLifecycle> | undefined;
   try {
     const auth = await authorizeAdminRoute(deps, organizationId, "admin.trader.operations.mutate");
-    if (!auth.ok) return auth.result;
     authRuntime = auth.runtime;
+    if (!auth.ok) return auth.result;
     if (!validateFhvAdminCsrf(request, requireFhvCsrfSecret(deps.env ?? process.env),
       organizationId, auth.userId)) {
       return adminClientError(403, "CSRF_INVALID", "CSRF validation failed.");

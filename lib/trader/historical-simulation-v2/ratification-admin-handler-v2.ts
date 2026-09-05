@@ -81,8 +81,8 @@ export async function handleHistoricalRatificationAdminGetV2(
   let authRuntime; let opened: ReturnType<typeof productionService> | undefined;
   try {
     const auth = await authorizeAdminRoute(deps, scope.organizationId, "admin.audit.read");
-    if (!auth.ok) return auth.result;
     authRuntime = auth.runtime;
+    if (!auth.ok) return auth.result;
     opened = deps.openRatification?.() ?? productionService();
     let result: Awaited<ReturnType<RatificationAdminPortV2["read"]>> | null = null;
     try {
@@ -124,8 +124,8 @@ export async function handleHistoricalRatificationAdminPostV2(
   try {
     const auth = await authorizeAdminRoute(deps, scope.organizationId,
       "admin.trader.operations.mutate");
-    if (!auth.ok) return auth.result;
     authRuntime = auth.runtime;
+    if (!auth.ok) return auth.result;
     if (!validateFhvAdminCsrf(request, requireFhvCsrfSecret(deps.env ?? process.env),
       scope.organizationId, auth.userId)) {
       return adminClientError(403, "CSRF_INVALID", "CSRF validation failed.");

@@ -55,6 +55,20 @@ const decimalRatio = (principal: string | null, numerator: string | null,
 };
 
 function projectCycle(row: Row): HistoricalObservableCycleV2 {
+  const forecast = object(row.forecast_json);
+  const forecastAuthority = object(row.forecast_runtime_authority);
+  const terminalMasses = object(row.forecast_terminal_scenario_masses);
+  const probabilities = array(terminalMasses.probabilities);
+  if (forecast.status === "AUTHORIZED" &&
+      (!text(forecast.authorityContentDigestHex) ||
+       forecastAuthority.contentDigestHex !== forecast.authorityContentDigestHex ||
+       !text(row.forecast_bundle_id) || probabilities.length !== 7 ||
+       probabilities.some(p => typeof p !== "number" || !Number.isFinite(p) || p < 0 || p > 1) ||
+       Math.abs(probabilities.reduce<number>((sum, p) => sum + Number(p), 0) - 1) > 1e-9 ||
+       array(terminalMasses.lowerBoundsScale8).length !== 7 ||
+       array(terminalMasses.upperBoundsScale8).length !== 7)) {
+    throw new Error("HISTORICAL_OBSERVABLE_FORECAST_EVIDENCE_MISSING");
+  }
   if (!row.accounting_state_json) throw new Error(`HISTORICAL_OBSERVABLE_ACCOUNTING_SNAPSHOT_MISSING:${Object.keys(row).join(",")}`);
   const accounting = object(row.accounting_state_json);
   const portfolio = object(accounting.positions);
@@ -100,7 +114,12 @@ function projectCycle(row: Row): HistoricalObservableCycleV2 {
     }).length,
     decisionsCount: number(row.decisions_count), riskVetoCount: number(row.risk_veto_count),
     ordersCount: number(row.orders_count), fillsCount: number(row.fills_count),
-    lastForecast: row.forecast_json, lastDecision: row.decision_json,
+    lastForecast: { ...forecast,
+      bundleId: text(row.forecast_bundle_id),
+      executionHorizonMinutes: row.forecast_execution_horizon_minutes ?? null,
+      primaryHorizonMinutes: row.forecast_primary_horizon_minutes ?? null,
+      terminalScenarioMasses: forecast.status === "AUTHORIZED" ? terminalMasses : null },
+    lastDecision: row.decision_json,
     lastPortfolio: row.portfolio_json, lastRisk: risk, lastExecution: execution,
     lastAccounting: accounting, lastGuardian: row.guardian_json, lastLearning: row.learning_json,
     observedExecutionEffects: effects,
@@ -160,6 +179,11 @@ async function loadHistoricalObservableProjectionWithinSnapshotPostgresV2(
         AND l.partition IN ('DEVELOPMENT','WALK_FORWARD') AND l.capital_eligible=false
     )
     SELECT s.*,
+      fb.id::text AS forecast_bundle_id,
+      fb.forecast_runtime_authorized_outcome_json->'authority' AS forecast_runtime_authority,
+      fb.forecast_runtime_authorized_outcome_json#>'{issuance,terminalScenarioMasses}' AS forecast_terminal_scenario_masses,
+      fb.forecast_runtime_authorized_outcome_json#>'{issuance,executionHorizonMinutes}' AS forecast_execution_horizon_minutes,
+      fb.forecast_runtime_authorized_outcome_json#>'{issuance,package,family,primaryHorizonMinutes}' AS forecast_primary_horizon_minutes,
       coalesce((SELECT jsonb_agg(stage ORDER BY stage) FROM trader_historical_simulation_atomic_stage_v2 st
         WHERE st.organization_id=s.organization_id AND st.account_id=s.account_id AND st.run_id=s.run_id
           AND st.cycle_sequence=s.cycle_sequence),'[]'::jsonb) AS stages,
@@ -182,6 +206,13 @@ async function loadHistoricalObservableProjectionWithinSnapshotPostgresV2(
       initial_dataset.sealed_cycle_json #>> '{closedBar,close}' AS initial_close,
       current_dataset.sealed_cycle_json #>> '{closedBar,close}' AS current_close
     FROM scoped s
+    LEFT JOIN trader_historical_forecast_input_pit_v2 fp
+      ON fp.organization_id=s.organization_id AND fp.run_id=s.run_id
+      AND fp.cycle_id=s.cycle_id AND fp.symbol=s.symbol AND fp.partition=s.partition
+      AND fp.forecast_authority_content_digest_hex=s.forecast_json->>'authorityContentDigestHex'
+    LEFT JOIN trader_forecast_bundle_v2 fb
+      ON fb.id=fp.bundle_id AND fb.organization_id=fp.organization_id
+      AND fb.run_id=fp.run_id AND fb.cycle_id=fp.cycle_id AND fb.symbol=fp.symbol
     LEFT JOIN LATERAL (SELECT sn.state_json,sn.snapshot_content_digest_hex,sn.schema_version,sn.cycle_id
       FROM trader_historical_simulation_resume_snapshot_link_v2 sl
       JOIN trader_historical_simulation_durable_snapshot_v2 sn

@@ -36,6 +36,20 @@ const baseUrl = `https://waia.test/api?organization_id=${organizationId}` +
   `&run_id=run-1&release_sha=${releaseSha}`;
 
 describe("Historical V2 split Admin ratification", () => {
+  it.each([handleHistoricalRatificationAdminGetV2, handleHistoricalRatificationAdminPostV2])(
+    "disposes the authenticated runtime on permission denial", async (handler) => {
+      const runtime = { kind: "postgres" };
+      mocks.authorize.mockResolvedValueOnce({ ok: false, runtime,
+        result: { status: 403, body: {}, outcome: "client_error" } });
+      const openRatification = vi.fn();
+      const result = await handler(new Request(baseUrl), {
+        getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth,
+        openRatification,
+      });
+      expect(result.status).toBe(403);
+      expect(mocks.disposeAuth).toHaveBeenCalledWith(runtime);
+      expect(openRatification).not.toHaveBeenCalled();
+    });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authorize.mockResolvedValue({ ok: true, userId: operatorId,

@@ -95,7 +95,8 @@ Promise<Readonly<{ initialRecordIndex: number; terminalRecordIndexExclusive: num
     WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
       AND partition=${input.partition} AND symbol=${input.symbol}
   `;
-  const initialRecordIndex = Number(pits[0]?.first_record_index);
+  const firstRecordIndex = pits[0]?.first_record_index;
+  const initialRecordIndex = firstRecordIndex == null ? NaN : Number(firstRecordIndex);
   if (!Number.isSafeInteger(initialRecordIndex) || initialRecordIndex < 0) {
     throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:INITIAL_PIT");
   }
@@ -172,12 +173,19 @@ export function createHistoricalSimulationRunLifecyclePostgresV2(
         const authority = await qualifiedLaunch(tx, input);
         const existing = await latest(tx, input.organizationId, input.runId);
         if (existing) {
+          // A crash can leave the atomic checkpoint one cycle ahead of the
+          // lifecycle event. Only the lease-owning claim may reconcile it;
+          // queue must allow that bounded recovery to reach claim.
+          const progressMatches = existing.committedCycles === authority.committedCycles &&
+            existing.latestCommittedCycleId === authority.latestCommittedCycleId;
+          const recoverableCommit = existing.phase === "RUNNING" &&
+            authority.committedCycles === existing.committedCycles + 1 &&
+            authority.latestCommittedCycleId !== null;
           if (!sameIdentity(existing, input) ||
               existing.initialRecordIndex !== authority.initialRecordIndex ||
               existing.terminalRecordIndexExclusive !== authority.terminalRecordIndexExclusive ||
               existing.qualifiedTotalCycles !== authority.qualifiedTotalCycles ||
-              existing.committedCycles !== authority.committedCycles ||
-              existing.latestCommittedCycleId !== authority.latestCommittedCycleId) {
+              (!progressMatches && !recoverableCommit)) {
             throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:LIFECYCLE_DIVERGENCE");
           }
           if (["QUEUED", "RUNNING", "COMPLETED"].includes(existing.phase)) return existing;

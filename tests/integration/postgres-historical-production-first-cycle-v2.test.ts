@@ -89,6 +89,9 @@ import {
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { computeSemanticSha256Hex } from
   "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { buildKnowledgeCheckpointRecord, writeKnowledgeCheckpointV2,
+  writeHistoricalKnowledgeCheckpointV2 } from
+  "@/lib/trader/intelligence/knowledge-state/knowledge-state-checkpoint-service-v2";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES_SESSION?.trim() ?? "";
@@ -1028,6 +1031,10 @@ describe.skipIf(!enabled || !url || !disposable)(
     it("commits 35 production cycles and applies the first future-only Forecast learning closure", async () => {
       const runnerReserved = await pool.reserve();
       const runnerSql = bindPostgresReservedSession(pool, runnerReserved);
+      const lifecyclePort = createHistoricalSimulationRunLifecyclePostgresV2(runnerSql);
+      const launchScope = { organizationId, accountId: productionInput.accountId, runId,
+        partition: "WALK_FORWARD" as const, symbol: "BTCUSDT" as const,
+        requestedByOperatorId: ratified.operatorUserId };
       let latest:
         | Awaited<ReturnType<typeof runHistoricalSimulationNextCyclePostgresV2>>
         | undefined;
@@ -1060,6 +1067,19 @@ describe.skipIf(!enabled || !url || !disposable)(
           Array<Readonly<{ current_user: string }>>
         >`SELECT current_user`;
         expect(identity[0]?.current_user).toBe(HISTORICAL_RUNNER_ROLE);
+        await lifecyclePort.queue(launchScope);
+        let lifecycleEvent = await lifecyclePort.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
+
+        const checkpointInput = { organizationId, checkpointSeq: 999999,
+          modelVersion: "general-adversarial", calibrationSnapshotDigest: "a".repeat(64),
+          rejectedResearchStates: [], promotedResearchStates: [] };
+        await expect(writeKnowledgeCheckpointV2(runnerSql,
+          buildKnowledgeCheckpointRecord(checkpointInput))).rejects.toThrow(/row-level security/);
+        const unapprovedNamespace =
+          `waia.trader.historical_simulation_knowledge_binding.v2|unapproved-${runId}|BTCUSDT|historical-simulation-v2`;
+        await expect(writeHistoricalKnowledgeCheckpointV2(runnerSql,
+          buildKnowledgeCheckpointRecord({ ...checkpointInput, modelVersion: unapprovedNamespace }),
+          unapprovedNamespace)).rejects.toThrow(/row-level security/);
 
         const first = await runHistoricalSimulationNextCyclePostgresV2({
           sql: runnerSql,
@@ -1076,6 +1096,17 @@ describe.skipIf(!enabled || !url || !disposable)(
         expect(first.nextCycleSequence).toBe(1);
         expect(first.nextRecordIndex).toBe(INITIAL_RECORD_INDEX + 1);
 
+        // Crash window: atomic commit succeeded but lifecycle append did not.
+        // A restarted approved launch reaches queue before lease-owning claim.
+        await releaseHistoricalSimulationConsumerLeasePostgresV2(runnerSql, launchScope);
+        const stale = await lifecyclePort.queue(launchScope);
+        expect(stale).toEqual(lifecycleEvent);
+        expect(stale.committedCycles).toBe(0);
+        lifecycleEvent = await lifecyclePort.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
+        expect(lifecycleEvent.committedCycles).toBe(1);
+        expect(lifecycleEvent.latestCommittedCycleId).toBe(first.committedCycleId);
+        expect(lifecycleEvent.errorCode).toBe("CRASH_RECOVERED_AFTER_COMMIT");
+
         latest = first;
         for (let sequence = 1; sequence < 35; sequence += 1) {
           latest = await runHistoricalSimulationNextCyclePostgresV2({
@@ -1087,6 +1118,9 @@ describe.skipIf(!enabled || !url || !disposable)(
             symbol: "BTCUSDT",
             expectedCycleSequence: sequence,
           });
+          lifecycleEvent = await lifecyclePort.append({ previous: lifecycleEvent,
+            phase: sequence === 34 ? "COMPLETED" : "RUNNING", committedCycles: sequence + 1,
+            latestCommittedCycleId: latest.committedCycleId, errorCode: null });
         }
 
         const retry = await runHistoricalSimulationNextCyclePostgresV2({
@@ -1099,6 +1133,7 @@ describe.skipIf(!enabled || !url || !disposable)(
           expectedCycleSequence: 34,
         });
         expect(retry).toEqual(latest);
+        expect(lifecycleEvent.phase).toBe("COMPLETED");
 
         // 0202 is NOT VALID so legacy compact rows remain readable, but PostgreSQL
         // must still reject every new incomplete accounting row — including an
@@ -1122,6 +1157,7 @@ describe.skipIf(!enabled || !url || !disposable)(
           )
         `).rejects.toThrow(/trader_accounting_frontier_semantic_state_complete/);
       } finally {
+        await releaseHistoricalSimulationConsumerLeasePostgresV2(runnerSql, launchScope);
         await runnerSql.unsafe("RESET ROLE");
         runnerReserved.release();
       }
@@ -1159,6 +1195,7 @@ describe.skipIf(!enabled || !url || !disposable)(
             visibleEvidenceCount: number;
             distinctModelInputs: string;
             distinctTerminalDistributions: string;
+            distinctTerminalProbabilities: string;
             distinctCalibrationSnapshots: string;
             scoredKnowledgeUpdates: string;
             governedZeroDeltaUpdates: string;
@@ -1328,6 +1365,11 @@ describe.skipIf(!enabled || !url || !disposable)(
            WHERE bundle.organization_id=${organizationId}::uuid
              AND bundle.run_id=${runId}
              AND forecast.target_role_id='TERMINAL_RETURN') AS "distinctTerminalDistributions",
+          (SELECT count(DISTINCT forecast_runtime_authorized_outcome_json
+             #> '{issuance,terminalScenarioMasses,probabilities}')::text
+           FROM trader_forecast_bundle_v2
+           WHERE organization_id=${organizationId}::uuid AND run_id=${runId})
+             AS "distinctTerminalProbabilities",
           (SELECT count(DISTINCT calibration_snapshot_digest)::text
            FROM trader_knowledge_state_checkpoint_v2
            WHERE organization_id=${organizationId}::uuid
@@ -1388,6 +1430,9 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(Number(rows[0]!.latestNetRealizedPnl)).not.toBe(0);
       expect(Number(rows[0]!.distinctModelInputs)).toBeGreaterThan(1);
       expect(Number(rows[0]!.distinctTerminalDistributions)).toBeGreaterThan(1);
+      // Identity digests include the anchor timestamp; compare economic values
+      // independently so timestamp-only changes cannot satisfy this proof.
+      expect(Number(rows[0]!.distinctTerminalProbabilities)).toBeGreaterThan(1);
       // Historical learning accumulates scored evidence and changes the
       // calibration snapshot visible to later PITs.  Confidence mutation stays
       // zero until operator disposition; this is the governed contract, not a
@@ -1459,7 +1504,141 @@ describe.skipIf(!enabled || !url || !disposable)(
       `).rejects.toMatchObject({ code: "23514" });
     });
 
-    it("rejects directly submitted, internally rehashed knowledge and market authority forgeries", async () => {
+    it("rejects a resealed proposal whose displayed candidate was substituted", async () => {
+      await heldSql`BEGIN`;
+      try {
+        await heldSql`SELECT set_config('waia.test.source_org', ${organizationId}, true),
+          set_config('waia.test.source_run', ${runId}, true)`;
+        await heldSql.unsafe(`DO $displayed$
+          DECLARE proposed trader_historical_technical_proposal_v2%ROWTYPE;
+            rejected_constraint text;
+          BEGIN
+            SELECT * INTO STRICT proposed FROM trader_historical_technical_proposal_v2
+              WHERE organization_id=current_setting('waia.test.source_org')::uuid
+                AND run_id=current_setting('waia.test.source_run');
+            proposed.id := gen_random_uuid();
+            proposed.proposal_json := jsonb_set(proposed.proposal_json,'{technicalCandidate}','{}'::jsonb);
+            proposed.content_digest_hex := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(
+              proposed.proposal_json-'contentDigestHex'::text),'UTF8')),'hex');
+            proposed.proposal_json := jsonb_set(proposed.proposal_json,'{contentDigestHex}',to_jsonb(proposed.content_digest_hex));
+            SET LOCAL ROLE waia_historical_runner;
+            BEGIN
+              INSERT INTO trader_historical_technical_proposal_v2 SELECT proposed.*;
+              RAISE EXCEPTION 'displayed candidate substitution was accepted';
+            EXCEPTION WHEN check_violation THEN
+              GET STACKED DIAGNOSTICS rejected_constraint=CONSTRAINT_NAME;
+              IF rejected_constraint <> 'historical_proposal_displayed_candidate_matches_v2' THEN
+                RAISE EXCEPTION 'unexpected rejection constraint: %',rejected_constraint;
+              END IF;
+            END;
+          END $displayed$`);
+      } finally {
+        await heldSql`ROLLBACK`;
+      }
+    });
+
+    it("denies definer access to another organization's approved proposal", async () => {
+      // Administrator-owned disposable fixture: preserve all table constraints
+      // and triggers. No runner permission, RLS or immutable row is changed.
+      await heldSql`BEGIN`;
+      try {
+        await heldSql`SELECT set_config('waia.test.source_org', ${organizationId}, true),
+          set_config('waia.test.source_run', ${runId}, true)`;
+        await heldSql.unsafe(`DO $fixture$
+          DECLARE
+            foreign_org uuid := gen_random_uuid();
+            requested trader_historical_ratification_request_v2%ROWTYPE;
+            qualified trader_historical_qualified_execution_extent_v2%ROWTYPE;
+            proposed trader_historical_technical_proposal_v2%ROWTYPE;
+            approved trader_historical_proposal_ratification_v2%ROWTYPE;
+          BEGIN
+            SELECT * INTO STRICT requested FROM trader_historical_ratification_request_v2
+              WHERE organization_id=current_setting('waia.test.source_org')::uuid
+                AND run_id=current_setting('waia.test.source_run');
+            SELECT * INTO STRICT qualified FROM trader_historical_qualified_execution_extent_v2
+              WHERE organization_id=requested.organization_id AND run_id=requested.run_id;
+            SELECT * INTO STRICT proposed FROM trader_historical_technical_proposal_v2
+              WHERE request_id=requested.id;
+            SELECT * INTO STRICT approved FROM trader_historical_proposal_ratification_v2
+              WHERE proposal_id=proposed.id;
+            INSERT INTO organizations (id,owner_user_id,kind,name)
+              VALUES (foreign_org,requested.operator_user_id,'personal','Foreign negative fixture');
+            INSERT INTO organization_members (id,organization_id,user_id,member_role)
+              VALUES (gen_random_uuid(),foreign_org,requested.operator_user_id,'owner');
+
+            requested.id := gen_random_uuid(); requested.organization_id := foreign_org;
+            requested.request_json := jsonb_set(requested.request_json,'{organizationId}',to_jsonb(foreign_org::text));
+            requested.content_digest_hex := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(
+              requested.request_json-'contentDigestHex'::text),'UTF8')),'hex');
+            requested.request_json := jsonb_set(requested.request_json,'{contentDigestHex}',to_jsonb(requested.content_digest_hex));
+            INSERT INTO trader_historical_ratification_request_v2 SELECT requested.*;
+
+            qualified.organization_id := foreign_org;
+            qualified.qualification_receipt_json := jsonb_set(qualified.qualification_receipt_json,'{organizationId}',to_jsonb(foreign_org::text));
+            qualified.qualification_receipt_digest_hex := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(
+              qualified.qualification_receipt_json-'qualificationReceiptDigest'::text),'UTF8')),'hex');
+            qualified.qualification_receipt_json := jsonb_set(qualified.qualification_receipt_json,'{qualificationReceiptDigest}',to_jsonb(qualified.qualification_receipt_digest_hex));
+            INSERT INTO trader_historical_qualified_execution_extent_v2 SELECT qualified.*;
+
+            proposed.id := gen_random_uuid(); proposed.organization_id := foreign_org;
+            proposed.request_id := requested.id; proposed.request_content_digest_hex := requested.content_digest_hex;
+            proposed.technical_candidate_json := proposed.technical_candidate_json || jsonb_build_object(
+              'organizationId',foreign_org::text,'qualificationReceiptDigestHex',qualified.qualification_receipt_digest_hex);
+            proposed.technical_candidate_content_digest_hex := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(
+              proposed.technical_candidate_json-'contentDigestHex'::text),'UTF8')),'hex');
+            proposed.technical_candidate_json := jsonb_set(proposed.technical_candidate_json,'{contentDigestHex}',to_jsonb(proposed.technical_candidate_content_digest_hex));
+            proposed.proposal_json := proposed.proposal_json || jsonb_build_object(
+              'organizationId',foreign_org::text,'requestId',requested.id::text,
+              'requestContentDigestHex',requested.content_digest_hex,
+              'technicalCandidate',proposed.technical_candidate_json,
+              'technicalCandidateContentDigestHex',proposed.technical_candidate_content_digest_hex);
+            proposed.content_digest_hex := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(
+              proposed.proposal_json-'contentDigestHex'::text),'UTF8')),'hex');
+            proposed.proposal_json := jsonb_set(proposed.proposal_json,'{contentDigestHex}',to_jsonb(proposed.content_digest_hex));
+            INSERT INTO trader_historical_technical_proposal_v2 SELECT proposed.*;
+
+            approved.id := gen_random_uuid(); approved.organization_id := foreign_org;
+            approved.proposal_id := proposed.id; approved.proposal_content_digest_hex := proposed.content_digest_hex;
+            approved.ratification_json := approved.ratification_json || jsonb_build_object(
+              'organizationId',foreign_org::text,'proposalId',proposed.id::text,
+              'proposalContentDigestHex',proposed.content_digest_hex);
+            approved.content_digest_hex := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(
+              approved.ratification_json-'contentDigestHex'::text),'UTF8')),'hex');
+            approved.ratification_json := jsonb_set(approved.ratification_json,'{contentDigestHex}',to_jsonb(approved.content_digest_hex));
+            INSERT INTO trader_historical_proposal_ratification_v2 SELECT approved.*;
+            PERFORM set_config('waia.test.foreign_org',foreign_org::text,true);
+            PERFORM set_config('waia.test.foreign_proposal',proposed.id::text,true);
+            PERFORM set_config('waia.test.foreign_proposal_digest',proposed.content_digest_hex,true);
+            PERFORM set_config('waia.test.foreign_candidate_digest',proposed.technical_candidate_content_digest_hex,true);
+          END $fixture$`);
+        await assumeHistoricalSimulationRunnerRoleV2(heldSql);
+        const roles = await heldSql<Array<{ own_role: string; foreign_role: string | null }>>`
+          SELECT public.waia_historical_approved_operator_role_v2(
+            ${organizationId}::uuid,${runId},${RELEASE_SHA},${userId}::uuid) AS own_role,
+            public.waia_historical_approved_operator_role_v2(
+              current_setting('waia.test.foreign_org')::uuid,${runId},${RELEASE_SHA},${userId}::uuid) AS foreign_role
+        `;
+        expect(roles).toEqual([{ own_role: "owner", foreign_role: null }]);
+        await expect(heldSql`
+          SELECT public.waia_finalize_historical_four_surface_authority_v2(
+            current_setting('waia.test.foreign_proposal')::uuid,
+            current_setting('waia.test.foreign_proposal_digest'),
+            current_setting('waia.test.foreign_candidate_digest'),'{}'::jsonb)
+        `).rejects.toMatchObject({ code: "P0002" });
+      } finally {
+        await heldSql`ROLLBACK`;
+      }
+    });
+
+    // Keep each independent SQL rejection visible in CI. Five sequential
+    // finalizations previously shared one default 5s budget, so a timeout hid
+    // which guard was slow. Each case retains that same individual budget,
+    // the actual runner role and the durable-authority immutability assertion.
+    it.each([
+      "knowledge hypothesis", "market trust", "Human selected K",
+      "unapproved extension", "future epistemic cutoff",
+    ] as const)("rejects internally rehashed authority forgery: %s", async (forgery) => {
+      const startedAt = performance.now();
       const proposalRows = await pool<Array<Readonly<{
         id: string;
         content_digest_hex: string;
@@ -1471,6 +1650,7 @@ describe.skipIf(!enabled || !url || !disposable)(
       `;
       expect(proposalRows).toHaveLength(1);
       const proposal = proposalRows[0]!;
+      const loadedAt = performance.now();
 
       async function expectForgedAuthorityRejected(
         mutate: (authority: Record<string, unknown>) => void,
@@ -1480,10 +1660,13 @@ describe.skipIf(!enabled || !url || !disposable)(
         forged.contentDigestHex = computeSemanticSha256Hex(
           semanticBody(forged, "contentDigestHex"),
         );
+        const preparedAt = performance.now();
         const connection = await pool.reserve();
         const roleSql = bindPostgresReservedSession(pool, connection);
+        const reservedAt = performance.now();
         try {
           await assumeHistoricalSimulationRunnerRoleV2(roleSql);
+          const queryStartedAt = performance.now();
           await expect(roleSql`
             SELECT public.waia_finalize_historical_four_surface_authority_v2(
               ${proposal.id}::uuid,${proposal.content_digest_hex},
@@ -1491,13 +1674,23 @@ describe.skipIf(!enabled || !url || !disposable)(
               ${roleSql.json(forged as postgres.JSONValue)}::jsonb
             )
           `).rejects.toMatchObject({ code: "23514" });
+          if (performance.now() - startedAt > 1_000) {
+            console.info("HISTORICAL_AUTHORITY_NEGATIVE_TIMING", {
+              forgery,
+              loadMs: loadedAt - startedAt,
+              prepareMs: preparedAt - loadedAt,
+              reserveMs: reservedAt - preparedAt,
+              roleMs: queryStartedAt - reservedAt,
+              queryMs: performance.now() - queryStartedAt,
+            });
+          }
         } finally {
           try { await resetHistoricalSimulationRunnerRoleV2(roleSql); }
           finally { connection.release(); }
         }
       }
 
-      await expectForgedAuthorityRejected((forged) => {
+      if (forgery === "knowledge hypothesis") await expectForgedAuthorityRejected((forged) => {
         const snapshots = forged.knowledgeSnapshots as Array<Record<string, unknown>>;
         snapshots[0]!.selectedHypothesisType = "forged-hypothesis-type";
         snapshots[0]!.snapshotContentDigestHex = computeSemanticSha256Hex(
@@ -1511,7 +1704,7 @@ describe.skipIf(!enabled || !url || !disposable)(
         });
       });
 
-      await expectForgedAuthorityRejected((forged) => {
+      if (forgery === "market trust") await expectForgedAuthorityRejected((forged) => {
         const evidence = forged.marketEvidence as Array<Record<string, unknown>>;
         evidence[0]!.trustScore = "0.5";
         evidence[0]!.contentDigestHex = computeSemanticSha256Hex(
@@ -1523,7 +1716,7 @@ describe.skipIf(!enabled || !url || !disposable)(
         });
       });
 
-      await expectForgedAuthorityRejected((forged) => {
+      if (forgery === "Human selected K") await expectForgedAuthorityRejected((forged) => {
         const admissions = forged.surfaceAdmissions as Array<Record<string, unknown>>;
         const admission = admissions[0]!;
         const human = admission.humanRatificationReceipt as Record<string, unknown>;
@@ -1533,11 +1726,11 @@ describe.skipIf(!enabled || !url || !disposable)(
         );
       });
 
-      await expectForgedAuthorityRejected((forged) => {
+      if (forgery === "unapproved extension") await expectForgedAuthorityRejected((forged) => {
         forged.unapprovedSemanticExtension = "runner-controlled";
       });
 
-      await expectForgedAuthorityRejected((forged) => {
+      if (forgery === "future epistemic cutoff") await expectForgedAuthorityRejected((forged) => {
         forged.epistemicRecordCutoff = "2999-01-01T00:00:00.000Z";
         forged.knowledgeSnapshotDigestHex = computeSemanticSha256Hex({
           schemaVersion: "waia.trader.historical_prerun_knowledge_snapshot_set.v2",

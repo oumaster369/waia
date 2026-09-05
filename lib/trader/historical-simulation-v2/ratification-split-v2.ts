@@ -138,6 +138,20 @@ function assertSealed<T extends Readonly<{ contentDigestHex: string }>>(
       computeSemanticSha256Hex(body) !== contentDigestHex) refuse("DIGEST");
 }
 
+export function assertHistoricalTechnicalProposalV2(proposal: HistoricalTechnicalProposalV2): void {
+  assertSealed(proposal, HISTORICAL_TECHNICAL_PROPOSAL_V2);
+  const candidate = proposal.technicalCandidate;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    refuse("TECHNICAL_CANDIDATE_BINDING");
+  }
+  assertSealed(candidate, "waia.trader.historical_four_surface_technical_candidate.v2");
+  if (candidate.contentDigestHex !== proposal.technicalCandidateContentDigestHex ||
+      candidate.organizationId !== proposal.organizationId ||
+      candidate.runId !== proposal.runId || candidate.releaseSha !== proposal.releaseSha) {
+    refuse("TECHNICAL_CANDIDATE_BINDING");
+  }
+}
+
 function validateLaunchPlan(plan: HistoricalTechnicalLaunchPlanV2): void {
   if (!plan.accountId || plan.accountId.trim() !== plan.accountId ||
       !["BTCUSDT", "ETHUSDT"].includes(plan.symbol) ||
@@ -288,7 +302,7 @@ export async function readHistoricalTechnicalProposalForAdminV2(
       proposal.content_digest_hex !== proposal.proposal_json.contentDigestHex) {
     refuse("PROPOSAL_MISSING");
   }
-  assertSealed(proposal.proposal_json, HISTORICAL_TECHNICAL_PROPOSAL_V2);
+  assertHistoricalTechnicalProposalV2(proposal.proposal_json);
   const approvals = await sql<Array<Readonly<{ present: boolean }>>>`
     SELECT EXISTS (
       SELECT 1 FROM trader_historical_proposal_ratification_v2
@@ -365,7 +379,7 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
     if (rows.length !== 1 || !row || row.content_digest_hex !== proposal.contentDigestHex) {
       refuse("PROPOSAL_CONFLICT");
     }
-    assertSealed(row.proposal_json, HISTORICAL_TECHNICAL_PROPOSAL_V2);
+    assertHistoricalTechnicalProposalV2(row.proposal_json);
     return Object.freeze({ id: row.id, proposal: row.proposal_json });
   } finally {
     try {
@@ -461,7 +475,7 @@ export async function ratifyHistoricalTechnicalProposalV2(sql: postgres.Sql, inp
     const proposal = proposals[0];
     if (proposals.length !== 1 || !proposal ||
         proposal.content_digest_hex !== input.proposalContentDigestHex) refuse("PROPOSAL_MISSING");
-    assertSealed(proposal.proposal_json, HISTORICAL_TECHNICAL_PROPOSAL_V2);
+    assertHistoricalTechnicalProposalV2(proposal.proposal_json);
     const request = await loadRequest(tx, input);
     if (request.request.operatorUserId !== input.authenticatedOperatorUserId ||
         proposal.proposal_json.requestId !== request.id ||
@@ -545,7 +559,7 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
     if (proposals.length !== 1 || approvals.length !== 1 || !proposal || !approval) {
       refuse("APPROVAL_MISSING");
     }
-    assertSealed(proposal.proposal_json, HISTORICAL_TECHNICAL_PROPOSAL_V2);
+    assertHistoricalTechnicalProposalV2(proposal.proposal_json);
     assertSealed(approval.ratification_json, HISTORICAL_PROPOSAL_RATIFICATION_V2);
     if (approval.ratification_json.proposalId !== proposal.id ||
         approval.ratification_json.proposalContentDigestHex !== proposal.content_digest_hex) {

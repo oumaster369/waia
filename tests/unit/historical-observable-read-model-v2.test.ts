@@ -21,7 +21,13 @@ const row = (accountId: string, equity: string, sequence: number) => {
   accounting_json: { status: "COMMITTED" },
   accounting_state_json: snapshot.state, accounting_snapshot_content_digest_hex:snapshot.contentDigestHex,
   accounting_snapshot_schema_version:snapshot.schemaVersion,accounting_snapshot_cycle_id:snapshot.cycleId,
-  forecast_json: { status: "AUTHORIZED", reasonCodes: ["FORECAST_READY"] },
+  forecast_json: { status: "AUTHORIZED", reasonCodes: ["FORECAST_READY"], authorityContentDigestHex: "d".repeat(64) },
+  forecast_bundle_id: "bundle-1", forecast_runtime_authority: { contentDigestHex: "d".repeat(64) },
+  forecast_terminal_scenario_masses: { probabilities: [0,0,0.25,0.5,0.25,0,0],
+    lowerBoundsScale8: [null,"-0.03","-0.02","-0.01","0.01","0.02","0.03"],
+    upperBoundsScale8: ["-0.03","-0.02","-0.01","0.01","0.02","0.03",null] },
+  forecast_execution_horizon_minutes: 33,
+  forecast_primary_horizon_minutes: 30,
   portfolio_json: { status: "PROPOSED", reasonCodes: ["PORTFOLIO_READY"] }, risk_json: { status: "PERMITTED" },
   execution_json: { status: "NO_TRADE" }, decision_json: { action: "CASH" }, guardian_json: {}, learning_json: {},
   observed_execution_effects_json: [], stages: ["KNOWLEDGE"], snapshots: ["KNOWLEDGE"],
@@ -34,6 +40,16 @@ const row = (accountId: string, equity: string, sequence: number) => {
 };
 
 describe("historical observable read model v2", () => {
+  it("rejects missing or mismatched actual Forecast evidence for an authorized cycle", async () => {
+    for (const override of [{ forecast_bundle_id: null },
+      { forecast_runtime_authority: { contentDigestHex: "e".repeat(64) } },
+      { forecast_terminal_scenario_masses: null }]) {
+      const unsafe = vi.fn().mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ ...row("a", "100.00000000", 0), ...override }]);
+      await expect(loadHistoricalObservableProjectionPostgresV2({ unsafe } as never,
+        { organizationId: "org", runId: "run" })).rejects.toThrow("FORECAST_EVIDENCE_MISSING");
+    }
+  });
   it("aggregates operator accounts without exposing a control or capital surface", async () => {
     const lifecycle = buildHistoricalSimulationRunLifecycleEventV2({organizationId:"org",accountId:"a",runId:"run",
       partition:"WALK_FORWARD",symbol:"BTCUSDT",eventSequence:1,phase:"RUNNING",initialRecordIndex:240,
@@ -55,6 +71,9 @@ describe("historical observable read model v2", () => {
     expect(result.accounts[0]?.checkpoint?.nextCycleSequence).toBe(2);
     expect(result.accounts[0]?.history.map((cycle) => cycle.cycleSequence)).toEqual([0, 1]);
     expect(result.accounts[0]?.lastForecast).toMatchObject({ reasonCodes:["FORECAST_READY"] });
+    expect(result.accounts[0]?.lastForecast).toMatchObject({ executionHorizonMinutes:33,
+      primaryHorizonMinutes:30,
+      terminalScenarioMasses: { probabilities:[0,0,0.25,0.5,0.25,0,0] } });
     expect(result.accounts[0]?.lastPortfolio).toMatchObject({ reasonCodes:["PORTFOLIO_READY"] });
     expect(result.accounts[0]?.modeledRealityArtifacts).toHaveLength(1);
     expect(result.accounts[0]?.knowledgeArtifacts).toHaveLength(1);
