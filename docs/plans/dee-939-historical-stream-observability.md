@@ -36,12 +36,16 @@ in Admin and tenant panels on 2026-09-06 MSK, delegating engineering through
 historical readiness. PR #553 stays frozen; no algorithm, authority, schema,
 credentials, live or holdout changes. No legacy diagnostic observer fallback.
 
-WP-1: Shared V2 account charts from ordered committed history, clearly labelled
+## WP-1 — Shared observation surfaces
+
+Shared V2 account charts from ordered committed history, clearly labelled
 observed-history drawdown (not a Risk verdict); explicit unknown-lifecycle/transport/stale
 states; visible contact and commit timestamps; correct scoped observation links.
 An org query is only a selection among server-authorized orgs, never authority.
 
-WP-2: Targeted negative/update/fallback/cleanup regression and local browser E2E,
+## WP-2 — Validation
+
+Targeted negative/update/fallback/cleanup regression and local browser E2E,
 lint/typecheck/build, exact-head independent review and applicable PR CI.
 Fixture UI tests prove rendering/transport behavior, not production correctness.
 Actual paired authenticated run evidence remains a DEE-920 readiness gate.
