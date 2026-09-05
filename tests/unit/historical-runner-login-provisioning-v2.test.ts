@@ -22,7 +22,9 @@ function provisioningDatabase(existing: Readonly<{
       return [{ rolcanlogin: false, rolinherit: false, rolsuper: false, rolcreatedb: false,
         rolcreaterole: false, rolreplication: false, rolbypassrls: false, memberships: [] }];
     }
-    if (query.includes("FROM pg_roles login WHERE login.rolname")) return [{ oid: "1", ...existing }];
+    if (query.includes("FROM pg_roles login WHERE login.rolname")) return [{ oid: "1",
+      rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolreplication: false,
+      rolbypassrls: false, unsafe_membership_options: false, ...existing }];
     throw new Error(`unexpected query: ${query}`);
   }), { unsafe: vi.fn(async () => []) });
   const pool = {
