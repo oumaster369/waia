@@ -149,3 +149,45 @@ local schema and is syntactically valid; currently no links exist before eligibl
 33967223941 and PostgreSQL33967223934. Local continuation reached45 committed cycles
 (last sequence44); it remains IN PROGRESS. Publishing the bounded corrections now starts
 their exact-head gates in parallel and does not imply continuation or production PASS.
+
+## 15:40 UTC — reproduced CI connection-lifetime defect
+
+On head3478dda6f93961b9ecacf6638bc56ea2dda2a2aa, PostgreSQL run33970597497
+failed only the first rehashed knowledge-authority negative at5002ms. The35-cycle
+graph passed2700725ms;142 tests passed,1 failed,3 skipped. Other CI, including
+unit/build/E2E, passed. This is not an assertion showing forged authority accepted.
+
+Bounded diagnosis reused disposable DB `waia_hsv2_it_astrarepeat3478`, without
+rebuilding fixtures or rerunning the35-cycle graph:
+
+- Three standalone actual-runner attempts rejected with23514 and
+  `KNOWLEDGE_DURABLE_BINDING`; persisted authority remained unchanged.
+- The exact two rollback-only predecessor tests plus five forgery cases passed
+  in157ms with a fresh default pool.
+- To reproduce expiry without waiting30–60min, set only the diagnostic pool's
+  `max_lifetime:1`, reserve both held and runner slots, run `pg_sleep(1.2)` on
+  the runner, release it, and execute the unchanged seven-test sequence.
+  The first knowledge case alone timed out twice (5005ms/5011ms); six passed.
+  Phase markers locate the stall in `pool.reserve()`, after proposal SELECT
+  completed in3.37ms and before SET ROLE or the finalizer query.
+- Installed postgres.js defers expiry of explicit reservations. Releasing an
+  expired slot lets its next normal query complete before closure. A concurrent
+  reserve can be dequeued by onclose during reconnect and then lose its resolver
+  at the handshake. The random default30–60min lifetime overlaps the45min proof.
+- With timer expiry disabled (`0`, then exact final `null`), the same elapsed
+  boundary and all seven assertions passed in1.40s including1.2s deliberate wait.
+
+Minimal correction: only this explicitly owned integration pool uses
+`max_lifetime:null`; afterAll still releases backends and ends the pool. Add a
+short pool-ownership regression sharing those options, asserting no timer and
+successful reacquisition while preserving the held backend. It passed1246ms.
+No test timeout, SQL guard, role,35-cycle assertion, formula or runtime changed.
+An independent max:1 production-shaped rollover probe reacquired in2.39ms;
+the local max:3 failure is not evidence of a production-consumer defect.
+
+Earlier independent80-cycle proof on3478 completed with exit0 on a fresh DB;
+comparison with the first persisted80-cycle run passed the explicit semantic/
+economic whitelist (digest8825f0970577b5b112d13fd7e4ddbda538ead4cd7ef57e074af60bb76668e41f).
+It confirms local graph/evidence repeatability, not adaptive learning, public
+HTX dataset qualification, production panels or live readiness. CI on this
+new correction is still required before requesting exact merge permission.

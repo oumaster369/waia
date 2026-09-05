@@ -486,10 +486,46 @@ const policyConfig = Object.freeze({
   postExitResidualPolicy: "SIZE_ECONOMICALLY_INADMISSIBLE" as const,
 });
 
+// This suite owns long-lived reserved backends and closes them in afterAll.
+// postgres.js lifetime rollover can lose a queued reserve() after an expired
+// manual reservation is released; the default random 30–60min lifetime overlaps
+// the full graph proof. Keep the session lifetime owned by this suite, not a timer.
+const firstCyclePoolOptions = { max: 3, max_lifetime: null } as const;
+
+describe.skipIf(!enabled || !url || !disposable)(
+  "DEE-920 first-cycle PostgreSQL pool ownership",
+  () => {
+    it("preserves reserved backends and reacquires after a released runner slot", async () => {
+      const pool = postgres(url, firstCyclePoolOptions);
+      let held: postgres.ReservedSql | undefined;
+      let runner: postgres.ReservedSql | undefined;
+      try {
+        held = await pool.reserve();
+        expect(pool.options.max_lifetime).toBeNull();
+        const [original] = await held`SELECT pg_backend_pid() AS pid`;
+        runner = await pool.reserve();
+        // The diagnostic control max_lifetime=1 reproduces the CI lost-reserve
+        // timeout across this boundary. No security query or timeout is waived.
+        await runner`SELECT pg_sleep(1.2)`;
+        runner.release();
+        runner = undefined;
+        await pool`SELECT 1`;
+        runner = await pool.reserve();
+        expect(await runner`SELECT 1 AS value`).toEqual([{ value: 1 }]);
+        expect(await held`SELECT pg_backend_pid() AS pid`).toEqual([original]);
+      } finally {
+        runner?.release();
+        held?.release();
+        await pool.end({ timeout: 5 });
+      }
+    });
+  },
+);
+
 describe.skipIf(!enabled || !url || !disposable)(
   "DEE-919 full production first-cycle PostgreSQL integration",
   () => {
-    const pool = postgres(url, { max: 3 });
+    const pool = postgres(url, firstCyclePoolOptions);
     const priorReleaseSha = process.env.WAIA_RELEASE_SHA;
     const organizationId = HISTORICAL_RUNNER_ORGANIZATION_ID;
     const userId = randomUUID();
