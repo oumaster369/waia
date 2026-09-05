@@ -96,8 +96,8 @@ import {
 import { assertHistoricalMarketCycleV2, type HistoricalSealedMarketCycleV2 } from
   "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
-import { readHistoricalCanonicalPitObservationV2 } from
-  "@/lib/trader/historical-simulation-v2/historical-canonical-pit-proof-v2";
+import { verifyHistoricalObservationProofV2 } from
+  "@/lib/trader/historical-simulation-v2/historical-observation-proof-v2";
 
 export const FORECAST_BUNDLE_SCHEMA_VERSION = "forecast-bundle/v2" as const;
 export const FORECAST_CALIBRATION_SCHEMA_VERSION = "forecast-calibration/v2" as const;
@@ -745,55 +745,21 @@ export async function verifyHistoricalForecastInformationProofV2(
   ) {
     throw new Error("[forecast-v2/persistence] durable historical dataset mismatch (fail closed)");
   }
-  const canonicalObservation = await
-  readHistoricalCanonicalPitObservationV2(
-    sql,
-    { organizationId: input.organizationId },
-    sealed.observationId,
-  );
-  const normalizedObservation = Object.freeze({
-    schemaVersion: "waia.trader.observation.v1" as const,
-    kind: "ohlcv_bar" as const,
-    interval: "1m" as const,
-    sessionPhase: "UNKNOWN" as const,
-    provenance: Object.freeze({
-      providerId: "htx_spot" as const,
-      venue: "htx",
-      feedKind: "ohlcv_bar",
-      symbol: membership.symbol,
-      eventTimeUtc: sealed.publicAvailableAt,
-      ingestTimeUtc: sealed.canonicalRecordIngestTime,
-    }),
-    health: "HEALTHY" as const,
-    freshnessMs: 0,
-    latencyMs: Math.max(0,
-      Date.parse(sealed.canonicalRecordIngestTime) - Date.parse(sealed.publicAvailableAt)),
-    confidence: sealed.trustScore,
-    payload: Object.freeze({
-      barCount: 1,
-      latestClose: sealedCycle.closedBar.close,
-      latestBarCloseTime: sealed.publicAvailableAt,
-    }),
+  await verifyHistoricalObservationProofV2(sql, {
+    organizationId: input.organizationId,
+    sourceId: sealed.sourceId,
+    observationId: sealed.observationId,
+    subjectRef: membership.symbol,
+    eventTime: sealed.publicAvailableAt,
+    availableAt: sealed.canonicalRecordAvailableAt,
+    ingestTime: sealed.canonicalRecordIngestTime,
+    trustAsOfReceiptId: sealed.trustAsOfReceiptId,
+    sourceTrustRevisionId: sealed.trustRevisionId,
+    sourceTrustContentDigest: sealed.trustRevisionContentDigestHex,
+    trustScore: sealed.trustScore,
+    contentDigest: sealed.observationContentDigestHex,
+    latestClose: sealedCycle.closedBar.close,
   });
-  if (!canonicalObservation ||
-      canonicalObservation.organizationId !== input.organizationId ||
-      canonicalObservation.sourceId !== sealed.sourceId ||
-      canonicalObservation.observationKind !== "ohlcv_bar" ||
-      canonicalObservation.subjectRef !== membership.symbol ||
-      canonicalObservation.canonicalProviderId !== "htx_spot" ||
-      canonicalObservation.eventTime.toISOString() !== sealed.publicAvailableAt ||
-      canonicalObservation.availableAt.toISOString() !== sealed.canonicalRecordAvailableAt ||
-      canonicalObservation.ingestTime.toISOString() !== sealed.canonicalRecordIngestTime ||
-      canonicalObservation.trustAsOfReceiptId !== sealed.trustAsOfReceiptId ||
-      canonicalObservation.sourceTrustRevisionId !== sealed.trustRevisionId ||
-      canonicalObservation.sourceTrustContentDigest !==
-        sealed.trustRevisionContentDigestHex ||
-      canonicalObservation.normalizedInputDigest !==
-        computeStableJsonDigest(normalizedObservation) ||
-      canonicalObservation.payloadJson !== canonicalJsonString(normalizedObservation.payload) ||
-      canonicalObservation.contentDigest !== sealed.observationContentDigestHex) {
-    throw new Error("[forecast-v2/persistence] durable historical observation mismatch (fail closed)");
-  }
   const profileRows = await sql<Array<Readonly<{
     profile_json: unknown; content_digest: string;
   }>>>`

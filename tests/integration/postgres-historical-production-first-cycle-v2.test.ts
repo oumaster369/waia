@@ -1155,8 +1155,9 @@ describe.skipIf(!enabled || !url || !disposable)(
             visibleEvidenceCount: number;
             distinctModelInputs: string;
             distinctTerminalDistributions: string;
-            distinctForecastConfidences: string;
-            distinctExpectedDirections: string;
+            distinctCalibrationSnapshots: string;
+            scoredKnowledgeUpdates: string;
+            governedZeroDeltaUpdates: string;
           }>
         >
       >`
@@ -1323,14 +1324,24 @@ describe.skipIf(!enabled || !url || !disposable)(
            WHERE bundle.organization_id=${organizationId}::uuid
              AND bundle.run_id=${runId}
              AND forecast.target_role_id='TERMINAL_RETURN') AS "distinctTerminalDistributions",
-          (SELECT count(DISTINCT forecast_confidence_json::jsonb ->> 'confidence_value')::text
-           FROM trader_intelligence_forecast_record
+          (SELECT count(DISTINCT calibration_snapshot_digest)::text
+           FROM trader_knowledge_state_checkpoint_v2
            WHERE organization_id=${organizationId}::uuid
-             AND run_id=${runId}) AS "distinctForecastConfidences",
-          (SELECT count(DISTINCT scenario_set_json::jsonb ->> 'expected_path')::text
-           FROM trader_intelligence_forecast_record
+             AND checkpoint_namespace LIKE
+               ${`waia.trader.historical_simulation_knowledge_binding.v2|${runId}|BTCUSDT|%`})
+             AS "distinctCalibrationSnapshots",
+          (SELECT count(*)::text
+           FROM trader_knowledge_confidence_update_record
            WHERE organization_id=${organizationId}::uuid
-             AND run_id=${runId}) AS "distinctExpectedDirections"
+             AND run_id=${runId} AND score::numeric <> 0) AS "scoredKnowledgeUpdates",
+          (SELECT count(*)::text
+           FROM trader_knowledge_confidence_update_record
+           WHERE organization_id=${organizationId}::uuid
+             AND run_id=${runId}
+             AND prior_confidence::numeric=posterior_confidence::numeric
+             AND delta::numeric=0
+             AND terminal_reason='FORECAST_V2_EVIDENCE_ONLY_ZERO_DELTA')
+             AS "governedZeroDeltaUpdates"
       `;
       expect(rows[0]).toMatchObject({
         checkpoints: "35",
@@ -1373,8 +1384,13 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(Number(rows[0]!.latestNetRealizedPnl)).not.toBe(0);
       expect(Number(rows[0]!.distinctModelInputs)).toBeGreaterThan(1);
       expect(Number(rows[0]!.distinctTerminalDistributions)).toBeGreaterThan(1);
-      expect(Number(rows[0]!.distinctForecastConfidences)).toBeGreaterThan(1);
-      expect(Number(rows[0]!.distinctExpectedDirections)).toBeGreaterThan(1);
+      // Historical learning accumulates scored evidence and changes the
+      // calibration snapshot visible to later PITs.  Confidence mutation stays
+      // zero until operator disposition; this is the governed contract, not a
+      // missing learning event.
+      expect(Number(rows[0]!.distinctCalibrationSnapshots)).toBeGreaterThan(1);
+      expect(rows[0]!.scoredKnowledgeUpdates).toBe("1");
+      expect(rows[0]!.governedZeroDeltaUpdates).toBe("1");
       expect(fixture.qualificationReceipt.holdout.status)
         .toBe("PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED");
     }, 1_500_000);

@@ -1111,11 +1111,13 @@ async function appendLedger(
     ) VALUES (
       ${entry.entryId}, ${entry.organizationId}::uuid, ${entry.accountId}, ${entry.runId}, ${entry.cycleId},
       ${entry.cycleSequence}, ${entry.symbol}, ${entry.partition}, false, ${entry.replayBarClosedAtUtc}::timestamptz,
-      ${entry.datasetMembership.contentDigestHex}, ${json(entry.datasetMembership)}::jsonb,
-      ${entry.previousContentDigestHex}, ${json(entry.forecast)}::jsonb, ${json(entry.decision)}::jsonb,
-      ${json(entry.portfolio)}::jsonb, ${json(entry.risk)}::jsonb, ${json(entry.execution)}::jsonb,
-      ${json(entry.observedExecutionEffects)}::jsonb, ${json(entry.accounting)}::jsonb,
-      ${json(entry.guardian)}::jsonb, ${json(entry.learning)}::jsonb, ${entry.contentDigestHex}
+      ${entry.datasetMembership.contentDigestHex}, ${json(entry.datasetMembership)}::text::jsonb,
+      ${entry.previousContentDigestHex}, ${json(entry.forecast)}::text::jsonb,
+      ${json(entry.decision)}::text::jsonb, ${json(entry.portfolio)}::text::jsonb,
+      ${json(entry.risk)}::text::jsonb, ${json(entry.execution)}::text::jsonb,
+      ${json(entry.observedExecutionEffects)}::text::jsonb, ${json(entry.accounting)}::text::jsonb,
+      ${json(entry.guardian)}::text::jsonb, ${json(entry.learning)}::text::jsonb,
+      ${entry.contentDigestHex}
     )
   `;
   for (const evidence of deriveHistoricalSimulationModeledEvidenceV2(entry)) {
@@ -1125,7 +1127,7 @@ async function appendLedger(
         source_content_digest_hex, evidence_content_digest_hex, payload_json, capital_eligible
       ) VALUES (${evidence.evidenceId}, ${evidence.organizationId}::uuid, ${evidence.reasonLedgerEntryId},
         ${evidence.evidenceKind}, ${evidence.evidenceOrdinal}, ${evidence.sourceContentDigestHex},
-        ${evidence.evidenceContentDigestHex}, ${json(evidence.payload)}::jsonb, false)
+        ${evidence.evidenceContentDigestHex}, ${json(evidence.payload)}::text::jsonb, false)
     `;
   }
 }
@@ -1243,7 +1245,7 @@ function transactionPort(
          ledger_entry_content_digest_hex,artifacts_json,bundle_content_digest_hex,schema_version)
         SELECT ${bundle.organizationId}::uuid,${bundle.accountId},${bundle.runId},l.cycle_sequence,
           ${bundle.cycleId},${bundle.stage},l.entry_id,${bundle.ledgerEntryContentDigestHex},
-          ${json(bundle.artifacts)}::jsonb,${bundle.contentDigestHex},${bundle.schemaVersion}
+          ${json(bundle.artifacts)}::text::jsonb,${bundle.contentDigestHex},${bundle.schemaVersion}
         FROM trader_historical_simulation_reason_ledger_v2 l
         WHERE l.organization_id=${bundle.organizationId}::uuid AND l.account_id=${bundle.accountId}
           AND l.run_id=${bundle.runId} AND l.cycle_id=${bundle.cycleId}
@@ -1277,7 +1279,7 @@ function transactionPort(
           ${cursor.committedCycleId},${kind},
           (SELECT entry_id FROM trader_historical_simulation_reason_ledger_v2 WHERE organization_id=${cursor.organizationId}::uuid
             AND account_id=${cursor.accountId} AND run_id=${cursor.runId} AND cycle_sequence=${cursor.nextCycleSequence - 1}
-            AND content_digest_hex=${cursor.ledgerHeadContentDigestHex}),${cursor.ledgerHeadContentDigestHex},${json(snapshot.state)}::jsonb,
+            AND content_digest_hex=${cursor.ledgerHeadContentDigestHex}),${cursor.ledgerHeadContentDigestHex},${json(snapshot.state)}::text::jsonb,
           ${snapshot.contentDigestHex},${snapshot.schemaVersion})`;
       await sql`INSERT INTO trader_historical_simulation_resume_checkpoint_v2
         (organization_id,account_id,run_id,split,committed_cycle_sequence,committed_cycle_id,ledger_entry_id,
@@ -1289,9 +1291,11 @@ function transactionPort(
           (SELECT entry_id FROM trader_historical_simulation_reason_ledger_v2 WHERE organization_id=${cursor.organizationId}::uuid
             AND account_id=${cursor.accountId} AND run_id=${cursor.runId} AND cycle_sequence=${cursor.nextCycleSequence - 1}),
           ${cursor.ledgerHeadContentDigestHex},${cursor.nextRecordIndex},${cursor.nextCycleSequence},
-          ${json(cursor.datasetAuthority)}::jsonb,${json(cursor.cycleStageBundleDigestHexByStage)}::jsonb,
-          ${json(Object.fromEntries(snapshots.map(({ kind, snapshot }) => [kind, snapshot.contentDigestHex])))}::jsonb,
-          ${json(cursor)}::jsonb,${cursor.contentDigestHex},${commitRequest.contentDigestHex},${json(commitRequest)}::jsonb,
+          ${json(cursor.datasetAuthority)}::text::jsonb,
+          ${json(cursor.cycleStageBundleDigestHexByStage)}::text::jsonb,
+          ${json(Object.fromEntries(snapshots.map(({ kind, snapshot }) => [kind, snapshot.contentDigestHex])))}::text::jsonb,
+          ${json(cursor)}::text::jsonb,${cursor.contentDigestHex},${commitRequest.contentDigestHex},
+          ${json(commitRequest)}::text::jsonb,
           ${cursor.schemaVersion})`;
       for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2)
         await sql`

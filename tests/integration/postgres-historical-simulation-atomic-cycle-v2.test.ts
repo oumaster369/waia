@@ -163,8 +163,9 @@ describe.skipIf(!enabled || !url)("Historical Simulation V2 atomic resume Postgr
         (SELECT count(*)::int FROM trader_historical_simulation_resume_checkpoint_v2 WHERE run_id=${runId}) checkpoints,
         (SELECT count(*)::int FROM trader_historical_simulation_resume_stage_link_v2 WHERE run_id=${runId}) "stageLinks",
         (SELECT count(*)::int FROM trader_historical_simulation_resume_snapshot_link_v2 WHERE run_id=${runId}) "snapshotLinks"`;
-    expect(counts[0]).toEqual({ ledger: 1, stages: 9, snapshots: 6, checkpoints: 1,
-      stageLinks: 9, snapshotLinks: 6 });
+    expect(counts[0]).toEqual({ ledger: 1, stages: HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.length,
+      snapshots: 6, checkpoints: 1, stageLinks: HISTORICAL_SIMULATION_ATOMIC_STAGES_V2.length,
+      snapshotLinks: 6 });
     expect(retry.contentDigestHex).toBe(left.contentDigestHex);
   });
 });
