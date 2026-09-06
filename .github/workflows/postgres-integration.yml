@@ -53,6 +53,9 @@ on:
       - "tests/integration/postgres-historical-simulation-atomic-cycle-v2.test.ts"
       - "tests/integration/postgres-historical-observable-read-model-v2.test.ts"
       - "tests/integration/postgres-historical-runner-least-privilege-v2.test.ts"
+      - "tests/integration/postgres-predictive-package-storage-v1.test.ts"
+      - "lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1.ts"
+      - "lib/trader/intelligence/forecast-v2/predictive-package-codec-v1.ts"
       - "tests/unit/postgres-session-transaction-v2.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
@@ -122,4 +125,5 @@ jobs:
           tests/integration/postgres-historical-simulation-atomic-cycle-v2.test.ts
           tests/integration/postgres-historical-observable-read-model-v2.test.ts
           tests/integration/postgres-historical-runner-least-privilege-v2.test.ts
+          tests/integration/postgres-predictive-package-storage-v1.test.ts
           tests/unit/postgres-session-transaction-v2.test.ts

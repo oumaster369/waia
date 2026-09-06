@@ -10,11 +10,25 @@ import {
 describe("FHV V2 PostgreSQL schema preflight", () => {
   const canonical = readFhvV2CanonicalMigrations(process.cwd());
 
-  it("binds the exact contiguous canonical journal through 0202", () => {
-    expect(canonical).toHaveLength(203);
+  it("binds the exact contiguous canonical journal through 0203", () => {
+    expect(canonical).toHaveLength(204);
     expect(canonical[0]?.tag.startsWith("0000_")).toBe(true);
-    expect(canonical.at(-1)?.tag).toBe("0202_historical_accounting_semantic_state_v2");
+    expect(canonical.at(-1)?.tag).toBe("0203_predictive_package_storage_v1");
   });
+
+  it("refuses the old journal without required package storage", () => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical,
+      applied: canonical.slice(0, -1).map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) })),
+    })).toThrow("0203_predictive_package_storage_v1 is not applied");
+  });
+
+  it.each(["trader_predictive_package_manifest_v1", "trader_predictive_package_chunk_v1"] as const)(
+    "refuses missing %s even with a complete journal", (table) => {
+      const present = new Set(FHV_V2_POSTGRES_REQUIRED_TABLES);
+      present.delete(table);
+      expect(() => assertFhvV2RequiredTablesPresent(present)).toThrow(table);
+    },
+  );
 
   it("rejects a production database whose applied migration journal ends at 0109", () => {
     const appliedThrough0109 = canonical.slice(0, 110).map((entry) => ({

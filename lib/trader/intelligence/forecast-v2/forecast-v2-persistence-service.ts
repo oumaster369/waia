@@ -2,6 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
 import type postgres from "postgres";
+import { persistPredictivePackageStorageV1 } from "./predictive-package-storage-postgres-v1";
+import {
+  encodeForecastRuntimeInputWireV1, encodeForecastAuthorizedOutcomeWireV1,
+  hydrateForecastRuntimeInputWireV1, hydrateForecastAuthorizedOutcomeWireV1,
+  assertForecastSourceWireVersionV1,
+  FORECAST_SOURCE_VERIFIER_BOUNDED_V3, FORECAST_SOURCE_VERIFIER_LEGACY_V2,
+  type ForecastRuntimeInputWireV1, type ForecastAuthorizedOutcomeWireV1,
+} from "./forecast-package-wire-v1";
+import { computeForecastWireSemanticDigestV1 } from "./forecast-wire-semantic-v1";
 
 import { withPostgresSessionTransaction } from "@/db/postgres-session-transaction";
 import { withPostgresSerializableTransactionRetry } from
@@ -265,6 +274,7 @@ async function persistPredictivePackageV2InTransaction(
     ) {
       throw new Error("[forecast-v2/persistence] existing predictive package binding mismatch");
     }
+    await persistPredictivePackageStorageV1(sql, row.package_id, pkg);
     return {
       packageId: row.package_id,
       predictivePackageContentDigestHex: packageDigest,
@@ -392,6 +402,7 @@ async function persistPredictivePackageV2InTransaction(
     )
   `;
 
+  await persistPredictivePackageStorageV1(sql, packageId, pkg);
   return {
     packageId,
     predictivePackageContentDigestHex: packageDigest,
@@ -446,7 +457,6 @@ export type PersistForecastBundleV2Input = {
 };
 
 const FORECAST_RUNTIME_INPUT_SOURCE_V2 = "waia.trader.forecast_runtime_input_source.v2" as const;
-const FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2 = "waia.forecast-runtime-input-source.verifier.v2" as const;
 
 type ForecastRuntimeAuthorityClassV2 =
   "GENERAL_FORECAST_V2" | "HISTORICAL_SIMULATION_V2";
@@ -486,7 +496,7 @@ function deriveRuntimeAuthorityClass(
   return derived;
 }
 
-function forecastRuntimeInputVerifierBuildDigest(): string {
+function forecastRuntimeInputVerifierBuildDigest(verifierVersion: string): string {
   const release = process.env.WAIA_RELEASE_SHA;
   const vercel = process.env.VERCEL_GIT_COMMIT_SHA;
   if (release && vercel && release !== vercel) {
@@ -496,15 +506,13 @@ function forecastRuntimeInputVerifierBuildDigest(): string {
   if (!sha || !/^[0-9a-f]{40}$/i.test(sha)) {
     throw new Error("[forecast-v2/persistence] immutable build SHA unavailable (fail closed)");
   }
-  return computeSemanticSha256Hex({ verifierVersion: FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2, sourceSha: sha.toLowerCase() });
+  return computeSemanticSha256Hex({ verifierVersion, sourceSha: sha.toLowerCase() });
 }
 
 function validateRuntimeInputSource(
   input: PersistForecastBundleV2Input,
   runtimeAuthorityClass: ForecastRuntimeAuthorityClassV2,
-): Readonly<{
-  runtimeInput: ForecastRuntimeInputV2; outcomeDigestHex: string; inputDigestHex: string; buildDigestHex: string;
-}> | null {
+): ForecastRuntimeInputV2 | null {
   if (input.authorizedOutcome && !input.runtimeInput) {
     throw new Error("[forecast-v2/persistence] authorized outcome requires exact runtime input source (fail closed)");
   }
@@ -540,15 +548,14 @@ function validateRuntimeInputSource(
       replay.authority.anchorClosedBarAt !== new Date(input.anchorClosedBarEpochMs).toISOString()) {
     throw new Error("[forecast-v2/persistence] runtime input does not reproduce authorized outcome (fail closed)");
   }
-  return {
-    runtimeInput: input.runtimeInput,
-    outcomeDigestHex: computeSemanticSha256Hex(replay),
-    // Bind the digest to the exact JSON representation that is durable in PostgreSQL, rather
-    // than to Node Buffer prototypes that jsonb cannot preserve.
-    inputDigestHex: computeSemanticSha256Hex(JSON.parse(JSON.stringify(input.runtimeInput))),
-    buildDigestHex: forecastRuntimeInputVerifierBuildDigest(),
-  };
+  return input.runtimeInput;
 }
+
+type PreparedRuntimeSource = {
+  runtimeInput: ForecastRuntimeInputV2; inputWire: ForecastRuntimeInputWireV1;
+  outcomeWire: ForecastAuthorizedOutcomeWireV1; outcomeDigestHex: string;
+  inputDigestHex: string; buildDigestHex: string;
+};
 
 async function verifyHistoricalKnowledgeProofV2(
   sql: postgres.Sql,
@@ -906,7 +913,7 @@ export type PersistForecastBundleV2Result = {
 async function loadExistingBundleByNaturalIdentity(
   sql: postgres.Sql,
   input: PersistForecastBundleV2Input,
-  runtimeAuthorityClass: ForecastRuntimeAuthorityClassV2,
+  runtimeSource: PreparedRuntimeSource | null,
 ): Promise<PersistForecastBundleV2Result | null> {
   const rows = await sql<{
     id: string;
@@ -930,12 +937,13 @@ async function loadExistingBundleByNaturalIdentity(
     return null;
   }
   const existingBundle = rows[0]!;
-  const expectedPayload = input.authorizedOutcome
-    ? JSON.parse(JSON.stringify(input.authorizedOutcome))
+  const scope = { organizationId: input.organizationId, packageId: input.packageId };
+  const existingOutcome = existingBundle.authorized_outcome
+    ? await hydrateForecastAuthorizedOutcomeWireV1(sql, existingBundle.authorized_outcome as never, scope)
     : null;
   if (
     existingBundle.predictive_package_id !== input.packageId ||
-    !isDeepStrictEqual(existingBundle.authorized_outcome, expectedPayload) ||
+    !isDeepStrictEqual(existingOutcome, input.authorizedOutcome ?? null) ||
     existingBundle.issuance_sequence !== (input.issuanceSequence ?? null)
   ) {
     throw new Error(
@@ -969,16 +977,32 @@ async function loadExistingBundleByNaturalIdentity(
     );
   }
   if (input.runtimeInput) {
-    const expectedSource = validateRuntimeInputSource(input, runtimeAuthorityClass)!;
+    const expectedSource = runtimeSource!;
     const sourceRows = await sql<{ runtime_input_content_digest_hex: string; authorized_outcome_content_digest_hex: string;
-      verifier_build_digest_hex: string }[]>`
-      SELECT runtime_input_content_digest_hex, authorized_outcome_content_digest_hex, verifier_build_digest_hex
+      verifier_build_digest_hex: string; verifier_version: string;
+      runtime_input_json: ForecastRuntimeInputWireV1 | ForecastRuntimeInputV2; authorized_outcome_json: unknown }[]>`
+      SELECT runtime_input_content_digest_hex, authorized_outcome_content_digest_hex, verifier_build_digest_hex,
+        verifier_version, runtime_input_json, authorized_outcome_json
       FROM trader_forecast_runtime_input_source_v2
       WHERE organization_id=${input.organizationId}::uuid AND bundle_id=${existingId}::uuid
     `;
-    if (sourceRows.length !== 1 || sourceRows[0]?.runtime_input_content_digest_hex !== expectedSource.inputDigestHex ||
-        sourceRows[0]?.authorized_outcome_content_digest_hex !== expectedSource.outcomeDigestHex ||
-        sourceRows[0]?.verifier_build_digest_hex !== expectedSource.buildDigestHex) {
+    const source = sourceRows[0];
+    if (source) assertForecastSourceWireVersionV1(source.verifier_version,
+      source.runtime_input_json.predictivePackage,
+      (source.authorized_outcome_json as ForecastAuthorizedOutcomeWireV1)?.issuance?.package);
+    const legacy = source?.verifier_version === FORECAST_SOURCE_VERIFIER_LEGACY_V2;
+    const expectedInputDigest = legacy && source ? computeForecastWireSemanticDigestV1(source.runtime_input_json) : expectedSource.inputDigestHex;
+    const expectedOutcomeDigest = legacy ? computeForecastWireSemanticDigestV1(existingOutcome) : expectedSource.outcomeDigestHex;
+    const expectedBuild = legacy ? forecastRuntimeInputVerifierBuildDigest(FORECAST_SOURCE_VERIFIER_LEGACY_V2) : expectedSource.buildDigestHex;
+    if (sourceRows.length !== 1 || !source ||
+        (!legacy && source.verifier_version !== FORECAST_SOURCE_VERIFIER_BOUNDED_V3) ||
+        source.runtime_input_content_digest_hex !== expectedInputDigest ||
+        source.runtime_input_content_digest_hex !== computeForecastWireSemanticDigestV1(source.runtime_input_json) ||
+        (!legacy && source.authorized_outcome_content_digest_hex !== computeForecastWireSemanticDigestV1(source.authorized_outcome_json)) ||
+        source.authorized_outcome_content_digest_hex !== expectedOutcomeDigest ||
+        source.verifier_build_digest_hex !== expectedBuild ||
+        !isDeepStrictEqual(await hydrateForecastRuntimeInputWireV1(sql, source.runtime_input_json, scope), input.runtimeInput) ||
+        !isDeepStrictEqual(await hydrateForecastAuthorizedOutcomeWireV1(sql, source.authorized_outcome_json as never, scope), existingOutcome)) {
       throw new Error("[forecast-v2/persistence] natural-idempotent runtime source conflict (fail closed)");
     }
   }
@@ -1003,7 +1027,7 @@ export async function persistForecastBundleV2(
     );
   }
   const runtimeAuthorityClass = deriveRuntimeAuthorityClass(input);
-  const runtimeSource = validateRuntimeInputSource(input, runtimeAuthorityClass);
+  const runtimeInput = validateRuntimeInputSource(input, runtimeAuthorityClass);
   if (input.organizationId !== input.issuance.organizationId) {
     throw new Error("[forecast-v2/persistence] organizationId mismatch vs issuance (fail closed)");
   }
@@ -1056,10 +1080,21 @@ export async function persistForecastBundleV2(
     });
   }
 
+  let runtimeSource: PreparedRuntimeSource | null = null;
+  if (runtimeInput) {
+    const buildDigestHex = forecastRuntimeInputVerifierBuildDigest(FORECAST_SOURCE_VERIFIER_BOUNDED_V3);
+    const reference = await persistPredictivePackageStorageV1(sql, input.packageId, input.issuance.package);
+    const inputWire = encodeForecastRuntimeInputWireV1(runtimeInput, reference);
+    const outcomeWire = encodeForecastAuthorizedOutcomeWireV1(input.authorizedOutcome!, reference);
+    runtimeSource = { runtimeInput, inputWire, outcomeWire,
+      inputDigestHex: computeForecastWireSemanticDigestV1(inputWire),
+      outcomeDigestHex: computeForecastWireSemanticDigestV1(outcomeWire), buildDigestHex };
+  }
+
   const existing = await loadExistingBundleByNaturalIdentity(
     sql,
     input,
-    runtimeAuthorityClass,
+    runtimeSource,
   );
   if (existing) {
     return existing;
@@ -1142,7 +1177,7 @@ export async function persistForecastBundleV2(
           ${bundleId}::uuid, ${input.organizationId}::uuid, ${input.packageId}::uuid,
           ${input.runId}, ${input.cycleId}, ${input.symbol}, ${input.anchorClosedBarEpochMs},
           'INCOMPLETE', ${terminalContent}, ${bundleSchema},
-          ${input.authorizedOutcome ? JSON.stringify(input.authorizedOutcome) : null}::text::jsonb,
+          ${runtimeSource ? JSON.stringify(runtimeSource.outcomeWire) : null}::text::jsonb,
           ${input.issuanceSequence ?? null}
         )
       `;
@@ -1214,9 +1249,9 @@ export async function persistForecastBundleV2(
             ${binding.contentDigestHex}, ${runtime.knowledgeEdgeId ?? null}::uuid, ${knowledgeContentDigestHex},
             ${snapshot.contentDigestHex}, ${admission.contentDigestHex},
             ${input.authorizedOutcome!.authority.contentDigestHex}, ${runtimeSource.outcomeDigestHex},
-            ${runtimeSource.inputDigestHex}, ${JSON.stringify(runtime)}::text::jsonb,
-            ${JSON.stringify(input.authorizedOutcome)}::text::jsonb,
-            ${FORECAST_RUNTIME_INPUT_SOURCE_VERIFIER_V2}, ${runtimeSource.buildDigestHex}, ${FORECAST_RUNTIME_INPUT_SOURCE_V2}
+            ${runtimeSource.inputDigestHex}, ${JSON.stringify(runtimeSource.inputWire)}::text::jsonb,
+            ${JSON.stringify(runtimeSource.outcomeWire)}::text::jsonb,
+            ${FORECAST_SOURCE_VERIFIER_BOUNDED_V3}, ${runtimeSource.buildDigestHex}, ${FORECAST_RUNTIME_INPUT_SOURCE_V2}
           )
         `;
       }
@@ -1244,7 +1279,7 @@ export async function persistForecastBundleV2(
       const raced = await loadExistingBundleByNaturalIdentity(
         sql,
         input,
-        runtimeAuthorityClass,
+        runtimeSource,
       );
       if (raced) {
         return raced;

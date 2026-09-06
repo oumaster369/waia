@@ -8,9 +8,15 @@ import {
 import {
   issueForecastRuntimeV2,
   requireForecastRuntimeAuthorizedOutcomeV2,
-  reviveForecastRuntimeJsonV2,
   type ForecastRuntimeInputV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import {
+  assertForecastSourceWireVersionV1,
+  hydrateForecastRuntimeInputWireV1,
+  hydrateForecastAuthorizedOutcomeWireV1,
+  type ForecastRuntimeInputWireV1,
+} from "@/lib/trader/intelligence/forecast-v2/forecast-package-wire-v1";
+import { computeForecastWireSemanticDigestV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-wire-semantic-v1";
 import { readForecastContractBindingV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
 import { verifyHistoricalForecastInformationProofV2 } from
   "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
@@ -52,19 +58,19 @@ export type HistoricalForecastInputPitRecordV2 = Readonly<{
   forecastAuthorityContentDigestHex: string;
   runtimeInputContentDigestHex: string;
   verifierBuildDigestHex: string;
-  runtimeInput: ForecastRuntimeInputV2;
+  runtimeInput: ForecastRuntimeInputV2 | ForecastRuntimeInputWireV1;
   contentDigestHex: string;
 }>;
 
 const DIGEST = /^[0-9a-f]{64}$/;
 
-function currentVerifierBuildDigest(): string {
+function currentVerifierBuildDigest(verifierVersion: string): string {
   const release = process.env.WAIA_RELEASE_SHA;
   const vercel = process.env.VERCEL_GIT_COMMIT_SHA;
   if (release && vercel && release !== vercel) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:BUILD_SHA_CONFLICT");
   const sha = release ?? vercel;
   if (!sha || !/^[0-9a-f]{40}$/i.test(sha)) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:BUILD_SHA_MISSING");
-  return computeSemanticSha256Hex({ verifierVersion: "waia.forecast-runtime-input-source.verifier.v2", sourceSha: sha.toLowerCase() });
+  return computeSemanticSha256Hex({ verifierVersion, sourceSha: sha.toLowerCase() });
 }
 
 function validateMembership(value: HistoricalDatasetMembershipV2, input: {
@@ -139,10 +145,11 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     }
     const datasetMembership = dataset.membership_json;
     validateMembership(datasetMembership, input);
-    const sourceRows = await sql<{ id: string; bundle_id: string; runtime_input_json: ForecastRuntimeInputV2;
+    const sourceRows = await sql<{ id: string; bundle_id: string; runtime_input_json: ForecastRuntimeInputV2 | ForecastRuntimeInputWireV1;
+      predictive_package_id: string; verifier_version: string;
       execution_forecast_target_role_id: string; execution_forecast_content_digest_hex: string;
       runtime_input_content_digest_hex: string; verifier_build_digest_hex: string }[]>`
-      SELECT s.id::text, s.bundle_id::text, s.runtime_input_json,
+      SELECT s.id::text, s.bundle_id::text, s.runtime_input_json, s.predictive_package_id::text, s.verifier_version,
              s.execution_forecast_target_role_id,
              encode(s.execution_forecast_content_digest, 'hex') AS execution_forecast_content_digest_hex,
              s.runtime_input_content_digest_hex, s.verifier_build_digest_hex
@@ -155,14 +162,16 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     `;
     const source = sourceRows[0];
     if (!source || sourceRows.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUNTIME_INPUT_SOURCE_IDENTITY");
-    if (computeSemanticSha256Hex(source.runtime_input_json) !== source.runtime_input_content_digest_hex)
+    assertForecastSourceWireVersionV1(source.verifier_version, source.runtime_input_json.predictivePackage);
+    if (computeForecastWireSemanticDigestV1(source.runtime_input_json) !== source.runtime_input_content_digest_hex)
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUNTIME_INPUT_SOURCE_DIGEST");
-    if (source.verifier_build_digest_hex !== currentVerifierBuildDigest())
+    if (source.verifier_build_digest_hex !== currentVerifierBuildDigest(source.verifier_version))
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUNTIME_INPUT_SOURCE_BUILD");
     if (source.execution_forecast_target_role_id !== "EXECUTION_OPPORTUNITY" ||
         !DIGEST.test(source.execution_forecast_content_digest_hex))
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:RUNTIME_INPUT_SOURCE_FORECAST");
-    const runtimeInput = reviveForecastRuntimeJsonV2(source.runtime_input_json);
+    const runtimeInput = await hydrateForecastRuntimeInputWireV1(sql, source.runtime_input_json,
+      { organizationId: input.organizationId, packageId: source.predictive_package_id });
     await verifyHistoricalForecastInformationProofV2(sql, {
       organizationId: input.organizationId,
       runId: input.runId,
@@ -187,8 +196,9 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
     const forecasts = await sql<Readonly<{
       organization_id: string; run_id: string; cycle_id: string; symbol: string; forecast_schema: string;
       forecast_content_digest: string; anchor_epoch_ms: string | number; authorized_outcome: unknown;
+      predictive_package_id: string;
     }>[]>`
-      SELECT b.organization_id::text, b.run_id, b.cycle_id, b.symbol,
+      SELECT b.organization_id::text, b.run_id, b.cycle_id, b.symbol, b.predictive_package_id::text,
              f.schema_version::text AS forecast_schema,
              encode(f.forecast_content_digest, 'hex') AS forecast_content_digest,
              b.anchor_closed_bar_epoch_ms AS anchor_epoch_ms,
@@ -199,14 +209,17 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
         AND f.target_role_id='EXECUTION_OPPORTUNITY'
     `;
     const forecast = forecasts[0];
-    const persistedOutcome = forecast ? requireForecastRuntimeAuthorizedOutcomeV2(forecast.authorized_outcome as never) : null;
+    const persistedOutcome = forecast ? requireForecastRuntimeAuthorizedOutcomeV2(
+      await hydrateForecastAuthorizedOutcomeWireV1(sql, forecast.authorized_outcome as never,
+        { organizationId: input.organizationId, packageId: forecast.predictive_package_id })) : null;
     if (!forecast || forecasts.length !== 1 || forecast.run_id !== input.runId ||
         forecast.cycle_id !== input.cycleId || forecast.symbol.replace("/", "") !== input.symbol ||
         Number(forecast.forecast_schema) !== 2 || !DIGEST.test(forecast.forecast_content_digest) ||
         forecast.forecast_content_digest !== digestHex(outcome.issuance.forecastContentDigestExec) ||
         forecast.forecast_content_digest !== source.execution_forecast_content_digest_hex ||
         new Date(Number(forecast.anchor_epoch_ms)).toISOString() !== input.pitAnchor ||
-        canonicalizeSemanticJsonString(persistedOutcome) !== canonicalizeSemanticJsonString(outcome)) {
+        forecast.predictive_package_id !== source.predictive_package_id ||
+        !isDeepStrictEqual(persistedOutcome, outcome)) {
       throw new Error("HISTORICAL_FORECAST_PIT_PRODUCER_REFUSED:CANONICAL_FORECAST");
     }
 
@@ -318,9 +331,10 @@ export function createPostgresHistoricalForecastInputPitProducerV2(sql: postgres
       forecastAuthorityContentDigestHex: outcome.authority.contentDigestHex,
       runtimeInputContentDigestHex: source.runtime_input_content_digest_hex,
       verifierBuildDigestHex: source.verifier_build_digest_hex,
-      runtimeInput: cloneAndDeepFreeze(runtimeInput),
+      // Preserve the sealed transport; never inline the hydrated corpus/pools.
+      runtimeInput: source.runtime_input_json,
     };
-    const record = cloneAndDeepFreeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) });
+    const record = cloneAndDeepFreeze({ ...body, contentDigestHex: computeForecastWireSemanticDigestV1(body) });
     await sql`
       INSERT INTO trader_historical_forecast_input_pit_v2 (
         organization_id, run_id, cycle_id, forecast_id, bundle_id,
