@@ -1,5 +1,20 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  cloneBoundedForecastWireJsonV1,
+  encodeForecastRuntimeInputWireV1,
+  encodeForecastAuthorizedOutcomeWireV1,
+  hydrateForecastRuntimeInputWireV1,
+  hydrateForecastAuthorizedOutcomeWireV1,
+  forecastPackageWireVersionV1,
+} from "@/lib/trader/intelligence/forecast-v2/forecast-package-wire-v1";
+import {
+  encodePredictivePackageV1, hydratePredictivePackageAsyncV1,
+} from "@/lib/trader/intelligence/forecast-v2/predictive-package-codec-v1";
+const transport = vi.hoisted(() => ({ hydrate: vi.fn() }));
+vi.mock("@/lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1", () => ({
+  hydratePredictivePackageStorageV1: transport.hydrate,
+}));
 
 import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { buildForecastContractBindingV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1";
@@ -165,6 +180,98 @@ function fixture(): ForecastRuntimeInputV2 {
     knowledgeContentDigestHex: hex("6"),
   };
 }
+
+describe("DEE-946 bounded input AND authorized-outcome wire", () => {
+  function wireFixture() {
+    const input = fixture();
+    const outcome = issueForecastRuntimeV2(input);
+    if (outcome.status !== "FORECAST_AUTHORIZED") throw new Error("fixture not authorized");
+    const encoded = encodePredictivePackageV1(input.predictivePackage!);
+    const reference = {
+      packageId: "00000000-0000-4000-8000-000000000946",
+      organizationId,
+      codecVersion: encoded.manifest.version,
+      generationDigestHex: encoded.manifest.generationDigestHex,
+      contentDigestHex: encoded.manifest.contentDigestHex,
+      manifestDigestHex: encoded.manifest.manifestDigestHex,
+    };
+    transport.hydrate.mockReset().mockImplementation(async (_sql, trusted) => {
+      async function* chunks() { yield* encoded.chunks; }
+      return hydratePredictivePackageAsyncV1(encoded.manifest, chunks(), trusted);
+    });
+    return { input, outcome, reference, scope: { organizationId, packageId: reference.packageId } };
+  }
+
+  it("round-trips both surfaces and reproduces the actual Forecast authority", async () => {
+    const { input, outcome, reference, scope } = wireFixture();
+    const inputWire = encodeForecastRuntimeInputWireV1(input, reference);
+    const outcomeWire = encodeForecastAuthorizedOutcomeWireV1(outcome, reference);
+    expect(JSON.stringify(inputWire)).not.toContain("canonicalSourceCorpus");
+    expect(JSON.stringify(outcomeWire)).not.toContain("replicaArtifacts");
+    expect(inputWire.predictivePackage.family.symbol).toBe("BTCUSDT");
+    expect(outcomeWire.issuance.package.family.symbol).toBe("BTCUSDT");
+    const restoredInput = await hydrateForecastRuntimeInputWireV1({} as never, inputWire, scope);
+    const restoredOutcome = await hydrateForecastAuthorizedOutcomeWireV1({} as never, outcomeWire, scope);
+    expect(restoredInput).toStrictEqual(input);
+    expect(restoredOutcome).toStrictEqual(outcome);
+    expect(issueForecastRuntimeV2(restoredInput)).toStrictEqual(outcome);
+    expect(requireForecastRuntimeAuthorizedOutcomeV2(restoredOutcome)).toStrictEqual(outcome);
+    expect(Buffer.byteLength(JSON.stringify(inputWire))).toBeLessThan(50_000);
+    expect(Buffer.byteLength(JSON.stringify(outcomeWire))).toBeLessThan(50_000);
+  });
+
+  it("does not inspect corpus or pools when serializing admitted references", () => {
+    const { input, outcome, reference } = wireFixture();
+    const pkg = { ...input.predictivePackage! };
+    Object.defineProperty(pkg, "canonicalSourceCorpus", { get() { throw Error("WHOLE_CORPUS_VISITED"); } });
+    Object.defineProperty(pkg, "replicaArtifacts", { get() { throw Error("WHOLE_POOLS_VISITED"); } });
+    expect(() => encodeForecastRuntimeInputWireV1({ ...input, predictivePackage: pkg }, reference)).not.toThrow();
+    expect(() => encodeForecastAuthorizedOutcomeWireV1({ ...outcome, issuance: { ...outcome.issuance, package: pkg } }, reference)).not.toThrow();
+  });
+
+  it.each(["organization", "package", "version", "extra", "digest"])("rejects %s substitution before storage access", async (kind) => {
+    const { input, reference, scope } = wireFixture();
+    const wire = encodeForecastRuntimeInputWireV1(input, reference);
+    if (kind === "organization") wire.predictivePackage.reference.organizationId = "00000000-0000-4000-8000-000000000947";
+    if (kind === "package") wire.predictivePackage.reference.packageId = "00000000-0000-4000-8000-000000000947";
+    if (kind === "version") Object.assign(wire.predictivePackage, { schemaVersion: "unknown" });
+    if (kind === "extra") Object.assign(wire.predictivePackage.reference, { authority: "LIVE" });
+    if (kind === "digest") wire.predictivePackage.reference.manifestDigestHex = "invalid";
+    await expect(hydrateForecastRuntimeInputWireV1({} as never, wire, scope)).rejects.toThrow("FORECAST_PACKAGE_WIRE_REFUSED");
+    expect(transport.hydrate).not.toHaveBeenCalled();
+  });
+
+  it("rejects valid-format wrong seal and altered family against hydrated evidence", async () => {
+    const { input, reference, scope } = wireFixture();
+    const wrongSeal = encodeForecastRuntimeInputWireV1(input, { ...reference, manifestDigestHex: "0".repeat(64) });
+    await expect(hydrateForecastRuntimeInputWireV1({} as never, wrongSeal, scope)).rejects.toThrow("MANIFEST");
+    const wrongFamily = encodeForecastRuntimeInputWireV1(input, reference);
+    wrongFamily.predictivePackage.family.symbol = "ETHUSDT";
+    await expect(hydrateForecastRuntimeInputWireV1({} as never, wrongFamily, scope)).rejects.toThrow("FAMILY_SUBSTITUTION");
+  });
+
+  it("reads legacy JSON without interpreting it as a reference or granting authority", async () => {
+    const { input, outcome, scope } = wireFixture();
+    const oldInput = JSON.parse(JSON.stringify(input));
+    const oldOutcome = JSON.parse(JSON.stringify(outcome));
+    expect(forecastPackageWireVersionV1(oldInput.predictivePackage)).toBe("LEGACY");
+    expect(await hydrateForecastRuntimeInputWireV1({} as never, oldInput, scope)).toStrictEqual(input);
+    expect(await hydrateForecastAuthorizedOutcomeWireV1({} as never, oldOutcome, scope)).toStrictEqual(outcome);
+    expect(transport.hydrate).not.toHaveBeenCalled();
+  });
+
+  it("refuses oversized or cyclic metadata before JSON serialization", () => {
+    const oversized = { value: "x".repeat(4 * 1024 * 1024) };
+    const stringify = vi.spyOn(JSON, "stringify");
+    try {
+      expect(() => cloneBoundedForecastWireJsonV1(oversized)).toThrow("WIRE_TOO_LARGE");
+      expect(stringify).not.toHaveBeenCalled();
+    } finally { stringify.mockRestore(); }
+    const cycle: Record<string, unknown> = {}; cycle.self = cycle;
+    expect(() => cloneBoundedForecastWireJsonV1(cycle)).toThrow("CYCLE");
+    expect(() => cloneBoundedForecastWireJsonV1({ value: Infinity })).toThrow("NONFINITE");
+  });
+});
 
 describe("DEE-756 Forecast Runtime Authority V2", () => {
   it("issues and replays one deterministic, content-addressed Forecast authority", () => {
