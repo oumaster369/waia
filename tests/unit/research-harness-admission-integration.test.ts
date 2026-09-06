@@ -44,6 +44,28 @@ function historyReturnMinuteOpenTimesMs(count = 2500): number[] {
   return Array.from({ length: count }, (_, i) => 1_700_000_000_000 + i * 60_000);
 }
 
+function finiteBaselineHistory(development: readonly number[]): number[] {
+  // Exactly five DEVELOPMENT-shaped periods in the rolling W=2000 window.
+  // Unlike the narrower cosine fixture, every observed bucket has positive mass.
+  return Array.from({ length: 2400 }, (_, i) => development[i % development.length]!);
+}
+
+function expectFiniteBaselineScores(development: number[], history: number[], observed: number[]) {
+  const context = buildBaselineContextFromDevelopment({
+    developmentReturns: development,
+    history,
+    historyMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
+    primaryHorizonMinutes: 30,
+  });
+  for (const baselineId of MANDATORY_BASELINE_IDS) {
+    const baseline = evaluateMandatoryBaselineV1(baselineId, context);
+    expect(baseline.status).toBe("AVAILABLE");
+    if (baseline.status === "AVAILABLE") {
+      expect(observed.every((value) => Number.isFinite(baseline.logScore(value)))).toBe(true);
+    }
+  }
+}
+
 function challengerProbabilities(development: readonly number[]): number[] {
   const grid = computeTerminalTargetGridFromDevelopmentReturns(development);
   return empiricalBucketProbabilities(development, grid);
@@ -85,8 +107,9 @@ function anchorsFromReturns(input: {
 describe("DEE-531 research harness admission integration", () => {
   it("A: beats every mandatory baseline with Holm significance → QUALIFIED", () => {
     const development = developmentReturns();
-    const history = historyReturns();
+    const history = finiteBaselineHistory(development);
     const observed = development.slice(0, 24);
+    expectFiniteBaselineScores(development, history, observed);
     const result = runResearchHarnessAdmissionV1({
       ...BASE_INPUT,
       developmentReturns: development,
@@ -99,9 +122,9 @@ describe("DEE-531 research harness admission integration", () => {
     expect(result.holmResults.every((r) => r.rejected)).toBe(true);
   }, 180_000);
 
-  it("B: beats four baselines but fails one mandatory baseline mean → NOT QUALIFIED", () => {
+  it("B: fails a mandatory baseline mean → NOT QUALIFIED", () => {
     const development = developmentReturns();
-    const history = historyReturns();
+    const history = finiteBaselineHistory(development);
     const context = buildBaselineContextFromDevelopment({
       developmentReturns: development,
       history,
@@ -110,6 +133,7 @@ describe("DEE-531 research harness admission integration", () => {
     const climatology = evaluateMandatoryBaselineV1("climatology/v1", context);
     expect(climatology.status).toBe("AVAILABLE");
     const observed = development.slice(0, 20);
+    expectFiniteBaselineScores(development, history, observed);
     const probs = challengerProbabilities(development);
     const anchors = observed.map((observedReturn, index) => ({
       anchorId: `anchor-${index}`,
@@ -243,9 +267,9 @@ describe("DEE-531 research harness admission integration", () => {
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
   }, 180_000);
 
-  it("H: v2 baseline and receipt identities cannot collide with defective v1 evidence", () => {
-    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v2");
-    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v2");
+  it("H: corrected harness and baseline identities cannot collide with defective evidence", () => {
+    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v3");
+    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v3");
     const common = {
       scoringContractVersion: "multiclass-log-score/v1",
       evaluationPartitionReceiptDigestHex: BASE_INPUT.evaluationPartitionReceiptDigestHex,
@@ -280,5 +304,24 @@ describe("DEE-531 research harness admission integration", () => {
     });
     expect(result.baselineAvailability["ewma-lambda094/v2"]).toBe("UNAVAILABLE");
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
+  });
+
+  it("J: zero baseline bucket mass refuses qualification instead of producing a significant NaN p-value", () => {
+    const development = developmentReturns();
+    const history = historyReturns();
+    const observed = development.slice(0, 24);
+    const context = buildBaselineContextFromDevelopment({ developmentReturns: development, history });
+    const rolling = evaluateMandatoryBaselineV1("rolling-w2000/v1", context);
+    expect(rolling.status).toBe("AVAILABLE");
+    if (rolling.status === "AVAILABLE") {
+      expect(observed.some((value) => rolling.logScore(value) === -Infinity)).toBe(true);
+    }
+    expect(() => runResearchHarnessAdmissionV1({
+      ...BASE_INPUT,
+      developmentReturns: development,
+      historyReturns: history,
+      historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
+      anchors: anchorsBeatAllBaselines(development, observed),
+    })).toThrow("non-finite differential");
   });
 });

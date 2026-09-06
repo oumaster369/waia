@@ -118,6 +118,45 @@ function admittedFixture() {
   return { receipt, expected, predictive, km, ratification };
 }
 
+describe("DEE-947 corrected bootstrap admission boundary", () => {
+  it("rejects old QUALIFIED evidence and a superficial harness-version relabel", () => {
+    const fixture = admittedFixture();
+    expect(fixture.predictive.terminalStatus).toBe("QUALIFIED");
+    const { contentDigestHex: currentDigest, ...currentBody } = fixture.predictive;
+    const oldHarnessDigest = createHash("sha256").update([
+      "scientific-admission-receipt/v2",
+      currentBody.comparisonFamilyId,
+      currentBody.commonAnchorSetDigestHex,
+      currentBody.terminalStatus,
+      ...currentBody.holmComparisons
+        .map((value) => `${value.comparisonId}:${value.pValue.toFixed(12)}`)
+        .sort((a, b) => a.localeCompare(b)),
+    ].join("\n")).digest("hex");
+    // Keep identical p-values deliberately: version/digest invalidation must not
+    // depend on whether the statistical outputs happen to change for a corpus.
+    for (const harnessSchemaVersion of ["research-harness-admission/v2", currentBody.harnessSchemaVersion]) {
+      const body = {
+        ...currentBody,
+        harnessSchemaVersion,
+        harnessAdmissionReceiptDigestHex: oldHarnessDigest,
+      };
+      const receipt = {
+        ...body,
+        contentDigestHex: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
+      } as typeof fixture.predictive;
+      expect(receipt.contentDigestHex).not.toBe(currentDigest);
+      expect(() => buildScientificAdmissionReceiptV2({
+        organizationId: "org-a",
+        predictiveTerminalReceipt: receipt,
+        kmConvergenceReceipt: fixture.km,
+        epistemicParameterRatificationReceipt: fixture.ratification,
+      })).toThrow(harnessSchemaVersion === "research-harness-admission/v2"
+        ? "SCIENTIFIC_ADMISSION_PREDICTIVE_HARNESS_SCHEMA_MISMATCH"
+        : "SCIENTIFIC_ADMISSION_PREDICTIVE_HARNESS_MISMATCH");
+    }
+  }, 180_000);
+});
+
 describe("DEE-631 scientific admission receipt v2", () => {
   it("conjunctively admits exact predictive, KM and Human-ratified identities deterministically", () => {
     const first = admittedFixture();

@@ -6,13 +6,11 @@ import {
   stationaryBootstrapV1,
 } from "@/lib/trader/intelligence/forecast-v2/stationary-bootstrap-v1";
 import { CBRNG_DOMAIN_VALBOOT1 } from "@/lib/trader/intelligence/forecast-v2/constants";
-import {
-  waiaUnbiasedInt,
-  type WaiaCbrngAddress,
-} from "@/lib/trader/intelligence/forecast-v2/waia-cbrng-v1";
+import { createWaiaUnbiasedIntV1 } from "@/lib/trader/intelligence/forecast-v2/waia-cbrng-v1";
 
 export const VALIDATION_BOOTSTRAP_B = 10_000 as const;
-export const VALIDATION_BOOTSTRAP_VERSION = "validation-bootstrap/v1" as const;
+// DEE-947 evidence revision; never relabel old 1/n qualification outputs.
+export const VALIDATION_BOOTSTRAP_VERSION = "validation-bootstrap/v2" as const;
 export const VALIDATION_BOOTSTRAP_MONTE_CARLO_DENOMINATOR = VALIDATION_BOOTSTRAP_B + 1;
 
 export type ValidationBootstrapNullCenteredResultV1 = {
@@ -24,6 +22,13 @@ export type ValidationBootstrapNullCenteredResultV1 = {
   n: number;
 };
 
+function finiteStatistic(value: number, stage: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`[validation-bootstrap] non-finite ${stage} — qualification refused`);
+  }
+  return value;
+}
+
 export function deriveValidationBootstrapRoot(trialIdentityDigest32: Buffer): Buffer {
   if (trialIdentityDigest32.length !== 32) {
     throw new Error("[validation-bootstrap] trial identity digest must be 32 bytes");
@@ -34,20 +39,22 @@ export function deriveValidationBootstrapRoot(trialIdentityDigest32: Buffer): Bu
     .digest();
 }
 
-function valBootAddress(
-  rootSeed: Buffer,
-  replicaU32: number,
-  sampleU32: number,
-  drawU32: number,
-  retryU32 = 0,
-): WaiaCbrngAddress {
+function createValidationIndexWalker(n: number, rootSeed: Buffer) {
+  const blockLength = computeStationaryBootstrapBlockLength(n);
+  const sourceIndex = createWaiaUnbiasedIntV1({ domain: CBRNG_DOMAIN_VALBOOT1, rootSeed, n });
+  const restart = createWaiaUnbiasedIntV1({ domain: CBRNG_DOMAIN_VALBOOT1, rootSeed, n: blockLength });
   return {
-    domain: CBRNG_DOMAIN_VALBOOT1,
-    rootSeed,
-    replicaU32,
-    sampleU32,
-    drawU32,
-    retryU32,
+    blockLength,
+    visit(resampleOrdinal: number, consume: (index: number, position: number) => void): void {
+      let index = sourceIndex(resampleOrdinal, 0, 0);
+      consume(index, 0);
+      for (let position = 1; position < n; position += 1) {
+        index = restart(resampleOrdinal, position, 1) === 0
+          ? sourceIndex(resampleOrdinal, position, 0)
+          : (index + 1) % n;
+        consume(index, position);
+      }
+    },
   };
 }
 
@@ -58,34 +65,14 @@ export function validationBootstrapResampleV1<T>(input: {
   resampleOrdinal: number;
 }): { resampled: T[]; indexVector: number[]; blockLength: number } {
   const n = input.source.length;
-  const blockLength = computeStationaryBootstrapBlockLength(n);
+  const walker = createValidationIndexWalker(n, input.validationBootstrapRoot);
   const indexVector: number[] = new Array(n);
-
-  indexVector[0] = waiaUnbiasedInt(
-    valBootAddress(input.validationBootstrapRoot, input.resampleOrdinal, 0, 0),
-    n,
-  );
-
-  for (let position = 1; position < n; position += 1) {
-    const restart =
-      waiaUnbiasedInt(
-        valBootAddress(input.validationBootstrapRoot, input.resampleOrdinal, position, 1),
-        n,
-      ) === 0;
-    if (restart) {
-      indexVector[position] = waiaUnbiasedInt(
-        valBootAddress(input.validationBootstrapRoot, input.resampleOrdinal, position, 0),
-        n,
-      );
-    } else {
-      indexVector[position] = (indexVector[position - 1]! + 1) % n;
-    }
-  }
+  walker.visit(input.resampleOrdinal, (index, position) => { indexVector[position] = index; });
 
   return {
     resampled: indexVector.map((index) => input.source[index]!),
     indexVector,
-    blockLength,
+    blockLength: walker.blockLength,
   };
 }
 
@@ -99,15 +86,20 @@ export function nullCenterPairedDifferentials(source: readonly number[]): {
   if (n === 0) {
     throw new Error("[validation-bootstrap] differentials must be non-empty");
   }
-  const dBar = source.reduce((acc, value) => acc + value, 0) / n;
-  const centered = source.map((value) => value - dBar);
+  let sum = 0;
+  for (let i = 0; i < n; i += 1) {
+    // Explicit indexing also refuses sparse/undefined inputs. Arithmetic order is unchanged.
+    sum = finiteStatistic(sum + finiteStatistic(source[i]!, "differential"), "differential sum");
+  }
+  const dBar = finiteStatistic(sum / n, "differential mean");
+  const centered = source.map((value) => finiteStatistic(value - dBar, "centered differential"));
   return { n, dBar, centered };
 }
 
 /** Observed test statistic T_obs = sqrt(n) * d_bar. */
 export function observedNullCenteredBootstrapStatistic(differentials: readonly number[]): number {
   const { n, dBar } = nullCenterPairedDifferentials(differentials);
-  return Math.sqrt(n) * dBar;
+  return finiteStatistic(Math.sqrt(n) * dBar, "observed statistic");
 }
 
 /**
@@ -119,18 +111,18 @@ export function validationBootstrapPValueV1(input: {
   trialIdentityDigest32: Buffer;
 }): ValidationBootstrapNullCenteredResultV1 {
   const { n, dBar, centered } = nullCenterPairedDifferentials(input.differentials);
-  const tObs = Math.sqrt(n) * dBar;
-  const centeredMean = centered.reduce((acc, value) => acc + value, 0) / n;
+  const tObs = finiteStatistic(Math.sqrt(n) * dBar, "observed statistic");
+  const centeredMean = finiteStatistic(centered.reduce((acc, value) =>
+    finiteStatistic(acc + value, "centered sum"), 0) / n, "centered mean");
   const root = deriveValidationBootstrapRoot(input.trialIdentityDigest32);
+  const walker = createValidationIndexWalker(n, root);
 
   let extremeCount = 0;
   for (let b = 0; b < VALIDATION_BOOTSTRAP_B; b += 1) {
-    const resampled = validationBootstrapResampleV1({
-      source: centered,
-      validationBootstrapRoot: root,
-      resampleOrdinal: b,
-    }).resampled;
-    const tStar = Math.sqrt(n) * (resampled.reduce((acc, value) => acc + value, 0) / n);
+    let sum = 0;
+    // Exactly the old left-to-right reduce order, without per-resample O(n) arrays.
+    walker.visit(b, (index) => { sum = finiteStatistic(sum + centered[index]!, "resample sum"); });
+    const tStar = finiteStatistic(Math.sqrt(n) * (sum / n), "resample statistic");
     if (tStar >= tObs) {
       extremeCount += 1;
     }

@@ -14,10 +14,11 @@ import {
   digestHex,
   type TrialIdentityInput,
 } from "./trial-identity-v2";
-import { validationBootstrapPValueV1 } from "./validation-bootstrap-v1";
+import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1 } from "./validation-bootstrap-v1";
 
-export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v2" as const;
-export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v2" as const;
+// DEE-947: keep corrected-law evidence separate even when numeric outputs coincide.
+export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v3" as const;
+export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v3" as const;
 
 export type ResearchHarnessAnchorV1 = {
   anchorId: string;
@@ -110,6 +111,7 @@ export function computeResearchHarnessAdmissionReceiptDigestV2(input: {
 }): string {
   const body = [
     SCIENTIFIC_ADMISSION_RECEIPT_VERSION,
+    VALIDATION_BOOTSTRAP_VERSION,
     input.comparisonFamilyId,
     input.commonAnchorSetDigestHex,
     input.terminalStatus,
