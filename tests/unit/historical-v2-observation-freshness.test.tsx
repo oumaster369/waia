@@ -47,7 +47,7 @@ describe("Historical V2 honest observation transport", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(result.current.connected).toBe(false);
     expect(result.current.transport).toBe("polling");
-    expect(source.close).toHaveBeenCalledTimes(1);
+    expect(source.close).toHaveBeenCalledTimes(2); // Scheduled renewal, then watchdog fallback.
     expect(fetchMock).toHaveBeenCalledWith("/stream?transport=poll", expect.objectContaining({ cache: "no-store", credentials: "include", signal: expect.any(AbortSignal) }));
   });
   it("keeps last verified values but shows disconnected state on read failure", async () => {
@@ -57,6 +57,46 @@ describe("Historical V2 honest observation transport", () => {
     expect(result.current.projection?.eventId).toBe("1");
     expect(result.current.connected).toBe(false);
     expect(result.current.error).toMatch(/interrupted/);
+  });
+  it("renews SSE through fresh route authorization without discarding verified data", () => {
+    vi.useFakeTimers(); const { result, emit, source } = setup();
+    emit("historical.snapshot", snapshot());
+    act(() => vi.advanceTimersByTime(25_000));
+    expect(EventSource).toHaveBeenCalledTimes(2);
+    expect(source.close).toHaveBeenCalledOnce();
+    expect(result.current.transport).toBe("SSE");
+    expect(result.current.projection?.eventId).toBe("1");
+  });
+  it.each([401, 403])("clears previously displayed data when fresh admission returns %s", async status => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
+    const { result, emit, source } = setup(); emit("historical.snapshot", snapshot());
+    await act(async () => source.onerror?.());
+    expect(result.current.projection).toBeNull();
+    expect(result.current.connected).toBe(false);
+    expect(result.current.error).toContain("revoked");
+  });
+  it("ignores retired source snapshots and errors after renewal", () => {
+    vi.useFakeTimers();
+    const sources: Array<{ listeners: Map<string, (event: MessageEvent<string>) => void>;
+      close: ReturnType<typeof vi.fn>; onerror: (() => void) | null;
+      addEventListener: (name: string, cb: (event: MessageEvent<string>) => void) => void }> = [];
+    vi.stubGlobal("EventSource", vi.fn(() => {
+      const listeners = new Map<string, (event: MessageEvent<string>) => void>();
+      const source = { listeners, close: vi.fn(), onerror: null as (() => void) | null,
+        addEventListener: (name: string, cb: (event: MessageEvent<string>) => void) => { listeners.set(name, cb); } };
+      sources.push(source); return source;
+    }));
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useHistoricalV2Observation({ endpoint: "/stream", runId: "run" }));
+    act(() => vi.advanceTimersByTime(25_000));
+    expect(sources).toHaveLength(2);
+    act(() => {
+      sources[0].listeners.get("historical.snapshot")?.(new MessageEvent("historical.snapshot", { data: JSON.stringify(snapshot()) }));
+      sources[0].onerror?.();
+    });
+    expect(result.current.projection).toBeNull(); expect(fetchMock).not.toHaveBeenCalled();
+    act(() => sources[1].listeners.get("historical.snapshot")?.(new MessageEvent("historical.snapshot", { data: JSON.stringify(snapshot()) })));
+    expect(result.current.projection?.eventId).toBe("1");
   });
   it("clears previous data and closes on organization mismatch without fallback", () => {
     const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
