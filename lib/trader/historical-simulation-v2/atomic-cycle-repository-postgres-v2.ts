@@ -54,11 +54,10 @@ import { createHistoricalSimulationPostgresKnowledgeReadPortV2 } from "./knowled
 import { loadHistoricalSimulationInitialRecordIndexV2 } from "./production-initial-cycle-index-v2";
 import { prepareHistoricalProductionNextCycleForCommitV2 } from "./production-next-cycle-preparation-v2";
 import {
-  assertHistoricalForecastNonActionableSourceV2,
-  assertHistoricalForecastNonActionableVerificationV2,
-  type HistoricalForecastNonActionableSourceV2,
-  type HistoricalForecastNonActionableVerificationV2,
-} from "./non-actionable-forecast-source-v2";
+  verifyHistoricalForecastNonActionableEvidenceV3,
+  type HistoricalForecastNonActionableSource,
+  type HistoricalForecastNonActionableVerification,
+} from "./non-actionable-forecast-source-v3";
 import { prepareHistoricalProductionNextCycleAuthorityV2 } from "./production-next-cycle-authority-v2";
 import {
   loadHistoricalProductionLearningProjectionV2,
@@ -395,10 +394,10 @@ async function verifyCanonicalStageArtifacts(
     const verificationArtifact =
       produced.stageBundles.CANONICAL_VERIFICATION.artifacts[0];
     const source = sourceArtifact?.payload as
-      | HistoricalForecastNonActionableSourceV2
+      | HistoricalForecastNonActionableSource
       | undefined;
     const verification = verificationArtifact?.payload as
-      | HistoricalForecastNonActionableVerificationV2
+      | HistoricalForecastNonActionableVerification
       | undefined;
     const releaseSha = process.env.WAIA_RELEASE_SHA?.toLowerCase() ??
       process.env.VERCEL_GIT_COMMIT_SHA?.toLowerCase() ?? "";
@@ -417,7 +416,7 @@ async function verifyCanonicalStageArtifacts(
         "HISTORICAL_SIMULATION_RESUME_REFUSED:NON_ACTIONABLE_STAGE_SOURCE",
       );
     }
-    assertHistoricalForecastNonActionableSourceV2(source, {
+    const runtimeInput = await verifyHistoricalForecastNonActionableEvidenceV3(sql, source, verification, {
       organizationId: scope.organizationId,
       accountId: scope.accountId,
       runId: scope.runId,
@@ -426,12 +425,8 @@ async function verifyCanonicalStageArtifacts(
       pitAnchor: produced.ledgerEntry.replayBarClosedAtUtc,
       datasetMembershipContentDigestHex:
         produced.ledgerEntry.datasetMembership.contentDigestHex,
-    });
-    assertHistoricalForecastNonActionableVerificationV2(verification, {
-      source,
-      releaseSha,
-    });
-    const cycleAuthority = source.runtimeInput.historicalIntelligenceCycleAuthority;
+    }, releaseSha);
+    const cycleAuthority = runtimeInput.historicalIntelligenceCycleAuthority;
     const rows = cycleAuthority
       ? await sql<Array<Readonly<{ content_digest: string;
           input_semantic_digest: string }>>>`
@@ -1006,9 +1001,9 @@ async function verifyCommitRequestSources(
     throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:COMMIT_REQUEST_SOURCE");
   }
   let forecastStatus = produced?.ledgerEntry.forecast.status;
-  let persistedSource: HistoricalForecastNonActionableSourceV2 | undefined;
+  let persistedSource: HistoricalForecastNonActionableSource | undefined;
   let persistedVerification:
-    | HistoricalForecastNonActionableVerificationV2
+    | HistoricalForecastNonActionableVerification
     | undefined;
   if (!forecastStatus) {
     const rows = await sql<Array<Readonly<{ forecast_json: Readonly<{ status?: string }> }>>>`
@@ -1022,9 +1017,9 @@ async function verifyCommitRequestSources(
   if (forecastStatus === "NON_ACTIONABLE") {
     if (produced) {
       persistedSource = produced.stageBundles.FORECAST_LIFECYCLE.artifacts[0]
-        ?.payload as HistoricalForecastNonActionableSourceV2 | undefined;
+        ?.payload as HistoricalForecastNonActionableSource | undefined;
       persistedVerification = produced.stageBundles.CANONICAL_VERIFICATION.artifacts[0]
-        ?.payload as HistoricalForecastNonActionableVerificationV2 | undefined;
+        ?.payload as HistoricalForecastNonActionableVerification | undefined;
     } else {
       const rows = await sql<Array<Readonly<{ stage: string; artifacts_json: Array<Readonly<{
           artifactKind: string; contentDigestHex: string; payload?: unknown }>> }>>>`
@@ -1037,11 +1032,11 @@ async function verifyCommitRequestSources(
       persistedSource = rows.find((row) => row.stage === "FORECAST_LIFECYCLE")
         ?.artifacts_json.find((artifact) =>
           artifact.artifactKind === "FORECAST_NON_ACTIONABLE")
-        ?.payload as HistoricalForecastNonActionableSourceV2 | undefined;
+        ?.payload as HistoricalForecastNonActionableSource | undefined;
       persistedVerification = rows.find((row) => row.stage === "CANONICAL_VERIFICATION")
         ?.artifacts_json.find((artifact) =>
           artifact.artifactKind === "FORECAST_NON_ACTIONABLE_VERIFICATION")
-        ?.payload as HistoricalForecastNonActionableVerificationV2 | undefined;
+        ?.payload as HistoricalForecastNonActionableVerification | undefined;
     }
     if (!persistedSource || !persistedVerification ||
         persistedSource.contentDigestHex !== request.forecastInputAuthorityContentDigestHex) {
@@ -1049,7 +1044,8 @@ async function verifyCommitRequestSources(
         "HISTORICAL_SIMULATION_RESUME_REFUSED:NON_ACTIONABLE_COMMIT_SOURCE",
       );
     }
-    assertHistoricalForecastNonActionableSourceV2(persistedSource, {
+    const runtimeInput = await verifyHistoricalForecastNonActionableEvidenceV3(sql,
+      persistedSource, persistedVerification, {
       organizationId: request.organizationId,
       accountId: request.accountId,
       runId: request.runId,
@@ -1058,13 +1054,8 @@ async function verifyCommitRequestSources(
       pitAnchor: request.replayBarClosedAtUtc,
       datasetMembershipContentDigestHex:
         request.datasetMembershipContentDigestHex,
-    });
-    assertHistoricalForecastNonActionableVerificationV2(persistedVerification, {
-      source: persistedSource,
-      releaseSha,
-    });
-    const cycleAuthority =
-      persistedSource.runtimeInput.historicalIntelligenceCycleAuthority;
+    }, releaseSha);
+    const cycleAuthority = runtimeInput.historicalIntelligenceCycleAuthority;
     const intelligenceRows = cycleAuthority
       ? await sql<Array<Readonly<{ id: string }>>>`
           SELECT id::text FROM trader_intelligence_cycle_envelope
@@ -1696,8 +1687,8 @@ type HistoricalSimulationLoadedNonActionableProductionCycleV2 = Readonly<{
   forecastInput: Parameters<
     typeof import("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2").issueForecastRuntimeV2
   >[0];
-  nonActionableSource: HistoricalForecastNonActionableSourceV2;
-  nonActionableVerification: HistoricalForecastNonActionableVerificationV2;
+  nonActionableSource: HistoricalForecastNonActionableSource;
+  nonActionableVerification: HistoricalForecastNonActionableVerification;
 }>;
 
 type HistoricalSimulationLoadedProductionCycleV2 =
@@ -2410,7 +2401,7 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
               status: "NON_ACTIONABLE" as const,
               membership: cycleIdentity.membership,
               sealedCycle: cycleIdentity.sealedCycle,
-              forecastInput: prepared.source.runtimeInput,
+              forecastInput: prepared.runtimeInput,
               nonActionableSource: prepared.source,
               nonActionableVerification: prepared.verification,
             }),

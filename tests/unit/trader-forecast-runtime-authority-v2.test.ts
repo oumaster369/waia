@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createHistoricalForecastNonActionableEvidenceV3,
+  verifyHistoricalForecastNonActionableEvidenceV3,
+} from "@/lib/trader/historical-simulation-v2/non-actionable-forecast-source-v3";
+import {
+  createHistoricalForecastNonActionableSourceV2,
+  createHistoricalForecastNonActionableVerificationV2,
+} from "@/lib/trader/historical-simulation-v2/non-actionable-forecast-source-v2";
+import {
   cloneBoundedForecastWireJsonV1,
   encodeForecastRuntimeInputWireV1,
   encodeForecastAuthorizedOutcomeWireV1,
@@ -228,6 +236,109 @@ describe("DEE-946 bounded input AND authorized-outcome wire", () => {
     });
     return { input, outcome, reference, scope: { organizationId, packageId: reference.packageId } };
   }
+
+  function abstentionFixture() {
+    const base = wireFixture();
+    const { contentDigestHex: _prior, ...prior } = base.input.predictiveAdmissionReceipt!;
+    void _prior;
+    const body = { ...prior, verdict: "NOT_ADMITTED" as const,
+      blockingReasons: ["HYPOTHESIS_NOT_APPLICABLE"] as const };
+    const input = { ...base.input,
+      predictiveAdmissionReceipt: { ...body, contentDigestHex: computeSemanticSha256Hex(body) } };
+    const outcome = issueForecastRuntimeV2(input);
+    if (outcome.status !== "NON_ACTIONABLE") throw new Error("expected real abstention");
+    const scope = { organizationId, accountId: "account", runId: "run", cycleId: "cycle",
+      symbol: "BTCUSDT" as const, pitAnchor, datasetMembershipContentDigestHex: hex("a") };
+    const releaseSha = "a".repeat(40);
+    return { input, outcome, scope, releaseSha, reference: base.reference,
+      evidence: createHistoricalForecastNonActionableEvidenceV3({
+        ...scope, runtimeInput: input, outcome, reference: base.reference, releaseSha }) };
+  }
+
+  it("keeps a real NON_ACTIONABLE package bounded and replays after hydration", async () => {
+    const { input, outcome, scope, releaseSha, evidence } = abstentionFixture();
+    const durable = JSON.parse(JSON.stringify(evidence));
+    expect(JSON.stringify(durable)).not.toMatch(/canonicalSourceCorpus|replicaArtifacts/);
+    expect(Buffer.byteLength(JSON.stringify(durable))).toBeLessThan(50 * 1024);
+    const restored = await verifyHistoricalForecastNonActionableEvidenceV3(
+      {} as never, durable.source, durable.verification, scope, releaseSha);
+    expect(restored).toStrictEqual(input);
+    expect(issueForecastRuntimeV2(restored)).toStrictEqual(outcome);
+    expect(transport.hydrate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["scope", "wire", "verification", "release", "downgrade"] as const)(
+    "refuses NON_ACTIONABLE %s tampering before hydration", async (kind) => {
+      const { scope, releaseSha, evidence } = abstentionFixture();
+      const durable = JSON.parse(JSON.stringify(evidence));
+      if (kind === "scope") durable.source.organizationId = "22222222-2222-4222-8222-222222222222";
+      if (kind === "wire") durable.source.runtimeInput.predictivePackage.reference.manifestDigestHex = hex("b");
+      if (kind === "verification") durable.verification.verifierVersion = "historical-forecast-non-actionable-verifier/1";
+      if (kind === "downgrade") durable.source.schemaVersion = "waia.trader.historical_forecast_non_actionable_source.v2";
+      await expect(verifyHistoricalForecastNonActionableEvidenceV3({} as never,
+        durable.source, durable.verification, scope, kind === "release" ? "b".repeat(40) : releaseSha,
+      )).rejects.toThrow();
+      expect(transport.hydrate).not.toHaveBeenCalled();
+    });
+
+  it("refuses an internally resealed wrong package manifest instead of accepting negative evidence", async () => {
+    const { input, outcome, scope, releaseSha, reference } = abstentionFixture();
+    const evidence = createHistoricalForecastNonActionableEvidenceV3({ ...scope,
+      runtimeInput: input, outcome, releaseSha,
+      reference: { ...reference, manifestDigestHex: hex("b") } });
+    await expect(verifyHistoricalForecastNonActionableEvidenceV3({} as never,
+      evidence.source, evidence.verification, scope, releaseSha)).rejects.toThrow();
+    expect(transport.hydrate).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves strict legacy abstention verification without pretending it is V3", async () => {
+    const { input, outcome, scope, releaseSha } = abstentionFixture();
+    const source = createHistoricalForecastNonActionableSourceV2({ ...scope,
+      runtimeInput: input, outcome });
+    const verification = createHistoricalForecastNonActionableVerificationV2({ source, releaseSha });
+    const restored = await verifyHistoricalForecastNonActionableEvidenceV3({} as never,
+      source, verification, scope, releaseSha);
+    expect(issueForecastRuntimeV2(restored)).toStrictEqual(outcome);
+    expect(transport.hydrate).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing expected scope before reading the NON_ACTIONABLE package", async () => {
+    const { releaseSha, evidence } = abstentionFixture();
+    await expect(verifyHistoricalForecastNonActionableEvidenceV3({} as never,
+      evidence.source, evidence.verification, {} as never, releaseSha)).rejects.toThrow("SOURCE_IDENTITY");
+    expect(transport.hydrate).not.toHaveBeenCalled();
+  });
+
+  it("refuses sealing a BTC abstention as an ETH source", () => {
+    const { input, outcome, scope, releaseSha, reference } = abstentionFixture();
+    expect(() => createHistoricalForecastNonActionableEvidenceV3({ ...scope,
+      symbol: "ETHUSDT", runtimeInput: input, outcome, releaseSha, reference,
+    })).toThrow("SOURCE_IDENTITY");
+  });
+
+  it("owns NON_ACTIONABLE wire metadata across asynchronous package hydration", async () => {
+    const { scope, releaseSha, evidence, outcome } = abstentionFixture();
+    const durable = JSON.parse(JSON.stringify(evidence));
+    const hydrate = transport.hydrate.getMockImplementation()!;
+    transport.hydrate.mockImplementationOnce(async (...args) => {
+      durable.source.runtimeInput.predictiveAdmissionReceipt.blockingReasons = ["TAMPERED"];
+      durable.source.outcome.upstreamReasonCodes = ["TAMPERED"];
+      return hydrate(...args);
+    });
+    const restored = await verifyHistoricalForecastNonActionableEvidenceV3({} as never,
+      durable.source, durable.verification, scope, releaseSha);
+    expect(issueForecastRuntimeV2(restored)).toStrictEqual(outcome);
+  });
+
+  it("does not reinterpret another refusal as a permitted market abstention", () => {
+    const { input, scope, releaseSha, reference } = abstentionFixture();
+    const refusedInput = { ...input, predictiveAdmissionReceipt: null };
+    const outcome = issueForecastRuntimeV2(refusedInput);
+    if (outcome.status !== "NON_ACTIONABLE") throw new Error("expected refusal");
+    expect(() => createHistoricalForecastNonActionableEvidenceV3({ ...scope,
+      runtimeInput: refusedInput, outcome, reference, releaseSha,
+    })).toThrow("NOT_A_PERMITTED_MARKET_ABSTENTION");
+  });
 
   it("round-trips both surfaces and reproduces the actual Forecast authority", async () => {
     const { input, outcome, reference, scope } = wireFixture();

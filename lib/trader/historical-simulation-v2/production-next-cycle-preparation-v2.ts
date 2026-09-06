@@ -1,4 +1,8 @@
 import type postgres from "postgres";
+import type { ForecastRuntimeInputV2 } from
+  "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import { persistPredictivePackageStorageV1 } from
+  "@/lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1";
 
 import {
   issueForecastRuntimeV2,
@@ -19,11 +23,10 @@ import { createPostgresHistoricalForecastInputPitProducerV2 } from
 import { prepareHistoricalProductionNextCycleForecastV2 } from
   "./production-next-cycle-forecast-v2";
 import {
-  createHistoricalForecastNonActionableSourceV2,
-  createHistoricalForecastNonActionableVerificationV2,
-  type HistoricalForecastNonActionableSourceV2,
-  type HistoricalForecastNonActionableVerificationV2,
-} from "./non-actionable-forecast-source-v2";
+  createHistoricalForecastNonActionableEvidenceV3,
+  type HistoricalForecastNonActionableSourceV3,
+  type HistoricalForecastNonActionableVerificationV3,
+} from "./non-actionable-forecast-source-v3";
 
 export const HISTORICAL_PRODUCTION_NEXT_CYCLE_PREPARATION_V2 =
   "waia.trader.historical_production_next_cycle_preparation.v2" as const;
@@ -90,8 +93,9 @@ export async function prepareHistoricalProductionNextCycleForCommitV2(input: Rea
       pitContentDigestHex: string }>
   | Readonly<{ status: "NON_ACTIONABLE"; cycleId: string; defaultQuantity: string;
       policyConfigContentDigestHex: string;
-      source: HistoricalForecastNonActionableSourceV2;
-      verification: HistoricalForecastNonActionableVerificationV2 }>
+      runtimeInput: ForecastRuntimeInputV2;
+      source: HistoricalForecastNonActionableSourceV3;
+      verification: HistoricalForecastNonActionableVerificationV3 }>
 > {
   const rows = await input.tx<PreviousPreparationRowV2[]>`
     SELECT p.cycle_id, h.record_index, p.policy_config_digest_hex,
@@ -167,7 +171,10 @@ export async function prepareHistoricalProductionNextCycleForCommitV2(input: Rea
   const current = forecast.information.sourceAuthority;
   const pitAnchor = current.currentSealedCycle.closedBar.barCloseTime;
   if (forecast.status === "NON_ACTIONABLE") {
-    const source = createHistoricalForecastNonActionableSourceV2({
+    if (!forecast.runtimeInput.predictivePackage) refuse("NON_ACTIONABLE_PACKAGE_MISSING");
+    const reference = await persistPredictivePackageStorageV1(input.tx,
+      forecast.packageId, forecast.runtimeInput.predictivePackage);
+    const evidence = createHistoricalForecastNonActionableEvidenceV3({
       organizationId: input.organizationId,
       accountId: input.accountId,
       runId: input.runId,
@@ -177,17 +184,16 @@ export async function prepareHistoricalProductionNextCycleForCommitV2(input: Rea
       datasetMembershipContentDigestHex: current.currentMembership.contentDigestHex,
       runtimeInput: forecast.runtimeInput,
       outcome: forecast.outcome,
+      reference,
+      releaseSha: input.codeSha,
     });
     return Object.freeze({
       status: "NON_ACTIONABLE" as const,
       cycleId: current.currentCycleId,
       defaultQuantity: quantities[0],
       policyConfigContentDigestHex: row.policy_config_digest_hex,
-      source,
-      verification: createHistoricalForecastNonActionableVerificationV2({
-        source,
-        releaseSha: input.codeSha,
-      }),
+      runtimeInput: forecast.runtimeInput,
+      ...evidence,
     });
   }
   const issued = issueForecastRuntimeV2(forecast.runtimeInput);

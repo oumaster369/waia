@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocked = vi.hoisted(() => ({
   forecast: vi.fn(),
   issueForecast: vi.fn(),
+  persistPackage: vi.fn(),
+  hydratePackage: vi.fn(),
   requireOutcome: vi.fn((value) => value),
   preregister: vi.fn(),
   verifyForecast: vi.fn(),
@@ -21,6 +23,11 @@ vi.mock("@/lib/trader/historical-simulation-v2/production-next-cycle-forecast-v2
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", () => ({
   issueForecastRuntimeV2: mocked.issueForecast,
   requireForecastRuntimeAuthorizedOutcomeV2: mocked.requireOutcome,
+  reviveForecastRuntimeJsonV2: (value: unknown) => value,
+}));
+vi.mock("@/lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1", () => ({
+  persistPredictivePackageStorageV1: mocked.persistPackage,
+  hydratePredictivePackageStorageV1: mocked.hydratePackage,
 }));
 vi.mock("@/lib/trader/historical-simulation-v2/canonical-verification-receipt-postgres-v2", () => ({
   createCanonicalDecisionVerificationReceiptServiceV2: () => ({
@@ -46,8 +53,8 @@ vi.mock("@/lib/trader/research/execopp-qualification/scientific-admission-receip
 }));
 
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
-import { assertHistoricalForecastNonActionableSourceV2 } from
-  "@/lib/trader/historical-simulation-v2/non-actionable-forecast-source-v2";
+import { verifyHistoricalForecastNonActionableEvidenceV3 } from
+  "@/lib/trader/historical-simulation-v2/non-actionable-forecast-source-v3";
 import { prepareHistoricalProductionNextCycleForCommitV2 } from
   "@/lib/trader/historical-simulation-v2/production-next-cycle-preparation-v2";
 
@@ -222,7 +229,12 @@ describe("Historical Simulation V2 atomic later-cycle preparation", () => {
       contentDigestHex: "f".repeat(64),
     };
     const runtimeInput = {
-      diagnosticTimestamp: new Date(pit),
+      diagnosticTimestamp: pit,
+      predictivePackage: {
+        family: { organizationId: org, symbol: "BTCUSDT" },
+        predictivePackageGenerationIdentityDigest: Buffer.from("1".repeat(64), "hex"),
+        predictivePackageContentDigest: Buffer.from("2".repeat(64), "hex"),
+      },
       predictiveAdmissionReceipt: {
         verdict: "NOT_ADMITTED",
         blockingReasons: ["HYPOTHESIS_NOT_APPLICABLE"],
@@ -230,6 +242,7 @@ describe("Historical Simulation V2 atomic later-cycle preparation", () => {
     };
     mocked.forecast.mockResolvedValueOnce({
       status: "NON_ACTIONABLE",
+      packageId: bundleId,
       runtimeInput,
       outcome,
       information: { sourceAuthority: {
@@ -239,6 +252,10 @@ describe("Historical Simulation V2 atomic later-cycle preparation", () => {
       } },
     });
     mocked.issueForecast.mockReturnValue(outcome);
+    mocked.persistPackage.mockResolvedValue({ organizationId: org, packageId: bundleId,
+      codecVersion: "predictive-package-codec/v1", generationDigestHex: "1".repeat(64),
+      contentDigestHex: "2".repeat(64), manifestDigestHex: "3".repeat(64) });
+    mocked.hydratePackage.mockResolvedValue(runtimeInput.predictivePackage);
 
     const prepared = await prepareHistoricalProductionNextCycleForCommitV2({
       tx: sqlHarness() as never,
@@ -253,10 +270,14 @@ describe("Historical Simulation V2 atomic later-cycle preparation", () => {
     });
     if (prepared.status !== "NON_ACTIONABLE") throw new Error("expected abstention");
     const durableSource = JSON.parse(JSON.stringify(prepared.source));
-    expect(() => assertHistoricalForecastNonActionableSourceV2(
-      durableSource,
-      prepared.source,
-    )).not.toThrow();
+    await expect(verifyHistoricalForecastNonActionableEvidenceV3({} as never,
+      durableSource, prepared.verification, {
+        organizationId: org, accountId: account, runId: run, cycleId,
+        symbol: "BTCUSDT", pitAnchor: pit, datasetMembershipContentDigestHex: "7".repeat(64),
+      }, input.codeSha)).resolves.toEqual(runtimeInput);
+    expect(prepared.runtimeInput).toBe(runtimeInput);
+    expect(mocked.persistPackage).toHaveBeenCalledWith(expect.anything(), bundleId,
+      runtimeInput.predictivePackage);
     expect(durableSource.runtimeInput.diagnosticTimestamp).toBe(pit);
     expect(mocked.preregister).not.toHaveBeenCalled();
     expect(mocked.persistAuthority).not.toHaveBeenCalled();

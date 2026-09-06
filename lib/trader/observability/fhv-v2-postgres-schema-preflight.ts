@@ -6,12 +6,14 @@ import type postgres from "postgres";
 
 import { getPostgresSql } from "@/db/postgres-client";
 
-export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 202 as const;
+export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 203 as const;
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
   "trader_forecast_target_bucket_v2",
   "trader_forecast_predictive_package_v2",
+  "trader_predictive_package_manifest_v1",
+  "trader_predictive_package_chunk_v1",
   "trader_forecast_predictive_package_target_v2",
   "trader_forecast_replica_artifact_v2",
   "trader_forecast_bundle_v2",
