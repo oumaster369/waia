@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 import { validationBootstrapPValueNodeParallelV1 } from "../../scripts/trader/validation-bootstrap-node-pool";
 import { INTERNAL_validationBootstrapOrdinalRangeV1, validationBootstrapPValueV1,
+  INTERNAL_createValidationBootstrapRangeEvaluatorV1,
   validationBootstrapPValueAsyncV1, validationBootstrapExecutionFromEnvironmentV1 } from
   "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 import { independentValidationPValue } from "./helpers/validation-bootstrap-independent-reference";
@@ -12,6 +13,24 @@ const fixture = () => ({ differentials: Array.from({ length: 31 }, (_, i) => Mat
 
 describe("DEE-950 exact Node worker ranges", () => {
   afterEach(() => vi.unstubAllEnvs());
+
+  it("owns one prepared input across out-of-order worker ranges and caller mutation", () => {
+    const input = fixture();
+    const expected = independentValidationPValue(input.differentials, input.trialIdentityDigest32);
+    const evaluate = INTERNAL_createValidationBootstrapRangeEvaluatorV1(input);
+    input.differentials.fill(NaN);
+    input.trialIdentityDigest32.fill(0);
+    const second = evaluate(5000, 10000);
+    const first = evaluate(0, 5000);
+    expect(first.extremeCount + second.extremeCount).toBe(expected.extremeCount);
+    for (const part of [first, second]) {
+      expect(part).not.toHaveProperty("pRaw");
+      expect(part).toMatchObject({ n: expected.n, dBar: expected.dBar,
+        tObs: expected.tObs, centeredMean: expected.centeredMean });
+    }
+    expect(evaluate(0, 5000)).toEqual(first);
+    expect(() => evaluate(-1, 0)).toThrow("INVALID_ORDINAL_RANGE");
+  });
 
   it("explicit async selection owns input before dynamic import and returns the actual exact result", async () => {
     vi.stubEnv("WAIA_TRADER_CLI", "1");
