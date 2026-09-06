@@ -1,5 +1,47 @@
 # DEE-950 bounded qualification cost evidence
 
+## Worker-owned preparation and full-N responsiveness — 2026-09-06 22:37 UTC
+
+Before this change each32-ordinal worker assignment re-centered allN inputs. The worker
+now owns prepared centered values, summary statistics and the unchanged addressed walker
+once, and evaluates strict ranges through that closure. This is local input reuse, not
+cached scientific results or durable qualified-evidence reuse. Chunks are8ordinals instead
+of32 to report completed work earlier; the controller still requires exact coverage of
+all10000ordinals before any p-value. No float summation order or result version changed.
+
+48targeted tests PASS (21439): fullB independent oracle for1/2/4workers, all-five-baseline
+predictive receipt equality, out-of-order prepared range evaluation, caller mutation,
+invalid ranges, pre/mid/final cancellation and startup/sink failures. TypeScript/scoped
+lint/diff PASS. Final current-source TypeScript, full eslint--quiet and Next production
+build47110 PASS. Earlier OpenNext33075 applies to preceding ece9f5b1 wiring checkpoint;
+no new OpenNext/combined PostgreSQL or deployed-image proof is inferred from it.
+
+Both local AppleM5/Node22.22.3 probes used syntheticN525600, configuredB10000 and fourworkers;
+they deliberately stopped at128completed ordinals, cancelling all in-flight work and
+returning NO p-value. These are not corpus qualification or target-host measurements.
+
+| Measured quantity | Before (78975) | After (28225) |
+|---|---:|---:|
+| First completed-range progress |14312.282ms|3847.172ms|
+| Total including awaited termination |14615.052ms|15728.289ms|
+| Maximum observed processRSS at callbacks |617447424bytes|560513024bytes|
+| Process userCPU |66467602µs|72035158µs|
+| Progress events |4|16|
+
+Total time was slower in this bounded run. Do NOT present this as an overall speedup or
+derive a full-run deadline: completion bursts and discarded in-flight work invalidate
+simple partial-throughput extrapolation. The reproducible responsiveness script now accepts
+an optional worker count, preserves its default cooperative8-resample probe and suppresses
+parallel partial-run ETA calculations. Command: `WAIA_TRADER_CLI=1 node --import tsx
+scripts/trader/benchmark-validation-bootstrap-responsiveness.ts 525600 4`.
+
+Earlier local exact-image build26193 failed on DockerHub base metadata timeout before any
+build step. Linux smoke53469 used a cached older image plus current read-only source mounts,
+network off, userwaia,1GiB/2CPU/pids256 and passed1/2/4worker exact parity onNode22.23.2.
+It is not proof of a rebuilt image. Initial pids64 smoke23501 failed esbuild spawnEAGAIN
+without a result. At22:36UTC host public registry endpoint responded401 (expected anonymous
+challenge), permitting a bounded base-image pull retry; outcome recorded in root handoff.
+
 ## Explicit actual-path Node wiring — 2026-09-06 22:23 UTC
 
 Actual technical-surface builder → async predictive receipt → owned async harness →

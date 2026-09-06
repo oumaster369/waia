@@ -139,17 +139,30 @@ export function INTERNAL_validationBootstrapOrdinalRangeV1(
   start: number,
   endExclusive: number,
 ): Omit<ValidationBootstrapNullCenteredResultV1, "pRaw"> & { start: number; endExclusive: number } {
+  assertOrdinalRange(start, endExclusive);
+  return INTERNAL_createValidationBootstrapRangeEvaluatorV1(input)(start, endExclusive);
+}
+
+function assertOrdinalRange(start: number, endExclusive: number): void {
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(endExclusive) ||
     start < 0 || start >= endExclusive || endExclusive > VALIDATION_BOOTSTRAP_B) {
     throw new Error("VALIDATION_BOOTSTRAP_INVALID_ORDINAL_RANGE");
   }
+}
+
+/** Worker-local owned preparation, reused without caching or accepting scientific results. */
+export function INTERNAL_createValidationBootstrapRangeEvaluatorV1(input: ValidationBootstrapInputV1) {
   const prepared = prepareValidationBootstrap(input);
-  let extremeCount = 0;
-  for (let b = start; b < endExclusive; b++) {
-    if (prepared.extremeAt(b)) extremeCount++;
-  }
   const { n, dBar, tObs, centeredMean } = prepared;
-  return { start, endExclusive, extremeCount, n, dBar, tObs, centeredMean };
+  return (start: number, endExclusive: number):
+    Omit<ValidationBootstrapNullCenteredResultV1, "pRaw"> & { start: number; endExclusive: number } => {
+    assertOrdinalRange(start, endExclusive);
+    let extremeCount = 0;
+    for (let b = start; b < endExclusive; b++) {
+      if (prepared.extremeAt(b)) extremeCount++;
+    }
+    return { start, endExclusive, extremeCount, n, dBar, tObs, centeredMean };
+  };
 }
 
 function* validationBootstrapSteps(input: ValidationBootstrapInputV1):

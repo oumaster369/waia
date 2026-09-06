@@ -9,7 +9,7 @@ import { deriveValidationBootstrapRoot, nullCenterPairedDifferentials,
 
 type RangeResult = ReturnType<typeof INTERNAL_validationBootstrapOrdinalRangeV1>;
 type Input = Parameters<typeof INTERNAL_validationBootstrapOrdinalRangeV1>[0];
-const RANGE_SIZE = 32;
+const RANGE_SIZE = 8;
 
 /** Only trusted local worker channels supply range results; callers cannot inject them. */
 export async function validationBootstrapPValueNodeParallelV1(

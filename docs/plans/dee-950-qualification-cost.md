@@ -14,13 +14,13 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-NODE-INTEGRATION
-  completedWorkPackages: [WP-BOUND-COST, WP-OPTIMIZE, WP-ORACLE]
+  currentWorkPackage: WP-NODE-PREPARATION
+  completedWorkPackages: [WP-BOUND-COST, WP-OPTIMIZE, WP-ORACLE, WP-NODE-INTEGRATION]
   remainingWorkPackages: [WP-COOPERATIVE, WP-REVIEW, WP-FULL-DATA-FEASIBILITY]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 570d41f12b63541ea8f8659d93f05abcbcf442ee
-  lastValidationAt: "2026-09-06T21:27:00Z"
+  lastValidatedGitSha: ece9f5b118c89101aeec8445c0c2e8d8e1822623
+  lastValidationAt: "2026-09-06T22:23:00Z"
   blockedReason: null
   nextAction: "Validate exact execution-image packaging and full-data resource feasibility after explicit Node executor wiring. Durable progress/resume and final cumulative gates remain open."
 provenance:
@@ -30,6 +30,27 @@ provenance:
 ---
 
 ## Approved scope and dependency
+
+### Worker input lifetime — 2026-09-06 22:33 UTC
+
+Full-N synthetic probe (N525600, configuredB10000, deliberately cancelled after128
+completed ordinals, fourworkers) took14615ms through termination, first progress14312ms,
+peak observed processRSS617447424bytes. This is not completed qualification or targetETA.
+Code inspection shows every32-ordinal assignment re-centers the entire input in itsworker.
+Prepare the unchanged centered input/walker once per worker, retain exact independent
+range validation and per-resample order, and use fixed8-ordinal chunks for earlier progress.
+No skipped work, altered statistics, result injection or durable cache. Validate factory
+ownership, full-B independent oracle and receipt parity, cancellation and resource measurement.
+
+Implemented worker-local owned preparation and8-ordinal scheduling.48targeted tests PASS,
+including unchanged complete five-baseline receipt, independent fullB oracle on1/2/4workers,
+out-of-order range reuse, input mutation and cancellation. Full-N synthetic rerun N525600
+cancelled128resamples: first progress3847ms (prior14312ms), observedRSSpeak560513024bytes
+(prior617447424), total through termination15728ms (prior14615ms). This is earlier progress
+and removal of repeated preparation, NOT a demonstrated total-speedup. No extrapolated
+ETA/p-value is emitted for parallel partial work. Full corpus and target-host feasibility
+remain unverified; no scientific thresholds or production settings changed.
+Final current-source TypeScript, full eslint--quiet and Next production build47110 PASS.
 
 ### Exact worker ranges — implementation checkpoint 2026-09-06 21:54 UTC
 
