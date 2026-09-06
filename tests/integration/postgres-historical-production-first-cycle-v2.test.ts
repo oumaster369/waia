@@ -5,6 +5,7 @@
  * WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES_SESSION=postgresql://... vitest run ...
  */
 import { createHash, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,8 @@ import { join } from "node:path";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { assertRepeatEmpty, exportRepeatEvidence, repeatConfig,
+  REPEAT_USER_ID, REPEAT_RUN_ID } from "../helpers/historical-independent-repeat";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { bindPostgresReservedSession } from "@/db/postgres-session-transaction";
@@ -129,6 +132,7 @@ const INITIAL_RECORD_INDEX = WF_PREDICTIVE_BAR_COUNT;
 const PROVE_KNOWLEDGE_CONTINUATION =
   process.env.WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF === "1";
 const APPROVED_CYCLE_COUNT = PROVE_KNOWLEDGE_CONTINUATION ? 80 : 35;
+const independentRepeat = repeatConfig(process.env, url);
 const QUALIFIED_AT = "2026-08-01T00:00:00.000Z";
 const SYMBOLS = ["BTCUSDT", "ETHUSDT"] as const;
 
@@ -528,8 +532,9 @@ describe.skipIf(!enabled || !url || !disposable)(
     const pool = postgres(url, firstCyclePoolOptions);
     const priorReleaseSha = process.env.WAIA_RELEASE_SHA;
     const organizationId = HISTORICAL_RUNNER_ORGANIZATION_ID;
-    const userId = randomUUID();
-    const runId = `dee-919-${randomUUID()}`;
+    const userId = independentRepeat ? REPEAT_USER_ID : randomUUID();
+    const runId = independentRepeat ? REPEAT_RUN_ID : `dee-919-${randomUUID()}`;
+    let repeatSourceSha: string;
     let fixture: Fixture;
     let preflight: KmFourSurfaceProductionPreflightInputV2;
     let productionInput: HistoricalProductionFirstCycleBootstrapInputV2;
@@ -541,6 +546,11 @@ describe.skipIf(!enabled || !url || !disposable)(
     let neutralKnowledgeEdge: ReturnType<typeof buildHistoricalForecastKnowledgeBootstrapV2>;
 
     beforeAll(async () => {
+      if (independentRepeat) {
+        expect(execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()).toBe("");
+        repeatSourceSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+        await assertRepeatEmpty(pool);
+      }
       process.env.WAIA_RELEASE_SHA = RELEASE_SHA;
       const migrated = await pool<Array<Readonly<{ relation: string | null }>>>`
         SELECT to_regclass(
@@ -1536,6 +1546,16 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(rows[0]!.governedZeroDeltaUpdates).toBe("1");
       expect(fixture.qualificationReceipt.holdout.status)
         .toBe("PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED");
+      if (independentRepeat) {
+        await exportRepeatEvidence(pool, independentRepeat, repeatSourceSha, {
+          userId, organizationId, runId, accountId: productionInput.accountId,
+          releaseSha: RELEASE_SHA, initialRecordIndex: INITIAL_RECORD_INDEX,
+          cycleCount: APPROVED_CYCLE_COUNT, barCount: BAR_COUNT,
+          predictiveBarCount: WF_PREDICTIVE_BAR_COUNT, economicBarCount: WF_ECONOMIC_BAR_COUNT,
+          qualifiedAt: QUALIFIED_AT, symbols: SYMBOLS,
+          upstreamKmEvaluator: "synthetic-qualified-fixture-NOT-full-corpus-qualification",
+        });
+      }
       // This is the full 35-cycle proof, not a synthetic smoke. It completes in
       // about 20 minutes locally, while GitHub's shared runner has demonstrated
       // that it needs more than 40 minutes. Preserve every assertion and allow
