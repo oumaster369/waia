@@ -6,6 +6,8 @@ import {
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import type { HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
 import type { HistoricalModeledExecutionReceiptV2 } from "./modeled-capital-binding-v2";
+import { cancelProtectedHistoricalModeledEntriesV2, resolveCurrentHistoricalModeledGuardianV2 }
+  from "./current-modeled-guardian-v2";
 import { computeEconomicsContentDigest } from "@/lib/trader/execution/fill-economics";
 import type { CostedFillEconomics } from "@/lib/trader/execution/historical-execution-model.types";
 import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
@@ -1874,6 +1876,20 @@ async function produceHistoricalSimulationNextCycleV2(
       });
     },
   });
+  // A protection already known at the prior checkpoint must cancel pending entries
+  // before their next eligible fill. Never use the current bar's later loss here.
+  const restoredGuardian = {
+    status: runtime.guardian.posture,
+    reasonCodes: runtime.guardian.posture === "NONE" ? [] : ["RESTORED_GUARDIAN_POSTURE"],
+  };
+  cancelProtectedHistoricalModeledEntriesV2({
+    exchange: runtime.exchange,
+    guardian: resolveCurrentHistoricalModeledGuardianV2({
+      frontier: runtime.accounting, restored: restoredGuardian,
+    }),
+    requestedAtUtc: runtime.accounting.frontierAsOf,
+    cancelLatencyMs: runtime.model.cancelLatencyMs,
+  });
   // Chronology is strict: orders accepted on earlier bars are advanced on the
   // current closed bar before Forecast/Decision/Risk observe capital.  The
   // ledger projection below consumes this exact result and must never advance
@@ -1881,6 +1897,14 @@ async function produceHistoricalSimulationNextCycleV2(
   const currentBarAdvance = await advance(cycleId);
   advanceResult = currentBarAdvance;
   currentAccounting = currentBarAdvance.accountingFrontier;
+  const currentGuardian = resolveCurrentHistoricalModeledGuardianV2({
+    frontier: currentAccounting, restored: restoredGuardian,
+  });
+  cancelProtectedHistoricalModeledEntriesV2({
+    exchange: runtime.exchange, guardian: currentGuardian,
+    requestedAtUtc: cycle.observedAt,
+    cancelLatencyMs: runtime.model.cancelLatencyMs,
+  });
   const sourceAuthority = input.sourceAuthority ??
     await input.finalizeSourceAuthority?.(currentAccounting);
   if (!sourceAuthority) {
@@ -1951,20 +1975,12 @@ async function produceHistoricalSimulationNextCycleV2(
         ),
       outstandingReservationNotional: "0",
       exposureLimitNotional: currentAccounting.equity,
-      posture:
-        runtime.guardian.posture === "NONE"
-          ? "NORMAL"
-          : runtime.guardian.posture === "STOP_ACCOUNT"
-            ? "HALT"
-            : "CLOSE_ONLY",
+      posture: currentGuardian.posture,
     }),
     exchange: runtime.exchange,
     executionRegistry: runtime.executionRegistry,
     decisionBarIndex: () => source.sealedCycle.barIndex,
-    evaluateGuardian: async () => ({
-      status: runtime.guardian.posture,
-      reasonCodes: runtime.guardian.posture === "NONE" ? [] : ["RESTORED_GUARDIAN_POSTURE"],
-    }),
+    evaluateGuardian: async () => currentGuardian,
     persistEvidence: async (e) => {
       modeledEvidence.push(e);
     },
