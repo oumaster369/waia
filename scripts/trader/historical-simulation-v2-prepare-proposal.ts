@@ -6,6 +6,10 @@ import { prepareHistoricalTechnicalProposalOnExecutionServerV2 } from
   "../../lib/trader/historical-simulation-v2/ratification-split-v2";
 import { runHistoricalTechnicalProposalCliV2 } from
   "../../lib/trader/historical-simulation-v2/ratification-execution-cli-v2";
+import { withHistoricalLaunchCleanupV2 } from
+  "../../lib/trader/historical-simulation-v2/launch-cleanup-v2";
+import { formatHistoricalLaunchErrorV2 } from
+  "../../lib/trader/historical-simulation-v2/launch-error-format-v2";
 
 export async function runHistoricalTechnicalProposalMainV2(
   env: NodeJS.ProcessEnv = process.env,
@@ -13,8 +17,10 @@ export async function runHistoricalTechnicalProposalMainV2(
   const result = await runHistoricalTechnicalProposalCliV2(env,
     async (databaseUrl, input) => {
       const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
-      try { return await prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input); }
-      finally { await pool.end({ timeout: 5 }); }
+      return withHistoricalLaunchCleanupV2(
+        () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input),
+        [() => pool.end({ timeout: 5 })],
+      );
     });
 
   process.stdout.write(`${JSON.stringify({
@@ -26,7 +32,7 @@ export async function runHistoricalTechnicalProposalMainV2(
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   void runHistoricalTechnicalProposalMainV2().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+    process.stderr.write(`${formatHistoricalLaunchErrorV2(error)}\n`);
     process.exitCode = 1;
   });
 }

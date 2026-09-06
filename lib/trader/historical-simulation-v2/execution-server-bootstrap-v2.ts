@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
 
 import {
   INTERNAL_prepareHistoricalProductionFirstCycleOnExecutionServerV2,
@@ -33,7 +34,7 @@ export async function bootstrapAndQueueHistoricalSimulationOnExecutionServerV2(
   const bootstrap = prepared.bootstrap;
   const reserved = await sql.reserve();
   let roleAssumed = false;
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await assumeHistoricalSimulationRunnerRoleV2(reserved);
     roleAssumed = true;
     const lifecycle = await createHistoricalSimulationRunLifecyclePostgresV2(reserved).queue({
@@ -45,11 +46,10 @@ export async function bootstrapAndQueueHistoricalSimulationOnExecutionServerV2(
       requestedByOperatorId: prepared.ratifiedOperatorUserId,
     });
     return Object.freeze({ bootstrap, lifecycle });
-  } finally {
-    try {
+  }, [
+    async () => {
       if (roleAssumed) await resetHistoricalSimulationRunnerRoleV2(reserved);
-    } finally {
-      reserved.release();
-    }
-  }
+    },
+    () => reserved.release(),
+  ]);
 }

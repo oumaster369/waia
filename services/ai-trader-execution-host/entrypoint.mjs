@@ -37,6 +37,7 @@ function required(env, key) {
 }
 
 export function parseExecutionHostRuntimeV2(env) {
+  historicalChildHeapOptionsV2(env.NODE_OPTIONS);
   const forbiddenKey = FORBIDDEN_RUNTIME_KEYS.find((key) => env[key]?.trim());
   if (forbiddenKey) refuse(`FORBIDDEN_RUNTIME_AUTHORITY:${forbiddenKey}`);
   const imageReleaseSha = required(env, "WAIA_IMAGE_RELEASE_SHA").toLowerCase();
@@ -65,12 +66,27 @@ export function parseExecutionHostRuntimeV2(env) {
   return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId });
 }
 
-/** Only the constrained DB secret and durable run identity cross into the child. */
+/** Only an explicit capacity setting may cross the NODE_OPTIONS boundary. */
+export function historicalChildHeapOptionsV2(value) {
+  if (value === undefined || value.trim() === "") return undefined;
+  const match = /^--max[-_]old[-_]space[-_]size(?:=| +)([1-9][0-9]*)$/.exec(value.trim());
+  const megabytes = match ? Number(match[1]) : NaN;
+  // Bound capacity below the execution host's 48-GiB RAM; this allocates no
+  // memory itself. Additional flags (including preloads/inspect) fail closed.
+  if (!Number.isSafeInteger(megabytes) || megabytes < 128 || megabytes > 32768) {
+    refuse("UNSAFE_CHILD_NODE_OPTIONS");
+  }
+  return `--max-old-space-size=${megabytes}`;
+}
+
+/** Only constrained DB/run authority and validated heap capacity cross into the child. */
 export function buildHistoricalConsumerEnvironmentV2(env, config) {
+  const heapOptions = historicalChildHeapOptionsV2(env.NODE_OPTIONS);
   return Object.freeze({
     PATH: env.PATH,
     HOME: env.HOME,
     NODE_ENV: "production",
+    ...(heapOptions === undefined ? {} : { NODE_OPTIONS: heapOptions }),
     WAIA_TRADER_CLI: "1",
     DATABASE_URL_POSTGRES_SESSION: config.databaseUrl,
     WAIA_RELEASE_SHA: config.releaseSha,
@@ -117,6 +133,8 @@ export function runExecutionHostImagePreflightV2(env, fileExists = existsSync) {
 export function startExecutionHostSupervisorV2(options = {}) {
   const env = options.env ?? process.env;
   const config = parseExecutionHostRuntimeV2(env);
+  // Validate before opening a listener so invalid options cannot strand a server.
+  const childEnvironment = buildHistoricalConsumerEnvironmentV2(env, config);
   const consumer = { state: "starting", exitCode: null };
   const createServer = options.createServer ?? createHealthServer;
   const spawnChild = options.spawnChild ?? spawn;
@@ -147,7 +165,7 @@ export function startExecutionHostSupervisorV2(options = {}) {
       "--import", "tsx", "--conditions=react-server", CONSUMER_SCRIPT,
     ], {
       cwd,
-      env: buildHistoricalConsumerEnvironmentV2(env, config),
+      env: childEnvironment,
       stdio: ["inherit", "inherit", "inherit", "ipc"],
     });
     child.on("message", (message) => {

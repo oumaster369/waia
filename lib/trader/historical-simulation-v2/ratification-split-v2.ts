@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type postgres from "postgres";
+import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
 
 import { bindPostgresReservedSession, withPostgresSessionTransaction } from
   "@/db/postgres-session-transaction";
@@ -150,6 +151,7 @@ export function assertHistoricalTechnicalProposalV2(proposal: HistoricalTechnica
       candidate.runId !== proposal.runId || candidate.releaseSha !== proposal.releaseSha) {
     refuse("TECHNICAL_CANDIDATE_BINDING");
   }
+  assertLaunchPlanWithinQualifiedEconomicPartition(proposal.launchPlan, candidate);
 }
 
 function validateLaunchPlan(plan: HistoricalTechnicalLaunchPlanV2): void {
@@ -165,14 +167,18 @@ function validateLaunchPlan(plan: HistoricalTechnicalLaunchPlanV2): void {
   }
 }
 
-function assertLaunchPlanWithinQualifiedEconomicPartition(
+export function assertLaunchPlanWithinQualifiedEconomicPartition(
   plan: HistoricalTechnicalLaunchPlanV2,
   candidate: HistoricalFourSurfaceTechnicalCandidateV2,
 ): void {
+  validateLaunchPlan(plan);
   const first = candidate.firstEconomicRecordIndex;
   const count = candidate.economicRecordCount;
-  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(count) || first < 240 || count < 1 ||
-      plan.initialRecordIndex < first || plan.initialRecordIndex >= first + count ||
+  // Bootstrap reconstructs state at this exact boundary, not an arbitrary
+  // in-partition offset. Resume is a separate durable-cursor path.
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(count) ||
+      !Number.isSafeInteger(first + count) || first < 240 || count < 1 ||
+      plan.initialRecordIndex !== first ||
       plan.cycleCount > first + count - plan.initialRecordIndex) {
     refuse("LAUNCH_PLAN_OUTSIDE_QUALIFIED_ECONOMIC_PARTITION");
   }
@@ -327,7 +333,7 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
   let assumed = false;
   let locked = false;
   const lockKey = historicalDatasetAuthorityRunLockKeyV2(input.preflight);
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await requireHistoricalSimulationRunnerLoginV2(sql);
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
@@ -381,13 +387,13 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
     }
     assertHistoricalTechnicalProposalV2(row.proposal_json);
     return Object.freeze({ id: row.id, proposal: row.proposal_json });
-  } finally {
-    try {
+  }, [
+    async () => {
       if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-      if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql);
-    }
-    finally { reserved.release(); }
-  }
+    },
+    async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
+    () => reserved.release(),
+  ]);
 }
 
 /** TEST_ONLY production-composition seam; the database role downgrade remains real. */
@@ -407,7 +413,7 @@ export async function TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionSer
   let assumed = false;
   let locked = false;
   const lockKey = historicalDatasetAuthorityRunLockKeyV2(input.preflight);
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
     await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
@@ -445,13 +451,13 @@ export async function TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionSer
         ${HISTORICAL_TECHNICAL_PROPOSAL_V2})
     `;
     return Object.freeze({ id, proposal });
-  } finally {
-    try {
+  }, [
+    async () => {
       if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-      if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql);
-    }
-    finally { reserved.release(); }
-  }
+    },
+    async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
+    () => reserved.release(),
+  ]);
 }
 
 export async function ratifyHistoricalTechnicalProposalV2(sql: postgres.Sql, input: Readonly<{
@@ -535,8 +541,7 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
   const sql = bindPostgresReservedSession(pool, reserved);
   let assumed = false;
   let locked = false;
-  let operationFailed = false;
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
     const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
@@ -632,26 +637,16 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
         authorityId: bootstrap.ratifiedAuthorityId,
         manifest: Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) }),
       });
-  } catch (error) {
-    operationFailed = true;
-    throw error;
-  } finally {
-    let cleanupError: unknown;
-    try {
+  }, [
+    async () => {
       if (locked) {
-        try {
-          const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
-          await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-        } catch (error) { cleanupError ??= error; }
+        const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
+        await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
       }
-      if (assumed) {
-        try { await resetHistoricalSimulationRunnerRoleV2(sql); }
-        catch (error) { cleanupError ??= error; }
-      }
-    }
-    finally { reserved.release(); }
-    if (!operationFailed && cleanupError) throw cleanupError;
-  }
+    },
+    async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
+    () => reserved.release(),
+  ]);
 }
 
 export function finalizeApprovedHistoricalProposalOnExecutionServerV2(
