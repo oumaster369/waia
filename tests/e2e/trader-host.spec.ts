@@ -107,6 +107,28 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await expect(page.locator(":focus")).toBeVisible();
   });
 
+  test("keeps Trader registration and login free of Twin wording on desktop and mobile", async ({ page }) => {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const auth = page.getByTestId("landing-auth");
+      await expect(auth).not.toContainText(/twin/i);
+      await page.getByTestId("landing-auth-mode-create").click();
+      await expect(auth.getByRole("heading")).toHaveText("Register for AI-TRADER");
+      await expect(auth).not.toContainText(/twin|partner preview/i);
+      await expect(page.getByTestId("landing-auth-full-name")).toBeVisible();
+      await expect(page.getByTestId("landing-auth-submit")).toHaveText("Register");
+      await page.getByTestId("landing-auth-submit").click();
+      await expect(page.getByTestId("landing-auth-error")).toHaveText("Enter your name.");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await auth.screenshot({ path: `test-results/trader-registration-${width}.png` });
+      await page.getByTestId("landing-auth-mode-sign-in").click();
+      await expect(auth.getByRole("heading")).toHaveText("Sign in to AI-TRADER");
+      await expect(page.getByTestId("landing-auth-full-name")).toHaveCount(0);
+      await expect(auth).not.toContainText(/twin/i);
+    }
+  });
+
   test("redirects entitled user from trader host root to /trader", async ({
     page,
     baseURL,
