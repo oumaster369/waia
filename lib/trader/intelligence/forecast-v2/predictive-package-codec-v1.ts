@@ -393,7 +393,7 @@ export async function hydratePredictivePackageAsyncV1(
   }
 }
 
-function validateManifest(
+export function validatePredictivePackageManifestV1(
   m: PredictivePackageManifestV1,
   expected: PredictivePackageCodecIdentityV1 & { manifestDigestHex: string },
 ): void {
@@ -437,6 +437,8 @@ function validateManifest(
   )
     fail("MANIFEST");
 }
+
+const validateManifest = validatePredictivePackageManifestV1;
 
 function* decodeChunk(bytes: unknown, d: Descriptor, chunkByteLimit: number): Generator<unknown[]> {
   if (

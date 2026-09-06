@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: "2026-09-06"
   blockedReason: null
-  nextAction: "Implement immutable PostgreSQL manifest/chunk storage and BOTH input/outcome wire references; async hydration is tested but not yet wired."
+  nextAction: "Wire BOTH canonical input/outcome references into persistence and replay; bounded PostgreSQL transport passes focused tests but is not yet called by production paths."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -30,7 +30,7 @@ provenance:
   humanApproval: "2026-09-06 new user turn authorizes DEE-946–951 implementation and PR preparation; no merge, deployment or real account."
 ---
 
-# DEE-946 — partial phase 1, not launch readiness
+# DEE-946 — codec and storage implemented, integration incomplete
 
 ## Authorized scope
 
@@ -40,7 +40,7 @@ Each wire chunk and each individually serialized record is bounded. Never string
 
 ## Remaining integration work
 
-Database schema, RLS, transactional publication, persistence/hydration wiring, immutable idempotency/conflict rules, migration tests and full-corpus runtime requalification remain root-owned follow-up. No migration, production mutation, credentials, scientific-law change, corpus reduction or qualification PASS is included here. DEE-946 must not be closed on codec tests alone.
+The additive storage migration, RLS and bounded PostgreSQL transport now exist locally and have focused local PostgreSQL tests. Production-callsite wiring, canonical input/outcome reference versions, complete retry/replay integration and full-corpus runtime requalification remain root-owned follow-up. No production mutation, credentials, scientific-law change, corpus reduction or qualification PASS is included here. DEE-946 must not be closed on codec or storage tests alone.
 
 ## Validation
 
@@ -52,7 +52,7 @@ Focused regression suite covers actual-builder round-trip, existing pool replay 
 
 The codec recomputes existing family/package/pool/artifact/grid digests without refitting or inventing replacement digests. This is not scientific qualification: trusted manifest identity must be obtained from an authorized immutable reference, existing admission/replay validation remains required, and full-corpus cost/load and durable storage tests remain pending. On partial encoder failure no completion manifest is returned; later persistence must stage chunks and publish atomically only after successful final manifest and authority validation.
 
-## Concrete phase 2 integration contract (not implemented)
+## Concrete phase 2 integration contract (partially implemented)
 
 Add an immutable manifest table and byte-bounded chunk table with composite organization/package/codec keys. Recheck the next migration number (0203 at the audited base). Reference the canonical package through a same-organization foreign key; chunks include ordinal, byte length, record count and SHA-256. Enforce byte length <=65536 and exact payload length/hash in PostgreSQL. Normalize chunk descriptors as rows, never a giant JSON manifest. Enable tenant RLS using the existing authorized runner organization restriction, INSERT/SELECT only; no DELETE/TRUNCATE/BYPASSRLS or ownership changes. Preserve existing rows.
 
@@ -77,3 +77,13 @@ Phase 2 gates: PG17 restricted-admin fresh migration, actual runner RLS negative
 Implemented `hydratePredictivePackageAsyncV1` with one outstanding chunk read, no payload collection, shared record parsing/scientific validation, admission before opening a cursor, copied manifest descriptors and trusted identity to prevent mutation across awaits, and awaited cursor cleanup. When both reading and cleanup fail, both errors and the primary cause are retained; cleanup failure after a valid read still refuses success. The synchronous transport continues through the same parser.
 
 37 focused codec tests PASS (original 26 plus 11 asynchronous cases); full TypeScript check, scoped ESLint and diff check PASS. Covers exact real-builder/replay parity, missing/extra/reordered/corrupt chunks, sealed invalid draw indices, denied admission without opening input, caller mutation, one in-flight read, source failure and cleanup failure. Not yet database persistence, not a full-corpus benchmark, not independent review or PR readiness.
+
+## PostgreSQL transport work package — 2026-09-06 19:19 UTC
+
+Implemented local migration 0203, Drizzle table definitions, immutable manifest/chunk tables, same-organization canonical-package lineage, byte/hash constraints, deferred chunk-to-manifest FK, once-per-seal contiguous-coverage verification and package-scoped publication locks. UPDATE/DELETE/TRUNCATE are refused even for an ordinary table owner; runner receives only SELECT/INSERT with the existing fixed-organization RLS boundary. No role privilege escalation, extension, existing-row rewrite or production apply.
+
+The new server-only storage module streams inserts/read pages of at most eight 64-KiB payloads (512 KiB/page), retains descriptor metadata rather than payload collections, validates the immutable seal, retries root serializable conflicts, skips re-encoding an existing matching sealed artifact and reconstructs through the tested asynchronous codec. It is not yet wired into Forecast input/outcome persistence or replay.
+
+Fresh local PostgreSQL 17 migration journal through 0203 PASS. The new migration separately applies within a rollback-only probe as an administrator with no SUPERUSER, BYPASSRLS, CREATEROLE or CREATEDB. 18 PostgreSQL tests + 37 codec tests PASS: actual runner round-trip and byte equality, bounded rows, retry, wrong identities/seal, partial/empty/gapped/extra/oversized publication rollback, byte tampering, forbidden mutation privileges, actual other-tenant invisibility, post-seal extension refusal, owner immutability, concurrent identical publication and new-connection hydration. One initial owner-TRUNCATE test was preempted by PostgreSQL pending deferred trigger events; the corrected probe flushes constraints before asserting the actual immutable trigger. No runtime protection was weakened.
+
+Remaining: both versioned wire surfaces, canonical consumers/outcome/restart integration, full-data resource measurement, independent review and complete PR gates. These local tests are not an end-to-end Historical Simulation PASS or production readiness. Test fixtures are synthetic and stay only in a dedicated localhost PostgreSQL container; no production data was copied.
