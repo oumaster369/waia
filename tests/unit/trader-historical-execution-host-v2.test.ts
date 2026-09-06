@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildExecutionHostRuntimeHealthV2,
   buildHistoricalConsumerEnvironmentV2,
+  historicalChildHeapOptionsV2,
   parseExecutionHostRuntimeV2,
   runExecutionHostImagePreflightV2,
   startExecutionHostSupervisorV2,
@@ -23,6 +25,39 @@ const env = Object.freeze({
 });
 
 describe("Historical Simulation V2 execution-host supervisor", () => {
+  it("propagates the explicit heap limit to a real Node child without other host authority", () => {
+    const childEnv = buildHistoricalConsumerEnvironmentV2({
+      ...env, NODE_OPTIONS: "--max-old-space-size=24576", HTX_SECRET_KEY: "not-forwarded",
+    }, parseExecutionHostRuntimeV2(env));
+    const child = spawnSync(process.execPath, ["--input-type=module", "-e",
+      "import v8 from 'node:v8'; console.log(JSON.stringify({heap: v8.getHeapStatistics().heap_size_limit / 1048576, secretPresent: 'HTX_SECRET_KEY' in process.env}));"],
+    { env: childEnv, encoding: "utf8", timeout: 10_000 });
+    expect(child.error).toBeUndefined();
+    expect(child.status).toBe(0);
+    const measured = JSON.parse(child.stdout);
+    expect(measured.heap).toBeGreaterThanOrEqual(24576);
+    expect(measured.heap).toBeLessThan(25000);
+    expect(measured.secretPresent).toBe(false);
+  });
+
+  it.each([
+    "--require=/tmp/injected.cjs", "--import=data:text/javascript,process.exit()",
+    "--max-old-space-size=24576 --require=/tmp/injected.cjs",
+    "--max-old-space-size=24576 --inspect=0.0.0.0:9229",
+    "--max-old-space-size=24576 --max-old-space-size=512",
+    "--max-old-space-size=0", "--max-old-space-size=32769",
+    "--max-old-space-size=1e4", "--max-old-space-size=24576\n--require=x",
+  ])("rejects unsafe or unbounded child NODE_OPTIONS: %s", (value) => {
+    expect(() => historicalChildHeapOptionsV2(value)).toThrow("UNSAFE_CHILD_NODE_OPTIONS");
+  });
+
+  it("does not invent a heap setting and normalizes the sole supported capacity option", () => {
+    expect(historicalChildHeapOptionsV2(undefined)).toBeUndefined();
+    expect(historicalChildHeapOptionsV2(" ")).toBeUndefined();
+    expect(historicalChildHeapOptionsV2("--max_old_space_size 24576"))
+      .toBe("--max-old-space-size=24576");
+  });
+
   it("binds runtime identity to the baked SHA and dedicated LOGIN", () => {
     expect(parseExecutionHostRuntimeV2(env)).toMatchObject({
       releaseSha: "a".repeat(40),
