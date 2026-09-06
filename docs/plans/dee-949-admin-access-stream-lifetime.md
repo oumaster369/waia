@@ -39,7 +39,7 @@ on 2026-09-06, including closing anonymous admin presentation. Merge, deployment
 and real-account access remain separate. No trading logic, corpus, statistical
 criteria, RLS, credentials or Human launch gate changes.
 
-## Contract
+## Acceptance
 
 - Before rendering trader admin, verify the existing server-side session and
   canonical `admin.audit.read` permission. Anonymous users go to the existing
