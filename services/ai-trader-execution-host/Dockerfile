@@ -23,6 +23,8 @@ COPY db ./db
 COPY lib ./lib
 COPY scripts/trader/historical-simulation-v2-prepare-proposal.ts ./scripts/trader/historical-simulation-v2-prepare-proposal.ts
 COPY scripts/trader/historical-simulation-v2-launch-approved.ts ./scripts/trader/historical-simulation-v2-launch-approved.ts
+COPY scripts/trader/validation-bootstrap-node-pool.ts ./scripts/trader/validation-bootstrap-node-pool.ts
+COPY scripts/trader/validation-bootstrap-range-worker.mjs ./scripts/trader/validation-bootstrap-range-worker.mjs
 COPY services/ai-trader-execution-host ./services/ai-trader-execution-host
 
 USER waia

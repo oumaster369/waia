@@ -1,5 +1,34 @@
 # DEE-950 bounded qualification cost evidence
 
+## Explicit actual-path Node wiring — 2026-09-06 22:23 UTC
+
+Actual technical-surface builder → async predictive receipt → owned async harness →
+fixed external Node executor is now connected behind optional strict deployment setting
+`WAIA_FHV_VALIDATION_WORKERS=1..4`. Default unchanged. No HTTP field/caller callback can
+provide execution results or a module path. CLI/runtime guard occurs before loading;
+all input/options are captured before awaits and every baseline/surface retains full work.
+Dockerfile copies both scripts, image preflight checks presence, supervisor forwards only
+the validated optional count. Actual Docker image construction remains to be verified.
+
+45targeted tests71532 PASS;54/55broader58185 PASS with health test blocked by listenEPERM.
+Same health suite75674 PASS6/6 with approved local port access, then full eslint--quiet PASS.
+Thus100distinct tests across10files pass;31actual-worker/receipt tests repeated after the
+final external-module correction (73897) also PASS. TypeScript/scopedlint/diff PASS33859.
+
+Initial normal Next/OpenNext builds87861 and91078 failed because Turbopack followed the
+worker source into tsx/esbuild native binaries. A worker-site ignore annotation alone did
+not resolve it. Corrected the shared async driver's explicit external Node-module boundary:
+fixed image-relative fileURL import, bundler ignore annotations, runtime guard, packaging
+preflight and no alternate/fallback executor. Normal Next/OpenNext33075 then PASS, producing
+`.open-next/worker.js`; no dependency upgrade, compatibility-date/config change or weakened gate.
+Native Node22 `--import tsx` CLI smoke outside Vitest also PASS: N31/B10000, extremeCount2682,
+pRaw0.2682731726827317 and every returned statistic identical to scalar.
+
+This is local integration evidence only. No production flag, push/merge/deployment, qualified
+receipt reuse or live authority. Full-data cost, durable progress/resume, actual immutable-image
+smoke and final combined graph/repeat remain open. Earlier not-yet-wired statements below
+describe prior checkpoints, not current implementation.
+
 ## Exact Node ordinal executor — 2026-09-06 22:03 UTC
 
 Local Node executor now runs fixed32-ordinal chunks on1..4owned worker threads, with

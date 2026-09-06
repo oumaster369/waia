@@ -61,8 +61,12 @@ export function parseExecutionHostRuntimeV2(env) {
   const runId = required(env, "WAIA_HISTORICAL_RUN_ID");
   if (!UUID.test(organizationId)) refuse("WAIA_HISTORICAL_ORGANIZATION_ID");
   if (!RUN_ID.test(runId)) refuse("WAIA_HISTORICAL_RUN_ID");
+  const validationWorkers = env.WAIA_FHV_VALIDATION_WORKERS;
+  if (validationWorkers !== undefined && !/^[1-4]$/.test(validationWorkers)) {
+    refuse("WAIA_FHV_VALIDATION_WORKERS");
+  }
 
-  return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId });
+  return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId, validationWorkers });
 }
 
 /** Only the constrained DB secret and durable run identity cross into the child. */
@@ -76,6 +80,7 @@ export function buildHistoricalConsumerEnvironmentV2(env, config) {
     WAIA_RELEASE_SHA: config.releaseSha,
     WAIA_HISTORICAL_ORGANIZATION_ID: config.organizationId,
     WAIA_HISTORICAL_RUN_ID: config.runId,
+    ...(config.validationWorkers === undefined ? {} : { WAIA_FHV_VALIDATION_WORKERS: config.validationWorkers }),
   });
 }
 
@@ -104,6 +109,10 @@ export function runExecutionHostImagePreflightV2(env, fileExists = existsSync) {
   if (!fileExists(CONSUMER_SCRIPT) || !fileExists(PROPOSAL_SCRIPT) ||
       !fileExists("node_modules/tsx")) {
     refuse("HISTORICAL_CONSUMER_NOT_PACKAGED");
+  }
+  if (!fileExists("scripts/trader/validation-bootstrap-node-pool.ts") ||
+      !fileExists("scripts/trader/validation-bootstrap-range-worker.mjs")) {
+    refuse("VALIDATION_BOOTSTRAP_NOT_PACKAGED");
   }
   return Object.freeze({
     schemaVersion: "waia.execution_host_image_preflight.v2",

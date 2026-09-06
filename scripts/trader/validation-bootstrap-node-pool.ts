@@ -1,4 +1,4 @@
-/** Node-only executor for exact disjoint bootstrap ranges. Not yet production wiring. */
+/** Node-only executor for exact disjoint bootstrap ranges, selected explicitly by the async kernel. */
 import { Worker } from "node:worker_threads";
 import { join } from "node:path";
 import { deriveValidationBootstrapRoot, nullCenterPairedDifferentials,

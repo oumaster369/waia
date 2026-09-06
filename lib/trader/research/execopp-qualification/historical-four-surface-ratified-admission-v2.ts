@@ -61,6 +61,7 @@ import {
   type HtxVolumeQualificationReceiptV1,
 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import type { ResearchHarnessAdmissionInputV1 } from "@/lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
+import { validationBootstrapExecutionFromEnvironmentV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 import {
   buildEpistemicParameterRatificationReceiptV1,
   buildPredictiveTerminalReceiptAsyncV1,
@@ -1432,6 +1433,8 @@ async function buildTechnicalSurfaceCandidatesV2(
   }>
 > {
   const candidates: HistoricalFourSurfaceTechnicalSurfaceCandidateV2[] = [];
+  // Snapshot this resource choice once for all surfaces; no HTTP/caller-provided executor.
+  const bootstrapExecution = validationBootstrapExecutionFromEnvironmentV1(process.env);
   const marketBoundaryBars = {} as Record<"BTCUSDT" | "ETHUSDT", Bar>;
   for (const surface of input.prepared.authority.contract.surfaces) {
     if (!SURFACE_KEYS.includes(surface.surfaceKey as HistoricalFourSurfaceKeyV2)) {
@@ -1578,7 +1581,7 @@ async function buildTechnicalSurfaceCandidatesV2(
         scoringContractVersion: "multiclass-log-score/v1",
         evaluationPartitionReceiptDigestHex,
       },
-    });
+    }, bootstrapExecution);
     if (predictive.terminalStatus !== "QUALIFIED") {
       const diagnostic = canonicalizeDiagnosticJsonString({
         reasonCodes: predictive.reasonCodes,
