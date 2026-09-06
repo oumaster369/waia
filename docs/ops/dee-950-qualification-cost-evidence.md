@@ -1,5 +1,37 @@
 # DEE-950 bounded qualification cost evidence
 
+## Exact Node ordinal executor — 2026-09-06 22:03 UTC
+
+Local Node executor now runs fixed32-ordinal chunks on1..4owned worker threads, with
+the same shared centering/single-resample kernel as scalar/cooperative computation.
+The controller owns input copies, checks assigned bounds/statistics/integer counts,
+tracks coverage of each of all10000ordinals, and computes pRaw only after complete
+nonoverlapping coverage. Per-resample floating reduction is unchanged. Progress is
+frozen counts only. Errors, worker startup failures and cancellation refuse results;
+all owned workers are awaited during termination. No caller can supply a range result.
+This is **not yet wired into the actual technical-proposal path**, nor durable resume.
+
+Initial ESM tsImport worker loading failed alias resolution (6worker tests failed,
+22scalar/cooperative tests passed). Explicit tsconfig did not fix transitive resolution;
+relative kernel imports alone exposed extension resolution failure. Switched to installed
+tsx's documented CJS `require(specifier, parentURL)` API in the isolated worker; preserved
+relative imports in the small pure kernel. Actual worker tests then passed12/12, covering
+1/2/4workers against the independently encoded fullB10000 oracle, exact ordinal partition,
+input mutation, pre/mid/final cancellation, sink failure and invalid inputs/ranges.
+An explicit missing-worker-script refusal regression is included subsequently. No error
+was suppressed or production package/dependency upgraded.
+
+60existing shared-kernel/cooperative/known-answer/null-centered/scientific tests passed;
+TypeScript/scopedlint/diff passed before the added startup regression. Final checks recorded
+in the canonical plan. Earlier fullgraph does not cover the extracted kernel until revalidated.
+
+Bounded `benchmark-validation-bootstrap-parallel.ts 2048` retained B10000 and exact result:
+extremeCount4805,pRaw0.48055194480551944. Scalar8735.443ms;2workers11447.284ms(slower);
+4workers5323.423ms. This run overlapped other local tests, so it is **not an isolated
+speedup/capacity claim**. Both worker runs emitted313progress updates and serviced timers
+(993/474ticks respectively). No full corpus, target-host execution, deployment or scientific
+qualification result was produced. Do not extrapolate a deadline from these measurements.
+
 ## Actual issuer duplicate encoding — 2026-09-06 21:49 UTC
 
 The actual `issueForecastV1` encoded the same K×M×13 sample body twice, once for
