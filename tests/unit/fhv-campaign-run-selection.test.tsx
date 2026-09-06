@@ -79,7 +79,7 @@ describe("DEE-785 streaming FHV Admin Console", () => {
     render(<FhvOperationsAdminPage />);
     await waitFor(() => expect(EventSourceMock).toHaveBeenCalledTimes(1));
     expect(EventSourceMock).toHaveBeenCalledWith(`/api/trader/admin/historical-v2/stream?organization_id=${encodeURIComponent(ORG_ID)}&run_id=${encodeURIComponent(RUN_ID)}`, { withCredentials: true });
-    expect(listeners).toEqual(["historical.snapshot"]);
+    expect(listeners).toEqual(["historical.snapshot", "heartbeat"]);
   });
 
   it("starts only one polling fallback after duplicate SSE errors", async () => {
