@@ -24,7 +24,7 @@ The current runtime provides useful legacy foundations: bounded dialogue/replay,
 Primary code evidence at intake:
 
 - `lib/readiness/readiness.ts` computes the floored mean, Diary `>=60`, Society via `socializationCompleted` and final readiness at `100 + socialization`.
-- `db/schema.postgres.ts` table `twin_readiness_state` stores six integer columns plus socialization/final flags, without a versioned Human-model ledger.
+- `db/schema.postgres.ts` table `twin_readiness_state` stores six integer values in one `indicators_json` JSONB column plus socialization/final flags, without a versioned Human-model ledger.
 - `lib/reasoning/twin-readiness.ts` computes a separate legacy system-maturity metric; it is not canonical Formation or Model Health.
 - `docs/product/ai-twin-readiness-model.md` defines the legacy `{0,33,67,100}` monotonic contract and old unlocks.
 - Current Diary, avatar and Society surfaces lack the canonical observation, biometric trust and mutual-contract semantics.

@@ -14,7 +14,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-review
+  status: abandoned
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: []
@@ -22,8 +22,8 @@ state:
   prUrl: "https://github.com/oumaster369/waia/pull/555"
   lastValidatedGitSha: "766b27be1f021dbb52c3d663249384205fb44aec"
   lastValidationAt: "2026-09-06"
-  blockedReason: null
-  nextAction: "Review PR555 CI; await explicit Human merge permission. No deploy."
+  blockedReason: "Standalone integration superseded by DEE-943 / PR556; code and evidence preserved, no work discarded."
+  nextAction: "Follow DEE-943 / PR556 for this delivered slice; DEE-923 retains future canonical migration acceptance."
 provenance:
   createdFrom: "Human 2026-09-06 explicit isolated AI-TWIN resume; DEE-922 merged canon"
   gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
@@ -31,6 +31,10 @@ provenance:
 ---
 
 # DEE-923 — truthful pre-billing disclosure
+
+## Historical integration record
+
+The later 2026-09-06 Human instruction requests minimal PR/merge count and delegates safe AI-TWIN merge. Standalone PR555 is superseded without merge by the consolidated [DEE-943 plan](dee-943-ai-twin-evidence-reconciliation.md) / PR556. This plan's abandoned state applies only to the standalone integration boundary, not to the implementation or the still-active DEE-923 requirement. Its original evidence below is retained. Do not create a second PR under this integration record.
 
 ## Scope and authority
 

@@ -25,6 +25,8 @@ The Human resumed source recovery, audit, AI-TWIN documentation/Linear reconcili
 
 DEE-943 reconciles evidence/canon; DEE-923 is first because DEE-922 is merged and static disclosure needs no shared-runtime mutation. It is not a substitute for DEE-871 or the remaining epistemic work.
 
+Later scoped Human instruction on 2026-09-06 delegates safe AI-TWIN squash merge and requests minimal PR/merge count. Existing PR556/DEE-943 therefore consolidates its canon reconciliation with the already reviewed current-dialogue DEE-923 slice; PR555 is superseded without merge. DEE-923 remains active for future canonical migration. Required CI and privacy/production gates stay intact. Do not advance main ahead of active priority Trader integration, because strict freshness may invalidate its checks. This scoped delegation does not modify global DEV OS authority.
+
 Each issue row below is an integration batch with one branch, one canonical plan, one PR and one merge. The order column is a dependency wave, not a license for unreviewed parallel execution.
 
 ## Version gates

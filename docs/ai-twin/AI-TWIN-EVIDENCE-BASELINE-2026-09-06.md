@@ -68,7 +68,7 @@ The loop is not “collect more messages”: source/purpose → observation with
 
 AI-TRADER Canonical Algorithm §§1–4 was read as a read-only precedent: source/PIT truth, measurement, sufficiency, competing hypotheses, forecasts and factual receipts. Reuse separation/traceability, not trading objectives, capital permission, survival utility or its runtime objects. Trader's own canon distinguishes target from implementation.
 
-DEE-923 is small but complete: a signed-in Human sees exact approved terms before Start, after exchange/reload and through legacy readiness states. Static copy must not enter AI prompts, record consent or call payments/Society. No shared auth/database/gateway edits. Canonical cutover stays DEE-879/884; no nonexistent feature flag is claimed tested.
+The current-dialogue DEE-923 slice is complete: a signed-in Human sees exact approved terms before Start, after exchange/reload and through legacy readiness states. Static copy must not enter AI prompts, record consent or call payments/Society. No shared auth/database/gateway edits. Canonical cutover stays DEE-879/884; no nonexistent feature flag is claimed tested and the broader DEE-923 issue remains active.
 
 ## Open questions — Proposed, not ratified
 
@@ -80,6 +80,8 @@ DEE-923 is small but complete: a signed-in Human sees exact approved terms befor
 - Additional sensitive inference/data collection cannot be justified by increasing Formation; privacy, intent and refusal constrain the planner.
 
 ## Isolation / verification limits
+
+Later 2026-09-06 U decision delegates safe AI-TWIN merge and requests minimal PR/merge count; CI and Trader exclusions remain. The originally separate reviewed docs/UI deliverables are consolidated in existing DEE-943/PR556; PR555 is superseded without merge. DEE-923 remains active for future canonical migration acceptance. This changes delivery sequencing, not Human-model authority or any product/privacy meaning.
 
 Main checkout was clean at 0d19765d766818733dab7f3161380eea4f8a55a1 on another work branch; not switched/edited. Origin/main was fetched/fixed at base above. No open GitHub PRs at initial check: a time-bound snapshot, not a claim that parallel work stopped.
 
