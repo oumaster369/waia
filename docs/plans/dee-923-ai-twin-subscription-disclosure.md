@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: "2026-09-06T09:15:00Z"
+  prNumber: 555
+  prUrl: "https://github.com/oumaster369/waia/pull/555"
+  lastValidatedGitSha: "766b27be1f021dbb52c3d663249384205fb44aec"
+  lastValidationAt: "2026-09-06"
   blockedReason: null
-  nextAction: "Open PR after scoped governance checks; Human merge required."
+  nextAction: "Review PR555 CI; await explicit Human merge permission. No deploy."
 provenance:
   createdFrom: "Human 2026-09-06 explicit isolated AI-TWIN resume; DEE-922 merged canon"
   gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
