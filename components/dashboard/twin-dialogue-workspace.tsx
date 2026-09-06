@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { TwinSubscriptionDisclosure } from "@/components/dashboard/twin-subscription-disclosure";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
@@ -344,6 +345,7 @@ export function TwinDialogueWorkspace({
           {isSubmitting ? "Sending" : "Send"}
         </Button>
       </form>
+      <TwinSubscriptionDisclosure />
     </div>
   );
 }

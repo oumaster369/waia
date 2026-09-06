@@ -41,6 +41,10 @@ function normalizeWs(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+// Independent verbatim assertion against the DEE-922 product copy.
+const EXPECTED_SUBSCRIPTION_DISCLOSURE =
+  "Creating and training your AI Twin is currently free. A monthly subscription will begin only after your Twin is fully formed and you choose to connect it to the future social network of AI Twins. We will show you the current price and ask for your explicit confirmation before billing begins.";
+
 describe("TwinDialogueWorkspace POST submit", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -58,6 +62,36 @@ describe("TwinDialogueWorkspace POST submit", () => {
   function clickStartRitual() {
     fireEvent.click(screen.getByTestId("dashboard-twin-start-cta"));
   }
+
+  it("discloses future subscription terms before and after Start without a request or billing control", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    mountWorkspace(false);
+    const note = screen.getByRole("note", { name: "AI Twin subscription terms" });
+    expect(note).toHaveTextContent(EXPECTED_SUBSCRIPTION_DISCLOSURE);
+    expect(note).toHaveAttribute("lang", "en");
+    expect(screen.getByRole("log")).not.toContainElement(note);
+    const composer = screen.getByRole("form", { name: "Send a message in Twin dialogue" });
+    expect(composer.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(note.querySelector("button, a, input")).toBeNull();
+    clickStartRitual();
+    expect(screen.getByRole("note", { name: "AI Twin subscription terms" })).toBeVisible();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "keeps the disclosure with persisted history (meaningful=%s)",
+    (meaningful) => {
+      render(
+        <TwinDialogueWorkspace
+          hasMeaningfulExchange={meaningful}
+          initialTwinDialogueTurns={[{ id: "seed-u", role: "user", text: "Saved observation" }]}
+        />,
+      );
+      expect(screen.getByRole("note", { name: "AI Twin subscription terms" })).toHaveTextContent(
+        EXPECTED_SUBSCRIPTION_DISCLOSURE,
+      );
+    },
+  );
 
   it("first-start framing and welcome copy avoid doctrine-forbidden phrasing", () => {
     mountWorkspace(false);
@@ -142,6 +176,11 @@ describe("TwinDialogueWorkspace POST submit", () => {
     expect(body.message).toBe("e2e-safe-user-payload-xyz");
     expect(body.message).not.toContain("Welcome.");
     expect(String(opts.body)).not.toContain("address you");
+    expect(String(opts.body)).not.toContain("subscription");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("note", { name: "AI Twin subscription terms" })).toHaveTextContent(
+      EXPECTED_SUBSCRIPTION_DISCLOSURE,
+    );
   });
 
   it("does not show welcome bubble when SSR seeds initial turns", () => {
@@ -286,6 +325,9 @@ describe("TwinDialogueWorkspace POST submit", () => {
     );
     expect(screen.getByTestId("dashboard-twin-message-input")).toHaveValue("");
     await waitFor(() => expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument());
+    expect(screen.getByRole("note", { name: "AI Twin subscription terms" })).toHaveTextContent(
+      EXPECTED_SUBSCRIPTION_DISCLOSURE,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
 
