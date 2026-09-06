@@ -13,12 +13,12 @@ export async function GET(request: Request): Promise<Response> {
   const deps = createProductionAdminRouteDeps(); let authRuntime;
   try {
     const auth = await authorizeAdminRoute(deps, parsed, "admin.audit.read");
-    if (!auth.ok) return Response.json(auth.result.body, { status: auth.result.status });
     authRuntime = auth.runtime;
+    if (!auth.ok) return Response.json(auth.result.body, { status: auth.result.status,
+      headers: { "Cache-Control": "private, no-store" } });
   } finally { await deps.disposeRuntimeDb(authRuntime); }
   const runtime = createPerRequestPostgresRuntime();
   return serveHistoricalObservableV2({ request, sql: runtime._sql,
     scope: { organizationId: parsed, runId },
     dispose: async () => { await disposePostgresClientSafely(runtime._sql); } });
 }
-
