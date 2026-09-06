@@ -31,6 +31,29 @@ provenance:
 
 ## Approved scope and dependency
 
+### Exact worker ranges — implementation checkpoint 2026-09-06 21:54 UTC
+
+Implement the cost-evidence design as bounded disjoint bootstrap ordinal ranges.
+Extract a private shared preparation/single-resample kernel; the existing synchronous
+and cooperative full-B APIs must remain byte/numerically identical. A Node-only worker
+executor may distribute fixed non-overlapping ranges, each with owned complete input,
+then return a p-value only after all0..9999 ordinals are covered exactly once and all
+workers completed successfully. Counts are integers; never regroup floating sums inside
+a resample. Cancellation/error must terminate workers and refuse partial results.
+First prove scalar/oracle parity and worker lifecycle locally; production-path wiring,
+bundle compatibility and operator progress/resume remain separate required checks.
+No exported API accepts caller-supplied partial results as qualification authority.
+
+Local Node executor and range primitive implemented. Final13actualworker/range tests PASS
+(1/2/4workers, independent fullB10000oracle, exactpartition, mutation, pre/mid/finalcancel,
+sinkfailure, invalidbounds/input and missingworker startup).60existing kernel/scientific
+tests PASS. FullTypeScript/scopedlint/diff and Nextproductionbuild17597 PASS. Initial loader
+failures and bounded benchmark limitations are retained in cost evidence. No parallel
+technical-proposal wiring yet: next work must connect this trusted executor to the actual
+async harness/receipt behind explicit Node-only selection, test fullreceipt parity and
+non-Node refusal, verify bundling and include worker sources in exact execution packaging.
+Do not introduce a caller-supplied executor/result or turn local range counts into authority.
+
 ### Bounded issuance cost work package — 2026-09-06 21:48 UTC
 
 Actual technical-surface preparation invokes the full issuer for every predictive anchor.

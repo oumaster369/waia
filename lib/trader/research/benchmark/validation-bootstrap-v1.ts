@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 
-import { VALIDATION_BOOTSTRAP_ROOT_PREFIX_16 } from "@/lib/trader/intelligence/forecast-v2/constants";
+import { VALIDATION_BOOTSTRAP_ROOT_PREFIX_16 } from "../../intelligence/forecast-v2/constants";
 import {
   computeStationaryBootstrapBlockLength,
   stationaryBootstrapV1,
-} from "@/lib/trader/intelligence/forecast-v2/stationary-bootstrap-v1";
-import { CBRNG_DOMAIN_VALBOOT1 } from "@/lib/trader/intelligence/forecast-v2/constants";
-import { createWaiaUnbiasedIntV1 } from "@/lib/trader/intelligence/forecast-v2/waia-cbrng-v1";
+} from "../../intelligence/forecast-v2/stationary-bootstrap-v1";
+import { CBRNG_DOMAIN_VALBOOT1 } from "../../intelligence/forecast-v2/constants";
+import { createWaiaUnbiasedIntV1 } from "../../intelligence/forecast-v2/waia-cbrng-v1";
 
 export const VALIDATION_BOOTSTRAP_B = 10_000 as const;
 // DEE-947 evidence revision; never relabel old 1/n qualification outputs.
@@ -106,10 +106,12 @@ export function observedNullCenteredBootstrapStatistic(differentials: readonly n
  * Raw one-sided WF_PREDICTIVE admission p-value (Human-ratified DEE-531):
  * bootstrap null-centered c; T*_b = sqrt(n)*mean(c*_b); p = (|{T*_b >= T_obs}| + 1)/(B+1).
  */
-function* validationBootstrapSteps(input: {
+type ValidationBootstrapInputV1 = {
   differentials: readonly number[];
   trialIdentityDigest32: Buffer;
-}): Generator<number, ValidationBootstrapNullCenteredResultV1, void> {
+};
+
+function prepareValidationBootstrap(input: ValidationBootstrapInputV1) {
   const { n, dBar, centered } = nullCenterPairedDifferentials(input.differentials);
   const tObs = finiteStatistic(Math.sqrt(n) * dBar, "observed statistic");
   const centeredMean = finiteStatistic(centered.reduce((acc, value) =>
@@ -117,13 +119,45 @@ function* validationBootstrapSteps(input: {
   const root = deriveValidationBootstrapRoot(input.trialIdentityDigest32);
   const walker = createValidationIndexWalker(n, root);
 
+  return {
+    n, dBar, tObs, centeredMean,
+    extremeAt(b: number): boolean {
+      let sum = 0;
+      // Preserve every sample's left-to-right arithmetic, regardless of ordinal scheduling.
+      walker.visit(b, (index) => { sum = finiteStatistic(sum + centered[index]!, "resample sum"); });
+      const tStar = finiteStatistic(Math.sqrt(n) * (sum / n), "resample statistic");
+      return tStar >= tObs;
+    },
+  };
+}
+
+/** Internal worker primitive: never returns a partial p-value or accepts a result from a caller. */
+export function INTERNAL_validationBootstrapOrdinalRangeV1(
+  input: ValidationBootstrapInputV1,
+  start: number,
+  endExclusive: number,
+): Omit<ValidationBootstrapNullCenteredResultV1, "pRaw"> & { start: number; endExclusive: number } {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(endExclusive) ||
+    start < 0 || start >= endExclusive || endExclusive > VALIDATION_BOOTSTRAP_B) {
+    throw new Error("VALIDATION_BOOTSTRAP_INVALID_ORDINAL_RANGE");
+  }
+  const prepared = prepareValidationBootstrap(input);
+  let extremeCount = 0;
+  for (let b = start; b < endExclusive; b++) {
+    if (prepared.extremeAt(b)) extremeCount++;
+  }
+  const { n, dBar, tObs, centeredMean } = prepared;
+  return { start, endExclusive, extremeCount, n, dBar, tObs, centeredMean };
+}
+
+function* validationBootstrapSteps(input: ValidationBootstrapInputV1):
+  Generator<number, ValidationBootstrapNullCenteredResultV1, void> {
+  const prepared = prepareValidationBootstrap(input);
+  const { n, dBar, tObs, centeredMean } = prepared;
+
   let extremeCount = 0;
   for (let b = 0; b < VALIDATION_BOOTSTRAP_B; b += 1) {
-    let sum = 0;
-    // Exactly the old left-to-right reduce order, without per-resample O(n) arrays.
-    walker.visit(b, (index) => { sum = finiteStatistic(sum + centered[index]!, "resample sum"); });
-    const tStar = finiteStatistic(Math.sqrt(n) * (sum / n), "resample statistic");
-    if (tStar >= tObs) {
+    if (prepared.extremeAt(b)) {
       extremeCount += 1;
     }
     yield b + 1;
