@@ -35,6 +35,8 @@ on:
       - "lib/trader/research/execopp-qualification/scientific-admission-receipt-service-v2.ts"
       - "lib/trader/research/execopp-qualification/scientific-admission-v2.ts"
       - "tests/integration/postgres-scientific-admission-receipt-v1.test.ts"
+      - "lib/trader/market-data/volume-qualification/htx-volume-qualification-receipt-service.ts"
+      - "tests/integration/postgres-htx-volume-receipt-retry.test.ts"
       - "lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1.ts"
       - "tests/integration/postgres-forecast-contract-binding-v1.test.ts"
       - "lib/trader/historical-simulation-v2/bootstrap-source-loader-v2.ts"
@@ -114,6 +116,7 @@ jobs:
           tests/integration/trader-capital-path-trace-evidence.test.ts
           tests/integration/fhv-execution-v2-historical-symbol-boundary.test.ts
           tests/integration/postgres-scientific-admission-receipt-v1.test.ts
+          tests/integration/postgres-htx-volume-receipt-retry.test.ts
           tests/integration/postgres-forecast-contract-binding-v1.test.ts
           tests/integration/postgres-km-four-surface-production-preflight-v2.test.ts
           tests/integration/postgres-scientific-admission-four-surface-v2.test.ts
