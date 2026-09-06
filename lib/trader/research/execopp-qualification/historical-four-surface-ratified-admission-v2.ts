@@ -1528,6 +1528,30 @@ async function buildTechnicalSurfaceCandidatesV2(
     const developmentReturns = development.corpus.map((anchor) =>
       terminalRhFromOutcome13dV1(anchor.outcome13d),
     );
+    const anchors: ResearchHarnessAdmissionInputV1["anchors"][number][] = [];
+    for (const anchor of walkForward.corpus) {
+      const issuance = issueForecastV1({
+        pkg: predictivePackage,
+        anchorClosedBarEpochMs: anchor.closedBarEpochMs,
+        anchorRealizedVol20m_1m: anchor.realizedVol20m_1m,
+        executionHorizonMinutes: surface.family.executionHorizonMinutes,
+        normalizationVersionDigestHex: surface.family.normalizationVersionDigestHex,
+      });
+      anchors.push(Object.freeze({
+        anchorId: computeSemanticSha256Hex({
+          schemaVersion: "waia.trader.wf_predictive_anchor.v2",
+          surfaceKey,
+          closedBarEpochMs: anchor.closedBarEpochMs,
+          barContentDigest: anchor.barContentDigest,
+          evaluationPartitionReceiptDigestHex,
+        }),
+        observedReturn: terminalRhFromOutcome13dV1(anchor.outcome13d),
+        challengerProbabilities: issuance.terminalScenarioMasses.probabilities,
+      }));
+      // Only scheduling changes: issue every anchor in the original order using
+      // the same complete package. No thinning, pooling or alternate Forecast.
+      if (anchors.length % 32 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
     const harnessInput: ResearchHarnessAdmissionInputV1 = {
       venue: "htx",
       market: "spot",
@@ -1541,26 +1565,7 @@ async function buildTechnicalSurfaceCandidatesV2(
       developmentReturns,
       historyReturns: developmentReturns,
       historyReturnMinuteOpenTimesMs: development.corpus.map((anchor) => anchor.closedBarEpochMs),
-      anchors: walkForward.corpus.map((anchor) => {
-        const issuance = issueForecastV1({
-          pkg: predictivePackage,
-          anchorClosedBarEpochMs: anchor.closedBarEpochMs,
-          anchorRealizedVol20m_1m: anchor.realizedVol20m_1m,
-          executionHorizonMinutes: surface.family.executionHorizonMinutes,
-          normalizationVersionDigestHex: surface.family.normalizationVersionDigestHex,
-        });
-        return Object.freeze({
-          anchorId: computeSemanticSha256Hex({
-            schemaVersion: "waia.trader.wf_predictive_anchor.v2",
-            surfaceKey,
-            closedBarEpochMs: anchor.closedBarEpochMs,
-            barContentDigest: anchor.barContentDigest,
-            evaluationPartitionReceiptDigestHex,
-          }),
-          observedReturn: terminalRhFromOutcome13dV1(anchor.outcome13d),
-          challengerProbabilities: issuance.terminalScenarioMasses.probabilities,
-        });
-      }),
+      anchors,
     };
     const predictive = await buildPredictiveTerminalReceiptAsyncV1({
       harnessInput,
