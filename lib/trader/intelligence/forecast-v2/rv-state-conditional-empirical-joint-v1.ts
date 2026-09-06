@@ -8,7 +8,10 @@ import {
   TARGET_ROLE_EXECUTION,
   TARGET_ROLE_TERMINAL,
 } from "./constants";
-import { computeDistributionSemanticDigest } from "./distribution-semantic-digest-v1";
+import {
+  computeDistributionSemanticDigest,
+  computeExecutionAndTerminalDistributionSemanticDigests,
+} from "./distribution-semantic-digest-v1";
 import {
   computeForecastContentDigest,
   computeForecastGenerationIdentityDigest,
@@ -579,25 +582,15 @@ export function issueForecastV1(input: {
     aleatoricRoot,
   });
 
-  const distributionSemanticDigestExec = computeDistributionSemanticDigest({
-    forecastGenerationIdentityDigestHex: digestHex(forecastGenerationIdentityDigest),
-    predictivePackageContentDigestHex: digestHex(input.pkg.predictivePackageContentDigest),
-    k: input.pkg.kConfigDec,
-    m: input.pkg.mConfigDec,
-    normalizationVersionDigestHex: input.normalizationVersionDigestHex,
-    targetRoleId: TARGET_ROLE_EXECUTION,
-    samples,
-  });
-
-  const distributionSemanticDigestTerminal = computeDistributionSemanticDigest({
-    forecastGenerationIdentityDigestHex: digestHex(forecastGenerationIdentityDigest),
-    predictivePackageContentDigestHex: digestHex(input.pkg.predictivePackageContentDigest),
-    k: input.pkg.kConfigDec,
-    m: input.pkg.mConfigDec,
-    normalizationVersionDigestHex: input.normalizationVersionDigestHex,
-    targetRoleId: TARGET_ROLE_TERMINAL,
-    samples,
-  });
+  const { execution: distributionSemanticDigestExec, terminal: distributionSemanticDigestTerminal } =
+    computeExecutionAndTerminalDistributionSemanticDigests({
+      forecastGenerationIdentityDigestHex: digestHex(forecastGenerationIdentityDigest),
+      predictivePackageContentDigestHex: digestHex(input.pkg.predictivePackageContentDigest),
+      k: input.pkg.kConfigDec,
+      m: input.pkg.mConfigDec,
+      normalizationVersionDigestHex: input.normalizationVersionDigestHex,
+      samples,
+    });
 
   const forecastContentDigestExec = computeForecastContentDigest(
     forecastGenerationIdentityDigest,

@@ -31,6 +31,28 @@ provenance:
 
 ## Approved scope and dependency
 
+### Bounded issuance cost work package — 2026-09-06 21:48 UTC
+
+Actual technical-surface preparation invokes the full issuer for every predictive anchor.
+The issuer currently quantizes the same K×M×13 sample body twice for its distinct
+Execution and Terminal digests. Optimize only that duplicate work: retain both exact
+role-specific headers, sample/component order, HALF_UP implementation and SHA256 bytes,
+feeding one bounded per-sample canonical fragment to two independent hash states.
+No cross-anchor cache, alternate Forecast, skipped samples, new digest version or authority.
+Validate against the previous scalar digest and existing identity known answers, including
+nonfinite/malformed refusal, then measure a bounded synthetic actual-issuer benchmark.
+Full-data cost and final cumulative gates remain open; earlier PASS is not this new head.
+
+Implemented the paired encoder in the actual issuer. Initial33focused tests and broader49tests
+pass (70distinct tests across7files); realissuer replay checks both role digests. FullTypeScript,
+diffcheck, scopedlint and fulllint pass (307existingwarnings,0errors). Nextproductionbuild
+passes in84559 after the first sandbox-limited attempt18783 failed on loopbackEPERM; no
+source/config change was used to address that environment restriction. Bounded synthetic
+actual-issuer benchmark median491.195→230.791ms for64issuances (2.128×), with all before/after
+content/probability digests identical. No claim of target-host/full-data preparation ETA.
+Fullcorpus bootstrap remains dominant; disjoint exact ordinal worker batches and durable
+scope-bound progress/resume remain unimplemented. Do not equate this optimization with readiness.
+
 Human approved DEE-946–951 implementation and PR preparation on 2026-09-06.
 This local T3 package optimizes only the same frozen SHA-256 addressed bootstrap;
 no commit/push until root review, no merge/deployment/production/private credentials/capital/holdout.
