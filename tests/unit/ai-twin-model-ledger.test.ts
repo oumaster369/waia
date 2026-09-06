@@ -1,0 +1,273 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  applyModelCommand,
+  createModelLedger,
+  projectCurrentModel,
+} from "@/lib/ai-twin/model/ledger";
+import type { ModelCommand, ModelContext, ModelLedger } from "@/lib/ai-twin/model/contracts";
+
+const scope = { organizationId: "org-a", subjectId: "human-a" };
+const now = "2026-09-06T12:00:00.000Z";
+function context(kind: "human" | "model" = "human"): ModelContext {
+  return {
+    scope,
+    actor: { kind, subjectId: scope.subjectId },
+    now,
+    purpose: "formation",
+    grants: [
+      {
+        id: "grant-a",
+        version: 1,
+        scope,
+        purpose: "formation",
+        sources: ["dialogue", "diary"],
+        mode: "private_modelling",
+        issuedAt: "2026-09-01T00:00:00.000Z",
+        expiresAt: "2026-10-01T00:00:00.000Z",
+        revokedAt: null,
+        retentionPolicyId: "synthetic-policy-v1",
+      },
+    ],
+  };
+}
+const observation: ModelCommand = {
+  kind: "observe",
+  requestId: "request-observe",
+  id: "observation-a",
+  scope,
+  grant: { id: "grant-a", version: 1 },
+  source: "dialogue",
+  eventTime: "2026-09-05T09:00:00.000Z",
+  context: "Synthetic workday example",
+  text: "I focus better in the morning on workdays.",
+  projectionRisks: ["missing_context"],
+};
+const proposal: ModelCommand = {
+  kind: "propose",
+  requestId: "request-propose",
+  claimId: "claim-a",
+  scope,
+  statement: "Morning meetings are always preferred.",
+  domain: "daily-context",
+  context: "Synthetic example",
+  uncertainty: "May confuse focus time with meeting preference.",
+  observationIds: ["observation-a"],
+};
+const correction: ModelCommand = {
+  kind: "correct",
+  requestId: "request-correct",
+  id: "correction-a",
+  claimId: "claim-a",
+  scope,
+  expectedRevision: 1,
+  action: "correct",
+  reason: "Focus and meetings are different.",
+  statement: "I prefer uninterrupted morning focus on workdays.",
+  context: "Workdays only",
+};
+function proposed(): ModelLedger {
+  return applyModelCommand(
+    applyModelCommand(createModelLedger(scope), observation, context()),
+    proposal,
+    context("model"),
+  );
+}
+
+describe("inert AI-TWIN epistemic correction kernel", () => {
+  it("uses the Human correction without overwriting self-report or prior interpretation", () => {
+    const before = proposed();
+    const after = applyModelCommand(before, correction, context());
+    expect(before.claims).toHaveLength(1);
+    expect(after.claims).toHaveLength(2);
+    expect(after.observations[0].epistemicKind).toBe("self_report");
+    expect(after.observations[0].text).toBe(observation.text);
+    expect(after.claims[0]).toMatchObject({
+      status: "proposed",
+      basis: "model_interpretation",
+      revision: 1,
+    });
+    expect(projectCurrentModel(after, context())).toEqual([
+      expect.objectContaining({
+        statement: correction.statement,
+        context: "Workdays only",
+        revision: 2,
+        status: "active",
+        basis: "human_endorsed",
+        supersedesRevision: 1,
+        humanCorrectionId: "correction-a",
+        observationIds: ["observation-a"],
+        uncertainty: proposal.uncertainty,
+      }),
+    ]);
+    expect(after.corrections[0]).toMatchObject({ previousRevision: 1, actorSubjectId: "human-a" });
+  });
+
+  it("does not let model output impersonate Human correction or self-report", () => {
+    expect(() => applyModelCommand(proposed(), correction, context("model"))).toThrow(
+      "HUMAN_REQUIRED",
+    );
+    expect(() =>
+      applyModelCommand(createModelLedger(scope), observation, context("model")),
+    ).toThrow("HUMAN_REQUIRED");
+    const forged = { ...correction, actor: { kind: "human" } } as ModelCommand;
+    expect(() => applyModelCommand(proposed(), forged, context("model"))).toThrow();
+  });
+
+  it.each(["organizationId", "subjectId"] as const)(
+    "isolates %s on commands, actors and reads",
+    (field) => {
+      const otherScope = { ...scope, [field]: "other" };
+      expect(() =>
+        applyModelCommand(proposed(), { ...correction, scope: otherScope }, context()),
+      ).toThrow("SCOPE_MISMATCH");
+      expect(() => projectCurrentModel(proposed(), { ...context(), scope: otherScope })).toThrow(
+        "SCOPE_MISMATCH",
+      );
+      const wrongGrant = context();
+      wrongGrant.grants = [{ ...wrongGrant.grants[0], scope: otherScope }];
+      expect(() => applyModelCommand(createModelLedger(scope), observation, wrongGrant)).toThrow(
+        "CONSENT_UNAVAILABLE",
+      );
+    },
+  );
+
+  it("requires the authenticated subject, not an organization administrator", () => {
+    const ctx = context();
+    ctx.actor = { kind: "human", subjectId: "admin" };
+    expect(() => applyModelCommand(proposed(), correction, ctx)).toThrow("SCOPE_MISMATCH");
+  });
+
+  it.each(["missing", "revoked", "expired", "raw_only", "purpose", "source", "revision"])(
+    "excludes evidence with %s consent",
+    (mode) => {
+      const ctx = context();
+      if (mode === "missing") ctx.grants = [];
+      else
+        ctx.grants = [
+          {
+            ...ctx.grants[0],
+            ...(mode === "revoked" ? { revokedAt: now } : {}),
+            ...(mode === "expired" ? { expiresAt: now } : {}),
+            ...(mode === "raw_only" ? { mode: "raw_only" as const } : {}),
+            ...(mode === "purpose" ? { purpose: "another-purpose" } : {}),
+            ...(mode === "source" ? { sources: ["diary" as const] } : {}),
+            ...(mode === "revision" ? { version: 2 } : {}),
+          },
+        ];
+      expect(() => applyModelCommand(createModelLedger(scope), observation, ctx)).toThrow(
+        "CONSENT_UNAVAILABLE",
+      );
+      const state = proposed();
+      expect(projectCurrentModel(state, ctx)).toEqual([]);
+      expect(() => applyModelCommand(state, correction, ctx)).toThrow("EVIDENCE_UNAVAILABLE");
+      expect(state.observations).toHaveLength(1); // Filtering is not physical deletion.
+    },
+  );
+
+  it("rejects missing evidence rather than inventing a source", () => {
+    expect(() => applyModelCommand(createModelLedger(scope), proposal, context("model"))).toThrow(
+      "EVIDENCE_UNAVAILABLE",
+    );
+  });
+
+  it("rejects sparse source references instead of admitting an evidence-free claim", () => {
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        { ...proposal, observationIds: new Array<string>(1) },
+        context("model"),
+      ),
+    ).toThrow("INVALID_INPUT");
+  });
+
+  it("rejects undeclared payload fields nested in scope or consent reference", () => {
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        {
+          ...observation,
+          scope: { ...scope, additionalData: "Not an admitted field" },
+        } as ModelCommand,
+        context(),
+      ),
+    ).toThrow("INVALID_INPUT");
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        {
+          ...observation,
+          grant: { ...observation.grant, additionalData: "Not an admitted field" },
+        } as ModelCommand,
+        context(),
+      ),
+    ).toThrow("INVALID_INPUT");
+  });
+
+  it("deduplicates exact retries but rejects reuse with different content", () => {
+    const state = proposed();
+    const next = applyModelCommand(state, correction, context());
+    expect(applyModelCommand(next, correction, context())).toBe(next);
+    expect(() =>
+      applyModelCommand(next, { ...correction, statement: "Different" }, context()),
+    ).toThrow("REPLAY_CONFLICT");
+    expect(applyModelCommand(state, proposal, context("model"))).toBe(state);
+  });
+
+  it("does not let idempotent replay bypass current revocation", () => {
+    const state = applyModelCommand(proposed(), correction, context());
+    const ctx = context();
+    ctx.grants = [];
+    expect(() => applyModelCommand(state, correction, ctx)).toThrow("EVIDENCE_UNAVAILABLE");
+  });
+
+  it("refuses stale corrections without changing the snapshot", () => {
+    const state = applyModelCommand(proposed(), correction, context());
+    expect(() =>
+      applyModelCommand(
+        state,
+        { ...correction, id: "correction-b", requestId: "another" },
+        context(),
+      ),
+    ).toThrow("STALE_REVISION");
+    expect(state.claims).toHaveLength(2);
+  });
+
+  it.each(["ratify", "dispute"] as const)(
+    "preserves uncertainty when the Human chooses %s",
+    (action) => {
+      const state = applyModelCommand(
+        proposed(),
+        { ...correction, action, statement: null, context: null },
+        context(),
+      );
+      expect(projectCurrentModel(state, context())[0]).toMatchObject({
+        status: action === "ratify" ? "active" : "contested",
+        statement: proposal.statement,
+        uncertainty: proposal.uncertainty,
+      });
+    },
+  );
+
+  it("copies and freezes inputs so later mutation cannot rewrite evidence", () => {
+    const input = structuredClone(observation);
+    const state = applyModelCommand(createModelLedger(scope), input, context());
+    input.text = "Changed after submission";
+    expect(state.observations[0].text).toBe(observation.text);
+    expect(Object.isFrozen(state.observations[0])).toBe(true);
+    expect(Object.isFrozen(state.observations[0].projectionRisks)).toBe(true);
+  });
+
+  it("rejects invalid time and future observations without consulting a clock", () => {
+    expect(() =>
+      applyModelCommand(createModelLedger(scope), observation, { ...context(), now: "invalid" }),
+    ).toThrow("INVALID_INPUT");
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        { ...observation, eventTime: "2030-01-01T00:00:00.000Z" },
+        context(),
+      ),
+    ).toThrow("INVALID_INPUT");
+  });
+});
