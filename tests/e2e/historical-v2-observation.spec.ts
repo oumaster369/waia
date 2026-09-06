@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { HistoricalObservableCycleV2, HistoricalObservableProjectionV2 } from "@/lib/trader/historical-simulation-v2/observable-read-model-v2";
+import { signUpAndOpenDashboard } from "./helpers/auth-dashboard";
+import { grantPlatformAdminByUserEmail } from "./helpers/fhv-e2e-sqlite";
+import { WAIA_SESSION_COOKIE } from "@/lib/auth/constants";
 
 // Browser presentation fixtures only. These do not qualify the trading graph,
 // production authority, tenant RLS or economic/scientific performance.
@@ -55,7 +58,36 @@ async function emit(page: Page, kind: string, body: unknown = {}) {
   await page.evaluate(detail => window.dispatchEvent(new CustomEvent("e2e-observation", { detail })), { kind, body });
 }
 
+async function admitLocalAdmin(page: Page) {
+  const email = `e2e-historical-admin-${crypto.randomUUID()}@example.com`;
+  await signUpAndOpenDashboard(page, email);
+  grantPlatformAdminByUserEmail(email);
+  // Local SQLite session fixture on the second loopback hostname. Server-side
+  // identity and database role verification still run; no production auth flag.
+  const cookie = (await page.context().cookies()).find(row => row.name === WAIA_SESSION_COOKIE);
+  expect(cookie).toBeDefined();
+  await page.context().addCookies([{ ...cookie!, domain: "trader.localhost" }]);
+}
+
+test("admin shell is unavailable without a session or without admin role", async ({ page, baseURL }) => {
+  const origin = baseURL!.replace("127.0.0.1", "trader.localhost");
+  await page.goto(`${origin}/admin/fhv-operations`);
+  await expect(page).toHaveURL(`${origin}/`);
+  await expect(page.getByRole("heading", { name: "Operator admin" })).toHaveCount(0);
+  const email = `e2e-historical-nonadmin-${crypto.randomUUID()}@example.com`;
+  await signUpAndOpenDashboard(page, email);
+  const cookie = (await page.context().cookies()).find(row => row.name === WAIA_SESSION_COOKIE);
+  expect(cookie).toBeDefined();
+  await page.context().addCookies([{ ...cookie!, domain: "trader.localhost" }]);
+  await page.goto(`${origin}/admin/fhv-operations`);
+  await expect(page.getByRole("heading", { name: "Operator admin" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
+  const denied = await page.request.get(`${origin}/api/trader/admin/historical-v2/stream?organization_id=11111111-1111-4111-a111-111111111111&run_id=run`);
+  expect(denied.status()).toBe(403);
+});
+
 test("paired admin and tenant render updates, scoped links and polling recovery", async ({ page, context, baseURL }) => {
+  await admitLocalAdmin(page);
   const origin = baseURL!.replace("127.0.0.1", "trader.localhost");
   const tenant = await context.newPage();
   for (const surface of [page, tenant]) await installPresentationTransport(surface);
@@ -99,6 +131,7 @@ test("paired admin and tenant render updates, scoped links and polling recovery"
 });
 
 test("unknown requested organization cannot silently observe the first org", async ({ page, baseURL }) => {
+  await admitLocalAdmin(page);
   await installPresentationTransport(page);
   await page.goto(`${baseURL!.replace("127.0.0.1", "trader.localhost")}/admin/fhv-operations?campaign_run_id=${runId}&organization_id=not-authorized`);
   await expect(page.getByText("Requested organization is not available. Select an authorized organization.")).toBeVisible();

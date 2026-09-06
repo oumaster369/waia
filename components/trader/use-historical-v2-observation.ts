@@ -3,6 +3,7 @@ import * as React from "react";
 import type { HistoricalObservableProjectionV2 } from "@/lib/trader/historical-simulation-v2/observable-read-model-v2";
 
 const POLL_MS = 2_000;
+const REAUTHORIZE_MS = 25_000; // Reopen before the server's 30-second authority deadline.
 const CONTACT_TIMEOUT_MS = 30_000; // UI connectivity watchdog, not a market/risk threshold.
 export function useHistoricalV2Observation({ endpoint, runId, accountId, expectedOrganizationId }: {
   endpoint: string; runId: string; accountId?: string; expectedOrganizationId?: string;
@@ -25,6 +26,7 @@ export function useHistoricalV2Observation({ endpoint, runId, accountId, expecte
     let stopped = false, refused = false, polling = false, inFlight = false;
     let source: EventSource | null = null;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let renewalTimer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     let latestContact = Date.now();
     const touch = () => { latestContact = Date.now(); setLastContact(latestContact); setNow(latestContact); };
@@ -32,6 +34,7 @@ export function useHistoricalV2Observation({ endpoint, runId, accountId, expecte
       refused = true; setProjection(null); setConnected(false); setError(message);
       source?.close(); source = null; controller?.abort();
       if (pollTimer) clearTimeout(pollTimer);
+      if (renewalTimer) clearTimeout(renewalTimer);
     };
     const accept = (next: HistoricalObservableProjectionV2) => {
       if (stopped || refused) return;
@@ -52,6 +55,10 @@ export function useHistoricalV2Observation({ endpoint, runId, accountId, expecte
       try {
         const response = await fetch(`${endpoint}${endpoint.includes("?") ? "&" : "?"}transport=poll`,
           { cache: "no-store", credentials: "include", signal: controller.signal });
+        if (stopped || refused) return;
+        if (response.status === 401 || response.status === 403) {
+          refuse("Observation access expired or was revoked. Sign in with an authorized account."); return;
+        }
         if (!response.ok) throw new Error("Historical projection unavailable");
         accept(await response.json() as HistoricalObservableProjectionV2);
       } catch {
@@ -63,21 +70,29 @@ export function useHistoricalV2Observation({ endpoint, runId, accountId, expecte
     };
     const startPolling = () => {
       if (stopped || refused || polling) return;
+      if (renewalTimer) clearTimeout(renewalTimer);
       source?.close(); source = null; polling = true; setTransport("polling"); void poll();
     };
-    if (typeof EventSource === "function") {
-      source = new EventSource(endpoint, { withCredentials: true });
+    const openSource = () => {
+      if (stopped || refused || polling) return;
+      source?.close();
+      const current = new EventSource(endpoint, { withCredentials: true });
+      source = current;
       // Opening a socket alone is not evidence of an observed run or fresh data.
-      source.addEventListener("historical.snapshot", raw => {
+      current.addEventListener("historical.snapshot", raw => {
+        if (source !== current) return;
         try { accept(JSON.parse((raw as MessageEvent<string>).data) as HistoricalObservableProjectionV2); }
         catch { if (!stopped && !refused) { setConnected(false); setError("Invalid historical event rejected."); startPolling(); } }
       });
-      source.addEventListener("heartbeat", () => { if (!stopped && !refused) touch(); });
-      source.onerror = () => {
-        if (stopped || refused) return;
+      current.addEventListener("heartbeat", () => { if (!stopped && !refused && source === current) touch(); });
+      current.onerror = () => {
+        if (stopped || refused || source !== current) return;
         setConnected(false); setError("Stream interrupted. Polling automatically…"); startPolling();
       };
-    } else startPolling();
+      renewalTimer = setTimeout(openSource, REAUTHORIZE_MS);
+    };
+    if (typeof EventSource === "function") openSource();
+    else startPolling();
     const watchdog = setInterval(() => {
       if (stopped || refused) return;
       setNow(Date.now());
@@ -88,6 +103,7 @@ export function useHistoricalV2Observation({ endpoint, runId, accountId, expecte
     return () => {
       stopped = true; source?.close(); controller?.abort();
       clearInterval(watchdog); if (pollTimer) clearTimeout(pollTimer);
+      if (renewalTimer) clearTimeout(renewalTimer);
     };
   }, [endpoint, runId, accountId, expectedOrganizationId]);
   return { projection, connected, error, transport, lastContact, now };
