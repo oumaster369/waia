@@ -27,16 +27,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: blocked
+  status: in-review
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: [WP-4]
   prNumber: 556
   prUrl: "https://github.com/oumaster369/waia/pull/556"
-  lastValidatedGitSha: "ae64ad304a2f3e9a65e5963545e5bab02dc85899"
+  lastValidatedGitSha: "5d0b78e9d5fac8ea467c362af273de296dd3d9bf"
   lastValidationAt: "2026-09-06"
-  blockedReason: "Priority Trader PR557 remains open with a separately declared Human merge gate; this task cannot mutate Trader. Combined changes remain committed locally to avoid redundant pre-sync CI."
-  nextAction: "After PR557 is integrated by its authorized owner, fetch main into this isolated worktree, review base overlap, validate/publish the consolidated PR556 head once, then exact-head squash merge after required checks. No renewed AI-TWIN merge approval or production deployment."
+  blockedReason: null
+  nextAction: "Follow PR556 exact-head required CI and unresolved review findings through the authorized squash merge, then verify main containment and reconcile Linear. Human Twin merge delegation remains active; no production deployment."
 provenance:
   createdFrom: "Human 2026-09-06 explicit AI-TWIN resume"
   gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
@@ -90,16 +90,26 @@ Original reviewed UI implementation:766b27be1f021dbb52c3d663249384205fb44aec; UI
 
 Read-only Cloudflare preflight: main is production branch; non-production builds enabled; both publication commands use versions upload, not traffic deployment. Active version276f576f (PRODUCTION_EA765A99_PR553_PR554) held100% traffic; Twin versions9f80624d/a809bb6d were separate uploads. Do not exercise preview URLs backed by shared production bindings. No settings changed. Earlier GitHub optional preview deploys were stopped before deployment steps.
 
-Do not advance main ahead of active priority Trader PR557: strict branch freshness could force it through another full CI. Only observe its state. Required checks, current head/base, independent review and zero unresolved findings remain merge gates; no admin bypass, production release, migration or automation.
+Historical sequencing constraint: do not advance main ahead of priority Trader PR557, because strict branch freshness could force it through another full CI. That constraint was resolved by its authorized merge below. Required checks, current head/base, independent review and zero unresolved findings remain merge gates; no admin bypass, production release, migration or automation.
 
 Cumulative local check on the consolidated pre-sync tree:39 targeted unit tests passed, lint0 errors/308 existing warnings, typecheck and canonical validator passed. Independent combined review found no runtime/security overlap; corrected two evidence-wording findings (JSONB storage shape and current-slice versus whole-issue completion). Final-base build/E2E/CI remain required.
 
 Pre-sync HEAD ae64ad304a2f3e9a65e5963545e5bab02dc85899: production build passed; both focused Chromium scenarios passed at1280px and390px. Tests used only localhost3294, the owned worktree's SQLite fixture and fake/offline AI; the temporary local server was stopped afterward. The sandbox denied loopback during the first build attempt; the scoped local retry succeeded. These results do not replace final-base required CI or prove production/AI-model quality.
 
-### Safe external integration gate — 2026-09-06
+### Historical external integration gate — 2026-09-06, resolved
 
 Owned combined checkpoint b5e52b7989ac5ea9d30bf15eca332f7f320e759a is committed locally, not pushed. PR556 remains draft on historical docs-only head79f067c575aa0ef148bfb265204cc15a0ca8a9b7; do not mistake its green checks for qualification of the combined tree. PR555 is closed without merge, with history preserved.
 
 Read-only PR557 inspection: its ordinary checks completed successfully, but the PR is still open and explicitly declares a separate Human merge gate. The owning task's latest available September6 source confirms an additional isolated PostgreSQL check is pending and no merge has occurred; no later Human merge authorization was found in the inspected post-PR history. That task's execution and Human gate are not this batch's authority. No message, process, workflow, issue or PR in the Trader scope was changed.
 
 This is an external priority/authority boundary, not an access failure or a request to reapprove AI-TWIN. Do not bypass it, recreate the batch, schedule a heartbeat or push a skip-CI workaround. Resume from the existing owned branch after the authorized Trader integration; record final exact-head CI and post-merge receipt in DEE-943. DEE-923 remains active for its residual acceptance.
+
+### Resumed final integration — 2026-09-06
+
+PR557 was merged by its authorized owner at11:51:36 UTC into main bf1872160bbdd49ddc2af6d6e566ba1209a6702a. Fresh read-only inventory found only this Twin PR open. The Human reaffirmed autonomous continuation; an informational status check is not a new approval requirement once the previous gate is resolved.
+
+The isolated published-history branch merged origin/main normally, producing5d0b78e9d5fac8ea467c362af273de296dd3d9bf without conflicts. The base changes touch only the Trader pool digest, its test and plan; all are unchanged relative to main in this PR. The 13-file Twin diff has no shared auth/database/gateway/runtime/CI surfaces. Sources and other worktrees remain untouched.
+
+Cloudflare build settings were re-read: main and non-production publication commands still use versions upload; no settings or production traffic changed. Final local and GitHub verification evidence follows; earlier green heads remain historical only.
+
+Final-base local verification on5d0b78e9d5fac8ea467c362af273de296dd3d9bf:39 targeted tests passed (workspace14, dialogue route18, Diary7); lint passed with0 errors/308 pre-existing warnings; typecheck and production build passed; both desktop/mobile Chromium scenarios passed against the owned localhost3294 SQLite fixture. The local test server was stopped. An independent read-only review confirmed no new findings and no Trader/shared-file diff. Final handoff changes only this plan's evidence/status; exact published-head CI and post-merge containment must still pass and will be recorded in Linear/PR without a status-only follow-up PR.
