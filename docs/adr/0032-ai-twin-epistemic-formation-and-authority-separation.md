@@ -1,6 +1,6 @@
 # ADR-0032: AI-TWIN epistemic formation and authority separation
 
-**Status:** Proposed — Human-ratified on 2026-09-01; becomes Accepted on merge  
+**Status:** Accepted — Human-ratified and merged on 2026-09-01, PR #541 (8170dc3878d4cade59cc02422d2df022ee300c88)
 **Date:** 2026-09-01  
 **Linear:** DEE-130
 
@@ -43,6 +43,8 @@ The product ambition is larger: a changing Human process, a private co-researche
 - **Grant action rights when the Twin is formed.** Knowledge never implies consent or authority.
 
 ## Related
+
+Status reconciled on 2026-09-06 under DEE-943. The earlier “becomes Accepted on merge” label is historical; no architectural decision changes.
 
 - [`../product/AI-TWIN-PRODUCT-CONSTITUTION.md`](../product/AI-TWIN-PRODUCT-CONSTITUTION.md)
 - [`../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md`](../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md)
