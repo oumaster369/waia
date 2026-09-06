@@ -27,16 +27,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: blocked
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: [WP-4]
   prNumber: 556
   prUrl: "https://github.com/oumaster369/waia/pull/556"
-  lastValidatedGitSha: "0f254f73308933269ea98217974af79d07c54191"
+  lastValidatedGitSha: "ae64ad304a2f3e9a65e5963545e5bab02dc85899"
   lastValidationAt: "2026-09-06"
-  blockedReason: null
-  nextAction: "Validate consolidated batch on fresh main after Trader PR557; exact-head squash merge authorized, no production deployment."
+  blockedReason: "Priority Trader PR557 remains open with a separately declared Human merge gate; this task cannot mutate Trader. Combined changes remain committed locally to avoid redundant pre-sync CI."
+  nextAction: "After PR557 is integrated by its authorized owner, fetch main into this isolated worktree, review base overlap, validate/publish the consolidated PR556 head once, then exact-head squash merge after required checks. No renewed AI-TWIN merge approval or production deployment."
 provenance:
   createdFrom: "Human 2026-09-06 explicit AI-TWIN resume"
   gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md
@@ -95,3 +95,11 @@ Do not advance main ahead of active priority Trader PR557: strict branch freshne
 Cumulative local check on the consolidated pre-sync tree:39 targeted unit tests passed, lint0 errors/308 existing warnings, typecheck and canonical validator passed. Independent combined review found no runtime/security overlap; corrected two evidence-wording findings (JSONB storage shape and current-slice versus whole-issue completion). Final-base build/E2E/CI remain required.
 
 Pre-sync HEAD ae64ad304a2f3e9a65e5963545e5bab02dc85899: production build passed; both focused Chromium scenarios passed at1280px and390px. Tests used only localhost3294, the owned worktree's SQLite fixture and fake/offline AI; the temporary local server was stopped afterward. The sandbox denied loopback during the first build attempt; the scoped local retry succeeded. These results do not replace final-base required CI or prove production/AI-model quality.
+
+### Safe external integration gate — 2026-09-06
+
+Owned combined checkpoint b5e52b7989ac5ea9d30bf15eca332f7f320e759a is committed locally, not pushed. PR556 remains draft on historical docs-only head79f067c575aa0ef148bfb265204cc15a0ca8a9b7; do not mistake its green checks for qualification of the combined tree. PR555 is closed without merge, with history preserved.
+
+Read-only PR557 inspection: its ordinary checks completed successfully, but the PR is still open and explicitly declares a separate Human merge gate. The owning task's latest available September6 source confirms an additional isolated PostgreSQL check is pending and no merge has occurred; no later Human merge authorization was found in the inspected post-PR history. That task's execution and Human gate are not this batch's authority. No message, process, workflow, issue or PR in the Trader scope was changed.
+
+This is an external priority/authority boundary, not an access failure or a request to reapprove AI-TWIN. Do not bypass it, recreate the batch, schedule a heartbeat or push a skip-CI workaround. Resume from the existing owned branch after the authorized Trader integration; record final exact-head CI and post-merge receipt in DEE-943. DEE-923 remains active for its residual acceptance.
