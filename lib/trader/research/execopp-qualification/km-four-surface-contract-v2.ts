@@ -14,6 +14,10 @@ import {
 } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
 import { canonicalizeSourceCorpusV1 } from
   "@/lib/trader/intelligence/forecast-v2/source-corpus-canonical-v1";
+import {
+  canonicalSourceCorporaEqualV2,
+  computeKmDevelopmentCorpusDigestV2,
+} from "./km-corpus-serialization-v2";
 
 import {
   buildKmConvergenceReceiptV1,
@@ -151,8 +155,7 @@ function canonicalCorpus(input: KmDevelopmentCorpusSurfaceInputV2): readonly Sou
   const corpus = canonicalizeSourceCorpusV1(input.developmentCorpus);
   if (
     corpus.length < KM_ANCHORS_PER_SURFACE ||
-    canonicalizeSemanticJsonString(corpus) !==
-      canonicalizeSemanticJsonString(input.developmentCorpus) ||
+    !canonicalSourceCorporaEqualV2(corpus, input.developmentCorpus) ||
     corpus.some(
       (anchor) =>
         anchor.venue !== "htx" ||
@@ -228,7 +231,7 @@ export function buildKmFourSurfaceDevelopmentAuthorityV2(input: Readonly<{
       anchorCount: corpus.length,
       firstAnchorEpochMs: corpus[0]!.closedBarEpochMs,
       lastAnchorEpochMs: corpus.at(-1)!.closedBarEpochMs,
-      corpusContentDigestHex: computeSemanticSha256Hex({
+      corpusContentDigestHex: computeKmDevelopmentCorpusDigestV2({
         schemaVersion: "km-development-corpus/v2",
         organizationId: input.organizationId,
         datasetAuthorityIdentityDigestHex: input.datasetAuthorityIdentityDigestHex,
