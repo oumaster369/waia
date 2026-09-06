@@ -2,7 +2,7 @@
 specId: PCS-AI-TWIN-PRESENCE-DECISION
 title: "AI-TWIN Presence, Biometric Privacy and Avatar — Human decision"
 module: ai-twin
-maturity: proposed
+maturity: active
 owner: Architect
 sourceOfTruth:
   - docs/product/AI-TWIN-PRODUCT-CONSTITUTION.md
@@ -10,13 +10,13 @@ sourceOfTruth:
 relatedGaps:
   - docs/gaps/ai-twin-v1-gap-registry.md
 relatedRoadmap: docs/roadmaps/ai-twin-program-roadmap.md
-lastReviewed: 2026-09-01
-version: 0.1.0
+lastReviewed: 2026-09-06
+version: 0.2.0
 ---
 
 # AI-TWIN Presence, Biometric Privacy and Avatar — Human Decision
 
-**Status:** Decision requested; no biometric implementation authorized
+**Status:** D1–D5 ratified 2026-09-01; only the selected DARK preparatory scope is authorized
 **Issue:** DEE-873
 **Blocks:** DEE-880 final trust composition, DEE-882 liveness implementation and DEE-883 Avatar provider integration
 
@@ -25,6 +25,14 @@ version: 0.1.0
 Present the smallest explicit Human decisions required to preserve free will, biometric privacy and truthful trust claims before any downstream AI-TWIN liveness or Avatar implementation begins.
 
 ## Scope
+
+### Recorded Human decision
+
+After PR #542 merged, the Human selected D1 **B-DARK-EVALUATION**, D2 **APPROVE**, D3 **EPHEMERAL-NO-TEMPLATE**, D4 **APPROVE**, D5 **APPROVE-DARK-ONLY**, with **EU/EEA design baseline**.
+
+Source: task 01a057ba-ed9b-77a1-948d-5220bb52debd, turn 01a05d02-c065-74f0-8999-fb1563efdd77, 2026-09-01 12:47 UTC; DEE-873 comment 501f1589-577c-49f7-8a05-b19990475a4d. Reconciled here on 2026-09-06 under DEE-943.
+
+Decision-request/options text below is preserved as the historical proposal that was answered. No production vendor, final retention duration, completed DPIA, performance threshold or production activation is implied. Remaining blocks concern trust composition/provider/evaluation evidence, not an unanswered D1–D5 question.
 
 - v1 liveness strategy and the exact claim it may produce;
 - raw-evidence and reusable-template posture;
@@ -42,7 +50,7 @@ Present the smallest explicit Human decisions required to preserve free will, bi
 
 ## Acceptance criteria
 
-- [ ] The Human records D1–D5 using the decision template or an equivalently explicit statement.
+- [x] The Human records D1–D5 using the decision template or an equivalently explicit statement.
 - [ ] Any revision preserves the canonical separation of Formation, authentication, liveness, uniqueness, legal identity, representation approval and action authority.
 - [ ] Downstream plans retain DARK-by-default activation and their independent Human merge/production gates.
 - [ ] Unresolved vendor, jurisdiction, retention or performance questions remain visibly open rather than inferred as approved.
@@ -66,11 +74,11 @@ DEE-873 can establish the architecture boundary, but a Human must choose the ris
 
 ### D1 — v1 liveness strategy
 
-| Option | Meaning | Benefit | Cost/risk |
-|---|---|---|---|
-| **A — Non-biometric v1** | Launch Avatar workflow with passkey, rate limits, disclosure/provenance and optional Human review; no camera PAD gate | Lowest biometric/privacy risk; fastest honest launch | Does not produce a liveness result; synthetic/replayed source risk handled by other controls |
-| **B — Privacy-minimized PAD adapter (recommended for evaluation)** | Build a vendor-neutral, `DARK` liveness path; select a provider only after DPIA, contract and independent benchmark | Can reduce replay/presentation abuse while preserving exit/fallback | Processor, transfer, bias, false-reject, breach and vendor-change risk; requires real evaluation |
-| **C — First-party/self-hosted PAD** | WAIA operates capture and PAD models itself | Greater infrastructure/data-path control | Highest v1 engineering, security, dataset, bias and ongoing adversarial-research burden; not recommended for v1 |
+| Option                                                             | Meaning                                                                                                               | Benefit                                                             | Cost/risk                                                                                                       |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **A — Non-biometric v1**                                           | Launch Avatar workflow with passkey, rate limits, disclosure/provenance and optional Human review; no camera PAD gate | Lowest biometric/privacy risk; fastest honest launch                | Does not produce a liveness result; synthetic/replayed source risk handled by other controls                    |
+| **B — Privacy-minimized PAD adapter (recommended for evaluation)** | Build a vendor-neutral, `DARK` liveness path; select a provider only after DPIA, contract and independent benchmark   | Can reduce replay/presentation abuse while preserving exit/fallback | Processor, transfer, bias, false-reject, breach and vendor-change risk; requires real evaluation                |
+| **C — First-party/self-hosted PAD**                                | WAIA operates capture and PAD models itself                                                                           | Greater infrastructure/data-path control                            | Highest v1 engineering, security, dataset, bias and ongoing adversarial-research burden; not recommended for v1 |
 
 Recommendation: authorize **B for DARK evaluation only**, not production. Preserve **A** as the launch/fallback posture if vendor evidence, DPIA or accessibility thresholds do not pass. Do not choose C for v1 without a separate resourced program.
 
@@ -117,19 +125,19 @@ Recommended posture:
 
 Each candidate is marked `PASS`, `FAIL`, `UNKNOWN` or `NOT_APPLICABLE`; `UNKNOWN` never contributes to approval.
 
-| Gate | Required evidence | Blocking |
-|---|---|---|
-| Purpose boundary | Liveness-only configuration; no identity/dedup/emotion/sensitive-trait features | Yes |
-| Data location | Controller/processor/subprocessor and region map | Yes |
-| Secondary use | Enforceable no-training/no-unrelated-use terms | Yes |
-| Raw/template retention | Exact default/max durations and deletion proof | Yes |
-| Security | Independent PAD scope plus injection/SDK/API controls | Yes |
-| Version control | Model/version pinning or advance change notice and requalification | Yes |
-| Performance | Attack/bona fide errors with sample sizes and confidence intervals | Yes |
-| Fairness/accessibility | Demographic, disability, device/environment evidence and fallback | Yes |
-| Rights | Access/export/delete/withdrawal cascade and SLA | Yes |
-| Incident/exit | Notification, kill switch, termination export/deletion | Yes |
-| Commercial/operational | Cost, latency, availability and support | No; compare after safety gates |
+| Gate                   | Required evidence                                                               | Blocking                       |
+| ---------------------- | ------------------------------------------------------------------------------- | ------------------------------ |
+| Purpose boundary       | Liveness-only configuration; no identity/dedup/emotion/sensitive-trait features | Yes                            |
+| Data location          | Controller/processor/subprocessor and region map                                | Yes                            |
+| Secondary use          | Enforceable no-training/no-unrelated-use terms                                  | Yes                            |
+| Raw/template retention | Exact default/max durations and deletion proof                                  | Yes                            |
+| Security               | Independent PAD scope plus injection/SDK/API controls                           | Yes                            |
+| Version control        | Model/version pinning or advance change notice and requalification              | Yes                            |
+| Performance            | Attack/bona fide errors with sample sizes and confidence intervals              | Yes                            |
+| Fairness/accessibility | Demographic, disability, device/environment evidence and fallback               | Yes                            |
+| Rights                 | Access/export/delete/withdrawal cascade and SLA                                 | Yes                            |
+| Incident/exit          | Notification, kill switch, termination export/deletion                          | Yes                            |
+| Commercial/operational | Cost, latency, availability and support                                         | No; compare after safety gates |
 
 ## 4. Evidence required for the later production decision
 

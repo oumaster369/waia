@@ -1,7 +1,8 @@
 # AI-TWIN Product Constitution
 
 **Status:** Human-ratified target canon; implementation is not implied  
-**Ratified:** 2026-09-01; economic/access extension pending Human merge under DEE-922
+**Ratified:** 2026-09-01 (DEE-130 / PR #541); economic/access extension Human-merged 2026-09-02 (DEE-922 / PR #550)
+**Evidence review:** 2026-09-06 — [source register and implementation map](../ai-twin/AI-TWIN-EVIDENCE-BASELINE-2026-09-06.md)
 **Canonical root:** [DEE-130](https://linear.app/deepsense/issue/DEE-130)  
 **Decision record:** [ADR-0032](../adr/0032-ai-twin-epistemic-formation-and-authority-separation.md)
 
@@ -60,13 +61,13 @@ Goals are not a seventh trait or a replacement domain. A goal is a temporal traj
 
 Each domain advances through evidence-backed maturity states:
 
-| State | Meaning |
-|---|---|
-| 0 — Unobserved | WAIA has no adequate evidence and must not guess. |
-| 1 — Self-described | The Human has declared a view, preference or story. |
-| 2 — Contextually grounded | Episodic or situational evidence connects the declaration to lived context. |
-| 3 — Dynamically modelled | Triggers, responses, consequences, cross-domain relationships and tensions are represented. |
-| 4 — Calibrated | A reflection, prediction or reversible experiment has an observed outcome and Human correction. |
+| State                     | Meaning                                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| 0 — Unobserved            | WAIA has no adequate evidence and must not guess.                                               |
+| 1 — Self-described        | The Human has declared a view, preference or story.                                             |
+| 2 — Contextually grounded | Episodic or situational evidence connects the declaration to lived context.                     |
+| 3 — Dynamically modelled  | Triggers, responses, consequences, cross-domain relationships and tensions are represented.     |
+| 4 — Calibrated            | A reflection, prediction or reversible experiment has an observed outcome and Human correction. |
 
 The maturity state is evidence-derived. Fluency, message count, elapsed time and model confidence cannot substitute for evidence.
 
@@ -124,6 +125,8 @@ The system must keep four questions separate:
 - **legal identity** — does the person correspond to a verified real-world identity.
 
 The v1 target uses passkeys/WebAuthn for account and device authentication plus a separate active liveness ceremony: a short-lived server challenge with nonce and expiry, randomized actions, passive presentation-attack checks, injection/virtual-camera signals, rate limits and a recovery path. “Say cheese” can be one prompt, never the sole control. Raw liveness evidence and avatar training material have separate consent, retention, deletion and export policies. WAIA must not infer personality or emotion from biometric media.
+
+The Human's 2026-09-01 DEE-873 decision authorizes provider-neutral **DARK evaluation only**, ephemeral raw liveness processing with no reusable central face template, the narrow presence claim and accessible fallback. EU/EEA is the design baseline, not evidence of legal compliance. No vendor, final retention durations or production activation were approved. The [decision record](../product-specs/ai-twin-presence-human-decision.md) preserves the exact scope.
 
 ## 7. Authority and real-world action
 
@@ -184,12 +187,12 @@ A sponsored subscription is a subscription payment classification, not an ordina
 
 ## 10. Version boundary
 
-| Version | Product outcome | Explicit boundary |
-|---|---|---|
-| v1 — Formation, Embodiment & Adviser | Evidence-backed Human model, Diary, Formation/Model Health, Avatar Studio trust gates, calibrated Adviser | No general connector execution or Society launch |
-| v2 — Connected Context & Delegated Actions | Consented read context and bounded real-world actions with receipts | No silent authority expansion; no broad autonomous agent |
-| v3 — Society & Alignment Contracts | Mutual introductions, compatibility hypotheses and revocable contracts | No popularity mechanics or machine consent |
-| Future — Living WAIA network | Bounded collective learning and self-improvement proposals | No consciousness claim, survival imperative or self-sovereignty |
+| Version                                    | Product outcome                                                                                           | Explicit boundary                                               |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| v1 — Formation, Embodiment & Adviser       | Evidence-backed Human model, Diary, Formation/Model Health, Avatar Studio trust gates, calibrated Adviser | No general connector execution or Society launch                |
+| v2 — Connected Context & Delegated Actions | Consented read context and bounded real-world actions with receipts                                       | No silent authority expansion; no broad autonomous agent        |
+| v3 — Society & Alignment Contracts         | Mutual introductions, compatibility hypotheses and revocable contracts                                    | No popularity mechanics or machine consent                      |
+| Future — Living WAIA network               | Bounded collective learning and self-improvement proposals                                                | No consciousness claim, survival imperative or self-sovereignty |
 
 Economic work crosses version boundaries without changing them: v1 may explain the future billing contract and measure cost; no billable activation is permitted before the v3 Society connection gate and explicit Human confirmation.
 
@@ -207,3 +210,16 @@ Economic work crosses version boundaries without changing them: v1 may explain t
 - Sponsorship != access to the supported Human/Twin != governance or Patron weight.
 
 Any implementation that collapses one of these separations is constitutionally incorrect even if its UI appears complete.
+
+## 12. Baseline and change history
+
+This is the current agreed baseline, not a claim of complete knowledge or a prohibition on future Human-approved revision. The source register distinguishes user decisions, ratified canon, proposals, code inspection and verification results. Legacy runtime remains legacy until its own migration/qualification gates pass.
+
+| Date       | Decision / evidence                            | Effect                                                                                                      |
+| ---------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 2026-09-01 | DEE-130, PR #541, ADR-0032                     | Initial epistemic Formation/Adviser and v1–v3 canon                                                         |
+| 2026-09-01 | DEE-873, PR #542 and subsequent D1–D5 decision | Narrow DARK-only presence evaluation; no production authority                                               |
+| 2026-09-02 | DEE-922, Human-merged PR #550                  | Free Formation, governed cost ×5 pricing, separate subscription and sponsored-access consent                |
+| 2026-09-06 | Explicit Human resume; DEE-943                 | Evidence/status reconciliation; isolated implementation permitted while Trader stays outside mutation scope |
+
+Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

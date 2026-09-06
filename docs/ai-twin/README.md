@@ -11,6 +11,10 @@ AI-TWIN is WAIA's private, longitudinal model and co-researcher of one Human lif
 5. [`../gaps/ai-twin-v1-gap-registry.md`](../gaps/ai-twin-v1-gap-registry.md) — current implementation delta.
 6. [`../roadmaps/ai-twin-program-roadmap.md`](../roadmaps/ai-twin-program-roadmap.md) — executable version and batch order.
 
+## Evidence baseline
+
+The [2026-09-06 evidence baseline](AI-TWIN-EVIDENCE-BASELINE-2026-09-06.md) is a subordinate source register and implementation map, not another canonical root.
+
 ## Economics and access packet
 
 - The Product Constitution owns the no-charge Formation rule, governed `cost x 5` price policy and the Human-consented Society subscription boundary.
@@ -22,6 +26,6 @@ AI-TWIN is WAIA's private, longitudinal model and co-researcher of one Human lif
 
 - [`../security/AI-TWIN-PRESENCE-AND-LIVENESS-THREAT-MODEL.md`](../security/AI-TWIN-PRESENCE-AND-LIVENESS-THREAT-MODEL.md) — claims, trust boundaries, threats, controls and qualification blockers.
 - [`../privacy/AI-TWIN-BIOMETRIC-PRIVACY-AND-DPIA-PACKET.md`](../privacy/AI-TWIN-BIOMETRIC-PRIVACY-AND-DPIA-PACKET.md) — data inventory, rights, DPIA and vendor evidence contract.
-- [`../product-specs/ai-twin-presence-human-decision.md`](../product-specs/ai-twin-presence-human-decision.md) — alternatives and the exact Human decision required before downstream biometric work.
+- [`../product-specs/ai-twin-presence-human-decision.md`](../product-specs/ai-twin-presence-human-decision.md) — recorded DARK-only D1–D5 decision, historical alternatives and remaining provider/production gates.
 
 The earlier readiness/user-flow/dashboard documents remain evidence of the shipped MVP contract. Their progress thresholds and six-domain semantics are superseded for future implementation by this canon.
