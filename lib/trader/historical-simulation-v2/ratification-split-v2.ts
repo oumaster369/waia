@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type postgres from "postgres";
 import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
+import { assertTechnicalPreparationActiveV2, snapshotTechnicalPreparationObserverV2,
+  type TechnicalPreparationObserverV2 } from "./technical-preparation-observer-v2";
 
 import { bindPostgresReservedSession, withPostgresSessionTransaction } from
   "@/db/postgres-session-transaction";
@@ -325,9 +327,11 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
   pool: postgres.Sql,
   input: Readonly<{ preflight: KmFourSurfaceProductionPreflightInputV2;
     launchPlan: HistoricalTechnicalLaunchPlanV2 }>,
+  requestedObserver: TechnicalPreparationObserverV2 = {},
 ): Promise<Readonly<{ id: string; proposal: HistoricalTechnicalProposalV2 }>> {
   assertScope(input.preflight);
   validateLaunchPlan(input.launchPlan);
+  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
   const reserved = await pool.reserve();
   const sql = bindPostgresReservedSession(pool, reserved);
   let assumed = false;
@@ -339,6 +343,7 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
     assumed = true;
     await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
     locked = true;
+    assertTechnicalPreparationActiveV2(observer);
     const request = await loadRequest(sql, input.preflight);
     if (request.request.executionExtent.initialRecordIndex !== input.launchPlan.initialRecordIndex ||
         request.request.executionExtent.cycleCount !== input.launchPlan.cycleCount) {
@@ -349,7 +354,9 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
       sql,
       { preflight: input.preflight,
         humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2 },
+      observer,
     );
+    assertTechnicalPreparationActiveV2(observer);
     assertLaunchPlanWithinQualifiedEconomicPartition(input.launchPlan, technicalCandidate);
     const proposal = seal({
       schemaVersion: HISTORICAL_TECHNICAL_PROPOSAL_V2,

@@ -203,7 +203,8 @@ export type ValidationBootstrapExecutionV1 = Readonly<{
   /** Explicit Node CLI execution only; never changes the scientific input or result. */
   nodeWorkerCount?: number;
   signal?: AbortSignal;
-  onProgress?: (progress: Readonly<{ completed: number; total: typeof VALIDATION_BOOTSTRAP_B }>) => void;
+  onProgress?: (progress: Readonly<{ completed: number; total: typeof VALIDATION_BOOTSTRAP_B;
+    trialIdentityDigestHex?: string }>) => void;
 }>;
 
 export function snapshotValidationBootstrapExecutionV1(
@@ -243,6 +244,9 @@ export async function validationBootstrapPValueAsyncV1(
 ): Promise<ValidationBootstrapNullCenteredResultV1> {
   const ownedExecution = snapshotValidationBootstrapExecutionV1(execution);
   const { signal, onProgress, nodeWorkerCount } = ownedExecution;
+  const trialIdentityDigestHex = Buffer.from(input.trialIdentityDigest32).toString("hex");
+  const reportProgress = (progress: Readonly<{ completed: number; total: typeof VALIDATION_BOOTSTRAP_B }>) =>
+    onProgress?.(Object.freeze({ ...progress, trialIdentityDigestHex }));
   const assertActive = () => {
     if (signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
   };
@@ -259,7 +263,7 @@ export async function validationBootstrapPValueAsyncV1(
     ) as typeof import("../../../../scripts/trader/validation-bootstrap-node-pool");
     assertActive();
     return validationBootstrapPValueNodeParallelV1(ownedInput, {
-      signal, onProgress, workerCount: nodeWorkerCount,
+      signal, onProgress: reportProgress, workerCount: nodeWorkerCount,
     });
   }
   const quantum = Math.max(1, Math.min(250, Math.floor(250_000 / input.differentials.length)));
@@ -269,7 +273,7 @@ export async function validationBootstrapPValueAsyncV1(
   try {
     while (!step.done) {
       if (step.value % quantum === 0 || step.value === VALIDATION_BOOTSTRAP_B) {
-        onProgress?.(Object.freeze({ completed: step.value, total: VALIDATION_BOOTSTRAP_B }));
+        reportProgress({ completed: step.value, total: VALIDATION_BOOTSTRAP_B });
         assertActive();
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         assertActive();

@@ -18,7 +18,9 @@ export async function runHistoricalTechnicalProposalMainV2(
     async (databaseUrl, input) => {
       const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
       return withHistoricalLaunchCleanupV2(
-        () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input),
+        () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input, {
+          onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); },
+        }),
         [() => pool.end({ timeout: 5 })],
       );
     });
