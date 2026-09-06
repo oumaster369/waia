@@ -94,10 +94,12 @@ Synthetic N525600 responsiveness probe on local AppleM5/Node22.22.3 deliberately
 
 Still required: bounded multi-worker equivalence/coverage if adopted, durable exact-release/input/baseline evidence reuse, operator-visible progress and wired cancellation, target-host/full-data preparation, cumulative release review and remoteCI. Do not close DEE950 from this local responsiveness result.
 
-## Current-base and preceding issuance scheduling — 2026-09-06 21:04 UTC
+## Current-base and preceding issuance scheduling — 2026-09-06 21:00 UTC
 
 Merged already-approved origin/main b5c17263 locally without conflicts (merge b25c69e16629cf8b8eb3437a4598854c8559453f), retaining PR558 bounded corpus serialization and PR559 admin/stream admission. No remote write or deployment. The WF_PREDICTIVE issuance loop now visits every original anchor in order and yields after each32completed Forecast calls. Individual Forecast calls and package construction remain synchronous; this is not a fixed wall-clock latency bound or parallel speedup. No anchors, probabilities or package inputs changed.
 
 Post-merge checks: full TypeScript PASS;35targeted tests PASS across scientific receipt/cooperative parity, actual production-bootstrap fixture, ratification migration and bounded corpus serialization (including exceeding V8 string limit). Scoped lint has only the existing unused-input warning. A new isolated localPG17database waia_hsv2_it_dee950_v1 has fresh migrations through0202 for this branch; old databases/evidence retained. Native better-sqlite3 was absent and restored using its existing dependency install script before attempting the integration suite; this is local test setup, not a product correction.
 
 Read-only execution-server metadata check found the original qualification receipt digest fc5c63853a4314efd148dc3197f794a88bfcf87652f363fdf7c9e791891a084d: per-symbol DEVELOPMENT1578240bars(2020–2022), WF_PREDICTIVE525600bars(2023), WF_ECONOMIC527040bars(2024). These are receipt bar counts, not independently recomputed valid anchor counts or renewed qualification. No data copied or server process started. The legacy current symlink resolves0d19765d and docker ps returned no running containers; that does not alone establish whether a separate non-container service is running.
+
+At21:01UTC the full sequential PostgreSQL first/35-cycle/restart/negative suite started as session48342 against clean implementation head570d41f12b63541ea8f8659d93f05abcbcf442ee, using waia_hsv2_it_dee950_v1. It is running, not PASS. This exercises the corrected DEE947 bootstrap law and new scheduling on the bounded complete-graph fixture; it does not include the separate DEE946 transport branch yet. No timeout or assertion changes.
