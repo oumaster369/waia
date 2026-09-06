@@ -32,14 +32,17 @@ export type PoolSemanticDigestInput = {
   observations: readonly PoolObservation[];
 };
 
-export function buildPoolSemanticDigestStream(input: PoolSemanticDigestInput): Buffer {
+function emitPoolSemanticDigestChunks(
+  input: PoolSemanticDigestInput,
+  emit: (chunk: Buffer) => void,
+): void {
   assertAsciiLine(input.organizationId, "organizationId");
   assertAsciiLine(input.venue, "venue");
   assertAsciiLine(input.market, "market");
   assertAsciiLine(input.symbol, "symbol");
   assertDigestHex64(input.developmentDatasetDigestHex, "developmentDatasetDigestHex");
 
-  const chunks: Buffer[] = [
+  const header: Buffer[] = [
     line(POOL_SEM_VERSION),
     line(input.organizationId),
     line(input.venue),
@@ -54,30 +57,40 @@ export function buildPoolSemanticDigestStream(input: PoolSemanticDigestInput): B
     Buffer.from(input.developmentDatasetDigestHex, "hex"),
     line(assertCanonicalIntegerLine(input.observations.length, "n_pool")),
   ];
+  for (const chunk of header) emit(chunk);
 
   const ordered = [...input.observations].sort(
     (a, b) => a.resamplePositionOrdinal - b.resamplePositionOrdinal,
   );
 
   for (const obs of ordered) {
-    chunks.push(
+    emit(
       line(assertCanonicalIntegerLine(obs.resamplePositionOrdinal, "resamplePositionOrdinal")),
     );
-    chunks.push(line(assertCanonicalIntegerLine(obs.anchor.closedBarEpochMs, "closedBarEpochMs")));
-    chunks.push(line(obs.anchor.venue));
-    chunks.push(line(obs.anchor.market));
-    chunks.push(line(obs.anchor.symbol));
+    emit(line(assertCanonicalIntegerLine(obs.anchor.closedBarEpochMs, "closedBarEpochMs")));
+    emit(line(obs.anchor.venue));
+    emit(line(obs.anchor.market));
+    emit(line(obs.anchor.symbol));
     if (obs.anchor.outcome13d.length !== 13) {
       throw new Error("[forecast-v2/pool-sem] outcome13d must have 13 components");
     }
     for (const component of obs.anchor.outcome13d) {
-      chunks.push(line(quantizeScale8HalfUp(component)));
+      emit(line(quantizeScale8HalfUp(component)));
     }
   }
+}
 
+export function buildPoolSemanticDigestStream(input: PoolSemanticDigestInput): Buffer {
+  const chunks: Buffer[] = [];
+  emitPoolSemanticDigestChunks(input, (chunk) => chunks.push(chunk));
   return Buffer.concat(chunks);
 }
 
 export function computePoolSemanticDigest(input: PoolSemanticDigestInput): Buffer {
-  return createHash("sha256").update(buildPoolSemanticDigestStream(input)).digest();
+  const hasher = createHash("sha256");
+  // Preserve the canonical bytes without retaining every field Buffer or the full stream.
+  emitPoolSemanticDigestChunks(input, (chunk) => {
+    hasher.update(chunk);
+  });
+  return hasher.digest();
 }
