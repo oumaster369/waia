@@ -19,6 +19,10 @@ state:
   lastValidationAt: null
   blockedReason: null
   nextAction: "Open the scoped PR and verify exact-head CI; preserve merge and production gates"
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
 ---
 
 ## Scope and authority
@@ -40,6 +44,16 @@ WP-3: independent audit and review, lint/typecheck/build, one integration-ready 
 Record other discovered blockers separately; do not claim this small correction
 resolves all production readiness. No merge, deployment, migration, account,
 credential, capital or blind-holdout authority is granted by this plan.
+
+## Acceptance
+
+- Canonical equality and SHA-256 bytes match the frozen legacy oracle.
+- Actual input above V8 MAX_STRING_LENGTH reproduces the legacy failure and
+  completes through bounded serialization without dropping corpus elements.
+- Existing negative validation and targeted contract/bootstrap tests pass.
+- Lint, typecheck, build, canonical plan validation and exact-head CI pass.
+- Scoped independent review has no P1/P2 findings; broader readiness blockers
+  remain explicitly open and no deployment is implied.
 
 ## Evidence
 
