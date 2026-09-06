@@ -19,8 +19,8 @@ state:
   remainingWorkPackages: [WP-COOPERATIVE, WP-REVIEW, WP-FULL-DATA-FEASIBILITY]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 570d41f12b63541ea8f8659d93f05abcbcf442ee
+  lastValidationAt: "2026-09-06T21:27:00Z"
   blockedReason: null
   nextAction: "Validate cooperative execution on the real technical-proposal path; retain all resamples and exact receipt parity. Full-data feasibility and durable progress/resume remain open."
 provenance:
@@ -103,3 +103,9 @@ Post-merge checks: full TypeScript PASS;35targeted tests PASS across scientific 
 Read-only execution-server metadata check found the original qualification receipt digest fc5c63853a4314efd148dc3197f794a88bfcf87652f363fdf7c9e791891a084d: per-symbol DEVELOPMENT1578240bars(2020–2022), WF_PREDICTIVE525600bars(2023), WF_ECONOMIC527040bars(2024). These are receipt bar counts, not independently recomputed valid anchor counts or renewed qualification. No data copied or server process started. The legacy current symlink resolves0d19765d and docker ps returned no running containers; that does not alone establish whether a separate non-container service is running.
 
 At21:01UTC the full sequential PostgreSQL first/35-cycle/restart/negative suite started as session48342 against clean implementation head570d41f12b63541ea8f8659d93f05abcbcf442ee, using waia_hsv2_it_dee950_v1. It is running, not PASS. This exercises the corrected DEE947 bootstrap law and new scheduling on the bounded complete-graph fixture; it does not include the separate DEE946 transport branch yet. No timeout or assertion changes.
+
+### Completed graph result — supersedes the running status above
+
+Session48342 finished exit0:13tests passed,1skipped,1468.52seconds total. The full35-cycle case passed in1153.400seconds. This includes actual runner/pool reacquisition, durable-boundary recovery, production bootstrap/queue/consumer and future-only knowledge closure assertions with corrected947 law and cooperative950 scheduling. The optional80-cycle continuation remains skipped; it is not reported as tested. No assertion,35-cycle count, statistical criterion or timeout was relaxed.
+
+This is a bounded synthetic complete-graph test, not the full historical dataset, full-data scientific qualification, remoteCI or production readiness. The separate local cumulative validation snapshot37de0528 includes946/948/951/953 and is being tested independently. Neither result grants publication, merge, deployment, Human ratification or live authority. Full-data cost, durable progress/resume, operator cancellation and final review remain open. Linear evidence:56719731-cd1f-4093-a068-789c016318e6.
