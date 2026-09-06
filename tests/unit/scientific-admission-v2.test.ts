@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ValidationBootstrapExecutionV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 
 import { MANDATORY_BASELINE_IDS } from "@/lib/trader/research/benchmark/baseline-models-v1";
 import { qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
@@ -92,21 +93,33 @@ function kmReceipt(qualifies = true) {
 }
 
 describe("DEE-950 cooperative predictive receipt", () => {
-  it("has exact receipt parity across all mandatory baselines and owns caller data", async () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([undefined, 2])("has exact receipt parity across all mandatory baselines with workers=%s and owns caller data", async (nodeWorkerCount) => {
+    if (nodeWorkerCount !== undefined) vi.stubEnv("WAIA_TRADER_CLI", "1");
     const input = { harnessInput: harnessInput(), identities: { ...identities } };
     const expected = buildPredictiveTerminalReceiptV1(input);
     let completedBaselines = 0;
-    const actual = await buildPredictiveTerminalReceiptAsyncV1(input, { onProgress: ({ completed }) => {
+    const execution: { -readonly [K in keyof ValidationBootstrapExecutionV1]: ValidationBootstrapExecutionV1[K] } = {
+      nodeWorkerCount, onProgress: ({ completed }) => {
       if (completed === 10000) completedBaselines++;
+      execution.nodeWorkerCount = 999;
       input.identities.predictivePackageContentDigestHex = hex("f");
       input.harnessInput.comparisonFamilyId = "caller-mutation";
       input.harnessInput.developmentReturns = [NaN];
       input.harnessInput.anchors[0]!.challengerProbabilities = [NaN];
-    } });
+    } };
+    const actual = await buildPredictiveTerminalReceiptAsyncV1(input, execution);
     expect(completedBaselines).toBe(5);
     expect(actual).toEqual(expected);
     expect(actual.terminalStatus).toBe("QUALIFIED");
   }, 180_000);
+
+  it("refuses Node selection outside CLI even when an empty anchor set needs no bootstrap", async () => {
+    vi.stubEnv("WAIA_TRADER_CLI", "");
+    await expect(buildPredictiveTerminalReceiptAsyncV1({ harnessInput: harnessInput(false), identities },
+      { nodeWorkerCount: 2 })).rejects.toThrow("VALIDATION_BOOTSTRAP_NODE_CLI_REQUIRED");
+  });
 
   it("preserves negative terminal evidence for an empty anchor set", async () => {
     const input = { harnessInput: harnessInput(false), identities };

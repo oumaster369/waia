@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 import { validationBootstrapPValueNodeParallelV1 } from "../../scripts/trader/validation-bootstrap-node-pool";
-import { INTERNAL_validationBootstrapOrdinalRangeV1, validationBootstrapPValueV1 } from
+import { INTERNAL_validationBootstrapOrdinalRangeV1, validationBootstrapPValueV1,
+  validationBootstrapPValueAsyncV1, validationBootstrapExecutionFromEnvironmentV1 } from
   "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 import { independentValidationPValue } from "./helpers/validation-bootstrap-independent-reference";
 
@@ -10,6 +11,33 @@ const fixture = () => ({ differentials: Array.from({ length: 31 }, (_, i) => Mat
   trialIdentityDigest32: Buffer.alloc(32, 0x55) });
 
 describe("DEE-950 exact Node worker ranges", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("explicit async selection owns input before dynamic import and returns the actual exact result", async () => {
+    vi.stubEnv("WAIA_TRADER_CLI", "1");
+    const input = fixture();
+    const expected = validationBootstrapPValueV1(input);
+    const result = validationBootstrapPValueAsyncV1(input, { nodeWorkerCount: 2 });
+    input.differentials.fill(NaN);
+    input.trialIdentityDigest32.fill(0);
+    expect(await result).toEqual(expected);
+  }, 30000);
+
+  it("refuses invalid configuration or non-CLI selection; unset configuration preserves default", async () => {
+    vi.stubEnv("WAIA_TRADER_CLI", "");
+    expect(validationBootstrapExecutionFromEnvironmentV1({})).toEqual({});
+    expect(() => validationBootstrapExecutionFromEnvironmentV1({ WAIA_FHV_VALIDATION_WORKERS: "2" }))
+      .toThrow("VALIDATION_BOOTSTRAP_NODE_CLI_REQUIRED");
+    await expect(validationBootstrapPValueAsyncV1(fixture(), { nodeWorkerCount: 2 }))
+      .rejects.toThrow("VALIDATION_BOOTSTRAP_NODE_CLI_REQUIRED");
+    vi.stubEnv("WAIA_TRADER_CLI", "1");
+    for (const raw of ["", "0", "5", "02", " 2", "2.1", "Infinity"]) {
+      expect(() => validationBootstrapExecutionFromEnvironmentV1({ WAIA_FHV_VALIDATION_WORKERS: raw }))
+        .toThrow("VALIDATION_BOOTSTRAP_WORKERS_MUST_BE_1_TO_4");
+    }
+    expect(validationBootstrapExecutionFromEnvironmentV1({ WAIA_FHV_VALIDATION_WORKERS: "4" }))
+      .toMatchObject({ nodeWorkerCount: 4 });
+  });
   it("partitions all ordinals without changing the full scalar result", () => {
     const input = fixture();
     const expected = validationBootstrapPValueV1(input);

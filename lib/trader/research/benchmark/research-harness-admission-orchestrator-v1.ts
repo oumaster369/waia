@@ -15,6 +15,7 @@ import {
   type TrialIdentityInput,
 } from "./trial-identity-v2";
 import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1,
+  snapshotValidationBootstrapExecutionV1,
   validationBootstrapPValueAsyncV1, type ValidationBootstrapExecutionV1,
   type ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
 
@@ -303,13 +304,13 @@ export async function runResearchHarnessAdmissionAsyncV1(
   input: ResearchHarnessAdmissionInputV1,
   execution: ValidationBootstrapExecutionV1 = {},
 ): Promise<ResearchHarnessAdmissionResultV1> {
-  if (execution.signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
+  const ownedExecution = snapshotValidationBootstrapExecutionV1(execution);
   // Own all metadata/history/anchors across awaits. No caller mutation may alter
   // later baselines or receipt identity after the first baseline was computed.
   const steps = researchHarnessAdmissionSteps(structuredClone(input));
   let step = steps.next();
   try {
-    while (!step.done) step = steps.next(await validationBootstrapPValueAsyncV1(step.value, execution));
+    while (!step.done) step = steps.next(await validationBootstrapPValueAsyncV1(step.value, ownedExecution));
     return step.value;
   } finally { steps.return(undefined as never); }
 }

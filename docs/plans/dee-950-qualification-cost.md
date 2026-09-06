@@ -14,7 +14,7 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-COOPERATIVE
+  currentWorkPackage: WP-NODE-INTEGRATION
   completedWorkPackages: [WP-BOUND-COST, WP-OPTIMIZE, WP-ORACLE]
   remainingWorkPackages: [WP-COOPERATIVE, WP-REVIEW, WP-FULL-DATA-FEASIBILITY]
   prNumber: null
@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: 570d41f12b63541ea8f8659d93f05abcbcf442ee
   lastValidationAt: "2026-09-06T21:27:00Z"
   blockedReason: null
-  nextAction: "Validate cooperative execution on the real technical-proposal path; retain all resamples and exact receipt parity. Full-data feasibility and durable progress/resume remain open."
+  nextAction: "Validate exact execution-image packaging and full-data resource feasibility after explicit Node executor wiring. Durable progress/resume and final cumulative gates remain open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -49,10 +49,41 @@ Local Node executor and range primitive implemented. Final13actualworker/range t
 sinkfailure, invalidbounds/input and missingworker startup).60existing kernel/scientific
 tests PASS. FullTypeScript/scopedlint/diff and Nextproductionbuild17597 PASS. Initial loader
 failures and bounded benchmark limitations are retained in cost evidence. No parallel
-technical-proposal wiring yet: next work must connect this trusted executor to the actual
+technical-proposal wiring at that checkpoint: next work must connect this trusted executor to the actual
 async harness/receipt behind explicit Node-only selection, test fullreceipt parity and
 non-Node refusal, verify bundling and include worker sources in exact execution packaging.
 Do not introduce a caller-supplied executor/result or turn local range counts into authority.
+
+### Node execution wiring — 2026-09-06 22:23 UTC
+
+Actual technical-surface preparation now snapshots an optional deployment-only
+`WAIA_FHV_VALIDATION_WORKERS` (exact strings1..4), passes it through the existing async
+predictive receipt/harness and invokes the fixed external Node pool. Unset means the
+existing cooperative implementation. Invalid values and non-CLI execution refuse,
+including no-anchor paths. Inputs and options are owned before async module loading;
+no caller can supply an executor, partial results or alternative path. Configuration
+changes do not alter corpus, seeds, B10000, arithmetic, receipt content or authority.
+
+The execution image explicitly copies both Node assets; image preflight refuses their
+absence. The supervisor passes only the snapshotted validated count through its allowlist.
+No deployment setting has been enabled. The pool is an external Node CLI module loaded
+at the fixed image-relative URL, not a web bundle chunk. Dynamic-import bundler annotations
+preserve that boundary; actual Node CLI parity and full Next/OpenNext build both PASS.
+
+Validation:45targeted tests PASS, including exact complete five-baseline predictive receipt
+parity with actual workers and caller mutation;55additional tests PASS after the health-port
+test was rerun with loopback permission (first attempt EPERM, not an assertion failure).
+31worker/receipt tests were repeated after the external-module boundary correction and PASS.
+TypeScript/scoped lint/diff and full repository eslint--quiet PASS. Full normal OpenNext
+build33075 PASS, including current-source Next build and `.open-next/worker.js` generation.
+Earlier87861/91078 build failures traced tsx/esbuild into web routes; retained in evidence.
+An annotation only at newWorker did not fix this; the corrected boundary excludes the
+entire external Node executor from web bundling, without changing Next config/dependencies.
+
+Still not proved: a newly built immutable execution image, full-corpus resource feasibility,
+operator-visible progress/cancel, durable preparation resume, final cumulative head gates,
+independent full-graph deterministic repeat, production requalification or launch readiness.
+This local implementation is not release or Human-ratification authority.
 
 ### Bounded issuance cost work package — 2026-09-06 21:48 UTC
 

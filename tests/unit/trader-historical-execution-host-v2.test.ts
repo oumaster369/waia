@@ -96,6 +96,8 @@ describe("Historical Simulation V2 execution-host supervisor", () => {
       "scripts/trader/historical-simulation-v2-launch-approved.ts",
       "scripts/trader/historical-simulation-v2-prepare-proposal.ts",
       "node_modules/tsx",
+      "scripts/trader/validation-bootstrap-node-pool.ts",
+      "scripts/trader/validation-bootstrap-range-worker.mjs",
     ].includes(String(path)));
     expect(runExecutionHostImagePreflightV2(env, exists)).toEqual({
       schemaVersion: "waia.execution_host_image_preflight.v2",
@@ -106,6 +108,21 @@ describe("Historical Simulation V2 execution-host supervisor", () => {
     });
     expect(() => runExecutionHostImagePreflightV2(env, () => false))
       .toThrow("HISTORICAL_CONSUMER_NOT_PACKAGED");
+    expect(() => runExecutionHostImagePreflightV2(env, path => !String(path).includes("range-worker")))
+      .toThrow("VALIDATION_BOOTSTRAP_NOT_PACKAGED");
+  });
+
+  it("passes only the validated, optional worker count without adding authority", () => {
+    expect(buildHistoricalConsumerEnvironmentV2(env, parseExecutionHostRuntimeV2(env)))
+      .not.toHaveProperty("WAIA_FHV_VALIDATION_WORKERS");
+    const selected = { ...env, WAIA_FHV_VALIDATION_WORKERS: "4" };
+    const config = parseExecutionHostRuntimeV2(selected);
+    selected.WAIA_FHV_VALIDATION_WORKERS = "99";
+    expect(buildHistoricalConsumerEnvironmentV2(selected, config).WAIA_FHV_VALIDATION_WORKERS).toBe("4");
+    for (const value of ["", "0", "5", "1.5", "04", " 2", "Infinity"]) {
+      expect(() => parseExecutionHostRuntimeV2({ ...env, WAIA_FHV_VALIDATION_WORKERS: value }))
+        .toThrow("WAIA_FHV_VALIDATION_WORKERS");
+    }
   });
 
   it("packages the proposal preparer and only the canonical approved launch entrypoint", () => {
@@ -119,6 +136,8 @@ describe("Historical Simulation V2 execution-host supervisor", () => {
     expect(dockerfile).toContain(
       "COPY scripts/trader/historical-simulation-v2-prepare-proposal.ts",
     );
+    expect(dockerfile).toContain("COPY scripts/trader/validation-bootstrap-node-pool.ts");
+    expect(dockerfile).toContain("COPY scripts/trader/validation-bootstrap-range-worker.mjs");
     expect(dockerfile).not.toContain(
       "COPY scripts/trader/historical-simulation-v2-launch-consumer.ts",
     );

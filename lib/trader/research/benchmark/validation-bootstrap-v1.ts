@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { VALIDATION_BOOTSTRAP_ROOT_PREFIX_16 } from "../../intelligence/forecast-v2/constants";
 import {
@@ -185,9 +187,38 @@ export function validationBootstrapPValueV1(
 }
 
 export type ValidationBootstrapExecutionV1 = Readonly<{
+  /** Explicit Node CLI execution only; never changes the scientific input or result. */
+  nodeWorkerCount?: number;
   signal?: AbortSignal;
   onProgress?: (progress: Readonly<{ completed: number; total: typeof VALIDATION_BOOTSTRAP_B }>) => void;
 }>;
+
+export function snapshotValidationBootstrapExecutionV1(
+  execution: ValidationBootstrapExecutionV1,
+): ValidationBootstrapExecutionV1 {
+  const { nodeWorkerCount, signal, onProgress } = execution;
+  if (nodeWorkerCount !== undefined) {
+    if (!Number.isSafeInteger(nodeWorkerCount) || nodeWorkerCount < 1 || nodeWorkerCount > 4) {
+      throw new Error("VALIDATION_BOOTSTRAP_WORKERS_MUST_BE_1_TO_4");
+    }
+    if (typeof process === "undefined" || process.release?.name !== "node" ||
+      !process.versions?.node || process.env.WAIA_TRADER_CLI !== "1") {
+      throw new Error("VALIDATION_BOOTSTRAP_NODE_CLI_REQUIRED");
+    }
+  }
+  if (signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
+  return Object.freeze({ nodeWorkerCount, signal, onProgress });
+}
+
+/** Deployment resource setting only, not a request/body field or scientific override. */
+export function validationBootstrapExecutionFromEnvironmentV1(
+  env: Readonly<Record<string, string | undefined>>,
+): ValidationBootstrapExecutionV1 {
+  const raw = env.WAIA_FHV_VALIDATION_WORKERS;
+  if (raw === undefined) return Object.freeze({});
+  if (!/^[1-4]$/.test(raw)) throw new Error("VALIDATION_BOOTSTRAP_WORKERS_MUST_BE_1_TO_4");
+  return snapshotValidationBootstrapExecutionV1({ nodeWorkerCount: Number(raw) });
+}
 
 /** Same complete B=10000 computation, yielding only BETWEEN whole resamples.
  * This is cooperative scheduling, not parallel speedup or durable resume.
@@ -197,11 +228,27 @@ export async function validationBootstrapPValueAsyncV1(
   input: Parameters<typeof validationBootstrapSteps>[0],
   execution: ValidationBootstrapExecutionV1 = {},
 ): Promise<ValidationBootstrapNullCenteredResultV1> {
-  const { signal, onProgress } = execution;
+  const ownedExecution = snapshotValidationBootstrapExecutionV1(execution);
+  const { signal, onProgress, nodeWorkerCount } = ownedExecution;
   const assertActive = () => {
     if (signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
   };
   assertActive();
+  if (nodeWorkerCount !== undefined) {
+    // Own input before module loading yields. The executor is fixed, not caller-injected.
+    const ownedInput = { differentials: [...input.differentials],
+      trialIdentityDigest32: Buffer.from(input.trialIdentityDigest32) };
+    // This is an external Node CLI entry, shipped by the immutable execution image,
+    // not a web bundle chunk. No caller can choose the module location.
+    const executorUrl = pathToFileURL(join(process.cwd(), "scripts/trader/validation-bootstrap-node-pool.ts")).href;
+    const { validationBootstrapPValueNodeParallelV1 } = await import(
+      /* webpackIgnore: true */ /* turbopackIgnore: true */ executorUrl
+    ) as typeof import("../../../../scripts/trader/validation-bootstrap-node-pool");
+    assertActive();
+    return validationBootstrapPValueNodeParallelV1(ownedInput, {
+      signal, onProgress, workerCount: nodeWorkerCount,
+    });
+  }
   const quantum = Math.max(1, Math.min(250, Math.floor(250_000 / input.differentials.length)));
   const steps = validationBootstrapSteps(input);
   // Centering and immutable sampler prefixes are owned before the first await.
