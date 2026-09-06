@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
+import { MODEL_TRANSFORM_VERSION, TARGET_ROLE_TERMINAL } from "@/lib/trader/intelligence/forecast-v2/constants";
+import { computeDistributionSemanticDigest } from "@/lib/trader/intelligence/forecast-v2/distribution-semantic-digest-v1";
 import {
   buildPredictivePackageV1,
   canonicalizeSourceCorpusV1,
@@ -95,6 +96,15 @@ describe("DEE-527 rv-state-conditional-empirical-joint/v1 end-to-end", () => {
       issuance,
       expectedDistributionSemanticDigestExec: issuance.distributionSemanticDigestExec,
     });
+    expect(issuance.distributionSemanticDigestTerminal).toEqual(computeDistributionSemanticDigest({
+      forecastGenerationIdentityDigestHex: issuance.forecastGenerationIdentityDigest.toString("hex"),
+      predictivePackageContentDigestHex: issuance.package.predictivePackageContentDigest.toString("hex"),
+      k: issuance.package.kConfigDec,
+      m: issuance.package.mConfigDec,
+      normalizationVersionDigestHex: issuance.normalizationVersionDigestHex,
+      targetRoleId: TARGET_ROLE_TERMINAL,
+      samples: issuance.samples,
+    }));
     expect(issuance.samples).toHaveLength(3);
     expect(issuance.samples[0]).toHaveLength(5);
   });

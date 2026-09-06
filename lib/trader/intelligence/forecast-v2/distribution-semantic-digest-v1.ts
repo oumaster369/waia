@@ -4,6 +4,8 @@ import {
   COMPONENT_LAYOUT_VERSION,
   DISTRIBUTION_SEMANTIC_VERSION,
   QUANTIZER_VERSION,
+  TARGET_ROLE_EXECUTION,
+  TARGET_ROLE_TERMINAL,
 } from "./constants";
 import { quantizeScale8HalfUp } from "./quantize-scale8-half-up-v1";
 
@@ -28,13 +30,13 @@ function assertHex64(name: string, value: string): void {
 /**
  * Streaming SHA-256 distribution semantic digest (dist-sem-v1, §2.5.2).
  */
-export function computeDistributionSemanticDigest(input: DistributionSemanticDigestInput): Buffer {
+function distributionHeader(input: DistributionSemanticDigestInput): string {
   assertHex64("forecastGenerationIdentityDigestHex", input.forecastGenerationIdentityDigestHex);
   assertHex64("predictivePackageContentDigestHex", input.predictivePackageContentDigestHex);
   assertHex64("normalizationVersionDigestHex", input.normalizationVersionDigestHex);
 
   const s = input.k * input.m;
-  const header = [
+  return [
     DISTRIBUTION_SEMANTIC_VERSION,
     input.forecastGenerationIdentityDigestHex,
     input.predictivePackageContentDigestHex,
@@ -48,9 +50,11 @@ export function computeDistributionSemanticDigest(input: DistributionSemanticDig
   ]
     .join("\n")
     .concat("\n");
+}
 
+export function computeDistributionSemanticDigest(input: DistributionSemanticDigestInput): Buffer {
   const hash = createHash("sha256");
-  hash.update(header, "utf8");
+  hash.update(distributionHeader(input), "utf8");
 
   for (let kIdx = 0; kIdx < input.k; kIdx += 1) {
     for (let mIdx = 0; mIdx < input.m; mIdx += 1) {
@@ -66,6 +70,36 @@ export function computeDistributionSemanticDigest(input: DistributionSemanticDig
   }
 
   return hash.digest();
+}
+
+/** Same dist-sem-v1 bytes for both roles, with only one quantization pass.
+ * The temporary fragment is bounded to one 13-component sample, not K×M samples.
+ * Hash states and headers remain separate; no result/input cache crosses issuances.
+ */
+export function computeExecutionAndTerminalDistributionSemanticDigests(
+  input: Omit<DistributionSemanticDigestInput, "targetRoleId">,
+): Readonly<{ execution: Buffer; terminal: Buffer }> {
+  const execution = createHash("sha256").update(distributionHeader({
+    ...input, targetRoleId: TARGET_ROLE_EXECUTION,
+  }), "utf8");
+  const terminal = createHash("sha256").update(distributionHeader({
+    ...input, targetRoleId: TARGET_ROLE_TERMINAL,
+  }), "utf8");
+  for (let kIdx = 0; kIdx < input.k; kIdx++) {
+    for (let mIdx = 0; mIdx < input.m; mIdx++) {
+      const sample = input.samples[kIdx]?.[mIdx];
+      if (!sample || sample.length !== 13) {
+        throw new Error("[forecast-v2/dist-sem] each sample must have 13 components");
+      }
+      let fragment = "";
+      for (let component = 0; component < 13; component++) {
+        fragment += `${quantizeScale8HalfUp(sample[component]!)}\n`;
+      }
+      execution.update(fragment, "utf8");
+      terminal.update(fragment, "utf8");
+    }
+  }
+  return { execution: execution.digest(), terminal: terminal.digest() };
 }
 
 export function distributionSemanticDigestHex(input: DistributionSemanticDigestInput): string {

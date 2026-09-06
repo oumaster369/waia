@@ -1,5 +1,30 @@
 # DEE-950 bounded qualification cost evidence
 
+## Actual issuer duplicate encoding — 2026-09-06 21:49 UTC
+
+The actual `issueForecastV1` encoded the same K×M×13 sample body twice, once for
+Execution and once for Terminal. Both role-specific headers remain mandatory. The
+new paired encoder shares only per-sample HALF_UP quantization, feeding exactly the
+same ordered body bytes to two independent SHA256 states. Temporary text is bounded
+to one13component sample. No pooling, cross-anchor caching, altered draws, probabilities,
+sampling/identity version, skipped Forecast, or changed scientific result.
+
+`node --import tsx scripts/trader/benchmark-forecast-issuance-cost.ts 64` uses the real
+builder/issuer on synthetic360source anchors, K10/M80,64newanchor issuances per trial.
+On Node22.22.3/macOSarm64/AppleM5, three scalar-before trials took496.837/490.068/491.195ms;
+paired-after took239.908/228.995/230.791ms. Median speedup2.128× for this bounded
+actual-issuer scenario (7.675→3.606ms/issuance), **not a full-preparation speedup or ETA**.
+Every before/after trial's combined execution/terminal content digests plus probability
+vector hash was identical: `c0f57251e39b56795c2b20aba9baa8fcdc2ddd3eae9914102aeb06df793a58ac`.
+Package fit was measured separately29.188/29.601ms; this synthetic fit is not full-corpus
+K/M convergence. No production data/process used.
+
+33focused tests passed at the initial implementation:8new paired/scalar byte-parity,
+sample-order/mutation, malformed/nonfinite/header refusal regressions, realissuer replay,
+existing identity known answers and quantizer boundaries. Broader path/build gates are
+being checked separately; this new source change is NOT covered by earlier cumulative
+37de0528 fullgraph PASS until reintegrated and verified.
+
 ## Actual path and cost boundary
 
 `historical-four-surface-ratified-admission-v2.ts:1544–1566` evaluates issuance at every
