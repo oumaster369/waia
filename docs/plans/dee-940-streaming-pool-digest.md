@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: integration-ready
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 220cbd25cb3ba257e504a4504f1ac033f325179b
+  lastValidationAt: "2026-09-06T09:31:00Z"
   blockedReason: null
-  nextAction: "Root integrator: review local patch and complete required PR gates"
+  nextAction: "Open the single PR, monitor exact-head CI, and preserve merge/production gates"
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -97,4 +97,8 @@ build environment required loopback permission and an isolated frozen-lockfile
 dependency installation instead of a cross-worktree node_modules symlink. No
 lockfile or application configuration changed.
 
-Full PR CI and independent exact-head review remain root-owned and pending.
+Independent review of implementation head
+`220cbd25cb3ba257e504a4504f1ac033f325179b` found P1=0/P2=0 in the scoped diff;
+the reviewer independently ran 21/21 parity/known-answer tests. Root PR governance
+regressions and rendered-body preflight passed. Full exact-head PR CI remains
+pending; the review does not assert historical or production readiness.
