@@ -14,6 +14,7 @@ import { buildKmConvergenceReceiptV1 } from "@/lib/trader/research/execopp-quali
 import {
   buildEpistemicParameterRatificationReceiptV1,
   buildPredictiveTerminalReceiptV1,
+  buildPredictiveTerminalReceiptAsyncV1,
   buildScientificAdmissionReceiptV2,
   requireScientificAdmissionV2,
 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
@@ -89,6 +90,36 @@ function kmReceipt(qualifies = true) {
     selectedPackageContentDigestHex: identities.predictivePackageContentDigestHex,
   });
 }
+
+describe("DEE-950 cooperative predictive receipt", () => {
+  it("has exact receipt parity across all mandatory baselines and owns caller data", async () => {
+    const input = { harnessInput: harnessInput(), identities: { ...identities } };
+    const expected = buildPredictiveTerminalReceiptV1(input);
+    let completedBaselines = 0;
+    const actual = await buildPredictiveTerminalReceiptAsyncV1(input, { onProgress: ({ completed }) => {
+      if (completed === 10000) completedBaselines++;
+      input.identities.predictivePackageContentDigestHex = hex("f");
+      input.harnessInput.comparisonFamilyId = "caller-mutation";
+      input.harnessInput.developmentReturns = [NaN];
+      input.harnessInput.anchors[0]!.challengerProbabilities = [NaN];
+    } });
+    expect(completedBaselines).toBe(5);
+    expect(actual).toEqual(expected);
+    expect(actual.terminalStatus).toBe("QUALIFIED");
+  }, 180_000);
+
+  it("preserves negative terminal evidence for an empty anchor set", async () => {
+    const input = { harnessInput: harnessInput(false), identities };
+    expect(await buildPredictiveTerminalReceiptAsyncV1(input)).toEqual(buildPredictiveTerminalReceiptV1(input));
+  });
+
+  it("never issues a predictive receipt on cancellation", async () => {
+    const controller = new AbortController();
+    await expect(buildPredictiveTerminalReceiptAsyncV1({ harnessInput: harnessInput(), identities }, {
+      signal: controller.signal, onProgress: () => controller.abort(),
+    })).rejects.toThrow("VALIDATION_BOOTSTRAP_CANCELLED");
+  });
+});
 
 function admittedFixture() {
   const predictive = buildPredictiveTerminalReceiptV1({ harnessInput: harnessInput(), identities });

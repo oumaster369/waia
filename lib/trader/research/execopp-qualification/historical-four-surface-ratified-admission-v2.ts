@@ -63,7 +63,7 @@ import {
 import type { ResearchHarnessAdmissionInputV1 } from "@/lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
 import {
   buildEpistemicParameterRatificationReceiptV1,
-  buildPredictiveTerminalReceiptV1,
+  buildPredictiveTerminalReceiptAsyncV1,
 } from "./scientific-admission-v2";
 import {
   buildScientificAdmissionReceiptRecordV2,
@@ -1562,7 +1562,7 @@ async function buildTechnicalSurfaceCandidatesV2(
         });
       }),
     };
-    const predictive = buildPredictiveTerminalReceiptV1({
+    const predictive = await buildPredictiveTerminalReceiptAsyncV1({
       harnessInput,
       identities: {
         developmentDatasetDigestHex: input.prepared.authority.developmentDatasetIdentityDigestHex,

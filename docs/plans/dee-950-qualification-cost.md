@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-REVIEW
+  currentWorkPackage: WP-COOPERATIVE
   completedWorkPackages: [WP-BOUND-COST, WP-OPTIMIZE, WP-ORACLE]
-  remainingWorkPackages: [WP-REVIEW]
+  remainingWorkPackages: [WP-COOPERATIVE, WP-REVIEW, WP-FULL-DATA-FEASIBILITY]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root review; retain DEE-947 evidence revisions on integration; remaining readiness gates"
+  nextAction: "Validate cooperative execution on the real technical-proposal path; retain all resamples and exact receipt parity. Full-data feasibility and durable progress/resume remain open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -81,3 +81,15 @@ combined integration review remain root release gates; this package does not cla
 Reproducible benchmark and remaining cost/parallel/cache requirements:
 [DEE-950 qualification cost evidence](../ops/dee-950-qualification-cost-evidence.md).
 Measured final-code local speedup is1.319× at N128/B10000, not the1.61× unimplemented prototype.
+
+## Cooperative computation — 2026-09-06 20:51 UTC
+
+The shared pure bootstrap now has a private step generator consumed by both the existing synchronous API and a cooperative asynchronous API. Both evaluate exactly all10000resamples and every position with unchanged arithmetic and addressed randomness. The async path yields to the event loop between complete resamples, capped at250resamples or about250000positions per quantum (minimum one whole resample). Callbacks receive frozen counts only, not an injectable result. Abort or callback failure rejects without a partial p-value. Centered data/root are owned before awaiting.
+
+The research harness shares its original algorithm through a private generator; the async driver calls only the actual bootstrap kernel and owns a snapshot of all history/anchors/metadata. Predictive-terminal construction shares the same validation and sealing logic, with owned identity bindings. The actual historical technical-surface preparation now awaits that async constructor. No new qualification version, digest meaning, thresholds, baseline omission or approval authority. This wiring permits event-loop servicing during the bootstrap stage; it does not make preceding Forecast issuance cooperative or prove complete end-to-end cancellation/streaming.
+
+79 focused tests PASS across7files, including10new cooperative tests: complete independent B10000oracle parity; exact predictive receipt parity across all5baselines despite caller mutation; timer servicing; pre/mid/final-boundary cancellation; progress-sink failure; nonfinite refusal; negative terminal evidence. TypeScript/scoped lint/diff passed (one pre-existing unused-input warning). Full repository lint, typecheck and Next production build also PASS in session30835; existing lint warnings retained. This is not a deployment or final combined-release CI.
+
+Synthetic N525600 responsiveness probe on local AppleM5/Node22.22.3 deliberately aborts after8resamples; configured B stays10000 and NO p-value is returned. Eight resamples took1694.07ms, timers serviced7times, RSSpeak156254208bytes; steady measured210.384ms/resample. Linear extrapolation0.5844hours for one complete comparison is NOT a target-server/full-corpus ETA, and excludes Forecast, K/M, I/O and other baselines/surfaces. No production job executed.
+
+Still required: bounded multi-worker equivalence/coverage if adopted, durable exact-release/input/baseline evidence reuse, operator-visible progress and wired cancellation, target-host/full-data preparation, cumulative release review and remoteCI. Do not close DEE950 from this local responsiveness result.

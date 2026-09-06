@@ -91,3 +91,27 @@ requirements here, **not implemented features**.
 Target-host representative stage benchmarks, memory-bounded parallel capacity, durable progress/
 cancellation/reuse verification and actual full-data preparation remain outstanding.
 No full-corpus job, production call, migration, deployment or new authority was exercised by this package.
+
+## Cooperative implementation and larger-N CPU sample — 2026-09-06 20:51 UTC
+
+Supersedes the earlier statement that no cooperative execution is implemented: the
+actual technical-surface builder now awaits the same harness/receipt algorithm with
+event-loop yields between complete bootstrap resamples. Both APIs share a private
+generator; all B=10000 draws and floating-point reduction order remain identical.
+No externally supplied bootstrap result can enter that generator. Optional count
+callbacks and cancellation reject partial results; full operator progress/cancel
+wiring and durable restart/cache remain outstanding, as does parallel capacity.
+
+Executed `node --import tsx scripts/trader/benchmark-validation-bootstrap-responsiveness.ts 525600`.
+This uses synthetic local differentials and deliberately cancels after eight resamples;
+it does NOT return a p-value or satisfy scientific qualification. Configured B remains10000.
+On AppleM5/Node22.22.3, elapsed1694.071ms, seven serviced timer ticks, maximum RSS156254208bytes,
+steady210.384ms/resample after the first sample. Linear estimate0.5844CPUhours per comparison
+(11.688CPUhours if hypothetically multiplied by four surfaces and five baselines) is
+not a measured target-host/full-data ETA. Actual anchor counts, K/M, Forecast issuance,
+I/O and other stages must be measured separately. Do not use the older small-N or
+unimplemented prototype measurements as a guaranteed production completion time.
+
+79 focused tests pass, including an independent full-B oracle, all-five-baseline exact
+receipt parity, mutation resistance, event-loop servicing and cancellation/failure refusal.
+Full local lint/typecheck/Next build pass. No deployment or production data access.

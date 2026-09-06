@@ -14,7 +14,9 @@ import {
   digestHex,
   type TrialIdentityInput,
 } from "./trial-identity-v2";
-import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1 } from "./validation-bootstrap-v1";
+import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1,
+  validationBootstrapPValueAsyncV1, type ValidationBootstrapExecutionV1,
+  type ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
 
 // DEE-947: keep corrected-law evidence separate even when numeric outputs coincide.
 export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v3" as const;
@@ -123,9 +125,10 @@ export function computeResearchHarnessAdmissionReceiptDigestV2(input: {
 }
 
 /** Authoritative WF_PREDICTIVE challenger admission path (DEE-531). */
-export function runResearchHarnessAdmissionV1(
+function* researchHarnessAdmissionSteps(
   input: ResearchHarnessAdmissionInputV1,
-): ResearchHarnessAdmissionResultV1 {
+): Generator<Parameters<typeof validationBootstrapPValueV1>[0],
+  ResearchHarnessAdmissionResultV1, ValidationBootstrapNullCenteredResultV1> {
   if (input.anchors.length === 0) {
     return {
       schemaVersion: RESEARCH_HARNESS_ADMISSION_VERSION,
@@ -190,10 +193,10 @@ export function runResearchHarnessAdmissionV1(
       return challenger - baseline.logScore(anchor.observedReturn);
     });
     const trialDigest = buildTrialIdentity(trialCommon, baselineId);
-    const bootstrap = validationBootstrapPValueV1({
+    const bootstrap = yield {
       differentials,
       trialIdentityDigest32: trialDigest,
-    });
+    };
     holmComparisons.push({ comparisonId: baselineId, pValue: bootstrap.pRaw });
   }
 
@@ -284,6 +287,31 @@ export function runResearchHarnessAdmissionV1(
     }),
     reasonCodes,
   };
+}
+
+export function runResearchHarnessAdmissionV1(
+  input: ResearchHarnessAdmissionInputV1,
+): ResearchHarnessAdmissionResultV1 {
+  const steps = researchHarnessAdmissionSteps(input);
+  let step = steps.next();
+  while (!step.done) step = steps.next(validationBootstrapPValueV1(step.value));
+  return step.value;
+}
+
+/** Private generator accepts results only from the unchanged local kernel. */
+export async function runResearchHarnessAdmissionAsyncV1(
+  input: ResearchHarnessAdmissionInputV1,
+  execution: ValidationBootstrapExecutionV1 = {},
+): Promise<ResearchHarnessAdmissionResultV1> {
+  if (execution.signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
+  // Own all metadata/history/anchors across awaits. No caller mutation may alter
+  // later baselines or receipt identity after the first baseline was computed.
+  const steps = researchHarnessAdmissionSteps(structuredClone(input));
+  let step = steps.next();
+  try {
+    while (!step.done) step = steps.next(await validationBootstrapPValueAsyncV1(step.value, execution));
+    return step.value;
+  } finally { steps.return(undefined as never); }
 }
 
 export { digestHex };

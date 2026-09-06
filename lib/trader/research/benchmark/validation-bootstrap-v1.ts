@@ -106,10 +106,10 @@ export function observedNullCenteredBootstrapStatistic(differentials: readonly n
  * Raw one-sided WF_PREDICTIVE admission p-value (Human-ratified DEE-531):
  * bootstrap null-centered c; T*_b = sqrt(n)*mean(c*_b); p = (|{T*_b >= T_obs}| + 1)/(B+1).
  */
-export function validationBootstrapPValueV1(input: {
+function* validationBootstrapSteps(input: {
   differentials: readonly number[];
   trialIdentityDigest32: Buffer;
-}): ValidationBootstrapNullCenteredResultV1 {
+}): Generator<number, ValidationBootstrapNullCenteredResultV1, void> {
   const { n, dBar, centered } = nullCenterPairedDifferentials(input.differentials);
   const tObs = finiteStatistic(Math.sqrt(n) * dBar, "observed statistic");
   const centeredMean = finiteStatistic(centered.reduce((acc, value) =>
@@ -126,6 +126,7 @@ export function validationBootstrapPValueV1(input: {
     if (tStar >= tObs) {
       extremeCount += 1;
     }
+    yield b + 1;
   }
 
   const pRaw = (extremeCount + 1) / VALIDATION_BOOTSTRAP_MONTE_CARLO_DENOMINATOR;
@@ -138,6 +139,54 @@ export function validationBootstrapPValueV1(input: {
     centeredMean,
     n,
   };
+}
+
+export function validationBootstrapPValueV1(
+  input: Parameters<typeof validationBootstrapSteps>[0],
+): ValidationBootstrapNullCenteredResultV1 {
+  const steps = validationBootstrapSteps(input);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+export type ValidationBootstrapExecutionV1 = Readonly<{
+  signal?: AbortSignal;
+  onProgress?: (progress: Readonly<{ completed: number; total: typeof VALIDATION_BOOTSTRAP_B }>) => void;
+}>;
+
+/** Same complete B=10000 computation, yielding only BETWEEN whole resamples.
+ * This is cooperative scheduling, not parallel speedup or durable resume.
+ * Callbacks receive counts only and cannot inject bootstrap results/authority.
+ */
+export async function validationBootstrapPValueAsyncV1(
+  input: Parameters<typeof validationBootstrapSteps>[0],
+  execution: ValidationBootstrapExecutionV1 = {},
+): Promise<ValidationBootstrapNullCenteredResultV1> {
+  const { signal, onProgress } = execution;
+  const assertActive = () => {
+    if (signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
+  };
+  assertActive();
+  const quantum = Math.max(1, Math.min(250, Math.floor(250_000 / input.differentials.length)));
+  const steps = validationBootstrapSteps(input);
+  // Centering and immutable sampler prefixes are owned before the first await.
+  let step = steps.next();
+  try {
+    while (!step.done) {
+      if (step.value % quantum === 0 || step.value === VALIDATION_BOOTSTRAP_B) {
+        onProgress?.(Object.freeze({ completed: step.value, total: VALIDATION_BOOTSTRAP_B }));
+        assertActive();
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        assertActive();
+      }
+      step = steps.next();
+    }
+    return step.value;
+  } finally {
+    // No partial p-value escapes when a callback fails or cancellation occurs.
+    steps.return(undefined as never);
+  }
 }
 
 /** Epistemic bootstrap alias for harness tests. */
