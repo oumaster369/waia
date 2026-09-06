@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-REVIEW
-  completedWorkPackages: [WP-CODEC]
+  currentWorkPackage: WP-PERSISTENCE
+  completedWorkPackages: [WP-CODEC, WP-ASYNC-HYDRATION]
   remainingWorkPackages: [WP-PERSISTENCE, WP-REVIEW]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: "2026-09-06"
   blockedReason: null
-  nextAction: "Root independent review of phase 1 codec, then separate persistence/schema integration; no commit/push by child."
+  nextAction: "Implement immutable PostgreSQL manifest/chunk storage and BOTH input/outcome wire references; async hydration is tested but not yet wired."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -68,6 +68,12 @@ Required coordinated call sites:
 - canonical-verification-receipt-postgres-v2: hydrate before requireForecastRuntimeAuthorizedOutcomeV2.
 - outcome-resolution/epistemic-closure-runtime and forecast-runtime-authority-v2 revival: structural/async hydration, not a whole-package JSON round-trip.
 
-The codec currently accepts synchronous iterables. PostgreSQL streaming needs an async iterator adapter or bounded private spool; SELECT-all payload arrays and JSON aggregation are not an acceptable substitute. This is still a full in-memory scientific package after hydration, not constant total memory. Measure cost before choosing a transaction/storage execution plan.
+The codec now accepts synchronous and asynchronous chunk iterables through a shared parser and scientific validator. PostgreSQL must supply a bounded cursor or page iterator; SELECT-all payload arrays and JSON aggregation are not an acceptable substitute. This is still a full in-memory scientific package after hydration, not constant total memory. Measure cost before choosing a transaction/storage execution plan.
 
 Phase 2 gates: PG17 restricted-admin fresh migration, actual runner RLS negatives, interrupted publication rollback, missing/reordered/tampered chunks, concurrent identical retry and conflicting seal refusal, first/next cycle, process restart/outcome resolution, exact deterministic scientific parity and full-corpus resource measurement. A codec unit PASS does not satisfy any of those database or production gates.
+
+## Async hydration work package — 2026-09-06
+
+Implemented `hydratePredictivePackageAsyncV1` with one outstanding chunk read, no payload collection, shared record parsing/scientific validation, admission before opening a cursor, copied manifest descriptors and trusted identity to prevent mutation across awaits, and awaited cursor cleanup. When both reading and cleanup fail, both errors and the primary cause are retained; cleanup failure after a valid read still refuses success. The synchronous transport continues through the same parser.
+
+37 focused codec tests PASS (original 26 plus 11 asynchronous cases); full TypeScript check, scoped ESLint and diff check PASS. Covers exact real-builder/replay parity, missing/extra/reordered/corrupt chunks, sealed invalid draw indices, denied admission without opening input, caller mutation, one in-flight read, source failure and cleanup failure. Not yet database persistence, not a full-corpus benchmark, not independent review or PR readiness.

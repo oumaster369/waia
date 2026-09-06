@@ -327,6 +327,76 @@ export function hydratePredictivePackageV1(
   chunks: Iterable<Buffer>,
   expected: PredictivePackageCodecIdentityV1 & { manifestDigestHex: string },
 ): PredictivePackageV1 {
+  expected = { ...expected };
+  validateManifest(m, expected);
+  m = { ...m, chunks: m.chunks.map((d) => ({ ...d })) };
+  return consumeRecords(m, records(), expected);
+
+  function* records(): Generator<unknown[]> {
+    const input = chunks[Symbol.iterator]();
+    try {
+      for (const d of m.chunks) {
+        const next = input.next();
+        if (next.done) fail("MISSING_CHUNK");
+        yield* decodeChunk(next.value, d, m.chunkByteLimit);
+      }
+      if (!input.next().done) fail("EXTRA_CHUNKS");
+    } finally {
+      input.return?.();
+    }
+  }
+}
+
+/** Pull one chunk at a time from a cursor; no payload collection or speculative reads. */
+export async function hydratePredictivePackageAsyncV1(
+  m: PredictivePackageManifestV1,
+  chunks: AsyncIterable<Buffer>,
+  expected: PredictivePackageCodecIdentityV1 & { manifestDigestHex: string },
+): Promise<PredictivePackageV1> {
+  expected = { ...expected };
+  validateManifest(m, expected);
+  m = { ...m, chunks: m.chunks.map((d) => ({ ...d })) };
+  const assembler = assemblePackage(m, expected);
+  assembler.next();
+  const input = chunks[Symbol.asyncIterator]();
+  let failed = false;
+  let primaryFailure: unknown;
+  try {
+    for (const d of m.chunks) {
+      const next = await input.next();
+      if (next.done) fail("MISSING_CHUNK");
+      for (const row of decodeChunk(next.value, d, m.chunkByteLimit)) {
+        if (assembler.next(row).done) fail("EXTRA_RECORDS");
+      }
+    }
+    if (!(await input.next()).done) fail("EXTRA_CHUNKS");
+    const result = assembler.next(undefined);
+    if (!result.done) fail("RECORD_ORDER");
+    return result.value;
+  } catch (error) {
+    failed = true;
+    primaryFailure = error;
+    throw error;
+  } finally {
+    // Await cursor cleanup even after transport, parsing or scientific failure.
+    try {
+      await input.return?.();
+    } catch (cleanupFailure) {
+      if (failed)
+        throw new AggregateError(
+          [primaryFailure, cleanupFailure],
+          "PREDICTIVE_PACKAGE_CODEC_REFUSED:READ_AND_CLEANUP",
+          { cause: primaryFailure },
+        );
+      throw cleanupFailure;
+    }
+  }
+}
+
+function validateManifest(
+  m: PredictivePackageManifestV1,
+  expected: PredictivePackageCodecIdentityV1 & { manifestDigestHex: string },
+): void {
   // Validate descriptor primitives before hashing: no unbounded attacker string
   // may reach even the small per-descriptor JSON serializer.
   if (
@@ -366,86 +436,88 @@ export function hydratePredictivePackageV1(
     manifestDigest(m) !== expected.manifestDigestHex
   )
     fail("MANIFEST");
-  function* records(): Generator<unknown[]> {
-    const input = chunks[Symbol.iterator]();
-    try {
-      for (const [i, d] of m.chunks.entries()) {
-        const next = input.next(),
-          bytes = next.value;
-        if (next.done) fail("MISSING_CHUNK");
-        if (
-          !Buffer.isBuffer(bytes) ||
-          d.ordinal !== i ||
-          !integer(d.byteLength) ||
-          !d.byteLength ||
-          d.byteLength > m.chunkByteLimit ||
-          bytes.length !== d.byteLength ||
-          !integer(d.recordCount) ||
-          !d.recordCount ||
-          !digest(d.sha256) ||
-          hash(bytes) !== d.sha256
-        )
-          fail("CHUNK");
-        const text = bytes.toString("utf8");
-        if (!Buffer.from(text).equals(bytes) || !text.endsWith("\n")) fail("CHUNK_ENCODING");
-        const lines = text.slice(0, -1).split("\n");
-        if (lines.length !== d.recordCount) fail("CHUNK_RECORD_COUNT");
-        for (const line of lines) {
-          const row = unpack(JSON.parse(line));
-          if (!Array.isArray(row)) fail("RECORD");
-          yield row;
-        }
-      }
-      if (!input.next().done) fail("EXTRA_CHUNKS");
-    } finally {
-      input.return?.();
-    }
+}
+
+function* decodeChunk(bytes: unknown, d: Descriptor, chunkByteLimit: number): Generator<unknown[]> {
+  if (
+    !Buffer.isBuffer(bytes) ||
+    d.byteLength > chunkByteLimit ||
+    bytes.length !== d.byteLength ||
+    hash(bytes) !== d.sha256
+  )
+    fail("CHUNK");
+  const text = bytes.toString("utf8");
+  if (!Buffer.from(text).equals(bytes) || !text.endsWith("\n")) fail("CHUNK_ENCODING");
+  const lines = text.slice(0, -1).split("\n");
+  if (lines.length !== d.recordCount) fail("CHUNK_RECORD_COUNT");
+  for (const line of lines) {
+    const row = unpack(JSON.parse(line));
+    if (!Array.isArray(row)) fail("RECORD");
+    yield row;
   }
-  const rows = records();
-  try {
-    const take = (kind: string, length: number): unknown[] => {
-      const row = rows.next();
-      if (row.done || row.value[0] !== kind || row.value.length !== length) fail("RECORD_ORDER");
-      return row.value;
-    };
-    const metadata = take("header", 2)[1] as Omit<
-      PredictivePackageV1,
-      "canonicalSourceCorpus" | "replicaArtifacts"
-    >;
-    const corpus: SourceAnchor[] = [];
-    for (let i = 0; i < m.sourceCount; i++) corpus.push(take("anchor", 2)[1] as SourceAnchor);
-    assertNoDuplicateSourceAnchors(corpus);
-    const replicas: ReplicaArtifact[] = [];
-    for (let i = 0; i < m.replicaCount; i++) {
-      const header = take("replica", 2)[1] as Omit<ReplicaArtifact, "pools">;
-      const pools: ReplicaArtifact["pools"] = { S0: [], S1: [], S2: [] };
-      for (const state of STATES) {
-        const row = take("pool", 3),
-          count = row[2];
-        if (row[1] !== state || !integer(count) || count > corpus.length) fail("POOL_HEADER");
-        for (let j = 0; j < count; j++) {
-          const draw = take("draw", 3),
-            ordinal = draw[1],
-            index = draw[2];
-          if (!integer(index) || index >= corpus.length || !integer(ordinal)) fail("SOURCE_INDEX");
-          pools[state].push({ resamplePositionOrdinal: ordinal, anchor: corpus[index]! });
-        }
-      }
-      replicas.push({ ...header, pools });
-    }
-    if (!rows.next().done) fail("EXTRA_RECORDS");
-    const pkg = { ...metadata, canonicalSourceCorpus: corpus, replicaArtifacts: replicas };
-    if (
-      !isDeepStrictEqual(identity(pkg), {
-        organizationId: expected.organizationId,
-        generationDigestHex: expected.generationDigestHex,
-        contentDigestHex: expected.contentDigestHex,
-      })
-    )
-      fail("PACKAGE_IDENTITY");
-    validatePackage(pkg);
-    return pkg;
-  } finally {
-    rows.return(undefined);
+}
+
+function consumeRecords(
+  m: PredictivePackageManifestV1,
+  rows: Iterable<unknown[]>,
+  expected: PredictivePackageCodecIdentityV1 & { manifestDigestHex: string },
+): PredictivePackageV1 {
+  const assembler = assemblePackage(m, expected);
+  assembler.next();
+  for (const row of rows) {
+    if (assembler.next(row).done) fail("EXTRA_RECORDS");
   }
+  const result = assembler.next(undefined);
+  if (!result.done) fail("RECORD_ORDER");
+  return result.value;
+}
+
+// Both transport paths drive this one parser and unchanged scientific validator.
+function* assemblePackage(
+  m: PredictivePackageManifestV1,
+  expected: PredictivePackageCodecIdentityV1 & { manifestDigestHex: string },
+): Generator<void, PredictivePackageV1, unknown[] | undefined> {
+  function* take(kind: string, length: number): Generator<void, unknown[], unknown[] | undefined> {
+    const row = yield;
+    if (!row || row[0] !== kind || row.length !== length) fail("RECORD_ORDER");
+    return row;
+  }
+  const metadata = (yield* take("header", 2))[1] as Omit<
+    PredictivePackageV1,
+    "canonicalSourceCorpus" | "replicaArtifacts"
+  >;
+  const corpus: SourceAnchor[] = [];
+  for (let i = 0; i < m.sourceCount; i++)
+    corpus.push((yield* take("anchor", 2))[1] as SourceAnchor);
+  assertNoDuplicateSourceAnchors(corpus);
+  const replicas: ReplicaArtifact[] = [];
+  for (let i = 0; i < m.replicaCount; i++) {
+    const header = (yield* take("replica", 2))[1] as Omit<ReplicaArtifact, "pools">;
+    const pools: ReplicaArtifact["pools"] = { S0: [], S1: [], S2: [] };
+    for (const state of STATES) {
+      const row = yield* take("pool", 3),
+        count = row[2];
+      if (row[1] !== state || !integer(count) || count > corpus.length) fail("POOL_HEADER");
+      for (let j = 0; j < count; j++) {
+        const draw = yield* take("draw", 3),
+          ordinal = draw[1],
+          index = draw[2];
+        if (!integer(index) || index >= corpus.length || !integer(ordinal)) fail("SOURCE_INDEX");
+        pools[state].push({ resamplePositionOrdinal: ordinal, anchor: corpus[index]! });
+      }
+    }
+    replicas.push({ ...header, pools });
+  }
+  if ((yield) !== undefined) fail("EXTRA_RECORDS");
+  const pkg = { ...metadata, canonicalSourceCorpus: corpus, replicaArtifacts: replicas };
+  if (
+    !isDeepStrictEqual(identity(pkg), {
+      organizationId: expected.organizationId,
+      generationDigestHex: expected.generationDigestHex,
+      contentDigestHex: expected.contentDigestHex,
+    })
+  )
+    fail("PACKAGE_IDENTITY");
+  validatePackage(pkg);
+  return pkg;
 }

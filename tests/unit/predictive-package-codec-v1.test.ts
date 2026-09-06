@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildHistoricalForecastFamilyV2 } from "@/lib/trader/historical-simulation-v2/forecast-family-bootstrap-v2";
 import {
   buildPredictivePackageV1,
@@ -9,6 +9,7 @@ import {
   decodePredictivePackageV1,
   encodePredictivePackageV1,
   hydratePredictivePackageV1,
+  hydratePredictivePackageAsyncV1,
   streamEncodePredictivePackageV1,
   type EncodedPredictivePackageV1,
 } from "@/lib/trader/intelligence/forecast-v2/predictive-package-codec-v1";
@@ -105,6 +106,167 @@ function numberTag(n: number): unknown[] {
 }
 
 describe("bounded lossless predictive package codec phase 1", () => {
+  it("hydrates async cursor input with exact parity, one outstanding read and awaited cleanup", async () => {
+    const pkg = fixture(),
+      w = encodePredictivePackageV1(pkg, 8192);
+    let cursor = 0,
+      outstanding = 0,
+      peak = 0,
+      closed = false;
+    const next = vi.fn(async () => {
+      peak = Math.max(peak, ++outstanding);
+      await Promise.resolve();
+      outstanding--;
+      return cursor < w.chunks.length
+        ? { done: false as const, value: w.chunks[cursor++]! }
+        : { done: true as const, value: undefined };
+    });
+    const close = vi.fn(async () => {
+      await Promise.resolve();
+      closed = true;
+      return { done: true as const, value: undefined };
+    });
+    const reader = { [Symbol.asyncIterator]: () => ({ next, return: close }) };
+    const restored = await hydratePredictivePackageAsyncV1(w.manifest, reader, w.manifest);
+    expect(restored).toStrictEqual(pkg);
+    expect(peak).toBe(1);
+    expect(next).toHaveBeenCalledTimes(w.chunks.length + 1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(closed).toBe(true);
+    for (const artifact of restored.replicaArtifacts)
+      verifyReplicaPoolReplayV1({
+        family: restored.family,
+        canonicalSourceCorpus: restored.canonicalSourceCorpus,
+        artifact,
+      });
+  });
+  it.each(["byte", "missing", "extra", "order", "source-index"])(
+    "async hydration rejects %s and closes the source",
+    async (kind) => {
+      const w = encodePredictivePackageV1(fixture(), 8192);
+      if (kind === "byte") w.chunks[0]![10] ^= 1;
+      if (kind === "missing") w.chunks.pop();
+      if (kind === "extra") w.chunks.push(w.chunks[0]!);
+      if (kind === "order") [w.chunks[0], w.chunks[1]] = [w.chunks[1]!, w.chunks[0]!];
+      if (kind === "source-index")
+        editFirstDraw(w, (r) => {
+          r[1][2] = numberTag(-1);
+        });
+      let closed = false;
+      async function* reader() {
+        try {
+          yield* w.chunks;
+        } finally {
+          await Promise.resolve();
+          closed = true;
+        }
+      }
+      await expect(
+        hydratePredictivePackageAsyncV1(w.manifest, reader(), w.manifest),
+      ).rejects.toThrow();
+      expect(closed).toBe(true);
+    },
+  );
+  it("rejects an untrusted async manifest before opening the cursor", async () => {
+    const w = encodePredictivePackageV1(fixture());
+    const open = vi.fn();
+    await expect(
+      hydratePredictivePackageAsyncV1(
+        w.manifest,
+        { [Symbol.asyncIterator]: open },
+        {
+          ...w.manifest,
+          organizationId: "other-org",
+        },
+      ),
+    ).rejects.toThrow("MANIFEST");
+    expect(open).not.toHaveBeenCalled();
+  });
+  it("retains the admitted manifest across asynchronous caller mutations", async () => {
+    const pkg = fixture(),
+      w = encodePredictivePackageV1(pkg, 8192);
+    const expected = { ...w.manifest };
+    async function* reader() {
+      w.manifest.chunks[0]!.sha256 = "0".repeat(64);
+      w.manifest.chunks.length = 0;
+      w.manifest.sourceCount = 0;
+      expected.organizationId = "mutated";
+      yield* w.chunks;
+    }
+    expect(await hydratePredictivePackageAsyncV1(w.manifest, reader(), expected)).toStrictEqual(
+      pkg,
+    );
+  });
+  it("propagates async transport failures and awaits cursor cleanup", async () => {
+    const w = encodePredictivePackageV1(fixture());
+    const failure = new Error("cursor transport failed");
+    let closed = false;
+    const close = vi.fn(async () => {
+      await Promise.resolve();
+      closed = true;
+      return { done: true as const, value: undefined };
+    });
+    await expect(
+      hydratePredictivePackageAsyncV1(
+        w.manifest,
+        {
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              throw failure;
+            },
+            return: close,
+          }),
+        },
+        w.manifest,
+      ),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(closed).toBe(true);
+  });
+  it("retains both transport and cleanup failures instead of masking the primary cause", async () => {
+    const w = encodePredictivePackageV1(fixture());
+    const primary = new Error("read failure"),
+      cleanup = new Error("close failure");
+    await expect(
+      hydratePredictivePackageAsyncV1(
+        w.manifest,
+        {
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              throw primary;
+            },
+            return: async () => {
+              throw cleanup;
+            },
+          }),
+        },
+        w.manifest,
+      ),
+    ).rejects.toMatchObject({
+      message: "PREDICTIVE_PACKAGE_CODEC_REFUSED:READ_AND_CLEANUP",
+      cause: primary,
+      errors: [primary, cleanup],
+    });
+  });
+  it("does not return a package when cursor cleanup fails after a complete read", async () => {
+    const w = encodePredictivePackageV1(fixture());
+    const input = w.chunks[Symbol.iterator]();
+    const cleanup = new Error("close failure");
+    await expect(
+      hydratePredictivePackageAsyncV1(
+        w.manifest,
+        {
+          [Symbol.asyncIterator]: () => ({
+            next: async () => input.next(),
+            return: async () => {
+              throw cleanup;
+            },
+          }),
+        },
+        w.manifest,
+      ),
+    ).rejects.toBe(cleanup);
+  });
   it("supports incremental byte emission and hydration without assembling a wire string", () => {
     const pkg = fixture(),
       reference = encodePredictivePackageV1(pkg, 8192);
