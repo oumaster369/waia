@@ -6,6 +6,7 @@ import { withPostgresSessionTransaction } from "@/db/postgres-session-transactio
 import { buildHistoricalForecastFamilyV2 } from "@/lib/trader/historical-simulation-v2/forecast-family-bootstrap-v2";
 import { buildPredictivePackageV1 } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
 import { persistPredictivePackageV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
+import { SAMPLER_CONTRACT_VERSION, QUANTIZER_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
 import { encodePredictivePackageV1 } from "@/lib/trader/intelligence/forecast-v2/predictive-package-codec-v1";
 import {
   hydratePredictivePackageStorageV1,
@@ -74,10 +75,24 @@ describe.skipIf(!enabled)("DEE-946 immutable bounded PostgreSQL package storage"
       await tx`INSERT INTO organizations(id,owner_user_id,kind,name) VALUES (${organizationId}::uuid,${user}::uuid,'personal','DEE946 local fixture')`;
     }
     const pkg = fixture(organizationId);
-    const { packageId } = await persistPredictivePackageV2(tx, pkg, {
-      organizationId,
-      kmGlobalAnchorSetDigestHex: sha("DEE946 local corpus"),
-    });
+    // Low-level storage probes need an unsealed canonical metadata parent. The
+    // production persistence path now seals storage atomically (tested below).
+    const packageId = randomUUID();
+    await tx`INSERT INTO trader_forecast_predictive_package_v2
+      (id, organization_id, venue, market, symbol, primary_horizon_minutes,
+       execution_horizon_minutes, model_transform_version, replica_root_family_identity_digest,
+       predictive_package_generation_identity_digest, predictive_package_content_digest,
+       k_config_dec, m_config_dec, alpha_epi_config_scale8, km_global_anchor_set_digest,
+       development_dataset_digest, feature_version, sampler_contract_version, quantizer_version,
+       normalization_version_digest, runtime_contract_digest, package_subject_version, schema_version, idempotency_key)
+      VALUES (${packageId}::uuid, ${organizationId}::uuid, ${pkg.family.venue}, ${pkg.family.market},
+       ${pkg.family.symbol}, ${pkg.family.primaryHorizonMinutes}, ${pkg.family.executionHorizonMinutes},
+       ${pkg.family.modelTransformVersion}, ${pkg.replicaRootFamilyIdentityDigest.toString("hex")},
+       ${pkg.predictivePackageGenerationIdentityDigest.toString("hex")}, ${pkg.predictivePackageContentDigest.toString("hex")},
+       ${pkg.kConfigDec}, ${pkg.mConfigDec}, ${pkg.alphaEpiConfigScale8}, ${sha("DEE946 local corpus")},
+       ${pkg.family.developmentDatasetDigestHex}, ${pkg.family.featureVersion}, ${SAMPLER_CONTRACT_VERSION},
+       ${QUANTIZER_VERSION}, ${pkg.family.normalizationVersionDigestHex}, ${pkg.runtimeContractDigest.toString("hex")},
+       ${pkg.family.packageSubjectVersion}, 'predictive-package/v2', ${randomUUID()})`;
     return { pkg, packageId };
   }
   async function probe(
@@ -143,6 +158,20 @@ describe.skipIf(!enabled)("DEE-946 immutable bounded PostgreSQL package storage"
       await expect(
         hydratePredictivePackageStorageV1(tx, { ...ref, generationDigestHex: sha("wrong") }),
       ).rejects.toThrow("MANIFEST");
+    });
+  });
+
+  it("canonical persistence atomically seals storage and preserves idempotent retry", async () => {
+    await probe(async (tx) => {
+      const pkg = fixture();
+      await tx`SET LOCAL ROLE waia_historical_runner`;
+      const input = { organizationId: ORG, kmGlobalAnchorSetDigestHex: sha("DEE946 local corpus") };
+      const persisted = await persistPredictivePackageV2(tx, pkg, input);
+      const manifest = await tx`SELECT manifest_digest_hex FROM trader_predictive_package_manifest_v1
+        WHERE organization_id=${ORG}::uuid AND package_id=${persisted.packageId}::uuid`;
+      expect(manifest).toHaveLength(1);
+      expect(manifest[0]!.manifest_digest_hex).toBe(encodePredictivePackageV1(pkg).manifest.manifestDigestHex);
+      expect(await persistPredictivePackageV2(tx, pkg, input)).toEqual(persisted);
     });
   });
 

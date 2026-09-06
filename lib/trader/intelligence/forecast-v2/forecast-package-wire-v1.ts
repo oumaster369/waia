@@ -144,13 +144,62 @@ export function forecastPackageWireVersionV1(value: unknown): "REFERENCE_V1" | "
   return "LEGACY";
 }
 
+/** A stored source version binds its transport; neither downgrade nor mixed wires is valid. */
+export function assertForecastSourceWireVersionV1(
+  verifierVersion: string,
+  inputPackage: unknown,
+  outcomePackage?: unknown,
+): void {
+  const expected = verifierVersion === FORECAST_SOURCE_VERIFIER_BOUNDED_V3
+    ? "REFERENCE_V1"
+    : verifierVersion === FORECAST_SOURCE_VERIFIER_LEGACY_V2 ? "LEGACY" : null;
+  if (!expected || forecastPackageWireVersionV1(inputPackage) !== expected ||
+      (outcomePackage !== undefined && forecastPackageWireVersionV1(outcomePackage) !== expected)) {
+    refused("SOURCE_VERIFIER_WIRE_VERSION");
+  }
+}
+
+/** PostgreSQL JSON values only, plus native Buffers used by in-process readers.
+ * Preserves the old JSON round-trip's values without a package-sized string.
+ * Executable/custom-prototype objects cannot come from jsonb and are refused.
+ */
+export function reviveLegacyForecastPackageJsonV1<T>(value: T): T {
+  const active = new Set<object>();
+  function revive(item: unknown): unknown {
+    if (item === null || typeof item === "boolean" || typeof item === "string") return item;
+    if (typeof item === "number") return Number.isFinite(item) ? (item === 0 ? 0 : item) : null;
+    if (item === undefined) return undefined;
+    if (Buffer.isBuffer(item)) return Buffer.from(item);
+    if (typeof item !== "object") refused("LEGACY_NON_JSON_VALUE");
+    if (active.has(item)) refused("LEGACY_CYCLE");
+    active.add(item);
+    let result: unknown;
+    if (Array.isArray(item)) {
+      result = Array.from({ length: item.length }, (_, index) => revive(item[index]) ?? null);
+    } else {
+      const prototype = Object.getPrototypeOf(item);
+      if (prototype !== Object.prototype && prototype !== null) refused("LEGACY_NON_JSON_OBJECT");
+      const object: Record<string, unknown> = {};
+      for (const key of Object.keys(item)) {
+        const child = revive((item as Record<string, unknown>)[key]);
+        if (child !== undefined) Object.defineProperty(object, key,
+          { value: child, enumerable: true, writable: true, configurable: true });
+      }
+      result = object.type === "Buffer" && Array.isArray(object.data) ? Buffer.from(object.data) : object;
+    }
+    active.delete(item);
+    return result;
+  }
+  return revive(value) as T;
+}
+
 async function hydratePackage(
   sql: postgres.Sql,
   value: unknown,
   scope: ForecastPackageWireScopeV1,
 ): Promise<PredictivePackageV1> {
   if (forecastPackageWireVersionV1(value) === "LEGACY") {
-    const pkg = reviveForecastRuntimeJsonV2(value) as PredictivePackageV1;
+    const pkg = reviveLegacyForecastPackageJsonV1(value) as PredictivePackageV1;
     if (
       !pkg?.family ||
       pkg.family.organizationId !== scope.organizationId ||

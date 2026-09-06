@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: "2026-09-06"
   blockedReason: null
-  nextAction: "Wire BOTH canonical input/outcome references into persistence and replay; bounded PostgreSQL transport passes focused tests but is not yet called by production paths."
+  nextAction: "Finish bounded NON_ACTIONABLE source/restart transport, inspect the running full local Historical V2 test, then full-data resource and PR gates. Authorized input/outcome paths are now wired and focused tests pass."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -105,3 +105,15 @@ New wire regressions use an actual authorized Forecast fixture, the real bounded
 7. `reviveForecastRuntimeJsonV2` still uses a whole JSON round-trip, and legacy semantic digest computation uses a corpus-sized canonical string. Avoid routing hydrated packages through these. If changing shared helpers, prove exact existing Buffer/number/ordering/undefined semantics with regression vectors; never reinterpret legacy digests or silently skip validation.
 
 No production callsites use the new wire yet; do not report this phase as integration complete. Already merged PR558/559 were cleanly integrated from origin/main into this local branch before adapter work. Their CI is historical evidence, not validation of this new branch head.
+
+## Authorized-path integration — 2026-09-06 19:58 UTC (supersedes adapter-only status)
+
+Canonical package persistence now publishes immutable complete storage in the same transaction, including the existing-metadata path. Bundle and runtime-source persistence use both bounded wire surfaces with explicit source verifier v3. Natural retries validate version, stored hashes, trusted package identity and hydrated exact values; legacy v2 hashes retain their old meaning. Scoped streaming semantic hashing avoids corpus-sized strings and has parity vectors (Buffer, JSON Buffer, numeric keys, Unicode, -0 and sparse arrays); prototype-mutating keys are explicitly refused. Legacy package decoding structurally revives jsonb without a full-package stringify, preserving old Buffer/JSON values and rejecting executable/custom-prototype inputs.
+
+PIT producer retains the stored bounded wire, hydrating only for the unchanged scientific/PIT/knowledge replay. The asynchronous PIT loader checks wire/row identity separately from hydrated replay and no longer creates a package-sized JSON string on return. All three canonical outcome verifiers and outcome-resolution restart hydrate the exact organization/package reference before require/replay. Next-cycle horizon is read from canonical same-org package metadata rather than the whole input JSON. No scientific criterion or authorization gate removed.
+
+Focused validation: 103 unit tests PASS, 19 actual PG17 storage tests PASS (including new canonical persistence/atomic seal/idempotency test), all 6 PostgreSQL Forecast persistence tests PASS including restart, outcome resolution and real general/paper callers. Additional SQL assertions prove both stored wires contain no inline corpus/pools, remain below 50 KiB for the test fixture and match one immutable manifest. Full TypeScript/scoped ESLint/diff checks pass. Initial local test failures were an omitted required build SHA, deferred-FK fixture cleanup ordering and absent native better-sqlite3 binary; these were corrected in local setup/scoped fixture cleanup without weakening production protections. This is not CI or full Historical V2 PASS.
+
+A full Historical production-first/35-cycle/restart/negative suite is running in a separate freshly migrated PG17 database `waia_hsv2_it_dee946` on the existing dedicated localhost container. It has not returned a result; no timeout/assertion changes were made. Session 48768 began about 19:53 UTC. The existing test-only execution authority is restricted to this local modeled proof, not production/live permission.
+
+**Additional in-scope callsite found during integration audit:** `non-actionable-forecast-source-v2.ts` still JSON-round-trips the complete runtime input and stores it in atomic stage artifacts. The allowed HYPOTHESIS_NOT_APPLICABLE path can hit the same size failure even when authorized Forecast persistence is bounded. It must receive an explicit bounded source-wire version with scoped hydration in atomic-cycle commit/resume; retain complete negative evidence, exact refusal checks, source/verification digests and in-memory Forecast input. Do not omit the package, weaken the abstention proof or declare DEE946 complete while this path remains. First/next graph result, this transport, full-corpus resource measurement, independent review and complete PR gates are still pending. No push, production migration or deployment.

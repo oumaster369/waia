@@ -87,9 +87,7 @@ function sqlHarness(options: Readonly<{ accountingDigest?: string }> = {}) {
       policy_config_digest_hex: computeStableJsonDigest(policyConfig),
       authority_bundle_json: previousAuthority,
       authority_bundle_digest_hex: computeStableJsonDigest(previousAuthority),
-      runtime_input_json: {
-        predictivePackage: { family: { primaryHorizonMinutes: 30 } },
-      },
+      primary_horizon_minutes: 30,
     }];
     if (call === 2) return [{ id: accountingId,
       semantic_content_digest: options.accountingDigest ?? accountingDigest }];
@@ -279,9 +277,7 @@ describe("Historical Simulation V2 atomic later-cycle preparation", () => {
         ...previousAuthority,
         sealedCycle: { cycleId: `${previousCycleId}:tampered` },
       }),
-      runtime_input_json: {
-        predictivePackage: { family: { primaryHorizonMinutes: 30 } },
-      },
+      primary_horizon_minutes: 30,
     }]);
     await expect(prepareHistoricalProductionNextCycleForCommitV2({
       tx: tx as never,

@@ -7,6 +7,10 @@ import {
   hydrateForecastRuntimeInputWireV1,
   hydrateForecastAuthorizedOutcomeWireV1,
   forecastPackageWireVersionV1,
+  assertForecastSourceWireVersionV1,
+  FORECAST_SOURCE_VERIFIER_BOUNDED_V3,
+  FORECAST_SOURCE_VERIFIER_LEGACY_V2,
+  reviveLegacyForecastPackageJsonV1,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-package-wire-v1";
 import {
   encodePredictivePackageV1, hydratePredictivePackageAsyncV1,
@@ -182,6 +186,29 @@ function fixture(): ForecastRuntimeInputV2 {
 }
 
 describe("DEE-946 bounded input AND authorized-outcome wire", () => {
+  it("structurally revives legacy jsonb with exact prior JSON/Buffer semantics", () => {
+    const value = { b: Buffer.from([1, 255]), wire: { type: "Buffer", data: [0, 127] },
+      zero: -0, nan: NaN, absent: undefined, nested: [undefined, -0, Infinity, Array(2)],
+      proto: JSON.parse('{"__proto__":{"x":1}}') };
+    const old = JSON.parse(JSON.stringify(value), (_key, candidate) =>
+      candidate && candidate.type === "Buffer" && Array.isArray(candidate.data)
+        ? Buffer.from(candidate.data) : candidate);
+    expect(reviveLegacyForecastPackageJsonV1(value)).toStrictEqual(old);
+    const x: unknown[] = []; x.push(x);
+    expect(() => reviveLegacyForecastPackageJsonV1(x)).toThrow("LEGACY_CYCLE");
+    expect(() => reviveLegacyForecastPackageJsonV1({ execute: () => 1 })).toThrow("LEGACY_NON_JSON_VALUE");
+  });
+  it("binds the verifier version to both wires and refuses downgrade/mixing", () => {
+    const ref = { schemaVersion: "waia.trader.forecast_package_reference.v1" };
+    expect(() => assertForecastSourceWireVersionV1(FORECAST_SOURCE_VERIFIER_BOUNDED_V3, ref, ref)).not.toThrow();
+    expect(() => assertForecastSourceWireVersionV1(FORECAST_SOURCE_VERIFIER_LEGACY_V2, {}, {})).not.toThrow();
+    for (const [version, a, b] of [
+      [FORECAST_SOURCE_VERIFIER_LEGACY_V2, ref, ref],
+      [FORECAST_SOURCE_VERIFIER_BOUNDED_V3, {}, {}],
+      [FORECAST_SOURCE_VERIFIER_BOUNDED_V3, ref, {}],
+      ["unknown", ref, ref],
+    ] as const) expect(() => assertForecastSourceWireVersionV1(version, a, b)).toThrow("SOURCE_VERIFIER_WIRE_VERSION");
+  });
   function wireFixture() {
     const input = fixture();
     const outcome = issueForecastRuntimeV2(input);

@@ -53,11 +53,7 @@ type PreviousPreparationRowV2 = Readonly<{
   policy_config_digest_hex: string;
   authority_bundle_json: PreviousAuthorityBundleV2;
   authority_bundle_digest_hex: string;
-  runtime_input_json: Readonly<{
-    predictivePackage?: Readonly<{
-      family?: Readonly<{ primaryHorizonMinutes?: unknown }>;
-    }>;
-  }>;
+  primary_horizon_minutes: number;
 }>;
 
 function refuse(code: string): never {
@@ -100,7 +96,7 @@ export async function prepareHistoricalProductionNextCycleForCommitV2(input: Rea
   const rows = await input.tx<PreviousPreparationRowV2[]>`
     SELECT p.cycle_id, h.record_index, p.policy_config_digest_hex,
            p.authority_bundle_json, p.authority_bundle_digest_hex,
-           s.runtime_input_json
+           pkg.primary_horizon_minutes
     FROM trader_dee659_authority_preregistration_v2 p
     JOIN trader_historical_forecast_input_pit_v2 h
       ON h.organization_id=p.organization_id AND h.run_id=p.run_id
@@ -110,6 +106,8 @@ export async function prepareHistoricalProductionNextCycleForCommitV2(input: Rea
       ON s.organization_id=h.organization_id AND s.id=h.runtime_input_source_id
      AND s.execution_forecast_id=h.forecast_id AND s.run_id=h.run_id
      AND s.cycle_id=h.cycle_id AND s.symbol=h.symbol AND s.pit_anchor=h.pit_anchor
+    JOIN trader_forecast_predictive_package_v2 pkg
+      ON pkg.organization_id=s.organization_id AND pkg.id=s.predictive_package_id
     WHERE p.organization_id=${input.organizationId}::uuid
       AND p.account_id=${input.accountId} AND p.run_id=${input.runId}
       AND h.record_index < ${input.expectedRecordIndex}
@@ -128,8 +126,8 @@ export async function prepareHistoricalProductionNextCycleForCommitV2(input: Rea
       row.record_index >= input.expectedRecordIndex) {
     refuse("PREVIOUS_AUTHORITY");
   }
-  const primaryHorizonMinutes =
-    row.runtime_input_json.predictivePackage?.family?.primaryHorizonMinutes;
+  // Canonical same-org metadata, not an unverified transport summary or full corpus.
+  const primaryHorizonMinutes = row.primary_horizon_minutes;
   if (primaryHorizonMinutes !== 30 && primaryHorizonMinutes !== 60) {
     refuse("PRIMARY_HORIZON");
   }
