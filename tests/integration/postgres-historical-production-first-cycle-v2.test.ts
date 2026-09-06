@@ -1466,6 +1466,46 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(authorizedForecastCycles).toBeGreaterThan(0);
       expect(nonActionableCycles).toBeGreaterThan(0);
       expect(authorizedForecastCycles + nonActionableCycles).toBe(35);
+      // Durable abstentions must use the same complete immutable package store,
+      // not quietly put the full corpus/pools back in a generic stage JSONB.
+      const negativeWireRows = await pool<Array<Readonly<{
+        count: number; versions: boolean; sealed: boolean; inline: boolean; maxBytes: number;
+      }>>>`
+        SELECT count(*)::int AS count,
+          bool_and(COALESCE(
+            artifact->'payload'->>'schemaVersion'=
+              'waia.trader.historical_forecast_non_actionable_source.v3'
+            AND artifact#>>'{payload,runtimeInput,predictivePackage,schemaVersion}'=
+              'waia.trader.forecast_package_reference.v1',false)) AS versions,
+          bool_and(manifest.package_id IS NOT NULL) AS sealed,
+          bool_or((artifact#>'{payload,runtimeInput,predictivePackage}') ?
+            'canonicalSourceCorpus' OR
+            (artifact#>'{payload,runtimeInput,predictivePackage}') ? 'replicaArtifacts') AS inline,
+          max(octet_length((artifact->'payload')::text)) AS "maxBytes"
+        FROM trader_historical_simulation_atomic_stage_v2 stage
+        CROSS JOIN LATERAL jsonb_array_elements(stage.artifacts_json) artifact
+        LEFT JOIN trader_predictive_package_manifest_v1 manifest
+          ON manifest.organization_id=stage.organization_id
+          AND manifest.package_id::text=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,packageId}'
+          AND manifest.organization_id::text=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,organizationId}'
+          AND manifest.codec_version=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,codecVersion}'
+          AND manifest.generation_digest_hex=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,generationDigestHex}'
+          AND manifest.content_digest_hex=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,contentDigestHex}'
+          AND manifest.manifest_digest_hex=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,manifestDigestHex}'
+        WHERE stage.organization_id=${organizationId}::uuid
+          AND stage.account_id=${productionInput.accountId} AND stage.run_id=${runId}
+          AND stage.stage='FORECAST_LIFECYCLE'
+          AND artifact->>'artifactKind'='FORECAST_NON_ACTIONABLE'
+      `;
+      expect(negativeWireRows[0]).toMatchObject({ count: nonActionableCycles,
+        versions: true, sealed: true, inline: false });
+      expect(negativeWireRows[0]!.maxBytes).toBeLessThan(4 * 1024 * 1024);
       expect(rows[0]!.pits).toBe(rows[0]!.bundles);
       expect(rows[0]!.preregistrations).toBe(rows[0]!.bundles);
       // The qualification path must exercise both sides of a complete modeled
