@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: efc2a57ee5c18f32479a471a05f2b0469501a070
   lastValidationAt: "2026-09-07T10:58:00Z"
   blockedReason: null
-  nextAction: "Correct confirmed CI Node CLI profile omission and collect new exact-head gates; no merge or deployment."
+  nextAction: "Correct four stale unit fixtures; collect exact-head CI/review before the user-authorized squash and controlled rollout."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -38,13 +38,37 @@ User resumed the audited historical completion path on 2026-09-07.
 DEE-920's original PR551 already merged; this is a new integration boundary,
 not a second PR on920. This plan records existing corrections and new validation.
 Human explicitly approved this integration plan and additive CI strengthening on
-2026-09-07. No Human launch approval, merge or deployment is conferred.
+2026-09-07, then separately granted advance merge/deployment permission for this
+integration. Required exact-head CI, independent review, branch protection and
+verified rollout prerequisites remain mandatory. No Human launch ratification,
+private exchange credentials, live trading or capital authority is conferred.
 
 Ordinary Human-reviewed integration batch, NOT an Integration Train. Existing
 implementation predates this plan; no fabricated pre-implementation manifest or
 bounded autonomous merge claim is permitted. Parent920 retains production acceptance.
 
 ## Goal
+
+### CI checkpoint — 2026-09-07 13:08 UTC
+
+At `a6ec2567f65b4329ba683c25709aa27b131f2f91`, PostgreSQL run34119189054
+passed: PG16 23 files/192 tests,3 skipped; full35-cycle graph completed in
+2,193,733ms. Full migration-journal regression12 PASS and additive PG17 checks18
+PASS. This synthetic upstream qualification boundary is not full-corpus or
+production qualification evidence.
+
+Unit run34119189101 failed4 files/11 tests (6183 passed/526 skipped), blocking
+dependent build/E2E. Four obsolete test contracts were localized and corrected:
+extra applied migrations now include0203/0204 without changing ratifiedmax148;
+PIT producer legacy fixture supplies package/verifier metadata with real transport
+hydration and mismatch refusal; CLI separately models and disposes compute/events
+pools, retaining both distinct cleanup failures; dashboard asserts both truthful
+unavailable-evidence statuses. No runtime code, scientific assertion, timeout,
+RLS or authority guard changed. Authority issuance in the PIT unit remains mocked,
+not a substitute for real authority or PostgreSQL proofs. Targeted28 tests and
+100 related wire/authority/PIT-loader/cleanup/pending-order tests PASS; full
+typecheck, focused lint and independent delta review passed (no concreteP1/P2).
+New exact-head full CI is still required before merge; failures are not relabeled PASS.
 
 One exact historical source candidate with traceable corrections, unchanged data and
 scientific criteria, honest diagnostics and executable regression gates. Merged code
