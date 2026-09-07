@@ -17,6 +17,7 @@ function projection(count: number): HistoricalObservableProjectionV2 {
     buyAndHoldGrossEquity: "100", strategyMinusBuyAndHoldGross: String(i * 5),
     buyAndHoldConvention: "GROSS_MARK_TO_MARKET_NO_FEES", openPositionsCount: 1,
     decisionsCount: 1, riskVetoCount: 0, ordersCount: 1, fillsCount: 1,
+    pendingModeledOrders: [],
     lastForecast: { reasonCodes: [`FORECAST_CYCLE_${i}`] }, lastDecision: { action: "HOLD" },
     lastPortfolio: { reasonCodes: ["PORTFOLIO_MODELED"] }, lastRisk: { verdict: "ALLOW_MODELED" },
     lastExecution: { status: "MODELED" }, lastAccounting: { cash: "50", equity: String(100 + i * 5), positions: { BTCUSDT: { quantity: "0.001" } } },
@@ -123,6 +124,20 @@ test("paired admin and tenant render updates, scoped links and polling recovery"
     await expect(surface.getByText("Qualified progress · 3 / 3 cycles")).toBeVisible();
     await surface.route("**/api/trader/**historical-v2/stream?**", route => route.fulfill({ json: projection(3) }));
     await expect(surface.getByText("RUNNING · observed", { exact: true })).toBeVisible({ timeout: 10_000 });
+  }
+  const completed = projection(3);
+  const unsettled = { ...completed, eventId: "completed-with-pending",
+    lifecycle: { ...completed.lifecycle!, phase: "COMPLETED" as const },
+    aggregate: { ...completed.aggregate, runPhase: "COMPLETED" as const },
+    accounts: completed.accounts.map(account => ({ ...account, pendingModeledOrders: [{
+      orderId: "pending-final-cycle", symbol: "BTCUSDT", side: "buy" as const, state: "ACCEPTED",
+      quantity: "0.01", filledQuantity: "0", remainingQuantity: "0.01", cancellationPending: false,
+    }] })),
+  };
+  for (const surface of [page, tenant]) {
+    await surface.route("**/api/trader/**historical-v2/stream?**", route => route.fulfill({ json: unsettled }));
+    await expect(surface.getByText(/Replay extent completed with unsettled modeled orders/)).toBeVisible({ timeout: 10_000 });
+    await expect(surface.getByText("BTCUSDT · BUY · ACCEPTED", { exact: true })).toBeVisible();
   }
   await page.screenshot({ path: "test-results/historical-v2-admin.png", fullPage: true });
   await tenant.setViewportSize({ width: 390, height: 844 });

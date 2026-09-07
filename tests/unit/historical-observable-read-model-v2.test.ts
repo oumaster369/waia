@@ -14,6 +14,9 @@ const row = (accountId: string, equity: string, sequence: number) => {
   const state={...body,semanticContentDigest:computeAccountingSemanticDigest(body)};
   const snapshot=createHistoricalSimulationDurableStateSnapshotV2({organizationId:"org",accountId,runId:"run",split:"WALK_FORWARD",cycleId:`c-${sequence}`,
     stateKind:"ACCOUNTING_FRONTIER",state});
+  const exchange=createHistoricalSimulationDurableStateSnapshotV2({organizationId:"org",accountId,runId:"run",split:"WALK_FORWARD",cycleId:`c-${sequence}`,
+    stateKind:"MODELED_EXCHANGE",state:{openOrders:[],checkpoint:{schemaVersion:"htr-wp17-execution-checkpoint/v1",
+      executionModelSchemaVersion:"waia.trader.historical-execution-model.v1",openOrders:[]}}});
   return ({
   organization_id:"org",run_id:"run",
   account_id: accountId, cycle_sequence: sequence, cycle_id: `c-${sequence}`, symbol: "BTCUSDT",
@@ -21,6 +24,8 @@ const row = (accountId: string, equity: string, sequence: number) => {
   accounting_json: { status: "COMMITTED" },
   accounting_state_json: snapshot.state, accounting_snapshot_content_digest_hex:snapshot.contentDigestHex,
   accounting_snapshot_schema_version:snapshot.schemaVersion,accounting_snapshot_cycle_id:snapshot.cycleId,
+  exchange_state_json:exchange.state,exchange_snapshot_content_digest_hex:exchange.contentDigestHex,
+  exchange_snapshot_schema_version:exchange.schemaVersion,exchange_snapshot_cycle_id:exchange.cycleId,
   forecast_json: { status: "AUTHORIZED", reasonCodes: ["FORECAST_READY"], authorityContentDigestHex: "d".repeat(64) },
   forecast_bundle_id: "bundle-1", forecast_runtime_authority: { contentDigestHex: "d".repeat(64) },
   forecast_terminal_scenario_masses: { probabilities: [0,0,0.25,0.5,0.25,0,0],
@@ -40,6 +45,14 @@ const row = (accountId: string, equity: string, sequence: number) => {
 };
 
 describe("historical observable read model v2", () => {
+  it("refuses missing, tampered or differently scoped exchange evidence", async () => {
+    for (const override of [{exchange_state_json:null}, {exchange_snapshot_content_digest_hex:"f".repeat(64)},
+      {exchange_snapshot_cycle_id:"another-cycle"}]) {
+      const unsafe=vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{...row("a","100",0),...override}]);
+      await expect(loadHistoricalObservableProjectionPostgresV2({unsafe} as never,
+        {organizationId:"org",runId:"run"})).rejects.toThrow();
+    }
+  });
   it("rejects missing or mismatched actual Forecast evidence for an authorized cycle", async () => {
     for (const override of [{ forecast_bundle_id: null },
       { forecast_runtime_authority: { contentDigestHex: "e".repeat(64) } },
@@ -77,6 +90,9 @@ describe("historical observable read model v2", () => {
     expect(result.accounts[0]?.lastPortfolio).toMatchObject({ reasonCodes:["PORTFOLIO_READY"] });
     expect(result.accounts[0]?.modeledRealityArtifacts).toHaveLength(1);
     expect(result.accounts[0]?.knowledgeArtifacts).toHaveLength(1);
+    expect(result.accounts[0]?.pendingModeledOrders).toEqual([]);
+    expect(String(unsafe.mock.calls[1]?.[0])).toContain("sl.state_kind='MODELED_EXCHANGE'");
+    expect(String(unsafe.mock.calls[1]?.[0])).toContain("sn.cycle_id=s.cycle_id");
     expect(String(unsafe.mock.calls[1]?.[0])).not.toContain("WHERE s.latest_rank=1");
     expect(String(unsafe.mock.calls[1]?.[0])).toContain("capital_eligible=false");
     expect(String(unsafe.mock.calls[1]?.[0])).toContain("st.stage='HISTORICAL_MODELED_REALITY'");
