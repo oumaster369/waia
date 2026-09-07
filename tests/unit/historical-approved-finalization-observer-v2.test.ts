@@ -56,4 +56,25 @@ describe("approved launch forwards finalization diagnostics and shutdown", () =>
     expect(mocks.end).toHaveBeenCalledOnce(); expect(out).not.toHaveBeenCalled();
     expect(process.listenerCount("SIGTERM")).toBe(before);
   });
+  it("retains cancellation and pool cleanup failures without a success or leaked handler", async () => {
+    const primary = new Error("TECHNICAL_PREPARATION_CANCELLED");
+    const cleanup = new Error("POOL_END_FAILED");
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const beforeTerm = process.listenerCount("SIGTERM");
+    const beforeInt = process.listenerCount("SIGINT");
+    mocks.end.mockRejectedValue(cleanup);
+    mocks.finalize.mockImplementation(async (_pool, _scope, observer) => {
+      process.listeners("SIGTERM").at(-1)!("SIGTERM");
+      expect(observer.signal.aborted).toBe(true);
+      throw primary;
+    });
+    const failure = await runHistoricalSimulationApprovedLaunchMainV2({ NODE_ENV: "test" })
+      .catch(error => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure.cause).toBe(primary);
+    expect(failure.errors).toEqual([primary, cleanup]);
+    expect(mocks.end).toHaveBeenCalledOnce(); expect(out).not.toHaveBeenCalled();
+    expect(process.listenerCount("SIGTERM")).toBe(beforeTerm);
+    expect(process.listenerCount("SIGINT")).toBe(beforeInt);
+  });
 });

@@ -62,4 +62,18 @@ describe("technical proposal CLI observation boundary", () => {
     await expect(runHistoricalTechnicalProposalMainV2(env)).rejects.toBe(error);
     expect(out).not.toHaveBeenCalled(); expect(mocks.end).toHaveBeenCalledOnce();
   });
+  it("retains diagnostic and cleanup failures together after cumulative composition", async () => {
+    const primary = new Error("DIAGNOSTIC_WRITE_FAILED");
+    const cleanup = new Error("POOL_END_FAILED");
+    vi.spyOn(process.stderr, "write").mockImplementation(() => { throw primary; });
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    mocks.end.mockRejectedValue(cleanup);
+    mocks.prepare.mockImplementation(async (_pool, _input, observer) =>
+      observer.onProgress({ phase: "SURFACE_LOAD" }));
+    const failure = await runHistoricalTechnicalProposalMainV2(env).catch(error => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure.cause).toBe(primary);
+    expect(failure.errors).toEqual([primary, cleanup]);
+    expect(out).not.toHaveBeenCalled(); expect(mocks.end).toHaveBeenCalledOnce();
+  });
 });
