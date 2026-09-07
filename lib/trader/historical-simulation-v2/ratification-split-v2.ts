@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type postgres from "postgres";
 import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
+import { createPreparationAttemptJournalV2, readPreparationAttemptV2 } from "./preparation-attempt-events-v2";
 import { assertTechnicalPreparationActiveV2, snapshotTechnicalPreparationObserverV2,
   type TechnicalPreparationObserverV2 } from "./technical-preparation-observer-v2";
 
@@ -291,7 +292,8 @@ export async function readHistoricalTechnicalProposalForAdminV2(
     authenticatedOperatorUserId: string }>,
 ): Promise<Readonly<{ preparationState: "NOT_REQUESTED"; proposalAvailable: false }> |
   Readonly<{ preparationState: "REQUEST_RECORDED"; proposalAvailable: false;
-    requestId: string; requestedExtent: HistoricalRatificationRequestV2["executionExtent"] }> |
+    requestId: string; requestedExtent: HistoricalRatificationRequestV2["executionExtent"];
+    preparationAttempt?: Awaited<ReturnType<typeof readPreparationAttemptV2>> }> |
   Readonly<{ preparationState: "PROPOSAL_AVAILABLE"; proposalAvailable: true;
     requestId: string; proposalId: string;
     proposal: HistoricalTechnicalProposalV2; ratified: boolean }>> {
@@ -324,10 +326,14 @@ export async function readHistoricalTechnicalProposalForAdminV2(
       AND release_sha=${input.releaseSha}
     FOR SHARE
   `;
-  if (proposals.length === 0) return Object.freeze({
-    preparationState: "REQUEST_RECORDED", proposalAvailable: false,
-    requestId: request.id, requestedExtent: Object.freeze({ ...request.request.executionExtent }),
-  });
+  if (proposals.length === 0) {
+    const preparationAttempt = await readPreparationAttemptV2(sql, { ...input,
+      requestId: request.id, requestContentDigestHex: request.request.contentDigestHex });
+    return Object.freeze({ preparationState: "REQUEST_RECORDED", proposalAvailable: false,
+      requestId: request.id, requestedExtent: Object.freeze({ ...request.request.executionExtent }),
+      ...(preparationAttempt ? { preparationAttempt } : {}),
+    });
+  }
   const proposal = proposals[0];
   if (proposals.length !== 1 || !proposal ||
       proposal.proposal_json.requestId !== request.id ||
@@ -353,16 +359,24 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
   input: Readonly<{ preflight: KmFourSurfaceProductionPreflightInputV2;
     launchPlan: HistoricalTechnicalLaunchPlanV2 }>,
   requestedObserver: TechnicalPreparationObserverV2 = {},
+  preparationEventsPool?: postgres.Sql,
 ): Promise<Readonly<{ id: string; proposal: HistoricalTechnicalProposalV2 }>> {
   assertScope(input.preflight);
   validateLaunchPlan(input.launchPlan);
-  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
+  if (preparationEventsPool === pool) refuse("PREPARATION_JOURNAL_SEPARATE_POOL_REQUIRED");
+  const baseObserver = snapshotTechnicalPreparationObserverV2(requestedObserver);
+  let journal: Awaited<ReturnType<typeof createPreparationAttemptJournalV2>> | undefined;
+  const observer = { ...baseObserver, onProgress: baseObserver.onProgress || preparationEventsPool
+    ? (event: Parameters<NonNullable<TechnicalPreparationObserverV2["onProgress"]>>[0]) => {
+      journal?.progress(event); baseObserver.onProgress?.(event);
+    } : undefined };
   const reserved = await pool.reserve();
   const sql = bindPostgresReservedSession(pool, reserved);
   let assumed = false;
   let locked = false;
   const lockKey = historicalDatasetAuthorityRunLockKeyV2(input.preflight);
-  return withHistoricalLaunchCleanupV2(async () => {
+  try {
+  const result = await withHistoricalLaunchCleanupV2(async () => {
     await requireHistoricalSimulationRunnerLoginV2(sql);
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
@@ -373,6 +387,11 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
     if (request.request.executionExtent.initialRecordIndex !== input.launchPlan.initialRecordIndex ||
         request.request.executionExtent.cycleCount !== input.launchPlan.cycleCount) {
       refuse("REQUEST_EXECUTION_EXTENT");
+    }
+    if (preparationEventsPool) {
+      journal = await createPreparationAttemptJournalV2(preparationEventsPool, {
+        ...input.preflight, requestId: request.id,
+        requestContentDigestHex: request.request.contentDigestHex });
     }
     const technicalCandidate =
       await INTERNAL_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2(
@@ -418,6 +437,7 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
       refuse("PROPOSAL_CONFLICT");
     }
     assertHistoricalTechnicalProposalV2(row.proposal_json);
+    await journal?.complete(row.id);
     return Object.freeze({ id: row.id, proposal: row.proposal_json });
   }, [
     async () => {
@@ -426,6 +446,16 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
     async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
     () => reserved.release(),
   ]);
+  return result;
+  } catch (error) {
+    if (journal) {
+      try { await journal.fail(error); }
+      catch (journalError) {
+        throw new AggregateError([error, journalError], "HISTORICAL_PREPARATION_AND_JOURNAL_FAILURE");
+      }
+    }
+    throw error;
+  }
 }
 
 /** TEST_ONLY production-composition seam; the database role downgrade remains real. */

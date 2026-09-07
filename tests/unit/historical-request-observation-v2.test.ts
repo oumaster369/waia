@@ -21,7 +21,7 @@ function row(overrides: Record<string, unknown> = {}) {
     request_json: { ...body, contentDigestHex: digest }, content_digest_hex: digest };
 }
 function sqlMock(requests: unknown[], proposals: unknown[] = []) {
-  const sql = vi.fn().mockResolvedValueOnce(requests).mockResolvedValueOnce(proposals);
+  const sql = vi.fn().mockResolvedValue([]).mockResolvedValueOnce(requests).mockResolvedValueOnce(proposals);
   return { sql, port: sql as unknown as postgres.Sql };
 }
 
@@ -39,7 +39,7 @@ describe("authenticated durable historical request observation (SQL boundary moc
     const result = await readHistoricalTechnicalProposalForAdminV2(port, scope);
     expect(result).toEqual({ preparationState: "REQUEST_RECORDED", proposalAvailable: false,
       requestId: request.id, requestedExtent: { initialRecordIndex: 525600, cycleCount: 35 } });
-    expect(sql).toHaveBeenCalledTimes(2);
+    expect(sql).toHaveBeenCalledTimes(3);
     expect(Object.isFrozen(result)).toBe(true);
   });
   it.each(["organizationId", "runId", "releaseSha", "operatorUserId"])(

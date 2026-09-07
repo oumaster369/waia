@@ -43,6 +43,26 @@ provenance:
 
 ## Work packages
 
+### Preparation failure gap reproduction — 2026-09-07
+
+Isolated local investigation from ded0cb0d; no publication or train admission.
+Prove that a real preparation entrypoint rejection can leave the validated
+request projection indistinguishable from never-started preparation. Mock only
+the SQL boundary and scientific candidate producer; preserve the actual
+preparation cleanup and request reader. This is an acknowledged defect
+reproduction, not an acceptance test certifying correct failure observability.
+
+Migration 0201 deliberately makes requests immutable and runner read-only.
+Migration 0198 lifecycle events require a qualified run-start FK, so they cannot
+represent pre-proposal failure without inventing authority. A dedicated scoped
+append-only preparation-attempt journal is required; root coordinates a separate
+atomic backend issue and schema review before implementation. Do not mutate a
+Human request, fabricate a proposal/run-start, relax RLS, or report a failed
+scientific computation as successful. Current main stops at0202; cumulative local
+0203 is a separate unpublished dependency. Root subsequently authorized local
+0204 implementation in the separate atomic [DEE-958 plan](dee-958-preparation-attempt-events.md),
+not as part of this CPU/scientific work package. No production migration is authorized.
+
 ### Reserved connection loss — 2026-09-07 05:49 UTC
 
 Local-only follow-through in detached compatibility copy from42e9; not train

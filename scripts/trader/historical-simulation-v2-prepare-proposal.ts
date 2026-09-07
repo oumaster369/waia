@@ -20,11 +20,15 @@ export async function runHistoricalTechnicalProposalMainV2(
       const pool = guardSingleConnectionPostgresPool(
         postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
       );
+      const eventsPool = guardSingleConnectionPostgresPool(
+        postgres(databaseUrl, { ...waiaCampaignPostgresDriverOptions(), connect_timeout: 10,
+          connection: { statement_timeout: 10_000, lock_timeout: 3_000 } }),
+      );
       return withHistoricalLaunchCleanupV2(
         () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input, {
           onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); },
-        }),
-        [() => pool.end({ timeout: 5 })],
+        }, eventsPool),
+        [() => pool.end({ timeout: 5 }), () => eventsPool.end({ timeout: 5 })],
       );
     });
 
