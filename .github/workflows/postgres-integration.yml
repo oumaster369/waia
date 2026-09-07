@@ -70,6 +70,7 @@ on:
       - "lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1.ts"
       - "lib/trader/intelligence/forecast-v2/predictive-package-codec-v1.ts"
       - "tests/unit/postgres-session-transaction-v2.test.ts"
+      - "tests/unit/historical-postgres-ci-cli-profile.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
 
@@ -117,6 +118,9 @@ jobs:
         env:
           WAIA_PG_INTEGRATION: "1"
           FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY: "1"
+          # The real server-only preparation observer requires the same Node
+          # CLI profile used by production entrypoints; this grants no authority.
+          WAIA_TRADER_CLI: "1"
         run: >-
           pnpm test --run --no-file-parallelism
           tests/unit/control-replay-scientific-v2-driver-v1.test.ts
@@ -141,6 +145,7 @@ jobs:
           tests/integration/postgres-historical-runner-least-privilege-v2.test.ts
           tests/integration/postgres-predictive-package-storage-v1.test.ts
           tests/unit/postgres-session-transaction-v2.test.ts
+          tests/unit/historical-postgres-ci-cli-profile.test.ts
 
   historical-postgres17:
     name: PostgreSQL 17 historical regression guard

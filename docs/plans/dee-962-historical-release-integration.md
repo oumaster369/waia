@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: WP-PR
   completedWorkPackages: [WP-INVENTORY, WP-LOCAL-COMPATIBILITY, WP-GATES, WP-FINAL-REVIEW]
   remainingWorkPackages: [WP-PR]
-  prNumber: null
-  prUrl: null
+  prNumber: 562
+  prUrl: "https://github.com/oumaster369/waia/pull/562"
   lastValidatedGitSha: efc2a57ee5c18f32479a471a05f2b0469501a070
   lastValidationAt: "2026-09-07T10:58:00Z"
   blockedReason: null
-  nextAction: "Publish one review PR and collect exact-head CI; no merge or deployment."
+  nextAction: "Correct confirmed CI Node CLI profile omission and collect new exact-head gates; no merge or deployment."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -124,6 +124,23 @@ actual proposal/Human ratification, historical run/repeat and paired authenticat
 Scientific rejection is a valid result, not a code defect to hide.
 
 ## Validation evidence and remaining defects
+
+### PR562 first CI failure — 2026-09-07 11:16 UTC
+
+Exact1c1914cb PostgreSQL run34114634940:21filesPASS/1suiteFAIL,
+178testsPASS/15skipped. Full graph beforeAll failed at finalization observer with
+TECHNICAL_PREPARATION_OBSERVER_NODE_CLI_REQUIRED;35cycles did not run. This was
+not a timeout or a scientific assertion failure. PG17 additive job passed separately.
+The original PG16 Node test step omitted WAIA_TRADER_CLI=1, while server entrypoints
+and previous local execution supply it. A new test reads the actual CI step and
+calls the unchanged observer guard:1FAIL/1PASS before correction, same exact error.
+Correction supplies Node CLI mode only to the existing proof step and selects the
+regression there. No scientific gate, data, authority, test length or guard changed.
+New full CI is required; do not reuse previous partial PASS as final acceptance.
+After correction, the new regression and both observer suites passed (11/11);
+focused ESLint and full typecheck passed. Independent read-only review confirmed
+the cause, inspected effects on other selected tests, and found no concrete P1/P2
+in this correction. It did not certify the still-pending full graph or production.
 
 Local receipt: project-root `trader-historical-integration-check-2026-09-07.md`.
 Typecheck PASS; lint0errors/307warnings; targeted138PASS/1inventoryFAIL, then corrected
