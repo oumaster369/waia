@@ -116,7 +116,7 @@ describe("Historical V2 authenticated Admin launch ceremony", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Preparation request recorded");
   });
 
-  it.each(["http", "network"])("ignores an older %s failure after a newer successful poll", async kind => {
+  it.each(["401", "500", "network"])("ignores an older %s failure after a newer successful poll", async kind => {
     let finishOld!: (response: Response) => void, rejectOld!: (error: Error) => void;
     const oldResponse = new Promise<Response>((resolve, reject) => { finishOld = resolve; rejectOld = reject; });
     const interval = vi.spyOn(window, "setInterval");
@@ -129,12 +129,31 @@ describe("Historical V2 authenticated Admin launch ceremony", () => {
     await act(async () => { tick(); });
     expect(await screen.findByRole("status")).toHaveTextContent("Preparation request recorded");
     await act(async () => {
-      if (kind === "http") finishOld(new Response(JSON.stringify({ error: { message: "STALE-FAILURE" } }), { status: 500 }));
+      if (kind !== "network") finishOld(new Response(JSON.stringify({ error: { message: "STALE-FAILURE" } }), { status: Number(kind) }));
       else rejectOld(new Error("STALE-FAILURE"));
       await oldResponse.catch(() => undefined);
     });
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(/STALE-FAILURE/)).toBeNull();
+  });
+
+  it.each(["401", "500", "network"])("preserves a newer %s failure when an older success arrives later", async kind => {
+    let finishOld!: (response: Response) => void;
+    const oldResponse = new Promise<Response>(resolve => { finishOld = resolve; });
+    const interval = vi.spyOn(window, "setInterval");
+    const fetchMock = vi.fn().mockReturnValueOnce(oldResponse);
+    if (kind === "network") fetchMock.mockRejectedValueOnce(new Error("CURRENT-FAILURE"));
+    else fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "CURRENT-FAILURE" } }), { status: Number(kind) }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    const tick = interval.mock.calls[0]![0] as () => void;
+    await act(async () => { tick(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("CURRENT-FAILURE");
+    await act(async () => { finishOld(json({ preparationState: "REQUEST_RECORDED", proposalAvailable: false })); await oldResponse; });
+    expect(screen.getByRole("alert")).toHaveTextContent("CURRENT-FAILURE");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: /request exact technical proposal/i })).toBeDisabled();
   });
   it("obtains bound CSRF and requests preparation without accepting a CLI actor", async () => {
     let recorded = false;

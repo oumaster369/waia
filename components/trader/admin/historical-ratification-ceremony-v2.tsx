@@ -141,24 +141,25 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
   const csrf = loaded?.endpoint === endpoint ? loaded.csrf : "";
   const requestRecorded = review?.preparationState === "REQUEST_RECORDED";
   const refreshSequence = React.useRef(0);
-  const committedRefreshSequence = React.useRef(0);
+  const settledRefreshSequence = React.useRef(0);
 
   const refresh = React.useCallback(async (signal?: AbortSignal) => {
     if (!endpoint) return null;
     const sequence = ++refreshSequence.current;
     try {
     const response = await fetch(endpoint, { cache: "no-store", credentials: "include", signal });
-    if (signal?.aborted || sequence < committedRefreshSequence.current) return null;
+    if (signal?.aborted || sequence < settledRefreshSequence.current) return null;
     const token = response.headers.get("x-fhv-csrf-token") ?? "";
     if (!response.ok) throw new Error(await responseMessage(response));
     const next = await response.json() as Review;
-    if (signal?.aborted || sequence < committedRefreshSequence.current) return null;
-    committedRefreshSequence.current = sequence;
+    if (signal?.aborted || sequence < settledRefreshSequence.current) return null;
+    settledRefreshSequence.current = sequence;
     setLoaded({ endpoint, review: next, csrf: token });
     setError(null);
     return { review: next, csrf: token };
     } catch (cause) {
-      if (signal?.aborted || sequence < committedRefreshSequence.current) return null;
+      if (signal?.aborted || sequence < settledRefreshSequence.current) return null;
+      settledRefreshSequence.current = sequence;
       throw cause;
     }
   }, [endpoint]);

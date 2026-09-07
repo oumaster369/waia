@@ -49,7 +49,7 @@ root-controlled release gates. No production operation is authorized here.
 
 ## Local validation — 2026-09-07
 
-Fifteen ceremony tests pass, including the existing request/CSRF/actor/proposal
+Nineteen ceremony tests pass, including the existing request/CSRF/actor/proposal
 tests and new durable state, enum redaction, exact surface/trial counters,
 automatic refresh, and out-of-order same-scope poll rejection. Typecheck and
 scoped lint with zero warnings pass. Initial new test callbacks had unused
@@ -74,3 +74,8 @@ late HTTP and network errors are ignored only after a newer successful response.
 Added deterministic6s-response/5s-poll and both stale-error regression tests.
 Initial timer-fixture cleanup order failed one test; corrected cleanup ordering,
 then15tests, zero-warning lint and typecheck passed. No assertion suppression.
+
+Reviewer then reproduced the reverse ordering: newer failure followed by older
+success cleared that failure. Fence now tracks latest accepted SETTLED outcome
+(success or error), never merely-issued requests. Added401/500/network tests in
+both directions;19ceremony tests pass. The failure remains until a newer response.
