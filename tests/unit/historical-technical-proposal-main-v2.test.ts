@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ end: vi.fn(), prepare: vi.fn(), connect: vi.fn() }));
 vi.mock("postgres", () => ({ default: mocks.connect }));
-vi.mock("@/db/postgres-client", () => ({ waiaCampaignPostgresDriverOptions: () => ({ max: 2 }) }));
+vi.mock("@/db/postgres-client", () => ({ waiaCampaignPostgresDriverOptions: () => ({ max: 1 }) }));
 vi.mock("@/lib/trader/historical-simulation-v2/ratification-split-v2", () => ({
   prepareHistoricalTechnicalProposalOnExecutionServerV2: mocks.prepare,
   CURRENT_FHV_FIRST_ECONOMIC_RECORD_INDEX_V2: 525600,
@@ -26,7 +26,7 @@ const env = {
 };
 beforeEach(() => {
   vi.resetAllMocks(); mocks.end.mockResolvedValue(undefined);
-  mocks.connect.mockReturnValue({ end: mocks.end });
+  mocks.connect.mockReturnValue({ end: mocks.end, options: { max: 1 } });
 });
 afterEach(() => vi.restoreAllMocks());
 describe("technical proposal CLI observation boundary", () => {

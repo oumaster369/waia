@@ -43,6 +43,31 @@ provenance:
 
 ## Work packages
 
+### Reserved connection loss — 2026-09-07 05:49 UTC
+
+Local-only follow-through in detached compatibility copy from42e9; not train
+admission or publication. Reproduced stale reserved-handle dispatch after backend
+closure causes an asynchronous postgres.js socket-null exception. Introduce an
+opt-in max1 pool adapter in proposal/approved-launch CLI factories only. Preserve
+onclose diagnostics; invalidate the reserved handle and delayed queries, return
+structured CONNECTION_CLOSED, never re-reserve or continue across lost locks.
+Do not put a dead backend back into the driver's ready queue during release.
+Validate actual local PG control/injection and lazy execution, healthy sessions,
+existing CLI/login/cleanup tests, typecheck/lint/build. No vendor patches, timeout
+changes, schema/privilege/science changes, or production-runtime proof claimed.
+
+Local verification at05:57UTC:61 focused tests across6 files PASS; actual local
+PostgreSQL control/injected-idle test2PASS (3.68s) verifies JSON binding, delayed
+unsafe query, controlled CONNECTION_CLOSED and completed cleanup. Root diagnostic
+also retains full incremental failure/control events. TypeScript/full lint/diff
+PASS. Final Next production build including the file-query refusal guard also
+passed (session87833, verified06:01UTC); canonical document and release-identity
+checks passed06:02UTC. Unsupported asynchronous file-query dispatch
+is refused explicitly; historical CLI source has no file-query calls. No immediate
+cancellation of synchronous scientific kernels or full-corpus completion claimed.
+Initial mock metadata/type/import failures were corrected in test scaffolding,
+not by relaxing the close guard, restoring a broken connection or dropping checks.
+
 ### Durable request acknowledgement — 2026-09-07 04:48 UTC
 
 Separate local experiment from frozen7bb650ee while its graph test runs.

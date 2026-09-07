@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { fileURLToPath } from "node:url";
 
 import { waiaCampaignPostgresDriverOptions } from "../../db/postgres-client";
+import { guardSingleConnectionPostgresPool } from "../../db/postgres-reserved-close-guard";
 import { prepareHistoricalTechnicalProposalOnExecutionServerV2 } from
   "../../lib/trader/historical-simulation-v2/ratification-split-v2";
 import { runHistoricalTechnicalProposalCliV2 } from
@@ -16,7 +17,9 @@ export async function runHistoricalTechnicalProposalMainV2(
 ): Promise<void> {
   const result = await runHistoricalTechnicalProposalCliV2(env,
     async (databaseUrl, input) => {
-      const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
+      const pool = guardSingleConnectionPostgresPool(
+        postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+      );
       return withHistoricalLaunchCleanupV2(
         () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input, {
           onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); },

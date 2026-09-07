@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { fileURLToPath } from "node:url";
 
 import { waiaCampaignPostgresDriverOptions } from "../../db/postgres-client";
+import { guardSingleConnectionPostgresPool } from "../../db/postgres-reserved-close-guard";
 import { bindPostgresReservedSession } from
   "../../db/postgres-session-transaction";
 import { bootstrapAndQueueHistoricalSimulationOnExecutionServerV2 } from
@@ -75,7 +76,9 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
   async function consume(signal?: AbortSignal) {
     return runHistoricalSimulationLaunchConsumerCliV2(env, {
       async openDatabase(databaseUrl) {
-        const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
+        const pool = guardSingleConnectionPostgresPool(
+          postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+        );
         try {
           const reserved = await pool.reserve();
           const bound = bindPostgresReservedSession(pool, reserved);
@@ -113,7 +116,9 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
   try {
     const result = await runApprovedHistoricalLaunchCliV2(env, {
       async finalize(databaseUrl, scope) {
-        const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
+        const pool = guardSingleConnectionPostgresPool(
+          postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+        );
         return withHistoricalLaunchCleanupV2(
           () => finalizeApprovedHistoricalProposalOnExecutionServerV2(
             bindHistoricalRunnerLoginGuardedPoolV2(pool),
@@ -125,7 +130,9 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
         );
       },
       async bootstrap(databaseUrl, manifest) {
-        const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
+        const pool = guardSingleConnectionPostgresPool(
+          postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+        );
         return withHistoricalLaunchCleanupV2(
           () => bootstrapAndQueueHistoricalSimulationOnExecutionServerV2(
             bindHistoricalRunnerLoginGuardedPoolV2(pool),

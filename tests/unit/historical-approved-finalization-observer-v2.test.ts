@@ -17,7 +17,7 @@ const scope = { organizationId: "11111111-1111-4111-8111-111111111111",
 
 beforeEach(() => {
   vi.resetAllMocks(); mocks.end.mockResolvedValue(undefined);
-  mocks.connect.mockReturnValue(Object.assign(vi.fn(), { end: mocks.end }));
+  mocks.connect.mockReturnValue(Object.assign(vi.fn(), { end: mocks.end, options: { max: 1 } }));
   // No DB call, ratification, bootstrap or consumer: execute only the actual CLI callback.
   mocks.run.mockImplementation(async (_env, dependencies) =>
     dependencies.finalize("postgresql://synthetic@example.test/test", scope));
