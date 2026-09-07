@@ -43,6 +43,28 @@ provenance:
 
 ## Work packages
 
+### Durable request acknowledgement — 2026-09-07 04:48 UTC
+
+Separate local experiment from frozen7bb650ee while its graph test runs.
+Expose explicit NOT_REQUESTED / REQUEST_RECORDED / PROPOSAL_AVAILABLE from the
+existing authenticated read path. Preserve integrity/actor/scope failures;
+absence of a proposal must not hide a malformed row. Show recorded request extent
+after polling/reload, without claiming running computation, readiness or approval.
+Bind UI review and CSRF state to the queried scope. No schema/auth/RLS changes,
+runtime execution, science changes or publication. Validate service, handler and
+component regressions, full typecheck/lint/build; full preparation remains open.
+
+Local result 2026-09-07 04:58 UTC:34 tests/5 files PASS, full TypeScript/lint/diff
+PASS. Four browser presentation cases plus Next build PASS (34.3s), including
+POST acknowledgement surviving reload with no repeated click or launch claim;
+screenshot visually inspected. SELECT-only service verification on preserved
+local synthetic35 PostgreSQL data PASS: existing exact proposal/recorded test
+approval, absent request and wrong actor. No new DB writes; FOR SHARE uses a
+normal bounded transaction. This does not prove authenticated production HTTP,
+preparation worker lifecycle or scientific qualification. The preceding frozen
+7bb650ee full35 PASS predates these read/UI changes and is not retagged as this
+follow-up's graph result. Publication and production remain blocked separately.
+
 ### Actual PostgreSQL finalization observer proof — 2026-09-07 04:15 UTC
 
 Extend only the guarded TEST_ONLY observer forwarding seam and additive original

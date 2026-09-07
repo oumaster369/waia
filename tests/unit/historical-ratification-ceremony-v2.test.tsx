@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HistoricalRatificationCeremonyV2 } from
@@ -18,6 +18,7 @@ function json(body: unknown, headers?: Record<string, string>) {
 
 describe("Historical V2 authenticated Admin launch ceremony", () => {
   it("obtains bound CSRF and requests preparation without accepting a CLI actor", async () => {
+    let recorded = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
         expect(init.headers).toMatchObject({ "x-fhv-csrf-token": "csrf-token" });
@@ -26,20 +27,73 @@ describe("Historical V2 authenticated Admin launch ceremony", () => {
           initial_record_index: 525600,
           cycle_count: 35,
         });
+        recorded = true;
         return json({ id: "request-1", contentDigestHex: "c".repeat(64) });
       }
-      return json({ proposalAvailable: false }, { "x-fhv-csrf-token": "csrf-token" });
+      return json({ proposalAvailable: false,
+        preparationState: recorded ? "REQUEST_RECORDED" : "NOT_REQUESTED",
+        ...(recorded ? { requestId: "request-1",
+          requestedExtent: { initialRecordIndex: 525600, cycleCount: 35 } } : {}) },
+      { "x-fhv-csrf-token": "csrf-token" });
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+    const view = render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
       initialReleaseSha={releaseSha}/>);
     const button = await screen.findByRole("button", { name: /request exact technical proposal/i });
+    await waitFor(() => expect(button).toBeEnabled());
     fireEvent.change(screen.getByLabelText(/initial record index/i), {
       target: { value: "525600" },
     });
     fireEvent.click(button);
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) =>
       init?.method === "POST")).toBe(true));
+    expect(await screen.findByRole("status")).toHaveTextContent("Preparation request recorded");
+    expect(screen.getByRole("status")).toHaveTextContent("does not confirm that computation is running");
+    expect(screen.queryByRole("button", { name: /request exact technical proposal/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /ratify this exact proposal/i })).toBeNull();
+    view.unmount();
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    expect(await screen.findByRole("status")).toHaveTextContent("request-1");
+    expect(screen.getByRole("status")).toHaveTextContent("35 cycles");
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
+  it("never claims recorded intent after a failed authenticated request", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input, init) => init?.method === "POST"
+      ? new Response(JSON.stringify({ error: { message: "Request refused" } }), { status: 409 })
+      : json({ preparationState: "NOT_REQUESTED", proposalAvailable: false },
+        { "x-fhv-csrf-token": "csrf-token" })));
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    const button = screen.getByRole("button", { name: /request exact technical proposal/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Request refused");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("does not display a late recorded-request response from the previous scope", async () => {
+    let finishOld!: (response: Response) => void;
+    const oldResponse = new Promise<Response>((resolve) => { finishOld = resolve; });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("run_id=old-run") ? oldResponse : json({
+        preparationState: "NOT_REQUESTED", proposalAvailable: false },
+      { "x-fhv-csrf-token": "new-token" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<HistoricalRatificationCeremonyV2 organizationId={organizationId}
+      runId="old-run" initialReleaseSha={releaseSha}/>);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    view.rerender(<HistoricalRatificationCeremonyV2 organizationId={organizationId}
+      runId="new-run" initialReleaseSha={releaseSha}/>);
+    await waitFor(() => expect(screen.getByRole("button", {
+      name: /request exact technical proposal/i })).toBeEnabled());
+    await act(async () => { finishOld(json({ preparationState: "REQUEST_RECORDED",
+      proposalAvailable: false, requestId: "OLD-REQUEST-MUST-NOT-APPEAR" },
+    { "x-fhv-csrf-token": "old-token" })); await oldResponse; });
+    expect(screen.queryByText(/OLD-REQUEST-MUST-NOT-APPEAR/)).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: /request exact technical proposal/i })).toBeEnabled();
   });
 
   it("shows exact identity and sends only the displayed proposal id and digest", async () => {

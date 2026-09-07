@@ -154,3 +154,38 @@ test("unknown requested organization cannot silently observe the first org", asy
   await expect(page.getByText("Connecting to Historical V2…")).toHaveCount(0);
   await expect(page.getByTestId("historical-ratification-ceremony-v2")).toHaveCount(0);
 });
+
+test("recorded preparation request survives reload without claiming launch readiness", async ({ page, baseURL }) => {
+  await admitLocalAdmin(page);
+  await installPresentationTransport(page);
+  let recorded = false;
+  let requests = 0;
+  await page.route("**/api/trader/admin/historical-v2/ratification?**", async route => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toEqual({
+        action: "REQUEST_EXACT_PRE_HOLDOUT_TECHNICAL_PROPOSAL",
+        initial_record_index: 525600, cycle_count: 35,
+      });
+      recorded = true; requests++;
+      await route.fulfill({ status: 201, json: { id: "request-presentation-only" } });
+      return;
+    }
+    await route.fulfill({ headers: { "x-fhv-csrf-token": "presentation-token" }, json: {
+      preparationState: recorded ? "REQUEST_RECORDED" : "NOT_REQUESTED",
+      proposalAvailable: false,
+      ...(recorded ? { requestId: "request-presentation-only",
+        requestedExtent: { initialRecordIndex: 525600, cycleCount: 35 } } : {}),
+    } });
+  });
+  await page.goto(`${baseURL!.replace("127.0.0.1", "trader.localhost")}/admin/fhv-operations?campaign_run_id=${runId}&organization_id=${organizationId}&release_sha=${"a".repeat(40)}`);
+  await page.getByRole("button", { name: "Request exact technical proposal" }).click();
+  const ceremony = page.getByTestId("historical-ratification-ceremony-v2");
+  await expect(ceremony.getByRole("status")).toContainText("Preparation request recorded");
+  await page.reload();
+  await expect(ceremony.getByRole("status")).toContainText("does not confirm that computation is running");
+  await expect(ceremony.getByRole("status")).toContainText("35 cycles");
+  await expect(ceremony.getByRole("button", { name: "Request exact technical proposal" })).toHaveCount(0);
+  await expect(ceremony.getByRole("button", { name: /ratify this exact proposal/i })).toHaveCount(0);
+  expect(requests).toBe(1);
+  await page.screenshot({ path: "test-results/historical-request-recorded.png", fullPage: true });
+});

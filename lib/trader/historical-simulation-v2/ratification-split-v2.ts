@@ -289,11 +289,31 @@ export async function readHistoricalTechnicalProposalForAdminV2(
   sql: postgres.Sql,
   input: Readonly<{ organizationId: string; runId: string; releaseSha: string;
     authenticatedOperatorUserId: string }>,
-): Promise<Readonly<{ requestId: string; proposalId: string;
-  proposal: HistoricalTechnicalProposalV2; ratified: boolean }>> {
+): Promise<Readonly<{ preparationState: "NOT_REQUESTED"; proposalAvailable: false }> |
+  Readonly<{ preparationState: "REQUEST_RECORDED"; proposalAvailable: false;
+    requestId: string; requestedExtent: HistoricalRatificationRequestV2["executionExtent"] }> |
+  Readonly<{ preparationState: "PROPOSAL_AVAILABLE"; proposalAvailable: true;
+    requestId: string; proposalId: string;
+    proposal: HistoricalTechnicalProposalV2; ratified: boolean }>> {
   assertScope(input);
   if (!UUID.test(input.authenticatedOperatorUserId)) refuse("ACTOR");
-  const request = await loadRequest(sql, input);
+  const requests = await sql<RequestRow[]>`
+    SELECT id::text AS id,request_json,content_digest_hex
+    FROM trader_historical_ratification_request_v2
+    WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
+      AND release_sha=${input.releaseSha}
+  `;
+  if (requests.length === 0) return Object.freeze({
+    preparationState: "NOT_REQUESTED", proposalAvailable: false });
+  const row = requests[0];
+  if (requests.length !== 1 || !row ||
+      row.content_digest_hex !== row.request_json.contentDigestHex) refuse("REQUEST_INTEGRITY");
+  assertSealed(row.request_json, HISTORICAL_RATIFICATION_REQUEST_V2);
+  const request = { id: row.id, request: row.request_json };
+  if (request.request.organizationId !== input.organizationId ||
+      request.request.runId !== input.runId || request.request.releaseSha !== input.releaseSha) {
+    refuse("REQUEST_SCOPE_BINDING");
+  }
   if (request.request.operatorUserId !== input.authenticatedOperatorUserId) {
     refuse("ACTOR_BINDING");
   }
@@ -304,6 +324,10 @@ export async function readHistoricalTechnicalProposalForAdminV2(
       AND release_sha=${input.releaseSha}
     FOR SHARE
   `;
+  if (proposals.length === 0) return Object.freeze({
+    preparationState: "REQUEST_RECORDED", proposalAvailable: false,
+    requestId: request.id, requestedExtent: Object.freeze({ ...request.request.executionExtent }),
+  });
   const proposal = proposals[0];
   if (proposals.length !== 1 || !proposal ||
       proposal.proposal_json.requestId !== request.id ||
@@ -319,7 +343,8 @@ export async function readHistoricalTechnicalProposalForAdminV2(
         AND proposal_content_digest_hex=${proposal.content_digest_hex}
     ) AS present
   `;
-  return Object.freeze({ requestId: request.id, proposalId: proposal.id,
+  return Object.freeze({ preparationState: "PROPOSAL_AVAILABLE", proposalAvailable: true,
+    requestId: request.id, proposalId: proposal.id,
     proposal: proposal.proposal_json, ratified: approvals[0]?.present === true });
 }
 

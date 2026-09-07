@@ -44,7 +44,10 @@ type Proposal = Readonly<{
 }>;
 
 type Review = Readonly<{
+  preparationState?: "NOT_REQUESTED" | "REQUEST_RECORDED" | "PROPOSAL_AVAILABLE";
   proposalAvailable: boolean;
+  requestId?: string;
+  requestedExtent?: Readonly<{ initialRecordIndex: number; cycleCount: number }>;
   proposalId?: string;
   proposal?: Proposal;
   ratified?: boolean;
@@ -60,8 +63,9 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
   initialReleaseSha = "" }: Readonly<{ organizationId: string; runId: string;
   initialReleaseSha?: string }>) {
   const [releaseSha, setReleaseSha] = React.useState(initialReleaseSha.toLowerCase());
-  const [review, setReview] = React.useState<Review | null>(null);
-  const [csrf, setCsrf] = React.useState("");
+  const [loaded, setLoaded] = React.useState<Readonly<{
+    endpoint: string; review: Review; csrf: string;
+  }> | null>(null);
   const [busy, setBusy] = React.useState(false);
   // The current qualified corpus has 525,600 WF_PREDICTIVE minutes.  The
   // observed run starts at the first later WF_ECONOMIC minute so the package
@@ -75,15 +79,20 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
   const endpoint = valid ? "/api/trader/admin/historical-v2/ratification?" +
     new URLSearchParams({ organization_id: organizationId, run_id: runId,
       release_sha: releaseSha }).toString() : "";
+  // A late response from another organization/run/release must never supply
+  // the currently displayed review or its mutation token.
+  const review = loaded?.endpoint === endpoint ? loaded.review : null;
+  const csrf = loaded?.endpoint === endpoint ? loaded.csrf : "";
+  const requestRecorded = review?.preparationState === "REQUEST_RECORDED";
 
-  const refresh = React.useCallback(async () => {
+  const refresh = React.useCallback(async (signal?: AbortSignal) => {
     if (!endpoint) return null;
-    const response = await fetch(endpoint, { cache: "no-store", credentials: "include" });
+    const response = await fetch(endpoint, { cache: "no-store", credentials: "include", signal });
     const token = response.headers.get("x-fhv-csrf-token") ?? "";
     if (!response.ok) throw new Error(await responseMessage(response));
     const next = await response.json() as Review;
-    setReview(next);
-    if (token) setCsrf(token);
+    if (signal?.aborted) return null;
+    setLoaded({ endpoint, review: next, csrf: token });
     setError(null);
     return { review: next, csrf: token };
   }, [endpoint]);
@@ -91,14 +100,15 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
   React.useEffect(() => {
     if (!endpoint) return;
     let stopped = false;
+    const controller = new AbortController();
     const poll = async () => {
-      try { if (!stopped) await refresh(); }
+      try { if (!stopped) await refresh(controller.signal); }
       catch (cause) { if (!stopped) setError(cause instanceof Error ? cause.message :
         "Ratification ceremony unavailable."); }
     };
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 5_000);
-    return () => { stopped = true; window.clearInterval(timer); };
+    return () => { stopped = true; controller.abort(); window.clearInterval(timer); };
   }, [endpoint, refresh]);
 
   async function post(body: Record<string, string | number>) {
@@ -129,13 +139,12 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
       <input className="border-border bg-background w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm"
         value={releaseSha} onChange={(event) => {
           setReleaseSha(event.target.value.trim().toLowerCase());
-          setReview(null);
-          setCsrf("");
+          setLoaded(null);
         }}
         placeholder="40-character Git SHA" maxLength={40}/></label>
     {!valid ? <p className="text-amber-300 text-sm">Enter the exact 40-character release SHA and a
       valid campaign run ID above.</p> : null}
-    {valid && !review?.proposalAvailable ? <div className="grid max-w-xl gap-3 sm:grid-cols-2">
+    {valid && !review?.proposalAvailable && !requestRecorded ? <div className="grid max-w-xl gap-3 sm:grid-cols-2">
       <label className="space-y-1 text-sm"><span className="font-medium">Initial record index</span>
         <input className="border-border bg-background w-full rounded-md border px-3 py-2 font-mono"
           value={initialRecordIndex} onChange={(event) => setInitialRecordIndex(event.target.value)}
@@ -146,10 +155,21 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
           inputMode="numeric" /></label>
     </div> : null}
     {error ? <p className="text-destructive text-sm" role="alert">{error}</p> : null}
-    {valid && !review?.proposalAvailable ? <div className="space-y-2">
+    {valid && requestRecorded ? <div className="space-y-2" role="status">
+      <p className="text-sm font-semibold">Preparation request recorded</p>
+      <p className="text-muted-foreground text-sm">Your authenticated request is stored.
+        The technical proposal is not available yet. This does not confirm that computation
+        is running or that the historical test can start. This page checks automatically;
+        no additional request click is needed.</p>
+      <p className="text-muted-foreground text-xs">Request: {review.requestId}</p>
+      {review.requestedExtent ? <p className="text-muted-foreground text-xs">
+        Requested extent: initial record {review.requestedExtent.initialRecordIndex}
+        {" · "}{review.requestedExtent.cycleCount} cycles</p> : null}
+    </div> : null}
+    {valid && !review?.proposalAvailable && !requestRecorded ? <div className="space-y-2">
       <p className="text-muted-foreground text-sm">No technical proposal exists yet. This action
         records your authenticated request; the execution host then prepares the exact evidence.</p>
-      <Button type="button" disabled={busy || !extentValid} onClick={() => post({
+      <Button type="button" disabled={busy || !extentValid || !review || Boolean(error)} onClick={() => post({
         action: REQUEST_ACTION, initial_record_index: Number(initialRecordIndex),
         cycle_count: Number(cycleCount),
       })}>
