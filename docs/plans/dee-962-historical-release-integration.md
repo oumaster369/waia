@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-GATES
-  completedWorkPackages: [WP-INVENTORY, WP-LOCAL-COMPATIBILITY]
-  remainingWorkPackages: [WP-GATES, WP-FINAL-REVIEW, WP-PR]
+  status: integration-ready
+  currentWorkPackage: WP-PR
+  completedWorkPackages: [WP-INVENTORY, WP-LOCAL-COMPATIBILITY, WP-GATES, WP-FINAL-REVIEW]
+  remainingWorkPackages: [WP-PR]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
+  lastValidatedGitSha: efc2a57ee5c18f32479a471a05f2b0469501a070
   lastValidationAt: "2026-09-07T10:58:00Z"
   blockedReason: null
-  nextAction: "Validate additive PostgreSQL17 CI job and freeze reviewed integration candidate; no merge or deployment."
+  nextAction: "Publish one review PR and collect exact-head CI; no merge or deployment."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -112,9 +112,10 @@ or646 adaptive research are included.
 - [x] Canon146documents and release-identity validation pass; inherited metadata format corrected.
 - [x] Obtain and implement CI coverage correction:0204 PG17, actionable Forecast persistence,
       portable dataset-identity and reserved-session-close regression gates.
-- [ ] Frozen candidate targeted tests, applicable E2E and independent review without unresolved P1/P2.
+- [x] Frozen candidate targeted tests, applicable E2E and bounded integration review: no known source-integration P1/P2.
 - [ ] Required exact-head PR CI; synthetic upstream tests explicitly not full-corpus qualification.
-- [ ] PR governance preflight and one PR to main only after integration-ready conditions.
+- [x] PR governance preflight passed; local integration-ready conditions met.
+- [ ] Publish one PR to main and collect exact-head gates; this is not production readiness.
 - [ ] Human merge decision; no automatic merge authority asserted.
 
 Production acceptance is separate and remains pending: exact-SHA approved rollout,
@@ -151,6 +152,11 @@ Portable regression uses three synthetic bars and a synthetic upstream receipt,
 not real scientific qualification. Actual source loader and registration are unmocked.
 Agent mutation check failed1/3 with random IDs; mutation removed, final3/3PASS.
 Focused lint/full typecheck passed. Root inspected the complete new192-line test.
+Final bounded integration review on efc2a57ee5c18f32479a471a05f2b0469501a070
+found no known unresolved source-integration P1/P2 blocking review-PR publication.
+Product/migration/host bytes match audited7b556, required producer/consumer/migration
+closure preserved, and all three CI gaps addressed. This is not a whole-Trader
+certificate or full-corpus acceptance. Governance preflight and regression suite PASS.
 Browser4/4PASS after creating the missing local SQLite directory; original setup
 failure retained. Root-owned Next server stopped; no production observations inferred.
 Canon initially rejected seven formatting errors across six inherited plans;
