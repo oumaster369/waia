@@ -160,7 +160,10 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
     } catch (cause) {
       if (signal?.aborted || sequence < settledRefreshSequence.current) return null;
       settledRefreshSequence.current = sequence;
-      throw cause;
+      // Apply the accepted outcome at the same fence. A later outer catch
+      // could otherwise overwrite a newer success in another microtask.
+      setError(cause instanceof Error ? cause.message : "Ratification ceremony unavailable.");
+      return null;
     }
   }, [endpoint]);
 
@@ -169,9 +172,7 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
     let stopped = false;
     const controller = new AbortController();
     const poll = async () => {
-      try { if (!stopped) await refresh(controller.signal); }
-      catch (cause) { if (!stopped) setError(cause instanceof Error ? cause.message :
-        "Ratification ceremony unavailable."); }
+      if (!stopped) await refresh(controller.signal);
     };
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 5_000);
@@ -183,6 +184,7 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
     setBusy(true); setError(null);
     try {
       const context = csrf ? { csrf } : await refresh();
+      if (!context) return;
       const token = context?.csrf ?? "";
       if (!token) throw new Error("Authenticated CSRF ceremony could not be established.");
       const response = await fetch(endpoint, { method: "POST", credentials: "include",

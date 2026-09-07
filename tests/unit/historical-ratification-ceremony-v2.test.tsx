@@ -155,6 +155,39 @@ describe("Historical V2 authenticated Admin launch ceremony", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByRole("button", { name: /request exact technical proposal/i })).toBeDisabled();
   });
+  it.each(["401", "500", "network"].flatMap(kind => [false, true].flatMap(newerFails =>
+    [false, true].map(reverseResolution => ({ kind, newerFails, reverseResolution })))))
+  ("settles same-turn outcomes atomically: $kind newerFails=$newerFails reverse=$reverseResolution", async ({ kind, newerFails, reverseResolution }) => {
+    const pending = [0, 1].map(() => {
+      let resolve!: (value: Response) => void, reject!: (cause: Error) => void;
+      const promise = new Promise<Response>((yes, no) => { resolve = yes; reject = no; });
+      return { promise, resolve, reject };
+    });
+    const interval = vi.spyOn(window, "setInterval");
+    const fetchMock = vi.fn().mockReturnValueOnce(pending[0]!.promise).mockReturnValueOnce(pending[1]!.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    const tick = interval.mock.calls[0]![0] as () => void;
+    await act(async () => { tick(); });
+    const settle = (index: number) => {
+      const fails = newerFails ? index === 1 : index === 0;
+      if (!fails) pending[index]!.resolve(json({ preparationState: "REQUEST_RECORDED", proposalAvailable: false }));
+      else if (kind === "network") pending[index]!.reject(new Error("FAILURE-EVIDENCE"));
+      else pending[index]!.resolve(new Response(JSON.stringify({ error: { message: "FAILURE-EVIDENCE" } }), { status: Number(kind) }));
+    };
+    await act(async () => {
+      // No await between resolutions: this covers the outer-catch microtask race.
+      for (const index of reverseResolution ? [1, 0] : [0, 1]) settle(index);
+      await Promise.allSettled(pending.map(item => item.promise));
+    });
+    if (newerFails) expect(screen.getByRole("alert")).toHaveTextContent("FAILURE-EVIDENCE");
+    else {
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("status")).toHaveTextContent("Preparation request recorded");
+    }
+  });
+
   it("obtains bound CSRF and requests preparation without accepting a CLI actor", async () => {
     let recorded = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

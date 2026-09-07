@@ -79,3 +79,13 @@ Reviewer then reproduced the reverse ordering: newer failure followed by older
 success cleared that failure. Fence now tracks latest accepted SETTLED outcome
 (success or error), never merely-issued requests. Added401/500/network tests in
 both directions;19ceremony tests pass. The failure remains until a newer response.
+
+The next independent review found a same-turn microtask race in96340d6:
+the accepted error advanced the fence inside refresh, but an outer poll catch
+could apply that error after a newer success. Refresh now applies both the
+accepted fence and error synchronously in its own catch and returns null;
+polling and the pre-CSRF POST path do not rethrow or rewrite that refresh error.
+Twelve additional regressions settle both promises in the same act without an
+intermediate await (401/500/network, both newer outcomes, both resolution orders).
+All31ceremony tests pass. The previous96340 Next/OpenNext and local-browser
+passes remain prior-head evidence only, pending corrected-head review/build.
