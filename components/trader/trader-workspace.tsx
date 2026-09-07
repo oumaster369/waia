@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
+import { TraderSignOut } from "@/components/trader/trader-sign-out";
 import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
 import type { BalanceSnapshotDto } from "@/lib/trader/balances/types";
 import type { PositionSnapshotDto } from "@/lib/trader/positions/types";
@@ -524,6 +525,7 @@ function ExchangeTraderWorkspace() {
           <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">
             User observation workspace
           </span>
+          <TraderSignOut />
         </div>
         <h1
           data-testid="trader-workspace-title"
@@ -724,6 +726,7 @@ function HistoricalTraderWorkspace(): React.ReactNode {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
           <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">Historical simulation workspace</span>
+          <TraderSignOut />
         </div>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">AI-TRADER</h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm">Observe your tenant-scoped historical simulation automatically. No exchange credentials, real balances, live trading, or capital controls are loaded.</p>

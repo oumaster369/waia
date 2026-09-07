@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signUpAndOpenDashboard } from "./helpers/auth-dashboard";
 import { signInOnLanding } from "./helpers/trader-host-auth";
 import { grantTraderEntitlementByUserEmail } from "./helpers/trader-sqlite";
+import { grantPlatformAdminByUserEmail } from "./helpers/treasury-admin-sqlite";
 
 const TRADER_PASSWORD = "password123!";
 const STATIC_SHELL_RUN_ID = "e2e-static-shell";
@@ -66,6 +67,55 @@ async function gotoExpectingCrossHostRedirect(
 }
 
 test.describe("trader host routing (AT-E1 S2)", () => {
+  test("offers sign-out in exchange and historical workspaces and retains failures", async ({ page }) => {
+    for (const path of ["/trader", "/trader?campaign_run_id=e2e-sign-out"]) {
+      await page.goto(path);
+      const signOut = page.getByRole("button", { name: "Sign out", exact: true });
+      await expect(signOut).toBeVisible();
+      await page.route("**/api/auth/sign-out", (route) => route.fulfill({ status: 503, json: { ok: false } }));
+      await signOut.click();
+      await expect(page.getByRole("alert").filter({ hasText: "Sign out could not be confirmed" })).toBeVisible();
+      await expect(signOut).toBeEnabled();
+      expect(new URL(page.url()).pathname).toBe("/trader");
+      await page.unroute("**/api/auth/sign-out");
+      await signOut.click();
+      await expect(page).toHaveURL("/");
+    }
+  });
+
+  test("signs out an entitled SQLite session and denies subsequent protected reads", async ({ page, baseURL, browser }) => {
+    const email = `e2e-trader-sign-out-${Date.now()}@example.com`;
+    const primaryContext = await browser.newContext({ baseURL: primaryBaseUrl(baseURL) });
+    try {
+      await signUpAndOpenDashboard(await primaryContext.newPage(), email);
+    } finally { await primaryContext.close(); }
+    grantTraderEntitlementByUserEmail(email);
+    await signInOnLanding(page, email, TRADER_PASSWORD);
+    await page.waitForURL("**/trader");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page).toHaveURL("/");
+    await expectProtectedObserverApisFailClosed(page, 401);
+    await page.goto("/trader");
+    await expectStaticShellContainsNoProtectedData(page);
+    await expectProtectedObserverApisFailClosed(page, 401);
+  });
+
+  test("signs out from the admin console and removes protected access", async ({ page, baseURL, browser }) => {
+    const email = `e2e-trader-admin-sign-out-${Date.now()}@example.com`;
+    const primaryContext = await browser.newContext({ baseURL: primaryBaseUrl(baseURL) });
+    try { await signUpAndOpenDashboard(await primaryContext.newPage(), email); }
+    finally { await primaryContext.close(); }
+    grantTraderEntitlementByUserEmail(email);
+    grantPlatformAdminByUserEmail(email);
+    await signInOnLanding(page, email, TRADER_PASSWORD);
+    await page.waitForURL("**/trader");
+    await page.goto("/admin");
+    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page).toHaveURL("/");
+    await expectProtectedObserverApisFailClosed(page, 401);
+  });
+
   test("renders landing on trader host root when unauthenticated", async ({ page, baseURL }) => {
     await page.goto("/");
     await expect(page).toHaveURL("/");
