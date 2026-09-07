@@ -118,6 +118,8 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
           () => finalizeApprovedHistoricalProposalOnExecutionServerV2(
             bindHistoricalRunnerLoginGuardedPoolV2(pool),
             scope,
+            { signal: controller.signal,
+              onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); } },
           ),
           [() => pool.end({ timeout: 5 })],
         );

@@ -542,8 +542,10 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
   pool: postgres.Sql,
   scope: Readonly<{ organizationId: string; runId: string; releaseSha: string }>,
   materialize: typeof INTERNAL_materializeApprovedHistoricalFourSurfaceCandidateV2,
+  requestedObserver: TechnicalPreparationObserverV2 = {},
 ): Promise<Readonly<{ authorityId: string; manifest: HistoricalExecutionServerBootstrapManifestV2 }>> {
   assertScope(scope);
+  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
   const reserved = await pool.reserve();
   const sql = bindPostgresReservedSession(pool, reserved);
   let assumed = false;
@@ -554,6 +556,7 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
     const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
     await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
     locked = true;
+    assertTechnicalPreparationActiveV2(observer);
     const proposals = await sql<ProposalRow[]>`
         SELECT id::text AS id,proposal_json,content_digest_hex
         FROM trader_historical_technical_proposal_v2
@@ -601,7 +604,9 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
         { proposalId: proposal.id, proposalContentDigestHex: proposal.content_digest_hex,
           technicalCandidateContentDigestHex:
             proposal.proposal_json.technicalCandidateContentDigestHex },
+        observer,
       )).authority.contentDigestHex;
+    assertTechnicalPreparationActiveV2(observer);
     const authority = await requireHistoricalFourSurfaceRatifiedAdmissionV2(sql, {
         organizationId: scope.organizationId,
         runId: scope.runId,
@@ -659,9 +664,10 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
 export function finalizeApprovedHistoricalProposalOnExecutionServerV2(
   pool: postgres.Sql,
   scope: Readonly<{ organizationId: string; runId: string; releaseSha: string }>,
+  observer: TechnicalPreparationObserverV2 = {},
 ) {
   return finalizeApprovedHistoricalProposalWithMaterializerV2(
-    pool, scope, INTERNAL_materializeApprovedHistoricalFourSurfaceCandidateV2,
+    pool, scope, INTERNAL_materializeApprovedHistoricalFourSurfaceCandidateV2, observer,
   );
 }
 

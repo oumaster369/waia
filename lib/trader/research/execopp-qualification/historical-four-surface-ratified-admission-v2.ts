@@ -2127,6 +2127,7 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     technicalCandidateContentDigestHex: string;
   }>,
   dependencies: AuthenticatedRatificationDependenciesV2,
+  requestedObserver: TechnicalPreparationObserverV2 = {},
 ): Promise<Readonly<{ id: string; insertedNew: boolean;
   authority: HistoricalFourSurfaceRatifiedAdmissionV2 }>> {
   if (!UUID.test(authenticatedOperatorUserId) ||
@@ -2134,6 +2135,7 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     refuse("AUTHENTICATED_SESSION");
   }
   if (!input.executionExtent) refuse("APPROVED_EXECUTION_EXTENT");
+  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
   // Rebuild the capability object explicitly. TypeScript's structural typing permits
   // a caller to pass a richer launch plan; spreading that object into the durable
   // authority would silently widen the Human-approved execution capability.
@@ -2156,8 +2158,9 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     // would mint fresh timestamps/IDs for the same natural identity and is neither
     // deterministic nor necessary. Load and fully replay-validate that durable receipt.
     const prepared = await loadFrozenTechnicalAggregateV2(transaction, candidate);
+    emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "FINALIZATION_REPLAY" });
     const technical = await buildTechnicalSurfaceCandidatesV2({
-      preflight: input.preflight, prepared, qualification: receipt, dependencies,
+      preflight: input.preflight, prepared, qualification: receipt, dependencies, observer,
     });
     const replayed = sealTechnicalCandidateV2({
       preflight: input.preflight, prepared, qualification: receipt,
@@ -2211,10 +2214,11 @@ export function INTERNAL_materializeApprovedHistoricalFourSurfaceCandidateV2(
     proposalContentDigestHex: string;
     technicalCandidateContentDigestHex: string;
   }>,
+  observer: TechnicalPreparationObserverV2 = {},
 ) {
   return materializeApprovedCandidateWithHeldConnectionV2(
     sql, input, authenticatedOperatorUserId, candidate, approvedProposal,
-    productionRatificationDependenciesV2,
+    productionRatificationDependenciesV2, observer,
   );
 }
 
