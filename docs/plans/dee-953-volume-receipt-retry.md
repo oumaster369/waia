@@ -56,3 +56,15 @@ First reproduce with a real qualified receipt and a reordered persisted object. 
 - Actual isolated PostgreSQL 17: one rollback-only integration test passes (68 ms), covering durable same-ID retry, cross-tenant independent records, changed extra field refusal and invalid digest refusal. No production database was accessed.
 - Full repository lint, typecheck and Next production build pass. Existing lint warnings remain; no claim of warning-free code. This is not a Cloudflare deployment.
 - The PostgreSQL CI workflow now includes the retry test and both trigger paths; its existing PostgreSQL 16 version is unchanged. Remote CI and independent review remain pending.
+
+### CI inventory correction — 2026-09-07
+
+At head 61df96e2, PostgreSQL CI passed; the unit gate had one failure:
+Reality V2 source content inventory drift (5,855 tests passed, 492 skipped).
+The focused test reproduced the same failure locally. The 154 source paths and
+path digest are unchanged. Recomputing from exact base b5c1726 reproduces the old
+content digest; the only changed source is this issue's receipt persistence file.
+After reviewing that change, refresh only sourceDiscovery.sortedContentDigestHex
+to bind the reviewed implementation. Keep the validator, rules, counts, consumer
+digest, connector checks and all assertions unchanged. This is an inventory
+maintenance correction, not a waiver or a change to Reality admission.
