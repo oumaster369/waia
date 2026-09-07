@@ -114,11 +114,17 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 124,
-    "sortedPathDigestHex": "b394bbd99341c0a868dc3b2e05a6743163a67fec8d70103de70cde858c9f082d",
-    "sortedContentDigestHex": "4c2cb039be5a5b0e15a294ee99293b01cd2865d841b54fd0794616a7693c7cc9"
+    "expectedFileCount": 126,
+    "sortedPathDigestHex": "e76db0804a5b5a0d6d0cfc18750ed6e1479f7d938303f34d98d7f44bf9009832",
+    "sortedContentDigestHex": "ab54ea1e7741d4471688e9db5bd7252eb422426b16b631635c03cc048f71fe43"
   },
   "consumerRules": [
+    {
+      "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",
+      "pathPattern": "^lib/trader/account-observation/(service|types)\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "Read-only normalized account DTO collection is not canonical Reality ingress or execution authority; no raw-capture lineage is admitted by these two files."
+    },
     {
       "id": "REALITY_BOUNDARY",
       "pathPattern": "^lib/trader/reality/",

@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 
 import {
   assertConnectorReferenceClosure,
@@ -22,11 +23,62 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(JSON.parse(output)).toEqual(expect.objectContaining({
       status: "PASS",
       sources: 154,
-      consumers: 124,
+      consumers: 126,
       connectorReferences: 25,
       sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
     }));
+  });
+
+  it("excludes exactly the two normalized account-observation consumers without Reality or venue-write authority", () => {
+    const inventory = JSON.parse(readFileSync(INVENTORY, "utf8")) as {
+      consumerRules: { id: string; pathPattern: string; disposition: string }[];
+      admittedBoundaryFiles: string[];
+    };
+    const rule = inventory.consumerRules.find(item => item.id === "ACCOUNT_OBSERVATION_NORMALIZED_DTOS")!;
+    expect(rule).toMatchObject({
+      pathPattern: "^lib/trader/account-observation/(service|types)\\.ts$",
+      disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+    });
+    const paths = ["lib/trader/account-observation/service.ts", "lib/trader/account-observation/types.ts"];
+    const candidatePaths = readdirSync(join(ROOT, "lib/trader/account-observation"))
+      .map(file => `lib/trader/account-observation/${file}`);
+    expect(candidatePaths.filter(file => new RegExp(rule.pathPattern).test(file)).sort()).toEqual(paths);
+    for (const file of paths) {
+      expect(inventory.consumerRules.filter(item => new RegExp(item.pathPattern).test(file))).toEqual([rule]);
+      expect(inventory.admittedBoundaryFiles).not.toContain(file);
+      const body = readFileSync(join(ROOT, file), "utf8");
+      const ast = ts.createSourceFile(file, body, ts.ScriptTarget.Latest, true);
+      for (const statement of ast.statements) {
+        if (ts.isImportDeclaration(statement)) {
+          expect(statement.importClause?.isTypeOnly).toBe(true);
+          expect(["@/lib/trader/connectors/types", "./types"]).toContain(
+            (statement.moduleSpecifier as ts.StringLiteral).text,
+          );
+        }
+      }
+      expect(detectConnectorMethodReferencesInSource(body, file, [
+        "placeOrder", "cancelOrder", "amendOrder", "submitOrder", "getAccountInfo",
+        "getBalances", "getPositions", "getOpenOrders", "getOrder", "getTradeHistory",
+      ])).toEqual([]);
+      expect(body).not.toMatch(/import\s*\(|require\s*\(|(?:globalThis|window)\.fetch/);
+      // The service's local `fetch` parameter is an injected read callback, not global fetch.
+      const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "fetch") {
+          let enclosing: ts.Node | undefined = node.parent;
+          while (enclosing && !ts.isFunctionDeclaration(enclosing)) enclosing = enclosing.parent;
+          expect(enclosing && ts.isFunctionDeclaration(enclosing) &&
+            enclosing.parameters.some(parameter => ts.isIdentifier(parameter.name) && parameter.name.text === "fetch"))
+            .toBe(true);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(ast);
+    }
+    for (const file of ["lib/trader/account-observation/ingress.ts", "lib/trader/account-observation/service.tsx",
+      "lib/trader/account-observation/types.ts/other.ts"]) {
+      expect(new RegExp(rule.pathPattern).test(file)).toBe(false);
+    }
   });
 
   it("binds historical, synthetic, modelled, and Execution V2 barrel surfaces into closure", () => {
