@@ -358,6 +358,23 @@ describe("DEE-946 bounded input AND authorized-outcome wire", () => {
     expect(Buffer.byteLength(JSON.stringify(outcomeWire))).toBeLessThan(50_000);
   });
 
+  it.each([null, {}, { authority: null }, { authority: [] },
+    { status: "FORECAST_AUTHORIZED", authority: { contentDigestHex: "a".repeat(64) } },
+  ])("rejects malformed persisted authority before package hydration: %j", async (wire) => {
+    transport.hydrate.mockClear();
+    await expect(hydrateForecastAuthorizedOutcomeWireV1({} as never, wire as never,
+      { organizationId: "org", packageId: "package" }))
+      .rejects.toThrow("FORECAST_RUNTIME_AUTHORITY_INVALID");
+    expect(transport.hydrate).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, null, [], "invalid"])("rejects malformed issuance with valid authority: %j", async (issuance) => {
+    const { outcome, scope } = wireFixture();
+    await expect(hydrateForecastAuthorizedOutcomeWireV1({} as never,
+      { ...outcome, issuance } as never, scope)).rejects.toThrow("ISSUANCE_SHAPE");
+    expect(transport.hydrate).not.toHaveBeenCalled();
+  });
+
   it("does not inspect corpus or pools when serializing admitted references", () => {
     const { input, outcome, reference } = wireFixture();
     const pkg = { ...input.predictivePackage! };

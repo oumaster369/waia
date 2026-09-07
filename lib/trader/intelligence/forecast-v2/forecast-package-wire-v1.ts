@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type postgres from "postgres";
 import {
   reviveForecastRuntimeJsonV2,
+  requireForecastRuntimeAuthorityV2,
   type ForecastRuntimeInputV2,
   type ForecastRuntimeAuthorizedOutcomeV2,
 } from "./forecast-runtime-authority-v2";
@@ -238,6 +239,15 @@ export async function hydrateForecastAuthorizedOutcomeWireV1(
   wire: ForecastAuthorizedOutcomeWireV1 | ForecastRuntimeAuthorizedOutcomeV2,
   scope: ForecastPackageWireScopeV1,
 ): Promise<ForecastRuntimeAuthorizedOutcomeV2> {
+  // Persisted JSON is untrusted despite this transport type. Preserve the
+  // canonical authority rejection before destructuring or loading a package.
+  if (!wire || typeof wire !== "object" || !wire.authority ||
+      typeof wire.authority !== "object" || Array.isArray(wire.authority)) {
+    throw new Error("FORECAST_RUNTIME_AUTHORITY_INVALID");
+  }
+  requireForecastRuntimeAuthorityV2(cloneBoundedForecastWireJsonV1(wire.authority));
+  if (!wire.issuance || typeof wire.issuance !== "object" || Array.isArray(wire.issuance))
+    refused("ISSUANCE_SHAPE");
   const { issuance, ...rest } = wire;
   const { package: pkg, ...issuanceMetadata } = issuance;
   const metadata = reviveForecastRuntimeJsonV2(
