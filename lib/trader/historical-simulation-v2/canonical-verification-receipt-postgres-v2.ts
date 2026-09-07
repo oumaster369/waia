@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { historicalDatasetRegistrationIdentityV2 } from "./dataset-registration-identity-v2";
 
 import {
   validateCashEconomicAuthorityV1,
@@ -541,13 +542,17 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         const body = { organizationId: input.organizationId, runId: input.runId,
           membership, sealedCycle: cycle };
         const authorityDigest = computeStableJsonDigest(body);
+        const registrationId = historicalDatasetRegistrationIdentityV2({
+          organizationId: input.organizationId, runId: input.runId,
+          cycleId: cycle.cycleId, authorityContentDigestHex: authorityDigest,
+        });
         const inserted = await tx<{ id: string }[]>`
         INSERT INTO trader_historical_dataset_authority_v2 (
-          organization_id, run_id, cycle_id, dataset_authority_class, dataset_authority_digest_hex,
+          id, organization_id, run_id, cycle_id, dataset_authority_class, dataset_authority_digest_hex,
           membership_content_digest_hex, sealed_cycle_content_digest_hex,
           membership_json, sealed_cycle_json, authority_content_digest_hex, schema_version
         ) VALUES (
-          ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId},
+          ${registrationId}::uuid, ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId},
           ${membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2"}, ${datasetAuthorityDigestHex},
           ${membership.contentDigestHex}, ${cycle.contentDigestHex},
           ${JSON.stringify(membership)}::text::jsonb,
