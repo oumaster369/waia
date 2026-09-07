@@ -2234,12 +2234,13 @@ export function TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2(
     technicalCandidateContentDigestHex: string;
   }>,
   dependencies: AuthenticatedRatificationDependenciesV2,
+  observer: TechnicalPreparationObserverV2 = {},
 ) {
   if (process.env.NODE_ENV !== "test" || process.env.VITEST !== "true") {
     refuse("TEST_ONLY_RUNTIME");
   }
   return materializeApprovedCandidateWithHeldConnectionV2(
-    sql, input, authenticatedOperatorUserId, candidate, approvedProposal, dependencies,
+    sql, input, authenticatedOperatorUserId, candidate, approvedProposal, dependencies, observer,
   );
 }
 

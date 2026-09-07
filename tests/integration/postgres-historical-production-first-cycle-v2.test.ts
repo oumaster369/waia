@@ -760,14 +760,25 @@ describe.skipIf(!enabled || !url || !disposable)(
         authenticatedOperatorUserId: userId,
         humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2,
       });
+      const finalizationProgress: Array<Record<string, unknown>> = [];
       const finalized = await TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
         pool,
         { organizationId, runId, releaseSha: RELEASE_SHA },
-        (sql, input, actor, candidate, approvedProposal) =>
+        (sql, input, actor, candidate, approvedProposal, observer) =>
           TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2(
-            sql, input, actor, candidate, approvedProposal, testDependencies,
+            sql, input, actor, candidate, approvedProposal, testDependencies, observer,
           ),
+        { onProgress: event => { finalizationProgress.push(event); } },
       );
+      expect(finalizationProgress[0]).toMatchObject({ phase: "FINALIZATION_REPLAY" });
+      expect(finalizationProgress.every(event => event.organizationId === organizationId &&
+        event.runId === runId && event.releaseSha === RELEASE_SHA && event.authorityGranted === false)).toBe(true);
+      expect(finalizationProgress.filter(event => event.phase === "SURFACE_LOAD")).toHaveLength(4);
+      expect(finalizationProgress.filter(event => event.phase === "FORECAST_ANCHORS" &&
+        event.completed === event.total)).toHaveLength(4);
+      expect(finalizationProgress.filter(event => event.phase === "VALIDATION_RESAMPLES" &&
+        event.completed === 10_000 && event.total === 10_000)).toHaveLength(20);
+      const eventsBeforeRetry = finalizationProgress.length;
       const humanRowsBeforeRetry = await pool<Array<Readonly<{
         surface_receipts: string; validated_lifecycles: string;
       }>>>`
@@ -789,8 +800,10 @@ describe.skipIf(!enabled || !url || !disposable)(
           pool,
           { organizationId, runId, releaseSha: RELEASE_SHA },
           () => { throw new Error("FINALIZER_RETRY_MUST_NOT_REMATERIALIZE"); },
+          { onProgress: event => { finalizationProgress.push(event); } },
         );
       expect(finalizedRetry).toEqual(finalized);
+      expect(finalizationProgress).toHaveLength(eventsBeforeRetry);
       const humanRowsAfterRetry = await pool<Array<Readonly<{
         surface_receipts: string; validated_lifecycles: string;
       }>>>`

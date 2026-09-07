@@ -43,6 +43,18 @@ provenance:
 
 ## Work packages
 
+### Actual PostgreSQL finalization observer proof — 2026-09-07 04:15 UTC
+
+Extend only the guarded TEST_ONLY observer forwarding seam and additive original
+integration beforeAll assertions. Verify four surface/Forecast completions and
+twenty full-B comparison completions, exact scope and no authority granted by
+events; existing-authority retry must emit no replay. Keep upstream synthetic
+K/M qualification and every existing authority/recovery assertion explicit.
+Run the original first recovery case plus its complete setup in a new disposable
+local database; not the dependent35-cycle case alone, not a full-suite PASS.
+TypeScript/scoped lint/diff pass before the frozen local test commit. PostgreSQL
+result is pending and will be recorded separately, with original failures retained.
+
 ### Finalization cancellation/progress — 2026-09-07 04:05 UTC
 
 The approved-launch CLI installs SIGTERM/SIGINT handlers but currently forwards

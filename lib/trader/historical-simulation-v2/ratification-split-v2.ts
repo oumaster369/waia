@@ -675,9 +675,10 @@ export function TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
   pool: postgres.Sql,
   scope: Readonly<{ organizationId: string; runId: string; releaseSha: string }>,
   materialize: typeof INTERNAL_materializeApprovedHistoricalFourSurfaceCandidateV2,
+  observer: TechnicalPreparationObserverV2 = {},
 ) {
   if (process.env.NODE_ENV !== "test" || process.env.VITEST !== "true") {
     refuse("TEST_ONLY_RUNTIME");
   }
-  return finalizeApprovedHistoricalProposalWithMaterializerV2(pool, scope, materialize);
+  return finalizeApprovedHistoricalProposalWithMaterializerV2(pool, scope, materialize, observer);
 }
