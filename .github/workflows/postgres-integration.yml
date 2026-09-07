@@ -1,6 +1,8 @@
 # Postgres integration checks (DEE-64 D6-pre; restored DEE-287).
 # Applies every Postgres migration from an empty DB through the latest journal
 # entry against bare postgres:16-alpine, then runs the driver smoke.
+# An additional PostgreSQL 17 job exercises preparation diagnostics and the
+# previously omitted real-database regressions; it does not replace the 16 gate.
 #
 # Triggers:
 #   * workflow_dispatch — manual full run from the Actions tab.
@@ -55,7 +57,22 @@ on:
       - "tests/integration/postgres-historical-simulation-atomic-cycle-v2.test.ts"
       - "tests/integration/postgres-historical-observable-read-model-v2.test.ts"
       - "tests/integration/postgres-historical-runner-least-privilege-v2.test.ts"
+      - "tests/integration/postgres-predictive-package-storage-v1.test.ts"
+      - "tests/integration/postgres-forecast-v2-persistence.test.ts"
+      - "tests/integration/postgres-historical-dataset-registration-portable-v2.test.ts"
+      - "tests/integration/historical-preparation-events-v2.test.ts"
+      - "tests/integration/postgres-reserved-close-guard.test.ts"
+      - "lib/trader/intelligence/forecast-v2/**"
+      - "db/postgres-reserved-close-guard.ts"
+      - "db/postgres-client.ts"
+      - "db/postgres-session-transaction.ts"
+      - "scripts/ops/provision-historical-runner-login.mjs"
+      - "lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1.ts"
+      - "lib/trader/intelligence/forecast-v2/predictive-package-codec-v1.ts"
       - "tests/unit/postgres-session-transaction-v2.test.ts"
+      - "tests/unit/historical-postgres-ci-cli-profile.test.ts"
+      - "lib/trader/observability/fhv-v2-postgres-schema-preflight.ts"
+      - "tests/unit/fhv-v2-postgres-schema-preflight.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
 
@@ -99,10 +116,15 @@ jobs:
         run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
       - name: Drizzle + postgres-js smoke (insert/select/delete, FK-safe)
         run: pnpm db:smoke:postgres
+      - name: Historical complete migration journal regression
+        run: pnpm test --run tests/unit/fhv-v2-postgres-schema-preflight.test.ts
       - name: DEE-651 TEST_ONLY Decision → Risk → Execution V2 proof
         env:
           WAIA_PG_INTEGRATION: "1"
           FHV_TEST_ONLY_EXECUTION_V2_AUTHORITY: "1"
+          # The real server-only preparation observer requires the same Node
+          # CLI profile used by production entrypoints; this grants no authority.
+          WAIA_TRADER_CLI: "1"
         run: >-
           pnpm test --run --no-file-parallelism
           tests/unit/control-replay-scientific-v2-driver-v1.test.ts
@@ -125,4 +147,63 @@ jobs:
           tests/integration/postgres-historical-simulation-atomic-cycle-v2.test.ts
           tests/integration/postgres-historical-observable-read-model-v2.test.ts
           tests/integration/postgres-historical-runner-least-privilege-v2.test.ts
+          tests/integration/postgres-predictive-package-storage-v1.test.ts
           tests/unit/postgres-session-transaction-v2.test.ts
+          tests/unit/historical-postgres-ci-cli-profile.test.ts
+
+  historical-postgres17:
+    name: PostgreSQL 17 historical regression guard
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_it
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_it"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and full migrations on PostgreSQL 17
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Create isolated connection-close fixture database
+        # Fixed synthetic CI URL, never a production secret or copied dataset.
+        run: |
+          node --input-type=module <<'NODE'
+          import postgres from 'postgres';
+          const sql = postgres('postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it', { max: 1 });
+          try {
+            await sql.unsafe('CREATE DATABASE waia_test_dee962_close TEMPLATE template0');
+          } finally {
+            await sql.end({ timeout: 5 });
+          }
+          NODE
+      - name: Real Forecast persistence, portable identity and reserved disconnect
+        env:
+          WAIA_PG_INTEGRATION: "1"
+          WAIA_TEST_POSTGRES_SESSION_CLOSE_URL: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_test_dee962_close
+        run: >-
+          pnpm test --run --no-file-parallelism
+          tests/integration/postgres-forecast-v2-persistence.test.ts
+          tests/integration/postgres-historical-dataset-registration-portable-v2.test.ts
+          tests/integration/postgres-reserved-close-guard.test.ts
+      - name: Restricted-owner preparation journal and actual two-connection runner LOGIN
+        # Must follow full migrations (runner role exists) and other suites:
+        # this isolated fixture provisions a cluster-level LOGIN of its own.
+        env:
+          WAIA_TEST_DEE958_PG_ADMIN_URL: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
+        run: pnpm test --run tests/integration/historical-preparation-events-v2.test.ts

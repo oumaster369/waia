@@ -57,7 +57,7 @@ function jsonRoundTrip<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function assertPermittedAbstention(
+export function assertPermittedAbstention(
   runtimeInput: ForecastRuntimeInputV2,
   outcome: ForecastRuntimeNonActionableV2,
 ): void {

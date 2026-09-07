@@ -104,7 +104,8 @@ describe("Historical V2 split Admin ratification", () => {
   });
 
   it("exposes the digest-sealed proposal only after authenticated audit authorization", async () => {
-    const read = vi.fn(async () => ({ requestId: "request-1", proposalId,
+    const read = vi.fn(async () => ({ preparationState: "PROPOSAL_AVAILABLE",
+      proposalAvailable: true, requestId: "request-1", proposalId,
       proposal: { contentDigestHex: proposalDigest }, ratified: false }));
     const result = await handleHistoricalRatificationAdminGetV2(new Request(baseUrl), {
       getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth,
@@ -122,9 +123,8 @@ describe("Historical V2 split Admin ratification", () => {
   });
 
   it("bootstraps the CSRF ceremony before an execution-host proposal exists", async () => {
-    const read = vi.fn(async () => {
-      throw new Error("HISTORICAL_RATIFICATION_SPLIT_REFUSED:PROPOSAL_MISSING");
-    });
+    const read = vi.fn(async () => ({ preparationState: "NOT_REQUESTED",
+      proposalAvailable: false }));
     const result = await handleHistoricalRatificationAdminGetV2(new Request(baseUrl), {
       getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth,
       openRatification: () => ({ service: { request: vi.fn(), read, ratify: vi.fn() } as never,
@@ -134,4 +134,33 @@ describe("Historical V2 split Admin ratification", () => {
     expect(result.body).toMatchObject({ proposalAvailable: false });
     expect(result.responseHeaders?.["x-fhv-csrf-token"]).toBe("csrf-token");
   });
+
+  it("reports a recorded request without inventing computation or readiness", async () => {
+    const read = vi.fn(async () => ({ preparationState: "REQUEST_RECORDED",
+      proposalAvailable: false, requestId: "request-1",
+      requestedExtent: { initialRecordIndex: 525600, cycleCount: 35 } }));
+    const result = await handleHistoricalRatificationAdminGetV2(new Request(baseUrl), {
+      getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth,
+      openRatification: () => ({ service: { request: vi.fn(), read, ratify: vi.fn() } as never,
+        dispose: vi.fn(async () => undefined) }),
+    });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ preparationState: "REQUEST_RECORDED",
+      proposalAvailable: false, requestedExtent: { initialRecordIndex: 525600, cycleCount: 35 } });
+    expect(result.body).not.toHaveProperty("ratified");
+  });
+
+  it.each(["REQUEST_INTEGRITY", "PROPOSAL_MISSING", "ACTOR_BINDING", "REQUEST_SCOPE_BINDING"])(
+    "does not hide %s as pending preparation", async (code) => {
+      const read = vi.fn(async () => { throw new Error(`HISTORICAL_RATIFICATION_SPLIT_REFUSED:${code}`); });
+      const dispose = vi.fn(async () => undefined);
+      const result = await handleHistoricalRatificationAdminGetV2(new Request(baseUrl), {
+        getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth,
+        openRatification: () => ({ service: { request: vi.fn(), read, ratify: vi.fn() } as never,
+          dispose }),
+      });
+      expect(result.status).toBe(409);
+      expect(result.body).not.toHaveProperty("preparationState");
+      expect(dispose).toHaveBeenCalledOnce();
+    });
 });

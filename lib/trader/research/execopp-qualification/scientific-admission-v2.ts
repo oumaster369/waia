@@ -6,9 +6,11 @@ import {
   computeResearchHarnessAdmissionReceiptDigestV2,
   RESEARCH_HARNESS_ADMISSION_VERSION,
   runResearchHarnessAdmissionV1,
+  runResearchHarnessAdmissionAsyncV1,
   type ResearchHarnessAdmissionInputV1,
   type ResearchHarnessAdmissionResultV1,
 } from "@/lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
+import type { ValidationBootstrapExecutionV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 
 import {
   buildKmConvergenceReceiptV1,
@@ -121,10 +123,12 @@ function validatePredictiveTerminalReceipt(receipt: PredictiveTerminalReceiptV1)
   }
 }
 
-export function buildPredictiveTerminalReceiptV1(input: {
+type PredictiveTerminalInputV1 = {
   harnessInput: ResearchHarnessAdmissionInputV1;
   identities: PredictiveIdentityBindingsV1;
-}): PredictiveTerminalReceiptV1 {
+};
+
+function assertPredictiveTerminalInputV1(input: PredictiveTerminalInputV1): void {
   for (const [field, value] of Object.entries(input.identities)) {
     if (field !== "scoringContractVersion") requireDigest(value, field);
   }
@@ -136,7 +140,28 @@ export function buildPredictiveTerminalReceiptV1(input: {
   ) {
     throw new Error("PREDICTIVE_TERMINAL_HARNESS_IDENTITY_MISMATCH");
   }
-  const result = runResearchHarnessAdmissionV1(input.harnessInput);
+}
+
+export function buildPredictiveTerminalReceiptV1(input: PredictiveTerminalInputV1): PredictiveTerminalReceiptV1 {
+  assertPredictiveTerminalInputV1(input);
+  return finishPredictiveTerminalReceiptV1(input, runResearchHarnessAdmissionV1(input.harnessInput));
+}
+
+export async function buildPredictiveTerminalReceiptAsyncV1(
+  input: PredictiveTerminalInputV1,
+  execution: ValidationBootstrapExecutionV1 = {},
+): Promise<PredictiveTerminalReceiptV1> {
+  // The harness owns its arrays before awaiting; own the small bindings here too.
+  const owned = { harnessInput: input.harnessInput, identities: { ...input.identities } };
+  assertPredictiveTerminalInputV1(owned);
+  const result = await runResearchHarnessAdmissionAsyncV1(owned.harnessInput, execution);
+  return finishPredictiveTerminalReceiptV1(owned, result);
+}
+
+function finishPredictiveTerminalReceiptV1(
+  input: PredictiveTerminalInputV1,
+  result: ResearchHarnessAdmissionResultV1,
+): PredictiveTerminalReceiptV1 {
   const expectedHarnessDigest = computeResearchHarnessAdmissionReceiptDigestV2({
     comparisonFamilyId: result.comparisonFamilyId,
     commonAnchorSetDigestHex: result.commonAnchorSetDigestHex,

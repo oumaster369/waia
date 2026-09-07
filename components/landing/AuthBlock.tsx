@@ -273,7 +273,8 @@ export function AuthBlock({
     ? (Object.keys(oauthReady) as ReadonlyArray<AuthProvider>).filter((p) => oauthReady[p])
     : [];
 
-  const primaryCtaLabel = isLoading ? "…" : mode === "createTwin" ? "Create your Twin" : "Sign in";
+  const registrationLabel = context === "trader" ? "Register" : "Create your Twin";
+  const primaryCtaLabel = isLoading ? "…" : mode === "createTwin" ? registrationLabel : "Sign in";
 
   const showInlineAlert = failureMessage != null;
 
@@ -297,14 +298,16 @@ export function AuthBlock({
       <header className="flex flex-col gap-2 text-center">
         <h2 className="font-waia-serif text-[1.35rem] leading-snug font-medium tracking-tight text-[#e8dcc4] sm:text-[1.5rem]">
           {mode === "createTwin"
-            ? "Create your AI-Twin"
+            ? context === "trader" ? "Register for AI-TRADER" : "Create your AI-Twin"
             : context === "trader"
               ? "Sign in to AI-TRADER"
               : "Sign in"}
         </h2>
         <p className="text-sm leading-relaxed font-normal text-[rgba(210,204,195,0.9)]">
           {mode === "createTwin"
-            ? "Use your email to start partner preview onboarding."
+            ? context === "trader"
+              ? "Create your account with email. AI-TRADER access remains subject to your entitlement."
+              : "Use your email to start partner preview onboarding."
             : context === "trader"
               ? "Use the email on your WAIA account. Access remains subject to your Trader entitlement."
               : "Welcome back. Sign in with the email on your WAIA account."}
@@ -333,7 +336,7 @@ export function AuthBlock({
               : "text-[rgba(215,210,200,0.9)] hover:bg-[rgba(255,255,255,0.045)] hover:text-[rgba(236,232,224,0.98)]",
           )}
         >
-          Create Twin
+          {context === "trader" ? "Register" : "Create Twin"}
         </button>
         <button
           type="button"
@@ -489,14 +492,14 @@ export function AuthBlock({
           </>
         ) : (
           <>
-            New to WAIA?{" "}
+            {context === "trader" ? "New to AI-TRADER?" : "New to WAIA?"}{" "}
             <button
               type="button"
               data-testid="landing-auth-switch-to-create-twin"
               className="font-semibold text-[#dcc69a] underline decoration-[rgba(220,198,154,0.5)] underline-offset-4 transition-colors hover:text-[#ecd9b0]"
               onClick={() => switchMode("createTwin")}
             >
-              Create your Twin
+              {registrationLabel}
             </button>
           </>
         )}
