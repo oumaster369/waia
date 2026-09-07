@@ -125,6 +125,28 @@ Scientific rejection is a valid result, not a code defect to hide.
 
 ## Validation evidence and remaining defects
 
+### PR562 second CI failure — 2026-09-07 11:49 UTC
+
+Run34116398628 at662e6797:191testsPASS/3skipped/1FAIL;22filesPASS/1FAIL.
+Setup now passed, but the35-cycle test stopped at its initial runner-role negative
+before the cycle loop. The earlier schema guard raised UNKNOWN_APPLIED_MIGRATION
+for hash3d276ce097da14451e3114e112d1adef3fae5a63b719380244bb8e82ebb05a98.
+That is the exact checked-in0204 preparation-events migration, not a foreign DDL.
+The preflight still filtered the journal at203. This integration defect was missed
+by the earlier bounded review; its old test built both sides from the same filter.
+
+A new regression builds applied hashes independently from the whole journal:
+1FAIL/9PASS before correction, with the identical unknown0204 error. Corrected
+the explicit bound to204 and required the preparation-event table. Separate
+missing0203/missing0204, absent-table, changed-hash and unknown-hash refusals remain.
+14focused tests, focused lint and full typecheck PASS. Actual read-only preflight
+against the existing fully migrated localPG17 PASS. First local connection attempt
+used the wrong synthetic password; actual local container configuration then worked
+without exposing it. No production access or database writes were involved.
+CI adds a fast journal regression step before the existing heavy proof and triggers
+for both files; no existing checks removed. No migration bytes, guards, scientific
+inputs, cycle count or timeouts changed. New exact-head CI remains required.
+
 ### PR562 first CI failure — 2026-09-07 11:16 UTC
 
 Exact1c1914cb PostgreSQL run34114634940:21filesPASS/1suiteFAIL,
