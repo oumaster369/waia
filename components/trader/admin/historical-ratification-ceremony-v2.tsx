@@ -4,11 +4,66 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { WaiaSurface } from "@/components/waia/waia-surface";
+import type { readPreparationAttemptV2 } from
+  "@/lib/trader/historical-simulation-v2/preparation-attempt-events-v2";
 
 const REQUEST_ACTION = "REQUEST_EXACT_PRE_HOLDOUT_TECHNICAL_PROPOSAL";
 const RATIFY_ACTION =
   "RATIFY_FOUR_SURFACE_WF_PREDICTIVE_FOR_HISTORICAL_SIMULATION_ONLY";
 const RELEASE_SHA = /^[0-9a-f]{40}$/;
+type PreparationAttempt = NonNullable<Awaited<ReturnType<typeof readPreparationAttemptV2>>>;
+const PREPARATION_PHASES: Readonly<Record<string, string>> = {
+  SCIENTIFIC_PREPARATION: "Scientific preparation",
+  SURFACE_LOAD: "Loading historical surface",
+  FORECAST_ANCHORS: "Forecast anchors",
+  VALIDATION_RESAMPLES: "Validation resamples",
+  TECHNICAL_CANDIDATE_COMPLETE: "Technical candidate computation",
+  PROPOSAL_PERSISTED: "Proposal persistence",
+};
+const PREPARATION_ERRORS: Readonly<Record<string, string>> = {
+  CANCELLED: "The preparation attempt was cancelled.",
+  CONNECTION_LOST: "The preparation attempt lost its database connection.",
+  SCIENTIFIC_PREPARATION_REFUSED: "The scientific preparation checks refused this attempt.",
+  PREPARATION_FAILED: "The preparation attempt failed; the operator must review its private diagnostic log.",
+};
+function safeLabel(labels: Readonly<Record<string, string>>, key: unknown) {
+  return typeof key === "string" && Object.hasOwn(labels, key) ? labels[key] : undefined;
+}
+function observedCounter(value: unknown): string | null {
+  if ((typeof value !== "string" && typeof value !== "number") || !/^\d+$/.test(String(value)) ||
+      !Number.isSafeInteger(Number(value))) return null;
+  return String(value);
+}
+function PreparationAttemptDiagnostics({ attempt }: { attempt: PreparationAttempt }) {
+  const valid = attempt.authorityGranted === false;
+  const failed = valid && attempt.phase === "FAILED";
+  const progressing = valid && (attempt.phase === "STARTED" || attempt.phase === "PROGRESS");
+  const phase = safeLabel(PREPARATION_PHASES, attempt.progressPhase);
+  const completed = observedCounter(attempt.completed), total = observedCounter(attempt.total);
+  const countersValid = valid && attempt.phase === "PROGRESS" && phase && completed !== null &&
+    total !== null && Number(total) > 0 && Number(completed) <= Number(total);
+  const surface = typeof attempt.surfaceKey === "string" && /^(BTCUSDT|ETHUSDT):(30|60)$/.test(attempt.surfaceKey)
+    ? attempt.surfaceKey : null;
+  const trial = typeof attempt.trialIdentityDigestHex === "string" && /^[0-9a-f]{64}$/.test(attempt.trialIdentityDigestHex)
+    ? attempt.trialIdentityDigestHex : null;
+  const time = typeof attempt.observedAt === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(attempt.observedAt) &&
+    Number.isFinite(Date.parse(attempt.observedAt)) ? attempt.observedAt : null;
+  return <section aria-label="Preparation attempt diagnostics" className="space-y-2 rounded-md border p-3 text-sm">
+    {failed ? <p role="alert" className="text-destructive font-semibold">Preparation failed: {safeLabel(PREPARATION_ERRORS, attempt.errorCode) ??
+      "The failure reason is unavailable; inspect the private diagnostic log."}</p> :
+      <p className="font-semibold">{progressing ? "Preparation progress recorded" : "Preparation status unconfirmed"}</p>}
+    {progressing ? <p className="text-muted-foreground">This is the last durable observation, not proof the process is still running.
+      Current execution is unconfirmed until further evidence arrives.</p> : null}
+    <p className="text-muted-foreground">Diagnostics do not grant launch or retry authority. A validated technical proposal
+      and separate Human approval are still required.</p>
+    {valid && phase ? <p>Last recorded stage: {phase}</p> : null}
+    {valid && surface ? <p>Surface: {surface}</p> : null}
+    {valid && trial ? <p className="break-all font-mono text-xs">Trial: {trial}</p> : null}
+    {countersValid ? <p>Observed stage counter: {completed} / {total}.
+      {" "}{surface ? "For the surface above" : "Surface scope unavailable"}; this is not overall preparation progress.</p> : null}
+    <p className="text-muted-foreground text-xs">Last durable event: {time ? <time dateTime={time}>{time}</time> : "timestamp unavailable"}</p>
+  </section>;
+}
 
 type Proposal = Readonly<{
   contentDigestHex: string;
@@ -51,6 +106,7 @@ type Review = Readonly<{
   proposalId?: string;
   proposal?: Proposal;
   ratified?: boolean;
+  preparationAttempt?: PreparationAttempt | null;
 }>;
 
 async function responseMessage(response: Response): Promise<string> {
@@ -84,14 +140,16 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
   const review = loaded?.endpoint === endpoint ? loaded.review : null;
   const csrf = loaded?.endpoint === endpoint ? loaded.csrf : "";
   const requestRecorded = review?.preparationState === "REQUEST_RECORDED";
+  const refreshSequence = React.useRef(0);
 
   const refresh = React.useCallback(async (signal?: AbortSignal) => {
     if (!endpoint) return null;
+    const sequence = ++refreshSequence.current;
     const response = await fetch(endpoint, { cache: "no-store", credentials: "include", signal });
     const token = response.headers.get("x-fhv-csrf-token") ?? "";
     if (!response.ok) throw new Error(await responseMessage(response));
     const next = await response.json() as Review;
-    if (signal?.aborted) return null;
+    if (signal?.aborted || sequence !== refreshSequence.current) return null;
     setLoaded({ endpoint, review: next, csrf: token });
     setError(null);
     return { review: next, csrf: token };
@@ -165,6 +223,7 @@ export function HistoricalRatificationCeremonyV2({ organizationId, runId,
       {review.requestedExtent ? <p className="text-muted-foreground text-xs">
         Requested extent: initial record {review.requestedExtent.initialRecordIndex}
         {" · "}{review.requestedExtent.cycleCount} cycles</p> : null}
+      {review.preparationAttempt ? <PreparationAttemptDiagnostics attempt={review.preparationAttempt}/> : null}
     </div> : null}
     {valid && !review?.proposalAvailable && !requestRecorded ? <div className="space-y-2">
       <p className="text-muted-foreground text-sm">No technical proposal exists yet. This action

@@ -9,7 +9,7 @@ const runId = "partner-observed-wf";
 const releaseSha = "a".repeat(40);
 const proposalDigest = "b".repeat(64);
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function json(body: unknown, headers?: Record<string, string>) {
   return new Response(JSON.stringify(body), { status: 200,
@@ -17,6 +17,87 @@ function json(body: unknown, headers?: Record<string, string>) {
 }
 
 describe("Historical V2 authenticated Admin launch ceremony", () => {
+  it.each(["STARTED", "PROGRESS", "FAILED", "PROPOSAL_AVAILABLE", "UNKNOWN"])(
+    "renders bounded %s diagnostics without granting request or approval authority", async phase => {
+      const fetchMock = vi.fn(async () => json({ preparationState: "REQUEST_RECORDED",
+        proposalAvailable: false, requestId: "request-1", preparationAttempt: {
+          phase, authorityGranted: false, progressPhase: "VALIDATION_RESAMPLES",
+          completed: "12", total: "100", surfaceKey: "BTCUSDT:30",
+          trialIdentityDigestHex: "f".repeat(64), observedAt: "2026-09-07T07:00:00.000Z",
+          errorCode: "CONNECTION_LOST", rawError: "PRIVATE-DETAIL-MUST-NOT-RENDER" } }));
+      vi.stubGlobal("fetch", fetchMock);
+      render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+        initialReleaseSha={releaseSha}/>);
+      const panel = await screen.findByRole("region", { name: "Preparation attempt diagnostics" });
+      expect(panel).toHaveTextContent("2026-09-07T07:00:00.000Z");
+      expect(panel).toHaveTextContent("Diagnostics do not grant launch or retry authority");
+      if (phase === "FAILED") expect(screen.getByRole("alert")).toHaveTextContent("lost its database connection");
+      else if (phase === "STARTED" || phase === "PROGRESS") {
+        expect(panel).toHaveTextContent("Current execution is unconfirmed");
+      } else expect(panel).toHaveTextContent("Preparation status unconfirmed");
+      if (phase === "PROGRESS") {
+        expect(panel).toHaveTextContent("12 / 100");
+        expect(panel).toHaveTextContent("Surface: BTCUSDT:30");
+        expect(panel).toHaveTextContent("Trial: " + "f".repeat(64));
+        expect(panel).toHaveTextContent("not overall preparation progress");
+      } else expect(panel).not.toHaveTextContent("12 / 100");
+      expect(screen.queryByText(/PRIVATE-DETAIL-MUST-NOT-RENDER/)).toBeNull();
+      expect(screen.queryByRole("button", { name: /request exact|ratify/i })).toBeNull();
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+  it("does not echo unknown diagnostic text or invalid counters", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ preparationState: "REQUEST_RECORDED", proposalAvailable: false,
+      preparationAttempt: { authorityGranted: false, phase: "FAILED", errorCode: "SECRET-CODE",
+        progressPhase: "SECRET-STAGE", observedAt: "SECRET-TIME", completed: -1, total: 0,
+        surfaceKey: "SECRET-SURFACE", trialIdentityDigestHex: "SECRET-TRIAL" } })));
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("failure reason is unavailable");
+    expect(screen.queryByText(/SECRET-/)).toBeNull();
+    expect(screen.getByRole("region", { name: "Preparation attempt diagnostics" })).toHaveTextContent("timestamp unavailable");
+  });
+
+  it("automatically refreshes recorded progress to failure without another POST", async () => {
+    let phase = "STARTED";
+    const interval = vi.spyOn(window, "setInterval");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input; void init; return json({
+      preparationState: "REQUEST_RECORDED", proposalAvailable: false,
+      preparationAttempt: { phase, authorityGranted: false, errorCode: "PREPARATION_FAILED",
+        observedAt: "2026-09-07T07:00:00.000Z" } }); });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    expect(await screen.findByRole("region", { name: "Preparation attempt diagnostics" })).toHaveTextContent("Preparation progress recorded");
+    phase = "FAILED";
+    const tick = interval.mock.calls[0]![0] as () => void;
+    await act(async () => { tick(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Preparation failed");
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
+  });
+
+  it("does not let an older overlapping poll replace a newer durable failure", async () => {
+    let finishOld!: (response: Response) => void;
+    const oldResponse = new Promise<Response>(resolve => { finishOld = resolve; });
+    const interval = vi.spyOn(window, "setInterval");
+    const response = (phase: string) => json({ preparationState: "REQUEST_RECORDED",
+      proposalAvailable: false, preparationAttempt: { phase, authorityGranted: false,
+        errorCode: "CANCELLED", observedAt: "2026-09-07T07:00:00.000Z" } });
+    const fetchMock = vi.fn().mockResolvedValue(response("STARTED"))
+      .mockResolvedValueOnce(response("STARTED")).mockReturnValueOnce(oldResponse)
+      .mockResolvedValueOnce(response("FAILED"));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    await screen.findByRole("region", { name: "Preparation attempt diagnostics" });
+    const tick = interval.mock.calls[0]![0] as () => void;
+    await act(async () => { tick(); tick(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("cancelled");
+    await act(async () => { finishOld(response("STARTED")); await oldResponse; });
+    expect(screen.getByRole("alert")).toHaveTextContent("cancelled");
+    expect(screen.queryByText("Preparation progress recorded")).toBeNull();
+  });
   it("obtains bound CSRF and requests preparation without accepting a CLI actor", async () => {
     let recorded = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
