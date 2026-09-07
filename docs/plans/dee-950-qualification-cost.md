@@ -31,6 +31,49 @@ provenance:
 
 ## Approved scope and dependency
 
+## Acceptance
+
+- Identical full-B results and receipt contents under the frozen scientific law;
+  every required anchor, baseline, K/M candidate and verification remains present.
+- Cancellation and errors never publish partial work as qualification or start
+  a later launch phase; preserve any already committed durable state.
+- Process-local diagnostic events are scope-bound and grant no authority.
+- Full-data target-resource feasibility, durable reuse/resume, final cumulative
+  validation and production readiness require separate evidence and remain open.
+
+## Work packages
+
+### Finalization cancellation/progress — 2026-09-07 04:05 UTC
+
+The approved-launch CLI installs SIGTERM/SIGINT handlers but currently forwards
+their AbortSignal only to the consumer, not to the preceding complete scientific
+candidate replay. First finalization invokes the full technical surface builder
+again. Forward the existing process-local observer through finalization and
+materialization into that unchanged builder; check cancellation before reserving
+a session and after lock acquisition. Emit only diagnostic, authorityGranted=false
+phase events. Preserve every approval, dataset, scope, replay-equality and RLS check.
+Do not interrupt a synchronous kernel mid-result or claim immediate cancellation,
+durable resume, Admin streaming or full-data readiness. Validate pre-cancel/non-CLI/
+lock-wait cancellation cleanup and actual CLI signal forwarding without executing
+an exchange or production run; retained algorithm parity gates remain applicable.
+
+Also preserve cancellation at the existing phase boundaries: before finalization,
+before bootstrap/queue, and before starting the consumer. If bootstrap already
+committed, retain its durable state for an authorized retry; do not manufacture a
+rollback or completed run. Tests must assert the next phase is not invoked and
+the returned durable lifecycle object is untouched. No new cancellation promise
+inside synchronous work or in-flight database commits.
+
+Implemented locally.25focusedtests/5files PASS, full TypeScript/scoped lint/diff
+PASS. Three finalization entrypoint cases mock DB/session boundaries, three actual
+CLI callback cases verify both signal handlers and diagnostic write failure,
+three phase-boundary cases verify no next-stage invocation. They do not constitute
+PostgreSQL transaction/replay or full-corpus evidence. Initial test-only TypeScript
+errors (signal callback argument and required NODE_ENV) corrected. Initial Next
+build refused sandbox loopback EPERM; permissioned build PASS before the final
+three transition guards. Latest full lint/build result recorded in handoff;
+no publication, deployment, schema/authority/scientific change or readiness claim.
+
 ### Worker input lifetime — 2026-09-06 22:33 UTC
 
 Full-N synthetic probe (N525600, configuredB10000, deliberately cancelled after128

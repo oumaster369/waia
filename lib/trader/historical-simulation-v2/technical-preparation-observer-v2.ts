@@ -3,7 +3,8 @@ export type TechnicalPreparationProgressV2 = Readonly<{
   schemaVersion: "waia.trader.technical_preparation_progress.v2";
   organizationId: string; runId: string; releaseSha: string;
   phase: "SCIENTIFIC_PREPARATION" | "SURFACE_LOAD" | "FORECAST_ANCHORS" |
-    "VALIDATION_RESAMPLES" | "TECHNICAL_CANDIDATE_COMPLETE" | "PROPOSAL_PERSISTED";
+    "VALIDATION_RESAMPLES" | "TECHNICAL_CANDIDATE_COMPLETE" | "PROPOSAL_PERSISTED" |
+    "FINALIZATION_REPLAY";
   surfaceKey?: string;
   trialIdentityDigestHex?: string;
   completed?: number;

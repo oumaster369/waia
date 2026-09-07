@@ -14,7 +14,8 @@ vi.mock("@/lib/trader/historical-simulation-v2/historical-runner-role-v2", async
   assumeHistoricalSimulationRunnerRoleV2: io.assume,
   resetHistoricalSimulationRunnerRoleV2: io.reset,
 }));
-import { prepareHistoricalTechnicalProposalOnExecutionServerV2 } from
+import { prepareHistoricalTechnicalProposalOnExecutionServerV2,
+  finalizeApprovedHistoricalProposalOnExecutionServerV2 } from
   "@/lib/trader/historical-simulation-v2/ratification-split-v2";
 
 const input: Parameters<typeof prepareHistoricalTechnicalProposalOnExecutionServerV2>[1] = {
@@ -72,5 +73,40 @@ describe("actual technical proposal cancellation entry point", () => {
     expect(io.login).toHaveBeenCalledOnce(); expect(io.assume).toHaveBeenCalledOnce();
     expect(io.reset).toHaveBeenCalledOnce(); expect(release).toHaveBeenCalledOnce();
     expect(onProgress).not.toHaveBeenCalled();
+  });
+});
+
+describe("actual approved finalization cancellation entry point", () => {
+  it("refuses cancellation before reserving a session", async () => {
+    const controller = new AbortController(); controller.abort();
+    const reserve = vi.fn();
+    await expect(finalizeApprovedHistoricalProposalOnExecutionServerV2(
+      { reserve } as unknown as postgres.Sql, input.preflight, { signal: controller.signal },
+    )).rejects.toThrow("TECHNICAL_PREPARATION_CANCELLED");
+    expect(reserve).not.toHaveBeenCalled(); expect(io.assume).not.toHaveBeenCalled();
+  });
+  it("refuses a non-CLI finalization observer before reserving a session", async () => {
+    vi.stubEnv("WAIA_TRADER_CLI", "0"); const reserve = vi.fn();
+    await expect(finalizeApprovedHistoricalProposalOnExecutionServerV2(
+      { reserve } as unknown as postgres.Sql, input.preflight, { onProgress: vi.fn() },
+    )).rejects.toThrow("TECHNICAL_PREPARATION_OBSERVER_NODE_CLI_REQUIRED");
+    expect(reserve).not.toHaveBeenCalled();
+  });
+  it("cleans up the acquired lock and role without reading approvals after cancellation", async () => {
+    const controller = new AbortController(); const statements: string[] = [];
+    const query = vi.fn(async (parts: TemplateStringsArray) => {
+      const statement = parts.join("?"); statements.push(statement);
+      if (statement.includes("pg_advisory_lock(")) controller.abort();
+      else if (!statement.includes("pg_advisory_unlock(")) throw new Error("UNEXPECTED_DATABASE_OPERATION");
+      return [];
+    });
+    const release = vi.fn(); Object.assign(query, { release });
+    await expect(finalizeApprovedHistoricalProposalOnExecutionServerV2(
+      { reserve: vi.fn().mockResolvedValue(query) } as unknown as postgres.Sql,
+      input.preflight, { signal: controller.signal },
+    )).rejects.toThrow("TECHNICAL_PREPARATION_CANCELLED");
+    expect(statements).toHaveLength(2); expect(statements[1]).toContain("pg_advisory_unlock(");
+    expect(io.assume).toHaveBeenCalledOnce(); expect(io.reset).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
   });
 });
