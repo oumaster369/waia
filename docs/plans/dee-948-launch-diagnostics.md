@@ -42,7 +42,7 @@ Restore three operational contracts without changing the trading algorithm or sc
 
 No migration, RLS change, authority bypass, credential expansion, corpus reduction, Forecast substitution, model change, blind holdout, trading, capital or production mutation is included. Service timeouts, operational deadlines and launch/campaign duration limits are unchanged. There is no claim that heap propagation alone resolves package persistence or full-corpus qualification costs.
 
-## Files and acceptance
+## Acceptance
 
 - Execution-host entrypoint: validate and forward only the allowlisted heap option before listening or spawning children.
 - Historical bootstrap, ratification and launch-consumer modules: use a shared cleanup helper that retains the original failure and runs all cleanup callbacks.

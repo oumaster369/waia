@@ -18,6 +18,10 @@ state:
   lastValidatedGitSha: 76189935d3cdffd8727dce4854a7f49f2715ee32
   blockedReason: "Depends on unpublished DEE-958 backend and migration0204."
   nextAction: "Frozen frontend review and cumulative browser integration gates."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
 ---
 
 ## Approved scope

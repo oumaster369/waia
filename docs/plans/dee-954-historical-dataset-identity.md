@@ -1,3 +1,29 @@
+---
+integrationIssue: DEE-954
+integrationTitle: "Stable identity for new historical dataset registrations"
+branch: dee-954-historical-dataset-identity
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local]
+requiredValidation: [lint, typecheck, build, targeted-unit, postgres-integration]
+approvalGates: [plan-approved, integration-ready, human-merge, human-production-rollout]
+includedIssues: []
+state:
+  status: in-progress
+  currentWorkPackage: WP-VERIFY
+  completedWorkPackages: [WP-REPRODUCE, WP-IDENTITY]
+  remainingWorkPackages: [WP-VERIFY]
+  prNumber: null
+  prUrl: null
+  lastValidatedGitSha: null
+  blockedReason: "Cumulative same-authority graph comparison and exact-head review remain pending."
+  nextAction: "Validate portable registration regression and integration gates; no publication or deployment."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
+---
+
 # DEE-954 — Stable identity for new historical dataset registrations
 
 Local engineering scope under overnight delegation; no publication, merge, rollout or Human ratification.
@@ -22,7 +48,7 @@ lookup unchanged: an existing row returns its existing ID, including legacy rand
 or payload cannot inherit authority. No migration, old-row rewrite, removed identity binding, new caller
 authority, changed scientific formula or altered Human approval.
 
-## Validation / remaining gates
+## Acceptance
 
 - Pure identity equality, scope/content separation, malformed input rejection and stable vector.
 - Actual PostgreSQL insertion, legacy retry and conflicting payload protection.

@@ -36,7 +36,7 @@ This isolated T3 package fixes DEE-951 only. No merge, deployment, production wr
 private exchange credentials, live orders, capital, holdout, or safety/scientific threshold changes.
 The root controller owns integration review and Linear updates.
 
-## Defect and acceptance
+## Acceptance
 
 The post-fill Accounting Frontier was current while Risk still used the previous
 Guardian posture. A canonical loss-making full close could therefore admit a new

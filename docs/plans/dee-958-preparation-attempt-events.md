@@ -18,6 +18,10 @@ state:
   lastValidatedGitSha: ded0cb0d2e37cb45d9c8c17007d9a69860fd2a11
   blockedReason: null
   nextAction: "Frozen backend review and cumulative integration gates; no deployment."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
 ---
 
 ## Scope and authority

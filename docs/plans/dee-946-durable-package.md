@@ -42,6 +42,12 @@ Each wire chunk and each individually serialized record is bounded. Never string
 
 The additive storage migration, RLS and bounded PostgreSQL transport now exist locally and have focused local PostgreSQL tests. Production-callsite wiring, canonical input/outcome reference versions, complete retry/replay integration and full-corpus runtime requalification remain root-owned follow-up. No production mutation, credentials, scientific-law change, corpus reduction or qualification PASS is included here. DEE-946 must not be closed on codec or storage tests alone.
 
+## Acceptance
+
+Preserve exact scientific package values and authority boundaries through bounded,
+lossless transport. Database, retry, replay and full-corpus gates are specified in
+the phase 2 contract below; local codec success alone does not complete acceptance.
+
 ## Validation
 
 Use real buildPredictivePackageV1 fixtures, deep equality after round trip, existing pool replay validators, precise Buffer/float preservation, bounded chunks, tamper and substitution negatives. Run focused tests, typecheck and lint; no commit/push before root review.
