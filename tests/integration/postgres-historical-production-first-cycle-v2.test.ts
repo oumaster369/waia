@@ -6,7 +6,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +15,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assertRepeatEmpty, exportRepeatEvidence, repeatConfig,
   REPEAT_USER_ID, REPEAT_RUN_ID } from "../helpers/historical-independent-repeat";
+import { captureHistoricalRepeatSeed, historicalRepeatSeedConfig,
+  loadHistoricalRepeatSeed } from "../helpers/historical-repeat-seed";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { bindPostgresReservedSession } from "@/db/postgres-session-transaction";
@@ -133,6 +135,7 @@ const PROVE_KNOWLEDGE_CONTINUATION =
   process.env.WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF === "1";
 const APPROVED_CYCLE_COUNT = PROVE_KNOWLEDGE_CONTINUATION ? 80 : 35;
 const independentRepeat = repeatConfig(process.env, url);
+const repeatSeed = historicalRepeatSeedConfig(process.env, independentRepeat);
 const QUALIFIED_AT = "2026-08-01T00:00:00.000Z";
 const SYMBOLS = ["BTCUSDT", "ETHUSDT"] as const;
 
@@ -260,7 +263,7 @@ function runtimeRequalificationReceipt(
 }
 
 function buildDatasetFixture(organizationId: string): Fixture {
-  const root = mkdtempSync(join(tmpdir(), "dee-919-first-cycle-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "dee-919-first-cycle-")));
   const volumePaths = {} as Record<(typeof SYMBOLS)[number], string>;
   const volumeReceipts = {} as Record<(typeof SYMBOLS)[number], HtxVolumeQualificationReceiptV1>;
   const partitions: FhvPreHoldoutQualificationReceiptV1["partitions"][number][] = [];
@@ -544,12 +547,21 @@ describe.skipIf(!enabled || !url || !disposable)(
     let ratified: HistoricalFourSurfaceRatifiedAdmissionV2;
     let ratifiedAuthorityId: string;
     let neutralKnowledgeEdge: ReturnType<typeof buildHistoricalForecastKnowledgeBootstrapV2>;
+    const launchPlan = Object.freeze({
+      accountId: "dee-919-modeled-account",
+      symbol: "BTCUSDT" as const,
+      primaryHorizonMinutes: 30 as const,
+      startingCashUsdt: "100000",
+      defaultQuantity: "0.01",
+      initialRecordIndex: WF_PREDICTIVE_BAR_COUNT,
+      cycleCount: APPROVED_CYCLE_COUNT,
+    });
 
     beforeAll(async () => {
       if (independentRepeat) {
         expect(execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()).toBe("");
         repeatSourceSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-        await assertRepeatEmpty(pool);
+        if (repeatSeed?.mode !== "read") await assertRepeatEmpty(pool);
       }
       process.env.WAIA_RELEASE_SHA = RELEASE_SHA;
       const migrated = await pool<Array<Readonly<{ relation: string | null }>>>`
@@ -558,6 +570,24 @@ describe.skipIf(!enabled || !url || !disposable)(
         )::text AS relation
       `;
       expect(migrated[0]?.relation).toBe("trader_historical_four_surface_ratified_admission_v2");
+      if (repeatSeed?.mode === "read") {
+        // B restores the identical pre-execution synthetic authority. A alone runs
+        // preparation/ratification assertions; every execution test body runs in both.
+        const saved = await loadHistoricalRepeatSeed<{
+          fixture: Fixture; preflight: KmFourSurfaceProductionPreflightInputV2;
+          productionInput: HistoricalProductionFirstCycleBootstrapInputV2;
+          ratified: HistoricalFourSurfaceRatifiedAdmissionV2; ratifiedAuthorityId: string;
+          neutralKnowledgeEdge: typeof neutralKnowledgeEdge;
+        }>(pool, repeatSeed, repeatSourceSha);
+        ({ fixture, preflight, productionInput, ratified, ratifiedAuthorityId, neutralKnowledgeEdge } = saved);
+        const restored = await requireHistoricalFourSurfaceRatifiedAdmissionV2(pool, {
+          organizationId, runId, releaseSha: RELEASE_SHA,
+          aggregateAdmissionReceiptId: ratified.aggregateAdmissionReceiptId,
+          authorityContentDigestHex: ratified.contentDigestHex,
+        });
+        expect(restored).toEqual(ratified);
+        ratified = restored;
+      } else {
       await pool`INSERT INTO auth.users (id) VALUES (${userId}::uuid)`;
       await pool`INSERT INTO users (id, identity_label, email)
         VALUES (${userId}::uuid, 'DEE-919 PostgreSQL integration',
@@ -659,15 +689,6 @@ describe.skipIf(!enabled || !url || !disposable)(
             return fixture.volumeReceipts[symbol];
           },
         };
-      const launchPlan = Object.freeze({
-        accountId: "dee-919-modeled-account",
-        symbol: "BTCUSDT" as const,
-        primaryHorizonMinutes: 30 as const,
-        startingCashUsdt: "100000",
-        defaultQuantity: "0.01",
-        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT,
-        cycleCount: APPROVED_CYCLE_COUNT,
-      });
       await createHistoricalRatificationRequestV2(pool, {
         organizationId,
         runId,
@@ -816,6 +837,11 @@ describe.skipIf(!enabled || !url || !disposable)(
         authorityContentDigestHex: finalizedRows[0]!.authority_content_digest_hex,
       });
       productionInput = finalized.manifest.bootstrap;
+      if (repeatSeed?.mode === "write" && independentRepeat) {
+        await captureHistoricalRepeatSeed(pool, independentRepeat, repeatSeed, repeatSourceSha,
+          fixture.root, { fixture, preflight, productionInput, ratified, ratifiedAuthorityId, neutralKnowledgeEdge });
+      }
+      }
 
       reserved = await pool.reserve();
       const rawBackend = await reserved<
@@ -854,7 +880,7 @@ describe.skipIf(!enabled || !url || !disposable)(
         if (lockKey) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
         reserved.release();
       }
-      if (fixture?.root) rmSync(fixture.root, { recursive: true, force: true });
+      if (fixture?.root && !repeatSeed) rmSync(fixture.root, { recursive: true, force: true });
       await pool.end({ timeout: 5 });
       if (priorReleaseSha === undefined) delete process.env.WAIA_RELEASE_SHA;
       else process.env.WAIA_RELEASE_SHA = priorReleaseSha;
