@@ -129,3 +129,22 @@ access; its AST lexical-binding check now distinguishes them without changing pr
 Typecheck, targeted lint, canonical and release-identity checks and diff whitespace checks were
 rerun successfully after the inventory/test change. No production source changed since the
 successful Next build. These checks do not establish runtime adapter, PostgreSQL/RLS or live readiness.
+
+Independent review of local head `15f11f5` identified a claim error-boundary gap: `claimDue`
+rejection preceded the classified catch, and copying a malformed returned binding preceded token
+cleanup. The bounded correction puts claim/normalization inside the safe boundary; cleanup uses
+only original requested binding/owner and a validated returned token, never returned scope. Add
+synthetic-sensitive-driver-error and malformed-binding/token regressions, retaining their initial
+failures. Refresh only the mechanically changed consumer content pin after the source correction.
+
+Five new regressions failed before the correction: sensitive claim rejection escaped raw; null
+or empty-credential returned bindings failed before cleanup; invalid empty/nonstring tokens still
+reached release. Corrected core now passes 51 cases. Release accepts only binding/owner/token,
+avoiding fabricated expiry or failure fields when a returned lease is malformed. This defends the
+injected port contract; it does not assert an existing production adapter has these failures.
+Updated 126-consumer content digest:
+`8d1f675e7fe1e5e36218924af58f482c007275612cfa4dbadac139356088c4b4`.
+Post-correction verification: 56/56 focused tests PASS (51 core, 5 graph), typecheck and targeted
+lint PASS, inventory PASS with unchanged source/path/reference boundaries, canonical 137 documents
+PASS and diff check PASS. Next build was last run before this narrow correction; no repeated build
+or real database/runtime acceptance is claimed for it.

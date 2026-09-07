@@ -260,4 +260,35 @@ describe("DEE-960 injected account observation — no production adapter or real
     expect(f.repository.release).toHaveBeenCalledWith(expect.objectContaining({ binding: initial, ownerId: "owner" }));
     expect(f.openReader).not.toHaveBeenCalled();
   });
+  it("classifies a claim driver rejection without exposing sensitive connection details", async () => {
+    const f = setup(); const sensitive = "postgres://synthetic-user:synthetic-password@private-db/tenant";
+    vi.mocked(f.repository.claimDue).mockRejectedValue(new Error(sensitive));
+    const failure = await f.service.tick(initial, "owner").catch(error => error);
+    expect(failure).toBeInstanceOf(AccountObservationFailure);
+    expect(failure).toMatchObject({ code: "ACCOUNT_OBSERVATION_CLAIM_FAILED", secondary: [] });
+    expect(String(failure)).not.toContain(sensitive);
+    expect(JSON.stringify(failure)).not.toContain(sensitive);
+    expect(failure.cause).toBeUndefined();
+    expect(f.openReader).not.toHaveBeenCalled(); expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+  });
+  it.each([null, { ...initial, credentialId: "" }])("releases a valid claimed token when returned binding is malformed: %j", async badBinding => {
+    const f = setup(); const claim = vi.mocked(f.repository.claimDue).getMockImplementation()!;
+    vi.mocked(f.repository.claimDue).mockImplementation(async (...args) => {
+      const lease = (await claim(...args))!;
+      return { ...lease, binding: badBinding as unknown as ObservationBinding };
+    });
+    await expect(f.service.tick(initial, "owner")).rejects.toMatchObject({ code: "ACCOUNT_OBSERVATION_INTERNAL_FAILURE" });
+    expect(f.repository.release).toHaveBeenCalledOnce();
+    expect(f.repository.release).toHaveBeenCalledWith({ binding: initial, ownerId: "owner", token: "lease-1" });
+    expect(f.state.lease).toBeNull(); expect(f.openReader).not.toHaveBeenCalled();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
+  it.each(["", 42])("never attempts release with an invalid claimed token: %j", async token => {
+    const f = setup(); vi.mocked(f.repository.claimDue).mockResolvedValue({ binding: initial, ownerId: "owner",
+      token: token as string, consecutiveFailures: 0, expiresAtMs: 20000 });
+    await expect(f.service.tick(initial, "owner")).rejects.toMatchObject({ code: "ACCOUNT_OBSERVATION_INTERNAL_FAILURE" });
+    expect(f.repository.release).not.toHaveBeenCalled(); expect(f.openReader).not.toHaveBeenCalled();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
 });

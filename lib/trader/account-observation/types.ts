@@ -49,7 +49,7 @@ export type ObservationRepository = Readonly<{
   commitIfCurrent(input: Readonly<{ lease: ObservationLease; observation: AccountObservation;
     nowMs: number; nextDueAtMs: number; consecutiveFailures: number }>): Promise<boolean>;
   /** Token compare-and-release; an obsolete owner cannot release a successor. */
-  release(lease: ObservationLease): Promise<void>;
+  release(lease: Pick<ObservationLease, "binding" | "ownerId" | "token">): Promise<void>;
 }>;
 export type ObservationClock = Readonly<{
   now(): number;

@@ -138,14 +138,18 @@ export function createAccountObservationService(deps: Readonly<{
       const binding = copyBinding(requestedBinding); text(ownerId);
       if (binding.configurationRevision !== config.revision || signal?.aborted) return { status: "FENCED" };
       const started = now();
-      const rawLease = await deps.repository.claimDue(binding, ownerId, started, config.leaseTtlMs);
-      if (!rawLease) return { status: "NOT_CLAIMED" };
-      const lease = Object.freeze({ ...rawLease, binding: copyBinding(rawLease.binding) });
       let reader: AccountObservationReader | undefined;
       let primary: AccountObservationFailure | undefined; let committed = false;
-      const active = async () => !signal?.aborted && await current(lease);
+      let releaseClaim: Pick<ObservationLease, "binding" | "ownerId" | "token"> | undefined;
       const dispose = () => { const owned = reader; reader = undefined; owned?.dispose(); };
       try {
+        let rawLease: ObservationLease | null;
+        try { rawLease = await deps.repository.claimDue(binding, ownerId, started, config.leaseTtlMs); }
+        catch { throw new AccountObservationFailure("ACCOUNT_OBSERVATION_CLAIM_FAILED"); }
+        if (!rawLease) return { status: "NOT_CLAIMED" };
+        releaseClaim = Object.freeze({ binding, ownerId, token: text(rawLease.token) });
+        const lease = Object.freeze({ ...rawLease, binding: copyBinding(rawLease.binding) });
+        const active = async () => !signal?.aborted && await current(lease);
         if (!sameBinding(binding, lease.binding) || lease.ownerId !== ownerId || !lease.token ||
           !Number.isSafeInteger(lease.consecutiveFailures) || lease.consecutiveFailures < 0 ||
           !await active()) return { status: "FENCED" };
@@ -188,9 +192,9 @@ export function createAccountObservationService(deps: Readonly<{
         let cleanup: AccountObservationFailure | undefined;
         try { dispose(); } catch { cleanup = new AccountObservationFailure("ACCOUNT_OBSERVATION_DISPOSAL_FAILED"); }
         // Successful commit atomically released its token; do not invent a second release obligation.
-        if (!committed) try {
+        if (!committed && releaseClaim) try {
           // Even a malformed claim response cannot redirect cleanup into another scope/owner.
-          await deps.repository.release(Object.freeze({ ...lease, binding, ownerId }));
+          await deps.repository.release(releaseClaim);
         }
         catch {
           if (cleanup) cleanup.secondary.push("ACCOUNT_OBSERVATION_RELEASE_FAILED");
