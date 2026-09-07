@@ -9,7 +9,7 @@ const runId = "partner-observed-wf";
 const releaseSha = "a".repeat(40);
 const proposalDigest = "b".repeat(64);
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function json(body: unknown, headers?: Record<string, string>) {
   return new Response(JSON.stringify(body), { status: 200,
@@ -97,6 +97,44 @@ describe("Historical V2 authenticated Admin launch ceremony", () => {
     await act(async () => { finishOld(response("STARTED")); await oldResponse; });
     expect(screen.getByRole("alert")).toHaveTextContent("cancelled");
     expect(screen.queryByText("Preparation progress recorded")).toBeNull();
+  });
+
+  it("accepts successful six-second responses when the polling interval is five seconds", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(resolve => {
+      setTimeout(() => resolve(json({ preparationState: "REQUEST_RECORDED", proposalAvailable: false,
+        preparationAttempt: { phase: "STARTED", authorityGranted: false } })), 6_000);
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("region", { name: "Preparation attempt diagnostics" })).toHaveTextContent("Preparation progress recorded");
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("status")).toHaveTextContent("Preparation request recorded");
+  });
+
+  it.each(["http", "network"])("ignores an older %s failure after a newer successful poll", async kind => {
+    let finishOld!: (response: Response) => void, rejectOld!: (error: Error) => void;
+    const oldResponse = new Promise<Response>((resolve, reject) => { finishOld = resolve; rejectOld = reject; });
+    const interval = vi.spyOn(window, "setInterval");
+    const fetchMock = vi.fn().mockReturnValueOnce(oldResponse).mockResolvedValue(json({
+      preparationState: "REQUEST_RECORDED", proposalAvailable: false }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HistoricalRatificationCeremonyV2 organizationId={organizationId} runId={runId}
+      initialReleaseSha={releaseSha}/>);
+    const tick = interval.mock.calls[0]![0] as () => void;
+    await act(async () => { tick(); });
+    expect(await screen.findByRole("status")).toHaveTextContent("Preparation request recorded");
+    await act(async () => {
+      if (kind === "http") finishOld(new Response(JSON.stringify({ error: { message: "STALE-FAILURE" } }), { status: 500 }));
+      else rejectOld(new Error("STALE-FAILURE"));
+      await oldResponse.catch(() => undefined);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/STALE-FAILURE/)).toBeNull();
   });
   it("obtains bound CSRF and requests preparation without accepting a CLI actor", async () => {
     let recorded = false;

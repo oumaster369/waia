@@ -49,7 +49,7 @@ root-controlled release gates. No production operation is authorized here.
 
 ## Local validation — 2026-09-07
 
-Twelve ceremony tests pass, including the existing request/CSRF/actor/proposal
+Fifteen ceremony tests pass, including the existing request/CSRF/actor/proposal
 tests and new durable state, enum redaction, exact surface/trial counters,
 automatic refresh, and out-of-order same-scope poll rejection. Typecheck and
 scoped lint with zero warnings pass. Initial new test callbacks had unused
@@ -63,3 +63,14 @@ Diagnostic PROPOSAL_AVAILABLE without the actual proposal remains unconfirmed.
 Backend dependency is frozen76189935. Cumulative visual/browser verification,
 production/OpenNext build, final integration review and deployment remain open;
 passing component tests does not prove end-to-end historical-test readiness.
+
+### Independent review correction
+
+Reviewer found a real P2 in49caaf57: comparing response sequence to the latest
+issued poll starved all responses taking longer than the five-second interval.
+Additionally, an older HTTP failure could replace the current UI error state.
+Corrected to latest successfully committed sequence with endpoint/abort fencing;
+late HTTP and network errors are ignored only after a newer successful response.
+Added deterministic6s-response/5s-poll and both stale-error regression tests.
+Initial timer-fixture cleanup order failed one test; corrected cleanup ordering,
+then15tests, zero-warning lint and typecheck passed. No assertion suppression.
