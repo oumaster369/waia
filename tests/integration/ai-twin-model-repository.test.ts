@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createIsolatedTwinRepository } from "@/lib/ai-twin/model/postgres-repository";
 import type { WorkingHypothesis } from "@/lib/ai-twin/model/persistence-contracts";
+import { experienceFingerprint, type ExperienceDraft } from "@/lib/ai-twin/model/lifecycle";
 import type {
   ModelContext,
   ModelConsentGrant,
@@ -385,6 +386,175 @@ describe.skipIf(!enabled)(
       expect(
         (
           await owner`select count(*)::int as n from twin_model_fixture.object where organization_id=${isolated.organizationId}`
+        )[0].n,
+      ).toBe(0);
+    });
+    it("preserves a separately authorized private archive, not a relabeled model source", async () => {
+      expect(typeof repo.savePrivateSource).toBe("function");
+      const archive = { ...human, purpose: "private_archive" };
+      const source = {
+        scope,
+        id: "same-source-id",
+        revision: 1,
+        recordedAt: now,
+        text: "A separately saved synthetic Human declaration",
+        origin: "human_declaration" as const,
+      };
+      const seedAuthority = async (kind: "private_source" | "experience", id: string) => {
+        const payload = {
+          record: {
+            scope,
+            id,
+            revision: 1,
+            kind: kind === "private_source" ? "saved_episode" : "experience_archive",
+            createdAt: now,
+            evidenceEligible: true,
+            erasureRequestedAt: null,
+          },
+          authorization: {
+            scope,
+            recordId: id,
+            recordRevision: 1,
+            purpose: "private_archive",
+            approvedBy: "human",
+            validFrom: now,
+            validUntil: null,
+            revokedAt: null,
+            basisReference: `explicit-archive-${id}`,
+          },
+        };
+        await owner`insert into twin_model_fixture.archive_authority values (${scope.organizationId},${scope.subjectId},${kind},${id},1,${owner.json(payload)})`;
+      };
+      await seedAuthority("private_source", source.id);
+      await repo.savePrivateSource(archive, source);
+      await expect(
+        repo.savePrivateSource(archive, { ...source, text: "changed content" }),
+      ).rejects.toThrow("REPLAY_CONFLICT");
+      const draft: ExperienceDraft = {
+        scope,
+        id: "experience-private",
+        revision: 1,
+        recordedAt: now,
+        eventTime: now,
+        situation: "Synthetic experience",
+        context: "Private reflection",
+        intention: "Understand a choice",
+        consideredOptions: ["Rest", "A crowded event"],
+        decision: "Rest",
+        reasons: ["Human stated preference"],
+        expectedConsequences: ["More energy later"],
+        observedOutcomes: [],
+        humanLesson: "This choice depends on context",
+        reinterpretations: [],
+        uncertainty: "The later outcome is unknown",
+        transferConditions: "No transfer authorized",
+        provenance: [
+          {
+            scope,
+            sourceId: source.id,
+            sourceVersion: 1,
+            kind: "human_declaration",
+            authorizationReference: `explicit-archive-${source.id}`,
+            eligible: true,
+          },
+        ],
+      };
+      await seedAuthority("experience", draft.id);
+      await expect(
+        repo.saveExperience(
+          { ...archive, actor: model.actor },
+          draft,
+          experienceFingerprint(draft),
+        ),
+      ).rejects.toThrow("HUMAN_REQUIRED");
+      await expect(repo.saveExperience(human, draft, experienceFingerprint(draft))).rejects.toThrow(
+        "ARCHIVE_PURPOSE_REQUIRED",
+      );
+      await expect(repo.saveExperience(archive, draft, "wrong-approval")).rejects.toThrow();
+      const relabeled = { ...draft, provenance: [{ ...draft.provenance[0], sourceId: "history" }] };
+      await expect(
+        repo.saveExperience(archive, relabeled, experienceFingerprint(relabeled)),
+      ).rejects.toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
+      await repo.saveExperience(archive, draft, experienceFingerprint(draft));
+      await repo.saveExperience(archive, draft, experienceFingerprint(draft));
+      const changed = { ...draft, humanLesson: "Different content" };
+      await expect(
+        repo.saveExperience(archive, changed, experienceFingerprint(changed)),
+      ).rejects.toThrow("REPLAY_CONFLICT");
+      await repo.apply(human, observe(source.id));
+      await repo.apply(model, propose(source.id));
+      await repo.withdraw(human, source.id, "same-id-model-rights", "delete_source");
+      await repo.erase(human, "same-id-model-rights");
+      const preserved = await reopened.experience(archive, draft.id);
+      expect(preserved?.observedOutcomes).toEqual([]);
+      expect(preserved?.transferAuthority).toBe("none");
+      for (const key of ["organizationId", "subjectId"] as const) {
+        const otherScope = { ...scope, [key]: "foreign-archive" };
+        const other = {
+          ...archive,
+          scope: otherScope,
+          actor: { kind: "human" as const, subjectId: otherScope.subjectId },
+        };
+        expect(await reopened.experience(other, draft.id)).toBeNull();
+        await expect(
+          repo.saveExperience(other, draft, experienceFingerprint(draft)),
+        ).rejects.toThrow("SCOPE_MISMATCH");
+      }
+      expect(
+        (await reopened.experience({ ...archive, now: "2046-09-08T12:00:00.000Z" }, draft.id))
+          ?.fingerprint,
+      ).toBe(experienceFingerprint(draft));
+      await expect(
+        reopened.experience({ ...archive, actor: model.actor }, draft.id),
+      ).rejects.toThrow("HUMAN_REQUIRED");
+      expect((await reopened.current(human)).some((c) => c.claimId === draft.id)).toBe(false);
+      await repo.apply(human, observe("mixed-source"));
+      await owner`insert into twin_model_fixture.link values (${scope.organizationId},${scope.subjectId},'observation','mixed-source',1,'experience',${draft.id},1,'contextualizes')`;
+      await repo.withdraw(human, "mixed-source", "mixed-rights", "withdraw_modelling");
+      await expect(repo.erase(human, "mixed-rights")).rejects.toThrow(
+        "CROSS_PURPOSE_REVIEW_REQUIRED",
+      );
+      expect((await reopened.experience(archive, draft.id))?.fingerprint).toBe(
+        experienceFingerprint(draft),
+      );
+      const [currentAuthority] =
+        await owner`select payload from twin_model_fixture.archive_authority where kind='private_source' and id=${source.id} and version=1`;
+      const malformed = {
+        ...currentAuthority.payload,
+        record: { ...currentAuthority.payload.record, createdAt: "invalid" },
+      };
+      await owner`insert into twin_model_fixture.archive_authority values (${scope.organizationId},${scope.subjectId},'private_source',${source.id},2,${owner.json(malformed)})`;
+      await expect(reopened.experience(archive, draft.id)).rejects.toThrow(
+        "Canonical UTC timestamp required",
+      );
+      const revoked = {
+        ...currentAuthority.payload,
+        authorization: { ...currentAuthority.payload.authorization, revokedAt: now },
+      };
+      await owner`insert into twin_model_fixture.archive_authority values (${scope.organizationId},${scope.subjectId},'private_source',${source.id},3,${owner.json(revoked)})`;
+      expect(await reopened.experience(archive, draft.id)).toBeNull();
+      await expect(repo.savePrivateSource(archive, source)).rejects.toThrow(
+        "ARCHIVE_AUTHORITY_UNAVAILABLE",
+      );
+      await expect(
+        repo.saveExperience(archive, draft, experienceFingerprint(draft)),
+      ).rejects.toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
+      await repo.withdraw(
+        archive,
+        source.id,
+        "private-source-rights",
+        "delete_source",
+        "private_source",
+      );
+      expect(await reopened.experience(archive, draft.id)).toBeNull();
+      await expect(
+        repo.saveExperience(archive, draft, experienceFingerprint(draft)),
+      ).rejects.toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
+      await repo.erase(archive, "private-source-rights");
+      await expect(repo.savePrivateSource(archive, source)).rejects.toThrow("SOURCE_RESTRICTED");
+      expect(
+        (
+          await owner`select count(*)::int as n from twin_model_fixture.object where kind in ('private_source','experience')`
         )[0].n,
       ).toBe(0);
     });

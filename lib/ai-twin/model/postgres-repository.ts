@@ -11,7 +11,14 @@ import type {
   ModelObservation,
 } from "./contracts";
 import { applyModelCommand, createModelLedger, projectCurrentModel } from "./ledger";
-import { planRetention, TWIN_RETENTION_POLICY } from "./lifecycle";
+import {
+  planRetention,
+  TWIN_RETENTION_POLICY,
+  composePrivateExperience,
+  type ExperienceDraft,
+  type RetentionRecord,
+  type RetentionAuthorization,
+} from "./lifecycle";
 import {
   assertModelJsonData,
   modelReferenceKey,
@@ -22,15 +29,33 @@ import {
 
 type Context = Omit<ModelContext, "grants">;
 type Tx = postgres.TransactionSql;
+type PrivateSource = {
+  scope: Context["scope"];
+  id: string;
+  revision: number;
+  recordedAt: string;
+  text: string;
+  origin: "human_declaration";
+};
+type PrivateExperience = ReturnType<typeof composePrivateExperience>;
+type ArchiveAuthority = { record: RetentionRecord; authorization: RetentionAuthorization };
 type ObjectRow = {
-  kind: "observation" | "claim" | "correction" | "hypothesis" | "experience";
+  kind: "observation" | "claim" | "correction" | "hypothesis" | "experience" | "private_source";
   id: string;
   version: number;
-  payload: ModelObservation | HumanClaimVersion | HumanCorrectionRecord | WorkingHypothesis;
+  payload:
+    | ModelObservation
+    | HumanClaimVersion
+    | HumanCorrectionRecord
+    | WorkingHypothesis
+    | PrivateSource
+    | PrivateExperience;
   recorded_at: Date;
 };
 type RightsRow = {
-  observation_id: string;
+  source_id: string;
+  source_kind: "observation" | "private_source" | "experience";
+  purpose: string;
   request_id: string;
   operation: "withdraw_modelling" | "delete_source";
   state: "restricted" | "live_removed";
@@ -71,7 +96,7 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
   async function rights(tx: Tx, ctx: Context): Promise<RightsRow[]> {
     return tx<
       RightsRow[]
-    >`select observation_id, request_id, operation, state, requested_at from twin_model_fixture.rights_request where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and (purpose=${ctx.purpose} or operation='delete_source')`;
+    >`select source_id, source_kind, purpose, request_id, operation, state, requested_at from twin_model_fixture.rights_request where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and (purpose=${ctx.purpose} or operation='delete_source')`;
   }
   async function load(tx: Tx, ctx: Context) {
     const grants = (
@@ -83,7 +108,9 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       ObjectRow[]
     >`select kind,id,version,payload,recorded_at from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose=${ctx.purpose} order by version,recorded_at,id`;
     const restrictions = await rights(tx, ctx);
-    const denied = new Set(restrictions.map((r) => r.observation_id));
+    const denied = new Set(
+      restrictions.filter((r) => r.source_kind === "observation").map((r) => r.source_id),
+    );
     const observations = rows
       .filter((row) => row.kind === "observation")
       .map((row) => row.payload as ModelObservation)
@@ -212,7 +239,204 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       ctx.now,
     ).purposeUseAllowed;
   }
+  function archiveContext(ctx: Context) {
+    context(ctx, true);
+    requireValue(ctx.purpose === "private_archive", "ARCHIVE_PURPOSE_REQUIRED");
+  }
+  async function archiveAuthority(
+    tx: Tx,
+    ctx: Context,
+    kind: "private_source" | "experience",
+    id: string,
+    revision: number,
+  ): Promise<ArchiveAuthority> {
+    const [row] = await tx<
+      { payload: ArchiveAuthority }[]
+    >`select payload from twin_model_fixture.archive_authority where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and kind=${kind} and id=${id} order by version desc limit 1`;
+    requireValue(row, "ARCHIVE_AUTHORITY_UNAVAILABLE");
+    const { record, authorization } = row.payload;
+    requireValue(
+      sameScope(record.scope, ctx.scope) &&
+        record.id === id &&
+        record.revision === revision &&
+        record.kind === (kind === "private_source" ? "saved_episode" : "experience_archive"),
+      "ARCHIVE_AUTHORITY_UNAVAILABLE",
+    );
+    requireValue(
+      !(await rights(tx, ctx)).some((r) => r.source_kind === kind && r.source_id === id),
+      "SOURCE_RESTRICTED",
+    );
+    requireValue(
+      planRetention(record, authorization, ctx.now).purposeUseAllowed,
+      "ARCHIVE_AUTHORITY_UNAVAILABLE",
+    );
+    return row.payload;
+  }
+  async function composeStoredExperience(
+    tx: Tx,
+    ctx: Context,
+    draft: ExperienceDraft,
+    approvedFingerprint: string,
+  ) {
+    assertModelJsonData(draft);
+    requireValue(sameScope(draft.scope, ctx.scope) && draft.revision === 1, "SCOPE_MISMATCH");
+    const authority = await archiveAuthority(tx, ctx, "experience", draft.id, draft.revision);
+    const currentSources: ExperienceDraft["provenance"][number][] = [];
+    for (const source of draft.provenance) {
+      // A draft kind/eligibility flag is insufficient: require the exact persisted
+      // Human-created private source, not a dialogue/claim with the same id.
+      const [row] = await tx<
+        { payload: PrivateSource }[]
+      >`select payload from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose='private_archive' and kind='private_source' and id=${source.sourceId} and version=${source.sourceVersion}`;
+      requireValue(
+        row &&
+          sameScope(source.scope, ctx.scope) &&
+          source.kind === "human_declaration" &&
+          row.payload.origin === "human_declaration",
+        "ARCHIVE_SOURCE_UNAVAILABLE",
+      );
+      let sourceAuthority: ArchiveAuthority;
+      try {
+        sourceAuthority = await archiveAuthority(
+          tx,
+          ctx,
+          "private_source",
+          source.sourceId,
+          source.sourceVersion,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          ["ARCHIVE_AUTHORITY_UNAVAILABLE", "SOURCE_RESTRICTED"].includes(error.message)
+        )
+          throw new Error("ARCHIVE_SOURCE_UNAVAILABLE");
+        throw error; // Operational/storage corruption is not a consent denial or absent record.
+      }
+      requireValue(
+        row.payload.recordedAt === sourceAuthority.record.createdAt,
+        "ARCHIVE_SOURCE_UNAVAILABLE",
+      );
+      currentSources.push({
+        scope: ctx.scope,
+        sourceId: source.sourceId,
+        sourceVersion: source.sourceVersion,
+        kind: "human_declaration",
+        authorizationReference: sourceAuthority.authorization.basisReference,
+        eligible: true,
+      });
+    }
+    return composePrivateExperience(draft, {
+      scope: ctx.scope,
+      actor: ctx.actor,
+      now: ctx.now,
+      authorization: authority.authorization,
+      currentRecord: authority.record,
+      currentSources,
+      approvedFingerprint,
+    });
+  }
   return {
+    async savePrivateSource(ctx: Context, source: PrivateSource): Promise<void> {
+      archiveContext(ctx);
+      assertModelJsonData(source);
+      createModelLedger(source.scope);
+      requireValue(
+        Object.keys(source).sort().join(",") === "id,origin,recordedAt,revision,scope,text" &&
+          sameScope(source.scope, ctx.scope) &&
+          nonempty(source.id) &&
+          nonempty(source.text) &&
+          source.origin === "human_declaration" &&
+          source.revision === 1,
+        "INVALID_INPUT",
+      );
+      await sql.begin(async (tx) => {
+        await lock(tx, ctx);
+        const authority = await archiveAuthority(
+          tx,
+          ctx,
+          "private_source",
+          source.id,
+          source.revision,
+        );
+        requireValue(authority.record.createdAt === source.recordedAt, "BINDING_UNAVAILABLE");
+        const [prior] = await tx<
+          { payload: PrivateSource }[]
+        >`select payload from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and kind='private_source' and id=${source.id} and version=1`;
+        if (prior) {
+          requireValue(
+            prior.payload.text === source.text &&
+              prior.payload.recordedAt === source.recordedAt &&
+              prior.payload.origin === source.origin,
+            "REPLAY_CONFLICT",
+          );
+          return;
+        }
+        requireValue(source.recordedAt === ctx.now, "BINDING_UNAVAILABLE");
+        await insert(tx, ctx, "private_source", source.id, 1, source);
+      });
+    },
+    async saveExperience(
+      ctx: Context,
+      draft: ExperienceDraft,
+      approvedFingerprint: string,
+    ): Promise<void> {
+      archiveContext(ctx);
+      await sql.begin(async (tx) => {
+        await lock(tx, ctx);
+        const value = await composeStoredExperience(tx, ctx, draft, approvedFingerprint);
+        const [prior] = await tx<
+          { payload: PrivateExperience }[]
+        >`select payload from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and kind='experience' and id=${value.id} and version=1`;
+        if (prior) {
+          requireValue(prior.payload.fingerprint === value.fingerprint, "REPLAY_CONFLICT");
+          return;
+        }
+        requireValue(value.recordedAt === ctx.now, "BINDING_UNAVAILABLE");
+        await insert(tx, ctx, "experience", value.id, 1, value);
+        for (const source of value.provenance)
+          await link(
+            tx,
+            ctx,
+            "private_source",
+            source.sourceId,
+            source.sourceVersion,
+            "experience",
+            value.id,
+            1,
+            "contextualizes",
+          );
+      });
+    },
+    async experience(ctx: Context, id: string): Promise<PrivateExperience | null> {
+      archiveContext(ctx);
+      requireValue(nonempty(id));
+      return sql.begin(async (tx) => {
+        await lock(tx, ctx);
+        const [row] = await tx<
+          { payload: PrivateExperience }[]
+        >`select payload from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose='private_archive' and kind='experience' and id=${id} and version=1`;
+        if (!row) return null;
+        const { fingerprint, policyVersion, transferAuthority, ...draft } = row.payload;
+        requireValue(
+          policyVersion === TWIN_RETENTION_POLICY && transferAuthority === "none",
+          "BINDING_UNAVAILABLE",
+        );
+        try {
+          return await composeStoredExperience(tx, ctx, draft, fingerprint);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            [
+              "ARCHIVE_AUTHORITY_UNAVAILABLE",
+              "ARCHIVE_SOURCE_UNAVAILABLE",
+              "SOURCE_RESTRICTED",
+            ].includes(error.message)
+          )
+            return null;
+          throw error;
+        }
+      });
+    },
     async proposeHypothesis(ctx: Context, input: unknown, requestId: string): Promise<void> {
       context(ctx);
       requireValue(ctx.actor.kind === "model", "MODEL_REQUIRED");
@@ -335,7 +559,9 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
         const loaded = await load(tx, ctx);
         if (command.kind === "observe") {
           requireValue(
-            !loaded.restrictions.some((r) => r.observation_id === command.id),
+            !loaded.restrictions.some(
+              (r) => r.source_kind === "observation" && r.source_id === command.id,
+            ),
             "SOURCE_RESTRICTED",
           );
           const existing = loaded.rows.find(
@@ -421,36 +647,46 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
     },
     async withdraw(
       ctx: Context,
-      observationId: string,
+      sourceId: string,
       requestId: string,
       operation: RightsRow["operation"],
+      sourceKind: RightsRow["source_kind"] = "observation",
     ): Promise<void> {
       context(ctx, true);
       requireValue(
-        nonempty(observationId) &&
+        nonempty(sourceId) &&
           nonempty(requestId) &&
-          ["withdraw_modelling", "delete_source"].includes(operation),
+          ["withdraw_modelling", "delete_source"].includes(operation) &&
+          ["observation", "private_source", "experience"].includes(sourceKind),
+      );
+      requireValue(
+        operation === "delete_source" || sourceKind === "observation",
+        "RIGHTS_PURPOSE_MISMATCH",
       );
       await sql.begin(async (tx) => {
         await lock(tx, ctx);
         const loaded = await load(tx, ctx);
-        const prior = loaded.restrictions.find((r) => r.request_id === requestId);
+        const prior = loaded.restrictions.find(
+          (r) => r.request_id === requestId && r.purpose === ctx.purpose,
+        );
         if (prior) {
           requireValue(
-            prior.observation_id === observationId && prior.operation === operation,
+            prior.source_id === sourceId &&
+              prior.source_kind === sourceKind &&
+              prior.operation === operation,
             "REPLAY_CONFLICT",
           );
           return;
         }
         requireValue(
-          loaded.rows.some((r) => r.kind === "observation" && r.id === observationId),
+          loaded.rows.some((r) => r.kind === sourceKind && r.id === sourceId),
           "SOURCE_UNAVAILABLE",
         );
         requireValue(
           !loaded.state.lastRecordedAt || ctx.now >= loaded.state.lastRecordedAt,
           "STALE_CLOCK",
         );
-        await tx`insert into twin_model_fixture.rights_request values (${ctx.scope.organizationId},${ctx.scope.subjectId},${ctx.purpose},${requestId},${observationId},${operation},${ctx.now},'restricted')`;
+        await tx`insert into twin_model_fixture.rights_request values (${ctx.scope.organizationId},${ctx.scope.subjectId},${ctx.purpose},${requestId},${sourceId},${operation},${ctx.now},'restricted',${sourceKind})`;
       });
     },
     async erase(ctx: Context, requestId: string): Promise<void> {
@@ -463,11 +699,25 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
           RightsRow[]
         >`select * from twin_model_fixture.rights_request where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose=${ctx.purpose} and request_id=${requestId}`;
         requireValue(request, "RIGHTS_UNAVAILABLE");
+        requireValue(ctx.now >= request.requested_at.toISOString(), "STALE_CLOCK");
         if (request.state === "live_removed") return;
-        await tx`with recursive affected(kind,id,version) as (
-          select kind,id,version from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and kind='observation' and id=${request.observation_id}
+        const affected = await tx<
+          { kind: string; id: string; version: number; purpose: string }[]
+        >`with recursive affected(kind,id,version) as (
+          select kind,id,version from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and kind=${request.source_kind} and id=${request.source_id}
           union select l.target_kind,l.target_id,l.target_version from twin_model_fixture.link l join affected a on l.source_kind=a.kind and l.source_id=a.id and l.source_version=a.version where l.organization_id=${ctx.scope.organizationId} and l.subject_id=${ctx.scope.subjectId}
-        ) delete from twin_model_fixture.object o using affected a where o.organization_id=${ctx.scope.organizationId} and o.subject_id=${ctx.scope.subjectId} and o.kind=a.kind and o.id=a.id and o.version=a.version`;
+        ) select o.kind,o.id,o.version,o.purpose from twin_model_fixture.object o join affected a on o.kind=a.kind and o.id=a.id and o.version=a.version where o.organization_id=${ctx.scope.organizationId} and o.subject_id=${ctx.scope.subjectId}`;
+        if (request.operation === "withdraw_modelling")
+          requireValue(
+            affected.every(
+              (row) =>
+                row.purpose === ctx.purpose &&
+                ["observation", "claim", "correction", "hypothesis"].includes(row.kind),
+            ),
+            "CROSS_PURPOSE_REVIEW_REQUIRED",
+          );
+        for (const row of affected)
+          await tx`delete from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and kind=${row.kind} and id=${row.id} and version=${row.version}`;
         await tx`update twin_model_fixture.rights_request set state='live_removed' where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose=${ctx.purpose} and request_id=${requestId}`;
       });
     },
