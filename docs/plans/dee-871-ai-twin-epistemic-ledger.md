@@ -16,8 +16,8 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: b1b62b058a754bfa7b2f729fd02458c582cade68,
-    lastValidationAt: "2026-09-06T12:58:00Z",
+    lastValidatedGitSha: 43b08fdf514675bc5104842c47c4f187d8446b7c,
+    lastValidationAt: "2026-09-08T13:10:20Z",
     blockedReason: null,
     nextAction: "DEE-963/965 merged. Continue reviewed isolated WP-1b object contracts and synthetic repository preparation; shared migration, access/rights, historical-consent and runtime gates remain.",
   }
@@ -168,6 +168,19 @@ Independent substep review requires kind+id+scope in every rights predicate (inc
 **Validation order:** independent read-only review of this matrix; RED contract tests then limited implementation; focused unit and explicitly opted-in PostgreSQL fixture tests (including real behavioral RED for rights/scope); independent adversarial review; scoped format/lint/typecheck plus required PR readiness checks once the complete integration boundary is actually met. Exact commands: `pnpm exec vitest run tests/unit/ai-twin-model-persistence-contracts.test.ts`; then `WAIA_TWIN_PG_FIXTURE=1 WAIA_TWIN_PG_FIXTURE_URL=<own-loopback-fixture> pnpm exec vitest run tests/integration/ai-twin-model-repository.test.ts`. No implicit success when the fixture suite is skipped.
 
 **Remaining gates:** shared migration/journal compatibility (Trader pins MAX=204), reviewed final access/schema/rights contract, full-v1 inventory, legacy quarantine/migration proof, downstream integration and operational erasure/backup evidence. Account deletion with an intentionally continuing legacy archive and any retained exception remain separate Human decisions. Stop at an actual unresolved gate, not merely because isolated preparation can continue safely.
+
+#### 2026-09-08 local preparation receipt — not integration readiness
+
+DEE-965 merged in PR564 as `655f0f80178ca70ce5b08cd9f0164e9ecff76c7e`. This unpublished continuation was rebased onto that verified main; the earlier Sep6 worktree and unrelated work remain untouched. Reviewed implementation head: `43b08fdf514675bc5104842c47c4f187d8446b7c`. Only the six surfaces admitted above differ from main. There is no runtime caller, shared migration/journal registration, push or PR for this partial DEE-871 package.
+
+- Cumulative targeted validation: **93/93 passed**, comprising 13 explicitly opted-in real PostgreSQL fixture scenarios, 35 kernel, 35 lifecycle and 10 persistence-contract unit tests. The PostgreSQL tests used only a newly created resource-bounded loopback container with synthetic content, no host data mount, verified database/role/port and run marker. This is not production RLS, real authentication or operational erasure proof.
+- Behavioral RED/fix evidence includes expired observation replay (1 failed / 8 passed before the fix) and concurrent consent-version revocation (1 failed / 10 passed before consistent scope locking). Exact duplicate hypothesis alternatives also had a failing assertion before the correction. Initial repository and private-archive REDs were missing-feature failures, not proof that all behavioral tests first failed.
+- Private archive checks cover current scoped authority on reads/writes/retries; same-id/different-kind rights targets; refusal of model actors, relabeled observations and conflicting content; preservation of independently authorized private experience after unrelated modelling withdrawal; failure-closed mixed-purpose cleanup; source deletion and dependent-content removal. The explicit 2046 test clock proves absence of an automatic policy TTL only, not twenty years of physical durability. No archive permission becomes modelling, disclosure or inheritance-release permission.
+- Independent read-only review read the complete six-file diff at the exact implementation head, independently passed **80/80 unit tests**, and reported no remaining concrete P1/P2 within this disconnected scope. It did **not** rerun the 13 PostgreSQL scenarios. Full v1 inventory, runtime integration and production admission were explicitly not approved by this review.
+- Scoped ESLint and TypeScript passed; `pnpm validate:canon` passed its regressions, 149 tracked canonical files and release-identity check; `git diff --check` passed. No full unit CI, build, browser or production-readiness claim is made for this unpublished package.
+- An additional deliberately wrong run-marker invocation rejected before fixture DDL (`Fixture marker mismatch`, all 13 scenarios skipped). A subsequent direct read of the exact own database confirmed the fixture schema absent. This expected negative safety check is separate from the 93 passing functional tests.
+
+DEE-871 remains **In Progress**, WP-1/2/3 incomplete and downstream dependencies unchanged. Next independently safe work is the remaining v1 object inventory and reviewed access/rights/storage and historical-consent quarantine contracts; shared registration must separately resolve the MAX=204 compatibility boundary without changing Trader from this task. No partial-PR split, automatic legacy opt-in, production data collection or operational retention promise is authorized by this receipt.
 
 - Observation never becomes interpretation or ratified claim by overwrite.
 - No biometric material, connector credential or AI-TRADER domain state enters this ledger.
