@@ -163,6 +163,7 @@ export type HistoricalProductionNextCycleAuthorizedForecastV2 = Readonly<{
 
 export type HistoricalProductionNextCycleNonActionableForecastV2 = Readonly<{
   status: "NON_ACTIONABLE";
+  packageId: string;
   information: HistoricalProductionNextCycleInformationV2;
   issuanceSequence: number;
   runtimeInput: Parameters<typeof issueForecastRuntimeV2>[0];
@@ -486,6 +487,7 @@ export async function prepareHistoricalProductionNextCycleForecastV2(input: Read
     }
     return Object.freeze({
       status: "NON_ACTIONABLE" as const,
+      packageId: persistedPackage.packageId,
       information,
       issuanceSequence,
       runtimeInput,

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildExecutionHostRuntimeHealthV2,
   buildHistoricalConsumerEnvironmentV2,
+  historicalChildHeapOptionsV2,
   parseExecutionHostRuntimeV2,
   runExecutionHostImagePreflightV2,
   startExecutionHostSupervisorV2,
@@ -23,6 +25,39 @@ const env = Object.freeze({
 });
 
 describe("Historical Simulation V2 execution-host supervisor", () => {
+  it("propagates the explicit heap limit to a real Node child without other host authority", () => {
+    const childEnv = buildHistoricalConsumerEnvironmentV2({
+      ...env, NODE_OPTIONS: "--max-old-space-size=24576", HTX_SECRET_KEY: "not-forwarded",
+    }, parseExecutionHostRuntimeV2(env));
+    const child = spawnSync(process.execPath, ["--input-type=module", "-e",
+      "import v8 from 'node:v8'; console.log(JSON.stringify({heap: v8.getHeapStatistics().heap_size_limit / 1048576, secretPresent: 'HTX_SECRET_KEY' in process.env}));"],
+    { env: childEnv, encoding: "utf8", timeout: 10_000 });
+    expect(child.error).toBeUndefined();
+    expect(child.status).toBe(0);
+    const measured = JSON.parse(child.stdout);
+    expect(measured.heap).toBeGreaterThanOrEqual(24576);
+    expect(measured.heap).toBeLessThan(25000);
+    expect(measured.secretPresent).toBe(false);
+  });
+
+  it.each([
+    "--require=/tmp/injected.cjs", "--import=data:text/javascript,process.exit()",
+    "--max-old-space-size=24576 --require=/tmp/injected.cjs",
+    "--max-old-space-size=24576 --inspect=0.0.0.0:9229",
+    "--max-old-space-size=24576 --max-old-space-size=512",
+    "--max-old-space-size=0", "--max-old-space-size=32769",
+    "--max-old-space-size=1e4", "--max-old-space-size=24576\n--require=x",
+  ])("rejects unsafe or unbounded child NODE_OPTIONS: %s", (value) => {
+    expect(() => historicalChildHeapOptionsV2(value)).toThrow("UNSAFE_CHILD_NODE_OPTIONS");
+  });
+
+  it("does not invent a heap setting and normalizes the sole supported capacity option", () => {
+    expect(historicalChildHeapOptionsV2(undefined)).toBeUndefined();
+    expect(historicalChildHeapOptionsV2(" ")).toBeUndefined();
+    expect(historicalChildHeapOptionsV2("--max_old_space_size 24576"))
+      .toBe("--max-old-space-size=24576");
+  });
+
   it("binds runtime identity to the baked SHA and dedicated LOGIN", () => {
     expect(parseExecutionHostRuntimeV2(env)).toMatchObject({
       releaseSha: "a".repeat(40),
@@ -61,6 +96,8 @@ describe("Historical Simulation V2 execution-host supervisor", () => {
       "scripts/trader/historical-simulation-v2-launch-approved.ts",
       "scripts/trader/historical-simulation-v2-prepare-proposal.ts",
       "node_modules/tsx",
+      "scripts/trader/validation-bootstrap-node-pool.ts",
+      "scripts/trader/validation-bootstrap-range-worker.mjs",
     ].includes(String(path)));
     expect(runExecutionHostImagePreflightV2(env, exists)).toEqual({
       schemaVersion: "waia.execution_host_image_preflight.v2",
@@ -71,6 +108,21 @@ describe("Historical Simulation V2 execution-host supervisor", () => {
     });
     expect(() => runExecutionHostImagePreflightV2(env, () => false))
       .toThrow("HISTORICAL_CONSUMER_NOT_PACKAGED");
+    expect(() => runExecutionHostImagePreflightV2(env, path => !String(path).includes("range-worker")))
+      .toThrow("VALIDATION_BOOTSTRAP_NOT_PACKAGED");
+  });
+
+  it("passes only the validated, optional worker count without adding authority", () => {
+    expect(buildHistoricalConsumerEnvironmentV2(env, parseExecutionHostRuntimeV2(env)))
+      .not.toHaveProperty("WAIA_FHV_VALIDATION_WORKERS");
+    const selected = { ...env, WAIA_FHV_VALIDATION_WORKERS: "4" };
+    const config = parseExecutionHostRuntimeV2(selected);
+    selected.WAIA_FHV_VALIDATION_WORKERS = "99";
+    expect(buildHistoricalConsumerEnvironmentV2(selected, config).WAIA_FHV_VALIDATION_WORKERS).toBe("4");
+    for (const value of ["", "0", "5", "1.5", "04", " 2", "Infinity"]) {
+      expect(() => parseExecutionHostRuntimeV2({ ...env, WAIA_FHV_VALIDATION_WORKERS: value }))
+        .toThrow("WAIA_FHV_VALIDATION_WORKERS");
+    }
   });
 
   it("packages the proposal preparer and only the canonical approved launch entrypoint", () => {
@@ -84,6 +136,8 @@ describe("Historical Simulation V2 execution-host supervisor", () => {
     expect(dockerfile).toContain(
       "COPY scripts/trader/historical-simulation-v2-prepare-proposal.ts",
     );
+    expect(dockerfile).toContain("COPY scripts/trader/validation-bootstrap-node-pool.ts");
+    expect(dockerfile).toContain("COPY scripts/trader/validation-bootstrap-range-worker.mjs");
     expect(dockerfile).not.toContain(
       "COPY scripts/trader/historical-simulation-v2-launch-consumer.ts",
     );

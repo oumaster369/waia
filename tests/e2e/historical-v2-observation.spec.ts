@@ -17,6 +17,7 @@ function projection(count: number): HistoricalObservableProjectionV2 {
     buyAndHoldGrossEquity: "100", strategyMinusBuyAndHoldGross: String(i * 5),
     buyAndHoldConvention: "GROSS_MARK_TO_MARKET_NO_FEES", openPositionsCount: 1,
     decisionsCount: 1, riskVetoCount: 0, ordersCount: 1, fillsCount: 1,
+    pendingModeledOrders: [],
     lastForecast: { reasonCodes: [`FORECAST_CYCLE_${i}`] }, lastDecision: { action: "HOLD" },
     lastPortfolio: { reasonCodes: ["PORTFOLIO_MODELED"] }, lastRisk: { verdict: "ALLOW_MODELED" },
     lastExecution: { status: "MODELED" }, lastAccounting: { cash: "50", equity: String(100 + i * 5), positions: { BTCUSDT: { quantity: "0.001" } } },
@@ -124,6 +125,20 @@ test("paired admin and tenant render updates, scoped links and polling recovery"
     await surface.route("**/api/trader/**historical-v2/stream?**", route => route.fulfill({ json: projection(3) }));
     await expect(surface.getByText("RUNNING · observed", { exact: true })).toBeVisible({ timeout: 10_000 });
   }
+  const completed = projection(3);
+  const unsettled = { ...completed, eventId: "completed-with-pending",
+    lifecycle: { ...completed.lifecycle!, phase: "COMPLETED" as const },
+    aggregate: { ...completed.aggregate, runPhase: "COMPLETED" as const },
+    accounts: completed.accounts.map(account => ({ ...account, pendingModeledOrders: [{
+      orderId: "pending-final-cycle", symbol: "BTCUSDT", side: "buy" as const, state: "ACCEPTED",
+      quantity: "0.01", filledQuantity: "0", remainingQuantity: "0.01", cancellationPending: false,
+    }] })),
+  };
+  for (const surface of [page, tenant]) {
+    await surface.route("**/api/trader/**historical-v2/stream?**", route => route.fulfill({ json: unsettled }));
+    await expect(surface.getByText(/Replay extent completed with unsettled modeled orders/)).toBeVisible({ timeout: 10_000 });
+    await expect(surface.getByText("BTCUSDT · BUY · ACCEPTED", { exact: true })).toBeVisible();
+  }
   await page.screenshot({ path: "test-results/historical-v2-admin.png", fullPage: true });
   await tenant.setViewportSize({ width: 390, height: 844 });
   expect(await tenant.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -138,4 +153,39 @@ test("unknown requested organization cannot silently observe the first org", asy
   await expect(page.getByTestId("historical-v2-streaming-dashboard")).toHaveCount(0);
   await expect(page.getByText("Connecting to Historical V2…")).toHaveCount(0);
   await expect(page.getByTestId("historical-ratification-ceremony-v2")).toHaveCount(0);
+});
+
+test("recorded preparation request survives reload without claiming launch readiness", async ({ page, baseURL }) => {
+  await admitLocalAdmin(page);
+  await installPresentationTransport(page);
+  let recorded = false;
+  let requests = 0;
+  await page.route("**/api/trader/admin/historical-v2/ratification?**", async route => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toEqual({
+        action: "REQUEST_EXACT_PRE_HOLDOUT_TECHNICAL_PROPOSAL",
+        initial_record_index: 525600, cycle_count: 35,
+      });
+      recorded = true; requests++;
+      await route.fulfill({ status: 201, json: { id: "request-presentation-only" } });
+      return;
+    }
+    await route.fulfill({ headers: { "x-fhv-csrf-token": "presentation-token" }, json: {
+      preparationState: recorded ? "REQUEST_RECORDED" : "NOT_REQUESTED",
+      proposalAvailable: false,
+      ...(recorded ? { requestId: "request-presentation-only",
+        requestedExtent: { initialRecordIndex: 525600, cycleCount: 35 } } : {}),
+    } });
+  });
+  await page.goto(`${baseURL!.replace("127.0.0.1", "trader.localhost")}/admin/fhv-operations?campaign_run_id=${runId}&organization_id=${organizationId}&release_sha=${"a".repeat(40)}`);
+  await page.getByRole("button", { name: "Request exact technical proposal" }).click();
+  const ceremony = page.getByTestId("historical-ratification-ceremony-v2");
+  await expect(ceremony.getByRole("status")).toContainText("Preparation request recorded");
+  await page.reload();
+  await expect(ceremony.getByRole("status")).toContainText("does not confirm that computation is running");
+  await expect(ceremony.getByRole("status")).toContainText("35 cycles");
+  await expect(ceremony.getByRole("button", { name: "Request exact technical proposal" })).toHaveCount(0);
+  await expect(ceremony.getByRole("button", { name: /ratify this exact proposal/i })).toHaveCount(0);
+  expect(requests).toBe(1);
+  await page.screenshot({ path: "test-results/historical-request-recorded.png", fullPage: true });
 });

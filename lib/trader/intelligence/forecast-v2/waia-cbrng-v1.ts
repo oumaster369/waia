@@ -123,6 +123,43 @@ export function waiaUnbiasedInt(address: WaiaCbrngAddress, n: number): number {
   }
 }
 
+/**
+ * Same addressed SHA-256/uint64 rejection law, with immutable prefix and modulus
+ * setup amortized across draws. No RNG cursor: every call supplies all ordinals.
+ * The private buffer is used synchronously and never shared between samplers.
+ */
+export function createWaiaUnbiasedIntV1(input: Readonly<{
+  domain: string;
+  rootSeed: Buffer;
+  n: number;
+}>): (replicaU32: number, sampleU32: number, drawU32: number, retryU32?: number) => number {
+  if (!Number.isSafeInteger(input.n) || input.n <= 0) {
+    throw new Error(`[forecast-v2/cbrng] UNBIASED_INT requires safe integer N > 0, got ${input.n}`);
+  }
+  const preimage = buildWaiaRandomBlockPreimage({ domain: input.domain, rootSeed: input.rootSeed,
+    replicaU32: 0, sampleU32: 0, drawU32: 0, retryU32: 0 });
+  const bigN = BigInt(input.n);
+  const limit = (1n << 64n) - ((1n << 64n) % bigN);
+  return (replicaU32, sampleU32, drawU32, retryU32 = 0) => {
+    assertU32("replicaU32", replicaU32);
+    assertU32("sampleU32", sampleU32);
+    assertU32("drawU32", drawU32);
+    assertU32("retryU32", retryU32);
+    if (retryU32 === 0xffff_ffff) throw new CbrngRetryOverflowError();
+    preimage.writeUInt32BE(replicaU32, 48);
+    preimage.writeUInt32BE(sampleU32, 52);
+    preimage.writeUInt32BE(drawU32, 56);
+    let retry = retryU32;
+    for (;;) {
+      preimage.writeUInt32BE(retry, 60);
+      const word = createHash("sha256").update(preimage).digest().readBigUInt64BE(0);
+      if (word < limit) return Number(word % bigN);
+      if (retry === 0xffff_ffff) throw new CbrngRetryOverflowError();
+      retry += 1;
+    }
+  };
+}
+
 export function uint53UniformFromBlock(block: Buffer): number {
   const word = block.readBigUInt64BE(0);
   const numerator = word >> 11n;

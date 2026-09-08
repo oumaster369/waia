@@ -27,7 +27,7 @@ import {
   type HistoricalModeledRealityV2,
   type HistoricalModeledRiskAccountingV2,
 } from "./historical-modeled-portfolio-reality-v2";
-import { evaluateHtrGuardianCycle } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
+import { resolveCurrentHistoricalModeledGuardianV2 } from "./current-modeled-guardian-v2";
 
 export const HISTORICAL_MODELED_RISK_V2_SCHEMA = "waia.trader.historical_modeled_risk.v2" as const;
 export const HISTORICAL_MODELED_EXECUTION_V2_SCHEMA = "waia.trader.historical_modeled_execution.v2" as const;
@@ -221,6 +221,7 @@ export function createHistoricalModeledCapitalBindingV2(
   async function loadAccounting(cycle: HistoricalSimulationV2Cycle): Promise<Readonly<{
     derived: HistoricalModeledRiskAccountingV2;
     posture: ProtectivePostureV2;
+    guardian: ReturnType<typeof resolveCurrentHistoricalModeledGuardianV2>;
   }>> {
     const snapshot = await input.loadAccounting(cycle);
     const derived = deriveHistoricalModeledRiskAccountingV2({
@@ -232,7 +233,12 @@ export function createHistoricalModeledCapitalBindingV2(
       worstCasePendingExposureNotional: snapshot.worstCasePendingExposureNotional,
       outstandingReservationNotional: snapshot.outstandingReservationNotional,
     });
-    return Object.freeze({ derived, posture: snapshot.posture });
+    const guardian = resolveCurrentHistoricalModeledGuardianV2({
+      frontier: derived.frontier,
+      restored: await input.evaluateGuardian({ cycle, accounting: derived }),
+      accountingPosture: snapshot.posture,
+    });
+    return Object.freeze({ derived, posture: guardian.posture, guardian });
   }
 
   async function assessRisk(args: Readonly<{
@@ -507,7 +513,7 @@ export function createHistoricalModeledCapitalBindingV2(
 
   const resolveLedgerProjection: RunHistoricalSimulationV2Input["resolveLedgerProjection"] = async (context) => {
     const observed = await input.advanceModeledExecution(context.cycle);
-    const { derived: accounting } = await loadAccounting(context.cycle);
+    const { derived: accounting, guardian: currentGuardian } = await loadAccounting(context.cycle);
     const lifecycle = portfolioByCycle.get(context.cycle.cycleId) ??
       buildHistoricalModeledPortfolioLifecycleV2({ organizationId: input.organizationId,
         accountId: input.accountId, runId: input.runId, cycleId: context.cycle.cycleId,
@@ -518,22 +524,6 @@ export function createHistoricalModeledCapitalBindingV2(
       accountId: input.accountId, runId: input.runId, cycleId: context.cycle.cycleId,
       accounting, portfolioLifecycle: lifecycle });
     realityByCycle.set(context.cycle.cycleId, reality);
-    const restored = await input.evaluateGuardian({ cycle: context.cycle, accounting });
-    const frontier = accounting.frontier;
-    const derivedGuardian = evaluateHtrGuardianCycle({
-      accountPeakHwm: frontier.equityHwm,
-      monthlyPeakHwm: frontier.monthlyPeakHwm ?? frontier.equityHwm,
-      equityUsdt: frontier.equity,
-      strategyDrawdownBps: Math.max(0, ...Object.values(frontier.strategyDrawdownBpsByKey ?? {})),
-      skipReconciliationAssert: true,
-      missingMark: accounting.openPositionCount > Object.keys(frontier.marks).length,
-    });
-    const statusRank = { NONE: 0, CLOSE_ONLY: 1, STOP_ACCOUNT: 2 } as const;
-    const derivedStatus = derivedGuardian.breachState === "STOP_ACCOUNT" ? "STOP_ACCOUNT" as const :
-      derivedGuardian.breachState === "CLOSE_ONLY" ? "CLOSE_ONLY" as const : "NONE" as const;
-    const status = statusRank[derivedStatus] >= statusRank[restored.status] ? derivedStatus : restored.status;
-    const guardianReasons = Object.freeze([...restored.reasonCodes,
-      ...(derivedGuardian.reason === null ? [] : [derivedGuardian.reason])]);
     const guardian = seal({
       schemaVersion: HISTORICAL_MODELED_GUARDIAN_V2_SCHEMA,
       source: "MODELED_HISTORICAL" as const,
@@ -542,8 +532,8 @@ export function createHistoricalModeledCapitalBindingV2(
       accountingFrontierContentDigestHex: accounting.frontierContentDigestHex,
       reconciledExposureNotional: accounting.accounting.reconciledExposureNotional,
       exposureLimitNotional: accounting.accounting.exposureLimitNotional,
-      status,
-      reasonCodes: guardianReasons,
+      status: currentGuardian.status,
+      reasonCodes: currentGuardian.reasonCodes,
     }) as HistoricalModeledGuardianReceiptV2;
     guardianByCycle.set(context.cycle.cycleId, guardian);
     await input.persistEvidence(guardian);

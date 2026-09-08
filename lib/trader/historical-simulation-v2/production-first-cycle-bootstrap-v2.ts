@@ -10,6 +10,7 @@ import {
 } from
   "@/db/postgres-session-transaction";
 import type postgres from "postgres";
+import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
 import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 
 import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
@@ -1316,7 +1317,7 @@ export function prepareHistoricalProductionFirstCycleV2(
       runId: input.preflight.runId,
     });
     let locked = false;
-    try {
+    return withHistoricalLaunchCleanupV2(async () => {
       await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
       locked = true;
       return await withPostgresSerializableTransactionRetry(sql, (transaction) =>
@@ -1325,13 +1326,12 @@ export function prepareHistoricalProductionFirstCycleV2(
           input,
           authenticatedOperatorUserId,
         ));
-    } finally {
-      try {
+    }, [
+      async () => {
         if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-      } finally {
-        reserved.release();
-      }
-    }
+      },
+      () => reserved.release(),
+    ]);
     });
   });
 }
@@ -1367,7 +1367,7 @@ export async function INTERNAL_prepareHistoricalProductionFirstCycleOnExecutionS
   });
   let locked = false;
   let runnerRoleAssumed = false;
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     runnerRoleAssumed = true;
     await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
@@ -1384,17 +1384,15 @@ export async function INTERNAL_prepareHistoricalProductionFirstCycleOnExecutionS
         ratifiedOperatorUserId: authority.operatorUserId,
       });
     });
-  } finally {
-    try {
+  }, [
+    async () => {
       if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-    } finally {
-      try {
-        if (runnerRoleAssumed) await resetHistoricalSimulationRunnerRoleV2(sql);
-      } finally {
-        reserved.release();
-      }
-    }
-  }
+    },
+    async () => {
+      if (runnerRoleAssumed) await resetHistoricalSimulationRunnerRoleV2(sql);
+    },
+    () => reserved.release(),
+  ]);
 }
 
 /**
