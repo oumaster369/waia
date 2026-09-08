@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const mocks = vi.hoisted(() => ({ connect: vi.fn(), end: vi.fn(), finalize: vi.fn(), run: vi.fn() }));
 vi.mock("postgres", () => ({ default: mocks.connect }));
@@ -15,14 +18,18 @@ import { runHistoricalSimulationApprovedLaunchMainV2 } from
 const scope = { organizationId: "11111111-1111-4111-8111-111111111111",
   runId: "synthetic-finalization-observer", releaseSha: "a".repeat(40) };
 
+let checkpointRoot: string;
 beforeEach(() => {
+  vi.stubEnv("WAIA_TRADER_CLI", "1");
+  checkpointRoot = realpathSync(mkdtempSync(join(tmpdir(), "waia-finalize-checkpoint-test-")));
   vi.resetAllMocks(); mocks.end.mockResolvedValue(undefined);
   mocks.connect.mockReturnValue(Object.assign(vi.fn(), { end: mocks.end, options: { max: 1 } }));
   // No DB call, ratification, bootstrap or consumer: execute only the actual CLI callback.
   mocks.run.mockImplementation(async (_env, dependencies) =>
     dependencies.finalize("postgresql://synthetic@example.test/test", scope));
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(checkpointRoot, { recursive: true }); });
+const env = (): NodeJS.ProcessEnv => ({ NODE_ENV: "test", WAIA_FHV_CHECKPOINT_ROOT: checkpointRoot });
 
 describe("approved launch forwards finalization diagnostics and shutdown", () => {
   it.each(["SIGTERM", "SIGINT"] as const)("forwards %s to finalization and cleans up without a success", async signal => {
@@ -39,7 +46,7 @@ describe("approved launch forwards finalization diagnostics and shutdown", () =>
       expect(observer.signal.aborted).toBe(true);
       throw stopped;
     });
-    await expect(runHistoricalSimulationApprovedLaunchMainV2({ NODE_ENV: "test" })).rejects.toBe(stopped);
+    await expect(runHistoricalSimulationApprovedLaunchMainV2(env())).rejects.toBe(stopped);
     expect(mocks.finalize).toHaveBeenCalledOnce(); expect(mocks.end).toHaveBeenCalledWith({ timeout: 5 });
     expect(out).not.toHaveBeenCalled(); expect(err).toHaveBeenCalledOnce();
     expect(process.listenerCount(signal)).toBe(before);
@@ -52,7 +59,7 @@ describe("approved launch forwards finalization diagnostics and shutdown", () =>
     const before = process.listenerCount("SIGTERM");
     mocks.finalize.mockImplementation(async (_pool, _scope, observer) =>
       observer.onProgress({ ...scope, phase: "FINALIZATION_REPLAY", authorityGranted: false }));
-    await expect(runHistoricalSimulationApprovedLaunchMainV2({ NODE_ENV: "test" })).rejects.toBe(failure);
+    await expect(runHistoricalSimulationApprovedLaunchMainV2(env())).rejects.toBe(failure);
     expect(mocks.end).toHaveBeenCalledOnce(); expect(out).not.toHaveBeenCalled();
     expect(process.listenerCount("SIGTERM")).toBe(before);
   });
@@ -68,7 +75,7 @@ describe("approved launch forwards finalization diagnostics and shutdown", () =>
       expect(observer.signal.aborted).toBe(true);
       throw primary;
     });
-    const failure = await runHistoricalSimulationApprovedLaunchMainV2({ NODE_ENV: "test" })
+    const failure = await runHistoricalSimulationApprovedLaunchMainV2(env())
       .catch(error => error);
     expect(failure).toBeInstanceOf(AggregateError);
     expect(failure.cause).toBe(primary);

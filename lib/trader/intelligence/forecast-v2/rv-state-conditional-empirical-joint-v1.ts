@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { reuseScientificPackageV1 } from "@/lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
 
 import {
   ALEATORIC_ROOT_PREFIX_16,
@@ -343,6 +344,10 @@ export function buildPredictivePackageV1(input: {
     nodeVersionExact: string;
   };
 }): PredictivePackageV1 {
+  return reuseScientificPackageV1(input, () => buildPredictivePackageUncachedV1(input));
+}
+
+function buildPredictivePackageUncachedV1(input: Parameters<typeof buildPredictivePackageV1>[0]): PredictivePackageV1 {
   if (!Number.isInteger(input.kConfigDec) || input.kConfigDec < 1 || input.kConfigDec > 50) {
     throw new Error("[forecast-v2/joint] kConfigDec must be integer 1..50");
   }

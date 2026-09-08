@@ -366,7 +366,10 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
   if (preparationEventsPool === pool) refuse("PREPARATION_JOURNAL_SEPARATE_POOL_REQUIRED");
   const baseObserver = snapshotTechnicalPreparationObserverV2(requestedObserver);
   let journal: Awaited<ReturnType<typeof createPreparationAttemptJournalV2>> | undefined;
-  const observer = { ...baseObserver, onProgress: baseObserver.onProgress || preparationEventsPool
+  const observer = { ...baseObserver, flushProgress: preparationEventsPool || baseObserver.flushProgress ? async () => {
+      await journal?.flush();
+      await baseObserver.flushProgress?.();
+    } : undefined, onProgress: baseObserver.onProgress || preparationEventsPool
     ? (event: Parameters<NonNullable<TechnicalPreparationObserverV2["onProgress"]>>[0]) => {
       journal?.progress(event); baseObserver.onProgress?.(event);
     } : undefined };

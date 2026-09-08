@@ -62,7 +62,9 @@ import {
 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import type { ResearchHarnessAdmissionInputV1 } from "@/lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
 import { validationBootstrapExecutionFromEnvironmentV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
-import { assertTechnicalPreparationActiveV2, emitTechnicalPreparationProgressV2,
+import { reuseScientificEvidenceV1, reuseScientificEvidenceAsyncV1 } from
+  "@/lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
+import { assertTechnicalPreparationActiveV2, emitTechnicalPreparationProgressV2, flushTechnicalPreparationProgressV2,
   snapshotTechnicalPreparationObserverV2, type TechnicalPreparationObserverV2 } from
   "@/lib/trader/historical-simulation-v2/technical-preparation-observer-v2";
 import {
@@ -1447,6 +1449,7 @@ async function buildTechnicalSurfaceCandidatesV2(
     }
     const surfaceKey = surface.surfaceKey as HistoricalFourSurfaceKeyV2;
     emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "SURFACE_LOAD", surfaceKey });
+    await flushTechnicalPreparationProgressV2(observer);
     const selectedK = surface.convergenceReceipt.selectedK;
     const selectedM = surface.convergenceReceipt.selectedM;
     const generationDigest = surface.convergenceReceipt.selectedPackageGenerationIdentityDigestHex;
@@ -1540,7 +1543,14 @@ async function buildTechnicalSurfaceCandidatesV2(
     const anchors: ResearchHarnessAdmissionInputV1["anchors"][number][] = [];
     emitTechnicalPreparationProgressV2(observer, input.preflight,
       { phase: "FORECAST_ANCHORS", surfaceKey, completed: 0, total: walkForward.corpus.length });
-    for (const anchor of walkForward.corpus) {
+    await flushTechnicalPreparationProgressV2(observer);
+    for (let offset = 0; offset < walkForward.corpus.length; offset += 32) {
+      assertTechnicalPreparationActiveV2(observer);
+      const batch = walkForward.corpus.slice(offset, offset + 32);
+      const batchResults = reuseScientificEvidenceV1("wf-forecast-batch-v1", {
+        organizationId: input.preflight.organizationId, releaseSha: input.preflight.releaseSha,
+        generationDigest, packageDigest, evaluationPartitionReceiptDigestHex, offset, batch,
+      }, () => batch.map(anchor => {
       assertTechnicalPreparationActiveV2(observer);
       const issuance = issueForecastV1({
         pkg: predictivePackage,
@@ -1549,7 +1559,7 @@ async function buildTechnicalSurfaceCandidatesV2(
         executionHorizonMinutes: surface.family.executionHorizonMinutes,
         normalizationVersionDigestHex: surface.family.normalizationVersionDigestHex,
       });
-      anchors.push(Object.freeze({
+      return Object.freeze({
         anchorId: computeSemanticSha256Hex({
           schemaVersion: "waia.trader.wf_predictive_anchor.v2",
           surfaceKey,
@@ -1559,13 +1569,16 @@ async function buildTechnicalSurfaceCandidatesV2(
         }),
         observedReturn: terminalRhFromOutcome13dV1(anchor.outcome13d),
         challengerProbabilities: issuance.terminalScenarioMasses.probabilities,
+      });
       }));
+      anchors.push(...batchResults);
       // Only scheduling changes: issue every anchor in the original order using
       // the same complete package. No thinning, pooling or alternate Forecast.
       if (anchors.length % 32 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
       if (anchors.length % 1024 === 0 || anchors.length === walkForward.corpus.length) {
         emitTechnicalPreparationProgressV2(observer, input.preflight,
           { phase: "FORECAST_ANCHORS", surfaceKey, completed: anchors.length, total: walkForward.corpus.length });
+        await flushTechnicalPreparationProgressV2(observer);
       }
     }
     const harnessInput: ResearchHarnessAdmissionInputV1 = {
@@ -1583,7 +1596,7 @@ async function buildTechnicalSurfaceCandidatesV2(
       historyReturnMinuteOpenTimesMs: development.corpus.map((anchor) => anchor.closedBarEpochMs),
       anchors,
     };
-    const predictive = await buildPredictiveTerminalReceiptAsyncV1({
+    const predictiveInput = {
       harnessInput,
       identities: {
         developmentDatasetDigestHex: input.prepared.authority.developmentDatasetIdentityDigestHex,
@@ -1591,15 +1604,19 @@ async function buildTechnicalSurfaceCandidatesV2(
         predictivePackageGenerationIdentityDigestHex: generationDigest,
         predictivePackageContentDigestHex: packageDigest,
         runtimeContractDigestHex: predictivePackage.runtimeContractDigest.toString("hex"),
-        scoringContractVersion: "multiclass-log-score/v1",
+        scoringContractVersion: "multiclass-log-score/v1" as const,
         evaluationPartitionReceiptDigestHex,
       },
-    }, { ...bootstrapExecution, signal: observer.signal, onProgress: progress => {
+    };
+    const predictive = await reuseScientificEvidenceAsyncV1("wf-predictive-terminal-v1", predictiveInput,
+      () => buildPredictiveTerminalReceiptAsyncV1(predictiveInput, { ...bootstrapExecution, signal: observer.signal,
+      flushProgress: () => flushTechnicalPreparationProgressV2(observer), onProgress: progress => {
       if (progress.completed % 1000 === 0 || progress.completed === progress.total) {
         emitTechnicalPreparationProgressV2(observer, input.preflight,
           { phase: "VALIDATION_RESAMPLES", surfaceKey, ...progress });
       }
-    } });
+    } }));
+    await flushTechnicalPreparationProgressV2(observer);
     if (predictive.terminalStatus !== "QUALIFIED") {
       const diagnostic = canonicalizeDiagnosticJsonString({
         reasonCodes: predictive.reasonCodes,
@@ -1893,6 +1910,7 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
   assertAuthenticatedRatificationScopeV2(input, receipt);
   return withPostgresSessionTransaction(sql, "SERIALIZABLE", async (transaction) => {
     emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "SCIENTIFIC_PREPARATION" });
+    await flushTechnicalPreparationProgressV2(observer);
     const prepared = await dependencies.prepare(transaction, input.preflight);
     assertTechnicalPreparationActiveV2(observer);
     if (
@@ -1912,6 +1930,7 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
       surfaces: technical.surfaces,
     });
     emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "TECHNICAL_CANDIDATE_COMPLETE" });
+    await flushTechnicalPreparationProgressV2(observer);
     await transaction`
       INSERT INTO trader_historical_qualified_execution_extent_v2 (
         organization_id,run_id,release_sha,qualification_receipt_digest_hex,
@@ -2159,6 +2178,7 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     // deterministic nor necessary. Load and fully replay-validate that durable receipt.
     const prepared = await loadFrozenTechnicalAggregateV2(transaction, candidate);
     emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "FINALIZATION_REPLAY" });
+    await flushTechnicalPreparationProgressV2(observer);
     const technical = await buildTechnicalSurfaceCandidatesV2({
       preflight: input.preflight, prepared, qualification: receipt, dependencies, observer,
     });

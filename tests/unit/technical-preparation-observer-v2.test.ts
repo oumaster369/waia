@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { emitTechnicalPreparationProgressV2, snapshotTechnicalPreparationObserverV2 } from
+import { emitTechnicalPreparationProgressV2, flushTechnicalPreparationProgressV2, snapshotTechnicalPreparationObserverV2 } from
   "@/lib/trader/historical-simulation-v2/technical-preparation-observer-v2";
 import { validationBootstrapPValueAsyncV1, validationBootstrapPValueV1 } from
   "@/lib/trader/research/benchmark/validation-bootstrap-v1";
@@ -9,6 +9,22 @@ const scope = { organizationId: "11111111-1111-4111-8111-111111111111", runId: "
   releaseSha: "a".repeat(40) };
 afterEach(() => vi.unstubAllEnvs());
 describe("process-local technical preparation observer", () => {
+  it("owns the progress barrier and checks cancellation after its pending write", async () => {
+    vi.stubEnv("WAIA_TRADER_CLI", "1");
+    const controller = new AbortController();
+    const flush = vi.fn(async () => { controller.abort(); });
+    const input = { signal: controller.signal, flushProgress: flush };
+    const observer = snapshotTechnicalPreparationObserverV2(input);
+    input.flushProgress = vi.fn(async () => {});
+    await expect(flushTechnicalPreparationProgressV2(observer)).rejects.toThrow(/CANCELLED/);
+    expect(flush).toHaveBeenCalledOnce(); expect(input.flushProgress).not.toHaveBeenCalled();
+  });
+  it.each([undefined, 2])("never returns a successful bootstrap if the journal drain fails, workers=%s", async nodeWorkerCount => {
+    vi.stubEnv("WAIA_TRADER_CLI", "1");
+    const failure = new Error("JOURNAL_WRITE_FAILED");
+    await expect(validationBootstrapPValueAsyncV1({ differentials: [1, -2, 3], trialIdentityDigest32: Buffer.alloc(32, 9) },
+      { nodeWorkerCount, flushProgress: async () => { throw failure; } })).rejects.toBe(failure);
+  });
   it("refuses caller observers outside the Node CLI", () => {
     vi.stubEnv("WAIA_TRADER_CLI", "0");
     expect(snapshotTechnicalPreparationObserverV2()).toEqual({ signal: undefined, onProgress: undefined });

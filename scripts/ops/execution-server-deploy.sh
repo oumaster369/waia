@@ -5,17 +5,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/_execution-server-common.sh"
 readonly SCRIPT_NAME="${0##*/}"
 usage() { cat >&2 <<EOF
-Usage: ${SCRIPT_NAME} --target-sha <sha> --image-tag <tag> --operator <id> --secrets-env-file PATH --dataset-root PATH [--approved-ref refs/remotes/origin/main] [--confirm] [--dry-run]
+Usage: ${SCRIPT_NAME} --target-sha <sha> --image-tag <tag> --operator <id> --secrets-env-file PATH --dataset-root PATH --checkpoint-root PATH [--approved-ref refs/remotes/origin/main] [--confirm] [--dry-run]
 Deploys container and writes deployed-revision.json on --confirm. No-op without --confirm.
 EOF
 }
 TARGET_SHA="${EXECUTION_SERVER_TARGET_SHA:-}"; REPO_PATH="${EXECUTION_SERVER_REPO_PATH:-}"
 APPROVED_REF="${EXECUTION_SERVER_APPROVED_REF:-refs/remotes/origin/main}"
-IMAGE_TAG=""; OPERATOR=""; SECRETS_ENV_FILE=""; DATASET_ROOT=""; CONFIRM=0; DRY_RUN=0
+IMAGE_TAG=""; OPERATOR=""; SECRETS_ENV_FILE=""; DATASET_ROOT=""; CHECKPOINT_ROOT=""; CONFIRM=0; DRY_RUN=0
 while [[ $# -gt 0 ]]; do case "$1" in
   --target-sha) TARGET_SHA="$2"; shift 2;; --image-tag) IMAGE_TAG="$2"; shift 2;;
   --operator) OPERATOR="$2"; shift 2;; --secrets-env-file) SECRETS_ENV_FILE="$2"; shift 2;;
   --dataset-root) DATASET_ROOT="$2"; shift 2;;
+  --checkpoint-root) CHECKPOINT_ROOT="$2"; shift 2;;
   --repo-path) REPO_PATH="$2"; shift 2;; --confirm) CONFIRM=1; shift;; --dry-run) DRY_RUN=1; shift;;
   --approved-ref) APPROVED_REF="$2"; shift 2;;
   -h|--help) usage; exit 0;; *) die "unknown argument: $1";; esac; done
@@ -35,6 +36,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 fi
 log "execution-server deploy"; log "  image tag: ${IMAGE_TAG}"; log "planned actions: preflight, docker run, /health, write revision"
 if ! require_confirm_or_noop "deploy"; then print_noop_footer; exit 0; fi
+[[ "$CHECKPOINT_ROOT" == /* && "$CHECKPOINT_ROOT" != / && -d "$CHECKPOINT_ROOT" && ! -L "$CHECKPOINT_ROOT" ]] ||
+  die "checkpoint-root must be an existing private absolute directory owned by the image user"
+CHECKPOINT_ROOT="$(cd "$CHECKPOINT_ROOT" && pwd -P)"
+[[ "$CHECKPOINT_ROOT" != "$DATASET_ROOT" && "$CHECKPOINT_ROOT" != "$DATASET_ROOT"/* ]] ||
+  die "checkpoint-root must be outside the read-only source dataset"
+[[ "$CHECKPOINT_ROOT" != *","* && "$DATASET_ROOT" != *","* ]] || die "mount paths must not contain commas"
 run_preflight "$REPO_ROOT" "$TARGET_SHA" "$APPROVED_REF" || exit 1
 IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG")"
 [[ "$IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ]] || die "docker returned an invalid immutable image id"
@@ -50,12 +57,21 @@ docker run --rm \
 docker run --rm \
   --env-file "$SECRETS_ENV_FILE" \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
+  -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   "$IMAGE_TAG" node services/ai-trader-execution-host/entrypoint.mjs --preflight-runtime >/dev/null
+# Validate private durable storage as the immutable image user before replacing any container.
+docker run --rm \
+  --mount "type=bind,src=${CHECKPOINT_ROOT},dst=/var/lib/waia/scientific-checkpoints" \
+  -e WAIA_TRADER_CLI=1 -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
+  "$IMAGE_TAG" node --import tsx --conditions=react-server -e \
+  'require("./scripts/trader/scientific-checkpoint-store-v1.ts").createScientificCheckpointStoreV1("/var/lib/waia/scientific-checkpoints", process.env.WAIA_RELEASE_SHA)' >/dev/null
 docker ps -a --format '{{.Names}}' | grep -qx "$EXECUTION_SERVER_CONTAINER_NAME" && docker rm -f "$EXECUTION_SERVER_CONTAINER_NAME" || true
 docker run -d --name "$EXECUTION_SERVER_CONTAINER_NAME" --restart unless-stopped \
   -p "${EXECUTION_SERVER_HOST_PORT}:8080" \
   --mount "type=bind,src=${DATASET_ROOT},dst=${DATASET_ROOT},readonly" \
+  --mount "type=bind,src=${CHECKPOINT_ROOT},dst=/var/lib/waia/scientific-checkpoints" \
   --env-file "$SECRETS_ENV_FILE" \
+  -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   -e EXECUTION_HOST_PORT=8080 \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
   "$IMAGE_TAG"

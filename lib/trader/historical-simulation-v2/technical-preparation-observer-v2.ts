@@ -15,18 +15,26 @@ export type TechnicalPreparationProgressV2 = Readonly<{
 export type TechnicalPreparationObserverV2 = Readonly<{
   signal?: AbortSignal;
   onProgress?: (event: TechnicalPreparationProgressV2) => void;
+  flushProgress?: () => Promise<void>;
 }>;
 
 export function snapshotTechnicalPreparationObserverV2(
   observer: TechnicalPreparationObserverV2 = {},
 ): TechnicalPreparationObserverV2 {
-  const { signal, onProgress } = observer;
-  if ((signal || onProgress) && (typeof process === "undefined" ||
+  const { signal, onProgress, flushProgress } = observer;
+  if ((signal || onProgress || flushProgress) && (typeof process === "undefined" ||
       process.release?.name !== "node" || !process.versions?.node || process.env.WAIA_TRADER_CLI !== "1")) {
     throw new Error("TECHNICAL_PREPARATION_OBSERVER_NODE_CLI_REQUIRED");
   }
   assertTechnicalPreparationActiveV2({ signal });
-  return Object.freeze({ signal, onProgress });
+  return Object.freeze({ signal, onProgress, flushProgress });
+}
+
+/** Drain diagnostic I/O BEFORE entering another CPU-bound stage. No authority. */
+export async function flushTechnicalPreparationProgressV2(observer: TechnicalPreparationObserverV2): Promise<void> {
+  assertTechnicalPreparationActiveV2(observer);
+  await observer.flushProgress?.();
+  assertTechnicalPreparationActiveV2(observer);
 }
 
 export function assertTechnicalPreparationActiveV2(observer: TechnicalPreparationObserverV2): void {

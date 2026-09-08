@@ -203,6 +203,7 @@ export type ValidationBootstrapExecutionV1 = Readonly<{
   /** Explicit Node CLI execution only; never changes the scientific input or result. */
   nodeWorkerCount?: number;
   signal?: AbortSignal;
+  flushProgress?: () => Promise<void>;
   onProgress?: (progress: Readonly<{ completed: number; total: typeof VALIDATION_BOOTSTRAP_B;
     trialIdentityDigestHex?: string }>) => void;
 }>;
@@ -210,7 +211,7 @@ export type ValidationBootstrapExecutionV1 = Readonly<{
 export function snapshotValidationBootstrapExecutionV1(
   execution: ValidationBootstrapExecutionV1,
 ): ValidationBootstrapExecutionV1 {
-  const { nodeWorkerCount, signal, onProgress } = execution;
+  const { nodeWorkerCount, signal, onProgress, flushProgress } = execution;
   if (nodeWorkerCount !== undefined) {
     if (!Number.isSafeInteger(nodeWorkerCount) || nodeWorkerCount < 1 || nodeWorkerCount > 4) {
       throw new Error("VALIDATION_BOOTSTRAP_WORKERS_MUST_BE_1_TO_4");
@@ -221,7 +222,7 @@ export function snapshotValidationBootstrapExecutionV1(
     }
   }
   if (signal?.aborted) throw new Error("VALIDATION_BOOTSTRAP_CANCELLED");
-  return Object.freeze({ nodeWorkerCount, signal, onProgress });
+  return Object.freeze({ nodeWorkerCount, signal, onProgress, flushProgress });
 }
 
 /** Deployment resource setting only, not a request/body field or scientific override. */
@@ -262,9 +263,12 @@ export async function validationBootstrapPValueAsyncV1(
       /* webpackIgnore: true */ /* turbopackIgnore: true */ executorUrl
     ) as typeof import("../../../../scripts/trader/validation-bootstrap-node-pool");
     assertActive();
-    return validationBootstrapPValueNodeParallelV1(ownedInput, {
+    const result = await validationBootstrapPValueNodeParallelV1(ownedInput, {
       signal, onProgress: reportProgress, workerCount: nodeWorkerCount,
     });
+    await ownedExecution.flushProgress?.();
+    assertActive();
+    return result;
   }
   const quantum = Math.max(1, Math.min(250, Math.floor(250_000 / input.differentials.length)));
   const steps = validationBootstrapSteps(input);
@@ -274,6 +278,7 @@ export async function validationBootstrapPValueAsyncV1(
     while (!step.done) {
       if (step.value % quantum === 0 || step.value === VALIDATION_BOOTSTRAP_B) {
         reportProgress({ completed: step.value, total: VALIDATION_BOOTSTRAP_B });
+        await ownedExecution.flushProgress?.();
         assertActive();
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         assertActive();
