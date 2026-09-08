@@ -161,7 +161,9 @@ holdout authority.
 
 PASS is the printed proposal ID and digest. Open the Admin review, compare its
 exact SHA/run/extent/four surfaces and `NONE/NONE/FORBIDDEN` boundary, then perform
-the explicit Human ratification. Only after ratification proceed to §5.
+the explicit Human ratification. Only after ratification proceed to the
+**activation** mode in §5. Idle installation can precede preparation; it neither
+creates a proposal nor grants permission to calculate.
 
 ---
 
@@ -169,7 +171,9 @@ the explicit Human ratification. Only after ratification proceed to §5.
 
 **Classification:** HUMAN-ONLY
 
-**Goal:** Run the execution-host container and inject runtime secrets from operator vault — never from repo or Cloudflare.
+**Goal:** Install the execution-host container without starting calculation, or
+explicitly activate a Human-ratified historical run. These are separate approvals.
+Inject runtime secrets from the operator vault — never from repo or Cloudflare.
 
 ### Guarded script
 
@@ -180,24 +184,39 @@ the explicit Human ratification. Only after ratification proceed to §5.
   --operator <human-id> \
   --secrets-env-file /path/to/operator-vault.env \
   --dataset-root /opt/waia/fhv-work \
+  --checkpoint-root /var/lib/waia/scientific-checkpoints \
+  --runtime-mode idle \
   --confirm
 ```
 
-On `--confirm`: verifies baked/runtime SHA identity, verifies that the env selects the dedicated constrained database LOGIN, replaces the container, waits until the consumer has verified both `session_user` and `current_user`, proves it is `running` or `completed` through `/health`, rejects an immediate restart, and writes `deployed-revision.json`.
+Default mode is **idle**, even if the shell or env file contains an old active
+mode. On `--confirm` the script checks exact image identity, constrained LOGIN
+configuration and checkpoint access as the image user, replaces the container,
+verifies `/health` is `status=installed`, `executionReady=false`, consumer
+`mode=idle,state=idle,runId=null`, rejects restarts, and records
+`runtimeMode=idle` in `deployed-revision.json`. No consumer is spawned and no
+scientific preparation or DB connection is started by the idle supervisor.
+Full runtime configuration validation is retained; idle is not a DB connectivity,
+runtime-requalification, scientific-qualification or historical-test PASS.
 
-### Manual equivalent
+### Separate historical activation (only after explicit Human authority)
 
-```bash
-docker run -d \
-  --name ai-trader-execution-host \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  --mount type=bind,src=/opt/waia/fhv-work,dst=/opt/waia/fhv-work,readonly \
-  -e EXECUTION_HOST_PORT=8080 \
-  -e WAIA_RELEASE_SHA=<full-sha> \
-  --env-file /path/to/operator-vault.env \
-  waia-execution-host:<tag>
-```
+Scientific proposal preparation remains the separately authorized operation in
+§4. After exact proposal review and Human ratification, use the same guarded
+deployment command with **`--runtime-mode historical-v2-ratified-one-shot`**.
+This explicitly starts the existing canonical approved-launch path, including
+scientific finalization, bootstrap and consumption. It is not install-only.
+Existing approval/digest/runner/lease checks are unchanged; setting a mode is not
+ratification. Active deployment succeeds only after durable claim/completion:
+`status=ok`, `executionReady=true`, `consumer.mode=historical-v2-ratified-one-shot`,
+`state=running|completed`. Mode-specific health is mandatory; idle HTTP 200 cannot
+satisfy activation. Do not replace this script with an unverified `docker run`.
+
+Installing idle replaces the selected container, so it must not be used to
+interrupt an ongoing authorized run without a separate stop/change decision.
+Verify checkpoint ownership and capacity beforehand; the mount access probe
+does not estimate full-corpus storage demand. No scientific process is started
+merely to test capacity.
 
 | Rule | Detail |
 |------|--------|
@@ -243,8 +262,10 @@ After deploy: write/update `deployed-revision.json` (§2).
 
 ```bash
 curl -sf http://127.0.0.1:8080/health
-# Expect status=ok, exact releaseSha/imageReleaseSha and
-# consumer.mode=historical-v2-ratified-one-shot with state=running|completed
+# Idle: status=installed, executionReady=false, consumer.mode/state=idle, runId=null.
+# Activated: status=ok, executionReady=true,
+# consumer.mode=historical-v2-ratified-one-shot with state=running|completed.
+# Both: exact releaseSha/imageReleaseSha. HTTP 200 alone is not execution readiness.
 ```
 
 ### Readiness (operator checklist before live path)
