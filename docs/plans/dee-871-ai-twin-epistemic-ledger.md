@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-871
 integrationTitle: "AI-TWIN v1 — Epistemic ledger and Human-model persistence"
-branch: dee-871-ai-twin-epistemic-ledger
+branch: dee-871-ai-twin-repository
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr]
@@ -19,7 +19,7 @@ state:
     lastValidatedGitSha: b1b62b058a754bfa7b2f729fd02458c582cade68,
     lastValidationAt: "2026-09-06T12:58:00Z",
     blockedReason: null,
-    nextAction: "DEE-963 merged; DEE-965 owns the approved retention/experience foundation. Full persistence remains gated by shared migration compatibility, access/rights and historical-consent proof.",
+    nextAction: "DEE-963/965 merged. Continue reviewed isolated WP-1b object contracts and synthetic repository preparation; shared migration, access/rights, historical-consent and runtime gates remain.",
   }
 provenance:
   {
@@ -152,6 +152,8 @@ Model-purpose withdrawal and source deletion are separate commands: withdrawal r
 The PostgreSQL test must opt in with an AI-TWIN-specific explicit loopback URL and expected dedicated database name. Never use `DATABASE_URL_POSTGRES`, `DATABASE_URL`, existing integration/bootstrap commands, `.env` or an ambient/shared database. Use a uniquely named own container from an already available PostgreSQL image with loopback-only ephemeral port, no host data mounts and bounded resources; inspect only its own id and remove only that exact disposable target after validation. Never list/control another program's containers. Fixture SQL stays outside `db/migrations*` and is NOT an alternative production apply path or a reserved migration number.
 
 Fixture guard additionally binds the URL's published port and database identity to the exact newly created container and run token. Before fixture DDL/cleanup, verify `current_database()`, current role and a dedicated database marker installed during creation of this own disposable target. A loopback host plus a familiar database name alone is insufficient authority for destructive cleanup. The suite fails if explicitly opted in but identity/marker/URL is missing or mismatched; skip is allowed only when not opted in.
+
+The rights restriction must commit separately before attempted physical cleanup, survive cleanup rollback and deny stale writers/replay. Synthetic fixture receipts/fences are discarded with the exact temporary database at test completion; they are not a permanent production tombstone policy. Any future retained identifiers/fingerprints require an independently reviewed bounded purpose and access/expiry contract. The independent read-only reviewer accepted this disconnected scope and object matrix, with the actor, source-versus-purpose, durable restriction and exact fixture-identity clarifications incorporated before code.
 
 **Validation order:** independent read-only review of this matrix; RED contract tests then limited implementation; focused unit and explicitly opted-in PostgreSQL fixture tests (including real behavioral RED for rights/scope); independent adversarial review; scoped format/lint/typecheck plus required PR readiness checks once the complete integration boundary is actually met. Exact commands: `pnpm exec vitest run tests/unit/ai-twin-model-persistence-contracts.test.ts`; then `WAIA_TWIN_PG_FIXTURE=1 WAIA_TWIN_PG_FIXTURE_URL=<own-loopback-fixture> pnpm exec vitest run tests/integration/ai-twin-model-repository.test.ts`. No implicit success when the fixture suite is skipped.
 
