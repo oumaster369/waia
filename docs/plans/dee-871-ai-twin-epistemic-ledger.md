@@ -19,7 +19,7 @@ state:
     lastValidatedGitSha: b1b62b058a754bfa7b2f729fd02458c582cade68,
     lastValidationAt: "2026-09-06T12:58:00Z",
     blockedReason: null,
-    nextAction: "DEE-963 owns the distinct inert WP-1a integration; continue WP-1b reviewed policy/object design without persistence or runtime wiring before its privacy/migration gates are satisfied.",
+    nextAction: "DEE-963 merged; DEE-965 owns the approved retention/experience foundation. Full persistence remains gated by shared migration compatibility, access/rights and historical-consent proof.",
   }
 provenance:
   {
@@ -40,6 +40,14 @@ An append-only, tenant-isolated persistence layer represents observations, prove
 The historical DEE-130/start wait is satisfied: the canon is merged and the Human resumed implementation. The Sep6 WP-1a admission and receipts below remain historical; they did not qualify full persistence. New [DEE-963](dee-963-ai-twin-epistemic-kernel.md) owns one distinct T1 integration for the already admitted inert kernel, reusing b1b62b058a754bfa7b2f729fd02458c582cade68 from a new verified-main worktree. This later scoped admission replaces only the earlier instruction to keep WP-1a unpublished until all of DEE-871 is ready. It does not relax any persistence, privacy, migration or production gate.
 
 DEE-871 stays In Progress with WP-1/2/3 incomplete. Its parent-level dependencies for DEE-874/875/876 are not discharged by DEE-963. The proposed policy matrix below remains unratified; no retention duration or permanent retention is inferred from resumption. DEE-963 carries its own current exact-head proof and closeout.
+
+## 2026-09-08 later Human approval and compatibility boundary
+
+The earlier Proposed-only statements above and below are historical, not the current duration decision. After PR563 merged as 40669e6bea60ecb8fb0709c4bb72794d0b36157b, the Human explicitly accepted the recommended retention baseline and the three-layer inheritable-experience proposal. [Canonical Algorithm sections 6.1–6.3](../ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md) now carries exact durations, anchors, conditional receipts and separate inheritance-release gates. This supersedes only the claim that no numerical/long-lived retention decision exists, not the remaining access, migration, operational-erasure or historical-consent gates.
+
+[DEE-965](dee-965-ai-twin-lifecycle.md) owns one distinct, reversible inert lifecycle/experience foundation integration on dee-965-ai-twin-lifecycle from verified main. Original DEE-871 branch/history stays preserved. Full T3 persistence is not admitted by a policy test: read-only review found Trader's schema preflight fixes the maximum migration at 204 and rejects unknown applied hashes; its test consumes the entire shared journal. Do not register a new migration or change that Trader contract. Resolve the compatibility boundary separately before any shared registration/apply.
+
+WP-1/2/3 and DEE-874/875/876 prerequisites remain incomplete. Persisted all-v1 objects, consent authority, transactional concurrency, both-tenant access, physical erasure/restore, legacy consent, and real integration tests still need proof. Isolated tests must never use an ambient/shared database. Default unit CI can skip Postgres tests; explicit isolated execution must be demonstrated, not inferred from a green suite.
 
 ## Work packages
 

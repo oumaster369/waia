@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, canon, pr-governance]
 approvalGates: [plan-approved, human-merge]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-1, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Implement the approved inert lifecycle and experience foundation; no shared migration registration or runtime activation." }
+state: { status: in-progress, currentWorkPackage: WP-2, completedWorkPackages: [WP-1], remainingWorkPackages: [WP-2], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Independent exact-head review and one required-CI integration; no shared migration registration or runtime activation." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -49,3 +49,14 @@ Before publication and merge: refresh main, inspect open priority Trader PRs and
 - tests/unit/ai-twin-model-lifecycle.test.ts.
 
 No shared authentication/database/migrations/Gateway/runtime/UI/configuration/CI changes. No production data, secrets, external services, biometric processing, real-world actions or automation. Do not operate Trader resources or edit its Linear records. DEE-871 and downstream full prerequisites stay open.
+
+## Local evidence — 2026-09-08
+
+- Plan admission 37088e5b87ab802f192fa811fe4aee5998f2fc2a preceded implementation. Initial RED was a missing-module import failure (zero executed assertions), not a behavioral test pass/fail claim.
+- First implementation passed 65 focused cases. Independent review reproduced composition ignoring a current removal request and relying on historical source eligibility; integrator also identified undeclared payload-field acceptance. Two new behavioral regressions failed before the fix (30 pass / 2 fail). Composition now requires identity-bound current lifecycle and independently current source eligibility, exact payload fields and immutable approved output.
+- Final local focused run: 70/70 (35 existing ledger + 35 lifecycle). Covers both tenant dimensions, current permission/source denial, revision/content binding, immediate exclusion, exact TTLs and common-request 7/30 targets. These are inert synthetic proofs, not storage/auth/RLS/backup/deletion integration evidence.
+- Typecheck/build pass; build generated 16 static items. Lint passes with zero errors and 307 existing warnings outside this batch; scoped new-module lint has no findings. Canon validator regression, 149 tracked canonical files and release identity checks pass; PR-governance regression passes. No production import of the module was found; no UI changed.
+- Cloudflare skill-guided read-only check around 11:13 UTC: production and branch commands remain versions upload, not traffic deployment. GitHub repository secret-name inventory contains only LINEAR_API_KEY, so the optional preview deploy is credential-gated off; verify skipped steps on the actual run. No settings/credentials changed. [Cloudflare version/deployment distinction](https://developers.cloudflare.com/workers/versions-and-deployments/) is not a claim that an upload serves production traffic.
+- Linear DEE-871 preserves old history with a later decision/compatibility addendum; DEE-894 records future LegacyDirective specification, not transfer activation. No new duplicate legacy epic or cross-program dependency was introduced.
+
+Reviewability exception: seven scoped files, approximately 870 lines including synthetic negative fixtures and canonical decision history. Keep the tightly related lifecycle/approval contract and its regressions together; splitting code from the ratified rules or per fixture would reduce reviewability and increase PR count. No unrelated refactor, database or platform edit.
