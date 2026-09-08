@@ -211,6 +211,58 @@ describe("inert AI-TWIN epistemic correction kernel", () => {
     ).toThrow("INVALID_INPUT");
   });
 
+  it("rejects undeclared array properties rather than storing unhashed content", () => {
+    const risks = Object.assign([], { extra: "Unadmitted synthetic content" });
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        { ...observation, projectionRisks: risks },
+        context(),
+      ),
+    ).toThrow("INVALID_INPUT");
+    const ids = Object.assign(["observation-a"], { extra: "Unadmitted synthetic content" });
+    expect(() =>
+      applyModelCommand(proposed(), { ...proposal, observationIds: ids }, context("model")),
+    ).toThrow("INVALID_INPUT");
+  });
+
+  it("rejects symbolic and accessor array entries without invoking accessors", () => {
+    let reads = 0;
+    const risks: [] = [];
+    Object.defineProperty(risks, "0", {
+      get: () => {
+        reads++;
+        return "ambiguity";
+      },
+    });
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        { ...observation, projectionRisks: risks },
+        context(),
+      ),
+    ).toThrow("INVALID_INPUT");
+    expect(reads).toBe(0);
+    const ids = Object.assign(["observation-a"], { [Symbol("extra")]: "Unadmitted" });
+    expect(() =>
+      applyModelCommand(proposed(), { ...proposal, observationIds: ids }, context("model")),
+    ).toThrow("INVALID_INPUT");
+  });
+
+  it("rejects a custom iterator that disguises missing source elements", () => {
+    const ids = new Array<string>(1);
+    ids[Symbol.iterator] = function* () {
+      yield "not-present";
+    };
+    expect(() =>
+      applyModelCommand(
+        createModelLedger(scope),
+        { ...proposal, observationIds: ids },
+        { ...context("model"), grants: [] },
+      ),
+    ).toThrow("INVALID_INPUT");
+  });
+
   it("rejects undeclared payload fields nested in scope or consent reference", () => {
     expect(() =>
       applyModelCommand(

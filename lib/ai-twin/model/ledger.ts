@@ -42,6 +42,17 @@ function validScope(scope: ModelScope): boolean {
     text(scope.subjectId)
   );
 }
+// Canonical hashing and storage must see exactly the same dense data elements.
+function dataArray(value: unknown): value is unknown[] {
+  return (
+    Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Array.prototype &&
+    Reflect.ownKeys(value).length === value.length + 1 &&
+    Array.from({ length: value.length }, (_, index) =>
+      Object.hasOwn(Object.getOwnPropertyDescriptor(value, String(index)) ?? {}, "value"),
+    ).every(Boolean)
+  );
+}
 function freeze<T>(value: T): T {
   const copy = structuredClone(value);
   function visit(node: unknown) {
@@ -138,7 +149,7 @@ function requireCommand(command: ModelCommand) {
       !text(command.grant.id) ||
       !Number.isSafeInteger(command.grant.version) ||
       command.grant.version < 1 ||
-      !Array.isArray(command.projectionRisks) ||
+      !dataArray(command.projectionRisks) ||
       Array.from(command.projectionRisks).some(
         (risk) =>
           ![
@@ -160,7 +171,7 @@ function requireCommand(command: ModelCommand) {
         command.context,
         command.uncertainty,
       ].every(text) ||
-      !Array.isArray(command.observationIds) ||
+      !dataArray(command.observationIds) ||
       command.observationIds.length === 0 ||
       !Array.from(command.observationIds).every(text) ||
       new Set(command.observationIds).size !== command.observationIds.length
