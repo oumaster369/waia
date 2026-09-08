@@ -97,7 +97,7 @@ function time(value: unknown): number {
   return Number.isFinite(result) && new Date(result).toISOString() === value ? result : NaN;
 }
 /** Reject getters/hidden fields/sparse arrays before cloning, hashing or reading payloads. */
-function requireJson(value: unknown, ancestors = new Set<object>()): void {
+export function assertModelJsonData(value: unknown, ancestors = new Set<object>()): void {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number") {
     requireValue(Number.isFinite(value));
@@ -115,7 +115,7 @@ function requireJson(value: unknown, ancestors = new Set<object>()): void {
     const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
     requireValue(descriptor.enumerable && Object.hasOwn(descriptor, "value"));
     if (array) requireValue(/^(0|[1-9]\d*)$/.test(key) && Number(key) < value.length);
-    requireJson(descriptor.value, ancestors);
+    assertModelJsonData(descriptor.value, ancestors);
   }
   ancestors.delete(value);
 }
@@ -154,9 +154,9 @@ export function validateWorkingHypothesis(
   eligibleSources: readonly VersionedModelReference[],
   now: string,
 ): WorkingHypothesis {
-  requireJson(input);
-  requireJson(scope);
-  requireJson(eligibleSources);
+  assertModelJsonData(input);
+  assertModelJsonData(scope);
+  assertModelJsonData(eligibleSources);
   keys(scope, ["organizationId", "subjectId"]);
   requireValue(
     nonempty(scope.organizationId) && nonempty(scope.subjectId) && Number.isFinite(time(now)),
