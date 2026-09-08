@@ -108,6 +108,49 @@ Prove tenant isolation, version history, idempotency and safe legacy/backfill ho
 
 ## Safety invariants
 
+### 2026-09-08 isolated WP-1b / WP-2 preparation admission
+
+The Human's resumed implementation and later retention/experience approval permit local preparation, not shared migration registration or production use. This dated entry supplements the historical WP-1b packet; it does not replace the retention canon delivered by DEE-965. Primary unpublished continuation branch: `dee-871-ai-twin-repository`, created from verified `origin/main` `40669e6bea60ecb8fb0709c4bb72794d0b36157b` in its own worktree. The earlier Sep6 branch and WIP remain preserved. Rebase this unpublished continuation onto the DEE-965 squash before consuming its contracts. Keep one eventual DEE-871 integration PR; no partial Done or dependency discharge.
+
+**Architect consultation / scope:** the Human explicitly authorized isolated implementation and scoped AI-TWIN merge, with AI-TRADER precedence. This authorizes the following synthetic, disconnected preparation only; unresolved production privacy choices, migration compatibility and T3 runtime admission are not inferred. Full DEE-871 remains T3. No runtime callers, shared schema/client/transaction runner, auth, environment loader, CI, migration journal or Trader files may change in this preparation.
+
+**One owner:** the integrating agent owns all changed files; independent agents may only review. Expected surfaces: this existing plan, new `lib/ai-twin/model/persistence-contracts.ts`, new `lib/ai-twin/model/postgres-repository.ts`, `tests/unit/ai-twin-model-persistence-contracts.test.ts`, `tests/integration/ai-twin-model-repository.test.ts`, and its dedicated `tests/fixtures/ai-twin-model-repository.sql`. Reuse the merged kernel and lifecycle, do not duplicate or rewire the working legacy Twin persistence. Additional surfaces require a recorded admission amendment before editing.
+
+#### Object / access / rights matrix to review before repository implementation
+
+Every reference contains organization, subject, object kind, stable id and positive version; references are exact, not a guessed latest version. Every persisted sensitive object is bound to a current purpose, creation time and retention policy. Unknown historical permissions are quarantined, not retrospectively ratified. Neither content hashes nor scope strings authenticate a caller.
+
+| Object family | Stored distinction / links | Lifecycle and release limit |
+|---|---|---|
+| Consent | Versioned source/purpose/disclosure/mode/issue/expiry/revocation authority | Server-supplied authenticated context; no LLM/body grant or historical opt-in; current authority checked within the same transaction as use |
+| Observation | Self-report versus other future source kinds, event versus record time, context/projection, exact grant | Ordinary immutability; source/model-purpose withdrawal excludes use immediately; rights deletion removes affected content, not just projection |
+| Claim / Human correction | Existing kernel's version, predecessor, evidence, status, Human endorsement versus truth | Compare expected revision, preserve ordinary conflicting history; content removal may erase historical dependent versions |
+| EvidenceLink | Scoped versioned source/target; support, contradiction or contextual qualification | Referential closure and source eligibility; cannot keep a removed source alive through a derived summary |
+| Hypothesis | Multiple explicit alternatives, support/contradiction, uncertainty, falsifier, validity and affected domains | Unconfirmed working retention uses substantial evidence anchor, never access/rephrasing; no invented calibrated score or automatic promotion |
+| DynamicRelation | Typed Sigma/Delta/attractor/tension/temporal transition, endpoints, context/time, uncertainty | A proposed relation, not an intrinsic numerical personality property; endpoint rights propagate |
+| KnowledgeNeed | Missing evidence/contradiction, reason, proposed observation, state and evidence refs | No unapproved planner weights; Human skip is not a readiness penalty; no collection authority |
+| Formation / Health | Versioned evidence and requirement/policy references, explained states | Storage/reference support only; deterministic scoring and ratification engine belong to DEE-876 |
+| Reflection / prediction / outcome | Uncertainty, expected versus observed, evidence/consent/stop-condition references | Storage/reference support only; DEE-875 owns reflection/experiment transitions, no real action permission |
+| Private experience | DEE-965 Human-approved exact content fingerprint/version, provenance and independent archive purpose | Recheck current record rights and exact current sources; no inheritance/disclosure authority; no automatic TTL is not undeletability |
+| Rights operation | Scoped request, affected purposes/records, dependency closure, immediate restriction, removal stage/retry/failure | Seven/thirty-day design deadlines share the same request anchor; physical-delete/backup proof never inferred from state flags |
+| Export manifest | Requester, selected versioned records/provenance, exclusion reasons and 24-hour expiry | Private composition only; no delivery, third-party disclosure or legacy-release authority |
+
+V2/V3-only LegacyDirective/DisclosureGrant/AlignmentContract/ActionCapability, and separately owned cost/price/subscription objects receive typed references only, never speculative schemas or activated permissions. Full v1 object coverage is an acceptance matrix, not a claim that the first fixture implements every downstream engine.
+
+#### Minimal closed fixture scenario and negative evidence
+
+1. In a dedicated empty local test database, persist a synthetic consented observation, competing interpretations and an explicit Human correction. Reopen another connection and prove provenance, ordinary version history and current projection survive.
+2. Scope every read/write by both organization and subject. Prove cross-organization and same-organization/other-subject denial, including referenced endpoints, rights operations and retry keys.
+3. Prove transaction rollback, conflicting idempotent retry rejection and concurrent revision protection. Database reads of current grants/rights and dependent writes must be serialized consistently; no network/provider work inside transactions.
+4. Withdraw the observation's modelling purpose. Immediately deny model use/replay; execute explicit live-content removal and show dependent working content is absent from a second connection. An independently authorized private experience may survive only with genuinely independent eligible sources, not the removed observation.
+5. Prove failed erasure remains restricted and retryable; stale pre-withdrawal content cannot be restored through an ordinary repository write. This proves only fixture live storage, not real backups, processors or end-to-end rights operations.
+
+The PostgreSQL test must opt in with an AI-TWIN-specific explicit loopback URL and expected dedicated database name. Never use `DATABASE_URL_POSTGRES`, `DATABASE_URL`, existing integration/bootstrap commands, `.env` or an ambient/shared database. Use a uniquely named own container from an already available PostgreSQL image with loopback-only ephemeral port, no host data mounts and bounded resources; inspect only its own id and remove only that exact disposable target after validation. Never list/control another program's containers. Fixture SQL stays outside `db/migrations*` and is NOT an alternative production apply path or a reserved migration number.
+
+**Validation order:** independent read-only review of this matrix; RED contract tests then limited implementation; focused unit and explicitly opted-in PostgreSQL fixture tests (including real behavioral RED for rights/scope); independent adversarial review; scoped format/lint/typecheck plus required PR readiness checks once the complete integration boundary is actually met. Exact commands: `pnpm exec vitest run tests/unit/ai-twin-model-persistence-contracts.test.ts`; then `WAIA_TWIN_PG_FIXTURE=1 WAIA_TWIN_PG_FIXTURE_URL=<own-loopback-fixture> pnpm exec vitest run tests/integration/ai-twin-model-repository.test.ts`. No implicit success when the fixture suite is skipped.
+
+**Remaining gates:** shared migration/journal compatibility (Trader pins MAX=204), reviewed final access/schema/rights contract, full-v1 inventory, legacy quarantine/migration proof, downstream integration and operational erasure/backup evidence. Account deletion with an intentionally continuing legacy archive and any retained exception remain separate Human decisions. Stop at an actual unresolved gate, not merely because isolated preparation can continue safely.
+
 - Observation never becomes interpretation or ratified claim by overwrite.
 - No biometric material, connector credential or AI-TRADER domain state enters this ledger.
 - Production migration apply and cutover remain Human-controlled.
