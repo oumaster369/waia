@@ -44,6 +44,12 @@ tenant scope, dataset checks and all acceptance criteria remain authoritative.
 
 ## Limits of this change
 
+Before a full-corpus rollout, measure free bytes/inodes and reserve capacity for completed and
+interrupted artifacts. Each 64-KiB package chunk is a separate fsynced file; large packages and
+32-anchor batch checkpoints add disk I/O. Small tests do not prove full-corpus storage capacity
+or elapsed time. The supervisor forwards only the validated checkpoint path to its child;
+the same path is mandatory during runtime preflight and finalization.
+
 The failed 8023bb19 production attempt had no such completed checkpoints in the inspected locations.
 This change cannot recover that process's lost RAM or promise reuse of its uncommitted results.
 No corpus thinning, K/M/B reduction, statistical threshold change, blind holdout, live trading,

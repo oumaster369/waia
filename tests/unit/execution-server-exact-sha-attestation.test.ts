@@ -109,6 +109,15 @@ describe("execution-server exact SHA attestation", () => {
     expect(deploy.indexOf('createScientificCheckpointStoreV1')).toBeLessThan(deploy.indexOf('docker rm -f'));
   });
 
+  it("supplies the required checkpoint path in both runtime preflight invocations", () => {
+    for (const script of [DEPLOY, PREPARE_PROPOSAL]) {
+      const content = readFileSync(script, "utf8");
+      const beforeRuntime = content.slice(0, content.indexOf("entrypoint.mjs --preflight-runtime"));
+      const command = beforeRuntime.slice(beforeRuntime.lastIndexOf("docker run"));
+      expect(command).toContain('-e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints"');
+    }
+  });
+
   it("prepares the technical proposal from the exact image and a read-only dataset", () => {
     const prepare = readFileSync(PREPARE_PROPOSAL, "utf8");
     expect(prepare).toContain("run_preflight");

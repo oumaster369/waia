@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -22,9 +24,36 @@ const env = Object.freeze({
     "postgresql://waia_historical_runner_login:secret@db.invalid:5432/postgres",
   WAIA_HISTORICAL_ORGANIZATION_ID: "11111111-1111-4111-8111-111111111111",
   WAIA_HISTORICAL_RUN_ID: "observed-walk-forward-35",
+  WAIA_FHV_CHECKPOINT_ROOT: "/var/lib/waia/scientific-checkpoints",
 });
 
 describe("Historical Simulation V2 execution-host supervisor", () => {
+  it("forwards the validated checkpoint mount to the actual Node child adapter", () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "waia-host-checkpoint-")));
+    try {
+      const selected = { ...env, WAIA_FHV_CHECKPOINT_ROOT: root };
+      const config = parseExecutionHostRuntimeV2(selected);
+      selected.WAIA_FHV_CHECKPOINT_ROOT = "/must-not-replace-validated-root";
+      const childEnv = buildHistoricalConsumerEnvironmentV2(selected, config);
+      expect(childEnv.WAIA_FHV_CHECKPOINT_ROOT).toBe(root);
+      const child = spawnSync(process.execPath, ["--import", "tsx", "--conditions=react-server", "-e",
+        "const { createScientificCheckpointStoreV1 } = require('./scripts/trader/scientific-checkpoint-store-v1.ts'); " +
+        "const store = createScientificCheckpointStoreV1(process.env.WAIA_FHV_CHECKPOINT_ROOT, process.env.WAIA_RELEASE_SHA); " +
+        "console.log(JSON.stringify(store.evidence('host-child-proof', {runId: process.env.WAIA_HISTORICAL_RUN_ID}, () => ({preserved: true}))));"],
+      { env: childEnv, encoding: "utf8", timeout: 15_000 });
+      expect(child.error).toBeUndefined();
+      expect(child.status, child.stderr).toBe(0);
+      expect(JSON.parse(child.stdout)).toEqual({ preserved: true });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it.each([undefined, "", "relative/cache", "/", "/tmp/..", "/tmp/invalid\u0000root"])(
+    "rejects a missing or unsafe checkpoint root before opening the server: %s", (root) => {
+      expect(() => parseExecutionHostRuntimeV2({ ...env, WAIA_FHV_CHECKPOINT_ROOT: root }))
+        .toThrow("WAIA_FHV_CHECKPOINT_ROOT");
+    },
+  );
+
   it("propagates the explicit heap limit to a real Node child without other host authority", () => {
     const childEnv = buildHistoricalConsumerEnvironmentV2({
       ...env, NODE_OPTIONS: "--max-old-space-size=24576", HTX_SECRET_KEY: "not-forwarded",

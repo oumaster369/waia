@@ -54,6 +54,7 @@ RECORDED_IMAGE_ID="$(read_revision_field "$REVISION_PATH" "imageId")" ||
 IMAGE_SHA="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE_TAG")"
 [[ "$IMAGE_SHA" == "$TARGET_SHA" ]] || die "image release SHA does not match target SHA"
 docker run --rm --env-file "$PROPOSAL_ENV_FILE" -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
+  -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   "$IMAGE_TAG" node services/ai-trader-execution-host/entrypoint.mjs --preflight-runtime >/dev/null
 docker run --rm \
   --mount "type=bind,src=${DATASET_ROOT},dst=${DATASET_ROOT},readonly" \

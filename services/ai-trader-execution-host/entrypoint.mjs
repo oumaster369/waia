@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createHealthServer } from "./server.mjs";
@@ -66,8 +67,12 @@ export function parseExecutionHostRuntimeV2(env) {
   if (validationWorkers !== undefined && !/^[1-4]$/.test(validationWorkers)) {
     refuse("WAIA_FHV_VALIDATION_WORKERS");
   }
+  const checkpointRoot = required(env, "WAIA_FHV_CHECKPOINT_ROOT");
+  if (!isAbsolute(checkpointRoot) || resolve(checkpointRoot) === "/" || checkpointRoot.includes("\0")) {
+    refuse("WAIA_FHV_CHECKPOINT_ROOT");
+  }
 
-  return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId, validationWorkers });
+  return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId, validationWorkers, checkpointRoot });
 }
 
 /** Only an explicit capacity setting may cross the NODE_OPTIONS boundary. */
@@ -96,6 +101,7 @@ export function buildHistoricalConsumerEnvironmentV2(env, config) {
     WAIA_RELEASE_SHA: config.releaseSha,
     WAIA_HISTORICAL_ORGANIZATION_ID: config.organizationId,
     WAIA_HISTORICAL_RUN_ID: config.runId,
+    WAIA_FHV_CHECKPOINT_ROOT: config.checkpointRoot,
     ...(config.validationWorkers === undefined ? {} : { WAIA_FHV_VALIDATION_WORKERS: config.validationWorkers }),
   });
 }

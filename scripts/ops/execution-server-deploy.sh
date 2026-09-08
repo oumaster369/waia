@@ -57,6 +57,7 @@ docker run --rm \
 docker run --rm \
   --env-file "$SECRETS_ENV_FILE" \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
+  -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   "$IMAGE_TAG" node services/ai-trader-execution-host/entrypoint.mjs --preflight-runtime >/dev/null
 # Validate private durable storage as the immutable image user before replacing any container.
 docker run --rm \
