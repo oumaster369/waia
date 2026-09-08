@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { once } from "node:events";
+import { createHealthServer } from "../../services/ai-trader-execution-host/server.mjs";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,6 +18,7 @@ import {
 } from "../../services/ai-trader-execution-host/entrypoint.mjs";
 
 const env = Object.freeze({
+  WAIA_EXECUTION_HOST_MODE: "historical-v2-ratified-one-shot",
   PATH: "/usr/bin",
   HOME: "/home/waia",
   WAIA_IMAGE_RELEASE_SHA: "a".repeat(40),
@@ -28,6 +31,72 @@ const env = Object.freeze({
 });
 
 describe("Historical Simulation V2 execution-host supervisor", () => {
+  it("serves truthful idle HTTP health and shuts down without a consumer", async () => {
+    const spawnChild = vi.fn(() => { throw new Error("no computation allowed"); });
+    const runtime = startExecutionHostSupervisorV2({
+      env: { ...env, WAIA_EXECUTION_HOST_MODE: undefined }, spawnChild,
+      createServer: (options: { getHealthBody: () => Record<string, unknown> }) =>
+        createHealthServer({ ...options, port: 0 }),
+    });
+    try {
+      if (!runtime.server.listening) await once(runtime.server, "listening");
+      const address = runtime.server.address() as { port: number };
+      const response = await fetch(`http://127.0.0.1:${address.port}/health`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        status: "installed", executionReady: false, consumer: { mode: "idle", state: "idle", runId: null },
+      });
+      expect(spawnChild).not.toHaveBeenCalled();
+    } finally { await runtime.shutdown(); }
+  });
+
+  it.each(["idle", "historical-v2-ratified-one-shot"])("preserves authority/identity guards in %s", (mode) => {
+    for (const [patch, code] of [
+      [{ WAIA_RELEASE_SHA: "b".repeat(40) }, "RELEASE_SHA_MISMATCH"],
+      [{ DATABASE_URL_POSTGRES_SESSION: "postgresql://postgres:secret@db.invalid/postgres" }, "DATABASE_LOGIN_ROLE"],
+      [{ HTX_SECRET_KEY: "forbidden" }, "FORBIDDEN_RUNTIME_AUTHORITY"],
+      [{ WAIA_FHV_CHECKPOINT_ROOT: "/" }, "WAIA_FHV_CHECKPOINT_ROOT"],
+    ] as const) {
+      const createServer = vi.fn();
+      expect(() => startExecutionHostSupervisorV2({
+        env: { ...env, WAIA_EXECUTION_HOST_MODE: mode, ...patch }, createServer,
+      })).toThrow(code);
+      expect(createServer).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([undefined, "idle"])("installs idle without spawning computation (mode=%s)", async (mode) => {
+    const spawnChild = vi.fn(() => { throw new Error("idle must never spawn"); });
+    const server = {
+      listening: false,
+      listen: (_port: number, callback: () => void) => { server.listening = true; callback(); },
+      close: (callback: () => void) => { server.listening = false; callback(); },
+    };
+    let health: (() => Record<string, unknown>) | undefined;
+    const runtime = startExecutionHostSupervisorV2({
+      env: { ...env, WAIA_EXECUTION_HOST_MODE: mode }, spawnChild,
+      createServer: (options: { getHealthBody: () => Record<string, unknown> }) => {
+        health = options.getHealthBody;
+        return { server, port: 8080 };
+      },
+    });
+    expect(spawnChild).not.toHaveBeenCalled();
+    expect(health?.()).toMatchObject({
+      status: "installed", executionReady: false,
+      releaseSha: env.WAIA_RELEASE_SHA,
+      consumer: { mode: "idle", state: "idle", runId: null, exitCode: null },
+    });
+    await runtime.shutdown();
+    expect(server.listening).toBe(false);
+  });
+
+  it.each(["", "active", "live", " idle", "idle "])("refuses invalid runtime mode %s before listening", (mode) => {
+    const createServer = vi.fn();
+    expect(() => startExecutionHostSupervisorV2({ env: { ...env, WAIA_EXECUTION_HOST_MODE: mode }, createServer }))
+      .toThrow("WAIA_EXECUTION_HOST_MODE");
+    expect(createServer).not.toHaveBeenCalled();
+  });
+
   it("forwards the validated checkpoint mount to the actual Node child adapter", () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "waia-host-checkpoint-")));
     try {

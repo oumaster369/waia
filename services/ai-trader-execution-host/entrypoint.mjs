@@ -38,6 +38,8 @@ function required(env, key) {
 }
 
 export function parseExecutionHostRuntimeV2(env) {
+  const mode = env.WAIA_EXECUTION_HOST_MODE ?? "idle";
+  if (mode !== "idle" && mode !== CONSUMER_MODE) refuse("WAIA_EXECUTION_HOST_MODE");
   historicalChildHeapOptionsV2(env.NODE_OPTIONS);
   const forbiddenKey = FORBIDDEN_RUNTIME_KEYS.find((key) => env[key]?.trim());
   if (forbiddenKey) refuse(`FORBIDDEN_RUNTIME_AUTHORITY:${forbiddenKey}`);
@@ -72,7 +74,7 @@ export function parseExecutionHostRuntimeV2(env) {
     refuse("WAIA_FHV_CHECKPOINT_ROOT");
   }
 
-  return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId, validationWorkers, checkpointRoot });
+  return Object.freeze({ mode, databaseUrl, imageReleaseSha, releaseSha, organizationId, runId, validationWorkers, checkpointRoot });
 }
 
 /** Only an explicit capacity setting may cross the NODE_OPTIONS boundary. */
@@ -107,16 +109,19 @@ export function buildHistoricalConsumerEnvironmentV2(env, config) {
 }
 
 export function buildExecutionHostRuntimeHealthV2(config, consumer) {
-  const ready = consumer.state === "running" || consumer.state === "completed";
+  const idle = config.mode === "idle" && consumer.state === "idle";
+  const ready = config.mode === CONSUMER_MODE &&
+    (consumer.state === "running" || consumer.state === "completed");
   return Object.freeze({
-    status: ready ? "ok" : "degraded",
+    status: idle ? "installed" : ready ? "ok" : "degraded",
+    executionReady: ready,
     service: SERVICE_NAME,
     releaseSha: config.releaseSha,
     imageReleaseSha: config.imageReleaseSha,
     consumer: Object.freeze({
-      mode: CONSUMER_MODE,
+      mode: config.mode,
       state: consumer.state,
-      runId: config.runId,
+      runId: idle ? null : config.runId,
       exitCode: consumer.exitCode,
     }),
   });
@@ -149,8 +154,8 @@ export function startExecutionHostSupervisorV2(options = {}) {
   const env = options.env ?? process.env;
   const config = parseExecutionHostRuntimeV2(env);
   // Validate before opening a listener so invalid options cannot strand a server.
-  const childEnvironment = buildHistoricalConsumerEnvironmentV2(env, config);
-  const consumer = { state: "starting", exitCode: null };
+  const childEnvironment = config.mode === "idle" ? null : buildHistoricalConsumerEnvironmentV2(env, config);
+  const consumer = { state: config.mode === "idle" ? "idle" : "starting", exitCode: null };
   const createServer = options.createServer ?? createHealthServer;
   const spawnChild = options.spawnChild ?? spawn;
   const cwd = options.cwd ?? process.cwd();
@@ -174,6 +179,10 @@ export function startExecutionHostSupervisorV2(options = {}) {
   server.listen(port, () => {
     if (stopping) {
       void closeServer();
+      return;
+    }
+    if (config.mode === "idle") {
+      process.stdout.write(`[${SERVICE_NAME}] installed release=${config.releaseSha} mode=idle executionReady=false\n`);
       return;
     }
     child = spawnChild(process.execPath, [
@@ -237,7 +246,7 @@ if (isMainModule()) {
       schemaVersion: "waia.execution_host_runtime_preflight.v2",
       releaseSha: config.releaseSha,
       loginRole: RUNNER_LOGIN,
-      consumerMode: CONSUMER_MODE,
+      consumerMode: config.mode,
     })}\n`);
   } else {
     const runtime = startExecutionHostSupervisorV2();

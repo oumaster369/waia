@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -47,6 +47,74 @@ afterEach(() => {
 });
 
 describe("execution-server exact SHA attestation", () => {
+  it.each([
+    { requested: undefined, reported: "idle", success: true },
+    { requested: "idle", reported: "historical-v2-ratified-one-shot", success: false },
+    { requested: "historical-v2-ratified-one-shot", reported: "idle", success: false },
+    { requested: "historical-v2-ratified-one-shot", reported: "historical-v2-ratified-one-shot", success: true },
+  ])("deployment enforces requested mode $requested against reported $reported", ({ requested, reported, success }) => {
+    // Execute the real shell helper in a temporary git repository. Docker/curl
+    // are local test doubles; no actual container or production endpoint exists.
+    const { root } = createRepository();
+    mkdirSync(join(root, "scripts/ops"), { recursive: true });
+    copyFileSync(PREFLIGHT, join(root, "scripts/ops/execution-server-preflight.sh"));
+    chmodSync(join(root, "scripts/ops/execution-server-preflight.sh"), 0o755);
+    git(root, "add", "scripts/ops/execution-server-preflight.sh");
+    git(root, "commit", "-m", "preflight");
+    const target = git(root, "rev-parse", "HEAD");
+    git(root, "update-ref", "refs/remotes/origin/main", target);
+    const fixture = realpathSync(mkdtempSync(join(tmpdir(), "waia-idle-deploy-")));
+    temporaryRepositories.push(fixture);
+    const binaryRoot = join(fixture, "bin");
+    mkdirSync(binaryRoot);
+    mkdirSync(join(fixture, "dataset"));
+    mkdirSync(join(fixture, "checkpoints"), { mode: 0o700 });
+    const envFile = join(fixture, "operator.env");
+    writeFileSync(envFile, "WAIA_EXECUTION_HOST_MODE=historical-v2-ratified-one-shot\n", { mode: 0o600 });
+    const log = join(fixture, "docker.jsonl");
+    const imageId = `sha256:${"b".repeat(64)}`;
+    const revision = join(fixture, "revision.json");
+    const initialRevision = { gitSha: target, imageId, imageTag: "test:exact" };
+    writeFileSync(revision, JSON.stringify(initialRevision));
+    const docker = join(binaryRoot, "docker");
+    writeFileSync(docker, `#!${process.execPath}
+const fs = require('node:fs');
+const a = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(a) + '\\n');
+if (a[0] === 'image') console.log(a.includes('{{.Id}}') ? ${JSON.stringify(imageId)} : ${JSON.stringify(target)});
+else if (a[0] === 'inspect') console.log(a.includes('{{.Image}}') ? ${JSON.stringify(imageId)} : '0');
+else if (a[0] === 'run') console.log('test-container');
+else if (a[0] !== 'ps') process.exit(19);
+`, { mode: 0o755 });
+    const health = {
+      status: reported === "idle" ? "installed" : "ok", executionReady: reported !== "idle",
+      service: "ai-trader-execution-host", releaseSha: target, imageReleaseSha: target,
+      consumer: { mode: reported, state: reported === "idle" ? "idle" : "running", runId: reported === "idle" ? null : "test-run", exitCode: null },
+    };
+    writeFileSync(join(binaryRoot, "curl"), `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify(health))});\n`, { mode: 0o755 });
+    const result = spawnSync("bash", [DEPLOY, "--target-sha", target, "--repo-path", root,
+      "--image-tag", "test:exact", "--operator", "test-only", "--secrets-env-file", envFile,
+      "--dataset-root", join(fixture, "dataset"), "--checkpoint-root", join(fixture, "checkpoints"),
+      ...(requested ? ["--runtime-mode", requested] : []), "--confirm"], {
+      encoding: "utf8", timeout: 15_000,
+      env: { ...process.env, PATH: `${binaryRoot}:${process.env.PATH}`,
+        WAIA_EXECUTION_HOST_MODE: "historical-v2-ratified-one-shot",
+        EXECUTION_SERVER_DEPLOYED_REVISION_PATH: revision, EXECUTION_SERVER_READY_TIMEOUT_SECONDS: "1" },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status === 0, result.stderr).toBe(success);
+    const calls = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
+    const runtimeCommands = calls.filter(a => a.includes("--preflight-runtime") || a.includes("-d"));
+    expect(runtimeCommands).toHaveLength(2);
+    for (const command of runtimeCommands) {
+      const modeIndex = command.indexOf(`WAIA_EXECUTION_HOST_MODE=${requested ?? "idle"}`);
+      expect(modeIndex).toBeGreaterThan(command.indexOf("--env-file"));
+    }
+    const stored = JSON.parse(readFileSync(revision, "utf8"));
+    if (success) expect(stored.runtimeMode).toBe(requested ?? "idle");
+    else expect(stored).toEqual(initialRevision);
+  });
+
   it("accepts a clean checkout at a commit reachable from origin/main", () => {
     const { root, approvedSha } = createRepository();
     const result = preflight(root, approvedSha);

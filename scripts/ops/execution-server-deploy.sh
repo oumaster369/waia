@@ -5,21 +5,26 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/_execution-server-common.sh"
 readonly SCRIPT_NAME="${0##*/}"
 usage() { cat >&2 <<EOF
-Usage: ${SCRIPT_NAME} --target-sha <sha> --image-tag <tag> --operator <id> --secrets-env-file PATH --dataset-root PATH --checkpoint-root PATH [--approved-ref refs/remotes/origin/main] [--confirm] [--dry-run]
-Deploys container and writes deployed-revision.json on --confirm. No-op without --confirm.
+Usage: ${SCRIPT_NAME} --target-sha <sha> --image-tag <tag> --operator <id> --secrets-env-file PATH --dataset-root PATH --checkpoint-root PATH [--runtime-mode idle|historical-v2-ratified-one-shot] [--approved-ref refs/remotes/origin/main] [--confirm] [--dry-run]
+Installs idle by default; historical activation requires explicit --runtime-mode and separate Human authority.
+Writes deployed-revision.json on --confirm. No-op without --confirm.
 EOF
 }
 TARGET_SHA="${EXECUTION_SERVER_TARGET_SHA:-}"; REPO_PATH="${EXECUTION_SERVER_REPO_PATH:-}"
 APPROVED_REF="${EXECUTION_SERVER_APPROVED_REF:-refs/remotes/origin/main}"
 IMAGE_TAG=""; OPERATOR=""; SECRETS_ENV_FILE=""; DATASET_ROOT=""; CHECKPOINT_ROOT=""; CONFIRM=0; DRY_RUN=0
+# Never take activation from inherited environment or the operator env file.
+RUNTIME_MODE="idle"
 while [[ $# -gt 0 ]]; do case "$1" in
   --target-sha) TARGET_SHA="$2"; shift 2;; --image-tag) IMAGE_TAG="$2"; shift 2;;
   --operator) OPERATOR="$2"; shift 2;; --secrets-env-file) SECRETS_ENV_FILE="$2"; shift 2;;
   --dataset-root) DATASET_ROOT="$2"; shift 2;;
   --checkpoint-root) CHECKPOINT_ROOT="$2"; shift 2;;
+  --runtime-mode) RUNTIME_MODE="$2"; shift 2;;
   --repo-path) REPO_PATH="$2"; shift 2;; --confirm) CONFIRM=1; shift;; --dry-run) DRY_RUN=1; shift;;
   --approved-ref) APPROVED_REF="$2"; shift 2;;
   -h|--help) usage; exit 0;; *) die "unknown argument: $1";; esac; done
+[[ "$RUNTIME_MODE" == "idle" || "$RUNTIME_MODE" == "historical-v2-ratified-one-shot" ]] || die "invalid runtime mode"
 [[ -n "$TARGET_SHA" && -n "$IMAGE_TAG" && -n "$OPERATOR" && -n "$SECRETS_ENV_FILE" &&
    -n "$DATASET_ROOT" ]] || \
   die "target-sha, image-tag, operator, secrets-env-file and dataset-root required"
@@ -34,7 +39,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   ENV_MODE="$(stat -c '%a' "$SECRETS_ENV_FILE")"
   (( (8#$ENV_MODE & 077) == 0 )) || die "secrets env file must not be group/world accessible"
 fi
-log "execution-server deploy"; log "  image tag: ${IMAGE_TAG}"; log "planned actions: preflight, docker run, /health, write revision"
+log "execution-server deploy"; log "  image tag: ${IMAGE_TAG}"; log "  runtime mode: ${RUNTIME_MODE}"; log "planned actions: preflight, docker run, /health, write revision"
 if ! require_confirm_or_noop "deploy"; then print_noop_footer; exit 0; fi
 [[ "$CHECKPOINT_ROOT" == /* && "$CHECKPOINT_ROOT" != / && -d "$CHECKPOINT_ROOT" && ! -L "$CHECKPOINT_ROOT" ]] ||
   die "checkpoint-root must be an existing private absolute directory owned by the image user"
@@ -56,6 +61,7 @@ docker run --rm \
   services/ai-trader-execution-host/entrypoint.mjs --preflight-image >/dev/null
 docker run --rm \
   --env-file "$SECRETS_ENV_FILE" \
+  -e "WAIA_EXECUTION_HOST_MODE=$RUNTIME_MODE" \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
   -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   "$IMAGE_TAG" node services/ai-trader-execution-host/entrypoint.mjs --preflight-runtime >/dev/null
@@ -71,6 +77,7 @@ docker run -d --name "$EXECUTION_SERVER_CONTAINER_NAME" --restart unless-stopped
   --mount "type=bind,src=${DATASET_ROOT},dst=${DATASET_ROOT},readonly" \
   --mount "type=bind,src=${CHECKPOINT_ROOT},dst=/var/lib/waia/scientific-checkpoints" \
   --env-file "$SECRETS_ENV_FILE" \
+  -e "WAIA_EXECUTION_HOST_MODE=$RUNTIME_MODE" \
   -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   -e EXECUTION_HOST_PORT=8080 \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
@@ -84,25 +91,31 @@ for _ in $(seq 1 "$READY_TIMEOUT_SECONDS"); do
   HEALTH_JSON="$(curl -sf "http://127.0.0.1:${EXECUTION_SERVER_HOST_PORT}/health" || true)"
   [[ -n "$HEALTH_JSON" ]] && break
   [[ "$(docker inspect --format '{{.RestartCount}}' "$EXECUTION_SERVER_CONTAINER_NAME")" == "0" ]] || \
-    die "ratified launch failed before durable claim; inspect container logs"
+    die "runtime failed before mode-specific health; inspect container logs"
   sleep 1
 done
-node - "$HEALTH_JSON" "$TARGET_SHA" <<'NODE'
-const [raw, targetSha] = process.argv.slice(2);
+node - "$HEALTH_JSON" "$TARGET_SHA" "$RUNTIME_MODE" <<'NODE'
+const [raw, targetSha, mode] = process.argv.slice(2);
 let body;
 try { body = JSON.parse(raw); } catch { process.exit(1); }
-if (body.status !== "ok" || body.releaseSha !== targetSha ||
+if (body.service !== "ai-trader-execution-host" || body.releaseSha !== targetSha ||
     body.imageReleaseSha !== targetSha ||
-    body.consumer?.mode !== "historical-v2-ratified-one-shot" ||
-    !["running", "completed"].includes(body.consumer?.state)) process.exit(1);
+    body.consumer?.mode !== mode) process.exit(1);
+if (mode === "idle") {
+  if (body.status !== "installed" || body.executionReady !== false ||
+      body.consumer.state !== "idle" || body.consumer.runId !== null ||
+      body.consumer.exitCode !== null) process.exit(1);
+} else if (body.status !== "ok" || body.executionReady !== true ||
+    !["running", "completed"].includes(body.consumer.state)) process.exit(1);
 NODE
 [[ "$(docker inspect --format '{{.RestartCount}}' "$EXECUTION_SERVER_CONTAINER_NAME")" == "0" ]] || \
   die "consumer container restarted during deployment preflight"
-PATCH_JSON="$(node - "$TARGET_SHA" "$IMAGE_TAG" "$IMAGE_ID" "$(utc_now_iso)" "$OPERATOR" "$PREVIOUS_SHA" <<'NODE'
-const [gitSha, imageTag, imageId, deployedAt, operator, previousGitSha] = process.argv.slice(2);
+PATCH_JSON="$(node - "$TARGET_SHA" "$IMAGE_TAG" "$IMAGE_ID" "$(utc_now_iso)" "$OPERATOR" "$PREVIOUS_SHA" "$RUNTIME_MODE" <<'NODE'
+const [gitSha, imageTag, imageId, deployedAt, operator, previousGitSha, runtimeMode] = process.argv.slice(2);
 const patch = { gitSha, imageTag, imageId, deployedAt, operator };
+patch.runtimeMode = runtimeMode;
 if (previousGitSha) patch.previousGitSha = previousGitSha;
 process.stdout.write(JSON.stringify(patch));
 NODE
 )"
-revision_merge_json "$REVISION_PATH" "$PATCH_JSON"; log "result: OK"
+revision_merge_json "$REVISION_PATH" "$PATCH_JSON"; log "result: OK mode=${RUNTIME_MODE} (installation is not historical qualification)"
