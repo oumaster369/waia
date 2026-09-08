@@ -264,6 +264,18 @@ describe("inert AI-TWIN epistemic correction kernel", () => {
     ).toThrow("INVALID_INPUT");
   });
 
+  it("rejects non-enumerable evidence indices that cloning would silently drop", () => {
+    const ids: string[] = [];
+    Object.defineProperty(ids, "0", { value: "observation-a", enumerable: false });
+    expect(() =>
+      applyModelCommand(
+        proposed(),
+        { ...proposal, requestId: "new-request", claimId: "new-claim", observationIds: ids },
+        context("model"),
+      ),
+    ).toThrow("INVALID_INPUT");
+  });
+
   it("rejects undeclared payload fields nested in scope or consent reference", () => {
     expect(() =>
       applyModelCommand(

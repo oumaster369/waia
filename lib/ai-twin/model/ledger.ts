@@ -48,9 +48,10 @@ function dataArray(value: unknown): value is unknown[] {
     Array.isArray(value) &&
     Object.getPrototypeOf(value) === Array.prototype &&
     Reflect.ownKeys(value).length === value.length + 1 &&
-    Array.from({ length: value.length }, (_, index) =>
-      Object.hasOwn(Object.getOwnPropertyDescriptor(value, String(index)) ?? {}, "value"),
-    ).every(Boolean)
+    Array.from({ length: value.length }, (_, index) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      return descriptor?.enumerable === true && Object.hasOwn(descriptor, "value");
+    }).every(Boolean)
   );
 }
 function freeze<T>(value: T): T {
