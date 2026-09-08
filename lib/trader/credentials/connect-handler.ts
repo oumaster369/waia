@@ -28,10 +28,7 @@ import {
   createSqliteCredentialService,
 } from "@/lib/trader/credentials/credential-service";
 import type { CredentialService } from "@/lib/trader/credentials/types";
-import {
-  CredentialConflictError,
-  CredentialNotFoundError,
-} from "@/lib/trader/credentials/errors";
+import { CredentialConflictError, CredentialNotFoundError } from "@/lib/trader/credentials/errors";
 import {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
@@ -244,6 +241,21 @@ export async function handleHtxConnectPost(
   context.userId = auth.userId;
 
   const accountInfo = await connector.getAccountInfo();
+
+  if (
+    accountInfo.accountId !== validation.accountId ||
+    accountInfo.venue !== HTX_CONNECT_VENUE ||
+    accountInfo.marketType !== "spot" ||
+    !Array.isArray(accountInfo.permissions) ||
+    !accountInfo.permissions.includes("read") ||
+    accountInfo.permissions.some((scope) => scope !== "read" && scope !== "trade")
+  ) {
+    return clientError(
+      400,
+      HTX_CONNECT_ERROR_CODES.CREDENTIAL_VALIDATION_FAILED,
+      "HTX account identity or permission metadata could not be verified consistently.",
+    );
+  }
 
   const permissionMetadata = buildHtxPermissionMetadata({
     exchangeAccountId: validation.accountId,
