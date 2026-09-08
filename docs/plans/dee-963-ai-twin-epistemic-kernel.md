@@ -47,4 +47,15 @@ DEE-871 WP-1b still requires reviewed raw/derived/corrections-consent/audit/expo
 
 ## Validation receipt
 
-Pending. Record exact implementation/review head and observed results before PR readiness; do not mark unchecked criteria complete.
+Implementation sequence: admitted local kernel b1b62b058a754bfa7b2f729fd02458c582cade68 reused as ba34f82a; purpose/input hardening 92cfdf59331c348b596b83e2337b37f5e50d7a7c; array-boundary fix c374aceb627ee9d7f354b5c71766f3d909174805 plus explicit undefined return in the synthetic iterator fixture.
+
+- Purpose provenance and null/undefined input tests initially produced 4 failures out of 29; fixes passed 29/29.
+- Independent read-only review at 92cfdf59 reproduced an array-shape defect: extra content was stored but not fingerprinted; a custom iterator could disguise a missing evidence element. Two additional regressions failed before the fix. Dense ordinary arrays with only own data indices are now required; a third custom-iterator regression covers the stronger evidence-free scenario.
+- Final focused suite: 32/32 pass. Typecheck passes after correcting the synthetic iterator return type. Lint passes with zero errors and 307 existing warnings outside this batch; scoped kernel lint has no findings. Local build passes (16 static generation items). Initial sandbox build failed on localhost EPERM; only the local build was retried with the necessary permission.
+- Canonical validator regression and 147 tracked canonical files pass; PR-governance regression passes. Revalidate changed plans before publication. No runtime imports found outside the kernel/test. No browser qualification is claimed for this inert module.
+- Fresh origin/main on 2026-09-08 remains 8023bb1980d9f02e61db4024f725aa16161c32dd. Open Trader PR561 is read-only context, not controlled by this batch.
+- Cloudflare skill-guided read-only check at 08:19 UTC: both main and branch commands use versions upload, not traffic deployment; no settings edited. GitHub optional preview deployment must be prevented for this PR only; required CI protections are not weakened. [Cloudflare version/deployment semantics](https://developers.cloudflare.com/workers/versions-and-deployments/) distinguish upload from active traffic.
+
+Reviewability exception: five scoped files, approximately 1,000 added lines, including two contract/history plans and synthetic negative fixtures. The three implementation/test files form one small invariant-bound kernel; splitting per test or file would remove meaningful review context. No unrelated refactor or platform change is included.
+
+Final exact-head independent re-review, required PR CI, squash identity/containment and scoped Linear closeout remain integration gates. Record their receipts on the single PR and DEE-963; no status-only post-merge PR.

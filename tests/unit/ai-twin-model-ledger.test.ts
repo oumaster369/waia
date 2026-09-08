@@ -253,6 +253,7 @@ describe("inert AI-TWIN epistemic correction kernel", () => {
     const ids = new Array<string>(1);
     ids[Symbol.iterator] = function* () {
       yield "not-present";
+      return undefined;
     };
     expect(() =>
       applyModelCommand(
