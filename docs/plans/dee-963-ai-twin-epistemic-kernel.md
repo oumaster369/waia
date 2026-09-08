@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, canon, pr-governance]
 approvalGates: [plan-approved, human-merge]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-1, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Reuse the admitted inert kernel, reproduce purpose isolation defects, validate and independently review one complete integration." }
+state: { status: in-review, currentWorkPackage: WP-2, completedWorkPackages: [WP-1], remainingWorkPackages: [WP-2], prNumber: 563, prUrl: "https://github.com/oumaster369/waia/pull/563", lastValidatedGitSha: 80152e9d1b66dab4f66241860568a131f8310135, lastValidationAt: "2026-09-08T08:30:00Z", blockedReason: null, nextAction: "Follow required exact-head CI and independent metadata review, then normal Human-delegated squash and scoped DEE-963 closeout; no production action." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -60,4 +60,4 @@ Implementation sequence: admitted local kernel b1b62b058a754bfa7b2f729fd02458c58
 
 Reviewability exception: five scoped files, approximately 1,000 added lines, including two contract/history plans and synthetic negative fixtures. The three implementation/test files form one small invariant-bound kernel; splitting per test or file would remove meaningful review context. No unrelated refactor or platform change is included.
 
-Final exact-head independent re-review, required PR CI, squash identity/containment and scoped Linear closeout remain integration gates. Record their receipts on the single PR and DEE-963; no status-only post-merge PR.
+Independent read-only review accepted code head 80152e9d1b66dab4f66241860568a131f8310135: 35/35 tests independently passed, all reported bypasses rejected, no remaining concrete findings in the inert scope. Subsequent changes are plan receipts/PR metadata only. Required exact-head PR CI, final metadata review, squash identity/containment and scoped Linear closeout remain integration gates. Record their receipts on PR563 and DEE-963; no status-only post-merge PR.
