@@ -104,6 +104,9 @@ describe("execution-server exact SHA attestation", () => {
     expect(deploy).toContain("running container image id does not match verified image id");
     expect(deploy).toContain("const patch = { gitSha, imageTag, imageId, deployedAt, operator }");
     expect(deploy).toContain('--mount "type=bind,src=${DATASET_ROOT},dst=${DATASET_ROOT},readonly"');
+    expect(deploy).toContain('--mount "type=bind,src=${CHECKPOINT_ROOT},dst=/var/lib/waia/scientific-checkpoints"');
+    expect(deploy).toContain('-e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints"');
+    expect(deploy.indexOf('createScientificCheckpointStoreV1')).toBeLessThan(deploy.indexOf('docker rm -f'));
   });
 
   it("prepares the technical proposal from the exact image and a read-only dataset", () => {
@@ -115,6 +118,8 @@ describe("execution-server exact SHA attestation", () => {
       '--mount "type=bind,src=${DATASET_ROOT},dst=${DATASET_ROOT},readonly"',
     );
     expect(prepare).toContain("historical-simulation-v2-prepare-proposal.ts");
+    expect(prepare).toContain('--mount "type=bind,src=${CHECKPOINT_ROOT},dst=/var/lib/waia/scientific-checkpoints"');
+    expect(prepare).toContain('checkpoint-root must be outside the read-only source dataset');
     expect(prepare).toContain("Human ratification is still required");
   });
 });

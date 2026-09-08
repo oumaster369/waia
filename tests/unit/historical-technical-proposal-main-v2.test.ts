@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 const mocks = vi.hoisted(() => ({ end: vi.fn(), eventsEnd: vi.fn(), prepare: vi.fn(), connect: vi.fn() }));
 vi.mock("postgres", () => ({ default: mocks.connect }));
 vi.mock("@/db/postgres-client", () => ({ waiaCampaignPostgresDriverOptions: () => ({ max: 1 }) }));
@@ -9,6 +12,7 @@ vi.mock("@/lib/trader/historical-simulation-v2/ratification-split-v2", () => ({
 import { runHistoricalTechnicalProposalMainV2 } from "../../scripts/trader/historical-simulation-v2-prepare-proposal";
 
 const env = {
+  WAIA_FHV_CHECKPOINT_ROOT: "",
   ...process.env, WAIA_TRADER_CLI: "1", DATABASE_URL_POSTGRES_SESSION: "postgresql://runner@example.test/waia",
   WAIA_RELEASE_SHA: "a".repeat(40), WAIA_HISTORICAL_ORGANIZATION_ID: "11111111-1111-4111-8111-111111111111",
   WAIA_HISTORICAL_RUN_ID: "synthetic-proposal", FHV_DATASET_ROOT: "/synthetic/data",
@@ -25,6 +29,8 @@ const env = {
   WAIA_HISTORICAL_CYCLE_COUNT: "35", WAIA_HISTORICAL_OPERATOR_ID: "NEVER_PASS_AS_AUTHORITY",
 };
 beforeEach(() => {
+  vi.stubEnv("WAIA_TRADER_CLI", "1");
+  env.WAIA_FHV_CHECKPOINT_ROOT = realpathSync(mkdtempSync(join(tmpdir(), "waia-cli-checkpoint-test-")));
   vi.resetAllMocks(); mocks.end.mockResolvedValue(undefined);
   mocks.eventsEnd.mockResolvedValue(undefined);
   mocks.connect
@@ -37,8 +43,13 @@ function expectBothPoolsDisposed() {
     expect(end).toHaveBeenCalledWith({ timeout: 5 });
   }
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(env.WAIA_FHV_CHECKPOINT_ROOT, { recursive: true }); });
 describe("technical proposal CLI observation boundary", () => {
+  it("refuses to start expensive work without a checkpoint root", async () => {
+    await expect(runHistoricalTechnicalProposalMainV2({ ...env, WAIA_FHV_CHECKPOINT_ROOT: undefined }))
+      .rejects.toThrow("SCIENTIFIC_CHECKPOINT_ROOT_REQUIRED");
+    expect(mocks.connect).not.toHaveBeenCalled(); expect(mocks.prepare).not.toHaveBeenCalled();
+  });
   it("forwards diagnostic events separately from the completed proposal and disposes the pool", async () => {
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);

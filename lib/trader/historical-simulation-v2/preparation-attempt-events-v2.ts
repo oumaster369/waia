@@ -109,6 +109,9 @@ export async function createPreparationAttemptJournalV2(
   };
   return Object.freeze({
     attemptId,
+    // Await at computation boundaries. A separate pool still shares Node's
+    // event loop: merely enqueueing progress before synchronous CPU work is unsafe.
+    flush,
     progress(event: TechnicalPreparationProgressV2): void {
       if (failed) throw writeFailure;
       if (terminal || event.organizationId !== scope.organizationId || event.runId !== scope.runId ||

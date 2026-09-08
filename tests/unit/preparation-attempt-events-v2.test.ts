@@ -86,6 +86,38 @@ describe("preparation diagnostics only", () => {
     await expect(journal.fail(new Error("primary"))).rejects.toBe(failure);
     expect(query.mock.calls.at(-1)?.[8]).toBe("FAILED");
   });
+  it("reproduces a progress deadline expiring before the I/O continuation is serviced", async () => {
+    vi.useFakeTimers();
+    try {
+      const { pool } = poolMock();
+      Object.assign(pool, { end: vi.fn(async () => undefined) });
+      const journal = await createPreparationAttemptJournalV2(pool, scope);
+      journal.progress({ schemaVersion: "waia.trader.technical_preparation_progress.v2", ...scope,
+        phase: "SURFACE_LOAD", authorityGranted: false });
+      // Deliberately advance the timer without servicing promise continuations:
+      // model the caller starting long synchronous CPU work immediately after progress().
+      vi.advanceTimersByTime(PREPARATION_JOURNAL_WRITE_DEADLINE_MS + 1);
+      await expect(journal.complete("unused")).rejects.toThrow("PREPARATION_JOURNAL_WRITE_TIMEOUT");
+    } finally { vi.useRealTimers(); }
+  });
+  it("offers a nonterminal flush barrier before CPU work, retaining subsequent progress", async () => {
+    vi.useFakeTimers();
+    try {
+      const { pool, query } = poolMock();
+      const end = vi.fn(async () => undefined); Object.assign(pool, { end });
+      const journal = await createPreparationAttemptJournalV2(pool, scope);
+      journal.progress({ schemaVersion: "waia.trader.technical_preparation_progress.v2", ...scope,
+        phase: "SURFACE_LOAD", authorityGranted: false });
+      await journal.flush();
+      vi.advanceTimersByTime(PREPARATION_JOURNAL_WRITE_DEADLINE_MS + 1);
+      expect(end).not.toHaveBeenCalled();
+      journal.progress({ schemaVersion: "waia.trader.technical_preparation_progress.v2", ...scope,
+        phase: "FORECAST_ANCHORS", completed: 1, total: 10, authorityGranted: false });
+      await journal.flush();
+      await journal.complete("proposal");
+      expect(query.mock.calls.at(-1)?.[8]).toBe("PROPOSAL_AVAILABLE");
+    } finally { vi.useRealTimers(); }
+  });
   it("binds every public read to request, digest, organization, run and release", async () => {
     const sql = vi.fn(async (...args: unknown[]) => { void args; return []; });
     expect(await readPreparationAttemptV2(sql as unknown as postgres.Sql, scope)).toBeNull();

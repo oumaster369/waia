@@ -1,5 +1,7 @@
 import postgres from "postgres";
 import { fileURLToPath } from "node:url";
+import { createScientificCheckpointStoreV1 } from "./scientific-checkpoint-store-v1";
+import { withScientificCheckpointsV1 } from "../../lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
 
 import { waiaCampaignPostgresDriverOptions } from "../../db/postgres-client";
 import { guardSingleConnectionPostgresPool } from "../../db/postgres-reserved-close-guard";
@@ -17,6 +19,9 @@ export async function runHistoricalTechnicalProposalMainV2(
 ): Promise<void> {
   const result = await runHistoricalTechnicalProposalCliV2(env,
     async (databaseUrl, input) => {
+      const checkpointRoot = env.WAIA_FHV_CHECKPOINT_ROOT;
+      if (!checkpointRoot) throw new Error("SCIENTIFIC_CHECKPOINT_ROOT_REQUIRED");
+      const checkpoints = createScientificCheckpointStoreV1(checkpointRoot, input.preflight.releaseSha);
       const pool = guardSingleConnectionPostgresPool(
         postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
       );
@@ -24,12 +29,12 @@ export async function runHistoricalTechnicalProposalMainV2(
         postgres(databaseUrl, { ...waiaCampaignPostgresDriverOptions(), connect_timeout: 10,
           connection: { statement_timeout: 10_000, lock_timeout: 3_000 } }),
       );
-      return withHistoricalLaunchCleanupV2(
+      return withScientificCheckpointsV1(checkpoints, () => withHistoricalLaunchCleanupV2(
         () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input, {
           onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); },
         }, eventsPool),
         [() => pool.end({ timeout: 5 }), () => eventsPool.end({ timeout: 5 })],
-      );
+      ));
     });
 
   process.stdout.write(`${JSON.stringify({
