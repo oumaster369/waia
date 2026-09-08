@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, canon, pr-governance]
 approvalGates: [plan-approved, human-merge]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-2, completedWorkPackages: [WP-1], remainingWorkPackages: [WP-2], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Independent exact-head review and one required-CI integration; no shared migration registration or runtime activation." }
+state: { status: in-review, currentWorkPackage: WP-2, completedWorkPackages: [WP-1], remainingWorkPackages: [WP-2], prNumber: null, prUrl: null, lastValidatedGitSha: 639cba7bc3dc994328c8100dc4ebdee9de05a061, lastValidationAt: "2026-09-08T11:16:00Z", blockedReason: null, nextAction: "Follow required exact-head CI, then normal Human-delegated squash and scoped closeout on DEE-965; no shared migration or runtime activation. PR linkage and final receipts belong in Linear, not a second post-merge PR." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -60,3 +60,5 @@ No shared authentication/database/migrations/Gateway/runtime/UI/configuration/CI
 - Linear DEE-871 preserves old history with a later decision/compatibility addendum; DEE-894 records future LegacyDirective specification, not transfer activation. No new duplicate legacy epic or cross-program dependency was introduced.
 
 Reviewability exception: seven scoped files, approximately 870 lines including synthetic negative fixtures and canonical decision history. Keep the tightly related lifecycle/approval contract and its regressions together; splitting code from the ratified rules or per fixture would reduce reviewability and increase PR count. No unrelated refactor, database or platform edit.
+
+Independent read-only review accepted implementation head 639cba7bc3dc994328c8100dc4ebdee9de05a061 against unchanged main40669e6b: 70/70 tests independently pass, prior concrete findings resolved, no remaining findings within the inert scope. Subsequent change is this integration receipt only. All seven required exact-head PR checks and normal fresh-head merge remain mandatory; no administrator bypass or auto-merge. No open priority Trader PR was found before publication. DEE-872 and DEE-885 now carry scoped composition/privacy qualification addenda; Backlog and dependencies are preserved.
