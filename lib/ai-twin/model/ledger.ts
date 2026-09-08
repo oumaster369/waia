@@ -32,7 +32,10 @@ function exactKeys(value: unknown, fields: readonly string[]): boolean {
     typeof value === "object" &&
     Object.getPrototypeOf(value) === Object.prototype &&
     Reflect.ownKeys(value).length === fields.length &&
-    fields.every((field) => Object.hasOwn(value, field))
+    fields.every((field) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, field);
+      return descriptor?.enumerable === true && Object.hasOwn(descriptor, "value");
+    })
   );
 }
 function validScope(scope: ModelScope): boolean {
@@ -93,7 +96,13 @@ function requireContext(state: ModelLedger, ctx: ModelContext) {
     fail("INVALID_INPUT");
 }
 function requireCommand(command: ModelCommand) {
-  if (!command || !["observe", "propose", "correct"].includes(command.kind)) fail("INVALID_INPUT");
+  const kind = command && Object.getOwnPropertyDescriptor(command, "kind");
+  if (
+    !kind?.enumerable ||
+    !Object.hasOwn(kind, "value") ||
+    !["observe", "propose", "correct"].includes(kind.value)
+  )
+    fail("INVALID_INPUT");
   const fields = {
     observe: [
       "kind",

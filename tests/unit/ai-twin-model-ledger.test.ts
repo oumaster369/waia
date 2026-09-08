@@ -276,6 +276,30 @@ describe("inert AI-TWIN epistemic correction kernel", () => {
     ).toThrow("INVALID_INPUT");
   });
 
+  it("rejects non-enumerable command fields excluded from fingerprints", () => {
+    const command = { ...observation };
+    Object.defineProperty(command, "text", { value: "Hidden synthetic text", enumerable: false });
+    expect(() => applyModelCommand(createModelLedger(scope), command, context())).toThrow(
+      "INVALID_INPUT",
+    );
+  });
+
+  it("rejects accessor fields before reading unstable command content", () => {
+    let reads = 0;
+    const command = { ...observation };
+    Object.defineProperty(command, "kind", {
+      enumerable: true,
+      get: () => {
+        reads++;
+        return "observe";
+      },
+    });
+    expect(() => applyModelCommand(createModelLedger(scope), command, context())).toThrow(
+      "INVALID_INPUT",
+    );
+    expect(reads).toBe(0);
+  });
+
   it("rejects undeclared payload fields nested in scope or consent reference", () => {
     expect(() =>
       applyModelCommand(
