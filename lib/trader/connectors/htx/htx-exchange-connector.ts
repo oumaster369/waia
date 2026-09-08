@@ -30,7 +30,6 @@ import {
 import { buildSignedPostQueryString } from "@/lib/trader/connectors/htx/signing";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
-  HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
   assertHtxSpotSymbolAllowed,
   internalSymbolToHtx,
@@ -41,11 +40,14 @@ import {
   mapHtxOrder,
   mapHtxPermissionsToAccountScopes,
   permissionIncludesTrade,
-  permissionIncludesWithdraw,
+  parseHtxPermissions,
   placeOrderInputToHtxType,
 } from "@/lib/trader/connectors/htx/mappers";
 
-export type HtxExchangeConnectorConfig = HtxClientConfig;
+export type HtxExchangeConnectorConfig = HtxClientConfig & {
+  /** Existing stored account binding; never a caller-supplied account-selection capability. */
+  expectedSpotAccountId?: string;
+};
 
 class HtxPlacementFailUnknownError extends Error {
   readonly rawVenueObservation: Readonly<Record<string, unknown>>;
@@ -87,15 +89,17 @@ function redactSensitiveHtxObservation(
     return value.map((entry) => redactSensitiveHtxObservation(entry, sensitiveValues));
   }
   if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
-      const safeKey = redactSensitiveHtxObservation(key, sensitiveValues) as string;
-      return [
-        safeKey,
-        HTX_SENSITIVE_RESPONSE_KEY.test(key)
-          ? "[REDACTED]"
-          : redactSensitiveHtxObservation(entry, sensitiveValues),
-      ];
-    }));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => {
+        const safeKey = redactSensitiveHtxObservation(key, sensitiveValues) as string;
+        return [
+          safeKey,
+          HTX_SENSITIVE_RESPONSE_KEY.test(key)
+            ? "[REDACTED]"
+            : redactSensitiveHtxObservation(entry, sensitiveValues),
+        ];
+      }),
+    );
   }
   return value;
 }
@@ -118,6 +122,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
   private validated = false;
   private spotAccountId: string | null = null;
   private permissionString: string | null = null;
+  private readonly expectedSpotAccountId: string | undefined;
 
   constructor(config: HtxExchangeConnectorConfig) {
     this.client = new HtxRestClient(config);
@@ -126,9 +131,11 @@ export class HtxExchangeConnector implements ExchangeConnector {
     this.placementRestHost = resolveHtxRestHost(config.restHost);
     this.placementHost = htxHostFromUrl(this.placementRestHost);
     this.placementFetch = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.expectedSpotAccountId = config.expectedSpotAccountId;
   }
 
   async validateCredentials(input: ConnectorCredentialInput): Promise<CredentialValidationResult> {
+    this.resetSession();
     const apiKey = input.apiKey.trim();
     const apiSecret = input.apiSecret.trim();
     if (!apiKey || !apiSecret) {
@@ -140,9 +147,25 @@ export class HtxExchangeConnector implements ExchangeConnector {
       };
     }
 
+    if (apiKey !== this.placementApiKey || apiSecret !== this.placementApiSecret) {
+      return {
+        valid: false,
+        errorCode: "CREDENTIAL_IDENTITY_MISMATCH",
+        errorMessage: "HTX validation credentials must match the configured signing client",
+      };
+    }
+
     try {
       const accounts = await this.client.getAccounts();
-      const spotAccount = accounts.find((row) => row.type === "spot" && row.state === "working");
+      const spotAccounts = accounts.filter((row) => row.type === "spot" && row.state === "working");
+      if (spotAccounts.length > 1) {
+        return {
+          valid: false,
+          errorCode: "AMBIGUOUS_SPOT_ACCOUNT",
+          errorMessage: "HTX account admission requires one unambiguous working spot account",
+        };
+      }
+      const spotAccount = spotAccounts[0];
       if (!spotAccount) {
         this.resetSession();
         return {
@@ -152,30 +175,53 @@ export class HtxExchangeConnector implements ExchangeConnector {
         };
       }
 
-      const warnings: string[] = [];
-      let permissionString: string | null = null;
+      if (
+        this.expectedSpotAccountId !== undefined &&
+        String(spotAccount.id) !== this.expectedSpotAccountId
+      ) {
+        return {
+          valid: false,
+          errorCode: "ACCOUNT_ID_MISMATCH",
+          errorMessage: "HTX observed account does not match the stored account binding",
+        };
+      }
 
-      try {
-        const uid = await this.client.getUserUid();
-        const apiKeyRow = await this.client.getUserApiKey(uid);
-        if (apiKeyRow?.permission) {
-          permissionString = apiKeyRow.permission;
-          if (permissionIncludesWithdraw(apiKeyRow.permission)) {
-            this.resetSession();
-            return {
-              valid: false,
-              errorCode: "FORBIDDEN_PERMISSION",
-              errorMessage: "HTX API key has withdraw permission which is forbidden",
-            };
-          }
-          if (permissionIncludesTrade(apiKeyRow.permission)) {
-            warnings.push(HTX_TRADE_PERMISSION_WARNING);
-          }
-        } else {
-          warnings.push(HTX_PERMISSION_PROBE_WARNING);
-        }
-      } catch {
-        warnings.push(HTX_PERMISSION_PROBE_WARNING);
+      const warnings: string[] = [];
+      const uid = await this.client.getUserUid();
+      const apiKeyRow = await this.client.getUserApiKey(uid);
+      if (
+        !apiKeyRow ||
+        apiKeyRow.status !== "normal" ||
+        typeof apiKeyRow.permission !== "string" ||
+        !apiKeyRow.permission.trim()
+      ) {
+        return {
+          valid: false,
+          errorCode: "PERMISSION_METADATA_UNVERIFIED",
+          errorMessage: "HTX requires active exact-key permission metadata before admission",
+        };
+      }
+      const permissionString = apiKeyRow.permission;
+      const permissions = parseHtxPermissions(permissionString);
+      if (permissions.some((permission) => permission !== "readonly" && permission !== "trade")) {
+        return {
+          valid: false,
+          errorCode: "FORBIDDEN_PERMISSION",
+          errorMessage: "HTX API key contains forbidden or unrecognized permissions",
+        };
+      }
+      if (
+        !permissions.includes("readonly") ||
+        permissionString.split(",").some((token) => !token.trim())
+      ) {
+        return {
+          valid: false,
+          errorCode: "PERMISSION_METADATA_UNVERIFIED",
+          errorMessage: "HTX read permission was not verified",
+        };
+      }
+      if (permissionIncludesTrade(permissionString)) {
+        warnings.push(HTX_TRADE_PERMISSION_WARNING);
       }
 
       this.validated = true;
@@ -189,17 +235,21 @@ export class HtxExchangeConnector implements ExchangeConnector {
       };
     } catch (error) {
       this.resetSession();
+      const safeErrorMessage = redactSensitiveHtxObservation(
+        error instanceof Error ? error.message : "HTX credential validation failed",
+        [this.placementApiKey, this.placementApiSecret],
+      ) as string;
       if (error instanceof HtxApiError) {
         return {
           valid: false,
           errorCode: error.code,
-          errorMessage: error.message,
+          errorMessage: safeErrorMessage,
         };
       }
       return {
         valid: false,
         errorCode: "VALIDATION_FAILED",
-        errorMessage: error instanceof Error ? error.message : "HTX credential validation failed",
+        errorMessage: safeErrorMessage,
       };
     }
   }
@@ -210,9 +260,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
       accountId: this.spotAccountId!,
       venue: "htx",
       marketType: "spot",
-      permissions: this.permissionString
-        ? mapHtxPermissionsToAccountScopes(this.permissionString)
-        : ["read"],
+      permissions: mapHtxPermissionsToAccountScopes(this.permissionString!),
     };
   }
 
