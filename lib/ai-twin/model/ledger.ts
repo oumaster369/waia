@@ -81,6 +81,7 @@ function requireContext(state: ModelLedger, ctx: ModelContext) {
     fail("INVALID_INPUT");
 }
 function requireCommand(command: ModelCommand) {
+  if (!command || !["observe", "propose", "correct"].includes(command.kind)) fail("INVALID_INPUT");
   const fields = {
     observe: [
       "kind",
@@ -179,7 +180,7 @@ function requireCommand(command: ModelCommand) {
   }
 }
 function consentFor(
-  observation: Pick<ModelObservation, "grant" | "source" | "scope" | "recordedAt">,
+  observation: Pick<ModelObservation, "grant" | "source" | "scope" | "recordedAt" | "purpose">,
   ctx: ModelContext,
 ) {
   const matches = ctx.grants.filter((grant) => grant.id === observation.grant.id);
@@ -192,6 +193,7 @@ function consentFor(
     !sameScope(grant.scope, ctx.scope) ||
     !sameScope(observation.scope, ctx.scope) ||
     grant.purpose !== ctx.purpose ||
+    observation.purpose !== ctx.purpose ||
     grant.mode !== "private_modelling" ||
     grant.revokedAt !== null ||
     !text(grant.retentionPolicyId) ||
@@ -247,14 +249,15 @@ export function applyModelCommand(
   if (command.kind === "observe") {
     if (ctx.actor.kind !== "human") fail("HUMAN_REQUIRED");
     if (instant(command.eventTime) > instant(ctx.now)) fail("INVALID_INPUT");
-    if (!consentFor({ ...command, recordedAt: ctx.now }, ctx)) fail("CONSENT_UNAVAILABLE");
+    if (!consentFor({ ...command, recordedAt: ctx.now, purpose: ctx.purpose }, ctx))
+      fail("CONSENT_UNAVAILABLE");
   } else if (command.kind === "propose") {
     if (ctx.actor.kind !== "model") fail("MODEL_REQUIRED");
     requireEvidence(state, command.observationIds, ctx);
   } else {
     if (ctx.actor.kind !== "human") fail("HUMAN_REQUIRED");
     prior = latestClaim(state, command.claimId);
-    if (!prior) fail("EVIDENCE_UNAVAILABLE");
+    if (!prior || prior.purpose !== ctx.purpose) fail("EVIDENCE_UNAVAILABLE");
     requireEvidence(state, prior.observationIds, ctx);
   }
   const fingerprint = createHash("sha256")
@@ -270,7 +273,7 @@ export function applyModelCommand(
   let corrections = state.corrections;
   if (command.kind === "observe") {
     if (observations.some((item) => item.id === command.id)) fail("DUPLICATE_ID");
-    const grant = consentFor({ ...command, recordedAt: ctx.now }, ctx)!;
+    const grant = consentFor({ ...command, recordedAt: ctx.now, purpose: ctx.purpose }, ctx)!;
     observations = [
       ...observations,
       {
@@ -283,6 +286,7 @@ export function applyModelCommand(
         text: command.text,
         projectionRisks: command.projectionRisks,
         epistemicKind: "self_report",
+        purpose: ctx.purpose,
         recordedAt: ctx.now,
         retentionPolicyId: grant.retentionPolicyId,
       },
@@ -300,6 +304,7 @@ export function applyModelCommand(
         uncertainty: command.uncertainty,
         observationIds: command.observationIds,
         revision: 1,
+        purpose: ctx.purpose,
         supersedesRevision: null,
         status: "proposed",
         basis: "model_interpretation",
@@ -323,6 +328,7 @@ export function applyModelCommand(
         statement: command.statement,
         context: command.context,
         previousRevision: expectedRevision,
+        purpose: ctx.purpose,
         actorSubjectId: ctx.actor.subjectId,
         recordedAt: ctx.now,
       },
@@ -363,6 +369,7 @@ export function projectCurrentModel(
     [...latest.values()].filter(
       (claim) =>
         sameScope(claim.scope, ctx.scope) &&
+        claim.purpose === ctx.purpose &&
         claim.status !== "withdrawn" &&
         claim.status !== "superseded" &&
         claim.observationIds.length > 0 &&

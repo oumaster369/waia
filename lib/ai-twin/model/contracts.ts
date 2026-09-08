@@ -68,6 +68,7 @@ export type ModelCommand = ObserveCommand | ProposeCommand | CorrectCommand;
 export type ModelObservation = Readonly<
   Omit<ObserveCommand, "kind" | "requestId"> & {
     epistemicKind: "self_report";
+    purpose: string;
     recordedAt: string;
     retentionPolicyId: string;
   }
@@ -75,6 +76,7 @@ export type ModelObservation = Readonly<
 export type HumanClaimVersion = Readonly<
   Omit<ProposeCommand, "kind" | "requestId"> & {
     revision: number;
+    purpose: string;
     supersedesRevision: number | null;
     status: "proposed" | "active" | "contested" | "superseded" | "withdrawn";
     /** Endorsement is not external verification or calibrated confidence. */
@@ -86,6 +88,7 @@ export type HumanClaimVersion = Readonly<
 export type HumanCorrectionRecord = Readonly<
   Omit<CorrectCommand, "kind" | "requestId" | "expectedRevision"> & {
     previousRevision: number;
+    purpose: string;
     actorSubjectId: string;
     recordedAt: string;
   }

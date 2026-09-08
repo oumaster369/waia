@@ -75,6 +75,36 @@ function proposed(): ModelLedger {
 }
 
 describe("inert AI-TWIN epistemic correction kernel", () => {
+  it("binds evidence and every correction version to the original modelling purpose", () => {
+    const state = applyModelCommand(proposed(), correction, context());
+    expect(state.observations[0]).toHaveProperty("purpose", "formation");
+    expect(state.claims.every((claim) => "purpose" in claim && claim.purpose === "formation")).toBe(
+      true,
+    );
+    expect(state.corrections[0]).toHaveProperty("purpose", "formation");
+  });
+
+  it("does not repurpose old evidence even if the adapter relabels a grant", () => {
+    const state = proposed();
+    const ctx = context();
+    ctx.purpose = "another-purpose";
+    ctx.grants = [{ ...ctx.grants[0], purpose: ctx.purpose }];
+    expect(projectCurrentModel(state, ctx)).toEqual([]);
+    expect(() => applyModelCommand(state, correction, ctx)).toThrow("EVIDENCE_UNAVAILABLE");
+    expect(() =>
+      applyModelCommand(state, proposal, { ...ctx, actor: context("model").actor }),
+    ).toThrow("EVIDENCE_UNAVAILABLE");
+  });
+
+  it.each([null, undefined, 1, "observe", { kind: "toString" }])(
+    "rejects malformed command %j with a stable input error",
+    (command) => {
+      expect(() =>
+        applyModelCommand(createModelLedger(scope), command as ModelCommand, context()),
+      ).toThrow("INVALID_INPUT");
+    },
+  );
+
   it("uses the Human correction without overwriting self-report or prior interpretation", () => {
     const before = proposed();
     const after = applyModelCommand(before, correction, context());
