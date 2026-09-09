@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, integration, canon, pr-governance]
 approvalGates: [plan-approved, independent-review, exact-head-ci]
 includedIssues: []
-state: { status: approved, currentWorkPackage: WP-1, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2, WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Adopt the frozen compatibility subset; resolve schema-mirror backward compatibility with Trader owner; qualify on owned PostgreSQL17." }
+state: { status: in-progress, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: "2026-09-09T15:31:00Z", blockedReason: null, nextAction: "Complete local build and exact-diff Trader-owner review; verify publication has no deployment effect; prepare one unmerged PR." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -60,4 +60,18 @@ Before any DB apply, reverting this unactivated code restores the previous check
 
 ## Evidence log
 
-Admission only. Implementation, actual PG17 acceptance, review and PR remain pending.
+Implementation and scoped PG17 acceptance completed below. Build, final independent review and PR gates remain pending.
+
+### 2026-09-09 — Trader-owner extraction correction
+
+DEE-960 comment `55850464-5490-4635-b48c-a2b69fc67ade` supersedes the earlier mirror recommendation. Existing credential repository uses unprojected select/insert/returning. Adding observationRevision would require205 for those consumers even when historical preflight accepts204. Owner explicitly approves deferring **all** schema.postgres.ts mirror changes here; preserve the file and consumers byte-for-byte from main. The exact SQL+journal remains the authoritative migration; account runtime/mirror rollout remains DEE-960. Final delivered manifest is exactly the four frozen adoption paths plus this plan and the independent PG harness (six files). No other files are admitted.
+
+### 2026-09-09 — Local qualification receipt
+
+- Current focused suite: **30/30 passed, zero skips** (20 frozen preflight units, one exact-source static check, nine actualPG17 scenarios). Fresh0000–0205 and204→205 use actual Drizzle with NOSUPERUSER/NOBYPASSRLS migration owner. Existing credential insert/get/list/revoke also run under that limited owner on BOTH schemas; captured generated SQL excludes observation_revision. Raw test SQL separately confirms revision increments after legacy revoke. Credential/snapshot preservation, forcedRLS/browser denial, exact scoped observer/reader filtering, secret denial, read-only/immutable/revision guards and eight rolled-back actual preflight corruptions pass. No account-runtime imports or calculation executed.
+- External owned fixture proof: final container `34b47f4eba9a09d13b5cb7f331251c8a6811190f7d56ad18cbdd7d39017aa334`, owner label ai-twin-dee976-final-20260909, loopback51188, image `sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73`, PostgreSQL17.11, no host mounts, bounded1CPU/1GiB and tmpfs512MiB. SQL independently checked dedicatedDB/owner/marker beforeDDL. Tests do not themselves verify Docker binding. Prior own first-pass container59396019 was removed with synthetic data only.
+- Lint passed with307 existing warnings/zero errors; typecheck, diff check, canon154 plus regressions/release identity, and PR-governance regressions passed. Full unit/E2E CI is not yet run. No hosted auth/Twin rights/207/full scientific readiness claim.
+- Initial local build failed because a sibling-node_modules symlink is outside Turbopack root. Replace only this worktree's symlink with its own dependency copy; source/config is not changed to suppress the build check. Successful retry remains required.
+- GitHub read-only check: no openPR; currentmain remains3657b257. Actions secret names contain only LINEAR_API_KEY, so existing Cloudflare preview deployment step is not enabled. No CI/config/secret changes. External Workers Builds behavior must be separately checked before push.
+
+The six-file diff may slightly exceed800lines after formatting the independent harness. One193-line immutableSQL, one small journal entry, one bounded preflight pair and one fresh/upgrade/security harness constitute a single compatibility/rollback boundary; separating these would leave migration acceptance unqualified. No runtime feature is included to increase scope.

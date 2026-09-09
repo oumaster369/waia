@@ -8,10 +8,14 @@ import {
   assertFhvV2RequiredTablesPresent,
   FHV_V2_POSTGRES_REQUIRED_TABLES,
   readFhvV2CanonicalMigrations,
+  readFhvV2CompatibleAdditiveMigrations,
 } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
 
 describe("FHV V2 PostgreSQL schema preflight", () => {
   const canonical = readFhvV2CanonicalMigrations(process.cwd());
+  const compatibleAdditive = readFhvV2CompatibleAdditiveMigrations(process.cwd());
+  const baseline = canonical.map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) }));
+  const additional = compatibleAdditive.map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) }));
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
     // Build the applied journal independently of the preflight's range filter,
@@ -24,7 +28,46 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       hash: createHash("sha256").update(readFileSync(join(root, `${entry.tag}.sql`))).digest("hex"),
       createdAt: String(entry.when),
     }));
-    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, applied })).not.toThrow();
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied })).not.toThrow();
+  });
+
+  it("admits only explicit 0205 and does not require it for historical execution", () => {
+    expect(compatibleAdditive.map(({ idx, when, tag }) => ({ idx, when, tag })))
+      .toEqual([{ idx: 205, when: 1780000000205, tag: "0205_trader_account_observation_v1" }]);
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline })).not.toThrow();
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, applied: [...baseline, ...additional] }))
+      .toThrow("UNKNOWN_APPLIED_MIGRATION");
+  });
+
+  it("does not let compatible 0205 substitute for required 0204", () => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: [...baseline.slice(0, -1), ...additional] })).toThrow("REQUIRED_MIGRATION_MISSING");
+  });
+
+  it("rejects changed additive SQL bytes", () => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: [...baseline, { ...additional[0], hash: "f".repeat(64) }] }))
+      .toThrow("APPLIED_MIGRATION_HASH_MISMATCH");
+  });
+
+  it("rejects an admitted hash registered at an unrecognized timestamp", () => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: [...baseline, { ...additional[0], createdAt: "1780000000206" }] }))
+      .toThrow("UNKNOWN_APPLIED_MIGRATION");
+  });
+
+  it("does not automatically admit the next migration", () => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: [...baseline, ...additional, { hash: "a".repeat(64), createdAt: "1780000000206" }] }))
+      .toThrow("UNKNOWN_APPLIED_MIGRATION");
+  });
+
+  it.each(["same row", "same timestamp", "same hash"])("rejects duplicate migration: %s", (kind) => {
+    const row = { ...additional[0] };
+    if (kind === "same timestamp") row.hash = "a".repeat(64);
+    if (kind === "same hash") row.createdAt = "1780000000206";
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: [...baseline, ...additional, row] })).toThrow("DUPLICATE_APPLIED_MIGRATION");
   });
 
   it("binds the exact contiguous canonical journal through 0204", () => {
