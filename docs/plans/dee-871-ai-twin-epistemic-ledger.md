@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: fa43288c0fb25b5ed58782e6159768ccf8f3f743,
-    lastValidationAt: "2026-09-09T09:18:03Z",
+    lastValidatedGitSha: 6ed6cb21a33a8bb91e770b0da431522d86c1591d,
+    lastValidationAt: "2026-09-09T09:57:56Z",
     blockedReason: null,
-    nextAction: "Private export metadata composition verified. Finish Formation/Health and reflection/prediction/outcome storage contracts; qualify full access/rights inventory before runtime integration. Shared migration/auth remains separately coordinated; no Trader mutation.",
+    nextAction: "Reflection/prediction/outcome vocabulary verified. Finish Formation/Health storage contract and full temporal/access/rights inventory; qualify persisted evidence as known at forecast time before calibration. Shared migration/auth remains separately coordinated; no Trader mutation.",
   }
 provenance:
   {
@@ -298,3 +298,15 @@ Reject foreign scope, wrong purpose/policy, missing/stale evidence, malformed/ge
 Verification: explicit missing-feature RED followed by focused synthetic tests across all three shapes and cross-object binding; cumulative four model unit files; scoped lint/typecheck/canon/diff checks; independent read-only plan and exact-head code review. Do not count earlier PG runs as current or present schema vocabulary as a complete runtime loop. Full-batch reviewability must be reassessed before publication; no new PR or dependency discharge from this substep.
 
 Independent pre-code review adds exact lineage/chronology checks: prediction creation <= window start < window end; every receipt (including unknown/declined) is created at/after its prediction; a prediction cannot cite the kind+id of its own reported outcome at any version. Expired prediction windows may still receive late reports, and observations outside the expected window must not be silently discarded. These are structural consistency checks, not proof of a safely conducted experiment or an independently observed result.
+
+#### Reflection / expectation / outcome validation receipt — 2026-09-09
+
+Admission `858056fe8bf00cb493f2d8e154522c8243006297` plus independent-review clarification `0100e25a` preceded implementation/review `6ed6cb21a33a8bb91e770b0da431522d86c1591d`. Only the two already owned code/test files changed; no runtime caller or new persistence registration.
+
+- Initial RED:20 new tests failed at the explicit function-availability guard,40 existing tests passed. Four additional chronology/cycle cases were added after plan review; no claim that each behavioral assertion was first reproduced failing.
+- Final **156/156 cumulative units passed**: contracts64 (24 new cases), lifecycle43, kernel35, quarantine14. Cases cover exact prediction/version/scope, policy and current evidence, event/window/report chronology, direct self-outcome cycles across versions, Human attribution, observation-only report evidence, unknown/declined, no inferred consent/authority, immutable output and no prediction overwrite.
+- Independent exact-head read-only review found no concrete P1/P2 in this pure-contract delta and independently ran contracts64/64. It did not rerun cumulative156, PostgreSQL or full DEE-871 qualification. TypeScript, scoped ESLint, diff check and canon validation passed (151 files, validator regressions and release identity).
+- The pure checks do not establish that evidence was known at forecast creation, its Human origin, independence or truth; they do not traverse multi-step provenance cycles. The future repository/ingestion layer must qualify evidence's recorded/known time and dependency closure before storage or calibration. Typed observations are not automatically independent real outcomes. No new retention classification is admitted by these validators.
+- No DB/container/provider, shared auth/schema/journal, Trader worktree/process/PR, deployment or browser modification. Remote main remains90de233a; openPR567 is outside mutation scope. Earlier PG receipts remain historical, not part of156. No full build/CI/E2E or actual experiment/calibration claim.
+
+DEE-875 remains Backlog under its unchanged dependencies; DEE-871 remains In Progress and unpublished. Formation/Health storage contract, complete persisted inventory, temporal/rights/access qualification, historical import and shared integration remain unfinished. This is not approval to merge the growing partial package: final all-file reviewability and integration acceptance remain gates; no additional PR or Done transition.
