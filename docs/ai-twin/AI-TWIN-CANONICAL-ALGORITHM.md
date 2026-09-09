@@ -137,7 +137,7 @@ The dialogue must explain why a sensitive question matters, allow skip/withdrawa
 
 Diary is available from initial privacy consent. Entries create private observations and may trigger extraction, reflection, contradiction detection and knowledge needs. The Human can keep an entry raw-only, allow private modelling, or approve a narrowly derived disclosure. Society and connectors never receive raw Diary content by default. Derived summaries must account for re-identification and inversion risk.
 
-### 6.1 Memory layers and retention — Human-approved 2026-09-08
+### 6.1 Memory layers and retention — Human-approved 2026-09-08; R1 classification approved 2026-09-09
 
 Working memory supports the current epistemic loop; personal memory preserves deliberately saved private experience; the inheritable experience archive preserves selected Human-approved experience without an automatic TTL. These are separate purposes, not progressively broader permission. No retention permission implies modelling, disclosure, action or inheritance authority. Keeping data does not make a claim current or true.
 
@@ -145,6 +145,7 @@ Working memory supports the current epistemic loop; personal memory preserves de
 |---|---|
 | Ordinary text dialogue | 90 days from creation |
 | Unconfirmed working hypothesis | 90 days from creation or latest substantial new evidence; reading/rephrasing/review alone never resets age |
+| Unconfirmed proposed relation / open knowledge need (R1) | Working memory under the same 90-day rule, not the long-lived model's annual-review policy; retries and new wording do not establish substantial evidence |
 | Diary / explicitly saved episodes | While deliberately maintained for an authorized private archival purpose; source/account/archive deletion or ended purpose triggers removal assessment |
 | Long-lived model and meaningful Human corrections | Only while authorized purpose and eligible evidence basis persist; review storage necessity at least annually, independently of Model Health and evidence freshness |
 | Inheritable experience archive | No automatic TTL, potentially decades; explicit independent Human-controlled archival purpose, composition and lifecycle; not an undeletable record |
@@ -154,6 +155,8 @@ Working memory supports the current epistemic loop; personal memory preserves de
 | Consent / erasure receipts | A proposed 12 months after consent/operation ends remains conditional on separately reviewed necessity, legal basis, minimal fields and access; no automatic post-account-deletion extension |
 
 These are approved design requirements, not proof of an implemented deletion service or legal compliance. Future operational tests must establish immediate exclusion from use on withdrawal and removal from live stores/indexes within **7 calendar days**, and **all** backup/processor copies within **30 calendar days from the same request**, not 7+30. Restore must reapply removal restrictions before serving data. A request, hash or tombstone is not completion evidence. Operational feasibility and every retained exception must be reviewed before making user-facing promises.
+
+R1 does not automatically promote a confirmed relation, resolve a need or create an archive. A substantial-evidence renewal requires independently verified new evidence and a trusted recorded anchor; reading, review, rephrasing, retries or caller-supplied metadata are insufficient. The disconnected DEE-871 repository currently admits initial proposed relations/open needs only, so their implemented anchor is creation; verified renewal and later-state transitions remain unimplemented. Current source eligibility, a shorter relation interval, withdrawal and deletion may exclude use earlier than 90 days.
 
 Withdrawal of modelling permission does not itself erase a separately authorized private Diary purpose. Conversely, source deletion cannot be evaded by keeping dependent summaries, embeddings, model versions or snapshots: remove them or establish truly independent authorized evidence. Archival permission must be explicit before independently preserving selected experience; expiry never silently promotes a conversation into an archive. Historical consent is not backfilled as opt-in. The existing biometric D3 EPHEMERAL-NO-TEMPLATE and DARK-only boundary is unchanged.
 
@@ -173,6 +176,7 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-08, PR563, main 40669e6b | Verified inert correction kernel only | 35 focused tests; no physical persistence/erasure |
 | 2026-09-08, Human retention acceptance in AI-TWIN task 01a057ba-ed9b-77a1-948d-5220bb52debd | Explicit approval of recommended baseline with conditional receipts | Supersedes Proposed-only duration status in historical DEE-871 WP-1b; operational proof remains absent |
 | 2026-09-08, Human inheritable-experience refinement and subsequent proposal acceptance, same task | Explicit long-lived archive requirement plus approved three-layer architecture | DEE-965 foundation; DEE-871 persistence, DEE-872 private composition UX; DEE-894 future disclosure/legacy specification, no transfer activation |
+| 2026-09-09, Human “Подтверждаю” in response to R1, same task | Ratified classification of proposed relations/open knowledge needs as 90-day working memory; independently selected private experience remains separate, without automatic TTL | Supersedes DEE-871's fixture-only Proposed annual-review mapping; no automatic renewal, permanent promotion or runtime release authority |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 

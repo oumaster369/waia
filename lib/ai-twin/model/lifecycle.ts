@@ -5,6 +5,8 @@ import type { ModelScope } from "./contracts";
  * a request/LLM parser. The future trusted adapter supplies current authorizations,
  * evidence eligibility and substantial-evidence anchors from authoritative records.
  * These functions neither collect data nor perform/verify removal or disclosure. */
+// R1 (Human-approved 2026-09-09) adds explicit working-memory classes without
+// changing the meaning of existing classes or relabeling persisted model records.
 export const TWIN_RETENTION_POLICY = "human-approved-2026-09-08/v1";
 const DAY = 86400000;
 type Purpose =
@@ -35,6 +37,8 @@ export type RetentionRecord = Readonly<{
   kind:
     | "dialogue"
     | "hypothesis"
+    | "proposed_relation"
+    | "open_knowledge_need"
     | "diary"
     | "saved_episode"
     | "model"
@@ -55,6 +59,8 @@ export type RetentionRecord = Readonly<{
 const purposes: Record<RetentionRecord["kind"], Purpose> = {
   dialogue: "dialogue",
   hypothesis: "modelling",
+  proposed_relation: "modelling",
+  open_knowledge_need: "modelling",
   model: "modelling",
   diary: "private_archive",
   saved_episode: "private_archive",
@@ -117,6 +123,8 @@ export function planRetention(
       expiry = created + 90 * DAY;
       break;
     case "hypothesis":
+    case "proposed_relation":
+    case "open_knowledge_need":
       expiry = anchor(record.lastSubstantialEvidenceAt) + 90 * DAY;
       break;
     case "diagnostic_log":
