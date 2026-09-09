@@ -296,15 +296,15 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
   function groundedPolicy(value: GroundedCandidate, ctx: Context): boolean {
     if ("validUntil" in value && value.validUntil !== null && ctx.now >= value.validUntil)
       return false;
-    // Fixture-only PROPOSED mapping: not a ratified retention classification for
-    // initial relations/needs. Current source eligibility is always checked first
-    // and cannot be prolonged by this model policy or by rephrasing/retry.
+    // Human-approved R1: initial relations/needs are 90-day working memory.
+    // Current source eligibility is checked first. Initial-only writes have no
+    // trusted substantial-evidence renewal; reads/rephrasing/retries never renew.
     const policy = planRetention(
       {
         scope: ctx.scope,
         id: value.ref.id,
         revision: value.ref.version,
-        kind: "model",
+        kind: value.ref.kind === "relation" ? "proposed_relation" : "open_knowledge_need",
         createdAt: value.createdAt,
         evidenceEligible: true,
         erasureRequestedAt: null,
@@ -322,7 +322,7 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       },
       ctx.now,
     );
-    return policy.purposeUseAllowed && !policy.reviewDue;
+    return policy.purposeUseAllowed;
   }
   function archiveContext(ctx: Context) {
     context(ctx, true);

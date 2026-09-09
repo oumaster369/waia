@@ -88,6 +88,73 @@ describe("inert retention policy", () => {
     expect(planRetention(r, grant("processing"), day(3)).disposition).toBe("remove");
     expect(() => planRetention(record("processing_copy"), grant("processing"), day(3))).toThrow();
   });
+  describe.each(["proposed_relation", "open_knowledge_need"] as const)(
+    "R1 working memory: %s",
+    (kind) => {
+      const candidate = () => record(kind);
+      it("expires exactly at day 90 independently of any source clock", () => {
+        const r = candidate();
+        const g = grant("modelling");
+        const before = new Date(Date.parse(day(90)) - 1).toISOString();
+        expect(planRetention(r, g, before)).toMatchObject({
+          purposeUseAllowed: true,
+          expiresAt: day(90),
+          reviewDueAt: null,
+        });
+        expect(planRetention(r, g, day(90))).toMatchObject({
+          purposeUseAllowed: false,
+          disposition: "remove",
+          expiresAt: day(90),
+        });
+      });
+      it("does not let repeated planning or necessity review renew age", () => {
+        const r = candidate();
+        for (const clock of [day(1), day(30), day(89)]) {
+          expect(planRetention(r, grant("modelling"), clock).expiresAt).toBe(day(90));
+        }
+        expect(
+          planRetention({ ...r, lastNecessityReviewAt: day(89) }, grant("modelling"), day(90))
+            .purposeUseAllowed,
+        ).toBe(false);
+      });
+      it("accepts only a trusted, chronological substantial-evidence anchor", () => {
+        const r = { ...candidate(), lastSubstantialEvidenceAt: day(10) };
+        expect(planRetention(r, grant("modelling"), day(90))).toMatchObject({
+          purposeUseAllowed: true,
+          expiresAt: day(100),
+        });
+        expect(planRetention(r, grant("modelling"), day(100)).purposeUseAllowed).toBe(false);
+        for (const anchor of [day(-1), day(101)]) {
+          expect(() =>
+            planRetention(
+              { ...r, lastSubstantialEvidenceAt: anchor },
+              grant("modelling"),
+              day(100),
+            ),
+          ).toThrow();
+        }
+      });
+      it("never turns retention into permission or a removal receipt", () => {
+        const r = candidate();
+        const g = grant("modelling");
+        const cases = [
+          [r, null],
+          [r, grant("private_archive")],
+          [r, { ...g, revokedAt: day(1) }],
+          [r, { ...g, scope: { ...scope, subjectId: "other" } }],
+          [{ ...r, evidenceEligible: false }, g],
+          [{ ...r, erasureRequestedAt: day(1) }, g],
+        ] as const;
+        for (const [item, authority] of cases) {
+          expect(planRetention(item, authority, day(1))).toMatchObject({
+            purposeUseAllowed: false,
+            disposition: "remove",
+            removalVerified: false,
+          });
+        }
+      });
+    },
+  );
   it("only substantial evidence can move the hypothesis anchor", () => {
     const r = { ...record("hypothesis"), lastSubstantialEvidenceAt: day(10) };
     expect(planRetention(r, grant("modelling"), day(90)).expiresAt).toBe(day(100));
