@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 43b08fdf514675bc5104842c47c4f187d8446b7c,
-    lastValidationAt: "2026-09-08T13:10:20Z",
+    lastValidatedGitSha: 3777e51d5ea22ff589383c2845b1ba0b9b6f46f5,
+    lastValidationAt: "2026-09-09T08:08:36Z",
     blockedReason: null,
-    nextAction: "DEE-963/965 merged. Continue reviewed isolated WP-1b object contracts and synthetic repository preparation; shared migration, access/rights, historical-consent and runtime gates remain.",
+    nextAction: "Quarantine planning and relation/knowledge candidate contracts locally reviewed. Complete remaining v1 inventory and final access/storage contract; no shared migration or runtime cutover before separately coordinated compatibility admission.",
   }
 provenance:
   {
@@ -207,3 +207,18 @@ Continue the existing object matrix within `persistence-contracts.ts` and its un
 For both, the caller must supply a current trusted purpose/policy and eligible versioned source set; equality checks do not authenticate consent or prove retention eligibility. No policy duration, score, new inference category or collection permission is introduced. Reject undeclared fields/getters/sparse arrays before inspection, unsupported object kinds, scope/purpose/policy mismatches, unavailable versions, duplicates and self-links; return deeply immutable independent candidates. These are local shape/lineage contracts only, with no new persistence or runtime caller. RED tests, targeted cumulative unit checks, scoped lint/typecheck and independent review are required before a validation receipt. This does not qualify the rest of the all-v1 inventory or DEE-871 completion.
 
 `pnpm lint`; `pnpm typecheck`; focused unit/integration/isolation tests; `pnpm validate:canon`; PR governance.
+
+### 2026-09-09 validation receipt — local preparation only
+
+Own branch based on verified main `90de233a192f9b97fa2d6a1ab0c3c1ba5a72df67`, no conflicts during unpublished rebase, no other worktree changes. Plan-before-code commits: `50f8690a` (quarantine) and `091f7dbc` (relation/knowledge contracts). Reviewed quarantine head `b423c3d18197feec9116af621593a08b03099228`; final code head `3777e51d5ea22ff589383c2845b1ba0b9b6f46f5`.
+
+- **106/106 cumulative unit tests pass**: kernel 35, lifecycle 35, persistence contracts 22, quarantine 14. Quarantine RED was a missing module with zero assertions; relation/knowledge RED had 10 failures caused by missing functions, not a demonstrated semantic regression. A later test-only TypeScript fixture error was corrected, then typecheck and scoped ESLint passed. No test or production check was weakened.
+- Independent read-only review independently reproduced 14/14 quarantine and 22/22 contract tests, read the exact admitted diffs, and reported no remaining concrete P1/P2 in those local scopes. It did not rerun the full 106. The previous PostgreSQL suite was not rerun or counted as current evidence: no SQL, repository behavior or existing hypothesis validator was changed in this substep; no database or container was accessed.
+- Canon validation passed regressions, 151 tracked canonical files and release-identity validation; scoped diff checks and clean-worktree checks passed. No full PR CI, new build, browser or production-readiness claim. Runtime import search confirms the added entry points appear only in their modules/tests.
+- `plan_only` quarantine is not applied to storage, deletion, a retention extension or an import permission. Source dates/unknowns survive unchanged; old readiness and verification cannot grant Formation credit.
+- Candidate validation is not semantic verification: available evidence alone does not resolve a question or establish a Sigma/Delta/tension. State changes and kind-specific meaning remain downstream. Historical relation intervals are accepted as records, not current-use authority. Scope/purpose/policy equality cannot authenticate a person or approve a policy.
+- Read-only UX review was recorded in DEE-879 comment `4c9d1cf8-d158-4abe-885e-ea3680aa3fab`: concrete proposed keyboard/mobile/error/correction/permission acceptance checks. It neither implements the dashboard nor changes DEE-879/881 dependency gates or ratifies a layout.
+
+Eight files currently differ from main, all within this one unpublished storage-preparation package. It exceeds the approximate line-count target, substantially through synthetic negative tests; one model/persistence rollback boundary and eight-file ownership keep local review tractable, but this is **not** final PR-size approval. Final integration review must decide whether the complete acceptance scope remains reviewable; do not grow or publish an unreviewed monolith or create a second PR on DEE-871. No PR/merge or Done transition occurred on this continuation.
+
+The shared migration boundary is unchanged at this main: Trader pins MAX=204. Its current PR567 also owns shared authentication work. Neither surface may be altered here. Isolated preparation is not globally blocked by those facts, but full runtime/production completion cannot be claimed before final object/access/rights contracts, separately admitted schema/auth integration, complete user journeys and operational erasure/backup qualification.
