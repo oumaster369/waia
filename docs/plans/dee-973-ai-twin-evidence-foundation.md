@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, integration, canon, pr-governance]
 approvalGates: [plan-approved, independent-review, exact-head-ci]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-1, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2, WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Adopt exact frozen source after this admission; whole-diff review and isolated qualification before one PR." }
+state: { status: in-progress, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: 96ba716bca0f5a6b875fcd996d2ad31292cfa0bc, lastValidationAt: "2026-09-09T10:27:00Z", blockedReason: null, nextAction: "Finalize independent exact-head review and rendered-body preflight; publish one PR and require current-main exact-head CI before scoped normal squash merge." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -84,10 +84,23 @@ After merge, fetch/verify exact squash containment, required PR checks and expec
 
 ## Validation receipt
 
-Pending adoption and whole-package checks. Source substeps are not integration readiness. The upcoming current receipt must distinguish independently rerun checks from integrator evidence and list any unexecuted checks explicitly.
+Adoption and local qualification completed; authoritative PR CI, final review receipt and merge remain pending. Source substeps alone are not integration readiness.
 
 ### 2026-09-09 — Whole-review bounded defect admission
 
 The independent reviewer read all eleven frozen source paths and reran 180 units. Two P2 defects block publication: hypothesis writes/retries do not enforce their ended `validUntil`; generic model reads with `private_archive` can disclose archive timestamps. Add PostgreSQL regressions before fixes, then enforce the same current interval on writes and retries and deny model archive access on generic surfaces. Review related cross-purpose archive rights timestamps as part of this same privacy defect, not a new feature. No other vocabulary or runtime integration is admitted.
 
 Qualification wording: the test validates container-id format and database/role/run marker. The integrator must separately inspect the actual owned container-to-loopback-port-to-marker binding; the suite alone does not establish Docker identity. Frozen source accounting is 1707 library lines, 1897 test lines, 89 SQL fixture lines and 214 documentation lines added (3907 total); tests plus fixture are about 51%.
+
+### 2026-09-09 — Integration qualification at implementation 96ba716b
+
+- Actual PostgreSQL RED reproduced both P2 defects (three failures, sixteen existing passes). A separate added cross-purpose private-clock regression reproduced the second defect's side channel (one failure, nineteen deliberately unselected). The fixes gate ended hypothesis intervals before retries; generic model archive access requires a Human; private-source/experience rights cannot shift the modelling clock, while cross-purpose observation deletion fences remain enforced.
+- Final current run: **200/200 passed**, consisting of twenty actual PostgreSQL scenarios and 180 focused units (88 contracts, 43 lifecycle, 35 ledger, 14 quarantine). No skipped PostgreSQL scenario was counted as passing.
+- External setup inspected exact own container `0b99fd2fdab11e567b48ba33896ac9ef2331e994da82901ad0a989b9ad7b8040`, image `sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777`, owner label `ai-twin-dee973-20260909-review`, loopback port51549, empty mounts and tmpfs storage. SQL separately confirmed dedicated database/role and the run marker before DDL. Wrong-marker admission failed before DDL; post-check showed no fixture schema and zero service/browser fixture roles. Only that exact owned container was then removed. No persistent user data or other containers were touched.
+- Required `pnpm lint` passed with 307 existing repository warnings and zero errors; changed-file lint, `pnpm typecheck`, diff check, canonical validator (152 files plus regressions/release identity) and PR-governance regressions passed. `pnpm build` passed with an explicit own SQLite path after sandbox loopback denial required a scoped retry. No source error was hidden; no full local unit suite was duplicated. No UI change, local E2E or real-user scenario claim.
+- Twelve admitted paths only; no imports of the new repository/contracts/quarantine from application components or other runtime library paths. Shared auth/schema/journal/CI/configuration and Trader are unchanged. Only DEE-871/876 evidence comments and the new DEE-973 issue/dependency were updated; their completion was not inferred.
+- Read-only publication preflight: GitHub repository secret names contain no Cloudflare credentials; run34337578416 explicitly skipped preview deployment. The Cloudflare WAIA settings page showed both production and branch commands as `wrangler versions upload`, not traffic deployment; main is the production branch, non-production builds enabled. No settings, secrets or triggers changed. Per [Cloudflare version/deployment semantics](https://developers.cloudflare.com/workers/versions-and-deployments/), uploading and activating are separate. PR/merge may produce an inactive version; it does not authorize a production promotion. Recheck exact PR checks/current main before merge.
+
+Independent final code review accepted exact `96ba716bca0f5a6b875fcd996d2ad31292cfa0bc`, closing both P2 findings including the private clock case; no unresolved concrete P1/P2. Reviewer independently reran 180 units and diff check, verified twelve admitted paths (4108 additions/five deletions before this receipt), and did not run PostgreSQL. This final documentation-only receipt inherits the reviewed code unchanged. Read-only pre-publication Cloudflare active deployment was `286d061d`, label `PRODUCTION_90DE233A_PR566_IDLE_INSTALLATION`, at 100%; branch/main build versions visible separately. Do not promote them.
+
+The fixture demonstrates a complete disconnected evidence/rights scenario, not production authentication/RLS, physical TTL or backup erasure, actual export/durable legacy inheritance, ingestion/calibration, Formation/Health evaluation or full v1 readiness. Those remain explicitly deferred to the existing tasks. Final PR/merge outcomes are recorded in DEE-973 and the PR so a documentation-only receipt does not create another integration PR.
