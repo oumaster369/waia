@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: bfa813715fbddef29b8de4959ab60c62c60c2908,
-    lastValidationAt: "2026-09-09T08:53:03Z",
+    lastValidatedGitSha: fa43288c0fb25b5ed58782e6159768ccf8f3f743,
+    lastValidationAt: "2026-09-09T09:18:03Z",
     blockedReason: null,
-    nextAction: "R1 ratified and verified. Finish private export composition and remaining v1/access contracts. Shared migration/auth integration remains separately coordinated; no Trader mutation.",
+    nextAction: "Private export metadata composition verified. Finish Formation/Health and reflection/prediction/outcome storage contracts; qualify full access/rights inventory before runtime integration. Shared migration/auth remains separately coordinated; no Trader mutation.",
   }
 provenance:
   {
@@ -273,3 +273,14 @@ Expected scenario: a trusted future server adapter supplies the Human actor/scop
 Manifest expiry is 24 hours from its original trusted creation, not rerun time; deny composition at/after expiry and invalid/future clocks. Reuse the lifecycle helper rather than add another duration constant. Current eligibility is reevaluated on every call, so a reference can move to excluded after revocation without extending expiry. Results are independent/deeply frozen; no omitted or newly eligible item is silently added, and no exclusion reason reveals undisclosed source details. `deliveryAuthority: none` is unconditional. Returned metadata is itself scoped/private, not anonymous or an authority token. A future renderer/delivery service must reauthorize the request, exact contents and current rights at use, implement actual 24-hour artifact expiry/deletion and a stable server-side idempotency record; no such service exists in this step.
 
 Acceptance: behavioral tests for explicit selection, separate organization/subject, current exact versions, revoked selection, caller-supplied TTL/authority/raw fields, duplicate/sparse/getter input, immutable results, day boundary/retry and independent permission loss. Start with RED then implement; cumulative four model unit files, scoped lint/typecheck, canon and independent read-only review. Existing 16 PG scenarios are historical evidence, not rerun/countable in this pure-only step. This extends no full-v1 or integration-ready claim; final batch reviewability and shared migration/auth gates remain.
+
+#### Private export composition validation receipt — 2026-09-09
+
+Admission `1c127dd06434422cf8527f869b3b9c3445c8d31b` preceded implementation/review head `fa43288c0fb25b5ed58782e6159768ccf8f3f743`. Independent pre-code consultation confirmed the closed-kind, exact-approval, stable-identity and neutral-exclusion boundaries. Only two already owned code/test files changed; this plan records their scope and results.
+
+- Initial RED: eight tests failed because the function did not exist; 22 existing tests and ten new generic-rejection tests passed. The latter accepted the missing-function exception and are not evidence of behavioral RED. Final **132/132 cumulative unit tests passed**: contracts40 (18 new export cases), lifecycle43, kernel35, quarantine14.
+- TypeScript, scoped ESLint, diff check and canon validation passed (151 files, validator regressions and release identity). Independent read-only review found no concrete P1/P2 within the exact pure substep and independently ran contracts40/40; it did not rerun cumulative132 or qualify all persistence.
+- No PostgreSQL/container/provider operation occurred. Earlier 16 PG scenarios remain dated historical evidence, not part of this run. No new build/full CI/browser or operational export claim. Import search found the function only in its module and tests.
+- Exact trusted Human selection is matched by kind/id/version and both scope dimensions; only a fresh export-specific eligibility set permits inclusion. The manifest's own creation/deadline remains stable across recomposition and excludes at exactly24h. This is not an immutable file snapshot or an authentication/permission token. Runtime approval acquisition, stable server idempotency, third-party redaction, final-content reauthorization, actual files/delivery and physical expiry remain unimplemented.
+
+Read-only remote check: main `90de233a192f9b97fa2d6a1ab0c3c1ba5a72df67`; open PR567 owns Trader/shared-auth work. Neither was mutated. The full unpublished package now spans11files, approximately3184 added lines before this receipt, with substantial fixture/negative-test content. This local review does not waive final integration reviewability or authorize another partial PR. Remaining all-v1 Formation/Health and reflection/prediction/outcome storage contracts, final access/rights qualification, historical import and separately admitted shared integration are not complete. DEE-871 remains In Progress; no push, PR, merge, status/dependency change or automatic wakeup.
