@@ -251,14 +251,15 @@ describe("AI-TWIN remaining object candidates — validation is not authority", 
     ).toThrow("EVIDENCE_UNAVAILABLE");
   });
   it("rejects empty/duplicate/self endpoints and action or private archive references", () => {
-    const self = relationDraft().ref;
-    for (const endpoints of [
+    const self: VersionedModelReference = { ...source, kind: "relation", id: "r1" };
+    const invalidEndpointSets: VersionedModelReference[][] = [
       [],
       [source, source],
       [self],
       [{ ...source, kind: "action_capability" }],
       [{ ...source, kind: "experience" }],
-    ]) {
+    ];
+    for (const endpoints of invalidEndpointSets) {
       expect(() =>
         validateDynamicRelation(
           { ...relationDraft(), endpoints },
