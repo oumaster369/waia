@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, integration, canon, pr-governance]
 approvalGates: [plan-approved, independent-review, exact-head-ci]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: 90e7cdfa804ef7c3aa8942b527197d6d1b5128ab, lastValidationAt: "2026-09-09T15:37:00Z", blockedReason: "Browser admin-policy verification denies Cloudflare access; external branch-build no-deployment behavior cannot be rechecked. No push or PR.", nextAction: "Obtain readable current waia-app Workers Builds production/non-production commands, then recheck exact base/head and publish the prepared unmerged PR without deployment." }
+state: { status: in-review, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: 90e7cdfa804ef7c3aa8942b527197d6d1b5128ab, lastValidationAt: "2026-09-09T15:37:00Z", blockedReason: null, nextAction: "Publish the single prepared PR against verified main and inspect exact-head CI. No merge, deployment or production migration." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -84,3 +84,9 @@ The reviewed six-file diff is728 additions/eight deletions, below the800-line ta
 - Final own tmpfs container34b47f4 was re-inspected by exact id/label/port and removed. Only synthetic test databases were discarded; no persistent Human data or Trader container was touched. Both created test containers are gone. This branch and prior871Core-auth branch remain local and unmerged.
 
 This completes the bounded local prerequisite, not DEE-871 or full AI-TWIN. No206/207/current-consent/right checks are claimed. No production/scientific operation, deployment, merge or periodic automation occurred.
+
+### 2026-09-09 — Human-supplied publication evidence closes the check
+
+The Human supplied the current waia-app Settings screenshot at18:57:11 and then the complete Deploy command and Version command values. Both values are identical: `npx wrangler versions upload` followed solely by seven `--var` arguments (TREASURY_WATCHER_ENABLED:false, TREASURY_WATCHER_ORGANIZATION_ID from WAIA_TREASURY_ORG, WAIA_FINANCE_ASSISTANT_OPENAI_MODEL:gpt-5.5, WAIA_FINANCE_ASSISTANT_WRITES_ENABLED:false, WAIA_PUBLIC_LINEAR_PROJECT_ALLOWLIST from WAIA_LINEAR_ALLOWLIST, WAIA_PUBLIC_TREASURY_ORGANIZATION_ID from WAIA_TREASURY_ORG and WAIA_PUBLIC_SUPPORT_USDT_TRC20_ADDRESS from WAIA_SUPPORT_ADDRESS). No chained shell command, deployment/activation command or database apply command is present. Environment values were not read or changed.
+
+Screenshot independently identifies repositoryoumaster369/waia, production branchmain and enabled non-production builds. This is Human-provided settings evidence, not successful browser access or a production-state inspection. It supersedes the previous incomplete screenshot/publication blocker; no browser-policy workaround was performed. Rechecked main3657b257, no existing PR for this branch and Actions secrets names still onlyLINEAR_API_KEY. Existing external branch builds may upload an inactive version; publication does not authorize its activation. Only this documentation receipt and rendered PR body change after the independently reviewed code. No redundant expensive tests.
