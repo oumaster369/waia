@@ -3,10 +3,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import postgres, { type Sql } from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { sql as drizzleSql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { createPostgresObservationRepository } from "@/lib/trader/account-observation/postgres-repository";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
 import { assertFhvV2PostgresSchemaPreflight } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
+import * as pgSchema from "@/db/schema.postgres";
+import { insertCredentialRowPostgres, getCredentialRowByIdPostgres,
+  listCredentialRowsForOrgPostgres, revokeCredentialRowPostgres } from "@/lib/trader/credentials/repository-postgres";
 
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
 const url = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
@@ -94,6 +98,26 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
       has_table_privilege('waia_account_observation_reader','public.trader_account_observations','INSERT') AS write`)[0])
       .toEqual({ secret: false, write: false });
   }
+  async function assertLegacyCredentialRepository(sql: Sql, org: string, phase: "0204" | "0205") {
+    // Actual unchanged repository, scoped to the limited migration owner rather
+    // than the local cluster administrator. No keys, network or provider involved.
+    await drizzle(sql, { schema: pgSchema }).transaction(async db => {
+      await db.execute(drizzleSql`SET LOCAL ROLE dee960_local_owner`);
+      const scope = { organizationId: org };
+      const row = await insertCredentialRowPostgres(db, scope, { venue: "htx",
+        exchangeAccountId: `synthetic-legacy-${phase}`, encryptedPayload: "synthetic-not-a-key" });
+      expect(await getCredentialRowByIdPostgres(db, scope, row.id)).toEqual(row);
+      expect((await listCredentialRowsForOrgPostgres(db, scope)).map(item => item.id)).toContain(row.id);
+      expect(await getCredentialRowByIdPostgres(db, { organizationId: randomUUID() }, row.id)).toBeNull();
+      const revoked = await revokeCredentialRowPostgres(db, scope, row.id);
+      expect(revoked).toMatchObject({ id: row.id, status: "revoked" });
+      expect(revoked?.revokedAt).toBeInstanceOf(Date);
+      expect(await revokeCredentialRowPostgres(db, scope, row.id)).toBeNull();
+      if (phase === "0205") {
+        expect((await db.execute(drizzleSql`SELECT observation_revision FROM public.exchange_credentials WHERE id=${row.id}`))[0].observation_revision).toBe("2");
+      }
+    });
+  }
   it("applies every unchanged migration through 0205 from an empty DB under limited owner", async () => {
     const sql = await database(); await apply(sql, 0, 205); await assertNewSurface(sql);
   }, 120000);
@@ -115,6 +139,7 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
     await sql`INSERT INTO auth.users(id) VALUES (${user})`;
     await sql`INSERT INTO public.users(id, identity_label, email) VALUES (${user}, 'Synthetic migration probe', ${`probe-${user}@invalid.local`})`;
     await sql`INSERT INTO public.organizations(id, owner_user_id, kind, name) VALUES (${org}, ${user}, 'personal', 'Synthetic migration probe')`;
+    await assertLegacyCredentialRepository(sql, org, "0204");
     await sql`INSERT INTO public.exchange_credentials(id,organization_id,venue,exchange_account_id,encrypted_payload)
       VALUES (${credential},${org},'htx','synthetic-account','synthetic-not-a-key')`;
     await sql`INSERT INTO public.trader_balance_snapshots(id,organization_id,credential_id,venue,exchange_account_id,balances,asset_count,synced_at)
@@ -122,6 +147,7 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
     const before = (await sql`SELECT to_jsonb(c) AS row FROM public.exchange_credentials c WHERE id=${credential}`)[0].row;
     const oldSnapshot = (await sql`SELECT to_jsonb(s) AS row FROM public.trader_balance_snapshots s WHERE id=${snapshot}`)[0].row;
     await apply(sql, 205, 205); await assertNewSurface(sql);
+    await assertLegacyCredentialRepository(sql, org, "0205");
     expect((await sql`SELECT to_jsonb(c)-'observation_revision' AS row FROM public.exchange_credentials c WHERE id=${credential}`)[0].row).toEqual(before);
     expect((await sql`SELECT to_jsonb(s) AS row FROM public.trader_balance_snapshots s WHERE id=${snapshot}`)[0].row).toEqual(oldSnapshot);
     const binding = { organizationId: org, credentialId: credential, exchangeAccountId: "synthetic-account",

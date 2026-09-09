@@ -773,7 +773,13 @@ export const exchangeCredentialStatusEnumPg = pgEnum("exchange_credential_status
   "revoked",
 ]);
 
-/** AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2). */
+/**
+ * AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2).
+ * DEE-960's observation_revision and its check/trigger are owned by migration 0205
+ * and read explicitly by observation SQL adapters. Keep that optional DB column
+ * out of this legacy ORM projection: implicit SELECT/INSERT/RETURNING must still
+ * work before 0205 is installed. The DB default/trigger owns it after installation.
+ */
 export const exchangeCredentials = pgTable(
   "exchange_credentials",
   {
@@ -789,8 +795,6 @@ export const exchangeCredentials = pgTable(
     wrappedDekKeyVersion: text("wrapped_dek_key_version"),
     wrappedDekKey: text("wrapped_dek_key"),
     permissionMetadata: text("permission_metadata"),
-    /** DEE-960: trigger-owned monotonic observation fence, not a credential secret. */
-    observationRevision: bigint("observation_revision", { mode: "bigint" }).notNull().default(1n),
     status: exchangeCredentialStatusEnumPg("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -802,7 +806,6 @@ export const exchangeCredentials = pgTable(
       t.venue,
       t.exchangeAccountId,
     ),
-    check("exchange_credentials_observation_revision_check", sql`${t.observationRevision} > 0`),
   ],
 );
 

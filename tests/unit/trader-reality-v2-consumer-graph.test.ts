@@ -23,11 +23,24 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(JSON.parse(output)).toEqual(expect.objectContaining({
       status: "PASS",
       sources: 154,
-      consumers: 128,
+      consumers: 129,
       connectorReferences: 25,
       sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
     }));
+  });
+
+  it("pins the protected store as exactly one observation-only consumer, not an admitted boundary", () => {
+    const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
+    const path = "lib/trader/account-observation/credential-store.ts";
+    const rules = inventory.consumerRules.filter((rule: { pathPattern: string }) => new RegExp(rule.pathPattern).test(path));
+    expect(rules).toEqual([{ id: "ACCOUNT_OBSERVATION_PROTECTED_STORE",
+      pathPattern: "^lib/trader/account-observation/credential-store\\.ts$",
+      disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY", reason: expect.any(String) }]);
+    expect(inventory.admittedBoundaryFiles).not.toContain(path);
+    expect(new RegExp(rules[0].pathPattern).test("lib/trader/account-observation/other-store.ts")).toBe(false);
+    expect(detectConnectorMethodReferencesInSource(readFileSync(join(ROOT, path), "utf8"), path,
+      ["placeOrder", "cancelOrder", "amendOrder", "submitOrder", "getAccountInfo", "getBalances", "getPositions", "getOpenOrders", "getOrder", "getTradeHistory"])).toEqual([]);
   });
 
   it("pins the GET-only transport as observation-only with no existing trading client", () => {

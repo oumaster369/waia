@@ -7,6 +7,7 @@ import { createAccountObservationService } from "@/lib/trader/account-observatio
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import { createObservationConfiguration, createPostgresAccountObservationRuntime } from "@/lib/trader/account-observation/runtime";
 import { openHtxObservationReader } from "@/lib/trader/account-observation/htx-reader-opener";
+import { createConfiguredHtxObservationRuntime } from "@/lib/trader/account-observation/configured-runtime";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "@/lib/trader/account-observation/read-handler";
 import type { AccountObservation, ObservationBinding, ObservationLease } from "@/lib/trader/account-observation/types";
 
@@ -120,6 +121,53 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     expect(reads).toBe(2);
     await admin`UPDATE exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
     expect(await repo.readLatest(b)).toBeNull();
+  }, 15000);
+  it("configured composition joins distinct restricted pools, store and transport; revoke prevents reopening", async () => {
+    const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
+      maxBackoffMs: 8000, readTimeoutMs: 1000, leaseTtlMs: 10000 });
+    const b = { ...await seed("654321"), configurationRevision: config.revision };
+    await admin`UPDATE trader_account_collection_state SET configuration_revision=${config.revision}
+      WHERE credential_id=${b.credentialId}`;
+    const name = String((await admin`SELECT current_database() AS name`)[0].name);
+    const login = "dee960_composed_read_" + randomUUID().replaceAll("-", "");
+    await admin.unsafe(`CREATE ROLE "${login}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
+      PASSWORD 'synthetic_composed_reader';
+      GRANT waia_account_observation_reader TO "${login}" WITH INHERIT FALSE, SET TRUE;`);
+    const readerSql = postgres(`postgres://${login}:synthetic_composed_reader@127.0.0.1:55460/${name}`,
+      { max: 2, connect_timeout: 3, prepare: false, connection: { statement_timeout: 3000 } });
+    let decrypts = 0; let reads = 0; let commits = 0;
+    const configured = [{ binding: b, config, readerLimits: {
+      pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 } }];
+    const make = (stop: AbortController) => createConfiguredHtxObservationRuntime({
+      collectorSql: client, readerSql, configured, clock: accountObservationClock,
+      ownerId: "local-composed-proof", intervalMs: 1000, iterationTimeoutMs: 15000, host: "api.huobi.pro",
+      // Test-only provider, admission and HTTP. No actual key or HTX request.
+      protectedCredentialService: { async getDecryptedCredentials(context, id) {
+        expect(context.organizationId).toBe(b.organizationId); expect(id).toBe(b.credentialId);
+        decrypts++; return { apiKey: "synthetic-key", apiSecret: "synthetic-secret" };
+      } }, verifyReadAdmission: async () => true,
+      async fetchImpl(url, init) {
+        expect(init?.method).toBe("GET"); expect(init?.redirect).toBe("error");
+        const request = new URL(String(url)); expect(request.origin).toBe("https://api.huobi.pro");
+        expect(request.searchParams.get("Signature")).toBeTruthy();
+        let data: unknown = [];
+        if (request.pathname.endsWith("/balance")) { reads++; data = { id: 654321, type: "spot", state: "working",
+          list: [{ currency: "usdt", type: "trade", balance: "42" }, { currency: "usdt", type: "frozen", balance: "0" }] }; }
+        return new Response(JSON.stringify({ status: "ok", data }));
+      }, report(event) { if (event === "COLLECTION_COMMITTED" && ++commits === 2) stop.abort(); },
+    });
+    try {
+      const stop = new AbortController(); const runtime = make(stop);
+      expect(decrypts).toBe(0); const safety = setTimeout(() => stop.abort(), 12000);
+      try { await runtime.run(stop.signal); } finally { clearTimeout(safety); runtime.dispose(); }
+      expect(commits).toBe(2); expect(reads).toBe(2); expect(decrypts).toBe(2);
+      expect((await repo.readLatest(b))?.holdings).toEqual([{ asset: "USDT", free: "42", locked: "0", total: "42" }]);
+      await admin`UPDATE exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
+      const after = new AbortController(); const next = make(after); const finish = setTimeout(() => after.abort(), 250);
+      try { await next.run(after.signal); } finally { clearTimeout(finish); next.dispose(); }
+      expect(decrypts).toBe(2); expect(reads).toBe(2); expect(await repo.readLatest(b)).toBeNull();
+      expect((await readerSql`SELECT current_user AS role`)[0].role).toBe(login); // caller-owned pool remains open
+    } finally { await readerSql.end({ timeout: 2 }); }
   }, 15000);
   function observation(b: ObservationBinding): AccountObservation {
     const t = Date.now();

@@ -120,3 +120,34 @@ Coordinate future shared journal registration through DEE-960 / DEE-871. Keep on
 integration owner for numbering and compatibility review; do not rewrite historical
 migration bytes, automatically accept unknown migrations, or touch the running
 scientific preparation to integrate unrelated account/Twin work.
+
+## ORM compatibility and explicit configured composition — 19:42 UTC
+
+Local uncommitted delta on HEAD6e35edb8. Removed the optional observationRevision
+projection from the shared legacy credentials ORM; 0205 column/default/trigger and
+explicit observation queries are unchanged. Actual repository insert/get/list/revoke
+under limited PostgreSQL17 owner was RED before0205 and now passes both before/after
+0205, including cross-tenant refusal and revision increment on revoke. Four additional
+legacy SQL projection unit regressions also demonstrated RED then GREEN.
+
+New configured-runtime explicitly joins trusted assignments, separate reader and
+collector SQL clients, protected credentials, mandatory injected venue admission,
+signed GET transport and the recurring owner. Construction performs no network/key
+opening. One-shot run/cancellation/disposal retains caller ownership of SQL pools.
+Actual PostgreSQL17 integration demonstrates two collections followed by revocation
+preventing further credential opening/HTTP. Keys, venue responses and venue admission
+are synthetic test dependencies, not production/HTX acceptance.
+
+Verification:88 selected unit PASS; migration4/storage19/reader11=34 actual PG17 PASS,
+then the changed storage integration file20/20 PASS with the new composed test.
+TypeScript PASS, scoped lint0errors/1 existing schema warning, diff-check PASS.
+New fixture corrections were min interval1000 and exact holdings free/locked fields;
+no production safeguards weakened. No full repository build/GitHub CI claimed here.
+Independent bounded read-only review found no proven P1/P2 in the new composition.
+Local test database stopped with data retained. No production/science changes.
+
+Outstanding qualification: genuine current exact-key venue admission implementation,
+protected provider/pool/provisioning in deployed host, transport coverage-limit identity
+(currently pinned per instance but outside persisted config hash), PR/release gates,
+and real authorized two-panel read-only acceptance. This closes the local composition
+gap only, not live trading authority or historical scientific qualification.
