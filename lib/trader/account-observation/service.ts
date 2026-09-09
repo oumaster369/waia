@@ -83,6 +83,7 @@ export function createAccountObservationService(deps: Readonly<{
   }
   const now = () => timestamp(deps.clock.now());
   async function open(binding: ObservationBinding, signal?: AbortSignal): Promise<AccountObservationReader> {
+    if (signal?.aborted) throw new AccountObservationFailure("ACCOUNT_OBSERVATION_OPEN_FAILED");
     const abort = new AbortController(); let abandoned = false; let resolved: AccountObservationReader | undefined;
     let disposed = false;
     const failure = new AccountObservationFailure("ACCOUNT_OBSERVATION_OPEN_FAILED");
@@ -114,6 +115,7 @@ export function createAccountObservationService(deps: Readonly<{
     const cancel = () => abort.abort();
     signal?.addEventListener("abort", cancel, { once: true });
     try {
+      if (signal?.aborted) throw new AccountObservationReadFailure("READ_FAILED");
       const response = await Promise.race([fetch(abort.signal), deps.clock.sleep(config.readTimeoutMs, abort.signal)
         .then(() => { throw new AccountObservationReadFailure("TIMEOUT"); })]);
       const ended = now();
@@ -150,7 +152,9 @@ export function createAccountObservationService(deps: Readonly<{
         if (!rawLease) return { status: "NOT_CLAIMED" };
         releaseClaim = Object.freeze({ binding, ownerId, token: text(rawLease.token) });
         const lease = Object.freeze({ ...rawLease, binding: copyBinding(rawLease.binding) });
-        const active = async () => !signal?.aborted && await current(lease);
+        // Cancellation may arrive while the bounded database currentness check
+        // is in flight. A true DB result cannot revive a cancelled tick.
+        const active = async () => !signal?.aborted && await current(lease) && !signal?.aborted;
         if (!sameBinding(binding, lease.binding) || lease.ownerId !== ownerId || !lease.token ||
           !Number.isSafeInteger(lease.consecutiveFailures) || lease.consecutiveFailures < 0 ||
           !await active()) return { status: "FENCED" };
@@ -183,6 +187,7 @@ export function createAccountObservationService(deps: Readonly<{
         const delay = !failed ? config.pollIntervalMs :
           Math.min(config.maxBackoffMs, config.pollIntervalMs * 2 ** failures);
         const nextDueAtMs = timestamp(ended + delay);
+        if (signal?.aborted) return { status: "FENCED" };
         committed = await deps.repository.commitIfCurrent({ lease, observation, nowMs: ended,
           nextDueAtMs, consecutiveFailures: failures });
         return committed ? { status: "COMMITTED", observation, nextDueAtMs } : { status: "FENCED" };

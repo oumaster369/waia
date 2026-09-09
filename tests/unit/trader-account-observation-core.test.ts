@@ -56,6 +56,30 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe("DEE-960 injected account observation — no production adapter or real venue", () => {
+  it.each(["before-read", "before-commit"])("fences cancellation during async currentness %s", async phase => {
+    const f = setup(); const stop = new AbortController();
+    let finish!: (value: boolean) => void; let reached!: () => void;
+    const checking = new Promise<void>(resolve => { reached = resolve; });
+    let checks = 0; let disposed = false;
+    vi.mocked(f.reader.dispose).mockImplementation(() => { disposed = true; });
+    vi.mocked(f.repository.isCurrent).mockImplementation(async () => {
+      checks++;
+      if (phase === "before-read" ? checks === 2 : disposed) {
+        reached(); return new Promise<boolean>(resolve => { finish = resolve; });
+      }
+      return true;
+    });
+    const work = f.service.tick(initial, "owner", stop.signal);
+    await checking; stop.abort(); finish(true);
+    expect(await work).toEqual({ status: "FENCED" });
+    if (phase === "before-read") expect(f.reader.readBalances).not.toHaveBeenCalled();
+    else expect(f.reader.readTrades).toHaveBeenCalledTimes(2);
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.state.observations).toEqual([]);
+    expect(f.reader.dispose).toHaveBeenCalledOnce();
+    expect(f.repository.release).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("keeps normal cadence for successful but explicitly bounded history coverage", async () => {
     const f = setup(); f.state.failures = 3;
     vi.mocked(f.reader.readTrades).mockResolvedValue({ ...f.envelope<Trade>(), complete: false });

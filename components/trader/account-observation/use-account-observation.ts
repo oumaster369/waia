@@ -108,8 +108,11 @@ export function useAccountObservation({
           publish("ERROR");
           return;
         }
-        if (latest && incoming.collectionCompletedAtMs <= latest.collectionCompletedAtMs) return;
-        latest = incoming;
+        // A valid reply restores transport health even when collection has not advanced.
+        // Keep the newest evidence (and its original age) on duplicate/older replies.
+        if (!latest || incoming.collectionCompletedAtMs > latest.collectionCompletedAtMs) {
+          latest = incoming;
+        }
         publish("CONNECTED");
       } else {
         publish(

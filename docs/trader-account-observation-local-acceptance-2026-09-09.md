@@ -151,3 +151,31 @@ protected provider/pool/provisioning in deployed host, transport coverage-limit 
 (currently pinned per instance but outside persisted config hash), PR/release gates,
 and real authorized two-panel read-only acceptance. This closes the local composition
 gap only, not live trading authority or historical scientific qualification.
+
+## Pre-publication review correction — 20:03 UTC
+
+Integrated current main c1d11c26 without conflict at3f592333; frozen0205 and shared
+preflight unchanged. User plan WIP was not committed. On that head:369 targeted unit,
+35 actual PostgreSQL17,13 fixture browser scenarios, Next build/typecheck, canonical
+and PR-governance regressions passed. Final review then found two reproducible P2s:
+
+- Cancellation during awaited currentness could start a later read or commit.
+  Two new RED tests proved each path. Post-await cancellation plus pre-open/read/
+  commit guards now fence both;55 core tests GREEN. Cancellation after a database
+  commit has already begun is not claimed to roll back that transaction.
+- Successful polling after a transient error with an unchanged snapshot left the
+  hook in ERROR. A regression using the actual polling subscriber (no artificial
+  connected event) was RED. Valid replies now restore transport health while the
+  newest observation and its age remain unchanged.64 scoped UI tests GREEN.
+
+Combined corrected surfaces:144 tests PASS and TypeScript PASS. Reviewers verified
+the corrections; no unresolved proven P1/P2 in reviewed scope. Only the mechanically
+computed consumer content digest changed; source/rule/path/count boundaries did not.
+Final-head browser/build/PG and remote CI remain required before merge.
+
+Publication is a local implementation delivery, not actual-account acceptance.
+Use explicit Linear keep-open semantics for DEE960; preserve DEE961 remaining
+acceptance. This coherent59-file observation package exceeds the preferred size
+target because persistence, runtime, shared DTO/panels and their negative tests must
+be reviewed together. Review is partitioned across storage/API/domain, transport/
+runtime and UI, with a single integrator; not a retroactive Integration Train.

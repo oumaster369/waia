@@ -6,6 +6,7 @@ import type {
   ObservationComponent,
 } from "@/lib/trader/account-observation/types";
 import { AccountObservationPanel } from "@/components/trader/account-observation/account-observation-panel";
+import { createPollingObservationSubscriber } from "@/components/trader/account-observation/polling-subscriber";
 import {
   useAccountObservation,
   type ObservationEvent,
@@ -73,6 +74,43 @@ afterEach(() => {
 });
 
 describe("DEE-961 injected observation subscription", () => {
+  it("recovers after a polling error when the successful retry returns the same observation", async () => {
+    const exactBinding = {
+      ...binding,
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      credentialId: "22222222-2222-4222-8222-222222222222",
+    };
+    const snapshot = observation({
+      binding: exactBinding,
+      observationId: "33333333-3333-4333-8333-333333333333",
+    });
+    const response = () => new Response(JSON.stringify(snapshot), {
+      headers: { "content-type": "application/json" },
+    });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockImplementationOnce(async () => response())
+      .mockRejectedValueOnce(new Error("synthetic transient failure"))
+      .mockImplementation(async () => response());
+    const subscribe = createPollingObservationSubscriber({
+      endpointPath: "/api/test-observation",
+      fetcher,
+      intervalMs: 1000,
+      requestTimeoutMs: 1000,
+      maxBackoffMs: 4000,
+    });
+    const { result } = renderHook(() => useAccountObservation({ binding: exactBinding, subscribe }));
+    await act(async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); });
+    expect(result.current.status).toBe("CURRENT");
+    const first = result.current.observation;
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    expect(result.current.status).toBe("ERROR");
+    expect(result.current.observation).toBe(first);
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(result.current.status).toBe("CURRENT");
+    expect(result.current.observation).toBe(first);
+  });
+
   it("does not subscribe without an authorized binding", async () => {
     const t = transport();
     const { result } = renderHook(() =>
