@@ -5,6 +5,8 @@ import postgres, { type Sql } from "postgres";
 import { createPostgresObservationRepository } from "@/lib/trader/account-observation/postgres-repository";
 import { createAccountObservationService } from "@/lib/trader/account-observation/service";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
+import { createObservationConfiguration, createPostgresAccountObservationRuntime } from "@/lib/trader/account-observation/runtime";
+import { createHtxAccountObservationReader } from "@/lib/trader/account-observation/htx-reader";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "@/lib/trader/account-observation/read-handler";
 import type { AccountObservation, ObservationBinding, ObservationLease } from "@/lib/trader/account-observation/types";
 
@@ -31,7 +33,7 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
     END $$;
-    GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner;`);
+    GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;`);
     // Schema DDL runs under a limited administrator, not postgres superuser.
     await admin.begin(async tx => {
       await tx.unsafe("SET LOCAL ROLE dee960_local_owner");
@@ -56,8 +58,8 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     await client?.end({ timeout: 2 }); await admin?.end({ timeout: 2 }); await root?.end({ timeout: 2 });
     // Retain isolated synthetic DB for diagnosis. Never drop any user database.
   });
-  async function seed(): Promise<ObservationBinding> {
-    const b = { organizationId: randomUUID(), credentialId: randomUUID(), exchangeAccountId: randomUUID(),
+  async function seed(exchangeAccountId: string = randomUUID()): Promise<ObservationBinding> {
+    const b = { organizationId: randomUUID(), credentialId: randomUUID(), exchangeAccountId,
       credentialRevision: "1", configurationRevision: "config-1" };
     await admin`INSERT INTO public.organizations VALUES (${b.organizationId})`;
     await admin`INSERT INTO public.exchange_credentials
@@ -68,6 +70,48 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       VALUES (${b.organizationId}, ${b.credentialId}, ${b.exchangeAccountId}, ${b.configurationRevision}, '["BTCUSDT"]')`;
     return b;
   }
+  it("runs recurring PostgreSQL collection without a browser and persists cadence across restart", async () => {
+    const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
+      maxBackoffMs: 8000, readTimeoutMs: 100, leaseTtlMs: 3000 });
+    const b = { ...await seed("123456"), configurationRevision: config.revision };
+    await admin`UPDATE trader_account_collection_state SET configuration_revision=${config.revision}
+      WHERE credential_id=${b.credentialId}`;
+    let reads = 0; let commits = 0;
+    const stop = new AbortController();
+    // Real adapter/service/repository composition; raw HTX responses are mocked, never signed or sent.
+    const openReader = async () => createHtxAccountObservationReader({ clock: accountObservationClock,
+      transport: { binding: b, dispose() {}, async signedGet(request) {
+        let data: unknown = [];
+        if (request.path.endsWith("/balance")) {
+          reads++; data = { id: 123456, type: "spot", state: "working",
+            list: [{ currency: "usdt", type: "trade", balance: "42" }, { currency: "usdt", type: "frozen", balance: "0" }] };
+        }
+        return { binding: b, httpStatus: 200, body: JSON.stringify({ status: "ok", data }) };
+      } } }, { binding: b, symbols: config.symbols, readTimeoutMs: config.readTimeoutMs,
+      pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 });
+    const safety = setTimeout(() => stop.abort(), 10000);
+    try {
+      await createPostgresAccountObservationRuntime({ sql: client, loadAssignments: async () => [{ binding: b, config }],
+        openReader, report(event) { if (event === "COLLECTION_COMMITTED" && ++commits === 2) stop.abort(); },
+        ownerId: "local-recurring-proof", iterationTimeoutMs: 5000 }).run(stop.signal);
+    } finally { clearTimeout(safety); }
+    expect(commits).toBe(2); expect(reads).toBe(2);
+    const latest = await repo.readLatest(b);
+    expect(latest).toMatchObject({ status: "PARTIAL", holdings: [{ asset: "USDT", total: "42" }] });
+    expect((await admin`SELECT count(*)::int AS n FROM trader_account_observations WHERE credential_id=${b.credentialId}`)[0].n).toBe(2);
+    // A fresh runtime must honor the stored cadence rather than collecting on every process start.
+    await admin`UPDATE trader_account_collection_state SET next_due_at=clock_timestamp()+interval '1 hour'
+      WHERE credential_id=${b.credentialId}`;
+    const again = new AbortController();
+    const finished = setTimeout(() => again.abort(), 150);
+    try {
+      await createPostgresAccountObservationRuntime({ sql: client, loadAssignments: async () => [{ binding: b, config }],
+        openReader, report() {}, ownerId: "local-restarted-proof" }).run(again.signal);
+    } finally { clearTimeout(finished); }
+    expect(reads).toBe(2);
+    await admin`UPDATE exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
+    expect(await repo.readLatest(b)).toBeNull();
+  }, 15000);
   function observation(b: ObservationBinding): AccountObservation {
     const t = Date.now();
     const component = { status: "COMPLETE" as const, values: [], sourceAsOfMs: null,

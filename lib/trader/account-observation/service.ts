@@ -57,7 +57,8 @@ function order(value: unknown): ObservedOrder {
     side: enumValue(r.side, ["buy", "sell"]), type: enumValue(r.type, ["limit", "market"]),
     status: enumValue(r.status, ["open", "partially_filled"]),
     ...(r.price === undefined ? {} : { price: decimal(r.price) }), quantity: decimal(r.quantity),
-    filledQuantity: decimal(r.filledQuantity), createdAt: dateText(r.createdAt), updatedAt: dateText(r.updatedAt) });
+    filledQuantity: decimal(r.filledQuantity), createdAt: dateText(r.createdAt),
+    updatedAt: r.updatedAt === null ? null : dateText(r.updatedAt) });
 }
 function trade(value: unknown, symbol: string): ObservedTrade {
   const r = row(value); if (r.symbol !== symbol) invalid();
@@ -176,8 +177,10 @@ export function createAccountObservationService(deps: Readonly<{
           observationId: text(deps.newObservationId()), binding, collectionStartedAtMs: started,
           collectionCompletedAtMs: ended, status, balances, openOrders, trades: Object.freeze(trades),
           holdings: balances.status === "COMPLETE" ? balances.values : null });
-        const failures = status === "COMPLETE" ? 0 : Math.min(lease.consecutiveFailures + 1, 30);
-        const delay = status === "COMPLETE" ? config.pollIntervalMs :
+        // Bounded venue coverage remains PARTIAL, but is not a transport/collection failure.
+        const failed = components.some(item => item.status === "ERROR");
+        const failures = failed ? Math.min(lease.consecutiveFailures + 1, 30) : 0;
+        const delay = !failed ? config.pollIntervalMs :
           Math.min(config.maxBackoffMs, config.pollIntervalMs * 2 ** failures);
         const nextDueAtMs = timestamp(ended + delay);
         committed = await deps.repository.commitIfCurrent({ lease, observation, nowMs: ended,

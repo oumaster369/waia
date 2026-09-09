@@ -10,7 +10,8 @@ export type ObservationLease = Readonly<{
 }>;
 export type ObservationReadError = "TIMEOUT" | "RATE_LIMITED" | "PERMISSION_DENIED" |
   "READ_FAILED" | "INVALID_RESPONSE" | "IDENTITY_MISMATCH";
-export type ObservedOrder = Omit<Order, "rawVenueObservation">;
+/** HTX open-order REST evidence has no last-update timestamp; unknown stays null. */
+export type ObservedOrder = Omit<Order, "rawVenueObservation" | "updatedAt"> & { updatedAt: string | null };
 export type ObservedTrade = Omit<Trade, "rawVenueObservation">;
 export type ObservationComponent<T> = Readonly<{
   status: "COMPLETE" | "PARTIAL" | "ERROR";

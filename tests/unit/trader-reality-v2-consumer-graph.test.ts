@@ -23,24 +23,24 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(JSON.parse(output)).toEqual(expect.objectContaining({
       status: "PASS",
       sources: 154,
-      consumers: 126,
+      consumers: 127,
       connectorReferences: 25,
       sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
     }));
   });
 
-  it("excludes exactly the two normalized account-observation consumers without Reality or venue-write authority", () => {
+  it("excludes exactly the three normalized account-observation consumers without Reality or venue-write authority", () => {
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8")) as {
       consumerRules: { id: string; pathPattern: string; disposition: string }[];
       admittedBoundaryFiles: string[];
     };
     const rule = inventory.consumerRules.find(item => item.id === "ACCOUNT_OBSERVATION_NORMALIZED_DTOS")!;
     expect(rule).toMatchObject({
-      pathPattern: "^lib/trader/account-observation/(service|types)\\.ts$",
+      pathPattern: "^lib/trader/account-observation/(service|types|htx-reader)\\.ts$",
       disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
     });
-    const paths = ["lib/trader/account-observation/service.ts", "lib/trader/account-observation/types.ts"];
+    const paths = ["lib/trader/account-observation/htx-reader.ts", "lib/trader/account-observation/service.ts", "lib/trader/account-observation/types.ts"];
     const candidatePaths = readdirSync(join(ROOT, "lib/trader/account-observation"))
       .map(file => `lib/trader/account-observation/${file}`);
     expect(candidatePaths.filter(file => new RegExp(rule.pathPattern).test(file)).sort()).toEqual(paths);
@@ -51,6 +51,12 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       const ast = ts.createSourceFile(file, body, ts.ScriptTarget.Latest, true);
       for (const statement of ast.statements) {
         if (ts.isImportDeclaration(statement)) {
+          if (file.endsWith("/htx-reader.ts") && (statement.moduleSpecifier as ts.StringLiteral).text === "./service") {
+            const bindings = statement.importClause?.namedBindings;
+            expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(e => e.name.text))
+              .toEqual(["AccountObservationReadFailure"]);
+            continue;
+          }
           expect(statement.importClause?.isTypeOnly).toBe(true);
           expect(["@/lib/trader/connectors/types", "./types"]).toContain(
             (statement.moduleSpecifier as ts.StringLiteral).text,

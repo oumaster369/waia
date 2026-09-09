@@ -56,6 +56,22 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe("DEE-960 injected account observation — no production adapter or real venue", () => {
+  it("keeps normal cadence for successful but explicitly bounded history coverage", async () => {
+    const f = setup(); f.state.failures = 3;
+    vi.mocked(f.reader.readTrades).mockResolvedValue({ ...f.envelope<Trade>(), complete: false });
+    await f.service.tick(initial, "owner");
+    expect(f.state.observations[0]?.status).toBe("PARTIAL");
+    expect(f.state.failures).toBe(0); expect(f.state.nextDue).toBe(10100);
+  });
+  it("preserves an explicitly unknown order update time instead of inventing one", async () => {
+    const f = setup();
+    vi.mocked(f.reader.readOpenOrders).mockResolvedValue(f.envelope<ObservedOrder>([{
+      orderId: "order-1", clientOrderId: "client-1", symbol: "BTCUSDT", side: "buy", type: "limit", status: "open",
+      quantity: "1", filledQuantity: "0", price: "100", createdAt: "2026-01-01T00:00:00Z", updatedAt: null,
+    }]));
+    expect((await f.service.tick(initial, "owner")).status).toBe("COMMITTED");
+    expect(f.state.observations[0]?.openOrders).toMatchObject({ status: "COMPLETE", values: [{ updatedAt: null }] });
+  });
   it("commits one bounded scope/window with actual empty balances, symbol-bound trades and disposal", async () => {
     const f = setup(); const result = await f.service.tick(initial, "owner-1");
     expect(result.status).toBe("COMMITTED");

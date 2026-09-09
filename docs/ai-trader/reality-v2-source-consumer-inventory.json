@@ -114,16 +114,16 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 126,
-    "sortedPathDigestHex": "e76db0804a5b5a0d6d0cfc18750ed6e1479f7d938303f34d98d7f44bf9009832",
-    "sortedContentDigestHex": "4312225676374bd6b201a724186b81ad220c6a7fb6c68c55a56522bffe120914"
+    "expectedFileCount": 127,
+    "sortedPathDigestHex": "a52b5c169e0ab8597ac629a44c21ced076d9692340f0b40a87875ff36a6b250a",
+    "sortedContentDigestHex": "31d00c919cd05f301e343d51cdc74752037fd7644ba394be1eea40a0f90460e7"
   },
   "consumerRules": [
     {
       "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",
-      "pathPattern": "^lib/trader/account-observation/(service|types)\\.ts$",
+      "pathPattern": "^lib/trader/account-observation/(service|types|htx-reader)\\.ts$",
       "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
-      "reason": "Read-only normalized account DTO collection is not canonical Reality ingress or execution authority; no raw-capture lineage is admitted by these two files."
+      "reason": "Read-only normalized account DTO collection and its injected GET-only HTX reader are not canonical Reality ingress or execution authority; no raw-capture lineage is admitted by these files."
     },
     {
       "id": "REALITY_BOUNDARY",

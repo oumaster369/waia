@@ -15,7 +15,7 @@ const order = z.object({
   orderId: text, clientOrderId: z.string().max(256), symbol: text,
   side: z.enum(["buy", "sell"]), type: z.enum(["limit", "market"]),
   status: z.enum(["open", "partially_filled"]), price: decimal.optional(),
-  quantity: decimal, filledQuantity: decimal, createdAt: dateText, updatedAt: dateText,
+  quantity: decimal, filledQuantity: decimal, createdAt: dateText, updatedAt: dateText.nullable(),
 }).strict();
 const trade = z.object({
   tradeId: text, orderId: text, clientOrderId: z.string().max(256), symbol: text,

@@ -57,4 +57,38 @@ describe("bounded awaited account collection scheduler", () => {
     expect(tick).not.toHaveBeenCalled(); expect(report).toHaveBeenCalledWith("ASSIGNMENTS_FAILED");
     stop.abort(); await work;
   });
+  it("continues with the interrupted account instead of starving the end of each sweep", async () => {
+    const stop = new AbortController();
+    const bindings = [b, { ...b, exchangeAccountId: "account-b" }, { ...b, exchangeAccountId: "account-c" }];
+    const attempts: string[] = []; const completed: string[] = [];
+    const scheduler = createObservationScheduler({ loadAssignments: async () => bindings,
+      tick: async (binding, signal) => {
+        attempts.push(binding.exchangeAccountId);
+        await accountObservationClock.sleep(900, signal);
+        completed.push(binding.exchangeAccountId);
+        return { status: "NOT_CLAIMED" };
+      }, clock: accountObservationClock, report: vi.fn() }, { ...options, maxAccounts: 3 });
+    const work = scheduler.run(stop.signal);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(attempts.slice(0, 4)).toEqual(["account", "account-b", "account-c", "account-c"]);
+    expect(completed).toContain("account-c");
+    stop.abort(); await work; expect(vi.getTimerCount()).toBe(0);
+  });
+  it("drops an interrupted assignment removed before the next sweep and still deduplicates", async () => {
+    const stop = new AbortController();
+    const removed = { ...b, exchangeAccountId: "removed" };
+    let bindings = [b, removed]; const attempts: string[] = [];
+    const scheduler = createObservationScheduler({ loadAssignments: async () => bindings,
+      tick: async (binding, signal) => {
+        attempts.push(binding.exchangeAccountId);
+        await accountObservationClock.sleep(1500, signal);
+        return { status: "NOT_CLAIMED" };
+      }, clock: accountObservationClock, report: vi.fn() }, { ...options, maxAccounts: 3 });
+    const work = scheduler.run(stop.signal);
+    await vi.advanceTimersByTimeAsync(2100);
+    bindings = [b, b, { ...b, exchangeAccountId: "replacement" }];
+    await vi.advanceTimersByTimeAsync(2600);
+    expect(attempts).toEqual(["account", "removed", "account", "replacement"]);
+    stop.abort(); await work; expect(vi.getTimerCount()).toBe(0);
+  });
 });
