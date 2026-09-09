@@ -120,6 +120,7 @@ describe("trader security foundation (DEE-221)", () => {
       expect(toHtxExchangeConnectorConfig(resolved)).toEqual({
         apiKey: "test-key",
         apiSecret: "test-secret",
+        expectedSpotAccountId: "100009",
       });
     });
 

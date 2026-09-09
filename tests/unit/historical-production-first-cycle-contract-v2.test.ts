@@ -72,7 +72,7 @@ describe("DEE-919 production first-cycle contract", () => {
     expect(source).not.toContain("withWaiaPostgresClient");
     expect(source).toContain("pg_advisory_lock");
     expect(source).toContain("pg_advisory_unlock");
-    expect(source).toContain("finally");
+    expect(source).toContain("withHistoricalLaunchCleanupV2");
 
     const productionImports = [
       "lib/trader/research/execopp-qualification/index.ts",

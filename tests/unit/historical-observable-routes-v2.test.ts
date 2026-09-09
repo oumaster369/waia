@@ -44,7 +44,21 @@ describe("historical observable route isolation v2",()=>{
   });
   it("does not open operator projection when audit permission is denied",async()=>{
     mocks.authorized=false;
+    const deniedRuntime = { sentinel: "denied-auth-runtime" };
+    mocks.authorize.mockResolvedValue({ ok:false, runtime:deniedRuntime,
+      result:{ status:403, body:{error:{code:"FORBIDDEN"}} } });
     const response=await adminGet(new Request("https://waia.test/api?organization_id=org-b&run_id=run"));
     expect(response.status).toBe(403);expect(mocks.serve).not.toHaveBeenCalled();expect(mocks.disposeAuth).toHaveBeenCalledOnce();
+    expect(mocks.disposeAuth).toHaveBeenCalledWith(deniedRuntime);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+  it("rechecks revoked admin permission and tenant entitlement on subsequent requests", async () => {
+    const admin = () => adminGet(new Request("https://waia.test/api?organization_id=org-b&run_id=run"));
+    const tenant = () => tenantGet(new Request("https://waia.test/api?run_id=run&account_id=owned"));
+    await admin(); await tenant(); mocks.serve.mockClear();
+    mocks.authorized = false; mocks.access = false;
+    expect((await admin()).status).toBe(403);
+    expect((await tenant()).status).toBe(403);
+    expect(mocks.serve).not.toHaveBeenCalled();
   });
 });

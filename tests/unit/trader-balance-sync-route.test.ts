@@ -265,6 +265,46 @@ describe("HTX balance sync API (DEE-237)", () => {
     );
   });
 
+  it.each([false, true])("rejects different stored account before data fetch/write (stub=%s)", async (stubValidation) => {
+    const recordSnapshot = vi.fn();
+    const read = vi.fn();
+    const mockFetch = defaultHtxHandlers({
+      "/v1/account/accounts": () => jsonResponse({
+        status: "ok",
+        data: [{ id: SPOT_ACCOUNT_ID + 1, type: "spot", state: "working" }],
+      }),
+    });
+    const result = await handleBalanceSyncPost(
+      credentialId,
+      createDeps({
+        createBalanceSnapshotService: () => ({ recordSnapshot }) as never,
+        createConnector: (config) => {
+          expect(config.expectedSpotAccountId).toBe(String(SPOT_ACCOUNT_ID));
+          const connector = new HtxExchangeConnector({ ...config, fetchImpl: mockFetch });
+          vi.spyOn(connector, "getBalances").mockImplementation(read);
+          if (stubValidation) {
+            vi.spyOn(connector, "validateCredentials").mockResolvedValue({
+              valid: true, accountId: String(SPOT_ACCOUNT_ID + 1),
+            });
+          }
+          return connector;
+        },
+      }),
+    );
+    expect(result.status).toBe(502);
+    expect(read).not.toHaveBeenCalled();
+    expect(recordSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("preserves generic validation failure when no reason is supplied", async () => {
+    const connector = new HtxExchangeConnector({ ...VALID_CREDS, fetchImpl: defaultHtxHandlers() });
+    vi.spyOn(connector, "validateCredentials").mockResolvedValue({ valid: false });
+    const result = await handleBalanceSyncPost(credentialId,  createDeps({ createConnector: () => connector }));
+    expect(result.status).toBe(502);
+    expect(JSON.stringify(result.body)).toContain("VALIDATION_FAILED");
+    expect(JSON.stringify(result.body)).not.toContain("ACCOUNT_ID_MISMATCH");
+  });
+
   it("returns 503 MASTER_KEY_NOT_READY without HTX fetch", async () => {
     const mockFetch = defaultHtxHandlers();
     const result = await handleBalanceSyncPost(

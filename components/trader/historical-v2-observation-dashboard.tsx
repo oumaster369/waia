@@ -3,6 +3,7 @@ import * as React from "react";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { useHistoricalV2Observation } from "./use-historical-v2-observation";
 import { HistoricalV2AccountCharts } from "./historical-v2-account-charts";
+import { HistoricalV2PendingOrders } from "./historical-v2-pending-orders";
 const scalar=(value:unknown)=>typeof value==="string"||typeof value==="number"?String(value):"—";
 const reasons=(value:unknown):string=>{
   if(!value||typeof value!=="object")return "—";
@@ -36,6 +37,7 @@ export function HistoricalV2ObservationDashboard({endpoint,runId,accountId,expec
   return <section className="space-y-4" data-testid="historical-v2-streaming-dashboard">
     <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-2xl font-semibold">Historical V2 · live observation</h2><p className="text-muted-foreground font-mono text-xs">{runId}</p></div><div className="flex gap-2"><span className="rounded-full border px-3 py-1 text-xs">{lifecycle?.phase??"AWAITING LIFECYCLE"}</span><span className={`rounded-full border px-3 py-1 text-xs ${connected?"text-emerald-300":"text-amber-300"}`}>{connected ? (lifecycle?.phase === "RUNNING" ? "RUNNING · observed" : "CONNECTED · observation only") : "Reconnecting…"}</span></div></div>
     {error?<p className="rounded border border-amber-500/30 p-3 text-sm text-amber-200">{error}</p>:null}
+    <HistoricalV2PendingOrders accounts={accounts} replayCompleted={lifecycle?.phase === "COMPLETED"}/>
     {!lifecycle ? <p role="status">Durable run lifecycle is unavailable; start/completion status cannot be confirmed. Observation connection is not execution readiness.</p> : null}
     <p className="text-xs text-waia-fg-muted">Transport: {transport} · Last contact: {lastContact === null ? "none" : `${Math.max(0, Math.floor((now-lastContact)/1000))}s ago`} · Snapshot observed: {projection.observedAt} · Last committed replay bar: {accounts.map(a=>a.replayBarClosedAtUtc).join(", ") || "none"}</p>
     {accounts.map(account=><WaiaSurface key={account.accountId} variant="raised" className="space-y-3 p-4"><h3 className="font-medium">Committed history · {account.accountId}</h3><HistoricalV2AccountCharts history={account.history}/>{!accountId?<a className="text-sm underline focus-visible:outline" href={`/trader?campaign_run_id=${encodeURIComponent(runId)}&account_id=${encodeURIComponent(account.accountId)}`}>Open account-scoped user observation</a>:null}</WaiaSurface>)}

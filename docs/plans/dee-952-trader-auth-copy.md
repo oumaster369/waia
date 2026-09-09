@@ -47,3 +47,15 @@ Root integrator separately tracks the proven backend acknowledgement correction 
 ## Local validation — 2026-09-07
 
 58 focused tests across Trader sign-out UI/route, existing landing and email/session tests passed. Full typecheck passed after correcting a test-only unsupported Testing Library selector option; full lint passed with 308 existing warnings and zero errors. Next production build and three loopback Playwright tests passed: exchange/historical presence and HTTP failure/retry, entitled SQLite session logout with subsequent protected 401, and platform-admin logout with subsequent protected 401. Browser setup required permitted local socket access after initial EPERM; no assertion was weakened. Database is isolated `.data/dee952-session-e2e.db`, fake AI, no real accounts. These are not Supabase production, account-streaming or full Trader readiness results. Raw provider error/partial-revocation behavior is separately covered by DEE-957.
+
+## Local integration continuation — 2026-09-09
+
+User authorized starting the parallel work and its control. Synchronize this
+existing clean feature branch with origin/main90de233a; preserve all main
+historical changes. The only textual merge conflict was this plan's older
+copy-only version versus the previously authorized local session extension.
+Keep both the copy acceptance and dated session evidence. The copy itself is
+already present in main; remaining implementation diff is the session UI and
+DEE-957 acknowledgement. This is local cumulative validation, not an admitted
+Integration Train or approval for merge/deployment. Re-run focused tests and
+loopback browser acceptance against the synchronized tree before publication.

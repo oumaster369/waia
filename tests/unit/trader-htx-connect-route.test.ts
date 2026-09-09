@@ -304,6 +304,57 @@ describe("HTX connect API (DEE-236)", () => {
     );
   });
 
+  it.each([
+    ["unrelated key", [{ accessKey: "another-key", permission: "readOnly", status: "normal" }]],
+    ["unknown metadata", []],
+    [
+      "forbidden transfer",
+      [{ accessKey: VALID_CREDS.apiKey, permission: "readOnly,transfer", status: "normal" }],
+    ],
+  ])("never opens storage for rejected %s admission", async (_name, data) => {
+    const getRuntimeDb = vi.fn();
+    const createCredentialService = vi.fn();
+    const mockFetch = defaultHtxHandlers({
+      "/v2/user/api-key": () => jsonResponse({ code: 200, data }),
+    });
+    const result = await handleHtxConnectPost(
+      connectPostRequest({
+        venue: "htx",
+        ...VALID_CREDS,
+        replacementCredentialId: "prior-exact-id",
+      }),
+      createDeps({
+        getRuntimeDb,
+        createCredentialService,
+        createConnector: (config) => new HtxExchangeConnector({ ...config, fetchImpl: mockFetch }),
+      }),
+    );
+    expect(result.status).toBe(400);
+    expect(getRuntimeDb).not.toHaveBeenCalled();
+    expect(createCredentialService).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(VALID_CREDS.apiSecret);
+  });
+
+  it.each([
+    { accountId: "wrong-account", permissions: ["read"] },
+    { accountId: String(SPOT_ACCOUNT_ID), permissions: [] },
+    { accountId: String(SPOT_ACCOUNT_ID), permissions: ["read", "transfer"] },
+  ])("rejects inconsistent metadata before persistence: %j", async (info) => {
+    const getRuntimeDb = vi.fn();
+    const connector = new HtxExchangeConnector({ ...VALID_CREDS, fetchImpl: defaultHtxHandlers() });
+    vi.spyOn(connector, "getAccountInfo").mockResolvedValue({
+      venue: "htx",
+      marketType: "spot",
+      ...info,
+    });
+    const result = await handleHtxConnectPost(
+      connectPostRequest({ venue: "htx", ...VALID_CREDS }),
+      createDeps({ getRuntimeDb, createConnector: () => connector }),
+    );
+    expect(result.status).toBe(400);
+    expect(getRuntimeDb).not.toHaveBeenCalled();
+  });
+
   it("stores credentials and returns metadata only on success", async () => {
     const result = await handleHtxConnectPost(
       connectPostRequest({
@@ -337,8 +388,9 @@ describe("HTX connect API (DEE-236)", () => {
   it("replaces existing credentials and emits rotated audit", async () => {
     const deps = createDeps();
     const listed = await handleExchangeCredentialsGet(deps);
-    const active = (listed.body as { credentials: Array<{ id: string; status: string }> })
-      .credentials.find((row) => row.status === "active");
+    const active = (
+      listed.body as { credentials: Array<{ id: string; status: string }> }
+    ).credentials.find((row) => row.status === "active");
     expect(active).toBeDefined();
 
     const second = await handleHtxConnectPost(
@@ -438,8 +490,9 @@ describe("HTX connect API (DEE-236)", () => {
 
   it("disconnect replay is idempotent, emits one audit and does not disclose secrets", async () => {
     const listed = await handleExchangeCredentialsGet(createDeps());
-    const active = (listed.body as { credentials: Array<{ id: string; status: string }> })
-      .credentials.find((row) => row.status === "active");
+    const active = (
+      listed.body as { credentials: Array<{ id: string; status: string }> }
+    ).credentials.find((row) => row.status === "active");
     expect(active).toBeDefined();
 
     const first = await handleExchangeCredentialDelete(active!.id, createDeps());
@@ -462,7 +515,10 @@ describe("HTX connect API (DEE-236)", () => {
     const result = await handleExchangeCredentialDelete(crypto.randomUUID(), createDeps());
     expect(result.status).toBe(404);
     expect(result.body).toEqual({
-      error: { code: HTX_CONNECT_ERROR_CODES.CREDENTIAL_NOT_FOUND, message: "Credential not found." },
+      error: {
+        code: HTX_CONNECT_ERROR_CODES.CREDENTIAL_NOT_FOUND,
+        message: "Credential not found.",
+      },
     });
   });
 

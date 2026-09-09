@@ -36,6 +36,30 @@ const proposal = {
 };
 
 describe("Historical split execution CLI", () => {
+  it.each(["before", "finalize", "bootstrap"] as const)(
+    "does not cross the next launch boundary after cancellation at %s", async stage => {
+      const controller = new AbortController();
+      if (stage === "before") controller.abort();
+      const durable = { phase: "QUEUED", marker: "must-preserve" };
+      const finalize = vi.fn(async () => {
+        if (stage === "finalize") controller.abort();
+        return { authorityId: "authority-1", manifest: {} as never };
+      });
+      const bootstrap = vi.fn(async () => {
+        if (stage === "bootstrap") controller.abort();
+        return { bootstrap: {}, lifecycle: durable } as never;
+      });
+      const consume = vi.fn();
+      await expect(runApprovedHistoricalLaunchCliV2(base,
+        { finalize, bootstrap, consume }, controller.signal,
+      )).rejects.toThrow("HISTORICAL_RATIFICATION_EXECUTION_CLI_REFUSED:CANCELLED");
+      expect(finalize).toHaveBeenCalledTimes(stage === "before" ? 0 : 1);
+      expect(bootstrap).toHaveBeenCalledTimes(stage === "bootstrap" ? 1 : 0);
+      expect(consume).not.toHaveBeenCalled();
+      expect(durable).toEqual({ phase: "QUEUED", marker: "must-preserve" });
+    },
+  );
+
   it("builds exact technical input without any CLI actor authority", () => {
     const parsed = parseHistoricalTechnicalProposalCliEnvV2(proposal);
     expect(parsed.preflight).toMatchObject({ runId: "run-1", developmentCycleCount: 200,

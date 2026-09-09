@@ -1,7 +1,10 @@
 import postgres from "postgres";
 import { fileURLToPath } from "node:url";
+import { createScientificCheckpointStoreV1 } from "./scientific-checkpoint-store-v1";
+import { withScientificCheckpointsV1 } from "../../lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
 
 import { waiaCampaignPostgresDriverOptions } from "../../db/postgres-client";
+import { guardSingleConnectionPostgresPool } from "../../db/postgres-reserved-close-guard";
 import { bindPostgresReservedSession } from
   "../../db/postgres-session-transaction";
 import { bootstrapAndQueueHistoricalSimulationOnExecutionServerV2 } from
@@ -18,6 +21,10 @@ import { finalizeApprovedHistoricalProposalOnExecutionServerV2 } from
   "../../lib/trader/historical-simulation-v2/ratification-split-v2";
 import { runApprovedHistoricalLaunchCliV2 } from
   "../../lib/trader/historical-simulation-v2/ratification-execution-cli-v2";
+import { withHistoricalLaunchCleanupV2 } from
+  "../../lib/trader/historical-simulation-v2/launch-cleanup-v2";
+import { formatHistoricalLaunchErrorV2 } from
+  "../../lib/trader/historical-simulation-v2/launch-error-format-v2";
 import {
   createHistoricalSimulationRunLifecyclePostgresV2,
   releaseHistoricalSimulationConsumerLeasePostgresV2,
@@ -44,8 +51,9 @@ export function bindHistoricalRunnerLoginGuardedPoolV2(
             await requireLogin(reserved as unknown as postgres.Sql);
             return reserved;
           } catch (error) {
-            reserved.release();
-            throw error;
+            return withHistoricalLaunchCleanupV2(
+              async () => { throw error; }, [() => reserved.release()],
+            );
           }
         };
       }
@@ -70,20 +78,23 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
   async function consume(signal?: AbortSignal) {
     return runHistoricalSimulationLaunchConsumerCliV2(env, {
       async openDatabase(databaseUrl) {
-        const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
+        const pool = guardSingleConnectionPostgresPool(
+          postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+        );
         try {
           const reserved = await pool.reserve();
           const bound = bindPostgresReservedSession(pool, reserved);
           return Object.freeze({
             sql: bound,
             async close() {
-              reserved.release();
-              await pool.end({ timeout: 5 });
+              await withHistoricalLaunchCleanupV2(async () => undefined,
+                [() => reserved.release(), () => pool.end({ timeout: 5 })]);
             },
           });
         } catch (error) {
-          await pool.end({ timeout: 5 });
-          throw error;
+          return withHistoricalLaunchCleanupV2(
+            async () => { throw error; }, [() => pool.end({ timeout: 5 })],
+          );
         }
       },
       requireRunnerLogin: requireHistoricalSimulationRunnerLoginV2,
@@ -107,26 +118,33 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
   try {
     const result = await runApprovedHistoricalLaunchCliV2(env, {
       async finalize(databaseUrl, scope) {
-        const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
-        try {
-          return await finalizeApprovedHistoricalProposalOnExecutionServerV2(
+        const checkpointRoot = env.WAIA_FHV_CHECKPOINT_ROOT;
+        if (!checkpointRoot) throw new Error("SCIENTIFIC_CHECKPOINT_ROOT_REQUIRED");
+        const checkpoints = createScientificCheckpointStoreV1(checkpointRoot, scope.releaseSha);
+        const pool = guardSingleConnectionPostgresPool(
+          postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+        );
+        return withScientificCheckpointsV1(checkpoints, () => withHistoricalLaunchCleanupV2(
+          () => finalizeApprovedHistoricalProposalOnExecutionServerV2(
             bindHistoricalRunnerLoginGuardedPoolV2(pool),
             scope,
-          );
-        } finally {
-          await pool.end({ timeout: 5 });
-        }
+            { signal: controller.signal,
+              onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); } },
+          ),
+          [() => pool.end({ timeout: 5 })],
+        ));
       },
       async bootstrap(databaseUrl, manifest) {
-        const pool = postgres(databaseUrl, waiaCampaignPostgresDriverOptions());
-        try {
-          return await bootstrapAndQueueHistoricalSimulationOnExecutionServerV2(
+        const pool = guardSingleConnectionPostgresPool(
+          postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+        );
+        return withHistoricalLaunchCleanupV2(
+          () => bootstrapAndQueueHistoricalSimulationOnExecutionServerV2(
             bindHistoricalRunnerLoginGuardedPoolV2(pool),
             manifest.bootstrap,
-          );
-        } finally {
-          await pool.end({ timeout: 5 });
-        }
+          ),
+          [() => pool.end({ timeout: 5 })],
+        );
       },
       consume: (_env, signal) => consume(signal),
     }, controller.signal);
@@ -157,7 +175,7 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   void runHistoricalSimulationApprovedLaunchMainV2().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+    process.stderr.write(`${formatHistoricalLaunchErrorV2(error)}\n`);
     process.exitCode = 1;
   });
 }

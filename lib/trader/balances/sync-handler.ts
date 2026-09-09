@@ -225,6 +225,7 @@ export async function handleBalanceSyncPost(
     const connector = deps.createConnector({
       apiKey: decrypted.apiKey,
       apiSecret: decrypted.apiSecret,
+      expectedSpotAccountId: metadata.exchangeAccountId,
     });
 
     const validation = await connector.validateCredentials({
@@ -232,8 +233,8 @@ export async function handleBalanceSyncPost(
       apiSecret: decrypted.apiSecret,
     });
 
-    if (!validation.valid) {
-      const detail = validation.errorCode ?? "VALIDATION_FAILED";
+    if (!validation.valid || validation.accountId !== metadata.exchangeAccountId) {
+      const detail = validation.errorCode ?? (!validation.valid ? "VALIDATION_FAILED" : "ACCOUNT_ID_MISMATCH");
       return {
         status: 502,
         body: errorEnvelope(

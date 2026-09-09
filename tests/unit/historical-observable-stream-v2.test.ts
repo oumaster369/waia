@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { serveHistoricalObservableV2 } from "@/lib/trader/historical-simulation-v2/observable-http-v2";
 import { createHistoricalObservablePollingStreamV2 } from "@/lib/trader/historical-simulation-v2/observable-stream-v2";
 import type { HistoricalObservableProjectionV2 } from "@/lib/trader/historical-simulation-v2/observable-read-model-v2";
@@ -14,6 +14,38 @@ const projection = (eventId: string): HistoricalObservableProjectionV2 => ({
 });
 
 describe("historical observable transport v2", () => {
+  afterEach(() => { vi.useRealTimers(); });
+  it("expires a stalled read without delivering its late result or double disposal", async () => {
+    vi.useFakeTimers();
+    let release!: (value: HistoricalObservableProjectionV2) => void;
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const abort = new AbortController();
+    const stream = createHistoricalObservablePollingStreamV2({ signal: abort.signal,
+      lastEventId: null, load: () => new Promise(resolve => { release = resolve; }), dispose });
+    const reader = stream.getReader(); const read = reader.read();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(read).resolves.toMatchObject({ done: true });
+    release(projection("forbidden-late")); abort.abort(); await reader.cancel();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+  it("does not allow a caller to extend the 30-second authorization lifetime", async () => {
+    vi.useFakeTimers(); const dispose = vi.fn().mockResolvedValue(undefined);
+    const reader = createHistoricalObservablePollingStreamV2({ signal: new AbortController().signal,
+      lastEventId: null, maxLifetimeMs: 120_000,
+      load: () => new Promise(() => {}), dispose }).getReader();
+    const read = reader.read(); await vi.advanceTimersByTimeAsync(30_000);
+    await expect(read).resolves.toMatchObject({ done: true });
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+  it("discards a completed read after deadline even before the expiry timer runs", async () => {
+    vi.useFakeTimers(); let release!: (value: HistoricalObservableProjectionV2) => void;
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const reader = createHistoricalObservablePollingStreamV2({ signal: new AbortController().signal,
+      lastEventId: null, load: () => new Promise(resolve => { release = resolve; }), dispose }).getReader();
+    const read = reader.read(); vi.setSystemTime(Date.now() + 30_001); release(projection("late"));
+    await expect(read).resolves.toMatchObject({ done: true });
+    expect(dispose).toHaveBeenCalledOnce();
+  });
   it("emits resumable named SSE events and suppresses an already delivered head", async () => {
     const abort = new AbortController();
     const stream = createHistoricalObservablePollingStreamV2({ signal: abort.signal,

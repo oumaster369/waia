@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createHealthServer } from "./server.mjs";
@@ -37,6 +38,9 @@ function required(env, key) {
 }
 
 export function parseExecutionHostRuntimeV2(env) {
+  const mode = env.WAIA_EXECUTION_HOST_MODE ?? "idle";
+  if (mode !== "idle" && mode !== CONSUMER_MODE) refuse("WAIA_EXECUTION_HOST_MODE");
+  historicalChildHeapOptionsV2(env.NODE_OPTIONS);
   const forbiddenKey = FORBIDDEN_RUNTIME_KEYS.find((key) => env[key]?.trim());
   if (forbiddenKey) refuse(`FORBIDDEN_RUNTIME_AUTHORITY:${forbiddenKey}`);
   const imageReleaseSha = required(env, "WAIA_IMAGE_RELEASE_SHA").toLowerCase();
@@ -61,35 +65,63 @@ export function parseExecutionHostRuntimeV2(env) {
   const runId = required(env, "WAIA_HISTORICAL_RUN_ID");
   if (!UUID.test(organizationId)) refuse("WAIA_HISTORICAL_ORGANIZATION_ID");
   if (!RUN_ID.test(runId)) refuse("WAIA_HISTORICAL_RUN_ID");
+  const validationWorkers = env.WAIA_FHV_VALIDATION_WORKERS;
+  if (validationWorkers !== undefined && !/^[1-4]$/.test(validationWorkers)) {
+    refuse("WAIA_FHV_VALIDATION_WORKERS");
+  }
+  const checkpointRoot = required(env, "WAIA_FHV_CHECKPOINT_ROOT");
+  if (!isAbsolute(checkpointRoot) || resolve(checkpointRoot) === "/" || checkpointRoot.includes("\0")) {
+    refuse("WAIA_FHV_CHECKPOINT_ROOT");
+  }
 
-  return Object.freeze({ databaseUrl, imageReleaseSha, releaseSha, organizationId, runId });
+  return Object.freeze({ mode, databaseUrl, imageReleaseSha, releaseSha, organizationId, runId, validationWorkers, checkpointRoot });
 }
 
-/** Only the constrained DB secret and durable run identity cross into the child. */
+/** Only an explicit capacity setting may cross the NODE_OPTIONS boundary. */
+export function historicalChildHeapOptionsV2(value) {
+  if (value === undefined || value.trim() === "") return undefined;
+  const match = /^--max[-_]old[-_]space[-_]size(?:=| +)([1-9][0-9]*)$/.exec(value.trim());
+  const megabytes = match ? Number(match[1]) : NaN;
+  // Bound capacity below the execution host's 48-GiB RAM; this allocates no
+  // memory itself. Additional flags (including preloads/inspect) fail closed.
+  if (!Number.isSafeInteger(megabytes) || megabytes < 128 || megabytes > 32768) {
+    refuse("UNSAFE_CHILD_NODE_OPTIONS");
+  }
+  return `--max-old-space-size=${megabytes}`;
+}
+
+/** Only constrained DB/run authority and validated heap capacity cross into the child. */
 export function buildHistoricalConsumerEnvironmentV2(env, config) {
+  const heapOptions = historicalChildHeapOptionsV2(env.NODE_OPTIONS);
   return Object.freeze({
     PATH: env.PATH,
     HOME: env.HOME,
     NODE_ENV: "production",
+    ...(heapOptions === undefined ? {} : { NODE_OPTIONS: heapOptions }),
     WAIA_TRADER_CLI: "1",
     DATABASE_URL_POSTGRES_SESSION: config.databaseUrl,
     WAIA_RELEASE_SHA: config.releaseSha,
     WAIA_HISTORICAL_ORGANIZATION_ID: config.organizationId,
     WAIA_HISTORICAL_RUN_ID: config.runId,
+    WAIA_FHV_CHECKPOINT_ROOT: config.checkpointRoot,
+    ...(config.validationWorkers === undefined ? {} : { WAIA_FHV_VALIDATION_WORKERS: config.validationWorkers }),
   });
 }
 
 export function buildExecutionHostRuntimeHealthV2(config, consumer) {
-  const ready = consumer.state === "running" || consumer.state === "completed";
+  const idle = config.mode === "idle" && consumer.state === "idle";
+  const ready = config.mode === CONSUMER_MODE &&
+    (consumer.state === "running" || consumer.state === "completed");
   return Object.freeze({
-    status: ready ? "ok" : "degraded",
+    status: idle ? "installed" : ready ? "ok" : "degraded",
+    executionReady: ready,
     service: SERVICE_NAME,
     releaseSha: config.releaseSha,
     imageReleaseSha: config.imageReleaseSha,
     consumer: Object.freeze({
-      mode: CONSUMER_MODE,
+      mode: config.mode,
       state: consumer.state,
-      runId: config.runId,
+      runId: idle ? null : config.runId,
       exitCode: consumer.exitCode,
     }),
   });
@@ -105,6 +137,10 @@ export function runExecutionHostImagePreflightV2(env, fileExists = existsSync) {
       !fileExists("node_modules/tsx")) {
     refuse("HISTORICAL_CONSUMER_NOT_PACKAGED");
   }
+  if (!fileExists("scripts/trader/validation-bootstrap-node-pool.ts") ||
+      !fileExists("scripts/trader/validation-bootstrap-range-worker.mjs")) {
+    refuse("VALIDATION_BOOTSTRAP_NOT_PACKAGED");
+  }
   return Object.freeze({
     schemaVersion: "waia.execution_host_image_preflight.v2",
     releaseSha: runtimeReleaseSha,
@@ -117,7 +153,9 @@ export function runExecutionHostImagePreflightV2(env, fileExists = existsSync) {
 export function startExecutionHostSupervisorV2(options = {}) {
   const env = options.env ?? process.env;
   const config = parseExecutionHostRuntimeV2(env);
-  const consumer = { state: "starting", exitCode: null };
+  // Validate before opening a listener so invalid options cannot strand a server.
+  const childEnvironment = config.mode === "idle" ? null : buildHistoricalConsumerEnvironmentV2(env, config);
+  const consumer = { state: config.mode === "idle" ? "idle" : "starting", exitCode: null };
   const createServer = options.createServer ?? createHealthServer;
   const spawnChild = options.spawnChild ?? spawn;
   const cwd = options.cwd ?? process.cwd();
@@ -143,11 +181,15 @@ export function startExecutionHostSupervisorV2(options = {}) {
       void closeServer();
       return;
     }
+    if (config.mode === "idle") {
+      process.stdout.write(`[${SERVICE_NAME}] installed release=${config.releaseSha} mode=idle executionReady=false\n`);
+      return;
+    }
     child = spawnChild(process.execPath, [
       "--import", "tsx", "--conditions=react-server", CONSUMER_SCRIPT,
     ], {
       cwd,
-      env: buildHistoricalConsumerEnvironmentV2(env, config),
+      env: childEnvironment,
       stdio: ["inherit", "inherit", "inherit", "ipc"],
     });
     child.on("message", (message) => {
@@ -204,7 +246,7 @@ if (isMainModule()) {
       schemaVersion: "waia.execution_host_runtime_preflight.v2",
       releaseSha: config.releaseSha,
       loginRole: RUNNER_LOGIN,
-      consumerMode: CONSUMER_MODE,
+      consumerMode: config.mode,
     })}\n`);
   } else {
     const runtime = startExecutionHostSupervisorV2();

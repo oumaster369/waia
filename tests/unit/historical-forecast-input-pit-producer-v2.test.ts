@@ -9,9 +9,11 @@ import { buildHistoricalKnowledgeSnapshotAuthorityV2 } from
 
 const mocked = vi.hoisted(() => ({ issue: vi.fn(), requireOutcome: vi.fn((value) => value),
   readBinding: vi.fn(), requireScientific: vi.fn(), verifyInformation: vi.fn() }));
-vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", () => ({
+vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", async (importOriginal) => ({
   issueForecastRuntimeV2: mocked.issue, requireForecastRuntimeAuthorizedOutcomeV2: mocked.requireOutcome,
-  reviveForecastRuntimeJsonV2: (value: unknown) => value,
+  // Authority issuance/replay is a separate test boundary; transport stays real.
+  requireForecastRuntimeAuthorityV2: (value: unknown) => value,
+  reviveForecastRuntimeJsonV2: (await importOriginal<typeof import("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2")>()).reviveForecastRuntimeJsonV2,
 }));
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-contract-binding-service-v1", () => ({ readForecastContractBindingV1: mocked.readBinding }));
 vi.mock("@/lib/trader/research/execopp-qualification/scientific-admission-v2", () => ({ requireScientificAdmissionV2: mocked.requireScientific }));
@@ -32,7 +34,10 @@ const binding = {
   scientificAdmissionReceiptContentDigestHex: "b".repeat(64),
   selectedPredictivePackageContentDigestHex: "c".repeat(64),
 };
+// Minimal legacy transport fixture, not a scientifically qualified candidate.
+const predictivePackage = { family: { organizationId: "org" }, canonicalSourceCorpus: [], replicaArtifacts: [] };
 const runtimeInput = {
+  predictivePackage,
   forecastContractBinding: binding,
   knowledgeContentDigestHex: knowledge,
   historicalKnowledgeSnapshotAuthority: buildHistoricalKnowledgeSnapshotAuthorityV2({
@@ -70,17 +75,19 @@ function authorizedOutcome() {
   return { status: "FORECAST_AUTHORIZED", authority: {
     organizationId: "org", anchorClosedBarAt: pit, knowledgeContentDigestHex: knowledge,
     contentDigestHex: "a".repeat(64),
-  }, issuance: { forecastContentDigestExec: Buffer.from("7".repeat(64), "hex") } };
+  }, issuance: { package: predictivePackage, forecastContentDigestExec: Buffer.from("7".repeat(64), "hex") } };
 }
 
 function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: string; bindingVisible?: boolean;
-  datasetAuthorityDigest?: string; forecastSchema?: string; persistedOutcome?: unknown } = {}) {
+  datasetAuthorityDigest?: string; forecastSchema?: string; persistedOutcome?: unknown;
+  verifierVersion?: string } = {}) {
   let insertedDigest = options.persistedDigest;
   const sql = Object.assign(vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join(" ");
     if (query.includes("FROM trader_historical_simulation_run_start_v2")) return [{ started_at: pit }];
     if (query.includes("FROM trader_forecast_runtime_input_source_v2")) return [{
       id: "source", bundle_id: "bundle", runtime_input_json: runtimeInput,
+      predictive_package_id: "package", verifier_version: options.verifierVersion ?? "waia.forecast-runtime-input-source.verifier.v2",
       execution_forecast_target_role_id: "EXECUTION_OPPORTUNITY",
       execution_forecast_content_digest_hex: "7".repeat(64),
       runtime_input_content_digest_hex: computeSemanticSha256Hex(runtimeInput),
@@ -96,6 +103,7 @@ function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: stri
     }];
     if (query.includes("FROM trader_forecast_v2")) return [{
       organization_id: "org", run_id: "run", cycle_id: "cycle", symbol: "BTCUSDT",
+      predictive_package_id: "package",
       forecast_schema: options.forecastSchema ?? "2", forecast_content_digest: "7".repeat(64),
       anchor_epoch_ms: Date.parse(pit),
       authorized_outcome: options.persistedOutcome ?? mocked.issue(),
@@ -119,6 +127,18 @@ function sqlHarness(options: { knowledgeRows?: unknown[]; persistedDigest?: stri
 
 describe("historical Forecast V2 PIT producer", () => {
   mocked.requireScientific.mockImplementation((value) => value);
+  it("rejects an unknown source verifier or a bounded verifier paired with legacy transport", async () => {
+    for (const verifierVersion of ["unknown", "waia.forecast-runtime-input-source.verifier.v3"]) {
+      mocked.issue.mockClear();
+      const sql = sqlHarness({ verifierVersion });
+      await expect(createPostgresHistoricalForecastInputPitProducerV2(sql as never)({
+        organizationId: "org", runId: "run", cycleId: "cycle", forecastId: "forecast",
+        symbol: "BTCUSDT", pitAnchor: pit, datasetAuthorityId: "dataset-authority",
+      })).rejects.toThrow("FORECAST_PACKAGE_WIRE_REFUSED:SOURCE_VERIFIER_WIRE_VERSION");
+      expect(mocked.issue).not.toHaveBeenCalled();
+      expect(sql.mock.calls.some(([strings]) => strings.join(" ").includes("INSERT INTO"))).toBe(false);
+    }
+  });
   it("persists an idempotent row only after canonical Forecast/scientific/knowledge replay", async () => {
     mocked.issue.mockReturnValue(authorizedOutcome());
     mocked.readBinding.mockResolvedValue(binding);

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ValidationBootstrapExecutionV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 
 import { MANDATORY_BASELINE_IDS } from "@/lib/trader/research/benchmark/baseline-models-v1";
 import { qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
@@ -14,6 +15,7 @@ import { buildKmConvergenceReceiptV1 } from "@/lib/trader/research/execopp-quali
 import {
   buildEpistemicParameterRatificationReceiptV1,
   buildPredictiveTerminalReceiptV1,
+  buildPredictiveTerminalReceiptAsyncV1,
   buildScientificAdmissionReceiptV2,
   requireScientificAdmissionV2,
 } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
@@ -90,6 +92,48 @@ function kmReceipt(qualifies = true) {
   });
 }
 
+describe("DEE-950 cooperative predictive receipt", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([undefined, 2])("has exact receipt parity across all mandatory baselines with workers=%s and owns caller data", async (nodeWorkerCount) => {
+    if (nodeWorkerCount !== undefined) vi.stubEnv("WAIA_TRADER_CLI", "1");
+    const input = { harnessInput: harnessInput(), identities: { ...identities } };
+    const expected = buildPredictiveTerminalReceiptV1(input);
+    let completedBaselines = 0;
+    const execution: { -readonly [K in keyof ValidationBootstrapExecutionV1]: ValidationBootstrapExecutionV1[K] } = {
+      nodeWorkerCount, onProgress: ({ completed }) => {
+      if (completed === 10000) completedBaselines++;
+      execution.nodeWorkerCount = 999;
+      input.identities.predictivePackageContentDigestHex = hex("f");
+      input.harnessInput.comparisonFamilyId = "caller-mutation";
+      input.harnessInput.developmentReturns = [NaN];
+      input.harnessInput.anchors[0]!.challengerProbabilities = [NaN];
+    } };
+    const actual = await buildPredictiveTerminalReceiptAsyncV1(input, execution);
+    expect(completedBaselines).toBe(5);
+    expect(actual).toEqual(expected);
+    expect(actual.terminalStatus).toBe("QUALIFIED");
+  }, 180_000);
+
+  it("refuses Node selection outside CLI even when an empty anchor set needs no bootstrap", async () => {
+    vi.stubEnv("WAIA_TRADER_CLI", "");
+    await expect(buildPredictiveTerminalReceiptAsyncV1({ harnessInput: harnessInput(false), identities },
+      { nodeWorkerCount: 2 })).rejects.toThrow("VALIDATION_BOOTSTRAP_NODE_CLI_REQUIRED");
+  });
+
+  it("preserves negative terminal evidence for an empty anchor set", async () => {
+    const input = { harnessInput: harnessInput(false), identities };
+    expect(await buildPredictiveTerminalReceiptAsyncV1(input)).toEqual(buildPredictiveTerminalReceiptV1(input));
+  });
+
+  it("never issues a predictive receipt on cancellation", async () => {
+    const controller = new AbortController();
+    await expect(buildPredictiveTerminalReceiptAsyncV1({ harnessInput: harnessInput(), identities }, {
+      signal: controller.signal, onProgress: () => controller.abort(),
+    })).rejects.toThrow("VALIDATION_BOOTSTRAP_CANCELLED");
+  });
+});
+
 function admittedFixture() {
   const predictive = buildPredictiveTerminalReceiptV1({ harnessInput: harnessInput(), identities });
   const km = kmReceipt();
@@ -117,6 +161,45 @@ function admittedFixture() {
   };
   return { receipt, expected, predictive, km, ratification };
 }
+
+describe("DEE-947 corrected bootstrap admission boundary", () => {
+  it("rejects old QUALIFIED evidence and a superficial harness-version relabel", () => {
+    const fixture = admittedFixture();
+    expect(fixture.predictive.terminalStatus).toBe("QUALIFIED");
+    const { contentDigestHex: currentDigest, ...currentBody } = fixture.predictive;
+    const oldHarnessDigest = createHash("sha256").update([
+      "scientific-admission-receipt/v2",
+      currentBody.comparisonFamilyId,
+      currentBody.commonAnchorSetDigestHex,
+      currentBody.terminalStatus,
+      ...currentBody.holmComparisons
+        .map((value) => `${value.comparisonId}:${value.pValue.toFixed(12)}`)
+        .sort((a, b) => a.localeCompare(b)),
+    ].join("\n")).digest("hex");
+    // Keep identical p-values deliberately: version/digest invalidation must not
+    // depend on whether the statistical outputs happen to change for a corpus.
+    for (const harnessSchemaVersion of ["research-harness-admission/v2", currentBody.harnessSchemaVersion]) {
+      const body = {
+        ...currentBody,
+        harnessSchemaVersion,
+        harnessAdmissionReceiptDigestHex: oldHarnessDigest,
+      };
+      const receipt = {
+        ...body,
+        contentDigestHex: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
+      } as typeof fixture.predictive;
+      expect(receipt.contentDigestHex).not.toBe(currentDigest);
+      expect(() => buildScientificAdmissionReceiptV2({
+        organizationId: "org-a",
+        predictiveTerminalReceipt: receipt,
+        kmConvergenceReceipt: fixture.km,
+        epistemicParameterRatificationReceipt: fixture.ratification,
+      })).toThrow(harnessSchemaVersion === "research-harness-admission/v2"
+        ? "SCIENTIFIC_ADMISSION_PREDICTIVE_HARNESS_SCHEMA_MISMATCH"
+        : "SCIENTIFIC_ADMISSION_PREDICTIVE_HARNESS_MISMATCH");
+    }
+  }, 180_000);
+});
 
 describe("DEE-631 scientific admission receipt v2", () => {
   it("conjunctively admits exact predictive, KM and Human-ratified identities deterministically", () => {
