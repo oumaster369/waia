@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 8c0fa8bebfe3beee666d62eb74d76c75d133efe0,
-    lastValidationAt: "2026-09-09T08:42:14Z",
+    lastValidatedGitSha: bfa813715fbddef29b8de4959ab60c62c60c2908,
+    lastValidationAt: "2026-09-09T08:53:03Z",
     blockedReason: null,
-    nextAction: "Grounded candidate fixture reviewed. Resolve R1 retention classification before runtime admission; finish remaining v1/access contracts. Shared migration/auth integration remains separately coordinated; no Trader mutation.",
+    nextAction: "R1 ratified and verified. Finish private export composition and remaining v1/access contracts. Shared migration/auth integration remains separately coordinated; no Trader mutation.",
   }
 provenance:
   {
@@ -263,3 +263,13 @@ Ratification/plan commit `261d6f2b` precedes implementation `bfa813715fbddef29b8
 - Test isolation: own resource-limited PostgreSQL16 container `426b8c83d20efc09e9b629ccc937566adec098924e8dcec1cdf2df9aacd6eb18`, verified exact role/database/run marker and loopback port58382, tmpfs data and no host mounts. Post-run query confirmed the fixture schema absent; only that own disposable container was removed. No shared/Trader database, process, worktree, PR, configuration or migration registry was mutated. Supabase/Postgres guidance preserved the least-privilege/isolated-fixture boundary; no Supabase feature or production operation was introduced.
 
 The R1 approval gate is resolved. Expiry planning/exclusion is not a physical deletion service, authentic evidence renewal, full tenant/auth qualification or a production retention promise. This remains one unpublished DEE-871 package; no partial PR, merge, deployment or Done transition. Remaining admitted work is final v1 object/access/rights inventory and separately qualified integration; historical quarantine is still plan-only. Existing shared schema/auth compatibility gates and UI dependencies remain unchanged.
+
+### Private export composition — bounded admission before implementation
+
+Continue the export-manifest row of the existing WP-1 matrix in only `persistence-contracts.ts`, its existing unit test and this plan. This is a pure reference-only composition plan, not a downloaded archive, endpoint or disclosure. Reuse DEE-965's export-retention policy; no database, schema, environment, UI, provider or Trader change. Verified remote main remains `90de233a192f9b97fa2d6a1ab0c3c1ba5a72df67`.
+
+Expected scenario: a trusted future server adapter supplies the Human actor/scope, stable manifest request id and original creation time, exact approved selection and a fresh export-specific eligible-reference set. The function validates a proposed selection against that exact approval, never infers selection from all eligible records. It produces selected permitted exact versions and a generic exclusion entry for each selected unavailable version; does not traverse provenance or disclose raw content. Foreign-scope input, model actors, altered selection, malformed/duplicate/unsupported references fail atomically. An empty current approval means revoked/unapproved and is denied. Eligibility for modelling or keeping an archive is not export eligibility; the adapter must independently review third-party rights/redaction and all current purposes before inclusion. Matching identifiers does not implement authentication.
+
+Manifest expiry is 24 hours from its original trusted creation, not rerun time; deny composition at/after expiry and invalid/future clocks. Reuse the lifecycle helper rather than add another duration constant. Current eligibility is reevaluated on every call, so a reference can move to excluded after revocation without extending expiry. Results are independent/deeply frozen; no omitted or newly eligible item is silently added, and no exclusion reason reveals undisclosed source details. `deliveryAuthority: none` is unconditional. Returned metadata is itself scoped/private, not anonymous or an authority token. A future renderer/delivery service must reauthorize the request, exact contents and current rights at use, implement actual 24-hour artifact expiry/deletion and a stable server-side idempotency record; no such service exists in this step.
+
+Acceptance: behavioral tests for explicit selection, separate organization/subject, current exact versions, revoked selection, caller-supplied TTL/authority/raw fields, duplicate/sparse/getter input, immutable results, day boundary/retry and independent permission loss. Start with RED then implement; cumulative four model unit files, scoped lint/typecheck, canon and independent read-only review. Existing 16 PG scenarios are historical evidence, not rerun/countable in this pure-only step. This extends no full-v1 or integration-ready claim; final batch reviewability and shared migration/auth gates remain.
