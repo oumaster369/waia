@@ -36,7 +36,7 @@ This is one new integration boundary under the Human's explicit authorization to
 | `lib/ai-twin/model/legacy-quarantine.ts` | Metadata-only no-opt-in planner | Applied quarantine, import or retention exception |
 | `lib/ai-twin/model/postgres-repository.ts` | Explicit injected connection, synthetic schema repository and rights closure | Authenticated server adapter, production schema/client, arbitrary real DB support |
 | `tests/fixtures/ai-twin-model-repository.sql` | Dedicated empty disposable schema, scoped keys/locking/roles | Shared journal, migration number, RLS qualification or production apply path |
-| `tests/integration/ai-twin-model-repository.test.ts` | Opt-in actual PostgreSQL regression and exact fixture identity guard | Shared/provider/backups/real-user rights proof |
+| `tests/integration/ai-twin-model-repository.test.ts` | Opt-in PostgreSQL regression and database/role/run-marker guard; externally verified owned-container binding | Shared/provider/backups/real-user rights proof |
 | `tests/unit/ai-twin-model-persistence-contracts.test.ts` | Candidate/export/outcome/unassessed-input negative and positive cases | Semantic evaluator or observed real-world truth |
 | `tests/unit/ai-twin-model-lifecycle.test.ts` | R1 exact expiry and authority regression | Physical TTL/backup enforcement |
 | `tests/unit/ai-twin-model-legacy-quarantine.test.ts` | Safe metadata inventory and no permission promotion | Historical consent interpretation or import |
@@ -61,7 +61,7 @@ Commit this admission on the new main-based branch, adopt the exact frozen sourc
 
 ### WP-2 — Qualify the boundary
 
-Run all four explicit model unit files and the actual16 PostgreSQL scenarios against a new bounded, own disposable Postgres16 fixture. Verify exact container id, loopback port, database, owner role and run marker before any DDL/cleanup. Never use ambient DB variables, .env, provider bootstrap or any shared DB. Negative marker admission must reject before DDL. Cleanup only the verified own temporary target.
+Run all four explicit model unit files and the actual20 PostgreSQL scenarios against a new bounded, own disposable Postgres16 fixture. Verify exact container id, loopback port, database, owner role and run marker before any DDL/cleanup. Never use ambient DB variables, .env, provider bootstrap or any shared DB. Negative marker admission must reject before DDL. Cleanup only the verified own temporary target.
 
 Run `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm validate:canon`, `pnpm validate:pr-governance`, and rendered-body preflight. Full unit suite is authoritative once on exact PR HEAD CI, not redundantly local. No UI changed: no new E2E/manual user-journey readiness claim. Required CI E2E remains unchanged.
 
@@ -85,3 +85,9 @@ After merge, fetch/verify exact squash containment, required PR checks and expec
 ## Validation receipt
 
 Pending adoption and whole-package checks. Source substeps are not integration readiness. The upcoming current receipt must distinguish independently rerun checks from integrator evidence and list any unexecuted checks explicitly.
+
+### 2026-09-09 — Whole-review bounded defect admission
+
+The independent reviewer read all eleven frozen source paths and reran 180 units. Two P2 defects block publication: hypothesis writes/retries do not enforce their ended `validUntil`; generic model reads with `private_archive` can disclose archive timestamps. Add PostgreSQL regressions before fixes, then enforce the same current interval on writes and retries and deny model archive access on generic surfaces. Review related cross-purpose archive rights timestamps as part of this same privacy defect, not a new feature. No other vocabulary or runtime integration is admitted.
+
+Qualification wording: the test validates container-id format and database/role/run marker. The integrator must separately inspect the actual owned container-to-loopback-port-to-marker binding; the suite alone does not establish Docker identity. Frozen source accounting is 1707 library lines, 1897 test lines, 89 SQL fixture lines and 214 documentation lines added (3907 total); tests plus fixture are about 51%.

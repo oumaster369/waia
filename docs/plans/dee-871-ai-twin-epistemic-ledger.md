@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 6ed6cb21a33a8bb91e770b0da431522d86c1591d,
+    lastValidatedGitSha: cb87f5b62707e47c7f1c22933d18f7ce29e9a39d,
     lastValidationAt: "2026-09-09T09:57:56Z",
     blockedReason: null,
-    nextAction: "Reflection/prediction/outcome vocabulary verified. Finish Formation/Health storage contract and full temporal/access/rights inventory; qualify persisted evidence as known at forecast time before calibration. Shared migration/auth remains separately coordinated; no Trader mutation.",
+    nextAction: "Frozen disconnected source handed to independent foundation batch DEE-973. Keep DEE-871 open for authenticated runtime, complete persisted inventory and temporal/rights qualification; no more vocabulary expansion on this source branch. Shared migration/auth remains separately coordinated; no Trader mutation.",
   }
 provenance:
   {
@@ -320,3 +320,9 @@ Within the existing `persistence-contracts.ts`, its unit test and this plan, add
 Reuse the current JSON/scope/purpose/policy/reference checks. Reject missing/duplicate/unknown dimensions, foreign-scope or stale evidence, extra percentages, maturity values, ratification/permission/history-overwrite fields, malformed notes, sparse arrays and getters. Return independent deeply frozen input snapshots. Health has no setter/reference that can rewrite formation history; neither type contains completion, identity trust, Society, billing or action authority. This is a storage-input vocabulary only, not a new retention classification, persistence route, engine activation or UI.
 
 Acceptance: two complete synthetic inputs with and without evidence; exact sets and evidence versions; loss of source eligibility; prohibition of numeric status/ratification/authority; immutable formation input after separate health recomposition. Explicit missing-feature RED; cumulative four model unit files; scoped lint/typecheck/canon/diff and independent read-only review. No DB/containers/shared auth/schema/journal/Trader mutation. Full engine output storage and evaluated requirements remain pending, so these types do not complete all-v1 inventory, DEE-871 or DEE-876. Before adding further work packages, reassess the accumulated package's integration boundary and reviewability.
+
+#### Formation / Health receipt and foundation handoff — 2026-09-09
+
+Admission `c0292db5b5f473401ab1989ad2b2e4172d90c25a` preceded source implementation `cb87f5b62707e47c7f1c22933d18f7ce29e9a39d`. Initial missing-feature RED: 22 failures, 64 existing contract tests passing. Registry immutability also had a specific behavioral RED before both registries were frozen. Final four-file cumulative units: **180/180** (contracts88, lifecycle43, ledger35, quarantine14); typecheck/scoped lint/diff passed. The independent reviewer reran 180 units and confirmed the Formation/Health input boundary. No evaluator, stored snapshots, percentages, ratification or user-facing behavior is delivered; DEE-876 remains Backlog. Current integration canon/build qualification belongs to the receiving batch, not this substep receipt.
+
+The original source branch is now frozen and clean at the exact implementation above. DEE-973, under the same v1 milestone and DEE-868 parent, owns one complete disconnected evidence-and-rights foundation integration, not this issue's unfinished shared-runtime acceptance. Its main-based branch admitted adoption in `0365fcb8`, then preserved source commits in merge `279799e63f18e4675372e9f18d149803241d0b33`. Review found two P2 defects in accumulated repository behavior; only the new batch owns their interval/privacy fixes and fresh PostgreSQL/whole-package qualification. See [DEE-973 plan](dee-973-ai-twin-evidence-foundation.md). All earlier statements of unpublished substeps remain historical; no parent or downstream completion is inferred. DEE-871 stays In Progress and is blocked by the foundation until it lands.

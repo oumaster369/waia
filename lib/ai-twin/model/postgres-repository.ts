@@ -103,7 +103,9 @@ function context(ctx: Context, humanOnly = false): void {
   );
   requireValue(ctx.actor.subjectId === ctx.scope.subjectId, "SCOPE_MISMATCH");
   requireValue(["human", "model"].includes(ctx.actor.kind));
-  if (humanOnly) requireValue(ctx.actor.kind === "human", "HUMAN_REQUIRED");
+  // Archive metadata is private too; generic reads cannot bypass archive actor limits.
+  if (humanOnly || ctx.purpose === "private_archive")
+    requireValue(ctx.actor.kind === "human", "HUMAN_REQUIRED");
 }
 
 /** Disconnected fixture repository, not a registered schema or runtime adapter.
@@ -182,7 +184,11 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     const times = [
       ...rows.map((r) => r.recorded_at.toISOString()),
-      ...restrictions.map((r) => r.requested_at.toISOString()),
+      // Keep all rights for enforcement, but private archive activity must not
+      // reveal its time through modelling history or a STALE_CLOCK write error.
+      ...restrictions
+        .filter((r) => ctx.purpose === "private_archive" || r.source_kind === "observation")
+        .map((r) => r.requested_at.toISOString()),
     ];
     const state: ModelLedger = {
       scope: ctx.scope,
@@ -239,6 +245,8 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
     ];
   }
   function hypothesisPolicy(hypothesis: WorkingHypothesis, ctx: Context): boolean {
+    // Semantic validity must still hold before an idempotent retry is acknowledged.
+    if (hypothesis.validUntil !== null && ctx.now >= hypothesis.validUntil) return false;
     return planRetention(
       {
         scope: ctx.scope,

@@ -270,6 +270,100 @@ describe.skipIf(!enabled)(
         )[0].n,
       ).toBe(0);
     });
+    it.each(["retry", "new"] as const)(
+      "denies %s of a hypothesis with an ended validity interval",
+      async (mode) => {
+        const s = { organizationId: `hypothesis-interval-${mode}`, subjectId: "synthetic-human" };
+        const h: Context = { ...human, scope: s, actor: { kind: "human", subjectId: s.subjectId } };
+        const m: Context = { ...h, actor: { ...h.actor, kind: "model" } };
+        const end = "2026-09-08T12:00:01.000Z";
+        const g = { ...grant, scope: s };
+        await owner`insert into twin_model_fixture.scope_lock values (${s.organizationId},${s.subjectId})`;
+        await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},1,${owner.json(g)})`;
+        await repo.apply(h, { ...observe("interval-source"), scope: s });
+        const source = { ...s, kind: "observation" as const, id: "interval-source", version: 1 };
+        const value: WorkingHypothesis = {
+          ref: { ...s, kind: "hypothesis", id: "interval-hypothesis", version: 1 },
+          purpose: h.purpose,
+          createdAt: mode === "retry" ? now : end,
+          retentionPolicyId: g.retentionPolicyId,
+          context: "Synthetic temporary interpretation",
+          domains: ["preferences"],
+          alternatives: [
+            {
+              id: "one",
+              statement: "Temporary preference",
+              support: [source],
+              contradiction: [],
+              uncertainty: "One report",
+              falsifier: "Contrary report",
+            },
+            {
+              id: "two",
+              statement: "Contextual choice",
+              support: [],
+              contradiction: [source],
+              uncertainty: "Context unknown",
+              falsifier: "Repeated pattern",
+            },
+          ],
+          validFrom: now,
+          validUntil: end,
+          lastSubstantialEvidenceAt: null,
+          status: "proposed",
+        };
+        if (mode === "retry") {
+          await repo.proposeHypothesis(m, value, "interval-request");
+          expect(await reopened.hypotheses(m)).toEqual([value]);
+        }
+        const ended = { ...m, now: end };
+        expect(await reopened.hypotheses(ended)).toEqual([]);
+        await expect(repo.proposeHypothesis(ended, value, "interval-request")).rejects.toThrow(
+          "RETENTION_UNAVAILABLE",
+        );
+        const [counts] =
+          await owner`select count(*)::int as n from twin_model_fixture.object where organization_id=${s.organizationId} and kind='hypothesis'`;
+        expect(counts.n).toBe(mode === "retry" ? 1 : 0);
+      },
+    );
+
+    it("denies model access to archive metadata through every generic read surface", async () => {
+      const archiveModel = { ...model, purpose: "private_archive" };
+      await expect(reopened.history(archiveModel)).rejects.toThrow("HUMAN_REQUIRED");
+      await expect(reopened.current(archiveModel)).rejects.toThrow("HUMAN_REQUIRED");
+      await expect(reopened.hypotheses(archiveModel)).rejects.toThrow("HUMAN_REQUIRED");
+      await expect(reopened.groundedCandidates(archiveModel)).rejects.toThrow("HUMAN_REQUIRED");
+    });
+
+    it("keeps private deletion clocks out of modelling without dropping cross-purpose observation fences", async () => {
+      const s = { organizationId: "private-clock", subjectId: "synthetic-human" };
+      const h: Context = { ...human, scope: s, actor: { kind: "human", subjectId: s.subjectId } };
+      const m: Context = { ...h, actor: { ...h.actor, kind: "model" } };
+      const g = { ...grant, scope: s };
+      await owner`insert into twin_model_fixture.scope_lock values (${s.organizationId},${s.subjectId})`;
+      await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},1,${owner.json(g)})`;
+      await repo.apply(h, { ...observe("public-source"), scope: s });
+      const history = await reopened.history(m);
+      const current = await reopened.current(m);
+      const later = "2026-09-08T12:00:02.000Z";
+      // Trusted synthetic rights seed; no archive content or authority is granted to modelling.
+      for (const kind of ["private_source", "experience"] as const) {
+        await owner`insert into twin_model_fixture.rights_request values (${s.organizationId},${s.subjectId},'private_archive',${`private-${kind}`},${`private-${kind}`},'delete_source',${later},'live_removed',${kind})`;
+      }
+      expect(await reopened.history(m)).toEqual(history);
+      expect(await reopened.current(m)).toEqual(current);
+      // A hidden private timestamp must not create a modelling write/STale-clock oracle either.
+      await repo.apply(m, { ...propose("public-source"), scope: s });
+      expect(await reopened.current(m)).toHaveLength(1);
+      // Conversely, a trusted deletion of an observation remains global across purposes.
+      await owner`insert into twin_model_fixture.rights_request values (${s.organizationId},${s.subjectId},'other-model-purpose','global-observation-delete','public-source','delete_source',${now},'restricted','observation')`;
+      expect(await reopened.current(m)).toEqual([]);
+      expect((await reopened.history(m)).observations).toEqual([]);
+      await expect(repo.apply(h, { ...observe("public-source"), scope: s })).rejects.toThrow(
+        "SOURCE_RESTRICTED",
+      );
+    });
+
     it("persists competing interpretations with exact current evidence, and removes their dependent content", async () => {
       await repo.apply(human, observe("hypothesis-source"));
       const source = {
