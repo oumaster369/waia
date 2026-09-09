@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, build, unit, integration, canon, pr-governance]
 approvalGates: [plan-approved, independent-review, exact-head-ci]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: "2026-09-09T15:31:00Z", blockedReason: null, nextAction: "Complete local build and exact-diff Trader-owner review; verify publication has no deployment effect; prepare one unmerged PR." }
+state: { status: in-progress, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: 90e7cdfa804ef7c3aa8942b527197d6d1b5128ab, lastValidationAt: "2026-09-09T15:37:00Z", blockedReason: "Browser admin-policy verification denies Cloudflare access; external branch-build no-deployment behavior cannot be rechecked. No push or PR.", nextAction: "Obtain readable current waia-app Workers Builds production/non-production commands, then recheck exact base/head and publish the prepared unmerged PR without deployment." }
 provenance: { createdFrom: DEE-871, gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -60,7 +60,7 @@ Before any DB apply, reverting this unactivated code restores the previous check
 
 ## Evidence log
 
-Implementation and scoped PG17 acceptance completed below. Build, final independent review and PR gates remain pending.
+Implementation, local gates and independent review completed below. External publication safety and PR CI remain pending.
 
 ### 2026-09-09 — Trader-owner extraction correction
 
@@ -74,4 +74,13 @@ DEE-960 comment `55850464-5490-4635-b48c-a2b69fc67ade` supersedes the earlier mi
 - Initial local build failed because a sibling-node_modules symlink is outside Turbopack root. Replace only this worktree's symlink with its own dependency copy; source/config is not changed to suppress the build check. Successful retry remains required.
 - GitHub read-only check: no openPR; currentmain remains3657b257. Actions secret names contain only LINEAR_API_KEY, so existing Cloudflare preview deployment step is not enabled. No CI/config/secret changes. External Workers Builds behavior must be separately checked before push.
 
-The six-file diff may slightly exceed800lines after formatting the independent harness. One193-line immutableSQL, one small journal entry, one bounded preflight pair and one fresh/upgrade/security harness constitute a single compatibility/rollback boundary; separating these would leave migration acceptance unqualified. No runtime feature is included to increase scope.
+The reviewed six-file diff is728 additions/eight deletions, below the800-line target. One193-line immutableSQL, one small journal entry, one bounded preflight pair and one fresh/upgrade/security harness constitute a single compatibility/rollback boundary. No runtime feature is included to increase scope.
+
+### 2026-09-09 — Review and publication checkpoint
+
+- Trader-owner final bounded review PASS on exact code candidate `90e7cdfa804ef7c3aa8942b527197d6d1b5128ab` / base3657b257, DEE-976 comment `153ad243-e7e0-44a3-8e60-25f9d830e5a6`: no proven P1/P2 across allsixfiles. Reviewer independently ran20units+1static, scopedlint/typecheck/diff; ninePGscenarios were deliberately skipped in that separate run and not counted as PGproof. ActualPG and Dockerbinding remain the integrator's receipts above.
+- Build retry passed with own copied dependencies and explicit own SQLite path. Rendered PR body passed P0governance preflight. Only documentation/PR-body receipt changes follow the reviewed code; no affected source/test rerun is required for this receipt. Revalidate base/head and any affected review before eventual publication.
+- Read-only Cloudflare dashboard request was denied: browser security could not verify the admin-enforced policy. No alternate browser/API workaround, setting change, push or PR was attempted. Earlier observed upload-only settings are historical, not a current verification. Need restored permitted read access or a Human-provided current view of waia-app Workers Builds production and non-production commands before publishing under the no-deployment constraint.
+- Final own tmpfs container34b47f4 was re-inspected by exact id/label/port and removed. Only synthetic test databases were discarded; no persistent Human data or Trader container was touched. Both created test containers are gone. This branch and prior871Core-auth branch remain local and unmerged.
+
+This completes the bounded local prerequisite, not DEE-871 or full AI-TWIN. No206/207/current-consent/right checks are claimed. No production/scientific operation, deployment, merge or periodic automation occurred.
