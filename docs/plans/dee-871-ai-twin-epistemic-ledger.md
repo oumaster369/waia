@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 3777e51d5ea22ff589383c2845b1ba0b9b6f46f5,
-    lastValidationAt: "2026-09-09T08:08:36Z",
+    lastValidatedGitSha: 8c0fa8bebfe3beee666d62eb74d76c75d133efe0,
+    lastValidationAt: "2026-09-09T08:42:14Z",
     blockedReason: null,
-    nextAction: "Quarantine planning and relation/knowledge candidate contracts locally reviewed. Complete remaining v1 inventory and final access/storage contract; no shared migration or runtime cutover before separately coordinated compatibility admission.",
+    nextAction: "Grounded candidate fixture reviewed. Resolve R1 retention classification before runtime admission; finish remaining v1/access contracts. Shared migration/auth integration remains separately coordinated; no Trader mutation.",
   }
 provenance:
   {
@@ -234,3 +234,13 @@ Every read/write/retry uses the existing short per-subject transaction lock and 
 Extend only the fixture object-kind allowlist with `relation` and `knowledge_need`; retain existing scoped composite foreign keys and least-privilege roles. Persist typed provenance edges to each source. Source rights restriction must hide dependent candidates before deletion and deny replay; explicit cleanup must physically remove them and their links/receipts. Withdrawal's working-purpose allowlist includes the two new kinds, never private archives. Independent sources/other subjects stay untouched. No temporary-data operation touches another database/container.
 
 Acceptance: real opted-in PostgreSQL tests for cross-connection persistence, exact source versions/current Human correction, own-scope and wrong-purpose denials, non-model actor/unknown kind/status/ungrounded admission denial, deterministic idempotency/content conflict, expiry/revocation read-and-replay refusal, and rights closure with physical deletion. Re-run the entire existing fixture and cumulative model units, scoped lint/typecheck/canon and independent read-only review. Create only an exact own resource-limited loopback container from the existing Postgres image, bind DB/role/port/token before DDL, remove only that own target afterwards. Full UI/auth/backup/production qualification is excluded. This adds one coherent scenario to the unpublished eight-file package; final integration-size review remains mandatory rather than automatically waived.
+
+#### Grounded fixture validation and pending Human decision R1
+
+Implementation/review head `8c0fa8bebfe3beee666d62eb74d76c75d133efe0`. Admission `a9292ff4` was clarified by `fd718ccf` **before code** after independent review identified that the relation/need retention classification was not ratified. Four admitted files changed in this substep, no shared migrations or production callers.
+
+- Initial RED: 13 existing PostgreSQL scenarios passed, 2 new scenarios failed at an explicit missing-method assertion. This proves absent functionality, not a prior semantic failure. Final cumulative **122/122 pass**: 16 actually executed PostgreSQL scenarios + 106 model units. The new tests verify separate-connection persistence, canonical-key-order retry, changed-content rejection, source revision correction, scope/purpose/policy/actor checks, expired source/interval denial, backward-clock rejection, newer consent revocation, separately committed restriction and cleanup failure/retry with dependent links/receipts removed.
+- TypeScript, scoped ESLint, diff checks and canon validation (151 files plus regressions/release identity) passed. Independent read-only review found no remaining concrete P1/P2 within the disconnected substep; independently passed 22 contract tests, but did not run PostgreSQL or the cumulative122. Annual necessity-review blocking is inspected, not separately reached by a PG fixture with still-eligible year-old evidence. No auth, full-v1, UI, operational backups or production qualification is implied.
+- Own resource-limited Postgres16 fixture was verified by exact container id/loopback port/database/role/run marker before DDL. Post-run verification confirmed its fixture schema absent. No user/shared/Trader data, processes, worktrees, PRs, settings or migration journal were modified. Supabase/Postgres guidance informed short transaction-scoped locking and preserved least-privilege/scoped-FK boundaries; no Supabase feature, service, deployment or advisor call was activated.
+
+**R1 — Proposed, awaiting Human classification:** treat unconfirmed proposed relations and open knowledge needs as working hypotheses, with the approved working-memory rule of 90 days from creation or independently verified substantial new evidence; rereading, rephrasing or retry must not reset the clock. Human-selected private lived experience remains under its separate archive authorization with no automatic TTL. This proposal does not automatically promote a confirmed relation into permanent storage, resolve a need or preserve deleted sources. It replaces the fixture-only annual-review experiment only after explicit Human approval and implementation/verification. No runtime/storage release may use the unratified fixture mapping. Other isolated preparation is not globally blocked by R1, but deciding its product/privacy meaning belongs to the Human.
