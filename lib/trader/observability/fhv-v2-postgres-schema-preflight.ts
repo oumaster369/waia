@@ -8,6 +8,12 @@ import { getPostgresSql } from "@/db/postgres-client";
 
 export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 204 as const;
 
+// Explicit compatibility admission, not automatic acceptance of every future
+// journal entry. Historical execution does not require account observation.
+const COMPATIBLE_ADDITIVE_MIGRATIONS = [
+  { idx: 205, when: 1780000000205, tag: "0205_trader_account_observation_v1" },
+] as const;
+
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
   "trader_forecast_target_bucket_v2",
@@ -154,10 +160,19 @@ export function readFhvV2CanonicalMigrations(repoRoot: string): FhvV2CanonicalMi
 
 export function assertFhvV2CanonicalMigrationsApplied(input: {
   canonical: readonly FhvV2CanonicalMigration[];
+  compatibleAdditive?: readonly FhvV2CanonicalMigration[];
   applied: readonly FhvV2AppliedMigration[];
 }): void {
+  const compatible = input.compatibleAdditive ?? [];
+  const known = [...input.canonical, ...compatible];
+  const knownByCreatedAt = new Map(known.map((entry) => [String(entry.when), entry]));
   const appliedByCreatedAt = new Map(input.applied.map((row) => [row.createdAt, row.hash]));
-  const canonicalHashes = new Set(input.canonical.map((entry) => entry.hash));
+  if (appliedByCreatedAt.size !== input.applied.length ||
+      new Set(input.applied.map((row) => row.hash)).size !== input.applied.length) {
+    throw new FhvV2PostgresSchemaPreflightError(
+      "DUPLICATE_APPLIED_MIGRATION", "applied journal contains duplicate identities",
+    );
+  }
   for (const entry of input.canonical) {
     const appliedHash = appliedByCreatedAt.get(String(entry.when));
     if (!appliedHash) {
@@ -173,13 +188,37 @@ export function assertFhvV2CanonicalMigrationsApplied(input: {
       );
     }
   }
-  const orphan = input.applied.find((row) => !canonicalHashes.has(row.hash));
-  if (orphan) {
-    throw new FhvV2PostgresSchemaPreflightError(
-      "UNKNOWN_APPLIED_MIGRATION",
-      `database contains non-canonical migration hash=${orphan.hash}`,
-    );
+  for (const row of input.applied) {
+    const entry = knownByCreatedAt.get(row.createdAt);
+    if (!entry) {
+      throw new FhvV2PostgresSchemaPreflightError(
+        "UNKNOWN_APPLIED_MIGRATION",
+        `database contains non-canonical migration identity=${row.createdAt}`,
+      );
+    }
+    if (row.hash !== entry.hash) {
+      throw new FhvV2PostgresSchemaPreflightError(
+        "APPLIED_MIGRATION_HASH_MISMATCH",
+        `${entry.tag} database=${row.hash} checkout=${entry.hash}`,
+      );
+    }
   }
+}
+
+export function readFhvV2CompatibleAdditiveMigrations(repoRoot: string): FhvV2CanonicalMigration[] {
+  const root = join(repoRoot, "db/migrations_postgres");
+  const journal = JSON.parse(readFileSync(join(root, "meta/_journal.json"), "utf8")) as Journal;
+  return COMPATIBLE_ADDITIVE_MIGRATIONS.map((identity) => {
+    const entries = journal.entries.filter((entry) =>
+      entry.idx === identity.idx || entry.when === identity.when || entry.tag === identity.tag);
+    if (entries.length !== 1 || entries[0].idx !== identity.idx ||
+        entries[0].when !== identity.when || entries[0].tag !== identity.tag) {
+      throw new FhvV2PostgresSchemaPreflightError(
+        "COMPATIBLE_MIGRATION_IDENTITY_INVALID", identity.tag,
+      );
+    }
+    return { ...identity, hash: sha256(readFileSync(join(root, `${identity.tag}.sql`))) };
+  });
 }
 
 export function assertFhvV2RequiredTablesPresent(presentTables: ReadonlySet<string>): void {
@@ -199,6 +238,7 @@ export async function assertFhvV2PostgresSchemaPreflight(input?: {
 }): Promise<void> {
   const sql = input?.sql ?? getPostgresSql();
   const canonical = readFhvV2CanonicalMigrations(input?.repoRoot ?? process.cwd());
+  const compatibleAdditive = readFhvV2CompatibleAdditiveMigrations(input?.repoRoot ?? process.cwd());
   const rows = await sql<{ hash: string; created_at: string }[]>`
     SELECT hash, created_at::text AS created_at
     FROM drizzle.__drizzle_migrations
@@ -206,6 +246,7 @@ export async function assertFhvV2PostgresSchemaPreflight(input?: {
   `;
   assertFhvV2CanonicalMigrationsApplied({
     canonical,
+    compatibleAdditive,
     applied: rows.map((row) => ({ hash: row.hash, createdAt: row.created_at })),
   });
   const presentTables = new Set<string>();

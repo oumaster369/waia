@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { createPostgresObservationRepository } from "@/lib/trader/account-observation/postgres-repository";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
+import { assertFhvV2PostgresSchemaPreflight } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
 
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
 const url = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
@@ -70,6 +71,14 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
     }
   }
   async function assertNewSurface(sql: Sql) {
+    // Actual historical entry point, actual journal and table catalog, under
+    // the same limited migration owner. No scientific calculation is invoked.
+    try {
+      await sql.unsafe("SET ROLE dee960_local_owner");
+      await assertFhvV2PostgresSchemaPreflight({ sql });
+    } finally {
+      await sql.unsafe("RESET ROLE");
+    }
     const tables = await sql`SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class
       WHERE relname IN ('trader_account_collection_state','trader_account_observations') ORDER BY relname`;
     expect(tables).toHaveLength(2);
@@ -101,6 +110,7 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
   }, 120000);
   it("upgrades full 0204 schema preserving credential/snapshot data and proves new fence", async () => {
     const sql = await database(); await apply(sql, 0, 204);
+    await assertFhvV2PostgresSchemaPreflight({ sql });
     const user = randomUUID(), org = randomUUID(), credential = randomUUID(), snapshot = randomUUID();
     await sql`INSERT INTO auth.users(id) VALUES (${user})`;
     await sql`INSERT INTO public.users(id, identity_label, email) VALUES (${user}, 'Synthetic migration probe', ${`probe-${user}@invalid.local`})`;

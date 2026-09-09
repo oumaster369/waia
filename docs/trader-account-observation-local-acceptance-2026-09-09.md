@@ -97,3 +97,26 @@ of remaining items 1–2 above, not their production acceptance requirements.
 
 Assignment provisioning, production admission/credential wiring, unsupported
 venue cases, production rollout and actual two-panel acceptance remain open.
+
+## Historical schema compatibility — 2026-09-09
+
+Reproduced the existing full-checkout preflight test failure after adding 0205:
+`UNKNOWN_APPLIED_MIGRATION`. The required historical baseline remains 0000–0204.
+An explicit optional compatibility list now admits only the exact journal identity
+and checkout bytes of `0205_trader_account_observation_v1`. Historical execution
+on a database through 0204 does not require account-observation provisioning.
+Unknown later migrations, altered hashes, wrong timestamps and duplicate applied
+identities are rejected. Future AI-TWIN migrations are NOT implicitly admitted.
+Existing SQL, scientific criteria, table requirements and roles are unchanged.
+
+20 targeted preflight tests PASS. Four actual PostgreSQL17 migration checks PASS:
+SQL packaging, fresh full chain, actual Drizzle migrator and data-preserving upgrade.
+The actual historical preflight is invoked on 0204 and after 0205, including under
+the limited migration owner. Typecheck/scoped lint/diff checks PASS. Independent
+bounded review found no proven P1/P2 in these three changed source/test files.
+This is local compatibility evidence, not production or scientific acceptance.
+
+Coordinate future shared journal registration through DEE-960 / DEE-871. Keep one
+integration owner for numbering and compatibility review; do not rewrite historical
+migration bytes, automatically accept unknown migrations, or touch the running
+scientific preparation to integrate unrelated account/Twin work.
