@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
 import { TraderSignOut } from "@/components/trader/trader-sign-out";
+import { ConnectedAccountObservationPanel } from "@/components/trader/account-observation/connected-account-observation-panel";
 import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
 import type { BalanceSnapshotDto } from "@/lib/trader/balances/types";
 import type { PositionSnapshotDto } from "@/lib/trader/positions/types";
@@ -361,10 +362,16 @@ function ExchangeTraderWorkspace() {
   const [positionSnapshots, setPositionSnapshots] = React.useState<PositionSnapshotDto[]>([]);
   const [tradeSnapshots, setTradeSnapshots] = React.useState<TradeHistorySnapshotDto[]>([]);
   const [tradeSymbol, setTradeSymbol] = React.useState(DEFAULT_TRADE_SYMBOL);
+  const scope = React.useRef(0);
+  const tradeRequest = React.useRef(0);
+  const selectedSymbol = React.useRef(DEFAULT_TRADE_SYMBOL);
+  const pending = React.useRef(new Map<string, object>());
+  const asyncError = "Account request could not be confirmed. Please retry; no account values were inferred.";
 
   const activeCredential = credentials.find((c) => c.status === "active") ?? credentials[0];
 
-  const refreshSnapshots = React.useCallback(async (credentialId: string, symbol: string) => {
+  const refreshSnapshots = React.useCallback(async (credentialId: string, symbol: string, generation: number) => {
+    const tradeGeneration = ++tradeRequest.current;
     const normalized = normalizeHtxSpotSymbol(symbol);
     const listSymbol = normalized.ok ? normalized.symbol : symbol.trim();
     const [balances, positions, trades] = await Promise.all([
@@ -372,47 +379,70 @@ function ExchangeTraderWorkspace() {
       listPositionSnapshotsClient(credentialId),
       listTradeHistorySnapshotsClient(credentialId, listSymbol),
     ]);
+    if (scope.current !== generation) return;
     if (balances.kind === "ok") {
       setBalanceSnapshots(balances.data);
     }
     if (positions.kind === "ok") {
       setPositionSnapshots(positions.data);
     }
-    if (trades.kind === "ok") {
+    if (trades.kind === "ok" && tradeRequest.current === tradeGeneration) {
       setTradeSnapshots(trades.data);
     }
   }, []);
 
   const loadWorkspace = React.useCallback(
     async (symbol: string) => {
+      const generation = ++scope.current;
+      ++tradeRequest.current;
+      // New account scope owns fresh operation flags. Retired finally blocks
+      // must not release a successor operation with the same name.
+      pending.current.clear();
+      setConnecting(false);
+      setSyncingBalances(false);
+      setSyncingPositions(false);
+      setSyncingTrades(false);
+      setBalanceSnapshots([]);
+      setPositionSnapshots([]);
+      setTradeSnapshots([]);
       setLoading(true);
       setErrorMessage(null);
-      const result = await listExchangeCredentialsClient();
-      if (result.kind === "err") {
-        setErrorMessage(result.displayMessage);
-        setCredentials([]);
+      try {
+        const result = await listExchangeCredentialsClient();
+        if (scope.current !== generation) return;
+        if (result.kind === "err") {
+          setErrorMessage(result.displayMessage);
+          setCredentials([]);
+          return;
+        }
+        assertNoSecretsInPayload(JSON.stringify(result.data));
+        setCredentials(result.data);
         setLoading(false);
-        return;
-      }
-      assertNoSecretsInPayload(JSON.stringify(result.data));
-      setCredentials(result.data);
-      setLoading(false);
-      const active = result.data.find((c) => c.status === "active") ?? result.data[0];
-      if (active) {
-        await refreshSnapshots(active.id, symbol);
+        const active = result.data.find((c) => c.status === "active") ?? result.data[0];
+        if (active) await refreshSnapshots(active.id, symbol, generation);
+      } catch {
+        if (scope.current === generation) setErrorMessage(asyncError);
+      } finally {
+        if (scope.current === generation) setLoading(false);
       }
     },
     [refreshSnapshots],
   );
 
+  const retireScope = React.useCallback(() => { ++scope.current; ++tradeRequest.current; }, []);
   React.useEffect(() => {
     void (async () => {
       await loadWorkspace(DEFAULT_TRADE_SYMBOL);
     })();
-  }, [loadWorkspace]);
+    return retireScope;
+  }, [loadWorkspace, retireScope]);
 
   const handleTradeSymbolChange = (value: string) => {
+    const generation = scope.current;
+    const request = ++tradeRequest.current;
+    selectedSymbol.current = value;
     setTradeSymbol(value);
+    setTradeSnapshots([]);
     if (activeCredential && value.trim()) {
       const normalized = normalizeHtxSpotSymbol(value);
       if (!normalized.ok) {
@@ -421,12 +451,40 @@ function ExchangeTraderWorkspace() {
       }
       void listTradeHistorySnapshotsClient(activeCredential.id, normalized.symbol).then(
         (result) => {
+          if (scope.current !== generation || tradeRequest.current !== request) return;
           if (result.kind === "ok") {
             setTradeSnapshots(result.data);
+          } else {
+            setErrorMessage(result.displayMessage);
           }
+        },
+        () => {
+          if (scope.current === generation && tradeRequest.current === request) setErrorMessage(asyncError);
         },
       );
     }
+  };
+
+  // Each operation owns its pending flag and retires with the mounted account scope.
+  const runRequest = (name: string, setPending: (value: boolean) => void,
+    work: (isCurrent: () => boolean, generation: number) => Promise<void>) => {
+    if (pending.current.has(name)) return;
+    const owner = {};
+    pending.current.set(name, owner);
+    const generation = scope.current;
+    const isCurrent = () => scope.current === generation;
+    setPending(true);
+    setErrorMessage(null);
+    void (async () => {
+      try { await work(isCurrent, generation); }
+      catch { if (isCurrent()) setErrorMessage(asyncError); }
+      finally {
+        if (pending.current.get(name) === owner) {
+          pending.current.delete(name);
+          if (isCurrent()) setPending(false);
+        }
+      }
+    })();
   };
 
   const handleConnect = (event: React.FormEvent<HTMLFormElement>) => {
@@ -437,15 +495,13 @@ function ExchangeTraderWorkspace() {
       setErrorMessage("API key and secret are required.");
       return;
     }
-    setConnecting(true);
-    setErrorMessage(null);
-    void (async () => {
+    runRequest("connect", setConnecting, async (isCurrent) => {
       const result = await connectHtxClient({
         apiKey: trimmedKey,
         apiSecret: trimmedSecret,
         accountLabel: accountLabel.trim() || undefined,
       });
-      setConnecting(false);
+      if (!isCurrent()) return;
       if (result.kind === "err") {
         setErrorMessage(result.displayMessage);
         return;
@@ -453,42 +509,39 @@ function ExchangeTraderWorkspace() {
       assertNoSecretsInPayload(JSON.stringify(result.data));
       setApiKey("");
       setApiSecret("");
-      await loadWorkspace(tradeSymbol);
-    })();
+      setConnecting(false);
+      await loadWorkspace(selectedSymbol.current);
+    });
   };
 
   const handleSyncBalances = () => {
     if (!activeCredential) {
       return;
     }
-    setSyncingBalances(true);
-    setErrorMessage(null);
-    void (async () => {
+    runRequest("balances", setSyncingBalances, async (isCurrent, generation) => {
       const result = await syncBalancesClient(activeCredential.id);
-      setSyncingBalances(false);
+      if (!isCurrent()) return;
       if (result.kind === "err") {
         setErrorMessage(result.displayMessage);
         return;
       }
-      await refreshSnapshots(activeCredential.id, tradeSymbol);
-    })();
+      await refreshSnapshots(activeCredential.id, selectedSymbol.current, generation);
+    });
   };
 
   const handleSyncPositions = () => {
     if (!activeCredential) {
       return;
     }
-    setSyncingPositions(true);
-    setErrorMessage(null);
-    void (async () => {
+    runRequest("positions", setSyncingPositions, async (isCurrent, generation) => {
       const result = await syncPositionsClient(activeCredential.id);
-      setSyncingPositions(false);
+      if (!isCurrent()) return;
       if (result.kind === "err") {
         setErrorMessage(result.displayMessage);
         return;
       }
-      await refreshSnapshots(activeCredential.id, tradeSymbol);
-    })();
+      await refreshSnapshots(activeCredential.id, selectedSymbol.current, generation);
+    });
   };
 
   const handleSyncTrades = () => {
@@ -500,18 +553,18 @@ function ExchangeTraderWorkspace() {
       setErrorMessage(TRADER_WORKSPACE_SUPPORTED_HTX_SPOT_PAIR_MESSAGE);
       return;
     }
-    setSyncingTrades(true);
-    setErrorMessage(null);
-    void (async () => {
+    const request = tradeRequest.current;
+    runRequest("trades", setSyncingTrades, async (isCurrent, generation) => {
       const result = await syncTradeHistoryClient(activeCredential.id, normalized.symbol);
-      setSyncingTrades(false);
+      if (!isCurrent() || tradeRequest.current !== request) return;
       if (result.kind === "err") {
         setErrorMessage(result.displayMessage);
         return;
       }
       setTradeSymbol(normalized.symbol);
-      await refreshSnapshots(activeCredential.id, normalized.symbol);
-    })();
+      selectedSymbol.current = normalized.symbol;
+      await refreshSnapshots(activeCredential.id, normalized.symbol, generation);
+    });
   };
 
   return (
@@ -564,12 +617,23 @@ function ExchangeTraderWorkspace() {
               <CredentialStatus credential={activeCredential} />
             </WaiaSurface>
           </section>
+          <ConnectedAccountObservationPanel
+            key={`${activeCredential.id}:${activeCredential.status}:${activeCredential.updatedAt}`}
+            target={activeCredential.status === "active" ? {
+              credentialId: activeCredential.id,
+              exchangeAccountId: activeCredential.exchangeAccountId,
+            } : null}
+          />
           <section aria-labelledby="trader-portfolio-heading" className="space-y-4">
             <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">Portfolio</p>
+              <p className="text-muted-foreground text-xs tracking-wide uppercase">Separate diagnostics</p>
               <h2 id="trader-portfolio-heading" className="mt-1 text-xl font-semibold">
-                Balances, positions and activity
+                Manually collected diagnostic snapshots
               </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                These legacy balance, position and activity snapshots are collected separately.
+                They are not the shared current account observation above and may have different timestamps.
+              </p>
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
               <BalancesPanel

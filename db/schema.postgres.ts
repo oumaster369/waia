@@ -21,6 +21,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  type PgTableExtraConfigValue,
   primaryKey,
   smallint,
   text,
@@ -772,7 +773,13 @@ export const exchangeCredentialStatusEnumPg = pgEnum("exchange_credential_status
   "revoked",
 ]);
 
-/** AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2). */
+/**
+ * AI-TRADER: envelope-encrypted exchange API credentials (DEE-233 / AT-E2).
+ * DEE-960's observation_revision and its check/trigger are owned by migration 0205
+ * and read explicitly by observation SQL adapters. Keep that optional DB column
+ * out of this legacy ORM projection: implicit SELECT/INSERT/RETURNING must still
+ * work before 0205 is installed. The DB default/trigger owns it after installation.
+ */
 export const exchangeCredentials = pgTable(
   "exchange_credentials",
   {
@@ -799,6 +806,59 @@ export const exchangeCredentials = pgTable(
       t.venue,
       t.exchangeAccountId,
     ),
+  ],
+);
+
+/** DEE-960 account-bound recurring observation ownership; no execution/capital authority. */
+export const traderAccountCollectionState = pgTable(
+  "trader_account_collection_state",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    credentialId: uuid("credential_id").notNull().references(() => exchangeCredentials.id),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    configurationRevision: text("configuration_revision").notNull(),
+    symbols: jsonb("symbols").$type<string[]>().notNull(),
+    nextDueAt: timestamp("next_due_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    leaseToken: uuid("lease_token"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true, mode: "date" }),
+    lastObservationId: uuid("last_observation_id"),
+  },
+  (t): PgTableExtraConfigValue[] => [
+    primaryKey({ columns: [t.organizationId, t.credentialId, t.exchangeAccountId] }),
+    check("trader_account_collection_state_configuration_revision_check", sql`length(${t.configurationRevision}) BETWEEN 1 AND 256`),
+    check("trader_account_collection_state_symbols_check", sql`jsonb_typeof(${t.symbols}) = 'array' AND jsonb_array_length(${t.symbols}) BETWEEN 1 AND 32`),
+    check("trader_account_collection_state_consecutive_failures_check", sql`${t.consecutiveFailures} BETWEEN 0 AND 30`),
+    check("trader_account_collection_state_check", sql`(${t.leaseToken} IS NULL AND ${t.leaseOwner} IS NULL AND ${t.leaseExpiresAt} IS NULL) OR (${t.leaseToken} IS NOT NULL AND ${t.leaseOwner} IS NOT NULL AND ${t.leaseExpiresAt} IS NOT NULL)`),
+    foreignKey({ columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.lastObservationId],
+      foreignColumns: [traderAccountObservations.organizationId, traderAccountObservations.credentialId,
+        traderAccountObservations.exchangeAccountId, traderAccountObservations.observationId], name: "trader_observation_last_fk" }),
+  ],
+);
+
+/** Immutable normalized observation evidence; triggers/RLS/role grants live in migration 0205. */
+export const traderAccountObservations = pgTable(
+  "trader_account_observations",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    credentialId: uuid("credential_id").notNull().references(() => exchangeCredentials.id),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    observationId: uuid("observation_id").notNull(),
+    credentialRevision: bigint("credential_revision", { mode: "bigint" }).notNull(),
+    configurationRevision: text("configuration_revision").notNull(),
+    leaseToken: uuid("lease_token").notNull(),
+    payload: jsonb("payload").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull().default(sql`clock_timestamp()`),
+  },
+  (t): PgTableExtraConfigValue[] => [
+    primaryKey({ columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.observationId] }),
+    unique().on(t.organizationId, t.credentialId, t.exchangeAccountId, t.leaseToken),
+    check("trader_account_observations_credential_revision_check", sql`${t.credentialRevision} > 0`),
+    check("trader_account_observations_payload_check", sql`jsonb_typeof(${t.payload}) = 'object' AND octet_length(${t.payload}::text) <= 1048576`),
+    foreignKey({ columns: [t.organizationId, t.credentialId, t.exchangeAccountId],
+      foreignColumns: [traderAccountCollectionState.organizationId, traderAccountCollectionState.credentialId,
+        traderAccountCollectionState.exchangeAccountId] }),
   ],
 );
 
