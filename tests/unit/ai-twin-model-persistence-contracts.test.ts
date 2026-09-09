@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   validateWorkingHypothesis,
   validateDynamicRelation,
   validateKnowledgeNeed,
   planPrivateExport,
+  validateReflection,
+  validatePredictionExperiment,
+  validateOutcomeReceipt,
   type WorkingHypothesis,
   type VersionedModelReference,
 } from "@/lib/ai-twin/model/persistence-contracts";
@@ -12,6 +15,279 @@ import {
 const scope = { organizationId: "synthetic-org", subjectId: "synthetic-human" };
 const now = "2026-09-08T12:00:00.000Z";
 const source: VersionedModelReference = { ...scope, kind: "observation", id: "o1", version: 1 };
+
+describe("reflection, expectation and reported outcome remain distinct", () => {
+  const later = (hours: number) => new Date(Date.parse(now) + hours * 3600000).toISOString();
+  const resultSource = { ...source, id: "reported-result" };
+  const context = () => ({
+    scope,
+    purpose: "private_modelling",
+    retentionPolicyId: "human-approved-2026-09-08/v1",
+    now: later(2),
+    eligibleSources: [source, resultSource],
+  });
+  const base = (kind: VersionedModelReference["kind"]) => ({
+    ref: { ...scope, kind, id: kind, version: 1 },
+    purpose: context().purpose,
+    retentionPolicyId: context().retentionPolicyId,
+    createdAt: now,
+    context: "Synthetic planning only",
+    uncertainty: "One self-report",
+    evidence: [source],
+    state: "proposed",
+  });
+  const reflection = () => ({ ...base("reflection"), text: "Quiet plans might matter this week" });
+  const prediction = () => ({
+    ...base("prediction"),
+    mode: "expectation",
+    expectedOutcome: "May report less interruption",
+    windowStartsAt: now,
+    windowEndsAt: later(1),
+    reversibilityNotes: "No action authorized",
+    stopCondition: "Human can decline",
+    experimentConsent: null,
+    actionAuthority: "none",
+  });
+  const report = () => ({
+    ...base("outcome"),
+    createdAt: later(2),
+    prediction: prediction().ref,
+    state: "human_reported",
+    observedOutcome: "Human reported no difference",
+    observedAt: later(1.5),
+    evidence: [resultSource],
+  });
+  const actor = { kind: "human", subjectId: scope.subjectId };
+  const validateReport = (input: unknown) =>
+    validateOutcomeReceipt(input, context(), prediction(), actor);
+  beforeEach(() => {
+    expect(typeof validateReflection).toBe("function");
+    expect(typeof validatePredictionExperiment).toBe("function");
+    expect(typeof validateOutcomeReceipt).toBe("function");
+  });
+  it("preserves reflection as a proposed interpretation, not a ratified fact", () => {
+    const input = reflection();
+    const value = validateReflection(input, context());
+    expect(value).toEqual(input);
+    input.text = "changed";
+    expect(value.text).not.toBe(input.text);
+    expect(Object.isFrozen(value.evidence[0])).toBe(true);
+    expect(value).not.toHaveProperty("verified");
+  });
+  it.each(["expectation", "experiment_proposal"])("keeps %s separate from permission", (mode) => {
+    const input = { ...prediction(), mode };
+    const value = validatePredictionExperiment(input, context());
+    expect(value).toEqual(input);
+    expect(value.actionAuthority).toBe("none");
+    expect(value.experimentConsent).toBeNull();
+    expect(Object.isFrozen(value)).toBe(true);
+  });
+  it("records a Human report outside the expected window without rewriting the prediction", () => {
+    const expected = prediction();
+    const before = structuredClone(expected);
+    const value = validateOutcomeReceipt(report(), context(), expected, actor);
+    expect(value.observedOutcome).toBe("Human reported no difference");
+    expect(value.state).toBe("human_reported");
+    expect(value.observedAt).toBe(later(1.5));
+    expect(expected).toEqual(before);
+    expect(value).not.toHaveProperty("calibration");
+    expect(value).not.toHaveProperty("formationProgress");
+    expect(Object.isFrozen(value.prediction)).toBe(true);
+  });
+  it.each(["unknown", "declined"])(
+    "preserves %s without fabricated outcomes or progress",
+    (state) => {
+      const input = { ...report(), state, observedOutcome: null, observedAt: null, evidence: [] };
+      expect(validateReport(input)).toEqual(input);
+      expect(() => validateReport({ ...input, observedOutcome: "Succeeded" })).toThrow(
+        "INVALID_INPUT",
+      );
+      expect(() => validateReport({ ...input, observedAt: later(1) })).toThrow("INVALID_INPUT");
+      expect(() => validateReport({ ...input, evidence: [resultSource] })).toThrow("INVALID_INPUT");
+    },
+  );
+  it.each(["model", "administrator"])("denies %s outcome attribution", (kind) => {
+    expect(() =>
+      validateOutcomeReceipt(report(), context(), prediction(), {
+        kind,
+        subjectId: scope.subjectId,
+      }),
+    ).toThrow("HUMAN_REQUIRED");
+  });
+  it("denies another Human actor", () => {
+    expect(() =>
+      validateOutcomeReceipt(report(), context(), prediction(), {
+        ...actor,
+        subjectId: "other",
+      }),
+    ).toThrow("HUMAN_REQUIRED");
+  });
+  it("binds the exact prediction identity and version", () => {
+    for (const change of [{ id: "other" }, { version: 2 }, { kind: "claim" }]) {
+      expect(() =>
+        validateReport({ ...report(), prediction: { ...prediction().ref, ...change } }),
+      ).toThrow("PREDICTION_MISMATCH");
+    }
+  });
+  it("requires current evidence for both expected and reported outcomes", () => {
+    for (const eligibleSources of [
+      [],
+      [source],
+      [resultSource],
+      [{ ...resultSource, version: 2 }, source],
+    ]) {
+      expect(() =>
+        validateOutcomeReceipt(report(), { ...context(), eligibleSources }, prediction(), actor),
+      ).toThrow("EVIDENCE_UNAVAILABLE");
+    }
+  });
+  it("does not use a model interpretation or advice acceptance as observed evidence", () => {
+    const claim = { ...resultSource, kind: "claim" as const };
+    expect(() =>
+      validateOutcomeReceipt(
+        { ...report(), evidence: [claim] },
+        {
+          ...context(),
+          eligibleSources: [source, claim],
+        },
+        prediction(),
+        actor,
+      ),
+    ).toThrow("OBSERVATION_REQUIRED");
+    expect(() => validateReport({ ...report(), state: "accepted" })).toThrow("INVALID_INPUT");
+    expect(() => validateReport({ ...report(), state: "verified" })).toThrow("INVALID_INPUT");
+  });
+  it("requires an actual report and provenance for human_reported state", () => {
+    for (const change of [
+      { observedOutcome: null },
+      { observedOutcome: "" },
+      { observedAt: null },
+      { evidence: [] },
+    ]) {
+      expect(() => validateReport({ ...report(), ...change })).toThrow();
+    }
+  });
+  it("rejects event times before prediction or after report and future report creation", () => {
+    for (const observedAt of [later(-1), later(3), "invalid"]) {
+      expect(() => validateReport({ ...report(), observedAt })).toThrow("INVALID_INPUT");
+    }
+    expect(() => validateReport({ ...report(), createdAt: later(3) })).toThrow("INVALID_INPUT");
+  });
+  it.each(["unknown", "declined"])(
+    "rejects a %s receipt created before the prediction",
+    (state) => {
+      expect(() =>
+        validateReport({
+          ...report(),
+          state,
+          createdAt: later(-1),
+          observedOutcome: null,
+          observedAt: null,
+          evidence: [],
+        }),
+      ).toThrow("INVALID_INPUT");
+    },
+  );
+  it.each([1, 2])("rejects a prediction grounded in its own outcome version %s", (version) => {
+    const circular = { ...report().ref, version };
+    expect(() =>
+      validateOutcomeReceipt(
+        report(),
+        {
+          ...context(),
+          eligibleSources: [source, resultSource, circular],
+        },
+        { ...prediction(), evidence: [source, circular] },
+        actor,
+      ),
+    ).toThrow("CIRCULAR_OUTCOME");
+  });
+  it.each(["organizationId", "subjectId"] as const)(
+    "rejects foreign %s across all objects",
+    (key) => {
+      const foreign = { ...scope, [key]: "other" };
+      expect(() =>
+        validateReflection(
+          { ...reflection(), ref: { ...reflection().ref, ...foreign } },
+          context(),
+        ),
+      ).toThrow("SCOPE_MISMATCH");
+      expect(() =>
+        validatePredictionExperiment(
+          { ...prediction(), evidence: [{ ...source, ...foreign }] },
+          context(),
+        ),
+      ).toThrow("SCOPE_MISMATCH");
+      expect(() =>
+        validateReport({ ...report(), prediction: { ...prediction().ref, ...foreign } }),
+      ).toThrow("SCOPE_MISMATCH");
+      expect(() =>
+        validateReport({ ...report(), evidence: [{ ...resultSource, ...foreign }] }),
+      ).toThrow("SCOPE_MISMATCH");
+    },
+  );
+  it("rejects changed purpose/policy and a stale prediction purpose", () => {
+    for (const change of [{ purpose: "society" }, { retentionPolicyId: "unknown" }]) {
+      expect(() => validateReflection({ ...reflection(), ...change }, context())).toThrow(
+        "PURPOSE_POLICY_MISMATCH",
+      );
+      expect(() => validatePredictionExperiment({ ...prediction(), ...change }, context())).toThrow(
+        "PURPOSE_POLICY_MISMATCH",
+      );
+      expect(() => validateReport({ ...report(), ...change })).toThrow("PURPOSE_POLICY_MISMATCH");
+      expect(() =>
+        validateOutcomeReceipt(report(), context(), { ...prediction(), ...change }, actor),
+      ).toThrow("PURPOSE_POLICY_MISMATCH");
+    }
+  });
+  it("rejects executable authority, invented consent, safety labels and confidence scores", () => {
+    for (const change of [
+      { actionAuthority: "execute" },
+      { experimentConsent: "approved" },
+      { safetyApproved: true },
+      { confidence: 1 },
+      { state: "active" },
+      { reversibilityNotes: "" },
+      { stopCondition: "" },
+    ])
+      expect(() => validatePredictionExperiment({ ...prediction(), ...change }, context())).toThrow(
+        "INVALID_INPUT",
+      );
+    expect(() => validateReflection({ ...reflection(), state: "ratified" }, context())).toThrow(
+      "INVALID_INPUT",
+    );
+  });
+  it("rejects invalid observation windows", () => {
+    for (const change of [
+      { windowStartsAt: later(-1) },
+      { windowEndsAt: now },
+      { windowEndsAt: "invalid" },
+      { windowStartsAt: later(2) },
+    ])
+      expect(() => validatePredictionExperiment({ ...prediction(), ...change }, context())).toThrow(
+        "INVALID_INPUT",
+      );
+  });
+  it("rejects missing, duplicated, sparse and accessor evidence", () => {
+    for (const evidence of [[], [source, source], new Array(1)]) {
+      expect(() => validateReflection({ ...reflection(), evidence }, context())).toThrow();
+      expect(() =>
+        validatePredictionExperiment({ ...prediction(), evidence }, context()),
+      ).toThrow();
+    }
+    let invoked = false;
+    const input = reflection();
+    Object.defineProperty(input, "text", {
+      enumerable: true,
+      get() {
+        invoked = true;
+        return "x";
+      },
+    });
+    expect(() => validateReflection(input, context())).toThrow("INVALID_INPUT");
+    expect(invoked).toBe(false);
+  });
+});
 
 describe("private export composition — metadata only, no delivery", () => {
   const older = { ...source, version: 2 };

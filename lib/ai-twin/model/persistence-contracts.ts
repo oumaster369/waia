@@ -80,6 +80,34 @@ export type KnowledgeNeed = {
   evidence: VersionedModelReference[];
   state: "open" | "skipped" | "resolved" | "withdrawn";
 };
+type ReflectionBase = {
+  ref: VersionedModelReference;
+  purpose: string;
+  createdAt: string;
+  retentionPolicyId: string;
+  context: string;
+  uncertainty: string;
+  evidence: VersionedModelReference[];
+};
+export type Reflection = ReflectionBase & { text: string; state: "proposed" };
+export type PredictionExperiment = ReflectionBase & {
+  state: "proposed";
+  mode: "expectation" | "experiment_proposal";
+  expectedOutcome: string;
+  windowStartsAt: string;
+  windowEndsAt: string;
+  reversibilityNotes: string;
+  stopCondition: string;
+  experimentConsent: null;
+  actionAuthority: "none";
+};
+/** A Human report is attributed testimony, not a verified outcome or calibration. */
+export type OutcomeReceipt = ReflectionBase & {
+  prediction: VersionedModelReference;
+  state: "unknown" | "declined" | "human_reported";
+  observedOutcome: string | null;
+  observedAt: string | null;
+};
 export type PrivateExportManifest = {
   scope: ModelScope;
   requestId: string;
@@ -490,5 +518,123 @@ export function validateKnowledgeNeed(
   requireValue([value.reason, value.proposedObservation].every(nonempty));
   candidateEvidence(value.evidence, value.ref, ctx, eligible);
   requireValue(value.state !== "resolved" || value.evidence.length > 0, "EVIDENCE_UNAVAILABLE");
+  return freeze(structuredClone(value));
+}
+
+const reflectionBaseKeys = [
+  "ref",
+  "purpose",
+  "createdAt",
+  "retentionPolicyId",
+  "context",
+  "uncertainty",
+  "evidence",
+  "state",
+];
+function reflectionEvidence(
+  value: ReflectionBase,
+  ctx: CandidateValidationContext,
+  eligible: Set<string>,
+) {
+  requireValue([value.context, value.uncertainty].every(nonempty));
+  candidateEvidence(value.evidence, value.ref, ctx, eligible);
+}
+
+/** Shape/current lineage only; text is not endorsed, safe or psychologically true. */
+export function validateReflection(input: unknown, ctx: CandidateValidationContext): Reflection {
+  const eligible = candidateBase(input, ctx, [...reflectionBaseKeys, "text"]);
+  const value = input as Reflection;
+  requireValue(
+    value.ref.kind === "reflection" && value.state === "proposed" && nonempty(value.text),
+  );
+  reflectionEvidence(value, ctx, eligible);
+  requireValue(value.evidence.length > 0, "EVIDENCE_UNAVAILABLE");
+  return freeze(structuredClone(value));
+}
+
+/** Initial proposal only. Notes and stop conditions do not establish safety,
+ * reversibility or consent. No executor or calibration may act on this alone. */
+export function validatePredictionExperiment(
+  input: unknown,
+  ctx: CandidateValidationContext,
+): PredictionExperiment {
+  const eligible = candidateBase(input, ctx, [
+    ...reflectionBaseKeys,
+    "mode",
+    "expectedOutcome",
+    "windowStartsAt",
+    "windowEndsAt",
+    "reversibilityNotes",
+    "stopCondition",
+    "experimentConsent",
+    "actionAuthority",
+  ]);
+  const value = input as PredictionExperiment;
+  requireValue(value.ref.kind === "prediction" && value.state === "proposed");
+  requireValue(["expectation", "experiment_proposal"].includes(value.mode));
+  requireValue(value.experimentConsent === null && value.actionAuthority === "none");
+  requireValue(
+    [value.expectedOutcome, value.reversibilityNotes, value.stopCondition].every(nonempty),
+  );
+  requireValue(
+    Number.isFinite(time(value.windowStartsAt)) &&
+      Number.isFinite(time(value.windowEndsAt)) &&
+      time(value.createdAt) <= time(value.windowStartsAt) &&
+      time(value.windowStartsAt) < time(value.windowEndsAt),
+  );
+  reflectionEvidence(value, ctx, eligible);
+  requireValue(value.evidence.length > 0, "EVIDENCE_UNAVAILABLE");
+  return freeze(structuredClone(value));
+}
+
+/** The adapter must supply the current authorized stored prediction and authenticated
+ * Human. This pure validator cannot prove their origin or evidence independence.
+ * Ordinary modelling/advice consent is not an experiment or an observed result. */
+export function validateOutcomeReceipt(
+  input: unknown,
+  ctx: CandidateValidationContext,
+  currentPrediction: unknown,
+  actor: { kind: string; subjectId: string },
+): OutcomeReceipt {
+  assertModelJsonData(actor);
+  keys(actor, ["kind", "subjectId"]);
+  const eligible = candidateBase(input, ctx, [
+    ...reflectionBaseKeys,
+    "prediction",
+    "observedOutcome",
+    "observedAt",
+  ]);
+  requireValue(actor.kind === "human" && actor.subjectId === ctx.scope.subjectId, "HUMAN_REQUIRED");
+  const value = input as OutcomeReceipt;
+  requireValue(value.ref.kind === "outcome");
+  requireValue(["unknown", "declined", "human_reported"].includes(value.state));
+  reference(value.prediction, ctx.scope);
+  const prediction = validatePredictionExperiment(currentPrediction, ctx);
+  requireValue(
+    modelReferenceKey(value.prediction) === modelReferenceKey(prediction.ref),
+    "PREDICTION_MISMATCH",
+  );
+  requireValue(time(prediction.createdAt) <= time(value.createdAt));
+  requireValue(
+    !prediction.evidence.some((ref) => ref.kind === value.ref.kind && ref.id === value.ref.id),
+    "CIRCULAR_OUTCOME",
+  );
+  reflectionEvidence(value, ctx, eligible);
+  if (value.state === "human_reported") {
+    requireValue(nonempty(value.observedOutcome) && Number.isFinite(time(value.observedAt)));
+    requireValue(
+      time(prediction.createdAt) <= time(value.observedAt) &&
+        time(value.observedAt) <= time(value.createdAt),
+    );
+    requireValue(value.evidence.length > 0, "EVIDENCE_UNAVAILABLE");
+    requireValue(
+      value.evidence.every((ref) => ref.kind === "observation"),
+      "OBSERVATION_REQUIRED",
+    );
+  } else {
+    requireValue(
+      value.observedOutcome === null && value.observedAt === null && value.evidence.length === 0,
+    );
+  }
   return freeze(structuredClone(value));
 }
