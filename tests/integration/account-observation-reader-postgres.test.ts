@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import postgres, { type Sql } from "postgres";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
+import { createPostgresObservationAssignmentSource } from "@/lib/trader/account-observation/postgres-assignments";
+import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
 import type { AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
 
 // Explicit synthetic loopback-only target; never use production environment URLs.
@@ -88,6 +90,34 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
     expect(await reader.resolveActiveBinding(scope(b))).toEqual(b);
     expect(await reader.resolveActiveBinding(b)).toEqual(b);
     expect(await reader.readLatest(b)).toEqual(observation);
+  });
+  it("checks exact current assignment and configured symbols through the restricted reader", async () => {
+    const { b } = await seed();
+    expect(await reader.isCurrentAssignment(b, ["BTCUSDT"])).toBe(true);
+    expect(await reader.isCurrentAssignment(b, ["ETHUSDT"])).toBe(false);
+    expect(await reader.isCurrentAssignment({ ...b, organizationId: randomUUID() }, ["BTCUSDT"])).toBe(false);
+    expect(await reader.isCurrentAssignment({ ...b, credentialRevision: "2" }, ["BTCUSDT"])).toBe(false);
+    expect(await reader.isCurrentAssignment({ ...b, configurationRevision: "wrong" }, ["BTCUSDT"])).toBe(false);
+    await admin`UPDATE public.exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
+    expect(await reader.isCurrentAssignment(b, ["BTCUSDT"])).toBe(false);
+  });
+  it("DB-backed assignment source refuses rotation, symbol drift and revoke without adopting them", async () => {
+    const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
+      maxBackoffMs: 8000, readTimeoutMs: 100, leaseTtlMs: 1000 });
+    const { b } = await seed(); const binding = { ...b, configurationRevision: config.revision };
+    await admin`UPDATE public.trader_account_collection_state SET configuration_revision=${config.revision} WHERE credential_id=${b.credentialId}`;
+    const source = createPostgresObservationAssignmentSource(client, [{ binding, config }]);
+    const signal = new AbortController().signal;
+    expect(await source.loadAssignments(signal)).toEqual([{ binding, config }]);
+    expect(await source.authorizeOpen(binding, signal)).toBe(true);
+    await admin`UPDATE public.trader_account_collection_state SET symbols='["ETHUSDT"]' WHERE credential_id=${b.credentialId}`;
+    expect(await source.authorizeOpen(binding, signal)).toBe(false);
+    await admin`UPDATE public.trader_account_collection_state SET symbols='["BTCUSDT"]' WHERE credential_id=${b.credentialId}`;
+    await admin`UPDATE public.exchange_credentials SET permission_metadata='synthetic-revision-change' WHERE id=${b.credentialId}`;
+    expect(await source.loadAssignments(signal)).toEqual([]);
+    expect(await source.authorizeOpen({ ...binding, credentialRevision: "2" }, signal)).toBe(false);
+    await admin`UPDATE public.exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
+    expect(await source.loadAssignments(signal)).toEqual([]);
   });
   it("dedicated LOGIN is NOINHERIT, nonprivileged and cannot become collector", async () => {
     const roles = await client`SELECT current_user, rolsuper, rolbypassrls, rolinherit, rolcreaterole

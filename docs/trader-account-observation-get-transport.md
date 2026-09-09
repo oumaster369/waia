@@ -95,3 +95,35 @@ The trusted implementations of `authorizeOpen`, `openCredential`,
 `verifyReadAdmission` and account assignment loading still require integration
 and separate production acceptance. They are not replaced by test callbacks in
 any production startup; no new process starts on import.
+
+## DB-backed assignment filtering
+
+`createPostgresObservationAssignmentSource(sql, configured)` now supplies concrete
+`loadAssignments` and `authorizeOpen` functions. The input is an explicitly
+authorized list of at most 20 exact bindings/configurations, not browser input or
+automatic discovery. It is copied and validated, including configuration digest
+and duplicate-account rejection. Every load/open check uses the dedicated
+read-only PostgreSQL role and a scoped joined query of current credential and
+collection metadata; no key columns, new grants or migrations are needed.
+
+The database check requires the stored active credential revision, organization,
+account, configuration revision and exact symbol list to match. Revoked, missing
+or changed assignments are filtered out. A new revision is never adopted without
+replacing the explicitly authorized input list. Database errors are failures,
+not permission to use a cached list. Cancelled results are discarded; concurrent
+loads are refused until the outstanding query settles. Existing SQL timeouts and
+the caller's bounded dedicated pool limit in-flight work. This is a per-account
+snapshot; opener/transport/commit fences remain necessary after loading.
+
+This closes read-only database filtering, not operator provisioning or venue
+admission. A collection row alone does not authorize decrypting a key or accessing
+an exchange. Supplying the authorized list, the approved credential store adapter
+and exact-key permission verification remain production integration obligations.
+
+Validation for this slice: 10 assignment unit checks, 5 runtime checks and 6
+Reality graph checks PASS; dedicated-reader PostgreSQL17 suite 11/11 PASS,
+including new exact-assignment/rotation/symbol-drift cases. Typecheck, scoped
+lint and diff checks PASS. Independent bounded review found no proven P1/P2.
+The database validation retained real restricted roles and RLS following the
+Supabase security guidance; no privileged fallback or permission expansion was
+added. Production data, secrets, calculations and deployments were not touched.
