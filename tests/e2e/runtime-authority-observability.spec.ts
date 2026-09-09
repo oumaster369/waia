@@ -37,5 +37,9 @@ test("Admin drill-down remains separately authorized and renders HALT read-only"
   await page.goto("/admin/runtime-authority");
   await expect(page.getByText("HALT", { exact: true })).toBeVisible();
   await expect(page.getByText("RUNTIME_CONTROL_LEASE_INVALID")).toBeVisible();
-  await expect(page.getByRole("button")).toHaveCount(0);
+  // The shared shell permits session exit, never runtime/capital mutations.
+  await expect(page.getByRole("region", { name: "Runtime Authority", exact: true })
+    .getByRole("button", { includeHidden: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { includeHidden: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 });

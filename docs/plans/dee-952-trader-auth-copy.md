@@ -17,12 +17,12 @@ state:
   currentWorkPackage: WP-INTEGRATION-VALIDATION
   completedWorkPackages: [WP-COPY, WP-SESSION-UI, WP-VALIDATION]
   remainingWorkPackages: [WP-PR]
-  prNumber: null
-  prUrl: null
+  prNumber: 567
+  prUrl: "https://github.com/oumaster369/waia/pull/567"
   lastValidatedGitSha: null
   lastValidationAt: "2026-09-09"
   blockedReason: null
-  nextAction: "Complete synchronized logout review and browser validation, then publication gate; no merge or deployment."
+  nextAction: "Publish scoped E2E correction and verify exact-head CI; no merge or deployment."
 provenance:
   createdFrom: chat
   humanApproval: "User 2026-09-06 requests visual/copy-only replacement of Twin associations on trader.waia.life; preserve form."
@@ -78,3 +78,19 @@ reuse of that same build passed in3.3s, without another redundant build.
 Canonical validation passes152 documents,8 validator regressions and3 release
 identity contracts. Independent read-only diff review found no P1/P2 within this
 logout scope; it does not certify deployed Supabase sessions or complete Trader.
+
+## PR567 CI triage — 2026-09-09
+
+Published head83b293e7 passed full GitHub unit, build, lint, typecheck and the
+other reported gates, except E2E (59/60 passed). The same failure reproduced
+locally: runtime-authority-observability.spec.ts asserted zero buttons across
+the entire admin shell, now containing the explicitly requested Sign out button.
+The browser snapshot confirms it is the only button, outside Runtime Authority.
+Replace this obsolete whole-shell assumption with zero buttons (including hidden)
+in the named Runtime Authority region, exactly one across the page, and a visible
+exact Sign out control. HALT, reasons, authentication and org-rejection assertions
+are unchanged. This preserves the no-runtime-mutation acceptance criterion.
+No application, session, scientific or deployment code changed in this fix.
+The full local browser suite passes60/60 with fresh production build and isolated
+SQLite; changed-file lint, typecheck and diff-check pass. Local success is not
+GitHub exact-new-head PASS. No merge or production deployment.
