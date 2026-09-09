@@ -6,7 +6,7 @@ import { createPostgresObservationRepository } from "@/lib/trader/account-observ
 import { createAccountObservationService } from "@/lib/trader/account-observation/service";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import { createObservationConfiguration, createPostgresAccountObservationRuntime } from "@/lib/trader/account-observation/runtime";
-import { createHtxAccountObservationReader } from "@/lib/trader/account-observation/htx-reader";
+import { openHtxObservationReader } from "@/lib/trader/account-observation/htx-reader-opener";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "@/lib/trader/account-observation/read-handler";
 import type { AccountObservation, ObservationBinding, ObservationLease } from "@/lib/trader/account-observation/types";
 
@@ -76,26 +76,35 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     const b = { ...await seed("123456"), configurationRevision: config.revision };
     await admin`UPDATE trader_account_collection_state SET configuration_revision=${config.revision}
       WHERE credential_id=${b.credentialId}`;
-    let reads = 0; let commits = 0;
+    let reads = 0; let commits = 0; let releasedHandles = 0;
     const stop = new AbortController();
-    // Real adapter/service/repository composition; raw HTX responses are mocked, never signed or sent.
-    const openReader = async () => createHtxAccountObservationReader({ clock: accountObservationClock,
-      transport: { binding: b, dispose() {}, async signedGet(request) {
+    // Real opener/signing/reader/service/repository composition. Only synthetic
+    // keys and in-memory HTTP responses; admission is a fixture, not production proof.
+    const openReader = (scope: ObservationBinding, signal: AbortSignal) => openHtxObservationReader({
+      clock: accountObservationClock, host: "api.huobi.pro", authorizeOpen: async () => true,
+      verifyReadAdmission: async () => true,
+      openCredential: async () => ({ binding: scope, apiKey: "synthetic-key", apiSecret: "synthetic-secret",
+        dispose() { releasedHandles++; } }),
+      async fetchImpl(url, init) {
+        expect(init?.method).toBe("GET"); expect(init?.redirect).toBe("error");
+        const request = new URL(String(url));
+        expect(request.origin).toBe("https://api.huobi.pro");
+        expect(request.searchParams.get("Signature")).toBeTruthy();
         let data: unknown = [];
-        if (request.path.endsWith("/balance")) {
+        if (request.pathname.endsWith("/balance")) {
           reads++; data = { id: 123456, type: "spot", state: "working",
             list: [{ currency: "usdt", type: "trade", balance: "42" }, { currency: "usdt", type: "frozen", balance: "0" }] };
         }
-        return { binding: b, httpStatus: 200, body: JSON.stringify({ status: "ok", data }) };
-      } } }, { binding: b, symbols: config.symbols, readTimeoutMs: config.readTimeoutMs,
-      pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 });
+        return new Response(JSON.stringify({ status: "ok", data }));
+      } }, { binding: scope, symbols: config.symbols, readTimeoutMs: config.readTimeoutMs,
+      pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 }, signal);
     const safety = setTimeout(() => stop.abort(), 10000);
     try {
       await createPostgresAccountObservationRuntime({ sql: client, loadAssignments: async () => [{ binding: b, config }],
         openReader, report(event) { if (event === "COLLECTION_COMMITTED" && ++commits === 2) stop.abort(); },
         ownerId: "local-recurring-proof", iterationTimeoutMs: 5000 }).run(stop.signal);
     } finally { clearTimeout(safety); }
-    expect(commits).toBe(2); expect(reads).toBe(2);
+    expect(commits).toBe(2); expect(reads).toBe(2); expect(releasedHandles).toBe(2);
     const latest = await repo.readLatest(b);
     expect(latest).toMatchObject({ status: "PARTIAL", holdings: [{ asset: "USDT", total: "42" }] });
     expect((await admin`SELECT count(*)::int AS n FROM trader_account_observations WHERE credential_id=${b.credentialId}`)[0].n).toBe(2);

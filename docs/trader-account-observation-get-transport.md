@@ -62,3 +62,36 @@ Protocol reference verified 2026-09-09:
 [official HTX spot authentication](https://huobiapi.github.io/docs/spot/v1/en/#authentication).
 HTTP method, lowercase host, path and sorted URL-encoded parameters form the signature;
 these tests use synthetic keys, not the user's credentials.
+
+## Local runtime opener composition
+
+`htx-reader-opener.ts` connects the runtime's `openReader(binding, signal)` port
+to this transport and the HTX reader. It checks a separately supplied open
+authorization before key access, validates all five returned binding fields and
+checks the digest of the actual key against current read admission before
+constructing the transport. Each subsequent request retains transport admission
+checks. No existing broad trading connector or permissive metadata parser is used.
+
+The OPEN deadline covers authorization, key adapter and final admission. Timeout
+or cancellation prevents use of a late key and releases its handle once. On
+successful return, OPEN cancellation is detached: the domain service aborts its
+open timer immediately, while each later read has its own signal. Reader disposal
+closes the transport and credential handle; errors are classified without raw
+adapter messages. This does not promise erasure of JavaScript strings.
+
+17 local tests cover this composition, including a domain-service commit with
+mocked storage and raw HTTP responses. Combined opener/transport/reader/runtime/
+Reality checks: 135/135 PASS. Independent read-only review found no proven P1/P2
+within the opener scope. These are not production credentials or admission proof.
+
+The recurring PostgreSQL17 integration now uses this opener plus the real signer,
+transport and reader, with synthetic keys and an in-memory HTTP adapter. It proves
+two persisted cycles, handle release, stored cadence after runtime restart and
+revoked-binding refusal. The affected PostgreSQL suite passes 19/19 tests under
+the existing constrained collector role. Admission callbacks remain explicit
+fixtures; no assertion of real HTX or production-key verification follows.
+
+The trusted implementations of `authorizeOpen`, `openCredential`,
+`verifyReadAdmission` and account assignment loading still require integration
+and separate production acceptance. They are not replaced by test callbacks in
+any production startup; no new process starts on import.
