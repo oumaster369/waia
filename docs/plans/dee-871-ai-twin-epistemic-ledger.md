@@ -188,4 +188,16 @@ DEE-871 remains **In Progress**, WP-1/2/3 incomplete and downstream dependencies
 
 ## Validation matrix
 
+### 2026-09-09 continuation admission — historical-source quarantine planner
+
+Human requested continued implementation and particular care for a clear, usable dashboard. The new UI must explain source versus interpretation, correction and permissions without inventing server authority; DEE-879/881 remain the UI owners and are not activated by this storage preparation. Current verified main is `90de233a192f9b97fa2d6a1ab0c3c1ba5a72df67`; own clean unpublished branch was rebased onto it. Open PR567 is Trader/shared-auth work and remains outside this task's mutation scope.
+
+Continue the already admitted historical-consent preparation with a **pure metadata-only quarantine planner**, not a database import or user-facing claim of completed migration. Additional owned surfaces admitted before implementation: `lib/ai-twin/model/legacy-quarantine.ts` and `tests/unit/ai-twin-model-legacy-quarantine.test.ts`. Existing shared schema, journal, authentication, runtime routes, sources mirror, UI and Trader files remain unchanged. No database, containers or provider calls are needed for this step.
+
+Input is a trusted adapter's scoped inventory of exact legacy source identities/revisions, original creation timestamps and source kinds (dialogue, Diary, readiness snapshot, prediction, verification, embedding). Never accept raw text, profile values, vectors, credentials, consent flags or requested authority. Validate plain JSON and exact fields before access; reject malformed, foreign-scope and duplicate identities atomically. Preserve original timestamps including unknown time; inventory must not restart a retention clock. No fingerprint of private content is created.
+
+Every valid item remains excluded from the new model. Direct dialogue/Diary sources need current source/purpose/retention review and explicit authorized selection before any separately implemented import. Legacy readiness is not new Formation evidence; legacy predictions/verifications need separately reviewed provenance and cannot be silently promoted to a calibrated loop; embeddings are non-authoritative indexes. This planner never grants consent, imports records, adjusts Formation, creates an archive, deletes legacy data or claims quarantine was applied to storage. Quarantine planning itself is not a retention exception; future runtime storage/rights review must establish any inventory lifetime.
+
+Acceptance for this bounded substep: deterministic immutable scope-bound manifest with explicit `plan_only`, no model-use/import/formation/archival/disclosure authority and item-level reason codes; synthetic tests for every kind, foreign scope, duplicate and delimiter-collision identities, malformed time, untrusted extra fields/getters/cycles/sparse arrays, no TTL reset and no automatic permission from legacy values. Red test first, scoped lint/typecheck, cumulative model unit tests, canon validation and independent read-only review. The existing 13 PostgreSQL tests remain Sep8 evidence and are not counted as newly executed here. Full DEE-871 and all three work packages remain incomplete.
+
 `pnpm lint`; `pnpm typecheck`; focused unit/integration/isolation tests; `pnpm validate:canon`; PR governance.
