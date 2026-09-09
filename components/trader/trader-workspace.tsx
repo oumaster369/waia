@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
 import { TraderSignOut } from "@/components/trader/trader-sign-out";
+import { ConnectedAccountObservationPanel } from "@/components/trader/account-observation/connected-account-observation-panel";
 import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
 import type { BalanceSnapshotDto } from "@/lib/trader/balances/types";
 import type { PositionSnapshotDto } from "@/lib/trader/positions/types";
@@ -564,12 +565,23 @@ function ExchangeTraderWorkspace() {
               <CredentialStatus credential={activeCredential} />
             </WaiaSurface>
           </section>
+          <ConnectedAccountObservationPanel
+            key={`${activeCredential.id}:${activeCredential.status}:${activeCredential.updatedAt}`}
+            target={activeCredential.status === "active" ? {
+              credentialId: activeCredential.id,
+              exchangeAccountId: activeCredential.exchangeAccountId,
+            } : null}
+          />
           <section aria-labelledby="trader-portfolio-heading" className="space-y-4">
             <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">Portfolio</p>
+              <p className="text-muted-foreground text-xs tracking-wide uppercase">Separate diagnostics</p>
               <h2 id="trader-portfolio-heading" className="mt-1 text-xl font-semibold">
-                Balances, positions and activity
+                Manually collected diagnostic snapshots
               </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                These legacy balance, position and activity snapshots are collected separately.
+                They are not the shared current account observation above and may have different timestamps.
+              </p>
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
               <BalancesPanel
