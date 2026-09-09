@@ -23,6 +23,10 @@ import {
   assertModelJsonData,
   modelReferenceKey,
   validateWorkingHypothesis,
+  validateDynamicRelation,
+  validateKnowledgeNeed,
+  type DynamicRelation,
+  type KnowledgeNeed,
   type WorkingHypothesis,
   type VersionedModelReference,
 } from "./persistence-contracts";
@@ -38,9 +42,18 @@ type PrivateSource = {
   origin: "human_declaration";
 };
 type PrivateExperience = ReturnType<typeof composePrivateExperience>;
+type GroundedKind = "relation" | "knowledge_need";
+type GroundedCandidate = DynamicRelation | KnowledgeNeed;
 type ArchiveAuthority = { record: RetentionRecord; authorization: RetentionAuthorization };
 type ObjectRow = {
-  kind: "observation" | "claim" | "correction" | "hypothesis" | "experience" | "private_source";
+  kind:
+    | "observation"
+    | "claim"
+    | "correction"
+    | "hypothesis"
+    | "experience"
+    | "private_source"
+    | GroundedKind;
   id: string;
   version: number;
   payload:
@@ -48,6 +61,7 @@ type ObjectRow = {
     | HumanClaimVersion
     | HumanCorrectionRecord
     | WorkingHypothesis
+    | GroundedCandidate
     | PrivateSource
     | PrivateExperience;
   recorded_at: Date;
@@ -69,6 +83,16 @@ function sameScope(a: Context["scope"], b: Context["scope"]): boolean {
 }
 function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, child]) => [key, canonicalJson(child)]),
+    );
+  return value;
 }
 function context(ctx: Context, humanOnly = false): void {
   createModelLedger(ctx.scope);
@@ -239,6 +263,67 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       ctx.now,
     ).purposeUseAllowed;
   }
+  function groundedValue(
+    kind: GroundedKind,
+    input: unknown,
+    loaded: Awaited<ReturnType<typeof load>>,
+  ): GroundedCandidate {
+    requireValue(kind === "relation" || kind === "knowledge_need");
+    const validation = {
+      scope: loaded.ctx.scope,
+      purpose: loaded.ctx.purpose,
+      retentionPolicyId: TWIN_RETENTION_POLICY,
+      eligibleSources: eligibleReferences(loaded),
+      now: loaded.ctx.now,
+    };
+    const value =
+      kind === "relation"
+        ? validateDynamicRelation(input, validation)
+        : validateKnowledgeNeed(input, validation);
+    requireValue(
+      value.ref.version === 1 &&
+        ("status" in value ? value.status === "proposed" : value.state === "open"),
+      "BINDING_UNAVAILABLE",
+    );
+    // Pure contracts allow open unknowns; persistence without any current source
+    // still requires a future explicit purpose authority, not an inferred grant.
+    requireValue(
+      ("endpoints" in value ? value.endpoints : value.evidence).length > 0,
+      "EVIDENCE_UNAVAILABLE",
+    );
+    return value;
+  }
+  function groundedPolicy(value: GroundedCandidate, ctx: Context): boolean {
+    if ("validUntil" in value && value.validUntil !== null && ctx.now >= value.validUntil)
+      return false;
+    // Fixture-only PROPOSED mapping: not a ratified retention classification for
+    // initial relations/needs. Current source eligibility is always checked first
+    // and cannot be prolonged by this model policy or by rephrasing/retry.
+    const policy = planRetention(
+      {
+        scope: ctx.scope,
+        id: value.ref.id,
+        revision: value.ref.version,
+        kind: "model",
+        createdAt: value.createdAt,
+        evidenceEligible: true,
+        erasureRequestedAt: null,
+      },
+      {
+        scope: ctx.scope,
+        recordId: value.ref.id,
+        recordRevision: value.ref.version,
+        purpose: "modelling",
+        approvedBy: "reviewed_policy",
+        validFrom: value.createdAt,
+        validUntil: null,
+        revokedAt: null,
+        basisReference: "fixture-only-current-source-authority",
+      },
+      ctx.now,
+    );
+    return policy.purposeUseAllowed && !policy.reviewDue;
+  }
   function archiveContext(ctx: Context) {
     context(ctx, true);
     requireValue(ctx.purpose === "private_archive", "ARCHIVE_PURPOSE_REQUIRED");
@@ -336,6 +421,69 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
     });
   }
   return {
+    async proposeGroundedCandidate(
+      ctx: Context,
+      kind: GroundedKind,
+      input: unknown,
+      requestId: string,
+    ): Promise<void> {
+      context(ctx);
+      requireValue(ctx.actor.kind === "model", "MODEL_REQUIRED");
+      requireValue(nonempty(requestId));
+      await sql.begin(async (tx) => {
+        await lock(tx, ctx);
+        const loaded = await load(tx, ctx);
+        requireValue(
+          !loaded.state.lastRecordedAt || ctx.now >= loaded.state.lastRecordedAt,
+          "STALE_CLOCK",
+        );
+        const value = groundedValue(kind, input, loaded);
+        requireValue(groundedPolicy(value, ctx), "RETENTION_UNAVAILABLE");
+        const fingerprint = createHash("sha256")
+          .update(JSON.stringify(["initial-grounded-candidate", kind, canonicalJson(value)]))
+          .digest("hex");
+        const prior = loaded.state.receipts.find((r) => r.requestId === requestId);
+        if (prior) {
+          requireValue(prior.fingerprint === fingerprint, "REPLAY_CONFLICT");
+          return;
+        }
+        requireValue(value.createdAt === ctx.now, "BINDING_UNAVAILABLE");
+        await insert(tx, ctx, kind, value.ref.id, 1, value);
+        for (const source of "endpoints" in value ? value.endpoints : value.evidence)
+          await link(
+            tx,
+            ctx,
+            source.kind,
+            source.id,
+            source.version,
+            kind,
+            value.ref.id,
+            1,
+            "contextualizes",
+          );
+        await tx`insert into twin_model_fixture.receipt values (${ctx.scope.organizationId},${ctx.scope.subjectId},${ctx.purpose},${requestId},${fingerprint},${kind},${value.ref.id},1)`;
+      });
+    },
+    async groundedCandidates(ctx: Context): Promise<GroundedCandidate[]> {
+      context(ctx);
+      return sql.begin(async (tx) => {
+        await lock(tx, ctx);
+        const loaded = await load(tx, ctx);
+        const result: GroundedCandidate[] = [];
+        for (const row of loaded.rows) {
+          if (row.kind !== "relation" && row.kind !== "knowledge_need") continue;
+          try {
+            const value = groundedValue(row.kind, row.payload, loaded);
+            if (groundedPolicy(value, ctx)) result.push(value);
+          } catch (error) {
+            // Rights/expiry exclude current use. Corrupt payloads and operational
+            // failures are not silently reported as an empty/healthy model.
+            if (!(error instanceof Error) || error.message !== "EVIDENCE_UNAVAILABLE") throw error;
+          }
+        }
+        return result;
+      });
+    },
     async savePrivateSource(ctx: Context, source: PrivateSource): Promise<void> {
       archiveContext(ctx);
       assertModelJsonData(source);
@@ -712,7 +860,14 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
             affected.every(
               (row) =>
                 row.purpose === ctx.purpose &&
-                ["observation", "claim", "correction", "hypothesis"].includes(row.kind),
+                [
+                  "observation",
+                  "claim",
+                  "correction",
+                  "hypothesis",
+                  "relation",
+                  "knowledge_need",
+                ].includes(row.kind),
             ),
             "CROSS_PURPOSE_REVIEW_REQUIRED",
           );

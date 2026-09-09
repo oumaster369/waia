@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createIsolatedTwinRepository } from "@/lib/ai-twin/model/postgres-repository";
-import type { WorkingHypothesis } from "@/lib/ai-twin/model/persistence-contracts";
+import type {
+  WorkingHypothesis,
+  DynamicRelation,
+  KnowledgeNeed,
+} from "@/lib/ai-twin/model/persistence-contracts";
 import { experienceFingerprint, type ExperienceDraft } from "@/lib/ai-twin/model/lifecycle";
 import type {
   ModelContext,
@@ -339,6 +343,219 @@ describe.skipIf(!enabled)(
         )[0].n,
       ).toBe(0);
     });
+    it.each(["relation", "knowledge_need"] as const)(
+      "stores grounded %s with current evidence and rights closure",
+      async (kind) => {
+        expect(typeof repo.proposeGroundedCandidate).toBe("function");
+        const ownScope = { organizationId: `grounded-${kind}`, subjectId: "synthetic-human" };
+        const h: Context = {
+          ...human,
+          scope: ownScope,
+          actor: { kind: "human", subjectId: ownScope.subjectId },
+        };
+        const m: Context = { ...h, actor: { ...h.actor, kind: "model" } };
+        const ownGrant = { ...grant, scope: ownScope };
+        await owner`insert into twin_model_fixture.scope_lock values (${ownScope.organizationId},${ownScope.subjectId})`;
+        await owner`insert into twin_model_fixture.consent values (${ownScope.organizationId},${ownScope.subjectId},${ownGrant.id},1,${owner.json(ownGrant)})`;
+        await repo.apply(h, { ...observe("grounded-source"), scope: ownScope });
+        await repo.apply(m, { ...propose("grounded-source"), scope: ownScope });
+        const evidence = {
+          ...ownScope,
+          kind: "claim" as const,
+          id: "claim-grounded-source",
+          version: 1,
+        };
+        const base = {
+          ref: { ...ownScope, kind, id: "candidate-1", version: 1 },
+          purpose: h.purpose,
+          createdAt: now,
+          retentionPolicyId: grant.retentionPolicyId,
+        };
+        const value: DynamicRelation | KnowledgeNeed =
+          kind === "relation"
+            ? {
+                ...base,
+                kind: "tension",
+                endpoints: [evidence],
+                context: "Synthetic context",
+                uncertainty: "One report only",
+                validFrom: now,
+                validUntil: "2026-09-09T12:00:00.000Z",
+                status: "proposed",
+              }
+            : {
+                ...base,
+                reason: "Missing situational context",
+                proposedObservation: "Optional further context",
+                evidence: [evidence],
+                state: "open",
+              };
+        await expect(repo.proposeGroundedCandidate(h, kind, value, "human-write")).rejects.toThrow(
+          "MODEL_REQUIRED",
+        );
+        await expect(
+          repo.proposeGroundedCandidate(m, "unknown" as never, value, "kind-write"),
+        ).rejects.toThrow("INVALID_INPUT");
+        await expect(
+          repo.proposeGroundedCandidate(
+            m,
+            kind,
+            { ...value, retentionPolicyId: "invented" },
+            "policy-write",
+          ),
+        ).rejects.toThrow("PURPOSE_POLICY_MISMATCH");
+        await expect(
+          repo.proposeGroundedCandidate(m, kind, { ...value, purpose: "other" }, "purpose-write"),
+        ).rejects.toThrow();
+        await expect(
+          repo.proposeGroundedCandidate(
+            m,
+            kind,
+            {
+              ...value,
+              ...(kind === "relation" ? { status: "contested" } : { state: "resolved" }),
+            },
+            "transition-write",
+          ),
+        ).rejects.toThrow("BINDING_UNAVAILABLE");
+        await expect(
+          repo.proposeGroundedCandidate(
+            m,
+            kind,
+            { ...value, ...(kind === "relation" ? { endpoints: [] } : { evidence: [] }) },
+            "empty-write",
+          ),
+        ).rejects.toThrow("EVIDENCE_UNAVAILABLE");
+        await repo.proposeGroundedCandidate(m, kind, value, "candidate-request");
+        // JSON key ordering is not new content and must not make a retry conflict.
+        await repo.proposeGroundedCandidate(
+          m,
+          kind,
+          Object.fromEntries(Object.entries(value).reverse()),
+          "candidate-request",
+        );
+        expect(await reopened.groundedCandidates(h)).toEqual([value]);
+        await expect(
+          repo.proposeGroundedCandidate(
+            m,
+            kind,
+            {
+              ...value,
+              ...(kind === "relation" ? { uncertainty: "Changed" } : { reason: "Changed" }),
+            },
+            "candidate-request",
+          ),
+        ).rejects.toThrow("REPLAY_CONFLICT");
+        for (const field of ["organizationId", "subjectId"] as const) {
+          const foreignScope = { ...ownScope, [field]: "foreign" };
+          const foreign = {
+            ...m,
+            scope: foreignScope,
+            actor: { ...m.actor, subjectId: foreignScope.subjectId },
+          };
+          expect(await reopened.groundedCandidates(foreign)).toEqual([]);
+          await expect(
+            repo.proposeGroundedCandidate(foreign, kind, value, "foreign-write"),
+          ).rejects.toThrow("SCOPE_MISMATCH");
+        }
+        if (kind === "relation") {
+          const ended = { ...m, now: "2026-09-09T12:00:00.000Z" };
+          expect(await reopened.groundedCandidates(ended)).toEqual([]);
+          await expect(
+            repo.proposeGroundedCandidate(ended, kind, value, "candidate-request"),
+          ).rejects.toThrow("RETENTION_UNAVAILABLE");
+        }
+        const expired = { ...m, now: "2026-12-07T12:00:00.000Z" };
+        expect(await reopened.groundedCandidates(expired)).toEqual([]);
+        await expect(
+          repo.proposeGroundedCandidate(expired, kind, value, "candidate-request"),
+        ).rejects.toThrow("EVIDENCE_UNAVAILABLE");
+        // Human correction makes the old exact claim revision ineligible; never rebind silently.
+        await repo.apply(h, { ...correct("grounded-source"), scope: ownScope });
+        expect(await reopened.groundedCandidates(h)).toEqual([]);
+        await expect(
+          repo.proposeGroundedCandidate(m, kind, value, "candidate-request"),
+        ).rejects.toThrow("EVIDENCE_UNAVAILABLE");
+        const currentEvidence = { ...evidence, version: 2 };
+        const revised = {
+          ...value,
+          ref: { ...value.ref, id: "candidate-2" },
+          ...(kind === "relation"
+            ? { endpoints: [currentEvidence] }
+            : { evidence: [currentEvidence] }),
+        };
+        await repo.proposeGroundedCandidate(m, kind, revised, "current-request");
+        expect(await reopened.groundedCandidates(h)).toHaveLength(1);
+        await repo.withdraw(h, "grounded-source", "grounded-rights", "withdraw_modelling");
+        expect(await reopened.groundedCandidates(h)).toEqual([]);
+        await expect(
+          repo.proposeGroundedCandidate(m, kind, revised, "current-request"),
+        ).rejects.toThrow("EVIDENCE_UNAVAILABLE");
+        await owner.unsafe(
+          "CREATE FUNCTION twin_model_fixture.fail_grounded_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.id='candidate-2' THEN RAISE EXCEPTION 'grounded_delete_failure'; END IF; RETURN OLD; END $$; CREATE TRIGGER fail_grounded_delete BEFORE DELETE ON twin_model_fixture.object FOR EACH ROW EXECUTE FUNCTION twin_model_fixture.fail_grounded_delete();",
+        );
+        try {
+          await expect(repo.erase(h, "grounded-rights")).rejects.toThrow("grounded_delete_failure");
+          expect(await reopened.groundedCandidates(h)).toEqual([]);
+          expect(
+            (
+              await owner`select state from twin_model_fixture.rights_request where organization_id=${ownScope.organizationId} and request_id='grounded-rights'`
+            )[0].state,
+          ).toBe("restricted");
+        } finally {
+          await owner.unsafe(
+            "DROP TRIGGER fail_grounded_delete ON twin_model_fixture.object; DROP FUNCTION twin_model_fixture.fail_grounded_delete();",
+          );
+        }
+        await repo.erase(h, "grounded-rights");
+        const [counts] =
+          await owner`select (select count(*)::int from twin_model_fixture.object where organization_id=${ownScope.organizationId} and kind=${kind}) as objects, (select count(*)::int from twin_model_fixture.link where organization_id=${ownScope.organizationId}) as links, (select count(*)::int from twin_model_fixture.receipt where organization_id=${ownScope.organizationId}) as receipts`;
+        expect(counts).toEqual({ objects: 0, links: 0, receipts: 0 });
+      },
+    );
+
+    it("rejects grounded clock rollback and rechecks newly revoked consent before retry", async () => {
+      const s = { organizationId: "grounded-clock", subjectId: "synthetic-human" };
+      const h: Context = { ...human, scope: s, actor: { kind: "human", subjectId: s.subjectId } };
+      const later = "2026-09-08T12:00:01.000Z";
+      const m: Context = { ...h, now: later, actor: { ...h.actor, kind: "model" } };
+      const g = { ...grant, scope: s };
+      await owner`insert into twin_model_fixture.scope_lock values (${s.organizationId},${s.subjectId})`;
+      await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},1,${owner.json(g)})`;
+      await repo.apply(h, { ...observe("clock-source"), scope: s });
+      const value: KnowledgeNeed = {
+        ref: { ...s, kind: "knowledge_need", id: "clock-need", version: 1 },
+        purpose: h.purpose,
+        retentionPolicyId: g.retentionPolicyId,
+        createdAt: later,
+        reason: "Synthetic context gap",
+        proposedObservation: "Optional question",
+        evidence: [{ ...s, kind: "observation", id: "clock-source", version: 1 }],
+        state: "open",
+      };
+      await repo.proposeGroundedCandidate(m, "knowledge_need", value, "clock-request");
+      expect(await reopened.groundedCandidates(m)).toEqual([value]);
+      await expect(
+        repo.proposeGroundedCandidate(
+          { ...m, now },
+          "knowledge_need",
+          { ...value, ref: { ...value.ref, id: "clock-new" }, createdAt: now },
+          "clock-backwards",
+        ),
+      ).rejects.toThrow("STALE_CLOCK");
+      expect(
+        (
+          await owner`select count(*)::int as n from twin_model_fixture.object where organization_id=${s.organizationId} and id='clock-new'`
+        )[0].n,
+      ).toBe(0);
+      const revoked = { ...g, version: 2, revokedAt: later };
+      await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},2,${owner.json(revoked)})`;
+      expect(await reopened.groundedCandidates(m)).toEqual([]);
+      await expect(
+        repo.proposeGroundedCandidate(m, "knowledge_need", value, "clock-request"),
+      ).rejects.toThrow("EVIDENCE_UNAVAILABLE");
+    });
+
     it("serializes a newer consent-version revocation with a concurrent writer", async () => {
       const isolated = { organizationId: "consent-race-org", subjectId: "consent-race-human" };
       const ctx = {

@@ -12,7 +12,7 @@ CREATE TABLE twin_model_fixture.consent (
 );
 CREATE TABLE twin_model_fixture.object (
   organization_id text NOT NULL, subject_id text NOT NULL, purpose text NOT NULL,
-  kind text NOT NULL CHECK (kind IN ('observation','claim','correction','hypothesis','experience','private_source')),
+  kind text NOT NULL CHECK (kind IN ('observation','claim','correction','hypothesis','experience','private_source','relation','knowledge_need')),
   id text NOT NULL, version integer NOT NULL CHECK (version > 0),
   recorded_at timestamptz NOT NULL, payload jsonb NOT NULL,
   PRIMARY KEY (organization_id, subject_id, kind, id, version),
