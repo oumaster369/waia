@@ -117,7 +117,7 @@ describe("inert retention policy", () => {
             .purposeUseAllowed,
         ).toBe(false);
       });
-      it("accepts only a trusted, chronological substantial-evidence anchor", () => {
+      it("applies a supplied evidence anchor and rejects invalid chronology", () => {
         const r = { ...candidate(), lastSubstantialEvidenceAt: day(10) };
         expect(planRetention(r, grant("modelling"), day(90))).toMatchObject({
           purposeUseAllowed: true,
