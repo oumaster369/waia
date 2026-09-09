@@ -41,3 +41,13 @@ No RLS, schema, middleware, session lifetime/scope changes, real accounts, crede
 ## Local validation — 2026-09-07
 
 Five route regression cases passed (returned error, thrown error, configured client missing, acknowledged provider success, unconfigured local-only path); combined UI/landing/auth run passed 58 tests. Full typecheck, lint (zero errors, 308 existing warnings), Next build and three isolated SQLite browser tests passed with DEE-952 UI. No Supabase production session was created, inspected or revoked. Independent review and publication admission remain outstanding.
+
+## Synchronized validation — 2026-09-09
+
+Local validation branch incorporates origin/main90de233a. Five acknowledgement
+route tests still pass; cumulative logout/admin/observation suite32/32 PASS,
+typecheck PASS, Next build PASS, three SQLite browser tests PASS, including
+post-logout401 and subsequent same-account login with authorized metadataHTTP200.
+Independent scoped review found no P1/P2. Provider global scope is preserved;
+already-issued access JWTs are not claimed immediately invalidated. No live
+Supabase session or credential access, scientific change, push, merge or deployment.

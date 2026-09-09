@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-PR
+  currentWorkPackage: WP-INTEGRATION-VALIDATION
   completedWorkPackages: [WP-COPY, WP-SESSION-UI, WP-VALIDATION]
   remainingWorkPackages: [WP-PR]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: "2026-09-07"
+  lastValidationAt: "2026-09-09"
   blockedReason: null
-  nextAction: "Root review and explicitly scoped integration preparation; no publication, merge or deployment."
+  nextAction: "Complete synchronized logout review and browser validation, then publication gate; no merge or deployment."
 provenance:
   createdFrom: chat
   humanApproval: "User 2026-09-06 requests visual/copy-only replacement of Twin associations on trader.waia.life; preserve form."
@@ -59,3 +59,22 @@ already present in main; remaining implementation diff is the session UI and
 DEE-957 acknowledgement. This is local cumulative validation, not an admitted
 Integration Train or approval for merge/deployment. Re-run focused tests and
 loopback browser acceptance against the synchronized tree before publication.
+
+The unmount regression initially failed (AbortSignal.aborted=false). Minimal
+correction cancels the pending request/timer on unmount and discards any retired
+request's late acknowledgement or error, including a delayed response body.
+It does not revoke an exchange credential, stop a collector, change provider
+sign-out scope or claim cancellation undoes an already processed server request.
+Current targeted suite32/32 PASS includes logout UI/route, admin authorization
+and existing historical observation cleanup/freshness tests. Typecheck and
+changed-file lint PASS. Full lint before this correction: zero errors and307
+warnings. First synchronized Next build and three local browser scenarios PASS;
+final browser rerun adds same-account re-login after logout and passes3/3.
+The added E2E first incorrectly expected a connected-credential badge for a user
+without any exchange credential; corrected to the actual connect form plus HTTP200
+from the authorized metadata route. Prior logout401 assertions remain unchanged.
+Only test expectations changed after the successful corrected-source Next build;
+reuse of that same build passed in3.3s, without another redundant build.
+Canonical validation passes152 documents,8 validator regressions and3 release
+identity contracts. Independent read-only diff review found no P1/P2 within this
+logout scope; it does not certify deployed Supabase sessions or complete Trader.

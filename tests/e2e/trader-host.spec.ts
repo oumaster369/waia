@@ -98,6 +98,12 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await page.goto("/trader");
     await expectStaticShellContainsNoProtectedData(page);
     await expectProtectedObserverApisFailClosed(page, 401);
+    await signInOnLanding(page, email, TRADER_PASSWORD);
+    await page.waitForURL("**/trader");
+    await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+    await expect(page.getByTestId("trader-connect-form")).toBeVisible();
+    const restoredAccess = await page.request.get("/api/trader/exchange-credentials");
+    expect(restoredAccess.status()).toBe(200);
   });
 
   test("signs out from the admin console and removes protected access", async ({ page, baseURL, browser }) => {

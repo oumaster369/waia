@@ -9,6 +9,23 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("Trader sign out", () => {
+  it("aborts on unmount and ignores an acknowledgement arriving after navigation", async () => {
+    vi.useFakeTimers();
+    let finish!: (response: Response) => void;
+    let signal!: AbortSignal;
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => {
+      signal = init.signal as AbortSignal;
+      return new Promise<Response>(resolve => { finish = resolve; });
+    }));
+    const redirect = vi.fn();
+    const { unmount } = render(<TraderSignOut onSignedOut={redirect} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    unmount();
+    expect(signal.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => finish(Response.json({ ok: true })));
+    expect(redirect).not.toHaveBeenCalled();
+  });
   it("exposes sign out in AdminShell", () => {
     render(<AdminShell><p>Protected view fixture</p></AdminShell>);
     expect(screen.getByRole("button", { name: "Sign out" })).toBeVisible();
