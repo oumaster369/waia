@@ -341,6 +341,63 @@ export const traderForecastPredictivePackageV2 = pgTable(
   ],
 );
 
+/** DEE-946 immutable codec seal; migration 0203 owns checks, sealing and RLS. */
+export const traderPredictivePackageManifestV1 = pgTable(
+  "trader_predictive_package_manifest_v1",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    packageId: uuid("package_id").notNull(),
+    codecVersion: text("codec_version").notNull(),
+    generationDigestHex: text("generation_digest_hex").notNull(),
+    contentDigestHex: text("content_digest_hex").notNull(),
+    manifestDigestHex: text("manifest_digest_hex").notNull(),
+    chunkByteLimit: integer("chunk_byte_limit").notNull(),
+    sourceCount: integer("source_count").notNull(),
+    replicaCount: integer("replica_count").notNull(),
+    chunkCount: integer("chunk_count").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.packageId, t.codecVersion] }),
+    foreignKey({
+      name: "tppm_v1_package_lineage_fk",
+      columns: [t.packageId, t.organizationId, t.contentDigestHex],
+      foreignColumns: [
+        traderForecastPredictivePackageV2.id,
+        traderForecastPredictivePackageV2.organizationId,
+        traderForecastPredictivePackageV2.predictivePackageContentDigest,
+      ],
+    }),
+  ],
+);
+
+/** Bounded byte payloads, not JSON. SQL 0203 makes the FK initially deferred. */
+export const traderPredictivePackageChunkV1 = pgTable(
+  "trader_predictive_package_chunk_v1",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    packageId: uuid("package_id").notNull(),
+    codecVersion: text("codec_version").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    byteLength: integer("byte_length").notNull(),
+    recordCount: integer("record_count").notNull(),
+    sha256Hex: text("sha256_hex").notNull(),
+    payload: bytea("payload").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.packageId, t.codecVersion, t.ordinal] }),
+    foreignKey({
+      name: "tppc_v1_manifest_fk",
+      columns: [t.organizationId, t.packageId, t.codecVersion],
+      foreignColumns: [
+        traderPredictivePackageManifestV1.organizationId,
+        traderPredictivePackageManifestV1.packageId,
+        traderPredictivePackageManifestV1.codecVersion,
+      ],
+    }),
+  ],
+);
+
 /** Forecast-V2 issuance seal, including DEE-633 durable authority and exact sequence. */
 export const traderForecastBundleV2 = pgTable(
   "trader_forecast_bundle_v2",

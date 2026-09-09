@@ -5,18 +5,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/_execution-server-common.sh"
 readonly SCRIPT_NAME="${0##*/}"
 usage() { cat >&2 <<EOF
-Usage: ${SCRIPT_NAME} --target-sha <sha> --image-tag <tag> --proposal-env-file PATH --dataset-root PATH [--approved-ref refs/remotes/origin/main] [--confirm] [--dry-run]
+Usage: ${SCRIPT_NAME} --target-sha <sha> --image-tag <tag> --proposal-env-file PATH --dataset-root PATH --checkpoint-root PATH [--approved-ref refs/remotes/origin/main] [--confirm] [--dry-run]
 Prepares the exact technical proposal from the immutable image and read-only dataset mount.
 No-op without --confirm. It never ratifies or launches the run.
 EOF
 }
 TARGET_SHA="${EXECUTION_SERVER_TARGET_SHA:-}"; REPO_PATH="${EXECUTION_SERVER_REPO_PATH:-}"
 APPROVED_REF="${EXECUTION_SERVER_APPROVED_REF:-refs/remotes/origin/main}"
-IMAGE_TAG=""; PROPOSAL_ENV_FILE=""; DATASET_ROOT=""; CONFIRM=0; DRY_RUN=0
+IMAGE_TAG=""; PROPOSAL_ENV_FILE=""; DATASET_ROOT=""; CHECKPOINT_ROOT=""; CONFIRM=0; DRY_RUN=0
 while [[ $# -gt 0 ]]; do case "$1" in
   --target-sha) TARGET_SHA="$2"; shift 2;; --image-tag) IMAGE_TAG="$2"; shift 2;;
   --proposal-env-file) PROPOSAL_ENV_FILE="$2"; shift 2;;
   --dataset-root) DATASET_ROOT="$2"; shift 2;;
+  --checkpoint-root) CHECKPOINT_ROOT="$2"; shift 2;;
   --repo-path) REPO_PATH="$2"; shift 2;; --confirm) CONFIRM=1; shift;; --dry-run) DRY_RUN=1; shift;;
   --approved-ref) APPROVED_REF="$2"; shift 2;;
   -h|--help) usage; exit 0;; *) die "unknown argument: $1";; esac; done
@@ -38,6 +39,12 @@ log "  image tag: ${IMAGE_TAG}"
 log "  dataset root: ${DATASET_ROOT} (read-only)"
 log "planned actions: exact-SHA preflight, image/runtime attestation, technical proposal only"
 if ! require_confirm_or_noop "proposal preparation"; then print_noop_footer; exit 0; fi
+[[ "$CHECKPOINT_ROOT" == /* && "$CHECKPOINT_ROOT" != / && -d "$CHECKPOINT_ROOT" && ! -L "$CHECKPOINT_ROOT" ]] ||
+  die "checkpoint-root must be an existing private absolute directory owned by the image user"
+CHECKPOINT_ROOT="$(cd "$CHECKPOINT_ROOT" && pwd -P)"
+[[ "$CHECKPOINT_ROOT" != "$DATASET_ROOT" && "$CHECKPOINT_ROOT" != "$DATASET_ROOT"/* ]] ||
+  die "checkpoint-root must be outside the read-only source dataset"
+[[ "$CHECKPOINT_ROOT" != *","* && "$DATASET_ROOT" != *","* ]] || die "mount paths must not contain commas"
 run_preflight "$REPO_ROOT" "$TARGET_SHA" "$APPROVED_REF" || exit 1
 IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG")"
 RECORDED_IMAGE_ID="$(read_revision_field "$REVISION_PATH" "imageId")" ||
@@ -47,10 +54,13 @@ RECORDED_IMAGE_ID="$(read_revision_field "$REVISION_PATH" "imageId")" ||
 IMAGE_SHA="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE_TAG")"
 [[ "$IMAGE_SHA" == "$TARGET_SHA" ]] || die "image release SHA does not match target SHA"
 docker run --rm --env-file "$PROPOSAL_ENV_FILE" -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
+  -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   "$IMAGE_TAG" node services/ai-trader-execution-host/entrypoint.mjs --preflight-runtime >/dev/null
 docker run --rm \
   --mount "type=bind,src=${DATASET_ROOT},dst=${DATASET_ROOT},readonly" \
+  --mount "type=bind,src=${CHECKPOINT_ROOT},dst=/var/lib/waia/scientific-checkpoints" \
   --env-file "$PROPOSAL_ENV_FILE" \
+  -e "WAIA_FHV_CHECKPOINT_ROOT=/var/lib/waia/scientific-checkpoints" \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
   "$IMAGE_TAG" node --import tsx --conditions=react-server \
   scripts/trader/historical-simulation-v2-prepare-proposal.ts

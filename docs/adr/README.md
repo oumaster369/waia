@@ -35,7 +35,8 @@ See policy: [`../waia-governance/ADR-POLICY.md`](../waia-governance/ADR-POLICY.m
 | [0029](0029-compact-forecast-v2-seal-and-bytea-artifacts.md) | Compact Forecast V2 seal and bytea replica artifacts (no per-sample rows) | Accepted | DEE-518 / DEE-527 |
 | [0030](0030-quantize-scale8-half-up-v1.md) | `quantizeScale8HalfUp/v1` — Forecast-only canonical quantizer | Accepted | DEE-518 / DEE-527 |
 | [0031](0031-waia-cbrng-sha256-ctr-v1.md) | `WAIA_RANDOM_BLOCK_V1` / `waia-cbrng/sha256-ctr/v1` deterministic RNG | Accepted | DEE-518 / DEE-527, DEE-531 |
-| [0032](0032-ai-twin-epistemic-formation-and-authority-separation.md) | AI-TWIN epistemic formation and authority separation | Proposed — Human-ratified; accepted on merge | DEE-130 / DEE-868 |
+| [0032](0032-ai-twin-epistemic-formation-and-authority-separation.md) | AI-TWIN epistemic formation and authority separation | Accepted — PR541, 2026-09-01; historical index reconciled | DEE-130 / DEE-868 |
+| [0033](0033-ai-twin-memory-retention-and-experience-legacy.md) | AI-TWIN memory retention and experience legacy | Proposed — Human-approved; accepted on merge | DEE-965 / DEE-871 |
 
 Add rows as new decisions land.**Superseded** decisions keep file for history — index notes replacement.
 

@@ -9,8 +9,8 @@ requiredValidation: [focused-unit, tenant-isolation, lint, typecheck, build, can
 approvalGates: [human-security-review, human-merge, human-production-rollout]
 state:
   status: in-progress
-  prNumber: null
-  prUrl: null
+  prNumber: 561
+  prUrl: https://github.com/oumaster369/waia/pull/561
   blockedReason: null
 provenance:
   authoritativeBase: b5c17263465fc525dd46eab8c8a076b1abde1a69
@@ -121,7 +121,15 @@ test was updated for the added internal account binding; a test-only literal typ
 
 ## Remaining gates and limitations
 
-Independent exact-head security review, publication/CI, merge and production rollout remain pending.
+Published at exact head `59aadcdf0a06d87e91708541cf2209cb38ed3584`; bounded independent
+review on the original base is recorded in the root handoff. On 2026-09-08 the Human
+requested cleanup of this existing PR and Linear. Synchronization with main
+`8023bb1980d9f02e61db4024f725aa16161c32dd` uses a merge, without rewriting published history.
+The sole textual conflict was the Reality inventory's two content digests. These
+were recomputed from the combined source; paths, counts and validator are unchanged.
+Current-base verification and mandatory exact-head CI remain gates, not replaced by
+the original-base checks. Human security/merge approval and production rollout remain separate.
+
 This slice does not establish historical-run PASS, read-only account admission, real-account
 reconciliation, live authority or full Trader readiness. Multiple working spot accounts deliberately
 remain refused until a separate user-selection contract exists.

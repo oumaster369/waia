@@ -61,9 +61,15 @@ import {
   type HtxVolumeQualificationReceiptV1,
 } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import type { ResearchHarnessAdmissionInputV1 } from "@/lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
+import { validationBootstrapExecutionFromEnvironmentV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
+import { reuseScientificEvidenceV1, reuseScientificEvidenceAsyncV1 } from
+  "@/lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
+import { assertTechnicalPreparationActiveV2, emitTechnicalPreparationProgressV2, flushTechnicalPreparationProgressV2,
+  snapshotTechnicalPreparationObserverV2, type TechnicalPreparationObserverV2 } from
+  "@/lib/trader/historical-simulation-v2/technical-preparation-observer-v2";
 import {
   buildEpistemicParameterRatificationReceiptV1,
-  buildPredictiveTerminalReceiptV1,
+  buildPredictiveTerminalReceiptAsyncV1,
 } from "./scientific-admission-v2";
 import {
   buildScientificAdmissionReceiptRecordV2,
@@ -1424,6 +1430,7 @@ async function buildTechnicalSurfaceCandidatesV2(
     prepared: InternalKmFourSurfaceScientificAdmissionProductionV2;
     qualification: FhvPreHoldoutQualificationReceiptV1;
     dependencies: AuthenticatedRatificationDependenciesV2;
+    observer?: TechnicalPreparationObserverV2;
   }>,
 ): Promise<
   Readonly<{
@@ -1432,12 +1439,17 @@ async function buildTechnicalSurfaceCandidatesV2(
   }>
 > {
   const candidates: HistoricalFourSurfaceTechnicalSurfaceCandidateV2[] = [];
+  const observer = input.observer ?? {};
+  // Snapshot this resource choice once for all surfaces; no HTTP/caller-provided executor.
+  const bootstrapExecution = validationBootstrapExecutionFromEnvironmentV1(process.env);
   const marketBoundaryBars = {} as Record<"BTCUSDT" | "ETHUSDT", Bar>;
   for (const surface of input.prepared.authority.contract.surfaces) {
     if (!SURFACE_KEYS.includes(surface.surfaceKey as HistoricalFourSurfaceKeyV2)) {
       refuse("SURFACE_SET");
     }
     const surfaceKey = surface.surfaceKey as HistoricalFourSurfaceKeyV2;
+    emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "SURFACE_LOAD", surfaceKey });
+    await flushTechnicalPreparationProgressV2(observer);
     const selectedK = surface.convergenceReceipt.selectedK;
     const selectedM = surface.convergenceReceipt.selectedM;
     const generationDigest = surface.convergenceReceipt.selectedPackageGenerationIdentityDigestHex;
@@ -1528,6 +1540,47 @@ async function buildTechnicalSurfaceCandidatesV2(
     const developmentReturns = development.corpus.map((anchor) =>
       terminalRhFromOutcome13dV1(anchor.outcome13d),
     );
+    const anchors: ResearchHarnessAdmissionInputV1["anchors"][number][] = [];
+    emitTechnicalPreparationProgressV2(observer, input.preflight,
+      { phase: "FORECAST_ANCHORS", surfaceKey, completed: 0, total: walkForward.corpus.length });
+    await flushTechnicalPreparationProgressV2(observer);
+    for (let offset = 0; offset < walkForward.corpus.length; offset += 32) {
+      assertTechnicalPreparationActiveV2(observer);
+      const batch = walkForward.corpus.slice(offset, offset + 32);
+      const batchResults = reuseScientificEvidenceV1("wf-forecast-batch-v1", {
+        organizationId: input.preflight.organizationId, releaseSha: input.preflight.releaseSha,
+        generationDigest, packageDigest, evaluationPartitionReceiptDigestHex, offset, batch,
+      }, () => batch.map(anchor => {
+      assertTechnicalPreparationActiveV2(observer);
+      const issuance = issueForecastV1({
+        pkg: predictivePackage,
+        anchorClosedBarEpochMs: anchor.closedBarEpochMs,
+        anchorRealizedVol20m_1m: anchor.realizedVol20m_1m,
+        executionHorizonMinutes: surface.family.executionHorizonMinutes,
+        normalizationVersionDigestHex: surface.family.normalizationVersionDigestHex,
+      });
+      return Object.freeze({
+        anchorId: computeSemanticSha256Hex({
+          schemaVersion: "waia.trader.wf_predictive_anchor.v2",
+          surfaceKey,
+          closedBarEpochMs: anchor.closedBarEpochMs,
+          barContentDigest: anchor.barContentDigest,
+          evaluationPartitionReceiptDigestHex,
+        }),
+        observedReturn: terminalRhFromOutcome13dV1(anchor.outcome13d),
+        challengerProbabilities: issuance.terminalScenarioMasses.probabilities,
+      });
+      }));
+      anchors.push(...batchResults);
+      // Only scheduling changes: issue every anchor in the original order using
+      // the same complete package. No thinning, pooling or alternate Forecast.
+      if (anchors.length % 32 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (anchors.length % 1024 === 0 || anchors.length === walkForward.corpus.length) {
+        emitTechnicalPreparationProgressV2(observer, input.preflight,
+          { phase: "FORECAST_ANCHORS", surfaceKey, completed: anchors.length, total: walkForward.corpus.length });
+        await flushTechnicalPreparationProgressV2(observer);
+      }
+    }
     const harnessInput: ResearchHarnessAdmissionInputV1 = {
       venue: "htx",
       market: "spot",
@@ -1541,28 +1594,9 @@ async function buildTechnicalSurfaceCandidatesV2(
       developmentReturns,
       historyReturns: developmentReturns,
       historyReturnMinuteOpenTimesMs: development.corpus.map((anchor) => anchor.closedBarEpochMs),
-      anchors: walkForward.corpus.map((anchor) => {
-        const issuance = issueForecastV1({
-          pkg: predictivePackage,
-          anchorClosedBarEpochMs: anchor.closedBarEpochMs,
-          anchorRealizedVol20m_1m: anchor.realizedVol20m_1m,
-          executionHorizonMinutes: surface.family.executionHorizonMinutes,
-          normalizationVersionDigestHex: surface.family.normalizationVersionDigestHex,
-        });
-        return Object.freeze({
-          anchorId: computeSemanticSha256Hex({
-            schemaVersion: "waia.trader.wf_predictive_anchor.v2",
-            surfaceKey,
-            closedBarEpochMs: anchor.closedBarEpochMs,
-            barContentDigest: anchor.barContentDigest,
-            evaluationPartitionReceiptDigestHex,
-          }),
-          observedReturn: terminalRhFromOutcome13dV1(anchor.outcome13d),
-          challengerProbabilities: issuance.terminalScenarioMasses.probabilities,
-        });
-      }),
+      anchors,
     };
-    const predictive = buildPredictiveTerminalReceiptV1({
+    const predictiveInput = {
       harnessInput,
       identities: {
         developmentDatasetDigestHex: input.prepared.authority.developmentDatasetIdentityDigestHex,
@@ -1570,10 +1604,19 @@ async function buildTechnicalSurfaceCandidatesV2(
         predictivePackageGenerationIdentityDigestHex: generationDigest,
         predictivePackageContentDigestHex: packageDigest,
         runtimeContractDigestHex: predictivePackage.runtimeContractDigest.toString("hex"),
-        scoringContractVersion: "multiclass-log-score/v1",
+        scoringContractVersion: "multiclass-log-score/v1" as const,
         evaluationPartitionReceiptDigestHex,
       },
-    });
+    };
+    const predictive = await reuseScientificEvidenceAsyncV1("wf-predictive-terminal-v1", predictiveInput,
+      () => buildPredictiveTerminalReceiptAsyncV1(predictiveInput, { ...bootstrapExecution, signal: observer.signal,
+      flushProgress: () => flushTechnicalPreparationProgressV2(observer), onProgress: progress => {
+      if (progress.completed % 1000 === 0 || progress.completed === progress.total) {
+        emitTechnicalPreparationProgressV2(observer, input.preflight,
+          { phase: "VALIDATION_RESAMPLES", surfaceKey, ...progress });
+      }
+    } }));
+    await flushTechnicalPreparationProgressV2(observer);
     if (predictive.terminalStatus !== "QUALIFIED") {
       const diagnostic = canonicalizeDiagnosticJsonString({
         reasonCodes: predictive.reasonCodes,
@@ -1855,7 +1898,9 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
   sql: postgres.Sql,
   input: HistoricalFourSurfaceAuthenticatedRatificationInputV2,
   dependencies: AuthenticatedRatificationDependenciesV2,
+  requestedObserver: TechnicalPreparationObserverV2 = {},
 ): Promise<HistoricalFourSurfaceTechnicalCandidateV2> {
+  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
   if (typeof (sql as unknown as { release?: unknown }).release !== "function") {
     refuse("DEDICATED_SESSION_REQUIRED");
   }
@@ -1864,7 +1909,10 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
   dependencies.assertFiles({ datasetRoot: input.preflight.datasetRoot, receipt });
   assertAuthenticatedRatificationScopeV2(input, receipt);
   return withPostgresSessionTransaction(sql, "SERIALIZABLE", async (transaction) => {
+    emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "SCIENTIFIC_PREPARATION" });
+    await flushTechnicalPreparationProgressV2(observer);
     const prepared = await dependencies.prepare(transaction, input.preflight);
+    assertTechnicalPreparationActiveV2(observer);
     if (
       prepared.admission.receipt.organizationId !== input.preflight.organizationId ||
       prepared.admission.receipt.runId !== input.preflight.runId ||
@@ -1875,12 +1923,14 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
       refuse("AGGREGATE_SCOPE");
     }
     const technical = await buildTechnicalSurfaceCandidatesV2({
-      preflight: input.preflight, prepared, qualification: receipt, dependencies,
+      preflight: input.preflight, prepared, qualification: receipt, dependencies, observer,
     });
     const candidate = sealTechnicalCandidateV2({
       preflight: input.preflight, prepared, qualification: receipt,
       surfaces: technical.surfaces,
     });
+    emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "TECHNICAL_CANDIDATE_COMPLETE" });
+    await flushTechnicalPreparationProgressV2(observer);
     await transaction`
       INSERT INTO trader_historical_qualified_execution_extent_v2 (
         organization_id,run_id,release_sha,qualification_receipt_digest_hex,
@@ -2066,9 +2116,10 @@ export function TEST_ONLY_ratifyHistoricalFourSurfaceAdmissionWithHeldPostgresV2
 export function INTERNAL_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2(
   sql: postgres.Sql,
   input: HistoricalFourSurfaceAuthenticatedRatificationInputV2,
+  observer: TechnicalPreparationObserverV2 = {},
 ): Promise<HistoricalFourSurfaceTechnicalCandidateV2> {
   return prepareTechnicalCandidateWithHeldConnectionV2(
-    sql, input, productionRatificationDependenciesV2,
+    sql, input, productionRatificationDependenciesV2, observer,
   );
 }
 
@@ -2095,6 +2146,7 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     technicalCandidateContentDigestHex: string;
   }>,
   dependencies: AuthenticatedRatificationDependenciesV2,
+  requestedObserver: TechnicalPreparationObserverV2 = {},
 ): Promise<Readonly<{ id: string; insertedNew: boolean;
   authority: HistoricalFourSurfaceRatifiedAdmissionV2 }>> {
   if (!UUID.test(authenticatedOperatorUserId) ||
@@ -2102,6 +2154,7 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     refuse("AUTHENTICATED_SESSION");
   }
   if (!input.executionExtent) refuse("APPROVED_EXECUTION_EXTENT");
+  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
   // Rebuild the capability object explicitly. TypeScript's structural typing permits
   // a caller to pass a richer launch plan; spreading that object into the durable
   // authority would silently widen the Human-approved execution capability.
@@ -2124,8 +2177,10 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     // would mint fresh timestamps/IDs for the same natural identity and is neither
     // deterministic nor necessary. Load and fully replay-validate that durable receipt.
     const prepared = await loadFrozenTechnicalAggregateV2(transaction, candidate);
+    emitTechnicalPreparationProgressV2(observer, input.preflight, { phase: "FINALIZATION_REPLAY" });
+    await flushTechnicalPreparationProgressV2(observer);
     const technical = await buildTechnicalSurfaceCandidatesV2({
-      preflight: input.preflight, prepared, qualification: receipt, dependencies,
+      preflight: input.preflight, prepared, qualification: receipt, dependencies, observer,
     });
     const replayed = sealTechnicalCandidateV2({
       preflight: input.preflight, prepared, qualification: receipt,
@@ -2179,10 +2234,11 @@ export function INTERNAL_materializeApprovedHistoricalFourSurfaceCandidateV2(
     proposalContentDigestHex: string;
     technicalCandidateContentDigestHex: string;
   }>,
+  observer: TechnicalPreparationObserverV2 = {},
 ) {
   return materializeApprovedCandidateWithHeldConnectionV2(
     sql, input, authenticatedOperatorUserId, candidate, approvedProposal,
-    productionRatificationDependenciesV2,
+    productionRatificationDependenciesV2, observer,
   );
 }
 
@@ -2198,12 +2254,13 @@ export function TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2(
     technicalCandidateContentDigestHex: string;
   }>,
   dependencies: AuthenticatedRatificationDependenciesV2,
+  observer: TechnicalPreparationObserverV2 = {},
 ) {
   if (process.env.NODE_ENV !== "test" || process.env.VITEST !== "true") {
     refuse("TEST_ONLY_RUNTIME");
   }
   return materializeApprovedCandidateWithHeldConnectionV2(
-    sql, input, authenticatedOperatorUserId, candidate, approvedProposal, dependencies,
+    sql, input, authenticatedOperatorUserId, candidate, approvedProposal, dependencies, observer,
   );
 }
 

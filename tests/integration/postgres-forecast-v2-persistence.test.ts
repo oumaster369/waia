@@ -376,12 +376,14 @@ describe.skipIf(!integrationEnabled || !url)(
         "trader_forecast_outcome_v2", "trader_forecast_v2", "trader_forecast_bundle_v2",
         "trader_forecast_replica_artifact_v2", "trader_forecast_predictive_package_target_v2",
         "trader_forecast_target_bucket_v2", "trader_forecast_target_definition_v2",
+        "trader_predictive_package_chunk_v1", "trader_predictive_package_manifest_v1",
         "trader_forecast_predictive_package_v2",
         "trader_forecast_contract_binding_v1",
         "trader_scientific_admission_receipt_v1",
         "trader_htx_volume_qualification_receipt_v1",
       ];
       await sql.begin(async (tx) => {
+        await tx`SET CONSTRAINTS ALL IMMEDIATE`;
         for (const table of tables) {
           await tx.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER USER`);
           await tx.unsafe(`DELETE FROM ${table} WHERE organization_id = $1`, [orgId]);
@@ -416,6 +418,13 @@ describe.skipIf(!integrationEnabled || !url)(
           );
         }
       });
+      // A failed prior local run can leave append-only package children. Remove
+      // only this synthetic test owner's Forecast rows before org cascade cleanup.
+      for (const prior of await sql<{ id: string }[]>`SELECT id::text FROM organizations
+        WHERE owner_user_id=${WP518_PG_USER}::uuid`) {
+        orgId = prior.id;
+        await cleanupForecastRows();
+      }
       await cleanupForecastV2TestOrg(url!, WP518_PG_USER);
       orgId = await seedWp13User(url!, WP518_PG_USER, "Forecast V2 Persistence");
       await cleanupForecastRows();
@@ -792,6 +801,33 @@ describe.skipIf(!integrationEnabled || !url)(
         issuanceSequence: 0,
       });
       expect(durableRetry.retriedExisting).toBe(true);
+      const boundedSources = await sql<{
+        verifier_version: string; input_bytes: number; outcome_bytes: number;
+        input_schema: string; outcome_schema: string; same_seal: boolean; no_inline_corpus: boolean;
+      }[]>`SELECT s.verifier_version,
+          octet_length(s.runtime_input_json::text) AS input_bytes,
+          octet_length(b.forecast_runtime_authorized_outcome_json::text) AS outcome_bytes,
+          s.runtime_input_json #>> '{predictivePackage,schemaVersion}' AS input_schema,
+          b.forecast_runtime_authorized_outcome_json #>> '{issuance,package,schemaVersion}' AS outcome_schema,
+          (s.runtime_input_json #>> '{predictivePackage,reference,manifestDigestHex}'=m.manifest_digest_hex
+            AND b.forecast_runtime_authorized_outcome_json #>> '{issuance,package,reference,manifestDigestHex}'=m.manifest_digest_hex
+            AND s.authorized_outcome_json=b.forecast_runtime_authorized_outcome_json) AS same_seal,
+          (NOT(s.runtime_input_json->'predictivePackage' ? 'canonicalSourceCorpus')
+            AND NOT(b.forecast_runtime_authorized_outcome_json #> '{issuance,package}' ? 'replicaArtifacts')) AS no_inline_corpus
+        FROM trader_forecast_runtime_input_source_v2 s
+        JOIN trader_forecast_bundle_v2 b ON b.id=s.bundle_id AND b.organization_id=s.organization_id
+        JOIN trader_predictive_package_manifest_v1 m
+          ON m.organization_id=s.organization_id AND m.package_id=s.predictive_package_id
+        WHERE s.organization_id=${orgId}::uuid AND s.bundle_id=${durableRetry.bundleId}::uuid`;
+      expect(boundedSources).toHaveLength(1);
+      expect(boundedSources[0]).toMatchObject({
+        verifier_version: "waia.forecast-runtime-input-source.verifier.v3",
+        input_schema: "waia.trader.forecast_package_reference.v1",
+        outcome_schema: "waia.trader.forecast_package_reference.v1",
+        same_seal: true, no_inline_corpus: true,
+      });
+      expect(boundedSources[0]!.input_bytes).toBeLessThan(50_000);
+      expect(boundedSources[0]!.outcome_bytes).toBeLessThan(50_000);
       const changedKnowledgeAuthorityBody = {
         ...authorizedOutcome.authority,
         knowledgeContentDigestHex: "7".repeat(64),

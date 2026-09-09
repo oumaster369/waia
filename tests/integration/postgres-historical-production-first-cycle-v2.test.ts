@@ -5,13 +5,18 @@
  * WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES_SESSION=postgresql://... vitest run ...
  */
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { assertRepeatEmpty, exportRepeatEvidence, repeatConfig,
+  REPEAT_USER_ID, REPEAT_RUN_ID } from "../helpers/historical-independent-repeat";
+import { captureHistoricalRepeatSeed, historicalRepeatSeedConfig,
+  loadHistoricalRepeatSeed } from "../helpers/historical-repeat-seed";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { bindPostgresReservedSession } from "@/db/postgres-session-transaction";
@@ -129,6 +134,8 @@ const INITIAL_RECORD_INDEX = WF_PREDICTIVE_BAR_COUNT;
 const PROVE_KNOWLEDGE_CONTINUATION =
   process.env.WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF === "1";
 const APPROVED_CYCLE_COUNT = PROVE_KNOWLEDGE_CONTINUATION ? 80 : 35;
+const independentRepeat = repeatConfig(process.env, url);
+const repeatSeed = historicalRepeatSeedConfig(process.env, independentRepeat);
 const QUALIFIED_AT = "2026-08-01T00:00:00.000Z";
 const SYMBOLS = ["BTCUSDT", "ETHUSDT"] as const;
 
@@ -256,7 +263,7 @@ function runtimeRequalificationReceipt(
 }
 
 function buildDatasetFixture(organizationId: string): Fixture {
-  const root = mkdtempSync(join(tmpdir(), "dee-919-first-cycle-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "dee-919-first-cycle-")));
   const volumePaths = {} as Record<(typeof SYMBOLS)[number], string>;
   const volumeReceipts = {} as Record<(typeof SYMBOLS)[number], HtxVolumeQualificationReceiptV1>;
   const partitions: FhvPreHoldoutQualificationReceiptV1["partitions"][number][] = [];
@@ -528,8 +535,9 @@ describe.skipIf(!enabled || !url || !disposable)(
     const pool = postgres(url, firstCyclePoolOptions);
     const priorReleaseSha = process.env.WAIA_RELEASE_SHA;
     const organizationId = HISTORICAL_RUNNER_ORGANIZATION_ID;
-    const userId = randomUUID();
-    const runId = `dee-919-${randomUUID()}`;
+    const userId = independentRepeat ? REPEAT_USER_ID : randomUUID();
+    const runId = independentRepeat ? REPEAT_RUN_ID : `dee-919-${randomUUID()}`;
+    let repeatSourceSha: string;
     let fixture: Fixture;
     let preflight: KmFourSurfaceProductionPreflightInputV2;
     let productionInput: HistoricalProductionFirstCycleBootstrapInputV2;
@@ -539,8 +547,22 @@ describe.skipIf(!enabled || !url || !disposable)(
     let ratified: HistoricalFourSurfaceRatifiedAdmissionV2;
     let ratifiedAuthorityId: string;
     let neutralKnowledgeEdge: ReturnType<typeof buildHistoricalForecastKnowledgeBootstrapV2>;
+    const launchPlan = Object.freeze({
+      accountId: "dee-919-modeled-account",
+      symbol: "BTCUSDT" as const,
+      primaryHorizonMinutes: 30 as const,
+      startingCashUsdt: "100000",
+      defaultQuantity: "0.01",
+      initialRecordIndex: WF_PREDICTIVE_BAR_COUNT,
+      cycleCount: APPROVED_CYCLE_COUNT,
+    });
 
     beforeAll(async () => {
+      if (independentRepeat) {
+        expect(execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()).toBe("");
+        repeatSourceSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+        if (repeatSeed?.mode !== "read") await assertRepeatEmpty(pool);
+      }
       process.env.WAIA_RELEASE_SHA = RELEASE_SHA;
       const migrated = await pool<Array<Readonly<{ relation: string | null }>>>`
         SELECT to_regclass(
@@ -548,6 +570,24 @@ describe.skipIf(!enabled || !url || !disposable)(
         )::text AS relation
       `;
       expect(migrated[0]?.relation).toBe("trader_historical_four_surface_ratified_admission_v2");
+      if (repeatSeed?.mode === "read") {
+        // B restores the identical pre-execution synthetic authority. A alone runs
+        // preparation/ratification assertions; every execution test body runs in both.
+        const saved = await loadHistoricalRepeatSeed<{
+          fixture: Fixture; preflight: KmFourSurfaceProductionPreflightInputV2;
+          productionInput: HistoricalProductionFirstCycleBootstrapInputV2;
+          ratified: HistoricalFourSurfaceRatifiedAdmissionV2; ratifiedAuthorityId: string;
+          neutralKnowledgeEdge: typeof neutralKnowledgeEdge;
+        }>(pool, repeatSeed, repeatSourceSha);
+        ({ fixture, preflight, productionInput, ratified, ratifiedAuthorityId, neutralKnowledgeEdge } = saved);
+        const restored = await requireHistoricalFourSurfaceRatifiedAdmissionV2(pool, {
+          organizationId, runId, releaseSha: RELEASE_SHA,
+          aggregateAdmissionReceiptId: ratified.aggregateAdmissionReceiptId,
+          authorityContentDigestHex: ratified.contentDigestHex,
+        });
+        expect(restored).toEqual(ratified);
+        ratified = restored;
+      } else {
       await pool`INSERT INTO auth.users (id) VALUES (${userId}::uuid)`;
       await pool`INSERT INTO users (id, identity_label, email)
         VALUES (${userId}::uuid, 'DEE-919 PostgreSQL integration',
@@ -649,15 +689,6 @@ describe.skipIf(!enabled || !url || !disposable)(
             return fixture.volumeReceipts[symbol];
           },
         };
-      const launchPlan = Object.freeze({
-        accountId: "dee-919-modeled-account",
-        symbol: "BTCUSDT" as const,
-        primaryHorizonMinutes: 30 as const,
-        startingCashUsdt: "100000",
-        defaultQuantity: "0.01",
-        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT,
-        cycleCount: APPROVED_CYCLE_COUNT,
-      });
       await createHistoricalRatificationRequestV2(pool, {
         organizationId,
         runId,
@@ -729,14 +760,25 @@ describe.skipIf(!enabled || !url || !disposable)(
         authenticatedOperatorUserId: userId,
         humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2,
       });
+      const finalizationProgress: Array<Record<string, unknown>> = [];
       const finalized = await TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
         pool,
         { organizationId, runId, releaseSha: RELEASE_SHA },
-        (sql, input, actor, candidate, approvedProposal) =>
+        (sql, input, actor, candidate, approvedProposal, observer) =>
           TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2(
-            sql, input, actor, candidate, approvedProposal, testDependencies,
+            sql, input, actor, candidate, approvedProposal, testDependencies, observer,
           ),
+        { onProgress: event => { finalizationProgress.push(event); } },
       );
+      expect(finalizationProgress[0]).toMatchObject({ phase: "FINALIZATION_REPLAY" });
+      expect(finalizationProgress.every(event => event.organizationId === organizationId &&
+        event.runId === runId && event.releaseSha === RELEASE_SHA && event.authorityGranted === false)).toBe(true);
+      expect(finalizationProgress.filter(event => event.phase === "SURFACE_LOAD")).toHaveLength(4);
+      expect(finalizationProgress.filter(event => event.phase === "FORECAST_ANCHORS" &&
+        event.completed === event.total)).toHaveLength(4);
+      expect(finalizationProgress.filter(event => event.phase === "VALIDATION_RESAMPLES" &&
+        event.completed === 10_000 && event.total === 10_000)).toHaveLength(20);
+      const eventsBeforeRetry = finalizationProgress.length;
       const humanRowsBeforeRetry = await pool<Array<Readonly<{
         surface_receipts: string; validated_lifecycles: string;
       }>>>`
@@ -758,8 +800,10 @@ describe.skipIf(!enabled || !url || !disposable)(
           pool,
           { organizationId, runId, releaseSha: RELEASE_SHA },
           () => { throw new Error("FINALIZER_RETRY_MUST_NOT_REMATERIALIZE"); },
+          { onProgress: event => { finalizationProgress.push(event); } },
         );
       expect(finalizedRetry).toEqual(finalized);
+      expect(finalizationProgress).toHaveLength(eventsBeforeRetry);
       const humanRowsAfterRetry = await pool<Array<Readonly<{
         surface_receipts: string; validated_lifecycles: string;
       }>>>`
@@ -806,6 +850,11 @@ describe.skipIf(!enabled || !url || !disposable)(
         authorityContentDigestHex: finalizedRows[0]!.authority_content_digest_hex,
       });
       productionInput = finalized.manifest.bootstrap;
+      if (repeatSeed?.mode === "write" && independentRepeat) {
+        await captureHistoricalRepeatSeed(pool, independentRepeat, repeatSeed, repeatSourceSha,
+          fixture.root, { fixture, preflight, productionInput, ratified, ratifiedAuthorityId, neutralKnowledgeEdge });
+      }
+      }
 
       reserved = await pool.reserve();
       const rawBackend = await reserved<
@@ -844,7 +893,7 @@ describe.skipIf(!enabled || !url || !disposable)(
         if (lockKey) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
         reserved.release();
       }
-      if (fixture?.root) rmSync(fixture.root, { recursive: true, force: true });
+      if (fixture?.root && !repeatSeed) rmSync(fixture.root, { recursive: true, force: true });
       await pool.end({ timeout: 5 });
       if (priorReleaseSha === undefined) delete process.env.WAIA_RELEASE_SHA;
       else process.env.WAIA_RELEASE_SHA = priorReleaseSha;
@@ -1466,6 +1515,46 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(authorizedForecastCycles).toBeGreaterThan(0);
       expect(nonActionableCycles).toBeGreaterThan(0);
       expect(authorizedForecastCycles + nonActionableCycles).toBe(35);
+      // Durable abstentions must use the same complete immutable package store,
+      // not quietly put the full corpus/pools back in a generic stage JSONB.
+      const negativeWireRows = await pool<Array<Readonly<{
+        count: number; versions: boolean; sealed: boolean; inline: boolean; maxBytes: number;
+      }>>>`
+        SELECT count(*)::int AS count,
+          bool_and(COALESCE(
+            artifact->'payload'->>'schemaVersion'=
+              'waia.trader.historical_forecast_non_actionable_source.v3'
+            AND artifact#>>'{payload,runtimeInput,predictivePackage,schemaVersion}'=
+              'waia.trader.forecast_package_reference.v1',false)) AS versions,
+          bool_and(manifest.package_id IS NOT NULL) AS sealed,
+          bool_or((artifact#>'{payload,runtimeInput,predictivePackage}') ?
+            'canonicalSourceCorpus' OR
+            (artifact#>'{payload,runtimeInput,predictivePackage}') ? 'replicaArtifacts') AS inline,
+          max(octet_length((artifact->'payload')::text)) AS "maxBytes"
+        FROM trader_historical_simulation_atomic_stage_v2 stage
+        CROSS JOIN LATERAL jsonb_array_elements(stage.artifacts_json) artifact
+        LEFT JOIN trader_predictive_package_manifest_v1 manifest
+          ON manifest.organization_id=stage.organization_id
+          AND manifest.package_id::text=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,packageId}'
+          AND manifest.organization_id::text=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,organizationId}'
+          AND manifest.codec_version=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,codecVersion}'
+          AND manifest.generation_digest_hex=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,generationDigestHex}'
+          AND manifest.content_digest_hex=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,contentDigestHex}'
+          AND manifest.manifest_digest_hex=
+            artifact#>>'{payload,runtimeInput,predictivePackage,reference,manifestDigestHex}'
+        WHERE stage.organization_id=${organizationId}::uuid
+          AND stage.account_id=${productionInput.accountId} AND stage.run_id=${runId}
+          AND stage.stage='FORECAST_LIFECYCLE'
+          AND artifact->>'artifactKind'='FORECAST_NON_ACTIONABLE'
+      `;
+      expect(negativeWireRows[0]).toMatchObject({ count: nonActionableCycles,
+        versions: true, sealed: true, inline: false });
+      expect(negativeWireRows[0]!.maxBytes).toBeLessThan(4 * 1024 * 1024);
       expect(rows[0]!.pits).toBe(rows[0]!.bundles);
       expect(rows[0]!.preregistrations).toBe(rows[0]!.bundles);
       // The qualification path must exercise both sides of a complete modeled
@@ -1496,6 +1585,16 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(rows[0]!.governedZeroDeltaUpdates).toBe("1");
       expect(fixture.qualificationReceipt.holdout.status)
         .toBe("PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED");
+      if (independentRepeat) {
+        await exportRepeatEvidence(pool, independentRepeat, repeatSourceSha, {
+          userId, organizationId, runId, accountId: productionInput.accountId,
+          releaseSha: RELEASE_SHA, initialRecordIndex: INITIAL_RECORD_INDEX,
+          cycleCount: APPROVED_CYCLE_COUNT, barCount: BAR_COUNT,
+          predictiveBarCount: WF_PREDICTIVE_BAR_COUNT, economicBarCount: WF_ECONOMIC_BAR_COUNT,
+          qualifiedAt: QUALIFIED_AT, symbols: SYMBOLS,
+          upstreamKmEvaluator: "synthetic-qualified-fixture-NOT-full-corpus-qualification",
+        });
+      }
       // This is the full 35-cycle proof, not a synthetic smoke. It completes in
       // about 20 minutes locally, while GitHub's shared runner has demonstrated
       // that it needs more than 40 minutes. Preserve every assertion and allow

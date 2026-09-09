@@ -151,11 +151,19 @@ export async function runApprovedHistoricalLaunchCliV2(
   bootstrap: HistoricalExecutionServerBootstrapResultV2;
   lifecycle: HistoricalSimulationRunLifecycleEventV2 }>> {
   const config = parseApprovedHistoricalLaunchCliEnvV2(env);
+  const assertActive = () => {
+    if (signal?.aborted) refuse("CANCELLED");
+  };
+  assertActive();
   const finalized = await dependencies.finalize(config.databaseUrl, {
     organizationId: config.organizationId, runId: config.runId,
     releaseSha: config.releaseSha,
   });
+  assertActive();
   const bootstrap = await dependencies.bootstrap(config.databaseUrl, finalized.manifest);
+  // A completed bootstrap may already be durable; never undo it or start a
+  // consumer after cancellation. A later authorized retry reads durable state.
+  assertActive();
   const lifecycle = bootstrap.lifecycle.phase === "COMPLETED"
     ? bootstrap.lifecycle : await dependencies.consume(env, signal);
   return Object.freeze({ authorityId: finalized.authorityId, bootstrap, lifecycle });
