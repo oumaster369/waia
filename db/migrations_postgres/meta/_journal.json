@@ -1436,6 +1436,13 @@
       "when": 1780000000204,
       "tag": "0204_historical_preparation_events_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1780000000205,
+      "tag": "0205_trader_account_observation_v1",
+      "breakpoints": true
     }
   ]
 }
