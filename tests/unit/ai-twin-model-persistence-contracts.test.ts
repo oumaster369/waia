@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   validateWorkingHypothesis,
+  validateDynamicRelation,
+  validateKnowledgeNeed,
   type WorkingHypothesis,
   type VersionedModelReference,
 } from "@/lib/ai-twin/model/persistence-contracts";
@@ -153,5 +155,159 @@ describe("AI-TWIN persistence hypothesis contract — synthetic, not extraction"
     value.alternatives[0].statement = "changed";
     expect(result.alternatives[0].statement).not.toBe("changed");
     expect(Object.isFrozen(result.alternatives[0].support[0])).toBe(true);
+  });
+});
+
+const candidateContext = {
+  scope,
+  purpose: "private_modelling",
+  retentionPolicyId: "human-approved-2026-09-08/v1",
+  eligibleSources: [source],
+  now,
+};
+function relationDraft() {
+  return {
+    ref: { ...scope, kind: "relation", id: "r1", version: 1 },
+    kind: "tension",
+    endpoints: [source],
+    purpose: candidateContext.purpose,
+    retentionPolicyId: candidateContext.retentionPolicyId,
+    createdAt: now,
+    context: "Synthetic independence and collaboration tension",
+    uncertainty: "Only one report; alternatives remain open",
+    validFrom: now,
+    validUntil: null,
+    status: "proposed",
+  };
+}
+function needDraft() {
+  return {
+    ref: { ...scope, kind: "knowledge_need", id: "n1", version: 1 },
+    purpose: candidateContext.purpose,
+    retentionPolicyId: candidateContext.retentionPolicyId,
+    createdAt: now,
+    reason: "Context is missing",
+    proposedObservation: "Ask whether this applies outside work, if the Human wants to discuss it",
+    evidence: [] as VersionedModelReference[],
+    state: "open",
+  };
+}
+
+describe("AI-TWIN remaining object candidates — validation is not authority", () => {
+  it.each(["sigma", "delta", "attractor", "tension", "temporal_transition"])(
+    "preserves a proposed %s relation and its uncertainty",
+    (kind) => {
+      const result = validateDynamicRelation({ ...relationDraft(), kind }, candidateContext);
+      expect(result.status).toBe("proposed");
+      expect(result.endpoints).toEqual([source]);
+      expect(result.uncertainty).toBe(relationDraft().uncertainty);
+      expect(result).not.toHaveProperty("confidence");
+    },
+  );
+  it("allows an open unknown without evidence but not unsupported resolution", () => {
+    expect(validateKnowledgeNeed(needDraft(), candidateContext).state).toBe("open");
+    expect(() =>
+      validateKnowledgeNeed({ ...needDraft(), state: "resolved" }, candidateContext),
+    ).toThrow("EVIDENCE_UNAVAILABLE");
+    expect(
+      validateKnowledgeNeed(
+        { ...needDraft(), state: "resolved", evidence: [source] },
+        candidateContext,
+      ).state,
+    ).toBe("resolved");
+    const skipped = validateKnowledgeNeed({ ...needDraft(), state: "skipped" }, candidateContext);
+    expect(skipped).not.toHaveProperty("penalty");
+  });
+  it.each(["organizationId", "subjectId"])(
+    "rejects foreign %s at candidate and eligible source",
+    (field) => {
+      expect(() =>
+        validateDynamicRelation(
+          { ...relationDraft(), ref: { ...relationDraft().ref, [field]: "foreign" } },
+          candidateContext,
+        ),
+      ).toThrow("SCOPE_MISMATCH");
+      expect(() =>
+        validateKnowledgeNeed(needDraft(), {
+          ...candidateContext,
+          eligibleSources: [{ ...source, [field]: "foreign" }],
+        }),
+      ).toThrow("SCOPE_MISMATCH");
+    },
+  );
+  it("binds current exact eligible sources, purpose and policy", () => {
+    for (const context of [
+      { ...candidateContext, purpose: "society" },
+      { ...candidateContext, retentionPolicyId: "unknown-policy" },
+      { ...candidateContext, eligibleSources: [{ ...source, version: 2 }] },
+      { ...candidateContext, eligibleSources: [] },
+    ])
+      expect(() => validateDynamicRelation(relationDraft(), context)).toThrow();
+    expect(() =>
+      validateKnowledgeNeed(
+        { ...needDraft(), evidence: [source] },
+        { ...candidateContext, eligibleSources: [] },
+      ),
+    ).toThrow("EVIDENCE_UNAVAILABLE");
+  });
+  it("rejects empty/duplicate/self endpoints and action or private archive references", () => {
+    const self = relationDraft().ref;
+    for (const endpoints of [
+      [],
+      [source, source],
+      [self],
+      [{ ...source, kind: "action_capability" }],
+      [{ ...source, kind: "experience" }],
+    ]) {
+      expect(() =>
+        validateDynamicRelation(
+          { ...relationDraft(), endpoints },
+          { ...candidateContext, eligibleSources: endpoints },
+        ),
+      ).toThrow();
+    }
+    expect(() =>
+      validateKnowledgeNeed({ ...needDraft(), evidence: [source, source] }, candidateContext),
+    ).toThrow();
+  });
+  it("rejects authority/score extras, invalid dates, versions and automatic ratification", () => {
+    for (const changes of [
+      { status: "ratified" },
+      { confidence: 1 },
+      { createdAt: "2030-01-01T00:00:00.000Z" },
+      { validUntil: now },
+      { uncertainty: "" },
+      { kind: "diagnosis" },
+      { ref: { ...relationDraft().ref, version: 0 } },
+    ]) {
+      expect(() =>
+        validateDynamicRelation({ ...relationDraft(), ...changes }, candidateContext),
+      ).toThrow();
+    }
+    expect(() =>
+      validateKnowledgeNeed({ ...needDraft(), collectionAuthorized: true }, candidateContext),
+    ).toThrow();
+  });
+  it("checks plain JSON before reading and returns frozen independent data", () => {
+    let read = false;
+    const getter = relationDraft();
+    Object.defineProperty(getter, "context", {
+      enumerable: true,
+      get() {
+        read = true;
+        return "bad";
+      },
+    });
+    expect(() => validateDynamicRelation(getter, candidateContext)).toThrow();
+    expect(read).toBe(false);
+    expect(() =>
+      validateKnowledgeNeed({ ...needDraft(), evidence: new Array(1) }, candidateContext),
+    ).toThrow();
+    const input = relationDraft();
+    const result = validateDynamicRelation(input, candidateContext);
+    input.context = "changed";
+    expect(result.context).not.toBe("changed");
+    expect(Object.isFrozen(result.endpoints[0])).toBe(true);
+    expect(Object.isFrozen(validateKnowledgeNeed(needDraft(), candidateContext).ref)).toBe(true);
   });
 });

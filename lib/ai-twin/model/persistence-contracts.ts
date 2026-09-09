@@ -55,20 +55,25 @@ export type WorkingHypothesis = {
   lastSubstantialEvidenceAt: string | null;
   status: "proposed" | "contested" | "withdrawn";
 };
-/** Reference-only design for later repositories/engines; not validated runtime payloads. */
+/** Validated candidate shapes below; state transitions remain downstream engine-owned. */
 export type DynamicRelation = {
   ref: VersionedModelReference;
   kind: "sigma" | "delta" | "attractor" | "tension" | "temporal_transition";
   endpoints: VersionedModelReference[];
   purpose: string;
+  createdAt: string;
+  retentionPolicyId: string;
   context: string;
   uncertainty: string;
   validFrom: string;
   validUntil: string | null;
+  status: "proposed" | "contested" | "withdrawn";
 };
 export type KnowledgeNeed = {
   ref: VersionedModelReference;
   purpose: string;
+  createdAt: string;
+  retentionPolicyId: string;
   reason: string;
   proposedObservation: string;
   evidence: VersionedModelReference[];
@@ -83,6 +88,17 @@ export type PrivateExportManifest = {
   records: VersionedModelReference[];
   excluded: { ref: VersionedModelReference; reason: string }[];
   deliveryAuthority: "none";
+};
+
+/** Trusted current adapter inputs; matching strings do not authenticate authority.
+ * Eligibility includes purpose/retention/rights and must be read with the write.
+ * These validators never choose or approve the policy supplied by that adapter. */
+export type CandidateValidationContext = {
+  scope: ModelScope;
+  purpose: string;
+  retentionPolicyId: string;
+  eligibleSources: readonly VersionedModelReference[];
+  now: string;
 };
 
 function requireValue(ok: unknown, code = "INVALID_INPUT"): asserts ok {
@@ -231,5 +247,128 @@ export function validateWorkingHypothesis(
     }
   }
   requireValue(evidenceCount > 0, "EVIDENCE_UNAVAILABLE");
+  return freeze(structuredClone(value));
+}
+
+const candidateSourceKinds = [
+  "observation",
+  "claim",
+  "correction",
+  "hypothesis",
+  "relation",
+  "outcome",
+];
+
+function candidateBase(input: unknown, ctx: CandidateValidationContext, expected: string[]) {
+  assertModelJsonData(input);
+  assertModelJsonData(ctx);
+  keys(ctx, ["scope", "purpose", "retentionPolicyId", "eligibleSources", "now"]);
+  keys(ctx.scope, ["organizationId", "subjectId"]);
+  requireValue(
+    [ctx.scope.organizationId, ctx.scope.subjectId, ctx.purpose, ctx.retentionPolicyId].every(
+      nonempty,
+    ),
+  );
+  requireValue(Number.isFinite(time(ctx.now)) && Array.isArray(ctx.eligibleSources));
+  keys(input, expected);
+  const base = input as {
+    ref: VersionedModelReference;
+    purpose: string;
+    createdAt: string;
+    retentionPolicyId: string;
+  };
+  reference(base.ref, ctx.scope);
+  requireValue(
+    base.purpose === ctx.purpose && base.retentionPolicyId === ctx.retentionPolicyId,
+    "PURPOSE_POLICY_MISMATCH",
+  );
+  requireValue(Number.isFinite(time(base.createdAt)) && time(base.createdAt) <= time(ctx.now));
+  const eligible = new Set<string>();
+  for (const ref of ctx.eligibleSources) {
+    reference(ref, ctx.scope);
+    requireValue(candidateSourceKinds.includes(ref.kind));
+    const key = modelReferenceKey(ref);
+    requireValue(!eligible.has(key));
+    eligible.add(key);
+  }
+  return eligible;
+}
+
+function candidateEvidence(
+  refs: VersionedModelReference[],
+  own: VersionedModelReference,
+  ctx: CandidateValidationContext,
+  eligible: Set<string>,
+) {
+  requireValue(Array.isArray(refs));
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    reference(ref, ctx.scope);
+    requireValue(candidateSourceKinds.includes(ref.kind));
+    requireValue(!(ref.kind === own.kind && ref.id === own.id), "SELF_REFERENCE");
+    const key = modelReferenceKey(ref);
+    requireValue(eligible.has(key), "EVIDENCE_UNAVAILABLE");
+    requireValue(!seen.has(key), "DUPLICATE_EVIDENCE");
+    seen.add(key);
+  }
+}
+
+/** Shape and current lineage only; does not discover or endorse a Human pattern. */
+export function validateDynamicRelation(
+  input: unknown,
+  ctx: CandidateValidationContext,
+): DynamicRelation {
+  const eligible = candidateBase(input, ctx, [
+    "ref",
+    "kind",
+    "endpoints",
+    "purpose",
+    "createdAt",
+    "retentionPolicyId",
+    "context",
+    "uncertainty",
+    "validFrom",
+    "validUntil",
+    "status",
+  ]);
+  const value = input as DynamicRelation;
+  requireValue(value.ref.kind === "relation");
+  requireValue(
+    ["sigma", "delta", "attractor", "tension", "temporal_transition"].includes(value.kind),
+  );
+  requireValue(["proposed", "contested", "withdrawn"].includes(value.status));
+  requireValue([value.context, value.uncertainty].every(nonempty));
+  requireValue(Number.isFinite(time(value.validFrom)) && time(value.validFrom) <= time(ctx.now));
+  requireValue(
+    value.validUntil === null ||
+      (Number.isFinite(time(value.validUntil)) && time(value.validUntil) > time(value.validFrom)),
+  );
+  candidateEvidence(value.endpoints, value.ref, ctx, eligible);
+  requireValue(value.endpoints.length > 0, "EVIDENCE_UNAVAILABLE");
+  return freeze(structuredClone(value));
+}
+
+/** An open knowledge gap may lack evidence. A resolved label needs a source,
+ * but this check alone proves neither resolution nor permission to ask a question. */
+export function validateKnowledgeNeed(
+  input: unknown,
+  ctx: CandidateValidationContext,
+): KnowledgeNeed {
+  const eligible = candidateBase(input, ctx, [
+    "ref",
+    "purpose",
+    "createdAt",
+    "retentionPolicyId",
+    "reason",
+    "proposedObservation",
+    "evidence",
+    "state",
+  ]);
+  const value = input as KnowledgeNeed;
+  requireValue(value.ref.kind === "knowledge_need");
+  requireValue(["open", "skipped", "resolved", "withdrawn"].includes(value.state));
+  requireValue([value.reason, value.proposedObservation].every(nonempty));
+  candidateEvidence(value.evidence, value.ref, ctx, eligible);
+  requireValue(value.state !== "resolved" || value.evidence.length > 0, "EVIDENCE_UNAVAILABLE");
   return freeze(structuredClone(value));
 }
