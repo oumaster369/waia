@@ -73,3 +73,27 @@ verification, scientific qualification or permission to trade.
 
 Private exchange credentials, real account requests, production migrations,
 deployment, live trading, capital and blind holdout remain untouched.
+
+## Subsequent local transport and CI slice — 2026-09-09
+
+This supersedes the missing transport implementation and CI authoring portions
+of remaining items 1–2 above, not their production acceptance requirements.
+
+- Added the bounded signed-GET transport described in
+  `docs/trader-account-observation-get-transport.md`; 49 mock-network tests PASS.
+  Exact-key admission and authorized key opening remain injected, not a deployed
+  credential integration. No real HTX requests were made.
+- Final combined reader/transport/Reality guard run: 113/113 PASS; typecheck PASS.
+  Reality now has 128 consumers, with the transport explicitly observation-only;
+  source count 154 and connector-reference count 25 remain unchanged.
+- Added dedicated account-observation PostgreSQL17 CI configuration; all 32
+  integration tests PASS locally using its exact serial command. Four CI-contract
+  checks and both YAML parses PASS. Existing historical workflow is byte-for-byte
+  unchanged. GitHub CI has not run for this local slice.
+- Full repository lint exits successfully with zero errors and 307 warnings;
+  this is not a warning-free result. Scoped new-code lint and diff checks PASS.
+- No new UI behavior was changed in this slice. Previous browser proof remains
+  fixture-based and is not being represented as real-account acceptance.
+
+Assignment provisioning, production admission/credential wiring, unsupported
+venue cases, production rollout and actual two-panel acceptance remain open.

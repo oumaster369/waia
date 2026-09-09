@@ -114,11 +114,17 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 127,
-    "sortedPathDigestHex": "a52b5c169e0ab8597ac629a44c21ced076d9692340f0b40a87875ff36a6b250a",
-    "sortedContentDigestHex": "31d00c919cd05f301e343d51cdc74752037fd7644ba394be1eea40a0f90460e7"
+    "expectedFileCount": 128,
+    "sortedPathDigestHex": "7a1dd8a0100de9720d46e94d3e5e4a5d1c7deda89cfda3ef33c1b4aaa4e3c372",
+    "sortedContentDigestHex": "78299e3b162811993219b4f9b8bb02d75da0bdd373a853e0a4e7dd0ed9c4cc8d"
   },
   "consumerRules": [
+    {
+      "id": "ACCOUNT_OBSERVATION_GET_TRANSPORT",
+      "pathPattern": "^lib/trader/account-observation/htx-get-transport\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "Server-only allowlisted signed-GET transport with injected network and exact-key admission; reads normalized observation inputs, does not grant canonical Reality, order or capital authority."
+    },
     {
       "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",
       "pathPattern": "^lib/trader/account-observation/(service|types|htx-reader)\\.ts$",

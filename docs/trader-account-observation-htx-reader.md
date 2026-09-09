@@ -1,5 +1,10 @@
 # DEE-960: local HTX observation reader
 
+Subsequent local integration added the explicit bounded GET transport in
+`htx-get-transport.ts`; see [its boundary and evidence](trader-account-observation-get-transport.md).
+The reader still has no default transport. Production credential opening,
+current admission wiring, deployment and real account qualification remain pending.
+
 `lib/trader/account-observation/htx-reader.ts` supplies the observation reader port through
 an explicitly injected, already admitted signed-GET transport. It neither opens credentials
 nor provides a network/signing implementation. No account, production call or deployment

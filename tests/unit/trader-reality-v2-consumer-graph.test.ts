@@ -23,11 +23,33 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(JSON.parse(output)).toEqual(expect.objectContaining({
       status: "PASS",
       sources: 154,
-      consumers: 127,
+      consumers: 128,
       connectorReferences: 25,
       sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
     }));
+  });
+
+  it("pins the GET-only transport as observation-only with no existing trading client", () => {
+    const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
+    const path = "lib/trader/account-observation/htx-get-transport.ts";
+    const rule = inventory.consumerRules.find((r: { id: string }) => r.id === "ACCOUNT_OBSERVATION_GET_TRANSPORT");
+    expect(rule).toEqual({ id: "ACCOUNT_OBSERVATION_GET_TRANSPORT",
+      pathPattern: "^lib/trader/account-observation/htx-get-transport\\.ts$",
+      disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY", reason: expect.any(String) });
+    expect(inventory.admittedBoundaryFiles).not.toContain(path);
+    const body = readFileSync(join(ROOT, path), "utf8");
+    const ast = ts.createSourceFile(path, body, ts.ScriptTarget.Latest, true);
+    const imports = ast.statements.filter(ts.isImportDeclaration)
+      .map(s => (s.moduleSpecifier as ts.StringLiteral).text).sort();
+    expect(imports).toEqual(["server-only", "node:crypto", "@/lib/trader/connectors/htx/signing",
+      "zod", "./service", "./validation", "./types", "./htx-reader"].sort());
+    const signer = ast.statements.filter(ts.isImportDeclaration).find(s =>
+      (s.moduleSpecifier as ts.StringLiteral).text === "@/lib/trader/connectors/htx/signing")!;
+    const named = signer.importClause?.namedBindings;
+    expect(named && ts.isNamedImports(named) && named.elements.map(e => e.name.text))
+      .toEqual(["buildSignedQueryString", "formatHtxTimestamp"]);
+    expect(body).not.toMatch(/process\.env|globalThis\.fetch|buildSignedPost|HtxRestClient|import\s*\(|require\s*\(/);
   });
 
   it("excludes exactly the three normalized account-observation consumers without Reality or venue-write authority", () => {
