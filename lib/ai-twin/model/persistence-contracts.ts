@@ -1,4 +1,5 @@
 import type { ModelScope } from "./contracts";
+import { planRetention } from "./lifecycle";
 
 /** Inert storage vocabulary. A reference grants neither access nor an action. */
 export type ModelObjectKind =
@@ -89,6 +90,125 @@ export type PrivateExportManifest = {
   excluded: { ref: VersionedModelReference; reason: string }[];
   deliveryAuthority: "none";
 };
+
+/** Trusted current export-specific inputs, NOT a request-body authentication
+ * contract. Approval, identity, stable request creation and eligibility must be
+ * independently supplied by the future server adapter on every composition.
+ * Modelling/archive permission alone cannot populate eligibleRecords. */
+export type PrivateExportContext = {
+  scope: ModelScope;
+  actor: { kind: string; subjectId: string };
+  requestId: string;
+  createdAt: string;
+  now: string;
+  approvedRecords: readonly VersionedModelReference[];
+  eligibleRecords: readonly VersionedModelReference[];
+};
+
+/** Metadata-only selection, never file creation, redaction or delivery authority.
+ * Reauthorization at content rendering/delivery and stable stored idempotency
+ * remain unimplemented. Do not use this manifest as an authorization token. */
+export function planPrivateExport(
+  selection: unknown,
+  context: PrivateExportContext,
+): PrivateExportManifest {
+  assertModelJsonData(selection);
+  assertModelJsonData(context);
+  keys(context, [
+    "scope",
+    "actor",
+    "requestId",
+    "createdAt",
+    "now",
+    "approvedRecords",
+    "eligibleRecords",
+  ]);
+  keys(context.scope, ["organizationId", "subjectId"]);
+  keys(context.actor, ["kind", "subjectId"]);
+  requireValue(
+    [context.scope.organizationId, context.scope.subjectId, context.requestId].every(nonempty),
+  );
+  requireValue(
+    context.actor.kind === "human" && context.actor.subjectId === context.scope.subjectId,
+    "HUMAN_REQUIRED",
+  );
+  // V1 data references only; later-stage permission/economic objects are excluded.
+  const allowed = new Set([
+    "observation",
+    "claim",
+    "correction",
+    "evidence_link",
+    "hypothesis",
+    "relation",
+    "knowledge_need",
+    "formation",
+    "health",
+    "reflection",
+    "prediction",
+    "outcome",
+    "experience",
+  ]);
+  const refs = (input: unknown): VersionedModelReference[] => {
+    requireValue(Array.isArray(input));
+    const values = input as VersionedModelReference[];
+    values.forEach((value) => {
+      reference(value, context.scope);
+      requireValue(allowed.has(value.kind), "UNSUPPORTED_EXPORT_KIND");
+    });
+    requireValue(new Set(values.map(modelReferenceKey)).size === values.length);
+    return values;
+  };
+  const selected = refs(selection);
+  const approved = new Set(refs(context.approvedRecords).map(modelReferenceKey));
+  const eligible = new Set(refs(context.eligibleRecords).map(modelReferenceKey));
+  requireValue(
+    selected.length > 0 &&
+      selected.length === approved.size &&
+      selected.every((ref) => approved.has(modelReferenceKey(ref))),
+    "SELECTION_MISMATCH",
+  );
+  const policy = planRetention(
+    {
+      scope: context.scope,
+      id: context.requestId,
+      revision: 1,
+      kind: "export",
+      createdAt: context.createdAt,
+      evidenceEligible: true,
+      erasureRequestedAt: null,
+    },
+    {
+      scope: context.scope,
+      recordId: context.requestId,
+      recordRevision: 1,
+      purpose: "export",
+      approvedBy: "human",
+      validFrom: context.createdAt,
+      validUntil: null,
+      revokedAt: null,
+      basisReference: "trusted-current-private-export-selection",
+    },
+    context.now,
+  );
+  requireValue(policy.purposeUseAllowed && policy.expiresAt !== null, "EXPORT_EXPIRED");
+  return freeze(
+    structuredClone({
+      scope: context.scope,
+      requestId: context.requestId,
+      requesterSubjectId: context.actor.subjectId,
+      createdAt: context.createdAt,
+      expiresAt: policy.expiresAt!,
+      records: selected.filter((ref) => eligible.has(modelReferenceKey(ref))),
+      excluded: selected
+        .filter((ref) => !eligible.has(modelReferenceKey(ref)))
+        .map((ref) => ({
+          ref,
+          reason: "UNAVAILABLE_FOR_PRIVATE_EXPORT",
+        })),
+      deliveryAuthority: "none" as const,
+    }),
+  );
+}
 
 /** Trusted current adapter inputs; matching strings do not authenticate authority.
  * Eligibility includes purpose/retention/rights and must be read with the write.

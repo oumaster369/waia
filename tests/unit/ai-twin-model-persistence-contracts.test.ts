@@ -4,6 +4,7 @@ import {
   validateWorkingHypothesis,
   validateDynamicRelation,
   validateKnowledgeNeed,
+  planPrivateExport,
   type WorkingHypothesis,
   type VersionedModelReference,
 } from "@/lib/ai-twin/model/persistence-contracts";
@@ -11,6 +12,172 @@ import {
 const scope = { organizationId: "synthetic-org", subjectId: "synthetic-human" };
 const now = "2026-09-08T12:00:00.000Z";
 const source: VersionedModelReference = { ...scope, kind: "observation", id: "o1", version: 1 };
+
+describe("private export composition — metadata only, no delivery", () => {
+  const older = { ...source, version: 2 };
+  const context = () => ({
+    scope,
+    actor: { kind: "human", subjectId: scope.subjectId },
+    requestId: "export-a",
+    createdAt: now,
+    now,
+    approvedRecords: [source, older],
+    eligibleRecords: [source],
+  });
+  const at = (hours: number) => new Date(Date.parse(now) + hours * 3600000).toISOString();
+
+  it("includes only explicitly selected current export-eligible versions", () => {
+    const ctx = context();
+    ctx.eligibleRecords.push({ ...source, id: "unselected" });
+    expect(planPrivateExport([source, older], ctx)).toEqual({
+      scope,
+      requestId: "export-a",
+      requesterSubjectId: scope.subjectId,
+      createdAt: now,
+      expiresAt: at(24),
+      records: [source],
+      excluded: [{ ref: older, reason: "UNAVAILABLE_FOR_PRIVATE_EXPORT" }],
+      deliveryAuthority: "none",
+    });
+  });
+  it("does not renew creation or deadline on repeated composition", () => {
+    const ctx = context();
+    const result = planPrivateExport([source, older], { ...ctx, now: at(23.99) });
+    expect(result.createdAt).toBe(now);
+    expect(result.expiresAt).toBe(at(24));
+    expect(() => planPrivateExport([source, older], { ...ctx, now: at(24) })).toThrow(
+      "EXPORT_EXPIRED",
+    );
+  });
+  it("rechecks permission loss without renewing expiry or reporting removal", () => {
+    const result = planPrivateExport([source, older], {
+      ...context(),
+      now: at(1),
+      eligibleRecords: [],
+    });
+    expect(result.records).toEqual([]);
+    expect(result.excluded).toHaveLength(2);
+    expect(result.expiresAt).toBe(at(24));
+    expect(result.deliveryAuthority).toBe("none");
+    expect(result).not.toHaveProperty("removalVerified");
+  });
+  it("rejects revoked or altered Human selection", () => {
+    expect(() => planPrivateExport([source], { ...context(), approvedRecords: [] })).toThrow();
+    expect(() => planPrivateExport([source], context())).toThrow("SELECTION_MISMATCH");
+    expect(() =>
+      planPrivateExport([source, older, { ...source, id: "extra" }], context()),
+    ).toThrow();
+  });
+  it.each(["model", "administrator"])("rejects %s actor", (kind) => {
+    expect(() =>
+      planPrivateExport([source, older], {
+        ...context(),
+        actor: { kind, subjectId: scope.subjectId },
+      }),
+    ).toThrow("HUMAN_REQUIRED");
+  });
+  it.each(["organizationId", "subjectId"] as const)("rejects foreign %s anywhere", (key) => {
+    const foreign = { ...source, [key]: "other" };
+    expect(() => planPrivateExport([foreign, older], context())).toThrow();
+    expect(() =>
+      planPrivateExport([source, older], {
+        ...context(),
+        approvedRecords: [source, foreign],
+      }),
+    ).toThrow();
+    expect(() =>
+      planPrivateExport([source, older], {
+        ...context(),
+        eligibleRecords: [source, foreign],
+      }),
+    ).toThrow();
+    expect(() =>
+      planPrivateExport([source, older], {
+        ...context(),
+        scope: { ...scope, [key]: "other" },
+      }),
+    ).toThrow();
+  });
+  it("rejects a different Human actor even inside the same organization", () => {
+    expect(() =>
+      planPrivateExport([source, older], {
+        ...context(),
+        actor: { kind: "human", subjectId: "other" },
+      }),
+    ).toThrow("HUMAN_REQUIRED");
+  });
+  it.each(["action_capability", "legacy_directive", "subscription", "unknown"])(
+    "does not activate export of unsupported %s",
+    (kind) => {
+      const unsupported = { ...source, kind } as VersionedModelReference;
+      expect(() =>
+        planPrivateExport([unsupported], {
+          ...context(),
+          approvedRecords: [unsupported],
+          eligibleRecords: [unsupported],
+        }),
+      ).toThrow();
+    },
+  );
+  it("rejects extra authority, raw-content and caller TTL fields", () => {
+    for (const extra of [
+      { deliveryAuthority: "download" },
+      { expiresAt: at(48) },
+      { rawText: "private" },
+    ]) {
+      expect(() => planPrivateExport([source, older], { ...context(), ...extra })).toThrow();
+      expect(() => planPrivateExport([{ ...source, ...extra }, older], context())).toThrow();
+    }
+  });
+  it("rejects duplicate and sparse references before composing", () => {
+    for (const records of [[source, source], new Array(1)]) {
+      expect(() => planPrivateExport(records, context())).toThrow();
+      expect(() =>
+        planPrivateExport([source, older], {
+          ...context(),
+          eligibleRecords: records,
+        }),
+      ).toThrow();
+      expect(() =>
+        planPrivateExport([source, older], {
+          ...context(),
+          approvedRecords: records,
+        }),
+      ).toThrow();
+    }
+  });
+  it("rejects getters without invoking them", () => {
+    let invoked = false;
+    const hostile = { ...source };
+    Object.defineProperty(hostile, "id", {
+      enumerable: true,
+      get() {
+        invoked = true;
+        return "other";
+      },
+    });
+    expect(() => planPrivateExport([hostile, older], context())).toThrow();
+    expect(invoked).toBe(false);
+  });
+  it("rejects invalid and future creation clocks", () => {
+    for (const createdAt of ["invalid", at(1)]) {
+      expect(() => planPrivateExport([source, older], { ...context(), createdAt })).toThrow();
+    }
+    expect(() => planPrivateExport([source, older], { ...context(), now: "invalid" })).toThrow();
+  });
+  it("returns independent deeply frozen private metadata", () => {
+    const selected = structuredClone([source, older]);
+    const ctx = structuredClone(context());
+    const result = planPrivateExport(selected, ctx);
+    selected[0].id = "changed";
+    ctx.scope.subjectId = "changed";
+    expect(result.records[0].id).toBe(source.id);
+    expect(result.scope.subjectId).toBe(scope.subjectId);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.records[0])).toBe(true);
+    expect(Object.isFrozen(result.excluded[0].ref)).toBe(true);
+  });
+});
 function draft(): WorkingHypothesis {
   return {
     ref: { ...scope, kind: "hypothesis", id: "h1", version: 1 },
