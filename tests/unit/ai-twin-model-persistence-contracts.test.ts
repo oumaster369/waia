@@ -8,6 +8,10 @@ import {
   validateReflection,
   validatePredictionExperiment,
   validateOutcomeReceipt,
+  validateFormationInputSnapshot,
+  validateModelHealthInputSnapshot,
+  FORMATION_INPUT_DOMAINS,
+  MODEL_HEALTH_INPUT_FACETS,
   type WorkingHypothesis,
   type VersionedModelReference,
 } from "@/lib/ai-twin/model/persistence-contracts";
@@ -15,6 +19,176 @@ import {
 const scope = { organizationId: "synthetic-org", subjectId: "synthetic-human" };
 const now = "2026-09-08T12:00:00.000Z";
 const source: VersionedModelReference = { ...scope, kind: "observation", id: "o1", version: 1 };
+
+it("keeps the dimension registries immutable at runtime", () => {
+  expect(Object.isFrozen(FORMATION_INPUT_DOMAINS)).toBe(true);
+  expect(Object.isFrozen(MODEL_HEALTH_INPUT_FACETS)).toBe(true);
+});
+
+describe.each(["formation", "health"] as const)(
+  "%s evaluation inputs do not claim readiness",
+  (kind) => {
+    const dimensions =
+      kind === "formation"
+        ? [
+            "meaning_values_boundaries",
+            "needs_motives_attractors",
+            "perception_thinking_decision",
+            "emotion_self_regulation",
+            "action_adaptation",
+            "relationships_reciprocity",
+          ]
+        : [
+            "freshness_temporal_coverage",
+            "provenance_corroboration",
+            "predictive_calibration",
+            "unresolved_contradictions",
+            "untested_changing_domains",
+            "human_corrections_contested_claims",
+          ];
+    const validate =
+      kind === "formation" ? validateFormationInputSnapshot : validateModelHealthInputSnapshot;
+    const ctx = () => ({
+      scope,
+      purpose: "private_modelling",
+      retentionPolicyId: "human-approved-2026-09-08/v1",
+      now,
+      eligibleSources: [source],
+    });
+    const draft = () => ({
+      ref: { ...scope, kind, id: kind, version: 1 },
+      purpose: ctx().purpose,
+      retentionPolicyId: ctx().retentionPolicyId,
+      createdAt: now,
+      status: "unassessed",
+      rows: dimensions.map((dimension) => ({
+        dimension,
+        evidence: [source],
+        notes: "Not yet evaluated",
+      })),
+    });
+    beforeEach(() => expect(typeof validate).toBe("function"));
+    if (kind === "formation")
+      it("does not alter Formation input when a separate Health input loses evidence", () => {
+        const formation = validate(draft(), ctx());
+        const before = structuredClone(formation);
+        const input = {
+          ...draft(),
+          ref: { ...draft().ref, kind: "health" },
+          rows: MODEL_HEALTH_INPUT_FACETS.map((dimension) => ({
+            dimension,
+            evidence: [],
+            notes: "No current evaluation basis",
+          })),
+        };
+        const health = validateModelHealthInputSnapshot(input, { ...ctx(), eligibleSources: [] });
+        expect(health.status).toBe("unassessed");
+        expect(formation).toEqual(before);
+        expect(formation.ref.kind).toBe("formation");
+      });
+    it("preserves all six inputs without computing a score or independent source count", () => {
+      const input = draft();
+      const value = validate(input, ctx());
+      expect(value).toEqual(input);
+      expect(value.rows).toHaveLength(6);
+      expect(value.status).toBe("unassessed");
+      expect(value).not.toHaveProperty("progress");
+      expect(value).not.toHaveProperty("maturity");
+      expect(value).not.toHaveProperty("independentEvidenceCount");
+    });
+    it("permits empty unknown inputs without assigning zero maturity or failure", () => {
+      const input = draft();
+      input.rows.forEach((row) => {
+        row.evidence = [];
+      });
+      const value = validate(input, { ...ctx(), eligibleSources: [] });
+      expect(value.rows.every((row) => row.evidence.length === 0)).toBe(true);
+      expect(value.status).toBe("unassessed");
+    });
+    it("rejects missing, repeated and unknown dimensions", () => {
+      const input = draft();
+      for (const rows of [
+        input.rows.slice(1),
+        [...input.rows.slice(1), input.rows[1]],
+        [{ ...input.rows[0], dimension: "legacy_readiness" }, ...input.rows.slice(1)],
+      ])
+        expect(() => validate({ ...input, rows }, ctx())).toThrow("DIMENSION_MISMATCH");
+    });
+    it("requires current exact evidence versions and rejects permission loss", () => {
+      for (const eligibleSources of [[], [{ ...source, version: 2 }]]) {
+        expect(() => validate(draft(), { ...ctx(), eligibleSources })).toThrow(
+          "EVIDENCE_UNAVAILABLE",
+        );
+      }
+    });
+    it.each(["organizationId", "subjectId"] as const)("rejects foreign %s", (key) => {
+      const input = draft();
+      expect(() => validate({ ...input, ref: { ...input.ref, [key]: "other" } }, ctx())).toThrow(
+        "SCOPE_MISMATCH",
+      );
+      input.rows[0].evidence = [{ ...source, [key]: "other" }];
+      expect(() => validate(input, ctx())).toThrow("SCOPE_MISMATCH");
+    });
+    it("rejects changed purpose or policy", () => {
+      for (const change of [{ purpose: "society" }, { retentionPolicyId: "unknown" }])
+        expect(() => validate({ ...draft(), ...change }, ctx())).toThrow("PURPOSE_POLICY_MISMATCH");
+    });
+    it("rejects scores, ratification and permission fields at every level", () => {
+      for (const extra of [
+        { progress: 100 },
+        { maturity: 4 },
+        { ratified: true },
+        { actionAuthority: "execute" },
+        { socialReady: true },
+        { formationHistory: "overwrite" },
+      ]) {
+        expect(() => validate({ ...draft(), ...extra }, ctx())).toThrow("INVALID_INPUT");
+        const input = draft();
+        input.rows[0] = { ...input.rows[0], ...extra };
+        expect(() => validate(input, ctx())).toThrow("INVALID_INPUT");
+      }
+      expect(() => validate({ ...draft(), status: "complete" }, ctx())).toThrow("INVALID_INPUT");
+    });
+    it("rejects missing notes, duplicate references and sparse rows", () => {
+      for (const change of [
+        { notes: "" },
+        { evidence: [source, source] },
+        { evidence: new Array(1) },
+      ]) {
+        const input = draft();
+        input.rows[0] = { ...input.rows[0], ...change };
+        expect(() => validate(input, ctx())).toThrow();
+      }
+      expect(() => validate({ ...draft(), rows: new Array(6) }, ctx())).toThrow("INVALID_INPUT");
+    });
+    it("rejects future snapshots and wrong object kinds", () => {
+      const input = draft();
+      expect(() => validate({ ...input, createdAt: "2027-01-01T00:00:00.000Z" }, ctx())).toThrow(
+        "INVALID_INPUT",
+      );
+      expect(() => validate({ ...input, ref: { ...input.ref, kind: "claim" } }, ctx())).toThrow(
+        "INVALID_INPUT",
+      );
+    });
+    it("does not invoke getters and returns independent frozen input history", () => {
+      const input = draft();
+      const value = validate(input, ctx());
+      input.rows[0].notes = "changed";
+      expect(value.rows[0].notes).toBe("Not yet evaluated");
+      expect(Object.isFrozen(value.rows[0].evidence[0])).toBe(true);
+      let invoked = false;
+      Object.defineProperty(input.rows[0], "notes", {
+        enumerable: true,
+        get() {
+          invoked = true;
+          return "x";
+        },
+      });
+      expect(() => validate(input, ctx())).toThrow("INVALID_INPUT");
+      expect(invoked).toBe(false);
+    });
+  },
+);
 
 describe("reflection, expectation and reported outcome remain distinct", () => {
   const later = (hours: number) => new Date(Date.parse(now) + hours * 3600000).toISOString();

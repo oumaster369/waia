@@ -108,6 +108,40 @@ export type OutcomeReceipt = ReflectionBase & {
   observedOutcome: string | null;
   observedAt: string | null;
 };
+
+/** Constitutional vocabulary only; these identifiers assign no scores or weights. */
+export const FORMATION_INPUT_DOMAINS = Object.freeze([
+  "meaning_values_boundaries",
+  "needs_motives_attractors",
+  "perception_thinking_decision",
+  "emotion_self_regulation",
+  "action_adaptation",
+  "relationships_reciprocity",
+] as const);
+export const MODEL_HEALTH_INPUT_FACETS = Object.freeze([
+  "freshness_temporal_coverage",
+  "provenance_corroboration",
+  "predictive_calibration",
+  "unresolved_contradictions",
+  "untested_changing_domains",
+  "human_corrections_contested_claims",
+] as const);
+type EvaluationInputSnapshot<Dimension extends string> = {
+  ref: VersionedModelReference;
+  purpose: string;
+  createdAt: string;
+  retentionPolicyId: string;
+  status: "unassessed";
+  rows: { dimension: Dimension; evidence: VersionedModelReference[]; notes: string }[];
+};
+/** Not a computed FormationSnapshot or a Human Initial Review receipt. */
+export type FormationInputSnapshot = EvaluationInputSnapshot<
+  (typeof FORMATION_INPUT_DOMAINS)[number]
+>;
+/** Not a computed ModelHealthSnapshot and cannot rewrite Formation history. */
+export type ModelHealthInputSnapshot = EvaluationInputSnapshot<
+  (typeof MODEL_HEALTH_INPUT_FACETS)[number]
+>;
 export type PrivateExportManifest = {
   scope: ModelScope;
   requestId: string;
@@ -637,4 +671,50 @@ export function validateOutcomeReceipt(
     );
   }
   return freeze(structuredClone(value));
+}
+
+function validateEvaluationInput<Dimension extends string>(
+  input: unknown,
+  ctx: CandidateValidationContext,
+  kind: "formation" | "health",
+  dimensions: readonly Dimension[],
+): EvaluationInputSnapshot<Dimension> {
+  const eligible = candidateBase(input, ctx, [
+    "ref",
+    "purpose",
+    "createdAt",
+    "retentionPolicyId",
+    "status",
+    "rows",
+  ]);
+  const value = input as EvaluationInputSnapshot<Dimension>;
+  requireValue(value.ref.kind === kind && value.status === "unassessed");
+  requireValue(Array.isArray(value.rows));
+  requireValue(value.rows.length === dimensions.length, "DIMENSION_MISMATCH");
+  const seen = new Set<string>();
+  for (const row of value.rows) {
+    keys(row, ["dimension", "evidence", "notes"]);
+    requireValue(
+      dimensions.includes(row.dimension) && !seen.has(row.dimension),
+      "DIMENSION_MISMATCH",
+    );
+    seen.add(row.dimension);
+    requireValue(nonempty(row.notes));
+    candidateEvidence(row.evidence, value.ref, ctx, eligible);
+  }
+  // No counts, maturity assignment, default scores or implicit ratification.
+  return freeze(structuredClone(value));
+}
+
+export function validateFormationInputSnapshot(
+  input: unknown,
+  ctx: CandidateValidationContext,
+): FormationInputSnapshot {
+  return validateEvaluationInput(input, ctx, "formation", FORMATION_INPUT_DOMAINS);
+}
+export function validateModelHealthInputSnapshot(
+  input: unknown,
+  ctx: CandidateValidationContext,
+): ModelHealthInputSnapshot {
+  return validateEvaluationInput(input, ctx, "health", MODEL_HEALTH_INPUT_FACETS);
 }
