@@ -13,7 +13,16 @@ const paging = { size, from: positiveId.optional(), direct: z.literal("next").op
 const openQuery = z.object({ "account-id": positiveId, ...paging }).strict();
 const tradeQuery = z.object({ symbol: z.string().regex(/^[a-z0-9]{2,32}$/),
   "start-time": z.string().regex(/^\d{1,16}$/), "end-time": z.string().regex(/^\d{1,16}$/), ...paging }).strict();
-type Request = Parameters<HtxObservationGetTransport["signedGet"]>[0];
+type Request = Omit<Parameters<HtxObservationGetTransport["signedGet"]>[0], "path"> & { path: string };
+type BoundedGetTransport = Readonly<{
+  binding: ObservationBinding;
+  signedGet(request: Request): ReturnType<HtxObservationGetTransport["signedGet"]>;
+  dispose(): void;
+}>;
+export type HtxMetadataGetTransport = Omit<BoundedGetTransport, "signedGet"> & Readonly<{
+  signedGet(request: Omit<Request, "path"> & { path: "/v1/account/accounts" | "/v2/user/uid" | "/v2/user/api-key" }):
+    ReturnType<HtxObservationGetTransport["signedGet"]>;
+}>;
 const denied = (code: "READ_FAILED" | "INVALID_RESPONSE" | "PERMISSION_DENIED" | "TIMEOUT"): never => {
   throw new AccountObservationReadFailure(code);
 };
@@ -23,7 +32,7 @@ const denied = (code: "READ_FAILED" | "INVALID_RESPONSE" | "PERMISSION_DENIED" |
  * and an explicit network implementation. No default fetch/env/credential fallback exists.
  * Local tests use only synthetic keys and in-memory response streams.
  */
-export function createHtxObservationGetTransport(input: Readonly<{
+type TransportInput = Readonly<{
   binding: ObservationBinding;
   apiKey: string; apiSecret: string;
   host: "api.huobi.pro" | "api-aws.huobi.pro";
@@ -32,7 +41,10 @@ export function createHtxObservationGetTransport(input: Readonly<{
   clock: ObservationClock;
   fetchImpl: typeof fetch;
   verifyReadAdmission(binding: ObservationBinding, apiKeySha256: string, signal: AbortSignal): Promise<boolean>;
-}>): HtxObservationGetTransport {
+}>;
+
+// The lane is selected only by the two fixed factories below, never by a request.
+function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | "METADATA"): BoundedGetTransport {
   const binding = Object.freeze(observationBindingSchema.parse(input.binding));
   positiveId.parse(binding.exchangeAccountId);
   const host = z.enum(["api.huobi.pro", "api-aws.huobi.pro"]).parse(input.host);
@@ -51,7 +63,14 @@ export function createHtxObservationGetTransport(input: Readonly<{
       request.maxResponseBytes < 1 || request.maxResponseBytes > 1048576) denied("INVALID_RESPONSE");
     const path = request.path;
     let query: Record<string, string>;
-    if (path === `/v1/account/accounts/${binding.exchangeAccountId}/balance` || /^\/v1\/order\/orders\/[1-9]\d{0,39}$/.test(path)) {
+    if (lane === "METADATA") {
+      if (path === "/v1/account/accounts" || path === "/v2/user/uid") {
+        query = z.object({}).strict().parse(request.query);
+      } else if (path === "/v2/user/api-key") {
+        query = z.object({ uid: positiveId.refine(value => Number.isSafeInteger(Number(value))),
+          accessKey: z.literal(apiKey) }).strict().parse(request.query);
+      } else return denied("PERMISSION_DENIED");
+    } else if (path === `/v1/account/accounts/${binding.exchangeAccountId}/balance` || /^\/v1\/order\/orders\/[1-9]\d{0,39}$/.test(path)) {
       query = z.object({}).strict().parse(request.query);
     } else if (path === "/v1/order/openOrders") {
       query = openQuery.parse(request.query);
@@ -145,4 +164,19 @@ export function createHtxObservationGetTransport(input: Readonly<{
       // Drops owned references, not a promise of secure erasure of immutable JS strings.
     },
   });
+}
+
+export function createHtxObservationGetTransport(input: TransportInput): HtxObservationGetTransport {
+  return createBoundedGetTransport(input, "OBSERVATION");
+}
+
+/** Only admission metadata GETs. authorizeCurrent proves current DB/operator scope,
+ * not venue permission; the metadata validator separately establishes read admission. */
+export function createHtxMetadataGetTransport(input: Omit<TransportInput, "symbols" | "verifyReadAdmission"> & Readonly<{
+  authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
+}>): HtxMetadataGetTransport {
+  const { authorizeCurrent } = input;
+  if (typeof authorizeCurrent !== "function") denied("INVALID_RESPONSE");
+  return createBoundedGetTransport({ ...input, symbols: ["METADATA"],
+    verifyReadAdmission: (binding, _digest, signal) => authorizeCurrent(binding, signal) }, "METADATA");
 }

@@ -7,6 +7,7 @@ import { createAccountObservationService } from "./service";
 import { createObservationScheduler } from "./scheduler";
 import { observationBindingSchema } from "./validation";
 import { accountObservationClock } from "./clock";
+import { htxObservationCoverageSchema } from "./coverage";
 import type { AccountObservationReader, ObservationBinding, ObservationClock, ObservationConfig } from "./types";
 
 const configurationSchema = z.object({
@@ -15,16 +16,18 @@ const configurationSchema = z.object({
   maxBackoffMs: z.number().int().min(1000).max(86400000),
   readTimeoutMs: z.number().int().min(100).max(60000),
   leaseTtlMs: z.number().int().min(1000).max(3600000),
+  htxCoverage: htxObservationCoverageSchema.optional(),
 }).strict().refine(c => new Set(c.symbols).size === c.symbols.length &&
   c.maxBackoffMs >= c.pollIntervalMs && c.leaseTtlMs > c.readTimeoutMs * (3 + c.symbols.length));
 
-/** Stable configuration identity. A timing/symbol change cannot keep the old revision.
+/** Stable configuration identity. A timing/symbol/HTX coverage change cannot keep the old revision.
  * Hashing configuration is NOT Human authorization or permission to access a credential.
  */
 export function createObservationConfiguration(input: Omit<ObservationConfig, "revision">): ObservationConfig {
   const config = configurationSchema.parse(input);
   const revision = "sha256:" + createHash("sha256").update(JSON.stringify(config)).digest("hex");
-  return Object.freeze({ ...config, symbols: Object.freeze([...config.symbols]), revision });
+  return Object.freeze({ ...config, symbols: Object.freeze([...config.symbols]),
+    ...(config.htxCoverage ? { htxCoverage: Object.freeze({ ...config.htxCoverage }) } : {}), revision });
 }
 
 export type ObservationAssignment = Readonly<{ binding: ObservationBinding; config: ObservationConfig }>;

@@ -7,19 +7,16 @@ import { createObservationConfiguration, createPostgresAccountObservationRuntime
 import { createPostgresObservationAssignmentSource } from "./postgres-assignments";
 import { createPostgresObservationReader } from "./postgres-reader";
 import { createObservationCredentialStore } from "./credential-store";
-import { openHtxObservationReader } from "./htx-reader-opener";
+import { openHtxObservationReader, type HtxObservationCredentialHandle } from "./htx-reader-opener";
+import { createHtxReadAdmission } from "./htx-read-admission";
 import type { HtxObservationReaderOptions } from "./htx-reader";
 import { observationBindingSchema } from "./validation";
 import { AccountObservationReadFailure } from "./service";
 import type { AccountObservationReader, ObservationBinding, ObservationClock } from "./types";
+import { htxObservationReaderLimitsSchema, htxObservationCoverageSchema } from "./coverage";
 
-const readerLimitsSchema = z.object({
-  pageSize: z.number().int().min(1).max(500), maxPages: z.number().int().min(1).max(10),
-  maxRecords: z.number().int().min(1).max(1000), maxResponseBytes: z.number().int().min(1).max(1048576),
-  tradeWindowMs: z.number().int().min(1).max(172800000),
-}).strict();
 export type ConfiguredHtxObservationAssignment = ObservationAssignment & Readonly<{
-  readerLimits: z.infer<typeof readerLimitsSchema>;
+  readerLimits: z.infer<typeof htxObservationReaderLimitsSchema>;
 }>;
 type AdmissionVerifier = Parameters<typeof openHtxObservationReader>[0]["verifyReadAdmission"];
 const key = (binding: ObservationBinding) => JSON.stringify(binding);
@@ -27,21 +24,22 @@ function failure(): never { throw new Error("ACCOUNT_OBSERVATION_CONFIGURED_RUNT
 
 /** Explicit composition only: no import/construction-time I/O or process launch.
  * Caller supplies independently authorized, bounded collector/reader SQL clients,
- * the existing protected credential service, trusted operator assignments, exact-key
- * exchange admission verifier and network implementation. It retains pool ownership.
+ * the existing protected credential service, trusted operator assignments and a network
+ * implementation. Same-key venue admission is performed by the concrete metadata reader;
+ * an optional extra verifier can veto it, never replace it. Caller retains pool ownership.
  * Neither assignment currentness nor credential decryption manufactures venue admission.
  *
  * One owner may await run(signal) once. Completion, cancellation and dispose close
  * all owned readers/key handles. A new run needs a fresh composition and admission.
- * Reader page/history limits are pinned for this instance; the existing persisted
- * config revision covers symbols/timing, not these transport coverage limits.
+ * Host and reader coverage must match the persisted configuration digest. Legacy
+ * symbols/timing-only revisions cannot open this credential-capable composition.
  */
 export function createConfiguredHtxObservationRuntime(input: Readonly<{
   collectorSql: Sql; readerSql: Sql;
   protectedCredentialService: Pick<CredentialService, "getDecryptedCredentials">;
   configured: readonly ConfiguredHtxObservationAssignment[];
   host: "api.huobi.pro" | "api-aws.huobi.pro";
-  fetchImpl: typeof fetch; verifyReadAdmission: AdmissionVerifier;
+  fetchImpl: typeof fetch; verifyReadAdmission?: AdmissionVerifier;
   clock: ObservationClock; report(event: ObservationRuntimeEvent): void;
   ownerId: string; intervalMs: number; iterationTimeoutMs: number;
 }>) {
@@ -50,7 +48,8 @@ export function createConfiguredHtxObservationRuntime(input: Readonly<{
     try {
       if (!input.collectorSql || !input.readerSql || input.collectorSql === input.readerSql ||
         typeof input.protectedCredentialService?.getDecryptedCredentials !== "function" ||
-        typeof input.fetchImpl !== "function" || typeof input.verifyReadAdmission !== "function" ||
+        typeof input.fetchImpl !== "function" ||
+        input.verifyReadAdmission !== undefined && typeof input.verifyReadAdmission !== "function" ||
         typeof input.clock?.now !== "function" || typeof input.clock?.sleep !== "function" ||
         typeof input.report !== "function" || typeof input.ownerId !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(input.ownerId) ||
         !["api.huobi.pro", "api-aws.huobi.pro"].includes(input.host) ||
@@ -67,7 +66,9 @@ export function createConfiguredHtxObservationRuntime(input: Readonly<{
         if (revision !== config.revision || binding.configurationRevision !== config.revision || seen.has(account) ||
           config.leaseTtlMs > input.iterationTimeoutMs) failure();
         seen.add(account);
-        const readerLimits = Object.freeze(readerLimitsSchema.parse(item.readerLimits));
+        const readerLimits = Object.freeze(htxObservationReaderLimitsSchema.parse(item.readerLimits));
+        const coverage = htxObservationCoverageSchema.parse({ ...readerLimits, host: input.host });
+        if (!config.htxCoverage || JSON.stringify(config.htxCoverage) !== JSON.stringify(coverage)) failure();
         return Object.freeze({ binding, config, readerLimits });
       });
     } catch { return failure(); }
@@ -108,9 +109,33 @@ export function createConfiguredHtxObservationRuntime(input: Readonly<{
       const cancel = () => abort.abort(); signal.addEventListener("abort", cancel, { once: true });
       if (signal.aborted || closed) cancel();
       let owned: AccountObservationReader | undefined;
+      let admission: ReturnType<typeof createHtxReadAdmission> | undefined;
       try {
-        owned = await openHtxObservationReader({ clock, host, fetchImpl, verifyReadAdmission,
-          authorizeOpen: source.authorizeOpen, openCredential: store.openCredential }, readerOptions, abort.signal);
+        owned = await openHtxObservationReader({ clock, host, fetchImpl,
+          authorizeOpen: source.authorizeOpen,
+          async openCredential(scope, credentialSignal) {
+            const handle = await store.openCredential(scope, credentialSignal);
+            try {
+              admission = createHtxReadAdmission({ credential: handle, host, clock, fetchImpl,
+                timeoutMs: readerOptions.readTimeoutMs, maxResponseBytes: readerOptions.maxResponseBytes,
+                authorizeCurrent: source.authorizeOpen });
+              // Keep the protected store's non-enumerable, disposal-aware accessors;
+              // never spread/copy secrets into an enumerable wrapper or retain new strings.
+              const wrapped: HtxObservationCredentialHandle = { binding: handle.binding,
+                get apiKey() { return handle.apiKey; },
+                get apiSecret() { return handle.apiSecret; },
+                dispose() { try { admission?.dispose(); } finally { handle.dispose(); } },
+              };
+              Object.defineProperties(wrapped, { apiKey: { enumerable: false }, apiSecret: { enumerable: false } });
+              return Object.freeze(wrapped);
+            } catch (error) { handle.dispose(); throw error; }
+          },
+          async verifyReadAdmission(scope, digest, admissionSignal) {
+            if (verifyReadAdmission && await verifyReadAdmission(scope, digest, admissionSignal) !== true) return false;
+            if (!admission || admissionSignal.aborted) return false;
+            return admission.verifyReadAdmission(scope, digest, admissionSignal);
+          },
+        }, readerOptions, abort.signal);
         if (closed || abort.signal.aborted) { owned.dispose(); throw new AccountObservationReadFailure("READ_FAILED"); }
         const reader = owned; let released = false;
         const wrapped = Object.freeze({ readBalances: reader.readBalances, readOpenOrders: reader.readOpenOrders,
@@ -122,6 +147,7 @@ export function createConfiguredHtxObservationRuntime(input: Readonly<{
         });
         readers.add(wrapped); return wrapped;
       } finally {
+        if (!owned) admission?.dispose();
         signal.removeEventListener("abort", cancel); opening.delete(abort); abort.abort();
       }
     },

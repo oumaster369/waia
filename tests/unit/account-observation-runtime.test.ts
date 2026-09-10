@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Sql } from "postgres";
 import { createObservationConfiguration, createPostgresAccountObservationRuntime } from "@/lib/trader/account-observation/runtime";
 import type { ObservationAssignment } from "@/lib/trader/account-observation/runtime";
+import { createHash } from "node:crypto";
 
 const ports = vi.hoisted(() => ({ claimDue: vi.fn(async () => null) }));
 vi.mock("@/lib/trader/account-observation/postgres-repository", () => ({
@@ -25,6 +26,25 @@ describe("explicit recurring PostgreSQL observation composition", () => {
     expect(Object.isFrozen(c.symbols)).toBe(true);
     expect(() => createObservationConfiguration({ ...parameters, symbols: ["BTCUSDT", "BTCUSDT"] })).toThrow();
     expect(() => createObservationConfiguration({ ...parameters, readTimeoutMs: 1000 })).toThrow();
+  });
+  it("retains legacy digest bytes for the generic reader, and canonically seals all HTX coverage", () => {
+    expect(createObservationConfiguration(parameters).revision).toBe("sha256:" +
+      createHash("sha256").update(JSON.stringify(parameters)).digest("hex"));
+    const htxCoverage = { host: "api.huobi.pro" as const, pageSize: 10, maxPages: 2,
+      maxRecords: 20, maxResponseBytes: 8192, tradeWindowMs: 60_000 };
+    const config = createObservationConfiguration({ ...parameters, htxCoverage });
+    expect(config.revision).not.toBe(createObservationConfiguration(parameters).revision);
+    expect(createObservationConfiguration({ ...parameters, htxCoverage: { tradeWindowMs: 60_000,
+      maxResponseBytes: 8192, maxRecords: 20, maxPages: 2, pageSize: 10, host: "api.huobi.pro" } })).toEqual(config);
+    for (const mutation of [{ pageSize: 11 }, { maxPages: 3 }, { maxRecords: 21 },
+      { maxResponseBytes: 8193 }, { tradeWindowMs: 61_000 }, { host: "api-aws.huobi.pro" as const }]) {
+      expect(createObservationConfiguration({ ...parameters, htxCoverage: { ...htxCoverage, ...mutation } }).revision)
+        .not.toBe(config.revision);
+    }
+    htxCoverage.pageSize = 500;
+    expect(config.htxCoverage?.pageSize).toBe(10); expect(Object.isFrozen(config.htxCoverage)).toBe(true);
+    expect(() => createObservationConfiguration({ ...parameters,
+      htxCoverage: { ...htxCoverage, maxResponseBytes: 1048577 } })).toThrow();
   });
   it("starts only when awaited, recurs without a browser, and stops cleanly", async () => {
     const stop = new AbortController(); const openReader = vi.fn(); const loadAssignments = vi.fn(async () => [assignment()]);
