@@ -23,12 +23,14 @@ vi.mock("@/lib/trader/account-observation/postgres-reader", () => ({
   },
 }));
 function assignment(account = "123", credentialSuffix = "2"): ConfiguredHtxObservationAssignment {
+  const readerLimits = { pageSize: 10, maxPages: 2, maxRecords: 20, maxResponseBytes: 8192, tradeWindowMs: 60_000 };
   const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
-    maxBackoffMs: 8000, readTimeoutMs: 100, leaseTtlMs: 1000 });
+    maxBackoffMs: 8000, readTimeoutMs: 100, leaseTtlMs: 1000,
+    htxCoverage: { ...readerLimits, host: "api.huobi.pro" } });
   return { binding: { organizationId: "00000000-0000-4000-8000-000000000001",
     credentialId: `00000000-0000-4000-8000-00000000000${credentialSuffix}`, exchangeAccountId: account,
     credentialRevision: "1", configurationRevision: config.revision }, config,
-  readerLimits: { pageSize: 10, maxPages: 2, maxRecords: 20, maxResponseBytes: 8192, tradeWindowMs: 60_000 } };
+  readerLimits };
 }
 type Input = Parameters<typeof createConfiguredHtxObservationRuntime>[0];
 type MutableInput = { -readonly [Key in keyof Input]: Input[Key] };
@@ -36,9 +38,15 @@ function setup(overrides: Partial<Input> = {}) {
   const item = assignment(); const collectorSql = { purpose: "collector" } as unknown as Sql;
   const readerSql = { purpose: "reader" } as unknown as Sql;
   const getDecryptedCredentials = vi.fn(async (): Promise<ConnectorCredentialInput> => ({ apiKey: "synthetic-key", apiSecret: "synthetic-secret" }));
-  const fetchImpl = vi.fn<typeof fetch>(async url => new Response(JSON.stringify({ status: "ok",
-    data: String(url).includes("/balance?") ? { id: 123, type: "spot", state: "working", list: [
-      { currency: "usdt", type: "trade", balance: "2" }] } : [] })));
+  const fetchImpl = vi.fn<typeof fetch>(async url => {
+    const path = new URL(String(url)).pathname;
+    if (path === "/v1/account/accounts") return Response.json({ status: "ok", data: [{ id: 123, type: "spot", state: "working" }] });
+    if (path === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+    if (path === "/v2/user/api-key") return Response.json({ code: 200,
+      data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly" }] });
+    return Response.json({ status: "ok", data: path.endsWith("/balance") ? { id: 123, type: "spot", state: "working", list: [
+      { currency: "usdt", type: "trade", balance: "2" }] } : [] });
+  });
   const verifyReadAdmission = vi.fn(async () => true); const report = vi.fn();
   const input: MutableInput = { collectorSql, readerSql, protectedCredentialService: { getDecryptedCredentials },
     configured: [item], host: "api.huobi.pro", fetchImpl, verifyReadAdmission, report,
@@ -69,7 +77,7 @@ describe("configured observation runtime, real local composition with mock persi
       status: "PARTIAL", balances: { status: "COMPLETE", values: [{ asset: "USDT", total: "2" }] },
       openOrders: { status: "PARTIAL" }, trades: [{ component: { status: "PARTIAL" } }] });
     expect(f.getDecryptedCredentials).toHaveBeenCalledWith({ organizationId: f.item.binding.organizationId }, f.item.binding.credentialId);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(3); expect(f.verifyReadAdmission).toHaveBeenCalledTimes(7);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(24); expect(f.verifyReadAdmission).toHaveBeenCalledTimes(7);
     expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature/);
     stop.abort(); await work; expect(vi.getTimerCount()).toBe(0);
     await expect(runtime.run(new AbortController().signal)).rejects.toThrow(); runtime.dispose();
@@ -88,17 +96,48 @@ describe("configured observation runtime, real local composition with mock persi
     expect(ports.commitIfCurrent).not.toHaveBeenCalled(); expect(ports.release).toHaveBeenCalledTimes(1);
     expect(f.report).toHaveBeenCalledWith("COLLECTION_FAILED");
   });
-  it.each(["same-pool", "missing-admission", "missing-fetch", "duplicate", "revision", "account", "reader-page",
+  it("rejects a legacy timing-only configuration even when its digest is internally consistent", () => {
+    const f = setup();
+    const { symbols, pollIntervalMs, maxBackoffMs, readTimeoutMs, leaseTtlMs } = f.item.config;
+    const config = createObservationConfiguration({ symbols, pollIntervalMs, maxBackoffMs, readTimeoutMs, leaseTtlMs });
+    f.input.configured = [{ ...f.item, config, binding: { ...f.item.binding, configurationRevision: config.revision } }];
+    expect(() => createConfiguredHtxObservationRuntime(f.input)).toThrow();
+    expect(ports.createRepository).not.toHaveBeenCalled(); expect(ports.createReader).not.toHaveBeenCalled();
+    expect(f.getDecryptedCredentials).not.toHaveBeenCalled(); expect(f.fetchImpl).not.toHaveBeenCalled();
+  });
+  it("cannot bypass actual venue admission with an always-true extra verifier", async () => {
+    const f = setup(); f.fetchImpl.mockResolvedValue(Response.json({ status: "ok", data: [{ id: 999, type: "spot", state: "working" }] }));
+    const stop = new AbortController(); const runtime = createConfiguredHtxObservationRuntime(f.input);
+    const work = runtime.run(stop.signal); await vi.advanceTimersByTimeAsync(0); stop.abort(); await work;
+    expect(f.verifyReadAdmission).toHaveBeenCalledTimes(1);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(1); expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.report).toHaveBeenCalledWith("COLLECTION_FAILED");
+  });
+  it("uses concrete venue admission even without an extra caller verifier", async () => {
+    const f = setup({ verifyReadAdmission: undefined }); const stop = new AbortController();
+    const work = createConfiguredHtxObservationRuntime(f.input).run(stop.signal);
+    await vi.advanceTimersByTimeAsync(0); stop.abort(); await work;
+    expect(f.verifyReadAdmission).not.toHaveBeenCalled(); expect(f.fetchImpl).toHaveBeenCalledTimes(24);
+    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
+  });
+  it.each(["same-pool", "invalid-admission", "missing-fetch", "duplicate", "revision", "account", "reader-page",
+    "coverage-page", "coverage-pages", "coverage-records", "coverage-bytes", "coverage-window", "coverage-host",
     "reader-window", "reader-extra", "lease-timeout", "scheduler-interval", "missing-owner"])("rejects unsafe %s configuration before I/O", mode => {
     const f = setup(); const item = f.item;
     if (mode === "same-pool") f.input.readerSql = f.collectorSql;
-    if (mode === "missing-admission") f.input.verifyReadAdmission = undefined as unknown as Input["verifyReadAdmission"];
+    if (mode === "invalid-admission") f.input.verifyReadAdmission = true as unknown as Input["verifyReadAdmission"];
     if (mode === "missing-fetch") f.input.fetchImpl = undefined as unknown as typeof fetch;
     if (mode === "duplicate") f.input.configured = [item, { ...item, binding: { ...item.binding,
       credentialId: "00000000-0000-4000-8000-000000000003" } }];
     if (mode === "revision") f.input.configured = [{ ...item, config: { ...item.config, pollIntervalMs: 2000 } }];
     if (mode === "account") f.input.configured = [{ ...item, binding: { ...item.binding, exchangeAccountId: "../other" } }];
     if (mode === "reader-page") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, maxPages: 999 } }];
+    if (mode === "coverage-page") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, pageSize: 11 } }];
+    if (mode === "coverage-pages") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, maxPages: 3 } }];
+    if (mode === "coverage-records") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, maxRecords: 21 } }];
+    if (mode === "coverage-bytes") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, maxResponseBytes: 8193 } }];
+    if (mode === "coverage-window") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, tradeWindowMs: 61_000 } }];
+    if (mode === "coverage-host") f.input.host = "api-aws.huobi.pro";
     if (mode === "reader-window") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, tradeWindowMs: 172_800_001 } }];
     if (mode === "reader-extra") f.input.configured = [{ ...item, readerLimits: { ...item.readerLimits, invented: true } } as ConfiguredHtxObservationAssignment];
     if (mode === "lease-timeout") f.input.iterationTimeoutMs = 500;

@@ -1,4 +1,5 @@
 import type { Balance, Order, Trade } from "@/lib/trader/connectors/types";
+import type { HtxObservationCoverage } from "./coverage";
 
 export type ObservationBinding = Readonly<{
   organizationId: string; credentialId: string; exchangeAccountId: string;
@@ -59,6 +60,8 @@ export type ObservationClock = Readonly<{
 export type ObservationConfig = Readonly<{
   revision: string; symbols: readonly string[]; pollIntervalMs: number; maxBackoffMs: number;
   readTimeoutMs: number; leaseTtlMs: number;
+  /** Required by the configured HTX composition; generic injected readers may omit it. */
+  htxCoverage?: HtxObservationCoverage;
 }>;
 export type ObservationTickResult =
   | Readonly<{ status: "NOT_CLAIMED" | "FENCED" }>

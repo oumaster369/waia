@@ -123,8 +123,10 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     expect(await repo.readLatest(b)).toBeNull();
   }, 15000);
   it("configured composition joins distinct restricted pools, store and transport; revoke prevents reopening", async () => {
+    const readerLimits = { pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 };
     const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
-      maxBackoffMs: 8000, readTimeoutMs: 1000, leaseTtlMs: 10000 });
+      maxBackoffMs: 8000, readTimeoutMs: 1000, leaseTtlMs: 10000,
+      htxCoverage: { ...readerLimits, host: "api.huobi.pro" } });
     const b = { ...await seed("654321"), configurationRevision: config.revision };
     await admin`UPDATE trader_account_collection_state SET configuration_revision=${config.revision}
       WHERE credential_id=${b.credentialId}`;
@@ -136,20 +138,24 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     const readerSql = postgres(`postgres://${login}:synthetic_composed_reader@127.0.0.1:55460/${name}`,
       { max: 2, connect_timeout: 3, prepare: false, connection: { statement_timeout: 3000 } });
     let decrypts = 0; let reads = 0; let commits = 0;
-    const configured = [{ binding: b, config, readerLimits: {
-      pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 } }];
+    const configured = [{ binding: b, config, readerLimits }];
     const make = (stop: AbortController) => createConfiguredHtxObservationRuntime({
       collectorSql: client, readerSql, configured, clock: accountObservationClock,
       ownerId: "local-composed-proof", intervalMs: 1000, iterationTimeoutMs: 15000, host: "api.huobi.pro",
-      // Test-only provider, admission and HTTP. No actual key or HTX request.
+      // Test-only provider and HTTP. Actual metadata admission, no key or HTX request.
       protectedCredentialService: { async getDecryptedCredentials(context, id) {
         expect(context.organizationId).toBe(b.organizationId); expect(id).toBe(b.credentialId);
         decrypts++; return { apiKey: "synthetic-key", apiSecret: "synthetic-secret" };
-      } }, verifyReadAdmission: async () => true,
+      } },
       async fetchImpl(url, init) {
         expect(init?.method).toBe("GET"); expect(init?.redirect).toBe("error");
         const request = new URL(String(url)); expect(request.origin).toBe("https://api.huobi.pro");
         expect(request.searchParams.get("Signature")).toBeTruthy();
+        if (request.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+          data: [{ id: 654321, type: "spot", state: "working" }] });
+        if (request.pathname === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+        if (request.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+          data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly" }] });
         let data: unknown = [];
         if (request.pathname.endsWith("/balance")) { reads++; data = { id: 654321, type: "spot", state: "working",
           list: [{ currency: "usdt", type: "trade", balance: "42" }, { currency: "usdt", type: "frozen", balance: "0" }] }; }
