@@ -93,6 +93,15 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
             continue;
           }
           expect(statement.importClause?.isTypeOnly).toBe(true);
+          if (file === "lib/trader/account-observation/types.ts" &&
+            (statement.moduleSpecifier as ts.StringLiteral).text === "./coverage") {
+            const bindings = statement.importClause?.namedBindings;
+            expect(statement.importClause?.name).toBeUndefined();
+            expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => ({
+              name: element.name.text, original: element.propertyName?.text,
+            }))).toEqual([{ name: "HtxObservationCoverage", original: undefined }]);
+            continue;
+          }
           expect(["@/lib/trader/connectors/types", "./types"]).toContain(
             (statement.moduleSpecifier as ts.StringLiteral).text,
           );
@@ -120,6 +129,24 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       "lib/trader/account-observation/types.ts/other.ts"]) {
       expect(new RegExp(rule.pathPattern).test(file)).toBe(false);
     }
+  });
+
+  it("keeps the type-only coverage dependency limited to static Zod schemas", () => {
+    const file = "lib/trader/account-observation/coverage.ts";
+    const body = readFileSync(join(ROOT, file), "utf8");
+    const ast = ts.createSourceFile(file, body, ts.ScriptTarget.Latest, true);
+    const imports = ast.statements.filter(ts.isImportDeclaration);
+    expect(imports.map(statement => (statement.moduleSpecifier as ts.StringLiteral).text)).toEqual(["zod"]);
+    const bindings = imports[0]!.importClause?.namedBindings;
+    expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => element.name.text)).toEqual(["z"]);
+    expect(ast.statements.every(statement => ts.isImportDeclaration(statement) ||
+      ts.isVariableStatement(statement) || ts.isTypeAliasDeclaration(statement))).toBe(true);
+    expect(ast.statements.filter(ts.isVariableStatement).flatMap(statement =>
+      statement.declarationList.declarations.map(declaration => declaration.name.getText(ast))))
+      .toEqual(["htxObservationReaderLimitsSchema", "htxObservationCoverageSchema"]);
+    expect(body).not.toMatch(/import\s*\(|require\s*\(|fetch|process\.env|globalThis|window|=>|\bfunction\b/);
+    const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
+    expect(inventory.admittedBoundaryFiles).not.toContain(file);
   });
 
   it("binds historical, synthetic, modelled, and Execution V2 barrel surfaces into closure", () => {

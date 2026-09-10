@@ -9,8 +9,8 @@ requiredValidation: [focused-unit, lint, typecheck, build, canon, independent-ex
 approvalGates: [human-security-review, human-production-rollout]
 state:
   status: in-review
-  prNumber: null
-  prUrl: null
+  prNumber: 571
+  prUrl: https://github.com/oumaster369/waia/pull/571
   blockedReason: null
 provenance:
   authoritativeBase: 9c976bdadded0f7de0bdfe891dc0573aac3be70c
@@ -83,3 +83,24 @@ only its allowlisted GET capability. Unknown/withdraw/transfer metadata is denie
 Supabase guidance and the official HTX API Key Query response contract were used
 for the protected credential and metadata boundary. No private credentials were
 read, logged, transmitted to Linear or included in tests.
+
+## CI correction — 2026-09-10
+
+PR571 original-head full CI ran to completion: 6906 tests passed, two failed in
+`trader-reality-v2-consumer-graph.test.ts`, 589 skipped in this suite (dedicated
+PostgreSQL17 gate passed separately). Both failures reproduced locally: the
+content digest omitted reviewed changes to transport/types, and the strict DTO
+import test had not admitted the new type-only coverage dependency. The earlier
+focused invocation used the wrong consumer-graph filename and did not execute
+this guard; the focused gate now names the actual file explicitly.
+
+Reconcile the existing inventory after review, preserving its 154 sources,129
+consumers,25 connector references, exact path digest, source digests, narrow
+dispositions and all forbidden-source checks. Allow only the single named
+type-only coverage import from types.ts and add a check of its static Zod-only
+module; no broad import exception or canonical Reality authority is introduced.
+PR572 merged after all21 checks PASS as2c19890b4363f7cf9d223ba0fd11e017ab1cd6eb;
+this branch incorporates that main commit without conflicts for strict-base CI.
+After correction:470 focused unit tests (including the actual8-test Reality graph
+guard), typecheck, scoped lint and diff check PASS. Exact-head GitHub CI will rerun;
+the failed original result is retained, not relabelled as a successful run.
