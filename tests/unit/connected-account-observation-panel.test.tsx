@@ -39,6 +39,10 @@ function observation(): AccountObservation {
 }
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+const streamed = (value: unknown) =>
+  new Response(`event: observation\ndata: ${JSON.stringify(value)}\n\n`, {
+    headers: { "content-type": "text/event-stream" },
+  });
 async function settle() {
   await act(async () => {
     for (let i = 0; i < 50; i++) await Promise.resolve();
@@ -51,11 +55,53 @@ afterEach(() => {
 });
 
 describe("DEE-961 connected panel (fake HTTP only)", () => {
-  it("resolves authorized binding then automatically polls the exact account", async () => {
+  it("account switch and logout cancel the old stream and clear its evidence immediately", async () => {
+    const cancelled = vi.fn();
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+      const exact = { ...binding, exchangeAccountId: url.searchParams.get("exchangeAccountId")! };
+      if (url.pathname.endsWith("/binding")) return json(exact);
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(
+              new TextEncoder().encode(
+                `event: observation\ndata: ${JSON.stringify({ ...observation(), binding: exact })}\n\n`,
+              ),
+            );
+          },
+          cancel: cancelled,
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    });
+    const { rerender } = render(
+      <ConnectedAccountObservationPanel target={target} fetcher={fetcher} />,
+    );
+    await settle();
+    expect(screen.getByText("account-a")).toBeInTheDocument();
+    rerender(
+      <ConnectedAccountObservationPanel
+        target={{ ...target, exchangeAccountId: "account-b" }}
+        fetcher={fetcher}
+      />,
+    );
+    expect(screen.queryByText("account-a")).not.toBeInTheDocument();
+    await settle();
+    expect(cancelled).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("account-b")).toBeInTheDocument();
+    rerender(<ConnectedAccountObservationPanel target={null} fetcher={fetcher} />);
+    expect(screen.queryByText("account-b")).not.toBeInTheDocument();
+    await settle();
+    expect(cancelled).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status")).toHaveTextContent("DISCONNECTED");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("resolves authorized binding then automatically streams the exact account", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockImplementation(async (input) =>
-        json(String(input).includes("/binding?") ? binding : observation()),
+        String(input).includes("/binding?") ? json(binding) : streamed(observation()),
       );
     render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
     await settle();
@@ -70,13 +116,14 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       redirect: "error",
     });
     expect(fetcher.mock.calls[1][0]).toContain("credentialRevision=1");
+    expect(fetcher.mock.calls[1][0]).toContain("/stream?");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
   it("uses admin endpoint with exact organization scope", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockImplementation(async (input) =>
-        json(String(input).includes("/binding?") ? binding : observation()),
+        String(input).includes("/binding?") ? json(binding) : streamed(observation()),
       );
     render(
       <ConnectedAccountObservationPanel
@@ -210,7 +257,7 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
     let count = 0;
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       if (String(input).includes("/binding?")) return json(binding);
-      return ++count === 1 ? json(observation()) : new Response(null, { status: 403 });
+      return ++count === 1 ? streamed(observation()) : new Response(null, { status: 403 });
     });
     render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
     await settle();

@@ -19,6 +19,69 @@ state:
 
 # DEE-961 — Shared account observation UI
 
+## Bounded SSE follow-up — 2026-09-10
+
+Implementation branch `dee-961-account-observation-stream`, exact base
+`9c976bdadded0f7de0bdfe891dc0573aac3be70c`. This section supersedes the earlier
+polling-only implementation description below. Earlier evidence is retained as history.
+
+- Both mounted panels now use authenticated fetch SSE through tenant/Admin
+  `/account-observation/stream` routes. Every read invokes the existing complete
+  stored-projection adapter with fresh identity, entitlement, membership, Admin
+  permission and exact five-field binding/revision checks before/after storage.
+  The existing read-only identity resolver is exported without React memoization
+  for these repeated checks; verified `getUser` semantics remain unchanged.
+- Streams are request-local and pull-driven (`highWaterMark: 0`). A first full
+  read selects the HTTP status, discards the preflight body, then consumer pulls
+  perform fresh fenced reads. Revocation between preflight and first pull cannot
+  publish a cached observation. Maximum four reads including preflight (three
+  data/control frames), five-second minimum interval between emitted reads,
+  25-second independent lifetime, 4 MiB frame and 16 MiB stream ceilings.
+  Existing five-second read timeout and per-read database disposal are retained.
+  Disconnect/expiry aborts active reads, cancels bodies, clears timers and fences
+  late completions. Slow consumers cannot accumulate queued projection reads.
+- Browser requests retain same-origin cookies, GET/no-store, redirect rejection
+  and no-referrer behavior. Only the existing five binding metadata fields enter
+  URLs. Strict DTO parsing and exact binding validation apply to every observation;
+  missing, revoked and error control events have fixed `null` payloads. No raw
+  exception text, venue responses, credentials or invented zero values are emitted.
+- Reconnect waits five seconds. Transient stream failures use three serialized
+  JSON polling reads before an SSE retry, with failure backoff capped at 30 seconds.
+  Browser stream lifetime is capped at 30 seconds and JSON reads at ten seconds.
+  HTTP401/403 or a revoke frame clears evidence and ends retries. No overlapping
+  requests or late publication occurs even when injected fetch ignores abort.
+  Actual network release still relies on native fetch/body cancellation.
+- UI separately labels stream connection, automatic reconnect and polling fallback;
+  observation completeness/age remain independent. Existing hook scope fencing
+  and immediate logout/account-switch clearing remain in force.
+
+Local validation: 111 focused tests cover real scoped read-handler composition,
+all five binding fields, repeated access/revision fences, preflight revocation,
+fresh identity without React cache, per-read route resource disposal, lifetime,
+slow/aborted reads, malformed/oversize frames, reconnect/fallback, and mounted
+account-switch/logout cleanup. Next production-mode build and 3/3 Playwright
+cases PASS using only `.data/dee961-stream-e2e.db` synthetic local SQLite identity
+fixtures. Browser cases prove mounted Admin/tenant observation parity, reconnect,
+controlled stream failure/polling fallback, revoked clearing, anonymous Admin
+denial and historical isolation. They intercept transport with schema-valid
+fixtures; backend permission tests separately use the actual scoped handler with
+injected dependencies. Typecheck and full lint (existing warnings only) PASS.
+
+Cloudflare and Supabase skills informed bounded streams, request-local state,
+verified identity and private cache policy. Current Workers stream documentation
+and best practices were retrieved; latest `@cloudflare/workers-types` version
+`5.20260908.1` verified `UnderlyingSource`, `QueuingStrategy`, `ReadableStream`
+and `AbortController` signatures. Existing Wrangler 4.87.0 schema was inspected;
+no configuration/binding changes. Supabase changelog markdown retrieval failed;
+HTML changelog and current SSR guidance were read instead. No relevant auth API
+change is introduced.
+
+This completes only the local bounded SSE transport follow-up. Production
+stream behavior, OpenNext/Workers deployment, actual HTX collection/account data,
+runtime collector configuration and production acceptance remain unverified and
+separately authorized. This work performs no deployment, production migration,
+real-account call, credential provisioning, historical restart or capital action.
+
 ## Local verification result — 2026-09-09
 
 Mounted browser checks now PASS 3/3, including automatic Admin/tenant observation
