@@ -66,6 +66,15 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
         {view.status}
         {view.stale && view.status !== "STALE" ? " · STALE" : ""}
       </p>
+      {view.transport && (
+        <p className="text-waia-fg-muted text-sm">
+          {view.transport === "STREAMING"
+            ? "Automatic stream connected."
+            : view.transport === "POLLING"
+              ? "Automatic polling fallback; stream retry scheduled."
+              : "Reconnecting automatically."}
+        </p>
+      )}
       <p className="text-waia-fg-muted text-sm">
         Read-only evidence. Holdings are not strategy positions. PnL, cost basis and equity are not
         calculated here.

@@ -8,6 +8,7 @@ import type {
 
 export type ObservationEvent =
   | { type: "observation"; observation: AccountObservation }
+  | { type: "transport"; transport: "STREAMING" | "POLLING" | "RECONNECTING" }
   | { type: "connected" | "disconnected" | "error" | "revoked" };
 
 /** The adapter owns authenticated transport, validation and bounded reconnects.
@@ -22,6 +23,7 @@ export type AccountObservationView = Readonly<{
   status: "DISCONNECTED" | "LOADING" | "CURRENT" | "STALE" | "PARTIAL" | "ERROR" | "REVOKED";
   observation: AccountObservation | null;
   stale: boolean;
+  transport?: "STREAMING" | "POLLING" | "RECONNECTING";
 }>;
 
 function bindingKey(binding: ObservationBinding | null): string {
@@ -40,6 +42,7 @@ type StoredView = {
   scope: object;
   observation: AccountObservation | null;
   connection: "LOADING" | "CONNECTED" | "DISCONNECTED" | "ERROR" | "REVOKED";
+  transport?: AccountObservationView["transport"];
 };
 
 /** Local UI port, not a production stream. Pass binding=null when access/session ends. */
@@ -78,6 +81,8 @@ export function useAccountObservation({
     let stopped = false;
     let revoked = false;
     let latest: AccountObservation | null = null;
+    let connection: StoredView["connection"] = "LOADING";
+    let transport: AccountObservationView["transport"];
     let unsubscribe: (() => void) | undefined;
     const dispose = () => {
       const cleanup = unsubscribe;
@@ -89,13 +94,18 @@ export function useAccountObservation({
       }
     };
     const startedAt = Date.now();
-    const publish = (connection: StoredView["connection"]) => {
-      if (!stopped) setStored({ scope, observation: latest, connection });
+    const publish = (next: StoredView["connection"]) => {
+      connection = next;
+      if (!stopped) setStored({ scope, observation: latest, connection, transport });
     };
     const emit = (event: ObservationEvent) => {
       if (stopped || revoked) return;
-      if (event.type === "revoked") {
+      if (event.type === "transport") {
+        transport = event.transport;
+        publish(connection);
+      } else if (event.type === "revoked") {
         revoked = true;
+        transport = undefined;
         latest = null;
         publish("REVOKED");
         controller.abort();
@@ -171,5 +181,5 @@ export function useAccountObservation({
               ? "PARTIAL"
               : "CURRENT"
       : stored.connection;
-  return { status, observation, stale };
+  return { status, observation, stale, transport: stored.transport };
 }
