@@ -26,7 +26,7 @@ provenance:
 
 # DEE-961 — Bounded account observation stream
 
-## Authorized scope and design
+## Acceptance
 
 Add tenant/Admin `/account-observation/stream` routes over the existing stored
 projection contract, then mount one shared browser subscriber in both panels.
