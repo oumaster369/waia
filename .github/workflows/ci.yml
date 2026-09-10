@@ -381,6 +381,9 @@ jobs:
       DATABASE_URL: file:./.data/ci-unit.sqlite
     steps:
       - uses: actions/checkout@v4
+        with:
+          # DEE-981 verifies frozen scientific source bytes against the original Git commit.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10
