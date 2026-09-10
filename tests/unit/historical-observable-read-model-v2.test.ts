@@ -4,6 +4,8 @@ import { createHistoricalSimulationDurableStateSnapshotV2 } from "@/lib/trader/h
 import { computeAccountingSemanticDigest } from "@/lib/trader/accounting";
 import { buildHistoricalSimulationRunLifecycleEventV2 } from
   "@/lib/trader/historical-simulation-v2/run-lifecycle-v2";
+import { compareHistoricalPanelExportsV2 } from
+  "@/lib/trader/historical-simulation-v2/panel-comparison-v2";
 
 const row = (accountId: string, equity: string, sequence: number) => {
   const body = { schemaVersion:"htr-accounting-frontier/v1" as const,engineId:"CANONICAL_CROSS_BACKEND_ACCOUNTING_ENGINE_V1" as const,
@@ -45,6 +47,21 @@ const row = (accountId: string, equity: string, sequence: number) => {
 };
 
 describe("historical observable read model v2", () => {
+  it("compares complete account-scoped exports from the actual projection producer", async () => {
+    const lifecycle = buildHistoricalSimulationRunLifecycleEventV2({ organizationId: "org", accountId: "a", runId: "run",
+      partition: "WALK_FORWARD", symbol: "BTCUSDT", eventSequence: 2, phase: "COMPLETED", initialRecordIndex: 1,
+      terminalRecordIndexExclusive: 3, qualifiedTotalCycles: 2, committedCycles: 2, nextCycleSequence: 2,
+      latestCommittedCycleId: "c-1", requestedByOperatorId: "operator", observedAt: "2026-01-01T00:02:00.000Z",
+      errorCode: null, previousContentDigestHex: "f".repeat(64) });
+    const rows = [row("a", "99", 0), { ...row("a", "100", 1), replay_bar_closed_at_utc: "2026-01-01T00:01:00.000Z" }];
+    const load = async () => loadHistoricalObservableProjectionPostgresV2({ unsafe: vi.fn()
+      .mockResolvedValueOnce([{ event_json: lifecycle }]).mockResolvedValueOnce(rows) } as never,
+    { organizationId: "org", runId: "run", accountId: "a" });
+    const admin = await load(); const tenant = await load();
+    expect(compareHistoricalPanelExportsV2(JSON.stringify(admin), JSON.stringify(tenant), {
+      organizationId: "org", runId: "run", accountId: "a", initialRecordIndex: 1, totalCycles: 2,
+    })).toEqual({ status: "MATCH", reason: "SUPPLIED_PROJECTIONS_EQUAL", readinessGranted: false });
+  });
   it("refuses missing, tampered or differently scoped exchange evidence", async () => {
     for (const override of [{exchange_state_json:null}, {exchange_snapshot_content_digest_hex:"f".repeat(64)},
       {exchange_snapshot_cycle_id:"another-cycle"}]) {
