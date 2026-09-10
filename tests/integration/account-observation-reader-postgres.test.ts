@@ -6,6 +6,9 @@ import { createPostgresObservationReader } from "@/lib/trader/account-observatio
 import { createPostgresObservationAssignmentSource } from "@/lib/trader/account-observation/postgres-assignments";
 import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
 import type { AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
+import { observationPoolLimits, probeObservationPool } from "@/lib/trader/account-observation/host-role-probe";
+import { createAccountObservationHost } from "@/lib/trader/account-observation/host";
+import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 
 // Explicit synthetic loopback-only target; never use production environment URLs.
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
@@ -197,5 +200,112 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
     await locked;
     try { expect(await reader.readLatest(b)).toEqual(observation); }
     finally { release(); await holder; }
+  });
+});
+
+// DEE-979: kept in this CI-selected file so case-only changes trigger PostgreSQL checks.
+describe.skipIf(!enabled)("DEE-979 actual PostgreSQL 17 host session attestation", () => {
+  let root: Sql; let admin: Sql; let db: string;
+  const clients: Sql[] = []; let serial = 0;
+  beforeAll(async () => {
+    root = postgres(url, { max: 1, connect_timeout: 3, prepare: false });
+    const version = Number((await root`SHOW server_version_num`)[0].server_version_num);
+    expect(version).toBeGreaterThanOrEqual(170000); expect(version).toBeLessThan(180000);
+    db = "dee979_host_" + randomUUID().replaceAll("-", "");
+    await root.unsafe(`CREATE DATABASE "${db}"`);
+    admin = postgres(url.replace("/waia_dee960_local", "/" + db), { max: 1, connect_timeout: 3, prepare: false });
+    await admin.unsafe(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
+        CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+    END $$;
+    GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;`);
+    await admin.begin(async tx => {
+      await tx.unsafe("SET LOCAL ROLE dee960_local_owner");
+      await tx.unsafe("CREATE TABLE public.organizations (id uuid PRIMARY KEY)");
+      for (const path of ["db/migrations_postgres/0006_exchange_credentials.sql",
+        "db/migrations_postgres/0007_exchange_credentials_rls.sql", "db/migrations_postgres/0205_trader_account_observation_v1.sql"])
+        await tx.unsafe(readFileSync(path, "utf8").replaceAll("--> statement-breakpoint", ""));
+    });
+  }, 30000);
+  afterAll(async () => {
+    for (const sql of clients) await sql.end({ timeout: 2 });
+    await admin?.end({ timeout: 2 }); await root?.end({ timeout: 2 });
+    // Unique synthetic DB/LOGINs retained for diagnosis. Never remove user data.
+  });
+  async function login(purpose: "collector" | "reader", membership = "WITH INHERIT FALSE, SET TRUE") {
+    const name = `${db}_${++serial}`;
+    const role = purpose === "reader" ? "waia_account_observation_reader" : "waia_account_observer";
+    await admin.unsafe(`CREATE ROLE "${name}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
+      PASSWORD 'synthetic_host_only'; GRANT ${role} TO "${name}" ${membership};`);
+    const sql = postgres(`postgres://${name}:synthetic_host_only@127.0.0.1:55460/${db}`, observationPoolLimits);
+    clients.push(sql); return { name, sql };
+  }
+  it("attests two distinct constrained LOGINs and leaves no role or timeout session residue", async () => {
+    const collector = await login("collector"); const reader = await login("reader");
+    expect(await probeObservationPool(collector.sql, "collector")).toBe(collector.name);
+    expect(await probeObservationPool(reader.sql, "reader")).toBe(reader.name);
+    expect(collector.name).not.toBe(reader.name);
+    for (const { name, sql } of [collector, reader]) {
+      expect((await sql`SELECT current_user::text AS role, current_setting('statement_timeout') AS timeout`)[0])
+        .toEqual({ role: name, timeout: "0" });
+      await expect(sql`SELECT encrypted_payload FROM public.exchange_credentials`).rejects.toThrow();
+    }
+  });
+  it("actual protected host composes and drains fresh attested pools without accessing an account", async () => {
+    const collector = await login("collector"); const reader = await login("reader");
+    const stop = new AbortController(); const closed: string[] = []; const events: string[] = [];
+    const host = createAccountObservationHost({ configured: [], host: "api.huobi.pro", ownerId: "synthetic-host",
+      intervalMs: 1000, iterationTimeoutMs: 2000, openTimeoutMs: 5000, shutdownTimeoutMs: 2000,
+      openCollector: async () => ({ sql: collector.sql, async dispose() { closed.push("collector"); await collector.sql.end({ timeout: 1 }); } }),
+      openReader: async () => ({ sql: reader.sql, async dispose() { closed.push("reader"); await reader.sql.end({ timeout: 1 }); } }),
+      openCredentialService: async () => ({ service: { async getDecryptedCredentials() { throw new Error("NO_ACCOUNT_ACCESS_ALLOWED"); } },
+        async dispose() { closed.push("credential-provider"); } }),
+      async fetchImpl() { throw new Error("NO_NETWORK_ALLOWED"); }, clock: accountObservationClock,
+      report(event) { events.push(event); if (event === "HOST_STARTED") stop.abort(); } });
+    await host.run(stop.signal); await host.stop();
+    expect(events).toEqual(["HOST_STARTED", "HOST_STOPPED"]);
+    expect(closed).toEqual(["credential-provider", "reader", "collector"]);
+    await expect(host.run(new AbortController().signal)).rejects.toThrow();
+  });
+  it("membership without SET cannot pass and collector cannot masquerade as reader", async () => {
+    const member = await login("reader", "WITH INHERIT FALSE, SET FALSE");
+    expect((await member.sql`SELECT pg_has_role(session_user, 'waia_account_observation_reader', 'MEMBER') AS member,
+      pg_has_role(session_user, 'waia_account_observation_reader', 'SET') AS can_set`)[0]).toEqual({ member: true, can_set: false });
+    await expect(probeObservationPool(member.sql, "reader")).rejects.toThrow("OBSERVATION_HOST_ROLE_REFUSED");
+    await expect(probeObservationPool((await login("collector")).sql, "reader")).rejects.toThrow();
+  });
+  it("refuses direct or inherited extra role authority and INHERIT sessions", async () => {
+    const direct = await login("reader");
+    await admin.unsafe(`GRANT waia_account_observer TO "${direct.name}" WITH INHERIT FALSE, SET TRUE`);
+    await expect(probeObservationPool(direct.sql, "reader")).rejects.toThrow();
+    const indirect = await login("reader"); const extra = `${db}_extra`;
+    await admin.unsafe(`CREATE ROLE "${extra}" NOLOGIN; GRANT pg_read_all_data TO "${extra}";
+      GRANT "${extra}" TO "${indirect.name}" WITH INHERIT TRUE, SET TRUE`);
+    await expect(probeObservationPool(indirect.sql, "reader")).rejects.toThrow();
+    const inherited = await login("reader"); await admin.unsafe(`ALTER ROLE "${inherited.name}" INHERIT`);
+    await expect(probeObservationPool(inherited.sql, "reader")).rejects.toThrow();
+  });
+  it("refuses PUBLIC secret or write grants and retains a passing baseline after revocation", async () => {
+    const reader = await login("reader");
+    await admin`GRANT SELECT (encrypted_payload) ON public.exchange_credentials TO PUBLIC`;
+    try { await expect(probeObservationPool(reader.sql, "reader")).rejects.toThrow(); }
+    finally { await admin`REVOKE SELECT (encrypted_payload) ON public.exchange_credentials FROM PUBLIC`; }
+    await admin`GRANT UPDATE (symbols) ON public.trader_account_collection_state TO PUBLIC`;
+    try { await expect(probeObservationPool(reader.sql, "reader")).rejects.toThrow(); }
+    finally { await admin`REVOKE UPDATE (symbols) ON public.trader_account_collection_state FROM PUBLIC`; }
+    expect(await probeObservationPool(reader.sql, "reader")).toBe(reader.name);
+  });
+  it("refuses role-local forbidden writes and disabled forced RLS", async () => {
+    const reader = await login("reader");
+    await admin`GRANT DELETE ON public.trader_account_observations TO waia_account_observation_reader`;
+    try { await expect(probeObservationPool(reader.sql, "reader")).rejects.toThrow(); }
+    finally { await admin`REVOKE DELETE ON public.trader_account_observations FROM waia_account_observation_reader`; }
+    await admin`ALTER TABLE public.trader_account_observations NO FORCE ROW LEVEL SECURITY`;
+    try { await expect(probeObservationPool(reader.sql, "reader")).rejects.toThrow(); }
+    finally { await admin`ALTER TABLE public.trader_account_observations FORCE ROW LEVEL SECURITY`; }
+    expect(await probeObservationPool(reader.sql, "reader")).toBe(reader.name);
   });
 });
