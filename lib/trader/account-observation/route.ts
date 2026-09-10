@@ -1,6 +1,6 @@
 import "server-only";
 import postgres, { type Sql } from "postgres";
-import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
+import { getFreshOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { assertOrgMembershipPostgres } from "@/lib/waia-core/scope/org-context";
 import { hasModuleEntitlementPostgres } from "@/lib/waia-core/entitlements/authoritative";
@@ -38,7 +38,7 @@ export function createAccountObservationRouteDependencies() {
     return createPostgresObservationReader(sql);
   };
   const deps: ObservationReadDependencies = {
-    async getUserId(signal) { assertOpen(signal); return getOptionalAdminSessionUserId(); },
+    async getUserId(signal) { assertOpen(signal); return getFreshOptionalAdminSessionUserId(); },
     async hasTraderAccess(_userId, organizationId, signal) {
       return hasModuleEntitlementPostgres((await runtime(signal)).db, { organizationId, entitlementKey: "trader" });
     },

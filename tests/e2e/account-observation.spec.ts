@@ -17,12 +17,14 @@ test("mounted Admin and tenant update the same observation automatically and cle
   page,
   context,
 }) => {
+  test.setTimeout(90_000);
   const email = `e2e-account-observation-${Date.now()}@example.com`;
   await signUpAndOpenDashboard(page, email);
   grantTraderEntitlementByUserEmail(email);
   grantPlatformAdminByUserEmail(email);
   let version = 1;
   let denied = false;
+  let streamFailed = false;
   const started = Date.now();
   const observation = () => {
     const at = started + version;
@@ -52,14 +54,19 @@ test("mounted Admin and tenant update the same observation automatically and cle
   };
   const wire = async (target: Page, admin: boolean) => {
     await target.route(`**/api/trader/${admin ? "admin/" : ""}account-observation**`, (route) => {
-      const isBinding = new URL(route.request().url()).pathname.endsWith("/binding");
+      const pathname = new URL(route.request().url()).pathname;
+      const isBinding = pathname.endsWith("/binding");
+      const isStream = pathname.endsWith("/stream");
+      if (streamFailed && isStream && !denied) return route.fulfill({ status: 503, body: "" });
       return route.fulfill(
         denied
           ? { status: 403, body: "" }
           : {
               status: 200,
-              contentType: "application/json",
-              body: JSON.stringify(isBinding ? binding : observation()),
+              contentType: isStream ? "text/event-stream" : "application/json",
+              body: isStream
+                ? `event: observation\ndata: ${JSON.stringify(observation())}\n\n`
+                : JSON.stringify(isBinding ? binding : observation()),
             },
       );
     });
@@ -122,10 +129,20 @@ test("mounted Admin and tenant update the same observation automatically and cle
   const adminPanel = admin.getByRole("region", { name: "Account observation", exact: true });
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible();
   await expect(adminPanel.getByRole("button")).toHaveCount(0);
+  await expect(tenantPanel.getByText("Reconnecting automatically.")).toBeVisible();
+  await expect(adminPanel.getByText("Reconnecting automatically.")).toBeVisible();
 
   version = 2;
   await expect(tenantPanel.getByText(observation().observationId)).toBeVisible({ timeout: 12_000 });
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible({ timeout: 12_000 });
+  streamFailed = true;
+  await expect(
+    tenantPanel.getByText("Automatic polling fallback; stream retry scheduled."),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    adminPanel.getByText("Automatic polling fallback; stream retry scheduled."),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(tenantPanel.getByText(observation().observationId)).toBeVisible();
   denied = true;
   await expect(tenantPanel.getByText("Access revoked; account data cleared.")).toBeVisible({
     timeout: 12_000,

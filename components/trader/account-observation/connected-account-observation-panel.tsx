@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
 import { observationBindingSchema } from "@/lib/trader/account-observation/validation";
 import { AccountObservationPanel } from "./account-observation-panel";
-import {
-  createPollingObservationSubscriber,
-  readBoundedObservationJson,
-} from "./polling-subscriber";
+import { readBoundedObservationJson } from "./polling-subscriber";
+import { createStreamingObservationSubscriber } from "./streaming-subscriber";
 import { useAccountObservation } from "./use-account-observation";
 
 const browserFetch: typeof fetch = (input, init) => fetch(input, init);
@@ -41,7 +39,7 @@ export function ConnectedAccountObservationPanel({
   const scope = useMemo(() => ({ key, endpoint, fetcher }), [key, endpoint, fetcher]);
   const [stored, setStored] = useState<BindingState | null>(null);
   const subscribe = useMemo(
-    () => createPollingObservationSubscriber({ endpointPath: endpoint, fetcher }),
+    () => createStreamingObservationSubscriber({ endpointPath: endpoint, fetcher }),
     [endpoint, fetcher],
   );
 

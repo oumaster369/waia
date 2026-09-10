@@ -83,3 +83,6 @@ async function resolveOptionalAdminSessionUserId(): Promise<string | null> {
 }
 
 export const getOptionalAdminSessionUserId = cache(resolveOptionalAdminSessionUserId);
+
+/** Revalidate sensitive bounded reads within a single request without React memoization. */
+export const getFreshOptionalAdminSessionUserId = resolveOptionalAdminSessionUserId;
