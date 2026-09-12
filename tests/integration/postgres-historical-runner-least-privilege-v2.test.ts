@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,6 +15,8 @@ import { buildHistoricalSimulationRunLifecycleEventV2 } from
 import { provisionHistoricalRunnerLoginV2 } from
   "../../scripts/ops/provision-historical-runner-login.mjs";
 import { registerManagedHistoricalRoleTests } from "./postgres-managed-historical-role-v2.cases";
+import { CDF_ERF_CODY715_VERSION, CDF_REFERENCE_AMENDMENT_DIGEST } from
+  "@/lib/trader/research/benchmark/cdf-evidence-protocol-v2";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -94,6 +97,45 @@ describe.skipIf(!enabled || !url)("Postgres Historical V2 runner least privilege
     }
     await sql.end({ timeout: 5 });
   });
+
+  it.each(["current", "missing", "old-kernel", "wrong-amendment", "old-schema"])(
+    "enforces actual 0207 protocol predicate under SET ROLE: %s", async kind => {
+      if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(url!).hostname))
+        throw new Error("LOCAL_PROTOCOL_PROBE_ONLY");
+      const migration = readFileSync("db/migrations_postgres/0207_historical_cody_admission_v4.sql","utf8");
+      const start=migration.indexOf("AND schema_version='scientific-admission-receipt/v4'");
+      const stop=migration.indexOf("AND selected_k_config_dec IS NOT NULL",start);
+      expect(start).toBeGreaterThan(0); expect(stop).toBeGreaterThan(start);
+      const predicate=migration.slice(start+4,stop).trim();
+      const receipt: Record<string,unknown> = {
+        predictiveTerminalReceipt:{
+          schemaVersion:"predictive-terminal-receipt/v3",harnessSchemaVersion:"research-harness-admission/v5",
+          scoringContractVersion:"multiclass-brier-reward/v1",scoringMetric:"terminal-multiclass-brier-reward/v1",
+          scoringAmendmentDigestHex:"694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
+          cdfKernelVersion:CDF_ERF_CODY715_VERSION,cdfAmendmentDigestHex:CDF_REFERENCE_AMENDMENT_DIGEST,
+        },
+      };
+      const terminal=receipt.predictiveTerminalReceipt as Record<string,unknown>;
+      if(kind==="missing") delete terminal.cdfKernelVersion;
+      if(kind==="old-kernel") terminal.cdfKernelVersion="cdf-erf-cody715/v1";
+      if(kind==="wrong-amendment") terminal.cdfAmendmentDigestHex="f".repeat(64);
+      let inserted=false, code:string|undefined;
+      try {
+        await sql.begin(async tx=>{
+          await tx.unsafe("CREATE TEMP TABLE cody_protocol_probe (schema_version text, receipt_json text) ON COMMIT DROP");
+          await tx.unsafe("ALTER TABLE cody_protocol_probe ENABLE ROW LEVEL SECURITY");
+          await tx.unsafe("GRANT INSERT ON cody_protocol_probe TO waia_historical_runner");
+          await tx.unsafe("CREATE POLICY cody_protocol_probe_insert ON cody_protocol_probe FOR INSERT TO waia_historical_runner WITH CHECK ("+predicate+")");
+          await tx.unsafe("SET LOCAL ROLE waia_historical_runner");
+          await tx`INSERT INTO cody_protocol_probe VALUES (
+            ${kind==="old-schema"?"scientific-admission-receipt/v3":"scientific-admission-receipt/v4"},
+            ${JSON.stringify(receipt)})`;
+          inserted=true;
+        });
+      } catch(error) { code=(error as {code?:string}).code; }
+      expect(inserted).toBe(kind==="current");
+      expect(code).toBe(kind==="current"?undefined:"42501");
+    });
 
   it("recomputes the legacy Human receipt digest with exact JSON.stringify bytes", async () => {
     const body = {
@@ -525,13 +567,21 @@ describe.skipIf(!enabled || !url)("Postgres Historical V2 runner least privilege
     }
   });
 
-  it.each(["scientific-admission-receipt/v2", "scientific-admission-receipt/v3"])("refuses arbitrary Human-semantic %s outside an exact approved surface", async (schemaVersion) => {
+  it.each(["scientific-admission-receipt/v2", "scientific-admission-receipt/v3", "scientific-admission-receipt/v4"])("refuses arbitrary Human-semantic %s outside an exact approved surface", async (schemaVersion) => {
     const forged = {
       schemaVersion,
       organizationId: AUTHORIZED_ORGANIZATION,
       wfPartition: "WF_PREDICTIVE",
       terminalStatus: "ADMITTED",
-      predictiveTerminalReceipt: {},
+      predictiveTerminalReceipt: {
+        schemaVersion: "predictive-terminal-receipt/v3",
+        harnessSchemaVersion: "research-harness-admission/v5",
+        scoringContractVersion: "multiclass-brier-reward/v1",
+        scoringMetric: "terminal-multiclass-brier-reward/v1",
+        scoringAmendmentDigestHex: "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
+        cdfKernelVersion: CDF_ERF_CODY715_VERSION,
+        cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST,
+      },
       kmConvergenceReceipt: {},
       epistemicParameterRatificationReceipt: {},
       evidenceSemanticDigestHex: "1".repeat(64),

@@ -1,4 +1,5 @@
 import { TERMINAL_SCORING_CONTRACT } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
+import { CDF_ERF_CODY715_VERSION, CDF_REFERENCE_AMENDMENT_DIGEST, PREDICTIVE_TERMINAL_CHECKPOINT_STAGE } from "@/lib/trader/research/benchmark/cdf-evidence-protocol-v2";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
@@ -71,6 +72,7 @@ import { assertTechnicalPreparationActiveV2, emitTechnicalPreparationProgressV2,
 import {
   buildEpistemicParameterRatificationReceiptV1,
   buildPredictiveTerminalReceiptAsyncV1,
+  validatePredictiveTerminalReceipt,
 } from "./scientific-admission-v2";
 import {
   buildScientificAdmissionReceiptRecordV2,
@@ -1609,7 +1611,8 @@ async function buildTechnicalSurfaceCandidatesV2(
         evaluationPartitionReceiptDigestHex,
       },
     };
-    const predictive = await reuseScientificEvidenceAsyncV1("wf-predictive-terminal-v2", predictiveInput,
+    const predictive = await reuseScientificEvidenceAsyncV1(PREDICTIVE_TERMINAL_CHECKPOINT_STAGE,
+      { ...predictiveInput, cdfKernelVersion: CDF_ERF_CODY715_VERSION, cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST },
       () => buildPredictiveTerminalReceiptAsyncV1(predictiveInput, { ...bootstrapExecution, signal: observer.signal,
       flushProgress: () => flushTechnicalPreparationProgressV2(observer), onProgress: progress => {
       if (progress.completed % 1000 === 0 || progress.completed === progress.total) {
@@ -1618,6 +1621,7 @@ async function buildTechnicalSurfaceCandidatesV2(
       }
     } }));
     await flushTechnicalPreparationProgressV2(observer);
+    validatePredictiveTerminalReceipt(predictive);
     if (predictive.terminalStatus !== "QUALIFIED") {
       const diagnostic = canonicalizeDiagnosticJsonString({
         logScoreDiagnostics: predictive.logScoreDiagnostics,

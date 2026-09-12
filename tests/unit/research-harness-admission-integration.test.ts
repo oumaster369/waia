@@ -156,10 +156,10 @@ describe("DEE-531 research harness admission integration", () => {
   it("C: raw p-values pass alpha but Holm step-down rejects → NOT QUALIFIED", () => {
     const comparisons = [
       { comparisonId: "climatology/v1", pValue: 0.009 },
-      { comparisonId: "gaussian-pop-std/v1", pValue: 0.013 },
+      { comparisonId: "gaussian-pop-std/v2", pValue: 0.013 },
       { comparisonId: "student-t5-nu5/v1", pValue: 0.013 },
       { comparisonId: "rolling-w2000/v1", pValue: 0.013 },
-      { comparisonId: "ewma-lambda094/v2", pValue: 0.013 },
+      { comparisonId: "ewma-lambda094/v3", pValue: 0.013 },
     ];
     expect(comparisons.every((c) => c.pValue <= 0.05)).toBe(true);
     const holm = holmFwerV1(comparisons);
@@ -178,7 +178,7 @@ describe("DEE-531 research harness admission integration", () => {
     });
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
     expect(result.baselineAvailability["rolling-w2000/v1"]).toBe("UNAVAILABLE");
-    expect(result.baselineAvailability["ewma-lambda094/v2"]).toBe("UNAVAILABLE");
+    expect(result.baselineAvailability["ewma-lambda094/v3"]).toBe("UNAVAILABLE");
     expect(result.reasonCodes).toContain("INCOMPLETE_MANDATORY_BASELINE_FAMILY");
   }, 60_000);
 
@@ -262,8 +262,8 @@ describe("DEE-531 research harness admission integration", () => {
   }, 180_000);
 
   it("H: corrected harness and baseline identities cannot collide with defective evidence", () => {
-    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v4");
-    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v4");
+    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v5");
+    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v5");
     const common = {
       scoringContractVersion: "multiclass-brier-reward/v1",
       evaluationPartitionReceiptDigestHex: BASE_INPUT.evaluationPartitionReceiptDigestHex,
@@ -280,7 +280,7 @@ describe("DEE-531 research harness admission integration", () => {
       comparisonFamilyId: BASE_INPUT.comparisonFamilyId,
     };
     const defective = computeTrialIdentityDigestV2({ ...common, baselineId: "ewma-lambda094/v1" });
-    const corrected = computeTrialIdentityDigestV2({ ...common, baselineId: "ewma-lambda094/v2" });
+    const corrected = computeTrialIdentityDigestV2({ ...common, baselineId: "ewma-lambda094/v3" });
     expect(corrected.equals(defective)).toBe(false);
   });
 
@@ -296,7 +296,7 @@ describe("DEE-531 research harness admission integration", () => {
       historyReturnMinuteOpenTimesMs: timestamps,
       anchors: anchorsFromReturns({ development, observedReturns: development.slice(0, 10) }),
     });
-    expect(result.baselineAvailability["ewma-lambda094/v2"]).toBe("UNAVAILABLE");
+    expect(result.baselineAvailability["ewma-lambda094/v3"]).toBe("UNAVAILABLE");
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
   });
 

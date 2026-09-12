@@ -53,14 +53,14 @@ describe("DEE-989 all-baseline input preflight", () => {
   }, 30_000);
 
   it("also preflights the fifth baseline before spending resamples on the first four", async () => {
-    invalidBaseline("ewma-lambda094/v2");
+    invalidBaseline("ewma-lambda094/v3");
     const fixture = input();
     fixture.historyReturns = [...fixture.developmentReturns, ...Array(1600).fill(0.00001)];
     fixture.anchors[0]!.observedReturn = 0.01;
     let progress = 0;
     await expect(runResearchHarnessAdmissionAsyncV1(fixture, {
       onProgress: () => { progress++; },
-    })).rejects.toThrow("baseline=ewma-lambda094/v2");
+    })).rejects.toThrow("baseline=ewma-lambda094/v3");
     expect(progress).toBe(0);
   });
 
@@ -124,7 +124,7 @@ describe("DEE-989 all-baseline input preflight", () => {
     expect(asyncResult).toEqual(sync);
     expect(createHash("sha256").update(JSON.stringify(sync)).digest("hex"))
       .not.toBe("78e503bf43cfcb12137c974f58304bd2cee8c232e5c498c0ef4c089454b29486");
-    expect(sync.schemaVersion).toBe("research-harness-admission/v4");
+    expect(sync.schemaVersion).toBe("research-harness-admission/v5");
     expect(sync.holmComparisons).toHaveLength(5);
     expect(fixture).toEqual(before);
   });
@@ -136,7 +136,7 @@ describe("DEE-989 all-baseline input preflight", () => {
     const result = await runResearchHarnessAdmissionAsyncV1(fixture);
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
     expect(result.baselineAvailability["rolling-w2000/v1"]).toBe("UNAVAILABLE");
-    expect(result.baselineAvailability["ewma-lambda094/v2"]).toBe("UNAVAILABLE");
+    expect(result.baselineAvailability["ewma-lambda094/v3"]).toBe("UNAVAILABLE");
     fixture.anchors = [];
     expect(runResearchHarnessAdmissionV1(fixture).reasonCodes).toEqual(["COMMON_ANCHOR_SET_EMPTY"]);
   });

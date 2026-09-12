@@ -3,6 +3,8 @@ import { buildBaselineContextFromDevelopment, evaluateMandatoryBaselineV1, MANDA
 import { multiclassBrierRewardV1, TERMINAL_SCORING_CONTRACT, TERMINAL_SCORING_AMENDMENT_DIGEST, assertTerminalDevelopmentReturnsV2 }
   from "../../lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import type { ResearchHarnessAdmissionInputV1 } from "../../lib/trader/research/benchmark/research-harness-admission-orchestrator-v1";
+import { CDF_ERF_CODY715_VERSION, CDF_REFERENCE_AMENDMENT_DIGEST } from
+  "../../lib/trader/research/benchmark/cdf-evidence-protocol-v2";
 
 /** Diagnostic necessary-condition check ONLY. Never a scientific receipt, p-value,
  * qualification, store reader, generator or substitute for the complete harness.
@@ -33,7 +35,9 @@ export function inspectBrierRecoveryCostPreflightV1(input: ResearchHarnessAdmiss
     return { baselineId, status: meanImprovement > 0 ? "POSITIVE_MEAN" as const : "NON_POSITIVE_MEAN" as const, meanImprovement };
   });
   return {
-    schemaVersion: "brier-recovery-cost-preflight/v1" as const,
+    schemaVersion: "brier-recovery-cost-preflight/v2" as const,
+    cdfKernelVersion: CDF_ERF_CODY715_VERSION,
+    cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST,
     authorityGranted: false as const,
     qualification: "NOT_RUN" as const,
     bootstrap: "NOT_RUN" as const,
