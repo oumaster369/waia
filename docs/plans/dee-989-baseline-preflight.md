@@ -55,7 +55,7 @@ receipt parity, intermediate overflow, unavailable baseline and empty-input beha
 Independent review; lint/typecheck/build; required exact-head PR CI before merge.
 No production or full scientific rerun is part of local validation.
 
-## Exclusions and acceptance boundary
+## Acceptance
 
 No epsilon, pseudocounts, clipping, deleted observations, removed baseline, thresholds,
 changed availability classification or conversion of arithmetic failure into a normal
