@@ -170,3 +170,32 @@ refuses without generation. All old score/bootstrap/Holm evidence needs separate
 authorized recomputation. Source bars/packages/forecasts are preservation candidates,
 not new authority. DEE-993 CDF defect remains open and blocks fresh evaluation.
 No scientific/reuse/production PASS or historical-test readiness is claimed.
+
+## Exact-head CI reconciliation — 2026-09-12, resumed after manual pause
+
+PR580 head683424c3 passed the PostgreSQL integration and both PG17 guards.
+Full unit CI reported7143 passed,596 existing skipped and3 failures; dependent
+build/E2E were skipped, not successful. The failures were stale integration
+expectations after the admitted0206 addition: explicit post0148 extra-migration
+list, the shared test assuming0205 must remain the journal tail, and the Reality
+consumer content pin. Ratified0148 identity and frozen0205 SQL bytes stay unchanged.
+
+The only changed production consumers in the unchanged129-path Reality inventory
+are production-first-cycle-bootstrap-v2.ts and production-next-cycle-forecast-v2.ts:
+each imports the ratified scoring constant and replaces the old log-score literal.
+Only the reviewed content digest is updated; source/path/count rules, connector
+closure and all negative authority checks remain intact.
+
+The shared migration regression now tests the current contiguous unique journal
+and keeps0205 exactly pinned. A real isolated PostgreSQL17 run exposed old fixture
+assumptions hidden behind opt-in: unscoped owner seeding of FORCE-RLS tables and
+unknown-vs-missing precedence when a required migration timestamp is moved.
+Fixture writes/reads now supply exact transaction-local scope; no RLS disabling,
+new grants, schema changes or production access. Fresh restricted-role rerun:
+10/10 PASS, including all scope, secret-denial, immutable-evidence and journal
+negatives. The earlier failed fixture/log is preserved and both local containers
+were stopped, not reused as production. Full CI must pass again on the final head.
+
+Published branch synchronized by normal merge from main5edd5511; no force push,
+direct main update, application rollout or scientific calculation. DEE992 remains
+open for deployment/scientific acceptance and DEE991/993 dependency closure.
