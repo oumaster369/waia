@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { TwinMobileDisclosure } from "@/components/dashboard/twin-mobile-disclosure";
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildDashboardViewModel } from "@/lib/dashboard/build-dashboard-model";
 import { loadDashboardPageDataForUser } from "@/lib/dashboard/dashboard-readiness-source";
@@ -54,11 +55,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="bg-background flex min-h-screen w-full flex-col md:flex-row">
-      <DashboardSidebar
-        identityLabel={model.identityLabel}
-        traderEntryHref={traderEntryHref}
-        twinActive
-      />
+      <TwinMobileDisclosure
+        label="WAIA menu"
+        className="md:flex md:w-[min(16rem,30vw)] md:shrink-0 [&_aside]:w-full md:[&>div]:flex md:[&>div]:w-full"
+      >
+        <DashboardSidebar
+          identityLabel={model.identityLabel}
+          traderEntryHref={traderEntryHref}
+          twinActive
+        />
+      </TwinMobileDisclosure>
       <DashboardShell model={model} />
     </div>
   );

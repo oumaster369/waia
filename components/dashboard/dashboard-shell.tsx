@@ -5,6 +5,7 @@ import { useState } from "react";
 import { DashboardDialogueArea } from "@/components/dashboard/dialogue-area";
 import { DashboardModeTabs } from "@/components/dashboard/mode-tabs";
 import { DashboardTopBlock } from "@/components/dashboard/top-block";
+import { TwinMobileDisclosure } from "@/components/dashboard/twin-mobile-disclosure";
 import type { ModeId } from "@/components/dashboard/types";
 import { resolveDashboardTwinGrowth } from "@/components/dashboard/twin-growth-placeholder";
 import type { DashboardClientProps } from "@/lib/dashboard/types";
@@ -20,12 +21,14 @@ export function DashboardShell({ model }: DashboardShellProps) {
   const tabPresentations = buildDashboardTabPresentations(twinGrowthResolved);
 
   return (
-    <div data-testid="dashboard-shell-main" className="flex flex-1 flex-col min-h-0 min-w-0">
-      <DashboardTopBlock
-        avatarStatusText={model.avatarStatusText}
-        indicatorPresentation={model.indicatorPresentation}
-        totalCompletionPercent={model.totalCompletionPercent}
-      />
+    <div data-testid="dashboard-shell-main" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <TwinMobileDisclosure label="Twin progress">
+        <DashboardTopBlock
+          avatarStatusText={model.avatarStatusText}
+          indicatorPresentation={model.indicatorPresentation}
+          totalCompletionPercent={model.totalCompletionPercent}
+        />
+      </TwinMobileDisclosure>
       <DashboardModeTabs
         tabPresentations={tabPresentations}
         selectedMode={selectedMode}
@@ -35,7 +38,7 @@ export function DashboardShell({ model }: DashboardShellProps) {
           setSelectedMode(mode);
         }}
       />
-      <div className="flex min-h-[16rem] flex-1 bg-background">
+      <div className="bg-background flex min-h-[16rem] min-w-0 flex-1 [&>section]:min-w-0">
         <DashboardDialogueArea
           model={model}
           tabPresentations={tabPresentations}
