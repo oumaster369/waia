@@ -16,6 +16,7 @@ import {
   computeReplicaRootFamilyIdentityDigest,
 } from "./identity-digests";
 import { computePoolSemanticDigest } from "./pool-semantic-digest-v1";
+import { withHydrationPoolDigestsV1 } from "./hydration-pool-suffix-v1";
 import {
   assertNoDuplicateSourceAnchors,
   canonicalizeSourceCorpusV1,
@@ -118,7 +119,10 @@ function unpack(value: unknown, depth = 0): unknown {
 function sameDigest(actual: Buffer, expected: unknown): void {
   if (!Buffer.isBuffer(expected) || !actual.equals(expected)) fail("SCIENTIFIC_DIGEST");
 }
-function validatePackage(pkg: PredictivePackageV1): void {
+function validatePackage(
+  pkg: PredictivePackageV1,
+  computePoolDigest = computePoolSemanticDigest,
+): void {
   const corpus = pkg.canonicalSourceCorpus;
   for (const a of corpus) {
     if (
@@ -174,7 +178,7 @@ function validatePackage(pkg: PredictivePackageV1): void {
         positions.add(obs.resamplePositionOrdinal);
       }
       sameDigest(
-        computePoolSemanticDigest({
+        computePoolDigest({
           ...pkg.family,
           replicaOrdinal: ordinal,
           stateId: state,
@@ -520,6 +524,11 @@ function* assemblePackage(
     })
   )
     fail("PACKAGE_IDENTITY");
-  validatePackage(pkg);
+  // Both transports reach this only after records are fully decoded into fresh,
+  // unpublished plain objects. Final validation is synchronous: no await/yield,
+  // source iterator, user callback or package publication can mutate an anchor
+  // while its suffix is shared across pools. Encoding uses the uncached public
+  // semantics above; returned packages remain mutable and retain no cache.
+  withHydrationPoolDigestsV1(corpus.length, (compute) => validatePackage(pkg, compute));
   return pkg;
 }
