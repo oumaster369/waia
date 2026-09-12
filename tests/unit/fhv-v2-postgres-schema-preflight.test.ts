@@ -15,7 +15,6 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   const canonical = readFhvV2CanonicalMigrations(process.cwd());
   const compatibleAdditive = readFhvV2CompatibleAdditiveMigrations(process.cwd());
   const baseline = canonical.map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) }));
-  const additional = compatibleAdditive.map((entry) => ({ hash: entry.hash, createdAt: String(entry.when) }));
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
     // Build the applied journal independently of the preflight's range filter,
@@ -31,49 +30,47 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied })).not.toThrow();
   });
 
-  it("admits only explicit 0205 and does not require it for historical execution", () => {
-    expect(compatibleAdditive.map(({ idx, when, tag }) => ({ idx, when, tag })))
-      .toEqual([{ idx: 205, when: 1780000000205, tag: "0205_trader_account_observation_v1" }]);
+  it("requires the complete Brier policy prefix and admits no optional future migrations", () => {
+    expect(compatibleAdditive).toEqual([]);
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline })).not.toThrow();
-    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, applied: [...baseline, ...additional] }))
-      .toThrow("UNKNOWN_APPLIED_MIGRATION");
+    expect(canonical.at(-1)?.tag).toBe("0206_historical_brier_admission_v3");
   });
 
-  it("does not let compatible 0205 substitute for required 0204", () => {
+  it("does not let complete 0205 substitute for required Brier policy 0206", () => {
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
-      applied: [...baseline.slice(0, -1), ...additional] })).toThrow("REQUIRED_MIGRATION_MISSING");
+      applied: baseline.slice(0, -1) })).toThrow("0206_historical_brier_admission_v3 is not applied");
   });
 
-  it("rejects changed additive SQL bytes", () => {
+  it("rejects changed Brier policy SQL bytes", () => {
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
-      applied: [...baseline, { ...additional[0], hash: "f".repeat(64) }] }))
+      applied: [...baseline.slice(0, -1), { ...baseline.at(-1)!, hash: "f".repeat(64) }] }))
       .toThrow("APPLIED_MIGRATION_HASH_MISMATCH");
   });
 
   it("rejects an admitted hash registered at an unrecognized timestamp", () => {
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
-      applied: [...baseline, { ...additional[0], createdAt: "1780000000206" }] }))
-      .toThrow("UNKNOWN_APPLIED_MIGRATION");
+      applied: [...baseline.slice(0, -1), { ...baseline.at(-1)!, createdAt: "1780000000207" }] }))
+      .toThrow("REQUIRED_MIGRATION_MISSING");
   });
 
   it("does not automatically admit the next migration", () => {
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
-      applied: [...baseline, ...additional, { hash: "a".repeat(64), createdAt: "1780000000206" }] }))
+      applied: [...baseline, { hash: "a".repeat(64), createdAt: "1780000000207" }] }))
       .toThrow("UNKNOWN_APPLIED_MIGRATION");
   });
 
   it.each(["same row", "same timestamp", "same hash"])("rejects duplicate migration: %s", (kind) => {
-    const row = { ...additional[0] };
+    const row = { ...baseline.at(-1)! };
     if (kind === "same timestamp") row.hash = "a".repeat(64);
-    if (kind === "same hash") row.createdAt = "1780000000206";
+    if (kind === "same hash") row.createdAt = "1780000000207";
     expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
-      applied: [...baseline, ...additional, row] })).toThrow("DUPLICATE_APPLIED_MIGRATION");
+      applied: [...baseline, row] })).toThrow("DUPLICATE_APPLIED_MIGRATION");
   });
 
-  it("binds the exact contiguous canonical journal through 0204", () => {
-    expect(canonical).toHaveLength(205);
+  it("binds the exact contiguous canonical journal through 0206", () => {
+    expect(canonical).toHaveLength(207);
     expect(canonical[0]?.tag.startsWith("0000_")).toBe(true);
-    expect(canonical.at(-1)?.tag).toBe("0204_historical_preparation_events_v2");
+    expect(canonical.at(-1)?.tag).toBe("0206_historical_brier_admission_v3");
   });
 
   it("refuses the old journal without required package storage", () => {

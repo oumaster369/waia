@@ -7,7 +7,7 @@ import { sql as drizzleSql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { createPostgresObservationRepository } from "@/lib/trader/account-observation/postgres-repository";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
-import { assertFhvV2PostgresSchemaPreflight } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
+import { assertFhvV2PostgresSchemaPreflight, FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
 import * as pgSchema from "@/db/schema.postgres";
 import { insertCredentialRowPostgres, getCredentialRowByIdPostgres,
   listCredentialRowsForOrgPostgres, revokeCredentialRowPostgres } from "@/lib/trader/credentials/repository-postgres";
@@ -21,8 +21,10 @@ const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8"))
 };
 const normalize = (s: string) => s.replace(/^--[^\n]*(?:\n|$)/gm, "").trim();
 it("0205 packages the reviewed local SQL without semantic drift or historical journal changes", () => {
-  expect(journal.entries.at(-1)).toMatchObject({ idx: 205, tag: migration, when: 1780000000205 });
-  expect(journal.entries.at(-2)?.tag).toBe("0204_historical_preparation_events_v2");
+  expect(journal.entries.filter(e => e.idx === 205)).toEqual([
+    expect.objectContaining({ idx: 205, tag: migration, when: 1780000000205 }),
+  ]);
+  expect(journal.entries[204]?.tag).toBe("0204_historical_preparation_events_v2");
   expect(new Set(journal.entries.map(e => e.tag)).size).toBe(journal.entries.length);
   expect(normalize(readFileSync(`${folder}/${migration}.sql`, "utf8")))
     .toBe(normalize(readFileSync("db/local-validation/dee960-account-observation.sql", "utf8")));
@@ -74,12 +76,18 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
       } catch (cause) { throw new Error(`LOCAL_MIGRATION_FAILED:${entry.tag}`, { cause }); }
     }
   }
-  async function assertNewSurface(sql: Sql) {
+  async function assertNewSurface(sql: Sql, appliedThrough = 205) {
     // Actual historical entry point, actual journal and table catalog, under
     // the same limited migration owner. No scientific calculation is invoked.
     try {
       await sql.unsafe("SET ROLE dee960_local_owner");
-      await assertFhvV2PostgresSchemaPreflight({ sql });
+      if (appliedThrough >= FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX) {
+        await assertFhvV2PostgresSchemaPreflight({ sql });
+      } else {
+        // The historical Brier runtime must not admit the older 0205 policy.
+        await expect(assertFhvV2PostgresSchemaPreflight({ sql }))
+          .rejects.toMatchObject({ code: "REQUIRED_MIGRATION_MISSING" });
+      }
     } finally {
       await sql.unsafe("RESET ROLE");
     }
@@ -92,7 +100,7 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
     expect(roles).toHaveLength(2);
     expect(roles.every(r => !r.rolcanlogin && !r.rolsuper && !r.rolbypassrls)).toBe(true);
     expect((await sql`SELECT count(*) FROM drizzle.__drizzle_migrations`)[0].count)
-      .toBe(String(journal.entries.filter(e => e.idx <= 205).length));
+      .toBe(String(journal.entries.filter(e => e.idx <= appliedThrough).length));
     expect((await sql`SELECT has_column_privilege('waia_account_observation_reader',
       'public.exchange_credentials','encrypted_payload','SELECT') AS secret,
       has_table_privilege('waia_account_observation_reader','public.trader_account_observations','INSERT') AS write`)[0])
@@ -130,11 +138,12 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
     } finally {
       await sql.unsafe("RESET ROLE");
     }
-    await assertNewSurface(sql);
+    await assertNewSurface(sql, journal.entries.at(-1)!.idx);
   }, 120000);
   it("upgrades full 0204 schema preserving credential/snapshot data and proves new fence", async () => {
     const sql = await database(); await apply(sql, 0, 204);
-    await assertFhvV2PostgresSchemaPreflight({ sql });
+    await expect(assertFhvV2PostgresSchemaPreflight({ sql }))
+      .rejects.toMatchObject({ code: "REQUIRED_MIGRATION_MISSING" });
     const user = randomUUID(), org = randomUUID(), credential = randomUUID(), snapshot = randomUUID();
     await sql`INSERT INTO auth.users(id) VALUES (${user})`;
     await sql`INSERT INTO public.users(id, identity_label, email) VALUES (${user}, 'Synthetic migration probe', ${`probe-${user}@invalid.local`})`;

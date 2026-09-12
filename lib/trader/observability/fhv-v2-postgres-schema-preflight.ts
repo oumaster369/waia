@@ -6,13 +6,12 @@ import type postgres from "postgres";
 
 import { getPostgresSql } from "@/db/postgres-client";
 
-export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 204 as const;
+// Brier receipt admission requires the exact 0206 policy, not the old v2 policy.
+export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 206 as const;
 
 // Explicit compatibility admission, not automatic acceptance of every future
-// journal entry. Historical execution does not require account observation.
-const COMPATIBLE_ADDITIVE_MIGRATIONS = [
-  { idx: 205, when: 1780000000205, tag: "0205_trader_account_observation_v1" },
-] as const;
+// journal entry. 0205 is now inside the required contiguous prefix through 0206.
+const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
