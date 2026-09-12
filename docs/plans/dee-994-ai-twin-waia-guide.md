@@ -8,7 +8,7 @@ executionSurfaces: [local, github-pr]
 requiredValidation: [lint, typecheck, unit, build, e2e, accessibility, canon, pr-governance]
 approvalGates: [plan-approved, product-review, human-merge]
 includedIssues: []
-state: { status: in-progress, currentWorkPackage: WP-1, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2, WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Implement optional in-place product guide after admission; validate isolated UI without provider/shared backend or Trader changes." }
+state: { status: in-review, currentWorkPackage: WP-3, completedWorkPackages: [WP-1, WP-2], remainingWorkPackages: [WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: 7dd54d34ea21e6e66e84d4bceec70fd715dc7cb5, lastValidationAt: "2026-09-12T09:09:26Z", blockedReason: null, nextAction: "Publish one PR after receipt/preflight; follow exact-head CI. Human merge and deployment remain separate. Final PR linkage and CI receipt in Linear, not a follow-up documentation PR." }
 provenance: { createdFrom: "Human explicit product-learning requirement 2026-09-12", gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
 ---
 
@@ -43,3 +43,18 @@ Tests first: missing-guide RED; content/selection, close/Escape/focus, draft/his
 ## Acceptance and release boundary
 
 All guide actions are optional, non-punitive, reversible UI actions and cannot grant authority or progress. Guide claims distinguish current runtime from future target. Positive/negative UI cases and existing dialogue regressions must pass; record actual evidence, not a static mockup as finished AI-TWIN. No production/deployment or new merge within this work package; prepare one coherent PR only after exact-head review and governance. Remaining program dependencies and Human product pilot remain intact.
+
+## Local implementation receipt — 2026-09-12
+
+Implementation head: `7dd54d34ea21e6e66e84d4bceec70fd715dc7cb5`, admitted plan `70eb485c`, base `6ab1b156a14fb883043f3c6c81c5365be858ffe2`. The subsequent commit changes this receipt only.
+
+- New guide unit tests were RED before implementation (missing help entry). Final scoped units: **18/18**, including all 14 existing dialogue tests.
+- New E2E first found a real 390px / 200% text overflow. Local minimum-width/word-wrap correction fixed the cause; bounds assertions retained. Keyboard Tab/Shift+Tab/Space/Enter and Escape/focus return are covered.
+- Final isolated production-mode Next build plus scoped E2E: **10/10** (new guide, subscription disclosure and existing dashboard smoke). Own port3294 and `.data/dee994-e2e.db`; fake provider, no Supabase/OpenAI credentials, no external provider calls. Earlier dev-server reuse was explicitly the owned preview only; final qualification rebuilt and started without reuse. This is not PostgreSQL integration or full AI-TWIN completion evidence.
+- Full lint passed with pre-existing out-of-scope warnings; scoped changed-file lint and typecheck passed after final CSS/test change. Canon and PR-governance regressions passed. Authoritative full units and other required checks remain PR CI gates, not claimed locally complete.
+- Real CUA browser inspection on desktop and390px: guide/readable steps/return visible; focus restored with Escape; viewport override reset. At200% the automated bounds checks cover panel/buttons; no claim of complete screen-reader or WCAG certification.
+- Independent read-only review of exact implementation head and all eight changed files: no concrete P1/P2. Reviewer rechecked final width fix and keyboard E2E; did not duplicate tests or operate any database.
+- Fresh read-only Cloudflare Builds settings: production branch main, non-production builds enabled, both deploy/version commands use `wrangler versions upload`, no deploy hooks. GitHub preview workflow is separately gated on two Actions secret names; neither exists at repository scope, owner is a personal User (no organization inheritance). No settings changed and no deployment invoked. Version upload and live traffic are distinct per [Cloudflare documentation](https://developers.cloudflare.com/workers/versions-and-deployments/).
+- Published main still matched exact base at read-only check. Diff contains no Trader, shared auth/DB, migration, configuration, global styling, dependency or lockfile change. Next's generated dev-only declaration reverted automatically on final production build; not committed. Existing DEE-871 branch remains untouched.
+
+DEE-881 now records the Human all-feature-teaching requirement and observed mobile shell gap: stacked sidebar/avatar/indicators delay access to conversation. Its dependencies/status remain intact. This guide does not repair cross-tab draft loss, redesign the full shell, implement an LLM tutor, or activate Core integration. Human product pilot, formation/model review and broader module readiness remain open.
