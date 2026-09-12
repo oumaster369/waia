@@ -19,10 +19,10 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 2ced7a319b419323ef97fd60c4137b12fbe2d2c7
+  lastValidationAt: "2026-09-12T17:07:00Z"
   blockedReason: null
-  nextAction: "Prepare the bounded PR when authorized; DEE-991 full-origin admission and DEE-993 remain separate gates."
+  nextAction: "Publish the separately reviewed Brier PR under current Human authorization; DEE-991/993 and production remain separate gates."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -30,6 +30,22 @@ provenance:
 ---
 
 # DEE-992: bounded Terminal score
+
+## Current publication boundary — 2026-09-12
+
+The user's later instruction authorizes necessary autonomous historical-recovery
+work, superseding the earlier local-only publication restriction below for this
+already ratified implementation. Publish DEE-992 as its own PR; do not include or
+claim delivery of the separately stacked Cody amendment (DEE-993). No production
+deployment, migration application, scientific bootstrap or checkpoint mutation is
+part of this PR operation. Keep DEE-992 open until its integration/acceptance
+boundaries are reconciled; no automatic qualification claim on merge.
+
+Subsequent read-only real-corpus diagnostics are recorded in Linear, not silently
+folded into the local test counts below. Original BTC30 Forecast mapping matched
+all525547 rows; other three surfaces lack their Forecast batches. Positive Brier
+means are necessary evidence only, not statistical qualification. New scientific
+evaluation remains blocked on the separate CDF correction and DEE-991 admission.
 
 ## Approval and limits
 
