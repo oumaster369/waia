@@ -113,6 +113,12 @@ Every substantive advice object must separate:
 
 WAIA may explicitly abstain when evidence or authority is insufficient.
 
+### 5.1 Learning to use WAIA — Human requirement added 2026-09-12
+
+AI-TWIN also teaches the Human how to use WAIA: explain functions, prerequisites and limitations, offer short contextual steps, and help recover from errors. Guidance is optional, interruptible and non-punitive, available without completing Formation. It must preserve the current task and distinguish implemented, unavailable and planned functionality. Guidance about a feature neither grants its authority nor performs its action. Learning activity is not personality evidence or Formation credit by default.
+
+The target is progressive coverage of all Human-facing WAIA functions as their owners publish verified help and capability contracts. No private/admin/scientific control is disclosed or enabled by a generic tutorial. Current account access comes from authoritative checks, never an inferred percentage or generated promise. DEE-994 owns the first curated in-workspace guide; context-aware conversational teaching extends DEE-878/881 and is not implied by that first interface. Preserve separate confirmation for any later navigation with unsaved changes or real action.
+
 ## 6. Embodiment and account trust
 
 At `20%` Formation, the Human becomes eligible to open Avatar Studio. This threshold means only that enough interaction exists for a meaningful representation workflow. It is not proof of identity or uniqueness.
@@ -221,5 +227,6 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-01 | DEE-873, PR #542 and subsequent D1–D5 decision | Narrow DARK-only presence evaluation; no production authority                                               |
 | 2026-09-02 | DEE-922, Human-merged PR #550                  | Free Formation, governed cost ×5 pricing, separate subscription and sponsored-access consent                |
 | 2026-09-06 | Explicit Human resume; DEE-943                 | Evidence/status reconciliation; isolated implementation permitted while Trader stays outside mutation scope |
+| 2026-09-12 | Explicit Human product-learning and UX requirement; DEE-994 | AI-TWIN teaches WAIA use through optional, truthful, capability-aware guidance; no authority/progress from learning |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”
