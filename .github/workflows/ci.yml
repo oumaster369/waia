@@ -16,6 +16,30 @@ env:
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
+  native-bootstrap-parity:
+    name: native bootstrap experimental parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Compile isolated synthetic experiment (not the application)
+        run: >-
+          g++ -O3 -std=c++17 -fno-fast-math -ffp-contract=off
+          scripts/trader/native/validation-bootstrap-range.cpp
+          -l:libcrypto.so.3 -o /tmp/waia-native-bootstrap-range
+      - name: Require exact Node parity, shared RNG rejection and negative tests
+        run: >-
+          node --import tsx scripts/trader/test-native-bootstrap-range.ts
+          /tmp/waia-native-bootstrap-range
+
   lint:
     name: lint
     runs-on: ubuntu-latest
