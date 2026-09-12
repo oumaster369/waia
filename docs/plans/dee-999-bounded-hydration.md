@@ -19,10 +19,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 0998da7345c6061f0800018681f3dcc0bc5a6e12
+  lastValidationAt: "2026-09-12T22:29:17Z"
   blockedReason: null
-  nextAction: "Synchronize final base and publish the independently reviewed local implementation after PR governance; exact-head CI remains required. No original-corpus execution."
+  nextAction: "Root to review the canonical-base local head and validated PR body, then decide publication. Exact-head CI and merge authority remain separate; no implementation-agent push, PR, deployment or original-corpus execution."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -218,3 +218,66 @@ Logs retained locally: `/private/tmp/waia-dee999-full-lint.log`,
 `/private/tmp/waia-dee999-consumer-graph2.log`,
 `/private/tmp/waia-dee999-build-local-deps.log` and the earlier failed setup logs.
 Exact-head GitHub CI and final base freshness are still pending at this checkpoint.
+
+## Later host diagnostic outcome and integration boundary
+
+The separate root-controlled read-only BTCUSDT/30 diagnostic using this unchanged
+64 MiB / 262144-entry implementation **did not complete**. It reached its 3600-second
+limit and ended at 2026-09-12T21:28:04Z with systemd `Result=timeout`, exit status 15
+(SIGTERM), CPU 3598.522049 seconds, peak memory 10148302848 bytes and no final report.
+The marker that all 101933 chunks had been read was explicitly pending codec
+authentication; it did not prove final source/pool/package validation had completed.
+This result is not full-codec PASS, reuse admission, scientific PASS or a recovered
+completed package. The local synthetic speed ratios above do not override it.
+
+The 262144-entry policy covers at most 16.61% of the 1578187 original source anchors,
+before considering suffix-byte capacity. A later bounded synthetic saturation
+experiment (N1000/N5000, K50) showed that this reduced coverage can materially reduce
+the benefit of suffix reuse. Its measured suffix distribution is not evidence of
+the original distribution and does not establish a production completion estimate.
+
+Root separately requested a local-only profiled driver with guarded in-memory
+512 MiB / 2000000-entry transforms and stage/replica/cache counters. That diagnostic
+artifact is outside this repository and is **not** this shared-library policy,
+public API, runtime default, environment knob or additional scientific authority.
+Its 94 small composed tests and CLI refusal checks establish only local diagnostic
+engineering evidence, not an original-corpus result. Delivery and any host run are
+root-owned separate actions; this implementation agent neither performs them nor
+claims a successful 512 MiB host result. Even 512 MiB does not guarantee all original
+suffixes fit, and backing-store bytes exclude Map, decoded package, temporaries and RSS.
+
+Shared sync/async/web consumers retain the conservative 64 MiB backing and 262144
+entry limits, proportional tiny allocations and complete-validation fallback.
+No cache-size increase or instrumentation is included in the DEE-999 application PR.
+
+## Canonical Cody reconciliation (2026-09-12 UTC)
+
+Canonical PR #581 squash `7e0498f7a7e922d35a5c1ca6d61e1bf995e1c76d` was fetched
+by root and normal-merged locally as `0998da7345c6061f0800018681f3dcc0bc5a6e12`.
+There were no conflicts, discarded changes, rebase or history replacement. The
+future diff against canonical main remains exactly this plan, the codec, its one
+private helper and the dedicated tests. All three implementation/test SHA256 values
+listed above are unchanged. The final documentation-only evidence commit follows
+the validated source head; it cannot encode its own hash in this frontmatter.
+
+After this merge, the affected focused gates passed again: 23 helper, 37 codec,
+15 streaming digest, 15 quantizer and 8 consumer-graph tests, **98/98 total**.
+Full project no-emit TypeScript, scoped ESLint, canonical-plan validation and diff
+whitespace checks passed. Logs: `/private/tmp/waia-dee999-canonical-focused.log`,
+`/private/tmp/waia-dee999-canonical-quantizer.log`,
+`/private/tmp/waia-dee999-canonical-types.log`, and
+`/private/tmp/waia-dee999-canonical-scoped-lint.log`.
+
+The canonical base added Cody evidence/baseline/admission and its already-CI-tested
+migration/fixtures, but changed none of the codec/helper's direct numerical sources,
+package/lock files, build/type/lint configuration or consumer-graph policy. Thus
+the prior successful default application build and full-lint evidence above is
+retained as **prior-source evidence**, not relabeled as a new exact-head run. No
+redundant full local unit/build was run for this reconciliation; exact-head GitHub
+CI remains required. No UI, new database change, rollout or deployment belongs to
+this four-file optimization. Root owns the final independent review and publication.
+
+The rendered local `.cursor/pr-body-DEE-999.md` passes the P0 PR governance
+preflight with the Linear API key explicitly unset (no network scope lookup).
+`/private/tmp/waia-dee999-canonical-pr-preflight.log` retains that result. Publication,
+exact-head CI, final review binding and any merge admission remain root-owned gates.
