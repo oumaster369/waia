@@ -99,7 +99,7 @@ function anchorsFromReturns(input: {
     anchorId: `anchor-${index}`,
     observedReturn,
     challengerProbabilities: probs.map((p, bucketIndex) =>
-      bucketIndex === 3 ? Math.min(0.99, p + (input.challengerShift ?? 0.05)) : p * 0.99,
+      p * (1 - (input.challengerShift ?? 0.05)) + (bucketIndex === 3 ? (input.challengerShift ?? 0.05) : 0),
     ),
   }));
 }
@@ -134,19 +134,13 @@ describe("DEE-531 research harness admission integration", () => {
     expect(climatology.status).toBe("AVAILABLE");
     const observed = development.slice(0, 20);
     expectFiniteBaselineScores(development, history, observed);
-    const probs = challengerProbabilities(development);
+    const grid = computeTerminalTargetGridFromDevelopmentReturns(development);
     const anchors = observed.map((observedReturn, index) => ({
       anchorId: `anchor-${index}`,
       observedReturn,
-      challengerProbabilities: probs.map((p, bucketIndex) => {
-        if (bucketIndex === 3) {
-          return 0.01;
-        }
-        if (climatology.status === "AVAILABLE" && index === 0) {
-          return 0.01;
-        }
-        return p;
-      }),
+      // Deliberately wrong one-hot synthetic forecast; still a valid simplex.
+      challengerProbabilities: Array.from({ length: 7 }, (_, j) =>
+        j === (bucketIndexForReturn(observedReturn, grid) + 1) % 7 ? 1 : 0),
     }));
     const result = runResearchHarnessAdmissionV1({
       ...BASE_INPUT,
@@ -211,7 +205,7 @@ describe("DEE-531 research harness admission integration", () => {
     expect(a.commonAnchorSetDigestHex).toBe(b.commonAnchorSetDigestHex);
     expect(a.admissionReceiptDigestHex).toBe(b.admissionReceiptDigestHex);
     const trialDigest = computeTrialIdentityDigestV2({
-      scoringContractVersion: "multiclass-log-score/v1",
+      scoringContractVersion: "multiclass-brier-reward/v1",
       evaluationPartitionReceiptDigestHex: BASE_INPUT.evaluationPartitionReceiptDigestHex,
       venue: BASE_INPUT.venue,
       market: BASE_INPUT.market,
@@ -220,7 +214,7 @@ describe("DEE-531 research harness admission integration", () => {
       modelTransformVersion: "rv-state-conditional-empirical-joint/v1",
       challengerPackageContentDigestHex: BASE_INPUT.challengerPackageContentDigestHex,
       baselineId: MANDATORY_BASELINE_IDS[0]!,
-      metricId: "terminal-multiclass-log-score/v1",
+      metricId: "terminal-multiclass-brier-reward/v1",
       commonAnchorSetDigestHex: a.commonAnchorSetDigestHex,
       purgeDurationMinutes: 30,
       embargoDurationMinutes: 30,
@@ -268,10 +262,10 @@ describe("DEE-531 research harness admission integration", () => {
   }, 180_000);
 
   it("H: corrected harness and baseline identities cannot collide with defective evidence", () => {
-    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v3");
-    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v3");
+    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v4");
+    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v4");
     const common = {
-      scoringContractVersion: "multiclass-log-score/v1",
+      scoringContractVersion: "multiclass-brier-reward/v1",
       evaluationPartitionReceiptDigestHex: BASE_INPUT.evaluationPartitionReceiptDigestHex,
       venue: BASE_INPUT.venue,
       market: BASE_INPUT.market,
@@ -279,7 +273,7 @@ describe("DEE-531 research harness admission integration", () => {
       primaryHorizonMinutes: 30,
       modelTransformVersion: "rv-state-conditional-empirical-joint/v1",
       challengerPackageContentDigestHex: BASE_INPUT.challengerPackageContentDigestHex,
-      metricId: "terminal-multiclass-log-score/v1",
+      metricId: "terminal-multiclass-brier-reward/v1",
       commonAnchorSetDigestHex: "a".repeat(64),
       purgeDurationMinutes: 30,
       embargoDurationMinutes: 30,
@@ -306,7 +300,7 @@ describe("DEE-531 research harness admission integration", () => {
     expect(result.terminalStatus).toBe("NO_CHALLENGER_QUALIFIES");
   });
 
-  it("J: zero baseline bucket mass refuses qualification instead of producing a significant NaN p-value", () => {
+  it("J: zero support has a finite Brier differential and retains the original log diagnostic", () => {
     const development = developmentReturns();
     const history = historyReturns();
     const observed = development.slice(0, 24);
@@ -316,12 +310,17 @@ describe("DEE-531 research harness admission integration", () => {
     if (rolling.status === "AVAILABLE") {
       expect(observed.some((value) => rolling.logScore(value) === -Infinity)).toBe(true);
     }
-    expect(() => runResearchHarnessAdmissionV1({
+    const result = runResearchHarnessAdmissionV1({
       ...BASE_INPUT,
       developmentReturns: development,
       historyReturns: history,
       historyReturnMinuteOpenTimesMs: historyReturnMinuteOpenTimesMs(history.length),
       anchors: anchorsBeatAllBaselines(development, observed),
-    })).toThrow("non-finite differential");
+    });
+    expect(result.holmComparisons).toHaveLength(5);
+    expect(result.holmComparisons.every((comparison) => Number.isFinite(comparison.pValue))).toBe(true);
+    expect(result.logScoreDiagnostics["rolling-w2000/v1"]!.baselineZeroCount).toBeGreaterThan(0);
+    expect(result.logScoreDiagnostics["rolling-w2000/v1"]!.nonFiniteDifferentialCount).toBeGreaterThan(0);
+    expect(result.logScoreDiagnostics["rolling-w2000/v1"]!.challengerZeroCount).toBe(0);
   });
 });

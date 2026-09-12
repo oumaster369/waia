@@ -1,3 +1,4 @@
+import { TERMINAL_SCORING_CONTRACT } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
 
@@ -140,7 +141,7 @@ function expectedScientific(
       surface.predictivePackageGenerationIdentityDigestHex,
     predictivePackageContentDigestHex: surface.predictivePackageContentDigestHex,
     runtimeContractDigestHex: predictive.runtimeContractDigestHex,
-    scoringContractVersion: "multiclass-log-score/v1",
+    scoringContractVersion: TERMINAL_SCORING_CONTRACT,
     evaluationPartitionReceiptDigestHex: predictive.evaluationPartitionReceiptDigestHex,
     kmConvergenceEvidenceSemanticDigestHex:
       receipt.kmConvergenceReceipt.evidenceSemanticDigestHex,

@@ -107,7 +107,14 @@ describe("DEE-947 frozen VALBOOT1 transition known answers", () => {
       "scientific-admission-receipt/v3", "validation-bootstrap/v2", "family", "a".repeat(64), "QUALIFIED", comparisonLine,
     ].join("\n")).digest("hex");
     expect(VALIDATION_BOOTSTRAP_VERSION).toBe("validation-bootstrap/v2");
-    expect(computeResearchHarnessAdmissionReceiptDigestV2(input)).toBe(correctedDigest);
+    const brierDigest = createHash("sha256").update([
+      "scientific-admission-receipt/v4", "multiclass-brier-reward/v1",
+      "terminal-multiclass-brier-reward/v1",
+      "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
+      "validation-bootstrap/v2", "family", "a".repeat(64), "QUALIFIED", comparisonLine,
+    ].join("\n")).digest("hex");
+    expect(computeResearchHarnessAdmissionReceiptDigestV2(input)).toBe(brierDigest);
+    expect(brierDigest).not.toBe(correctedDigest);
     expect(correctedDigest).not.toBe(legacyDigest);
   });
 });

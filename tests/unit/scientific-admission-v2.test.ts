@@ -30,7 +30,7 @@ const identities = {
   predictivePackageGenerationIdentityDigestHex: hex("3"),
   predictivePackageContentDigestHex: hex("4"),
   runtimeContractDigestHex: hex("5"),
-  scoringContractVersion: "multiclass-log-score/v1" as const,
+  scoringContractVersion: "multiclass-brier-reward/v1" as const,
   evaluationPartitionReceiptDigestHex: hex("6"),
 };
 
@@ -163,6 +163,40 @@ function admittedFixture() {
 }
 
 describe("DEE-947 corrected bootstrap admission boundary", () => {
+  it("DEE-992 refuses old or mixed primary score evidence even when self-rehashed", () => {
+    const fixture = admittedFixture();
+    const { contentDigestHex: _digest, ...body } = fixture.predictive;
+    expect(_digest).toMatch(/^[a-f0-9]{64}$/);
+    for (const patch of [
+      { scoringContractVersion: "multiclass-log/v1" },
+      { scoringMetric: "terminal-multiclass-logscore/v1" },
+      { scoringAmendmentDigestHex: hex("f") },
+      { scoringAmendmentDigestHex: undefined },
+      { schemaVersion: "predictive-terminal-receipt/v1" },
+      { harnessSchemaVersion: "research-harness-admission/v3" },
+    ]) {
+      const changed = { ...body, ...patch };
+      const receipt = { ...changed, contentDigestHex: createHash("sha256").update(JSON.stringify(changed)).digest("hex") };
+      expect(() => buildScientificAdmissionReceiptV2({
+        organizationId: "org-a",
+        predictiveTerminalReceipt: receipt as typeof fixture.predictive,
+        kmConvergenceReceipt: fixture.km,
+        epistemicParameterRatificationReceipt: fixture.ratification,
+      })).toThrow(/SCIENTIFIC_ADMISSION_(SCORING_CONTRACT|PREDICTIVE_SCHEMA|PREDICTIVE_HARNESS_SCHEMA)_MISMATCH/);
+    }
+    expect(() => buildPredictiveTerminalReceiptV1({
+      harnessInput: harnessInput(false),
+      identities: { ...identities, scoringContractVersion: "multiclass-log/v1" } as unknown as typeof identities,
+    })).toThrow("SCIENTIFIC_ADMISSION_SCORING_CONTRACT_MISMATCH");
+    const missingDiagnosticBody = { ...body, logScoreDiagnostics: {} };
+    const missingDiagnostic = { ...missingDiagnosticBody,
+      contentDigestHex: createHash("sha256").update(JSON.stringify(missingDiagnosticBody)).digest("hex") };
+    expect(() => buildScientificAdmissionReceiptV2({ organizationId: "org-a",
+      predictiveTerminalReceipt: missingDiagnostic, kmConvergenceReceipt: fixture.km,
+      epistemicParameterRatificationReceipt: fixture.ratification,
+    })).toThrow("SCIENTIFIC_ADMISSION_LOG_DIAGNOSTIC_MISMATCH");
+  });
+
   it("rejects old QUALIFIED evidence and a superficial harness-version relabel", () => {
     const fixture = admittedFixture();
     expect(fixture.predictive.terminalStatus).toBe("QUALIFIED");
@@ -226,7 +260,7 @@ describe("DEE-631 scientific admission receipt v2", () => {
       epistemicParameterRatificationReceipt: fixture.ratification,
       htxVolumeQualificationReceipt: volume,
     });
-    expect(record.schemaVersion).toBe("scientific-admission-receipt/v2");
+    expect(record.schemaVersion).toBe("scientific-admission-receipt/v3");
     expect(JSON.parse(record.receiptJson)).toEqual(fixture.receipt);
     expect(record.evidenceSemanticDigest).toBe(fixture.receipt.evidenceSemanticDigestHex);
   });

@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema.postgres";
-import { assertFhvV2PostgresSchemaPreflight } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
+import { assertFhvV2PostgresSchemaPreflight, FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
 import {
   getCredentialRowByIdPostgres,
   insertCredentialRowPostgres,
@@ -27,16 +27,16 @@ it("binds the exact frozen0205 bytes and contiguous journal without a second0205
       .update(readFileSync(join(folder, `${tag}.sql`)))
       .digest("hex"),
   ).toBe(hash);
-  expect(journal.entries.at(-1)).toEqual({
+  expect(journal.entries.filter((entry) => entry.idx === 205 || entry.tag === tag)).toEqual([{
     idx: 205,
     when: 1780000000205,
     tag,
     version: "7",
     breakpoints: true,
-  });
-  expect(journal.entries.map((e) => e.idx)).toEqual(Array.from({ length: 206 }, (_, i) => i));
-  expect(new Set(journal.entries.map((e) => e.tag)).size).toBe(206);
-  expect(new Set(journal.entries.map((e) => e.when)).size).toBe(206);
+  }]);
+  expect(journal.entries.map((e) => e.idx)).toEqual(Array.from({ length: journal.entries.length }, (_, i) => i));
+  expect(new Set(journal.entries.map((e) => e.tag)).size).toBe(journal.entries.length);
+  expect(new Set(journal.entries.map((e) => e.when)).size).toBe(journal.entries.length);
 });
 
 describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
@@ -123,7 +123,12 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
           (await sql`select rolsuper,rolbypassrls from pg_roles where rolname=current_user`)[0],
         ).toEqual({ rolsuper: false, rolbypassrls: false });
         await migrate(drizzle(sql), { migrationsFolder });
-        await assertFhvV2PostgresSchemaPreflight({ sql });
+        const applied = JSON.parse(readFileSync(join(migrationsFolder, "meta/_journal.json"), "utf8")) as typeof journal;
+        if (applied.entries.at(-1)!.idx < FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX) {
+          await expect(assertFhvV2PostgresSchemaPreflight({ sql })).rejects.toThrow("REQUIRED_MIGRATION_MISSING");
+        } else {
+          await assertFhvV2PostgresSchemaPreflight({ sql });
+        }
       } finally {
         await sql.unsafe("RESET ROLE");
       }
@@ -159,10 +164,10 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
         await sql.unsafe("RESET ROLE");
       }
     }
-    it("actual Drizzle fresh0000–0205 under a non-super/non-bypass migration owner", async () => {
+    it("actual Drizzle fresh current journal under a non-super/non-bypass migration owner", async () => {
       const sql = await database();
       await apply(sql, folder);
-      expect((await sql`select count(*) n from drizzle.__drizzle_migrations`)[0].n).toBe("206");
+      expect((await sql`select count(*) n from drizzle.__drizzle_migrations`)[0].n).toBe(String(journal.entries.length));
       const tables = await sql`select relname,relrowsecurity,relforcerowsecurity from pg_class
       where relname in ('trader_account_collection_state','trader_account_observations')`;
       expect(tables).toHaveLength(2);
@@ -172,7 +177,7 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
       expect(roles).toHaveLength(2);
       expect(roles.every((r) => !r.rolcanlogin && !r.rolsuper && !r.rolbypassrls)).toBe(true);
     }, 120000);
-    it("actual204→205 preserves credentials/snapshots and legacy read/insert/revoke on BOTH schemas", async () => {
+    it("actual204→current preserves credentials/snapshots and legacy read/insert/revoke on BOTH schemas", async () => {
       upgraded = await database();
       await apply(upgraded, baselineFolder);
       expect((await upgraded`select count(*) n from drizzle.__drizzle_migrations`)[0].n).toBe(
@@ -204,10 +209,21 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
         )[0].r,
       ).toEqual(snap);
       await legacyConsumer(upgraded, "after0205");
-      await upgraded`insert into public.trader_account_collection_state(organization_id,credential_id,exchange_account_id,configuration_revision,symbols)
-      values(${org},${credential},'synthetic-account','config','["BTCUSDT"]'),(${otherOrg},${otherCredential},'other-account','config','["BTCUSDT"]')`;
-      await upgraded`insert into public.trader_account_observations(organization_id,credential_id,exchange_account_id,observation_id,credential_revision,configuration_revision,lease_token,payload)
-      values(${org},${credential},'synthetic-account',${observation},1,'config',${randomUUID()},'{}')`;
+      // Even the fixture owner obeys FORCE RLS: seed each identity under its exact
+      // scope through the existing inherited policy, never disabling RLS.
+      for (const [scopeOrg, scopeCredential, account] of [
+        [org, credential, "synthetic-account"], [otherOrg, otherCredential, "other-account"],
+      ]) {
+        await upgraded.begin(async tx => {
+          await tx`select set_config('waia.observation_org',${scopeOrg},true),set_config('waia.observation_credential',${scopeCredential},true),set_config('waia.observation_account',${account},true)`;
+          await tx`insert into public.trader_account_collection_state(organization_id,credential_id,exchange_account_id,configuration_revision,symbols)
+          values(${scopeOrg},${scopeCredential},${account},'config','["BTCUSDT"]')`;
+          if (scopeOrg === org) {
+            await tx`insert into public.trader_account_observations(organization_id,credential_id,exchange_account_id,observation_id,credential_revision,configuration_revision,lease_token,payload)
+            values(${org},${credential},'synthetic-account',${observation},1,'config',${randomUUID()},'{}')`;
+          }
+        });
+      }
     }, 120000);
     it.each(["anon", "authenticated"])(
       "denies %s browser access to both new tables",
@@ -282,15 +298,17 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
         }),
       ).rejects.toThrow("OBSERVATION_REVISION_IS_DATABASE_OWNED");
       await expect(
-        upgraded`update public.trader_account_observations set payload='{"changed":true}' where observation_id=${observation}`,
+        upgraded.begin(async tx => {
+          await tx`select set_config('waia.observation_org',${org},true),set_config('waia.observation_credential',${credential},true),set_config('waia.observation_account','synthetic-account',true)`;
+          await tx`update public.trader_account_observations set payload='{"changed":true}' where observation_id=${observation}`;
+        }),
       ).rejects.toThrow("ACCOUNT_OBSERVATION_IMMUTABLE");
-      expect(
-        (
-          await upgraded`select payload from public.trader_account_observations where observation_id=${observation}`
-        )[0].payload,
-      ).toEqual({});
+      await scopedRole("waia_account_observation_reader", async tx => {
+        expect((await tx`select payload from public.trader_account_observations where observation_id=${observation}`)[0].payload).toEqual({});
+      });
     });
     it("actual historical preflight rejects invalid journal/table states, each rolled back", async () => {
+      const unknownTimestamp = journal.entries.at(-1)!.when + 1;
       const probes: [string, string][] = [
         [
           "delete from drizzle.__drizzle_migrations where created_at=1780000000204",
@@ -305,15 +323,15 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
           "APPLIED_MIGRATION_HASH_MISMATCH",
         ],
         [
-          "update drizzle.__drizzle_migrations set created_at=1780000000206 where created_at=1780000000205",
+          `update drizzle.__drizzle_migrations set created_at=${unknownTimestamp} where created_at=1780000000205`,
+          "REQUIRED_MIGRATION_MISSING",
+        ],
+        [
+          `insert into drizzle.__drizzle_migrations(hash,created_at) values('unknown',${unknownTimestamp})`,
           "UNKNOWN_APPLIED_MIGRATION",
         ],
         [
-          "insert into drizzle.__drizzle_migrations(hash,created_at) values('unknown',1780000000206)",
-          "UNKNOWN_APPLIED_MIGRATION",
-        ],
-        [
-          "insert into drizzle.__drizzle_migrations(hash,created_at) select hash,1780000000206 from drizzle.__drizzle_migrations where created_at=1780000000205",
+          `insert into drizzle.__drizzle_migrations(hash,created_at) select hash,${unknownTimestamp} from drizzle.__drizzle_migrations where created_at=1780000000205`,
           "DUPLICATE_APPLIED_MIGRATION",
         ],
         [

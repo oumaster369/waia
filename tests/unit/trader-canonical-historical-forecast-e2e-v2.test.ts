@@ -210,7 +210,7 @@ function authorityGraph() {
     predictivePackageGenerationIdentityDigestHex: generationDigest,
     predictivePackageContentDigestHex: packageDigest,
     runtimeContractDigestHex: runtimeDigest,
-    scoringContractVersion: "multiclass-log-score/v1" as const,
+    scoringContractVersion: "multiclass-brier-reward/v1" as const,
     evaluationPartitionReceiptDigestHex: hash("walk-forward-partition"),
   };
   const predictiveTerminalReceipt = buildPredictiveTerminalReceiptV1({
