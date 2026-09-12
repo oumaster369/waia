@@ -15,6 +15,7 @@ import {
   buildForecastModelArtifactV2,
   buildForecastModelSpecV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-contract-foundation-v2";
+import { SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
@@ -72,7 +73,7 @@ describe.skipIf(!integrationEnabled || !url)(
       await toggleDeleteTriggers(true);
     }
 
-    async function seedScientificReceipt() {
+    async function seedScientificReceipt(schemaVersion: string = SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION) {
       receiptId = randomUUID();
       await sql`
         INSERT INTO trader_scientific_admission_receipt_v1 (
@@ -85,7 +86,7 @@ describe.skipIf(!integrationEnabled || !url)(
           ${receiptId}::uuid, ${orgA}::uuid, 'WF_PREDICTIVE', ${hex64("anchor")},
           ${hex64("family")}, 10, 20, '0.10000000', ${hex64("package-generation")},
           ${packageDigest}, ${hex64(`evidence-${receiptId}`)}, '{}', ${receiptDigest},
-          'scientific-admission-receipt/v3'
+          ${schemaVersion}
         )
       `;
     }
@@ -165,6 +166,17 @@ describe.skipIf(!integrationEnabled || !url)(
           modelArtifactDigestHex: template.binding.modelArtifact.contentDigestHex,
         }),
       ).resolves.toMatchObject({ status: "ADMITTED" });
+    });
+
+    it("refuses the legacy Brier-era scientific receipt despite matching tenant and digests", async () => {
+      await cleanupRows();
+      await seedScientificReceipt("scientific-admission-receipt/v3");
+      await expect(persistForecastContractBindingV1(sql, record())).rejects.toThrow(
+        "FORECAST_CONTRACT_BINDING_SCIENTIFIC_ADMISSION_MISMATCH",
+      );
+      await expect(readForecastContractBindingV1(sql, {
+        organizationId: orgA, selectedPredictivePackageContentDigestHex: packageDigest,
+      })).resolves.toBeNull();
     });
 
     it("fails closed for contract substitution, conflict, and cross-tenant replay", async () => {

@@ -1,3 +1,4 @@
+import { CDF_ERF_CODY715_VERSION, CDF_REFERENCE_AMENDMENT_DIGEST } from "./cdf-evidence-protocol-v2";
 import { TERMINAL_SCORING_CONTRACT, TERMINAL_SCORING_METRIC, TERMINAL_SCORING_AMENDMENT_DIGEST, multiclassBrierRewardV1, assertTerminalProbabilityVectorV2 } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { assertTerminalDevelopmentReturnsV2 } from "./terminal-scoring-protocol-v2";
 import { createHash } from "node:crypto";
@@ -24,8 +25,8 @@ import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1,
   type ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
 
 // DEE-947: keep corrected-law evidence separate even when numeric outputs coincide.
-export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v4" as const;
-export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v4" as const;
+export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v5" as const;
+export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v5" as const;
 
 export type ResearchHarnessAnchorV1 = {
   anchorId: string;
@@ -126,6 +127,8 @@ export function computeResearchHarnessAdmissionReceiptDigestV2(input: {
     TERMINAL_SCORING_METRIC,
     TERMINAL_SCORING_AMENDMENT_DIGEST,
     VALIDATION_BOOTSTRAP_VERSION,
+    CDF_ERF_CODY715_VERSION,
+    CDF_REFERENCE_AMENDMENT_DIGEST,
     input.comparisonFamilyId,
     input.commonAnchorSetDigestHex,
     input.terminalStatus,

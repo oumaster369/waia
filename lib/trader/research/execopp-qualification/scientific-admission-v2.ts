@@ -1,3 +1,4 @@
+import { CDF_ERF_CODY715_VERSION, CDF_REFERENCE_AMENDMENT_DIGEST } from "@/lib/trader/research/benchmark/cdf-evidence-protocol-v2";
 import { TERMINAL_SCORING_CONTRACT, TERMINAL_SCORING_METRIC, TERMINAL_SCORING_AMENDMENT_DIGEST } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { createHash } from "node:crypto";
 
@@ -19,11 +20,11 @@ import {
   type KmConvergenceReceipt,
 } from "./km-convergence-gate-v1";
 
-export const PREDICTIVE_TERMINAL_RECEIPT_VERSION = "predictive-terminal-receipt/v2" as const;
+export const PREDICTIVE_TERMINAL_RECEIPT_VERSION = "predictive-terminal-receipt/v3" as const;
 export const EPISTEMIC_PARAMETER_RATIFICATION_VERSION =
   "epistemic-parameter-ratification/v1" as const;
 export const SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION =
-  "scientific-admission-receipt/v3" as const;
+  "scientific-admission-receipt/v4" as const;
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
@@ -51,6 +52,8 @@ export type PredictiveIdentityBindingsV1 = {
 
 export type PredictiveTerminalReceiptV1 = PredictiveIdentityBindingsV1 & {
   logScoreDiagnostics: ResearchHarnessAdmissionResultV1["logScoreDiagnostics"];
+  cdfKernelVersion: typeof CDF_ERF_CODY715_VERSION;
+  cdfAmendmentDigestHex: typeof CDF_REFERENCE_AMENDMENT_DIGEST;
   scoringMetric: typeof TERMINAL_SCORING_METRIC;
   scoringAmendmentDigestHex: typeof TERMINAL_SCORING_AMENDMENT_DIGEST;
   schemaVersion: typeof PREDICTIVE_TERMINAL_RECEIPT_VERSION;
@@ -74,8 +77,11 @@ function predictiveReceiptBody(
   return receipt;
 }
 
-function validatePredictiveTerminalReceipt(receipt: PredictiveTerminalReceiptV1): void {
+export function validatePredictiveTerminalReceipt(receipt: PredictiveTerminalReceiptV1): void {
   const { contentDigestHex, ...body } = receipt;
+  if (receipt.cdfKernelVersion !== CDF_ERF_CODY715_VERSION ||
+      receipt.cdfAmendmentDigestHex !== CDF_REFERENCE_AMENDMENT_DIGEST)
+    throw new Error("SCIENTIFIC_ADMISSION_CDF_CONTRACT_MISMATCH");
   if (receipt.scoringContractVersion !== TERMINAL_SCORING_CONTRACT ||
       receipt.scoringMetric !== TERMINAL_SCORING_METRIC ||
       receipt.scoringAmendmentDigestHex !== TERMINAL_SCORING_AMENDMENT_DIGEST) {
@@ -93,6 +99,19 @@ function validatePredictiveTerminalReceipt(receipt: PredictiveTerminalReceiptV1)
   if (sha256Canonical(body) !== contentDigestHex) {
     throw new Error("SCIENTIFIC_ADMISSION_PREDICTIVE_DIGEST_MISMATCH");
   }
+  const expectedFamily = canonicalBaselineIds();
+  const sameKeys = (record: object) => JSON.stringify(Object.keys(record).sort()) === JSON.stringify(expectedFamily);
+  if (JSON.stringify(receipt.mandatoryBaselineIds) !== JSON.stringify(expectedFamily) ||
+      !receipt.baselineAvailability || !sameKeys(receipt.baselineAvailability) ||
+      Object.values(receipt.baselineAvailability).some(v => v !== "AVAILABLE" && v !== "UNAVAILABLE"))
+    throw new Error("SCIENTIFIC_ADMISSION_PREDICTIVE_BASELINE_FAMILY_MISMATCH");
+  const availableIds = expectedFamily.filter(id => receipt.baselineAvailability[id] === "AVAILABLE");
+  const allowedSubset = (ids: string[]) => new Set(ids).size === ids.length &&
+    ids.every(id => availableIds.includes(id));
+  if (!allowedSubset(receipt.holmComparisons.map(c => c.comparisonId)) ||
+      !allowedSubset(receipt.holmResults.map(c => c.comparisonId)) ||
+      !allowedSubset(Object.keys(receipt.meanImprovementByBaseline)))
+    throw new Error("SCIENTIFIC_ADMISSION_PREDICTIVE_BASELINE_FAMILY_MISMATCH");
   const diagnostics = receipt.logScoreDiagnostics;
   const diagnosticIds = canonicalBaselineIds().filter(id => receipt.baselineAvailability[id] === "AVAILABLE");
   if (!diagnostics || JSON.stringify(Object.keys(diagnostics).sort()) !== JSON.stringify(diagnosticIds)) {
@@ -230,6 +249,8 @@ function finishPredictiveTerminalReceiptV1(
 
   const body: Omit<PredictiveTerminalReceiptV1, "contentDigestHex"> = {
     logScoreDiagnostics: result.logScoreDiagnostics,
+    cdfKernelVersion: CDF_ERF_CODY715_VERSION,
+    cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST,
     scoringMetric: TERMINAL_SCORING_METRIC,
     scoringAmendmentDigestHex: TERMINAL_SCORING_AMENDMENT_DIGEST,
     schemaVersion: PREDICTIVE_TERMINAL_RECEIPT_VERSION,
