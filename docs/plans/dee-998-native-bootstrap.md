@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: in-review
   currentWorkPackage: WP-3
-  completedWorkPackages: [WP-1, WP-2]
-  remainingWorkPackages: [WP-3]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: []
+  prNumber: 579
+  prUrl: https://github.com/oumaster369/waia/pull/579
+  lastValidatedGitSha: 96b25f96166cea33011d5f18357dc71ff0cf8af4
+  lastValidationAt: "2026-09-12T16:44:00Z"
   blockedReason: null
-  nextAction: "Finalize independent review and open the isolated experiment PR."
+  nextAction: "Obtain exact-head CI PASS; keep DEE-998 open for remaining authenticated execution admission."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -70,7 +70,7 @@ science thresholds, synthesize Human approval, deploy the application, access
 exchange credentials, trade, or touch blind holdout. No cross-release reuse
 admission is implied. Existing JavaScript execution remains unchanged.
 
-## Validation and next boundary
+## Acceptance
 
 Run the standalone parity driver plus existing bootstrap known-answer tests.
 Add a Linux CI parity job without removing or disabling any existing gate.
@@ -112,3 +112,9 @@ retry coverage and centering/resample-overflow negatives; both were added and
 passed on the target host. Local build initially hit sandbox IPC denial and then
 Turbopack's prohibition on an external node_modules symlink; dependency setup was
 corrected without changing application source.
+
+PR CI initially rejected this plan because its acceptance section used a different
+heading. The heading was corrected to the required `## Acceptance`; no validator
+or scientific assertion was weakened. Local canonical-doc validation was then
+rerun. DEE-998 remains open beyond this isolated experiment for complete-range
+authenticated accounting and execution admission; PR completion mode is keep-open.
