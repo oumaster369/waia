@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: in-review
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
+  prNumber: 581
+  prUrl: https://github.com/oumaster369/waia/pull/581
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Publish Cody-only PR against merged Brier657914b1 after governance preflight; authoritative full CI still required. No deployment or scientific execution."
+  nextAction: "Push reviewed test-only CI reconciliation to existing PR581; require fresh complete exact-head CI before merge. No deployment or scientific execution."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -30,6 +30,34 @@ provenance:
 ---
 
 # DEE-993: Cody reference-conformance integration
+
+## CI reconciliation — 2026-09-12 21:14 UTC
+
+Exact head dd5aee34 failed one unit test (7179 passed,602 skipped) and three
+PostgreSQL binding tests (196 passed,3 skipped). These are assertion failures,
+not timeouts. Complete failed logs were retained locally. Root and two bounded
+authors traced both failures to omitted test updates after the ratified Cody
+identity change; no production implementation or rejection predicate changed.
+
+The VALBOOT known answer now independently frames the Cody v5 receipt and pins
+its hash a11ddfe23c2e62a24508de3d7ba573ad96e5b8eecce859631be185075e3a8ee5.
+The old Brier v4 hash remains explicitly asserted, along with all four distinct
+legacy/bootstrap/Brier/Cody identities and unchanged p-value/RNG assertions.
+Targeted RED reproduced8PASS/1FAIL, then101 related tests passed across8 files.
+
+The PostgreSQL fixture now seeds the actual outer receipt version constant /v4,
+not obsolete /v3 (nor inner harness /v5). An additional negative test proves /v3
+still refuses despite matching tenant and digests. All five actual PostgreSQL17
+tests passed with zero skips in an isolated copied local0000..0207 test database.
+This binding fixture uses the same administrative cleanup capabilities as CI;
+it is not a replacement for the separate passing restricted-runner/RLS guards.
+The original production SQL, schema, scientific code and safeguards are unchanged.
+
+Full typecheck and scoped ESLint passed. Default application build/full lint from
+the unchanged production head remain applicable; no redundant full local suite
+was run. Fresh authoritative GitHub CI on the new head is mandatory; skipped
+build/E2E on failed dd5aee34 are not PASS. No merge, deployment or scientific
+calculation occurred during this reconciliation.
 
 ## Canonical publication checkpoint — 2026-09-12
 
