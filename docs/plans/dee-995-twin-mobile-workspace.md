@@ -1,0 +1,39 @@
+---
+integrationIssue: DEE-995
+integrationTitle: "AI-TWIN — mobile conversation access with optional workspace details"
+branch: dee-995-twin-mobile-workspace
+riskTier: T1
+prPolicy: one-integration-pr
+executionSurfaces: [local, github-pr]
+requiredValidation: [lint, typecheck, unit, build, e2e, accessibility, canon, pr-governance]
+approvalGates: [plan-approved, integration-ready, human-merge]
+includedIssues: []
+state: { status: in-progress, currentWorkPackage: WP-1, completedWorkPackages: [], remainingWorkPackages: [WP-1, WP-2, WP-3], prNumber: null, prUrl: null, lastValidatedGitSha: null, lastValidationAt: null, blockedReason: null, nextAction: "Reproduce phone conversation displacement; implement and validate bounded presentation repair." }
+provenance: { createdFrom: "Human continuation and cabinet usability direction 2026-09-12", gapRegistry: docs/gaps/ai-twin-v1-gap-registry.md, supersedes: null }
+---
+
+# DEE-995 — Conversation-first mobile workspace
+
+## Scope and authority
+
+Human authorized continued isolated AI-TWIN work and orderly Linear after PR577. This bounded T1 layout repair addresses the mobile gap recorded in DEE-881/994. It neither starts the blocked Adviser/model work nor reopens canceled DEE-144 or completed DEE-994. One new integration issue and one PR; merge/deployment require separate approval. Source baseline `d1c391906d23a5b6d68e9dcfc706b0d8cdf535e9`. No production activation or periodic automation.
+
+## Files and design
+
+One integrator owns `app/dashboard/page.tsx` (wrapping only), `components/dashboard/dashboard-shell.tsx`, new `components/dashboard/twin-mobile-disclosure.tsx`, `components/dashboard/top-block.tsx`, `components/dashboard/mode-tabs.tsx`, `components/dashboard/dialogue-area.tsx` (only reproduced wrapping/minimum-width layout fixes), `tests/unit/twin-mobile-disclosure.test.tsx`, `tests/e2e/twin-mobile-workspace.spec.ts`, and this plan. No shared Sidebar, auth, database, migration, AI/provider/Gateway, Trader, global CSS, dependencies or configuration changes.
+
+On narrow screens, existing navigation and progress/avatar content is behind two explicit, accessible disclosure buttons. On desktop both regions stay visible. Keep a single mounted copy of content, retain all existing values/permissions, and never recompute readiness. Content is hidden only by viewport/user disclosure, never by readiness. The conversation stays mounted throughout. Use existing semantic WAIA tokens, normal flow, 44px controls, wrapping text and focus-visible rings; no overlay, scroll hijacking, new visuals or animation. Preserve all navigation targets and server-side entitlement checks byte-for-byte. Disclosure needs no storage, request, model inference or analytics. Full cross-mode draft retention and conversational tutoring remain DEE-881/878.
+
+## Work packages and acceptance
+
+1. WP-1: RED test at 390x844 proves initial invitation/help are displaced; then add mobile disclosures with ARIA expanded/controls, keyboard/touch activation and Escape/focus return. Retain desktop visibility.
+2. WP-2: browser regressions at 320/390/768/1440 widths and 200% text; all existing indicator content and gated tabs remain accessible; no document overflow; draft/history survive disclosure toggling and resize; no requests from disclosure actions. Apply only layout corrections demonstrated by these tests.
+3. WP-3: targeted tests, mandatory readiness checks, independent read-only review, exact origin/main conflict check and one PR. Record actual tests/results, not whole-module readiness. DEE-878/879/881 statuses/dependencies and Trader work stay unchanged.
+
+## Validation and isolation
+
+`pnpm exec vitest run tests/unit/twin-mobile-disclosure.test.tsx tests/unit/dashboard-shell.test.tsx tests/unit/twin-dialogue-workspace.test.tsx tests/unit/twin-product-guide.test.tsx`.
+
+`pnpm exec playwright test tests/e2e/twin-mobile-workspace.spec.ts tests/e2e/dashboard.spec.ts tests/e2e/twin-product-guide.spec.ts tests/e2e/twin-subscription-disclosure.spec.ts --project chromium --workers 1`, using only own port3295, own `.data/dee995-e2e.db`, fake provider, blank external credentials, no inherited env files. Production-mode build/start for final browser qualification; optional own local preview for inspection. No shared servers or PostgreSQL needed for presentation-only change.
+
+`pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm validate:canon`, `pnpm validate:pr-governance`, rendered-body preflight. Full unit suite belongs to PR CI, not duplicated locally. No claims of full WCAG certification. One revert restores the old layout; no migration/operational rollout or new ADR is needed.
