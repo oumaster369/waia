@@ -1,5 +1,5 @@
 import { ENERGY_MC_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
-import { normalCdfCody715V1 } from "./cdf-erf-cody715-v1";
+import { normalCdfCody715V2 } from "./cdf-erf-cody715-v2";
 import { studentT5BaselineScaleV1, studentT5CdfBetaincV1 } from "./student-t5-cdf-betainc-v1";
 import {
   computeTerminalTargetGridFromDevelopmentReturns,
@@ -36,11 +36,11 @@ function gaussianBucketProbabilities(grid: TerminalTargetGrid, sigma: number): n
   const probs: number[] = [];
   let prevCdf = 0;
   for (let i = 0; i < grid.edges.length; i += 1) {
-    const cdf = normalCdfCody715V1(grid.edges[i]! / s);
+    const cdf = normalCdfCody715V2(grid.edges[i]! / s);
     probs.push(Math.max(0, cdf - prevCdf));
     prevCdf = cdf;
   }
-  const tailCdf = normalCdfCody715V1(grid.edges[grid.edges.length - 1]! / s);
+  const tailCdf = normalCdfCody715V2(grid.edges[grid.edges.length - 1]! / s);
   probs.push(Math.max(0, 1 - tailCdf));
   return probs;
 }
@@ -121,10 +121,10 @@ function makeAvailable(
 /** Frozen terminal baselines — multiclass log score over 7-bucket grid (§WP-RESEARCH-HARNESS). */
 export const MANDATORY_BASELINE_IDS = [
   "climatology/v1",
-  "gaussian-pop-std/v1",
+  "gaussian-pop-std/v2",
   "student-t5-nu5/v1",
   "rolling-w2000/v1",
-  "ewma-lambda094/v2",
+  "ewma-lambda094/v3",
 ] as const;
 
 export function evaluateMandatoryBaselineV1(
@@ -137,7 +137,7 @@ export function evaluateMandatoryBaselineV1(
   switch (baselineId) {
     case "climatology/v1":
       return makeAvailable(empiricalBucketProbabilities(developmentReturns, grid), grid);
-    case "gaussian-pop-std/v1":
+    case "gaussian-pop-std/v2":
       return makeAvailable(gaussianBucketProbabilities(grid, sigmaDev), grid);
     case "student-t5-nu5/v1":
       return makeAvailable(studentT5BucketProbabilities(grid, sigmaDev), grid);
@@ -151,7 +151,7 @@ export function evaluateMandatoryBaselineV1(
       }
       return makeAvailable(empiricalBucketProbabilities(window as number[], grid), grid);
     }
-    case "ewma-lambda094/v2": {
+    case "ewma-lambda094/v3": {
       const varEwma = computeEwmaVarianceReturnsV2(context);
       if (varEwma === null) {
         return { status: "UNAVAILABLE", reason: "EWMA_WARMUP_INSUFFICIENT" };
@@ -207,5 +207,5 @@ export const MANDATORY_BASELINES_V1 = MANDATORY_BASELINE_IDS.map((baselineId) =>
 }));
 
 export function gaussianCdfBaselineV1(z: number, sigma: number): number {
-  return normalCdfCody715V1(z / Math.max(sigma, 1e-8));
+  return normalCdfCody715V2(z / Math.max(sigma, 1e-8));
 }

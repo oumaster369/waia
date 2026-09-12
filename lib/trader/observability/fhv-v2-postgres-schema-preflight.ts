@@ -6,11 +6,11 @@ import type postgres from "postgres";
 
 import { getPostgresSql } from "@/db/postgres-client";
 
-// Brier receipt admission requires the exact 0206 policy, not the old v2 policy.
-export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 206 as const;
+// Corrected Cody evidence admission requires the exact 0207 policy.
+export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 
 // Explicit compatibility admission, not automatic acceptance of every future
-// journal entry. 0205 is now inside the required contiguous prefix through 0206.
+// journal entry. 0205 and 0206 remain inside the required prefix through 0207.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

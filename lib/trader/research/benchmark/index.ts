@@ -14,7 +14,9 @@ export {
   betaincLentzV1,
   BETAINC_LENTZ_VERSION,
 } from "./betainc-lentz-v1";
-export { CDF_ERF_CODY715_VERSION, erfCody715V1, normalCdfCody715V1 } from "./cdf-erf-cody715-v1";
+// Historical v1 functions retained for explicit diagnostics, never active baselines.
+export { erfCody715V1, normalCdfCody715V1 } from "./cdf-erf-cody715-v1";
+export { CDF_ERF_CODY715_VERSION, erfCody715V2, normalCdfCody715V2 } from "./cdf-erf-cody715-v2";
 export { energyMcFromNestedCubeV1, energyMcV1, ENERGY_MC_VERSION } from "./energy-mc-v1";
 export { holmFamilyPassV1, holmFwerV1, HOLM_FWER_VERSION } from "./holm-fwer-v1";
 export type { HolmComparison, HolmResult } from "./holm-fwer-v1";

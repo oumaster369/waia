@@ -260,7 +260,7 @@ describe("DEE-631 scientific admission receipt v2", () => {
       epistemicParameterRatificationReceipt: fixture.ratification,
       htxVolumeQualificationReceipt: volume,
     });
-    expect(record.schemaVersion).toBe("scientific-admission-receipt/v3");
+    expect(record.schemaVersion).toBe("scientific-admission-receipt/v4");
     expect(JSON.parse(record.receiptJson)).toEqual(fixture.receipt);
     expect(record.evidenceSemanticDigest).toBe(fixture.receipt.evidenceSemanticDigestHex);
   });

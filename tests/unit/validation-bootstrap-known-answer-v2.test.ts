@@ -113,7 +113,20 @@ describe("DEE-947 frozen VALBOOT1 transition known answers", () => {
       "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
       "validation-bootstrap/v2", "family", "a".repeat(64), "QUALIFIED", comparisonLine,
     ].join("\n")).digest("hex");
-    expect(computeResearchHarnessAdmissionReceiptDigestV2(input)).toBe(brierDigest);
+    // DEE-993 binds the approved Cody amendment without changing this p-value or
+    // VALBOOT1 law. Keep literal reference framing independent of runtime constants.
+    const codyDigest = createHash("sha256").update([
+      "scientific-admission-receipt/v5", "multiclass-brier-reward/v1",
+      "terminal-multiclass-brier-reward/v1",
+      "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
+      "validation-bootstrap/v2", "cdf-erf-cody715/v2",
+      "7b8dfb5540833d8e915ecf2456594e366e0fc9c11c8e33f9df6a0732f3d8a09f",
+      "family", "a".repeat(64), "QUALIFIED", comparisonLine,
+    ].join("\n")).digest("hex");
+    expect(brierDigest).toBe("708c51e6e5e80d288b11b660d4ed126022a083e7300635b0ec977ecfabdc53fe");
+    expect(codyDigest).toBe("a11ddfe23c2e62a24508de3d7ba573ad96e5b8eecce859631be185075e3a8ee5");
+    expect(computeResearchHarnessAdmissionReceiptDigestV2(input)).toBe(codyDigest);
+    expect(new Set([legacyDigest, correctedDigest, brierDigest, codyDigest]).size).toBe(4);
     expect(brierDigest).not.toBe(correctedDigest);
     expect(correctedDigest).not.toBe(legacyDigest);
   });
