@@ -525,9 +525,9 @@ describe.skipIf(!enabled || !url)("Postgres Historical V2 runner least privilege
     }
   });
 
-  it("refuses arbitrary Human-semantic scientific receipts outside an exact approved surface", async () => {
+  it.each(["scientific-admission-receipt/v2", "scientific-admission-receipt/v3"])("refuses arbitrary Human-semantic %s outside an exact approved surface", async (schemaVersion) => {
     const forged = {
-      schemaVersion: "scientific-admission-receipt/v2",
+      schemaVersion,
       organizationId: AUTHORIZED_ORGANIZATION,
       wfPartition: "WF_PREDICTIVE",
       terminalStatus: "ADMITTED",

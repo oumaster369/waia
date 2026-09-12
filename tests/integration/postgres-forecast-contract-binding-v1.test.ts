@@ -85,7 +85,7 @@ describe.skipIf(!integrationEnabled || !url)(
           ${receiptId}::uuid, ${orgA}::uuid, 'WF_PREDICTIVE', ${hex64("anchor")},
           ${hex64("family")}, 10, 20, '0.10000000', ${hex64("package-generation")},
           ${packageDigest}, ${hex64(`evidence-${receiptId}`)}, '{}', ${receiptDigest},
-          'scientific-admission-receipt/v2'
+          'scientific-admission-receipt/v3'
         )
       `;
     }

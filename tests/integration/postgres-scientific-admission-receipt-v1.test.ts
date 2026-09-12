@@ -99,7 +99,7 @@ function qualifiedV2Fixture(organizationId: string, seed: string) {
     predictivePackageGenerationIdentityDigestHex: hex64(`${seed}-selected-gen`),
     predictivePackageContentDigestHex: hex64(`${seed}-selected-content`),
     runtimeContractDigestHex: hex64(`${seed}-runtime`),
-    scoringContractVersion: "multiclass-log-score/v1" as const,
+    scoringContractVersion: "multiclass-brier-reward/v1" as const,
     evaluationPartitionReceiptDigestHex: hex64(`${seed}-partition`),
   };
   const predictive = buildPredictiveTerminalReceiptV1({

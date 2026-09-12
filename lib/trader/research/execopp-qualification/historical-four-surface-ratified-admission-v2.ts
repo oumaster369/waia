@@ -1,3 +1,4 @@
+import { TERMINAL_SCORING_CONTRACT } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
@@ -488,7 +489,7 @@ function validateSurface(
       binding.predictivePackageGenerationIdentityDigestHex,
     predictivePackageContentDigestHex: binding.predictivePackageContentDigestHex,
     runtimeContractDigestHex: receipt.predictiveTerminalReceipt.runtimeContractDigestHex,
-    scoringContractVersion: "multiclass-log-score/v1",
+    scoringContractVersion: TERMINAL_SCORING_CONTRACT,
     evaluationPartitionReceiptDigestHex:
       receipt.predictiveTerminalReceipt.evaluationPartitionReceiptDigestHex,
     kmConvergenceEvidenceSemanticDigestHex: binding.convergenceEvidenceSemanticDigestHex,
@@ -1604,11 +1605,11 @@ async function buildTechnicalSurfaceCandidatesV2(
         predictivePackageGenerationIdentityDigestHex: generationDigest,
         predictivePackageContentDigestHex: packageDigest,
         runtimeContractDigestHex: predictivePackage.runtimeContractDigest.toString("hex"),
-        scoringContractVersion: "multiclass-log-score/v1" as const,
+        scoringContractVersion: TERMINAL_SCORING_CONTRACT,
         evaluationPartitionReceiptDigestHex,
       },
     };
-    const predictive = await reuseScientificEvidenceAsyncV1("wf-predictive-terminal-v1", predictiveInput,
+    const predictive = await reuseScientificEvidenceAsyncV1("wf-predictive-terminal-v2", predictiveInput,
       () => buildPredictiveTerminalReceiptAsyncV1(predictiveInput, { ...bootstrapExecution, signal: observer.signal,
       flushProgress: () => flushTechnicalPreparationProgressV2(observer), onProgress: progress => {
       if (progress.completed % 1000 === 0 || progress.completed === progress.total) {
@@ -1619,6 +1620,7 @@ async function buildTechnicalSurfaceCandidatesV2(
     await flushTechnicalPreparationProgressV2(observer);
     if (predictive.terminalStatus !== "QUALIFIED") {
       const diagnostic = canonicalizeDiagnosticJsonString({
+        logScoreDiagnostics: predictive.logScoreDiagnostics,
         reasonCodes: predictive.reasonCodes,
         meanImprovementByBaseline: predictive.meanImprovementByBaseline,
         holmComparisons: predictive.holmComparisons,

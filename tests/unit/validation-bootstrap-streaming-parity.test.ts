@@ -104,14 +104,16 @@ describe("DEE-950 exact addressed setup and streaming bootstrap", () => {
     expect(() => nullCenterPairedDifferentials(new Array<number>(2))).toThrow("non-finite differential");
   });
 
-  it("retains the exact DEE-947 corrected bootstrap/harness evidence namespace", () => {
+  it("retains the corrected bootstrap law while binding the DEE-992 score amendment", () => {
     expect(VALIDATION_BOOTSTRAP_VERSION).toBe("validation-bootstrap/v2");
-    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v3");
-    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v3");
+    expect(RESEARCH_HARNESS_ADMISSION_VERSION).toBe("research-harness-admission/v4");
+    expect(SCIENTIFIC_ADMISSION_RECEIPT_VERSION).toBe("scientific-admission-receipt/v4");
     const input = { comparisonFamilyId: "family", commonAnchorSetDigestHex: "a".repeat(64),
       terminalStatus: "NO_CHALLENGER_QUALIFIES" as const, holmComparisons: [] };
     const expected = createHash("sha256").update([
-      "scientific-admission-receipt/v3", "validation-bootstrap/v2", input.comparisonFamilyId,
+      "scientific-admission-receipt/v4", "multiclass-brier-reward/v1", "terminal-multiclass-brier-reward/v1",
+      "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
+      "validation-bootstrap/v2", input.comparisonFamilyId,
       input.commonAnchorSetDigestHex, input.terminalStatus,
     ].join("\n")).digest("hex");
     expect(computeResearchHarnessAdmissionReceiptDigestV2(input)).toBe(expected);
