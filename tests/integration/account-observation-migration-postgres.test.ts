@@ -84,7 +84,7 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
       if (appliedThrough >= FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX) {
         await assertFhvV2PostgresSchemaPreflight({ sql });
       } else {
-        // The historical Brier runtime must not admit the older 0205 policy.
+        // The historical Cody runtime must not admit a prefix below required 0207.
         await expect(assertFhvV2PostgresSchemaPreflight({ sql }))
           .rejects.toMatchObject({ code: "REQUIRED_MIGRATION_MISSING" });
       }

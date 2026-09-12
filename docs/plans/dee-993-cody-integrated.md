@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-993
 integrationTitle: "Cody JINT=0 reference conformance and evidence versioning"
-branch: dee-993-cody-conformance
+branch: dee-993-cody-integrated
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local]
@@ -14,30 +14,33 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-3
-  completedWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Record exact local commit in Linear; reconcile DEE-992 dependency before publication."
+  nextAction: "Root integrator to review the isolated branch and determine publication/readiness; no server or scientific execution performed here."
 provenance:
   createdFrom: chat
   gapRegistry: null
   supersedes: null
 ---
 
-# DEE-993: Cody reference-conformance correction
+# DEE-993: Cody reference-conformance integration
 
 ## Authority and dependency
 
 Human explicitly approved the local correction and evidence versioning on 2026-09-12.
 No deployment, checkpoints mutation or scientific corpus calculation.
-Separate local branch stacked on DEE-992 commit
-2ced7a319b419323ef97fd60c4137b12fbe2d2c7. No push/PR/merge performed.
-Integration with the unmerged DEE-992 prerequisite must be reconciled before PR.
+Original local implementation was stacked on DEE-992 commit
+2ced7a319b419323ef97fd60c4137b12fbe2d2c7. The original branch remains preserved.
+This isolated integration branch starts at the corrected Brier commit
+683424c3b9011d6a185e7e7bf89fd5e06de1ed89 and cherry-picks only the approved Cody
+commit 1b1720a38a4468afe77ba25b261da15ac45ffed5 as dfae5bfd.
+No push/PR/merge or server operation is part of this local integration task.
 
 Ratified narrow mathematical precedence and version map:
 [amendment v1](dee-993-cody-amendment-v1.md),
@@ -51,6 +54,9 @@ Historical DEE-518 text and diagnostic v1 implementation remain unchanged.
   Terminal-only cache stage/input/validation; protocol-only local 0207 RLS successor.
 - WP-3: targeted numeric/evidence/compatibility tests, local fresh PostgreSQL 17,
   typecheck/lint/build, independent bounded review and factual Linear handoff.
+- WP-4: reconcile the mandatory schema preflight through 0207 and focused
+  negative cases on the corrected Brier base; preserve 0205/0206 requirements,
+  reject unknown future migrations, and run focused local units/typecheck.
 
 ## Scope / non-goals
 
@@ -69,6 +75,9 @@ Local PostgreSQL uses isolated localhost synthetic fixtures; server/checkpoints 
 
 ## Acceptance
 
+The following evidence describes the original Cody implementation, before this
+isolated integration. Integration validation is recorded separately below.
+
 Independent review found no outstanding scoped P1/P2 in numeric correction,
 identity/receipt/cache binding and exact migration delta. This is not a full Trader audit.
 Local validation: 143 distinct targeted unit tests passed across the final targeted
@@ -85,6 +94,22 @@ No remote CI or full production rehearsal was run.
 Tests include extreme tails, branch boundaries, ordinary bit parity, probability mass,
 resealed missing/legacy/mixed receipts for both verdicts, unchanged receipt history,
 version-only SQL delta, runner-role positive/negative protocol probes and authority refusal.
+
+### Local integration validation
+
+Schema admission now requires the complete exact-hash prefix 0000..0207. Neither
+0205 nor 0206 alone authorizes the current Cody runtime; removing either prior
+migration still refuses even when 0207 is present. 0207 is not optional, and 0208
+remains unknown. Existing account-observation migration tests continue to check
+0204/0205 refusal and full-current-journal acceptance without weakening RLS,
+role restrictions, credential isolation or data-preservation assertions.
+The ratified amendment bytes and 0207 SQL semantics remain unchanged.
+141 focused unit tests passed across 11 files, including corrected Cody, Brier,
+schema admission and shared receipt/harness consumers. Typecheck passed. Canonical
+validation passed for this plan and the unchanged ratified amendment. No full suite,
+PostgreSQL server execution, deployment or scientific corpus evaluation was run.
+The account-observation journal/SQL packaging check passed with its three PostgreSQL
+cases explicitly disabled. Targeted lint passed for the three preflight/test files.
 
 ## Rollback / boundaries
 
