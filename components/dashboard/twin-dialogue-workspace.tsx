@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { TwinSubscriptionDisclosure } from "@/components/dashboard/twin-subscription-disclosure";
+import { TwinProductGuide } from "@/components/dashboard/twin-product-guide";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
@@ -207,12 +208,13 @@ export function TwinDialogueWorkspace({
       role="region"
       aria-label="Twin dialogue"
     >
+      <TwinProductGuide />
       {showFramingAndCta && (
         <WaiaSurface
           variant="invitation"
           data-testid="dashboard-twin-invitation-placeholder"
           id="dashboard-twin-invitation-desc"
-          className="text-muted-foreground flex flex-col gap-3 p-4 text-sm leading-relaxed"
+          className="text-muted-foreground flex flex-col gap-3 p-4 text-base leading-relaxed"
         >
           <p className="whitespace-pre-line">{TWIN_FIRST_START_FRAMING_COPY}</p>
           <Button
@@ -260,7 +262,7 @@ export function TwinDialogueWorkspace({
             role="article"
             data-role="assistant"
             aria-label="Twin"
-            className="bg-card text-card-foreground ring-border self-start rounded-lg px-3 py-2 text-sm whitespace-pre-line ring-1"
+            className="bg-card text-card-foreground ring-border self-start rounded-lg px-3 py-2 text-base leading-relaxed whitespace-pre-line ring-1"
           >
             {TWIN_OPENING_WELCOME_MESSAGE}
           </article>
@@ -275,7 +277,7 @@ export function TwinDialogueWorkspace({
             data-pending={msg.pending ? "true" : undefined}
             data-failed={msg.failed ? "true" : undefined}
             className={cn(
-              "rounded-lg px-3 py-2 text-sm",
+              "max-w-full rounded-lg px-3 py-2 text-base leading-relaxed break-words",
               msg.role === "user"
                 ? cn(
                     "bg-primary text-primary-foreground self-end",
@@ -333,7 +335,7 @@ export function TwinDialogueWorkspace({
           rows={2}
           placeholder="Write to your Twin..."
           aria-describedby={textareaDescribedby.length > 0 ? textareaDescribedby : undefined}
-          className="bg-background dark:bg-background min-h-[2.75rem] w-full shrink px-3 text-sm shadow-xs"
+          className="bg-background dark:bg-background min-h-[2.75rem] w-full shrink px-3 text-base shadow-xs"
         />
         <Button
           type="submit"
