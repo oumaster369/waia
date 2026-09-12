@@ -111,12 +111,30 @@ PostgreSQL server execution, deployment or scientific corpus evaluation was run.
 The account-observation journal/SQL packaging check passed with its three PostgreSQL
 cases explicitly disabled. Targeted lint passed for the three preflight/test files.
 
+Root integration follow-up at `eff02ea6a6cefd1aba65992815f2fcdbe9755e80`:
+the same account-observation migration file was run with `DEE960_LOCAL_PG17=1`
+against the isolated localhost PostgreSQL 17 fixture. All four tests passed,
+including the three previously disabled cases: fresh chain, actual Drizzle
+migrator through the current 0207 journal under a restricted owner, and additive
+upgrade/data/grant preservation. Log: local `waia-dee993-integrated-pg17.log`.
+This is not production migration or a claim that the full regression suite ran again.
+
+### Current publication authority
+
+The latest Human instruction on 2026-09-12 authorizes autonomous necessary work
+toward historical readiness and supersedes the earlier local-only publication
+boundary for this already ratified correction. Prepare one DEE-993 PR only after
+the DEE-992 dependency is reconciled into main; exact-head CI and independent
+review remain required. No result grants scientific, Human-ratification,
+private-account, capital or blind-holdout authority. This local preparation has
+not changed production or started a scientific corpus calculation.
+
 ## Rollback / boundaries
 
 Local changes can be discarded via a reviewed revert; no production changed.
 Never downgrade an admitted receipt, relabel a checkpoint or restart the scientific
-calculation as part of rollback. Publication, integration and any production action
-remain separate from this local implementation permission.
+calculation as part of rollback. Publication is governed by the current authority
+above; production actions remain separate and subject to their technical gates.
 
 Reviewability: more than twenty files are required because the same numerical
 version boundary must reach baseline IDs, receipt and cache consumers, SQL,
