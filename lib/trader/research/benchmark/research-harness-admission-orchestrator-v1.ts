@@ -15,6 +15,7 @@ import {
   type TrialIdentityInput,
 } from "./trial-identity-v2";
 import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1,
+  preflightValidationBootstrapV1,
   snapshotValidationBootstrapExecutionV1,
   validationBootstrapPValueAsyncV1, type ValidationBootstrapExecutionV1,
   type ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
@@ -179,6 +180,32 @@ function* researchHarnessAdmissionSteps(
   const canonicalAnchors = [...input.anchors].sort((a, b) => a.anchorId.localeCompare(b.anchorId));
   const trialCommon = trialBase(input);
   trialCommon.commonAnchorSetDigestHex = commonAnchorSetDigestHex;
+
+  // Check every available comparison before spending B=10000 resamples on any one.
+  // One transient differential array at a time; valid arithmetic and trial identities
+  // below remain unchanged. A refusal here is not a statistical rejection or admission.
+  for (const baselineId of MANDATORY_BASELINE_IDS) {
+    if (baselineAvailability[baselineId] === "UNAVAILABLE") continue;
+    const baseline = evaluateMandatoryBaselineV1(baselineId, context);
+    if (baseline.status === "UNAVAILABLE") continue;
+    const differentials = canonicalAnchors.map((anchor) => {
+      const differential = challengerLogScoreAtAnchor(anchor, context) - baseline.logScore(anchor.observedReturn);
+      if (!Number.isFinite(differential)) {
+        // Anchor IDs may be caller text. Publish only a fixed-length identity, no raw data.
+        const anchorDigest = createHash("sha256").update(anchor.anchorId).digest("hex");
+        throw new Error(`[validation-bootstrap] non-finite differential — qualification refused; baseline=${baselineId}; anchorDigest=${anchorDigest}`);
+      }
+      return differential;
+    });
+    try {
+      preflightValidationBootstrapV1({ differentials, trialIdentityDigest32: buildTrialIdentity(trialCommon, baselineId) });
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("[validation-bootstrap]")) {
+        throw new Error(`${error.message}; baseline=${baselineId}`, { cause: error });
+      }
+      throw error;
+    }
+  }
 
   const holmComparisons: HolmComparison[] = [];
   for (const baselineId of MANDATORY_BASELINE_IDS) {
