@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root integrator to review the isolated branch and determine publication/readiness; no server or scientific execution performed here."
+  nextAction: "Publish Cody-only PR against merged Brier657914b1 after governance preflight; authoritative full CI still required. No deployment or scientific execution."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -30,6 +30,44 @@ provenance:
 ---
 
 # DEE-993: Cody reference-conformance integration
+
+## Canonical publication checkpoint — 2026-09-12
+
+The user subsequently authorized autonomous necessary engineering and merge work,
+then resumed the September12 handoff. The earlier local-only task statement below
+records that initial phase, not an assertion that publication already occurred.
+No production or original scientific execution is included in this publication.
+
+Brier PR580 merged as657914b1d6b4b897619cbfaef5d558ae1378efc9 after all24 checks
+passed. Its Git tree exactly matches reviewed Brier740ba4f1. Root preserved the
+original Cody branch at `dee-993-cody-presquash-20260912` (d5967bbc), then rebased
+the four Cody-only commits onto that squash before first publication. Canonical
+head26cfdcba80beffb11425b8426031f29726d850d6 has exactly the same full Git tree
+f979f1d2bcae35b9c4c07ac75fadba1b1757f897 as d5967bbc; no implementation changed.
+This checkpoint subsequently changes only this plan, not the reviewed source.
+
+Local71focused and10actual restricted-role shared PostgreSQL17 tests PASS, plus
+full typecheck, full lint (0errors,307existing warnings) and default Turbopack
+application build with private synthetic SQLite fixture. No redundant full local
+unit run: exact-head PR CI is authoritative. Logs include
+`/private/tmp/waia-cody-740-integration-focused.log`,
+`/private/tmp/waia-cody-740-shared-pg17.log`, `/private/tmp/waia-cody-build.log` and
+`/private/tmp/waia-cody-full-lint.log`.
+
+Independent read-only review of exact740ba4f1..d5967bbc found no P1/P2. It checked
+the ratified amendment hash, JINT=0 huge-tail exit against Netlib CALERF,
+baseline/trial/harness/Terminal/cache/outer identity propagation, strict migration
+prefix and preservation of0206 tenant/request/proposal/Human predicates in0207.
+Reviewer did not rerun tests or PostgreSQL. The protocol-positive PG test uses
+an extracted exact predicate on an RLS probe table, not a full real admitted
+receipt fixture. Scientific reuse/admission and whole-Trader acceptance remain
+separate; old cache or score evidence cannot become current by this merge.
+
+Reviewability rationale:26files/about900changed lines exceed the recommended
+size, but numerical correction and every versioned consumer/RLS/cache negative
+must land atomically to avoid accepting mixed evidence. Most changes are focused
+tests, the additive175line exact-predicate migration and the two plans; no unrelated
+feature is included. One revert restores this same coupled protocol boundary.
 
 ## Authority and dependency
 
