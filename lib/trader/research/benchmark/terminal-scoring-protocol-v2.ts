@@ -6,6 +6,15 @@ export const TERMINAL_SCORING_METRIC = "terminal-multiclass-brier-reward/v1" as 
 export const TERMINAL_SCORING_AMENDMENT_DIGEST =
   "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de" as const;
 
+export function assertTerminalDevelopmentReturnsV2(values: readonly number[]): void {
+  if (!Array.isArray(values) || values.length === 0) throw new Error("TERMINAL_SCORE_INVALID_DEVELOPMENT");
+  for (let i = 0; i < values.length; i++) {
+    const entry = Object.getOwnPropertyDescriptor(values, String(i));
+    if (!entry || !("value" in entry) || typeof entry.value !== "number" || !Number.isFinite(entry.value))
+      throw new Error("TERMINAL_SCORE_INVALID_DEVELOPMENT");
+  }
+}
+
 export function assertTerminalProbabilityVectorV2(p: readonly number[]): void {
   if (!Array.isArray(p) || p.length !== 7) throw new Error("TERMINAL_SCORE_INVALID_PROBABILITIES");
   let sum = 0;

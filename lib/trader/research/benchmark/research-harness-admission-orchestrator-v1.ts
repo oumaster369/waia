@@ -1,4 +1,5 @@
 import { TERMINAL_SCORING_CONTRACT, TERMINAL_SCORING_METRIC, TERMINAL_SCORING_AMENDMENT_DIGEST, multiclassBrierRewardV1, assertTerminalProbabilityVectorV2 } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
+import { assertTerminalDevelopmentReturnsV2 } from "./terminal-scoring-protocol-v2";
 import { createHash } from "node:crypto";
 
 import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
@@ -164,6 +165,7 @@ function* researchHarnessAdmissionSteps(
     };
   }
 
+  assertTerminalDevelopmentReturnsV2(input.developmentReturns);
   const context = buildBaselineContextFromDevelopment({
     developmentReturns: input.developmentReturns,
     history: input.historyReturns,
@@ -364,6 +366,7 @@ export async function runResearchHarnessAdmissionAsyncV1(
   execution: ValidationBootstrapExecutionV1 = {},
 ): Promise<ResearchHarnessAdmissionResultV1> {
   const ownedExecution = snapshotValidationBootstrapExecutionV1(execution);
+  if (input.anchors.length > 0) assertTerminalDevelopmentReturnsV2(input.developmentReturns);
   // structuredClone invokes accessors and would erase evidence of malformed
   // probability entries. Reject them on the original vectors before cloning.
   for (const anchor of input.anchors) assertTerminalProbabilityVectorV2(anchor.challengerProbabilities);

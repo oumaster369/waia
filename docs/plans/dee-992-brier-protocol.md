@@ -121,6 +121,32 @@ This is focused local evidence, not all-repository CI, E2E or full historical ac
 - [ ] Independent CDF correction (DEE-993) before any new evaluation.
 - [ ] Remote CI, merge, authorized rollout and scientific acceptance (not this local approval).
 
+## Local recovery continuation — 2026-09-12
+
+User requested parallel work without restarting science. Three bounded agents
+reviewed recovery mapping, CDF reference impact and diagnostic/reader correctness.
+Added no-authority necessary-mean/cost diagnostic, existing-only authenticated
+forecast-byte reader and pure original WF expected inventory/coverage mapper.
+The reader never opens the writing store factory, creates keys or accepts builders;
+missing entries remain explicit. Original SHA/runtime/key/anchor mapping is retained.
+Synthetic end-to-end composition confirms a missing final batch is not generated.
+
+Independent review found sparse DEVELOPMENT acceptance shared with the harness;
+descriptor-based dense/finite validation now protects diagnostic, sync and async
+paths before cloning/scoring. Another finding, blocking FIFO open in the reader,
+was fixed using nonblocking open before regular-file validation and three FIFO tests.
+Both fixes re-reviewed; inventory independently reviewed without outstanding findings.
+Final groups:118 +22 =140 targeted tests passed, integrated typecheck passed,
+application build passed. These overlap earlier evidence; do not sum all historical
+test counts as distinct tests. No full remote CI or original-corpus acceptance run.
+
+The inventory is derived from SUPPLIED original inputs, not proof those inputs
+independently match production. Actual full source reconstruction and authenticated
+production mapping still remain. No all-four-surface completeness or reuse admission.
+CDF reference review found the frozen pseudocode conflicts with its declared JINT=0
+source; a narrow reference-conformance amendment is proposed separately, not activated.
+No deployment, production/checkpoint writes, corpus scoring or bootstrap this turn.
+
 DEE-991 checker returns LOCAL_BINDINGS_MATCH_NOT_ADMISSION: authenticated whole-store
 read, independently reconstructed COMPLETE input inventory, full anchor coverage and
 production dual-origin evaluation adapter are NOT established. Missing metadata
