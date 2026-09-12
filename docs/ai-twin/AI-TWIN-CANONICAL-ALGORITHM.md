@@ -133,6 +133,10 @@ The next question maximizes expected epistemic value subject to consent, emotion
 
 The dialogue must explain why a sensitive question matters, allow skip/withdrawal and never punish refusal in progress or access. Generic interviewing and synthetic demo progression are not production evidence.
 
+### 5.1 Product-learning intent — Human requirement added 2026-09-12
+
+Distinguish a request to learn WAIA from a request to model the Human. Product help uses reviewed versioned feature instructions and current authoritative capability/access state; if either is missing, disclose the limit instead of inventing controls, routes or availability. Offer short optional steps, stop/return and error recovery without losing the current task. A help click or tutorial completion creates no personality observation, Formation credit, modelling consent, billing or external action. Later conversational routing must preserve this separation; the DEE-994 curated guide is its first UI foundation, not a completed tutor across all modules. Module owners maintain guidance as features change; AI-TWIN cannot use “teaching” to bypass another module's authority.
+
 ## 6. Diary contract
 
 Diary is available from initial privacy consent. Entries create private observations and may trigger extraction, reflection, contradiction detection and knowledge needs. The Human can keep an entry raw-only, allow private modelling, or approve a narrowly derived disclosure. Society and connectors never receive raw Diary content by default. Derived summaries must account for re-identification and inversion risk.
