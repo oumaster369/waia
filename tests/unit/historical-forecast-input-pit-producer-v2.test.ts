@@ -65,7 +65,7 @@ const scientificReceipt = {
   predictiveTerminalReceipt: {
     developmentDatasetDigestHex: "1".repeat(64), targetGridReceiptDigestHex: "2".repeat(64),
     predictivePackageGenerationIdentityDigestHex: "3".repeat(64), predictivePackageContentDigestHex: "c".repeat(64),
-    runtimeContractDigestHex: "4".repeat(64), scoringContractVersion: "multiclass-log-score/v1",
+    runtimeContractDigestHex: "4".repeat(64), scoringContractVersion: "multiclass-brier-reward/v1",
     evaluationPartitionReceiptDigestHex: "5".repeat(64), contentDigestHex: "6".repeat(64),
   },
   kmConvergenceReceipt: { evidenceSemanticDigestHex: "7".repeat(64) },

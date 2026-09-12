@@ -1,3 +1,4 @@
+import { TERMINAL_SCORING_CONTRACT } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from
   "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -418,7 +419,7 @@ async function loadScientific(
       surface.predictivePackageGenerationIdentityDigestHex,
     predictivePackageContentDigestHex: surface.predictivePackageContentDigestHex,
     runtimeContractDigestHex: predictive.runtimeContractDigestHex,
-    scoringContractVersion: "multiclass-log-score/v1",
+    scoringContractVersion: TERMINAL_SCORING_CONTRACT,
     evaluationPartitionReceiptDigestHex: predictive.evaluationPartitionReceiptDigestHex,
     kmConvergenceEvidenceSemanticDigestHex:
       receipt.kmConvergenceReceipt.evidenceSemanticDigestHex,

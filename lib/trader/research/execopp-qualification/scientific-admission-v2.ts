@@ -1,3 +1,4 @@
+import { TERMINAL_SCORING_CONTRACT, TERMINAL_SCORING_METRIC, TERMINAL_SCORING_AMENDMENT_DIGEST } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { createHash } from "node:crypto";
 
 import { MANDATORY_BASELINE_IDS } from "@/lib/trader/research/benchmark/baseline-models-v1";
@@ -18,11 +19,11 @@ import {
   type KmConvergenceReceipt,
 } from "./km-convergence-gate-v1";
 
-export const PREDICTIVE_TERMINAL_RECEIPT_VERSION = "predictive-terminal-receipt/v1" as const;
+export const PREDICTIVE_TERMINAL_RECEIPT_VERSION = "predictive-terminal-receipt/v2" as const;
 export const EPISTEMIC_PARAMETER_RATIFICATION_VERSION =
   "epistemic-parameter-ratification/v1" as const;
 export const SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION =
-  "scientific-admission-receipt/v2" as const;
+  "scientific-admission-receipt/v3" as const;
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
@@ -44,11 +45,14 @@ export type PredictiveIdentityBindingsV1 = {
   predictivePackageGenerationIdentityDigestHex: string;
   predictivePackageContentDigestHex: string;
   runtimeContractDigestHex: string;
-  scoringContractVersion: "multiclass-log-score/v1";
+  scoringContractVersion: typeof TERMINAL_SCORING_CONTRACT;
   evaluationPartitionReceiptDigestHex: string;
 };
 
 export type PredictiveTerminalReceiptV1 = PredictiveIdentityBindingsV1 & {
+  logScoreDiagnostics: ResearchHarnessAdmissionResultV1["logScoreDiagnostics"];
+  scoringMetric: typeof TERMINAL_SCORING_METRIC;
+  scoringAmendmentDigestHex: typeof TERMINAL_SCORING_AMENDMENT_DIGEST;
   schemaVersion: typeof PREDICTIVE_TERMINAL_RECEIPT_VERSION;
   harnessSchemaVersion: typeof RESEARCH_HARNESS_ADMISSION_VERSION;
   terminalStatus: "QUALIFIED" | "NO_CHALLENGER_QUALIFIES";
@@ -72,6 +76,11 @@ function predictiveReceiptBody(
 
 function validatePredictiveTerminalReceipt(receipt: PredictiveTerminalReceiptV1): void {
   const { contentDigestHex, ...body } = receipt;
+  if (receipt.scoringContractVersion !== TERMINAL_SCORING_CONTRACT ||
+      receipt.scoringMetric !== TERMINAL_SCORING_METRIC ||
+      receipt.scoringAmendmentDigestHex !== TERMINAL_SCORING_AMENDMENT_DIGEST) {
+    throw new Error("SCIENTIFIC_ADMISSION_SCORING_CONTRACT_MISMATCH");
+  }
   if (receipt.schemaVersion !== PREDICTIVE_TERMINAL_RECEIPT_VERSION) {
     throw new Error("SCIENTIFIC_ADMISSION_PREDICTIVE_SCHEMA_MISMATCH");
   }
@@ -83,6 +92,23 @@ function validatePredictiveTerminalReceipt(receipt: PredictiveTerminalReceiptV1)
   }
   if (sha256Canonical(body) !== contentDigestHex) {
     throw new Error("SCIENTIFIC_ADMISSION_PREDICTIVE_DIGEST_MISMATCH");
+  }
+  const diagnostics = receipt.logScoreDiagnostics;
+  const diagnosticIds = canonicalBaselineIds().filter(id => receipt.baselineAvailability[id] === "AVAILABLE");
+  if (!diagnostics || JSON.stringify(Object.keys(diagnostics).sort()) !== JSON.stringify(diagnosticIds)) {
+    throw new Error("SCIENTIFIC_ADMISSION_LOG_DIAGNOSTIC_MISMATCH");
+  }
+  for (const id of diagnosticIds) {
+    const d = diagnostics[id]!;
+    const fields = ["baselineZeroCount", "challengerZeroCount", "nanCount", "negativeInfinityCount",
+      "nonFiniteDifferentialCount", "positiveInfinityCount"];
+    if (!d || JSON.stringify(Object.keys(d).sort()) !== JSON.stringify(fields) ||
+        Object.values(d).some(n => !Number.isSafeInteger(n) || n < 0) ||
+        d.nonFiniteDifferentialCount !== d.positiveInfinityCount + d.negativeInfinityCount + d.nanCount ||
+        d.baselineZeroCount !== d.positiveInfinityCount + d.nanCount ||
+        d.challengerZeroCount !== d.negativeInfinityCount + d.nanCount) {
+      throw new Error("SCIENTIFIC_ADMISSION_LOG_DIAGNOSTIC_MISMATCH");
+    }
   }
   const expectedHarnessDigest = computeResearchHarnessAdmissionReceiptDigestV2({
     comparisonFamilyId: receipt.comparisonFamilyId,
@@ -129,6 +155,8 @@ type PredictiveTerminalInputV1 = {
 };
 
 function assertPredictiveTerminalInputV1(input: PredictiveTerminalInputV1): void {
+  if (input.identities.scoringContractVersion !== TERMINAL_SCORING_CONTRACT)
+    throw new Error("SCIENTIFIC_ADMISSION_SCORING_CONTRACT_MISMATCH");
   for (const [field, value] of Object.entries(input.identities)) {
     if (field !== "scoringContractVersion") requireDigest(value, field);
   }
@@ -201,6 +229,9 @@ function finishPredictiveTerminalReceiptV1(
   }
 
   const body: Omit<PredictiveTerminalReceiptV1, "contentDigestHex"> = {
+    logScoreDiagnostics: result.logScoreDiagnostics,
+    scoringMetric: TERMINAL_SCORING_METRIC,
+    scoringAmendmentDigestHex: TERMINAL_SCORING_AMENDMENT_DIGEST,
     schemaVersion: PREDICTIVE_TERMINAL_RECEIPT_VERSION,
     harnessSchemaVersion: RESEARCH_HARNESS_ADMISSION_VERSION,
     terminalStatus: result.terminalStatus,
@@ -379,7 +410,7 @@ export type ScientificAdmissionExpectedBindingsV2 = {
   predictivePackageGenerationIdentityDigestHex: string;
   predictivePackageContentDigestHex: string;
   runtimeContractDigestHex: string;
-  scoringContractVersion: "multiclass-log-score/v1";
+  scoringContractVersion: typeof TERMINAL_SCORING_CONTRACT;
   evaluationPartitionReceiptDigestHex: string;
   kmConvergenceEvidenceSemanticDigestHex: string;
   epistemicParameterRatificationReceiptDigestHex: string;

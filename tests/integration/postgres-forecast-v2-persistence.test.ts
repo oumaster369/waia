@@ -251,7 +251,7 @@ async function persistScientificForPackage(sql: postgres.Sql, organizationId: st
     predictivePackageGenerationIdentityDigestHex: digestHex(pkg.predictivePackageGenerationIdentityDigest),
     predictivePackageContentDigestHex: digestHex(pkg.predictivePackageContentDigest),
     runtimeContractDigestHex: digestHex(pkg.runtimeContractDigest),
-    scoringContractVersion: "multiclass-log-score/v1" as const,
+    scoringContractVersion: "multiclass-brier-reward/v1" as const,
     evaluationPartitionReceiptDigestHex: h(`${seed}-partition`),
   };
   const predictive = buildPredictiveTerminalReceiptV1({ identities, harnessInput: {

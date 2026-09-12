@@ -1,3 +1,4 @@
+import { TERMINAL_SCORING_CONTRACT, TERMINAL_SCORING_METRIC, TERMINAL_SCORING_AMENDMENT_DIGEST, multiclassBrierRewardV1, assertTerminalProbabilityVectorV2 } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { createHash } from "node:crypto";
 
 import { MODEL_TRANSFORM_VERSION } from "@/lib/trader/intelligence/forecast-v2/constants";
@@ -8,7 +9,8 @@ import {
   type BaselineContext,
 } from "./baseline-models-v1";
 import { holmFamilyPassV1, holmFwerV1, type HolmComparison } from "./holm-fwer-v1";
-import { multiclassLogScore } from "./target-grid-ceremony-v1";
+import { bucketIndexForReturn, multiclassLogScore } from "./target-grid-ceremony-v1";
+
 import {
   computeTrialIdentityDigestV2,
   digestHex,
@@ -21,8 +23,8 @@ import { VALIDATION_BOOTSTRAP_VERSION, validationBootstrapPValueV1,
   type ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
 
 // DEE-947: keep corrected-law evidence separate even when numeric outputs coincide.
-export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v3" as const;
-export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v3" as const;
+export const RESEARCH_HARNESS_ADMISSION_VERSION = "research-harness-admission/v4" as const;
+export const SCIENTIFIC_ADMISSION_RECEIPT_VERSION = "scientific-admission-receipt/v4" as const;
 
 export type ResearchHarnessAnchorV1 = {
   anchorId: string;
@@ -47,6 +49,10 @@ export type ResearchHarnessAdmissionInputV1 = {
 };
 
 export type ResearchHarnessAdmissionResultV1 = {
+  logScoreDiagnostics: Record<string, {
+    challengerZeroCount: number; baselineZeroCount: number; nonFiniteDifferentialCount: number;
+    positiveInfinityCount: number; negativeInfinityCount: number; nanCount: number;
+  }>;
   schemaVersion: typeof RESEARCH_HARNESS_ADMISSION_VERSION;
   terminalStatus: "QUALIFIED" | "NO_CHALLENGER_QUALIFIES";
   comparisonFamilyId: string;
@@ -76,7 +82,7 @@ function buildTrialIdentity(
 
 function trialBase(input: ResearchHarnessAdmissionInputV1): Omit<TrialIdentityInput, "baselineId"> {
   return {
-    scoringContractVersion: "multiclass-log-score/v1",
+    scoringContractVersion: TERMINAL_SCORING_CONTRACT,
     evaluationPartitionReceiptDigestHex: input.evaluationPartitionReceiptDigestHex,
     venue: input.venue,
     market: input.market,
@@ -84,7 +90,7 @@ function trialBase(input: ResearchHarnessAdmissionInputV1): Omit<TrialIdentityIn
     primaryHorizonMinutes: input.primaryHorizonMinutes,
     modelTransformVersion: MODEL_TRANSFORM_VERSION,
     challengerPackageContentDigestHex: input.challengerPackageContentDigestHex,
-    metricId: "terminal-multiclass-log-score/v1",
+    metricId: TERMINAL_SCORING_METRIC,
     commonAnchorSetDigestHex: computeCommonAnchorSetDigestHex(input.anchors.map((a) => a.anchorId)),
     purgeDurationMinutes: input.purgeDurationMinutes,
     embargoDurationMinutes: input.embargoDurationMinutes,
@@ -92,11 +98,11 @@ function trialBase(input: ResearchHarnessAdmissionInputV1): Omit<TrialIdentityIn
   };
 }
 
-function challengerLogScoreAtAnchor(
+function challengerPrimaryScoreAtAnchor(
   anchor: ResearchHarnessAnchorV1,
   context: BaselineContext,
 ): number {
-  return multiclassLogScore(anchor.observedReturn, anchor.challengerProbabilities, context.grid);
+  return multiclassBrierRewardV1(anchor.observedReturn, anchor.challengerProbabilities, context.grid);
 }
 
 function baselineAvailableOnAllAnchors(
@@ -115,6 +121,9 @@ export function computeResearchHarnessAdmissionReceiptDigestV2(input: {
 }): string {
   const body = [
     SCIENTIFIC_ADMISSION_RECEIPT_VERSION,
+    TERMINAL_SCORING_CONTRACT,
+    TERMINAL_SCORING_METRIC,
+    TERMINAL_SCORING_AMENDMENT_DIGEST,
     VALIDATION_BOOTSTRAP_VERSION,
     input.comparisonFamilyId,
     input.commonAnchorSetDigestHex,
@@ -131,9 +140,11 @@ function* researchHarnessAdmissionSteps(
   input: ResearchHarnessAdmissionInputV1,
 ): Generator<Parameters<typeof validationBootstrapPValueV1>[0],
   ResearchHarnessAdmissionResultV1, ValidationBootstrapNullCenteredResultV1> {
+  const logScoreDiagnostics: ResearchHarnessAdmissionResultV1["logScoreDiagnostics"] = {};
   if (input.anchors.length === 0) {
     return {
       schemaVersion: RESEARCH_HARNESS_ADMISSION_VERSION,
+      logScoreDiagnostics,
       terminalStatus: "NO_CHALLENGER_QUALIFIES",
       comparisonFamilyId: input.comparisonFamilyId,
       commonAnchorSetDigestHex: computeCommonAnchorSetDigestHex([]),
@@ -188,8 +199,26 @@ function* researchHarnessAdmissionSteps(
     if (baselineAvailability[baselineId] === "UNAVAILABLE") continue;
     const baseline = evaluateMandatoryBaselineV1(baselineId, context);
     if (baseline.status === "UNAVAILABLE") continue;
+    const diagnostic = { challengerZeroCount: 0, baselineZeroCount: 0, nonFiniteDifferentialCount: 0,
+      positiveInfinityCount: 0, negativeInfinityCount: 0, nanCount: 0 };
+    logScoreDiagnostics[baselineId] = diagnostic;
     const differentials = canonicalAnchors.map((anchor) => {
-      const differential = challengerLogScoreAtAnchor(anchor, context) - baseline.logScore(anchor.observedReturn);
+      let differential: number;
+      try {
+        differential = challengerPrimaryScoreAtAnchor(anchor, context) - multiclassBrierRewardV1(anchor.observedReturn, baseline.probabilities, context.grid);
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith("TERMINAL_SCORE_INVALID_")) throw error;
+        const anchorDigest = createHash("sha256").update(anchor.anchorId).digest("hex");
+        throw new Error(`${error.message}; baseline=${baselineId}; anchorDigest=${anchorDigest}`);
+      }
+      const bucket = bucketIndexForReturn(anchor.observedReturn, context.grid);
+      if (anchor.challengerProbabilities[bucket] === 0) diagnostic.challengerZeroCount++;
+      if (baseline.probabilities[bucket] === 0) diagnostic.baselineZeroCount++;
+      const logDifference = multiclassLogScore(anchor.observedReturn, anchor.challengerProbabilities, context.grid) - baseline.logScore(anchor.observedReturn);
+      if (!Number.isFinite(logDifference)) diagnostic.nonFiniteDifferentialCount++;
+      if (logDifference === Infinity) diagnostic.positiveInfinityCount++;
+      if (logDifference === -Infinity) diagnostic.negativeInfinityCount++;
+      if (Number.isNaN(logDifference)) diagnostic.nanCount++;
       if (!Number.isFinite(differential)) {
         // Anchor IDs may be caller text. Publish only a fixed-length identity, no raw data.
         const anchorDigest = createHash("sha256").update(anchor.anchorId).digest("hex");
@@ -217,8 +246,8 @@ function* researchHarnessAdmissionSteps(
       continue;
     }
     const differentials = canonicalAnchors.map((anchor) => {
-      const challenger = challengerLogScoreAtAnchor(anchor, context);
-      return challenger - baseline.logScore(anchor.observedReturn);
+      const challenger = challengerPrimaryScoreAtAnchor(anchor, context);
+      return challenger - multiclassBrierRewardV1(anchor.observedReturn, baseline.probabilities, context.grid);
     });
     const trialDigest = buildTrialIdentity(trialCommon, baselineId);
     const bootstrap = yield {
@@ -232,6 +261,7 @@ function* researchHarnessAdmissionSteps(
     const holmResults = holmFwerV1(holmComparisons);
     return {
       schemaVersion: RESEARCH_HARNESS_ADMISSION_VERSION,
+      logScoreDiagnostics,
       terminalStatus: "NO_CHALLENGER_QUALIFIES",
       comparisonFamilyId: input.comparisonFamilyId,
       commonAnchorSetDigestHex,
@@ -260,8 +290,8 @@ function* researchHarnessAdmissionSteps(
     }
     const meanDiff =
       canonicalAnchors.reduce((acc, anchor) => {
-        const challenger = challengerLogScoreAtAnchor(anchor, context);
-        return acc + (challenger - baseline.logScore(anchor.observedReturn));
+        const challenger = challengerPrimaryScoreAtAnchor(anchor, context);
+        return acc + (challenger - multiclassBrierRewardV1(anchor.observedReturn, baseline.probabilities, context.grid));
       }, 0) / canonicalAnchors.length;
       return [comparison.comparisonId, meanDiff];
     }),
@@ -274,6 +304,7 @@ function* researchHarnessAdmissionSteps(
     const holmResults = holmFwerV1(holmComparisons);
     return {
       schemaVersion: RESEARCH_HARNESS_ADMISSION_VERSION,
+      logScoreDiagnostics,
       terminalStatus: "NO_CHALLENGER_QUALIFIES",
       comparisonFamilyId: input.comparisonFamilyId,
       commonAnchorSetDigestHex,
@@ -300,6 +331,7 @@ function* researchHarnessAdmissionSteps(
 
   return {
     schemaVersion: RESEARCH_HARNESS_ADMISSION_VERSION,
+    logScoreDiagnostics,
     terminalStatus,
     comparisonFamilyId: input.comparisonFamilyId,
     commonAnchorSetDigestHex,
@@ -332,6 +364,9 @@ export async function runResearchHarnessAdmissionAsyncV1(
   execution: ValidationBootstrapExecutionV1 = {},
 ): Promise<ResearchHarnessAdmissionResultV1> {
   const ownedExecution = snapshotValidationBootstrapExecutionV1(execution);
+  // structuredClone invokes accessors and would erase evidence of malformed
+  // probability entries. Reject them on the original vectors before cloning.
+  for (const anchor of input.anchors) assertTerminalProbabilityVectorV2(anchor.challengerProbabilities);
   // Own all metadata/history/anchors across awaits. No caller mutation may alter
   // later baselines or receipt identity after the first baseline was computed.
   const steps = researchHarnessAdmissionSteps(structuredClone(input));

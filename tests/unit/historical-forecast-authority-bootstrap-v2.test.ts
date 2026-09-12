@@ -52,7 +52,7 @@ function qualifiedGraph() {
   const identities = { developmentDatasetDigestHex: family.developmentDatasetDigestHex,
     targetGridReceiptDigestHex: digest("grid"), predictivePackageGenerationIdentityDigestHex: generationDigest,
     predictivePackageContentDigestHex: packageDigest, runtimeContractDigestHex: runtimeDigest,
-    scoringContractVersion: "multiclass-log-score/v1" as const,
+    scoringContractVersion: "multiclass-brier-reward/v1" as const,
     evaluationPartitionReceiptDigestHex: digest("wf") };
   const predictive = buildPredictiveTerminalReceiptV1({ identities, harnessInput: {
     venue: "htx", market: "spot", symbol: "BTCUSDT", primaryHorizonMinutes: 30,
