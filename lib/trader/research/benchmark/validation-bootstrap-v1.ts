@@ -133,6 +133,11 @@ function prepareValidationBootstrap(input: ValidationBootstrapInputV1) {
   };
 }
 
+/** Validate the exact kernel inputs without evaluating any resample or issuing a result. */
+export function preflightValidationBootstrapV1(input: ValidationBootstrapInputV1): void {
+  prepareValidationBootstrap(input);
+}
+
 /** Internal worker primitive: never returns a partial p-value or accepts a result from a caller. */
 export function INTERNAL_validationBootstrapOrdinalRangeV1(
   input: ValidationBootstrapInputV1,
