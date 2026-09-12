@@ -131,6 +131,32 @@ not changed production or started a scientific corpus calculation.
 
 ## Rollback / boundaries
 
+### Resumed dependency compatibility check, 2026-09-12
+
+Normally merged PR580's pending head740ba4f160388df8ee4e6712fdeee3b6e6d5d4a1
+into this local unpublished branch, preserving9ab196cd and the original Cody
+branch. This is preparation, not proof that Brier has merged or publication
+readiness. After the actual Brier squash, reconcile the Cody-only delta onto
+that canonical main and repeat affected exact-head checks.
+
+Inherited the Brier regression fixes without changing migration SQL, scientific
+semantics or consumer discovery. The only new expectation is the explicit0207
+entry in the Forecast migration-extras list (ratified0148 identity unchanged).
+The missing expectation reproduced as1 failed/7 passed before the fix.
+Afterwards71 focused tests across7 files passed, including exact migration
+identity, Reality consumer digest, required207 preflight, numeric Cody and
+receipt-version boundaries. Typecheck and targeted ESLint passed.
+
+The actual shared PostgreSQL17 compatibility file passed all10 tests,0 skipped,
+against a new isolated localhost fixture on55478. It applied fresh0000..0207
+and204-to-current upgrade under non-super/non-bypass owner, preserved scoped
+credentials/snapshots and RLS, and rejected corrupted/unknown migration states.
+Fixture owner/port/label were inspected before use; it was stopped afterwards.
+Logs: local waia-cody-740-integration-focused.log and
+waia-cody-740-shared-pg17.log. No original data, production or scientific
+calculation was accessed. Independent static comparison confirmed that the
+Cody delta requires no extra Reality fingerprint beyond the Brier fix.
+
 Local changes can be discarded via a reviewed revert; no production changed.
 Never downgrade an admitted receipt, relabel a checkpoint or restart the scientific
 calculation as part of rollback. Publication is governed by the current authority
