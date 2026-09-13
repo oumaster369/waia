@@ -47,7 +47,8 @@ export function formatFailure(error, verifiedFormatter) {
  * Count/size bounds precede reads; symlinks (including path ancestors) are forbidden.
  * This is source verification, not a dependency/OCI attestation or a filesystem lock.
  */
-export function fingerprintSource(root) {
+export function fingerprintCoveredSource(root, paths) {
+  if (!Array.isArray(paths) || paths.length === 0) refuse("COVERED_SOURCE_PATHS");
   if (!isAbsolute(root) || resolve(root) === "/" || realpathSync(root) !== root) refuse("SOURCE_ROOT");
   const files = []; let total = 0; let entries = 0;
   const checkAncestors = relative => {
@@ -68,7 +69,10 @@ export function fingerprintSource(root) {
       files.push(relative);
     }
   };
-  for (const path of SOURCE_PATHS) { checkAncestors(path); visit(path); }
+  for (const path of paths) {
+    if (typeof path !== "string" || !path || path.startsWith("/") || path.split("/").includes("..")) refuse("COVERED_SOURCE_PATHS");
+    checkAncestors(path); visit(path);
+  }
   const digest = createHash("sha256"); let bytes = 0;
   for (const path of files.sort()) {
     const size = lstatSync(join(root, path)).size;
@@ -78,6 +82,10 @@ export function fingerprintSource(root) {
     digest.update(`${JSON.stringify([path, sha256(contents)])}\n`);
   }
   return Object.freeze({ digest: digest.digest("hex"), fileCount: files.length });
+}
+
+export function fingerprintSource(root) {
+  return fingerprintCoveredSource(root, SOURCE_PATHS);
 }
 
 export function verifyFrozenSource(root) {
@@ -97,6 +105,130 @@ export function validateInvocation(args, env, execArgv) {
   // The frozen runtime parser subsequently checks its complete forbidden-key list.
   if (Object.keys(env).some(key => /(?:OPERATOR|MANIFEST|RATIFICATION_JSON)/.test(key) && env[key]?.trim())) refuse("CALLER_AUTHORITY");
   return args[1];
+}
+
+
+export const STRICT_RESOLVER_CONTRACT_VERSION = "waia.strict-scientific-evidence-resolver.v1";
+export const RELEASE_BINDING_SCHEMA = "waia.historical_release_binding.v1";
+const SHA1 = /^[a-f0-9]{40}$/;
+const SHA256 = /^[a-f0-9]{64}$/;
+const NODE_VER = /^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/;
+const TOKEN = /^[a-z0-9_]+$/;
+
+function frozenRuntimeIdentity(value, code) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) refuse(code);
+  if (!NODE_VER.test(value.node) || !TOKEN.test(value.os) || !TOKEN.test(value.arch)) refuse(code);
+  return Object.freeze({ node: value.node, os: value.os, arch: value.arch });
+}
+
+function frozenNamespaceIdentity(value, code) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) refuse(code);
+  const runtime = frozenRuntimeIdentity(value.runtime, code);
+  if (!SHA1.test(value.releaseSha)) refuse(code);
+  return Object.freeze({ releaseSha: value.releaseSha, runtime });
+}
+
+/** Canonical immutable release-binding body. Never defaults to HEAD, trunk, or a floating tag. */
+export function canonicalReleaseBindingBody(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) refuse("MANIFEST_BODY");
+  if (!SHA1.test(body.releaseSha) || !SHA256.test(body.sourceTreeDigest) ||
+      !SHA256.test(body.coveredSourceDigest) || !Number.isSafeInteger(body.coveredSourceFileCount) ||
+      body.coveredSourceFileCount < 1) refuse("MANIFEST_BODY");
+  if (!Array.isArray(body.coveredSourcePaths) || body.coveredSourcePaths.length === 0) refuse("MANIFEST_BODY");
+  const coveredSourcePaths = Object.freeze(body.coveredSourcePaths.map(path => {
+    if (typeof path !== "string" || !path || path.startsWith("/") || path.split("/").includes("..")) refuse("MANIFEST_BODY");
+    return path;
+  }));
+  if (body.strictResolverContractVersion !== STRICT_RESOLVER_CONTRACT_VERSION) refuse("RESOLVER_CONTRACT");
+  const evaluatorIdentity = frozenNamespaceIdentity(body.evaluatorIdentity, "EVALUATOR_IDENTITY");
+  const runtimeIdentity = frozenRuntimeIdentity(body.runtimeIdentity, "RUNTIME_IDENTITY");
+  return Object.freeze({
+    releaseSha: body.releaseSha,
+    sourceTreeDigest: body.sourceTreeDigest,
+    coveredSourceDigest: body.coveredSourceDigest,
+    coveredSourceFileCount: body.coveredSourceFileCount,
+    coveredSourcePaths,
+    evaluatorIdentity,
+    runtimeIdentity,
+    strictResolverContractVersion: STRICT_RESOLVER_CONTRACT_VERSION,
+  });
+}
+
+export function digestReleaseBindingBody(body) {
+  const canonical = canonicalReleaseBindingBody(body);
+  return sha256(Buffer.from(JSON.stringify(canonical)));
+}
+
+export function parseReleaseBindingManifest(bytes) {
+  let parsed;
+  try { parsed = JSON.parse(typeof bytes === "string" ? bytes : bytes.toString("utf8")); }
+  catch { refuse("MANIFEST_JSON"); }
+  if (!parsed || parsed.schemaVersion !== RELEASE_BINDING_SCHEMA) refuse("MANIFEST_SCHEMA");
+  const digest = digestReleaseBindingBody(parsed.body);
+  if (typeof parsed.digest !== "string" || parsed.digest !== digest) refuse("MANIFEST_DIGEST");
+  return Object.freeze({ ...canonicalReleaseBindingBody(parsed.body), digest });
+}
+
+export function readReleaseBindingManifest(path) {
+  if (!isAbsolute(path) || resolve(path) === "/" || realpathSync(path) !== path) refuse("MANIFEST_PATH");
+  if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) refuse("MANIFEST_PATH");
+  return parseReleaseBindingManifest(readFileSync(path));
+}
+
+export function verifyManifestBoundSource(root, manifest) {
+  const actual = fingerprintCoveredSource(root, manifest.coveredSourcePaths);
+  if (actual.digest !== manifest.coveredSourceDigest) refuse("COVERED_SOURCE_DIGEST");
+  if (actual.fileCount !== manifest.coveredSourceFileCount) refuse("COVERED_SOURCE_FILE_COUNT");
+  return actual;
+}
+
+export function validateManifestBoundInvocation(args, env, execArgv) {
+  if (args.length !== 4 || args[0] !== "finalize-only" || args[2] !== "--release-binding") refuse("EXPLICIT_ACTION");
+  if (execArgv.length !== 1 || execArgv[0] !== "--conditions=react-server") refuse("NODE_ARGUMENTS");
+  if (env.WAIA_EXECUTION_HOST_MODE !== "idle") refuse("SUPERVISOR_MODE");
+  if (Object.keys(env).some(key => /(?:OPERATOR|MANIFEST|RATIFICATION_JSON)/.test(key) && env[key]?.trim())) refuse("CALLER_AUTHORITY");
+  const manifest = readReleaseBindingManifest(args[3]);
+  if (!env.WAIA_RELEASE_SHA || env.WAIA_RELEASE_SHA !== manifest.releaseSha) refuse("RELEASE_PIN");
+  if (!env.WAIA_IMAGE_RELEASE_SHA || env.WAIA_IMAGE_RELEASE_SHA !== manifest.releaseSha) refuse("IMAGE_RELEASE_PIN");
+  if (env.WAIA_RELEASE_SHA === "main" || env.WAIA_IMAGE_RELEASE_SHA === "latest") refuse("IMPLICIT_RELEASE");
+  if (process.version !== manifest.runtimeIdentity.node ||
+      process.platform !== manifest.runtimeIdentity.os ||
+      process.arch !== manifest.runtimeIdentity.arch) refuse("RUNTIME_IDENTITY");
+  return Object.freeze({ root: args[1], manifestPath: args[3], manifest });
+}
+
+export async function finalizeWithManifestBoundApi(config, api, signal, diagnostics = {}) {
+  const active = () => { if (signal?.aborted) refuse("CANCELLED"); };
+  active();
+  if (!config.manifest || config.manifest.releaseSha !== config.releaseSha) refuse("RELEASE_PIN");
+  if (config.manifest.strictResolverContractVersion !== STRICT_RESOLVER_CONTRACT_VERSION) refuse("RESOLVER_CONTRACT");
+  const resolver = api.createStrictScientificEvidenceResolverV1(config.evidenceGraph);
+  const pool = api.postgres(config.databaseUrl, api.waiaCampaignPostgresDriverOptions());
+  const finalized = await api.withHistoricalLaunchCleanupV2(
+    () => {
+      active();
+      const guarded = api.guardSingleConnectionPostgresPool(pool);
+      return api.withStrictScientificResolverV1(resolver, () => {
+        active();
+        return api.finalizeApprovedHistoricalProposalOnExecutionServerV2(
+          api.bindHistoricalRunnerLoginGuardedPoolV2(guarded),
+          { organizationId: config.organizationId, runId: config.runId, releaseSha: config.releaseSha },
+          { signal, onProgress: diagnostics.onProgress, flushProgress: diagnostics.flushProgress },
+        );
+      });
+    }, [() => pool.end({ timeout: 5 })],
+  );
+  active();
+  if (!/^[0-9a-f-]{36}$/i.test(finalized.authorityId) || !/^[0-9a-f]{64}$/.test(finalized.manifest?.contentDigestHex)) refuse("RESULT_SHAPE");
+  return Object.freeze({
+    schemaVersion: "waia.historical_finalize_only_operator_result.v1",
+    releaseSha: config.releaseSha, sourceDigest: config.manifest.coveredSourceDigest,
+    organizationId: config.organizationId, runId: config.runId,
+    authorityId: finalized.authorityId, manifestContentDigestHex: finalized.manifest.contentDigestHex,
+    status: "FINALIZER_RETURNED", bootstrapInvokedByThisDriver: false,
+    archiveBarrierEstablished: false, readinessGranted: false,
+    strictResolverContractVersion: STRICT_RESOLVER_CONTRACT_VERSION,
+  });
 }
 
 /** Composition seam: production binds exclusively to verified S exports below.
@@ -166,7 +298,13 @@ export async function loadFrozenFinalizerApi(root) {
 }
 
 export async function runOperatorMain() {
-  const root = validateInvocation(process.argv.slice(2), process.env, process.execArgv);
+  const argv = process.argv.slice(2);
+  if (argv.includes("--release-binding")) {
+    const invocation = validateManifestBoundInvocation(argv, process.env, process.execArgv);
+    verifyManifestBoundSource(invocation.root, invocation.manifest);
+    refuse("GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE");
+  }
+  const root = validateInvocation(argv, process.env, process.execArgv);
   verifyFrozenSource(root);
   const runtime = await import(pathToFileURL(join(root, "services/ai-trader-execution-host/entrypoint.mjs")).href);
   const config = runtime.parseExecutionHostRuntimeV2(process.env);
