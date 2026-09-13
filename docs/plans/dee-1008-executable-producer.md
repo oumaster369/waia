@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-EXECUTABLE
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-EXECUTABLE, WP-REVIEW]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  status: in-review
+  currentWorkPackage: WP-REVIEW
+  completedWorkPackages: [WP-EXECUTABLE]
+  remainingWorkPackages: [WP-REVIEW]
+  prNumber: 591
+  prUrl: "https://github.com/oumaster369/waia/pull/591"
+  lastValidatedGitSha: b15a9abf252acaadade36bf3c63022467af0943b
+  lastValidationAt: "2026-09-13T14:12:00Z"
   blockedReason: null
-  nextAction: "Open one PR to main. After Human squash-merge, freeze NEW P as the squash SHA. Do not execute H-P, transfer G1, or mutate the Execution Server from this issue."
+  nextAction: "Human review/squash-merge PR #591. Then freeze NEW P as the squash SHA. Do not execute H-P, transfer G1, or mutate the Execution Server from this issue."
 provenance:
   createdFrom: chat
   gapRegistry: null
