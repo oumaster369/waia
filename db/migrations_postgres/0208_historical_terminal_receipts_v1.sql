@@ -1,5 +1,29 @@
 -- DEE-1006: append-only scientific-refusal and rehearsal-started terminal receipts.
 -- Sibling tables: trader_scientific_admission_receipt_v1 remains ADMITTED-only.
+-- CHECK cannot contain subqueries; identity-set validation lives in this IMMUTABLE helper.
+CREATE FUNCTION public.waia_historical_refusal_comparison_identities_valid_v1(identities jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+STRICT
+AS $$
+  SELECT jsonb_typeof(identities) = 'array'
+    AND jsonb_array_length(identities) = 20
+    AND (
+      SELECT count(DISTINCT (value ->> 'surfaceKey') || ':' || (value ->> 'baselineId'))
+      FROM jsonb_array_elements(identities) value
+    ) = 20
+    AND (
+      SELECT count(*)
+      FROM jsonb_array_elements(identities) value
+      WHERE (value ->> 'surfaceKey') IN ('BTCUSDT:30','BTCUSDT:60','ETHUSDT:30','ETHUSDT:60')
+        AND (value ->> 'baselineId') IN (
+          'climatology/v1','gaussian-pop-std/v2','student-t5-nu5/v1',
+          'rolling-w2000/v1','ewma-lambda094/v3')
+        AND (value ->> 'comparisonIdentityDigestHex') ~ '^[0-9a-f]{64}$'
+    ) = 20
+$$;
+--> statement-breakpoint
 CREATE TABLE public.trader_historical_scientific_admission_refusal_v1 (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -41,16 +65,8 @@ CREATE TABLE public.trader_historical_scientific_admission_refusal_v1 (
   CHECK ((receipt_json -> 'holmFwer' ->> 'familyPass')::boolean IS NOT DISTINCT FROM holm_family_pass),
   CHECK (jsonb_typeof(receipt_json -> 'surfaces') = 'array'
     AND jsonb_array_length(receipt_json -> 'surfaces') = 4),
-  CHECK (jsonb_typeof(receipt_json -> 'comparisonIdentities') = 'array'
-    AND jsonb_array_length(receipt_json -> 'comparisonIdentities') = 20
-    AND (SELECT count(DISTINCT (value ->> 'surfaceKey') || ':' || (value ->> 'baselineId'))
-      FROM jsonb_array_elements(receipt_json -> 'comparisonIdentities') value) = 20
-    AND (SELECT count(*) FROM jsonb_array_elements(receipt_json -> 'comparisonIdentities') value
-      WHERE (value ->> 'surfaceKey') IN ('BTCUSDT:30','BTCUSDT:60','ETHUSDT:30','ETHUSDT:60')
-        AND (value ->> 'baselineId') IN (
-          'climatology/v1','gaussian-pop-std/v2','student-t5-nu5/v1',
-          'rolling-w2000/v1','ewma-lambda094/v3')
-        AND (value ->> 'comparisonIdentityDigestHex') ~ '^[0-9a-f]{64}$') = 20),
+  CHECK (public.waia_historical_refusal_comparison_identities_valid_v1(
+    receipt_json -> 'comparisonIdentities') IS TRUE),
   CHECK (jsonb_typeof(receipt_json -> 'statistics' -> 'comparisons') = 'array'
     AND jsonb_array_length(receipt_json -> 'statistics' -> 'comparisons') = 20),
   CHECK (jsonb_typeof(receipt_json -> 'holmFwer' -> 'results') = 'array'

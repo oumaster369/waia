@@ -90,7 +90,11 @@ describe("DEE-1006 historical terminal receipts migration", () => {
 
   it("binds JSON fields to extracted columns and seals the content digest", () => {
     expect(sql).toContain("jsonb_array_length(receipt_json -> 'surfaces') = 4");
-    expect(sql).toContain("jsonb_array_length(receipt_json -> 'comparisonIdentities') = 20");
+    expect(sql).toContain("waia_historical_refusal_comparison_identities_valid_v1");
+    expect(sql).toContain("jsonb_array_elements(identities)");
+    expect(sql).not.toMatch(
+      /CHECK \([\s\S]*SELECT count\([\s\S]*jsonb_array_elements\(receipt_json/,
+    );
     expect(sql).toContain("resampleOrdinalStartInclusive')::integer) = 0");
     expect(sql).toContain("resampleOrdinalEndExclusive')::integer) = 10000");
     expect(sql).toContain("waia_canonical_jsonb_v1(receipt_json - 'contentDigestHex'::text)");
