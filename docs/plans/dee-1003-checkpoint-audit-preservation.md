@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: WP-1
   completedWorkPackages: [WP-1]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
+  prNumber: 584
+  prUrl: "https://github.com/oumaster369/waia/pull/584"
   lastValidatedGitSha: 4f41b4b93040317dc5cae6e1363fcc3797d070df
   lastValidationAt: "2026-09-13T08:33:00Z"
   blockedReason: null
-  nextAction: "Open one PR to main; Human squash-merge. Parent DEE-991 remains In Progress."
+  nextAction: "Human review/squash-merge PR #584. Parent DEE-991 remains In Progress. Frozen forensic worktree stays unpublished."
 provenance:
   createdFrom: chat
   gapRegistry: null
