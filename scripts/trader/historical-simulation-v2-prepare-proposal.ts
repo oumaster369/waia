@@ -1,47 +1,73 @@
 import postgres from "postgres";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createScientificCheckpointStoreV1 } from "./scientific-checkpoint-store-v1";
+import { createValidationBootstrapDurableStoreV1 } from "./validation-bootstrap-durable-store-v1";
 import { withScientificCheckpointsV1 } from "../../lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
+import { withValidationBootstrapDurableStoreV1 } from "../../lib/trader/research/benchmark/validation-bootstrap-durable-v1";
 
 import { waiaCampaignPostgresDriverOptions } from "../../db/postgres-client";
 import { guardSingleConnectionPostgresPool } from "../../db/postgres-reserved-close-guard";
-import { prepareHistoricalTechnicalProposalOnExecutionServerV2 } from
-  "../../lib/trader/historical-simulation-v2/ratification-split-v2";
-import { runHistoricalTechnicalProposalCliV2 } from
-  "../../lib/trader/historical-simulation-v2/ratification-execution-cli-v2";
-import { withHistoricalLaunchCleanupV2 } from
-  "../../lib/trader/historical-simulation-v2/launch-cleanup-v2";
-import { formatHistoricalLaunchErrorV2 } from
-  "../../lib/trader/historical-simulation-v2/launch-error-format-v2";
+import { prepareHistoricalTechnicalProposalOnExecutionServerV2 } from "../../lib/trader/historical-simulation-v2/ratification-split-v2";
+import { runHistoricalTechnicalProposalCliV2 } from "../../lib/trader/historical-simulation-v2/ratification-execution-cli-v2";
+import { withHistoricalLaunchCleanupV2 } from "../../lib/trader/historical-simulation-v2/launch-cleanup-v2";
+import { formatHistoricalLaunchErrorV2 } from "../../lib/trader/historical-simulation-v2/launch-error-format-v2";
 
 export async function runHistoricalTechnicalProposalMainV2(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const result = await runHistoricalTechnicalProposalCliV2(env,
-    async (databaseUrl, input) => {
-      const checkpointRoot = env.WAIA_FHV_CHECKPOINT_ROOT;
-      if (!checkpointRoot) throw new Error("SCIENTIFIC_CHECKPOINT_ROOT_REQUIRED");
-      const checkpoints = createScientificCheckpointStoreV1(checkpointRoot, input.preflight.releaseSha);
-      const pool = guardSingleConnectionPostgresPool(
-        postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
-      );
-      const eventsPool = guardSingleConnectionPostgresPool(
-        postgres(databaseUrl, { ...waiaCampaignPostgresDriverOptions(), connect_timeout: 10,
-          connection: { statement_timeout: 10_000, lock_timeout: 3_000 } }),
-      );
-      return withScientificCheckpointsV1(checkpoints, () => withHistoricalLaunchCleanupV2(
-        () => prepareHistoricalTechnicalProposalOnExecutionServerV2(pool, input, {
-          onProgress: event => { process.stderr.write(`${JSON.stringify(event)}\n`); },
-        }, eventsPool),
-        [() => pool.end({ timeout: 5 }), () => eventsPool.end({ timeout: 5 })],
-      ));
-    });
+  const result = await runHistoricalTechnicalProposalCliV2(env, async (databaseUrl, input) => {
+    const checkpointRoot = env.WAIA_FHV_CHECKPOINT_ROOT;
+    if (!checkpointRoot) throw new Error("SCIENTIFIC_CHECKPOINT_ROOT_REQUIRED");
+    const checkpoints = createScientificCheckpointStoreV1(
+      checkpointRoot,
+      input.preflight.releaseSha,
+    );
+    const pool = guardSingleConnectionPostgresPool(
+      postgres(databaseUrl, waiaCampaignPostgresDriverOptions()),
+    );
+    const eventsPool = guardSingleConnectionPostgresPool(
+      postgres(databaseUrl, {
+        ...waiaCampaignPostgresDriverOptions(),
+        connect_timeout: 10,
+        connection: { statement_timeout: 10_000, lock_timeout: 3_000 },
+      }),
+    );
+    const durable = createValidationBootstrapDurableStoreV1(
+      join(checkpointRoot, "validation-bootstrap-durable-v1"),
+      {
+        organizationId: input.preflight.organizationId,
+        runId: input.preflight.runId,
+        releaseSha: input.preflight.releaseSha,
+      },
+    );
+    return withScientificCheckpointsV1(checkpoints, () =>
+      withValidationBootstrapDurableStoreV1(durable, () =>
+        withHistoricalLaunchCleanupV2(
+          () =>
+            prepareHistoricalTechnicalProposalOnExecutionServerV2(
+              pool,
+              input,
+              {
+                onProgress: (event) => {
+                  process.stderr.write(`${JSON.stringify(event)}\n`);
+                },
+              },
+              eventsPool,
+            ),
+          [() => pool.end({ timeout: 5 }), () => eventsPool.end({ timeout: 5 })],
+        ),
+      ),
+    );
+  });
 
-  process.stdout.write(`${JSON.stringify({
-    schemaVersion: "waia.trader.historical_technical_proposal_cli_result.v2",
-    proposalId: result.id,
-    proposalContentDigestHex: result.proposal.contentDigestHex,
-  })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({
+      schemaVersion: "waia.trader.historical_technical_proposal_cli_result.v2",
+      proposalId: result.id,
+      proposalContentDigestHex: result.proposal.contentDigestHex,
+    })}\n`,
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
