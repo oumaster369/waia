@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: integration-ready
   currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 4f41b4b93040317dc5cae6e1363fcc3797d070df
+  lastValidationAt: "2026-09-13T08:33:00Z"
   blockedReason: null
-  nextAction: "Plan committed; preserve source bytes; apply approved DEE-992 fixture token; validate; open one PR to main."
+  nextAction: "Open one PR to main; Human squash-merge. Parent DEE-991 remains In Progress."
 provenance:
   createdFrom: chat
   gapRegistry: null
