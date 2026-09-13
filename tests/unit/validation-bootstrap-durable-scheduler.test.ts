@@ -45,7 +45,7 @@ const fixture = () => ({
   trialIdentityDigest32: Buffer.alloc(32, 0x55),
 });
 
-function kernelRange(start = 0, endExclusive = VALIDATION_BOOTSTRAP_RANGE_SIZE) {
+function kernelRange(start = 0, endExclusive: number = VALIDATION_BOOTSTRAP_RANGE_SIZE) {
   const input = fixture();
   const result = INTERNAL_validationBootstrapOrdinalRangeV1(input, start, endExclusive);
   return sealValidationBootstrapRangeRecordV1({
