@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1007",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-990",
+      "scope": "Make container terminal status the only process-truth source. SUCCESS requires container terminal status AND verified receipt AND matching identity. Wrapper or exit-status=0 cannot promote SUCCESS.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "No train-child file overlap with DEE-1004/1005/1006 against common base b45c64f0.",
+        "Human Architect required serialized wave 1 so process-truth lands before evidence/bootstrap/receipts."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/ops/scientific-process-observation-v1.md",
+        "docs/plans/dee-990-outcome-verdict.md",
+        "scripts/trader/scientific-container-observation-v1.ts",
+        "scripts/trader/scientific-false-success-marker-v1.ts",
+        "scripts/trader/scientific-process-verdict-v1.ts",
+        "tests/unit/scientific-container-observation-v1.test.ts",
+        "tests/unit/scientific-false-success-marker-v1.test.ts",
+        "tests/unit/scientific-process-verdict-v1.test.ts"
+      ],
+      "expectedAcceptanceEvidence": [
+        "Container non-zero or non-terminal status cannot be reported as SUCCESS.",
+        "Verified receipt plus matching identity are required for SUCCESS."
+      ],
+      "expectedTests": [
+        "pnpm exec vitest --run tests/unit/scientific-container-observation-v1.test.ts tests/unit/scientific-false-success-marker-v1.test.ts tests/unit/scientific-process-verdict-v1.test.ts"
+      ],
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human Architect 2026-09-13 authorized this exact four-child Integration Train (DEE-990, DEE-1004, DEE-1005, DEE-1006) as one T3 H1-R boundary; production 0208 apply, Execution Server mutation, deploy, and scientific computation remain later Human gates."
+      },
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-1004",
+      "scope": "Strict dual-origin scientific evidence resolver and generic release-binding finalize. No builder on the strict API. Packages and BTC30 Forecast resolve to O; other Forecast to P; wf-predictive-terminal-v3 and wf-predictive-bootstrap-range-* to R. Generic finalize verifies then refuses GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Zero file overlap with DEE-990/1005/1006 against common base b45c64f0.",
+        "Human Architect required serialized wave 2 after process-truth and before durable bootstrap."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/historical-simulation-v2/scientific-evidence-resolver-v1.ts",
+        "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts",
+        "scripts/ops/historical-finalize-only-v1.mjs",
+        "scripts/trader/scientific-checkpoint-store-v1.ts",
+        "scripts/trader/scientific-evidence-resolver-v1.ts",
+        "tests/unit/cody-evidence-binding-v2.test.ts",
+        "tests/unit/historical-finalize-only-operator.test.mjs",
+        "tests/unit/historical-strict-evidence-wiring-v1.test.ts",
+        "tests/unit/scientific-evidence-resolver-v1.test.ts"
+      ],
+      "expectedAcceptanceEvidence": [
+        "Strict resolver has no builder path.",
+        "Generic finalize operator verifies then refuses GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE.",
+        "90de pin remains a compatibility fixture; R is not invented."
+      ],
+      "expectedTests": [
+        "pnpm exec vitest --run tests/unit/scientific-evidence-resolver-v1.test.ts tests/unit/historical-strict-evidence-wiring-v1.test.ts tests/unit/cody-evidence-binding-v2.test.ts tests/unit/historical-finalize-only-operator.test.mjs"
+      ],
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human Architect 2026-09-13 authorized this exact four-child Integration Train (DEE-990, DEE-1004, DEE-1005, DEE-1006) as one T3 H1-R boundary; production 0208 apply, Execution Server mutation, deploy, and scientific computation remain later Human gates."
+      },
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-1005",
+      "scope": "Durable TypeScript bootstrap range scheduler. VALIDATION_BOOTSTRAP_RANGE_SIZE remains 8; B remains 10000. Native DEE-998 ledgers refused. Worker count never enters any scientific digest.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Zero file overlap with DEE-990/1004/1006 against common base b45c64f0.",
+        "Human Architect required serialized wave 3 after the strict resolver and before terminal receipts."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/research/benchmark/index.ts",
+        "lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts",
+        "lib/trader/research/benchmark/validation-bootstrap-durable-v1.ts",
+        "lib/trader/research/benchmark/validation-bootstrap-v1.ts",
+        "scripts/trader/historical-simulation-v2-launch-approved.ts",
+        "scripts/trader/historical-simulation-v2-prepare-proposal.ts",
+        "scripts/trader/validation-bootstrap-durable-scheduler-cli.ts",
+        "scripts/trader/validation-bootstrap-durable-scheduler-v1.ts",
+        "scripts/trader/validation-bootstrap-durable-store-v1.ts",
+        "scripts/trader/validation-bootstrap-node-pool.ts",
+        "tests/unit/validation-bootstrap-durable-scheduler.test.ts"
+      ],
+      "expectedAcceptanceEvidence": [
+        "VALIDATION_BOOTSTRAP_B remains 10000.",
+        "VALIDATION_BOOTSTRAP_RANGE_SIZE remains 8 and kernelRange endExclusive is a number.",
+        "Native DEE-998 ledgers are refused for launch admission."
+      ],
+      "expectedTests": [
+        "pnpm exec vitest --run tests/unit/validation-bootstrap-durable-scheduler.test.ts"
+      ],
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human Architect 2026-09-13 authorized this exact four-child Integration Train (DEE-990, DEE-1004, DEE-1005, DEE-1006) as one T3 H1-R boundary; production 0208 apply, Execution Server mutation, deploy, and scientific computation remain later Human gates."
+      },
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      }
+    },
+    {
+      "issue": "DEE-1006",
+      "scope": "Git-only 0208 append-only Postgres tables for scientific-admission refusal and rehearsal-started receipts, plus verifier contracts. Production apply of 0208 remains Human H2 at exact R. Includes the FHV compatible-additive admission of 0208 so full-journal migrate preflight does not treat 1780000000208 as UNKNOWN_APPLIED_MIGRATION.",
+      "dependencies": [
+        "DEE-1005"
+      ],
+      "dependencyEvidence": [
+        "Refusal receipts bind VALIDATION_BOOTSTRAP_B and VALIDATION_BOOTSTRAP_VERSION from the bootstrap module owned by DEE-1005.",
+        "Zero file overlap with DEE-990/1004/1005 against common base b45c64f0; 0208 preflight files are DEE-1006-only."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "db/migrations_postgres/0208_historical_terminal_receipts_v1.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "lib/trader/historical-simulation-v2/historical-terminal-launch-verifier-v1.ts",
+        "lib/trader/historical-simulation-v2/historical-terminal-receipts-v1.ts",
+        "lib/trader/observability/fhv-v2-postgres-schema-preflight.ts",
+        "tests/integration/postgres-historical-terminal-receipts-v1.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/fhv-v2-postgres-schema-preflight.test.ts",
+        "tests/unit/historical-cody-migration-v4.test.ts",
+        "tests/unit/historical-terminal-launch-receipts-v1.test.ts",
+        "tests/unit/historical-terminal-receipts-migration-v1.test.ts"
+      ],
+      "expectedAcceptanceEvidence": [
+        "UPDATE and DELETE on both receipt tables raise.",
+        "0208 is admitted as explicit FHV compatible additive; canonical required max remains 0207.",
+        "Comparison-identity CHECK uses IMMUTABLE function, not a table subquery.",
+        "Production 0208 is not applied by this issue."
+      ],
+      "expectedTests": [
+        "pnpm exec vitest --run tests/unit/historical-terminal-receipts-migration-v1.test.ts tests/unit/historical-terminal-launch-receipts-v1.test.ts tests/unit/fhv-v2-postgres-schema-preflight.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts tests/unit/historical-cody-migration-v4.test.ts"
+      ],
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Human Architect 2026-09-13 authorized this exact four-child Integration Train (DEE-990, DEE-1004, DEE-1005, DEE-1006) as one T3 H1-R boundary; production 0208 apply, Execution Server mutation, deploy, and scientific computation remain later Human gates."
+      },
+      "execution": {
+        "wave": 4,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Human Architect 2026-09-13 four-child Integration Train authorization; DEE-950 / PR 589 remains a separate single-issue H1-P boundary"
+    }
+  },
+  "crossCuttingInvariants": [
+    "No scientific criterion, B=10000, baseline family, or DEE-998 native-admission change.",
+    "DEE-950 / PR 589 is not in this train.",
+    "Migration 0208 is Git-only; production apply remains Human H2 at exact R.",
+    "No deploy, Execution Server mutation, live/capital/holdout, or AI-TWIN change.",
+    "Child branches and original PR heads are preserved unedited."
+  ],
+  "rollbackStrategy": "One squash revert of the Integration Train PR restores origin/main to the pre-train SHA. Child branches remain for audit/recovery. 0208 is never applied to production by this batch.",
+  "validation": {
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-1007-launch-r-code-train.integration-train.json DEE-1007 admission",
+    "focused": [
+      "scientific process verdict",
+      "strict dual-origin resolver",
+      "durable bootstrap scheduler",
+      "terminal receipt migration and FHV preflight"
+    ],
+    "fullSuite": "one authoritative GitHub PR CI campaign on the frozen exact head after any required DEE-950 base reconciliation",
+    "review": "fresh independent exact-head zero P1/P2",
+    "publication": "one PR; DEE-653 required-before-merge; Human H1 squash-merge"
+  }
+}
