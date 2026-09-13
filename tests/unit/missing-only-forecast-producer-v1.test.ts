@@ -344,13 +344,9 @@ describe("DEE-950 missing-only Forecast producer", () => {
   it("refuses an origin write attempt through the read-only origin port", () => {
     const origin = createOriginReadOnlyPortV1(originRoot);
     const journal = createProducerJournalV1(producerRoot, identity);
-    expect(() => origin.package({} as never, () => pkg)).toThrow("ORIGIN_WRITE");
-    expect(() => origin.evidence("wf-forecast-batch-v1", { offset: 0 }, () => [])).toThrow(
-      "ORIGIN_WRITE",
-    );
-    expect(() =>
-      origin.evidenceAsync("wf-forecast-batch-v1", { offset: 0 }, async () => []),
-    ).toThrow("ORIGIN_WRITE");
+    expect(() => origin.package()).toThrow("ORIGIN_WRITE");
+    expect(() => origin.evidence()).toThrow("ORIGIN_WRITE");
+    expect(() => origin.evidenceAsync()).toThrow("ORIGIN_WRITE");
     expect(() =>
       issueMissingForecastBatchV1({
         envelope,

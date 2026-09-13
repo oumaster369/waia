@@ -10,9 +10,22 @@ import {
 } from "./missing-only-forecast-producer-v1";
 import type { SourceAnchor } from "../../lib/trader/intelligence/forecast-v2/source-anchor-v1";
 
-const fail = (reason: string): never => {
+function fail(reason: string): never {
   throw new Error(`MISSING_ONLY_FORECAST_PRODUCER_REFUSED:${reason}`);
-};
+}
+
+function requiredSurfaceKey(
+  value: string | undefined,
+): "BTCUSDT:30" | "BTCUSDT:60" | "ETHUSDT:30" | "ETHUSDT:60" {
+  if (
+    value === "BTCUSDT:30" ||
+    value === "BTCUSDT:60" ||
+    value === "ETHUSDT:30" ||
+    value === "ETHUSDT:60"
+  )
+    return value;
+  fail("SURFACE");
+}
 
 export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
   try {
@@ -27,8 +40,7 @@ export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
     for (const forbidden of ["--package-builder", "--builder", "--build-package", "--fallback"]) {
       if (flags.has(forbidden)) fail("BUILDER_FALLBACK");
     }
-    const mappingPath = flags.get("--mapping");
-    if (!mappingPath) fail("MISSING_MAPPING");
+    const mappingPath = flags.get("--mapping") ?? fail("MISSING_MAPPING");
     if (!isAbsolute(mappingPath)) fail("MAPPING_PATH");
     let parsed: unknown;
     try {
@@ -38,23 +50,16 @@ export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
     }
     const envelope = parseProducerMappingInputV1(parsed);
     const mode = flags.get("--mode") ?? "enumerate";
-    const producerSha = flags.get("--producer-sha");
-    const sourceRoot = flags.get("--source-root");
-    const originRoot = flags.get("--origin-root");
-    const producerRoot = flags.get("--producer-root");
-    if (!producerSha || !sourceRoot || !originRoot || !producerRoot) fail("USAGE");
+    const producerSha = flags.get("--producer-sha") ?? fail("USAGE");
+    const sourceRoot = flags.get("--source-root") ?? fail("USAGE");
+    const originRoot = flags.get("--origin-root") ?? fail("USAGE");
+    const producerRoot = flags.get("--producer-root") ?? fail("USAGE");
     const identity = bindMissingOnlyProducerIdentityV1({ producerGitSha: producerSha, sourceRoot });
     const origin = createOriginReadOnlyPortV1(originRoot);
     const journal = createProducerJournalV1(producerRoot, identity);
-    const surfaceKey = flags.get("--surface") as
-      | "BTCUSDT:30"
-      | "BTCUSDT:60"
-      | "ETHUSDT:30"
-      | "ETHUSDT:60"
-      | undefined;
-    if (!surfaceKey) fail("SURFACE");
-    const anchorsPath = flags.get("--anchors-json");
-    if (!anchorsPath || !isAbsolute(anchorsPath)) fail("ANCHORS");
+    const surfaceKey = requiredSurfaceKey(flags.get("--surface"));
+    const anchorsPath = flags.get("--anchors-json") ?? fail("ANCHORS");
+    if (!isAbsolute(anchorsPath)) fail("ANCHORS");
     const sourceCorpus = JSON.parse(readFileSync(anchorsPath, "utf8")) as SourceAnchor[];
     if (mode === "enumerate") {
       const missing = enumerateMissingWfForecastBatchesV1({
@@ -80,7 +85,7 @@ export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
       return 0;
     }
     if (mode === "control" || mode === "issue") fail("BUILDER_FALLBACK");
-    fail("USAGE");
+    return fail("USAGE");
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     process.stderr.write(

@@ -42,9 +42,9 @@ export const ISSUE_FORECAST_V1_ENTRY =
   "lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1.ts" as const;
 const HEX40 = /^[a-f0-9]{40}$/;
 const HEX64 = /^[a-f0-9]{64}$/;
-const fail = (reason: string): never => {
+function fail(reason: string): never {
   throw new Error(`MISSING_ONLY_FORECAST_PRODUCER_REFUSED:${reason}`);
-};
+}
 const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 function privateDirectory(path: string) {
   const st = lstatSync(path);
@@ -133,10 +133,9 @@ export function computeIssueForecastV1TransitiveSourceClosureV1(sourceRoot: stri
         continue;
       const base = spec.startsWith("@/") ? join(root, spec.slice(2)) : resolve(path, "..", spec);
       const candidates = [base, `${base}.ts`, `${base}.tsx`, `${base}.mjs`, join(base, "index.ts")];
-      const found = candidates.find(
-        (candidate) => existsSync(candidate) && lstatSync(candidate).isFile(),
-      );
-      if (!found) fail("SOURCE_CLOSURE");
+      const found =
+        candidates.find((candidate) => existsSync(candidate) && lstatSync(candidate).isFile()) ??
+        fail("SOURCE_CLOSURE");
       const next = relative(root, found);
       if (next.startsWith("..")) fail("SOURCE_ESCAPE");
       visit(next);
@@ -335,10 +334,9 @@ export function enumerateMissingWfForecastBatchesV1(input: {
   journal?: Pick<ProducerJournalV1, "hasCompletion">;
 }): readonly MissingWfForecastBatchV1[] {
   refuseBuilderFallback(input);
-  const surface = input.envelope.mapping.surfaces.find(
-    (entry) => entry.surfaceKey === input.surfaceKey,
-  );
-  if (!surface) fail("SURFACE");
+  const surface =
+    input.envelope.mapping.surfaces.find((entry) => entry.surfaceKey === input.surfaceKey) ??
+    fail("SURFACE");
   const origin = input.envelope.mapping.O;
   const inventory = buildPreservedWfExpectedInventoryV1({
     origin: {
@@ -409,7 +407,7 @@ function issueRows(input: {
   pkg: PredictivePackageV1;
   offset: number;
   batch: readonly SourceAnchor[];
-}): { rows: ForecastBatchRowV1[]; cacheInput: object } {
+}): { rows: readonly ForecastBatchRowV1[]; cacheInput: object } {
   const origin = input.envelope.mapping.O;
   const frozenBatch = Object.freeze(input.batch.map(freezeAnchor));
   if (
@@ -466,10 +464,9 @@ export function issueControlForecastBatchV1(input: {
 }) {
   refuseBuilderFallback(input);
   if (!input.pkg) fail("BUILDER_FALLBACK");
-  const surface = input.envelope.mapping.surfaces.find(
-    (entry) => entry.surfaceKey === input.surfaceKey,
-  );
-  if (!surface) fail("SURFACE");
+  const surface =
+    input.envelope.mapping.surfaces.find((entry) => entry.surfaceKey === input.surfaceKey) ??
+    fail("SURFACE");
   if (input.identity.producerGitSha === input.envelope.mapping.O.releaseSha) fail("O_P_COLLAPSE");
   const batch = input.sourceCorpus.slice(input.offset, input.offset + WF_FORECAST_BATCH_SIZE_V1);
   if (!batch.length) fail("BATCH");
@@ -521,10 +518,9 @@ export function issueMissingForecastBatchV1(input: {
     realpathSync(input.producerEvidenceRoot) === input.origin.root
   )
     fail("ORIGIN_WRITE");
-  const surface = input.envelope.mapping.surfaces.find(
-    (entry) => entry.surfaceKey === input.surfaceKey,
-  );
-  if (!surface) fail("SURFACE");
+  const surface =
+    input.envelope.mapping.surfaces.find((entry) => entry.surfaceKey === input.surfaceKey) ??
+    fail("SURFACE");
   const missing = enumerateMissingWfForecastBatchesV1({
     envelope: input.envelope,
     surfaceKey: input.surfaceKey,
@@ -532,8 +528,7 @@ export function issueMissingForecastBatchV1(input: {
     origin: input.origin,
     journal: input.journal,
   });
-  const target = missing.find((batch) => batch.offset === input.offset);
-  if (!target) fail("NOT_MISSING");
+  const target = missing.find((batch) => batch.offset === input.offset) ?? fail("NOT_MISSING");
   const batch = input.sourceCorpus.slice(input.offset, input.offset + WF_FORECAST_BATCH_SIZE_V1);
   if (batch.length !== target.anchorCount) fail("BATCH");
   input.journal.claim(input.surfaceKey, input.offset, input.retryIncomplete === true);

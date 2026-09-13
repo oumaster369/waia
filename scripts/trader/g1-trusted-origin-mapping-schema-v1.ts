@@ -9,9 +9,9 @@ export const WF_FORECAST_BATCH_SIZE_V1 = 32 as const;
 
 const HEX40 = /^[a-f0-9]{40}$/;
 const HEX64 = /^[a-f0-9]{64}$/;
-const fail = (reason: string): never => {
+function fail(reason: string): never {
   throw new Error(`G1_TRUSTED_ORIGIN_MAPPING_REFUSED:${reason}`);
-};
+}
 function dataObject(
   value: unknown,
   keys: readonly string[],
@@ -31,8 +31,8 @@ function dataObject(
   }
 }
 function denseArray(value: unknown): asserts value is unknown[] {
+  if (!Array.isArray(value)) fail("ARRAY");
   if (
-    !Array.isArray(value) ||
     types.isProxy(value) ||
     Object.getPrototypeOf(value) !== Array.prototype ||
     Object.getOwnPropertySymbols(value).length ||
@@ -49,18 +49,39 @@ const digest64 = (value: unknown): value is string =>
   typeof value === "string" && HEX64.test(value);
 const digest40 = (value: unknown): value is string =>
   typeof value === "string" && HEX40.test(value);
+function int(value: unknown, reason: string, min?: number): number {
+  if (typeof value !== "number") fail(reason);
+  if (!Number.isSafeInteger(value)) fail(reason);
+  if (min !== undefined && value < min) fail(reason);
+  return value;
+}
+function str(value: unknown, reason: string): string {
+  if (typeof value !== "string") fail(reason);
+  if (!value) fail(reason);
+  return value;
+}
+function hex64(value: unknown, reason: string): string {
+  if (typeof value !== "string") fail(reason);
+  if (!HEX64.test(value)) fail(reason);
+  return value;
+}
+function hex40(value: unknown, reason: string): string {
+  if (typeof value !== "string") fail(reason);
+  if (!HEX40.test(value)) fail(reason);
+  return value;
+}
 function runtime(value: unknown): { node: string; os: string; arch: string } {
   dataObject(value, ["arch", "node", "os"]);
+  const node = str(value.node, "RUNTIME");
+  const os = str(value.os, "RUNTIME");
+  const arch = str(value.arch, "RUNTIME");
   if (
-    typeof value.node !== "string" ||
-    typeof value.os !== "string" ||
-    typeof value.arch !== "string" ||
-    !/^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(value.node) ||
-    !/^[a-z0-9_]+$/.test(value.os) ||
-    !/^[a-z0-9_]+$/.test(value.arch)
+    !/^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(node) ||
+    !/^[a-z0-9_]+$/.test(os) ||
+    !/^[a-z0-9_]+$/.test(arch)
   )
     fail("RUNTIME");
-  return Object.freeze({ node: value.node, os: value.os, arch: value.arch });
+  return Object.freeze({ node, os, arch });
 }
 
 export function mappingContentDigestHexV1(mapping: unknown): string {
@@ -153,29 +174,23 @@ function parseSelectedPackage(value: unknown): G1SelectedPackageV1 {
     "sourceCount",
     "targetGridDigestHex",
   ]);
-  if (
-    !Number.isSafeInteger(value.chunkCount) ||
-    value.chunkCount < 1 ||
-    !digest64(value.contentDigestHex) ||
-    !digest64(value.generationDigestHex) ||
-    !digest64(value.packageKey) ||
-    !digest64(value.runtimeContractDigestHex) ||
-    typeof value.selectionRule !== "string" ||
-    !value.selectionRule ||
-    !Number.isSafeInteger(value.sourceCount) ||
-    value.sourceCount < 1 ||
-    !digest64(value.targetGridDigestHex)
-  )
-    fail("SELECTED_PACKAGE");
+  const chunkCount = int(value.chunkCount, "SELECTED_PACKAGE", 1);
+  const sourceCount = int(value.sourceCount, "SELECTED_PACKAGE", 1);
+  const contentDigestHex = hex64(value.contentDigestHex, "SELECTED_PACKAGE");
+  const generationDigestHex = hex64(value.generationDigestHex, "SELECTED_PACKAGE");
+  const packageKey = hex64(value.packageKey, "SELECTED_PACKAGE");
+  const runtimeContractDigestHex = hex64(value.runtimeContractDigestHex, "SELECTED_PACKAGE");
+  const selectionRule = str(value.selectionRule, "SELECTED_PACKAGE");
+  const targetGridDigestHex = hex64(value.targetGridDigestHex, "SELECTED_PACKAGE");
   return Object.freeze({
-    chunkCount: value.chunkCount,
-    contentDigestHex: value.contentDigestHex,
-    generationDigestHex: value.generationDigestHex,
-    packageKey: value.packageKey,
-    runtimeContractDigestHex: value.runtimeContractDigestHex,
-    selectionRule: value.selectionRule,
-    sourceCount: value.sourceCount,
-    targetGridDigestHex: value.targetGridDigestHex,
+    chunkCount,
+    contentDigestHex,
+    generationDigestHex,
+    packageKey,
+    runtimeContractDigestHex,
+    selectionRule,
+    sourceCount,
+    targetGridDigestHex,
   });
 }
 
@@ -193,46 +208,42 @@ function parseDomain(value: unknown): G1ExpectedWfForecastBatchDomainV1 {
     "wfStatus",
   ]);
   dataObject(value.offsets, ["endExclusive", "start", "step"]);
-  const offsets = value.offsets as Record<string, unknown>;
-  if (!Number.isSafeInteger(value.expectedAnchors) || value.expectedAnchors < 1)
-    fail("BATCH_DOMAIN");
-  const expectedBatches = Math.ceil(value.expectedAnchors / WF_FORECAST_BATCH_SIZE_V1);
+  const offsets = value.offsets;
+  const expectedAnchors = int(value.expectedAnchors, "BATCH_DOMAIN", 1);
+  const expectedBatches = Math.ceil(expectedAnchors / WF_FORECAST_BATCH_SIZE_V1);
   const lastBatchAnchorCount =
-    value.expectedAnchors % WF_FORECAST_BATCH_SIZE_V1 || WF_FORECAST_BATCH_SIZE_V1;
+    expectedAnchors % WF_FORECAST_BATCH_SIZE_V1 || WF_FORECAST_BATCH_SIZE_V1;
+  const missingBatches = int(value.missingBatches, "BATCH_DOMAIN", 0);
+  const authenticatedMatchingBatches = int(value.authenticatedMatchingBatches, "BATCH_DOMAIN", 0);
+  const expectedKeyOrderDigest = hex64(value.expectedKeyOrderDigest, "BATCH_DOMAIN");
+  const wfStatus = str(value.wfStatus, "BATCH_DOMAIN");
+  const endExclusive = int(offsets.endExclusive, "BATCH_DOMAIN", 1);
   if (
     value.batchSize !== WF_FORECAST_BATCH_SIZE_V1 ||
     value.stage !== WF_FORECAST_BATCH_STAGE_V1 ||
-    !digest64(value.expectedKeyOrderDigest) ||
-    typeof value.wfStatus !== "string" ||
-    !value.wfStatus ||
     value.expectedBatches !== expectedBatches ||
     value.lastBatchAnchorCount !== lastBatchAnchorCount ||
-    !Number.isSafeInteger(value.missingBatches) ||
-    value.missingBatches < 0 ||
-    !Number.isSafeInteger(value.authenticatedMatchingBatches) ||
-    value.authenticatedMatchingBatches < 0 ||
     offsets.start !== 0 ||
     offsets.step !== WF_FORECAST_BATCH_SIZE_V1 ||
-    !Number.isSafeInteger(offsets.endExclusive) ||
-    offsets.endExclusive !== value.expectedAnchors ||
-    value.authenticatedMatchingBatches + value.missingBatches !== value.expectedBatches
+    endExclusive !== expectedAnchors ||
+    authenticatedMatchingBatches + missingBatches !== expectedBatches
   )
     fail("BATCH_DOMAIN");
   return Object.freeze({
-    authenticatedMatchingBatches: value.authenticatedMatchingBatches,
+    authenticatedMatchingBatches,
     batchSize: WF_FORECAST_BATCH_SIZE_V1,
-    expectedAnchors: value.expectedAnchors,
-    expectedBatches: value.expectedBatches,
-    expectedKeyOrderDigest: value.expectedKeyOrderDigest,
-    lastBatchAnchorCount: value.lastBatchAnchorCount,
-    missingBatches: value.missingBatches,
+    expectedAnchors,
+    expectedBatches,
+    expectedKeyOrderDigest,
+    lastBatchAnchorCount,
+    missingBatches,
     offsets: Object.freeze({
-      endExclusive: offsets.endExclusive as number,
+      endExclusive,
       start: 0,
       step: WF_FORECAST_BATCH_SIZE_V1,
     }),
     stage: WF_FORECAST_BATCH_STAGE_V1,
-    wfStatus: value.wfStatus,
+    wfStatus,
   });
 }
 
@@ -259,53 +270,53 @@ function parseSurface(value: unknown): G1TrustedOriginSurfaceV1 {
   dataObject(value.kmSelection, ["k", "kmBindingStatus", "m", "surfaceAnchorSetDigestHex"]);
   dataObject(value.origin, ["releaseSha", "runtime"]);
   const originRuntime = runtime(value.origin.runtime);
-  if (
-    value.venue !== "htx" ||
-    value.market !== "spot" ||
-    (value.symbol !== "BTCUSDT" && value.symbol !== "ETHUSDT") ||
-    (value.primaryHorizonMinutes !== 30 && value.primaryHorizonMinutes !== 60) ||
-    value.surfaceKey !== `${value.symbol}:${value.primaryHorizonMinutes}` ||
-    !digest40(value.origin.releaseSha) ||
-    !digest64(value.development.datasetDigestHex) ||
-    !digest64(value.development.rawSha256Hex) ||
-    !Number.isSafeInteger(value.development.sourceCount) ||
-    value.development.sourceCount < 1 ||
-    !digest64(value.evaluationPartition.qualificationReceiptDigestHex) ||
-    !digest64(value.evaluationPartition.receiptDigestHex) ||
-    !digest64(value.evaluationPartition.walkForwardRawSha256Hex) ||
-    !Number.isSafeInteger(value.kmSelection.k) ||
-    value.kmSelection.k < 1 ||
-    !Number.isSafeInteger(value.kmSelection.m) ||
-    value.kmSelection.m < 1 ||
-    typeof value.kmSelection.kmBindingStatus !== "string" ||
-    !digest64(value.kmSelection.surfaceAnchorSetDigestHex)
-  )
-    fail("SURFACE");
+  if (value.venue !== "htx" || value.market !== "spot") fail("SURFACE");
+  if (value.symbol !== "BTCUSDT" && value.symbol !== "ETHUSDT") fail("SURFACE");
+  const symbol = value.symbol === "ETHUSDT" ? ("ETHUSDT" as const) : ("BTCUSDT" as const);
+  if (value.primaryHorizonMinutes !== 30 && value.primaryHorizonMinutes !== 60) fail("SURFACE");
+  const primaryHorizonMinutes = value.primaryHorizonMinutes === 60 ? (60 as const) : (30 as const);
+  if (value.surfaceKey !== `${symbol}:${primaryHorizonMinutes}`) fail("SURFACE");
+  const surfaceKey =
+    value.surfaceKey === "BTCUSDT:60"
+      ? ("BTCUSDT:60" as const)
+      : value.surfaceKey === "ETHUSDT:30"
+        ? ("ETHUSDT:30" as const)
+        : value.surfaceKey === "ETHUSDT:60"
+          ? ("ETHUSDT:60" as const)
+          : ("BTCUSDT:30" as const);
+  if (surfaceKey !== `${symbol}:${primaryHorizonMinutes}`) fail("SURFACE");
+  const kmBindingStatus = str(value.kmSelection.kmBindingStatus, "SURFACE");
   return Object.freeze({
     development: Object.freeze({
-      datasetDigestHex: value.development.datasetDigestHex,
-      rawSha256Hex: value.development.rawSha256Hex,
-      sourceCount: value.development.sourceCount,
+      datasetDigestHex: hex64(value.development.datasetDigestHex, "SURFACE"),
+      rawSha256Hex: hex64(value.development.rawSha256Hex, "SURFACE"),
+      sourceCount: int(value.development.sourceCount, "SURFACE", 1),
     }),
     evaluationPartition: Object.freeze({
-      qualificationReceiptDigestHex: value.evaluationPartition.qualificationReceiptDigestHex,
-      receiptDigestHex: value.evaluationPartition.receiptDigestHex,
-      walkForwardRawSha256Hex: value.evaluationPartition.walkForwardRawSha256Hex,
+      qualificationReceiptDigestHex: hex64(
+        value.evaluationPartition.qualificationReceiptDigestHex,
+        "SURFACE",
+      ),
+      receiptDigestHex: hex64(value.evaluationPartition.receiptDigestHex, "SURFACE"),
+      walkForwardRawSha256Hex: hex64(value.evaluationPartition.walkForwardRawSha256Hex, "SURFACE"),
     }),
     expectedWfForecastBatchDomain: parseDomain(value.expectedWfForecastBatchDomain),
     kmSelection: Object.freeze({
-      k: value.kmSelection.k,
-      kmBindingStatus: value.kmSelection.kmBindingStatus,
-      m: value.kmSelection.m,
-      surfaceAnchorSetDigestHex: value.kmSelection.surfaceAnchorSetDigestHex,
+      k: int(value.kmSelection.k, "SURFACE", 1),
+      kmBindingStatus,
+      m: int(value.kmSelection.m, "SURFACE", 1),
+      surfaceAnchorSetDigestHex: hex64(value.kmSelection.surfaceAnchorSetDigestHex, "SURFACE"),
     }),
-    market: "spot",
-    origin: Object.freeze({ releaseSha: value.origin.releaseSha, runtime: originRuntime }),
-    primaryHorizonMinutes: value.primaryHorizonMinutes,
+    market: "spot" as const,
+    origin: Object.freeze({
+      releaseSha: hex40(value.origin.releaseSha, "SURFACE"),
+      runtime: originRuntime,
+    }),
+    primaryHorizonMinutes,
     selectedPackage: parseSelectedPackage(value.selectedPackage),
-    surfaceKey: value.surfaceKey,
-    symbol: value.symbol,
-    venue: "htx",
+    surfaceKey,
+    symbol,
+    venue: "htx" as const,
   });
 }
 
@@ -349,74 +360,86 @@ export function parseG1TrustedOriginMappingEnvelopeV1(
     "missingForecastRows",
     "originCompleteForecastBatches",
   ]);
+  const s0 = hex40(mapping.S0, "MAPPING");
+  const organizationId = str(mapping.O.organizationId, "MAPPING").trim();
+  const releaseSha = hex40(mapping.O.releaseSha, "MAPPING");
+  const runId = str(mapping.O.runId, "MAPPING").trim();
+  const sealedAtUtc = str(mapping.sealedAtUtc, "MAPPING");
+  const datasetContentDigest = hex64(mapping.dataset.datasetContentDigest, "MAPPING");
+  const originRuntimeRequalificationDigest = hex64(
+    mapping.dataset.originRuntimeRequalificationDigest,
+    "MAPPING",
+  );
+  const qualificationReceiptDigestHex = hex64(
+    mapping.dataset.qualificationReceiptDigestHex,
+    "MAPPING",
+  );
+  const datasetRoot = str(mapping.dataset.root, "MAPPING");
+  const missingForecastBatches = int(mapping.totals.missingForecastBatches, "MAPPING", 0);
+  const missingForecastRows = int(mapping.totals.missingForecastRows, "MAPPING", 0);
+  const originCompleteForecastBatches = int(
+    mapping.totals.originCompleteForecastBatches,
+    "MAPPING",
+    0,
+  );
   if (
+    !organizationId ||
+    !runId ||
     mapping.authorityGranted !== false ||
     mapping.generationAuthority !== "NOT_GRANTED" ||
     mapping.scientificAdmission !== "NOT_GRANTED" ||
     mapping.serverWrite !== "NOT_PERFORMED" ||
-    mapping.schemaVersion !== G1_MAPPING_SCHEMA_V1 ||
-    !digest40(mapping.S0) ||
-    typeof mapping.O.organizationId !== "string" ||
-    !mapping.O.organizationId.trim() ||
-    !digest40(mapping.O.releaseSha) ||
-    typeof mapping.O.runId !== "string" ||
-    !mapping.O.runId.trim() ||
-    typeof mapping.sealedAtUtc !== "string" ||
-    !mapping.sealedAtUtc ||
-    !digest64(mapping.dataset.datasetContentDigest) ||
-    !digest64(mapping.dataset.originRuntimeRequalificationDigest) ||
-    !digest64(mapping.dataset.qualificationReceiptDigestHex) ||
-    typeof mapping.dataset.root !== "string" ||
-    !mapping.dataset.root ||
-    !Number.isSafeInteger(mapping.totals.missingForecastBatches) ||
-    mapping.totals.missingForecastBatches < 0 ||
-    !Number.isSafeInteger(mapping.totals.missingForecastRows) ||
-    mapping.totals.missingForecastRows < 0 ||
-    !Number.isSafeInteger(mapping.totals.originCompleteForecastBatches) ||
-    mapping.totals.originCompleteForecastBatches < 0
+    mapping.schemaVersion !== G1_MAPPING_SCHEMA_V1
   )
     fail("MAPPING");
   denseArray(mapping.surfaces);
   denseArray(mapping.unselectedDuplicatePackageKeys);
   if (!mapping.surfaces.length) fail("SURFACES");
+  if (
+    !mapping.provenance ||
+    typeof mapping.provenance !== "object" ||
+    Array.isArray(mapping.provenance)
+  )
+    fail("MAPPING");
+  const provenance: Record<string, unknown> = { ...mapping.provenance };
   const originRuntime = runtime(mapping.O.runtime);
   const surfaces = mapping.surfaces.map(parseSurface);
   const seen = new Set<string>();
   for (const surface of surfaces) {
-    if (seen.has(surface.surfaceKey) || surface.origin.releaseSha !== mapping.O.releaseSha)
+    if (seen.has(surface.surfaceKey) || surface.origin.releaseSha !== releaseSha)
       fail("SURFACE_IDENTITY");
     seen.add(surface.surfaceKey);
   }
   return Object.freeze({
     authorityGranted: false,
-    contentDigestHex: value.contentDigestHex,
+    contentDigestHex: hex64(value.contentDigestHex, "ENVELOPE"),
     schemaVersion: G1_MAPPING_ENVELOPE_SCHEMA_V1,
     mapping: Object.freeze({
       O: Object.freeze({
-        organizationId: mapping.O.organizationId,
-        releaseSha: mapping.O.releaseSha,
-        runId: mapping.O.runId,
+        organizationId,
+        releaseSha,
+        runId,
         runtime: originRuntime,
       }),
-      S0: mapping.S0,
+      S0: s0,
       authorityGranted: false as const,
       dataset: Object.freeze({
-        datasetContentDigest: mapping.dataset.datasetContentDigest,
-        originRuntimeRequalificationDigest: mapping.dataset.originRuntimeRequalificationDigest,
-        qualificationReceiptDigestHex: mapping.dataset.qualificationReceiptDigestHex,
-        root: mapping.dataset.root,
+        datasetContentDigest,
+        originRuntimeRequalificationDigest,
+        qualificationReceiptDigestHex,
+        root: datasetRoot,
       }),
-      generationAuthority: "NOT_GRANTED",
-      provenance: Object.freeze({ ...mapping.provenance }),
+      generationAuthority: "NOT_GRANTED" as const,
+      provenance: Object.freeze({ ...provenance }),
       schemaVersion: G1_MAPPING_SCHEMA_V1,
-      scientificAdmission: "NOT_GRANTED",
-      sealedAtUtc: mapping.sealedAtUtc,
-      serverWrite: "NOT_PERFORMED",
+      scientificAdmission: "NOT_GRANTED" as const,
+      sealedAtUtc,
+      serverWrite: "NOT_PERFORMED" as const,
       surfaces: Object.freeze(surfaces),
       totals: Object.freeze({
-        missingForecastBatches: mapping.totals.missingForecastBatches,
-        missingForecastRows: mapping.totals.missingForecastRows,
-        originCompleteForecastBatches: mapping.totals.originCompleteForecastBatches,
+        missingForecastBatches,
+        missingForecastRows,
+        originCompleteForecastBatches,
       }),
       unselectedDuplicatePackageKeys: Object.freeze([...mapping.unselectedDuplicatePackageKeys]),
     }),
