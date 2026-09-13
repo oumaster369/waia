@@ -6,7 +6,11 @@ import {
   createOriginReadOnlyPortV1,
   createProducerJournalV1,
   enumerateMissingWfForecastBatchesV1,
+  issueControlForecastBatchV1,
+  issueMissingForecastBatchV1,
+  loadSelectedPreservedPackageV1,
   parseProducerMappingInputV1,
+  type MissingOnlyProducerIdentityV1,
 } from "./missing-only-forecast-producer-v1";
 import type { SourceAnchor } from "../../lib/trader/intelligence/forecast-v2/source-anchor-v1";
 
@@ -25,6 +29,30 @@ function requiredSurfaceKey(
   )
     return value;
   fail("SURFACE");
+}
+
+function requiredAbsolute(value: string | undefined, reason: string): string {
+  if (!value || !isAbsolute(value)) fail(reason);
+  return value;
+}
+
+function parseOffset(value: string | undefined): number {
+  if (value === undefined || !/^(0|[1-9][0-9]*)$/.test(value)) fail("OFFSET");
+  const offset = Number(value);
+  if (!Number.isSafeInteger(offset)) fail("OFFSET");
+  return offset;
+}
+
+function requireRuntime(flags: Map<string, string>, identity: MissingOnlyProducerIdentityV1): void {
+  const node = flags.get("--require-node") ?? fail("RUNTIME");
+  const os = flags.get("--require-os") ?? fail("RUNTIME");
+  const arch = flags.get("--require-arch") ?? fail("RUNTIME");
+  if (
+    node !== identity.runtime.node ||
+    os !== identity.runtime.os ||
+    arch !== identity.runtime.arch
+  )
+    fail("RUNTIME");
 }
 
 export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
@@ -53,15 +81,15 @@ export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
     const producerSha = flags.get("--producer-sha") ?? fail("USAGE");
     const sourceRoot = flags.get("--source-root") ?? fail("USAGE");
     const originRoot = flags.get("--origin-root") ?? fail("USAGE");
-    const producerRoot = flags.get("--producer-root") ?? fail("USAGE");
     const identity = bindMissingOnlyProducerIdentityV1({ producerGitSha: producerSha, sourceRoot });
-    const origin = createOriginReadOnlyPortV1(originRoot);
-    const journal = createProducerJournalV1(producerRoot, identity);
     const surfaceKey = requiredSurfaceKey(flags.get("--surface"));
     const anchorsPath = flags.get("--anchors-json") ?? fail("ANCHORS");
     if (!isAbsolute(anchorsPath)) fail("ANCHORS");
     const sourceCorpus = JSON.parse(readFileSync(anchorsPath, "utf8")) as SourceAnchor[];
     if (mode === "enumerate") {
+      const producerRoot = flags.get("--producer-root") ?? fail("USAGE");
+      const origin = createOriginReadOnlyPortV1(originRoot);
+      const journal = createProducerJournalV1(producerRoot, identity);
       const missing = enumerateMissingWfForecastBatchesV1({
         envelope,
         surfaceKey,
@@ -84,13 +112,74 @@ export function runMissingOnlyForecastProducerCliV1(args: string[]): number {
       );
       return 0;
     }
-    if (mode === "control" || mode === "issue") fail("BUILDER_FALLBACK");
+    if (mode === "control" || mode === "issue") {
+      requireRuntime(flags, identity);
+      if (identity.producerGitSha === envelope.mapping.O.releaseSha) fail("O_P_COLLAPSE");
+      const packageRoot = requiredAbsolute(flags.get("--package-root"), "PACKAGE_ROOT");
+      const offset = parseOffset(flags.get("--offset"));
+      const origin = createOriginReadOnlyPortV1(originRoot);
+      const pkg = loadSelectedPreservedPackageV1({ envelope, surfaceKey, packageRoot });
+      if (mode === "control") {
+        const result = issueControlForecastBatchV1({
+          envelope,
+          identity,
+          surfaceKey,
+          pkg,
+          sourceCorpus,
+          offset,
+        });
+        process.stdout.write(
+          `${JSON.stringify({
+            format: "waia.trader.missing_only_forecast_producer.control.v1",
+            authorityGranted: false,
+            surface: result.surfaceKey,
+            offset: result.offset,
+            rowCount: result.rowCount,
+            rowsSha256: result.rowsSha256,
+            identity: result.identity,
+          })}\n`,
+        );
+        return 0;
+      }
+      const producerRoot = flags.get("--producer-root") ?? fail("USAGE");
+      const producerEvidenceRoot = requiredAbsolute(
+        flags.get("--producer-evidence-root"),
+        "EVIDENCE_ROOT",
+      );
+      const journal = createProducerJournalV1(producerRoot, identity);
+      const result = issueMissingForecastBatchV1({
+        envelope,
+        identity,
+        origin,
+        journal,
+        producerEvidenceRoot,
+        surfaceKey,
+        pkg,
+        sourceCorpus,
+        offset,
+        retryIncomplete: flags.get("--retry-incomplete") === "true",
+      });
+      process.stdout.write(
+        `${JSON.stringify({
+          format: "waia.trader.missing_only_forecast_producer.issue.v1",
+          authorityGranted: false,
+          surface: result.surfaceKey,
+          offset: result.offset,
+          rowCount: result.rowCount,
+          producerKey: result.producerKey,
+          payloadDigest: result.payloadDigest,
+          rowsSha256: result.rowsSha256,
+        })}\n`,
+      );
+      return 0;
+    }
     return fail("USAGE");
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     process.stderr.write(
       /^MISSING_ONLY_FORECAST_PRODUCER_REFUSED:[A-Z_]+$/.test(message) ||
-        /^G1_TRUSTED_ORIGIN_MAPPING_REFUSED:[A-Z_]+$/.test(message)
+        /^G1_TRUSTED_ORIGIN_MAPPING_REFUSED:[A-Z_]+$/.test(message) ||
+        /^SCIENTIFIC_CHECKPOINT_REFUSED:[A-Z_]+$/.test(message)
         ? `${message}\n`
         : "MISSING_ONLY_FORECAST_PRODUCER_REFUSED\n",
     );

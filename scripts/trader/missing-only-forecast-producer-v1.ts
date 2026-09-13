@@ -25,7 +25,10 @@ import {
   reuseScientificEvidenceV1,
   withScientificCheckpointsV1,
 } from "../../lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
-import { createScientificCheckpointStoreV1 } from "./scientific-checkpoint-store-v1";
+import {
+  createScientificCheckpointStoreV1,
+  readPreservedScientificPackageNoBuildV1,
+} from "./scientific-checkpoint-store-v1";
 import { deriveScientificCheckpointKeyV1 } from "./scientific-checkpoint-key-v1";
 import { buildPreservedWfExpectedInventoryV1 } from "./preserved-wf-inventory-v1";
 import {
@@ -172,7 +175,12 @@ export function bindMissingOnlyProducerIdentityV1(input: {
 
 export function createOriginReadOnlyPortV1(originRoot: string) {
   if (!isAbsolute(originRoot) || resolve(originRoot) === "/") fail("ORIGIN_ROOT");
-  const root = realpathSync(originRoot);
+  let root: string;
+  try {
+    root = realpathSync(originRoot);
+  } catch {
+    fail("ORIGIN_ROOT");
+  }
   privateDirectory(root);
   const refuseWrite = (): never => fail("ORIGIN_WRITE");
   return Object.freeze({
@@ -377,6 +385,32 @@ export function enumerateMissingWfForecastBatchesV1(input: {
     );
   }
   return Object.freeze(missing);
+}
+
+export function loadSelectedPreservedPackageV1(input: {
+  envelope: G1TrustedOriginMappingEnvelopeV1;
+  surfaceKey: G1TrustedOriginSurfaceV1["surfaceKey"];
+  packageRoot: string;
+}): PredictivePackageV1 {
+  refuseBuilderFallback(input);
+  if (!isAbsolute(input.packageRoot) || resolve(input.packageRoot) === "/") fail("PACKAGE_ROOT");
+  const surface =
+    input.envelope.mapping.surfaces.find((entry) => entry.surfaceKey === input.surfaceKey) ??
+    fail("SURFACE");
+  const pkg = (() => {
+    try {
+      return readPreservedScientificPackageNoBuildV1(
+        input.packageRoot,
+        surface.selectedPackage.packageKey,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const reason = /^SCIENTIFIC_CHECKPOINT_REFUSED:([A-Z_]+)$/.exec(message)?.[1];
+      return fail(reason ?? "PACKAGE");
+    }
+  })();
+  bindSelectedPackage(surface, pkg, input.envelope.mapping.O.organizationId);
+  return pkg;
 }
 
 function bindSelectedPackage(
