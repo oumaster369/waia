@@ -62,7 +62,7 @@ describe("read-only saved-score diagnostic", () => {
     return { packageKey: key, releaseSha: sha, contentDigestHex: input.header.contentDigestHex,
       developmentDatasetDigestHex: input.header.developmentDatasetDigestHex, evaluationPartitionReceiptDigestHex: evaluation,
       comparisonFamilyId: comparison, forecastCount: 2,
-      originalCompletedTrialIds: ["climatology/v1", "gaussian-pop-std/v1", "student-t5-nu5/v1"].map(baselineId => computeTrialIdentityDigestV2({
+      originalCompletedTrialIds: ["climatology/v1", "gaussian-pop-std/v2", "student-t5-nu5/v1"].map(baselineId => computeTrialIdentityDigestV2({
         scoringContractVersion: "multiclass-log-score/v1", evaluationPartitionReceiptDigestHex: evaluation,
         venue: "htx", market: "spot", symbol: "BTCUSDT", primaryHorizonMinutes: 30,
         modelTransformVersion: "rv-state-conditional-empirical-joint/v1", challengerPackageContentDigestHex: input.header.contentDigestHex,
