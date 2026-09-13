@@ -47,11 +47,18 @@ export {
   observedNullCenteredBootstrapStatistic,
   VALIDATION_BOOTSTRAP_B,
   VALIDATION_BOOTSTRAP_MONTE_CARLO_DENOMINATOR,
+  VALIDATION_BOOTSTRAP_RANGE_SIZE,
   VALIDATION_BOOTSTRAP_VERSION,
   validationBootstrapPValueV1,
   validationBootstrapResampleV1,
 } from "./validation-bootstrap-v1";
 export type { ValidationBootstrapNullCenteredResultV1 } from "./validation-bootstrap-v1";
+export {
+  VALIDATION_BOOTSTRAP_DURABLE_RECORD_VERSION,
+  VALIDATION_BOOTSTRAP_DURABLE_SCHEDULER_VERSION,
+  aggregateValidationBootstrapCoverageV1,
+  refuseNativeBootstrapLedgerAdmissionV1,
+} from "./validation-bootstrap-durable-v1";
 
 export const RESEARCH_HARNESS_VERSION = "research-harness/v1" as const;
 
