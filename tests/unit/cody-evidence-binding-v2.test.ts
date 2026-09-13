@@ -90,6 +90,8 @@ describe("DEE-993 current evidence cannot admit legacy/mixed Cody results", () =
     expect(PREDICTIVE_TERMINAL_CHECKPOINT_STAGE).toBe("wf-predictive-terminal-v3");
     const source=readFileSync("lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts","utf8");
     expect(source).toContain("reuseScientificEvidenceAsyncV1(PREDICTIVE_TERMINAL_CHECKPOINT_STAGE,");
+    expect(source).toContain("resolveScientificEvidenceAsyncV1(");
+    expect(source).toContain("PREDICTIVE_TERMINAL_CHECKPOINT_STAGE,");
     expect(source).toContain("cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST");
     expect(source.indexOf("validatePredictiveTerminalReceipt(predictive)")).toBeLessThan(
       source.indexOf('if (predictive.terminalStatus !== "QUALIFIED")'));

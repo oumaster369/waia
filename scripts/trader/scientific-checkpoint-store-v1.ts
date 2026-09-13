@@ -80,9 +80,15 @@ type Seal = { format: typeof FORMAT; key: string; kind: "package" | "evidence";
  * Incomplete .partial directories are retained as evidence, never admitted as hits.
  * Cache files are computation artifacts only; all final SQL admission checks still run.
  */
-export function createScientificCheckpointStoreV1(root: string, releaseSha: string): ScientificCheckpointStoreV1 {
+export function createScientificCheckpointStoreV1(
+  root: string, releaseSha: string,
+  runtime?: Readonly<{ node: string; os: string; arch: string }>,
+): ScientificCheckpointStoreV1 {
   if (process.release?.name !== "node" || process.env.WAIA_TRADER_CLI !== "1") fail("NODE_CLI");
   if (!isAbsolute(root) || resolve(root) === "/" || !/^[a-f0-9]{40}$/.test(releaseSha)) fail("CONFIG");
+  const resolvedRuntime = runtime ?? { node: process.version, os: process.platform, arch: process.arch };
+  if (runtime && (!/^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(resolvedRuntime.node) ||
+      !/^[a-z0-9_]+$/.test(resolvedRuntime.os) || !/^[a-z0-9_]+$/.test(resolvedRuntime.arch))) fail("RUNTIME");
   mkdirSync(root, { recursive: true, mode: 0o700 }); privatePath(root, true);
   if (realpathSync(root) !== resolve(root)) fail("ROOT_SYMLINK");
   const keyPath = join(root, ".seal-key");
@@ -93,7 +99,7 @@ export function createScientificCheckpointStoreV1(root: string, releaseSha: stri
   const secret = readBounded(keyPath, 32); if (secret.length !== 32) fail("SEAL_KEY");
   const sign = (body: string) => createHmac("sha256", secret).update(body).digest("hex");
   const identity = (stage: string, input: unknown) => inputDigest({ format: FORMAT, releaseSha,
-    runtime: { node: process.version, os: process.platform, arch: process.arch }, stage, input });
+    runtime: { node: resolvedRuntime.node, os: resolvedRuntime.os, arch: resolvedRuntime.arch }, stage, input });
   const readSeal = (dir: string, key: string, kind: Seal["kind"]): Seal => {
     privatePath(dir, true);
     const envelope = JSON.parse(readBounded(join(dir, "seal.json"), MAX_METADATA_BYTES).toString("utf8")) as
