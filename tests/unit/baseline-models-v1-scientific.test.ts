@@ -44,7 +44,7 @@ describe("DEE-531 baseline scientific protocol", () => {
   });
 
   it("gaussian-pop-std uses location 0", () => {
-    const baseline = evaluateMandatoryBaselineV1("gaussian-pop-std/v1", context);
+    const baseline = evaluateMandatoryBaselineV1("gaussian-pop-std/v2", context);
     expect(baseline.status).toBe("AVAILABLE");
   });
 
@@ -98,7 +98,7 @@ describe("DEE-531 baseline scientific protocol", () => {
       history: values,
       historyMinuteOpenTimesMs: times,
     });
-    expect(evaluateMandatoryBaselineV1("ewma-lambda094/v2", invalid)).toEqual({
+    expect(evaluateMandatoryBaselineV1("ewma-lambda094/v3", invalid)).toEqual({
       status: "UNAVAILABLE",
       reason: "EWMA_WARMUP_INSUFFICIENT",
     });
@@ -110,11 +110,11 @@ describe("DEE-531 baseline scientific protocol", () => {
       history: Array.from({ length: 2000 }, () => 0.01),
       historyMinuteOpenTimesMs: minuteTimes(2000),
     });
-    expect(evaluateMandatoryBaselineV1("ewma-lambda094/v2", invalid).status).toBe("UNAVAILABLE");
+    expect(evaluateMandatoryBaselineV1("ewma-lambda094/v3", invalid).status).toBe("UNAVAILABLE");
   });
 
   it("pins v2 identity and applies sqrt(h) horizon scaling", () => {
-    expect(MANDATORY_BASELINE_IDS).toContain("ewma-lambda094/v2");
+    expect(MANDATORY_BASELINE_IDS).toContain("ewma-lambda094/v3");
     expect(MANDATORY_BASELINE_IDS).not.toContain("ewma-lambda094/v1" as never);
     const values = Array.from({ length: 2000 }, () => 0.01);
     const base = {
@@ -123,11 +123,11 @@ describe("DEE-531 baseline scientific protocol", () => {
       historyMinuteOpenTimesMs: minuteTimes(values.length),
     };
     const at30 = evaluateMandatoryBaselineV1(
-      "ewma-lambda094/v2",
+      "ewma-lambda094/v3",
       buildBaselineContextFromDevelopment({ ...base, primaryHorizonMinutes: 30 }),
     );
     const at60 = evaluateMandatoryBaselineV1(
-      "ewma-lambda094/v2",
+      "ewma-lambda094/v3",
       buildBaselineContextFromDevelopment({ ...base, primaryHorizonMinutes: 60 }),
     );
     expect(at30.status).toBe("AVAILABLE");

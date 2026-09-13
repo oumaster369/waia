@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import type postgres from "postgres";
+import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
+import { createPreparationAttemptJournalV2, readPreparationAttemptV2 } from "./preparation-attempt-events-v2";
 import { assertTechnicalPreparationActiveV2, snapshotTechnicalPreparationObserverV2,
   type TechnicalPreparationObserverV2 } from "./technical-preparation-observer-v2";
 
@@ -152,6 +154,7 @@ export function assertHistoricalTechnicalProposalV2(proposal: HistoricalTechnica
       candidate.runId !== proposal.runId || candidate.releaseSha !== proposal.releaseSha) {
     refuse("TECHNICAL_CANDIDATE_BINDING");
   }
+  assertLaunchPlanWithinQualifiedEconomicPartition(proposal.launchPlan, candidate);
 }
 
 function validateLaunchPlan(plan: HistoricalTechnicalLaunchPlanV2): void {
@@ -167,14 +170,18 @@ function validateLaunchPlan(plan: HistoricalTechnicalLaunchPlanV2): void {
   }
 }
 
-function assertLaunchPlanWithinQualifiedEconomicPartition(
+export function assertLaunchPlanWithinQualifiedEconomicPartition(
   plan: HistoricalTechnicalLaunchPlanV2,
   candidate: HistoricalFourSurfaceTechnicalCandidateV2,
 ): void {
+  validateLaunchPlan(plan);
   const first = candidate.firstEconomicRecordIndex;
   const count = candidate.economicRecordCount;
-  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(count) || first < 240 || count < 1 ||
-      plan.initialRecordIndex < first || plan.initialRecordIndex >= first + count ||
+  // Bootstrap reconstructs state at this exact boundary, not an arbitrary
+  // in-partition offset. Resume is a separate durable-cursor path.
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(count) ||
+      !Number.isSafeInteger(first + count) || first < 240 || count < 1 ||
+      plan.initialRecordIndex !== first ||
       plan.cycleCount > first + count - plan.initialRecordIndex) {
     refuse("LAUNCH_PLAN_OUTSIDE_QUALIFIED_ECONOMIC_PARTITION");
   }
@@ -283,11 +290,32 @@ export async function readHistoricalTechnicalProposalForAdminV2(
   sql: postgres.Sql,
   input: Readonly<{ organizationId: string; runId: string; releaseSha: string;
     authenticatedOperatorUserId: string }>,
-): Promise<Readonly<{ requestId: string; proposalId: string;
-  proposal: HistoricalTechnicalProposalV2; ratified: boolean }>> {
+): Promise<Readonly<{ preparationState: "NOT_REQUESTED"; proposalAvailable: false }> |
+  Readonly<{ preparationState: "REQUEST_RECORDED"; proposalAvailable: false;
+    requestId: string; requestedExtent: HistoricalRatificationRequestV2["executionExtent"];
+    preparationAttempt?: Awaited<ReturnType<typeof readPreparationAttemptV2>> }> |
+  Readonly<{ preparationState: "PROPOSAL_AVAILABLE"; proposalAvailable: true;
+    requestId: string; proposalId: string;
+    proposal: HistoricalTechnicalProposalV2; ratified: boolean }>> {
   assertScope(input);
   if (!UUID.test(input.authenticatedOperatorUserId)) refuse("ACTOR");
-  const request = await loadRequest(sql, input);
+  const requests = await sql<RequestRow[]>`
+    SELECT id::text AS id,request_json,content_digest_hex
+    FROM trader_historical_ratification_request_v2
+    WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
+      AND release_sha=${input.releaseSha}
+  `;
+  if (requests.length === 0) return Object.freeze({
+    preparationState: "NOT_REQUESTED", proposalAvailable: false });
+  const row = requests[0];
+  if (requests.length !== 1 || !row ||
+      row.content_digest_hex !== row.request_json.contentDigestHex) refuse("REQUEST_INTEGRITY");
+  assertSealed(row.request_json, HISTORICAL_RATIFICATION_REQUEST_V2);
+  const request = { id: row.id, request: row.request_json };
+  if (request.request.organizationId !== input.organizationId ||
+      request.request.runId !== input.runId || request.request.releaseSha !== input.releaseSha) {
+    refuse("REQUEST_SCOPE_BINDING");
+  }
   if (request.request.operatorUserId !== input.authenticatedOperatorUserId) {
     refuse("ACTOR_BINDING");
   }
@@ -298,6 +326,14 @@ export async function readHistoricalTechnicalProposalForAdminV2(
       AND release_sha=${input.releaseSha}
     FOR SHARE
   `;
+  if (proposals.length === 0) {
+    const preparationAttempt = await readPreparationAttemptV2(sql, { ...input,
+      requestId: request.id, requestContentDigestHex: request.request.contentDigestHex });
+    return Object.freeze({ preparationState: "REQUEST_RECORDED", proposalAvailable: false,
+      requestId: request.id, requestedExtent: Object.freeze({ ...request.request.executionExtent }),
+      ...(preparationAttempt ? { preparationAttempt } : {}),
+    });
+  }
   const proposal = proposals[0];
   if (proposals.length !== 1 || !proposal ||
       proposal.proposal_json.requestId !== request.id ||
@@ -313,7 +349,8 @@ export async function readHistoricalTechnicalProposalForAdminV2(
         AND proposal_content_digest_hex=${proposal.content_digest_hex}
     ) AS present
   `;
-  return Object.freeze({ requestId: request.id, proposalId: proposal.id,
+  return Object.freeze({ preparationState: "PROPOSAL_AVAILABLE", proposalAvailable: true,
+    requestId: request.id, proposalId: proposal.id,
     proposal: proposal.proposal_json, ratified: approvals[0]?.present === true });
 }
 
@@ -322,16 +359,27 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
   input: Readonly<{ preflight: KmFourSurfaceProductionPreflightInputV2;
     launchPlan: HistoricalTechnicalLaunchPlanV2 }>,
   requestedObserver: TechnicalPreparationObserverV2 = {},
+  preparationEventsPool?: postgres.Sql,
 ): Promise<Readonly<{ id: string; proposal: HistoricalTechnicalProposalV2 }>> {
   assertScope(input.preflight);
   validateLaunchPlan(input.launchPlan);
-  const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
+  if (preparationEventsPool === pool) refuse("PREPARATION_JOURNAL_SEPARATE_POOL_REQUIRED");
+  const baseObserver = snapshotTechnicalPreparationObserverV2(requestedObserver);
+  let journal: Awaited<ReturnType<typeof createPreparationAttemptJournalV2>> | undefined;
+  const observer = { ...baseObserver, flushProgress: preparationEventsPool || baseObserver.flushProgress ? async () => {
+      await journal?.flush();
+      await baseObserver.flushProgress?.();
+    } : undefined, onProgress: baseObserver.onProgress || preparationEventsPool
+    ? (event: Parameters<NonNullable<TechnicalPreparationObserverV2["onProgress"]>>[0]) => {
+      journal?.progress(event); baseObserver.onProgress?.(event);
+    } : undefined };
   const reserved = await pool.reserve();
   const sql = bindPostgresReservedSession(pool, reserved);
   let assumed = false;
   let locked = false;
   const lockKey = historicalDatasetAuthorityRunLockKeyV2(input.preflight);
   try {
+  const result = await withHistoricalLaunchCleanupV2(async () => {
     await requireHistoricalSimulationRunnerLoginV2(sql);
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
@@ -342,6 +390,11 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
     if (request.request.executionExtent.initialRecordIndex !== input.launchPlan.initialRecordIndex ||
         request.request.executionExtent.cycleCount !== input.launchPlan.cycleCount) {
       refuse("REQUEST_EXECUTION_EXTENT");
+    }
+    if (preparationEventsPool) {
+      journal = await createPreparationAttemptJournalV2(preparationEventsPool, {
+        ...input.preflight, requestId: request.id,
+        requestContentDigestHex: request.request.contentDigestHex });
     }
     const technicalCandidate =
       await INTERNAL_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2(
@@ -387,13 +440,24 @@ export async function prepareHistoricalTechnicalProposalOnExecutionServerV2(
       refuse("PROPOSAL_CONFLICT");
     }
     assertHistoricalTechnicalProposalV2(row.proposal_json);
+    await journal?.complete(row.id);
     return Object.freeze({ id: row.id, proposal: row.proposal_json });
-  } finally {
-    try {
+  }, [
+    async () => {
       if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-      if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql);
+    },
+    async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
+    () => reserved.release(),
+  ]);
+  return result;
+  } catch (error) {
+    if (journal) {
+      try { await journal.fail(error); }
+      catch (journalError) {
+        throw new AggregateError([error, journalError], "HISTORICAL_PREPARATION_AND_JOURNAL_FAILURE");
+      }
     }
-    finally { reserved.release(); }
+    throw error;
   }
 }
 
@@ -414,7 +478,7 @@ export async function TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionSer
   let assumed = false;
   let locked = false;
   const lockKey = historicalDatasetAuthorityRunLockKeyV2(input.preflight);
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
     await sql`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
@@ -452,13 +516,13 @@ export async function TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionSer
         ${HISTORICAL_TECHNICAL_PROPOSAL_V2})
     `;
     return Object.freeze({ id, proposal });
-  } finally {
-    try {
+  }, [
+    async () => {
       if (locked) await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-      if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql);
-    }
-    finally { reserved.release(); }
-  }
+    },
+    async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
+    () => reserved.release(),
+  ]);
 }
 
 export async function ratifyHistoricalTechnicalProposalV2(sql: postgres.Sql, input: Readonly<{
@@ -544,8 +608,7 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
   const sql = bindPostgresReservedSession(pool, reserved);
   let assumed = false;
   let locked = false;
-  let operationFailed = false;
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     await assumeHistoricalSimulationRunnerRoleV2(sql);
     assumed = true;
     const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
@@ -644,26 +707,16 @@ async function finalizeApprovedHistoricalProposalWithMaterializerV2(
         authorityId: bootstrap.ratifiedAuthorityId,
         manifest: Object.freeze({ ...body, contentDigestHex: computeSemanticSha256Hex(body) }),
       });
-  } catch (error) {
-    operationFailed = true;
-    throw error;
-  } finally {
-    let cleanupError: unknown;
-    try {
+  }, [
+    async () => {
       if (locked) {
-        try {
-          const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
-          await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
-        } catch (error) { cleanupError ??= error; }
+        const lockKey = historicalDatasetAuthorityRunLockKeyV2(scope);
+        await sql`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
       }
-      if (assumed) {
-        try { await resetHistoricalSimulationRunnerRoleV2(sql); }
-        catch (error) { cleanupError ??= error; }
-      }
-    }
-    finally { reserved.release(); }
-    if (!operationFailed && cleanupError) throw cleanupError;
-  }
+    },
+    async () => { if (assumed) await resetHistoricalSimulationRunnerRoleV2(sql); },
+    () => reserved.release(),
+  ]);
 }
 
 export function finalizeApprovedHistoricalProposalOnExecutionServerV2(

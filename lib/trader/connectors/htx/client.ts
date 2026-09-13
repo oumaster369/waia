@@ -79,7 +79,21 @@ export class HtxRestClient {
     const response = await this.signedGet<HtxLegacyResponse<HtxAccountRow[]>>(
       HTX_ENDPOINTS.accounts,
     );
-    return response.data ?? [];
+    if (
+      !Array.isArray(response.data) ||
+      response.data.some(
+        (row) =>
+          row === null ||
+          typeof row !== "object" ||
+          !Number.isSafeInteger(row.id) ||
+          row.id <= 0 ||
+          typeof row.type !== "string" ||
+          typeof row.state !== "string",
+      )
+    ) {
+      throw new HtxApiError("invalid-response", "HTX accounts response has invalid identity data");
+    }
+    return response.data;
   }
 
   async getAccountBalance(accountId: string): Promise<HtxAccountBalance> {
@@ -180,7 +194,11 @@ export class HtxRestClient {
 
   async getUserUid(): Promise<number> {
     const response = await this.signedGet<HtxV2Response<number>>(HTX_ENDPOINTS.userUid);
-    if (typeof response.data !== "number") {
+    if (
+      typeof response.data !== "number" ||
+      !Number.isSafeInteger(response.data) ||
+      response.data <= 0
+    ) {
       throw new HtxApiError("empty-response", "HTX uid response missing data");
     }
     return response.data;
@@ -191,8 +209,19 @@ export class HtxRestClient {
       uid: String(uid),
       accessKey: this.apiKey,
     });
-    const rows = response.data ?? [];
-    return rows.find((row) => row.accessKey === this.apiKey) ?? rows[0] ?? null;
+    if (
+      !Array.isArray(response.data) ||
+      response.data.some(
+        (row) => row === null || typeof row !== "object" || typeof row.accessKey !== "string",
+      )
+    ) {
+      throw new HtxApiError("invalid-response", "HTX API-key response has invalid identity data");
+    }
+    const matchingRows = response.data.filter((row) => row.accessKey === this.apiKey);
+    if (matchingRows.length > 1) {
+      throw new HtxApiError("ambiguous-api-key", "HTX returned duplicate API-key identities");
+    }
+    return matchingRows[0] ?? null;
   }
 
   async getMarketDetailMerged(symbol: string): Promise<HtxMarketMergedResponse> {

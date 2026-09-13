@@ -7,6 +7,7 @@ import {
   computeSemanticSha256Hex,
 } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { orgScopedPostgresPredicate } from "@/lib/waia-core/scope/org-context";
+import { SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION } from "@/lib/trader/research/execopp-qualification/scientific-admission-v2";
 
 import {
   type ForecastInputContractV2,
@@ -164,7 +165,7 @@ export async function persistForecastContractBindingV1(
     FROM trader_scientific_admission_receipt_v1
     WHERE ${orgScopedPostgresPredicate(sql, binding.organizationId)}
       AND id = ${binding.scientificAdmissionReceiptId}::uuid
-      AND schema_version = 'scientific-admission-receipt/v2'
+      AND schema_version = ${SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION}
   `;
   const receipt = receipts[0];
   if (

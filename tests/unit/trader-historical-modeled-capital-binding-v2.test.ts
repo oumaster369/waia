@@ -206,7 +206,8 @@ describe("historical modeled capital binding v2", () => {
     });
     expect(advance).toHaveBeenCalledOnce();
     expect(projection.accounting.frontierContentDigestHex).toBe(frontier("1").semanticContentDigest);
-    expect(projection.guardian.status).toBe("NONE");
+    // The ledger must retain the same CLOSE_ONLY protection used to admit this strict reduction.
+    expect(projection.guardian.status).toBe("CLOSE_ONLY");
     expect(evidence.find((row) => row.schemaVersion === "waia.trader.historical_modeled_guardian.v2"))
       .toEqual(expect.objectContaining({ reconciledExposureNotional: "100", exposureLimitNotional: "1000" }));
     expect(binding.portfolioLifecycleForCycle(cycle.cycleId)).toEqual(expect.objectContaining({

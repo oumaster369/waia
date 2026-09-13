@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { withHistoricalLaunchCleanupV2 } from "./launch-cleanup-v2";
 
 import type { HistoricalSimulationRunLifecycleEventV2 } from "./run-lifecycle-v2";
 import type { HistoricalSimulationRunLifecyclePortV2 } from "./launch-orchestrator-v2";
@@ -93,7 +94,7 @@ export async function runHistoricalSimulationLaunchConsumerCliV2(
   const config = parseHistoricalSimulationLaunchConsumerCliEnvV2(env);
   const opened = await dependencies.openDatabase(config.databaseUrl);
   let runnerRoleAssumed = false;
-  try {
+  return withHistoricalLaunchCleanupV2(async () => {
     if (dependencies.requireRunnerLogin) {
       await dependencies.requireRunnerLogin(opened.sql);
     }
@@ -107,7 +108,7 @@ export async function runHistoricalSimulationLaunchConsumerCliV2(
       lifecycle: dependencies.createLifecycle(opened.sql),
       signal,
     });
-  } finally {
+  }, [async () => {
     if (runnerRoleAssumed) {
       try {
         await dependencies.releaseLease(opened.sql, {
@@ -123,6 +124,5 @@ export async function runHistoricalSimulationLaunchConsumerCliV2(
         // A closed reserved session cannot retain role state or advisory locks.
       }
     }
-    await opened.close();
-  }
+  }, () => opened.close()]);
 }

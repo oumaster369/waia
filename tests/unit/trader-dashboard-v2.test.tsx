@@ -161,7 +161,8 @@ describe("Trader Dashboard V2", () => {
     expect(screen.getAllByText(/KNOWLEDGE_BOUND/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/scope mismatch/i)).not.toBeInTheDocument();
     act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify({...base,lifecycle:null,eventId:"legacy-no-lifecycle",aggregate:{...base.aggregate,accountCount:1,processedRecords:1,latestCycleSequence:0},accounts:[account]})})));
-    expect(screen.getByRole("status")).toHaveTextContent("start/completion status cannot be confirmed");
+    expect(screen.getByText(/start\/completion status cannot be confirmed/)).toHaveAttribute("role", "status");
+    expect(screen.getByText(/Pending-order evidence unavailable/)).toHaveAttribute("role", "status");
     expect(screen.queryByText("No run has started.", { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText("Complete reason journal · 1 committed cycles")).toBeInTheDocument();
   });

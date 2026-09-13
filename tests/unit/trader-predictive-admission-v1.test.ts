@@ -43,7 +43,7 @@ function scientificFixture() {
     predictivePackageGenerationIdentityDigestHex: hex("3"),
     predictivePackageContentDigestHex: hex("4"),
     runtimeContractDigestHex: hex("5"),
-    scoringContractVersion: "multiclass-log-score/v1" as const,
+    scoringContractVersion: "multiclass-brier-reward/v1" as const,
     evaluationPartitionReceiptDigestHex: hex("6"),
   };
   const developmentReturns = Array.from(

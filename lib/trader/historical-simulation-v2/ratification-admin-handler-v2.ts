@@ -84,24 +84,14 @@ export async function handleHistoricalRatificationAdminGetV2(
     authRuntime = auth.runtime;
     if (!auth.ok) return auth.result;
     opened = deps.openRatification?.() ?? productionService();
-    let result: Awaited<ReturnType<RatificationAdminPortV2["read"]>> | null = null;
-    try {
-      result = await opened.service.read({ ...scope,
-        authenticatedOperatorUserId: auth.userId });
-    } catch (error) {
-      if (!(error instanceof Error) || ![
-        "HISTORICAL_RATIFICATION_SPLIT_REFUSED:REQUEST_MISSING",
-        "HISTORICAL_RATIFICATION_SPLIT_REFUSED:PROPOSAL_MISSING",
-      ].includes(error.message)) {
-        throw error;
-      }
-    }
+    const result = await opened.service.read({ ...scope,
+      authenticatedOperatorUserId: auth.userId });
     const csrfToken = createFhvAdminCsrfToken(
       requireFhvCsrfSecret(deps.env ?? process.env), scope.organizationId, auth.userId,
     );
     return { status: 200, outcome: "success", waiaDbBackend: auth.runtime.kind,
       body: { schemaVersion: "waia.trader.historical_ratification_review_response.v2",
-        proposalAvailable: result !== null, ...(result ?? {}) },
+        ...result },
       responseHeaders: {
         "Set-Cookie": buildFhvAdminCsrfSetCookieHeader(
           csrfToken, isFhvProductionRuntime(deps.env ?? process.env),

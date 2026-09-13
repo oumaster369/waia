@@ -19,9 +19,15 @@ export async function POST() {
 
   const pendingCookies: SupabaseCookiePatch[] = [];
   if (isSupabaseAuthConfigured()) {
-    const supabase = await createSupabaseRouteHandlerClient(pendingCookies);
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      const supabase = await createSupabaseRouteHandlerClient(pendingCookies);
+      if (!supabase) throw new Error("Auth provider unavailable");
+      const { error } = await supabase.auth.signOut();
+      if (error) throw new Error("Auth provider sign-out failed");
+    } catch {
+      // A provider failure may be partial. Do not claim success or erase the
+      // local session as if every authentication backend had acknowledged it.
+      return NextResponse.json({ ok: false, error: "SIGN_OUT_NOT_CONFIRMED" }, { status: 503 });
     }
   }
 

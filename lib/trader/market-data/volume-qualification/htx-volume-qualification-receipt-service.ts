@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import type postgres from "postgres";
 
@@ -80,7 +81,10 @@ export async function persistHtxVolumeQualificationReceipt(
   if (existing[0]) {
     const row = existing[0];
     const prior = row.receipt_json;
-    if (JSON.stringify(prior) !== JSON.stringify(receipt)) {
+    // JSONB does not preserve object insertion order. Compare complete JSON
+    // values, retaining every persisted field and array order; keep the existing
+    // receipt digest/validator unchanged. This small receipt is not a Forecast package.
+    if (!isDeepStrictEqual(prior, JSON.parse(JSON.stringify(receipt)))) {
       throw new HtxVolumeQualificationPersistConflictError(
         "conflicting HTX volume qualification receipt for identical digest key",
       );

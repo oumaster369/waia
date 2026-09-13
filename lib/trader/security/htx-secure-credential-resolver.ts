@@ -39,6 +39,13 @@ export function resolveHtxSecureCredential(
 
   validateHtxConnectorCredentialInput(input.credentials);
 
+  if (!input.exchangeAccountId.trim()) {
+    throw new HtxConnectorValidationError(
+      "ACCOUNT_ID_MISMATCH",
+      "HTX stored credentials require a non-empty exchange account identity",
+    );
+  }
+
   const metadata =
     parseHtxPermissionMetadata(input.permissionMetadata) ??
     ({
@@ -74,5 +81,6 @@ export function toHtxExchangeConnectorConfig(
   return {
     apiKey: resolved.apiKey,
     apiSecret: resolved.apiSecret,
+    expectedSpotAccountId: resolved.spotAccountId,
   };
 }

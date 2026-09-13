@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { TraderLandingPage } from "@/components/trader/public/trader-landing-page";
+import { AuthBlock } from "@/components/landing/AuthBlock";
 
 const { routerReplace } = vi.hoisted(() => ({ routerReplace: vi.fn() }));
 
@@ -80,5 +81,33 @@ describe("TraderLandingPage", () => {
     render(<TraderLandingPage initialOauthErrorCode="state_invalid" />);
 
     expect(screen.getByTestId("landing-auth-error")).toHaveAttribute("role", "alert");
+  });
+
+  it("uses Trader registration copy in both modes without changing fields or validation", async () => {
+    render(<TraderLandingPage />);
+    const auth = screen.getByTestId("landing-auth");
+    expect(auth.textContent).not.toMatch(/twin/i);
+    expect(screen.getByTestId("landing-auth-mode-create")).toHaveTextContent("Register");
+    fireEvent.click(screen.getByTestId("landing-auth-mode-create"));
+    expect(screen.getByRole("heading", { name: "Register for AI-TRADER" })).toBeInTheDocument();
+    expect(auth.textContent).not.toMatch(/twin|partner preview/i);
+    expect(screen.getByTestId("landing-auth-full-name")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-auth-password")).toHaveAttribute("autocomplete", "new-password");
+    expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Register");
+    fireEvent.click(screen.getByTestId("landing-auth-submit"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter your name.");
+    fireEvent.click(screen.getByTestId("landing-auth-mode-sign-in"));
+    expect(screen.getByRole("heading", { name: "Sign in to AI-TRADER" })).toBeInTheDocument();
+    expect(auth.textContent).not.toMatch(/twin/i);
+    expect(screen.getByTestId("landing-auth-password")).toHaveAttribute("autocomplete", "current-password");
+  });
+
+  it("preserves the primary WAIA Twin registration copy", () => {
+    render(<AuthBlock />);
+    expect(screen.getByRole("heading", { name: "Create your AI-Twin" })).toBeInTheDocument();
+    expect(screen.getByTestId("landing-auth-mode-create")).toHaveTextContent("Create Twin");
+    expect(screen.getByTestId("landing-auth-submit")).toHaveTextContent("Create your Twin");
+    fireEvent.click(screen.getByTestId("landing-auth-mode-sign-in"));
+    expect(screen.getByTestId("landing-auth-switch-to-create-twin")).toHaveTextContent("Create your Twin");
   });
 });

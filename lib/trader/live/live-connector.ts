@@ -45,11 +45,15 @@ export async function createLiveHtxConnector(
   const connector = createExchangeConnector("htx", {
     credentials: toHtxExchangeConnectorConfig(resolved),
     fetchImpl: input.fetchImpl,
+    expectedSpotAccountId: resolved.spotAccountId,
   });
-  await connector.validateCredentials({
+  const validation = await connector.validateCredentials({
     apiKey: resolved.apiKey,
     apiSecret: resolved.apiSecret,
   });
+  if (!validation.valid || validation.accountId !== resolved.spotAccountId) {
+    throw new Error("[trader/live] HTX exact stored account admission failed");
+  }
   return connector;
 }
 

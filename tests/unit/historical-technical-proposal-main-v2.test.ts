@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ end: vi.fn(), prepare: vi.fn(), connect: vi.fn() }));
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+const mocks = vi.hoisted(() => ({ end: vi.fn(), eventsEnd: vi.fn(), prepare: vi.fn(), connect: vi.fn() }));
 vi.mock("postgres", () => ({ default: mocks.connect }));
-vi.mock("@/db/postgres-client", () => ({ waiaCampaignPostgresDriverOptions: () => ({ max: 2 }) }));
+vi.mock("@/db/postgres-client", () => ({ waiaCampaignPostgresDriverOptions: () => ({ max: 1 }) }));
 vi.mock("@/lib/trader/historical-simulation-v2/ratification-split-v2", () => ({
   prepareHistoricalTechnicalProposalOnExecutionServerV2: mocks.prepare,
   CURRENT_FHV_FIRST_ECONOMIC_RECORD_INDEX_V2: 525600,
@@ -9,6 +12,7 @@ vi.mock("@/lib/trader/historical-simulation-v2/ratification-split-v2", () => ({
 import { runHistoricalTechnicalProposalMainV2 } from "../../scripts/trader/historical-simulation-v2-prepare-proposal";
 
 const env = {
+  WAIA_FHV_CHECKPOINT_ROOT: "",
   ...process.env, WAIA_TRADER_CLI: "1", DATABASE_URL_POSTGRES_SESSION: "postgresql://runner@example.test/waia",
   WAIA_RELEASE_SHA: "a".repeat(40), WAIA_HISTORICAL_ORGANIZATION_ID: "11111111-1111-4111-8111-111111111111",
   WAIA_HISTORICAL_RUN_ID: "synthetic-proposal", FHV_DATASET_ROOT: "/synthetic/data",
@@ -25,15 +29,34 @@ const env = {
   WAIA_HISTORICAL_CYCLE_COUNT: "35", WAIA_HISTORICAL_OPERATOR_ID: "NEVER_PASS_AS_AUTHORITY",
 };
 beforeEach(() => {
+  vi.stubEnv("WAIA_TRADER_CLI", "1");
+  env.WAIA_FHV_CHECKPOINT_ROOT = realpathSync(mkdtempSync(join(tmpdir(), "waia-cli-checkpoint-test-")));
   vi.resetAllMocks(); mocks.end.mockResolvedValue(undefined);
-  mocks.connect.mockReturnValue({ end: mocks.end });
+  mocks.eventsEnd.mockResolvedValue(undefined);
+  mocks.connect
+    .mockReturnValueOnce({ end: mocks.end, options: { max: 1 } })
+    .mockReturnValueOnce({ end: mocks.eventsEnd, options: { max: 1 } });
 });
-afterEach(() => vi.restoreAllMocks());
+function expectBothPoolsDisposed() {
+  for (const end of [mocks.end, mocks.eventsEnd]) {
+    expect(end).toHaveBeenCalledOnce();
+    expect(end).toHaveBeenCalledWith({ timeout: 5 });
+  }
+}
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(env.WAIA_FHV_CHECKPOINT_ROOT, { recursive: true }); });
 describe("technical proposal CLI observation boundary", () => {
+  it("refuses to start expensive work without a checkpoint root", async () => {
+    await expect(runHistoricalTechnicalProposalMainV2({ ...env, WAIA_FHV_CHECKPOINT_ROOT: undefined }))
+      .rejects.toThrow("SCIENTIFIC_CHECKPOINT_ROOT_REQUIRED");
+    expect(mocks.connect).not.toHaveBeenCalled(); expect(mocks.prepare).not.toHaveBeenCalled();
+  });
   it("forwards diagnostic events separately from the completed proposal and disposes the pool", async () => {
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
-    mocks.prepare.mockImplementation(async (_pool, input, observer) => {
+    mocks.prepare.mockImplementation(async (pool, input, observer, eventsPool) => {
+      expect(pool).not.toBe(eventsPool);
+      expect(pool.options).toBe(mocks.connect.mock.results[0]!.value.options);
+      expect(eventsPool.options).toBe(mocks.connect.mock.results[1]!.value.options);
       expect(observer.onProgress).toBeTypeOf("function");
       expect(JSON.stringify(input)).not.toContain("NEVER_PASS_AS_AUTHORITY");
       observer.onProgress({ schemaVersion: "waia.trader.technical_preparation_progress.v2",
@@ -46,13 +69,18 @@ describe("technical proposal CLI observation boundary", () => {
     expect(err).toHaveBeenCalledTimes(1); expect(out).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(err.mock.calls[0]![0]))).toMatchObject({ authorityGranted: false });
     expect(JSON.parse(String(out.mock.calls[0]![0]))).toMatchObject({ proposalId: "synthetic-proposal-id" });
-    expect(mocks.end).toHaveBeenCalledWith({ timeout: 5 });
+    expect(mocks.connect).toHaveBeenCalledTimes(2);
+    expect(mocks.connect).toHaveBeenNthCalledWith(1, env.DATABASE_URL_POSTGRES_SESSION, { max: 1 });
+    expect(mocks.connect).toHaveBeenNthCalledWith(2, env.DATABASE_URL_POSTGRES_SESSION, {
+      max: 1, connect_timeout: 10, connection: { statement_timeout: 10_000, lock_timeout: 3_000 },
+    });
+    expectBothPoolsDisposed();
   });
   it("does not print a successful result after preparation failure", async () => {
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     const error = new Error("SCIENTIFIC_REFUSAL"); mocks.prepare.mockRejectedValue(error);
     await expect(runHistoricalTechnicalProposalMainV2(env)).rejects.toBe(error);
-    expect(out).not.toHaveBeenCalled(); expect(mocks.end).toHaveBeenCalledOnce();
+    expect(out).not.toHaveBeenCalled(); expectBothPoolsDisposed();
   });
   it("retains progress write failure and still disposes without a final success", async () => {
     const error = new Error("DIAGNOSTIC_WRITE_FAILED");
@@ -60,6 +88,22 @@ describe("technical proposal CLI observation boundary", () => {
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     mocks.prepare.mockImplementation(async (_pool, _input, observer) => observer.onProgress({ phase: "SURFACE_LOAD" }));
     await expect(runHistoricalTechnicalProposalMainV2(env)).rejects.toBe(error);
-    expect(out).not.toHaveBeenCalled(); expect(mocks.end).toHaveBeenCalledOnce();
+    expect(out).not.toHaveBeenCalled(); expectBothPoolsDisposed();
+  });
+  it("retains diagnostic and cleanup failures together after cumulative composition", async () => {
+    const primary = new Error("DIAGNOSTIC_WRITE_FAILED");
+    const cleanup = new Error("POOL_END_FAILED");
+    const eventsCleanup = new Error("EVENTS_POOL_END_FAILED");
+    vi.spyOn(process.stderr, "write").mockImplementation(() => { throw primary; });
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    mocks.end.mockRejectedValue(cleanup);
+    mocks.eventsEnd.mockRejectedValue(eventsCleanup);
+    mocks.prepare.mockImplementation(async (_pool, _input, observer) =>
+      observer.onProgress({ phase: "SURFACE_LOAD" }));
+    const failure = await runHistoricalTechnicalProposalMainV2(env).catch(error => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure.cause).toBe(primary);
+    expect(failure.errors).toEqual([primary, cleanup, eventsCleanup]);
+    expect(out).not.toHaveBeenCalled(); expectBothPoolsDisposed();
   });
 });

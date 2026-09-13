@@ -1,3 +1,4 @@
+import { TERMINAL_SCORING_CONTRACT } from "@/lib/trader/research/benchmark/terminal-scoring-protocol-v2";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
 
@@ -140,7 +141,7 @@ function expectedScientific(
       surface.predictivePackageGenerationIdentityDigestHex,
     predictivePackageContentDigestHex: surface.predictivePackageContentDigestHex,
     runtimeContractDigestHex: predictive.runtimeContractDigestHex,
-    scoringContractVersion: "multiclass-log-score/v1",
+    scoringContractVersion: TERMINAL_SCORING_CONTRACT,
     evaluationPartitionReceiptDigestHex: predictive.evaluationPartitionReceiptDigestHex,
     kmConvergenceEvidenceSemanticDigestHex:
       receipt.kmConvergenceReceipt.evidenceSemanticDigestHex,
@@ -163,6 +164,7 @@ export type HistoricalProductionNextCycleAuthorizedForecastV2 = Readonly<{
 
 export type HistoricalProductionNextCycleNonActionableForecastV2 = Readonly<{
   status: "NON_ACTIONABLE";
+  packageId: string;
   information: HistoricalProductionNextCycleInformationV2;
   issuanceSequence: number;
   runtimeInput: Parameters<typeof issueForecastRuntimeV2>[0];
@@ -486,6 +488,7 @@ export async function prepareHistoricalProductionNextCycleForecastV2(input: Read
     }
     return Object.freeze({
       status: "NON_ACTIONABLE" as const,
+      packageId: persistedPackage.packageId,
       information,
       issuanceSequence,
       runtimeInput,

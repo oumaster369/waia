@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { reuseScientificEvidenceV1 } from "@/lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
 
 import { withWaiaPostgresClient } from "@/db/postgres-client";
 import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
@@ -383,6 +384,10 @@ function replayMetric(input: Readonly<{
 export function buildExecutableForecastReplayEvidenceV2(
   input: EvaluatorInput,
 ): readonly KmAnchorReplayEvidenceV2[] {
+  return reuseScientificEvidenceV1("km-replay-v2", input, () => buildExecutableForecastReplayUncachedV2(input));
+}
+
+function buildExecutableForecastReplayUncachedV2(input: EvaluatorInput): readonly KmAnchorReplayEvidenceV2[] {
   assertKmComputeBudgetV1();
   const pkg = buildPredictivePackageV1({
     family: input.family,
@@ -393,8 +398,16 @@ export function buildExecutableForecastReplayEvidenceV2(
   const sourceByEpoch = new Map(
     input.developmentCorpus.map((source) => [source.closedBarEpochMs / 60_000, source]),
   );
-  return Object.freeze(input.selectedAnchors.map((anchor) => {
-    const source = sourceByEpoch.get(anchor.anchorEpochMin);
+  const results: KmAnchorReplayEvidenceV2[] = [];
+  for (let offset = 0; offset < input.selectedAnchors.length; offset += 32) {
+    const batch = input.selectedAnchors.slice(offset, offset + 32).map(anchor => ({
+      anchor, source: sourceByEpoch.get(anchor.anchorEpochMin),
+    }));
+    const evidence = reuseScientificEvidenceV1("km-replay-batch-v1", {
+      family: input.family, economics: input.economics,
+      packageDigest: pkg.predictivePackageContentDigest,
+      generationDigest: pkg.predictivePackageGenerationIdentityDigest, offset, batch,
+    }, () => batch.map(({ anchor, source }) => {
     if (!source) throw new Error("KM_FOUR_SURFACE_PRODUCTION_REFUSED:SELECTED_SOURCE");
     const issuance = issueForecastV1({
       pkg,
@@ -426,7 +439,10 @@ export function buildExecutableForecastReplayEvidenceV2(
       reference,
       cells: Object.freeze(cells),
     });
-  }));
+    }));
+    results.push(...evidence);
+  }
+  return Object.freeze(results);
 }
 
 function validateQualification(input: Readonly<{

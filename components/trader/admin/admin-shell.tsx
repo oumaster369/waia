@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { WaiaSurface } from "@/components/waia/waia-surface";
+import { TraderSignOut } from "@/components/trader/trader-sign-out";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -24,6 +25,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <header className="space-y-2">
         <p className="text-muted-foreground text-sm">AI-TRADER · Admin console</p>
         <h1 className="text-2xl font-semibold tracking-tight">Operator admin</h1>
+        <TraderSignOut />
       </header>
 
       <WaiaSurface variant="raised" className="flex flex-wrap gap-2 p-2">

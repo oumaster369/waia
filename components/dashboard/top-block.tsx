@@ -1,5 +1,8 @@
 import { AvatarReadinessStatusBlock } from "@/components/dashboard/avatar-readiness-status";
-import type { IndicatorPresentationRow, IndicatorThresholdBand } from "@/lib/dashboard/indicator-ui";
+import type {
+  IndicatorPresentationRow,
+  IndicatorThresholdBand,
+} from "@/lib/dashboard/indicator-ui";
 import { cn } from "@/lib/utils";
 
 export type DashboardTopBlockProps = {
@@ -56,18 +59,18 @@ export function DashboardTopBlock({
       data-testid="dashboard-top-block"
       data-formation-complete={isFormationComplete ? "true" : undefined}
       className={cn(
-        "border-border border-b bg-background px-6 py-4",
+        "border-border bg-background border-b px-6 py-4",
         isFormationComplete &&
-          "bg-gradient-to-br from-emerald-500/[0.04] via-background to-background dark:from-emerald-500/[0.07]",
+          "via-background to-background bg-gradient-to-br from-emerald-500/[0.04] dark:from-emerald-500/[0.07]",
       )}
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 [overflow-wrap:anywhere] lg:flex-row lg:flex-wrap lg:items-start lg:justify-between lg:gap-8">
         <AvatarReadinessStatusBlock
           statusText={avatarStatusText}
           readinessPercent={totalCompletionPercent}
           isFormationComplete={isFormationComplete}
         />
-        <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 md:grid-cols-6 md:justify-items-stretch">
+        <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:flex-[1_1_30rem] xl:grid-cols-6">
           {indicatorPresentation.map((row) => {
             const labelId = `dashboard-indicator-${row.key}-label`;
             const hintId = `dashboard-indicator-${row.key}-hint`;
@@ -80,9 +83,7 @@ export function DashboardTopBlock({
                   : { "data-threshold": row.band })}
                 className={cn(
                   "flex flex-col gap-1 rounded-md border px-2 py-2",
-                  isFormationComplete
-                    ? formationCompletePanelClass
-                    : thresholdPanelClass(row.band),
+                  isFormationComplete ? formationCompletePanelClass : thresholdPanelClass(row.band),
                 )}
                 aria-describedby={hintId}
               >

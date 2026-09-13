@@ -35,7 +35,7 @@
     ],
     "expectedFileCount": 154,
     "sortedPathDigestHex": "d5f2b4b0f3642e52cb8aa1270105d66a4e3286b1d29ae26472bb3a02b951fd31",
-    "sortedContentDigestHex": "967c4686a3f8b8147904b86584bd4a4ac6e8ab6a694db4136da2ff8ed82127fb"
+    "sortedContentDigestHex": "7225a5bb99ff8602fa7a9e602041fb68c8fd5987529d8fad2bea41194c2a5b40"
   },
   "sourceRules": [
     {
@@ -114,11 +114,29 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 124,
-    "sortedPathDigestHex": "b394bbd99341c0a868dc3b2e05a6743163a67fec8d70103de70cde858c9f082d",
-    "sortedContentDigestHex": "8cb37a273a6e2563a6a381a5bf46abcf0de08178ba7f14a82fdbac219861a814"
+    "expectedFileCount": 129,
+    "sortedPathDigestHex": "0d54b86447d375e244a8faa3a415684eaa5edd78a857e9dcfa1dcc2577b413a0",
+    "sortedContentDigestHex": "ce2cac65e3dad2a20b5c77be54e13e2d5e778406e8153cadb5dccbc3c2bed9fa"
   },
   "consumerRules": [
+    {
+      "id": "ACCOUNT_OBSERVATION_PROTECTED_STORE",
+      "pathPattern": "^lib/trader/account-observation/credential-store\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "Explicitly injected protected credential service with authorization and exact binding checks before and after decryption; no exchange calls or canonical Reality/order/capital authority. Separate exact-key exchange admission remains mandatory at the opener."
+    },
+    {
+      "id": "ACCOUNT_OBSERVATION_GET_TRANSPORT",
+      "pathPattern": "^lib/trader/account-observation/htx-get-transport\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "Server-only allowlisted signed-GET transport with separate fixed observation and exact-key metadata lanes; reads normalized observation inputs and admission metadata, does not grant canonical Reality, order or capital authority."
+    },
+    {
+      "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",
+      "pathPattern": "^lib/trader/account-observation/(service|types|htx-reader)\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "Read-only normalized account DTO collection and its injected GET-only HTX reader are not canonical Reality ingress or execution authority; no raw-capture lineage is admitted by these files."
+    },
     {
       "id": "REALITY_BOUNDARY",
       "pathPattern": "^lib/trader/reality/",

@@ -1,0 +1,77 @@
+# Separate from historical computation gates: account/UI-only changes must not
+# schedule unrelated long-running historical proofs. Shared migration changes
+# still trigger both workflows through their respective existing path filters.
+name: account-observation-postgres
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "db/migrations_postgres/**"
+      - "db/schema.postgres.ts"
+      - "scripts/postgres-validation/**"
+      - "db/local-validation/dee960-account-observation.sql"
+      - "lib/trader/account-observation/**"
+      - "components/trader/account-observation/**"
+      - "app/api/trader/account-observation/**"
+      - "app/api/trader/admin/account-observation/**"
+      - "app/(trader)/admin/account-observation/**"
+      - "app/(trader)/trader/**"
+      - "tests/helpers/**"
+      - "tests/integration/*account-observation*.test.ts"
+      - "tests/unit/*account-observation*.test.ts"
+      - "tests/unit/*account-observation*.test.tsx"
+      - "tests/e2e/account-observation.spec.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "vitest.config.*"
+      - "vitest.setup.ts"
+      - ".github/workflows/account-observation-postgres.yml"
+      - ".github/workflows/postgres-integration.yml"
+
+jobs:
+  account-observation-postgres17:
+    name: PostgreSQL 17 account observation restricted-role guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Synthetic, isolated service only. Integration files also hardcode this
+      # loopback target and never fall back to production database variables.
+      DEE960_LOCAL_PG17: "1"
+      DATABASE_URL_POSTGRES: postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local
+      DATABASE_URL_POSTGRES_SESSION: postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: waia_local_admin
+          POSTGRES_PASSWORD: local_validation_only
+          POSTGRES_DB: waia_dee960_local
+        ports:
+          - 55460:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_local_admin -d waia_dee960_local"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Account observation CI contract
+        run: pnpm test --run tests/unit/account-observation-postgres-ci-contract.test.ts
+      - name: Full migrations, recurring collector and dedicated reader on PostgreSQL 17
+        # These suites create separate synthetic databases and exercise actual
+        # limited DDL owners and NOINHERIT LOGINs. Shared cluster-role setup must
+        # remain serial; no private HTX request or real account is involved.
+        run: >-
+          pnpm test --run --no-file-parallelism
+          tests/integration/account-observation-migration-postgres.test.ts
+          tests/integration/trader-account-observation-postgres.test.ts
+          tests/integration/account-observation-reader-postgres.test.ts

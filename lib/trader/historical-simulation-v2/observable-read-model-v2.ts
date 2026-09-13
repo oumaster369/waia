@@ -31,6 +31,8 @@ export type HistoricalObservableCycleV2 = Readonly<{
   riskVetoCount: number;
   ordersCount: number;
   fillsCount: number;
+  /** Remaining modeled orders at this exact committed checkpoint, not current live orders. */
+  pendingModeledOrders: readonly HistoricalObservablePendingOrderV2[];
   lastForecast: unknown;
   lastDecision: unknown;
   lastPortfolio: unknown;
@@ -51,6 +53,17 @@ export type HistoricalObservableCycleV2 = Readonly<{
     contentDigestHex: string;
   }> | null;
   ledgerHeadContentDigestHex: string;
+}>;
+
+export type HistoricalObservablePendingOrderV2 = Readonly<{
+  orderId: string;
+  symbol: string;
+  side: "buy" | "sell";
+  state: string;
+  quantity: string;
+  filledQuantity: string;
+  remainingQuantity: string;
+  cancellationPending: boolean;
 }>;
 
 export type HistoricalObservableAccountV2 = HistoricalObservableCycleV2 & Readonly<{

@@ -43,6 +43,73 @@ provenance:
 
 ## Work packages
 
+### Preparation failure gap reproduction — 2026-09-07
+
+Isolated local investigation from ded0cb0d; no publication or train admission.
+Prove that a real preparation entrypoint rejection can leave the validated
+request projection indistinguishable from never-started preparation. Mock only
+the SQL boundary and scientific candidate producer; preserve the actual
+preparation cleanup and request reader. This is an acknowledged defect
+reproduction, not an acceptance test certifying correct failure observability.
+
+Migration 0201 deliberately makes requests immutable and runner read-only.
+Migration 0198 lifecycle events require a qualified run-start FK, so they cannot
+represent pre-proposal failure without inventing authority. A dedicated scoped
+append-only preparation-attempt journal is required; root coordinates a separate
+atomic backend issue and schema review before implementation. Do not mutate a
+Human request, fabricate a proposal/run-start, relax RLS, or report a failed
+scientific computation as successful. Current main stops at0202; cumulative local
+0203 is a separate unpublished dependency. Root subsequently authorized local
+0204 implementation in the separate atomic [DEE-958 plan](dee-958-preparation-attempt-events.md),
+not as part of this CPU/scientific work package. No production migration is authorized.
+
+### Reserved connection loss — 2026-09-07 05:49 UTC
+
+Local-only follow-through in detached compatibility copy from42e9; not train
+admission or publication. Reproduced stale reserved-handle dispatch after backend
+closure causes an asynchronous postgres.js socket-null exception. Introduce an
+opt-in max1 pool adapter in proposal/approved-launch CLI factories only. Preserve
+onclose diagnostics; invalidate the reserved handle and delayed queries, return
+structured CONNECTION_CLOSED, never re-reserve or continue across lost locks.
+Do not put a dead backend back into the driver's ready queue during release.
+Validate actual local PG control/injection and lazy execution, healthy sessions,
+existing CLI/login/cleanup tests, typecheck/lint/build. No vendor patches, timeout
+changes, schema/privilege/science changes, or production-runtime proof claimed.
+
+Local verification at05:57UTC:61 focused tests across6 files PASS; actual local
+PostgreSQL control/injected-idle test2PASS (3.68s) verifies JSON binding, delayed
+unsafe query, controlled CONNECTION_CLOSED and completed cleanup. Root diagnostic
+also retains full incremental failure/control events. TypeScript/full lint/diff
+PASS. Final Next production build including the file-query refusal guard also
+passed (session87833, verified06:01UTC); canonical document and release-identity
+checks passed06:02UTC. Unsupported asynchronous file-query dispatch
+is refused explicitly; historical CLI source has no file-query calls. No immediate
+cancellation of synchronous scientific kernels or full-corpus completion claimed.
+Initial mock metadata/type/import failures were corrected in test scaffolding,
+not by relaxing the close guard, restoring a broken connection or dropping checks.
+
+### Durable request acknowledgement — 2026-09-07 04:48 UTC
+
+Separate local experiment from frozen7bb650ee while its graph test runs.
+Expose explicit NOT_REQUESTED / REQUEST_RECORDED / PROPOSAL_AVAILABLE from the
+existing authenticated read path. Preserve integrity/actor/scope failures;
+absence of a proposal must not hide a malformed row. Show recorded request extent
+after polling/reload, without claiming running computation, readiness or approval.
+Bind UI review and CSRF state to the queried scope. No schema/auth/RLS changes,
+runtime execution, science changes or publication. Validate service, handler and
+component regressions, full typecheck/lint/build; full preparation remains open.
+
+Local result 2026-09-07 04:58 UTC:34 tests/5 files PASS, full TypeScript/lint/diff
+PASS. Four browser presentation cases plus Next build PASS (34.3s), including
+POST acknowledgement surviving reload with no repeated click or launch claim;
+screenshot visually inspected. SELECT-only service verification on preserved
+local synthetic35 PostgreSQL data PASS: existing exact proposal/recorded test
+approval, absent request and wrong actor. No new DB writes; FOR SHARE uses a
+normal bounded transaction. This does not prove authenticated production HTTP,
+preparation worker lifecycle or scientific qualification. The preceding frozen
+7bb650ee full35 PASS predates these read/UI changes and is not retagged as this
+follow-up's graph result. Publication and production remain blocked separately.
+
 ### Actual PostgreSQL finalization observer proof — 2026-09-07 04:15 UTC
 
 Extend only the guarded TEST_ONLY observer forwarding seam and additive original

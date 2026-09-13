@@ -9,7 +9,6 @@ import {
 import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
 import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
 import {
-  HTX_PERMISSION_PROBE_WARNING,
   HTX_TRADE_PERMISSION_WARNING,
 } from "@/lib/trader/connectors/htx/mappers";
 
@@ -245,15 +244,16 @@ describe("HtxExchangeConnector credentials (DEE-195)", () => {
     expect(result.warnings).toContain(HTX_TRADE_PERMISSION_WARNING);
   });
 
-  it("returns safe-default warning when permission probe fails", async () => {
+  it("rejects admission when permission probe fails", async () => {
     const connector = createHtxConnector(
       defaultHandlers({
         "/v2/user/uid": () => jsonResponse({ code: 500, message: "fail" }),
       }),
     );
     const result = await connector.validateCredentials(VALID_CREDS);
-    expect(result.valid).toBe(true);
-    expect(result.warnings).toContain(HTX_PERMISSION_PROBE_WARNING);
+    expect(result.valid).toBe(false);
+    expect(result.errorCode).toBe("500");
+    await expect(connector.getAccountInfo()).rejects.toThrow();
   });
 
   it("fails cleanly on auth error", async () => {

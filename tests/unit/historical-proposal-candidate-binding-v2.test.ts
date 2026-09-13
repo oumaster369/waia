@@ -7,8 +7,11 @@ const seal = <T extends object>(body: T) => ({ ...body, contentDigestHex: comput
 const scope = { organizationId: "11111111-1111-4111-8111-111111111111",
   runId: "run-a", releaseSha: "a".repeat(40) };
 const candidate = seal({ ...scope,
+  firstEconomicRecordIndex: 525600, economicRecordCount: 1000,
   schemaVersion: "waia.trader.historical_four_surface_technical_candidate.v2" });
 const proposal = { ...scope, schemaVersion: HISTORICAL_TECHNICAL_PROPOSAL_V2,
+  launchPlan: { accountId: "account-a", symbol: "BTCUSDT", primaryHorizonMinutes: 30,
+    startingCashUsdt: "1000", defaultQuantity: "0.001", initialRecordIndex: 525600, cycleCount: 35 },
   technicalCandidate: candidate, technicalCandidateContentDigestHex: candidate.contentDigestHex };
 
 describe("Human displayed candidate binding independent of the outer seal", () => {
@@ -25,5 +28,11 @@ describe("Human displayed candidate binding independent of the outer seal", () =
     expect(() => assertHistoricalTechnicalProposalV2(seal({ ...proposal,
       technicalCandidate: null }) as unknown as HistoricalTechnicalProposalV2))
       .toThrow("TECHNICAL_CANDIDATE_BINDING");
+  });
+  it("rejects an internally sealed but unsupported start offset before operator approval", () => {
+    expect(() => assertHistoricalTechnicalProposalV2(seal({ ...proposal,
+      launchPlan: { ...proposal.launchPlan, initialRecordIndex: 525601 },
+    }) as unknown as HistoricalTechnicalProposalV2))
+      .toThrow("LAUNCH_PLAN_OUTSIDE_QUALIFIED_ECONOMIC_PARTITION");
   });
 });

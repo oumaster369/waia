@@ -7,6 +7,7 @@ import {
   type HistoricalObservableScopeV2,
 } from "./observable-read-model-v2";
 import { validateHistoricalSimulationDurableStateSnapshotV2 } from "./atomic-cycle-commit-v2";
+import { projectHistoricalPendingOrdersV2 } from "./observable-pending-orders-v2";
 import { assertHistoricalSimulationRunLifecycleEventV2,
   projectHistoricalSimulationRunLifecycleV2,
   type HistoricalSimulationRunLifecycleEventV2 } from "./run-lifecycle-v2";
@@ -97,6 +98,14 @@ function projectCycle(row: Row): HistoricalObservableCycleV2 {
     nextCycleSequence: number(row.next_cycle_sequence),
     contentDigestHex: String(row.checkpoint_content_digest_hex),
   } : null;
+  if (!row.exchange_state_json) throw new Error("HISTORICAL_OBSERVABLE_EXCHANGE_SNAPSHOT_MISSING");
+  const pendingModeledOrders = projectHistoricalPendingOrdersV2({
+    schemaVersion: String(row.exchange_snapshot_schema_version) as "waia.trader.historical_simulation_durable_state_snapshot.v2",
+    organizationId: String(row.organization_id), accountId: String(row.account_id), runId: String(row.run_id),
+    cycleId: String(row.exchange_snapshot_cycle_id), stateKind: "MODELED_EXCHANGE",
+    state: object(row.exchange_state_json) as never, contentDigestHex: String(row.exchange_snapshot_content_digest_hex),
+  }, { organizationId: String(row.organization_id), accountId: String(row.account_id), runId: String(row.run_id),
+    cycleId: String(row.cycle_id), split: row.partition as "DEVELOPMENT" | "WALK_FORWARD" });
   return {
     accountId: String(row.account_id), cycleSequence: number(row.cycle_sequence),
     cycleId: String(row.cycle_id), symbol: String(row.symbol),
@@ -114,6 +123,7 @@ function projectCycle(row: Row): HistoricalObservableCycleV2 {
     }).length,
     decisionsCount: number(row.decisions_count), riskVetoCount: number(row.risk_veto_count),
     ordersCount: number(row.orders_count), fillsCount: number(row.fills_count),
+    pendingModeledOrders,
     lastForecast: { ...forecast,
       bundleId: text(row.forecast_bundle_id),
       executionHorizonMinutes: row.forecast_execution_horizon_minutes ?? null,
@@ -155,7 +165,7 @@ async function loadHistoricalObservableProjectionWithinSnapshotPostgresV2(
   const lifecycle = lifecycleEvent ? projectHistoricalSimulationRunLifecycleV2(lifecycleEvent) : null;
   const rows = await sql.unsafe<Row[]>(`
     WITH scoped AS (
-      SELECT l.*, c.committed_cycle_sequence,c.next_record_index,c.next_cycle_sequence,c.checkpoint_content_digest_hex,
+      SELECT l.*, c.committed_cycle_sequence,c.next_record_index,c.next_cycle_sequence,c.checkpoint_content_digest_hex,c.snapshot_digest_json,
         row_number() OVER (PARTITION BY l.account_id ORDER BY c.committed_cycle_sequence DESC) AS latest_rank,
         count(*) OVER (PARTITION BY l.account_id) AS decisions_count,
         count(*) FILTER (WHERE coalesce(l.risk_json->>'status',l.risk_json->>'verdict','') IN ('VETO','REJECTED','DENIED'))
@@ -202,6 +212,10 @@ async function loadHistoricalObservableProjectionWithinSnapshotPostgresV2(
       accounting_snapshot.snapshot_content_digest_hex AS accounting_snapshot_content_digest_hex,
       accounting_snapshot.schema_version AS accounting_snapshot_schema_version,
       accounting_snapshot.cycle_id AS accounting_snapshot_cycle_id,
+      exchange_snapshot.state_json AS exchange_state_json,
+      exchange_snapshot.snapshot_content_digest_hex AS exchange_snapshot_content_digest_hex,
+      exchange_snapshot.schema_version AS exchange_snapshot_schema_version,
+      exchange_snapshot.cycle_id AS exchange_snapshot_cycle_id,
       proposal.launch_plan_json->>'startingCashUsdt' AS starting_cash_usdt,
       initial_dataset.sealed_cycle_json #>> '{closedBar,close}' AS initial_close,
       current_dataset.sealed_cycle_json #>> '{closedBar,close}' AS current_close
@@ -222,6 +236,16 @@ async function loadHistoricalObservableProjectionWithinSnapshotPostgresV2(
       WHERE sl.organization_id=s.organization_id AND sl.account_id=s.account_id AND sl.run_id=s.run_id
         AND sl.committed_cycle_sequence=s.committed_cycle_sequence AND sl.state_kind='ACCOUNTING_FRONTIER'
       LIMIT 1) accounting_snapshot ON true
+    LEFT JOIN LATERAL (SELECT sn.state_json,sn.snapshot_content_digest_hex,sn.schema_version,sn.cycle_id
+      FROM trader_historical_simulation_resume_snapshot_link_v2 sl
+      JOIN trader_historical_simulation_durable_snapshot_v2 sn
+        ON sn.organization_id=sl.organization_id AND sn.account_id=sl.account_id AND sn.run_id=sl.run_id
+        AND sn.cycle_sequence=sl.committed_cycle_sequence AND sn.state_kind=sl.state_kind
+        AND sn.snapshot_content_digest_hex=sl.snapshot_content_digest_hex AND sn.cycle_id=s.cycle_id
+      WHERE sl.organization_id=s.organization_id AND sl.account_id=s.account_id AND sl.run_id=s.run_id
+        AND sl.committed_cycle_sequence=s.committed_cycle_sequence AND sl.state_kind='MODELED_EXCHANGE'
+        AND sl.snapshot_content_digest_hex=s.snapshot_digest_json->>'MODELED_EXCHANGE'
+      LIMIT 1) exchange_snapshot ON true
     LEFT JOIN trader_historical_technical_proposal_v2 proposal
       ON proposal.organization_id=s.organization_id AND proposal.run_id=s.run_id
       AND proposal.launch_plan_json->>'accountId'=s.account_id

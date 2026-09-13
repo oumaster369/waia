@@ -23,6 +23,7 @@ import {
   persistPredictivePackageV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-v2-persistence-service";
 import type { ForecastRuntimeInputV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import { hydrateForecastAuthorizedOutcomeWireV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-package-wire-v1";
 import { TARGET_ROLE_TERMINAL } from "@/lib/trader/intelligence/forecast-v2/constants";
 import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1_DIGEST } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
@@ -201,8 +202,9 @@ export function createForecastV2DurableProducerV1(config: ForecastV2DurableProdu
           forecast_id: string;
           payload: unknown;
           issuance_sequence: number;
+          predictive_package_id: string;
         }[]>`
-          SELECT b.id::text AS bundle_id, f.id::text AS forecast_id,
+          SELECT b.id::text AS bundle_id, f.id::text AS forecast_id, b.predictive_package_id::text,
                  b.forecast_runtime_authorized_outcome_json AS payload,
                  b.forecast_runtime_issuance_sequence AS issuance_sequence
           FROM trader_forecast_bundle_v2 b
@@ -216,11 +218,8 @@ export function createForecastV2DurableProducerV1(config: ForecastV2DurableProdu
             AND o.forecast_id IS NULL
         `;
         for (const persisted of rows) {
-          const revived = JSON.parse(JSON.stringify(persisted.payload), (_key, value) =>
-            value && value.type === "Buffer" && Array.isArray(value.data)
-              ? Buffer.from(value.data)
-              : value,
-          ) as ForecastRuntimeAuthorizedOutcomeV2;
+          const revived = await hydrateForecastAuthorizedOutcomeWireV1(config.sql, persisted.payload as never,
+            { organizationId: input.organizationId, packageId: persisted.predictive_package_id });
           const authorizedOutcome = requireForecastRuntimeAuthorizedOutcomeV2(revived);
           if (!pending.some((row) => row.bundleId === persisted.bundle_id)) {
             pending.push({

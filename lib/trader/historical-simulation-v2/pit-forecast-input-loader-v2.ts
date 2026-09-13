@@ -6,8 +6,16 @@ import {
   issueForecastRuntimeV2,
   reviveForecastRuntimeJsonV2,
   type ForecastRuntimeInputV2,
+  type ForecastRuntimeAuthorizedOutcomeV2,
 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
-import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  assertForecastSourceWireVersionV1, forecastPackageWireVersionV1,
+  hydrateForecastRuntimeInputWireV1, hydrateForecastAuthorizedOutcomeWireV1,
+  FORECAST_SOURCE_VERIFIER_LEGACY_V2,
+  type ForecastRuntimeInputWireV1,
+} from "@/lib/trader/intelligence/forecast-v2/forecast-package-wire-v1";
+import { computeForecastWireSemanticDigestV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-wire-semantic-v1";
 import type { HistoricalDatasetMembershipV2 } from "./dataset-membership-v2";
 import { HISTORICAL_FORECAST_INPUT_PIT_V2,
   type HistoricalForecastPitKnowledgeRowV2 } from "./pit-forecast-input-producer-v2";
@@ -35,7 +43,7 @@ type PitInputRow = Readonly<{
   visible_from: Date | string;
   knowledge_content_digest_hex: string;
   forecast_authority_content_digest_hex: string;
-  runtime_input_json: ForecastRuntimeInputV2;
+  runtime_input_json: ForecastRuntimeInputV2 | ForecastRuntimeInputWireV1;
   content_digest_hex: string;
   schema_version: string;
   dataset_authority_id: string;
@@ -48,7 +56,9 @@ type PitInputRow = Readonly<{
   sealed_cycle_content_digest_hex: string;
   sealed_cycle_json: unknown;
   runtime_input_content_digest_hex: string;
-  source_runtime_input_json: ForecastRuntimeInputV2;
+  source_runtime_input_json: ForecastRuntimeInputV2 | ForecastRuntimeInputWireV1;
+  source_verifier_version?: string;
+  canonical_package_id?: string;
   source_authorized_outcome_json: unknown;
   source_forecast_authority_content_digest_hex: string;
   source_verifier_build_digest_hex: string;
@@ -74,12 +84,12 @@ export type HistoricalForecastInputPitIdentityV2 = Readonly<{
 
 const DIGEST = /^[0-9a-f]{64}$/;
 
-function currentVerifierBuildDigest(): string {
+function currentVerifierBuildDigest(verifierVersion: string): string {
   const release = process.env.WAIA_RELEASE_SHA; const vercel = process.env.VERCEL_GIT_COMMIT_SHA;
   if (release && vercel && release !== vercel) throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:BUILD_SHA_CONFLICT");
   const sha = release ?? vercel;
   if (!sha || !/^[0-9a-f]{40}$/i.test(sha)) throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:BUILD_SHA_MISSING");
-  return computeSemanticSha256Hex({ verifierVersion: "waia.forecast-runtime-input-source.verifier.v2", sourceSha: sha.toLowerCase() });
+  return computeSemanticSha256Hex({ verifierVersion, sourceSha: sha.toLowerCase() });
 }
 
 function utc(value: Date | string): string {
@@ -88,21 +98,40 @@ function utc(value: Date | string): string {
   return result;
 }
 
-function cloneAndDeepFreeze<T>(value: T): T {
-  const clone = JSON.parse(JSON.stringify(value)) as T;
-  const freeze = (candidate: unknown): void => {
-    if (!candidate || typeof candidate !== "object" || Object.isFrozen(candidate)) return;
-    for (const child of Object.values(candidate as Record<string, unknown>)) freeze(child);
-    Object.freeze(candidate);
-  };
-  freeze(clone);
-  return clone;
+function freezeRuntimeTree<T>(value: T, clone: boolean): T {
+  if (Buffer.isBuffer(value)) return (clone ? Buffer.from(value) : value) as T;
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    const result = clone ? value.map((item) => freezeRuntimeTree(item, true)) : value;
+    if (!clone) for (const child of result) freezeRuntimeTree(child, false);
+    return Object.freeze(result) as T;
+  }
+  const result = clone ? Object.fromEntries(Object.entries(value).map(
+    ([key, child]) => [key, freezeRuntimeTree(child, true)],
+  )) : value;
+  if (!clone) for (const child of Object.values(result)) freezeRuntimeTree(child, false);
+  return Object.freeze(result) as T;
 }
 
 export function assertHistoricalForecastInputPitBindingV2(
   row: PitInputRow,
   expected: HistoricalForecastInputPitIdentityV2,
 ): ForecastRuntimeInputV2 {
+  // Synchronous legacy inspection never interprets a reference as a full package.
+  if (forecastPackageWireVersionV1(row.runtime_input_json.predictivePackage) !== "LEGACY")
+    throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:ASYNC_PACKAGE_HYDRATION_REQUIRED");
+  return assertBinding(row, expected);
+}
+
+function assertBinding(
+  row: PitInputRow,
+  expected: HistoricalForecastInputPitIdentityV2,
+  hydrated?: { input: ForecastRuntimeInputV2; sourceOutcome: ForecastRuntimeAuthorizedOutcomeV2 },
+): ForecastRuntimeInputV2 {
+  const verifierVersion = row.source_verifier_version ?? FORECAST_SOURCE_VERIFIER_LEGACY_V2;
+  assertForecastSourceWireVersionV1(verifierVersion, row.runtime_input_json.predictivePackage);
+  assertForecastSourceWireVersionV1(verifierVersion, row.source_runtime_input_json.predictivePackage,
+    (row.source_authorized_outcome_json as ForecastRuntimeAuthorizedOutcomeV2)?.issuance?.package);
   const pitAnchor = utc(row.pit_anchor);
   if (
     row.organization_id !== expected.organizationId || row.run_id !== expected.runId ||
@@ -119,14 +148,14 @@ export function assertHistoricalForecastInputPitBindingV2(
     !DIGEST.test(row.sealed_cycle_content_digest_hex) ||
     computeStableJsonDigest({ organizationId: expected.organizationId, runId: expected.runId,
       membership: row.dataset_membership_json, sealedCycle: row.sealed_cycle_json }) !== row.dataset_authority_content_digest_hex ||
-    computeSemanticSha256Hex(row.source_runtime_input_json) !== row.runtime_input_content_digest_hex ||
-    computeSemanticSha256Hex(row.runtime_input_json) !== row.runtime_input_content_digest_hex ||
-    canonicalizeSemanticJsonString(row.source_runtime_input_json) !== canonicalizeSemanticJsonString(row.runtime_input_json) ||
+    computeForecastWireSemanticDigestV1(row.source_runtime_input_json) !== row.runtime_input_content_digest_hex ||
+    computeForecastWireSemanticDigestV1(row.runtime_input_json) !== row.runtime_input_content_digest_hex ||
     row.source_forecast_authority_content_digest_hex !== expected.forecastAuthorityContentDigestHex ||
-    row.source_verifier_build_digest_hex !== currentVerifierBuildDigest()
+    row.source_verifier_build_digest_hex !== currentVerifierBuildDigest(verifierVersion) ||
+    row.verifier_build_digest_hex !== row.source_verifier_build_digest_hex
   ) throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:SCOPE_OR_PIT_MISMATCH");
 
-  const input = reviveForecastRuntimeJsonV2(row.runtime_input_json);
+  const input = hydrated?.input ?? reviveForecastRuntimeJsonV2(row.runtime_input_json) as ForecastRuntimeInputV2;
   const binding = input.forecastContractBinding;
   const scientific = reviveForecastRuntimeJsonV2(
     JSON.parse(row.canonical_scientific_receipt_json) as ScientificAdmissionReceiptV2,
@@ -146,7 +175,7 @@ export function assertHistoricalForecastInputPitBindingV2(
   if (scientific.contentDigestHex !== row.canonical_scientific_content_digest_hex)
     throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:INPUT_SCIENTIFIC_BINDING_MISMATCH");
   if (
-    canonicalizeSemanticJsonString(row.canonical_authorized_outcome_json) !== canonicalizeSemanticJsonString(row.source_authorized_outcome_json)
+    computeForecastWireSemanticDigestV1(row.canonical_authorized_outcome_json) !== computeForecastWireSemanticDigestV1(row.source_authorized_outcome_json)
   ) throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:INPUT_FORECAST_BINDING_MISMATCH");
 
   const predictive = scientific.predictiveTerminalReceipt;
@@ -175,7 +204,7 @@ export function assertHistoricalForecastInputPitBindingV2(
     forecastAuthorityContentDigestHex: row.forecast_authority_content_digest_hex,
     runtimeInputContentDigestHex: row.runtime_input_content_digest_hex,
     verifierBuildDigestHex: row.verifier_build_digest_hex, runtimeInput: row.runtime_input_json };
-  if (!DIGEST.test(row.content_digest_hex) || computeSemanticSha256Hex(body) !== row.content_digest_hex)
+  if (!DIGEST.test(row.content_digest_hex) || computeForecastWireSemanticDigestV1(body) !== row.content_digest_hex)
     throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:ROW_DIGEST_MISMATCH");
 
   // Replays the complete Forecast V2 identity graph. Authorized inputs must reproduce an
@@ -194,12 +223,13 @@ export function assertHistoricalForecastInputPitBindingV2(
       row.forecast_content_digest_hex !== row.canonical_forecast_content_digest_hex) {
     throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:FORECAST_MEMBER_MISMATCH");
   }
-  if (canonicalizeSemanticJsonString(outcome) !== canonicalizeSemanticJsonString(
-    reviveForecastRuntimeJsonV2(row.source_authorized_outcome_json),
+  if (computeForecastWireSemanticDigestV1(outcome) !== computeForecastWireSemanticDigestV1(
+    hydrated?.sourceOutcome ?? reviveForecastRuntimeJsonV2(row.source_authorized_outcome_json),
   )) {
     throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:AUTHORIZED_OUTCOME_SOURCE_MISMATCH");
   }
-  return reviveForecastRuntimeJsonV2(cloneAndDeepFreeze(input));
+  // Hydration owns this object; no package-sized stringify/clone after admission.
+  return freezeRuntimeTree(input, !hydrated);
 }
 
 function canonicalMembershipDigest(value: HistoricalDatasetMembershipV2): string {
@@ -232,6 +262,7 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
              s.authorized_outcome_json AS source_authorized_outcome_json,
              s.forecast_authority_content_digest_hex AS source_forecast_authority_content_digest_hex,
              s.verifier_build_digest_hex AS source_verifier_build_digest_hex,
+             s.verifier_version AS source_verifier_version, pkg.id::text AS canonical_package_id,
              b.forecast_runtime_authorized_outcome_json AS canonical_authorized_outcome_json,
              encode(f.forecast_content_digest, 'hex') AS canonical_forecast_content_digest_hex,
              pkg.predictive_package_content_digest AS canonical_package_content_digest_hex,
@@ -251,7 +282,7 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
         AND f.forecast_content_digest=p.forecast_content_digest
       JOIN trader_forecast_bundle_v2 b ON b.id=p.bundle_id AND b.organization_id=p.organization_id
       JOIN trader_forecast_predictive_package_v2 pkg ON pkg.id=s.predictive_package_id
-        AND pkg.organization_id=s.organization_id
+        AND pkg.organization_id=s.organization_id AND pkg.id=b.predictive_package_id
       JOIN trader_scientific_admission_receipt_v1 sci ON sci.id=s.scientific_admission_receipt_id
         AND sci.organization_id=s.organization_id
       JOIN trader_forecast_contract_binding_v1 cb ON cb.organization_id=s.organization_id
@@ -266,6 +297,14 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
         AND p.visible_from <= ${expected.pitAnchor}::timestamptz
     `;
     if (rows.length !== 1) throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:EXACT_ROW_NOT_FOUND");
+    const row = rows[0]!;
+    if (!row.source_verifier_version || !row.canonical_package_id)
+      throw new Error("HISTORICAL_FORECAST_PIT_REFUSED:SOURCE_VERSION_OR_PACKAGE");
+    assertForecastSourceWireVersionV1(row.source_verifier_version, row.runtime_input_json.predictivePackage,
+      (row.source_authorized_outcome_json as ForecastRuntimeAuthorizedOutcomeV2)?.issuance?.package);
+    const scope = { organizationId: expected.organizationId, packageId: row.canonical_package_id };
+    const runtimeInput = await hydrateForecastRuntimeInputWireV1(sql, row.runtime_input_json, scope);
+    const sourceOutcome = await hydrateForecastAuthorizedOutcomeWireV1(sql, row.source_authorized_outcome_json as never, scope);
     const knowledgeRows = await sql<HistoricalForecastPitKnowledgeRowV2[]>`
       SELECT k.id::text, k.organization_id::text, k.run_id, k.cycle_id, k.symbol,
              k.knowledge_edge_id::text, k.update_kind, k.update_model_version,
@@ -284,7 +323,6 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
       symbol: expected.symbol,
       pitAnchor: expected.pitAnchor,
     }, knowledgeRows);
-    const runtimeInput = reviveForecastRuntimeJsonV2(rows[0]!.runtime_input_json);
     if (knowledgeSnapshotAuthority.knowledgeContentDigestHex !== expected.knowledgeContentDigestHex ||
         !runtimeInput.historicalKnowledgeSnapshotAuthority ||
         !isDeepStrictEqual(
@@ -307,7 +345,7 @@ export async function loadPostgresHistoricalForecastInputPitInTransactionV2(
       },
       runtimeInput,
     });
-  return assertHistoricalForecastInputPitBindingV2(rows[0]!, expected);
+  return assertBinding(row, expected, { input: runtimeInput, sourceOutcome });
 }
 
 export function createPostgresHistoricalForecastInputPitLoaderV2(sql: postgres.Sql) {

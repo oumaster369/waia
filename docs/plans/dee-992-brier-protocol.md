@@ -1,0 +1,201 @@
+---
+integrationIssue: DEE-992
+integrationTitle: "Human-ratified bounded Terminal score and preserved-origin compatibility"
+branch: dee-992-brier-protocol
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local]
+requiredValidation: [lint, typecheck, unit, build, postgres]
+approvalGates: [plan-approved, integration-ready, human-merge]
+includedIssues: []
+linearStatusFlow:
+  onPlanApproved: In Progress
+  onPrOpened: In Review
+  onMerge: Done
+state:
+  status: in-progress
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
+  remainingWorkPackages: []
+  prNumber: null
+  prUrl: null
+  lastValidatedGitSha: 2ced7a319b419323ef97fd60c4137b12fbe2d2c7
+  lastValidationAt: "2026-09-12T17:07:00Z"
+  blockedReason: null
+  nextAction: "Publish the separately reviewed Brier PR under current Human authorization; DEE-991/993 and production remain separate gates."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
+---
+
+# DEE-992: bounded Terminal score
+
+## Current publication boundary — 2026-09-12
+
+The user's later instruction authorizes necessary autonomous historical-recovery
+work, superseding the earlier local-only publication restriction below for this
+already ratified implementation. Publish DEE-992 as its own PR; do not include or
+claim delivery of the separately stacked Cody amendment (DEE-993). No production
+deployment, migration application, scientific bootstrap or checkpoint mutation is
+part of this PR operation. Keep DEE-992 open until its integration/acceptance
+boundaries are reconciled; no automatic qualification claim on merge.
+
+Subsequent read-only real-corpus diagnostics are recorded in Linear, not silently
+folded into the local test counts below. Original BTC30 Forecast mapping matched
+all525547 rows; other three surfaces lack their Forecast batches. Positive Brier
+means are necessary evidence only, not statistical qualification. New scientific
+evaluation remains blocked on the separate CDF correction and DEE-991 admission.
+
+## Approval and limits
+
+Human approved alternative A and local implementation with DEE-991 compatibility
+checks on 2026-09-12. Base: 78188f9d3d035b459d619531127321218845de3d.
+The exact approved proposal is preserved in
+[amendment-v1](dee-992-brier-protocol-amendment-v1.md), SHA-256:
+694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de.
+Its historical DRAFT heading precedes this explicit ratification.
+No deployment, production migration, scientific corpus scoring/bootstrap, original
+checkpoint modification, credentials, capital, holdout, push or merge. Local tests
+use synthetic fixtures. Original DEE-991 diagnostic worktree remains untouched.
+
+## Scientific contract
+
+Primary reward: -sum((p[j]-indicator(j=y))²), all seven original categories,
+larger is better. No scaling, clipping, floor, filtering or renormalization.
+Seven dense finite probabilities in [0,1]; ascending sum within 1e-12 of 1.
+Invalid probabilities/grid/outcome refuse before bootstrap. Original log score
+remains secondary, retaining zeros and +Infinity/-Infinity/NaN differential counts.
+
+Unchanged: DEVELOPMENT fitting, target grid, all observations, all five baselines,
+common PIT anchors, horizons, purge/embargo, VALBOOT1 dependence/null-centering,
+B=10000, positive-mean gate, Holm FWER 0.05. No adaptive learning/live authority.
+A changed metric may change ranking; it does not imply qualification or profit.
+Previously inspected WALK_FORWARD remains disclosed re-analysis, not untouched
+confirmation. Frozen DEE-518 log-score text is superseded only in this bounded
+Terminal primary-scoring domain by the exact ratified amendment, not elsewhere.
+
+## Work packages
+
+- WP-1: validated score, all-baseline preflight, log diagnostic retention.
+- WP-2: exact version/metric/amendment through Terminal/scientific/four-surface,
+  first/next-cycle consumers and SQL binding; reject old/mixed evidence.
+- WP-3: local DEE-991 checker of original SHA/runtime/key, package/data/grid/model/
+  normalization/randomness/partition dependencies, payload and original anchor/outcome
+  mapping. No store IO/builders, relabeling or authority issuance.
+- WP-4: focused tests, PostgreSQL 17, lint/typecheck/build and independent review.
+
+## Version registry
+
+| Contract | Local version |
+| --- | --- |
+| Primary score | multiclass-brier-reward/v1 |
+| Trial metric | terminal-multiclass-brier-reward/v1 |
+| Harness | research-harness-admission/v4 |
+| Harness digest namespace | scientific-admission-receipt/v4 |
+| Predictive Terminal receipt | predictive-terminal-receipt/v2 |
+| Outer scientific admission | scientific-admission-receipt/v3 |
+| Terminal checkpoint stage | wf-predictive-terminal-v2 |
+| Bootstrap law | validation-bootstrap/v2 (unchanged) |
+
+## Database compatibility and recovery
+
+0201 pins outer receipt v2 in runner RLS. Local migration0206 changes that
+predicate to v3 and adds exact nested Brier versions/amendment. Every original
+tenant/request/proposal/approved-surface/Human/aggregate predicate remains identical.
+The SQL binding reader shares the writer's version constant. No tables, records,
+credentials or privileges rewritten; no RLS disabled. Migration numbering requires
+reconciliation with then-current main before merge. Production apply remains separately
+authorized. Recovery: stop preparation, retain evidence, separately approve any
+policy/application rollback. Never treat old log-score admissions as new evidence.
+
+## Evidence and unfinished boundaries
+
+183 focused unit tests across17 files passed, including44,100 expected-score
+comparisons, worker parity, negative admissions, original-key/store parity, RLS delta.
+Typecheck passed. Lint:0 errors,307 repository warnings. Next production build passed.
+Fresh isolated PostgreSQL17 applied all migrations through0206.
+51 focused integration tests passed,2 conditional provisioning cases skipped.
+Three additional selected Forecast persistence/idempotence tests passed; three
+unselected cases were not run. Their first local run correctly refused a missing
+immutable build SHA; rerun with the explicit local base SHA passed, without bypass.
+Independent read-only review identified one async accessor-validation bypass.
+Original probability entries are now checked before structuredClone; the regression
+proves zero getter invocations and zero bootstrap progress in sync/async rejection.
+The reviewer rechecked the fix: no outstanding P1/P2 within the reviewed local diff.
+This is focused local evidence, not all-repository CI, E2E or full historical acceptance.
+
+## Acceptance
+
+- [x] Primary Brier formula, strict probabilities and immutable amendment binding.
+- [x] All five baselines and original log diagnostics retained without weakening gates.
+- [x] Old/mixed receipts refused in consumers and locally migrated runner RLS.
+- [x] Pure preserved-origin compatibility checker and original key parity tests.
+- [x] Focused unit/PostgreSQL 17 checks, typecheck, lint, build and independent review.
+- [x] Original checkpoints, production state and scientific execution untouched.
+- [ ] Full original-store provenance and production dual-origin adapter (DEE-991).
+- [ ] Independent CDF correction (DEE-993) before any new evaluation.
+- [ ] Remote CI, merge, authorized rollout and scientific acceptance (not this local approval).
+
+## Local recovery continuation — 2026-09-12
+
+User requested parallel work without restarting science. Three bounded agents
+reviewed recovery mapping, CDF reference impact and diagnostic/reader correctness.
+Added no-authority necessary-mean/cost diagnostic, existing-only authenticated
+forecast-byte reader and pure original WF expected inventory/coverage mapper.
+The reader never opens the writing store factory, creates keys or accepts builders;
+missing entries remain explicit. Original SHA/runtime/key/anchor mapping is retained.
+Synthetic end-to-end composition confirms a missing final batch is not generated.
+
+Independent review found sparse DEVELOPMENT acceptance shared with the harness;
+descriptor-based dense/finite validation now protects diagnostic, sync and async
+paths before cloning/scoring. Another finding, blocking FIFO open in the reader,
+was fixed using nonblocking open before regular-file validation and three FIFO tests.
+Both fixes re-reviewed; inventory independently reviewed without outstanding findings.
+Final groups:118 +22 =140 targeted tests passed, integrated typecheck passed,
+application build passed. These overlap earlier evidence; do not sum all historical
+test counts as distinct tests. No full remote CI or original-corpus acceptance run.
+
+The inventory is derived from SUPPLIED original inputs, not proof those inputs
+independently match production. Actual full source reconstruction and authenticated
+production mapping still remain. No all-four-surface completeness or reuse admission.
+CDF reference review found the frozen pseudocode conflicts with its declared JINT=0
+source; a narrow reference-conformance amendment is proposed separately, not activated.
+No deployment, production/checkpoint writes, corpus scoring or bootstrap this turn.
+
+DEE-991 checker returns LOCAL_BINDINGS_MATCH_NOT_ADMISSION: authenticated whole-store
+read, independently reconstructed COMPLETE input inventory, full anchor coverage and
+production dual-origin evaluation adapter are NOT established. Missing metadata
+refuses without generation. All old score/bootstrap/Holm evidence needs separate
+authorized recomputation. Source bars/packages/forecasts are preservation candidates,
+not new authority. DEE-993 CDF defect remains open and blocks fresh evaluation.
+No scientific/reuse/production PASS or historical-test readiness is claimed.
+
+## Exact-head CI reconciliation — 2026-09-12, resumed after manual pause
+
+PR580 head683424c3 passed the PostgreSQL integration and both PG17 guards.
+Full unit CI reported7143 passed,596 existing skipped and3 failures; dependent
+build/E2E were skipped, not successful. The failures were stale integration
+expectations after the admitted0206 addition: explicit post0148 extra-migration
+list, the shared test assuming0205 must remain the journal tail, and the Reality
+consumer content pin. Ratified0148 identity and frozen0205 SQL bytes stay unchanged.
+
+The only changed production consumers in the unchanged129-path Reality inventory
+are production-first-cycle-bootstrap-v2.ts and production-next-cycle-forecast-v2.ts:
+each imports the ratified scoring constant and replaces the old log-score literal.
+Only the reviewed content digest is updated; source/path/count rules, connector
+closure and all negative authority checks remain intact.
+
+The shared migration regression now tests the current contiguous unique journal
+and keeps0205 exactly pinned. A real isolated PostgreSQL17 run exposed old fixture
+assumptions hidden behind opt-in: unscoped owner seeding of FORCE-RLS tables and
+unknown-vs-missing precedence when a required migration timestamp is moved.
+Fixture writes/reads now supply exact transaction-local scope; no RLS disabling,
+new grants, schema changes or production access. Fresh restricted-role rerun:
+10/10 PASS, including all scope, secret-denial, immutable-evidence and journal
+negatives. The earlier failed fixture/log is preserved and both local containers
+were stopped, not reused as production. Full CI must pass again on the final head.
+
+Published branch synchronized by normal merge from main5edd5511; no force push,
+direct main update, application rollout or scientific calculation. DEE992 remains
+open for deployment/scientific acceptance and DEE991/993 dependency closure.

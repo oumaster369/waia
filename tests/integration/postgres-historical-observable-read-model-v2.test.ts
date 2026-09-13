@@ -22,6 +22,16 @@ suite("historical observable read model v2 on PostgreSQL", () => {
         await tx`INSERT INTO organizations (id,owner_user_id,kind,name) VALUES (${orgId},${userId},'personal','observable fixture')`;
         const org = { id: orgId }; const run = `observable-${suffix}`; const entry = `entry-${suffix}`;
         const digest = "a".repeat(64); const membershipDigest = "b".repeat(64);
+        const addEmptyExchange=async(targetOrg:string,accountId:string,cycleId:string,targetEntry:string,ledgerDigest:string)=>{
+          const snapshot=createHistoricalSimulationDurableStateSnapshotV2({organizationId:targetOrg,accountId,runId:run,
+            split:"DEVELOPMENT",cycleId,stateKind:"MODELED_EXCHANGE",state:{openOrders:[],checkpoint:{
+              schemaVersion:"htr-wp17-execution-checkpoint/v1",executionModelSchemaVersion:"waia.trader.historical-execution-model.v1",openOrders:[]}}});
+          await tx.unsafe(`INSERT INTO trader_historical_simulation_durable_snapshot_v2
+            (organization_id,account_id,run_id,cycle_sequence,cycle_id,state_kind,ledger_entry_id,ledger_entry_content_digest_hex,state_json,
+             snapshot_content_digest_hex,schema_version) VALUES ($1::uuid,$2,$3,0,$4,'MODELED_EXCHANGE',$5,$6,$7::jsonb,$8,$9)`,
+            [targetOrg,accountId,run,cycleId,targetEntry,ledgerDigest,JSON.stringify(snapshot.state),snapshot.contentDigestHex,snapshot.schemaVersion]);
+          return snapshot.contentDigestHex;
+        };
         const membership = { schemaVersion: "waia.trader.historical_dataset_membership.v2",
           organizationId: org.id, cycleId: "cycle-0", partition: "DEVELOPMENT", contentDigestHex: membershipDigest };
         await tx.unsafe(`INSERT INTO trader_historical_simulation_reason_ledger_v2
@@ -57,16 +67,20 @@ suite("historical observable read model v2 on PostgreSQL", () => {
           JSON.stringify(accountingSnapshot.state),snapshotDigest]);
         const request={schemaVersion:"waia.trader.historical_simulation_commit_request.v2",contentDigestHex:requestDigest,
           organizationId:org.id,accountId:"tenant-account",runId:run,cycleSequence:0,cycleId:"cycle-0"};
+        const exchangeDigest=await addEmptyExchange(org.id,"tenant-account","cycle-0",entry,digest);
         await tx.unsafe(`INSERT INTO trader_historical_simulation_resume_checkpoint_v2
           (organization_id,account_id,run_id,split,committed_cycle_sequence,committed_cycle_id,ledger_entry_id,
            ledger_head_content_digest_hex,next_record_index,next_cycle_sequence,dataset_authority_json,stage_digest_json,
            snapshot_digest_json,checkpoint_json,checkpoint_content_digest_hex,commit_request_digest_hex,commit_request_json,schema_version)
           VALUES ($1::uuid,'tenant-account',$2,'DEVELOPMENT',0,'cycle-0',$3,$4,1,1,'{}'::jsonb,'{}'::jsonb,
-           $5::jsonb,'{}'::jsonb,$6,$7,$8::jsonb,'waia.trader.historical_simulation_resume_cursor.v2')`,
-          [org.id,run,entry,digest,JSON.stringify({ACCOUNTING_FRONTIER:snapshotDigest}),checkpointDigest,requestDigest,JSON.stringify(request)]);
+           $5::text::jsonb,'{}'::jsonb,$6,$7,$8::jsonb,'waia.trader.historical_simulation_resume_cursor.v2')`,
+          [org.id,run,entry,digest,JSON.stringify({ACCOUNTING_FRONTIER:snapshotDigest,MODELED_EXCHANGE:exchangeDigest}),checkpointDigest,requestDigest,JSON.stringify(request)]);
         await tx.unsafe(`INSERT INTO trader_historical_simulation_resume_snapshot_link_v2
           (organization_id,account_id,run_id,committed_cycle_sequence,state_kind,snapshot_content_digest_hex)
           VALUES ($1::uuid,'tenant-account',$2,0,'ACCOUNTING_FRONTIER',$3)`,[org.id,run,snapshotDigest]);
+        await tx.unsafe(`INSERT INTO trader_historical_simulation_resume_snapshot_link_v2
+          (organization_id,account_id,run_id,committed_cycle_sequence,state_kind,snapshot_content_digest_hex)
+          VALUES ($1::uuid,'tenant-account',$2,0,'MODELED_EXCHANGE',$3)`,[org.id,run,exchangeDigest]);
         const addCommittedAccount=async(targetOrg:string,accountId:string,cycleId:string,equity:string)=>{
           const targetEntry=`entry-${accountId}-${suffix}`;const targetLedgerDigest=(accountId==="account-two"?"3":"4").repeat(64);
           const targetMembershipDigest=(accountId==="account-two"?"5":"6").repeat(64);
@@ -88,16 +102,20 @@ suite("historical observable read model v2 on PostgreSQL", () => {
              'waia.trader.historical_simulation_durable_state_snapshot.v2')`,[targetOrg,accountId,run,cycleId,targetEntry,targetLedgerDigest,
              JSON.stringify(targetState),targetSnapshot.contentDigestHex]);
           const targetReq={...request,organizationId:targetOrg,accountId,cycleId,contentDigestHex:(accountId==="account-two"?"7":"8").repeat(64)};
+          const targetExchangeDigest=await addEmptyExchange(targetOrg,accountId,cycleId,targetEntry,targetLedgerDigest);
           await tx.unsafe(`INSERT INTO trader_historical_simulation_resume_checkpoint_v2
             (organization_id,account_id,run_id,split,committed_cycle_sequence,committed_cycle_id,ledger_entry_id,ledger_head_content_digest_hex,
              next_record_index,next_cycle_sequence,dataset_authority_json,stage_digest_json,snapshot_digest_json,checkpoint_json,
              checkpoint_content_digest_hex,commit_request_digest_hex,commit_request_json,schema_version)
-            VALUES ($1::uuid,$2,$3,'DEVELOPMENT',0,$4,$5,$6,1,1,'{}','{}',$7::jsonb,'{}',$8,$9,$10::jsonb,
+            VALUES ($1::uuid,$2,$3,'DEVELOPMENT',0,$4,$5,$6,1,1,'{}','{}',$7::text::jsonb,'{}',$8,$9,$10::jsonb,
              'waia.trader.historical_simulation_resume_cursor.v2')`,[targetOrg,accountId,run,cycleId,targetEntry,targetLedgerDigest,
-             JSON.stringify({ACCOUNTING_FRONTIER:targetSnapshot.contentDigestHex}),"9".repeat(64),targetReq.contentDigestHex,JSON.stringify(targetReq)]);
+             JSON.stringify({ACCOUNTING_FRONTIER:targetSnapshot.contentDigestHex,MODELED_EXCHANGE:targetExchangeDigest}),"9".repeat(64),targetReq.contentDigestHex,JSON.stringify(targetReq)]);
           await tx.unsafe(`INSERT INTO trader_historical_simulation_resume_snapshot_link_v2
             (organization_id,account_id,run_id,committed_cycle_sequence,state_kind,snapshot_content_digest_hex)
             VALUES ($1::uuid,$2,$3,0,'ACCOUNTING_FRONTIER',$4)`,[targetOrg,accountId,run,targetSnapshot.contentDigestHex]);
+          await tx.unsafe(`INSERT INTO trader_historical_simulation_resume_snapshot_link_v2
+            (organization_id,account_id,run_id,committed_cycle_sequence,state_kind,snapshot_content_digest_hex)
+            VALUES ($1::uuid,$2,$3,0,'MODELED_EXCHANGE',$4)`,[targetOrg,accountId,run,targetExchangeDigest]);
         };
         await addCommittedAccount(org.id,"account-two","cycle-two","50.00000000");
         const user2=crypto.randomUUID(),org2=crypto.randomUUID();
@@ -120,6 +138,15 @@ suite("historical observable read model v2 on PostgreSQL", () => {
            '{}'::jsonb,'{"action":"ENTER_LONG"}'::jsonb,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,
            '{}'::jsonb,'{}'::jsonb,$5,'[]'::jsonb,$6,$7::jsonb)`,[`uncommitted-${suffix}`,org.id,run,digest,
           "2".repeat(64),uncommittedMembership.contentDigestHex,JSON.stringify(uncommittedMembership)]);
+        const exchangeBinding = await tx.unsafe<{valid:boolean}[]>(`SELECT
+          c.snapshot_digest_json->>'MODELED_EXCHANGE'=sl.snapshot_content_digest_hex AS valid
+          FROM trader_historical_simulation_resume_checkpoint_v2 c
+          JOIN trader_historical_simulation_resume_snapshot_link_v2 sl
+            ON sl.organization_id=c.organization_id AND sl.account_id=c.account_id AND sl.run_id=c.run_id
+            AND sl.committed_cycle_sequence=c.committed_cycle_sequence AND sl.state_kind='MODELED_EXCHANGE'
+          WHERE c.organization_id=$1::uuid AND c.run_id=$2`, [org.id,run]);
+        expect(exchangeBinding).toHaveLength(2);
+        expect(exchangeBinding.every(row=>row.valid)).toBe(true);
         captured = await loadHistoricalObservableProjectionPostgresV2(tx, {
           organizationId: org.id, runId: run, accountId: "tenant-account",
         });
@@ -134,7 +161,7 @@ suite("historical observable read model v2 on PostgreSQL", () => {
     expect(captured).toMatchObject({ capitalEligible: false,
       aggregate: { accountCount: 1, equity: "100.00000000", fills: 1, processedRecords: 1 },
       accounts: [{ accountId: "tenant-account", cycleSequence:0, decisionsCount:1, lastDecision: { action: "CASH" },
-        lastAccounting: { equity: "100.00000000" } }] });
+        lastAccounting: { equity: "100.00000000" }, pendingModeledOrders:[] }] });
     expect(operator?.aggregate).toMatchObject({accountCount:2,equity:"150.00000000"});
     expect(operator?.accounts.map((item)=>item.accountId).sort()).toEqual(["account-two","tenant-account"]);
     expect(wrongAccount?.accounts).toEqual([]);expect(wrongOrganization?.accounts).toEqual([]);

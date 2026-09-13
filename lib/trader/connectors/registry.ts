@@ -18,6 +18,7 @@ export type HtxConnectorFactoryConfig = {
   credentials: ConnectorCredentialInput;
   restHost?: string;
   fetchImpl?: typeof fetch;
+  expectedSpotAccountId?: string;
 };
 
 export type CreateExchangeConnectorConfig =
@@ -52,6 +53,7 @@ export function createExchangeConnector(
       apiSecret: config.credentials.apiSecret,
       restHost: config.restHost,
       fetchImpl: config.fetchImpl,
+      expectedSpotAccountId: config.expectedSpotAccountId,
     });
   }
 

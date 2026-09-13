@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { historicalDatasetRegistrationIdentityV2 } from "./dataset-registration-identity-v2";
 
 import {
   validateCashEconomicAuthorityV1,
@@ -48,6 +49,7 @@ import {
 } from "./postgres-session-transaction-v2";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { requireForecastRuntimeAuthorizedOutcomeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
+import { hydrateForecastAuthorizedOutcomeWireV1 } from "@/lib/trader/intelligence/forecast-v2/forecast-package-wire-v1";
 import {
   requireScientificAdmissionV2,
   SCIENTIFIC_ADMISSION_RECEIPT_V2_VERSION,
@@ -226,11 +228,11 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
   }>): Promise<CanonicalDecisionVerificationReceiptV2> {
     const rows = await sql<Readonly<{
       bundle_id: string; bundle_content_digest_hex: string; anchor_closed_bar_epoch_ms: string | number;
-      authorized_outcome_json: unknown; target_role_id: string;
+      authorized_outcome_json: unknown; target_role_id: string; predictive_package_id: string;
     }>[]>`
       SELECT b.id::text AS bundle_id, encode(b.bundle_content_digest,'hex') AS bundle_content_digest_hex,
              b.anchor_closed_bar_epoch_ms, b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json,
-             f.target_role_id
+             f.target_role_id, b.predictive_package_id::text
       FROM trader_forecast_v2 f JOIN trader_forecast_bundle_v2 b
         ON b.organization_id=f.organization_id AND b.id=f.bundle_id
       WHERE f.organization_id=${input.organizationId}::uuid AND f.id=${input.forecastId}::uuid
@@ -239,7 +241,10 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     if (!row || row.target_role_id !== "EXECUTION_OPPORTUNITY") {
       throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:FORECAST_SOURCE");
     }
-    const outcome = requireForecastRuntimeAuthorizedOutcomeV2(row.authorized_outcome_json as never);
+    const outcome = requireForecastRuntimeAuthorizedOutcomeV2(await hydrateForecastAuthorizedOutcomeWireV1(
+      sql, row.authorized_outcome_json as never,
+      { organizationId: input.organizationId, packageId: row.predictive_package_id },
+    ));
     if (outcome.authority.contentDigestHex !== input.subjectContentDigestHex) {
       throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:FORECAST_SOURCE");
     }
@@ -295,8 +300,9 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     const forecastRows = await sql<Array<Readonly<{
       anchor_closed_bar_epoch_ms: string | number;
       authorized_outcome_json: unknown;
+      predictive_package_id: string;
     }>>>`
-      SELECT b.anchor_closed_bar_epoch_ms,
+      SELECT b.anchor_closed_bar_epoch_ms, b.predictive_package_id::text,
              b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json
       FROM trader_forecast_v2 f
       JOIN trader_forecast_bundle_v2 b
@@ -310,7 +316,8 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       throw new Error("CANONICAL_DECISION_VERIFICATION_REFUSED:FORECAST_SOURCE");
     }
     const forecast = requireForecastRuntimeAuthorizedOutcomeV2(
-      forecastRow.authorized_outcome_json as never,
+      await hydrateForecastAuthorizedOutcomeWireV1(sql, forecastRow.authorized_outcome_json as never,
+        { organizationId: input.organizationId, packageId: forecastRow.predictive_package_id }),
     );
     const pitAnchor = new Date(
       Number(forecastRow.anchor_closed_bar_epoch_ms),
@@ -535,13 +542,17 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         const body = { organizationId: input.organizationId, runId: input.runId,
           membership, sealedCycle: cycle };
         const authorityDigest = computeStableJsonDigest(body);
+        const registrationId = historicalDatasetRegistrationIdentityV2({
+          organizationId: input.organizationId, runId: input.runId,
+          cycleId: cycle.cycleId, authorityContentDigestHex: authorityDigest,
+        });
         const inserted = await tx<{ id: string }[]>`
         INSERT INTO trader_historical_dataset_authority_v2 (
-          organization_id, run_id, cycle_id, dataset_authority_class, dataset_authority_digest_hex,
+          id, organization_id, run_id, cycle_id, dataset_authority_class, dataset_authority_digest_hex,
           membership_content_digest_hex, sealed_cycle_content_digest_hex,
           membership_json, sealed_cycle_json, authority_content_digest_hex, schema_version
         ) VALUES (
-          ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId},
+          ${registrationId}::uuid, ${input.organizationId}::uuid, ${input.runId}, ${cycle.cycleId},
           ${membership.datasetAuthorityClass ?? "FULL_SEALED_DATASET_V2"}, ${datasetAuthorityDigestHex},
           ${membership.contentDigestHex}, ${cycle.contentDigestHex},
           ${JSON.stringify(membership)}::text::jsonb,
@@ -729,9 +740,9 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
         throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:ACCOUNTING_DIGEST");
       }
     }
-    const forecastRows = await sql<{ authorized_outcome_json: unknown; anchor_closed_bar_epoch_ms: string | number }[]>`
+    const forecastRows = await sql<{ authorized_outcome_json: unknown; anchor_closed_bar_epoch_ms: string | number; predictive_package_id: string }[]>`
       SELECT b.forecast_runtime_authorized_outcome_json AS authorized_outcome_json,
-             b.anchor_closed_bar_epoch_ms
+             b.anchor_closed_bar_epoch_ms, b.predictive_package_id::text
       FROM trader_forecast_v2 f JOIN trader_forecast_bundle_v2 b
         ON b.organization_id=f.organization_id AND b.id=f.bundle_id
       WHERE f.organization_id=${input.organizationId}::uuid AND f.id=${input.forecastId}::uuid
@@ -739,7 +750,10 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     `;
     const forecastRow = forecastRows[0];
     if (!forecastRow) throw new Error("CANONICAL_DECISION_PREREGISTRATION_REFUSED:FORECAST");
-    const forecast = requireForecastRuntimeAuthorizedOutcomeV2(forecastRow.authorized_outcome_json as never);
+    const forecast = requireForecastRuntimeAuthorizedOutcomeV2(await hydrateForecastAuthorizedOutcomeWireV1(
+      sql, forecastRow.authorized_outcome_json as never,
+      { organizationId: input.organizationId, packageId: forecastRow.predictive_package_id },
+    ));
     const barEpoch = Date.parse(sealedCycle.closedBar.barCloseTime);
     if (forecast.authority.organizationId !== input.organizationId ||
         forecast.authority.anchorClosedBarEpochMs !== barEpoch ||
