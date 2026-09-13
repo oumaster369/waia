@@ -397,10 +397,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
-  test:
-    name: unit tests
+  unit-shards:
+    name: unit shard ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
     timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       DATABASE_URL: file:./.data/ci-unit.sqlite
     steps:
@@ -417,14 +421,63 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p .data && pnpm db:migrate
+      - name: Discover complete inventory and native partition without executing fixtures
+        id: prepare
+        run: node scripts/github/unit-shard-evidence.mjs prepare "$RUNNER_TEMP/waia-unit-shard" '${{ matrix.shard }}'
       - name: Run unit tests with bounded passing output
+        id: unit
         shell: bash
         run: |
-          WAIA_UNIT_LOG_FILE="$RUNNER_TEMP/waia-unit-tests.log" \
+          WAIA_UNIT_LOG_FILE="$RUNNER_TEMP/waia-unit-shard/unit.log" \
           WAIA_PROGRESS_INTERVAL_SECONDS=60 \
           WAIA_UNIT_TIMEOUT_SECONDS=3600 \
             ./scripts/github/run-unit-tests-with-bounded-progress.sh \
-              pnpm test --run --reporter=dot
+              pnpm test --run --reporter=dot --reporter=blob \
+                --shard=${{ matrix.shard }}/2 \
+                --outputFile.blob="$RUNNER_TEMP/waia-unit-shard/blob.json"
+      - name: Bind successful native report to this exact shard and attempt
+        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        run: node scripts/github/unit-shard-evidence.mjs seal "$RUNNER_TEMP/waia-unit-shard" '${{ steps.unit.outcome }}'
+      - name: Preserve complete shard log and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-shard-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/waia-unit-shard/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Preserve the existing required check and downstream dependency ID. A failed,
+  # cancelled or skipped shard cannot turn into a successful/skipped aggregate.
+  # Evidence is attempt-bound: rerun ALL jobs after failure, not failed jobs only.
+  test:
+    name: unit tests
+    needs: [unit-shards]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every isolated shard to succeed before downloading evidence
+        env:
+          UNIT_SHARDS_RESULT: ${{ needs.unit-shards.result }}
+        run: test "$UNIT_SHARDS_RESULT" = success
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unit-shard-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/waia-unit-shards
+      - name: Require exact complete partition and merged actual report coverage
+        run: node scripts/github/unit-shard-evidence.mjs aggregate "$RUNNER_TEMP/waia-unit-shards" '${{ needs.unit-shards.result }}'
 
   # RELEASE-BLOCKING GATE (ADR-0007): any cross-organization access leak blocks merge/release.
   # Owner: Architect / backend label. Tests are classified by the `tenant-isolation` filename
