@@ -1,7 +1,17 @@
 // @vitest-environment node
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, realpathSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -24,6 +34,7 @@ import {
   expectedOffsetsV1,
   issueControlForecastBatchV1,
   issueMissingForecastBatchV1,
+  loadSelectedPreservedPackageV1,
   parseProducerMappingInputV1,
   refuseCoverageGapV1,
   type MissingOnlyProducerIdentityV1,
@@ -187,13 +198,102 @@ const producerSource = [
   readFileSync(resolve("scripts/trader/missing-only-forecast-producer-cli-v1.ts"), "utf8"),
 ].join("\n");
 
+const CLI = resolve("scripts/trader/missing-only-forecast-producer-cli-v1.ts");
+
 let identity: MissingOnlyProducerIdentityV1;
 let pkg: ReturnType<typeof buildPredictivePackageV1>;
+let packageInput: Parameters<typeof buildPredictivePackageV1>[0];
 let wf: SourceAnchor[];
 let envelope: ReturnType<typeof makeEnvelope>;
 let originRoot: string;
 let producerRoot: string;
 let evidenceRoot: string;
+
+function treeDigest(root: string): string {
+  const lines: string[] = [];
+  const walk = (dir: string, rel: string) => {
+    for (const name of readdirSync(dir).sort()) {
+      const path = join(dir, name);
+      const next = rel ? `${rel}/${name}` : name;
+      if (lstatSync(path).isDirectory()) walk(path, next);
+      else lines.push(`${next}:${sha(readFileSync(path).toString("hex"))}`);
+    }
+  };
+  walk(root, "");
+  return sha(lines.join("\n"));
+}
+
+function spawnCli(args: string[], timeout = 120000) {
+  return spawnSync(
+    process.execPath,
+    ["--import", "tsx", "--conditions=react-server", CLI, ...args],
+    {
+      encoding: "utf8",
+      timeout,
+      env: { ...process.env, WAIA_TRADER_CLI: "1" },
+    },
+  );
+}
+
+function selectedPackageFields(packageKey: string) {
+  return {
+    chunkCount: 1,
+    contentDigestHex: pkg.predictivePackageContentDigest.toString("hex"),
+    generationDigestHex: pkg.predictivePackageGenerationIdentityDigest.toString("hex"),
+    packageKey,
+    runtimeContractDigestHex: pkg.runtimeContractDigest.toString("hex"),
+    sourceCount: 120,
+    targetGridDigestHex: pkg.terminalTargetGridIdentityDigestHex,
+  };
+}
+
+function sealedEnvelope(packageKey: string) {
+  return makeEnvelope([
+    makeSurface({
+      symbol: "BTCUSDT",
+      primaryHorizonMinutes: 30,
+      sourceCorpus: wf,
+      selectedPackage: selectedPackageFields(packageKey),
+      k: 2,
+      m: 20,
+    }),
+  ]);
+}
+
+function sealSelectedPackage(root: string): string {
+  createScientificCheckpointStoreV1(root, ORIGIN_SHA).package(packageInput, () => pkg);
+  const keys = readdirSync(root).filter((name) => /^[a-f0-9]{64}$/.test(name));
+  if (keys.length !== 1) throw new Error(`expected one sealed package, got ${keys.join(",")}`);
+  return keys[0]!;
+}
+
+function writeOperationalInputs(packageKey: string, mappingName = "mapping.json") {
+  const sealed = sealedEnvelope(packageKey);
+  const mappingPath = join(producerRoot, mappingName);
+  const anchorsPath = join(producerRoot, "anchors.json");
+  writeFileSync(
+    mappingPath,
+    JSON.stringify({
+      authorityGranted: false,
+      contentDigestHex: mappingContentDigestHexV1(sealed.mapping),
+      mapping: sealed.mapping,
+      schemaVersion: sealed.schemaVersion,
+    }),
+  );
+  writeFileSync(anchorsPath, JSON.stringify(wf));
+  return { sealed, mappingPath, anchorsPath };
+}
+
+function runtimeFlags() {
+  return [
+    "--require-node",
+    process.version,
+    "--require-os",
+    process.platform,
+    "--require-arch",
+    process.arch,
+  ] as const;
+}
 
 beforeAll(() => {
   vi.stubEnv("WAIA_TRADER_CLI", "1");
@@ -209,12 +309,13 @@ beforeAll(() => {
     releaseSha: ORIGIN_SHA,
   });
   const development = corpus("BTCUSDT", 120, "dev");
-  pkg = buildPredictivePackageV1({
+  packageInput = {
     family,
     sourceCorpus: development,
     kConfigDec: 2,
     mConfigDec: 20,
-  });
+  };
+  pkg = buildPredictivePackageV1(packageInput);
   wf = corpus("BTCUSDT", 40, "wf");
   envelope = makeEnvelope([
     makeSurface({
@@ -369,6 +470,8 @@ describe("DEE-950 missing-only Forecast producer", () => {
     expect(producerSource).not.toContain("km-four-surface-production-bootstrap");
     expect(producerSource).not.toContain("validation-bootstrap-v1");
     expect(producerSource).not.toContain("finalizeApprovedHistoricalProposal");
+    expect(producerSource).not.toContain("live-cli");
+    expect(producerSource).not.toContain("mark-enabled");
     expect(producerSource).not.toContain("Human");
     expect(identity.contractVersion).toBe("waia.trader.missing_only_forecast_producer.v1");
     expect(identity.producerGitSha).toBe(PRODUCER_SHA);
@@ -543,4 +646,343 @@ describe("DEE-950 missing-only Forecast producer", () => {
     ]);
     expect(result.stdout).not.toContain("buildPredictivePackageV1");
   });
+
+  it("loads a sealed selected package through the no-build reader", () => {
+    const packageKey = sealSelectedPackage(originRoot);
+    const sealed = sealedEnvelope(packageKey);
+    const loaded = loadSelectedPreservedPackageV1({
+      envelope: sealed,
+      surfaceKey: "BTCUSDT:30",
+      packageRoot: originRoot,
+    });
+    expect(loaded.predictivePackageContentDigest.toString("hex")).toBe(
+      pkg.predictivePackageContentDigest.toString("hex"),
+    );
+    expect(() =>
+      loadSelectedPreservedPackageV1({
+        envelope: sealed,
+        surfaceKey: "BTCUSDT:30",
+        packageRoot: originRoot,
+        buildPackage: () => pkg,
+      } as never),
+    ).toThrow("BUILDER_FALLBACK");
+    expect(() =>
+      loadSelectedPreservedPackageV1({
+        envelope: sealedEnvelope("a".repeat(64)),
+        surfaceKey: "BTCUSDT:30",
+        packageRoot: originRoot,
+      }),
+    ).toThrow("PACKAGE_MISSING");
+  });
+
+  it("executes control mode as a subprocess without writing origin or producer evidence", () => {
+    const packageKey = sealSelectedPackage(originRoot);
+    const { mappingPath, anchorsPath } = writeOperationalInputs(packageKey);
+    const before = treeDigest(originRoot);
+    const args = [
+      "--mapping",
+      mappingPath,
+      "--mode",
+      "control",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--package-root",
+      originRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      "--offset",
+      "0",
+      ...runtimeFlags(),
+    ];
+    const first = spawnCli(args);
+    expect(first.stderr).toBe("");
+    expect(first.status).toBe(0);
+    const body = JSON.parse(first.stdout) as {
+      format: string;
+      authorityGranted: boolean;
+      surface: string;
+      offset: number;
+      rowCount: number;
+      rowsSha256: string;
+      identity: { producerGitSha: string };
+    };
+    expect(body).toMatchObject({
+      format: "waia.trader.missing_only_forecast_producer.control.v1",
+      authorityGranted: false,
+      surface: "BTCUSDT:30",
+      offset: 0,
+      rowCount: 32,
+      identity: { producerGitSha: PRODUCER_SHA },
+    });
+    expect(body.rowsSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.stdout).not.toContain("challengerProbabilities");
+    const second = spawnCli(args);
+    expect(second.stderr).toBe("");
+    expect(second.status).toBe(0);
+    expect(second.stdout).toBe(first.stdout);
+    expect(JSON.parse(second.stdout).rowsSha256).toBe(body.rowsSha256);
+    expect(treeDigest(originRoot)).toBe(before);
+    expect(existsSync(join(producerRoot, "journal"))).toBe(false);
+    expect(readdirSync(evidenceRoot)).toEqual([]);
+  }, 180000);
+
+  it("executes issue mode as a subprocess, seals producer evidence, and refuses a duplicate completion", () => {
+    const packageKey = sealSelectedPackage(originRoot);
+    const { mappingPath, anchorsPath } = writeOperationalInputs(packageKey);
+    const journalRoot = join(producerRoot, "journal");
+    const originBefore = treeDigest(originRoot);
+    const issuePrefix = [
+      "--mapping",
+      mappingPath,
+      "--mode",
+      "issue",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--package-root",
+      originRoot,
+      "--producer-root",
+      journalRoot,
+      "--producer-evidence-root",
+      evidenceRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      ...runtimeFlags(),
+    ];
+    const issued = spawnCli([...issuePrefix, "--offset", "0"]);
+    expect(issued.stderr).toBe("");
+    expect(issued.status).toBe(0);
+    const body = JSON.parse(issued.stdout) as {
+      format: string;
+      producerKey: string;
+      payloadDigest: string;
+      rowsSha256: string;
+      rowCount: number;
+    };
+    expect(body).toMatchObject({
+      format: "waia.trader.missing_only_forecast_producer.issue.v1",
+      rowCount: 32,
+    });
+    expect(body.producerKey).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.payloadDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.rowsSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(existsSync(join(journalRoot, "completions", "BTCUSDT_30", "0.complete"))).toBe(true);
+    expect(existsSync(join(evidenceRoot, body.producerKey))).toBe(true);
+    expect(treeDigest(originRoot)).toBe(originBefore);
+    const restarted = spawnCli([
+      "--mapping",
+      mappingPath,
+      "--mode",
+      "enumerate",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--producer-root",
+      journalRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+    ]);
+    expect(restarted.stderr).toBe("");
+    expect(restarted.status).toBe(0);
+    expect(JSON.parse(restarted.stdout).missing).toEqual([{ offset: 32, anchorCount: 8 }]);
+    const duplicate = spawnCli([...issuePrefix, "--offset", "0"]);
+    expect(duplicate.status).toBe(1);
+    expect(duplicate.stderr).toContain("NOT_MISSING");
+    createProducerJournalV1(journalRoot, identity).claim("BTCUSDT:30", 32);
+    const claimed = spawnCli([...issuePrefix, "--offset", "32"]);
+    expect(claimed.status).toBe(1);
+    expect(claimed.stderr).toContain("DUPLICATE_CLAIM");
+    const retried = spawnCli([...issuePrefix, "--offset", "32", "--retry-incomplete", "true"]);
+    expect(retried.stderr).toBe("");
+    expect(retried.status).toBe(0);
+    expect(JSON.parse(retried.stdout).rowCount).toBe(8);
+  }, 180000);
+
+  it("refuses builder fallback flags on the operational CLI", () => {
+    const mappingPath = join(producerRoot, "mapping.json");
+    const anchorsPath = join(producerRoot, "anchors.json");
+    writeFileSync(
+      mappingPath,
+      JSON.stringify({
+        authorityGranted: false,
+        contentDigestHex: mappingContentDigestHexV1(envelope.mapping),
+        mapping: envelope.mapping,
+        schemaVersion: envelope.schemaVersion,
+      }),
+    );
+    writeFileSync(anchorsPath, JSON.stringify(wf));
+    for (const flag of ["--package-builder", "--builder", "--build-package", "--fallback"]) {
+      const result = spawnCli([
+        "--mapping",
+        mappingPath,
+        "--mode",
+        "control",
+        flag,
+        "true",
+        "--producer-sha",
+        PRODUCER_SHA,
+        "--source-root",
+        SOURCE_ROOT,
+        "--origin-root",
+        originRoot,
+        "--package-root",
+        originRoot,
+        "--surface",
+        "BTCUSDT:30",
+        "--anchors-json",
+        anchorsPath,
+        "--offset",
+        "0",
+        ...runtimeFlags(),
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("BUILDER_FALLBACK");
+    }
+  });
+
+  it("refuses wrong G1, package, producer, runtime, and origin paths", () => {
+    const packageKey = sealSelectedPackage(originRoot);
+    const { mappingPath, anchorsPath } = writeOperationalInputs(packageKey);
+    const wrongPath = join(producerRoot, "wrong-mapping.json");
+    const mapping = JSON.parse(readFileSync(mappingPath, "utf8")) as { contentDigestHex: string };
+    mapping.contentDigestHex = "a".repeat(64);
+    writeFileSync(wrongPath, JSON.stringify(mapping));
+    const wrongDigest = spawnCli([
+      "--mapping",
+      wrongPath,
+      "--mode",
+      "control",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--package-root",
+      originRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      "--offset",
+      "0",
+      ...runtimeFlags(),
+    ]);
+    expect(wrongDigest.status).toBe(1);
+    expect(wrongDigest.stderr).toContain("CONTENT_DIGEST");
+    const wrongPackage = writeOperationalInputs("b".repeat(64), "missing-package.json");
+    const missingPackage = spawnCli([
+      "--mapping",
+      wrongPackage.mappingPath,
+      "--mode",
+      "control",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--package-root",
+      originRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      "--offset",
+      "0",
+      ...runtimeFlags(),
+    ]);
+    expect(missingPackage.status).toBe(1);
+    expect(missingPackage.stderr).toContain("PACKAGE_MISSING");
+    const collapsed = spawnCli([
+      "--mapping",
+      mappingPath,
+      "--mode",
+      "control",
+      "--producer-sha",
+      ORIGIN_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--package-root",
+      originRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      "--offset",
+      "0",
+      ...runtimeFlags(),
+    ]);
+    expect(collapsed.status).toBe(1);
+    expect(collapsed.stderr).toContain("O_P_COLLAPSE");
+    const wrongRuntime = spawnCli([
+      "--mapping",
+      mappingPath,
+      "--mode",
+      "control",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      originRoot,
+      "--package-root",
+      originRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      "--offset",
+      "0",
+      "--require-node",
+      "v0.0.0",
+      "--require-os",
+      process.platform,
+      "--require-arch",
+      process.arch,
+    ]);
+    expect(wrongRuntime.status).toBe(1);
+    expect(wrongRuntime.stderr).toContain("RUNTIME");
+    const missingOrigin = spawnCli([
+      "--mapping",
+      mappingPath,
+      "--mode",
+      "control",
+      "--producer-sha",
+      PRODUCER_SHA,
+      "--source-root",
+      SOURCE_ROOT,
+      "--origin-root",
+      join(originRoot, "absent-origin"),
+      "--package-root",
+      originRoot,
+      "--surface",
+      "BTCUSDT:30",
+      "--anchors-json",
+      anchorsPath,
+      "--offset",
+      "0",
+      ...runtimeFlags(),
+    ]);
+    expect(missingOrigin.status).toBe(1);
+    expect(missingOrigin.stderr).toContain("ORIGIN_ROOT");
+  }, 180000);
 });
