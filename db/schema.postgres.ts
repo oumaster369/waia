@@ -4823,6 +4823,95 @@ export const traderHistoricalFourSurfaceRatifiedAdmissionV2 = pgTable(
   ],
 );
 
+/** DEE-1006: append-only scientific-refusal terminal receipt (not ADMITTED). */
+export const traderHistoricalScientificAdmissionRefusalV1 = pgTable(
+  "trader_historical_scientific_admission_refusal_v1",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    releaseSha: text("release_sha").notNull(),
+    runtimeReleaseBindingReceiptDigestHex:
+      text("runtime_release_binding_receipt_digest_hex").notNull(),
+    reasonCode: text("reason_code").notNull(),
+    coverageDigestHex: text("coverage_digest_hex").notNull(),
+    holmFamilyPass: boolean("holm_family_pass").notNull(),
+    receiptJson: jsonb("receipt_json").notNull(),
+    contentDigestHex: text("content_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("historical_scientific_admission_refusal_v1_natural")
+      .on(t.organizationId, t.runId),
+    unique("historical_scientific_admission_refusal_v1_full_lineage")
+      .on(t.id, t.organizationId, t.runId, t.contentDigestHex),
+    check("historical_scientific_admission_refusal_v1_schema",
+      sql`${t.schemaVersion} = 'waia.trader.historical_scientific_admission_refusal.v1'`),
+    check("historical_scientific_admission_refusal_v1_digests", sql`(
+      ${t.releaseSha} ~ '^[0-9a-f]{40}$' AND
+      ${t.runtimeReleaseBindingReceiptDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.coverageDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.contentDigestHex} ~ '^[0-9a-f]{64}$'
+    )`),
+  ],
+);
+
+/** DEE-1006: append-only rehearsal-started terminal receipt. */
+export const traderHistoricalRehearsalStartedV1 = pgTable(
+  "trader_historical_rehearsal_started_v1",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    runId: text("run_id").notNull(),
+    releaseSha: text("release_sha").notNull(),
+    runtimeReleaseBindingReceiptDigestHex:
+      text("runtime_release_binding_receipt_digest_hex").notNull(),
+    proposalId: uuid("proposal_id").notNull(),
+    proposalContentDigestHex: text("proposal_content_digest_hex").notNull(),
+    ratificationId: uuid("ratification_id").notNull(),
+    ratificationContentDigestHex: text("ratification_content_digest_hex").notNull(),
+    fourSurfaceAuthorityId: uuid("four_surface_authority_id").notNull(),
+    fourSurfaceAuthorityContentDigestHex:
+      text("four_surface_authority_content_digest_hex").notNull(),
+    consumerClaimDigestHex: text("consumer_claim_digest_hex").notNull(),
+    leaseDigestHex: text("lease_digest_hex").notNull(),
+    lifecycleContentDigestHex: text("lifecycle_content_digest_hex").notNull(),
+    imageHealthBindingDigestHex: text("image_health_binding_digest_hex").notNull(),
+    adminObservationBindingDigestHex: text("admin_observation_binding_digest_hex").notNull(),
+    tenantObservationBindingDigestHex: text("tenant_observation_binding_digest_hex").notNull(),
+    receiptJson: jsonb("receipt_json").notNull(),
+    contentDigestHex: text("content_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("historical_rehearsal_started_v1_natural")
+      .on(t.organizationId, t.runId),
+    unique("historical_rehearsal_started_v1_full_lineage")
+      .on(t.id, t.organizationId, t.runId, t.contentDigestHex),
+    check("historical_rehearsal_started_v1_schema",
+      sql`${t.schemaVersion} = 'waia.trader.historical_rehearsal_started.v1'`),
+    check("historical_rehearsal_started_v1_digests", sql`(
+      ${t.releaseSha} ~ '^[0-9a-f]{40}$' AND
+      ${t.runtimeReleaseBindingReceiptDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.proposalContentDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.ratificationContentDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.fourSurfaceAuthorityContentDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.consumerClaimDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.leaseDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.lifecycleContentDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.imageHealthBindingDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.adminObservationBindingDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.tenantObservationBindingDigestHex} ~ '^[0-9a-f]{64}$' AND
+      ${t.contentDigestHex} ~ '^[0-9a-f]{64}$'
+    )`),
+  ],
+);
+
 export const traderCanonicalDecisionVerificationSubjectV2 = pgTable(
   "trader_canonical_decision_verification_subject_v2",
   {
