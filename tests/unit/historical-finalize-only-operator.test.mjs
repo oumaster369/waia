@@ -9,6 +9,9 @@ import { pathToFileURL } from "node:url";
 import {
   SCIENTIFIC_RELEASE, SOURCE_DIGEST, SOURCE_FILE_COUNT, SOURCE_PATHS,
   fingerprintSource, verifyFrozenSource, validateInvocation, finalizeWithFrozenApi, formatProgress, formatFailure,
+  STRICT_RESOLVER_CONTRACT_VERSION, digestReleaseBindingBody, parseReleaseBindingManifest,
+  fingerprintCoveredSource, verifyManifestBoundSource, validateManifestBoundInvocation,
+  finalizeWithManifestBoundApi,
 } from "../../scripts/ops/historical-finalize-only-v1.mjs";
 
 const config = { checkpointRoot: "/private/checkpoints", releaseSha: SCIENTIFIC_RELEASE,
@@ -201,4 +204,94 @@ test("bounded allowlisted progress and safe pre-import diagnostic fallback", () 
   }
   assert.equal(formatFailure(new Error("postgres://user:secret@host/db")).includes("secret"), false);
   assert.equal(formatFailure(new Error("secret"), () => { throw new Error("secret"); }).includes("secret"), false);
+});
+
+
+const SYNTHETIC_RELEASE = "dddddddddddddddddddddddddddddddddddddddd";
+function writeBindingFixture() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "waia-release-binding-")));
+  mkdirSync(join(root, "lib"));
+  writeFileSync(join(root, "lib/a.ts"), "alpha");
+  const covered = fingerprintCoveredSource(root, ["lib"]);
+  const body = {
+    releaseSha: SYNTHETIC_RELEASE,
+    sourceTreeDigest: covered.digest,
+    coveredSourceDigest: covered.digest,
+    coveredSourceFileCount: covered.fileCount,
+    coveredSourcePaths: ["lib"],
+    evaluatorIdentity: { releaseSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      runtime: { node: "v22.24.0", os: "linux", arch: "x64" } },
+    runtimeIdentity: { node: process.version, os: process.platform, arch: process.arch },
+    strictResolverContractVersion: STRICT_RESOLVER_CONTRACT_VERSION,
+  };
+  const digest = digestReleaseBindingBody(body);
+  const manifestPath = join(root, "release-binding.json");
+  writeFileSync(manifestPath, JSON.stringify({ schemaVersion: "waia.historical_release_binding.v1", body, digest }));
+  return { root, body, digest, manifestPath, covered };
+}
+
+test("generic release-binding operator refuses release, image, digest, file-count and manifest-digest mismatch", () => {
+  const fixture = writeBindingFixture();
+  try {
+    const parsed = parseReleaseBindingManifest(readFileSync(fixture.manifestPath));
+    assert.equal(parsed.releaseSha, SYNTHETIC_RELEASE);
+    assert.deepEqual(verifyManifestBoundSource(fixture.root, parsed), fixture.covered);
+    const env = {
+      WAIA_RELEASE_SHA: SYNTHETIC_RELEASE, WAIA_IMAGE_RELEASE_SHA: SYNTHETIC_RELEASE,
+      WAIA_EXECUTION_HOST_MODE: "idle",
+    };
+    const invocation = validateManifestBoundInvocation(
+      ["finalize-only", fixture.root, "--release-binding", fixture.manifestPath], env, ["--conditions=react-server"]);
+    assert.equal(invocation.manifest.releaseSha, SYNTHETIC_RELEASE);
+
+    assert.throws(() => validateManifestBoundInvocation(
+      ["finalize-only", fixture.root, "--release-binding", fixture.manifestPath],
+      { ...env, WAIA_RELEASE_SHA: "e".repeat(40) }, ["--conditions=react-server"]), /RELEASE_PIN/);
+    assert.throws(() => validateManifestBoundInvocation(
+      ["finalize-only", fixture.root, "--release-binding", fixture.manifestPath],
+      { ...env, WAIA_IMAGE_RELEASE_SHA: "e".repeat(40) }, ["--conditions=react-server"]), /IMAGE_RELEASE_PIN/);
+    assert.throws(() => validateManifestBoundInvocation(
+      ["finalize-only", fixture.root, "--release-binding", fixture.manifestPath],
+      { ...env, WAIA_RELEASE_SHA: "main", WAIA_IMAGE_RELEASE_SHA: "latest" },
+      ["--conditions=react-server"]), /RELEASE_PIN|IMPLICIT_RELEASE/);
+
+    const digestMismatch = { ...parsed, coveredSourceDigest: "f".repeat(64) };
+    assert.throws(() => verifyManifestBoundSource(fixture.root, digestMismatch), /COVERED_SOURCE_DIGEST/);
+    const countMismatch = { ...parsed, coveredSourceFileCount: parsed.coveredSourceFileCount + 1 };
+    assert.throws(() => verifyManifestBoundSource(fixture.root, countMismatch), /COVERED_SOURCE_FILE_COUNT/);
+
+    const tampered = JSON.parse(readFileSync(fixture.manifestPath, "utf8"));
+    tampered.digest = "0".repeat(64);
+    assert.throws(() => parseReleaseBindingManifest(JSON.stringify(tampered)), /MANIFEST_DIGEST/);
+  } finally { rmSync(fixture.root, { recursive: true }); }
+});
+
+test("generic finalize binds the strict resolver and never creates a get-or-build store", async () => {
+  const fixture = writeBindingFixture();
+  try {
+    const calls = [];
+    const pool = { end: async options => { calls.push(["close", options]); } };
+    const api = {
+      createScientificCheckpointStoreV1: () => { assert.fail("get-or-build store"); },
+      createStrictScientificEvidenceResolverV1: graph => { calls.push(["resolver", graph]); return "resolver"; },
+      waiaCampaignPostgresDriverOptions: () => ({ max: 1 }),
+      postgres: () => { calls.push(["pool"]); return pool; },
+      guardSingleConnectionPostgresPool: value => value,
+      bindHistoricalRunnerLoginGuardedPoolV2: value => value,
+      withStrictScientificResolverV1: async (resolver, fn) => { assert.equal(resolver, "resolver"); return fn(); },
+      withHistoricalLaunchCleanupV2: async (fn, cleanup) => { try { return await fn(); } finally { for (const f of cleanup) await f(); } },
+      finalizeApprovedHistoricalProposalOnExecutionServerV2: async () => {
+        calls.push(["finalize"]);
+        return { authorityId: "11111111-1111-4111-8111-111111111111", manifest: { contentDigestHex: "a".repeat(64) } };
+      },
+    };
+    const manifest = parseReleaseBindingManifest(readFileSync(fixture.manifestPath));
+    const result = await finalizeWithManifestBoundApi({
+      databaseUrl: "postgres://synthetic", organizationId: "organization", runId: "run",
+      releaseSha: SYNTHETIC_RELEASE, manifest, evidenceGraph: { origin: "o", evaluator: "r" },
+    }, api);
+    assert.equal(result.bootstrapInvokedByThisDriver, false);
+    assert.equal(result.strictResolverContractVersion, STRICT_RESOLVER_CONTRACT_VERSION);
+    assert.deepEqual(calls.map(([name]) => name), ["resolver", "pool", "finalize", "close"]);
+  } finally { rmSync(fixture.root, { recursive: true }); }
 });

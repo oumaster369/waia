@@ -66,6 +66,12 @@ import type { ResearchHarnessAdmissionInputV1 } from "@/lib/trader/research/benc
 import { validationBootstrapExecutionFromEnvironmentV1 } from "@/lib/trader/research/benchmark/validation-bootstrap-v1";
 import { reuseScientificEvidenceV1, reuseScientificEvidenceAsyncV1 } from
   "@/lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
+import {
+  resolveScientificEvidenceAsyncV1,
+  resolveScientificEvidenceV1,
+  resolveScientificPackageV1,
+  scientificForecastEvidenceNamespaceV1,
+} from "@/lib/trader/historical-simulation-v2/scientific-evidence-resolver-v1";
 import { assertTechnicalPreparationActiveV2, emitTechnicalPreparationProgressV2, flushTechnicalPreparationProgressV2,
   snapshotTechnicalPreparationObserverV2, type TechnicalPreparationObserverV2 } from
   "@/lib/trader/historical-simulation-v2/technical-preparation-observer-v2";
@@ -73,6 +79,7 @@ import {
   buildEpistemicParameterRatificationReceiptV1,
   buildPredictiveTerminalReceiptAsyncV1,
   validatePredictiveTerminalReceipt,
+  type PredictiveTerminalReceiptV1,
 } from "./scientific-admission-v2";
 import {
   buildScientificAdmissionReceiptRecordV2,
@@ -1434,6 +1441,7 @@ async function buildTechnicalSurfaceCandidatesV2(
     qualification: FhvPreHoldoutQualificationReceiptV1;
     dependencies: AuthenticatedRatificationDependenciesV2;
     observer?: TechnicalPreparationObserverV2;
+    scientificEvidenceAccess: "strict-resolve" | "get-or-build";
   }>,
 ): Promise<
   Readonly<{
@@ -1510,13 +1518,16 @@ async function buildTechnicalSurfaceCandidatesV2(
     ) {
       refuse("WF_PREDICTIVE_AUTHORITY");
     }
-    const predictivePackage = buildPredictivePackageV1({
+    const packageInput = {
       family: surface.family,
       sourceCorpus: development.corpus,
       kConfigDec: selectedK,
       mConfigDec: selectedM,
       alphaEpiConfigScale8: surface.convergenceReceipt.alphaEpiConfigScale8,
-    });
+    };
+    const predictivePackage = input.scientificEvidenceAccess === "strict-resolve"
+      ? resolveScientificPackageV1(packageInput)
+      : buildPredictivePackageV1(packageInput);
     if (
       predictivePackage.predictivePackageGenerationIdentityDigest.toString("hex") !==
         generationDigest ||
@@ -1550,10 +1561,17 @@ async function buildTechnicalSurfaceCandidatesV2(
     for (let offset = 0; offset < walkForward.corpus.length; offset += 32) {
       assertTechnicalPreparationActiveV2(observer);
       const batch = walkForward.corpus.slice(offset, offset + 32);
-      const batchResults = reuseScientificEvidenceV1("wf-forecast-batch-v1", {
+      const forecastInput = {
         organizationId: input.preflight.organizationId, releaseSha: input.preflight.releaseSha,
         generationDigest, packageDigest, evaluationPartitionReceiptDigestHex, offset, batch,
-      }, () => batch.map(anchor => {
+      };
+      const batchResults = input.scientificEvidenceAccess === "strict-resolve"
+        ? resolveScientificEvidenceV1<ResearchHarnessAdmissionInputV1["anchors"][number][]>(
+          "wf-forecast-batch-v1",
+          forecastInput,
+          scientificForecastEvidenceNamespaceV1(surfaceKey),
+        )
+        : reuseScientificEvidenceV1("wf-forecast-batch-v1", forecastInput, () => batch.map(anchor => {
       assertTechnicalPreparationActiveV2(observer);
       const issuance = issueForecastV1({
         pkg: predictivePackage,
@@ -1611,8 +1629,19 @@ async function buildTechnicalSurfaceCandidatesV2(
         evaluationPartitionReceiptDigestHex,
       },
     };
-    const predictive = await reuseScientificEvidenceAsyncV1(PREDICTIVE_TERMINAL_CHECKPOINT_STAGE,
-      { ...predictiveInput, cdfKernelVersion: CDF_ERF_CODY715_VERSION, cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST },
+    const predictiveCacheInput = {
+      ...predictiveInput,
+      cdfKernelVersion: CDF_ERF_CODY715_VERSION,
+      cdfAmendmentDigestHex: CDF_REFERENCE_AMENDMENT_DIGEST,
+    };
+    const predictive = input.scientificEvidenceAccess === "strict-resolve"
+      ? await resolveScientificEvidenceAsyncV1<PredictiveTerminalReceiptV1>(
+        PREDICTIVE_TERMINAL_CHECKPOINT_STAGE,
+        predictiveCacheInput,
+        "evaluator",
+      )
+      : await reuseScientificEvidenceAsyncV1(PREDICTIVE_TERMINAL_CHECKPOINT_STAGE,
+      predictiveCacheInput,
       () => buildPredictiveTerminalReceiptAsyncV1(predictiveInput, { ...bootstrapExecution, signal: observer.signal,
       flushProgress: () => flushTechnicalPreparationProgressV2(observer), onProgress: progress => {
       if (progress.completed % 1000 === 0 || progress.completed === progress.total) {
@@ -1905,6 +1934,7 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
   input: HistoricalFourSurfaceAuthenticatedRatificationInputV2,
   dependencies: AuthenticatedRatificationDependenciesV2,
   requestedObserver: TechnicalPreparationObserverV2 = {},
+  scientificEvidenceAccess: "strict-resolve" | "get-or-build",
 ): Promise<HistoricalFourSurfaceTechnicalCandidateV2> {
   const observer = snapshotTechnicalPreparationObserverV2(requestedObserver);
   if (typeof (sql as unknown as { release?: unknown }).release !== "function") {
@@ -1930,6 +1960,7 @@ async function prepareTechnicalCandidateWithHeldConnectionV2(
     }
     const technical = await buildTechnicalSurfaceCandidatesV2({
       preflight: input.preflight, prepared, qualification: receipt, dependencies, observer,
+      scientificEvidenceAccess,
     });
     const candidate = sealTechnicalCandidateV2({
       preflight: input.preflight, prepared, qualification: receipt,
@@ -2035,6 +2066,7 @@ async function ratifyWithHeldConnectionV2(
       prepared,
       qualification: receipt,
       dependencies,
+      scientificEvidenceAccess: "get-or-build",
     });
     const candidate = sealTechnicalCandidateV2({
       preflight: input.preflight, prepared, qualification: receipt,
@@ -2125,7 +2157,7 @@ export function INTERNAL_prepareHistoricalFourSurfaceTechnicalAuthorityCandidate
   observer: TechnicalPreparationObserverV2 = {},
 ): Promise<HistoricalFourSurfaceTechnicalCandidateV2> {
   return prepareTechnicalCandidateWithHeldConnectionV2(
-    sql, input, productionRatificationDependenciesV2, observer,
+    sql, input, productionRatificationDependenciesV2, observer, "strict-resolve",
   );
 }
 
@@ -2138,7 +2170,9 @@ export function TEST_ONLY_prepareHistoricalFourSurfaceTechnicalAuthorityCandidat
   if (process.env.NODE_ENV !== "test" || process.env.VITEST !== "true") {
     refuse("TEST_ONLY_RUNTIME");
   }
-  return prepareTechnicalCandidateWithHeldConnectionV2(sql, input, dependencies);
+  return prepareTechnicalCandidateWithHeldConnectionV2(
+    sql, input, dependencies, {}, "get-or-build",
+  );
 }
 
 async function materializeApprovedCandidateWithHeldConnectionV2(
@@ -2187,6 +2221,7 @@ async function materializeApprovedCandidateWithHeldConnectionV2(
     await flushTechnicalPreparationProgressV2(observer);
     const technical = await buildTechnicalSurfaceCandidatesV2({
       preflight: input.preflight, prepared, qualification: receipt, dependencies, observer,
+      scientificEvidenceAccess: "strict-resolve",
     });
     const replayed = sealTechnicalCandidateV2({
       preflight: input.preflight, prepared, qualification: receipt,

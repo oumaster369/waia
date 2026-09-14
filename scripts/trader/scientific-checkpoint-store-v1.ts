@@ -201,10 +201,23 @@ export function readPreservedScientificPackageNoBuildV1(
 export function createScientificCheckpointStoreV1(
   root: string,
   releaseSha: string,
+  runtime?: Readonly<{ node: string; os: string; arch: string }>,
 ): ScientificCheckpointStoreV1 {
   if (process.release?.name !== "node" || process.env.WAIA_TRADER_CLI !== "1") fail("NODE_CLI");
   if (!isAbsolute(root) || resolve(root) === "/" || !/^[a-f0-9]{40}$/.test(releaseSha))
     fail("CONFIG");
+  const resolvedRuntime = runtime ?? {
+    node: process.version,
+    os: process.platform,
+    arch: process.arch,
+  };
+  if (
+    runtime &&
+    (!/^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(resolvedRuntime.node) ||
+      !/^[a-z0-9_]+$/.test(resolvedRuntime.os) ||
+      !/^[a-z0-9_]+$/.test(resolvedRuntime.arch))
+  )
+    fail("RUNTIME");
   mkdirSync(root, { recursive: true, mode: 0o700 });
   privatePath(root, true);
   if (realpathSync(root) !== resolve(root)) fail("ROOT_SYMLINK");
@@ -224,7 +237,11 @@ export function createScientificCheckpointStoreV1(
     inputDigest({
       format: FORMAT,
       releaseSha,
-      runtime: { node: process.version, os: process.platform, arch: process.arch },
+      runtime: {
+        node: resolvedRuntime.node,
+        os: resolvedRuntime.os,
+        arch: resolvedRuntime.arch,
+      },
       stage,
       input,
     });

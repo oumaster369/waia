@@ -11,7 +11,11 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 
 // Explicit compatibility admission, not automatic acceptance of every future
 // journal entry. 0205 and 0206 remain inside the required prefix through 0207.
-const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [];
+// 0208 is DEE-1006 terminal-receipt storage: admitted after Cody, never a
+// substitute for the required 0000..0207 prefix.
+const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
+  { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
+];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
   "trader_forecast_target_definition_v2",
@@ -166,10 +170,13 @@ export function assertFhvV2CanonicalMigrationsApplied(input: {
   const known = [...input.canonical, ...compatible];
   const knownByCreatedAt = new Map(known.map((entry) => [String(entry.when), entry]));
   const appliedByCreatedAt = new Map(input.applied.map((row) => [row.createdAt, row.hash]));
-  if (appliedByCreatedAt.size !== input.applied.length ||
-      new Set(input.applied.map((row) => row.hash)).size !== input.applied.length) {
+  if (
+    appliedByCreatedAt.size !== input.applied.length ||
+    new Set(input.applied.map((row) => row.hash)).size !== input.applied.length
+  ) {
     throw new FhvV2PostgresSchemaPreflightError(
-      "DUPLICATE_APPLIED_MIGRATION", "applied journal contains duplicate identities",
+      "DUPLICATE_APPLIED_MIGRATION",
+      "applied journal contains duplicate identities",
     );
   }
   for (const entry of input.canonical) {
@@ -208,12 +215,19 @@ export function readFhvV2CompatibleAdditiveMigrations(repoRoot: string): FhvV2Ca
   const root = join(repoRoot, "db/migrations_postgres");
   const journal = JSON.parse(readFileSync(join(root, "meta/_journal.json"), "utf8")) as Journal;
   return COMPATIBLE_ADDITIVE_MIGRATIONS.map((identity) => {
-    const entries = journal.entries.filter((entry) =>
-      entry.idx === identity.idx || entry.when === identity.when || entry.tag === identity.tag);
-    if (entries.length !== 1 || entries[0].idx !== identity.idx ||
-        entries[0].when !== identity.when || entries[0].tag !== identity.tag) {
+    const entries = journal.entries.filter(
+      (entry) =>
+        entry.idx === identity.idx || entry.when === identity.when || entry.tag === identity.tag,
+    );
+    if (
+      entries.length !== 1 ||
+      entries[0].idx !== identity.idx ||
+      entries[0].when !== identity.when ||
+      entries[0].tag !== identity.tag
+    ) {
       throw new FhvV2PostgresSchemaPreflightError(
-        "COMPATIBLE_MIGRATION_IDENTITY_INVALID", identity.tag,
+        "COMPATIBLE_MIGRATION_IDENTITY_INVALID",
+        identity.tag,
       );
     }
     return { ...identity, hash: sha256(readFileSync(join(root, `${identity.tag}.sql`))) };
@@ -237,7 +251,9 @@ export async function assertFhvV2PostgresSchemaPreflight(input?: {
 }): Promise<void> {
   const sql = input?.sql ?? getPostgresSql();
   const canonical = readFhvV2CanonicalMigrations(input?.repoRoot ?? process.cwd());
-  const compatibleAdditive = readFhvV2CompatibleAdditiveMigrations(input?.repoRoot ?? process.cwd());
+  const compatibleAdditive = readFhvV2CompatibleAdditiveMigrations(
+    input?.repoRoot ?? process.cwd(),
+  );
   const rows = await sql<{ hash: string; created_at: string }[]>`
     SELECT hash, created_at::text AS created_at
     FROM drizzle.__drizzle_migrations
