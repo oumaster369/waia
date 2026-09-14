@@ -378,6 +378,45 @@ acceptance of a grant without a resolvable disclosure boundary. GREEN requires
 focused source-admission and ledger tests, cumulative AI-TWIN model units,
 typecheck, lint, build, canon/diff validation and independent P1/P2 review.
 
+#### Private source-admission implementation receipt
+
+The RED was behaviorally specific: the new source-admission module could not be
+resolved, while 35 existing ledger tests passed and the new ledger case failed
+because a grant with an unqualified disclosure boundary still admitted
+productive use.
+
+The pure GREEN adds policy `human-approved-2026-09-14/v1`, explicit
+`private_only` boundary on the existing consent grant, a minimal content-free
+admission receipt and an exact validator for one new dialogue/Diary event. The
+inert ledger now rejects grants without the exact private boundary and rejects
+malformed grant objects/source arrays before reading them. No per-message
+Human confirmation is added.
+
+Independent review found one P1 in the first GREEN: candidate input selected its
+own purpose and grant from the trusted grant set. The correction removes every
+authority selector from the event candidate. Trusted adapter context now binds
+source class, active purpose, permitted use, retention policy and resolved
+grant; the validator then proves that reference is the unique exact latest
+grant. A parallel formation/archive-grant regression proves candidate input
+cannot choose the archive purpose, and undeclared candidate source/purpose/grant
+or policy fields are rejected. Re-review confirmed the P1 resolved with no
+remaining P1/P2.
+
+Final evidence:
+
+- focused source-admission + ledger tests GREEN: 56/56;
+- cumulative five-file AI-TWIN model units GREEN: 217/217;
+- scoped ESLint, `pnpm typecheck`, full `pnpm lint`, `pnpm build`,
+  `pnpm validate:canon`, `git diff --check` and IDE diagnostics GREEN;
+- build emitted only the pre-existing Next.js middleware convention warning;
+- repository implementation and fixture SQL are unchanged; the opt-in
+  PostgreSQL suite was not rerun because this slice changes only the typed
+  synthetic grant used by that test, not repository behavior.
+
+Fresh `origin/main` remained
+`d7d5941a995b83473acb6e00c42d5252c44b2303`. No shared migration, journal,
+schema, Trader, runtime, environment, deployment or Society surface changed.
+
 ## Approved outcome
 
 An append-only, tenant-isolated persistence layer represents observations, provenance/projection, evidence links, versioned claims, dynamic relations, hypotheses, knowledge needs, consent and Human corrections without cutting over legacy readiness.

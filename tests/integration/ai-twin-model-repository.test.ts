@@ -35,6 +35,7 @@ const grant: ModelConsentGrant = {
   purpose: "formation",
   sources: ["dialogue", "diary"],
   mode: "private_modelling",
+  disclosureBoundary: "private_only",
   issuedAt: now,
   expiresAt: "2027-09-08T12:00:00.000Z",
   revokedAt: null,

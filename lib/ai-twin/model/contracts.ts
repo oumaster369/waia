@@ -16,6 +16,8 @@ export type ModelConsentGrant = Readonly<{
   purpose: string;
   sources: readonly ObservationSource[];
   mode: "private_modelling" | "raw_only";
+  /** Explicitly grants no disclosure; non-private disclosure uses a separate grant. */
+  disclosureBoundary: "private_only";
   issuedAt: string;
   expiresAt: string;
   revokedAt: string | null;

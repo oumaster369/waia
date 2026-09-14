@@ -200,10 +200,36 @@ function requireCommand(command: ModelCommand) {
     } else if (!text(command.statement) || !text(command.context)) fail("INVALID_INPUT");
   }
 }
+
 function consentFor(
   observation: Pick<ModelObservation, "grant" | "source" | "scope" | "recordedAt" | "purpose">,
   ctx: ModelContext,
 ) {
+  if (
+    !dataArray(ctx.grants) ||
+    ctx.grants.some(
+      (grant) =>
+        !exactKeys(grant, [
+          "id",
+          "version",
+          "scope",
+          "purpose",
+          "sources",
+          "mode",
+          "disclosureBoundary",
+          "issuedAt",
+          "expiresAt",
+          "revokedAt",
+          "retentionPolicyId",
+        ]) ||
+        !validScope(grant.scope) ||
+        !dataArray(grant.sources) ||
+        grant.sources.length === 0 ||
+        grant.sources.some((source) => !["dialogue", "diary"].includes(source)) ||
+        new Set(grant.sources).size !== grant.sources.length,
+    )
+  )
+    return undefined;
   const matches = ctx.grants.filter((grant) => grant.id === observation.grant.id);
   const latest = Math.max(...matches.map((grant) => grant.version));
   const candidates = matches.filter((grant) => grant.version === latest);
@@ -216,6 +242,7 @@ function consentFor(
     grant.purpose !== ctx.purpose ||
     observation.purpose !== ctx.purpose ||
     grant.mode !== "private_modelling" ||
+    grant.disclosureBoundary !== "private_only" ||
     grant.revokedAt !== null ||
     !text(grant.retentionPolicyId) ||
     !grant.sources.includes(observation.source) ||

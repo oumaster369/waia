@@ -5,7 +5,12 @@ import {
   createModelLedger,
   projectCurrentModel,
 } from "@/lib/ai-twin/model/ledger";
-import type { ModelCommand, ModelContext, ModelLedger } from "@/lib/ai-twin/model/contracts";
+import type {
+  ModelCommand,
+  ModelConsentGrant,
+  ModelContext,
+  ModelLedger,
+} from "@/lib/ai-twin/model/contracts";
 
 const scope = { organizationId: "org-a", subjectId: "human-a" };
 const now = "2026-09-06T12:00:00.000Z";
@@ -23,6 +28,7 @@ function context(kind: "human" | "model" = "human"): ModelContext {
         purpose: "formation",
         sources: ["dialogue", "diary"],
         mode: "private_modelling",
+        disclosureBoundary: "private_only",
         issuedAt: "2026-09-01T00:00:00.000Z",
         expiresAt: "2026-10-01T00:00:00.000Z",
         revokedAt: null,
@@ -194,6 +200,19 @@ describe("inert AI-TWIN epistemic correction kernel", () => {
       expect(state.observations).toHaveLength(1); // Filtering is not physical deletion.
     },
   );
+
+  it("rejects a modelling grant without the explicit private disclosure boundary", () => {
+    const ctx = context();
+    ctx.grants = [
+      {
+        ...ctx.grants[0],
+        disclosureBoundary: "public",
+      } as unknown as ModelConsentGrant,
+    ];
+    expect(() => applyModelCommand(createModelLedger(scope), observation, ctx)).toThrow(
+      "CONSENT_UNAVAILABLE",
+    );
+  });
 
   it("rejects missing evidence rather than inventing a source", () => {
     expect(() => applyModelCommand(createModelLedger(scope), proposal, context("model"))).toThrow(
