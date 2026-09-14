@@ -47,7 +47,7 @@
     },
     {
       "issue": "DEE-1004",
-      "scope": "Strict dual-origin scientific evidence resolver and generic release-binding finalize. No builder on the strict API. Packages and BTC30 Forecast resolve to O; other Forecast to P; wf-predictive-terminal-v3 and wf-predictive-bootstrap-range-* to R. Generic finalize verifies then refuses GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE.",
+      "scope": "Strict dual-origin scientific evidence resolver and generic release-binding finalize. No builder on the strict API. Packages and BTC30 Forecast resolve to O; other Forecast to P; wf-predictive-terminal-v3 and wf-predictive-bootstrap-range-* to R. Generic finalize verifies then refuses GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE. TEST-HARNESS ONLY: the PostgreSQL first-cycle integration binds withStrictScientificResolverV1 around FINALIZATION_REPLAY using sealed prepare evidence; production require*/TEST_ONLY materializers stay fail-closed; no builder fallback.",
       "dependencies": [],
       "dependencyEvidence": [
         "Zero file overlap with DEE-990/1005/1006 against common base b45c64f0.",
@@ -62,22 +62,25 @@
         "tests/unit/cody-evidence-binding-v2.test.ts",
         "tests/unit/historical-finalize-only-operator.test.mjs",
         "tests/unit/historical-strict-evidence-wiring-v1.test.ts",
-        "tests/unit/scientific-evidence-resolver-v1.test.ts"
+        "tests/unit/scientific-evidence-resolver-v1.test.ts",
+        "tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
       ],
       "expectedAcceptanceEvidence": [
         "Strict resolver has no builder path.",
         "Generic finalize operator verifies then refuses GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE.",
-        "90de pin remains a compatibility fixture; R is not invented."
+        "90de pin remains a compatibility fixture; R is not invented.",
+        "First-cycle PostgreSQL integration binds withStrictScientificResolverV1; the same materialization path without a bound resolver still refuses RESOLVER_REQUIRED."
       ],
       "expectedTests": [
-        "pnpm exec vitest --run tests/unit/scientific-evidence-resolver-v1.test.ts tests/unit/historical-strict-evidence-wiring-v1.test.ts tests/unit/cody-evidence-binding-v2.test.ts tests/unit/historical-finalize-only-operator.test.mjs"
+        "pnpm exec vitest --run tests/unit/scientific-evidence-resolver-v1.test.ts tests/unit/historical-strict-evidence-wiring-v1.test.ts tests/unit/cody-evidence-binding-v2.test.ts tests/unit/historical-finalize-only-operator.test.mjs",
+        "pnpm exec vitest --run tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
       ],
       "deliveryStatus": "planned",
       "blocked": false,
       "riskTier": "T3",
       "humanGate": {
         "status": "t3-scope-preauthorized",
-        "evidence": "Human Architect 2026-09-13 authorized this exact four-child Integration Train (DEE-990, DEE-1004, DEE-1005, DEE-1006) as one T3 H1-R boundary; production 0208 apply, Execution Server mutation, deploy, and scientific computation remain later Human gates."
+        "evidence": "Human Architect 2026-09-13 authorized this exact four-child Integration Train (DEE-990, DEE-1004, DEE-1005, DEE-1006) as one T3 H1-R boundary; production 0208 apply, Execution Server mutation, deploy, and scientific computation remain later Human gates. Human Architect 2026-09-14 authorized exactly one additional DEE-1007 test-harness surface: tests/integration/postgres-historical-production-first-cycle-v2.test.ts."
       },
       "execution": {
         "wave": 2,
@@ -175,7 +178,7 @@
   "integrationEvidence": {
     "admissionEvidence": {
       "status": "pass",
-      "reviewer": "Human Architect 2026-09-13 four-child Integration Train authorization; DEE-950 / PR 589 remains a separate single-issue H1-P boundary"
+      "reviewer": "Human Architect 2026-09-13 four-child Integration Train authorization; DEE-950 / PR 589 remains a separate single-issue H1-P boundary; Human Architect 2026-09-14 authorized first-cycle strict-resolver harness admission on tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
     }
   },
   "crossCuttingInvariants": [

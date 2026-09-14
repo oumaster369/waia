@@ -53,6 +53,7 @@ humanApproval:
   capturedChildHeads:
     DEE-990: 1778dd43e4406762d9b873fd8d641387e38378b1
     DEE-1004: 6c0dd74742c9f935ef907d9165f503a4b806c1bb
+    DEE-1004-harnessSurface: tests/integration/postgres-historical-production-first-cycle-v2.test.ts
     DEE-1005: bfd5bce77afc312cf87fafee663211175d95f7d8
     DEE-1006: d4f4c2034e54d1ce68fca3e4400d16d934947372
 ---
