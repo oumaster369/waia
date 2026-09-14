@@ -10,16 +10,16 @@ approvalGates: [plan-approved, migration-reviewed, human-merge]
 includedIssues: []
 state:
   {
-    status: in-progress,
-    currentWorkPackage: closeout,
+    status: integration-ready,
+    currentWorkPackage: WP-PR,
     completedWorkPackages: [WP-1, WP-2, WP-3],
-    remainingWorkPackages: [],
+    remainingWorkPackages: [WP-PR],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: be44d84d0cc1756e14aa51f85c31ecf0ac0c55fa,
-    lastValidationAt: "2026-09-14T14:55:00Z",
-    blockedReason: "WP-1/WP-2/WP-3 are locally qualified as contract qualification only. Production DDL is not applied, writers/routes are not mounted, and DEE-871 is not integration-ready. origin/main moved to 680c9d7c (DEE-1009 KEY_ORDER; no shared schema/journal/FHV/0209 collision). Rebase onto fresh main, full-diff review, and PR preparation remain. Do not open the PR in this slice.",
-    nextAction: "Independent full-diff review of the complete DEE-871 branch versus origin/main, then PR preparation. Keep writers unmounted, do not apply production DDL, do not deploy, and do not open the PR until that review and rebase are complete.",
+    lastValidatedGitSha: 2c40ec36c7dfb8cbbef25e81c53a3b5d5a56ac77,
+    lastValidationAt: "2026-09-14T15:22:00Z",
+    blockedReason: null,
+    nextAction: "Human opens one squash PR to main from the prepared body. Do not apply production DDL, do not mount writers/routes, and do not treat residual-copy qualification as operational deletion evidence.",
   }
 provenance:
   {
@@ -1162,6 +1162,44 @@ not re-run full rights-history validation).
 
 This is not production deletion evidence, a download endpoint, an object-storage
 worker, or DEE-871 integration-ready closeout.
+
+### 2026-09-14 integration freeze / reviewability — A
+
+Synchronized published branch with `git merge --no-edit origin/main` (no rebase,
+no force-push). Fresh main `680c9d7c9c74d5cc2b85f2d90d13b99f8fb36c47` (DEE-1009)
+introduced no schema/journal/FHV/0209 overlap. Open PRs to `main`: none.
+Conflicts: none.
+
+Full independent review of `origin/main...HEAD` found P1=0 and three adapter
+P2s. Bounded production-repository fixes (kind-scoped live deletion,
+Human-endorsed necessity-review gating on `current()`, one transaction clock)
+were applied without 0210. Re-review: **P1=0, P2=0**.
+
+**Reviewability decision: A — retain one DEE-871 integration PR.**
+
+Size exceeds the ~20-file / ~800-line target (43 files, about +10.7k / −148).
+That is a review-cost fact, not a second deployable system. Split would be
+invalid because:
+
+- One Linear issue, one 0209 ownership, one FHV compatible-additive tuple.
+- WP-1 contracts, WP-2 schema/repository, and WP-3 residual/export
+  qualification share `ai_twin_rights_*` and the CLOSED DELETE persist gate.
+  Shipping 0209 without the repository, or the repository without 0209, or
+  rights contracts without the residual-copy close gate, creates an
+  intermediate schema/contract that FHV environments cannot apply or that
+  can CLOSE a deletion without inventory proof.
+- The 3-line Trader preflight tuple must land with the journal row; it is
+  not independently deployable and does not change Trader scientific law.
+- Production DDL is not applied, so one squash revert removes the entire
+  unmounted package.
+- No Society, deploy, route mount, private-archive tables, 0210, or
+  readiness cutover is in the diff.
+- No different Human gate is hidden: T3 persistence foundation is the
+  only merge gate. Production apply, runtime mount, and operational
+  deletion remain explicit deferred Human rollout gates, not merge
+  blockers under the DEE-871 acceptance contract.
+
+Never open a second PR against DEE-871.
 
 ## Approved outcome
 
