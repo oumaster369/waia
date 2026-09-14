@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: ed21d21c9de7abfeea2f586f79cc47aedfa9ab14,
-    lastValidationAt: "2026-09-14T10:27:32Z",
-    blockedReason: "WP-2 convergence assessment is pending against fresh origin/main and the read-only dee-871-ai-twin-shared-boundary forensic source. Shared schema/migration, Trader compatibility and runtime mounting remain frozen.",
-    nextAction: "Produce the WP-2 file-by-file convergence matrix and select only a repository/auth slice independent of shared schema/migration, if one exists. Do not edit numbered migrations, journal, db/schema.postgres.ts, Trader, runtime mounts or production.",
+    lastValidatedGitSha: 825314f20d3b85066f345fb44f16e93ecf44cd22,
+    lastValidationAt: "2026-09-14T11:28:35Z",
+    blockedReason: "The smallest technically independent WP-2 port is the unmounted Core access seam plus mocked unit tests, but admitting a Core/auth contract requires a separate bounded implementation decision. Production persistence additionally requires shared schema/migration registration and Trader compatibility review.",
+    nextAction: "After explicit bounded admission, port only lib/ai-twin/model/core-access.ts and tests/unit/ai-twin-core-access.test.ts from forensic source, revalidate against current Core contracts, and keep it unmounted. Do not port services/schema or edit migrations, journal, db/schema.postgres.ts, Trader, runtime or production.",
   }
 provenance:
   {
@@ -633,6 +633,134 @@ prove that a newly presented current grant cannot mutate or imply historical
 consent. The three focused files pass 139/139. WP-1 is complete as object and
 rights design, not as persistent/runtime delivery: DEE-871 remains In Progress,
 WP-2/WP-3 and downstream dependencies remain open, and no PR is authorized.
+
+### 2026-09-14 WP-2 read-only convergence assessment
+
+Fresh `origin/main` is
+`d7d5941a995b83473acb6e00c42d5252c44b2303`, also the continuation branch
+merge-base. Its Postgres journal has 209 entries (`0000..0208`). The current
+head is `0208_historical_terminal_receipts_v1`, timestamp identity
+`1780000000208`: DEE-1006 AI-TRADER scientific-refusal and rehearsal-started
+terminal receipts, not AI-TWIN persistence. Its production apply remains a
+separate Human gate.
+
+Trader schema preflight requires the exact `0000..0207` prefix and admits 0208
+only as an explicit compatible additive migration. It does not admit 0209 or
+any arbitrary future journal entry. `db/schema.postgres.ts` has no DEE-871
+epistemic tables. Therefore any production AI-TWIN DDL would require a new
+0209-or-later migration, journal registration, shared schema review and a
+separate Trader compatibility package; none is admitted here.
+
+The read-only forensic source is
+`dee-871-ai-twin-shared-boundary` at
+`7802b39474f0126c8ef00655ebec2bad41bc093b`. Its merge-base with current main is
+`78188f9d`; it predates merged 0206–0208 and is not mergeable wholesale.
+Three-dot inspection finds 24 unique files. Current continuation canon wins on
+all overlap.
+
+#### WP-2 file-by-file port matrix
+
+**Already merged / authoritative baseline on `origin/main`:**
+
+- `lib/ai-twin/model/contracts.ts`, `ledger.ts`, `lifecycle.ts`,
+  `persistence-contracts.ts`, `postgres-repository.ts` and
+  `legacy-quarantine.ts`;
+- `tests/fixtures/ai-twin-model-repository.sql`;
+- `tests/integration/ai-twin-model-repository.test.ts`;
+- the corresponding ledger/lifecycle/persistence/quarantine unit tests.
+
+These provide the inert kernel and disconnected `twin_model_fixture`
+repository. They are not production persistence or a runtime mount.
+
+**Safe repository/auth preparation, with no shared schema or migration
+mutation:**
+
+- `lib/ai-twin/model/core-access.ts` plus
+  `tests/unit/ai-twin-core-access.test.ts` form the smallest coherent slice.
+  They use verified `getUser()`, existing Core user/membership/entitlement
+  reads, the existing transaction runner and mocked unit tests. They add no
+  table, migration, journal entry, Trader dependency, route or deployment.
+  Formation entitlement and current-member own-data rights remain separate.
+- `lib/ai-twin/model/human-transition-input.ts` and
+  `tests/unit/ai-twin-human-transition-input.test.ts` are pure, but the forensic
+  module imports an observation-service parser. Porting it alone would require
+  a new extraction/refactor and is not the next coherent WP-2 slice.
+- `tests/unit/ai-twin-consent-input.test.ts` and
+  `tests/unit/ai-twin-observation-input.test.ts` exercise pure parser behavior,
+  but their parser exports live inside schema-dependent service modules. They
+  are deferred with those services rather than partially copied.
+
+**Requires shared schema contracts before a coherent service port:**
+
+- `db/ai-twin-consent-contract.ts`;
+- `db/ai-twin-observation-contract.ts`;
+- `db/ai-twin-claim-version-contract.ts`;
+- `lib/ai-twin/model/consent-service.ts`;
+- `lib/ai-twin/model/observation-service.ts`;
+- `lib/ai-twin/model/claim-version-service.ts`;
+- `tests/fixtures/ai-twin-core-consent.sql`;
+- `tests/fixtures/ai-twin-core-observation.sql`;
+- `tests/fixtures/ai-twin-core-claim-versions.sql`.
+- `lib/ai-twin/model/claim-service.ts`,
+  `tests/fixtures/ai-twin-core-claim.sql` and
+  `tests/unit/ai-twin-claim-input.test.ts` remain transitional dependencies of
+  the forensic normalized path: `claim-version-service.ts` imports its proposal
+  parser/type, and the normalized fixture upgrades the root fixture. They
+  require extraction/reconciliation and are not safe standalone ports.
+
+The TypeScript table modules are deliberately unregistered and the SQL files
+are disposable fixtures that depend on existing public Core tables. They may
+inform a later isolated fixture design but cannot establish production schema.
+
+**Requires migration registration for production use:**
+
+- every production realization of the three non-superseded
+  `db/ai-twin-*-contract.ts` modules above;
+- any production use of the consent/observation/claim-version services;
+- journal `meta/_journal.json`, a numbered 0209-or-later migration and
+  `db/schema.postgres.ts`.
+
+No numbered AI-TWIN migration exists in the forensic branch. Registration is a
+future boundary, not a file to port from it.
+
+**Superseded:**
+
+- `db/ai-twin-claim-contract.ts` as a production table profile is superseded by
+  normalized claim revisions. Its associated parser/fixture artifacts are not
+  independently superseded because the normalized forensic path still imports
+  them; they stay deferred above until disentangled;
+- forensic `docs/ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md`,
+  `docs/product/AI-TWIN-PRODUCT-CONSTITUTION.md`,
+  `docs/plans/dee-871-ai-twin-epistemic-ledger.md` and
+  `docs/gaps/ai-twin-v1-gap-registry.md` are superseded by this continuation's
+  later Human-ratified canon and must not overwrite it.
+
+**Must not port:**
+
+- `tests/integration/ai-twin-core-access-postgres.test.ts` as written, because
+  it applies the full shared migration directory and imports Trader schema
+  preflight;
+- the whole forensic branch, merge commits or its stale main-side deletions;
+- any forensic assumption that bypasses current source admission,
+  RightsOperation, annual-review or legacy-quarantine contracts.
+
+#### Exact next WP-2 slice and stop
+
+The smallest technically independent slice is exactly:
+
+1. `lib/ai-twin/model/core-access.ts`;
+2. `tests/unit/ai-twin-core-access.test.ts`.
+
+It must be ported file-by-file, reconciled with current Core/auth contracts and
+remain unmounted. This assessment does not itself admit implementation because
+Core/auth was an explicit shared boundary in the continuation preflight.
+Implementation therefore stops pending one bounded admission for that pair.
+No service, table contract, fixture stack or integration test is included.
+
+The first later hard persistence boundary is 0209-or-later shared migration
+registration together with `db/schema.postgres.ts` and Trader compatible
+additive review. No numbered migration, journal, shared schema, Trader file,
+runtime mount or production apply was edited during this assessment.
 
 ## Approved outcome
 
