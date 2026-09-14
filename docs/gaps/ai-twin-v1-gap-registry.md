@@ -5,8 +5,8 @@ scope: ai-twin
 owner: Architect
 linkedSpec: docs/product-specs/ai-twin-v1-completion.md
 linkedRoadmap: docs/roadmaps/ai-twin-program-roadmap.md
-lastReviewed: 2026-09-06
-version: 1.1.0
+lastReviewed: 2026-09-14
+version: 1.2.0
 ---
 
 # AI-TWIN v1 — gap registry
@@ -17,7 +17,7 @@ Track the evidence-backed difference between the shipped legacy AI-TWIN runtime 
 
 ## Evidence baseline
 
-Rechecked against origin/main at ea765a999b5818ffab84ea32024809b0098fdf74. See the [source → canon → task → code → test map](../ai-twin/AI-TWIN-EVIDENCE-BASELINE-2026-09-06.md). Test existence is not product qualification. No production runtime was inspected.
+Rechecked against origin/main at c6f79636b4aff2f0bf170b4357db7bb0d2abcb73. See the [source → canon → task → code → test map](../ai-twin/AI-TWIN-EVIDENCE-BASELINE-2026-09-06.md). Test existence is not product qualification. No production runtime was inspected.
 
 The current runtime provides useful legacy foundations: bounded dialogue/replay, six persisted readiness integers, deterministic aggregation and tab locks, Diary storage/embeddings, a separate system-maturity score, Avatar placeholder and local Society preview. These are not discarded, but they do not satisfy the new semantics.
 
@@ -33,7 +33,7 @@ Primary code evidence at intake:
 
 | gapId        | summary                                                                                                                      | severity    | status   | specRef   | batchRef                                 | evidence                                                                          |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------- | ----------- | -------- | --------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
-| GAP-TWIN-001 | No append-only observation/claim/relation/hypothesis/consent/correction ledger                                               | critical    | open     | A1–A3     | DEE-871                                  | Current `twin_readiness_state` is six ints + flags                                |
+| GAP-TWIN-001 | No append-only observation/claim/relation/hypothesis/consent/correction ledger                                               | critical    | open     | A1–A3     | DEE-871                                  | Partial only: disconnected correction/retention policy contracts exist; no complete authenticated ledger or mounted runtime |
 | GAP-TWIN-002 | Extractors do not preserve projection metadata, plural hypotheses and falsifiers                                             | critical    | open     | A2, C4    | DEE-874                                  | Legacy readiness signals/prompts                                                  |
 | GAP-TWIN-003 | Old six domains and arithmetic cannot represent process, dynamics or calibration                                             | critical    | open     | B1–B5     | DEE-876                                  | `ai-twin-readiness-model.md`; `readiness.ts`                                      |
 | GAP-TWIN-004 | Formation, system health, presence, social readiness and authority can be confused                                           | critical    | open     | B6        | DEE-876                                  | Two separate readiness implementations plus legacy flags                          |
@@ -53,6 +53,13 @@ Primary code evidence at intake:
 ## Resolution rules
 
 GAP-TWIN-007 remains an integration gap: prediction/verification modules exist but dialogue does not call the separate Twin Engine or close the canonical correction loop. Likewise the volume/repeatability-based reasoning-readiness module is not canonical Model Health.
+
+The DEE-871 annual storage-necessity policy closes one isolated semantic
+qualification only: a Human-confirmed review can bind an exact long-lived model
+record/version and an overdue review pauses productive use without taking over
+rights or deletion. It does not close GAP-TWIN-001 because it adds no complete
+persisted inventory, authenticated review workflow, erasure executor or runtime
+integration.
 
 DEE-923 presentation alone cannot close all F7 no-billing qualification or complete the future DEE-879 migration.
 

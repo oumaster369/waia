@@ -3,7 +3,12 @@ import {
   composePrivateExperience,
   experienceFingerprint,
   planRetention,
+  TWIN_NECESSITY_REVIEW_POLICY,
+  TWIN_RETENTION_POLICY,
   type ExperienceDraft,
+  type InitialHumanModelEndorsement,
+  type ModelNecessityReviewState,
+  type NecessityReviewConfirmation,
   type RetentionAuthorization,
   type RetentionRecord,
 } from "@/lib/ai-twin/model/lifecycle";
@@ -34,6 +39,75 @@ function grant(purpose: RetentionAuthorization["purpose"] = "dialogue"): Retenti
     revokedAt: null,
     basisReference: "synthetic-reviewed-basis",
   };
+}
+function necessityReview(
+  item: RetentionRecord,
+  confirmedAt = day(300),
+  preparedAt = day(299),
+): NecessityReviewConfirmation {
+  return {
+    reviewId: "review-1",
+    policyVersion: TWIN_NECESSITY_REVIEW_POLICY,
+    target: {
+      organizationId: item.scope.organizationId,
+      subjectId: item.scope.subjectId,
+      recordId: item.id,
+      recordRevision: item.revision,
+    },
+    basis: "storage_necessity",
+    decision: "retain",
+    preparedAt,
+    confirmedAt,
+    confirmedBy: {
+      kind: "human",
+      organizationId: item.scope.organizationId,
+      subjectId: item.scope.subjectId,
+    },
+  };
+}
+function modelRecord(overrides: Partial<RetentionRecord> = {}): RetentionRecord {
+  return {
+    ...record("model"),
+    ...overrides,
+  };
+}
+function initialEndorsement(
+  item: RetentionRecord,
+  confirmedAt = start,
+): InitialHumanModelEndorsement {
+  return {
+    endorsementId: "endorsement-1",
+    target: {
+      organizationId: item.scope.organizationId,
+      subjectId: item.scope.subjectId,
+      recordId: item.id,
+      recordRevision: 1,
+    },
+    basis: "initial_model_endorsement",
+    confirmedAt,
+    confirmedBy: {
+      kind: "human",
+      organizationId: item.scope.organizationId,
+      subjectId: item.scope.subjectId,
+    },
+  };
+}
+function modelReviewState(
+  item: RetentionRecord,
+  latestReview: NecessityReviewConfirmation | null = null,
+): ModelNecessityReviewState {
+  return {
+    initialEndorsement: initialEndorsement(item),
+    latestReview,
+  };
+}
+function planModelRetention(
+  item: RetentionRecord,
+  authorization: RetentionAuthorization | null,
+  now: string,
+  reviewState = modelReviewState(item),
+) {
+  return planRetention(item, authorization, now, reviewState);
 }
 const draft: ExperienceDraft = {
   scope,
@@ -107,15 +181,18 @@ describe("inert retention policy", () => {
           expiresAt: day(90),
         });
       });
-      it("does not let repeated planning or necessity review renew age", () => {
+      it("does not let repeated planning or undeclared review metadata renew age", () => {
         const r = candidate();
         for (const clock of [day(1), day(30), day(89)]) {
           expect(planRetention(r, grant("modelling"), clock).expiresAt).toBe(day(90));
         }
-        expect(
-          planRetention({ ...r, lastNecessityReviewAt: day(89) }, grant("modelling"), day(90))
-            .purposeUseAllowed,
-        ).toBe(false);
+        expect(() =>
+          planRetention(
+            { ...r, lastNecessityReviewAt: day(89) } as RetentionRecord,
+            grant("modelling"),
+            day(90),
+          ),
+        ).toThrow();
       });
       it("applies a supplied evidence anchor and rejects invalid chronology", () => {
         const r = { ...candidate(), lastSubstantialEvidenceAt: day(10) };
@@ -182,15 +259,186 @@ describe("inert retention policy", () => {
       ).disposition,
     ).toBe("remove");
   });
-  it("requires model necessity review without refreshing evidence", () => {
-    const r = record("model");
-    expect(planRetention(r, grant("modelling"), "2027-01-01T00:00:00.000Z")).toMatchObject({
+  it("pauses productive use exactly when a model necessity review becomes due", () => {
+    const r = modelRecord();
+    expect(planModelRetention(r, grant("modelling"), day(364))).toMatchObject({
+      policyVersion: TWIN_RETENTION_POLICY,
+      necessityReviewPolicyVersion: TWIN_NECESSITY_REVIEW_POLICY,
+      disposition: "retain",
+      purposeUseAllowed: true,
+      reviewDue: false,
+      reviewDueAt: day(365),
+      reviewDecision: "current",
+      humanRightsAssessment: "separate",
+    });
+    expect(planModelRetention(r, grant("modelling"), day(365))).toMatchObject({
+      disposition: "human_review_required",
+      purposeUseAllowed: false,
       reviewDue: true,
+      reviewDueAt: day(365),
+      reviewDecision: "human_decision_required",
+      humanRightsAssessment: "separate",
       expiresAt: null,
+      liveRemovalTargetAt: null,
+      allCopiesRemovalTargetAt: null,
+    });
+  });
+  it("starts the next interval only from exact Human review confirmation", () => {
+    const base = modelRecord();
+    const state = modelReviewState(base, necessityReview(base));
+    expect(planModelRetention(base, grant("modelling"), day(664), state)).toMatchObject({
+      disposition: "retain",
+      purposeUseAllowed: true,
+      reviewDue: false,
+      reviewDueAt: day(665),
+    });
+    expect(planModelRetention(base, grant("modelling"), day(665), state)).toMatchObject({
+      disposition: "human_review_required",
+      purposeUseAllowed: false,
+      reviewDue: true,
+      reviewDueAt: day(665),
+    });
+  });
+  it("does not let an ordinary correction refresh the initial review anchor", () => {
+    const corrected = modelRecord({
+      revision: 2,
+      createdAt: day(200),
+    });
+    const authority = { ...grant("modelling"), recordRevision: 2 };
+    expect(
+      planModelRetention(corrected, authority, day(365), modelReviewState(corrected)),
+    ).toMatchObject({
+      disposition: "human_review_required",
+      purposeUseAllowed: false,
+      reviewDue: true,
+      reviewDueAt: day(365),
+    });
+  });
+  it("binds necessity review to both tenant dimensions and the exact record version", () => {
+    const base = modelRecord();
+    const valid = necessityReview(base);
+    const invalid: NecessityReviewConfirmation[] = [
+      { ...valid, target: { ...valid.target, organizationId: "other" } },
+      { ...valid, target: { ...valid.target, subjectId: "other" } },
+      { ...valid, target: { ...valid.target, recordId: "other" } },
+      { ...valid, target: { ...valid.target, recordRevision: 2 } },
+      {
+        ...valid,
+        confirmedBy: { ...valid.confirmedBy, organizationId: "other" },
+      },
+      {
+        ...valid,
+        confirmedBy: { ...valid.confirmedBy, subjectId: "other" },
+      },
+    ];
+    for (const review of invalid) {
+      expect(() =>
+        planModelRetention(base, grant("modelling"), day(301), modelReviewState(base, review)),
+      ).toThrow(/necessity review/i);
+    }
+  });
+  it("rejects non-Human, future, out-of-order and undeclared review authority", () => {
+    const base = modelRecord();
+    const valid = necessityReview(base);
+    const accessorReview = { ...valid };
+    Object.defineProperty(accessorReview, "confirmedAt", {
+      get: () => day(300),
+      enumerable: true,
+    });
+    const validState = modelReviewState(base);
+    const invalidStates: ModelNecessityReviewState[] = [
+      {
+        ...validState,
+        initialEndorsement: initialEndorsement(base, day(302)),
+      },
+      modelReviewState(base, {
+        ...valid,
+        confirmedBy: { ...valid.confirmedBy, kind: "system" },
+      } as unknown as NecessityReviewConfirmation),
+      modelReviewState(base, {
+        ...valid,
+        policyVersion: "unreviewed-policy",
+      } as unknown as NecessityReviewConfirmation),
+      modelReviewState(base, {
+        ...valid,
+        preparedAt: day(301),
+        confirmedAt: day(300),
+      }),
+      modelReviewState(base, {
+        ...valid,
+        preparedAt: day(301),
+        confirmedAt: day(302),
+      }),
+      modelReviewState(base, {
+        ...valid,
+        preparedAt: day(0),
+        confirmedAt: day(0),
+      }),
+      modelReviewState(base, accessorReview),
+      modelReviewState(base, {
+        ...valid,
+        grantsModelUse: true,
+      } as NecessityReviewConfirmation),
+      {
+        ...validState,
+        initialEndorsement: {
+          ...validState.initialEndorsement,
+          target: { ...validState.initialEndorsement.target, organizationId: "other" },
+        },
+      },
+      {
+        ...validState,
+        initialEndorsement: {
+          ...validState.initialEndorsement,
+          confirmedBy: { ...validState.initialEndorsement.confirmedBy, subjectId: "other" },
+        },
+      },
+    ];
+    expect(() => planRetention(base, grant("modelling"), day(301))).toThrow();
+    for (const state of invalidStates) {
+      expect(() => planModelRetention(base, grant("modelling"), day(301), state)).toThrow();
+    }
+    for (const item of [
+      { ...base, lastNecessityReviewAt: day(300) } as RetentionRecord,
+      { ...base, initialHumanEndorsedAt: day(300) } as RetentionRecord,
+      { ...base, correctedAt: day(300) } as RetentionRecord,
+    ]) {
+      expect(() => planModelRetention(item, grant("modelling"), day(301), validState)).toThrow();
+    }
+    expect(() =>
+      planRetention(record("experience_archive"), grant("private_archive"), day(301), validState),
+    ).toThrow();
+  });
+  it("does not let review confirmation revive evidence or purpose authorization", () => {
+    const base = modelRecord();
+    const reviewed = modelReviewState(base, necessityReview(base));
+    expect(
+      planModelRetention(
+        modelRecord({ evidenceEligible: false }),
+        grant("modelling"),
+        day(301),
+        reviewed,
+      ),
+    ).toMatchObject({
+      disposition: "remove",
+      purposeUseAllowed: false,
+      reviewDue: false,
     });
     expect(
-      planRetention({ ...r, evidenceEligible: false }, grant("modelling"), day(1)).disposition,
-    ).toBe("remove");
+      planModelRetention(base, { ...grant("modelling"), revokedAt: day(301) }, day(301), reviewed),
+    ).toMatchObject({
+      disposition: "remove",
+      purposeUseAllowed: false,
+      reviewDue: false,
+    });
+    expect(
+      planModelRetention(base, { ...grant("modelling"), revokedAt: day(365) }, day(365)),
+    ).toMatchObject({
+      disposition: "remove",
+      purposeUseAllowed: false,
+      reviewDue: true,
+      reviewDecision: "superseded_by_removal",
+    });
   });
   it("requires separate explicit reviewed receipt limit; never defaults to twelve months", () => {
     expect(planRetention(record("receipt"), grant("rights_receipt"), day(1)).disposition).toBe(
@@ -219,7 +467,7 @@ describe("inert retention policy", () => {
   });
   it("withdrawal blocks use without claiming deletion; unrelated private purpose remains distinct", () => {
     expect(
-      planRetention(record("model"), { ...grant("modelling"), revokedAt: day(1) }, day(1))
+      planModelRetention(modelRecord(), { ...grant("modelling"), revokedAt: day(1) }, day(1))
         .purposeUseAllowed,
     ).toBe(false);
     expect(planRetention(record("diary"), grant("private_archive"), day(1)).purposeUseAllowed).toBe(

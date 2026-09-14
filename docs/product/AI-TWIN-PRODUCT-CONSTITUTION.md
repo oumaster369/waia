@@ -119,6 +119,25 @@ AI-TWIN also teaches the Human how to use WAIA: explain functions, prerequisites
 
 The target is progressive coverage of all Human-facing WAIA functions as their owners publish verified help and capability contracts. No private/admin/scientific control is disclosed or enabled by a generic tutorial. Current account access comes from authoritative checks, never an inferred percentage or generated promise. DEE-994 owns the first curated in-workspace guide; context-aware conversational teaching extends DEE-878/881 and is not implied by that first interface. Preserve separate confirmation for any later navigation with unsaved changes or real action.
 
+### 5.2 Long-lived model knowledge
+
+Long-lived model knowledge SHALL receive a **Human-approved
+storage-necessity review** at least annually. WAIA prepares the review surface;
+the Human confirms whether the exact selected knowledge remains necessary.
+First endorsement of a model establishes its initial review anchor but is not
+itself a necessity-review confirmation.
+
+Once the annual interval is overdue, and until the review is current, affected
+knowledge MUST NOT be used for new inference or advice. This pause is neither an
+automatic deletion rule nor permission for indefinite pending storage: the
+review presents retain, correct, archive or delete/erase actions, while Human
+access, correction and deletion remain independently available. Confirmation
+does not renew consent, restore withdrawn evidence, establish truth, promote an
+archive, refresh evidence or widen purpose. Current purpose and source
+authorization remain mandatory after review. No unapproved grace period,
+automatic deletion deadline or retained receipt exception follows from this
+rule.
+
 ## 6. Embodiment and account trust
 
 At `20%` Formation, the Human becomes eligible to open Avatar Studio. This threshold means only that enough interaction exists for a meaningful representation workflow. It is not proof of identity or uniqueness.
@@ -227,6 +246,7 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-01 | DEE-873, PR #542 and subsequent D1–D5 decision | Narrow DARK-only presence evaluation; no production authority                                               |
 | 2026-09-02 | DEE-922, Human-merged PR #550                  | Free Formation, governed cost ×5 pricing, separate subscription and sponsored-access consent                |
 | 2026-09-06 | Explicit Human resume; DEE-943                 | Evidence/status reconciliation; isolated implementation permitted while Trader stays outside mutation scope |
+| 2026-09-12 | Explicit Human retention decision; DEE-871     | Human-controlled annual storage-necessity review; overdue knowledge paused from new inference/advice         |
 | 2026-09-12 | Explicit Human product-learning and UX requirement; DEE-994 | AI-TWIN teaches WAIA use through optional, truthful, capability-aware guidance; no authority/progress from learning |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

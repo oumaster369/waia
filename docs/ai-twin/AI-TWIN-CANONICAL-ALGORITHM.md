@@ -158,6 +158,25 @@ Working memory supports the current epistemic loop; personal memory preserves de
 | Rolling Twin backups | 30 days from copy creation; archive age is independent of backup rotation |
 | Consent / erasure receipts | A proposed 12 months after consent/operation ends remains conditional on separately reviewed necessity, legal basis, minimal fields and access; no automatic post-account-deletion extension |
 
+The Human-ratified annual review is an explicit **storage-necessity decision**,
+not a freshness signal. WAIA prepares the review and the authenticated Human
+confirms it for an exact selected long-lived model record and version. Initial
+Human endorsement starts the first one-year interval but is not a later review;
+ordinary correction, reading, rephrasing, model use and evidence refresh do not
+count as review confirmation. A confirmed review starts the next interval at
+its confirmation instant.
+
+When the interval is overdue, the affected knowledge is excluded immediately
+from new inference and advice. It is neither automatically erased nor
+indefinitely retained under a default waiting policy: storage disposition
+requires the Human-controlled retain, correct, archive or delete/erase decision.
+The productive-use pause does not block the Human's independent access,
+correction or deletion paths. Review confirmation cannot renew consent, revive
+removed evidence, establish truth, promote an archive, refresh evidence or
+widen purpose. Current tenant, purpose and source eligibility checks still
+apply after review. There is no inferred grace period, deletion deadline or
+retained receipt exception.
+
 These are approved design requirements, not proof of an implemented deletion service or legal compliance. Future operational tests must establish immediate exclusion from use on withdrawal and removal from live stores/indexes within **7 calendar days**, and **all** backup/processor copies within **30 calendar days from the same request**, not 7+30. Restore must reapply removal restrictions before serving data. A request, hash or tombstone is not completion evidence. Operational feasibility and every retained exception must be reviewed before making user-facing promises.
 
 R1 does not automatically promote a confirmed relation, resolve a need or create an archive. A substantial-evidence renewal requires independently verified new evidence and a trusted recorded anchor; reading, review, rephrasing, retries or caller-supplied metadata are insufficient. The disconnected DEE-871 repository currently admits initial proposed relations/open needs only, so their implemented anchor is creation; verified renewal and later-state transitions remain unimplemented. Current source eligibility, a shorter relation interval, withdrawal and deletion may exclude use earlier than 90 days.
@@ -181,6 +200,7 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-08, Human retention acceptance in AI-TWIN task 01a057ba-ed9b-77a1-948d-5220bb52debd | Explicit approval of recommended baseline with conditional receipts | Supersedes Proposed-only duration status in historical DEE-871 WP-1b; operational proof remains absent |
 | 2026-09-08, Human inheritable-experience refinement and subsequent proposal acceptance, same task | Explicit long-lived archive requirement plus approved three-layer architecture | DEE-965 foundation; DEE-871 persistence, DEE-872 private composition UX; DEE-894 future disclosure/legacy specification, no transfer activation |
 | 2026-09-09, Human “Подтверждаю” in response to R1, same task | Ratified classification of proposed relations/open knowledge needs as 90-day working memory; independently selected private experience remains separate, without automatic TTL | Supersedes DEE-871's fixture-only Proposed annual-review mapping; no automatic renewal, permanent promotion or runtime release authority |
+| 2026-09-12, Human annual-review decision, same task | Human-controlled annual storage-necessity review; overdue knowledge pauses new inference/advice while rights remain independent | DEE-871 pure lifecycle policy contract; no runtime activation, automatic deletion deadline, consent renewal or source revival |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 

@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-871
 integrationTitle: "AI-TWIN v1 — Epistemic ledger and Human-model persistence"
-branch: dee-871-ai-twin-repository
+branch: dee-871-ai-twin-canonical-continuation
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr]
@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: cb87f5b62707e47c7f1c22933d18f7ce29e9a39d,
-    lastValidationAt: "2026-09-09T09:57:56Z",
+    lastValidatedGitSha: null,
+    lastValidationAt: "2026-09-14T07:57:33Z",
     blockedReason: null,
-    nextAction: "Frozen disconnected source handed to independent foundation batch DEE-973. Keep DEE-871 open for authenticated runtime, complete persisted inventory and temporal/rights qualification; no more vocabulary expansion on this source branch. Shared migration/auth remains separately coordinated; no Trader mutation.",
+    nextAction: "Bind independent review and PR governance to the final implementation commit, then publish one Human-review PR to main if the frozen shared boundary remains unchanged. Keep shared migrations/schema, Trader preflight/tests, runtime mounting and production activation frozen.",
   }
 provenance:
   {
@@ -30,6 +30,137 @@ provenance:
 ---
 
 # DEE-871 — Epistemic ledger and Human-model persistence
+
+## 2026-09-14 canonical continuation — annual necessity-review contract
+
+Recovery established one writable continuation at
+`dee-871-ai-twin-canonical-continuation`, clean from verified `origin/main`
+`c6f79636b4aff2f0bf170b4357db7bb0d2abcb73`. Earlier DEE-871 worktrees remain
+read-only forensic sources: the ledger and repository branches are superseded by
+merged DEE-963/973 foundations, while `dee-871-ai-twin-shared-boundary` at
+`7802b39474f0126c8ef00655ebec2bad41bc093b` contains valid but unmerged,
+unmounted WIP. None is a continuation location.
+
+The shared boundary is frozen while AI-TRADER PR #590 and related open child PRs
+own adjacent Postgres journal, schema and historical-preflight surfaces. This
+work package changes no numbered migration, journal entry,
+`db/schema.postgres.ts`, Core/auth contract, Trader path, runtime route or
+production configuration.
+
+### Continuation matrix
+
+1. **WP-1 — object/lifecycle/access contract.** The merged DEE-963/973/965
+   foundations and current AI-TWIN model modules are authoritative. The
+   Human-controlled annual necessity-review slice below is implemented locally
+   but not yet committed or merged. WP-1 remains incomplete until the complete
+   v1 persisted inventory, temporal/source qualification, historical-consent
+   treatment and final access/rights contract are reconciled without importing
+   superseded branch state wholesale.
+2. **WP-2 — persistence and current-model reads.** The current disconnected
+   repository/fixture on main is authoritative for merged behavior.
+   `dee-871-ai-twin-shared-boundary` is a read-only source for coherent,
+   unmerged authenticated-member, consent, observation, claim revision,
+   correction and selected live-erasure work. Each future slice must be
+   re-admitted and ported onto this continuation. Shared schema registration,
+   migration journal ordering and runtime mounting remain blocked by the
+   AI-TRADER collision boundary; the old branch itself must not be merged.
+3. **WP-3 — isolation, legacy migration and cutover proof.** Not complete.
+   Production currently has three non-equivalent concepts: legacy
+   `{0,33,67,100}` readiness, the separate reasoning-maturity heuristic and the
+   ratified evidence-state Formation/Model Health model. The readiness writer is
+   default-off, and no authoritative write API completes the legacy
+   `socializationCompleted` transition. These are migration/qualification
+   evidence, not authority to enable a writer, invent socialization persistence
+   or collapse the models. Society remains a separately gated v3 concern.
+4. **Peripheral recovery evidence.** DEE-605 homepage visuals, DEE-784 “My
+   Twin” navigation restoration and DEE-799's old Twin facade/proxy harness may
+   inform later UX/runtime qualification. Their gone/stale branches are neither
+   DEE-871 continuation sources nor evidence that canonical persistence,
+   readiness migration or socialization writes are complete.
+
+### Selected bounded work package
+
+The Human-ratified 2026-09-12 rule is the next isolated WP-1 retention/rights
+qualification:
+
+- WAIA prepares the annual storage-necessity review and the Human confirms it.
+- First Human endorsement creates the initial model-class review anchor but is
+  not itself a necessity-review confirmation.
+- A later review binds an exact organization, subject, model record and positive
+  version, plus explicit Human actor, preparation time and confirmation time.
+- When review is overdue, the affected record is excluded from new inference and
+  advice. This is neither automatic deletion nor permission for indefinite
+  pending retention.
+- Human access, correction and deletion remain separate rights paths and are not
+  blocked by this productive-use assessment or by subscription state.
+- Confirmation does not renew consent, restore removed evidence, establish
+  truth, promote an archive, refresh evidence or widen purpose.
+- Current authorization and evidence eligibility remain mandatory after review.
+  No grace period, default waiting duration, deletion deadline or retained
+  receipt exception is introduced.
+
+Owned files are this plan, the Product Constitution, the Canonical Algorithm,
+the AI-TWIN v1 gap registry, `lib/ai-twin/model/lifecycle.ts` and
+`tests/unit/ai-twin-model-lifecycle.test.ts`. The implementation remains a pure,
+disconnected policy contract with no caller or persistence adapter added.
+
+Acceptance requires an explicit missing-behavior RED, exact one-year boundaries
+before/at the due instant, exact record/version and both-tenant dimensions,
+Human-only confirmation, chronology, immutable source authorization, overdue
+productive-use denial, independent rights metadata, and negative proof against
+consent/evidence revival, archive promotion, automatic removal deadlines,
+getters and undeclared authority fields. Validation is the focused lifecycle
+unit suite, cumulative AI-TWIN model units, scoped lint/typecheck, canon
+validation, diff checks, then repository PR-readiness checks only if this
+bounded package remains collision-free.
+
+### Implementation and local validation receipt
+
+The required RED failed seven focused cases while the old policy still returned
+`retain` and allowed productive use after the annual due instant. The bounded
+implementation now requires a canonical Human-only confirmation with a reviewed
+policy version, preparation/confirmation chronology, both tenant dimensions and
+exact record/version binding. Initial endorsement is an explicit inherited
+model-class receipt in separately supplied trusted lineage; ordinary record
+revision cannot carry or refresh it. At the due instant, otherwise-authorized
+knowledge returns `human_review_required` and
+`purposeUseAllowed: false`, with no expiry or removal target. Removal caused by
+withdrawn purpose, ineligible evidence or erasure remains higher priority.
+Rights are reported as a separate assessment.
+
+The existing retention policy identifier remains
+`human-approved-2026-09-08/v1`; the new review receipt has the separate
+`human-approved-2026-09-12/v1` identifier. This avoids treating annual review as
+consent renewal or invalidating existing purpose grants.
+
+Independent review initially found two P2s: the ordinary-record input could
+carry a refreshed initial anchor, and Constitution wording could be read as
+blocking first-year use. The implementation now accepts annual lineage only
+through a separate exact `ModelNecessityReviewState` trusted-adapter contract,
+rejects record-level anchor/review metadata, and the Constitution pauses use
+only once the interval is overdue. Focused re-review found both resolved and no
+remaining concrete P1/P2. The adapter must still obtain that lineage from an
+authoritative immutable source; this pure policy function does not authenticate
+or persist it.
+
+Validated on the uncommitted continuation diff over exact base
+`c6f79636b4aff2f0bf170b4357db7bb0d2abcb73`:
+
+- focused lifecycle GREEN: 48/48;
+- cumulative AI-TWIN model units GREEN: 185/185;
+- changed-file ESLint GREEN;
+- `pnpm typecheck` GREEN;
+- `pnpm validate:canon` GREEN, 173 canonical files checked;
+- `pnpm lint` GREEN;
+- `pnpm build` GREEN, with only the pre-existing Next.js middleware convention
+  deprecation warning;
+- `git diff --check` GREEN.
+
+Immediately before PR-readiness validation, `origin/main` remained the exact
+base SHA and open AI-TRADER/research PRs #585, #586, #587, #588 and #590
+remained foreign. No merge/rebase was necessary. No shared migration, journal,
+Postgres schema, Trader preflight/test, runtime, environment, deployment or
+Society surface changed.
 
 ## Approved outcome
 
