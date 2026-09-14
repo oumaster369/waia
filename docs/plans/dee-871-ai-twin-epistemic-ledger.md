@@ -334,7 +334,7 @@ The Human resolved the prior semantic boundary for DEE-871 WP-1:
    manufactures success. Minimal receipts preserve no removed personal content.
    A request, tombstone, hash, attempted job or process exit cannot prove
    completion.
-8. `WITHDRAW_USE`, `DELETE_ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`
+8. `WITHDRAW_USE`, `DELETE` / `ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`
    share lifecycle auditability but retain type-specific effects. No operation
    renews consent, widens purpose, establishes truth, grants archive authority
    or changes Formation/Model Health.

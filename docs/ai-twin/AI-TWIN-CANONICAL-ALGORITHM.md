@@ -221,7 +221,7 @@ tombstone, hash, attempted job or process exit is insufficient.
 Receipts are minimal and preserve no removed personal content. Operations do
 not renew consent, widen purpose, establish truth, grant archive authority or
 change Formation/Model Health. The shared lifecycle covers at least
-`WITHDRAW_USE`, `DELETE_ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`,
+`WITHDRAW_USE`, `DELETE` / `ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`,
 while each operation keeps distinct effects and authorization.
 
 R1 does not automatically promote a confirmed relation, resolve a need or create an archive. A substantial-evidence renewal requires independently verified new evidence and a trusted recorded anchor; reading, review, rephrasing, retries or caller-supplied metadata are insufficient. The disconnected DEE-871 repository currently admits initial proposed relations/open needs only, so their implemented anchor is creation; verified renewal and later-state transitions remain unimplemented. Current source eligibility, a shorter relation interval, withdrawal and deletion may exclude use earlier than 90 days.

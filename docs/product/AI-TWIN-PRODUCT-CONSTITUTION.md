@@ -183,8 +183,8 @@ Failure/retry history is append-only and cannot manufacture success or reset
 the original request clock. Minimal receipts must not preserve the personal
 content whose removal they prove. Rights operations do not renew consent, widen
 purpose, establish truth, grant archive authority or alter Formation/Model
-Health. At minimum, type-specific operations include `WITHDRAW_USE`,
-`DELETE_ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`; sharing one
+Health. At minimum, type-specific operations include `WITHDRAW_USE`, `DELETE` /
+`ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`; sharing one
 auditable lifecycle does not make their effects interchangeable.
 
 ## 6. Embodiment and account trust
