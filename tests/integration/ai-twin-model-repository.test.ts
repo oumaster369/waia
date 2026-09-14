@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createIsolatedTwinRepository } from "@/lib/ai-twin/model/postgres-repository";
+import {
+  createIsolatedTwinRepository,
+  type TwinRepositoryTx,
+} from "@/lib/ai-twin/model/postgres-repository";
 import { TWIN_PERSONAL_MODEL_ACCESS_POLICY } from "@/lib/ai-twin/model/core-access";
 import type {
   WorkingHypothesis,
@@ -101,12 +104,12 @@ describe.skipIf(!enabled)(
     let sessionActor: unknown = { actorClass: "human", actorUserId: subjectId };
     let afterCoreRead: (() => Promise<void>) | null = null;
     const authority = {
-      resolveAuthenticatedActor: async (tx: postgres.TransactionSql) => {
+      resolveAuthenticatedActor: async (tx: TwinRepositoryTx) => {
         await tx`select txid_current()`;
         return sessionActor;
       },
       resolveCurrentCoreAccess: async (
-        tx: postgres.TransactionSql,
+        tx: TwinRepositoryTx,
         request: {
           actor: { actorClass: "human"; actorUserId: string };
           organizationId: string;

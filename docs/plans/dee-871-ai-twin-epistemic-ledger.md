@@ -18,8 +18,8 @@ state:
     prUrl: null,
     lastValidatedGitSha: 274ef2e4f8348554b9df26734ebe3a449cb79e96,
     lastValidationAt: "2026-09-14T12:45:29Z",
-    blockedReason: "The disconnected repository now requires fresh injected Human identity and transaction-local trusted Core resolution, but only a synthetic adapter output fixture is qualified. Production persistence, a concrete Supabase/Core adapter, shared table registration and runtime mounting remain unimplemented and cross the frozen shared architecture/schema boundary.",
-    nextAction: "Seek explicit shared-boundary admission for the concrete production Core resolver and AI-TWIN Postgres schema/migration package, including db/schema.postgres.ts and Trader-compatible additive review. Do not mount the fixture repository, apply production DDL, edit Trader or start WP-3.",
+    blockedReason: "WP-2 production 0209 schema, Core resolver and normalized repository are implemented in-repo but not production-applied, not runtime-mounted, and not integration-ready. WP-3 residual-copy/export verification remains. Trader-owner/shared-boundary review of the bounded 0209 compatibility tuple is still required before the final DEE-871 PR.",
+    nextAction: "Qualify the 0209 package locally, keep writers unmounted, do not apply production DDL, do not open a PR, and do not start WP-3. Obtain Trader-owner/shared-boundary review of the bounded FHV compatible-additive exception before integration-ready closeout.",
   }
 provenance:
   {
@@ -1025,6 +1025,44 @@ the separately reviewed 0209-or-later migration, journal,
 `db/schema.postgres.ts` and Trader-compatible additive package. Those are the
 next shared boundaries, so WP-2 remains current and incomplete and execution
 stops before them.
+
+### 2026-09-14 Human decisions and 0209 shared persistence package
+
+Fresh preflight immediately before implementation confirmed `origin/main`
+`d7d5941a995b83473acb6e00c42d5252c44b2303`, merge-base identity, a clean
+pushed branch, and zero open PRs. The Human then ratified:
+
+1. **Ownership A.** The 0209 journal/SQL/`db/schema.postgres.ts` package and
+   the exact FHV compatible-additive tuple
+   `{ idx: 209, when: 1780000000209, tag: 0209_ai_twin_epistemic_persistence_v1 }`
+   stay inside DEE-871. `FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX` remains 207.
+   AI-TWIN tables are not added to `FHV_V2_POSTGRES_REQUIRED_TABLES`. No other
+   Trader file or scientific/runtime behavior is in this exception.
+   Trader-owner/shared-boundary review remains mandatory.
+2. **Annual-review target.** `InitialHumanModelEndorsement` and
+   `NecessityReviewConfirmation` persist against an exact Human-endorsed claim
+   revision `(organization_id, subject_user_id, claim_id, revision)`. No
+   aggregate model-record table was invented.
+3. **Private archive deferred.** `ai_twin_private_sources`,
+   `ai_twin_private_experiences` and `ai_twin_private_experience_sources` are
+   not in 0209. The disconnected fixture archive remains disconnected.
+
+Implemented in-repo, still unmounted and unapplied:
+
+- additive create-only migration `0209_ai_twin_epistemic_persistence_v1`;
+- Drizzle registration of the 18 epistemic tables;
+- `getFreshOptionalSessionUserId`;
+- `createProductionTwinCoreAuthorityAdapter` with `FOR SHARE` Core reads and
+  row-presence=`current` mapping;
+- normalized `createProductionTwinRepository` using
+  `withPostgresSerializableTransactionRetry`, two-dimensional application
+  scoping, append-only consent, dialogue/Diary observations, claims,
+  corrections, evidence links, rights history, and claim-targeted
+  endorsement/review.
+
+Not claimed: production DDL apply, runtime writer/route mount, RLS expansion,
+legacy backfill, WP-3 residual-copy verification, or DEE-871 integration-ready
+closeout.
 
 ## Approved outcome
 

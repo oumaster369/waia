@@ -13,8 +13,11 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // journal entry. 0205 and 0206 remain inside the required prefix through 0207.
 // 0208 is DEE-1006 terminal-receipt storage: admitted after Cody, never a
 // substitute for the required 0000..0207 prefix.
+// 0209 is DEE-871 AI-TWIN epistemic persistence: unrelated additive tables,
+// never a substitute for the required prefix or a required FHV table.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
+  { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

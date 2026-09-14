@@ -34,7 +34,8 @@ import {
 } from "./persistence-contracts";
 
 type Context = Omit<ModelContext, "grants">;
-type Tx = postgres.TransactionSql;
+export type TwinRepositoryTx = postgres.Sql | postgres.TransactionSql;
+type Tx = TwinRepositoryTx;
 type AuthenticatedActor = Readonly<{
   actorClass: "human";
   actorUserId: string;
@@ -185,6 +186,8 @@ function context(ctx: Context, humanOnly = false): void {
  * adapter, never request/LLM fields or a prior access decision. Consent issuance is
  * qualified only against the disposable fixture and is not a production ceremony.
  * Rights fences here live only for the disposable fixture, not indefinitely in production.
+ * Production tables live in 0209 (`ai_twin_*`) and are owned by
+ * `postgres-production-repository.ts`.
  */
 export function createIsolatedTwinRepository(
   sql: postgres.Sql,

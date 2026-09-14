@@ -53,6 +53,7 @@ export type NecessityReviewConfirmation = Readonly<{
 }>;
 export type InitialHumanModelEndorsement = Readonly<{
   endorsementId: string;
+  /** Production 0209 maps this to an exact Human-endorsed claim object version. */
   target: Readonly<{
     organizationId: string;
     subjectId: string;

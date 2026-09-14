@@ -7801,3 +7801,827 @@ export const waiaPostgresTxValidation = pgTable("waia_postgres_tx_validation", {
   payload: text("payload").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
+
+/** DEE-871 epistemic identity spine. Append-only versions; no payload or current flag. */
+export const aiTwinObjectVersions = pgTable(
+  "ai_twin_object_versions",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull(),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    purpose: text("purpose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_object_versions_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_object_versions_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    index("ai_twin_object_versions_scope_purpose_created_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.purpose,
+      t.createdAt,
+    ),
+    index("ai_twin_object_versions_scope_kind_id_version_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.objectKind,
+      t.objectId,
+      t.version,
+    ),
+    check(
+      "ai_twin_object_versions_kind_check",
+      sql`${t.objectKind} IN ('observation','claim','correction','evidence_link','hypothesis','relation','knowledge_need')`,
+    ),
+  ],
+);
+
+export const aiTwinConsentGrants = pgTable(
+  "ai_twin_consent_grants",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    grantId: uuid("grant_id").notNull(),
+    version: integer("version").notNull(),
+    purpose: text("purpose").notNull(),
+    sources: jsonb("sources").notNull(),
+    mode: text("mode").notNull(),
+    permittedUses: jsonb("permitted_uses").notNull(),
+    disclosureBoundary: text("disclosure_boundary").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "date" }).notNull(),
+    temporalMode: text("temporal_mode").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.grantId, t.version],
+      name: "ai_twin_consent_grants_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_consent_grants_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    index("ai_twin_consent_grants_scope_grant_version_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.grantId,
+      t.version,
+    ),
+    index("ai_twin_consent_grants_scope_purpose_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.purpose,
+    ),
+  ],
+);
+
+export const aiTwinConsentIssuanceReceipts = pgTable(
+  "ai_twin_consent_issuance_receipts",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    purpose: text("purpose").notNull(),
+    requestId: uuid("request_id").notNull(),
+    intentFingerprint: text("intent_fingerprint").notNull(),
+    grantId: uuid("grant_id").notNull(),
+    grantVersion: integer("grant_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.purpose, t.requestId],
+      name: "ai_twin_consent_issuance_receipts_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_consent_issuance_receipts_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_consent_issuance_receipts_grant_fk",
+      columns: [t.organizationId, t.subjectUserId, t.grantId, t.grantVersion],
+      foreignColumns: [
+        aiTwinConsentGrants.organizationId,
+        aiTwinConsentGrants.subjectUserId,
+        aiTwinConsentGrants.grantId,
+        aiTwinConsentGrants.version,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinObservations = pgTable(
+  "ai_twin_observations",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("observation"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    grantId: uuid("grant_id").notNull(),
+    grantVersion: integer("grant_version").notNull(),
+    source: text("source").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull(),
+    context: text("context").notNull(),
+    observationText: text("observation_text").notNull(),
+    projectionRisks: jsonb("projection_risks").notNull(),
+    epistemicKind: text("epistemic_kind").notNull(),
+    purpose: text("purpose").notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_observations_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_observations_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_observations_grant_fk",
+      columns: [t.organizationId, t.subjectUserId, t.grantId, t.grantVersion],
+      foreignColumns: [
+        aiTwinConsentGrants.organizationId,
+        aiTwinConsentGrants.subjectUserId,
+        aiTwinConsentGrants.grantId,
+        aiTwinConsentGrants.version,
+      ],
+    }).onDelete("restrict"),
+    index("ai_twin_observations_scope_purpose_recorded_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.purpose,
+      t.recordedAt,
+    ),
+    index("ai_twin_observations_grant_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.grantId,
+      t.grantVersion,
+    ),
+  ],
+);
+
+export const aiTwinClaimRevisions = pgTable(
+  "ai_twin_claim_revisions",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("claim"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    statement: text("statement").notNull(),
+    domain: text("domain").notNull(),
+    context: text("context").notNull(),
+    uncertainty: text("uncertainty").notNull(),
+    status: text("status").notNull(),
+    basis: text("basis").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull(),
+    purpose: text("purpose").notNull(),
+    supersedesRevision: integer("supersedes_revision"),
+    humanCorrectionId: text("human_correction_id"),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_claim_revisions_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_claim_revisions_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    uniqueIndex("ai_twin_claim_revisions_scope_id_version_uq").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.objectId,
+      t.version,
+    ),
+    index("ai_twin_claim_revisions_scope_claim_version_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.objectId,
+      t.version,
+    ),
+  ],
+);
+
+export const aiTwinHumanCorrections = pgTable(
+  "ai_twin_human_corrections",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("correction"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    claimId: text("claim_id").notNull(),
+    previousRevision: integer("previous_revision").notNull(),
+    action: text("action").notNull(),
+    reason: text("reason").notNull(),
+    statement: text("statement"),
+    context: text("context"),
+    actorSubjectUserId: uuid("actor_subject_user_id").notNull(),
+    purpose: text("purpose").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_human_corrections_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_human_corrections_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_human_corrections_claim_fk",
+      columns: [t.organizationId, t.subjectUserId, t.claimId, t.previousRevision],
+      foreignColumns: [
+        aiTwinClaimRevisions.organizationId,
+        aiTwinClaimRevisions.subjectUserId,
+        aiTwinClaimRevisions.objectId,
+        aiTwinClaimRevisions.version,
+      ],
+    }).onDelete("restrict"),
+    uniqueIndex("ai_twin_human_corrections_scope_id_uq").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.objectId,
+    ),
+  ],
+);
+
+export const aiTwinEvidenceLinks = pgTable(
+  "ai_twin_evidence_links",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("evidence_link"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    purpose: text("purpose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+    sourceKind: text("source_kind").notNull(),
+    sourceId: text("source_id").notNull(),
+    sourceVersion: integer("source_version").notNull(),
+    targetKind: text("target_kind").notNull(),
+    targetId: text("target_id").notNull(),
+    targetVersion: integer("target_version").notNull(),
+    relationship: text("relationship").notNull(),
+    reason: text("reason").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_evidence_links_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_evidence_links_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_evidence_links_source_fk",
+      columns: [t.organizationId, t.subjectUserId, t.sourceKind, t.sourceId, t.sourceVersion],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_evidence_links_target_fk",
+      columns: [t.organizationId, t.subjectUserId, t.targetKind, t.targetId, t.targetVersion],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    uniqueIndex("ai_twin_evidence_links_edge_uq").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.sourceKind,
+      t.sourceId,
+      t.sourceVersion,
+      t.targetKind,
+      t.targetId,
+      t.targetVersion,
+      t.relationship,
+    ),
+    index("ai_twin_evidence_links_source_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.sourceKind,
+      t.sourceId,
+      t.sourceVersion,
+    ),
+    index("ai_twin_evidence_links_target_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.targetKind,
+      t.targetId,
+      t.targetVersion,
+    ),
+  ],
+);
+
+export const aiTwinWorkingHypotheses = pgTable(
+  "ai_twin_working_hypotheses",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("hypothesis"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    purpose: text("purpose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+    context: text("context").notNull(),
+    domains: jsonb("domains").notNull(),
+    alternatives: jsonb("alternatives").notNull(),
+    validFrom: timestamp("valid_from", { withTimezone: true, mode: "date" }).notNull(),
+    validUntil: timestamp("valid_until", { withTimezone: true, mode: "date" }),
+    lastSubstantialEvidenceAt: timestamp("last_substantial_evidence_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    status: text("status").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_working_hypotheses_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_working_hypotheses_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinDynamicRelations = pgTable(
+  "ai_twin_dynamic_relations",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("relation"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    relationKind: text("relation_kind").notNull(),
+    purpose: text("purpose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+    context: text("context").notNull(),
+    uncertainty: text("uncertainty").notNull(),
+    validFrom: timestamp("valid_from", { withTimezone: true, mode: "date" }).notNull(),
+    validUntil: timestamp("valid_until", { withTimezone: true, mode: "date" }),
+    status: text("status").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_dynamic_relations_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_dynamic_relations_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinKnowledgeNeeds = pgTable(
+  "ai_twin_knowledge_needs",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    objectKind: text("object_kind").notNull().default("knowledge_need"),
+    objectId: text("object_id").notNull(),
+    version: integer("version").notNull(),
+    purpose: text("purpose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+    reason: text("reason").notNull(),
+    proposedObservation: text("proposed_observation").notNull(),
+    state: text("state").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      name: "ai_twin_knowledge_needs_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_knowledge_needs_object_fk",
+      columns: [t.organizationId, t.subjectUserId, t.objectKind, t.objectId, t.version],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinCommandReceipts = pgTable(
+  "ai_twin_command_receipts",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    purpose: text("purpose").notNull(),
+    requestId: text("request_id").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    targetKind: text("target_kind").notNull(),
+    targetId: text("target_id").notNull(),
+    targetVersion: integer("target_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
+    retentionPolicyId: text("retention_policy_id").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.purpose, t.requestId],
+      name: "ai_twin_command_receipts_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_command_receipts_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_command_receipts_target_fk",
+      columns: [t.organizationId, t.subjectUserId, t.targetKind, t.targetId, t.targetVersion],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinRightsCompletionEvidence = pgTable(
+  "ai_twin_rights_completion_evidence",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    evidenceClass: text("evidence_class").notNull(),
+    producerReference: text("producer_reference").notNull(),
+    admittedAt: timestamp("admitted_at", { withTimezone: true, mode: "date" }).notNull(),
+    admittedByReference: text("admitted_by_reference").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.evidenceDigest],
+      name: "ai_twin_rights_completion_evidence_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_rights_completion_evidence_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinRightsOperations = pgTable(
+  "ai_twin_rights_operations",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    operationType: text("operation_type").notNull(),
+    targetScopeKind: text("target_scope_kind").notNull(),
+    targetDigest: text("target_digest").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true, mode: "date" }).notNull(),
+    requestedBySubjectUserId: uuid("requested_by_subject_user_id").notNull(),
+    requestedByActorReference: text("requested_by_actor_reference").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.operationId],
+      name: "ai_twin_rights_operations_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_rights_operations_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    index("ai_twin_rights_operations_scope_type_requested_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.operationType,
+      t.requestedAt,
+    ),
+    index("ai_twin_rights_operations_target_digest_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.targetDigest,
+    ),
+  ],
+);
+
+export const aiTwinRightsOperationEvents = pgTable(
+  "ai_twin_rights_operation_events",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    sequence: integer("sequence").notNull(),
+    state: text("state").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true, mode: "date" }).notNull(),
+    completionEvidenceDigest: text("completion_evidence_digest"),
+    acceptedBySubjectUserId: uuid("accepted_by_subject_user_id"),
+    acceptedByActorReference: text("accepted_by_actor_reference"),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.operationId, t.sequence],
+      name: "ai_twin_rights_operation_events_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_rights_operation_events_operation_fk",
+      columns: [t.organizationId, t.subjectUserId, t.operationId],
+      foreignColumns: [
+        aiTwinRightsOperations.organizationId,
+        aiTwinRightsOperations.subjectUserId,
+        aiTwinRightsOperations.operationId,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_rights_operation_events_evidence_fk",
+      columns: [t.organizationId, t.subjectUserId, t.completionEvidenceDigest],
+      foreignColumns: [
+        aiTwinRightsCompletionEvidence.organizationId,
+        aiTwinRightsCompletionEvidence.subjectUserId,
+        aiTwinRightsCompletionEvidence.evidenceDigest,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinRightsOperationAttempts = pgTable(
+  "ai_twin_rights_operation_attempts",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    sequence: integer("sequence").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }).notNull(),
+    outcome: text("outcome").notNull(),
+    outcomeCode: text("outcome_code").notNull(),
+    completionEvidenceDigest: text("completion_evidence_digest"),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.operationId, t.sequence],
+      name: "ai_twin_rights_operation_attempts_pkey",
+    }),
+    uniqueIndex("ai_twin_rights_operation_attempts_id_uq").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.operationId,
+      t.attemptId,
+    ),
+    foreignKey({
+      name: "ai_twin_rights_operation_attempts_operation_fk",
+      columns: [t.organizationId, t.subjectUserId, t.operationId],
+      foreignColumns: [
+        aiTwinRightsOperations.organizationId,
+        aiTwinRightsOperations.subjectUserId,
+        aiTwinRightsOperations.operationId,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_rights_operation_attempts_evidence_fk",
+      columns: [t.organizationId, t.subjectUserId, t.completionEvidenceDigest],
+      foreignColumns: [
+        aiTwinRightsCompletionEvidence.organizationId,
+        aiTwinRightsCompletionEvidence.subjectUserId,
+        aiTwinRightsCompletionEvidence.evidenceDigest,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinRightsOperationEffects = pgTable(
+  "ai_twin_rights_operation_effects",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    effectKind: text("effect_kind").notNull(),
+    committedAt: timestamp("committed_at", { withTimezone: true, mode: "date" }).notNull(),
+    completionEvidenceDigest: text("completion_evidence_digest").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.operationId],
+      name: "ai_twin_rights_operation_effects_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_rights_operation_effects_operation_fk",
+      columns: [t.organizationId, t.subjectUserId, t.operationId],
+      foreignColumns: [
+        aiTwinRightsOperations.organizationId,
+        aiTwinRightsOperations.subjectUserId,
+        aiTwinRightsOperations.operationId,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_rights_operation_effects_evidence_fk",
+      columns: [t.organizationId, t.subjectUserId, t.completionEvidenceDigest],
+      foreignColumns: [
+        aiTwinRightsCompletionEvidence.organizationId,
+        aiTwinRightsCompletionEvidence.subjectUserId,
+        aiTwinRightsCompletionEvidence.evidenceDigest,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinModelEndorsements = pgTable(
+  "ai_twin_model_endorsements",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    endorsementId: text("endorsement_id").notNull(),
+    targetObjectKind: text("target_object_kind").notNull().default("claim"),
+    targetObjectId: text("target_object_id").notNull(),
+    targetVersion: integer("target_version").notNull(),
+    basis: text("basis").notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }).notNull(),
+    confirmedBySubjectUserId: uuid("confirmed_by_subject_user_id").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.endorsementId],
+      name: "ai_twin_model_endorsements_pkey",
+    }),
+    uniqueIndex("ai_twin_model_endorsements_target_uq").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.targetObjectId,
+      t.targetVersion,
+    ),
+    foreignKey({
+      name: "ai_twin_model_endorsements_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_model_endorsements_object_fk",
+      columns: [
+        t.organizationId,
+        t.subjectUserId,
+        t.targetObjectKind,
+        t.targetObjectId,
+        t.targetVersion,
+      ],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_model_endorsements_claim_fk",
+      columns: [t.organizationId, t.subjectUserId, t.targetObjectId, t.targetVersion],
+      foreignColumns: [
+        aiTwinClaimRevisions.organizationId,
+        aiTwinClaimRevisions.subjectUserId,
+        aiTwinClaimRevisions.objectId,
+        aiTwinClaimRevisions.version,
+      ],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const aiTwinNecessityReviews = pgTable(
+  "ai_twin_necessity_reviews",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    subjectUserId: uuid("subject_user_id").notNull(),
+    reviewId: text("review_id").notNull(),
+    targetObjectKind: text("target_object_kind").notNull().default("claim"),
+    targetObjectId: text("target_object_id").notNull(),
+    targetVersion: integer("target_version").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    basis: text("basis").notNull(),
+    decision: text("decision").notNull(),
+    preparedAt: timestamp("prepared_at", { withTimezone: true, mode: "date" }).notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }).notNull(),
+    confirmedBySubjectUserId: uuid("confirmed_by_subject_user_id").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.subjectUserId, t.reviewId],
+      name: "ai_twin_necessity_reviews_pkey",
+    }),
+    foreignKey({
+      name: "ai_twin_necessity_reviews_membership_fk",
+      columns: [t.organizationId, t.subjectUserId],
+      foreignColumns: [organizationMembers.organizationId, organizationMembers.userId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_necessity_reviews_object_fk",
+      columns: [
+        t.organizationId,
+        t.subjectUserId,
+        t.targetObjectKind,
+        t.targetObjectId,
+        t.targetVersion,
+      ],
+      foreignColumns: [
+        aiTwinObjectVersions.organizationId,
+        aiTwinObjectVersions.subjectUserId,
+        aiTwinObjectVersions.objectKind,
+        aiTwinObjectVersions.objectId,
+        aiTwinObjectVersions.version,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "ai_twin_necessity_reviews_claim_fk",
+      columns: [t.organizationId, t.subjectUserId, t.targetObjectId, t.targetVersion],
+      foreignColumns: [
+        aiTwinClaimRevisions.organizationId,
+        aiTwinClaimRevisions.subjectUserId,
+        aiTwinClaimRevisions.objectId,
+        aiTwinClaimRevisions.version,
+      ],
+    }).onDelete("restrict"),
+    index("ai_twin_necessity_reviews_target_idx").on(
+      t.organizationId,
+      t.subjectUserId,
+      t.targetObjectId,
+      t.targetVersion,
+      t.confirmedAt,
+    ),
+  ],
+);

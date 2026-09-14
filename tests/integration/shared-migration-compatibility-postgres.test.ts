@@ -7,7 +7,10 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema.postgres";
-import { assertFhvV2PostgresSchemaPreflight, FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
+import {
+  assertFhvV2PostgresSchemaPreflight,
+  FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX,
+} from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
 import {
   getCredentialRowByIdPostgres,
   insertCredentialRowPostgres,
@@ -27,14 +30,18 @@ it("binds the exact frozen0205 bytes and contiguous journal without a second0205
       .update(readFileSync(join(folder, `${tag}.sql`)))
       .digest("hex"),
   ).toBe(hash);
-  expect(journal.entries.filter((entry) => entry.idx === 205 || entry.tag === tag)).toEqual([{
-    idx: 205,
-    when: 1780000000205,
-    tag,
-    version: "7",
-    breakpoints: true,
-  }]);
-  expect(journal.entries.map((e) => e.idx)).toEqual(Array.from({ length: journal.entries.length }, (_, i) => i));
+  expect(journal.entries.filter((entry) => entry.idx === 205 || entry.tag === tag)).toEqual([
+    {
+      idx: 205,
+      when: 1780000000205,
+      tag,
+      version: "7",
+      breakpoints: true,
+    },
+  ]);
+  expect(journal.entries.map((e) => e.idx)).toEqual(
+    Array.from({ length: journal.entries.length }, (_, i) => i),
+  );
   expect(new Set(journal.entries.map((e) => e.tag)).size).toBe(journal.entries.length);
   expect(new Set(journal.entries.map((e) => e.when)).size).toBe(journal.entries.length);
 });
@@ -123,9 +130,13 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
           (await sql`select rolsuper,rolbypassrls from pg_roles where rolname=current_user`)[0],
         ).toEqual({ rolsuper: false, rolbypassrls: false });
         await migrate(drizzle(sql), { migrationsFolder });
-        const applied = JSON.parse(readFileSync(join(migrationsFolder, "meta/_journal.json"), "utf8")) as typeof journal;
+        const applied = JSON.parse(
+          readFileSync(join(migrationsFolder, "meta/_journal.json"), "utf8"),
+        ) as typeof journal;
         if (applied.entries.at(-1)!.idx < FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX) {
-          await expect(assertFhvV2PostgresSchemaPreflight({ sql })).rejects.toThrow("REQUIRED_MIGRATION_MISSING");
+          await expect(assertFhvV2PostgresSchemaPreflight({ sql })).rejects.toThrow(
+            "REQUIRED_MIGRATION_MISSING",
+          );
         } else {
           await assertFhvV2PostgresSchemaPreflight({ sql });
         }
@@ -167,7 +178,9 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
     it("actual Drizzle fresh current journal under a non-super/non-bypass migration owner", async () => {
       const sql = await database();
       await apply(sql, folder);
-      expect((await sql`select count(*) n from drizzle.__drizzle_migrations`)[0].n).toBe(String(journal.entries.length));
+      expect((await sql`select count(*) n from drizzle.__drizzle_migrations`)[0].n).toBe(
+        String(journal.entries.length),
+      );
       const tables = await sql`select relname,relrowsecurity,relforcerowsecurity from pg_class
       where relname in ('trader_account_collection_state','trader_account_observations')`;
       expect(tables).toHaveLength(2);
@@ -176,6 +189,38 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
       where rolname in ('waia_account_observer','waia_account_observation_reader')`;
       expect(roles).toHaveLength(2);
       expect(roles.every((r) => !r.rolcanlogin && !r.rolsuper && !r.rolbypassrls)).toBe(true);
+      const twin = await sql<{ relname: string; relrowsecurity: boolean }[]>`
+        select relname, relrowsecurity from pg_class
+        where relkind = 'r' and relname like 'ai_twin_%'
+        order by relname`;
+      expect(twin.map((row) => row.relname)).toEqual([
+        "ai_twin_claim_revisions",
+        "ai_twin_command_receipts",
+        "ai_twin_consent_grants",
+        "ai_twin_consent_issuance_receipts",
+        "ai_twin_dynamic_relations",
+        "ai_twin_evidence_links",
+        "ai_twin_human_corrections",
+        "ai_twin_knowledge_needs",
+        "ai_twin_model_endorsements",
+        "ai_twin_necessity_reviews",
+        "ai_twin_object_versions",
+        "ai_twin_observations",
+        "ai_twin_rights_completion_evidence",
+        "ai_twin_rights_operation_attempts",
+        "ai_twin_rights_operation_effects",
+        "ai_twin_rights_operation_events",
+        "ai_twin_rights_operations",
+        "ai_twin_working_hypotheses",
+      ]);
+      expect(twin.every((row) => row.relrowsecurity === false)).toBe(true);
+      expect(twin.every((row) => !row.relname.includes("private_"))).toBe(true);
+      for (const table of twin) {
+        expect(
+          (await sql.unsafe<{ n: string }[]>(`select count(*) n from public.${table.relname}`))[0]
+            .n,
+        ).toBe("0");
+      }
     }, 120000);
     it("actual204→current preserves credentials/snapshots and legacy read/insert/revoke on BOTH schemas", async () => {
       upgraded = await database();
@@ -208,13 +253,18 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
           await upgraded`select to_jsonb(s) r from public.trader_balance_snapshots s where id=${snapshot}`
         )[0].r,
       ).toEqual(snap);
+      expect((await upgraded`select count(*) n from public.ai_twin_object_versions`)[0].n).toBe(
+        "0",
+      );
+      expect((await upgraded`select count(*) n from public.ai_twin_consent_grants`)[0].n).toBe("0");
       await legacyConsumer(upgraded, "after0205");
       // Even the fixture owner obeys FORCE RLS: seed each identity under its exact
       // scope through the existing inherited policy, never disabling RLS.
       for (const [scopeOrg, scopeCredential, account] of [
-        [org, credential, "synthetic-account"], [otherOrg, otherCredential, "other-account"],
+        [org, credential, "synthetic-account"],
+        [otherOrg, otherCredential, "other-account"],
       ]) {
-        await upgraded.begin(async tx => {
+        await upgraded.begin(async (tx) => {
           await tx`select set_config('waia.observation_org',${scopeOrg},true),set_config('waia.observation_credential',${scopeCredential},true),set_config('waia.observation_account',${account},true)`;
           await tx`insert into public.trader_account_collection_state(organization_id,credential_id,exchange_account_id,configuration_revision,symbols)
           values(${scopeOrg},${scopeCredential},${account},'config','["BTCUSDT"]')`;
@@ -298,13 +348,17 @@ describe.skipIf(process.env.WAIA_SHARED_PG17 !== "1")(
         }),
       ).rejects.toThrow("OBSERVATION_REVISION_IS_DATABASE_OWNED");
       await expect(
-        upgraded.begin(async tx => {
+        upgraded.begin(async (tx) => {
           await tx`select set_config('waia.observation_org',${org},true),set_config('waia.observation_credential',${credential},true),set_config('waia.observation_account','synthetic-account',true)`;
           await tx`update public.trader_account_observations set payload='{"changed":true}' where observation_id=${observation}`;
         }),
       ).rejects.toThrow("ACCOUNT_OBSERVATION_IMMUTABLE");
-      await scopedRole("waia_account_observation_reader", async tx => {
-        expect((await tx`select payload from public.trader_account_observations where observation_id=${observation}`)[0].payload).toEqual({});
+      await scopedRole("waia_account_observation_reader", async (tx) => {
+        expect(
+          (
+            await tx`select payload from public.trader_account_observations where observation_id=${observation}`
+          )[0].payload,
+        ).toEqual({});
       });
     });
     it("actual historical preflight rejects invalid journal/table states, each rolled back", async () => {
