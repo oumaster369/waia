@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: null,
-    lastValidationAt: "2026-09-14T07:57:33Z",
+    lastValidatedGitSha: 99d98b1647c5b31751b855076cd8fab7a700f4f0,
+    lastValidationAt: "2026-09-14T08:07:09Z",
     blockedReason: null,
-    nextAction: "Bind independent review and PR governance to the final implementation commit, then publish one Human-review PR to main if the frozen shared boundary remains unchanged. Keep shared migrations/schema, Trader preflight/tests, runtime mounting and production activation frozen.",
+    nextAction: "Continue WP-1 with the admitted pure EvidenceLink qualification contract. Keep RightsOperation/consent reconciliation sequential, and stop before shared migration/schema, Trader compatibility, runtime activation or any unratified temporal/source policy.",
   }
 provenance:
   {
@@ -41,21 +41,23 @@ merged DEE-963/973 foundations, while `dee-871-ai-twin-shared-boundary` at
 `7802b39474f0126c8ef00655ebec2bad41bc093b` contains valid but unmerged,
 unmounted WIP. None is a continuation location.
 
-The shared boundary is frozen while AI-TRADER PR #590 and related open child PRs
-own adjacent Postgres journal, schema and historical-preflight surfaces. This
-work package changes no numbered migration, journal entry,
-`db/schema.postgres.ts`, Core/auth contract, Trader path, runtime route or
-production configuration.
+AI-TRADER PR #590 subsequently merged to `origin/main` as `d7d5941a`; its child
+PRs #585–#588 remain foreign. The continuation integrated only that fresh main
+commit at the accepted checkpoint boundary. The shared boundary remains frozen:
+no numbered migration, journal entry, `db/schema.postgres.ts`, Core/auth
+contract, Trader path/test/preflight, runtime route or production configuration
+is admitted.
 
 ### Continuation matrix
 
 1. **WP-1 — object/lifecycle/access contract.** The merged DEE-963/973/965
    foundations and current AI-TWIN model modules are authoritative. The
-   Human-controlled annual necessity-review slice below is implemented locally
-   but not yet committed or merged. WP-1 remains incomplete until the complete
-   v1 persisted inventory, temporal/source qualification, historical-consent
-   treatment and final access/rights contract are reconciled without importing
-   superseded branch state wholesale.
+   Human-controlled annual necessity-review slice below is committed as stable
+   checkpoint `99d98b1647c5b31751b855076cd8fab7a700f4f0` but not merged. WP-1
+   remains incomplete until the complete v1 persisted inventory,
+   temporal/source qualification, historical-consent treatment and final
+   access/rights contract are reconciled without importing superseded branch
+   state wholesale.
 2. **WP-2 — persistence and current-model reads.** The current disconnected
    repository/fixture on main is authoritative for merged behavior.
    `dee-871-ai-twin-shared-boundary` is a read-only source for coherent,
@@ -161,6 +163,91 @@ base SHA and open AI-TRADER/research PRs #585, #586, #587, #588 and #590
 remained foreign. No merge/rebase was necessary. No shared migration, journal,
 Postgres schema, Trader preflight/test, runtime, environment, deployment or
 Society surface changed.
+
+### Stable checkpoint and fresh-main synchronization
+
+The Human accepted the annual necessity-review slice as a stable WP-1
+checkpoint. It was committed without unrelated history as
+`99d98b1647c5b31751b855076cd8fab7a700f4f0` and then rebased as the single
+unpublished DEE-871 commit onto fresh `origin/main`
+`d7d5941a995b83473acb6e00c42d5252c44b2303`, which contains merged AI-TRADER PR
+#590. The upstream change touched only foreign Trader/shared migration surfaces
+and did not overlap the six-file annual-review checkpoint. The rebased diff
+against fresh main remains exactly those six admitted AI-TWIN files;
+`git diff --check` passes and the cumulative four AI-TWIN model unit files pass
+185/185 on the new base. This checkpoint does not complete WP-1, discharge
+DEE-871 dependencies or authorize a PR.
+
+### Remaining WP-1 dependency matrix
+
+1. **Complete v1 epistemic-object inventory.**
+   - Complete pure/disconnected validators already exist for working
+     hypotheses, dynamic relations, knowledge needs, reflection,
+     prediction/experiment, outcome receipt, Formation/Health inputs, private
+     export, retention, private experience and legacy quarantine.
+   - `EvidenceLink` is typed and represented in the disconnected fixture but
+     lacks its own exact pure validator. This is the smallest current inventory
+     gap.
+   - A pure `RightsOperation` contract and standalone consent/observation
+     qualification remain after EvidenceLink. Evaluated Formation/Model Health
+     outputs belong to DEE-876 and must not be invented here.
+2. **Temporal qualification.**
+   - Existing contracts qualify event/record chronology, relation validity,
+     substantial-evidence anchors, prediction windows, outcome chronology and
+     annual necessity-review boundaries.
+   - EvidenceLink still needs an original creation instant bound to the trusted
+     current clock. Evidence-known-at, independence/recency scoring,
+     sufficiency thresholds and transitive temporal closure remain engine or
+     ingestion decisions; this task must stop rather than infer them.
+3. **Source/provenance qualification.**
+   - Existing candidates recheck exact current eligible source versions, and
+     private experience rechecks its exact current provenance.
+   - EvidenceLink still needs exact source and target availability, both tenant
+     dimensions, closed relationship vocabulary and no exact self-link.
+     Validation is lineage admission only: it cannot establish truth,
+     independence, consent, collection authority or multi-hop closure.
+4. **Final rights/use contract.**
+   - The stable checkpoint separates overdue productive use from Human
+     access/correction/deletion; current authorization and source eligibility
+     still win. Private export and private archive authority also remain
+     separate.
+   - The remaining pure RightsOperation and consent/access reconciliation must
+     preserve requested/restricted/live-removed distinctions without claiming
+     physical deletion. Authenticated services, RLS, backup/processor proof and
+     operational erasure are WP-2/WP-3 and remain blocked from this sequence.
+
+Dependencies are sequential: exact reference/provenance qualification precedes
+the final pure rights graph, while no safe WP-1 contract depends on shared
+migration registration. Historical-consent import remains `plan_only`; moving
+beyond quarantine requires a separately admitted Human/runtime decision.
+
+### Next bounded WP-1 slice — EvidenceLink qualification
+
+Implement one pure `validateEvidenceLink` contract in
+`lib/ai-twin/model/persistence-contracts.ts`, with focused tests in
+`tests/unit/ai-twin-model-persistence-contracts.test.ts` and this plan as the
+only owned files.
+
+The validated object binds its own `evidence_link` reference, purpose, original
+creation time and retention-policy identity; an exact eligible evidence source;
+an exact currently available claim or hypothesis target; one of `supports`,
+`contradicts` or `contextualizes`; and a nonempty Human-readable reason. The
+trusted adapter context supplies both exact current sets in the same scope and
+purpose. Matching identifiers do not authenticate authority.
+
+Reject foreign organization or subject, unavailable/stale versions, duplicate
+trusted references, unsupported source/target kinds, exact source-target
+self-link, future creation, changed purpose/policy, empty reason, getters,
+hidden/extra fields, custom prototypes, cycles and sparse arrays. Return an
+independent deeply frozen value carrying no truth, ratification, write,
+collection, consent, disclosure, Formation, archive or action authority.
+
+Start with an explicit missing-function RED, then GREEN the focused contract
+suite and cumulative four AI-TWIN model unit files. Run scoped ESLint,
+typecheck, full lint/build, canon and diff validation, followed by independent
+P1/P2 review. Do not wire the validator into
+`postgres-repository.ts`; persistence is WP-2. No canonical algorithm change is
+needed because the EvidenceLink relationship meaning is already ratified.
 
 ## Approved outcome
 
