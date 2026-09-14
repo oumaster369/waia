@@ -93,6 +93,26 @@ specific, purpose-bound, versioned and revocable. A private modelling grant
 does not authorize disclosure, and a disclosure grant does not silently
 authorize storage, modelling, Formation credit or another purpose.
 
+V1 productive raw-observation ingress is limited to currently authorized
+dialogue and Diary. Imported service/device context remains future-capable but
+unadmitted until later Connected Context / v2 consent, connector and ingestion
+decisions. Human corrections and outcome receipts are separate typed records,
+not generic external-source ingress.
+
+DEE-871 defines the durable provenance contract—exact identity/version,
+tenant/subject, purpose/policy, chronology, current authority/availability
+references and append-only lineage. WP-1 does not claim that production
+persistence/runtime delivery exists. DEE-871 does not score independence, sufficiency,
+corroboration, inference recency, hypothesis confidence, Formation or Model
+Health; those are downstream DEE-874/875/876 responsibilities.
+
+Legacy material is never inferred or backfilled as consented. It remains
+quarantined and non-productive without current provable authority. Later
+explicit Human authorization for specified material creates a new current,
+purpose-bound grant for future use and does not rewrite prior collection/use
+history. Unresolvable identity, scope, provenance or rights keeps the material
+quarantined, subject only to independent Human export/delete rights.
+
 ## 4. Formation Contract and progress
 
 Formation progress answers one narrow question: **how much of the initial evidence contract has been completed?** It does not answer whether the account is genuine, whether the model is currently healthy, whether the Human is ready to socialize, or whether WAIA may act.
@@ -343,5 +363,6 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-12 | Explicit Human product-learning and UX requirement; DEE-994 | AI-TWIN teaches WAIA use through optional, truthful, capability-aware guidance; no authority/progress from learning |
 | 2026-09-14 | Explicit Human source-admission and RightsOperation decision; DEE-871 | Fail-closed private source use, separate disclosure authority and evidence-bearing rights lifecycle |
 | 2026-09-14 | Explicit Human RightsOperation completion decision; DEE-871 | Type-specific cancellation/effects, append-only retry, verified closure and minimized twelve-month terminal receipts |
+| 2026-09-14 | Explicit Human DEE-871 WP-1 closure decision | Dialogue/Diary-only v1 ingress, provenance-only persistence ownership and non-inferred historical consent |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

@@ -11,15 +11,15 @@ includedIssues: []
 state:
   {
     status: in-progress,
-    currentWorkPackage: WP-1,
-    completedWorkPackages: [],
-    remainingWorkPackages: [WP-1, WP-2, WP-3],
+    currentWorkPackage: WP-2,
+    completedWorkPackages: [WP-1],
+    remainingWorkPackages: [WP-2, WP-3],
     prNumber: null,
     prUrl: null,
     lastValidatedGitSha: ed21d21c9de7abfeea2f586f79cc47aedfa9ab14,
     lastValidationAt: "2026-09-14T10:27:32Z",
-    blockedReason: "The next complete-WP-1 step requires unresolved product semantics for non-dialogue/Diary source admission and completion-evidence qualification, including evidence-known-at and independence/sufficiency. Historical-consent migration remains separately unresolved; the shared-DB boundary has not been entered.",
-    nextAction: "Obtain the remaining source/provenance and evidence-qualification decisions, then continue WP-1. Do not infer historical consent or start shared migration/schema, Trader compatibility, runtime writers, Society, deployment or the final integration PR.",
+    blockedReason: "WP-2 convergence assessment is pending against fresh origin/main and the read-only dee-871-ai-twin-shared-boundary forensic source. Shared schema/migration, Trader compatibility and runtime mounting remain frozen.",
+    nextAction: "Produce the WP-2 file-by-file convergence matrix and select only a repository/auth slice independent of shared schema/migration, if one exists. Do not edit numbered migrations, journal, db/schema.postgres.ts, Trader, runtime mounts or production.",
   }
 provenance:
   {
@@ -591,6 +591,48 @@ required and fully determined by ratified canon:
 DEE-871 therefore remains In Progress with WP-1/WP-2/WP-3 incomplete. This stop
 does not discharge downstream dependencies, authorize runtime activation or
 make the batch integration-ready.
+
+### 2026-09-14 Human decision — WP-1 closure boundary
+
+The Human closed the remaining WP-1 semantic questions:
+
+1. Productive v1 raw-observation ingress is exactly current-authorized
+   `dialogue` / `diary`. Imported service/device sources remain future-capable
+   v2 vocabulary, not present authority. `HumanCorrection` and
+   `OutcomeReceipt` remain typed records owned by DEE-875, not generic ingress.
+2. DEE-871 owns durable provenance facts only: exact versioned identity,
+   tenant/subject, purpose/policy, chronology, current authority/availability
+   references and append-only lineage. Independence, sufficiency,
+   corroboration, inference recency, confidence, Formation and Model Health are
+   downstream algorithm ownership.
+3. Legacy material is never backfilled or inferred as consented. It remains
+   quarantined and non-productive without current provable authority. A later
+   explicit grant for specified material governs future use only and cannot
+   rewrite prior collection/use history. Unresolvable material remains
+   quarantined with independent Human export/delete rights.
+
+#### WP-1 closure proof
+
+Existing architecture already carries the required separation:
+
+- `ObservationSource` is the authority-bearing v1 union `dialogue | diary`;
+  the transport-neutral versioned `observation` persistence reference can
+  remain stable for future source payload versions without admitting them;
+- private source admission validates exact current scope, purpose, source,
+  policy, grant version and chronology and rejects every unknown class;
+- EvidenceLink accepts exact current typed `correction` / `outcome` references
+  as provenance while returning no ingress, independence, sufficiency,
+  corroboration, confidence, Formation or Model Health field;
+- legacy quarantine is metadata-only `plan_only`, grants no import/model use,
+  rejects grant-like input fields and preserves original/unknown time.
+
+No new source/scoring abstraction is needed. Targeted tests explicitly reject
+`imported_service`, `device`, `human_correction` and `outcome_receipt` as raw v1
+ingress; preserve correction/outcome as typed provenance references only; and
+prove that a newly presented current grant cannot mutate or imply historical
+consent. The three focused files pass 139/139. WP-1 is complete as object and
+rights design, not as persistent/runtime delivery: DEE-871 remains In Progress,
+WP-2/WP-3 and downstream dependencies remain open, and no PR is authorized.
 
 ## Approved outcome
 

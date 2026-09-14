@@ -1,7 +1,9 @@
 import type { ModelScope } from "./contracts";
 import { planRetention } from "./lifecycle";
 
-/** Inert storage vocabulary. A reference grants neither access nor an action. */
+/** Inert storage vocabulary. A reference grants neither access nor an action.
+ * `observation` remains transport-neutral for future source classes; productive
+ * source admission is separately closed to the current v1 authority type. */
 export type ModelObjectKind =
   | "observation"
   | "claim"

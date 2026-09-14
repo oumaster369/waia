@@ -45,8 +45,10 @@ function instant(value: unknown): number {
  * Scope/clock/inventory must come from a future trusted server adapter, not an LLM
  * or request-body authority. Identifiers remain private data; no logging/storage is
  * performed. A plan creates no retention exception or permission to read content.
- * A later import must independently revalidate current consent, rights, provenance
- * and retention. No legacy value can grant any of the capabilities below. */
+ * A later explicitly selected import must independently revalidate current consent,
+ * rights, identity, provenance and retention. A new current grant never rewrites or
+ * implies historical consent. Unresolvable material remains quarantined with only
+ * independent Human export/delete rights. No legacy value can grant the capabilities below. */
 export function planLegacyModelQuarantine(input: unknown, scope: ModelScope, now: string) {
   assertModelJsonData(input);
   assertModelJsonData(scope);

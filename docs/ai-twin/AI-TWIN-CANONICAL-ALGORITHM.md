@@ -34,9 +34,16 @@ Before observation, the engine records the current purpose, permitted source typ
 
 ### 2.2 Observation and projection
 
-Every observation has provenance:
+Every observation has provenance. Productive raw-observation ingress in v1 is
+limited to currently authorized dialogue and Diary. Imported service and device
+remain future-capable source classes for Connected Context / v2, not admitted
+v1 authority. `HumanCorrection` and `OutcomeReceipt` are separate typed
+canonical records owned by the DEE-875 creation/reconciliation loop, not generic
+external-source ingress.
 
-- source: dialogue, Diary, imported service, device, Human correction or verified outcome;
+For an admitted observation, provenance records:
+
+- source: dialogue or Diary in v1;
 - observation time and event time;
 - context and active purpose;
 - direct quote/reference or content digest where retention permits;
@@ -65,6 +72,23 @@ Disclosure authority remains separate from modelling/use authority and is
 specific, purpose-bound, versioned and revocable. V1 private source admission
 therefore proves a `private_only` disclosure boundary and grants no disclosure;
 a later non-private disclosure requires its own qualified grant.
+
+DEE-871 qualifies durable provenance facts only: exact reference identity and
+version, both tenant dimensions, purpose/policy binding, chronology, current
+source availability/authority references and append-only lineage. Evidence
+independence, sufficiency thresholds, corroboration score, inference-level
+recency, hypothesis confidence, Formation maturity and Model Health belong to
+DEE-874/875/876 as applicable. The persistence vocabulary remains extensible
+through transport-neutral versioned observation references; that extensibility
+does not admit a future source class.
+
+Historical material is never backfilled or inferred as consented. Without
+current provable authority it remains quarantined and non-productive. A later
+Human may explicitly authorize specified material for a current purpose after
+appropriate disclosure, creating a new current grant for future productive use
+without rewriting collection/use history. Material whose source identity,
+scope, provenance or rights cannot be established remains quarantined and is
+available only to independent Human export/delete rights.
 
 ### 2.3 Measurement and sufficiency
 
@@ -293,6 +317,7 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-12, Human annual-review decision, same task | Human-controlled annual storage-necessity review; overdue knowledge pauses new inference/advice while rights remain independent | DEE-871 pure lifecycle policy contract; no runtime activation, automatic deletion deadline, consent renewal or source revival |
 | 2026-09-14, Human source-admission and RightsOperation decision, DEE-871 continuation | Fail-closed source admission, private default, separate disclosure grants and append-only evidence-bearing rights lifecycle | Authorizes deterministic WP-1 contracts/tests only; no shared migration, runtime activation, Society, Trader change or deployment |
 | 2026-09-14, Human RightsOperation completion decision, DEE-871 continuation | Type-specific cancellation/effects, attempt-scoped failure, immutable-clock retry, evidence-qualified closure and minimized twelve-month terminal receipt | Authorizes one pure/disconnected lifecycle contract; account-deletion override and operational proof remain unmounted |
+| 2026-09-14, Human DEE-871 WP-1 closure decision | V1 raw ingress is dialogue/Diary only; persistence owns provenance facts, not scoring; legacy consent is never inferred | Closes pure object/rights design after targeted proof; WP-2 convergence remains read-only before shared schema/migration decisions |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 

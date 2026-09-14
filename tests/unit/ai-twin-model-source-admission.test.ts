@@ -110,14 +110,17 @@ describe("private source admission is fail-closed and grants no disclosure", () 
     expect(admitted).not.toHaveProperty("predecessor");
   });
 
-  it("rejects unknown source classes before any productive use", () => {
-    expect(() =>
-      admitPrivateSourceEvent(candidate(), {
-        ...context(),
-        sourceClass: "imported_service",
-      } as unknown as SourceAdmissionContext),
-    ).toThrow("SOURCE_CLASS_NOT_ADMITTED");
-  });
+  it.each(["imported_service", "device", "human_correction", "outcome_receipt"])(
+    "rejects non-v1 raw source class %s before any productive use",
+    (sourceClass) => {
+      expect(() =>
+        admitPrivateSourceEvent(candidate(), {
+          ...context(),
+          sourceClass,
+        } as unknown as SourceAdmissionContext),
+      ).toThrow("SOURCE_CLASS_NOT_ADMITTED");
+    },
+  );
 
   it("requires the exact unique latest grant version", () => {
     expect(() => admitPrivateSourceEvent(candidate(), context({ currentGrants: [] }))).toThrow(

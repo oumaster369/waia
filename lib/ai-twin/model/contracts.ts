@@ -1,5 +1,7 @@
 /** Inert reference contracts, not a persistence schema or authenticated API. */
 export type ModelScope = Readonly<{ organizationId: string; subjectId: string }>;
+/** Productive raw-observation ingress for v1 only. Future service/device classes
+ * remain canonical but deliberately cannot inhabit this authority-bearing type. */
 export type ObservationSource = "dialogue" | "diary";
 export type ProjectionRisk =
   | "ambiguity"

@@ -827,6 +827,26 @@ describe("EvidenceLink qualification is lineage, not authority", () => {
     },
   );
 
+  it.each(["correction", "outcome"] as const)(
+    "references a typed %s record as provenance without treating it as raw ingress or scoring",
+    (kind) => {
+      const typedSource = { ...source, kind, id: `${kind}-1` };
+      const result = validateEvidenceLink(
+        { ...evidenceLinkDraft(), source: typedSource },
+        evidenceLinkContext({ eligibleSources: [typedSource] }),
+      );
+      expect(result.source).toEqual(typedSource);
+      expect(result.source.kind).toBe(kind);
+      expect(result).not.toHaveProperty("sourceClassAdmitted");
+      expect(result).not.toHaveProperty("independence");
+      expect(result).not.toHaveProperty("sufficiency");
+      expect(result).not.toHaveProperty("corroborationScore");
+      expect(result).not.toHaveProperty("confidence");
+      expect(result).not.toHaveProperty("formation");
+      expect(result).not.toHaveProperty("modelHealth");
+    },
+  );
+
   it.each(["organizationId", "subjectId"] as const)(
     "rejects foreign %s across link, source, target and trusted context",
     (field) => {
