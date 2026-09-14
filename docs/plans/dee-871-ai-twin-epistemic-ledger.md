@@ -16,8 +16,8 @@ state:
     remainingWorkPackages: [WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 825314f20d3b85066f345fb44f16e93ecf44cd22,
-    lastValidationAt: "2026-09-14T11:28:35Z",
+    lastValidatedGitSha: 40574145e1c717d355bdbf217af93a218bb94bbd,
+    lastValidationAt: "2026-09-14T11:47:57Z",
     blockedReason: "The bounded pure Core guard is implemented, but the forensic consent/observation services depend on the rejected in-module Supabase/entitlement wrapper and unregistered table contracts. A next disconnected consent-persistence slice needs explicit trusted-adapter transaction/freshness and consent-issuance semantics before shared schema.",
     nextAction: "Seek bounded admission for a fixture-only current-consent persistence/read slice in postgres-repository.ts, its fixture SQL and integration test, after deciding how fresh trusted Core resolution enters the repository transaction and how consent issuance is authorized. Keep migrations, journal, db/schema.postgres.ts, Trader and runtime frozen.",
   }
@@ -798,6 +798,7 @@ Proxy inputs fail closed. Re-review reproduced the former exploit as
 
 Checkpoint validation is green:
 
+- implementation checkpoint: `40574145e1c717d355bdbf217af93a218bb94bbd`;
 - focused Core-access unit suite: 18/18;
 - cumulative AI-TWIN model units: 274/274 across seven files;
 - full `pnpm lint` and `pnpm typecheck`;
