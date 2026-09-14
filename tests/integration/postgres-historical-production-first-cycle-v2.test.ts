@@ -6,17 +6,25 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { assertRepeatEmpty, exportRepeatEvidence, repeatConfig,
-  REPEAT_USER_ID, REPEAT_RUN_ID } from "../helpers/historical-independent-repeat";
-import { captureHistoricalRepeatSeed, historicalRepeatSeedConfig,
-  loadHistoricalRepeatSeed } from "../helpers/historical-repeat-seed";
+import {
+  assertRepeatEmpty,
+  exportRepeatEvidence,
+  repeatConfig,
+  REPEAT_USER_ID,
+  REPEAT_RUN_ID,
+} from "../helpers/historical-independent-repeat";
+import {
+  captureHistoricalRepeatSeed,
+  historicalRepeatSeedConfig,
+  loadHistoricalRepeatSeed,
+} from "../helpers/historical-repeat-seed";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { bindPostgresReservedSession } from "@/db/postgres-session-transaction";
@@ -67,6 +75,7 @@ import {
 import {
   TEST_ONLY_buildKmFourSurfaceProductionAuthorityV2,
   TEST_ONLY_loadKmFourSurfaceDurableDatasetAuthorityV2,
+  type KmFourSurfaceProductionAuthorityV2,
 } from "@/lib/trader/research/execopp-qualification/km-four-surface-production-bootstrap-v2";
 import type { KmAnchorReplayEvidenceV2 } from "@/lib/trader/research/execopp-qualification/km-four-surface-contract-v2";
 import { INTERNAL_persistScientificAdmissionFourSurfaceV2 } from "@/lib/trader/research/execopp-qualification/scientific-admission-four-surface-repository-postgres-v2";
@@ -76,7 +85,20 @@ import {
   TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2,
   TEST_ONLY_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2,
   type HistoricalFourSurfaceRatifiedAdmissionV2,
+  type HistoricalFourSurfaceTechnicalSurfaceCandidateV2,
 } from "@/lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2";
+import {
+  isEvaluatorDurableBootstrapStageV1,
+  scientificForecastEvidenceNamespaceV1,
+  withStrictScientificResolverV1,
+} from "@/lib/trader/historical-simulation-v2/scientific-evidence-resolver-v1";
+import {
+  withScientificCheckpointsV1,
+  type ScientificCheckpointStoreV1,
+} from "@/lib/trader/historical-simulation-v2/scientific-checkpoint-context-v1";
+import { createScientificCheckpointStoreV1 } from "../../scripts/trader/scientific-checkpoint-store-v1";
+import { createStrictScientificEvidenceResolverV1 } from "../../scripts/trader/scientific-evidence-resolver-v1";
+import { buildPredictivePackageV1 } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
 import {
   createHistoricalRatificationRequestV2,
   ratifyHistoricalTechnicalProposalV2,
@@ -92,11 +114,12 @@ import {
   persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2,
 } from "@/lib/trader/historical-simulation-v2/forecast-knowledge-bootstrap-v2";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { computeSemanticSha256Hex } from
-  "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { buildKnowledgeCheckpointRecord, writeKnowledgeCheckpointV2,
-  writeHistoricalKnowledgeCheckpointV2 } from
-  "@/lib/trader/intelligence/knowledge-state/knowledge-state-checkpoint-service-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  buildKnowledgeCheckpointRecord,
+  writeKnowledgeCheckpointV2,
+  writeHistoricalKnowledgeCheckpointV2,
+} from "@/lib/trader/intelligence/knowledge-state/knowledge-state-checkpoint-service-v2";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES_SESSION?.trim() ?? "";
@@ -149,6 +172,55 @@ type Fixture = Readonly<{
 
 function hex(label: string): string {
   return createHash("sha256").update(label).digest("hex");
+}
+
+const HARNESS_PRODUCER_RELEASE_SHA = "c".repeat(40);
+const HARNESS_EVALUATOR_RELEASE_SHA = "b".repeat(40);
+
+function createHarnessCapturingStoreV1(): ScientificCheckpointStoreV1 & {
+  readonly captured: Array<Readonly<{ stage: string; input: unknown; value: unknown }>>;
+} {
+  const captured: Array<Readonly<{ stage: string; input: unknown; value: unknown }>> = [];
+  return {
+    captured,
+    package(_input, build) {
+      return build();
+    },
+    evidence(stage, input, build) {
+      const value = build();
+      captured.push({ stage, input, value });
+      return value;
+    },
+    async evidenceAsync(stage, input, build) {
+      const value = await build();
+      captured.push({ stage, input, value });
+      return value;
+    },
+  };
+}
+
+function harnessEvidenceStoreV1(
+  stage: string,
+  input: unknown,
+  surfaces: readonly HistoricalFourSurfaceTechnicalSurfaceCandidateV2[],
+  stores: Readonly<{
+    origin: ReturnType<typeof createScientificCheckpointStoreV1>;
+    producer: ReturnType<typeof createScientificCheckpointStoreV1>;
+    evaluator: ReturnType<typeof createScientificCheckpointStoreV1>;
+  }>,
+): ReturnType<typeof createScientificCheckpointStoreV1> {
+  if (isEvaluatorDurableBootstrapStageV1(stage)) return stores.evaluator;
+  if (stage === "wf-forecast-batch-v1") {
+    const digest = (input as { packageDigest?: string }).packageDigest;
+    const surface = surfaces.find(
+      (candidate) => candidate.predictivePackageContentDigestHex === digest,
+    );
+    if (!digest || !surface) throw new Error("DEE1007_HARNESS_FORECAST_SURFACE");
+    return scientificForecastEvidenceNamespaceV1(surface.surfaceKey) === "origin"
+      ? stores.origin
+      : stores.producer;
+  }
+  throw new Error(`DEE1007_HARNESS_UNROUTED_STAGE:${stage}`);
 }
 
 function semanticBody(value: Record<string, unknown>, digestKey: string): Record<string, unknown> {
@@ -534,6 +606,7 @@ describe.skipIf(!enabled || !url || !disposable)(
   () => {
     const pool = postgres(url, firstCyclePoolOptions);
     const priorReleaseSha = process.env.WAIA_RELEASE_SHA;
+    const priorTraderCli = process.env.WAIA_TRADER_CLI;
     const organizationId = HISTORICAL_RUNNER_ORGANIZATION_ID;
     const userId = independentRepeat ? REPEAT_USER_ID : randomUUID();
     const runId = independentRepeat ? REPEAT_RUN_ID : `dee-919-${randomUUID()}`;
@@ -546,6 +619,10 @@ describe.skipIf(!enabled || !url || !disposable)(
     let lockKey: string;
     let ratified: HistoricalFourSurfaceRatifiedAdmissionV2;
     let ratifiedAuthorityId: string;
+    let preparedAuthority: KmFourSurfaceProductionAuthorityV2;
+    let originEvidenceRoot: string | undefined;
+    let producerEvidenceRoot: string | undefined;
+    let evaluatorEvidenceRoot: string | undefined;
     let neutralKnowledgeEdge: ReturnType<typeof buildHistoricalForecastKnowledgeBootstrapV2>;
     const launchPlan = Object.freeze({
       accountId: "dee-919-modeled-account",
@@ -559,11 +636,14 @@ describe.skipIf(!enabled || !url || !disposable)(
 
     beforeAll(async () => {
       if (independentRepeat) {
-        expect(execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()).toBe("");
+        expect(execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()).toBe(
+          "",
+        );
         repeatSourceSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
         if (repeatSeed?.mode !== "read") await assertRepeatEmpty(pool);
       }
       process.env.WAIA_RELEASE_SHA = RELEASE_SHA;
+      process.env.WAIA_TRADER_CLI = "1";
       const migrated = await pool<Array<Readonly<{ relation: string | null }>>>`
         SELECT to_regclass(
           'public.trader_historical_four_surface_ratified_admission_v2'
@@ -574,62 +654,72 @@ describe.skipIf(!enabled || !url || !disposable)(
         // B restores the identical pre-execution synthetic authority. A alone runs
         // preparation/ratification assertions; every execution test body runs in both.
         const saved = await loadHistoricalRepeatSeed<{
-          fixture: Fixture; preflight: KmFourSurfaceProductionPreflightInputV2;
+          fixture: Fixture;
+          preflight: KmFourSurfaceProductionPreflightInputV2;
           productionInput: HistoricalProductionFirstCycleBootstrapInputV2;
-          ratified: HistoricalFourSurfaceRatifiedAdmissionV2; ratifiedAuthorityId: string;
+          ratified: HistoricalFourSurfaceRatifiedAdmissionV2;
+          ratifiedAuthorityId: string;
           neutralKnowledgeEdge: typeof neutralKnowledgeEdge;
         }>(pool, repeatSeed, repeatSourceSha);
-        ({ fixture, preflight, productionInput, ratified, ratifiedAuthorityId, neutralKnowledgeEdge } = saved);
+        ({
+          fixture,
+          preflight,
+          productionInput,
+          ratified,
+          ratifiedAuthorityId,
+          neutralKnowledgeEdge,
+        } = saved);
         const restored = await requireHistoricalFourSurfaceRatifiedAdmissionV2(pool, {
-          organizationId, runId, releaseSha: RELEASE_SHA,
+          organizationId,
+          runId,
+          releaseSha: RELEASE_SHA,
           aggregateAdmissionReceiptId: ratified.aggregateAdmissionReceiptId,
           authorityContentDigestHex: ratified.contentDigestHex,
         });
         expect(restored).toEqual(ratified);
         ratified = restored;
       } else {
-      await pool`INSERT INTO auth.users (id) VALUES (${userId}::uuid)`;
-      await pool`INSERT INTO users (id, identity_label, email)
+        await pool`INSERT INTO auth.users (id) VALUES (${userId}::uuid)`;
+        await pool`INSERT INTO users (id, identity_label, email)
         VALUES (${userId}::uuid, 'DEE-919 PostgreSQL integration',
           ${`dee-919-${userId}@invalid.local`})`;
-      await pool`INSERT INTO organizations (id, owner_user_id, kind, name)
+        await pool`INSERT INTO organizations (id, owner_user_id, kind, name)
         VALUES (${organizationId}::uuid, ${userId}::uuid, 'personal',
           'DEE-919 PostgreSQL integration')
         ON CONFLICT (id) DO NOTHING`;
-      await pool`INSERT INTO organization_members (
+        await pool`INSERT INTO organization_members (
         id, organization_id, user_id, member_role
       ) VALUES (${randomUUID()}::uuid, ${organizationId}::uuid, ${userId}::uuid, 'owner')`;
-      fixture = buildDatasetFixture(organizationId);
-      for (const symbol of SYMBOLS) {
-        await persistHtxVolumeQualificationReceipt(pool, {
+        fixture = buildDatasetFixture(organizationId);
+        for (const symbol of SYMBOLS) {
+          await persistHtxVolumeQualificationReceipt(pool, {
+            organizationId,
+            receipt: fixture.volumeReceipts[symbol],
+          });
+        }
+        preflight = {
+          runId,
+          datasetRoot: fixture.root,
+          qualificationReceiptPath: fixture.qualificationPath,
+          runtimeRequalificationReceiptPath: join(fixture.root, "unused-runtime.json"),
+          releaseSha: RELEASE_SHA,
           organizationId,
-          receipt: fixture.volumeReceipts[symbol],
-        });
-      }
-      preflight = {
-        runId,
-        datasetRoot: fixture.root,
-        qualificationReceiptPath: fixture.qualificationPath,
-        runtimeRequalificationReceiptPath: join(fixture.root, "unused-runtime.json"),
-        releaseSha: RELEASE_SHA,
-        organizationId,
-        economics: {
-          notionalUsdt: 1_000,
-          costRate: 0.001,
-          slippageBufferUsdt: 0.05,
-          nRefUsdt: 1_000,
-        },
-        htxVolumeQualificationReceiptPaths: fixture.volumePaths,
-        initialDevelopmentRecordIndex: INITIAL_DEVELOPMENT_RECORD_INDEX,
-        developmentCycleCount: 1,
-      };
-      const testDependencies: Parameters<
-        typeof TEST_ONLY_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2
-      >[2] = {
+          economics: {
+            notionalUsdt: 1_000,
+            costRate: 0.001,
+            slippageBufferUsdt: 0.05,
+            nRefUsdt: 1_000,
+          },
+          htxVolumeQualificationReceiptPaths: fixture.volumePaths,
+          initialDevelopmentRecordIndex: INITIAL_DEVELOPMENT_RECORD_INDEX,
+          developmentCycleCount: 1,
+        };
+        const testDependencies: Parameters<
+          typeof TEST_ONLY_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2
+        >[2] = {
           prepare: async (transaction, preparedPreflight) => {
-            const authority = await TEST_ONLY_prepareKmFourSurfaceProductionAuthorityV2(
-              preparedPreflight,
-              {
+            const authority = (preparedAuthority =
+              await TEST_ONLY_prepareKmFourSurfaceProductionAuthorityV2(preparedPreflight, {
                 loadCycles: loadHistoricalSimulationBootstrapSourceCyclesV2,
                 assertRunUnused: (scope) =>
                   TEST_ONLY_assertKmFourSurfaceProductionRunUnusedV2(transaction, scope),
@@ -670,8 +760,7 @@ describe.skipIf(!enabled || !url || !disposable)(
                     evaluate: ({ selectedAnchors }) =>
                       buildQualifiedReplayEvidenceFixtureV2(selectedAnchors),
                   }),
-              },
-            );
+              }));
             const admission = await INTERNAL_persistScientificAdmissionFourSurfaceV2(
               transaction,
               authority,
@@ -689,54 +778,144 @@ describe.skipIf(!enabled || !url || !disposable)(
             return fixture.volumeReceipts[symbol];
           },
         };
-      await createHistoricalRatificationRequestV2(pool, {
-        organizationId,
-        runId,
-        releaseSha: RELEASE_SHA,
-        authenticatedOperatorUserId: userId,
-        initialRecordIndex: launchPlan.initialRecordIndex,
-        cycleCount: launchPlan.cycleCount,
-      });
-      const proposal = await TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionServerV2(
-        pool,
-        { preflight, launchPlan },
-        (sql) => TEST_ONLY_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2(
-          sql,
-          {
-            preflight,
-            humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2,
-            executionExtent: launchPlan,
-          },
-          testDependencies,
-        ),
-      );
-      const btc30 = proposal.proposal.technicalCandidate.surfaces.find(
-        (surface) => surface.symbol === "BTCUSDT" && surface.primaryHorizonMinutes === 30,
-      );
-      if (!btc30) throw new Error("DEE919_NEUTRAL_KNOWLEDGE_SURFACE_MISSING");
-      neutralKnowledgeEdge = buildHistoricalForecastKnowledgeBootstrapV2({
-        organizationId,
-        symbol: btc30.symbol,
-        horizonMinutes: btc30.executionHorizonMinutes,
-        predictivePackageContentDigestHex: btc30.predictivePackageContentDigestHex,
-      });
-      let preapprovalKnowledgeCode: string | undefined;
-      try {
-        await pool.begin(async (transaction) => {
-          await transaction.unsafe(`SET LOCAL ROLE ${HISTORICAL_RUNNER_ROLE}`);
-          await persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
-            transaction as unknown as postgres.Sql,
-            neutralKnowledgeEdge,
-          );
+        await createHistoricalRatificationRequestV2(pool, {
+          organizationId,
+          runId,
+          releaseSha: RELEASE_SHA,
+          authenticatedOperatorUserId: userId,
+          initialRecordIndex: launchPlan.initialRecordIndex,
+          cycleCount: launchPlan.cycleCount,
         });
-      } catch (error) {
-        preapprovalKnowledgeCode = (error as { code?: string }).code;
-      }
-      expect(preapprovalKnowledgeCode).toBe("42501");
-      const beforeApproval = await pool<Array<Readonly<{
-        authorities: string;
-        validated: string;
-      }>>>`
+        const capturingStore = createHarnessCapturingStoreV1();
+        const proposal = await withScientificCheckpointsV1(capturingStore, () =>
+          TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionServerV2(
+            pool,
+            { preflight, launchPlan },
+            (sql) =>
+              TEST_ONLY_prepareHistoricalFourSurfaceTechnicalAuthorityCandidateV2(
+                sql,
+                {
+                  preflight,
+                  humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2,
+                  executionExtent: launchPlan,
+                },
+                testDependencies,
+              ),
+          ),
+        );
+        const runtime = Object.freeze({
+          node: process.version,
+          os: process.platform,
+          arch: process.arch,
+        });
+        originEvidenceRoot = realpathSync(mkdtempSync(join(tmpdir(), "waia-dee1007-o-")));
+        producerEvidenceRoot = realpathSync(mkdtempSync(join(tmpdir(), "waia-dee1007-p-")));
+        evaluatorEvidenceRoot = realpathSync(mkdtempSync(join(tmpdir(), "waia-dee1007-r-")));
+        chmodSync(originEvidenceRoot, 0o700);
+        chmodSync(producerEvidenceRoot, 0o700);
+        chmodSync(evaluatorEvidenceRoot, 0o700);
+        const originStore = createScientificCheckpointStoreV1(
+          originEvidenceRoot,
+          RELEASE_SHA,
+          runtime,
+        );
+        const producerStore = createScientificCheckpointStoreV1(
+          producerEvidenceRoot,
+          HARNESS_PRODUCER_RELEASE_SHA,
+          runtime,
+        );
+        const evaluatorStore = createScientificCheckpointStoreV1(
+          evaluatorEvidenceRoot,
+          HARNESS_EVALUATOR_RELEASE_SHA,
+          runtime,
+        );
+        for (const surface of preparedAuthority.contract.surfaces) {
+          const selectedK = surface.convergenceReceipt.selectedK;
+          const selectedM = surface.convergenceReceipt.selectedM;
+          if (selectedK === null || selectedM === null) {
+            throw new Error("DEE1007_HARNESS_SURFACE_NOT_CONVERGED");
+          }
+          const development = await loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2({
+            datasetRoot: fixture.root,
+            symbol: surface.symbol,
+            primaryHorizonMinutes: surface.primaryHorizonMinutes,
+          });
+          const packageInput = {
+            family: surface.family,
+            sourceCorpus: development.corpus,
+            kConfigDec: selectedK,
+            mConfigDec: selectedM,
+            alphaEpiConfigScale8: surface.convergenceReceipt.alphaEpiConfigScale8,
+          };
+          originStore.package(packageInput, () => buildPredictivePackageV1(packageInput));
+        }
+        const evidenceStores = Object.freeze({
+          origin: originStore,
+          producer: producerStore,
+          evaluator: evaluatorStore,
+        });
+        for (const captured of capturingStore.captured) {
+          harnessEvidenceStoreV1(
+            captured.stage,
+            captured.input,
+            proposal.proposal.technicalCandidate.surfaces,
+            evidenceStores,
+          ).evidence(captured.stage, captured.input, () => captured.value);
+        }
+        chmodSync(originEvidenceRoot, 0o500);
+        chmodSync(producerEvidenceRoot, 0o500);
+        chmodSync(evaluatorEvidenceRoot, 0o500);
+        const harnessResolver = createStrictScientificEvidenceResolverV1({
+          origin: {
+            root: originEvidenceRoot,
+            identity: Object.freeze({ releaseSha: RELEASE_SHA, runtime }),
+          },
+          producer: {
+            root: producerEvidenceRoot,
+            identity: Object.freeze({
+              releaseSha: HARNESS_PRODUCER_RELEASE_SHA,
+              runtime,
+            }),
+          },
+          evaluator: {
+            root: evaluatorEvidenceRoot,
+            identity: Object.freeze({
+              releaseSha: HARNESS_EVALUATOR_RELEASE_SHA,
+              runtime,
+            }),
+          },
+        });
+        const btc30 = proposal.proposal.technicalCandidate.surfaces.find(
+          (surface) => surface.symbol === "BTCUSDT" && surface.primaryHorizonMinutes === 30,
+        );
+        if (!btc30) throw new Error("DEE919_NEUTRAL_KNOWLEDGE_SURFACE_MISSING");
+        neutralKnowledgeEdge = buildHistoricalForecastKnowledgeBootstrapV2({
+          organizationId,
+          symbol: btc30.symbol,
+          horizonMinutes: btc30.executionHorizonMinutes,
+          predictivePackageContentDigestHex: btc30.predictivePackageContentDigestHex,
+        });
+        let preapprovalKnowledgeCode: string | undefined;
+        try {
+          await pool.begin(async (transaction) => {
+            await transaction.unsafe(`SET LOCAL ROLE ${HISTORICAL_RUNNER_ROLE}`);
+            await persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
+              transaction as unknown as postgres.Sql,
+              neutralKnowledgeEdge,
+            );
+          });
+        } catch (error) {
+          preapprovalKnowledgeCode = (error as { code?: string }).code;
+        }
+        expect(preapprovalKnowledgeCode).toBe("42501");
+        const beforeApproval = await pool<
+          Array<
+            Readonly<{
+              authorities: string;
+              validated: string;
+            }>
+          >
+        >`
         SELECT
           (SELECT count(*)::text
              FROM trader_historical_four_surface_ratified_admission_v2
@@ -750,63 +929,96 @@ describe.skipIf(!enabled || !url || !disposable)(
               AND hypothesis.name LIKE ${`waia.trader.historical_prerun_knowledge_bootstrap.v2:${runId}:%`}
               AND lifecycle.lifecycle_state='VALIDATED') AS validated
       `;
-      expect(beforeApproval[0]).toEqual({ authorities: "0", validated: "0" });
-      await ratifyHistoricalTechnicalProposalV2(pool, {
-        organizationId,
-        runId,
-        releaseSha: RELEASE_SHA,
-        proposalId: proposal.id,
-        proposalContentDigestHex: proposal.proposal.contentDigestHex,
-        authenticatedOperatorUserId: userId,
-        humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2,
-      });
-      const finalizationProgress: Array<Record<string, unknown>> = [];
-      const finalized = await TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
-        pool,
-        { organizationId, runId, releaseSha: RELEASE_SHA },
-        (sql, input, actor, candidate, approvedProposal, observer) =>
+        expect(beforeApproval[0]).toEqual({ authorities: "0", validated: "0" });
+        await ratifyHistoricalTechnicalProposalV2(pool, {
+          organizationId,
+          runId,
+          releaseSha: RELEASE_SHA,
+          proposalId: proposal.id,
+          proposalContentDigestHex: proposal.proposal.contentDigestHex,
+          authenticatedOperatorUserId: userId,
+          humanDecision: HISTORICAL_FOUR_SURFACE_HUMAN_DECISION_V2,
+        });
+        const finalizationProgress: Array<Record<string, unknown>> = [];
+        const materializeApproved = (
+          sql: Parameters<typeof TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2>[0],
+          input: Parameters<
+            typeof TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2
+          >[1],
+          actor: Parameters<
+            typeof TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2
+          >[2],
+          candidate: Parameters<
+            typeof TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2
+          >[3],
+          approvedProposal: Parameters<
+            typeof TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2
+          >[4],
+          observer: Parameters<
+            typeof TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2
+          >[6],
+        ) =>
           TEST_ONLY_materializeApprovedHistoricalFourSurfaceCandidateV2(
-            sql, input, actor, candidate, approvedProposal, testDependencies, observer,
+            sql,
+            input,
+            actor,
+            candidate,
+            approvedProposal,
+            testDependencies,
+            observer,
+          );
+        await expect(
+          TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
+            pool,
+            { organizationId, runId, releaseSha: RELEASE_SHA },
+            materializeApproved,
           ),
-        { onProgress: event => { finalizationProgress.push(event); } },
-      );
-      expect(finalizationProgress[0]).toMatchObject({ phase: "FINALIZATION_REPLAY" });
-      expect(finalizationProgress.every(event => event.organizationId === organizationId &&
-        event.runId === runId && event.releaseSha === RELEASE_SHA && event.authorityGranted === false)).toBe(true);
-      expect(finalizationProgress.filter(event => event.phase === "SURFACE_LOAD")).toHaveLength(4);
-      expect(finalizationProgress.filter(event => event.phase === "FORECAST_ANCHORS" &&
-        event.completed === event.total)).toHaveLength(4);
-      expect(finalizationProgress.filter(event => event.phase === "VALIDATION_RESAMPLES" &&
-        event.completed === 10_000 && event.total === 10_000)).toHaveLength(20);
-      const eventsBeforeRetry = finalizationProgress.length;
-      const humanRowsBeforeRetry = await pool<Array<Readonly<{
-        surface_receipts: string; validated_lifecycles: string;
-      }>>>`
-        SELECT
-          (SELECT count(*)::text FROM trader_scientific_admission_receipt_v1
-            WHERE organization_id=${organizationId}::uuid
-              AND receipt_kind='WF_PREDICTIVE') AS surface_receipts,
-          (SELECT count(*)::text
-             FROM trader_mi_hypothesis_lifecycle lifecycle
-             JOIN trader_mi_hypothesis hypothesis
-               ON hypothesis.id=lifecycle.hypothesis_id
-              AND hypothesis.organization_id=lifecycle.organization_id
-            WHERE lifecycle.organization_id=${organizationId}::uuid
-              AND hypothesis.name LIKE ${`waia.trader.historical_prerun_knowledge_bootstrap.v2:${runId}:%`}
-              AND lifecycle.lifecycle_state='VALIDATED') AS validated_lifecycles
-      `;
-      const finalizedRetry =
-        await TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
-          pool,
-          { organizationId, runId, releaseSha: RELEASE_SHA },
-          () => { throw new Error("FINALIZER_RETRY_MUST_NOT_REMATERIALIZE"); },
-          { onProgress: event => { finalizationProgress.push(event); } },
+        ).rejects.toThrow("STRICT_SCIENTIFIC_EVIDENCE_REFUSED:RESOLVER_REQUIRED");
+        const finalized = await withStrictScientificResolverV1(harnessResolver, () =>
+          TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
+            pool,
+            { organizationId, runId, releaseSha: RELEASE_SHA },
+            materializeApproved,
+            {
+              onProgress: (event) => {
+                finalizationProgress.push(event);
+              },
+            },
+          ),
         );
-      expect(finalizedRetry).toEqual(finalized);
-      expect(finalizationProgress).toHaveLength(eventsBeforeRetry);
-      const humanRowsAfterRetry = await pool<Array<Readonly<{
-        surface_receipts: string; validated_lifecycles: string;
-      }>>>`
+        expect(finalizationProgress[0]).toMatchObject({ phase: "FINALIZATION_REPLAY" });
+        expect(
+          finalizationProgress.every(
+            (event) =>
+              event.organizationId === organizationId &&
+              event.runId === runId &&
+              event.releaseSha === RELEASE_SHA &&
+              event.authorityGranted === false,
+          ),
+        ).toBe(true);
+        expect(finalizationProgress.filter((event) => event.phase === "SURFACE_LOAD")).toHaveLength(
+          4,
+        );
+        expect(
+          finalizationProgress.filter(
+            (event) => event.phase === "FORECAST_ANCHORS" && event.completed === event.total,
+          ),
+        ).toHaveLength(4);
+        expect(
+          capturingStore.captured.some((entry) => isEvaluatorDurableBootstrapStageV1(entry.stage)),
+        ).toBe(true);
+        expect(
+          finalizationProgress.filter((event) => event.phase === "VALIDATION_RESAMPLES"),
+        ).toHaveLength(0);
+        const eventsBeforeRetry = finalizationProgress.length;
+        const humanRowsBeforeRetry = await pool<
+          Array<
+            Readonly<{
+              surface_receipts: string;
+              validated_lifecycles: string;
+            }>
+          >
+        >`
         SELECT
           (SELECT count(*)::text FROM trader_scientific_admission_receipt_v1
             WHERE organization_id=${organizationId}::uuid
@@ -820,40 +1032,97 @@ describe.skipIf(!enabled || !url || !disposable)(
               AND hypothesis.name LIKE ${`waia.trader.historical_prerun_knowledge_bootstrap.v2:${runId}:%`}
               AND lifecycle.lifecycle_state='VALIDATED') AS validated_lifecycles
       `;
-      expect(humanRowsAfterRetry).toEqual(humanRowsBeforeRetry);
-      await pool.begin(async (transaction) => {
-        await transaction.unsafe(`SET LOCAL ROLE ${HISTORICAL_RUNNER_ROLE}`);
-        await expect(persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
-          transaction as unknown as postgres.Sql,
-          neutralKnowledgeEdge,
-        )).resolves.toEqual({ insertedNew: true });
-        await expect(persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
-          transaction as unknown as postgres.Sql,
-          neutralKnowledgeEdge,
-        )).resolves.toEqual({ insertedNew: false });
-      });
-      ratifiedAuthorityId = finalized.authorityId;
-      const finalizedRows = await pool<Array<Readonly<{
-        authority_content_digest_hex: string;
-      }>>>`
+        const finalizedRetry =
+          await TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2(
+            pool,
+            { organizationId, runId, releaseSha: RELEASE_SHA },
+            () => {
+              throw new Error("FINALIZER_RETRY_MUST_NOT_REMATERIALIZE");
+            },
+            {
+              onProgress: (event) => {
+                finalizationProgress.push(event);
+              },
+            },
+          );
+        expect(finalizedRetry).toEqual(finalized);
+        expect(finalizationProgress).toHaveLength(eventsBeforeRetry);
+        const humanRowsAfterRetry = await pool<
+          Array<
+            Readonly<{
+              surface_receipts: string;
+              validated_lifecycles: string;
+            }>
+          >
+        >`
+        SELECT
+          (SELECT count(*)::text FROM trader_scientific_admission_receipt_v1
+            WHERE organization_id=${organizationId}::uuid
+              AND receipt_kind='WF_PREDICTIVE') AS surface_receipts,
+          (SELECT count(*)::text
+             FROM trader_mi_hypothesis_lifecycle lifecycle
+             JOIN trader_mi_hypothesis hypothesis
+               ON hypothesis.id=lifecycle.hypothesis_id
+              AND hypothesis.organization_id=lifecycle.organization_id
+            WHERE lifecycle.organization_id=${organizationId}::uuid
+              AND hypothesis.name LIKE ${`waia.trader.historical_prerun_knowledge_bootstrap.v2:${runId}:%`}
+              AND lifecycle.lifecycle_state='VALIDATED') AS validated_lifecycles
+      `;
+        expect(humanRowsAfterRetry).toEqual(humanRowsBeforeRetry);
+        await pool.begin(async (transaction) => {
+          await transaction.unsafe(`SET LOCAL ROLE ${HISTORICAL_RUNNER_ROLE}`);
+          await expect(
+            persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
+              transaction as unknown as postgres.Sql,
+              neutralKnowledgeEdge,
+            ),
+          ).resolves.toEqual({ insertedNew: true });
+          await expect(
+            persistHistoricalForecastKnowledgeBootstrapWithinTransactionV2(
+              transaction as unknown as postgres.Sql,
+              neutralKnowledgeEdge,
+            ),
+          ).resolves.toEqual({ insertedNew: false });
+        });
+        ratifiedAuthorityId = finalized.authorityId;
+        const finalizedRows = await pool<
+          Array<
+            Readonly<{
+              authority_content_digest_hex: string;
+            }>
+          >
+        >`
         SELECT authority_content_digest_hex
         FROM trader_historical_four_surface_ratified_admission_v2
         WHERE id=${ratifiedAuthorityId}::uuid
       `;
-      expect(finalizedRows).toHaveLength(1);
-      ratified = await requireHistoricalFourSurfaceRatifiedAdmissionV2(pool, {
-        organizationId,
-        runId,
-        releaseSha: RELEASE_SHA,
-        aggregateAdmissionReceiptId:
-          proposal.proposal.technicalCandidate.aggregateAdmissionReceiptId,
-        authorityContentDigestHex: finalizedRows[0]!.authority_content_digest_hex,
-      });
-      productionInput = finalized.manifest.bootstrap;
-      if (repeatSeed?.mode === "write" && independentRepeat) {
-        await captureHistoricalRepeatSeed(pool, independentRepeat, repeatSeed, repeatSourceSha,
-          fixture.root, { fixture, preflight, productionInput, ratified, ratifiedAuthorityId, neutralKnowledgeEdge });
-      }
+        expect(finalizedRows).toHaveLength(1);
+        ratified = await requireHistoricalFourSurfaceRatifiedAdmissionV2(pool, {
+          organizationId,
+          runId,
+          releaseSha: RELEASE_SHA,
+          aggregateAdmissionReceiptId:
+            proposal.proposal.technicalCandidate.aggregateAdmissionReceiptId,
+          authorityContentDigestHex: finalizedRows[0]!.authority_content_digest_hex,
+        });
+        productionInput = finalized.manifest.bootstrap;
+        if (repeatSeed?.mode === "write" && independentRepeat) {
+          await captureHistoricalRepeatSeed(
+            pool,
+            independentRepeat,
+            repeatSeed,
+            repeatSourceSha,
+            fixture.root,
+            {
+              fixture,
+              preflight,
+              productionInput,
+              ratified,
+              ratifiedAuthorityId,
+              neutralKnowledgeEdge,
+            },
+          );
+        }
       }
 
       reserved = await pool.reserve();
@@ -881,10 +1150,10 @@ describe.skipIf(!enabled || !url || !disposable)(
       });
       // Full executable K/M replay is verified by the dedicated DEE-917 suite. Keep this
       // persistence/cycle scenario bounded while retaining all 4,096 × 15 contract rows.
-    // GitHub's shared runner can take more than ten minutes to build and
-    // persist the deterministic 5,440-bar dual-symbol authority fixture.
-    // Keep the hook budget aligned with the full 35-cycle production proof so
-    // CI executes the assertions instead of timing out during preparation.
+      // GitHub's shared runner can take more than ten minutes to build and
+      // persist the deterministic 5,440-bar dual-symbol authority fixture.
+      // Keep the hook budget aligned with the full 35-cycle production proof so
+      // CI executes the assertions instead of timing out during preparation.
     }, 1_500_000);
 
     afterAll(async () => {
@@ -894,53 +1163,73 @@ describe.skipIf(!enabled || !url || !disposable)(
         reserved.release();
       }
       if (fixture?.root && !repeatSeed) rmSync(fixture.root, { recursive: true, force: true });
+      for (const root of [originEvidenceRoot, producerEvidenceRoot, evaluatorEvidenceRoot]) {
+        if (!root) continue;
+        try {
+          chmodSync(root, 0o700);
+        } catch {
+          /* already gone */
+        }
+        rmSync(root, { recursive: true, force: true });
+      }
       await pool.end({ timeout: 5 });
       if (priorReleaseSha === undefined) delete process.env.WAIA_RELEASE_SHA;
       else process.env.WAIA_RELEASE_SHA = priorReleaseSha;
+      if (priorTraderCli === undefined) delete process.env.WAIA_TRADER_CLI;
+      else process.env.WAIA_TRADER_CLI = priorTraderCli;
     });
 
     it("recovers exactly after every durable boundary and refuses a conflicting partial retry", async () => {
       const sql = heldSql;
       const verification = createCanonicalDecisionVerificationReceiptServiceV2(sql);
-      const registration = (input: Readonly<{
-        initialRecordIndex: number;
-        cycleCount: number;
-        volumePath?: string;
-      }>) => verification.registerPreHoldoutDatasetAuthorityFromSource({
-        datasetRoot: fixture.root,
-        qualificationReceiptPath: fixture.qualificationPath,
-        runtimeRequalificationReceiptPath: join(fixture.root, "unused-runtime.json"),
-        htxVolumeQualificationReceiptPath:
-          input.volumePath ?? fixture.volumePaths.BTCUSDT,
-        releaseSha: RELEASE_SHA,
-        organizationId,
-        runId,
-        partition: "WALK_FORWARD",
-        symbol: "BTCUSDT",
-        initialRecordIndex: input.initialRecordIndex,
-        cycleCount: input.cycleCount,
-      });
-      await expect(registration({
-        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT - 2,
-        cycleCount: 2,
-      })).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_GAP");
-      await expect(registration({
-        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT + APPROVED_CYCLE_COUNT,
-        cycleCount: 1,
-      })).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_OUTSIDE_APPROVAL");
+      const registration = (
+        input: Readonly<{
+          initialRecordIndex: number;
+          cycleCount: number;
+          volumePath?: string;
+        }>,
+      ) =>
+        verification.registerPreHoldoutDatasetAuthorityFromSource({
+          datasetRoot: fixture.root,
+          qualificationReceiptPath: fixture.qualificationPath,
+          runtimeRequalificationReceiptPath: join(fixture.root, "unused-runtime.json"),
+          htxVolumeQualificationReceiptPath: input.volumePath ?? fixture.volumePaths.BTCUSDT,
+          releaseSha: RELEASE_SHA,
+          organizationId,
+          runId,
+          partition: "WALK_FORWARD",
+          symbol: "BTCUSDT",
+          initialRecordIndex: input.initialRecordIndex,
+          cycleCount: input.cycleCount,
+        });
+      await expect(
+        registration({
+          initialRecordIndex: WF_PREDICTIVE_BAR_COUNT - 2,
+          cycleCount: 2,
+        }),
+      ).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_GAP");
+      await expect(
+        registration({
+          initialRecordIndex: WF_PREDICTIVE_BAR_COUNT + APPROVED_CYCLE_COUNT,
+          cycleCount: 1,
+        }),
+      ).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_OUTSIDE_APPROVAL");
       const mismatchedVolume = qualifyHtxKlineVolumeAuthority({
         symbol: "BTCUSDT",
         qualifiedAtUtc: "2026-08-01T00:00:01.000Z",
-        rows: [{ id: 1, open: 100, high: 200, low: 90, close: 101,
-          amount: 10, vol: 1_010, count: 1 }],
+        rows: [
+          { id: 1, open: 100, high: 200, low: 90, close: 101, amount: 10, vol: 1_010, count: 1 },
+        ],
       });
       const mismatchedVolumePath = join(fixture.root, "BTCUSDT.volume-mismatch.json");
       writeFileSync(mismatchedVolumePath, JSON.stringify(mismatchedVolume));
-      await expect(registration({
-        initialRecordIndex: WF_PREDICTIVE_BAR_COUNT - 1,
-        cycleCount: 1,
-        volumePath: mismatchedVolumePath,
-      })).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_IDENTITY_CONFLICT");
+      await expect(
+        registration({
+          initialRecordIndex: WF_PREDICTIVE_BAR_COUNT - 1,
+          cycleCount: 1,
+          volumePath: mismatchedVolumePath,
+        }),
+      ).rejects.toThrow("HISTORICAL_DATASET_AUTHORITY_RANGE_IDENTITY_CONFLICT");
 
       const steps: readonly HistoricalProductionFirstCycleStepV2[] = [
         "RATIFICATION_READY",
@@ -1122,9 +1411,14 @@ describe.skipIf(!enabled || !url || !disposable)(
       const runnerReserved = await pool.reserve();
       const runnerSql = bindPostgresReservedSession(pool, runnerReserved);
       const lifecyclePort = createHistoricalSimulationRunLifecyclePostgresV2(runnerSql);
-      const launchScope = { organizationId, accountId: productionInput.accountId, runId,
-        partition: "WALK_FORWARD" as const, symbol: "BTCUSDT" as const,
-        requestedByOperatorId: ratified.operatorUserId };
+      const launchScope = {
+        organizationId,
+        accountId: productionInput.accountId,
+        runId,
+        partition: "WALK_FORWARD" as const,
+        symbol: "BTCUSDT" as const,
+        requestedByOperatorId: ratified.operatorUserId,
+      };
       let latest:
         | Awaited<ReturnType<typeof runHistoricalSimulationNextCyclePostgresV2>>
         | undefined;
@@ -1168,20 +1462,38 @@ describe.skipIf(!enabled || !url || !disposable)(
             public.waia_historical_approved_knowledge_namespace_v2(
               ${organizationId}::uuid,${`${knowledgeNamespace}:UNAPPROVED:`}) AS child_trial
         `;
-        expect(namespaceChecks).toEqual([{ own: true, trial: true, child: false, child_trial: false }]);
+        expect(namespaceChecks).toEqual([
+          { own: true, trial: true, child: false, child_trial: false },
+        ]);
         await lifecyclePort.queue(launchScope);
-        let lifecycleEvent = await lifecyclePort.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
+        let lifecycleEvent = await lifecyclePort.claim({
+          organizationId,
+          runId,
+          releaseSha: RELEASE_SHA,
+        });
 
-        const checkpointInput = { organizationId, checkpointSeq: 999999,
-          modelVersion: "general-adversarial", calibrationSnapshotDigest: "a".repeat(64),
-          rejectedResearchStates: [], promotedResearchStates: [] };
-        await expect(writeKnowledgeCheckpointV2(runnerSql,
-          buildKnowledgeCheckpointRecord(checkpointInput))).rejects.toThrow(/row-level security/);
-        const unapprovedNamespace =
-          `waia.trader.historical_simulation_knowledge_binding.v2|unapproved-${runId}|BTCUSDT|historical-simulation-v2`;
-        await expect(writeHistoricalKnowledgeCheckpointV2(runnerSql,
-          buildKnowledgeCheckpointRecord({ ...checkpointInput, modelVersion: unapprovedNamespace }),
-          unapprovedNamespace)).rejects.toThrow(/row-level security/);
+        const checkpointInput = {
+          organizationId,
+          checkpointSeq: 999999,
+          modelVersion: "general-adversarial",
+          calibrationSnapshotDigest: "a".repeat(64),
+          rejectedResearchStates: [],
+          promotedResearchStates: [],
+        };
+        await expect(
+          writeKnowledgeCheckpointV2(runnerSql, buildKnowledgeCheckpointRecord(checkpointInput)),
+        ).rejects.toThrow(/row-level security/);
+        const unapprovedNamespace = `waia.trader.historical_simulation_knowledge_binding.v2|unapproved-${runId}|BTCUSDT|historical-simulation-v2`;
+        await expect(
+          writeHistoricalKnowledgeCheckpointV2(
+            runnerSql,
+            buildKnowledgeCheckpointRecord({
+              ...checkpointInput,
+              modelVersion: unapprovedNamespace,
+            }),
+            unapprovedNamespace,
+          ),
+        ).rejects.toThrow(/row-level security/);
 
         const first = await runHistoricalSimulationNextCyclePostgresV2({
           sql: runnerSql,
@@ -1204,7 +1516,11 @@ describe.skipIf(!enabled || !url || !disposable)(
         const stale = await lifecyclePort.queue(launchScope);
         expect(stale).toEqual(lifecycleEvent);
         expect(stale.committedCycles).toBe(0);
-        lifecycleEvent = await lifecyclePort.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
+        lifecycleEvent = await lifecyclePort.claim({
+          organizationId,
+          runId,
+          releaseSha: RELEASE_SHA,
+        });
         expect(lifecycleEvent.committedCycles).toBe(1);
         expect(lifecycleEvent.latestCommittedCycleId).toBe(first.committedCycleId);
         expect(lifecycleEvent.errorCode).toBe("CRASH_RECOVERED_AFTER_COMMIT");
@@ -1220,10 +1536,13 @@ describe.skipIf(!enabled || !url || !disposable)(
             symbol: "BTCUSDT",
             expectedCycleSequence: sequence,
           });
-          lifecycleEvent = await lifecyclePort.append({ previous: lifecycleEvent,
+          lifecycleEvent = await lifecyclePort.append({
+            previous: lifecycleEvent,
             phase: sequence === APPROVED_CYCLE_COUNT - 1 ? "COMPLETED" : "RUNNING",
             committedCycles: sequence + 1,
-            latestCommittedCycleId: latest.committedCycleId, errorCode: null });
+            latestCommittedCycleId: latest.committedCycleId,
+            errorCode: null,
+          });
         }
 
         const retry = await runHistoricalSimulationNextCyclePostgresV2({
@@ -1517,9 +1836,17 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(authorizedForecastCycles + nonActionableCycles).toBe(35);
       // Durable abstentions must use the same complete immutable package store,
       // not quietly put the full corpus/pools back in a generic stage JSONB.
-      const negativeWireRows = await pool<Array<Readonly<{
-        count: number; versions: boolean; sealed: boolean; inline: boolean; maxBytes: number;
-      }>>>`
+      const negativeWireRows = await pool<
+        Array<
+          Readonly<{
+            count: number;
+            versions: boolean;
+            sealed: boolean;
+            inline: boolean;
+            maxBytes: number;
+          }>
+        >
+      >`
         SELECT count(*)::int AS count,
           bool_and(COALESCE(
             artifact->'payload'->>'schemaVersion'=
@@ -1552,8 +1879,12 @@ describe.skipIf(!enabled || !url || !disposable)(
           AND stage.stage='FORECAST_LIFECYCLE'
           AND artifact->>'artifactKind'='FORECAST_NON_ACTIONABLE'
       `;
-      expect(negativeWireRows[0]).toMatchObject({ count: nonActionableCycles,
-        versions: true, sealed: true, inline: false });
+      expect(negativeWireRows[0]).toMatchObject({
+        count: nonActionableCycles,
+        versions: true,
+        sealed: true,
+        inline: false,
+      });
       expect(negativeWireRows[0]!.maxBytes).toBeLessThan(4 * 1024 * 1024);
       expect(rows[0]!.pits).toBe(rows[0]!.bundles);
       expect(rows[0]!.preregistrations).toBe(rows[0]!.bundles);
@@ -1566,8 +1897,12 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(rows[0]!.modeledOrders).toBe("2");
       expect(rows[0]!.modeledFills).toBe("2");
       expect(rows[0]!.modeledFillEvidence).toBe(rows[0]!.modeledFills);
-      for (const value of [rows[0]!.latestCash, rows[0]!.latestEquity,
-        rows[0]!.latestNetRealizedPnl, rows[0]!.latestMarkedPositionValue]) {
+      for (const value of [
+        rows[0]!.latestCash,
+        rows[0]!.latestEquity,
+        rows[0]!.latestNetRealizedPnl,
+        rows[0]!.latestMarkedPositionValue,
+      ]) {
         expect(Number.isFinite(Number(value))).toBe(true);
       }
       expect(Number(rows[0]!.latestNetRealizedPnl)).not.toBe(0);
@@ -1583,15 +1918,23 @@ describe.skipIf(!enabled || !url || !disposable)(
       expect(Number(rows[0]!.distinctCalibrationSnapshots)).toBeGreaterThan(1);
       expect(rows[0]!.scoredKnowledgeUpdates).toBe("1");
       expect(rows[0]!.governedZeroDeltaUpdates).toBe("1");
-      expect(fixture.qualificationReceipt.holdout.status)
-        .toBe("PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED");
+      expect(fixture.qualificationReceipt.holdout.status).toBe(
+        "PRE_HOLDOUT_ONLY_NOT_PRESENT_NOT_ACCESSED",
+      );
       if (independentRepeat) {
         await exportRepeatEvidence(pool, independentRepeat, repeatSourceSha, {
-          userId, organizationId, runId, accountId: productionInput.accountId,
-          releaseSha: RELEASE_SHA, initialRecordIndex: INITIAL_RECORD_INDEX,
-          cycleCount: APPROVED_CYCLE_COUNT, barCount: BAR_COUNT,
-          predictiveBarCount: WF_PREDICTIVE_BAR_COUNT, economicBarCount: WF_ECONOMIC_BAR_COUNT,
-          qualifiedAt: QUALIFIED_AT, symbols: SYMBOLS,
+          userId,
+          organizationId,
+          runId,
+          accountId: productionInput.accountId,
+          releaseSha: RELEASE_SHA,
+          initialRecordIndex: INITIAL_RECORD_INDEX,
+          cycleCount: APPROVED_CYCLE_COUNT,
+          barCount: BAR_COUNT,
+          predictiveBarCount: WF_PREDICTIVE_BAR_COUNT,
+          economicBarCount: WF_ECONOMIC_BAR_COUNT,
+          qualifiedAt: QUALIFIED_AT,
+          symbols: SYMBOLS,
           upstreamKmEvaluator: "synthetic-qualified-fixture-NOT-full-corpus-qualification",
         });
       }
@@ -1607,9 +1950,14 @@ describe.skipIf(!enabled || !url || !disposable)(
         const connection = await pool.reserve();
         const sql = bindPostgresReservedSession(pool, connection);
         const lifecycle = createHistoricalSimulationRunLifecyclePostgresV2(sql);
-        const scope = { organizationId, accountId: productionInput.accountId, runId,
-          partition: "WALK_FORWARD" as const, symbol: "BTCUSDT" as const,
-          requestedByOperatorId: ratified.operatorUserId };
+        const scope = {
+          organizationId,
+          accountId: productionInput.accountId,
+          runId,
+          partition: "WALK_FORWARD" as const,
+          symbol: "BTCUSDT" as const,
+          requestedByOperatorId: ratified.operatorUserId,
+        };
         try {
           await assumeHistoricalSimulationRunnerRoleV2(sql);
           const identity = await sql`SELECT current_user`;
@@ -1617,26 +1965,46 @@ describe.skipIf(!enabled || !url || !disposable)(
           await lifecycle.queue(scope);
           let event = await lifecycle.claim({ organizationId, runId, releaseSha: RELEASE_SHA });
           expect(event.committedCycles).toBe(35);
-          let latest: Awaited<ReturnType<typeof runHistoricalSimulationNextCyclePostgresV2>> | undefined;
+          let latest:
+            | Awaited<ReturnType<typeof runHistoricalSimulationNextCyclePostgresV2>>
+            | undefined;
           for (let sequence = 35; sequence < APPROVED_CYCLE_COUNT; sequence += 1) {
-            latest = await runHistoricalSimulationNextCyclePostgresV2({ sql, organizationId,
-              accountId: productionInput.accountId, runId, partition: "WALK_FORWARD",
-              symbol: "BTCUSDT", expectedCycleSequence: sequence });
+            latest = await runHistoricalSimulationNextCyclePostgresV2({
+              sql,
+              organizationId,
+              accountId: productionInput.accountId,
+              runId,
+              partition: "WALK_FORWARD",
+              symbol: "BTCUSDT",
+              expectedCycleSequence: sequence,
+            });
             expect(latest.nextCycleSequence).toBe(sequence + 1);
-            event = await lifecycle.append({ previous: event,
+            event = await lifecycle.append({
+              previous: event,
               phase: sequence === APPROVED_CYCLE_COUNT - 1 ? "COMPLETED" : "RUNNING",
-              committedCycles: sequence + 1, latestCommittedCycleId: latest.committedCycleId,
-              errorCode: null });
+              committedCycles: sequence + 1,
+              latestCommittedCycleId: latest.committedCycleId,
+              errorCode: null,
+            });
           }
           expect(event.phase).toBe("COMPLETED");
           expect(event.committedCycles).toBe(80);
           const finalCycleId = `${runId}:WALK_FORWARD:BTCUSDT:${INITIAL_RECORD_INDEX + 79}`;
-          const links = await sql<Array<{
-            cycle_id: string; knowledge_update_id: string;
-            resolved_at: Date; pit_anchor: Date; visible_from: Date;
-            posterior_confidence: string; prior_confidence: string; delta: string;
-            pit_evidence_boundary: Date; forecast_status: string; binding_matches: boolean;
-          }>>`
+          const links = await sql<
+            Array<{
+              cycle_id: string;
+              knowledge_update_id: string;
+              resolved_at: Date;
+              pit_anchor: Date;
+              visible_from: Date;
+              posterior_confidence: string;
+              prior_confidence: string;
+              delta: string;
+              pit_evidence_boundary: Date;
+              forecast_status: string;
+              binding_matches: boolean;
+            }>
+          >`
             SELECT pit.cycle_id, link.knowledge_update_id, knowledge.resolved_at,
               pit.pit_anchor,
               (knowledge.source_record_ids_json::jsonb ->>
@@ -1671,9 +2039,15 @@ describe.skipIf(!enabled || !url || !disposable)(
           for (const link of links) {
             expect(link.forecast_status).toBe("FORECAST_AUTHORIZED");
             expect(link.binding_matches).toBe(true);
-            expect(new Date(link.resolved_at).getTime()).toBeLessThan(new Date(link.pit_anchor).getTime());
-            expect(new Date(link.visible_from).getTime()).toBeLessThanOrEqual(new Date(link.pit_anchor).getTime());
-            expect(new Date(link.pit_evidence_boundary).getTime()).toBeLessThanOrEqual(new Date(link.pit_anchor).getTime());
+            expect(new Date(link.resolved_at).getTime()).toBeLessThan(
+              new Date(link.pit_anchor).getTime(),
+            );
+            expect(new Date(link.visible_from).getTime()).toBeLessThanOrEqual(
+              new Date(link.pit_anchor).getTime(),
+            );
+            expect(new Date(link.pit_evidence_boundary).getTime()).toBeLessThanOrEqual(
+              new Date(link.pit_anchor).getTime(),
+            );
             expect(link.posterior_confidence).toBe(link.prior_confidence);
             expect(Number(link.delta)).toBe(0);
           }
@@ -1689,9 +2063,15 @@ describe.skipIf(!enabled || !url || !disposable)(
                 WHERE bundle.organization_id=${organizationId}::uuid AND bundle.run_id=${runId}) AS outcomes
           `;
           const beforeRetry = await evidenceCounts();
-          const retry = await runHistoricalSimulationNextCyclePostgresV2({ sql, organizationId,
-            accountId: productionInput.accountId, runId, partition: "WALK_FORWARD",
-            symbol: "BTCUSDT", expectedCycleSequence: 79 });
+          const retry = await runHistoricalSimulationNextCyclePostgresV2({
+            sql,
+            organizationId,
+            accountId: productionInput.accountId,
+            runId,
+            partition: "WALK_FORWARD",
+            symbol: "BTCUSDT",
+            expectedCycleSequence: 79,
+          });
           expect(retry).toEqual(latest);
           expect(await evidenceCounts()).toEqual(beforeRetry);
           const checkpoints = await sql`
@@ -1707,7 +2087,8 @@ describe.skipIf(!enabled || !url || !disposable)(
           await resetHistoricalSimulationRunnerRoleV2(sql);
           connection.release();
         }
-      }, 3_600_000,
+      },
+      3_600_000,
     );
 
     it("persists valid historical evidence and rejects a rehashed receipt with tampered authority", async () => {
@@ -1897,15 +2278,22 @@ describe.skipIf(!enabled || !url || !disposable)(
     // which guard was slow. Each case retains that same individual budget,
     // the actual runner role and the durable-authority immutability assertion.
     it.each([
-      "knowledge hypothesis", "market trust", "Human selected K",
-      "unapproved extension", "future epistemic cutoff",
+      "knowledge hypothesis",
+      "market trust",
+      "Human selected K",
+      "unapproved extension",
+      "future epistemic cutoff",
     ] as const)("rejects internally rehashed authority forgery: %s", async (forgery) => {
       const startedAt = performance.now();
-      const proposalRows = await pool<Array<Readonly<{
-        id: string;
-        content_digest_hex: string;
-        technical_candidate_content_digest_hex: string;
-      }>>>`
+      const proposalRows = await pool<
+        Array<
+          Readonly<{
+            id: string;
+            content_digest_hex: string;
+            technical_candidate_content_digest_hex: string;
+          }>
+        >
+      >`
         SELECT id::text,content_digest_hex,technical_candidate_content_digest_hex
         FROM trader_historical_technical_proposal_v2
         WHERE organization_id=${organizationId}::uuid AND run_id=${runId}
@@ -1947,60 +2335,75 @@ describe.skipIf(!enabled || !url || !disposable)(
             });
           }
         } finally {
-          try { await resetHistoricalSimulationRunnerRoleV2(roleSql); }
-          finally { connection.release(); }
+          try {
+            await resetHistoricalSimulationRunnerRoleV2(roleSql);
+          } finally {
+            connection.release();
+          }
         }
       }
 
-      if (forgery === "knowledge hypothesis") await expectForgedAuthorityRejected((forged) => {
-        const snapshots = forged.knowledgeSnapshots as Array<Record<string, unknown>>;
-        snapshots[0]!.selectedHypothesisType = "forged-hypothesis-type";
-        snapshots[0]!.snapshotContentDigestHex = computeSemanticSha256Hex(
-          semanticBody(snapshots[0]!, "snapshotContentDigestHex"),
-        );
-        forged.knowledgeSnapshotDigestHex = computeSemanticSha256Hex({
-          schemaVersion: "waia.trader.historical_prerun_knowledge_snapshot_set.v2",
-          organizationId,runId,releaseSha: RELEASE_SHA,
-          epistemicRecordCutoff: forged.epistemicRecordCutoff,
-          knowledgeSnapshots: snapshots,
+      if (forgery === "knowledge hypothesis")
+        await expectForgedAuthorityRejected((forged) => {
+          const snapshots = forged.knowledgeSnapshots as Array<Record<string, unknown>>;
+          snapshots[0]!.selectedHypothesisType = "forged-hypothesis-type";
+          snapshots[0]!.snapshotContentDigestHex = computeSemanticSha256Hex(
+            semanticBody(snapshots[0]!, "snapshotContentDigestHex"),
+          );
+          forged.knowledgeSnapshotDigestHex = computeSemanticSha256Hex({
+            schemaVersion: "waia.trader.historical_prerun_knowledge_snapshot_set.v2",
+            organizationId,
+            runId,
+            releaseSha: RELEASE_SHA,
+            epistemicRecordCutoff: forged.epistemicRecordCutoff,
+            knowledgeSnapshots: snapshots,
+          });
         });
-      });
 
-      if (forgery === "market trust") await expectForgedAuthorityRejected((forged) => {
-        const evidence = forged.marketEvidence as Array<Record<string, unknown>>;
-        evidence[0]!.trustScore = "0.5";
-        evidence[0]!.contentDigestHex = computeSemanticSha256Hex(
-          semanticBody(evidence[0]!, "contentDigestHex"),
-        );
-        forged.marketEvidenceDigestHex = computeSemanticSha256Hex({
-          schemaVersion: "waia.trader.historical_ratified_market_evidence_set.v2",
-          organizationId,runId,releaseSha: RELEASE_SHA,marketEvidence: evidence,
+      if (forgery === "market trust")
+        await expectForgedAuthorityRejected((forged) => {
+          const evidence = forged.marketEvidence as Array<Record<string, unknown>>;
+          evidence[0]!.trustScore = "0.5";
+          evidence[0]!.contentDigestHex = computeSemanticSha256Hex(
+            semanticBody(evidence[0]!, "contentDigestHex"),
+          );
+          forged.marketEvidenceDigestHex = computeSemanticSha256Hex({
+            schemaVersion: "waia.trader.historical_ratified_market_evidence_set.v2",
+            organizationId,
+            runId,
+            releaseSha: RELEASE_SHA,
+            marketEvidence: evidence,
+          });
         });
-      });
 
-      if (forgery === "Human selected K") await expectForgedAuthorityRejected((forged) => {
-        const admissions = forged.surfaceAdmissions as Array<Record<string, unknown>>;
-        const admission = admissions[0]!;
-        const human = admission.humanRatificationReceipt as Record<string, unknown>;
-        human.selectedK = Number(human.selectedK) + 1;
-        human.contentDigestHex = computeSemanticSha256Hex(
-          semanticBody(human, "contentDigestHex"),
-        );
-      });
-
-      if (forgery === "unapproved extension") await expectForgedAuthorityRejected((forged) => {
-        forged.unapprovedSemanticExtension = "runner-controlled";
-      });
-
-      if (forgery === "future epistemic cutoff") await expectForgedAuthorityRejected((forged) => {
-        forged.epistemicRecordCutoff = "2999-01-01T00:00:00.000Z";
-        forged.knowledgeSnapshotDigestHex = computeSemanticSha256Hex({
-          schemaVersion: "waia.trader.historical_prerun_knowledge_snapshot_set.v2",
-          organizationId,runId,releaseSha: RELEASE_SHA,
-          epistemicRecordCutoff: forged.epistemicRecordCutoff,
-          knowledgeSnapshots: forged.knowledgeSnapshots,
+      if (forgery === "Human selected K")
+        await expectForgedAuthorityRejected((forged) => {
+          const admissions = forged.surfaceAdmissions as Array<Record<string, unknown>>;
+          const admission = admissions[0]!;
+          const human = admission.humanRatificationReceipt as Record<string, unknown>;
+          human.selectedK = Number(human.selectedK) + 1;
+          human.contentDigestHex = computeSemanticSha256Hex(
+            semanticBody(human, "contentDigestHex"),
+          );
         });
-      });
+
+      if (forgery === "unapproved extension")
+        await expectForgedAuthorityRejected((forged) => {
+          forged.unapprovedSemanticExtension = "runner-controlled";
+        });
+
+      if (forgery === "future epistemic cutoff")
+        await expectForgedAuthorityRejected((forged) => {
+          forged.epistemicRecordCutoff = "2999-01-01T00:00:00.000Z";
+          forged.knowledgeSnapshotDigestHex = computeSemanticSha256Hex({
+            schemaVersion: "waia.trader.historical_prerun_knowledge_snapshot_set.v2",
+            organizationId,
+            runId,
+            releaseSha: RELEASE_SHA,
+            epistemicRecordCutoff: forged.epistemicRecordCutoff,
+            knowledgeSnapshots: forged.knowledgeSnapshots,
+          });
+        });
 
       const durableRows = await pool<Array<Readonly<{ authority_json: unknown }>>>`
         SELECT authority_json FROM trader_historical_four_surface_ratified_admission_v2
