@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-1007",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -33,7 +33,7 @@
       "expectedTests": [
         "pnpm exec vitest --run tests/unit/scientific-container-observation-v1.test.ts tests/unit/scientific-false-success-marker-v1.test.ts tests/unit/scientific-process-verdict-v1.test.ts"
       ],
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "riskTier": "T3",
       "humanGate": {
@@ -43,7 +43,28 @@
       "execution": {
         "wave": 1,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "docs/ops/scientific-process-observation-v1.md",
+        "docs/plans/dee-990-outcome-verdict.md",
+        "scripts/trader/scientific-container-observation-v1.ts",
+        "scripts/trader/scientific-false-success-marker-v1.ts",
+        "scripts/trader/scientific-process-verdict-v1.ts",
+        "tests/unit/scientific-container-observation-v1.test.ts",
+        "tests/unit/scientific-false-success-marker-v1.test.ts",
+        "tests/unit/scientific-process-verdict-v1.test.ts"
+      ],
+      "integratedCommits": [
+        "62a529313fb76e10b169045bb029cd50f571354d"
+      ],
+      "acceptanceEvidence": [
+        "Cherry-picked exact PR #586 head 1778dd43e4406762d9b873fd8d641387e38378b1; all 8 files byte-exact versus that head.",
+        "Unit tests scientific-container-observation/false-success-marker/process-verdict: 89 tests PASS.",
+        "Rebased onto exact NEW P origin/main c6f79636b4aff2f0bf170b4357db7bb0d2abcb73 after Human squash-merge of PR #591; all 8 child file blobs remain byte-exact versus the captured original head."
+      ],
+      "tests": [
+        "pnpm exec vitest --run tests/unit/scientific-container-observation-v1.test.ts tests/unit/scientific-false-success-marker-v1.test.ts tests/unit/scientific-process-verdict-v1.test.ts PASS (89 tests)"
+      ]
     },
     {
       "issue": "DEE-1004",
@@ -75,7 +96,7 @@
         "pnpm exec vitest --run tests/unit/scientific-evidence-resolver-v1.test.ts tests/unit/historical-strict-evidence-wiring-v1.test.ts tests/unit/cody-evidence-binding-v2.test.ts tests/unit/historical-finalize-only-operator.test.mjs",
         "pnpm exec vitest --run tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
       ],
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "riskTier": "T3",
       "humanGate": {
@@ -85,7 +106,36 @@
       "execution": {
         "wave": 2,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "lib/trader/historical-simulation-v2/scientific-evidence-resolver-v1.ts",
+        "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts",
+        "scripts/ops/historical-finalize-only-v1.mjs",
+        "scripts/trader/scientific-checkpoint-store-v1.ts",
+        "scripts/trader/scientific-evidence-resolver-v1.ts",
+        "tests/unit/cody-evidence-binding-v2.test.ts",
+        "tests/unit/historical-finalize-only-operator.test.mjs",
+        "tests/unit/historical-strict-evidence-wiring-v1.test.ts",
+        "tests/unit/scientific-evidence-resolver-v1.test.ts",
+        "tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
+      ],
+      "integratedCommits": [
+        "25a8a718679d445473b269d7cb1f3687a89f18a4",
+        "23fd2be050ce670429511646487c206f8ac67538",
+        "6f7d2364b7edbb721e08e4463ca66b70e78957e3"
+      ],
+      "acceptanceEvidence": [
+        "Cherry-picked exact PR #587 head 6c0dd74742c9f935ef907d9165f503a4b806c1bb.",
+        "Eight of nine child files remain byte-exact versus that head after rebase onto NEW P c6f79636b4aff2f0bf170b4357db7bb0d2abcb73.",
+        "Overlap file scripts/trader/scientific-checkpoint-store-v1.ts is a documented semantic merge: NEW P readPreservedScientificPackageNoBuildV1 is byte-exact versus c6f79636; DEE-1004 optional runtime?: {node,os,arch} plus resolvedRuntime identity HMAC remain present. No conflict markers.",
+        "Vitest scientific-evidence-resolver/historical-strict-evidence-wiring/cody-evidence-binding PASS; node --test historical-finalize-only-operator.test.mjs 12/12 PASS.",
+        "Human Architect 2026-09-14 authorized TEST-HARNESS admission of tests/integration/postgres-historical-production-first-cycle-v2.test.ts. Local reproduction on 4a74c8d9 failed RESOLVER_REQUIRED at finalize:764. After binding withStrictScientificResolverV1 over sealed prepare evidence, the same suite passed 13/14 (1 skipped continuation). Unbound materialization still refuses RESOLVER_REQUIRED. DEE-1004 unit resolver tests remain PASS (8)."
+      ],
+      "tests": [
+        "pnpm exec vitest --run tests/unit/scientific-evidence-resolver-v1.test.ts tests/unit/historical-strict-evidence-wiring-v1.test.ts tests/unit/cody-evidence-binding-v2.test.ts PASS",
+        "node --test tests/unit/historical-finalize-only-operator.test.mjs PASS 12/12",
+        "pnpm exec vitest --run tests/integration/postgres-historical-production-first-cycle-v2.test.ts PASS (13 passed, 1 skipped) on disposable waia_hsv2_it_dee1007fix1"
+      ]
     },
     {
       "issue": "DEE-1005",
@@ -116,7 +166,7 @@
       "expectedTests": [
         "pnpm exec vitest --run tests/unit/validation-bootstrap-durable-scheduler.test.ts"
       ],
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "riskTier": "T3",
       "humanGate": {
@@ -126,7 +176,32 @@
       "execution": {
         "wave": 3,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "lib/trader/research/benchmark/index.ts",
+        "lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts",
+        "lib/trader/research/benchmark/validation-bootstrap-durable-v1.ts",
+        "lib/trader/research/benchmark/validation-bootstrap-v1.ts",
+        "scripts/trader/historical-simulation-v2-launch-approved.ts",
+        "scripts/trader/historical-simulation-v2-prepare-proposal.ts",
+        "scripts/trader/validation-bootstrap-durable-scheduler-cli.ts",
+        "scripts/trader/validation-bootstrap-durable-scheduler-v1.ts",
+        "scripts/trader/validation-bootstrap-durable-store-v1.ts",
+        "scripts/trader/validation-bootstrap-node-pool.ts",
+        "tests/unit/validation-bootstrap-durable-scheduler.test.ts"
+      ],
+      "integratedCommits": [
+        "49fbda7c1b3b449324a5384264604be4a5ce579a",
+        "323ec7a102f3ddee863ab951576bbc7d83ecbef1"
+      ],
+      "acceptanceEvidence": [
+        "Cherry-picked exact PR #588 head bfd5bce77afc312cf87fafee663211175d95f7d8; all 11 files byte-exact versus that head.",
+        "VALIDATION_BOOTSTRAP_B remains 10000; RANGE_SIZE remains 8; durable scheduler unit tests 12/12 PASS.",
+        "Rebased onto exact NEW P origin/main c6f79636b4aff2f0bf170b4357db7bb0d2abcb73 after Human squash-merge of PR #591; child file blobs remain byte-exact versus the captured original head."
+      ],
+      "tests": [
+        "pnpm exec vitest --run tests/unit/validation-bootstrap-durable-scheduler.test.ts PASS (12 tests)"
+      ]
     },
     {
       "issue": "DEE-1006",
@@ -161,7 +236,7 @@
       "expectedTests": [
         "pnpm exec vitest --run tests/unit/historical-terminal-receipts-migration-v1.test.ts tests/unit/historical-terminal-launch-receipts-v1.test.ts tests/unit/fhv-v2-postgres-schema-preflight.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts tests/unit/historical-cody-migration-v4.test.ts"
       ],
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "riskTier": "T3",
       "humanGate": {
@@ -171,7 +246,36 @@
       "execution": {
         "wave": 4,
         "mode": "serialized"
-      }
+      },
+      "actualFiles": [
+        "db/migrations_postgres/0208_historical_terminal_receipts_v1.sql",
+        "db/migrations_postgres/meta/_journal.json",
+        "db/schema.postgres.ts",
+        "lib/trader/historical-simulation-v2/historical-terminal-launch-verifier-v1.ts",
+        "lib/trader/historical-simulation-v2/historical-terminal-receipts-v1.ts",
+        "lib/trader/observability/fhv-v2-postgres-schema-preflight.ts",
+        "tests/integration/postgres-historical-terminal-receipts-v1.test.ts",
+        "tests/unit/fhv-v2-postgres-schema-preflight.test.ts",
+        "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+        "tests/unit/historical-cody-migration-v4.test.ts",
+        "tests/unit/historical-terminal-launch-receipts-v1.test.ts",
+        "tests/unit/historical-terminal-receipts-migration-v1.test.ts"
+      ],
+      "integratedCommits": [
+        "5e4170436389dd55252eeaf3007811f00396aedf",
+        "a14dac99b6e35e7186433bdfd115ecd39fad49c2",
+        "07306ffa03eb1a459a4153249520eefbf1f20785"
+      ],
+      "acceptanceEvidence": [
+        "Cherry-picked exact PR #585 head d4f4c2034e54d1ce68fca3e4400d16d934947372; original 8 files byte-exact versus that head.",
+        "Train-only FHV compatible-additive admission of 0208 identity 1780000000208; required Cody prefix remains 0207; FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX remains 207.",
+        "Train-only FHV files remain byte-exact versus prior train head 3454e33ee183a6134f8fe9504c36c73109da4913.",
+        "Unit tests historical-terminal-receipts-migration/launch-receipts/fhv-preflight/forecast-v2-identity/historical-cody-migration PASS.",
+        "Rebased onto exact NEW P origin/main c6f79636b4aff2f0bf170b4357db7bb0d2abcb73 after Human squash-merge of PR #591."
+      ],
+      "tests": [
+        "pnpm exec vitest --run tests/unit/historical-terminal-receipts-migration-v1.test.ts tests/unit/historical-terminal-launch-receipts-v1.test.ts tests/unit/fhv-v2-postgres-schema-preflight.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts tests/unit/historical-cody-migration-v4.test.ts PASS"
+      ]
     }
   ],
   "deferredChildren": [],
@@ -179,25 +283,157 @@
     "admissionEvidence": {
       "status": "pass",
       "reviewer": "Human Architect 2026-09-13 four-child Integration Train authorization; DEE-950 / PR 589 remains a separate single-issue H1-P boundary; Human Architect 2026-09-14 authorized first-cycle strict-resolver harness admission on tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
-    }
+    },
+    "authoritativeBase": "c6f79636b4aff2f0bf170b4357db7bb0d2abcb73",
+    "duplicateOwnershipDependencyAudit": {
+      "status": "pass",
+      "evidence": "Pairwise changed-file overlap across DEE-990/1004/1005/1006 remains empty after rebase onto c6f79636b4aff2f0bf170b4357db7bb0d2abcb73 (DEE-1008 squash #591). The only NEW-P overlap is scripts/trader/scientific-checkpoint-store-v1.ts with DEE-1004, proven as a semantic merge (no-build reader + runtime identity). DEE-950/DEE-1008 producer files are on main and remain outside this train."
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestDigest": "bcb78bb899db39feabf3c80d9da6456b97823c32f47be470d9455bec023acfee",
+      "manifestCommit": "cee75376eee40f543bae1f48ad39aaf04aca59b8",
+      "manifestPath": "docs/plans/dee-1007-launch-r-code-train.integration-train.json",
+      "reviewer": "Human Architect 2026-09-13 four-child Integration Train authorization; DEE-950 / PR 589 remains a separate single-issue H1-P boundary; Human Architect 2026-09-14 authorized first-cycle strict-resolver harness admission on tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-990",
+        "status": "pass",
+        "reviewedCommits": [
+          "62a529313fb76e10b169045bb029cd50f571354d"
+        ],
+        "reviewedFiles": [
+          "docs/ops/scientific-process-observation-v1.md",
+          "docs/plans/dee-990-outcome-verdict.md",
+          "scripts/trader/scientific-container-observation-v1.ts",
+          "scripts/trader/scientific-false-success-marker-v1.ts",
+          "scripts/trader/scientific-process-verdict-v1.ts",
+          "tests/unit/scientific-container-observation-v1.test.ts",
+          "tests/unit/scientific-false-success-marker-v1.test.ts",
+          "tests/unit/scientific-process-verdict-v1.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-1004",
+        "status": "pass",
+        "reviewedCommits": [
+          "25a8a718679d445473b269d7cb1f3687a89f18a4",
+          "23fd2be050ce670429511646487c206f8ac67538",
+          "6f7d2364b7edbb721e08e4463ca66b70e78957e3"
+        ],
+        "reviewedFiles": [
+          "lib/trader/historical-simulation-v2/scientific-evidence-resolver-v1.ts",
+          "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts",
+          "scripts/ops/historical-finalize-only-v1.mjs",
+          "scripts/trader/scientific-checkpoint-store-v1.ts",
+          "scripts/trader/scientific-evidence-resolver-v1.ts",
+          "tests/unit/cody-evidence-binding-v2.test.ts",
+          "tests/unit/historical-finalize-only-operator.test.mjs",
+          "tests/unit/historical-strict-evidence-wiring-v1.test.ts",
+          "tests/unit/scientific-evidence-resolver-v1.test.ts",
+          "tests/integration/postgres-historical-production-first-cycle-v2.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-1005",
+        "status": "pass",
+        "reviewedCommits": [
+          "49fbda7c1b3b449324a5384264604be4a5ce579a",
+          "323ec7a102f3ddee863ab951576bbc7d83ecbef1"
+        ],
+        "reviewedFiles": [
+          "lib/trader/research/benchmark/index.ts",
+          "lib/trader/research/benchmark/research-harness-admission-orchestrator-v1.ts",
+          "lib/trader/research/benchmark/validation-bootstrap-durable-v1.ts",
+          "lib/trader/research/benchmark/validation-bootstrap-v1.ts",
+          "scripts/trader/historical-simulation-v2-launch-approved.ts",
+          "scripts/trader/historical-simulation-v2-prepare-proposal.ts",
+          "scripts/trader/validation-bootstrap-durable-scheduler-cli.ts",
+          "scripts/trader/validation-bootstrap-durable-scheduler-v1.ts",
+          "scripts/trader/validation-bootstrap-durable-store-v1.ts",
+          "scripts/trader/validation-bootstrap-node-pool.ts",
+          "tests/unit/validation-bootstrap-durable-scheduler.test.ts"
+        ]
+      },
+      {
+        "issue": "DEE-1006",
+        "status": "pass",
+        "reviewedCommits": [
+          "5e4170436389dd55252eeaf3007811f00396aedf",
+          "a14dac99b6e35e7186433bdfd115ecd39fad49c2",
+          "07306ffa03eb1a459a4153249520eefbf1f20785"
+        ],
+        "reviewedFiles": [
+          "db/migrations_postgres/0208_historical_terminal_receipts_v1.sql",
+          "db/migrations_postgres/meta/_journal.json",
+          "db/schema.postgres.ts",
+          "lib/trader/historical-simulation-v2/historical-terminal-launch-verifier-v1.ts",
+          "lib/trader/historical-simulation-v2/historical-terminal-receipts-v1.ts",
+          "lib/trader/observability/fhv-v2-postgres-schema-preflight.ts",
+          "tests/integration/postgres-historical-terminal-receipts-v1.test.ts",
+          "tests/unit/fhv-v2-postgres-schema-preflight.test.ts",
+          "tests/unit/forecast-v2-applied-migration-identity-v1.test.ts",
+          "tests/unit/historical-cody-migration-v4.test.ts",
+          "tests/unit/historical-terminal-launch-receipts-v1.test.ts",
+          "tests/unit/historical-terminal-receipts-migration-v1.test.ts"
+        ]
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-990",
+        "status": "pass",
+        "commands": [
+          "pnpm exec vitest --run tests/unit/scientific-container-observation-v1.test.ts tests/unit/scientific-false-success-marker-v1.test.ts tests/unit/scientific-process-verdict-v1.test.ts PASS (89 tests)"
+        ]
+      },
+      {
+        "afterIssue": "DEE-1004",
+        "status": "pass",
+        "commands": [
+          "pnpm exec vitest --run tests/unit/scientific-evidence-resolver-v1.test.ts tests/unit/historical-strict-evidence-wiring-v1.test.ts tests/unit/cody-evidence-binding-v2.test.ts PASS",
+          "node --test tests/unit/historical-finalize-only-operator.test.mjs PASS 12/12",
+          "pnpm exec vitest --run tests/integration/postgres-historical-production-first-cycle-v2.test.ts PASS (13 passed, 1 skipped)"
+        ]
+      },
+      {
+        "afterIssue": "DEE-1005",
+        "status": "pass",
+        "commands": [
+          "pnpm exec vitest --run tests/unit/validation-bootstrap-durable-scheduler.test.ts PASS (12 tests)"
+        ]
+      },
+      {
+        "afterIssue": "DEE-1006",
+        "status": "pass",
+        "commands": [
+          "pnpm exec vitest --run tests/unit/historical-terminal-receipts-migration-v1.test.ts tests/unit/historical-terminal-launch-receipts-v1.test.ts tests/unit/fhv-v2-postgres-schema-preflight.test.ts tests/unit/forecast-v2-applied-migration-identity-v1.test.ts tests/unit/historical-cody-migration-v4.test.ts PASS"
+        ]
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "No scientific criterion, B=10000, baseline family, or DEE-998 native-admission change.",
-    "DEE-950 / PR 589 is not in this train.",
+    "DEE-950 / PR 589 and DEE-1008 / PR 591 are not in this train.",
     "Migration 0208 is Git-only; production apply remains Human H2 at exact R.",
     "No deploy, Execution Server mutation, live/capital/holdout, or AI-TWIN change.",
-    "Child branches and original PR heads are preserved unedited."
+    "Child branches and original PR heads are preserved unedited.",
+    "Old P ffb2fd608a3d5496964d6c7d60e5e6f2463c58cc is superseded for launch execution only; it remains valid historical evidence.",
+    "TEST-HARNESS only: tests/integration/postgres-historical-production-first-cycle-v2.test.ts binds withStrictScientificResolverV1; production require*/TEST_ONLY materializers stay fail-closed with no builder fallback."
   ],
-  "rollbackStrategy": "One squash revert of the Integration Train PR restores origin/main to the pre-train SHA. Child branches remain for audit/recovery. 0208 is never applied to production by this batch.",
+  "rollbackStrategy": "One squash revert of the Integration Train PR restores origin/main to the pre-train SHA (NEW P c6f79636b4aff2f0bf170b4357db7bb0d2abcb73). Child branches remain for audit/recovery. 0208 is never applied to production by this batch.",
   "validation": {
-    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-1007-launch-r-code-train.integration-train.json DEE-1007 admission",
+    "manifestCommand": "./scripts/linear/validate-integration-train-manifest.sh $PWD/docs/plans/dee-1007-launch-r-code-train.integration-train.json DEE-1007 frozen",
     "focused": [
       "scientific process verdict",
       "strict dual-origin resolver",
       "durable bootstrap scheduler",
       "terminal receipt migration and FHV preflight"
     ],
-    "fullSuite": "one authoritative GitHub PR CI campaign on the frozen exact head after any required DEE-950 base reconciliation",
+    "fullSuite": "one authoritative GitHub PR CI campaign on the frozen exact head after Human-authorized first-cycle strict-resolver harness repair",
     "review": "fresh independent exact-head zero P1/P2",
     "publication": "one PR; DEE-653 required-before-merge; Human H1 squash-merge"
   }
