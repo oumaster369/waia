@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 99d98b1647c5b31751b855076cd8fab7a700f4f0,
-    lastValidationAt: "2026-09-14T08:07:09Z",
-    blockedReason: null,
-    nextAction: "Continue WP-1 with the admitted pure EvidenceLink qualification contract. Keep RightsOperation/consent reconciliation sequential, and stop before shared migration/schema, Trader compatibility, runtime activation or any unratified temporal/source policy.",
+    lastValidatedGitSha: a9c515710fd3322cb140fd53660b64b47b843c1e,
+    lastValidationAt: "2026-09-14T08:17:11Z",
+    blockedReason: "The next unimplemented WP-1 contracts require Human ratification of exact consent disclosure/source admission or RightsOperation failure, receipt and closure semantics. Shared migration/schema and Trader compatibility remain separately frozen.",
+    nextAction: "Obtain the missing product-semantic decision, then admit one pure WP-1 consent/observation or RightsOperation slice. Do not start WP-2/3, register a migration, mutate shared schema/Trader compatibility, mount runtime writers or open the integration PR.",
   }
 provenance:
   {
@@ -274,6 +274,37 @@ Fresh `origin/main` remained
 `d7d5941a995b83473acb6e00c42d5252c44b2303` at this slice boundary. No shared
 migration, journal, Postgres schema, repository, Trader, runtime, environment,
 deployment or Society file changed.
+
+### Sequential stop boundary after EvidenceLink
+
+EvidenceLink is the last remaining WP-1 slice whose complete shape and
+qualification are fixed by the current ratified canon without another product
+decision:
+
+- `ConsentGrant` still lacks its canonical disclosure qualification. The canon
+  requires disclosure, but does not yet freeze its exact v1 shape and allowed
+  values. Adding an arbitrary field or treating private modelling as disclosure
+  would invent authority.
+- A standalone persisted Observation validator restricted to only
+  `dialogue | diary` would duplicate the current kernel while leaving the
+  canonical imported-artifact, provider/device and correction/outcome source
+  admission unresolved. Expanding those source kinds requires explicit
+  consent/privacy and ingestion qualification rather than a type-only guess.
+- The RightsOperation matrix fixes Human control, immediate restriction,
+  source deletion versus purpose withdrawal, dependency closure and the shared
+  seven/thirty-day targets. It does not yet freeze the exact durable
+  request/failure/retry/closure receipt shape or any minimal retained-receipt
+  purpose and expiry. The canon explicitly leaves the proposed twelve-month
+  receipt conditional. A new pure record now would silently decide those open
+  semantics or misrepresent the disconnected fixture's `restricted` and
+  `live_removed` flags as the final contract.
+
+Accordingly, sequential implementation stops before choosing fields for those
+contracts. This is a product-semantic boundary, not completion: WP-1 remains in
+progress and WP-2/WP-3 remain untouched. After that decision, shared migration
+registration, `db/schema.postgres.ts`, Trader schema-preflight compatibility,
+authenticated runtime mounting and production activation remain later explicit
+stop gates.
 
 ## Approved outcome
 
