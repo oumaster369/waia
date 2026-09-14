@@ -187,6 +187,50 @@ Health. At minimum, type-specific operations include `WITHDRAW_USE`, `DELETE` /
 `ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`; sharing one
 auditable lifecycle does not make their effects interchangeable.
 
+`WITHDRAW_USE`, `DELETE` and `ERASE` may be cancelled only while `REQUESTED`.
+After authenticated `ACCEPTED`, productive-use blocking cannot be cancelled to
+revive previous authority. `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE` may be
+cancelled until their type-specific artifact, revision, decision or archive
+effect is committed. A later change requires a new operation; history is never
+rewritten.
+
+`FAILED` terminates one execution attempt, not necessarily the Human operation.
+Retry creates a new append-only attempt under the same immutable operation,
+original request time, scope and policy. Prior failure evidence remains, and
+withdrawal/deletion/erasure use blocking survives every failure and retry.
+
+Type-specific effects remain:
+
+- `WITHDRAW_USE` blocks future productive use without claiming deletion;
+- `DELETE` removes selected records/sources and unsupported dependent
+  projections;
+- `ERASE` applies to the declared subject/source/purpose scope and dependency
+  closure without claiming statutory compliance;
+- `EXPORT` creates only a currently authorized point-in-time export under the
+  existing 24-hour generated-export rule and grants no wider disclosure;
+- `CORRECT` appends a Human correction/revision without erasing prior evidence;
+- `RETAIN` records continued storage of an exact currently eligible record
+  under existing purpose authority, without renewing consent or freshness;
+- `ARCHIVE` records independently authorized private preservation, grants no
+  inheritance/disclosure and cannot rescue a previously withdrawn/deleted
+  source.
+
+Removal-only states apply only to operations requiring removal. Other
+operations close from verified type-specific effect evidence and never
+fabricate `LIVE_REMOVED`.
+
+While unresolved, retain only the minimum operation/attempt state needed to
+complete and prove the operation. After `CLOSED`, `REFUSED` or `CANCELLED`,
+retain the minimized content-free receipt for twelve months from that terminal
+timestamp. This does not extend automatically beyond verified subject/account
+deletion: after live and backup/processor cleanup, remove subject-linkable
+receipts unless a separately Human-approved legal/security basis applies.
+Receipts contain only operation identity/type, organization/subject reference
+while necessary, scope kind/digest, relevant timestamps, policy version,
+authenticated actor class/reference, attempt/outcome information and
+completion-evidence digests—never removed content, dialogue/Diary or claim text,
+embeddings or copied payloads.
+
 ## 6. Embodiment and account trust
 
 At `20%` Formation, the Human becomes eligible to open Avatar Studio. This threshold means only that enough interaction exists for a meaningful representation workflow. It is not proof of identity or uniqueness.
@@ -298,5 +342,6 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-12 | Explicit Human retention decision; DEE-871     | Human-controlled annual storage-necessity review; overdue knowledge paused from new inference/advice         |
 | 2026-09-12 | Explicit Human product-learning and UX requirement; DEE-994 | AI-TWIN teaches WAIA use through optional, truthful, capability-aware guidance; no authority/progress from learning |
 | 2026-09-14 | Explicit Human source-admission and RightsOperation decision; DEE-871 | Fail-closed private source use, separate disclosure authority and evidence-bearing rights lifecycle |
+| 2026-09-14 | Explicit Human RightsOperation completion decision; DEE-871 | Type-specific cancellation/effects, append-only retry, verified closure and minimized twelve-month terminal receipts |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

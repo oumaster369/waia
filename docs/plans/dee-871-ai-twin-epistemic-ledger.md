@@ -17,9 +17,9 @@ state:
     prNumber: null,
     prUrl: null,
     lastValidatedGitSha: 90dd0a3d48a697fe6d188ca3041330cacb671116,
-    lastValidationAt: "2026-09-14T08:41:02Z",
-    blockedReason: "RightsOperation still needs exact Human decisions for valid cancellation transitions, FAILED retry semantics, type-specific target/effect contracts and minimal receipt retention before a deterministic record/state machine can be implemented.",
-    nextAction: "Obtain the remaining RightsOperation semantic decisions, then admit its pure append-only lifecycle contract. Do not start shared migration/schema, Trader compatibility, runtime writers, Society, deployment or the final integration PR.",
+    lastValidationAt: "2026-09-14T10:11:32Z",
+    blockedReason: null,
+    nextAction: "Implement the admitted pure RightsOperation history contract RED to GREEN, independently review and checkpoint it, then reassess remaining WP-1 from fresh canon. Keep shared migration/schema, Trader, runtime writers, Society, deployment and the final integration PR frozen.",
   }
 provenance:
   {
@@ -440,6 +440,80 @@ remaining choices materially determine legal states and retained evidence, so
 no enum-only or fixture-derived implementation is admitted until the Human
 resolves them. This is the current product-semantic stop boundary; the later
 shared-DB/Trader boundary has not been entered.
+
+### 2026-09-14 Human decision — RightsOperation completion semantics
+
+The Human ratified the previously missing cancellation, retry, effect and
+receipt rules:
+
+1. `WITHDRAW_USE`, `DELETE` and `ERASE` cancel only from `REQUESTED`.
+   `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE` cancel until their
+   type-specific effect is committed. A later change is a new operation.
+2. `FAILED` is terminal for one execution attempt. Retry appends a new attempt
+   under the same immutable operation id, original request time, scope and
+   policy. Failure/retry cannot reset clocks, erase failure evidence or restore
+   productive use.
+3. Withdrawal blocks use without deletion. Delete removes selected
+   records/sources plus unsupported dependent projections. Erase covers the
+   declared subject/source/purpose scope plus dependency closure without
+   claiming statutory compliance. Export, correct, retain and archive retain
+   the exact bounded effects recorded in current canon.
+4. Removal-only states apply only to operations requiring removal. Other
+   operations close from verified type-specific effect evidence and never
+   fabricate `LIVE_REMOVED`.
+5. Keep minimum state while unresolved. After `CLOSED`, `REFUSED` or
+   `CANCELLED`, keep the minimized content-free receipt for twelve months from
+   terminal time. Verified subject/account deletion and complete live +
+   backup/processor cleanup remove subject-linkable receipts unless a
+   separately Human-approved legal/security basis applies.
+
+This supersedes the four unresolved points in the immediately preceding
+boundary record. It authorizes deterministic DEE-871 contracts/tests/canon
+only—no migration, schema, repository mount, runtime writer, Trader, Society,
+production apply/deploy or PR.
+
+#### Selected smallest safe slice — pure RightsOperation history
+
+Add `lib/ai-twin/model/rights-operation.ts` and one focused unit test. The
+contract validates an inert complete-or-in-progress operation history; it does
+not execute, persist, authenticate or physically verify any effect.
+
+The immutable header binds operation id/type, both tenant dimensions, minimal
+target scope kind plus SHA-256 digest, original request time, exact policy
+version, Human requester and optional exact Human accepter. Ordered state
+events and execution attempts carry only sequence, timestamps, identifier-like
+outcome codes and SHA-256 evidence digests—never source content or copied
+payloads.
+
+Allowed state paths:
+
+- `DELETE` / `ERASE`: the ordered removal lifecycle or
+  `REQUESTED -> CANCELLED` / `REQUESTED -> REFUSED`;
+- `WITHDRAW_USE`: `REQUESTED -> ACCEPTED -> USE_BLOCKED -> CLOSED`, or
+  cancellation/refusal before acceptance;
+- `EXPORT`, `CORRECT`, `RETAIN`, `ARCHIVE`: `REQUESTED -> ACCEPTED -> CLOSED`,
+  or `CANCELLED` before the type-specific effect is committed; cancellation may
+  follow acceptance only while that effect remains absent.
+
+Each failed/succeeded attempt is terminal and append-only; sequence/id/time
+must be unique and monotone. Removal attempts cannot precede `USE_BLOCKED`.
+`LIVE_REMOVED` requires a successful attempt plus its own completion-evidence
+digest. `CLOSED` requires the relevant verified effect/closure digest.
+Non-removal histories reject every removal-only state.
+
+Terminal receipt metadata computes a calendar twelve-month retention boundary,
+marks unresolved receipt retention separately and records the mandatory
+subject-deletion cleanup override without claiming that account deletion was
+performed. The returned history is independent and deeply frozen and grants no
+consent, disclosure, truth, archive, Formation or runtime authority.
+
+RED is the missing module/function. GREEN must cover every operation family,
+valid prefixes, cancellation boundaries, failed-attempt retry under immutable
+header, use-block persistence, required live/residual/closed evidence,
+non-removal denial of removal states, exact terminal receipt dates including
+leap-day behavior, both tenant dimensions, hostile object shapes and forbidden
+personal-content fields. Then run cumulative AI-TWIN model tests,
+lint/typecheck/build/canon/diff and independent P1/P2 review.
 
 ## Approved outcome
 

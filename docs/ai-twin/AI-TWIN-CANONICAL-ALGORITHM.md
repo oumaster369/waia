@@ -177,7 +177,7 @@ Working memory supports the current epistemic loop; personal memory preserves de
 | Diagnostic logs / security events | 14 / 90 days from creation; no raw dialogue, Diary or model content |
 | Generated exports / temporary processing copies | 24 hours from export creation / processing completion respectively; active processing still needs a bounded job/abort policy before runtime admission |
 | Rolling Twin backups | 30 days from copy creation; archive age is independent of backup rotation |
-| Consent / erasure receipts | A proposed 12 months after consent/operation ends remains conditional on separately reviewed necessity, legal basis, minimal fields and access; no automatic post-account-deletion extension |
+| RightsOperation receipts | Minimum necessary state while unresolved; minimized content-free receipt for 12 months from `CLOSED`, `REFUSED` or `CANCELLED`; no automatic extension beyond verified subject/account deletion and full cleanup without a separately Human-approved legal/security basis |
 
 The Human-ratified annual review is an explicit **storage-necessity decision**,
 not a freshness signal. WAIA prepares the review and the authenticated Human
@@ -224,6 +224,51 @@ change Formation/Model Health. The shared lifecycle covers at least
 `WITHDRAW_USE`, `DELETE` / `ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`,
 while each operation keeps distinct effects and authorization.
 
+Cancellation and effects are type-specific. `WITHDRAW_USE`, `DELETE` and
+`ERASE` may cancel only from `REQUESTED`; after authenticated acceptance their
+use block cannot be reversed by cancellation. `EXPORT`, `CORRECT`, `RETAIN` and
+`ARCHIVE` may cancel until their artifact, corrective revision, retention
+decision or archive effect is committed. Any later Human change creates a new
+operation.
+
+`FAILED` terminates one execution attempt. Retry appends a distinct attempt
+under the same immutable operation id, request time, scope and policy, retaining
+all prior failure evidence. Failure or retry never restores productive-use
+authority for withdrawal/deletion/erasure.
+
+Type-specific completion means:
+
+- `WITHDRAW_USE`: future productive modelling/use is blocked; deletion is not
+  implied;
+- `DELETE`: selected records/sources and dependent projections without an
+  independently authorized evidence basis are removed;
+- `ERASE`: declared subject/source/purpose scope plus dependency closure is
+  removed, as product semantics rather than statutory-compliance evidence;
+- `EXPORT`: a bounded point-in-time export of currently authorized Human data
+  is created under the 24-hour generated-export rule, without wider disclosure;
+- `CORRECT`: a Human correction/new revision is appended and current projection
+  updated without ordinary erasure of prior evidence;
+- `RETAIN`: continued storage is committed for an exact currently eligible
+  record under existing purpose authority, without renewing consent, freshness
+  or source eligibility;
+- `ARCHIVE`: independently authorized private archival preservation is
+  committed, without inheritance/disclosure or after-the-fact rescue of a
+  withdrawn/deleted source.
+
+Only operations requiring removal use live/remnant removal states.
+Non-removal operations close from verified effect evidence and cannot claim
+`LIVE_REMOVED`.
+
+Unresolved operations retain only minimum operation/attempt state. A minimized
+receipt remains for twelve months after `CLOSED`, `REFUSED` or `CANCELLED`.
+Verified full subject/account deletion plus live and backup/processor cleanup
+removes subject-linkable receipts unless a separately Human-approved
+legal/security basis applies. Allowed receipt fields are operation identity and
+type, necessary organization/subject reference, scope kind/digest, timestamps,
+policy version, authenticated actor class/reference, attempt/outcome data and
+completion-evidence digests. Source, dialogue/Diary and claim text, embeddings
+and copied payloads are forbidden.
+
 R1 does not automatically promote a confirmed relation, resolve a need or create an archive. A substantial-evidence renewal requires independently verified new evidence and a trusted recorded anchor; reading, review, rephrasing, retries or caller-supplied metadata are insufficient. The disconnected DEE-871 repository currently admits initial proposed relations/open needs only, so their implemented anchor is creation; verified renewal and later-state transitions remain unimplemented. Current source eligibility, a shorter relation interval, withdrawal and deletion may exclude use earlier than 90 days.
 
 Withdrawal of modelling permission does not itself erase a separately authorized private Diary purpose. Conversely, source deletion cannot be evaded by keeping dependent summaries, embeddings, model versions or snapshots: remove them or establish truly independent authorized evidence. Archival permission must be explicit before independently preserving selected experience; expiry never silently promotes a conversation into an archive. Historical consent is not backfilled as opt-in. The existing biometric D3 EPHEMERAL-NO-TEMPLATE and DARK-only boundary is unchanged.
@@ -247,6 +292,7 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-09, Human “Подтверждаю” in response to R1, same task | Ratified classification of proposed relations/open knowledge needs as 90-day working memory; independently selected private experience remains separate, without automatic TTL | Supersedes DEE-871's fixture-only Proposed annual-review mapping; no automatic renewal, permanent promotion or runtime release authority |
 | 2026-09-12, Human annual-review decision, same task | Human-controlled annual storage-necessity review; overdue knowledge pauses new inference/advice while rights remain independent | DEE-871 pure lifecycle policy contract; no runtime activation, automatic deletion deadline, consent renewal or source revival |
 | 2026-09-14, Human source-admission and RightsOperation decision, DEE-871 continuation | Fail-closed source admission, private default, separate disclosure grants and append-only evidence-bearing rights lifecycle | Authorizes deterministic WP-1 contracts/tests only; no shared migration, runtime activation, Society, Trader change or deployment |
+| 2026-09-14, Human RightsOperation completion decision, DEE-871 continuation | Type-specific cancellation/effects, attempt-scoped failure, immutable-clock retry, evidence-qualified closure and minimized twelve-month terminal receipt | Authorizes one pure/disconnected lifecycle contract; account-deletion override and operational proof remain unmounted |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 
