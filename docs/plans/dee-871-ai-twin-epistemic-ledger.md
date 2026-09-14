@@ -1201,6 +1201,19 @@ invalid because:
 
 Never open a second PR against DEE-871.
 
+### 2026-09-14 PR 593 exact-head CI repair
+
+PR https://github.com/oumaster369/waia/pull/593 HEAD
+`e3e942744462a9d11915be45d1200edef8fb5d99` failed required `unit tests` on
+shard 1/2: `tests/unit/historical-terminal-receipts-migration-v1.test.ts`
+still treated `journal.entries.at(-1)` as 0208. 0208 identity, timestamp
+`1780000000208`, and the 0208 SQL file are unchanged. DEE-871 0209 is the
+journal tip and already owns tail identity in
+`tests/unit/ai-twin-epistemic-persistence-migration-v1.test.ts`. Repair:
+assert the 0208 journal row with `toContainEqual`, matching the 0194
+contiguous-ownership pattern. FHV `REQUIRED_MIGRATION_MAX` remains 207.
+No schema, writer/route mount, production DDL, or second PR.
+
 ## Approved outcome
 
 An append-only, tenant-isolated persistence layer represents observations, provenance/projection, evidence links, versioned claims, dynamic relations, hypotheses, knowledge needs, consent and Human corrections without cutting over legacy readiness.

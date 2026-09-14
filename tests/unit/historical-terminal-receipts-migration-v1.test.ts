@@ -18,7 +18,7 @@ describe("DEE-1006 historical terminal receipts migration", () => {
     const journal = JSON.parse(
       readFileSync(join(ROOT, "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<Record<string, unknown>> };
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(journal.entries).toContainEqual({
       idx: 208,
       version: "7",
       when: 1780000000208,
