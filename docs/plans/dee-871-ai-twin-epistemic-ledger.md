@@ -10,16 +10,16 @@ approvalGates: [plan-approved, migration-reviewed, human-merge]
 includedIssues: []
 state:
   {
-    status: integration-ready,
+    status: in-review,
     currentWorkPackage: WP-PR,
     completedWorkPackages: [WP-1, WP-2, WP-3],
     remainingWorkPackages: [WP-PR],
-    prNumber: null,
-    prUrl: null,
+    prNumber: 593,
+    prUrl: "https://github.com/oumaster369/waia/pull/593",
     lastValidatedGitSha: 2c40ec36c7dfb8cbbef25e81c53a3b5d5a56ac77,
     lastValidationAt: "2026-09-14T15:22:00Z",
     blockedReason: null,
-    nextAction: "Human opens one squash PR to main from the prepared body. Do not apply production DDL, do not mount writers/routes, and do not treat residual-copy qualification as operational deletion evidence.",
+    nextAction: "Wait for authoritative GitHub PR CI on exact HEAD, then Human squash-merge. Do not apply production DDL, do not mount writers/routes, and do not treat residual-copy qualification as operational deletion evidence.",
   }
 provenance:
   {
