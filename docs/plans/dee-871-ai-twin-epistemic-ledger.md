@@ -17,9 +17,9 @@ state:
     prNumber: null,
     prUrl: null,
     lastValidatedGitSha: a9c515710fd3322cb140fd53660b64b47b843c1e,
-    lastValidationAt: "2026-09-14T08:17:11Z",
-    blockedReason: "The next unimplemented WP-1 contracts require Human ratification of exact consent disclosure/source admission or RightsOperation failure, receipt and closure semantics. Shared migration/schema and Trader compatibility remain separately frozen.",
-    nextAction: "Obtain the missing product-semantic decision, then admit one pure WP-1 consent/observation or RightsOperation slice. Do not start WP-2/3, register a migration, mutate shared schema/Trader compatibility, mount runtime writers or open the integration PR.",
+    lastValidationAt: "2026-09-14T08:27:23Z",
+    blockedReason: null,
+    nextAction: "Implement the admitted pure private source-admission contract RED to GREEN, independently review and checkpoint it, then assess RightsOperation as a separate WP-1 slice. Keep shared migration/schema, Trader, runtime activation, Society and deployment frozen.",
   }
 provenance:
   {
@@ -305,6 +305,78 @@ progress and WP-2/WP-3 remain untouched. After that decision, shared migration
 registration, `db/schema.postgres.ts`, Trader schema-preflight compatibility,
 authenticated runtime mounting and production activation remain later explicit
 stop gates.
+
+### 2026-09-14 Human decision — source admission and RightsOperation
+
+The Human resolved the prior semantic boundary for DEE-871 WP-1:
+
+1. Productive Human-model use requires deterministic current purpose, admitted
+   source class, permitted use, retention policy and disclosure boundary.
+   Missing, expired, revoked, mismatched or non-provable authority fails closed.
+2. AI-TWIN is private by default. Storage, possession, Formation progress or
+   prior consent for another source/purpose grants neither modelling nor
+   disclosure. New sensitive/not-yet-authorized classes require Human-visible
+   disclosure and explicit Human authorization before first productive use.
+3. Ordinary voluntarily supplied dialogue may use an already-current dialogue
+   grant without per-message re-consent. A post-withdrawal statement is a new
+   source event with its own creation time and current authority and cannot
+   revive the old source, consent or dependent claims.
+4. Disclosure permission is separate, specific, purpose-bound, versioned and
+   revocable.
+5. Rights requests use the canonical evidence-bearing lifecycle
+   `REQUESTED -> ACCEPTED -> USE_BLOCKED -> LIVE_REMOVAL_IN_PROGRESS ->
+   LIVE_REMOVED -> RESIDUAL_COPIES_PENDING -> CLOSED`, with explicit
+   `REFUSED`, `FAILED` and conditionally valid `CANCELLED`.
+6. Acceptance binds exact tenant, Human/subject, operation, target, original
+   request time, policy and actor. Use blocking is independent of cleanup;
+   live removal and residual-copy closure require separate evidence.
+7. Failure/retry history is append-only and never resets the request clock or
+   manufactures success. Minimal receipts preserve no removed personal content.
+   A request, tombstone, hash, attempted job or process exit cannot prove
+   completion.
+8. `WITHDRAW_USE`, `DELETE_ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`
+   share lifecycle auditability but retain type-specific effects. No operation
+   renews consent, widens purpose, establishes truth, grants archive authority
+   or changes Formation/Model Health.
+
+This authorizes deterministic DEE-871 contracts, tests and canon only. It adds
+no migration/apply, runtime writer, Society, Trader or deployment authority.
+
+#### Selected smallest safe slice — private source admission
+
+Implement one pure, disconnected v1 admission contract before the larger
+RightsOperation state machine:
+
+- freeze v1 admitted productive source classes to the existing `dialogue` and
+  `diary`; any unknown class fails `SOURCE_CLASS_NOT_ADMITTED` until its own
+  Human-visible disclosure and authorization contract is ratified;
+- make the existing modelling grant's disclosure boundary explicit as
+  `private_only`; that value grants no disclosure and cannot be replaced by a
+  request/body/model claim;
+- accept an ordinary new source event under the exact latest current grant
+  without per-message Human reconfirmation only when scope, purpose, source
+  class, `private_modelling` use, retention policy, issue/expiry/revocation
+  chronology and private boundary all match;
+- reject withdrawn event identity, stale/older grant version, missing or
+  duplicate current grant, raw-only use, foreign tenant/subject, changed
+  purpose/policy, future source creation, expired/revoked grant, unknown class,
+  getters, hidden/extra fields, sparse arrays and cycles;
+- return an immutable minimal admission decision with
+  `productiveUseAllowed: true`, `disclosureAllowed: false` and
+  `disclosureGrant: null`. It authenticates nobody, stores nothing and carries
+  no Formation, truth, archive, collection, action or runtime authority.
+
+Owned implementation surfaces are `lib/ai-twin/model/contracts.ts`,
+`lib/ai-twin/model/source-admission.ts`, the existing inert ledger's consent
+check, focused source-admission/ledger tests and the disconnected repository
+test's typed synthetic grant. Canon and this plan record the decision. Do not
+modify the repository implementation, fixture SQL, shared schema/migrations,
+Trader, runtime routes or Society.
+
+RED must demonstrate the missing admission function and the current kernel's
+acceptance of a grant without a resolvable disclosure boundary. GREEN requires
+focused source-admission and ledger tests, cumulative AI-TWIN model units,
+typecheck, lint, build, canon/diff validation and independent P1/P2 review.
 
 ## Approved outcome
 

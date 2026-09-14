@@ -71,6 +71,28 @@ Each domain advances through evidence-backed maturity states:
 
 The maturity state is evidence-derived. Fluency, message count, elapsed time and model confidence cannot substitute for evidence.
 
+### 3.3 Source admission, use and disclosure
+
+No source may enter productive Human-model use unless its current purpose,
+admitted source class, permitted use, retention policy and disclosure boundary
+are deterministically resolvable. Admission is fail-closed: missing, expired,
+revoked, purpose-mismatched or non-provable authority means no productive use.
+Storage, Formation progress, possession of data or consent for another
+source/purpose grants nothing by implication.
+
+AI-TWIN remains private by default. A new sensitive or not-yet-authorized
+source class requires Human-visible disclosure before its first productive use
+and explicit Human authorization. Ordinary voluntarily supplied dialogue may
+continue under an already-current dialogue grant without per-message
+re-consent. A statement voluntarily supplied after withdrawal is a new source
+event with its own creation time and current authorization; it cannot revive
+the withdrawn source, old consent or dependent claims.
+
+Disclosure permission is separate from modelling/use permission. It is
+specific, purpose-bound, versioned and revocable. A private modelling grant
+does not authorize disclosure, and a disclosure grant does not silently
+authorize storage, modelling, Formation credit or another purpose.
+
 ## 4. Formation Contract and progress
 
 Formation progress answers one narrow question: **how much of the initial evidence contract has been completed?** It does not answer whether the account is genuine, whether the model is currently healthy, whether the Human is ready to socialize, or whether WAIA may act.
@@ -137,6 +159,33 @@ archive, refresh evidence or widen purpose. Current purpose and source
 authorization remain mandatory after review. No unapproved grace period,
 automatic deletion deadline or retained receipt exception follows from this
 rule.
+
+### 5.3 Rights operations
+
+Rights requests are durable evidence-bearing operations, not mutable flags.
+Their canonical lifecycle is:
+
+`REQUESTED -> ACCEPTED -> USE_BLOCKED -> LIVE_REMOVAL_IN_PROGRESS -> LIVE_REMOVED -> RESIDUAL_COPIES_PENDING -> CLOSED`
+
+`REFUSED`, `FAILED` and `CANCELLED` are explicit terminal/error states;
+cancellation exists only while it remains valid. Authenticated acceptance binds
+the exact organization, Human/subject, operation type, target scope, original
+request time, policy version and actor.
+
+Withdrawal or deletion blocks new productive use independently of later
+physical cleanup. `LIVE_REMOVED` requires evidence that affected live stores,
+indexes and dependent live projections no longer serve the source. Residual
+backup/processor cleanup remains a distinct obligation, and `CLOSED` requires
+verified completion evidence. A request, tombstone, hash, attempted job or
+process exit is never completion by itself.
+
+Failure/retry history is append-only and cannot manufacture success or reset
+the original request clock. Minimal receipts must not preserve the personal
+content whose removal they prove. Rights operations do not renew consent, widen
+purpose, establish truth, grant archive authority or alter Formation/Model
+Health. At minimum, type-specific operations include `WITHDRAW_USE`,
+`DELETE_ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`; sharing one
+auditable lifecycle does not make their effects interchangeable.
 
 ## 6. Embodiment and account trust
 
@@ -248,5 +297,6 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-06 | Explicit Human resume; DEE-943                 | Evidence/status reconciliation; isolated implementation permitted while Trader stays outside mutation scope |
 | 2026-09-12 | Explicit Human retention decision; DEE-871     | Human-controlled annual storage-necessity review; overdue knowledge paused from new inference/advice         |
 | 2026-09-12 | Explicit Human product-learning and UX requirement; DEE-994 | AI-TWIN teaches WAIA use through optional, truthful, capability-aware guidance; no authority/progress from learning |
+| 2026-09-14 | Explicit Human source-admission and RightsOperation decision; DEE-871 | Fail-closed private source use, separate disclosure authority and evidence-bearing rights lifecycle |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”
