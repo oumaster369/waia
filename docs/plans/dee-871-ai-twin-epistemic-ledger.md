@@ -16,8 +16,8 @@ state:
     remainingWorkPackages: [],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 3370b0206ffd263676540ccbc9710a592e77d3c9,
-    lastValidationAt: "2026-09-14T14:52:00Z",
+    lastValidatedGitSha: be44d84d0cc1756e14aa51f85c31ecf0ac0c55fa,
+    lastValidationAt: "2026-09-14T14:55:00Z",
     blockedReason: "WP-1/WP-2/WP-3 are locally qualified as contract qualification only. Production DDL is not applied, writers/routes are not mounted, and DEE-871 is not integration-ready. origin/main moved to 680c9d7c (DEE-1009 KEY_ORDER; no shared schema/journal/FHV/0209 collision). Rebase onto fresh main, full-diff review, and PR preparation remain. Do not open the PR in this slice.",
     nextAction: "Independent full-diff review of the complete DEE-871 branch versus origin/main, then PR preparation. Keep writers unmounted, do not apply production DDL, do not deploy, and do not open the PR until that review and rebase are complete.",
   }
@@ -1113,8 +1113,9 @@ collision. Merge-base of this branch remains `d7d5941a`. Rebase onto
 
 ### 2026-09-14 WP-3 residual-copy / export verification — contract qualification PASS
 
-WP-3 is isolation and migration proof, not runtime rollout. Existing 0209
-schema was sufficient; no 0210 and no 0209 SQL/journal/FHV edit in this slice.
+Implementation commit: `be44d84d0cc1756e14aa51f85c31ecf0ac0c55fa`. WP-3 is isolation
+and migration proof, not runtime rollout. Existing 0209 schema was sufficient;
+no 0210 and no 0209 SQL/journal/FHV edit in this slice.
 
 Implemented application/repository qualification only:
 
