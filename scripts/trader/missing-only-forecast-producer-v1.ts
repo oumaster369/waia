@@ -366,7 +366,12 @@ export function enumerateMissingWfForecastBatchesV1(input: {
     inventory.batches.at(-1)?.anchorCount !== domain.lastBatchAnchorCount
   )
     fail("DOMAIN");
-  const keyOrderDigest = digest(inventory.batches.map((batch) => batch.key).join("\n"));
+  const keyOrderHash = createHash("sha256");
+  for (const batch of inventory.batches) {
+    keyOrderHash.update(batch.key, "utf8");
+    keyOrderHash.update("\n", "utf8");
+  }
+  const keyOrderDigest = keyOrderHash.digest("hex");
   if (keyOrderDigest !== domain.expectedKeyOrderDigest) fail("KEY_ORDER");
   const missing: MissingWfForecastBatchV1[] = [];
   for (const batch of inventory.batches) {
