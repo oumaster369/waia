@@ -3,7 +3,10 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type postgres from "postgres";
 
-import { withPostgresSerializableTransactionRetry } from "@/db/postgres-session-transaction";
+import {
+  parsePostgresTimestamptz,
+  withPostgresSerializableTransactionRetry,
+} from "@/db/postgres-session-transaction";
 import type {
   HumanClaimVersion,
   HumanCorrectionRecord,
@@ -74,12 +77,28 @@ function freezeJson<T>(value: T): T {
   }
   return value;
 }
+function timestamptzIso(value: Date | string): string {
+  if (value instanceof Date) {
+    requireValue(Number.isFinite(value.getTime()), "INVALID_TIMESTAMP");
+    return value.toISOString();
+  }
+  try {
+    return parsePostgresTimestamptz(value).toISOString();
+  } catch {
+    const parsed = new Date(value);
+    requireValue(Number.isFinite(parsed.getTime()), "INVALID_TIMESTAMP");
+    return parsed.toISOString();
+  }
+}
 function iso(value: Date | string | null): string | null {
   if (value === null) return null;
-  return value instanceof Date ? value.toISOString() : value;
+  return timestamptzIso(value);
 }
 function observationTargetDigest(objectId: string): string {
   return `sha256:${createHash("sha256").update(objectId, "utf8").digest("hex")}`;
+}
+function jsonbText(value: unknown): string {
+  return JSON.stringify(value);
 }
 export const twinObservationTargetDigest = observationTargetDigest;
 function consentLineageFingerprint(grant: ModelConsentGrant): string {
@@ -148,10 +167,10 @@ type ConsentRow = {
   mode: ModelConsentGrant["mode"];
   permitted_uses: ModelConsentGrant["permittedUses"];
   disclosure_boundary: ModelConsentGrant["disclosureBoundary"];
-  issued_at: Date;
+  issued_at: Date | string;
   temporal_mode: ModelConsentGrant["temporalMode"];
-  expires_at: Date | null;
-  revoked_at: Date | null;
+  expires_at: Date | string | null;
+  revoked_at: Date | string | null;
   retention_policy_id: string;
 };
 
@@ -165,7 +184,7 @@ function grantFromRow(row: ConsentRow): ModelConsentGrant {
     mode: row.mode,
     permittedUses: row.permitted_uses,
     disclosureBoundary: row.disclosure_boundary,
-    issuedAt: row.issued_at.toISOString(),
+    issuedAt: timestamptzIso(row.issued_at),
     temporalMode: row.temporal_mode,
     expiresAt: iso(row.expires_at),
     revokedAt: iso(row.revoked_at),
@@ -415,13 +434,13 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
           scope: ctx.scope,
           grant: { id: row.grant_id, version: row.grant_version },
           source: row.source,
-          eventTime: row.event_time.toISOString(),
+          eventTime: timestamptzIso(row.event_time),
           context: row.context,
           text: row.observation_text,
           projectionRisks: row.projection_risks,
           epistemicKind: "self_report",
           purpose: row.purpose,
-          recordedAt: row.recorded_at.toISOString(),
+          recordedAt: timestamptzIso(row.recorded_at),
           retentionPolicyId: row.retention_policy_id,
         }),
       )
@@ -516,7 +535,7 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
       supersedesRevision: row.supersedes_revision,
       status: row.status,
       basis: row.basis,
-      recordedAt: row.recorded_at.toISOString(),
+      recordedAt: timestamptzIso(row.recorded_at),
       humanCorrectionId: row.human_correction_id,
     }));
     const correctionRows = await tx<
@@ -550,7 +569,7 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
       scope: ctx.scope,
       purpose: row.purpose,
       actorSubjectId: row.actor_subject_user_id,
-      recordedAt: row.recorded_at.toISOString(),
+      recordedAt: timestamptzIso(row.recorded_at),
     }));
     const receipts = await tx<{ request_id: string; fingerprint: string }[]>`
       SELECT request_id, fingerprint
@@ -629,8 +648,8 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
             revoked_at, retention_policy_id
           ) VALUES (
             ${ctx.scope.organizationId}::uuid, ${ctx.scope.subjectId}::uuid, ${value.id}::uuid,
-            1, ${value.purpose}, ${tx.json(value.sources)}, ${value.mode},
-            ${tx.json(value.permittedUses)}, ${value.disclosureBoundary}, ${value.issuedAt},
+            1, ${value.purpose}, ${jsonbText(value.sources)}::jsonb, ${value.mode},
+            ${jsonbText(value.permittedUses)}::jsonb, ${value.disclosureBoundary}, ${value.issuedAt},
             ${value.temporalMode}, ${value.expiresAt}, NULL, ${value.retentionPolicyId}
           )
         `;
@@ -693,8 +712,8 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
             revoked_at, retention_policy_id
           ) VALUES (
             ${ctx.scope.organizationId}::uuid, ${ctx.scope.subjectId}::uuid, ${revoked.id}::uuid,
-            ${revoked.version}, ${revoked.purpose}, ${tx.json(revoked.sources)}, ${revoked.mode},
-            ${tx.json(revoked.permittedUses)}, ${revoked.disclosureBoundary}, ${revoked.issuedAt},
+            ${revoked.version}, ${revoked.purpose}, ${jsonbText(revoked.sources)}::jsonb, ${revoked.mode},
+            ${jsonbText(revoked.permittedUses)}::jsonb, ${revoked.disclosureBoundary}, ${revoked.issuedAt},
             ${revoked.temporalMode}, ${revoked.expiresAt}, ${revoked.revokedAt},
             ${revoked.retentionPolicyId}
           )
@@ -744,7 +763,7 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
               ${ctx.scope.organizationId}::uuid, ${ctx.scope.subjectId}::uuid, 'observation',
               ${observation.id}, 1, ${observation.grant.id}::uuid, ${observation.grant.version},
               ${observation.source}, ${observation.eventTime}, ${observation.recordedAt},
-              ${observation.context}, ${observation.text}, ${tx.json(observation.projectionRisks)},
+              ${observation.context}, ${observation.text}, ${jsonbText(observation.projectionRisks)}::jsonb,
               'self_report', ${observation.purpose}, ${observation.retentionPolicyId}
             )
           `;
@@ -1121,7 +1140,7 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
               recordRevision: endorsement.target_version,
             },
             basis: "initial_model_endorsement" as const,
-            confirmedAt: endorsement.confirmed_at.toISOString(),
+            confirmedAt: timestamptzIso(endorsement.confirmed_at),
             confirmedBy: {
               kind: "human" as const,
               organizationId: ctx.scope.organizationId,
@@ -1140,8 +1159,8 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
                 },
                 basis: "storage_necessity" as const,
                 decision: "retain" as const,
-                preparedAt: review.prepared_at.toISOString(),
-                confirmedAt: review.confirmed_at.toISOString(),
+                preparedAt: timestamptzIso(review.prepared_at),
+                confirmedAt: timestamptzIso(review.confirmed_at),
                 confirmedBy: {
                   kind: "human" as const,
                   organizationId: ctx.scope.organizationId,
@@ -1231,7 +1250,7 @@ async function loadRightsHistory(
     scope: ctx.scope,
     type: header.operation_type,
     target: { scopeKind: header.target_scope_kind, digest: header.target_digest },
-    requestedAt: header.requested_at.toISOString(),
+    requestedAt: timestamptzIso(header.requested_at),
     requestedBy: {
       actorClass: "human",
       subjectId: header.requested_by_subject_user_id,
@@ -1248,14 +1267,14 @@ async function loadRightsHistory(
     history: events.map((event) => ({
       sequence: event.sequence,
       state: event.state,
-      at: event.event_time.toISOString(),
+      at: timestamptzIso(event.event_time),
       completionEvidenceDigest: event.completion_evidence_digest,
     })),
     attempts: attempts.map((attempt) => ({
       attemptId: attempt.attempt_id,
       sequence: attempt.sequence,
-      startedAt: attempt.started_at.toISOString(),
-      completedAt: attempt.completed_at.toISOString(),
+      startedAt: timestamptzIso(attempt.started_at),
+      completedAt: timestamptzIso(attempt.completed_at),
       outcome: attempt.outcome,
       outcomeCode: attempt.outcome_code,
       completionEvidenceDigest: attempt.completion_evidence_digest,
@@ -1263,7 +1282,7 @@ async function loadRightsHistory(
     effect: effect
       ? {
           kind: effect.effect_kind,
-          committedAt: effect.committed_at.toISOString(),
+          committedAt: timestamptzIso(effect.committed_at),
           completionEvidenceDigest: effect.completion_evidence_digest,
         }
       : null,

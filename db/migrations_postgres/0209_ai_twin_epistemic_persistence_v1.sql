@@ -43,20 +43,20 @@ AS $$
     )
 $$;
 --> statement-breakpoint
-CREATE FUNCTION public.ai_twin_nonempty_text_array_valid_v1(values jsonb)
+CREATE FUNCTION public.ai_twin_nonempty_text_array_valid_v1(items jsonb)
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 STRICT
 AS $$
-  SELECT jsonb_typeof(values) = 'array'
-    AND jsonb_array_length(values) > 0
-    AND jsonb_array_length(values) = (
-      SELECT count(DISTINCT value) FROM jsonb_array_elements_text(values) value
+  SELECT jsonb_typeof(items) = 'array'
+    AND jsonb_array_length(items) > 0
+    AND jsonb_array_length(items) = (
+      SELECT count(DISTINCT value) FROM jsonb_array_elements_text(items) value
     )
     AND (
       SELECT bool_and(length(btrim(value)) > 0)
-      FROM jsonb_array_elements_text(values) value
+      FROM jsonb_array_elements_text(items) value
     )
 $$;
 --> statement-breakpoint

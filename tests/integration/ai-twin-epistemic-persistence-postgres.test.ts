@@ -99,25 +99,28 @@ describe.skipIf(!enabled)(
       expect(grant.scope).toEqual({ organizationId, subjectId: actorUserId });
       expect(grant.revokedAt).toBeNull();
       await repo().revokeConsent(human(), { id: grant.id, version: 1 });
+      const otherSubjectIntent = {
+        confirmed: true as const,
+        requestId: randomUUID(),
+        purpose: "formation" as const,
+        sources: ["dialogue"] as const,
+        permittedUses: ["productive_private_modelling"] as const,
+        disclosureBoundary: "private_only" as const,
+        retentionPolicyId: TWIN_RETENTION_POLICY,
+        temporal: { mode: "UNTIL_REVOKED" as const, expiresAt: null },
+      };
       await expect(
-        repo(otherUserId).issueConsent(
+        repo().issueConsent(
           {
             ...human(),
             scope: { organizationId, subjectId: otherUserId },
-            actor: { kind: "human", subjectId: otherUserId },
           },
-          {
-            confirmed: true,
-            requestId: randomUUID(),
-            purpose: "formation",
-            sources: ["dialogue"],
-            permittedUses: ["productive_private_modelling"],
-            disclosureBoundary: "private_only",
-            retentionPolicyId: TWIN_RETENTION_POLICY,
-            temporal: { mode: "UNTIL_REVOKED", expiresAt: null },
-          },
+          otherSubjectIntent,
         ),
-      ).rejects.toThrow(/TWIN_PERSONAL_SUBJECT_MISMATCH|TWIN_CORE/);
+      ).rejects.toThrow(/TWIN_PERSONAL_SUBJECT_MISMATCH|TWIN_CORE|SCOPE_MISMATCH/);
+      await expect(repo(otherUserId).issueConsent(human(), otherSubjectIntent)).rejects.toThrow(
+        /TWIN_PERSONAL_SUBJECT_MISMATCH|TWIN_CORE|SCOPE_MISMATCH/,
+      );
       await expect(
         repo().issueConsent(
           {
