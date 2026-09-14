@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 90dd0a3d48a697fe6d188ca3041330cacb671116,
-    lastValidationAt: "2026-09-14T10:11:32Z",
-    blockedReason: null,
-    nextAction: "Implement the admitted pure RightsOperation history contract RED to GREEN, independently review and checkpoint it, then reassess remaining WP-1 from fresh canon. Keep shared migration/schema, Trader, runtime writers, Society, deployment and the final integration PR frozen.",
+    lastValidatedGitSha: ed21d21c9de7abfeea2f586f79cc47aedfa9ab14,
+    lastValidationAt: "2026-09-14T10:27:32Z",
+    blockedReason: "The next complete-WP-1 step requires unresolved product semantics for non-dialogue/Diary source admission and completion-evidence qualification, including evidence-known-at and independence/sufficiency. Historical-consent migration remains separately unresolved; the shared-DB boundary has not been entered.",
+    nextAction: "Obtain the remaining source/provenance and evidence-qualification decisions, then continue WP-1. Do not infer historical consent or start shared migration/schema, Trader compatibility, runtime writers, Society, deployment or the final integration PR.",
   }
 provenance:
   {
@@ -185,41 +185,52 @@ DEE-871 dependencies or authorize a PR.
      hypotheses, dynamic relations, knowledge needs, reflection,
      prediction/experiment, outcome receipt, Formation/Health inputs, private
      export, retention, private experience and legacy quarantine.
-   - `EvidenceLink` is typed and represented in the disconnected fixture but
-     lacks its own exact pure validator. This is the smallest current inventory
-     gap.
-   - A pure `RightsOperation` contract and standalone consent/observation
-     qualification remain after EvidenceLink. Evaluated Formation/Model Health
-     outputs belong to DEE-876 and must not be invented here.
+   - `EvidenceLink` and the pure structural `RightsOperation` history are now
+     exactly qualified. Existing ledger/source-admission contracts qualify
+     consent and observations for the ratified `dialogue` / `diary` source
+     boundary.
+   - Completing a broader v1 source inventory would require source-class,
+     disclosure and ingestion decisions for imported artifacts,
+     provider/device events and correction/outcome evidence. Evaluated
+     Formation/Model Health outputs belong to DEE-876 and remain out of scope.
 2. **Temporal qualification.**
    - Existing contracts qualify event/record chronology, relation validity,
      substantial-evidence anchors, prediction windows, outcome chronology and
-     annual necessity-review boundaries.
-   - EvidenceLink still needs an original creation instant bound to the trusted
-     current clock. Evidence-known-at, independence/recency scoring,
-     sufficiency thresholds and transitive temporal closure remain engine or
-     ingestion decisions; this task must stop rather than infer them.
+     annual necessity-review boundaries. EvidenceLink creation and
+     RightsOperation request/state/attempt/effect/terminal chronology are now
+     included.
+   - Evidence-known-at, independence/recency scoring, sufficiency thresholds
+     and transitive temporal closure remain engine/ingestion decisions. They
+     are the current semantic stop rather than values this plan may infer.
 3. **Source/provenance qualification.**
    - Existing candidates recheck exact current eligible source versions, and
-     private experience rechecks its exact current provenance.
-   - EvidenceLink still needs exact source and target availability, both tenant
-     dimensions, closed relationship vocabulary and no exact self-link.
-     Validation is lineage admission only: it cannot establish truth,
-     independence, consent, collection authority or multi-hop closure.
+     private experience rechecks its exact current provenance. EvidenceLink now
+     requires exact available source/target versions, both tenant dimensions,
+     closed relationship vocabulary and no exact self-link.
+   - Private source admission is fail-closed for current `dialogue` / `diary`
+     events and grants no disclosure. Expanding admitted source kinds or
+     qualifying evidence independence/sufficiency requires a new Human
+     decision; lineage admission alone establishes none of those authorities.
 4. **Final rights/use contract.**
    - The stable checkpoint separates overdue productive use from Human
      access/correction/deletion; current authorization and source eligibility
      still win. Private export and private archive authority also remain
      separate.
-   - The remaining pure RightsOperation and consent/access reconciliation must
-     preserve requested/restricted/live-removed distinctions without claiming
-     physical deletion. Authenticated services, RLS, backup/processor proof and
-     operational erasure are WP-2/WP-3 and remain blocked from this sequence.
+   - The pure RightsOperation checkpoint now enforces immutable headers,
+     append-only state/attempt prefixes, type-specific cancellation/effects and
+     minimized terminal receipt timing. It records only trusted-context
+     evidence-reference admission and never claims evidence independence,
+     physical deletion or effect verification.
+   - Authenticated acceptance/effect services, RLS, actual evidence
+     qualification, backup/processor proof, account-deletion receipt removal
+     and operational erasure are WP-2/WP-3; historical-consent migration stays
+     `plan_only`.
 
-Dependencies are sequential: exact reference/provenance qualification precedes
-the final pure rights graph, while no safe WP-1 contract depends on shared
-migration registration. Historical-consent import remains `plan_only`; moving
-beyond quarantine requires a separately admitted Human/runtime decision.
+The currently ratified independent WP-1 sequence is exhausted. The next step is
+blocked first by product semantics for broader source/provenance and
+completion-evidence qualification, before the later shared migration/schema and
+Trader compatibility boundary. Historical-consent import remains `plan_only`;
+moving beyond quarantine requires a separately admitted Human/runtime decision.
 
 ### Next bounded WP-1 slice — EvidenceLink qualification
 
@@ -497,9 +508,11 @@ Allowed state paths:
 
 Each failed/succeeded attempt is terminal and append-only; sequence/id/time
 must be unique and monotone. Removal attempts cannot precede `USE_BLOCKED`.
-`LIVE_REMOVED` requires a successful attempt plus its own completion-evidence
-digest. `CLOSED` requires the relevant verified effect/closure digest.
-Non-removal histories reject every removal-only state.
+`LIVE_REMOVED` records a successful attempt plus a separately admitted
+completion-evidence reference. `CLOSED` records the relevant effect/closure
+reference. The trusted adapter supplies admitted references; this pure
+validator defines no evidence-independence or sufficiency test. Non-removal
+histories reject every removal-only state.
 
 Terminal receipt metadata computes a calendar twelve-month retention boundary,
 marks unresolved receipt retention separately and records the mandatory
@@ -514,6 +527,70 @@ non-removal denial of removal states, exact terminal receipt dates including
 leap-day behavior, both tenant dimensions, hostile object shapes and forbidden
 personal-content fields. Then run cumulative AI-TWIN model tests,
 lint/typecheck/build/canon/diff and independent P1/P2 review.
+
+#### RightsOperation implementation and validation receipt
+
+The focused RED failed module resolution before any RightsOperation case could
+run. GREEN adds policy `human-approved-2026-09-14/v1` and one pure structural
+history validator. A new operation starts only as `REQUESTED`; every later
+validation requires a trusted previous snapshot. Immutable header equality and
+canonical, field-order-independent state/attempt prefixes prevent rewrites
+while permitting JSONB reconstruction order.
+
+The implementation preserves the three type families: `DELETE` / `ERASE` use
+the full removal path, `WITHDRAW_USE` closes from its use block without
+inventing deletion, and `EXPORT` / `CORRECT` / `RETAIN` / `ARCHIVE` close only
+with their exact effect kind. Failed attempts remain in the prefix when a retry
+is appended. Effects/attempts cannot postdate terminal disposition. Terminal
+receipt metadata uses a calendar twelve-month boundary, includes no personal
+payload field and records—but does not execute—the full-subject-cleanup
+override.
+
+Independent review initially found three P2s: missing terminal chronology,
+deep-freeze without trusted prior-prefix proof, and digest-shape overclaiming.
+The fixes bind effects/attempts to terminal time, require the trusted previous
+snapshot, and rename outputs to `recordedState` /
+`productiveUseBlockRecorded`. Evidence digests must match a trusted adapter's
+admitted-reference set, while the result explicitly states
+`trusted_context_reference_match_only`. Re-review then found field-order
+sensitivity and two overclaiming test names; canonical comparison and neutral
+language resolved both. Final re-review found no remaining P1/P2.
+
+Evidence:
+
+- focused RightsOperation suite GREEN: 33/33;
+- cumulative six-file AI-TWIN model suite GREEN: 250/250;
+- scoped ESLint, `pnpm typecheck`, full `pnpm lint`, `pnpm build` and
+  `pnpm validate:canon` GREEN;
+- build emitted only the pre-existing Next.js middleware convention warning;
+- implementation checkpoint:
+  `ed21d21c9de7abfeea2f586f79cc47aedfa9ab14`;
+- fresh `origin/main`:
+  `d7d5941a995b83473acb6e00c42d5252c44b2303`.
+
+Only `lib/ai-twin/model/rights-operation.ts` and its focused unit test changed
+in the implementation commit. No repository/fixture SQL, shared migration or
+journal, `db/schema.postgres.ts`, Trader, runtime writer, Society, environment,
+deployment or PR surface changed.
+
+#### Fresh WP-1 reassessment and stop boundary
+
+The remaining matrix above is now current. EvidenceLink, annual
+storage-necessity review, private dialogue/Diary admission and the pure
+RightsOperation structure are qualified. No next coherent slice is both
+required and fully determined by ratified canon:
+
+1. broader source admission needs exact source/provenance, disclosure and
+   ingestion decisions;
+2. operational completion qualification needs evidence-known-at and
+   independence/sufficiency decisions;
+3. historical consent remains quarantine-only and cannot be inferred;
+4. persistence then reaches the separately frozen shared migration/schema and
+   Trader compatibility boundary.
+
+DEE-871 therefore remains In Progress with WP-1/WP-2/WP-3 incomplete. This stop
+does not discharge downstream dependencies, authorize runtime activation or
+make the batch integration-ready.
 
 ## Approved outcome
 
