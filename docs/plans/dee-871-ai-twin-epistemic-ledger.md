@@ -16,8 +16,8 @@ state:
     remainingWorkPackages: [WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 40574145e1c717d355bdbf217af93a218bb94bbd,
-    lastValidationAt: "2026-09-14T11:47:57Z",
+    lastValidatedGitSha: 274ef2e4f8348554b9df26734ebe3a449cb79e96,
+    lastValidationAt: "2026-09-14T12:45:29Z",
     blockedReason: "The disconnected repository now requires fresh injected Human identity and transaction-local trusted Core resolution, but only a synthetic adapter output fixture is qualified. Production persistence, a concrete Supabase/Core adapter, shared table registration and runtime mounting remain unimplemented and cross the frozen shared architecture/schema boundary.",
     nextAction: "Seek explicit shared-boundary admission for the concrete production Core resolver and AI-TWIN Postgres schema/migration package, including db/schema.postgres.ts and Trader-compatible additive review. Do not mount the fixture repository, apply production DDL, edit Trader or start WP-3.",
   }
@@ -1008,6 +1008,14 @@ source admission and ledger tests. The explicitly owned PostgreSQL fixture is
 the Core revocation race, same-Human isolation, pre-await snapshots of hostile
 or mutated context/write payloads, idempotent issuance, expiry rejection,
 immutable lineage and append-only revocation.
+
+Implementation checkpoint:
+`274ef2e4f8348554b9df26734ebe3a449cb79e96`. Final cumulative AI-TWIN model
+units are 285/285; full lint has zero errors (pre-existing repository warnings
+remain), typecheck/build/canon and `git diff --check` pass. Independent
+adversarial review found and closed identity-transaction, mutable-input,
+grant-ID, issuance-replay, full-lineage and revocation-validation gaps; final
+re-review reports no concrete P1/P2.
 
 This does not qualify real Supabase authentication, public Core-table queries,
 production persistence, RLS, migration registration or runtime use. A concrete
