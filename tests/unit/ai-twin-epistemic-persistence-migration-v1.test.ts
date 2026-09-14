@@ -106,5 +106,12 @@ describe("DEE-871 AI-TWIN epistemic persistence migration 0209", () => {
     );
     expect(production).not.toContain("app/");
     expect(production).toContain("withPostgresSerializableTransactionRetry");
+    expect(production).toContain("now: authorityNow");
+    expect(production).toContain("AND basis = 'human_endorsed'");
+    expect(production).toContain("AND object_kind = ${objectKind} AND object_id = ${objectId}");
+    expect(production).toContain('kind: "model"');
+    expect(production).not.toMatch(
+      /DELETE FROM public\.ai_twin_observations[\s\S]*object_id = \$3/,
+    );
   });
 });

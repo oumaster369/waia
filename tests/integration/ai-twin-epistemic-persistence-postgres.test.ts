@@ -25,7 +25,7 @@ describe.skipIf(!enabled)(
     const otherUserId = randomUUID();
     const otherOrgId = randomUUID();
     type Context = Omit<ModelContext, "grants">;
-    const now = "2026-09-14T23:00:00.000Z";
+    const now = "2026-09-14T12:00:00.000Z";
     const human = (): Context => ({
       scope: { organizationId, subjectId: actorUserId },
       purpose: "formation",
@@ -220,6 +220,24 @@ describe.skipIf(!enabled)(
       expect(ledger.observations).toHaveLength(1);
       expect(ledger.claims.map((claim) => claim.revision)).toEqual([1]);
       expect(await repo().current(human())).toHaveLength(1);
+      await expect(
+        repo().recordEndorsement(human(), {
+          endorsementId: randomUUID(),
+          target: {
+            organizationId,
+            subjectId: actorUserId,
+            recordId: "claim-wp3-1",
+            recordRevision: 1,
+          },
+          basis: "initial_model_endorsement",
+          confirmedAt: now,
+          confirmedBy: {
+            kind: "human",
+            organizationId,
+            subjectId: actorUserId,
+          },
+        }),
+      ).rejects.toThrow("CLAIM_UNAVAILABLE");
 
       const requestedAt = "2026-09-14T11:00:00.000Z";
       const operationId = "delete-obs-wp3-1";
@@ -232,7 +250,10 @@ describe.skipIf(!enabled)(
         subjectId: actorUserId,
         actorReference: "human-ref-1",
       };
-      const validation = { scope: { organizationId, subjectId: actorUserId }, now };
+      const validation = {
+        scope: { organizationId, subjectId: actorUserId },
+        now: "2026-09-14T23:00:00.000Z",
+      };
       const requested = {
         operationId,
         policyVersion: TWIN_RIGHTS_OPERATION_POLICY,

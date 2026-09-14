@@ -252,13 +252,15 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
         decision.allowed ? "TWIN_CORE_CONTEXT_MISMATCH" : decision.reason,
       );
       const [{ now }] = await tx<{ now: string }[]>`select clock_timestamp()::text as now`;
+      const authorityNow = new Date(now).toISOString();
       const trusted: Context = {
         ...snapshot,
+        now: authorityNow,
         scope: Object.freeze({ ...decision.scope }),
         actor: Object.freeze({ ...snapshot.actor, subjectId: decision.scope.subjectId }),
       };
       await tx`select pg_advisory_xact_lock(hashtextextended(jsonb_build_array(${trusted.scope.organizationId}::text,${trusted.scope.subjectId}::text)::text,0))`;
-      return work(tx, trusted, new Date(now).toISOString());
+      return work(tx, trusted, authorityNow);
     });
   }
   async function consentLineage(tx: Tx, ctx: Context, id: string): Promise<ModelConsentGrant[]> {
@@ -477,7 +479,7 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
             revokedAt: grant.revokedAt,
             basisReference: `${grant.id}:${grant.version}`,
           },
-          ctx.now,
+          authorityNow,
         ).purposeUseAllowed;
       });
     const claimRows = await tx<
@@ -855,7 +857,117 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
       ctx = snapshotContext(ctx, false);
       return withAccess(ctx, false, async (tx, ctx, authorityNow) => {
         const loaded = await load(tx, ctx, authorityNow);
-        return projectCurrentModel(loaded.state, loaded.ctx);
+        const endorsements = await tx<
+          {
+            endorsement_id: string;
+            target_object_id: string;
+            target_version: number;
+            confirmed_at: Date;
+            confirmed_by_subject_user_id: string;
+          }[]
+        >`
+          SELECT endorsement_id, target_object_id, target_version, confirmed_at,
+            confirmed_by_subject_user_id
+          FROM public.ai_twin_model_endorsements
+          WHERE ${scoped(tx, ctx)}
+        `;
+        const reviews = await tx<
+          {
+            review_id: string;
+            target_object_id: string;
+            target_version: number;
+            policy_version: string;
+            prepared_at: Date;
+            confirmed_at: Date;
+            confirmed_by_subject_user_id: string;
+          }[]
+        >`
+          SELECT review_id, target_object_id, target_version, policy_version, prepared_at,
+            confirmed_at, confirmed_by_subject_user_id
+          FROM public.ai_twin_necessity_reviews
+          WHERE ${scoped(tx, ctx)}
+          ORDER BY confirmed_at DESC
+        `;
+        const projected = projectCurrentModel(loaded.state, loaded.ctx);
+        return projected.filter((claim) => {
+          if (claim.basis !== "human_endorsed") return true;
+          const endorsement = endorsements.find(
+            (row) =>
+              row.target_object_id === claim.claimId && row.target_version === claim.revision,
+          );
+          if (!endorsement) return false;
+          const review = reviews.find(
+            (row) =>
+              row.target_object_id === claim.claimId && row.target_version === claim.revision,
+          );
+          const state = {
+            initialEndorsement: {
+              endorsementId: endorsement.endorsement_id,
+              target: {
+                organizationId: ctx.scope.organizationId,
+                subjectId: ctx.scope.subjectId,
+                recordId: endorsement.target_object_id,
+                recordRevision: endorsement.target_version,
+              },
+              basis: "initial_model_endorsement" as const,
+              confirmedAt: timestamptzIso(endorsement.confirmed_at),
+              confirmedBy: {
+                kind: "human" as const,
+                organizationId: ctx.scope.organizationId,
+                subjectId: endorsement.confirmed_by_subject_user_id,
+              },
+            },
+            latestReview: review
+              ? {
+                  reviewId: review.review_id,
+                  policyVersion: review.policy_version as typeof TWIN_NECESSITY_REVIEW_POLICY,
+                  target: {
+                    organizationId: ctx.scope.organizationId,
+                    subjectId: ctx.scope.subjectId,
+                    recordId: review.target_object_id,
+                    recordRevision: review.target_version,
+                  },
+                  basis: "storage_necessity" as const,
+                  decision: "retain" as const,
+                  preparedAt: timestamptzIso(review.prepared_at),
+                  confirmedAt: timestamptzIso(review.confirmed_at),
+                  confirmedBy: {
+                    kind: "human" as const,
+                    organizationId: ctx.scope.organizationId,
+                    subjectId: review.confirmed_by_subject_user_id,
+                  },
+                }
+              : null,
+          };
+          try {
+            return planRetention(
+              {
+                scope: ctx.scope,
+                id: claim.claimId,
+                revision: claim.revision,
+                kind: "model",
+                createdAt: claim.recordedAt,
+                evidenceEligible: true,
+                erasureRequestedAt: null,
+              },
+              {
+                scope: ctx.scope,
+                recordId: claim.claimId,
+                recordRevision: claim.revision,
+                purpose: "modelling",
+                approvedBy: "human",
+                validFrom: state.initialEndorsement.confirmedAt,
+                validUntil: null,
+                revokedAt: null,
+                basisReference: state.initialEndorsement.endorsementId,
+              },
+              authorityNow,
+              state,
+            ).purposeUseAllowed;
+          } catch {
+            return false;
+          }
+        });
       });
     },
     async history(ctx: Context): Promise<ModelLedger> {
@@ -885,11 +997,12 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
       endorsement = snapshotData(endorsement);
       requireValue(endorsement.confirmedBy.subjectId === ctx.scope.subjectId, "HUMAN_REQUIRED");
       await withAccess(ctx, true, async (tx, ctx) => {
-        const [claim] = await tx<{ object_id: string }[]>`
-          SELECT object_id FROM public.ai_twin_claim_revisions
+        const [claim] = await tx<{ object_id: string; basis: string }[]>`
+          SELECT object_id, basis FROM public.ai_twin_claim_revisions
           WHERE ${scoped(tx, ctx)}
             AND object_id = ${endorsement.target.recordId}
             AND version = ${endorsement.target.recordRevision}
+            AND basis = 'human_endorsed'
         `;
         requireValue(claim, "CLAIM_UNAVAILABLE");
         await tx`
@@ -911,11 +1024,12 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
       requireValue(review.policyVersion === TWIN_NECESSITY_REVIEW_POLICY, "POLICY_UNAVAILABLE");
       requireValue(review.confirmedBy.subjectId === ctx.scope.subjectId, "HUMAN_REQUIRED");
       await withAccess(ctx, true, async (tx, ctx) => {
-        const [claim] = await tx<{ object_id: string }[]>`
-          SELECT object_id FROM public.ai_twin_claim_revisions
+        const [claim] = await tx<{ object_id: string; basis: string }[]>`
+          SELECT object_id, basis FROM public.ai_twin_claim_revisions
           WHERE ${scoped(tx, ctx)}
             AND object_id = ${review.target.recordId}
             AND version = ${review.target.recordRevision}
+            AND basis = 'human_endorsed'
         `;
         requireValue(claim, "CLAIM_UNAVAILABLE");
         await tx`
@@ -1081,7 +1195,7 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
         );
         await tx`
           DELETE FROM public.ai_twin_command_receipts
-          WHERE ${scoped(tx, ctx)} AND target_id = ${objectId}
+          WHERE ${scoped(tx, ctx)} AND target_kind = ${objectKind} AND target_id = ${objectId}
         `;
         await tx`
           DELETE FROM public.ai_twin_necessity_reviews
@@ -1096,27 +1210,48 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
         await tx`
           DELETE FROM public.ai_twin_evidence_links
           WHERE ${scoped(tx, ctx)}
-            AND (source_id = ${objectId} OR target_id = ${objectId} OR object_id IN (
-              SELECT object_id FROM public.ai_twin_evidence_links
-              WHERE ${scoped(tx, ctx)} AND (source_id = ${objectId} OR target_id = ${objectId})
-            ))
+            AND (
+              (source_kind = ${objectKind} AND source_id = ${objectId})
+              OR (target_kind = ${objectKind} AND target_id = ${objectId})
+              OR (object_kind = ${objectKind} AND object_id = ${objectId})
+            )
         `;
-        for (const table of [
-          "ai_twin_observations",
-          "ai_twin_human_corrections",
-          "ai_twin_claim_revisions",
-          "ai_twin_working_hypotheses",
-          "ai_twin_dynamic_relations",
-          "ai_twin_knowledge_needs",
-        ] as const) {
-          await tx.unsafe(
-            `DELETE FROM public.${table} WHERE organization_id = $1::uuid AND subject_user_id = $2::uuid AND object_id = $3`,
-            [ctx.scope.organizationId, ctx.scope.subjectId, objectId],
-          );
+        if (objectKind === "observation") {
+          await tx`
+            DELETE FROM public.ai_twin_observations
+            WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
+          `;
+        } else if (objectKind === "claim") {
+          await tx`
+            DELETE FROM public.ai_twin_claim_revisions
+            WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
+          `;
+        } else if (objectKind === "correction") {
+          await tx`
+            DELETE FROM public.ai_twin_human_corrections
+            WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
+          `;
+        } else if (objectKind === "hypothesis") {
+          await tx`
+            DELETE FROM public.ai_twin_working_hypotheses
+            WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
+          `;
+        } else if (objectKind === "relation") {
+          await tx`
+            DELETE FROM public.ai_twin_dynamic_relations
+            WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
+          `;
+        } else if (objectKind === "knowledge_need") {
+          await tx`
+            DELETE FROM public.ai_twin_knowledge_needs
+            WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
+          `;
+        } else {
+          requireValue(objectKind === "evidence_link", "INVALID_INPUT");
         }
         await tx`
           DELETE FROM public.ai_twin_object_versions
-          WHERE ${scoped(tx, ctx)} AND object_id = ${objectId}
+          WHERE ${scoped(tx, ctx)} AND object_kind = ${objectKind} AND object_id = ${objectId}
         `;
       });
     },
