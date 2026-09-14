@@ -11,15 +11,15 @@ includedIssues: []
 state:
   {
     status: in-progress,
-    currentWorkPackage: WP-2,
-    completedWorkPackages: [WP-1],
-    remainingWorkPackages: [WP-3],
+    currentWorkPackage: closeout,
+    completedWorkPackages: [WP-1, WP-2, WP-3],
+    remainingWorkPackages: [],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 197b079e14f4b3d28543987728b5d0633e3fbbe0,
-    lastValidationAt: "2026-09-14T13:46:00Z",
-    blockedReason: "WP-2 0209 persistence is implemented and locally qualified (fresh/upgrade PG17, tenant-isolation, consent/Core denial) but not production-applied, not runtime-mounted, and not integration-ready. WP-3 residual-copy/export verification remains. Trader-owner/shared-boundary review of the bounded 0209 compatibility tuple is still required before the final DEE-871 PR.",
-    nextAction: "Keep writers unmounted, do not apply production DDL, do not open a PR, and do not start WP-3. Obtain Trader-owner/shared-boundary review of the bounded FHV compatible-additive exception before integration-ready closeout.",
+    lastValidatedGitSha: 3370b0206ffd263676540ccbc9710a592e77d3c9,
+    lastValidationAt: "2026-09-14T14:52:00Z",
+    blockedReason: "WP-1/WP-2/WP-3 are locally qualified as contract qualification only. Production DDL is not applied, writers/routes are not mounted, and DEE-871 is not integration-ready. origin/main moved to 680c9d7c (DEE-1009 KEY_ORDER; no shared schema/journal/FHV/0209 collision). Rebase onto fresh main, full-diff review, and PR preparation remain. Do not open the PR in this slice.",
+    nextAction: "Independent full-diff review of the complete DEE-871 branch versus origin/main, then PR preparation. Keep writers unmounted, do not apply production DDL, do not deploy, and do not open the PR until that review and rebase are complete.",
   }
 provenance:
   {
@@ -66,7 +66,9 @@ is admitted.
    re-admitted and ported onto this continuation. Shared schema registration,
    migration journal ordering and runtime mounting remain blocked by the
    AI-TRADER collision boundary; the old branch itself must not be merged.
-3. **WP-3 — isolation, legacy migration and cutover proof.** Not complete.
+3. **WP-3 — isolation, legacy migration and cutover proof.** Contract
+   qualification complete (residual-copy/export/legacy isolation). Not
+   production residual-copy evidence, runtime mount, or integration-ready.
    Production currently has three non-equivalent concepts: legacy
    `{0,33,67,100}` readiness, the separate reasoning-maturity heuristic and the
    ratified evidence-state Formation/Model Health model. The readiness writer is
@@ -1071,6 +1073,95 @@ gate; production consent issue/revoke and same-org other-subject / cross-org
 denial passed against real Core membership rows. Writers remain unmounted.
 The isolated fixture container was disposable and is not a production apply.
 
+### 2026-09-14 Trader/shared-boundary independent review — PASS
+
+Freshness immediately before this review: live `origin/main`, local `origin/main`, and
+merge-base remain `d7d5941a995b83473acb6e00c42d5252c44b2303`. Branch HEAD
+`3370b0206ffd263676540ccbc9710a592e77d3c9` is clean and pushed. The only open
+PR is #592 (DEE-1009 forecast KEY_ORDER); it does not touch
+`db/schema.postgres.ts`, `db/migrations_postgres/`, the journal, FHV
+preflight/tests, or ordinal 0209+. No shared collision.
+
+Independent adversarial review of the exact compatibility delta (P1=0, P2=0):
+
+1. `FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX` remains exactly 207.
+2. 0209 is not in `FHV_V2_POSTGRES_REQUIRED_TABLES`.
+3. 0208 compatible-additive admission is unchanged.
+4. 0209 admission is exactly
+   `{ idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" }`.
+5. Preflight still hashes exact SQL file bytes; additive rows are not exempt.
+6. Unknown applied `1780000000210` / 0210+ still throws `UNKNOWN_APPLIED_MIGRATION`.
+7. Wrong 0209 idx/when/tag still throws `COMPATIBLE_MIGRATION_IDENTITY_INVALID`;
+   wrong applied hash still throws `APPLIED_MIGRATION_HASH_MISMATCH`.
+8. Absence of applied 0209 is accepted; 0209 is not in the required scientific prefix.
+9. AI-TWIN tables are irrelevant to FHV required-table qualification.
+10. No Trader scientific logic, runtime semantics, execution path, table
+    requirement, or evidence law changed. The only `lib/trader/**` production
+    edit is the three-line allowlist append in
+    `fhv-v2-postgres-schema-preflight.ts`.
+
+P3 only: listed FHV tests do not mutate 0209 idx/when/tag/hash (same coverage
+shape as 0208 on `origin/main`). Not a production weakening. WP-3 may proceed.
+
+Later freshness before WP-3 closeout: live `origin/main` moved to
+`680c9d7c9c74d5cc2b85f2d90d13b99f8fb36c47` (DEE-1009 / PR #592 KEY_ORDER).
+That commit touches only `docs/plans/dee-1009-align-forecast-key-order.md` and
+the missing-only forecast producer/test. No `db/schema.postgres.ts`, journal,
+FHV preflight/tests, or 0209+ files. Open PRs to `main`: none. No new shared
+collision. Merge-base of this branch remains `d7d5941a`. Rebase onto
+`680c9d7c` is required before the DEE-871 PR, not in this WP-3 slice.
+
+### 2026-09-14 WP-3 residual-copy / export verification — contract qualification PASS
+
+WP-3 is isolation and migration proof, not runtime rollout. Existing 0209
+schema was sufficient; no 0210 and no 0209 SQL/journal/FHV edit in this slice.
+
+Implemented application/repository qualification only:
+
+- `lib/ai-twin/model/residual-copy-verification.ts` —
+  `qualifyResidualCopyClosure`
+- `lib/ai-twin/model/export-artifact-verification.ts` —
+  `qualifyExportArtifactRetention`
+- DELETE/ERASE persist CLOSED in
+  `postgres-production-repository.recordRightsOperation` requires a closable
+  residual-copy qualification against a trusted-adapter inventory declaration
+- focused unit tests plus the existing production PostgreSQL persistence suite
+
+Ratified semantics proved as **contract qualification**, not production
+residual-copy or legal-deletion evidence (`productionClaim:
+contract_qualification_only`, `authority: none`):
+
+- withdrawal/USE_BLOCKED blocks productive use independently of physical cleanup
+- `LIVE_REMOVED` is not residual-copy proof
+- missing/empty inventory fails closed (`COPY_INVENTORY_REQUIRED` /
+  `not_closable_inventory_required`); this module does not invent a backup or
+  processor registry
+- a live-only inventory cannot close unless the trusted adapter explicitly
+  declares `residualCopyClasses: declared_absent_for_this_deployment`
+- residual proof requires an admitted SUCCEEDED attempt digest whose
+  `outcomeCode` matches the copy class (`LIVE_CLEANUP_VERIFIED` /
+  `BACKUP_PURGE_VERIFIED` / `PROCESSOR_PURGE_VERIFIED`) and is **not** a
+  lifecycle event digest (ACCEPTED / USE_BLOCKED / LIVE_REMOVED / CLOSED)
+- remapping CLOSED or live-cleanup digests onto `backup_copy` is rejected
+- retry preserves the original `requestedAt` (7-day live / 30-day all-copies)
+- failed cleanup without a later success stays fail-closed
+- export artifact valid before original `createdAt+24h`; removal required
+  at/after; retry does not refresh TTL
+- EXPORT CLOSED / `EXPORT_ARTIFACT_CREATED` / ACCEPTED / attempt hashes are
+  not artifact-removal proof; removal evidence must be admitted, request- and
+  scope-bound, and absent from the supplied export operation
+- source revocation is rechecked on later composition; artifact expiry does
+  not delete source records
+- legacy quarantine remains non-productive; no legacy consent/content importer
+
+Independent WP-3 residual/export re-review after the P1/P2 fix: **P1=0,
+P2=0**. Remaining notes are P3 (caller-supplied inventory completeness is a
+trusted-adapter declaration, not a durable registry; export qualifier does
+not re-run full rights-history validation).
+
+This is not production deletion evidence, a download endpoint, an object-storage
+worker, or DEE-871 integration-ready closeout.
+
 ## Approved outcome
 
 An append-only, tenant-isolated persistence layer represents observations, provenance/projection, evidence links, versioned claims, dynamic relations, hypotheses, knowledge needs, consent and Human corrections without cutting over legacy readiness.
@@ -1145,6 +1236,8 @@ Implement schema, repositories and current-model projections; embeddings remain 
 ### WP-3 — Isolation and migration proof
 
 Prove tenant isolation, version history, idempotency and safe legacy/backfill hooks.
+Local residual-copy/export/legacy contract qualification is recorded in the
+2026-09-14 WP-3 receipt above. It is not production residual-copy evidence.
 
 ## Safety invariants
 

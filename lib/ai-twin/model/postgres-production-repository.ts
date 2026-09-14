@@ -28,6 +28,7 @@ import {
   type NecessityReviewConfirmation,
 } from "./lifecycle";
 import { assertModelJsonData, type VersionedModelReference } from "./persistence-contracts";
+import { qualifyResidualCopyClosure } from "./residual-copy-verification";
 import {
   TWIN_RIGHTS_OPERATION_POLICY,
   validateRightsOperationHistory,
@@ -962,6 +963,12 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
         RightsOperationValidationContext,
         "previous" | "admittedCompletionEvidenceDigests"
       >,
+      removalClosure?: {
+        copyInventory: unknown;
+        copyEvidence: unknown;
+        inventoryComplete: unknown;
+        residualCopyClasses: unknown;
+      },
     ): Promise<void> {
       ctx = snapshotContext(ctx, true);
       input = snapshotData(input);
@@ -972,12 +979,35 @@ export function createProductionTwinRepository(options: ProductionTwinRepository
           SELECT evidence_digest FROM public.ai_twin_rights_completion_evidence
           WHERE ${scoped(tx, ctx)}
         `;
-        validateRightsOperationHistory(history, {
+        const admittedDigests = admitted.map((row) => row.evidence_digest);
+        const qualified = validateRightsOperationHistory(history, {
           ...validation,
           scope: ctx.scope,
           previous,
-          admittedCompletionEvidenceDigests: admitted.map((row) => row.evidence_digest),
+          admittedCompletionEvidenceDigests: admittedDigests,
         });
+        if (
+          (history.type === "DELETE" || history.type === "ERASE") &&
+          qualified.recordedState === "CLOSED"
+        ) {
+          requireValue(removalClosure, "COPY_INVENTORY_REQUIRED");
+          const closure = qualifyResidualCopyClosure({
+            now: validation.now,
+            history,
+            validation: {
+              ...validation,
+              scope: ctx.scope,
+              previous,
+              admittedCompletionEvidenceDigests: admittedDigests,
+            },
+            copyInventory: removalClosure.copyInventory,
+            copyEvidence: removalClosure.copyEvidence,
+            admittedCompletionEvidenceDigests: admittedDigests,
+            inventoryComplete: removalClosure.inventoryComplete,
+            residualCopyClasses: removalClosure.residualCopyClasses,
+          });
+          requireValue(closure.closure === "closable", "RESIDUAL_COPIES_UNVERIFIED");
+        }
         if (previous === null) {
           await tx`
             INSERT INTO public.ai_twin_rights_operations (
