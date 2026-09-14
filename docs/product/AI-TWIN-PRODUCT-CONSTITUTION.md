@@ -71,6 +71,94 @@ Each domain advances through evidence-backed maturity states:
 
 The maturity state is evidence-derived. Fluency, message count, elapsed time and model confidence cannot substitute for evidence.
 
+### 3.3 Source admission, use and disclosure
+
+No source may enter productive Human-model use unless its current purpose,
+admitted source class, permitted use, retention policy and disclosure boundary
+are deterministically resolvable. Admission is fail-closed: missing, expired,
+revoked, purpose-mismatched or non-provable authority means no productive use.
+Storage, Formation progress, possession of data or consent for another
+source/purpose grants nothing by implication.
+
+AI-TWIN remains private by default. A new sensitive or not-yet-authorized
+source class requires Human-visible disclosure before its first productive use
+and explicit Human authorization. Ordinary voluntarily supplied dialogue may
+continue under an already-current dialogue grant without per-message
+re-consent. A statement voluntarily supplied after withdrawal is a new source
+event with its own creation time and current authorization; it cannot revive
+the withdrawn source, old consent or dependent claims.
+
+Disclosure permission is separate from modelling/use permission. It is
+specific, purpose-bound, versioned and revocable. A private modelling grant
+does not authorize disclosure, and a disclosure grant does not silently
+authorize storage, modelling, Formation credit or another purpose.
+
+V1 productive raw-observation ingress is limited to currently authorized
+dialogue and Diary. Imported service/device context remains future-capable but
+unadmitted until later Connected Context / v2 consent, connector and ingestion
+decisions. Human corrections and outcome receipts are separate typed records,
+not generic external-source ingress.
+
+DEE-871 defines the durable provenance contract—exact identity/version,
+tenant/subject, purpose/policy, chronology, current authority/availability
+references and append-only lineage. WP-1 does not claim that production
+persistence/runtime delivery exists. DEE-871 does not score independence, sufficiency,
+corroboration, inference recency, hypothesis confidence, Formation or Model
+Health; those are downstream DEE-874/875/876 responsibilities.
+
+Legacy material is never inferred or backfilled as consented. It remains
+quarantined and non-productive without current provable authority. Later
+explicit Human authorization for specified material creates a new current,
+purpose-bound grant for future use and does not rewrite prior collection/use
+history. Unresolvable identity, scope, provenance or rights keeps the material
+quarantined, subject only to independent Human export/delete rights.
+
+ConsentGrant issuance requires an authenticated Human action with
+`actorUserId == subjectUserId` and an exact current organization. Purpose,
+admitted dialogue/Diary sources, productive uses, private disclosure boundary,
+retention/use policy and temporal mode are explicit; trusted server time is the
+issue time. Possession, account/membership, prior consent, Formation,
+subscription/payment, continued use and silence imply no consent.
+
+Temporal mode is exactly `UNTIL_REVOKED` or `EXPIRES_AT`, never missing or
+defaulted. `EXPIRES_AT` requires a valid future trusted timestamp at issuance.
+`UNTIL_REVOKED` is an explicit Human choice and remains usable only while
+unrevoked, purpose/source/policy remain current and no higher-priority rights
+operation blocks use. Expiry or revocation blocks new productive use but does
+not erase data. Later authorization is a new append-only grant/version and
+cannot rewrite history, revive deleted/erased sources or widen purpose,
+sources, use or disclosure without explicit Human authorization.
+
+### 3.4 Personal-model access
+
+Supabase Auth and WAIA Core are the sole credential, identity, organization,
+membership, role and permission authorities. AI-TWIN duplicates none of that
+state. Matching caller-supplied identifiers prove nothing.
+
+Ordinary v1 access to a private personal model requires a trusted Core
+resolution proving an authenticated Human, current exact organization,
+current actor membership, current subject-to-organization binding and
+`actorUserId == subjectUserId`. Membership in an organization never grants
+access to another Human's Twin. Admin, owner, member, agent or service status
+creates no bypass; future operator/support access requires a separate audited
+capability contract.
+
+Payment, subscription, Formation or future module-routing entitlement is not a
+prerequisite for the Human's own private Formation/model data. The DEE-871
+guard is a pure fail-closed evaluation of already trusted Core facts. It does
+not authenticate, parse credentials, query model persistence or grant consent,
+disclosure, Society, action or billing authority, and its result is not an
+authorization token for caller-controlled use.
+
+Every protected repository operation must resolve current Core
+identity/membership/subject authority at operation time and, where technically
+possible, within the same authoritative transaction/consistent database
+boundary as the protected read or mutation. A prior guard decision is not
+durable authority, is never reused across transactions and has no invented TTL,
+grace or cache interval. If that atomic authority cannot be provided, the
+repository fails closed rather than substituting matching IDs or a fixture Core
+model.
+
 ## 4. Formation Contract and progress
 
 Formation progress answers one narrow question: **how much of the initial evidence contract has been completed?** It does not answer whether the account is genuine, whether the model is currently healthy, whether the Human is ready to socialize, or whether WAIA may act.
@@ -118,6 +206,96 @@ WAIA may explicitly abstain when evidence or authority is insufficient.
 AI-TWIN also teaches the Human how to use WAIA: explain functions, prerequisites and limitations, offer short contextual steps, and help recover from errors. Guidance is optional, interruptible and non-punitive, available without completing Formation. It must preserve the current task and distinguish implemented, unavailable and planned functionality. Guidance about a feature neither grants its authority nor performs its action. Learning activity is not personality evidence or Formation credit by default.
 
 The target is progressive coverage of all Human-facing WAIA functions as their owners publish verified help and capability contracts. No private/admin/scientific control is disclosed or enabled by a generic tutorial. Current account access comes from authoritative checks, never an inferred percentage or generated promise. DEE-994 owns the first curated in-workspace guide; context-aware conversational teaching extends DEE-878/881 and is not implied by that first interface. Preserve separate confirmation for any later navigation with unsaved changes or real action.
+
+### 5.2 Long-lived model knowledge
+
+Long-lived model knowledge SHALL receive a **Human-approved
+storage-necessity review** at least annually. WAIA prepares the review surface;
+the Human confirms whether the exact selected knowledge remains necessary.
+First endorsement of a model establishes its initial review anchor but is not
+itself a necessity-review confirmation.
+
+Once the annual interval is overdue, and until the review is current, affected
+knowledge MUST NOT be used for new inference or advice. This pause is neither an
+automatic deletion rule nor permission for indefinite pending storage: the
+review presents retain, correct, archive or delete/erase actions, while Human
+access, correction and deletion remain independently available. Confirmation
+does not renew consent, restore withdrawn evidence, establish truth, promote an
+archive, refresh evidence or widen purpose. Current purpose and source
+authorization remain mandatory after review. No unapproved grace period,
+automatic deletion deadline or retained receipt exception follows from this
+rule.
+
+### 5.3 Rights operations
+
+Rights requests are durable evidence-bearing operations, not mutable flags.
+Their canonical lifecycle is:
+
+`REQUESTED -> ACCEPTED -> USE_BLOCKED -> LIVE_REMOVAL_IN_PROGRESS -> LIVE_REMOVED -> RESIDUAL_COPIES_PENDING -> CLOSED`
+
+`REFUSED`, `FAILED` and `CANCELLED` are explicit terminal/error states;
+cancellation exists only while it remains valid. Authenticated acceptance binds
+the exact organization, Human/subject, operation type, target scope, original
+request time, policy version and actor.
+
+Withdrawal or deletion blocks new productive use independently of later
+physical cleanup. `LIVE_REMOVED` requires evidence that affected live stores,
+indexes and dependent live projections no longer serve the source. Residual
+backup/processor cleanup remains a distinct obligation, and `CLOSED` requires
+verified completion evidence. A request, tombstone, hash, attempted job or
+process exit is never completion by itself.
+
+Failure/retry history is append-only and cannot manufacture success or reset
+the original request clock. Minimal receipts must not preserve the personal
+content whose removal they prove. Rights operations do not renew consent, widen
+purpose, establish truth, grant archive authority or alter Formation/Model
+Health. At minimum, type-specific operations include `WITHDRAW_USE`, `DELETE` /
+`ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`; sharing one
+auditable lifecycle does not make their effects interchangeable.
+
+`WITHDRAW_USE`, `DELETE` and `ERASE` may be cancelled only while `REQUESTED`.
+After authenticated `ACCEPTED`, productive-use blocking cannot be cancelled to
+revive previous authority. `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE` may be
+cancelled until their type-specific artifact, revision, decision or archive
+effect is committed. A later change requires a new operation; history is never
+rewritten.
+
+`FAILED` terminates one execution attempt, not necessarily the Human operation.
+Retry creates a new append-only attempt under the same immutable operation,
+original request time, scope and policy. Prior failure evidence remains, and
+withdrawal/deletion/erasure use blocking survives every failure and retry.
+
+Type-specific effects remain:
+
+- `WITHDRAW_USE` blocks future productive use without claiming deletion;
+- `DELETE` removes selected records/sources and unsupported dependent
+  projections;
+- `ERASE` applies to the declared subject/source/purpose scope and dependency
+  closure without claiming statutory compliance;
+- `EXPORT` creates only a currently authorized point-in-time export under the
+  existing 24-hour generated-export rule and grants no wider disclosure;
+- `CORRECT` appends a Human correction/revision without erasing prior evidence;
+- `RETAIN` records continued storage of an exact currently eligible record
+  under existing purpose authority, without renewing consent or freshness;
+- `ARCHIVE` records independently authorized private preservation, grants no
+  inheritance/disclosure and cannot rescue a previously withdrawn/deleted
+  source.
+
+Removal-only states apply only to operations requiring removal. Other
+operations close from verified type-specific effect evidence and never
+fabricate `LIVE_REMOVED`.
+
+While unresolved, retain only the minimum operation/attempt state needed to
+complete and prove the operation. After `CLOSED`, `REFUSED` or `CANCELLED`,
+retain the minimized content-free receipt for twelve months from that terminal
+timestamp. This does not extend automatically beyond verified subject/account
+deletion: after live and backup/processor cleanup, remove subject-linkable
+receipts unless a separately Human-approved legal/security basis applies.
+Receipts contain only operation identity/type, organization/subject reference
+while necessary, scope kind/digest, relevant timestamps, policy version,
+authenticated actor class/reference, attempt/outcome information and
+completion-evidence digests—never removed content, dialogue/Diary or claim text,
+embeddings or copied payloads.
 
 ## 6. Embodiment and account trust
 
@@ -227,6 +405,12 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-01 | DEE-873, PR #542 and subsequent D1–D5 decision | Narrow DARK-only presence evaluation; no production authority                                               |
 | 2026-09-02 | DEE-922, Human-merged PR #550                  | Free Formation, governed cost ×5 pricing, separate subscription and sponsored-access consent                |
 | 2026-09-06 | Explicit Human resume; DEE-943                 | Evidence/status reconciliation; isolated implementation permitted while Trader stays outside mutation scope |
+| 2026-09-12 | Explicit Human retention decision; DEE-871     | Human-controlled annual storage-necessity review; overdue knowledge paused from new inference/advice         |
 | 2026-09-12 | Explicit Human product-learning and UX requirement; DEE-994 | AI-TWIN teaches WAIA use through optional, truthful, capability-aware guidance; no authority/progress from learning |
+| 2026-09-14 | Explicit Human source-admission and RightsOperation decision; DEE-871 | Fail-closed private source use, separate disclosure authority and evidence-bearing rights lifecycle |
+| 2026-09-14 | Explicit Human RightsOperation completion decision; DEE-871 | Type-specific cancellation/effects, append-only retry, verified closure and minimized twelve-month terminal receipts |
+| 2026-09-14 | Explicit Human DEE-871 WP-1 closure decision | Dialogue/Diary-only v1 ingress, provenance-only persistence ownership and non-inferred historical consent |
+| 2026-09-14 | Explicit Human DEE-871 WP-2 Core-access decision | Personal-model access requires exact trusted Core actor/subject/organization equality; no role or entitlement bypass |
+| 2026-09-14 | Explicit Human DEE-871 authenticated-repository decision | Transaction-current Core authority plus explicit append-only `UNTIL_REVOKED` / `EXPIRES_AT` consent; no stale guard reuse |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

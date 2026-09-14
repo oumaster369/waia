@@ -1,5 +1,7 @@
 /** Inert reference contracts, not a persistence schema or authenticated API. */
 export type ModelScope = Readonly<{ organizationId: string; subjectId: string }>;
+/** Productive raw-observation ingress for v1 only. Future service/device classes
+ * remain canonical but deliberately cannot inhabit this authority-bearing type. */
 export type ObservationSource = "dialogue" | "diary";
 export type ProjectionRisk =
   | "ambiguity"
@@ -16,8 +18,12 @@ export type ModelConsentGrant = Readonly<{
   purpose: string;
   sources: readonly ObservationSource[];
   mode: "private_modelling" | "raw_only";
+  permittedUses: readonly "productive_private_modelling"[];
+  /** Explicitly grants no disclosure; non-private disclosure uses a separate grant. */
+  disclosureBoundary: "private_only";
   issuedAt: string;
-  expiresAt: string;
+  temporalMode: "UNTIL_REVOKED" | "EXPIRES_AT";
+  expiresAt: string | null;
   revokedAt: string | null;
   retentionPolicyId: string;
 }>;

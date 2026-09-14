@@ -4,11 +4,30 @@ CREATE TABLE twin_model_fixture.scope_lock (
   organization_id text NOT NULL, subject_id text NOT NULL,
   PRIMARY KEY (organization_id, subject_id)
 );
+-- Synthetic trusted-adapter output state only. This is not a Core identity,
+-- membership or production schema; it lets the disconnected test resolver
+-- prove transaction-local re-resolution without inventing repository authority.
+CREATE TABLE twin_model_fixture.core_adapter_state (
+  organization_id text NOT NULL, subject_id text NOT NULL,
+  organization_status text NOT NULL DEFAULT 'current',
+  membership_status text NOT NULL DEFAULT 'current',
+  subject_status text NOT NULL DEFAULT 'current',
+  PRIMARY KEY (organization_id, subject_id),
+  FOREIGN KEY (organization_id, subject_id) REFERENCES twin_model_fixture.scope_lock
+);
 CREATE TABLE twin_model_fixture.consent (
   organization_id text NOT NULL, subject_id text NOT NULL,
   id text NOT NULL, version integer NOT NULL CHECK (version > 0), payload jsonb NOT NULL,
   PRIMARY KEY (organization_id, subject_id, id, version),
   FOREIGN KEY (organization_id, subject_id) REFERENCES twin_model_fixture.scope_lock
+);
+CREATE TABLE twin_model_fixture.consent_issuance_receipt (
+  organization_id text NOT NULL, subject_id text NOT NULL, purpose text NOT NULL,
+  request_id text NOT NULL, fingerprint text NOT NULL,
+  grant_id text NOT NULL, grant_version integer NOT NULL,
+  PRIMARY KEY (organization_id, subject_id, purpose, request_id),
+  FOREIGN KEY (organization_id, subject_id, grant_id, grant_version)
+    REFERENCES twin_model_fixture.consent(organization_id, subject_id, id, version)
 );
 CREATE TABLE twin_model_fixture.object (
   organization_id text NOT NULL, subject_id text NOT NULL, purpose text NOT NULL,
@@ -63,8 +82,19 @@ CREATE TABLE twin_model_fixture.archive_authority (
 CREATE FUNCTION twin_model_fixture.lock_consent_scope() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP = 'UPDATE' AND (OLD.organization_id,OLD.subject_id,OLD.id,OLD.version,to_jsonb(OLD)->>'kind')
-    IS DISTINCT FROM (NEW.organization_id,NEW.subject_id,NEW.id,NEW.version,to_jsonb(NEW)->>'kind') THEN
+  IF TG_OP = 'UPDATE' AND (
+    to_jsonb(OLD)->>'organization_id',
+    to_jsonb(OLD)->>'subject_id',
+    to_jsonb(OLD)->>'id',
+    to_jsonb(OLD)->>'version',
+    to_jsonb(OLD)->>'kind'
+  ) IS DISTINCT FROM (
+    to_jsonb(NEW)->>'organization_id',
+    to_jsonb(NEW)->>'subject_id',
+    to_jsonb(NEW)->>'id',
+    to_jsonb(NEW)->>'version',
+    to_jsonb(NEW)->>'kind'
+  ) THEN
     RAISE EXCEPTION 'Consent identity is immutable';
   END IF;
   IF TG_OP = 'DELETE' THEN
@@ -76,14 +106,20 @@ BEGIN
 END $$;
 CREATE TRIGGER twin_fixture_consent_scope_lock BEFORE INSERT OR UPDATE OR DELETE
   ON twin_model_fixture.consent FOR EACH ROW EXECUTE FUNCTION twin_model_fixture.lock_consent_scope();
+CREATE TRIGGER twin_fixture_core_adapter_scope_lock BEFORE UPDATE OR DELETE
+  ON twin_model_fixture.core_adapter_state FOR EACH ROW
+  EXECUTE FUNCTION twin_model_fixture.lock_consent_scope();
 CREATE TRIGGER twin_fixture_archive_scope_lock BEFORE INSERT OR UPDATE OR DELETE
   ON twin_model_fixture.archive_authority FOR EACH ROW EXECUTE FUNCTION twin_model_fixture.lock_consent_scope();
 -- App-scoped access remains primary (ADR-0007); fixture service is not superuser/owner.
 CREATE ROLE twin_fixture_service LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 CREATE ROLE twin_fixture_browser NOLOGIN NOSUPERUSER NOBYPASSRLS;
 GRANT USAGE ON SCHEMA twin_model_fixture TO twin_fixture_service, twin_fixture_browser;
-GRANT SELECT, INSERT ON twin_model_fixture.scope_lock TO twin_fixture_service;
-GRANT SELECT ON twin_model_fixture.consent, twin_model_fixture.archive_authority TO twin_fixture_service;
+GRANT SELECT ON twin_model_fixture.scope_lock TO twin_fixture_service;
+GRANT SELECT ON twin_model_fixture.core_adapter_state TO twin_fixture_service;
+GRANT SELECT, INSERT ON twin_model_fixture.consent TO twin_fixture_service;
+GRANT SELECT, INSERT ON twin_model_fixture.consent_issuance_receipt TO twin_fixture_service;
+GRANT SELECT ON twin_model_fixture.archive_authority TO twin_fixture_service;
 GRANT SELECT, INSERT, DELETE ON twin_model_fixture.object, twin_model_fixture.link, twin_model_fixture.receipt TO twin_fixture_service;
 GRANT SELECT, INSERT, UPDATE ON twin_model_fixture.rights_request TO twin_fixture_service;
 -- Browser role deliberately receives no table privileges. No platform roles are modified.

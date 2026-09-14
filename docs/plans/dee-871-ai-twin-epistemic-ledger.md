@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-871
 integrationTitle: "AI-TWIN v1 — Epistemic ledger and Human-model persistence"
-branch: dee-871-ai-twin-repository
+branch: dee-871-ai-twin-canonical-continuation
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr]
@@ -10,16 +10,16 @@ approvalGates: [plan-approved, migration-reviewed, human-merge]
 includedIssues: []
 state:
   {
-    status: in-progress,
-    currentWorkPackage: WP-1,
-    completedWorkPackages: [],
-    remainingWorkPackages: [WP-1, WP-2, WP-3],
-    prNumber: null,
-    prUrl: null,
-    lastValidatedGitSha: cb87f5b62707e47c7f1c22933d18f7ce29e9a39d,
-    lastValidationAt: "2026-09-09T09:57:56Z",
+    status: in-review,
+    currentWorkPackage: WP-PR,
+    completedWorkPackages: [WP-1, WP-2, WP-3],
+    remainingWorkPackages: [WP-PR],
+    prNumber: 593,
+    prUrl: "https://github.com/oumaster369/waia/pull/593",
+    lastValidatedGitSha: 2c40ec36c7dfb8cbbef25e81c53a3b5d5a56ac77,
+    lastValidationAt: "2026-09-14T15:22:00Z",
     blockedReason: null,
-    nextAction: "Frozen disconnected source handed to independent foundation batch DEE-973. Keep DEE-871 open for authenticated runtime, complete persisted inventory and temporal/rights qualification; no more vocabulary expansion on this source branch. Shared migration/auth remains separately coordinated; no Trader mutation.",
+    nextAction: "Wait for authoritative GitHub PR CI on exact HEAD, then Human squash-merge. Do not apply production DDL, do not mount writers/routes, and do not treat residual-copy qualification as operational deletion evidence.",
   }
 provenance:
   {
@@ -30,6 +30,1189 @@ provenance:
 ---
 
 # DEE-871 — Epistemic ledger and Human-model persistence
+
+## 2026-09-14 canonical continuation — annual necessity-review contract
+
+Recovery established one writable continuation at
+`dee-871-ai-twin-canonical-continuation`, clean from verified `origin/main`
+`c6f79636b4aff2f0bf170b4357db7bb0d2abcb73`. Earlier DEE-871 worktrees remain
+read-only forensic sources: the ledger and repository branches are superseded by
+merged DEE-963/973 foundations, while `dee-871-ai-twin-shared-boundary` at
+`7802b39474f0126c8ef00655ebec2bad41bc093b` contains valid but unmerged,
+unmounted WIP. None is a continuation location.
+
+AI-TRADER PR #590 subsequently merged to `origin/main` as `d7d5941a`; its child
+PRs #585–#588 remain foreign. The continuation integrated only that fresh main
+commit at the accepted checkpoint boundary. The shared boundary remains frozen:
+no numbered migration, journal entry, `db/schema.postgres.ts`, Core/auth
+contract, Trader path/test/preflight, runtime route or production configuration
+is admitted.
+
+### Continuation matrix
+
+1. **WP-1 — object/lifecycle/access contract.** The merged DEE-963/973/965
+   foundations and current AI-TWIN model modules are authoritative. The
+   Human-controlled annual necessity-review slice below is committed as stable
+   checkpoint `99d98b1647c5b31751b855076cd8fab7a700f4f0` but not merged. WP-1
+   remains incomplete until the complete v1 persisted inventory,
+   temporal/source qualification, historical-consent treatment and final
+   access/rights contract are reconciled without importing superseded branch
+   state wholesale.
+2. **WP-2 — persistence and current-model reads.** The current disconnected
+   repository/fixture on main is authoritative for merged behavior.
+   `dee-871-ai-twin-shared-boundary` is a read-only source for coherent,
+   unmerged authenticated-member, consent, observation, claim revision,
+   correction and selected live-erasure work. Each future slice must be
+   re-admitted and ported onto this continuation. Shared schema registration,
+   migration journal ordering and runtime mounting remain blocked by the
+   AI-TRADER collision boundary; the old branch itself must not be merged.
+3. **WP-3 — isolation, legacy migration and cutover proof.** Contract
+   qualification complete (residual-copy/export/legacy isolation). Not
+   production residual-copy evidence, runtime mount, or integration-ready.
+   Production currently has three non-equivalent concepts: legacy
+   `{0,33,67,100}` readiness, the separate reasoning-maturity heuristic and the
+   ratified evidence-state Formation/Model Health model. The readiness writer is
+   default-off, and no authoritative write API completes the legacy
+   `socializationCompleted` transition. These are migration/qualification
+   evidence, not authority to enable a writer, invent socialization persistence
+   or collapse the models. Society remains a separately gated v3 concern.
+4. **Peripheral recovery evidence.** DEE-605 homepage visuals, DEE-784 “My
+   Twin” navigation restoration and DEE-799's old Twin facade/proxy harness may
+   inform later UX/runtime qualification. Their gone/stale branches are neither
+   DEE-871 continuation sources nor evidence that canonical persistence,
+   readiness migration or socialization writes are complete.
+
+### Selected bounded work package
+
+The Human-ratified 2026-09-12 rule is the next isolated WP-1 retention/rights
+qualification:
+
+- WAIA prepares the annual storage-necessity review and the Human confirms it.
+- First Human endorsement creates the initial model-class review anchor but is
+  not itself a necessity-review confirmation.
+- A later review binds an exact organization, subject, model record and positive
+  version, plus explicit Human actor, preparation time and confirmation time.
+- When review is overdue, the affected record is excluded from new inference and
+  advice. This is neither automatic deletion nor permission for indefinite
+  pending retention.
+- Human access, correction and deletion remain separate rights paths and are not
+  blocked by this productive-use assessment or by subscription state.
+- Confirmation does not renew consent, restore removed evidence, establish
+  truth, promote an archive, refresh evidence or widen purpose.
+- Current authorization and evidence eligibility remain mandatory after review.
+  No grace period, default waiting duration, deletion deadline or retained
+  receipt exception is introduced.
+
+Owned files are this plan, the Product Constitution, the Canonical Algorithm,
+the AI-TWIN v1 gap registry, `lib/ai-twin/model/lifecycle.ts` and
+`tests/unit/ai-twin-model-lifecycle.test.ts`. The implementation remains a pure,
+disconnected policy contract with no caller or persistence adapter added.
+
+Acceptance requires an explicit missing-behavior RED, exact one-year boundaries
+before/at the due instant, exact record/version and both-tenant dimensions,
+Human-only confirmation, chronology, immutable source authorization, overdue
+productive-use denial, independent rights metadata, and negative proof against
+consent/evidence revival, archive promotion, automatic removal deadlines,
+getters and undeclared authority fields. Validation is the focused lifecycle
+unit suite, cumulative AI-TWIN model units, scoped lint/typecheck, canon
+validation, diff checks, then repository PR-readiness checks only if this
+bounded package remains collision-free.
+
+### Implementation and local validation receipt
+
+The required RED failed seven focused cases while the old policy still returned
+`retain` and allowed productive use after the annual due instant. The bounded
+implementation now requires a canonical Human-only confirmation with a reviewed
+policy version, preparation/confirmation chronology, both tenant dimensions and
+exact record/version binding. Initial endorsement is an explicit inherited
+model-class receipt in separately supplied trusted lineage; ordinary record
+revision cannot carry or refresh it. At the due instant, otherwise-authorized
+knowledge returns `human_review_required` and
+`purposeUseAllowed: false`, with no expiry or removal target. Removal caused by
+withdrawn purpose, ineligible evidence or erasure remains higher priority.
+Rights are reported as a separate assessment.
+
+The existing retention policy identifier remains
+`human-approved-2026-09-08/v1`; the new review receipt has the separate
+`human-approved-2026-09-12/v1` identifier. This avoids treating annual review as
+consent renewal or invalidating existing purpose grants.
+
+Independent review initially found two P2s: the ordinary-record input could
+carry a refreshed initial anchor, and Constitution wording could be read as
+blocking first-year use. The implementation now accepts annual lineage only
+through a separate exact `ModelNecessityReviewState` trusted-adapter contract,
+rejects record-level anchor/review metadata, and the Constitution pauses use
+only once the interval is overdue. Focused re-review found both resolved and no
+remaining concrete P1/P2. The adapter must still obtain that lineage from an
+authoritative immutable source; this pure policy function does not authenticate
+or persist it.
+
+Validated on the uncommitted continuation diff over exact base
+`c6f79636b4aff2f0bf170b4357db7bb0d2abcb73`:
+
+- focused lifecycle GREEN: 48/48;
+- cumulative AI-TWIN model units GREEN: 185/185;
+- changed-file ESLint GREEN;
+- `pnpm typecheck` GREEN;
+- `pnpm validate:canon` GREEN, 173 canonical files checked;
+- `pnpm lint` GREEN;
+- `pnpm build` GREEN, with only the pre-existing Next.js middleware convention
+  deprecation warning;
+- `git diff --check` GREEN.
+
+Immediately before PR-readiness validation, `origin/main` remained the exact
+base SHA and open AI-TRADER/research PRs #585, #586, #587, #588 and #590
+remained foreign. No merge/rebase was necessary. No shared migration, journal,
+Postgres schema, Trader preflight/test, runtime, environment, deployment or
+Society surface changed.
+
+### Stable checkpoint and fresh-main synchronization
+
+The Human accepted the annual necessity-review slice as a stable WP-1
+checkpoint. It was committed without unrelated history as
+`99d98b1647c5b31751b855076cd8fab7a700f4f0` and then rebased as the single
+unpublished DEE-871 commit onto fresh `origin/main`
+`d7d5941a995b83473acb6e00c42d5252c44b2303`, which contains merged AI-TRADER PR
+#590. The upstream change touched only foreign Trader/shared migration surfaces
+and did not overlap the six-file annual-review checkpoint. The rebased diff
+against fresh main remains exactly those six admitted AI-TWIN files;
+`git diff --check` passes and the cumulative four AI-TWIN model unit files pass
+185/185 on the new base. This checkpoint does not complete WP-1, discharge
+DEE-871 dependencies or authorize a PR.
+
+### Remaining WP-1 dependency matrix
+
+1. **Complete v1 epistemic-object inventory.**
+   - Complete pure/disconnected validators already exist for working
+     hypotheses, dynamic relations, knowledge needs, reflection,
+     prediction/experiment, outcome receipt, Formation/Health inputs, private
+     export, retention, private experience and legacy quarantine.
+   - `EvidenceLink` and the pure structural `RightsOperation` history are now
+     exactly qualified. Existing ledger/source-admission contracts qualify
+     consent and observations for the ratified `dialogue` / `diary` source
+     boundary.
+   - Completing a broader v1 source inventory would require source-class,
+     disclosure and ingestion decisions for imported artifacts,
+     provider/device events and correction/outcome evidence. Evaluated
+     Formation/Model Health outputs belong to DEE-876 and remain out of scope.
+2. **Temporal qualification.**
+   - Existing contracts qualify event/record chronology, relation validity,
+     substantial-evidence anchors, prediction windows, outcome chronology and
+     annual necessity-review boundaries. EvidenceLink creation and
+     RightsOperation request/state/attempt/effect/terminal chronology are now
+     included.
+   - Evidence-known-at, independence/recency scoring, sufficiency thresholds
+     and transitive temporal closure remain engine/ingestion decisions. They
+     are the current semantic stop rather than values this plan may infer.
+3. **Source/provenance qualification.**
+   - Existing candidates recheck exact current eligible source versions, and
+     private experience rechecks its exact current provenance. EvidenceLink now
+     requires exact available source/target versions, both tenant dimensions,
+     closed relationship vocabulary and no exact self-link.
+   - Private source admission is fail-closed for current `dialogue` / `diary`
+     events and grants no disclosure. Expanding admitted source kinds or
+     qualifying evidence independence/sufficiency requires a new Human
+     decision; lineage admission alone establishes none of those authorities.
+4. **Final rights/use contract.**
+   - The stable checkpoint separates overdue productive use from Human
+     access/correction/deletion; current authorization and source eligibility
+     still win. Private export and private archive authority also remain
+     separate.
+   - The pure RightsOperation checkpoint now enforces immutable headers,
+     append-only state/attempt prefixes, type-specific cancellation/effects and
+     minimized terminal receipt timing. It records only trusted-context
+     evidence-reference admission and never claims evidence independence,
+     physical deletion or effect verification.
+   - Authenticated acceptance/effect services, RLS, actual evidence
+     qualification, backup/processor proof, account-deletion receipt removal
+     and operational erasure are WP-2/WP-3; historical-consent migration stays
+     `plan_only`.
+
+The currently ratified independent WP-1 sequence is exhausted. The next step is
+blocked first by product semantics for broader source/provenance and
+completion-evidence qualification, before the later shared migration/schema and
+Trader compatibility boundary. Historical-consent import remains `plan_only`;
+moving beyond quarantine requires a separately admitted Human/runtime decision.
+
+### Next bounded WP-1 slice — EvidenceLink qualification
+
+Implement one pure `validateEvidenceLink` contract in
+`lib/ai-twin/model/persistence-contracts.ts`, with focused tests in
+`tests/unit/ai-twin-model-persistence-contracts.test.ts` and this plan as the
+only owned files.
+
+The validated object binds its own `evidence_link` reference, purpose, original
+creation time and retention-policy identity; an exact eligible evidence source;
+an exact currently available claim or hypothesis target; one of `supports`,
+`contradicts` or `contextualizes`; and a nonempty Human-readable reason. The
+trusted adapter context supplies both exact current sets in the same scope and
+purpose. Matching identifiers do not authenticate authority.
+
+Reject foreign organization or subject, unavailable/stale versions, duplicate
+trusted references, unsupported source/target kinds, exact source-target
+self-link, future creation, changed purpose/policy, empty reason, getters,
+hidden/extra fields, custom prototypes, cycles and sparse arrays. Return an
+independent deeply frozen value carrying no truth, ratification, write,
+collection, consent, disclosure, Formation, archive or action authority.
+
+Start with an explicit missing-function RED, then GREEN the focused contract
+suite and cumulative four AI-TWIN model unit files. Run scoped ESLint,
+typecheck, full lint/build, canon and diff validation, followed by independent
+P1/P2 review. Do not wire the validator into
+`postgres-repository.ts`; persistence is WP-2. No canonical algorithm change is
+needed because the EvidenceLink relationship meaning is already ratified.
+
+### EvidenceLink implementation and validation receipt
+
+The focused RED executed 99 cases: the 89 existing persistence-contract tests
+passed and all 10 new EvidenceLink cases failed because
+`validateEvidenceLink` did not exist. The minimal GREEN adds the qualified
+object and trusted context described above without a repository caller.
+
+Focused persistence-contract tests pass 99/99 and cumulative AI-TWIN model units
+pass 196/196 across ledger, lifecycle, persistence contracts and legacy
+quarantine. Changed-file ESLint, `pnpm typecheck`, full `pnpm lint`,
+`pnpm build`, `pnpm validate:canon`, `git diff --check` and IDE diagnostics are
+GREEN. Build output contains only the pre-existing Next.js middleware
+convention deprecation warning.
+
+Independent exact-slice review found no P1/P2. It confirmed tenant scope,
+version eligibility, chronology, purpose/policy binding, closed source/target
+and relationship kinds, hostile-object rejection, deep immutability and
+authority-negative coverage. Evidence-known-at, source independence/recency,
+sufficiency, transitive closure, authentication, consent proof and persistence
+remain explicit residual limits rather than implied capability.
+
+Fresh `origin/main` remained
+`d7d5941a995b83473acb6e00c42d5252c44b2303` at this slice boundary. No shared
+migration, journal, Postgres schema, repository, Trader, runtime, environment,
+deployment or Society file changed.
+
+### Sequential stop boundary after EvidenceLink
+
+EvidenceLink is the last remaining WP-1 slice whose complete shape and
+qualification are fixed by the current ratified canon without another product
+decision:
+
+- `ConsentGrant` still lacks its canonical disclosure qualification. The canon
+  requires disclosure, but does not yet freeze its exact v1 shape and allowed
+  values. Adding an arbitrary field or treating private modelling as disclosure
+  would invent authority.
+- A standalone persisted Observation validator restricted to only
+  `dialogue | diary` would duplicate the current kernel while leaving the
+  canonical imported-artifact, provider/device and correction/outcome source
+  admission unresolved. Expanding those source kinds requires explicit
+  consent/privacy and ingestion qualification rather than a type-only guess.
+- The RightsOperation matrix fixes Human control, immediate restriction,
+  source deletion versus purpose withdrawal, dependency closure and the shared
+  seven/thirty-day targets. It does not yet freeze the exact durable
+  request/failure/retry/closure receipt shape or any minimal retained-receipt
+  purpose and expiry. The canon explicitly leaves the proposed twelve-month
+  receipt conditional. A new pure record now would silently decide those open
+  semantics or misrepresent the disconnected fixture's `restricted` and
+  `live_removed` flags as the final contract.
+
+Accordingly, sequential implementation stops before choosing fields for those
+contracts. This is a product-semantic boundary, not completion: WP-1 remains in
+progress and WP-2/WP-3 remain untouched. After that decision, shared migration
+registration, `db/schema.postgres.ts`, Trader schema-preflight compatibility,
+authenticated runtime mounting and production activation remain later explicit
+stop gates.
+
+### 2026-09-14 Human decision — source admission and RightsOperation
+
+The Human resolved the prior semantic boundary for DEE-871 WP-1:
+
+1. Productive Human-model use requires deterministic current purpose, admitted
+   source class, permitted use, retention policy and disclosure boundary.
+   Missing, expired, revoked, mismatched or non-provable authority fails closed.
+2. AI-TWIN is private by default. Storage, possession, Formation progress or
+   prior consent for another source/purpose grants neither modelling nor
+   disclosure. New sensitive/not-yet-authorized classes require Human-visible
+   disclosure and explicit Human authorization before first productive use.
+3. Ordinary voluntarily supplied dialogue may use an already-current dialogue
+   grant without per-message re-consent. A post-withdrawal statement is a new
+   source event with its own creation time and current authority and cannot
+   revive the old source, consent or dependent claims.
+4. Disclosure permission is separate, specific, purpose-bound, versioned and
+   revocable.
+5. Rights requests use the canonical evidence-bearing lifecycle
+   `REQUESTED -> ACCEPTED -> USE_BLOCKED -> LIVE_REMOVAL_IN_PROGRESS ->
+   LIVE_REMOVED -> RESIDUAL_COPIES_PENDING -> CLOSED`, with explicit
+   `REFUSED`, `FAILED` and conditionally valid `CANCELLED`.
+6. Acceptance binds exact tenant, Human/subject, operation, target, original
+   request time, policy and actor. Use blocking is independent of cleanup;
+   live removal and residual-copy closure require separate evidence.
+7. Failure/retry history is append-only and never resets the request clock or
+   manufactures success. Minimal receipts preserve no removed personal content.
+   A request, tombstone, hash, attempted job or process exit cannot prove
+   completion.
+8. `WITHDRAW_USE`, `DELETE` / `ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`
+   share lifecycle auditability but retain type-specific effects. No operation
+   renews consent, widens purpose, establishes truth, grants archive authority
+   or changes Formation/Model Health.
+
+This authorizes deterministic DEE-871 contracts, tests and canon only. It adds
+no migration/apply, runtime writer, Society, Trader or deployment authority.
+
+#### Selected smallest safe slice — private source admission
+
+Implement one pure, disconnected v1 admission contract before the larger
+RightsOperation state machine:
+
+- freeze v1 admitted productive source classes to the existing `dialogue` and
+  `diary`; any unknown class fails `SOURCE_CLASS_NOT_ADMITTED` until its own
+  Human-visible disclosure and authorization contract is ratified;
+- make the existing modelling grant's disclosure boundary explicit as
+  `private_only`; that value grants no disclosure and cannot be replaced by a
+  request/body/model claim;
+- accept an ordinary new source event under the exact latest current grant
+  without per-message Human reconfirmation only when scope, purpose, source
+  class, `private_modelling` use, retention policy, issue/expiry/revocation
+  chronology and private boundary all match;
+- reject withdrawn event identity, stale/older grant version, missing or
+  duplicate current grant, raw-only use, foreign tenant/subject, changed
+  purpose/policy, future source creation, expired/revoked grant, unknown class,
+  getters, hidden/extra fields, sparse arrays and cycles;
+- return an immutable minimal admission decision with
+  `productiveUseAllowed: true`, `disclosureAllowed: false` and
+  `disclosureGrant: null`. It authenticates nobody, stores nothing and carries
+  no Formation, truth, archive, collection, action or runtime authority.
+
+Owned implementation surfaces are `lib/ai-twin/model/contracts.ts`,
+`lib/ai-twin/model/source-admission.ts`, the existing inert ledger's consent
+check, focused source-admission/ledger tests and the disconnected repository
+test's typed synthetic grant. Canon and this plan record the decision. Do not
+modify the repository implementation, fixture SQL, shared schema/migrations,
+Trader, runtime routes or Society.
+
+RED must demonstrate the missing admission function and the current kernel's
+acceptance of a grant without a resolvable disclosure boundary. GREEN requires
+focused source-admission and ledger tests, cumulative AI-TWIN model units,
+typecheck, lint, build, canon/diff validation and independent P1/P2 review.
+
+#### Private source-admission implementation receipt
+
+The RED was behaviorally specific: the new source-admission module could not be
+resolved, while 35 existing ledger tests passed and the new ledger case failed
+because a grant with an unqualified disclosure boundary still admitted
+productive use.
+
+The pure GREEN adds policy `human-approved-2026-09-14/v1`, explicit
+`private_only` boundary on the existing consent grant, a minimal content-free
+admission receipt and an exact validator for one new dialogue/Diary event. The
+inert ledger now rejects grants without the exact private boundary and rejects
+malformed grant objects/source arrays before reading them. No per-message
+Human confirmation is added.
+
+Independent review found one P1 in the first GREEN: candidate input selected its
+own purpose and grant from the trusted grant set. The correction removes every
+authority selector from the event candidate. Trusted adapter context now binds
+source class, active purpose, permitted use, retention policy and resolved
+grant; the validator then proves that reference is the unique exact latest
+grant. A parallel formation/archive-grant regression proves candidate input
+cannot choose the archive purpose, and undeclared candidate source/purpose/grant
+or policy fields are rejected. Re-review confirmed the P1 resolved with no
+remaining P1/P2.
+
+Final evidence:
+
+- focused source-admission + ledger tests GREEN: 56/56;
+- cumulative five-file AI-TWIN model units GREEN: 217/217;
+- scoped ESLint, `pnpm typecheck`, full `pnpm lint`, `pnpm build`,
+  `pnpm validate:canon`, `git diff --check` and IDE diagnostics GREEN;
+- build emitted only the pre-existing Next.js middleware convention warning;
+- repository implementation and fixture SQL are unchanged; the opt-in
+  PostgreSQL suite was not rerun because this slice changes only the typed
+  synthetic grant used by that test, not repository behavior.
+
+Fresh `origin/main` remained
+`d7d5941a995b83473acb6e00c42d5252c44b2303`. No shared migration, journal,
+schema, Trader, runtime, environment, deployment or Society surface changed.
+
+#### RightsOperation boundary after source admission
+
+The source-admission checkpoint is
+`90dd0a3d48a697fe6d188ca3041330cacb671116`. The next sequential WP-1 slice is
+the pure RightsOperation lifecycle, but implementation stops before inventing
+four details not fixed by the current decision:
+
+1. which exact lifecycle states still permit `CANCELLED`;
+2. whether `FAILED` terminates the operation, returns to an earlier state on
+   retry, or records an append-only failed attempt while the operation remains
+   in another state;
+3. exact target/effect contracts for `EXPORT`, `CORRECT`, `RETAIN` and
+   `ARCHIVE`, which must not inherit withdrawal/deletion use-blocking effects;
+4. the purpose and expiry of the minimal content-free rights receipt, whose
+   former twelve-month proposal remains explicitly conditional in retention
+   canon.
+
+The lifecycle order, original-clock rule, live-versus-residual evidence
+separation and no-authority effects are ratified and preserved. Those four
+remaining choices materially determine legal states and retained evidence, so
+no enum-only or fixture-derived implementation is admitted until the Human
+resolves them. This is the current product-semantic stop boundary; the later
+shared-DB/Trader boundary has not been entered.
+
+### 2026-09-14 Human decision — RightsOperation completion semantics
+
+The Human ratified the previously missing cancellation, retry, effect and
+receipt rules:
+
+1. `WITHDRAW_USE`, `DELETE` and `ERASE` cancel only from `REQUESTED`.
+   `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE` cancel until their
+   type-specific effect is committed. A later change is a new operation.
+2. `FAILED` is terminal for one execution attempt. Retry appends a new attempt
+   under the same immutable operation id, original request time, scope and
+   policy. Failure/retry cannot reset clocks, erase failure evidence or restore
+   productive use.
+3. Withdrawal blocks use without deletion. Delete removes selected
+   records/sources plus unsupported dependent projections. Erase covers the
+   declared subject/source/purpose scope plus dependency closure without
+   claiming statutory compliance. Export, correct, retain and archive retain
+   the exact bounded effects recorded in current canon.
+4. Removal-only states apply only to operations requiring removal. Other
+   operations close from verified type-specific effect evidence and never
+   fabricate `LIVE_REMOVED`.
+5. Keep minimum state while unresolved. After `CLOSED`, `REFUSED` or
+   `CANCELLED`, keep the minimized content-free receipt for twelve months from
+   terminal time. Verified subject/account deletion and complete live +
+   backup/processor cleanup remove subject-linkable receipts unless a
+   separately Human-approved legal/security basis applies.
+
+This supersedes the four unresolved points in the immediately preceding
+boundary record. It authorizes deterministic DEE-871 contracts/tests/canon
+only—no migration, schema, repository mount, runtime writer, Trader, Society,
+production apply/deploy or PR.
+
+#### Selected smallest safe slice — pure RightsOperation history
+
+Add `lib/ai-twin/model/rights-operation.ts` and one focused unit test. The
+contract validates an inert complete-or-in-progress operation history; it does
+not execute, persist, authenticate or physically verify any effect.
+
+The immutable header binds operation id/type, both tenant dimensions, minimal
+target scope kind plus SHA-256 digest, original request time, exact policy
+version, Human requester and optional exact Human accepter. Ordered state
+events and execution attempts carry only sequence, timestamps, identifier-like
+outcome codes and SHA-256 evidence digests—never source content or copied
+payloads.
+
+Allowed state paths:
+
+- `DELETE` / `ERASE`: the ordered removal lifecycle or
+  `REQUESTED -> CANCELLED` / `REQUESTED -> REFUSED`;
+- `WITHDRAW_USE`: `REQUESTED -> ACCEPTED -> USE_BLOCKED -> CLOSED`, or
+  cancellation/refusal before acceptance;
+- `EXPORT`, `CORRECT`, `RETAIN`, `ARCHIVE`: `REQUESTED -> ACCEPTED -> CLOSED`,
+  or `CANCELLED` before the type-specific effect is committed; cancellation may
+  follow acceptance only while that effect remains absent.
+
+Each failed/succeeded attempt is terminal and append-only; sequence/id/time
+must be unique and monotone. Removal attempts cannot precede `USE_BLOCKED`.
+`LIVE_REMOVED` records a successful attempt plus a separately admitted
+completion-evidence reference. `CLOSED` records the relevant effect/closure
+reference. The trusted adapter supplies admitted references; this pure
+validator defines no evidence-independence or sufficiency test. Non-removal
+histories reject every removal-only state.
+
+Terminal receipt metadata computes a calendar twelve-month retention boundary,
+marks unresolved receipt retention separately and records the mandatory
+subject-deletion cleanup override without claiming that account deletion was
+performed. The returned history is independent and deeply frozen and grants no
+consent, disclosure, truth, archive, Formation or runtime authority.
+
+RED is the missing module/function. GREEN must cover every operation family,
+valid prefixes, cancellation boundaries, failed-attempt retry under immutable
+header, use-block persistence, required live/residual/closed evidence,
+non-removal denial of removal states, exact terminal receipt dates including
+leap-day behavior, both tenant dimensions, hostile object shapes and forbidden
+personal-content fields. Then run cumulative AI-TWIN model tests,
+lint/typecheck/build/canon/diff and independent P1/P2 review.
+
+#### RightsOperation implementation and validation receipt
+
+The focused RED failed module resolution before any RightsOperation case could
+run. GREEN adds policy `human-approved-2026-09-14/v1` and one pure structural
+history validator. A new operation starts only as `REQUESTED`; every later
+validation requires a trusted previous snapshot. Immutable header equality and
+canonical, field-order-independent state/attempt prefixes prevent rewrites
+while permitting JSONB reconstruction order.
+
+The implementation preserves the three type families: `DELETE` / `ERASE` use
+the full removal path, `WITHDRAW_USE` closes from its use block without
+inventing deletion, and `EXPORT` / `CORRECT` / `RETAIN` / `ARCHIVE` close only
+with their exact effect kind. Failed attempts remain in the prefix when a retry
+is appended. Effects/attempts cannot postdate terminal disposition. Terminal
+receipt metadata uses a calendar twelve-month boundary, includes no personal
+payload field and records—but does not execute—the full-subject-cleanup
+override.
+
+Independent review initially found three P2s: missing terminal chronology,
+deep-freeze without trusted prior-prefix proof, and digest-shape overclaiming.
+The fixes bind effects/attempts to terminal time, require the trusted previous
+snapshot, and rename outputs to `recordedState` /
+`productiveUseBlockRecorded`. Evidence digests must match a trusted adapter's
+admitted-reference set, while the result explicitly states
+`trusted_context_reference_match_only`. Re-review then found field-order
+sensitivity and two overclaiming test names; canonical comparison and neutral
+language resolved both. Final re-review found no remaining P1/P2.
+
+Evidence:
+
+- focused RightsOperation suite GREEN: 33/33;
+- cumulative six-file AI-TWIN model suite GREEN: 250/250;
+- scoped ESLint, `pnpm typecheck`, full `pnpm lint`, `pnpm build` and
+  `pnpm validate:canon` GREEN;
+- build emitted only the pre-existing Next.js middleware convention warning;
+- implementation checkpoint:
+  `ed21d21c9de7abfeea2f586f79cc47aedfa9ab14`;
+- fresh `origin/main`:
+  `d7d5941a995b83473acb6e00c42d5252c44b2303`.
+
+Only `lib/ai-twin/model/rights-operation.ts` and its focused unit test changed
+in the implementation commit. No repository/fixture SQL, shared migration or
+journal, `db/schema.postgres.ts`, Trader, runtime writer, Society, environment,
+deployment or PR surface changed.
+
+#### Fresh WP-1 reassessment and stop boundary
+
+The remaining matrix above is now current. EvidenceLink, annual
+storage-necessity review, private dialogue/Diary admission and the pure
+RightsOperation structure are qualified. No next coherent slice is both
+required and fully determined by ratified canon:
+
+1. broader source admission needs exact source/provenance, disclosure and
+   ingestion decisions;
+2. operational completion qualification needs evidence-known-at and
+   independence/sufficiency decisions;
+3. historical consent remains quarantine-only and cannot be inferred;
+4. persistence then reaches the separately frozen shared migration/schema and
+   Trader compatibility boundary.
+
+DEE-871 therefore remains In Progress with WP-1/WP-2/WP-3 incomplete. This stop
+does not discharge downstream dependencies, authorize runtime activation or
+make the batch integration-ready.
+
+### 2026-09-14 Human decision — WP-1 closure boundary
+
+The Human closed the remaining WP-1 semantic questions:
+
+1. Productive v1 raw-observation ingress is exactly current-authorized
+   `dialogue` / `diary`. Imported service/device sources remain future-capable
+   v2 vocabulary, not present authority. `HumanCorrection` and
+   `OutcomeReceipt` remain typed records owned by DEE-875, not generic ingress.
+2. DEE-871 owns durable provenance facts only: exact versioned identity,
+   tenant/subject, purpose/policy, chronology, current authority/availability
+   references and append-only lineage. Independence, sufficiency,
+   corroboration, inference recency, confidence, Formation and Model Health are
+   downstream algorithm ownership.
+3. Legacy material is never backfilled or inferred as consented. It remains
+   quarantined and non-productive without current provable authority. A later
+   explicit grant for specified material governs future use only and cannot
+   rewrite prior collection/use history. Unresolvable material remains
+   quarantined with independent Human export/delete rights.
+
+#### WP-1 closure proof
+
+Existing architecture already carries the required separation:
+
+- `ObservationSource` is the authority-bearing v1 union `dialogue | diary`;
+  the transport-neutral versioned `observation` persistence reference can
+  remain stable for future source payload versions without admitting them;
+- private source admission validates exact current scope, purpose, source,
+  policy, grant version and chronology and rejects every unknown class;
+- EvidenceLink accepts exact current typed `correction` / `outcome` references
+  as provenance while returning no ingress, independence, sufficiency,
+  corroboration, confidence, Formation or Model Health field;
+- legacy quarantine is metadata-only `plan_only`, grants no import/model use,
+  rejects grant-like input fields and preserves original/unknown time.
+
+No new source/scoring abstraction is needed. Targeted tests explicitly reject
+`imported_service`, `device`, `human_correction` and `outcome_receipt` as raw v1
+ingress; preserve correction/outcome as typed provenance references only; and
+prove that a newly presented current grant cannot mutate or imply historical
+consent. The three focused files pass 139/139. WP-1 is complete as object and
+rights design, not as persistent/runtime delivery: DEE-871 remains In Progress,
+WP-2/WP-3 and downstream dependencies remain open, and no PR is authorized.
+
+### 2026-09-14 WP-2 read-only convergence assessment
+
+Fresh `origin/main` is
+`d7d5941a995b83473acb6e00c42d5252c44b2303`, also the continuation branch
+merge-base. Its Postgres journal has 209 entries (`0000..0208`). The current
+head is `0208_historical_terminal_receipts_v1`, timestamp identity
+`1780000000208`: DEE-1006 AI-TRADER scientific-refusal and rehearsal-started
+terminal receipts, not AI-TWIN persistence. Its production apply remains a
+separate Human gate.
+
+Trader schema preflight requires the exact `0000..0207` prefix and admits 0208
+only as an explicit compatible additive migration. It does not admit 0209 or
+any arbitrary future journal entry. `db/schema.postgres.ts` has no DEE-871
+epistemic tables. Therefore any production AI-TWIN DDL would require a new
+0209-or-later migration, journal registration, shared schema review and a
+separate Trader compatibility package; none is admitted here.
+
+The read-only forensic source is
+`dee-871-ai-twin-shared-boundary` at
+`7802b39474f0126c8ef00655ebec2bad41bc093b`. Its merge-base with current main is
+`78188f9d`; it predates merged 0206–0208 and is not mergeable wholesale.
+Three-dot inspection finds 24 unique files. Current continuation canon wins on
+all overlap.
+
+#### WP-2 file-by-file port matrix
+
+**Already merged / authoritative baseline on `origin/main`:**
+
+- `lib/ai-twin/model/contracts.ts`, `ledger.ts`, `lifecycle.ts`,
+  `persistence-contracts.ts`, `postgres-repository.ts` and
+  `legacy-quarantine.ts`;
+- `tests/fixtures/ai-twin-model-repository.sql`;
+- `tests/integration/ai-twin-model-repository.test.ts`;
+- the corresponding ledger/lifecycle/persistence/quarantine unit tests.
+
+These provide the inert kernel and disconnected `twin_model_fixture`
+repository. They are not production persistence or a runtime mount.
+
+**Safe repository/auth preparation, with no shared schema or migration
+mutation:**
+
+- `lib/ai-twin/model/core-access.ts` plus
+  `tests/unit/ai-twin-core-access.test.ts` form the smallest coherent slice.
+  They use verified `getUser()`, existing Core user/membership/entitlement
+  reads, the existing transaction runner and mocked unit tests. They add no
+  table, migration, journal entry, Trader dependency, route or deployment.
+  Formation entitlement and current-member own-data rights remain separate.
+- `lib/ai-twin/model/human-transition-input.ts` and
+  `tests/unit/ai-twin-human-transition-input.test.ts` are pure, but the forensic
+  module imports an observation-service parser. Porting it alone would require
+  a new extraction/refactor and is not the next coherent WP-2 slice.
+- `tests/unit/ai-twin-consent-input.test.ts` and
+  `tests/unit/ai-twin-observation-input.test.ts` exercise pure parser behavior,
+  but their parser exports live inside schema-dependent service modules. They
+  are deferred with those services rather than partially copied.
+
+**Requires shared schema contracts before a coherent service port:**
+
+- `db/ai-twin-consent-contract.ts`;
+- `db/ai-twin-observation-contract.ts`;
+- `db/ai-twin-claim-version-contract.ts`;
+- `lib/ai-twin/model/consent-service.ts`;
+- `lib/ai-twin/model/observation-service.ts`;
+- `lib/ai-twin/model/claim-version-service.ts`;
+- `tests/fixtures/ai-twin-core-consent.sql`;
+- `tests/fixtures/ai-twin-core-observation.sql`;
+- `tests/fixtures/ai-twin-core-claim-versions.sql`.
+- `lib/ai-twin/model/claim-service.ts`,
+  `tests/fixtures/ai-twin-core-claim.sql` and
+  `tests/unit/ai-twin-claim-input.test.ts` remain transitional dependencies of
+  the forensic normalized path: `claim-version-service.ts` imports its proposal
+  parser/type, and the normalized fixture upgrades the root fixture. They
+  require extraction/reconciliation and are not safe standalone ports.
+
+The TypeScript table modules are deliberately unregistered and the SQL files
+are disposable fixtures that depend on existing public Core tables. They may
+inform a later isolated fixture design but cannot establish production schema.
+
+**Requires migration registration for production use:**
+
+- every production realization of the three non-superseded
+  `db/ai-twin-*-contract.ts` modules above;
+- any production use of the consent/observation/claim-version services;
+- journal `meta/_journal.json`, a numbered 0209-or-later migration and
+  `db/schema.postgres.ts`.
+
+No numbered AI-TWIN migration exists in the forensic branch. Registration is a
+future boundary, not a file to port from it.
+
+**Superseded:**
+
+- `db/ai-twin-claim-contract.ts` as a production table profile is superseded by
+  normalized claim revisions. Its associated parser/fixture artifacts are not
+  independently superseded because the normalized forensic path still imports
+  them; they stay deferred above until disentangled;
+- forensic `docs/ai-twin/AI-TWIN-CANONICAL-ALGORITHM.md`,
+  `docs/product/AI-TWIN-PRODUCT-CONSTITUTION.md`,
+  `docs/plans/dee-871-ai-twin-epistemic-ledger.md` and
+  `docs/gaps/ai-twin-v1-gap-registry.md` are superseded by this continuation's
+  later Human-ratified canon and must not overwrite it.
+
+**Must not port:**
+
+- `tests/integration/ai-twin-core-access-postgres.test.ts` as written, because
+  it applies the full shared migration directory and imports Trader schema
+  preflight;
+- the whole forensic branch, merge commits or its stale main-side deletions;
+- any forensic assumption that bypasses current source admission,
+  RightsOperation, annual-review or legacy-quarantine contracts.
+
+#### Exact next WP-2 slice and stop
+
+The smallest technically independent slice is exactly:
+
+1. `lib/ai-twin/model/core-access.ts`;
+2. `tests/unit/ai-twin-core-access.test.ts`.
+
+It must be ported file-by-file, reconciled with current Core/auth contracts and
+remain unmounted. This assessment does not itself admit implementation because
+Core/auth was an explicit shared boundary in the continuation preflight.
+Implementation therefore stops pending one bounded admission for that pair.
+No service, table contract, fixture stack or integration test is included.
+
+The first later hard persistence boundary is 0209-or-later shared migration
+registration together with `db/schema.postgres.ts` and Trader compatible
+additive review. No numbered migration, journal, shared schema, Trader file,
+runtime mount or production apply was edited during this assessment.
+
+### 2026-09-14 Human decision — bounded WP-2 Core access
+
+The Human admitted only a deterministic personal-model guard over a trusted
+resolved Core/auth snapshot. Supabase Auth / WAIA Core remains the sole
+credential, identity and tenancy authority. Access requires current exact
+organization, current actor membership, current subject binding and
+`actorUserId == subjectUserId`. Admin/owner/member roles, service/agent class,
+Formation and subscription cannot bypass that equality or create adjacent
+authority.
+
+Line-by-line forensic review found its `core-access.ts` broader than this
+decision: it invokes Supabase `getUser()`, queries Core tables, owns a
+transaction/locks and requires a `twin` entitlement for Formation access. None
+of those mechanisms was ported. The continuation instead rewrites the minimal
+slice as:
+
+- `lib/ai-twin/model/core-access.ts`: a pure closed-shape evaluator with policy
+  identity, explicit allow/deny reason codes, exact actor/subject/organization
+  binding and explicit current/stale/revoked Core states;
+- `tests/unit/ai-twin-core-access.test.ts`: mocked trusted-context tests with no
+  provider, schema, database or runtime dependency.
+
+The evaluator accepts no role, entitlement, payment, subscription, Formation,
+disclosure, Society, action or billing field. It returns only a frozen personal
+scope/actor on success, authenticates nobody, is not a caller-usable
+authorization token and reads/writes no Core or epistemic state. RED was the
+missing module; focused GREEN is 18/18.
+
+Independent review found one P2: validation repeatedly read live properties,
+so a stateful Proxy could change identity after an earlier check. The evaluator
+now validates only a detached native structured-clone snapshot; root and nested
+Proxy inputs fail closed. Re-review reproduced the former exploit as
+`TWIN_CORE_CONTEXT_MALFORMED` and found no remaining P1/P2.
+
+Checkpoint validation is green:
+
+- implementation checkpoint: `40574145e1c717d355bdbf217af93a218bb94bbd`;
+- focused Core-access unit suite: 18/18;
+- cumulative AI-TWIN model units: 274/274 across seven files;
+- full `pnpm lint` and `pnpm typecheck`;
+- production `pnpm build`;
+- `pnpm validate:canon` and `git diff --check`.
+
+#### Fresh WP-2 reassessment after Core access
+
+The next conceptual independent slice is a disconnected current-consent
+persistence/read boundary using only:
+
+1. `lib/ai-twin/model/postgres-repository.ts`;
+2. `tests/fixtures/ai-twin-model-repository.sql`;
+3. `tests/integration/ai-twin-model-repository.test.ts`.
+
+It would keep fixture-seeded authority and any future consent write/revocation
+inside one isolated repository transaction, without shared DDL. It is not yet
+admitted because the current repository has no consent-creation API and the
+forensic consent service assumes mechanisms rejected by this decision:
+in-module Supabase authentication, an entitlement-gated Core transaction and
+unregistered table contracts. Before implementation, canon must specify how a
+fresh trusted Core resolution enters and remains bound to the repository
+transaction, and what exact Human ceremony authorizes initial consent issuance
+and expiry. Matching IDs or this pure guard's output alone cannot supply that
+authority.
+
+DEE-875-owned Human transition input is not substituted as WP-2 progress.
+Production schema remains the later 0209-or-higher migration,
+`db/schema.postgres.ts` and Trader-compatibility boundary. Stop here after the
+Core checkpoint; no service, fixture, migration, journal, shared schema, Trader
+file, runtime route or production state is admitted.
+
+### 2026-09-14 Human decision — bounded authenticated repository boundary
+
+Fresh preflight confirms `origin/main`
+`d7d5941a995b83473acb6e00c42d5252c44b2303` remains the exact branch
+merge-base. The Human ratified transaction-current Core authority and explicit
+ConsentGrant issuance/temporal semantics. Initial review identified the raw
+`postgres.js` / Drizzle split, but independent review correctly found that the
+existing raw repository transaction can host an injected trusted Core resolver
+without changing Core tables or accepting a prior access decision. The admitted
+implementation is still disconnected: it proves transaction composition
+against synthetic trusted-adapter output, not production Supabase/Core wiring.
+
+#### Admission matrix
+
+**`lib/ai-twin/model/core-access.ts`**
+
+- Reuse: exact actor/subject/organization/current-state semantics and explicit
+  fail-closed reasons.
+- Merged equivalent: the continuation already contains the pure evaluator.
+- WP-1 compatibility: yes; it grants no consent or product authority.
+- Transaction-current Core: compatible only when its resolved input is produced
+  inside the current repository transaction; its output remains non-durable.
+- New consent compatibility: neutral.
+- Shared schema/migration: none.
+- Bounded verdict: reused inside every repository transaction after fresh
+  adapter resolution; never accepted as an input token or cache.
+
+**`lib/ai-twin/model/postgres-repository.ts`**
+
+- Reuse: per-operation `sql.begin`, scope advisory lock, exact tenant/subject
+  predicates, in-transaction grant/rights/object reads, append-only objects and
+  idempotency.
+- Merged equivalent: authoritative disconnected repository already on main and
+  extended by current WP-1 contracts.
+- WP-1 compatibility: yes after grant-shape reconciliation; caller
+  `ModelContext` is operation data, not identity authority.
+- Transaction-current Core: bounded compatible. The factory requires fresh
+  trusted Human identity resolution inside every operation transaction, invokes
+  current Core resolution with that exact `TransactionSql`, evaluates the raw
+  result through `core-access.ts`, then performs protected work before
+  transaction completion.
+- New consent compatibility: explicit issuance intent, trusted database issue
+  time, `UNTIL_REVOKED | EXPIRES_AT`, future-expiry validation, exact
+  purpose/source/use/disclosure/policy binding and append-only revocation.
+- Shared schema/migration: not required for the existing fixture, but required
+  for production persistence.
+- Bounded verdict: admitted and implemented only as a disconnected repository
+  contract. No concrete production authority adapter or runtime mount exists.
+
+**`tests/fixtures/ai-twin-model-repository.sql`**
+
+- Reuse: isolated schema and advisory serialization shared by adapter-state,
+  repository and consent writers.
+- Merged equivalent: already authoritative test fixture.
+- WP-1 compatibility: useful for epistemic storage behavior only.
+- Transaction-current Core: synthetic owner-seeded adapter output only,
+  separately locked/read inside the repository transaction. It is expressly
+  not Core identity/membership state.
+- New consent compatibility: append-only JSON versions; service can INSERT but
+  cannot UPDATE/DELETE consent. The service database handle is part of the
+  trusted app TCB and is never caller-exposed; this fixture does not claim to
+  resist compromise of that credential. Repository APIs enforce issuance,
+  replay and lineage under current authority.
+- Shared schema/migration: no.
+- Bounded verdict: minimally extended with output-state rows only. No user,
+  organization, role, membership or subject Core model is duplicated.
+
+**`tests/integration/ai-twin-model-repository.test.ts`**
+
+- Reuse: exact org/subject isolation, grant-version freshness, expiry,
+  revocation races, append-only history and hostile persistence cases.
+- Merged equivalent: already authoritative for the disconnected fixture.
+- WP-1 compatibility: yes; fixtures use the canonical explicit temporal/use
+  shape.
+- Transaction-current Core: proves a current adapter read and lock in the exact
+  repository transaction, same-Human access, no service/foreign bypass, no
+  decision reuse and the check/revoke/work race. It does not prove real
+  Supabase/Core integration.
+- New consent compatibility: proves Human-only issuance, trusted issue time,
+  `UNTIL_REVOKED`, rejected past expiry, append-only revocation and stale-grant
+  denial.
+- Shared schema/migration: no.
+- Bounded verdict: admitted as disconnected adapter/repository qualification
+  only.
+
+**`lib/ai-twin/model/contracts.ts` and
+`lib/ai-twin/model/source-admission.ts`**
+
+- Reuse: append-only version reference, exact purpose/source/policy/private
+  disclosure checks and fail-closed current-grant admission.
+- Merged equivalent: current continuation owns them.
+- WP-1 compatibility: yes for ratified dialogue/Diary admission.
+- Transaction-current Core: neither module resolves identity.
+- New consent compatibility: complete for the bounded contract:
+  `ModelConsentGrant` requires explicit temporal mode and productive-use set;
+  parsers reject malformed chronology/extra fields/hostile objects; source
+  admission handles both temporal modes and current revocation.
+- Shared schema/migration: none for a future pure reconciliation.
+- Bounded verdict: admitted and implemented with focused pure tests; neither
+  module authenticates or persists by itself.
+
+**Forensic `lib/ai-twin/model/core-access.ts`,
+`consent-service.ts` and `observation-service.ts`**
+
+- Reuse: conceptual same-transaction intent, current grant re-read and
+  append-only revocation version.
+- Merged equivalent: no; only the rewritten pure Core evaluator is current.
+- WP-1 compatibility: no as written; the grant projection omits the current
+  explicit disclosure boundary and later WP-1 semantics.
+- Transaction-current Core: broader than admitted. It performs Supabase access
+  in AI-TWIN, depends on Core schema tables/Drizzle transactions and introduces
+  an entitlement prerequisite rejected by the Human.
+- New consent compatibility: only finite `expiresAt`; purpose/source/use values
+  are hardcoded rather than all explicit Human choices.
+- Shared schema/migration: services depend on unregistered table contracts and
+  public Core tables.
+- Bounded verdict: must not port.
+
+**Forensic `db/ai-twin-*-contract.ts`, Core fixture SQL and shared integration
+test**
+
+- Reuse: none in this bounded slice.
+- Merged equivalent: disconnected model fixture only, not these files.
+- WP-1/new consent compatibility: incomplete and stale.
+- Transaction-current Core: the shared test applies production migrations and
+  imports Trader preflight; synthetic fixtures still do not prove Supabase
+  identity.
+- Shared schema/migration: yes.
+- Bounded verdict: must not port or modify.
+
+**Canon and this plan**
+
+- Reuse: exact Human decisions and bounded implementation evidence.
+- Merged equivalent: current continuation is authoritative.
+- Compatibility: yes.
+- Shared schema/migration: none.
+- Bounded verdict: admitted alongside the disconnected code/test slice.
+
+#### Bounded implementation and remaining limitation
+
+The repository now composes authority as follows:
+
+1. snapshot/freeze caller operation context before any asynchronous read;
+2. begin the repository `TransactionSql`;
+3. resolve a fresh authenticated Human through that exact transaction;
+4. pass the same transaction and exact target scope to the trusted Core
+   resolver;
+5. evaluate its raw current context with `core-access.ts`;
+6. acquire the scope lock and complete the protected operation in the same
+   transaction.
+
+The factory accepts no prior access decision. Caller `actor`, IDs, roles,
+entitlements or product state cannot replace adapter resolution. The
+disconnected resolver reads owner-seeded status output while holding the same
+scope advisory transaction lock; a concurrent revoke waits for in-flight
+protected work, and the next transaction observes the revocation and fails
+closed. Root/nested Proxy, getter, service actor and foreign-Human cases fail.
+
+Consent intent has no identity, grant ID or issue-time field. It explicitly
+selects purpose, dialogue/Diary sources, productive private modelling,
+`private_only` disclosure, retention policy and
+`UNTIL_REVOKED | EXPIRES_AT`. The repository generates the grant ID and trusted
+database issue time after current access, rejects non-future expiry, appends
+revocation as a new version and never updates/deletes grant history. A
+scope/purpose request receipt makes issuance retries idempotent and conflicts
+fail closed. Grant IDs are UUIDs; every read, replay and revocation validates
+the complete stored lineage and rejects gaps, post-revocation versions or
+changes to immutable purpose/source/use/time/policy fields. Current
+reads/writes re-read the latest version and deny
+expired/revoked authority; source rights fences remain higher priority.
+
+RED was the missing pure consent module. Focused GREEN is 70/70 across consent,
+source admission and ledger tests. The explicitly owned PostgreSQL fixture is
+28/28, including transaction-local identity/current-authority re-resolution,
+the Core revocation race, same-Human isolation, pre-await snapshots of hostile
+or mutated context/write payloads, idempotent issuance, expiry rejection,
+immutable lineage and append-only revocation.
+
+Implementation checkpoint:
+`274ef2e4f8348554b9df26734ebe3a449cb79e96`. Final cumulative AI-TWIN model
+units are 285/285; full lint has zero errors (pre-existing repository warnings
+remain), typecheck/build/canon and `git diff --check` pass. Independent
+adversarial review found and closed identity-transaction, mutable-input,
+grant-ID, issuance-replay, full-lineage and revocation-validation gaps; final
+re-review reports no concrete P1/P2.
+
+This does not qualify real Supabase authentication, public Core-table queries,
+production persistence, RLS, migration registration or runtime use. A concrete
+production resolver must bind verified Supabase identity to current Core rows
+on the same reserved database transaction, and physical AI-TWIN tables require
+the separately reviewed 0209-or-later migration, journal,
+`db/schema.postgres.ts` and Trader-compatible additive package. Those are the
+next shared boundaries, so WP-2 remains current and incomplete and execution
+stops before them.
+
+### 2026-09-14 Human decisions and 0209 shared persistence package
+
+Fresh preflight immediately before implementation confirmed `origin/main`
+`d7d5941a995b83473acb6e00c42d5252c44b2303`, merge-base identity, a clean
+pushed branch, and zero open PRs. The Human then ratified:
+
+1. **Ownership A.** The 0209 journal/SQL/`db/schema.postgres.ts` package and
+   the exact FHV compatible-additive tuple
+   `{ idx: 209, when: 1780000000209, tag: 0209_ai_twin_epistemic_persistence_v1 }`
+   stay inside DEE-871. `FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX` remains 207.
+   AI-TWIN tables are not added to `FHV_V2_POSTGRES_REQUIRED_TABLES`. No other
+   Trader file or scientific/runtime behavior is in this exception.
+   Trader-owner/shared-boundary review remains mandatory.
+2. **Annual-review target.** `InitialHumanModelEndorsement` and
+   `NecessityReviewConfirmation` persist against an exact Human-endorsed claim
+   revision `(organization_id, subject_user_id, claim_id, revision)`. No
+   aggregate model-record table was invented.
+3. **Private archive deferred.** `ai_twin_private_sources`,
+   `ai_twin_private_experiences` and `ai_twin_private_experience_sources` are
+   not in 0209. The disconnected fixture archive remains disconnected.
+
+Implemented in-repo, still unmounted and unapplied:
+
+- additive create-only migration `0209_ai_twin_epistemic_persistence_v1`;
+- Drizzle registration of the 18 epistemic tables;
+- `getFreshOptionalSessionUserId`;
+- `createProductionTwinCoreAuthorityAdapter` with `FOR SHARE` Core reads and
+  row-presence=`current` mapping;
+- normalized `createProductionTwinRepository` using
+  `withPostgresSerializableTransactionRetry`, two-dimensional application
+  scoping, append-only consent, dialogue/Diary observations, claims,
+  corrections, evidence links, rights history, and claim-targeted
+  endorsement/review.
+
+Not claimed: production DDL apply, runtime writer/route mount, RLS expansion,
+legacy backfill, WP-3 residual-copy verification, or DEE-871 integration-ready
+closeout.
+
+Local qualification at `197b079e14f4b3d28543987728b5d0633e3fbbe0`: 0209
+applies on isolated PostgreSQL 17; the shared fresh-current and 204→current
+upgrade suites passed; `*tenant-isolation*` passed including the AI-TWIN
+gate; production consent issue/revoke and same-org other-subject / cross-org
+denial passed against real Core membership rows. Writers remain unmounted.
+The isolated fixture container was disposable and is not a production apply.
+
+### 2026-09-14 Trader/shared-boundary independent review — PASS
+
+Freshness immediately before this review: live `origin/main`, local `origin/main`, and
+merge-base remain `d7d5941a995b83473acb6e00c42d5252c44b2303`. Branch HEAD
+`3370b0206ffd263676540ccbc9710a592e77d3c9` is clean and pushed. The only open
+PR is #592 (DEE-1009 forecast KEY_ORDER); it does not touch
+`db/schema.postgres.ts`, `db/migrations_postgres/`, the journal, FHV
+preflight/tests, or ordinal 0209+. No shared collision.
+
+Independent adversarial review of the exact compatibility delta (P1=0, P2=0):
+
+1. `FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX` remains exactly 207.
+2. 0209 is not in `FHV_V2_POSTGRES_REQUIRED_TABLES`.
+3. 0208 compatible-additive admission is unchanged.
+4. 0209 admission is exactly
+   `{ idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" }`.
+5. Preflight still hashes exact SQL file bytes; additive rows are not exempt.
+6. Unknown applied `1780000000210` / 0210+ still throws `UNKNOWN_APPLIED_MIGRATION`.
+7. Wrong 0209 idx/when/tag still throws `COMPATIBLE_MIGRATION_IDENTITY_INVALID`;
+   wrong applied hash still throws `APPLIED_MIGRATION_HASH_MISMATCH`.
+8. Absence of applied 0209 is accepted; 0209 is not in the required scientific prefix.
+9. AI-TWIN tables are irrelevant to FHV required-table qualification.
+10. No Trader scientific logic, runtime semantics, execution path, table
+    requirement, or evidence law changed. The only `lib/trader/**` production
+    edit is the three-line allowlist append in
+    `fhv-v2-postgres-schema-preflight.ts`.
+
+P3 only: listed FHV tests do not mutate 0209 idx/when/tag/hash (same coverage
+shape as 0208 on `origin/main`). Not a production weakening. WP-3 may proceed.
+
+Later freshness before WP-3 closeout: live `origin/main` moved to
+`680c9d7c9c74d5cc2b85f2d90d13b99f8fb36c47` (DEE-1009 / PR #592 KEY_ORDER).
+That commit touches only `docs/plans/dee-1009-align-forecast-key-order.md` and
+the missing-only forecast producer/test. No `db/schema.postgres.ts`, journal,
+FHV preflight/tests, or 0209+ files. Open PRs to `main`: none. No new shared
+collision. Merge-base of this branch remains `d7d5941a`. Rebase onto
+`680c9d7c` is required before the DEE-871 PR, not in this WP-3 slice.
+
+### 2026-09-14 WP-3 residual-copy / export verification — contract qualification PASS
+
+Implementation commit: `be44d84d0cc1756e14aa51f85c31ecf0ac0c55fa`. WP-3 is isolation
+and migration proof, not runtime rollout. Existing 0209 schema was sufficient;
+no 0210 and no 0209 SQL/journal/FHV edit in this slice.
+
+Implemented application/repository qualification only:
+
+- `lib/ai-twin/model/residual-copy-verification.ts` —
+  `qualifyResidualCopyClosure`
+- `lib/ai-twin/model/export-artifact-verification.ts` —
+  `qualifyExportArtifactRetention`
+- DELETE/ERASE persist CLOSED in
+  `postgres-production-repository.recordRightsOperation` requires a closable
+  residual-copy qualification against a trusted-adapter inventory declaration
+- focused unit tests plus the existing production PostgreSQL persistence suite
+
+Ratified semantics proved as **contract qualification**, not production
+residual-copy or legal-deletion evidence (`productionClaim:
+contract_qualification_only`, `authority: none`):
+
+- withdrawal/USE_BLOCKED blocks productive use independently of physical cleanup
+- `LIVE_REMOVED` is not residual-copy proof
+- missing/empty inventory fails closed (`COPY_INVENTORY_REQUIRED` /
+  `not_closable_inventory_required`); this module does not invent a backup or
+  processor registry
+- a live-only inventory cannot close unless the trusted adapter explicitly
+  declares `residualCopyClasses: declared_absent_for_this_deployment`
+- residual proof requires an admitted SUCCEEDED attempt digest whose
+  `outcomeCode` matches the copy class (`LIVE_CLEANUP_VERIFIED` /
+  `BACKUP_PURGE_VERIFIED` / `PROCESSOR_PURGE_VERIFIED`) and is **not** a
+  lifecycle event digest (ACCEPTED / USE_BLOCKED / LIVE_REMOVED / CLOSED)
+- remapping CLOSED or live-cleanup digests onto `backup_copy` is rejected
+- retry preserves the original `requestedAt` (7-day live / 30-day all-copies)
+- failed cleanup without a later success stays fail-closed
+- export artifact valid before original `createdAt+24h`; removal required
+  at/after; retry does not refresh TTL
+- EXPORT CLOSED / `EXPORT_ARTIFACT_CREATED` / ACCEPTED / attempt hashes are
+  not artifact-removal proof; removal evidence must be admitted, request- and
+  scope-bound, and absent from the supplied export operation
+- source revocation is rechecked on later composition; artifact expiry does
+  not delete source records
+- legacy quarantine remains non-productive; no legacy consent/content importer
+
+Independent WP-3 residual/export re-review after the P1/P2 fix: **P1=0,
+P2=0**. Remaining notes are P3 (caller-supplied inventory completeness is a
+trusted-adapter declaration, not a durable registry; export qualifier does
+not re-run full rights-history validation).
+
+This is not production deletion evidence, a download endpoint, an object-storage
+worker, or DEE-871 integration-ready closeout.
+
+### 2026-09-14 integration freeze / reviewability — A
+
+Synchronized published branch with `git merge --no-edit origin/main` (no rebase,
+no force-push). Fresh main `680c9d7c9c74d5cc2b85f2d90d13b99f8fb36c47` (DEE-1009)
+introduced no schema/journal/FHV/0209 overlap. Open PRs to `main`: none.
+Conflicts: none.
+
+Full independent review of `origin/main...HEAD` found P1=0 and three adapter
+P2s. Bounded production-repository fixes (kind-scoped live deletion,
+Human-endorsed necessity-review gating on `current()`, one transaction clock)
+were applied without 0210. Re-review: **P1=0, P2=0**.
+
+**Reviewability decision: A — retain one DEE-871 integration PR.**
+
+Size exceeds the ~20-file / ~800-line target (43 files, about +10.7k / −148).
+That is a review-cost fact, not a second deployable system. Split would be
+invalid because:
+
+- One Linear issue, one 0209 ownership, one FHV compatible-additive tuple.
+- WP-1 contracts, WP-2 schema/repository, and WP-3 residual/export
+  qualification share `ai_twin_rights_*` and the CLOSED DELETE persist gate.
+  Shipping 0209 without the repository, or the repository without 0209, or
+  rights contracts without the residual-copy close gate, creates an
+  intermediate schema/contract that FHV environments cannot apply or that
+  can CLOSE a deletion without inventory proof.
+- The 3-line Trader preflight tuple must land with the journal row; it is
+  not independently deployable and does not change Trader scientific law.
+- Production DDL is not applied, so one squash revert removes the entire
+  unmounted package.
+- No Society, deploy, route mount, private-archive tables, 0210, or
+  readiness cutover is in the diff.
+- No different Human gate is hidden: T3 persistence foundation is the
+  only merge gate. Production apply, runtime mount, and operational
+  deletion remain explicit deferred Human rollout gates, not merge
+  blockers under the DEE-871 acceptance contract.
+
+Never open a second PR against DEE-871.
+
+### 2026-09-14 PR 593 exact-head CI repair
+
+PR https://github.com/oumaster369/waia/pull/593 HEAD
+`e3e942744462a9d11915be45d1200edef8fb5d99` failed required `unit tests` on
+shard 1/2: `tests/unit/historical-terminal-receipts-migration-v1.test.ts`
+still treated `journal.entries.at(-1)` as 0208. 0208 identity, timestamp
+`1780000000208`, and the 0208 SQL file are unchanged. DEE-871 0209 is the
+journal tip and already owns tail identity in
+`tests/unit/ai-twin-epistemic-persistence-migration-v1.test.ts`. Repair:
+assert the 0208 journal row with `toContainEqual`, matching the 0194
+contiguous-ownership pattern. FHV `REQUIRED_MIGRATION_MAX` remains 207.
+No schema, writer/route mount, production DDL, or second PR.
 
 ## Approved outcome
 
@@ -105,6 +1288,8 @@ Implement schema, repositories and current-model projections; embeddings remain 
 ### WP-3 — Isolation and migration proof
 
 Prove tenant isolation, version history, idempotency and safe legacy/backfill hooks.
+Local residual-copy/export/legacy contract qualification is recorded in the
+2026-09-14 WP-3 receipt above. It is not production residual-copy evidence.
 
 ## Safety invariants
 

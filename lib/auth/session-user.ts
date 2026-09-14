@@ -86,3 +86,8 @@ export const getOptionalAdminSessionUserId = cache(resolveOptionalAdminSessionUs
 
 /** Revalidate sensitive bounded reads within a single request without React memoization. */
 export const getFreshOptionalAdminSessionUserId = resolveOptionalAdminSessionUserId;
+
+/** Fresh product session lookup without React memoization. Twin production
+ * persistence must resolve identity immediately before repository entry, never
+ * from a prior cached decision or request-body ID. */
+export const getFreshOptionalSessionUserId = resolveOptionalSessionUserId;

@@ -3,11 +3,13 @@ import type { ModelScope } from "./contracts";
 
 /** Inert reference policy, not storage, authentication, legal-basis determination or
  * a request/LLM parser. The future trusted adapter supplies current authorizations,
- * evidence eligibility and substantial-evidence anchors from authoritative records.
- * These functions neither collect data nor perform/verify removal or disclosure. */
+ * evidence eligibility, substantial-evidence anchors and immutable model-class
+ * review lineage from authoritative records. These functions neither collect data
+ * nor perform/verify removal or disclosure. */
 // R1 (Human-approved 2026-09-09) adds explicit working-memory classes without
 // changing the meaning of existing classes or relabeling persisted model records.
 export const TWIN_RETENTION_POLICY = "human-approved-2026-09-08/v1";
+export const TWIN_NECESSITY_REVIEW_POLICY = "human-approved-2026-09-12/v1";
 const DAY = 86400000;
 type Purpose =
   | "dialogue"
@@ -29,6 +31,47 @@ export type RetentionAuthorization = Readonly<{
   validUntil: string | null;
   revokedAt: string | null;
   basisReference: string;
+}>;
+export type NecessityReviewConfirmation = Readonly<{
+  reviewId: string;
+  policyVersion: typeof TWIN_NECESSITY_REVIEW_POLICY;
+  target: Readonly<{
+    organizationId: string;
+    subjectId: string;
+    recordId: string;
+    recordRevision: number;
+  }>;
+  basis: "storage_necessity";
+  decision: "retain";
+  preparedAt: string;
+  confirmedAt: string;
+  confirmedBy: Readonly<{
+    kind: "human";
+    organizationId: string;
+    subjectId: string;
+  }>;
+}>;
+export type InitialHumanModelEndorsement = Readonly<{
+  endorsementId: string;
+  /** Production 0209 maps this to an exact Human-endorsed claim object version. */
+  target: Readonly<{
+    organizationId: string;
+    subjectId: string;
+    recordId: string;
+    recordRevision: number;
+  }>;
+  basis: "initial_model_endorsement";
+  confirmedAt: string;
+  confirmedBy: Readonly<{
+    kind: "human";
+    organizationId: string;
+    subjectId: string;
+  }>;
+}>;
+/** Trusted model-class lineage supplied independently of an ordinary record revision. */
+export type ModelNecessityReviewState = Readonly<{
+  initialEndorsement: InitialHumanModelEndorsement;
+  latestReview: NecessityReviewConfirmation | null;
 }>;
 export type RetentionRecord = Readonly<{
   scope: ModelScope;
@@ -53,7 +96,6 @@ export type RetentionRecord = Readonly<{
   evidenceEligible: boolean;
   erasureRequestedAt: string | null;
   lastSubstantialEvidenceAt?: string;
-  lastNecessityReviewAt?: string;
   processingCompletedAt?: string;
 }>;
 const purposes: Record<RetentionRecord["kind"], Purpose> = {
@@ -100,16 +142,152 @@ function anniversary(value: number): number {
   if (date.getUTCMonth() !== month) date.setUTCDate(0);
   return date.getTime();
 }
+function contractKeys(value: object, keys: readonly string[], label: string, exact = true): void {
+  const actual = Object.keys(value);
+  if (actual.some((key) => !keys.includes(key)) || (exact && actual.length !== keys.length))
+    throw new Error(`Invalid ${label} fields`);
+}
+function initialEndorsementAnchor(
+  record: RetentionRecord,
+  endorsement: InitialHumanModelEndorsement,
+  clock: number,
+): number {
+  canonical(endorsement);
+  contractKeys(
+    endorsement,
+    ["endorsementId", "target", "basis", "confirmedAt", "confirmedBy"],
+    "initial model endorsement",
+  );
+  contractKeys(
+    endorsement.target,
+    ["organizationId", "subjectId", "recordId", "recordRevision"],
+    "initial model endorsement target",
+  );
+  contractKeys(
+    endorsement.confirmedBy,
+    ["kind", "organizationId", "subjectId"],
+    "initial model endorsement actor",
+  );
+  text(endorsement.endorsementId);
+  identity(
+    {
+      organizationId: endorsement.target.organizationId,
+      subjectId: endorsement.target.subjectId,
+    },
+    endorsement.target.recordId,
+    endorsement.target.recordRevision,
+  );
+  if (
+    endorsement.basis !== "initial_model_endorsement" ||
+    endorsement.confirmedBy.kind !== "human" ||
+    endorsement.target.organizationId !== record.scope.organizationId ||
+    endorsement.target.subjectId !== record.scope.subjectId ||
+    endorsement.target.recordId !== record.id ||
+    endorsement.target.recordRevision > record.revision ||
+    endorsement.confirmedBy.organizationId !== record.scope.organizationId ||
+    endorsement.confirmedBy.subjectId !== record.scope.subjectId
+  )
+    throw new Error("Invalid initial model endorsement binding");
+  const confirmed = instant(endorsement.confirmedAt);
+  if (confirmed > clock) throw new Error("Initial Human endorsement is in the future");
+  return confirmed;
+}
+function necessityReviewAnchor(
+  record: RetentionRecord,
+  review: NecessityReviewConfirmation,
+  created: number,
+  initialEndorsement: number,
+  clock: number,
+): number {
+  canonical(review);
+  contractKeys(
+    review,
+    [
+      "reviewId",
+      "policyVersion",
+      "target",
+      "basis",
+      "decision",
+      "preparedAt",
+      "confirmedAt",
+      "confirmedBy",
+    ],
+    "necessity review",
+  );
+  contractKeys(
+    review.target,
+    ["organizationId", "subjectId", "recordId", "recordRevision"],
+    "necessity review target",
+  );
+  contractKeys(
+    review.confirmedBy,
+    ["kind", "organizationId", "subjectId"],
+    "necessity review actor",
+  );
+  text(review.reviewId);
+  identity(
+    {
+      organizationId: review.target.organizationId,
+      subjectId: review.target.subjectId,
+    },
+    review.target.recordId,
+    review.target.recordRevision,
+  );
+  if (
+    review.policyVersion !== TWIN_NECESSITY_REVIEW_POLICY ||
+    review.basis !== "storage_necessity" ||
+    review.decision !== "retain" ||
+    review.confirmedBy.kind !== "human" ||
+    review.target.organizationId !== record.scope.organizationId ||
+    review.target.subjectId !== record.scope.subjectId ||
+    review.target.recordId !== record.id ||
+    review.target.recordRevision !== record.revision ||
+    review.confirmedBy.organizationId !== record.scope.organizationId ||
+    review.confirmedBy.subjectId !== record.scope.subjectId
+  )
+    throw new Error("Invalid necessity review binding");
+  const prepared = instant(review.preparedAt);
+  const confirmed = instant(review.confirmedAt);
+  if (
+    prepared < created ||
+    confirmed < prepared ||
+    confirmed <= initialEndorsement ||
+    confirmed > clock
+  )
+    throw new Error("Invalid necessity review chronology");
+  return confirmed;
+}
 
 export function planRetention(
   record: RetentionRecord,
   authorization: RetentionAuthorization | null,
   now: string,
+  modelReviewState: ModelNecessityReviewState | null = null,
 ) {
+  canonical(record);
+  contractKeys(
+    record,
+    [
+      "scope",
+      "id",
+      "revision",
+      "kind",
+      "createdAt",
+      "evidenceEligible",
+      "erasureRequestedAt",
+      "lastSubstantialEvidenceAt",
+      "processingCompletedAt",
+    ],
+    "retention record",
+    false,
+  );
+  contractKeys(record.scope, ["organizationId", "subjectId"], "retention scope");
   identity(record.scope, record.id, record.revision);
   const clock = instant(now);
   const created = instant(record.createdAt);
   if (created > clock) throw new Error("Record is in the future");
+  if (record.kind !== "model" && modelReviewState !== null)
+    throw new Error("Necessity review applies only to long-lived model knowledge");
   const anchor = (value: string | undefined) => {
     const result = value === undefined ? created : instant(value);
     if (result < created || result > clock) throw new Error("Invalid lifecycle anchor");
@@ -141,9 +319,33 @@ export function planRetention(
         throw new Error("Completed-copy policy requires completion time");
       expiry = anchor(record.processingCompletedAt) + DAY;
       break;
-    case "model":
-      reviewAt = anniversary(anchor(record.lastNecessityReviewAt));
+    case "model": {
+      if (modelReviewState === null)
+        throw new Error("Model requires trusted necessity-review state");
+      canonical(modelReviewState);
+      contractKeys(
+        modelReviewState,
+        ["initialEndorsement", "latestReview"],
+        "model necessity-review state",
+      );
+      const initialEndorsement = initialEndorsementAnchor(
+        record,
+        modelReviewState.initialEndorsement,
+        clock,
+      );
+      const reviewAnchor =
+        modelReviewState.latestReview === null
+          ? initialEndorsement
+          : necessityReviewAnchor(
+              record,
+              modelReviewState.latestReview,
+              created,
+              initialEndorsement,
+              clock,
+            );
+      reviewAt = anniversary(reviewAnchor);
       break;
+    }
     case "receipt":
     case "diary":
     case "saved_episode":
@@ -154,6 +356,27 @@ export function planRetention(
   }
   let permitted = false;
   if (authorization !== null) {
+    canonical(authorization);
+    contractKeys(
+      authorization,
+      [
+        "scope",
+        "recordId",
+        "recordRevision",
+        "purpose",
+        "approvedBy",
+        "validFrom",
+        "validUntil",
+        "revokedAt",
+        "basisReference",
+      ],
+      "retention authorization",
+    );
+    contractKeys(
+      authorization.scope,
+      ["organizationId", "subjectId"],
+      "retention authorization scope",
+    );
     const from = instant(authorization.validFrom);
     const until = authorization.validUntil === null ? null : instant(authorization.validUntil);
     const revoked = authorization.revokedAt === null ? null : instant(authorization.revokedAt);
@@ -179,20 +402,37 @@ export function planRetention(
     if (until !== null) expiry = expiry === null ? until : Math.min(expiry, until);
   }
   const requestAt = record.erasureRequestedAt === null ? null : anchor(record.erasureRequestedAt);
-  const retain =
+  const otherwiseRetainable =
     permitted &&
     record.evidenceEligible === true &&
     requestAt === null &&
     (expiry === null || clock < expiry);
+  const reviewDue = reviewAt !== null && clock >= reviewAt;
+  const purposeUseAllowed = otherwiseRetainable && !reviewDue;
   const iso = (value: number | null) => (value === null ? null : new Date(value).toISOString());
   return {
     policyVersion: TWIN_RETENTION_POLICY,
-    disposition: retain ? ("retain" as const) : ("remove" as const),
+    necessityReviewPolicyVersion: TWIN_NECESSITY_REVIEW_POLICY,
+    disposition: !otherwiseRetainable
+      ? ("remove" as const)
+      : reviewDue
+        ? ("human_review_required" as const)
+        : ("retain" as const),
     /** Applies ONLY to the recorded purpose, never inferred modelling/sharing. */
-    purposeUseAllowed: retain,
+    purposeUseAllowed,
     expiresAt: iso(expiry),
     reviewDueAt: iso(reviewAt),
-    reviewDue: reviewAt !== null && clock >= reviewAt,
+    reviewDue,
+    reviewDecision:
+      reviewAt === null
+        ? ("not_applicable" as const)
+        : reviewDue && otherwiseRetainable
+          ? ("human_decision_required" as const)
+          : reviewDue
+            ? ("superseded_by_removal" as const)
+            : ("current" as const),
+    /** Access, correction and deletion are authorized through independent rights paths. */
+    humanRightsAssessment: "separate" as const,
     liveRemovalTargetAt: iso(requestAt === null ? null : requestAt + 7 * DAY),
     allCopiesRemovalTargetAt: iso(requestAt === null ? null : requestAt + 30 * DAY),
     removalVerified: false as const,

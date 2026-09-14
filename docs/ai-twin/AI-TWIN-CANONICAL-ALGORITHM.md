@@ -34,9 +34,16 @@ Before observation, the engine records the current purpose, permitted source typ
 
 ### 2.2 Observation and projection
 
-Every observation has provenance:
+Every observation has provenance. Productive raw-observation ingress in v1 is
+limited to currently authorized dialogue and Diary. Imported service and device
+remain future-capable source classes for Connected Context / v2, not admitted
+v1 authority. `HumanCorrection` and `OutcomeReceipt` are separate typed
+canonical records owned by the DEE-875 creation/reconciliation loop, not generic
+external-source ingress.
 
-- source: dialogue, Diary, imported service, device, Human correction or verified outcome;
+For an admitted observation, provenance records:
+
+- source: dialogue or Diary in v1;
 - observation time and event time;
 - context and active purpose;
 - direct quote/reference or content digest where retention permits;
@@ -44,6 +51,58 @@ Every observation has provenance:
 - projection risks: ambiguity, leading question, missing context, selection bias or model interpretation.
 
 Raw observation is immutable during ordinary revision. Interpretation never overwrites it. This does not override Human deletion or purpose/retention limits: historical personal content is erasable under section 6.1.
+
+### 2.2.1 Source admission and consent disclosure — Human-approved 2026-09-14
+
+Before productive Human-model use, a deterministic admission check resolves the
+source's current purpose, admitted class, permitted use, retention policy and
+disclosure boundary. Missing, expired, revoked, purpose-mismatched or
+non-provable authority fails closed. Storage, possession, Formation credit and
+prior consent for another source or purpose do not substitute.
+
+AI-TWIN is private by default. A new sensitive or not-yet-authorized source
+class requires Human-visible disclosure and explicit Human authorization before
+first productive use. Ordinary voluntarily supplied dialogue may use an
+already-current dialogue grant without per-message re-consent. A voluntarily
+supplied statement after withdrawal is a new source event with its own creation
+time and current grant; it cannot revive the withdrawn event, old grant or
+dependent claims.
+
+Disclosure authority remains separate from modelling/use authority and is
+specific, purpose-bound, versioned and revocable. V1 private source admission
+therefore proves a `private_only` disclosure boundary and grants no disclosure;
+a later non-private disclosure requires its own qualified grant.
+
+DEE-871 qualifies durable provenance facts only: exact reference identity and
+version, both tenant dimensions, purpose/policy binding, chronology, current
+source availability/authority references and append-only lineage. Evidence
+independence, sufficiency thresholds, corroboration score, inference-level
+recency, hypothesis confidence, Formation maturity and Model Health belong to
+DEE-874/875/876 as applicable. The persistence vocabulary remains extensible
+through transport-neutral versioned observation references; that extensibility
+does not admit a future source class.
+
+Historical material is never backfilled or inferred as consented. Without
+current provable authority it remains quarantined and non-productive. A later
+Human may explicitly authorize specified material for a current purpose after
+appropriate disclosure, creating a new current grant for future productive use
+without rewriting collection/use history. Material whose source identity,
+scope, provenance or rights cannot be established remains quarantined and is
+available only to independent Human export/delete rights.
+
+New ConsentGrant issuance is an authenticated Human action bound to
+`actorUserId == subjectUserId`, exact current organization, explicit purpose,
+dialogue/Diary sources, productive uses, `private_only` disclosure, governing
+retention/use policy and trusted server issue time. It must explicitly select
+`UNTIL_REVOKED` or `EXPIRES_AT`; the latter has a valid future trusted expiry.
+The former remains current only while unrevoked, purpose/source/policy remain
+valid and no higher-priority rights operation blocks use.
+
+Expiry/revocation blocks future productive use and does not itself erase.
+Subsequent authorization appends a new grant/version; it cannot rewrite prior
+consent, revive deleted/erased sources or silently widen purpose, source, use or
+disclosure. Account, membership, possession, Formation, payment/subscription,
+continued use and silence never imply issuance.
 
 ### 2.3 Measurement and sufficiency
 
@@ -89,6 +148,37 @@ Where safe and useful, the Twin states a falsifiable expectation or offers a rev
 | SponsoredSubscriptionRequest | Privacy-safe request, reservation, payment and fulfillment lifecycle for one billable period |
 
 All sensitive objects require tenant isolation, subject access/export and deletion/retention semantics. A vector embedding is an index, not the authoritative fact record.
+
+### 3.1 Personal-model Core access — Human-approved 2026-09-14
+
+Supabase Auth / WAIA Core remains the sole authority for credentials, identity,
+organizations, memberships, roles and permissions. AI-TWIN creates no parallel
+auth, tenancy, role or entitlement state, and caller-supplied matching IDs are
+never evidence of authority.
+
+Ordinary v1 private-model access requires trusted resolved Core facts proving:
+an authenticated Human actor; the exact current organization; current
+membership for that actor; current binding of the exact subject to that
+organization; and `actorUserId == subjectUserId`. Organization membership,
+admin/owner/member role, agent/service class, Formation or subscription state
+cannot bypass the personal-subject rule. Future support/operator/service access
+requires a separate explicit audited capability.
+
+The bounded DEE-871 evaluator consumes only the trusted resolved snapshot and
+returns a deterministic allow/deny reason. Missing, malformed, stale,
+contradictory or foreign facts fail closed. It performs no authentication,
+credential parsing, Core mutation, epistemic read/write, disclosure, Society,
+action, billing or runtime mounting. Payment/subscription and future module
+routing are separate from the Human's access to their own private model.
+
+For repository reads and mutations, Core identity, actor membership and
+subject binding are re-resolved at operation time. A prior evaluator decision
+is not durable authority and cannot cross a repository transaction. The Core
+authority read and protected operation share one authoritative
+transaction/consistent database boundary where technically possible, with no
+invented TTL, grace or cache interval. If the current architecture cannot
+provide that boundary, it fails closed rather than accepting caller IDs,
+reusing a decision or constructing an AI-TWIN-owned Core mirror.
 
 ## 4. Formation engine
 
@@ -156,9 +246,97 @@ Working memory supports the current epistemic loop; personal memory preserves de
 | Diagnostic logs / security events | 14 / 90 days from creation; no raw dialogue, Diary or model content |
 | Generated exports / temporary processing copies | 24 hours from export creation / processing completion respectively; active processing still needs a bounded job/abort policy before runtime admission |
 | Rolling Twin backups | 30 days from copy creation; archive age is independent of backup rotation |
-| Consent / erasure receipts | A proposed 12 months after consent/operation ends remains conditional on separately reviewed necessity, legal basis, minimal fields and access; no automatic post-account-deletion extension |
+| RightsOperation receipts | Minimum necessary state while unresolved; minimized content-free receipt for 12 months from `CLOSED`, `REFUSED` or `CANCELLED`; no automatic extension beyond verified subject/account deletion and full cleanup without a separately Human-approved legal/security basis |
+
+The Human-ratified annual review is an explicit **storage-necessity decision**,
+not a freshness signal. WAIA prepares the review and the authenticated Human
+confirms it for an exact selected long-lived model record and version. Initial
+Human endorsement starts the first one-year interval but is not a later review;
+ordinary correction, reading, rephrasing, model use and evidence refresh do not
+count as review confirmation. A confirmed review starts the next interval at
+its confirmation instant.
+
+When the interval is overdue, the affected knowledge is excluded immediately
+from new inference and advice. It is neither automatically erased nor
+indefinitely retained under a default waiting policy: storage disposition
+requires the Human-controlled retain, correct, archive or delete/erase decision.
+The productive-use pause does not block the Human's independent access,
+correction or deletion paths. Review confirmation cannot renew consent, revive
+removed evidence, establish truth, promote an archive, refresh evidence or
+widen purpose. Current tenant, purpose and source eligibility checks still
+apply after review. There is no inferred grace period, deletion deadline or
+retained receipt exception.
 
 These are approved design requirements, not proof of an implemented deletion service or legal compliance. Future operational tests must establish immediate exclusion from use on withdrawal and removal from live stores/indexes within **7 calendar days**, and **all** backup/processor copies within **30 calendar days from the same request**, not 7+30. Restore must reapply removal restrictions before serving data. A request, hash or tombstone is not completion evidence. Operational feasibility and every retained exception must be reviewed before making user-facing promises.
+
+#### 6.1.1 RightsOperation lifecycle — Human-approved 2026-09-14
+
+Rights requests are append-only, evidence-bearing operations:
+
+`REQUESTED -> ACCEPTED -> USE_BLOCKED -> LIVE_REMOVAL_IN_PROGRESS -> LIVE_REMOVED -> RESIDUAL_COPIES_PENDING -> CLOSED`
+
+`REFUSED`, `FAILED` and `CANCELLED` are explicit terminal/error states;
+cancellation is valid only where the operation still permits it. Acceptance
+binds exact organization, Human/subject, operation type, target scope, original
+request time, policy version and authenticated actor. Failure/retry history
+cannot reset that clock or manufacture success.
+
+Withdrawal/deletion blocks new productive use independently of cleanup.
+`LIVE_REMOVED` needs evidence that live stores, indexes and dependent live
+projections no longer serve affected content. Residual backup/processor cleanup
+is separately evidenced; `CLOSED` requires verified completion. A request,
+tombstone, hash, attempted job or process exit is insufficient.
+
+Receipts are minimal and preserve no removed personal content. Operations do
+not renew consent, widen purpose, establish truth, grant archive authority or
+change Formation/Model Health. The shared lifecycle covers at least
+`WITHDRAW_USE`, `DELETE` / `ERASE`, `EXPORT`, `CORRECT`, `RETAIN` and `ARCHIVE`,
+while each operation keeps distinct effects and authorization.
+
+Cancellation and effects are type-specific. `WITHDRAW_USE`, `DELETE` and
+`ERASE` may cancel only from `REQUESTED`; after authenticated acceptance their
+use block cannot be reversed by cancellation. `EXPORT`, `CORRECT`, `RETAIN` and
+`ARCHIVE` may cancel until their artifact, corrective revision, retention
+decision or archive effect is committed. Any later Human change creates a new
+operation.
+
+`FAILED` terminates one execution attempt. Retry appends a distinct attempt
+under the same immutable operation id, request time, scope and policy, retaining
+all prior failure evidence. Failure or retry never restores productive-use
+authority for withdrawal/deletion/erasure.
+
+Type-specific completion means:
+
+- `WITHDRAW_USE`: future productive modelling/use is blocked; deletion is not
+  implied;
+- `DELETE`: selected records/sources and dependent projections without an
+  independently authorized evidence basis are removed;
+- `ERASE`: declared subject/source/purpose scope plus dependency closure is
+  removed, as product semantics rather than statutory-compliance evidence;
+- `EXPORT`: a bounded point-in-time export of currently authorized Human data
+  is created under the 24-hour generated-export rule, without wider disclosure;
+- `CORRECT`: a Human correction/new revision is appended and current projection
+  updated without ordinary erasure of prior evidence;
+- `RETAIN`: continued storage is committed for an exact currently eligible
+  record under existing purpose authority, without renewing consent, freshness
+  or source eligibility;
+- `ARCHIVE`: independently authorized private archival preservation is
+  committed, without inheritance/disclosure or after-the-fact rescue of a
+  withdrawn/deleted source.
+
+Only operations requiring removal use live/remnant removal states.
+Non-removal operations close from verified effect evidence and cannot claim
+`LIVE_REMOVED`.
+
+Unresolved operations retain only minimum operation/attempt state. A minimized
+receipt remains for twelve months after `CLOSED`, `REFUSED` or `CANCELLED`.
+Verified full subject/account deletion plus live and backup/processor cleanup
+removes subject-linkable receipts unless a separately Human-approved
+legal/security basis applies. Allowed receipt fields are operation identity and
+type, necessary organization/subject reference, scope kind/digest, timestamps,
+policy version, authenticated actor class/reference, attempt/outcome data and
+completion-evidence digests. Source, dialogue/Diary and claim text, embeddings
+and copied payloads are forbidden.
 
 R1 does not automatically promote a confirmed relation, resolve a need or create an archive. A substantial-evidence renewal requires independently verified new evidence and a trusted recorded anchor; reading, review, rephrasing, retries or caller-supplied metadata are insufficient. The disconnected DEE-871 repository currently admits initial proposed relations/open needs only, so their implemented anchor is creation; verified renewal and later-state transitions remain unimplemented. Current source eligibility, a shorter relation interval, withdrawal and deletion may exclude use earlier than 90 days.
 
@@ -181,6 +359,12 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-08, Human retention acceptance in AI-TWIN task 01a057ba-ed9b-77a1-948d-5220bb52debd | Explicit approval of recommended baseline with conditional receipts | Supersedes Proposed-only duration status in historical DEE-871 WP-1b; operational proof remains absent |
 | 2026-09-08, Human inheritable-experience refinement and subsequent proposal acceptance, same task | Explicit long-lived archive requirement plus approved three-layer architecture | DEE-965 foundation; DEE-871 persistence, DEE-872 private composition UX; DEE-894 future disclosure/legacy specification, no transfer activation |
 | 2026-09-09, Human “Подтверждаю” in response to R1, same task | Ratified classification of proposed relations/open knowledge needs as 90-day working memory; independently selected private experience remains separate, without automatic TTL | Supersedes DEE-871's fixture-only Proposed annual-review mapping; no automatic renewal, permanent promotion or runtime release authority |
+| 2026-09-12, Human annual-review decision, same task | Human-controlled annual storage-necessity review; overdue knowledge pauses new inference/advice while rights remain independent | DEE-871 pure lifecycle policy contract; no runtime activation, automatic deletion deadline, consent renewal or source revival |
+| 2026-09-14, Human source-admission and RightsOperation decision, DEE-871 continuation | Fail-closed source admission, private default, separate disclosure grants and append-only evidence-bearing rights lifecycle | Authorizes deterministic WP-1 contracts/tests only; no shared migration, runtime activation, Society, Trader change or deployment |
+| 2026-09-14, Human RightsOperation completion decision, DEE-871 continuation | Type-specific cancellation/effects, attempt-scoped failure, immutable-clock retry, evidence-qualified closure and minimized twelve-month terminal receipt | Authorizes one pure/disconnected lifecycle contract; account-deletion override and operational proof remain unmounted |
+| 2026-09-14, Human DEE-871 WP-1 closure decision | V1 raw ingress is dialogue/Diary only; persistence owns provenance facts, not scoring; legacy consent is never inferred | Closes pure object/rights design after targeted proof; WP-2 convergence remains read-only before shared schema/migration decisions |
+| 2026-09-14, Human DEE-871 WP-2 Core-access decision | Exact trusted Core actor, subject, organization and current-membership equality for personal-model access; no role/entitlement bypass | Authorizes one pure unmounted evaluator and mocked tests only; no Supabase implementation, persistence, schema, Trader or runtime change |
+| 2026-09-14, Human DEE-871 authenticated-repository decision | Transaction-current Core authority; explicit append-only consent issuance with `UNTIL_REVOKED` / `EXPIRES_AT` | Requires fail-closed stop if current repository cannot share the Core transaction; no fixture authority substitution or shared architecture change |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 

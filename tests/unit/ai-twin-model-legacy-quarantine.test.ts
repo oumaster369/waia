@@ -53,6 +53,20 @@ describe("AI-TWIN legacy quarantine planning — no import authority", () => {
       expect(() => plan([{ ...item(), ...extra }])).toThrow();
     }
   });
+  it("does not let a new current grant rewrite or imply historical consent", () => {
+    const before = plan([item()]);
+    const currentGrant = {
+      id: "new-current-grant",
+      issuedAt: now,
+      purpose: "private_modelling",
+    };
+    expect(() => plan([{ ...item(), currentGrant }])).toThrow();
+    expect(plan([item()])).toEqual(before);
+    expect(before.status).toBe("plan_only");
+    expect(before.items[0].disposition).toBe("quarantined");
+    expect(before).not.toHaveProperty("historicallyConsented");
+    expect(before).not.toHaveProperty("productiveUseAllowed");
+  });
   it.each(["organizationId", "subjectId"])(
     "rejects the entire inventory on foreign %s",
     (field) => {

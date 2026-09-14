@@ -1,7 +1,9 @@
 import type { ModelScope } from "./contracts";
 import { planRetention } from "./lifecycle";
 
-/** Inert storage vocabulary. A reference grants neither access nor an action. */
+/** Inert storage vocabulary. A reference grants neither access nor an action.
+ * `observation` remains transport-neutral for future source classes; productive
+ * source admission is separately closed to the current v1 authority type. */
 export type ModelObjectKind =
   | "observation"
   | "claim"
@@ -30,6 +32,9 @@ export type VersionedModelReference = ModelScope & {
 };
 export type EvidenceLink = {
   ref: VersionedModelReference;
+  purpose: string;
+  createdAt: string;
+  retentionPolicyId: string;
   source: VersionedModelReference;
   target: VersionedModelReference;
   relationship: "supports" | "contradicts" | "contextualizes";
@@ -282,6 +287,10 @@ export type CandidateValidationContext = {
   eligibleSources: readonly VersionedModelReference[];
   now: string;
 };
+/** Trusted current source and target sets; this is not authentication or consent. */
+export type EvidenceLinkValidationContext = CandidateValidationContext & {
+  availableTargets: readonly VersionedModelReference[];
+};
 
 function requireValue(ok: unknown, code = "INVALID_INPUT"): asserts ok {
   if (!ok) throw new Error(code);
@@ -440,6 +449,85 @@ const candidateSourceKinds = [
   "relation",
   "outcome",
 ];
+
+/** Pure current-lineage qualification. A link neither proves its relationship
+ * nor grants consent, collection, disclosure, persistence or action authority. */
+export function validateEvidenceLink(
+  input: unknown,
+  ctx: EvidenceLinkValidationContext,
+): EvidenceLink {
+  assertModelJsonData(input);
+  assertModelJsonData(ctx);
+  keys(ctx, [
+    "scope",
+    "purpose",
+    "retentionPolicyId",
+    "eligibleSources",
+    "availableTargets",
+    "now",
+  ]);
+  keys(ctx.scope, ["organizationId", "subjectId"]);
+  requireValue(
+    [ctx.scope.organizationId, ctx.scope.subjectId, ctx.purpose, ctx.retentionPolicyId].every(
+      nonempty,
+    ) && Number.isFinite(time(ctx.now)),
+  );
+  keys(input, [
+    "ref",
+    "purpose",
+    "createdAt",
+    "retentionPolicyId",
+    "source",
+    "target",
+    "relationship",
+    "reason",
+  ]);
+  const value = input as EvidenceLink;
+  reference(value.ref, ctx.scope);
+  reference(value.source, ctx.scope);
+  reference(value.target, ctx.scope);
+  requireValue(value.ref.kind === "evidence_link");
+  requireValue(
+    value.purpose === ctx.purpose && value.retentionPolicyId === ctx.retentionPolicyId,
+    "PURPOSE_POLICY_MISMATCH",
+  );
+  requireValue(Number.isFinite(time(value.createdAt)) && time(value.createdAt) <= time(ctx.now));
+  requireValue(["supports", "contradicts", "contextualizes"].includes(value.relationship));
+  requireValue(nonempty(value.reason));
+  requireValue(
+    ["observation", "claim", "correction", "outcome"].includes(value.source.kind),
+    "UNSUPPORTED_SOURCE_KIND",
+  );
+  requireValue(["claim", "hypothesis"].includes(value.target.kind), "UNSUPPORTED_TARGET_KIND");
+  requireValue(
+    modelReferenceKey(value.source) !== modelReferenceKey(value.target),
+    "SELF_REFERENCE",
+  );
+
+  requireValue(Array.isArray(ctx.eligibleSources) && Array.isArray(ctx.availableTargets));
+  const eligibleSources = new Set<string>();
+  for (const source of ctx.eligibleSources) {
+    reference(source, ctx.scope);
+    requireValue(
+      ["observation", "claim", "correction", "outcome"].includes(source.kind),
+      "UNSUPPORTED_SOURCE_KIND",
+    );
+    const key = modelReferenceKey(source);
+    requireValue(!eligibleSources.has(key), "DUPLICATE_EVIDENCE");
+    eligibleSources.add(key);
+  }
+  const availableTargets = new Set<string>();
+  for (const target of ctx.availableTargets) {
+    reference(target, ctx.scope);
+    requireValue(["claim", "hypothesis"].includes(target.kind), "UNSUPPORTED_TARGET_KIND");
+    const key = modelReferenceKey(target);
+    requireValue(!availableTargets.has(key), "DUPLICATE_TARGET");
+    availableTargets.add(key);
+  }
+  requireValue(eligibleSources.has(modelReferenceKey(value.source)), "EVIDENCE_UNAVAILABLE");
+  requireValue(availableTargets.has(modelReferenceKey(value.target)), "TARGET_UNAVAILABLE");
+  return freeze(structuredClone(value));
+}
 
 function candidateBase(input: unknown, ctx: CandidateValidationContext, expected: string[]) {
   assertModelJsonData(input);

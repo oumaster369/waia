@@ -1464,6 +1464,13 @@
       "when": 1780000000208,
       "tag": "0208_historical_terminal_receipts_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1780000000209,
+      "tag": "0209_ai_twin_epistemic_persistence_v1",
+      "breakpoints": true
     }
   ]
 }
