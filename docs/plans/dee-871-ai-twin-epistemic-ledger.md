@@ -16,10 +16,10 @@ state:
     remainingWorkPackages: [WP-1, WP-2, WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: a9c515710fd3322cb140fd53660b64b47b843c1e,
-    lastValidationAt: "2026-09-14T08:27:23Z",
-    blockedReason: null,
-    nextAction: "Implement the admitted pure private source-admission contract RED to GREEN, independently review and checkpoint it, then assess RightsOperation as a separate WP-1 slice. Keep shared migration/schema, Trader, runtime activation, Society and deployment frozen.",
+    lastValidatedGitSha: 90dd0a3d48a697fe6d188ca3041330cacb671116,
+    lastValidationAt: "2026-09-14T08:41:02Z",
+    blockedReason: "RightsOperation still needs exact Human decisions for valid cancellation transitions, FAILED retry semantics, type-specific target/effect contracts and minimal receipt retention before a deterministic record/state machine can be implemented.",
+    nextAction: "Obtain the remaining RightsOperation semantic decisions, then admit its pure append-only lifecycle contract. Do not start shared migration/schema, Trader compatibility, runtime writers, Society, deployment or the final integration PR.",
   }
 provenance:
   {
@@ -416,6 +416,30 @@ Final evidence:
 Fresh `origin/main` remained
 `d7d5941a995b83473acb6e00c42d5252c44b2303`. No shared migration, journal,
 schema, Trader, runtime, environment, deployment or Society surface changed.
+
+#### RightsOperation boundary after source admission
+
+The source-admission checkpoint is
+`90dd0a3d48a697fe6d188ca3041330cacb671116`. The next sequential WP-1 slice is
+the pure RightsOperation lifecycle, but implementation stops before inventing
+four details not fixed by the current decision:
+
+1. which exact lifecycle states still permit `CANCELLED`;
+2. whether `FAILED` terminates the operation, returns to an earlier state on
+   retry, or records an append-only failed attempt while the operation remains
+   in another state;
+3. exact target/effect contracts for `EXPORT`, `CORRECT`, `RETAIN` and
+   `ARCHIVE`, which must not inherit withdrawal/deletion use-blocking effects;
+4. the purpose and expiry of the minimal content-free rights receipt, whose
+   former twelve-month proposal remains explicitly conditional in retention
+   canon.
+
+The lifecycle order, original-clock rule, live-versus-residual evidence
+separation and no-authority effects are ratified and preserved. Those four
+remaining choices materially determine legal states and retained evidence, so
+no enum-only or fixture-derived implementation is admitted until the Human
+resolves them. This is the current product-semantic stop boundary; the later
+shared-DB/Trader boundary has not been entered.
 
 ## Approved outcome
 
