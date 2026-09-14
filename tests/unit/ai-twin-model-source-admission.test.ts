@@ -10,16 +10,20 @@ import {
 
 const scope = { organizationId: "synthetic-org", subjectId: "synthetic-human" };
 const now = "2026-09-14T08:30:00.000Z";
+const grantId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const archiveGrantId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 function grant(changes: Partial<ModelConsentGrant> = {}): ModelConsentGrant {
   return {
-    id: "grant-1",
+    id: grantId,
     version: 2,
     scope,
     purpose: "formation",
     sources: ["dialogue", "diary"],
     mode: "private_modelling",
+    permittedUses: ["productive_private_modelling"],
     issuedAt: "2026-09-01T00:00:00.000Z",
+    temporalMode: "EXPIRES_AT",
     expiresAt: "2026-10-01T00:00:00.000Z",
     revokedAt: null,
     retentionPolicyId: "human-approved-2026-09-08/v1",
@@ -47,7 +51,7 @@ function context(changes: Partial<SourceAdmissionContext> = {}): SourceAdmission
     purpose: "formation",
     permittedUse: "productive_private_modelling",
     retentionPolicyId: "human-approved-2026-09-08/v1",
-    resolvedGrant: { id: "grant-1", version: 2 },
+    resolvedGrant: { id: grantId, version: 2 },
     currentGrants: [grant()],
     withdrawnSourceEventIds: [],
     ...changes,
@@ -67,7 +71,7 @@ describe("private source admission is fail-closed and grants no disclosure", () 
         createdAt: "2026-09-14T08:29:00.000Z",
         purpose: "formation",
         permittedUse: "productive_private_modelling",
-        grant: { id: "grant-1", version: 2 },
+        grant: { id: grantId, version: 2 },
         retentionPolicyId: "human-approved-2026-09-08/v1",
         disclosureBoundary: "private_only",
         productiveUseAllowed: true,
@@ -79,6 +83,23 @@ describe("private source admission is fail-closed and grants no disclosure", () 
       expect(Object.isFrozen(result.grant)).toBe(true);
     },
   );
+
+  it("admits explicit UNTIL_REVOKED only while no revocation blocks it", () => {
+    const current = grant({ temporalMode: "UNTIL_REVOKED", expiresAt: null });
+    expect(
+      admitPrivateSourceEvent(candidate(), context({ currentGrants: [current] }))
+        .productiveUseAllowed,
+    ).toBe(true);
+    expect(() =>
+      admitPrivateSourceEvent(
+        candidate(),
+        context({
+          currentGrants: [{ ...current, version: 3, revokedAt: now }],
+          resolvedGrant: { id: current.id, version: 3 },
+        }),
+      ),
+    ).toThrow("CONSENT_UNAVAILABLE");
+  });
 
   it("uses one current dialogue grant for separate messages without per-message re-consent", () => {
     const ctx = context();
@@ -130,7 +151,7 @@ describe("private source admission is fail-closed and grants no disclosure", () 
       admitPrivateSourceEvent(
         candidate(),
         context({
-          resolvedGrant: { id: "grant-1", version: 1 },
+          resolvedGrant: { id: grantId, version: 1 },
           currentGrants: [grant({ version: 1 }), grant()],
         }),
       ),
@@ -142,7 +163,7 @@ describe("private source admission is fail-closed and grants no disclosure", () 
 
   it("binds purpose and grant selection only from trusted adapter context", () => {
     const archiveGrant = grant({
-      id: "grant-archive",
+      id: archiveGrantId,
       purpose: "archive",
       retentionPolicyId: "archive-policy",
     });
@@ -151,12 +172,13 @@ describe("private source admission is fail-closed and grants no disclosure", () 
       context({ currentGrants: [grant(), archiveGrant] }),
     );
     expect(result.purpose).toBe("formation");
-    expect(result.grant).toEqual({ id: "grant-1", version: 2 });
+    expect(result.grant).toEqual({ id: grantId, version: 2 });
     expect(result.retentionPolicyId).toBe("human-approved-2026-09-08/v1");
   });
 
   it.each([
     ["raw-only use", { mode: "raw_only" }],
+    ["missing productive use", { permittedUses: [] }],
     ["expired authority", { expiresAt: now }],
     ["revoked authority", { revokedAt: "2026-09-14T08:00:00.000Z" }],
     ["another purpose", { purpose: "archive" }],
@@ -242,7 +264,7 @@ describe("private source admission is fail-closed and grants no disclosure", () 
     for (const extra of [
       { sourceClass: "diary" },
       { purpose: "archive" },
-      { grant: { id: "grant-archive", version: 1 } },
+      { grant: { id: archiveGrantId, version: 1 } },
       { retentionPolicyId: "archive-policy" },
       { disclosureAllowed: true },
       { formationCredit: 1 },

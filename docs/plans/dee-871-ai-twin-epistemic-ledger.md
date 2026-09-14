@@ -18,8 +18,8 @@ state:
     prUrl: null,
     lastValidatedGitSha: 40574145e1c717d355bdbf217af93a218bb94bbd,
     lastValidationAt: "2026-09-14T11:47:57Z",
-    blockedReason: "The bounded pure Core guard is implemented, but the forensic consent/observation services depend on the rejected in-module Supabase/entitlement wrapper and unregistered table contracts. A next disconnected consent-persistence slice needs explicit trusted-adapter transaction/freshness and consent-issuance semantics before shared schema.",
-    nextAction: "Seek bounded admission for a fixture-only current-consent persistence/read slice in postgres-repository.ts, its fixture SQL and integration test, after deciding how fresh trusted Core resolution enters the repository transaction and how consent issuance is authorized. Keep migrations, journal, db/schema.postgres.ts, Trader and runtime frozen.",
+    blockedReason: "The disconnected repository now requires fresh injected Human identity and transaction-local trusted Core resolution, but only a synthetic adapter output fixture is qualified. Production persistence, a concrete Supabase/Core adapter, shared table registration and runtime mounting remain unimplemented and cross the frozen shared architecture/schema boundary.",
+    nextAction: "Seek explicit shared-boundary admission for the concrete production Core resolver and AI-TWIN Postgres schema/migration package, including db/schema.postgres.ts and Trader-compatible additive review. Do not mount the fixture repository, apply production DDL, edit Trader or start WP-3.",
   }
 provenance:
   {
@@ -830,6 +830,193 @@ Production schema remains the later 0209-or-higher migration,
 `db/schema.postgres.ts` and Trader-compatibility boundary. Stop here after the
 Core checkpoint; no service, fixture, migration, journal, shared schema, Trader
 file, runtime route or production state is admitted.
+
+### 2026-09-14 Human decision — bounded authenticated repository boundary
+
+Fresh preflight confirms `origin/main`
+`d7d5941a995b83473acb6e00c42d5252c44b2303` remains the exact branch
+merge-base. The Human ratified transaction-current Core authority and explicit
+ConsentGrant issuance/temporal semantics. Initial review identified the raw
+`postgres.js` / Drizzle split, but independent review correctly found that the
+existing raw repository transaction can host an injected trusted Core resolver
+without changing Core tables or accepting a prior access decision. The admitted
+implementation is still disconnected: it proves transaction composition
+against synthetic trusted-adapter output, not production Supabase/Core wiring.
+
+#### Admission matrix
+
+**`lib/ai-twin/model/core-access.ts`**
+
+- Reuse: exact actor/subject/organization/current-state semantics and explicit
+  fail-closed reasons.
+- Merged equivalent: the continuation already contains the pure evaluator.
+- WP-1 compatibility: yes; it grants no consent or product authority.
+- Transaction-current Core: compatible only when its resolved input is produced
+  inside the current repository transaction; its output remains non-durable.
+- New consent compatibility: neutral.
+- Shared schema/migration: none.
+- Bounded verdict: reused inside every repository transaction after fresh
+  adapter resolution; never accepted as an input token or cache.
+
+**`lib/ai-twin/model/postgres-repository.ts`**
+
+- Reuse: per-operation `sql.begin`, scope advisory lock, exact tenant/subject
+  predicates, in-transaction grant/rights/object reads, append-only objects and
+  idempotency.
+- Merged equivalent: authoritative disconnected repository already on main and
+  extended by current WP-1 contracts.
+- WP-1 compatibility: yes after grant-shape reconciliation; caller
+  `ModelContext` is operation data, not identity authority.
+- Transaction-current Core: bounded compatible. The factory requires fresh
+  trusted Human identity resolution inside every operation transaction, invokes
+  current Core resolution with that exact `TransactionSql`, evaluates the raw
+  result through `core-access.ts`, then performs protected work before
+  transaction completion.
+- New consent compatibility: explicit issuance intent, trusted database issue
+  time, `UNTIL_REVOKED | EXPIRES_AT`, future-expiry validation, exact
+  purpose/source/use/disclosure/policy binding and append-only revocation.
+- Shared schema/migration: not required for the existing fixture, but required
+  for production persistence.
+- Bounded verdict: admitted and implemented only as a disconnected repository
+  contract. No concrete production authority adapter or runtime mount exists.
+
+**`tests/fixtures/ai-twin-model-repository.sql`**
+
+- Reuse: isolated schema and advisory serialization shared by adapter-state,
+  repository and consent writers.
+- Merged equivalent: already authoritative test fixture.
+- WP-1 compatibility: useful for epistemic storage behavior only.
+- Transaction-current Core: synthetic owner-seeded adapter output only,
+  separately locked/read inside the repository transaction. It is expressly
+  not Core identity/membership state.
+- New consent compatibility: append-only JSON versions; service can INSERT but
+  cannot UPDATE/DELETE consent. The service database handle is part of the
+  trusted app TCB and is never caller-exposed; this fixture does not claim to
+  resist compromise of that credential. Repository APIs enforce issuance,
+  replay and lineage under current authority.
+- Shared schema/migration: no.
+- Bounded verdict: minimally extended with output-state rows only. No user,
+  organization, role, membership or subject Core model is duplicated.
+
+**`tests/integration/ai-twin-model-repository.test.ts`**
+
+- Reuse: exact org/subject isolation, grant-version freshness, expiry,
+  revocation races, append-only history and hostile persistence cases.
+- Merged equivalent: already authoritative for the disconnected fixture.
+- WP-1 compatibility: yes; fixtures use the canonical explicit temporal/use
+  shape.
+- Transaction-current Core: proves a current adapter read and lock in the exact
+  repository transaction, same-Human access, no service/foreign bypass, no
+  decision reuse and the check/revoke/work race. It does not prove real
+  Supabase/Core integration.
+- New consent compatibility: proves Human-only issuance, trusted issue time,
+  `UNTIL_REVOKED`, rejected past expiry, append-only revocation and stale-grant
+  denial.
+- Shared schema/migration: no.
+- Bounded verdict: admitted as disconnected adapter/repository qualification
+  only.
+
+**`lib/ai-twin/model/contracts.ts` and
+`lib/ai-twin/model/source-admission.ts`**
+
+- Reuse: append-only version reference, exact purpose/source/policy/private
+  disclosure checks and fail-closed current-grant admission.
+- Merged equivalent: current continuation owns them.
+- WP-1 compatibility: yes for ratified dialogue/Diary admission.
+- Transaction-current Core: neither module resolves identity.
+- New consent compatibility: complete for the bounded contract:
+  `ModelConsentGrant` requires explicit temporal mode and productive-use set;
+  parsers reject malformed chronology/extra fields/hostile objects; source
+  admission handles both temporal modes and current revocation.
+- Shared schema/migration: none for a future pure reconciliation.
+- Bounded verdict: admitted and implemented with focused pure tests; neither
+  module authenticates or persists by itself.
+
+**Forensic `lib/ai-twin/model/core-access.ts`,
+`consent-service.ts` and `observation-service.ts`**
+
+- Reuse: conceptual same-transaction intent, current grant re-read and
+  append-only revocation version.
+- Merged equivalent: no; only the rewritten pure Core evaluator is current.
+- WP-1 compatibility: no as written; the grant projection omits the current
+  explicit disclosure boundary and later WP-1 semantics.
+- Transaction-current Core: broader than admitted. It performs Supabase access
+  in AI-TWIN, depends on Core schema tables/Drizzle transactions and introduces
+  an entitlement prerequisite rejected by the Human.
+- New consent compatibility: only finite `expiresAt`; purpose/source/use values
+  are hardcoded rather than all explicit Human choices.
+- Shared schema/migration: services depend on unregistered table contracts and
+  public Core tables.
+- Bounded verdict: must not port.
+
+**Forensic `db/ai-twin-*-contract.ts`, Core fixture SQL and shared integration
+test**
+
+- Reuse: none in this bounded slice.
+- Merged equivalent: disconnected model fixture only, not these files.
+- WP-1/new consent compatibility: incomplete and stale.
+- Transaction-current Core: the shared test applies production migrations and
+  imports Trader preflight; synthetic fixtures still do not prove Supabase
+  identity.
+- Shared schema/migration: yes.
+- Bounded verdict: must not port or modify.
+
+**Canon and this plan**
+
+- Reuse: exact Human decisions and bounded implementation evidence.
+- Merged equivalent: current continuation is authoritative.
+- Compatibility: yes.
+- Shared schema/migration: none.
+- Bounded verdict: admitted alongside the disconnected code/test slice.
+
+#### Bounded implementation and remaining limitation
+
+The repository now composes authority as follows:
+
+1. snapshot/freeze caller operation context before any asynchronous read;
+2. begin the repository `TransactionSql`;
+3. resolve a fresh authenticated Human through that exact transaction;
+4. pass the same transaction and exact target scope to the trusted Core
+   resolver;
+5. evaluate its raw current context with `core-access.ts`;
+6. acquire the scope lock and complete the protected operation in the same
+   transaction.
+
+The factory accepts no prior access decision. Caller `actor`, IDs, roles,
+entitlements or product state cannot replace adapter resolution. The
+disconnected resolver reads owner-seeded status output while holding the same
+scope advisory transaction lock; a concurrent revoke waits for in-flight
+protected work, and the next transaction observes the revocation and fails
+closed. Root/nested Proxy, getter, service actor and foreign-Human cases fail.
+
+Consent intent has no identity, grant ID or issue-time field. It explicitly
+selects purpose, dialogue/Diary sources, productive private modelling,
+`private_only` disclosure, retention policy and
+`UNTIL_REVOKED | EXPIRES_AT`. The repository generates the grant ID and trusted
+database issue time after current access, rejects non-future expiry, appends
+revocation as a new version and never updates/deletes grant history. A
+scope/purpose request receipt makes issuance retries idempotent and conflicts
+fail closed. Grant IDs are UUIDs; every read, replay and revocation validates
+the complete stored lineage and rejects gaps, post-revocation versions or
+changes to immutable purpose/source/use/time/policy fields. Current
+reads/writes re-read the latest version and deny
+expired/revoked authority; source rights fences remain higher priority.
+
+RED was the missing pure consent module. Focused GREEN is 70/70 across consent,
+source admission and ledger tests. The explicitly owned PostgreSQL fixture is
+28/28, including transaction-local identity/current-authority re-resolution,
+the Core revocation race, same-Human isolation, pre-await snapshots of hostile
+or mutated context/write payloads, idempotent issuance, expiry rejection,
+immutable lineage and append-only revocation.
+
+This does not qualify real Supabase authentication, public Core-table queries,
+production persistence, RLS, migration registration or runtime use. A concrete
+production resolver must bind verified Supabase identity to current Core rows
+on the same reserved database transaction, and physical AI-TWIN tables require
+the separately reviewed 0209-or-later migration, journal,
+`db/schema.postgres.ts` and Trader-compatible additive package. Those are the
+next shared boundaries, so WP-2 remains current and incomplete and execution
+stops before them.
 
 ## Approved outcome
 

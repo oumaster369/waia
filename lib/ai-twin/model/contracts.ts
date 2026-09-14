@@ -18,10 +18,12 @@ export type ModelConsentGrant = Readonly<{
   purpose: string;
   sources: readonly ObservationSource[];
   mode: "private_modelling" | "raw_only";
+  permittedUses: readonly "productive_private_modelling"[];
   /** Explicitly grants no disclosure; non-private disclosure uses a separate grant. */
   disclosureBoundary: "private_only";
   issuedAt: string;
-  expiresAt: string;
+  temporalMode: "UNTIL_REVOKED" | "EXPIRES_AT";
+  expiresAt: string | null;
   revokedAt: string | null;
   retentionPolicyId: string;
 }>;

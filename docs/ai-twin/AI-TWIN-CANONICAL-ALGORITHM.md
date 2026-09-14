@@ -90,6 +90,20 @@ without rewriting collection/use history. Material whose source identity,
 scope, provenance or rights cannot be established remains quarantined and is
 available only to independent Human export/delete rights.
 
+New ConsentGrant issuance is an authenticated Human action bound to
+`actorUserId == subjectUserId`, exact current organization, explicit purpose,
+dialogue/Diary sources, productive uses, `private_only` disclosure, governing
+retention/use policy and trusted server issue time. It must explicitly select
+`UNTIL_REVOKED` or `EXPIRES_AT`; the latter has a valid future trusted expiry.
+The former remains current only while unrevoked, purpose/source/policy remain
+valid and no higher-priority rights operation blocks use.
+
+Expiry/revocation blocks future productive use and does not itself erase.
+Subsequent authorization appends a new grant/version; it cannot rewrite prior
+consent, revive deleted/erased sources or silently widen purpose, source, use or
+disclosure. Account, membership, possession, Formation, payment/subscription,
+continued use and silence never imply issuance.
+
 ### 2.3 Measurement and sufficiency
 
 Extraction produces typed candidate claims, relationships, events, tensions and knowledge needs. A deterministic sufficiency gate evaluates provenance diversity, contextual grounding, recency, contradiction, independence and required Human review. Model fluency cannot pass this gate.
@@ -156,6 +170,15 @@ contradictory or foreign facts fail closed. It performs no authentication,
 credential parsing, Core mutation, epistemic read/write, disclosure, Society,
 action, billing or runtime mounting. Payment/subscription and future module
 routing are separate from the Human's access to their own private model.
+
+For repository reads and mutations, Core identity, actor membership and
+subject binding are re-resolved at operation time. A prior evaluator decision
+is not durable authority and cannot cross a repository transaction. The Core
+authority read and protected operation share one authoritative
+transaction/consistent database boundary where technically possible, with no
+invented TTL, grace or cache interval. If the current architecture cannot
+provide that boundary, it fails closed rather than accepting caller IDs,
+reusing a decision or constructing an AI-TWIN-owned Core mirror.
 
 ## 4. Formation engine
 
@@ -341,6 +364,7 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-14, Human RightsOperation completion decision, DEE-871 continuation | Type-specific cancellation/effects, attempt-scoped failure, immutable-clock retry, evidence-qualified closure and minimized twelve-month terminal receipt | Authorizes one pure/disconnected lifecycle contract; account-deletion override and operational proof remain unmounted |
 | 2026-09-14, Human DEE-871 WP-1 closure decision | V1 raw ingress is dialogue/Diary only; persistence owns provenance facts, not scoring; legacy consent is never inferred | Closes pure object/rights design after targeted proof; WP-2 convergence remains read-only before shared schema/migration decisions |
 | 2026-09-14, Human DEE-871 WP-2 Core-access decision | Exact trusted Core actor, subject, organization and current-membership equality for personal-model access; no role/entitlement bypass | Authorizes one pure unmounted evaluator and mocked tests only; no Supabase implementation, persistence, schema, Trader or runtime change |
+| 2026-09-14, Human DEE-871 authenticated-repository decision | Transaction-current Core authority; explicit append-only consent issuance with `UNTIL_REVOKED` / `EXPIRES_AT` | Requires fail-closed stop if current repository cannot share the Core transaction; no fixture authority substitution or shared architecture change |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 

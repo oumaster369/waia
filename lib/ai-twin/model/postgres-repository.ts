@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type postgres from "postgres";
 import type {
   HumanClaimVersion,
@@ -11,6 +11,8 @@ import type {
   ModelObservation,
 } from "./contracts";
 import { applyModelCommand, createModelLedger, projectCurrentModel } from "./ledger";
+import { evaluatePersonalTwinModelAccess } from "./core-access";
+import { parseConsentGrantIssuanceIntent, parseModelConsentGrant } from "./consent";
 import {
   planRetention,
   TWIN_RETENTION_POLICY,
@@ -33,6 +35,23 @@ import {
 
 type Context = Omit<ModelContext, "grants">;
 type Tx = postgres.TransactionSql;
+type AuthenticatedActor = Readonly<{
+  actorClass: "human";
+  actorUserId: string;
+}>;
+export type TwinRepositoryAuthorityAdapter = Readonly<{
+  /** Fresh trusted server-side identity resolution through this exact transaction. */
+  resolveAuthenticatedActor: (tx: Tx) => Promise<unknown>;
+  /** Must query/lock current Core state through this exact transaction. */
+  resolveCurrentCoreAccess: (
+    tx: Tx,
+    request: Readonly<{
+      actor: AuthenticatedActor;
+      organizationId: string;
+      subjectUserId: string;
+    }>,
+  ) => Promise<unknown>;
+}>;
 type PrivateSource = {
   scope: Context["scope"];
   id: string;
@@ -84,6 +103,7 @@ function sameScope(a: Context["scope"], b: Context["scope"]): boolean {
 function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function canonicalJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalJson);
   if (value && typeof value === "object")
@@ -93,6 +113,57 @@ function canonicalJson(value: unknown): unknown {
         .map(([key, child]) => [key, canonicalJson(child)]),
     );
   return value;
+}
+function freezeJson<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    Object.values(value).forEach(freezeJson);
+    Object.freeze(value);
+  }
+  return value;
+}
+function consentLineageFingerprint(grant: ModelConsentGrant): string {
+  return JSON.stringify(
+    canonicalJson({
+      id: grant.id,
+      scope: grant.scope,
+      purpose: grant.purpose,
+      sources: grant.sources,
+      mode: grant.mode,
+      permittedUses: grant.permittedUses,
+      disclosureBoundary: grant.disclosureBoundary,
+      issuedAt: grant.issuedAt,
+      temporalMode: grant.temporalMode,
+      expiresAt: grant.expiresAt,
+      retentionPolicyId: grant.retentionPolicyId,
+    }),
+  );
+}
+function validateConsentLineage(
+  grants: readonly ModelConsentGrant[],
+  scope: Context["scope"],
+): void {
+  const byId = new Map<string, ModelConsentGrant[]>();
+  for (const grant of grants) {
+    requireValue(sameScope(grant.scope, scope), "CONSENT_LINEAGE_INVALID");
+    byId.set(grant.id, [...(byId.get(grant.id) ?? []), grant]);
+  }
+  for (const lineage of byId.values()) {
+    lineage.sort((a, b) => a.version - b.version);
+    const first = lineage[0];
+    requireValue(first.version === 1 && first.revokedAt === null, "CONSENT_LINEAGE_INVALID");
+    const fingerprint = consentLineageFingerprint(first);
+    for (let index = 1; index < lineage.length; index += 1) {
+      const previous = lineage[index - 1];
+      const current = lineage[index];
+      requireValue(
+        current.version === previous.version + 1 &&
+          previous.revokedAt === null &&
+          current.revokedAt !== null &&
+          consentLineageFingerprint(current) === fingerprint,
+        "CONSENT_LINEAGE_INVALID",
+      );
+    }
+  }
 }
 function context(ctx: Context, humanOnly = false): void {
   createModelLedger(ctx.scope);
@@ -110,11 +181,90 @@ function context(ctx: Context, humanOnly = false): void {
 
 /** Disconnected fixture repository, not a registered schema or runtime adapter.
  * Explicit dedicated SQL handle only; no ambient URLs, singleton or external I/O.
- * Authenticated actor/scope MUST come from a future trusted server boundary, never
- * request/LLM fields. Fixtures seed authoritative consent; no consent-creation API.
+ * Fresh identity and current Core scope MUST come from the injected trusted server
+ * adapter, never request/LLM fields or a prior access decision. Consent issuance is
+ * qualified only against the disposable fixture and is not a production ceremony.
  * Rights fences here live only for the disposable fixture, not indefinitely in production.
  */
-export function createIsolatedTwinRepository(sql: postgres.Sql) {
+export function createIsolatedTwinRepository(
+  sql: postgres.Sql,
+  authority: TwinRepositoryAuthorityAdapter,
+) {
+  async function authenticatedActor(tx: Tx): Promise<AuthenticatedActor> {
+    let value: unknown;
+    try {
+      const input = await authority.resolveAuthenticatedActor(tx);
+      assertModelJsonData(input);
+      value = structuredClone(input);
+      assertModelJsonData(value);
+    } catch {
+      throw new Error("TWIN_SESSION_REQUIRED");
+    }
+    const candidate = value as Record<string, unknown>;
+    requireValue(
+      value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 2 &&
+        Object.hasOwn(value, "actorClass") &&
+        Object.hasOwn(value, "actorUserId") &&
+        candidate.actorClass === "human" &&
+        typeof candidate.actorUserId === "string" &&
+        uuid.test(candidate.actorUserId),
+      "TWIN_SESSION_REQUIRED",
+    );
+    return Object.freeze(value as AuthenticatedActor);
+  }
+  function snapshotData<T>(input: T): T {
+    try {
+      assertModelJsonData(input);
+      const snapshot = freezeJson(structuredClone(input));
+      assertModelJsonData(snapshot);
+      return snapshot;
+    } catch {
+      throw new Error("INVALID_INPUT");
+    }
+  }
+  function snapshotContext(supplied: Context, humanOnly: boolean): Context {
+    const snapshot = snapshotData(supplied);
+    context(snapshot, humanOnly);
+    return snapshot;
+  }
+  async function withAccess<T>(
+    supplied: Context,
+    humanOnly: boolean,
+    work: (tx: Tx, trusted: Context, authorityNow: string) => Promise<T>,
+  ): Promise<T> {
+    const snapshot = snapshotContext(supplied, humanOnly);
+    return (await sql.begin(async (tx) => {
+      const actor = await authenticatedActor(tx);
+      const request = Object.freeze({
+        actor,
+        organizationId: snapshot.scope.organizationId,
+        subjectUserId: snapshot.scope.subjectId,
+      });
+      const resolved = await authority.resolveCurrentCoreAccess(tx, request);
+      const decision = evaluatePersonalTwinModelAccess(resolved);
+      requireValue(
+        decision.allowed &&
+          decision.scope.organizationId === request.organizationId &&
+          decision.scope.subjectId === request.subjectUserId &&
+          decision.actor.subjectId === actor.actorUserId,
+        decision.allowed ? "TWIN_CORE_CONTEXT_MISMATCH" : decision.reason,
+      );
+      const [{ now }] = await tx<{ now: string }[]>`
+        select clock_timestamp()::text as now
+      `;
+      const authorityNow = new Date(now).toISOString();
+      const trusted: Context = {
+        ...snapshot,
+        scope: Object.freeze({ ...decision.scope }),
+        actor: Object.freeze({ ...snapshot.actor, subjectId: decision.scope.subjectId }),
+      };
+      await lock(tx, trusted);
+      return work(tx, trusted, authorityNow);
+    })) as T;
+  }
   async function lock(tx: Tx, ctx: Context) {
     // One consistent lock order for scope -> records; unrelated subjects remain separate.
     await tx`select pg_advisory_xact_lock(hashtextextended(jsonb_build_array(${ctx.scope.organizationId}::text,${ctx.scope.subjectId}::text)::text,0))`;
@@ -124,12 +274,27 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       RightsRow[]
     >`select source_id, source_kind, purpose, request_id, operation, state, requested_at from twin_model_fixture.rights_request where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and (purpose=${ctx.purpose} or operation='delete_source')`;
   }
-  async function load(tx: Tx, ctx: Context) {
+  async function consentLineage(tx: Tx, ctx: Context, id: string): Promise<ModelConsentGrant[]> {
+    const lineage = (
+      await tx<{ payload: ModelConsentGrant }[]>`
+        select payload
+        from twin_model_fixture.consent
+        where organization_id=${ctx.scope.organizationId}
+          and subject_id=${ctx.scope.subjectId}
+          and id=${id}
+        order by version
+      `
+    ).map((row) => parseModelConsentGrant(row.payload));
+    validateConsentLineage(lineage, ctx.scope);
+    return lineage;
+  }
+  async function load(tx: Tx, ctx: Context, authorityNow: string) {
     const grants = (
       await tx<
         { payload: ModelConsentGrant }[]
       >`select payload from twin_model_fixture.consent where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId}`
-    ).map((row) => row.payload);
+    ).map((row) => parseModelConsentGrant(row.payload));
+    validateConsentLineage(grants, ctx.scope);
     const rows = await tx<
       ObjectRow[]
     >`select kind,id,version,payload,recorded_at from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose=${ctx.purpose} order by version,recorded_at,id`;
@@ -153,9 +318,20 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
           !sameScope(grant.scope, ctx.scope) ||
           grant.purpose !== ctx.purpose ||
           grant.mode !== "private_modelling" ||
+          !Array.isArray(grant.permittedUses) ||
+          !grant.permittedUses.includes("productive_private_modelling") ||
+          grant.disclosureBoundary !== "private_only" ||
           !grant.sources.includes("dialogue") ||
           grant.retentionPolicyId !== TWIN_RETENTION_POLICY ||
-          grant.issuedAt > observation.recordedAt
+          grant.issuedAt > observation.recordedAt ||
+          grant.issuedAt > authorityNow ||
+          grant.revokedAt !== null ||
+          !(
+            (grant.temporalMode === "UNTIL_REVOKED" && grant.expiresAt === null) ||
+            (grant.temporalMode === "EXPIRES_AT" &&
+              grant.expiresAt !== null &&
+              authorityNow < grant.expiresAt)
+          )
         )
           return false;
         return planRetention(
@@ -429,18 +605,129 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
     });
   }
   return {
+    async issueConsent(ctx: Context, input: unknown): Promise<ModelConsentGrant> {
+      ctx = snapshotContext(ctx, true);
+      const intent = parseConsentGrantIssuanceIntent(input);
+      requireValue(
+        intent.purpose === ctx.purpose && intent.retentionPolicyId === TWIN_RETENTION_POLICY,
+        "CONSENT_BINDING_UNAVAILABLE",
+      );
+      return withAccess(ctx, true, async (tx, ctx, authorityNow) => {
+        const fingerprint = createHash("sha256")
+          .update(JSON.stringify(["consent-issuance-v1", canonicalJson(intent)]))
+          .digest("hex");
+        const [prior] = await tx<
+          { fingerprint: string; grant_id: string; grant_version: number }[]
+        >`
+          select fingerprint,grant_id,grant_version
+          from twin_model_fixture.consent_issuance_receipt
+          where organization_id=${ctx.scope.organizationId}
+            and subject_id=${ctx.scope.subjectId}
+            and purpose=${ctx.purpose}
+            and request_id=${intent.requestId}
+        `;
+        if (prior) {
+          requireValue(prior.fingerprint === fingerprint, "CONSENT_REPLAY_CONFLICT");
+          const lineage = await consentLineage(tx, ctx, prior.grant_id);
+          const stored = lineage.find((grant) => grant.version === prior.grant_version);
+          requireValue(stored, "CONSENT_REPLAY_CORRUPT");
+          return stored;
+        }
+        const expiresAt = intent.temporal.mode === "EXPIRES_AT" ? intent.temporal.expiresAt : null;
+        requireValue(expiresAt === null || authorityNow < expiresAt, "CONSENT_EXPIRY_REQUIRED");
+        const value: ModelConsentGrant = {
+          id: randomUUID(),
+          version: 1,
+          scope: ctx.scope,
+          purpose: intent.purpose,
+          sources: intent.sources,
+          mode: "private_modelling",
+          permittedUses: intent.permittedUses,
+          disclosureBoundary: intent.disclosureBoundary,
+          issuedAt: authorityNow,
+          temporalMode: intent.temporal.mode,
+          expiresAt,
+          revokedAt: null,
+          retentionPolicyId: intent.retentionPolicyId,
+        };
+        await tx`
+          insert into twin_model_fixture.consent
+            (organization_id,subject_id,id,version,payload)
+          values
+            (${ctx.scope.organizationId},${ctx.scope.subjectId},${value.id},1,${tx.json(value)})
+        `;
+        await tx`
+          insert into twin_model_fixture.consent_issuance_receipt
+            (organization_id,subject_id,purpose,request_id,fingerprint,grant_id,grant_version)
+          values
+            (${ctx.scope.organizationId},${ctx.scope.subjectId},${ctx.purpose},${intent.requestId},${fingerprint},${value.id},1)
+        `;
+        return freezeJson(structuredClone(value));
+      });
+    },
+    async revokeConsent(ctx: Context, input: unknown): Promise<void> {
+      ctx = snapshotContext(ctx, true);
+      assertModelJsonData(input);
+      requireValue(
+        input !== null &&
+          typeof input === "object" &&
+          !Array.isArray(input) &&
+          Object.keys(input).length === 2 &&
+          Object.hasOwn(input, "id") &&
+          Object.hasOwn(input, "version"),
+        "INVALID_CONSENT_REFERENCE",
+      );
+      const ref = input as { id: unknown; version: unknown };
+      requireValue(
+        typeof ref.id === "string" &&
+          uuid.test(ref.id) &&
+          Number.isSafeInteger(ref.version) &&
+          (ref.version as number) > 0,
+        "INVALID_CONSENT_REFERENCE",
+      );
+      const consentId = ref.id as string;
+      const consentVersion = ref.version as number;
+      await withAccess(ctx, true, async (tx, ctx, authorityNow) => {
+        const lineage = await consentLineage(tx, ctx, consentId);
+        const current = lineage.at(-1);
+        requireValue(current, "CONSENT_UNAVAILABLE");
+        requireValue(
+          sameScope(current.scope, ctx.scope) &&
+            current.purpose === ctx.purpose &&
+            current.retentionPolicyId === TWIN_RETENTION_POLICY &&
+            current.issuedAt <= authorityNow,
+          "CONSENT_UNAVAILABLE",
+        );
+        if (current.version === consentVersion + 1 && current.revokedAt !== null) return;
+        requireValue(
+          current.version === consentVersion && current.revokedAt === null,
+          "CONSENT_UNAVAILABLE",
+        );
+        const revoked = parseModelConsentGrant({
+          ...current,
+          version: current.version + 1,
+          revokedAt: authorityNow,
+        });
+        await tx`
+          insert into twin_model_fixture.consent
+            (organization_id,subject_id,id,version,payload)
+          values
+            (${ctx.scope.organizationId},${ctx.scope.subjectId},${revoked.id},${revoked.version},${tx.json(revoked)})
+        `;
+      });
+    },
     async proposeGroundedCandidate(
       ctx: Context,
       kind: GroundedKind,
       input: unknown,
       requestId: string,
     ): Promise<void> {
-      context(ctx);
+      ctx = snapshotContext(ctx, false);
+      input = snapshotData(input);
       requireValue(ctx.actor.kind === "model", "MODEL_REQUIRED");
       requireValue(nonempty(requestId));
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      await withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         requireValue(
           !loaded.state.lastRecordedAt || ctx.now >= loaded.state.lastRecordedAt,
           "STALE_CLOCK",
@@ -473,10 +760,9 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async groundedCandidates(ctx: Context): Promise<GroundedCandidate[]> {
-      context(ctx);
-      return sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      ctx = snapshotContext(ctx, false);
+      return withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         const result: GroundedCandidate[] = [];
         for (const row of loaded.rows) {
           if (row.kind !== "relation" && row.kind !== "knowledge_need") continue;
@@ -493,8 +779,9 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async savePrivateSource(ctx: Context, source: PrivateSource): Promise<void> {
+      ctx = snapshotContext(ctx, true);
       archiveContext(ctx);
-      assertModelJsonData(source);
+      source = snapshotData(source);
       createModelLedger(source.scope);
       requireValue(
         Object.keys(source).sort().join(",") === "id,origin,recordedAt,revision,scope,text" &&
@@ -505,8 +792,7 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
           source.revision === 1,
         "INVALID_INPUT",
       );
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
+      await withAccess(ctx, true, async (tx, ctx) => {
         const authority = await archiveAuthority(
           tx,
           ctx,
@@ -536,9 +822,10 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       draft: ExperienceDraft,
       approvedFingerprint: string,
     ): Promise<void> {
+      ctx = snapshotContext(ctx, true);
       archiveContext(ctx);
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
+      draft = snapshotData(draft);
+      await withAccess(ctx, true, async (tx, ctx) => {
         const value = await composeStoredExperience(tx, ctx, draft, approvedFingerprint);
         const [prior] = await tx<
           { payload: PrivateExperience }[]
@@ -564,10 +851,10 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async experience(ctx: Context, id: string): Promise<PrivateExperience | null> {
+      ctx = snapshotContext(ctx, true);
       archiveContext(ctx);
       requireValue(nonempty(id));
-      return sql.begin(async (tx) => {
-        await lock(tx, ctx);
+      return withAccess(ctx, true, async (tx, ctx) => {
         const [row] = await tx<
           { payload: PrivateExperience }[]
         >`select payload from twin_model_fixture.object where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose='private_archive' and kind='experience' and id=${id} and version=1`;
@@ -594,12 +881,12 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async proposeHypothesis(ctx: Context, input: unknown, requestId: string): Promise<void> {
-      context(ctx);
+      ctx = snapshotContext(ctx, false);
+      input = snapshotData(input);
       requireValue(ctx.actor.kind === "model", "MODEL_REQUIRED");
       requireValue(nonempty(requestId));
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      await withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         const value = validateWorkingHypothesis(
           input,
           ctx.scope,
@@ -679,10 +966,9 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async hypotheses(ctx: Context): Promise<WorkingHypothesis[]> {
-      context(ctx);
-      return sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      ctx = snapshotContext(ctx, false);
+      return withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         const evidence = eligibleReferences(loaded);
         const result: WorkingHypothesis[] = [];
         for (const row of loaded.rows.filter((r) => r.kind === "hypothesis")) {
@@ -704,15 +990,14 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async apply(ctx: Context, command: ModelCommand): Promise<void> {
-      context(ctx);
-      assertModelJsonData(command);
+      ctx = snapshotContext(ctx, false);
+      command = snapshotData(command);
       requireValue(sameScope(command.scope, ctx.scope), "SCOPE_MISMATCH");
       // Diary/private archive authority is deliberately not inferred by this first fixture.
       if (command.kind === "observe")
         requireValue(command.source === "dialogue", "SOURCE_NOT_ADMITTED");
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      await withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         if (command.kind === "observe") {
           requireValue(
             !loaded.restrictions.some(
@@ -776,18 +1061,16 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async current(ctx: Context) {
-      context(ctx);
-      return sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      ctx = snapshotContext(ctx, false);
+      return withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         return projectCurrentModel(loaded.state, loaded.ctx);
       });
     },
     async history(ctx: Context): Promise<ModelLedger> {
-      context(ctx);
-      return sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      ctx = snapshotContext(ctx, false);
+      return withAccess(ctx, false, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         const usable = new Set(loaded.state.observations.map((o) => o.id));
         const claims = loaded.state.claims.filter((c) =>
           c.observationIds.every((id) => usable.has(id)),
@@ -808,7 +1091,7 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       operation: RightsRow["operation"],
       sourceKind: RightsRow["source_kind"] = "observation",
     ): Promise<void> {
-      context(ctx, true);
+      ctx = snapshotContext(ctx, true);
       requireValue(
         nonempty(sourceId) &&
           nonempty(requestId) &&
@@ -819,9 +1102,8 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
         operation === "delete_source" || sourceKind === "observation",
         "RIGHTS_PURPOSE_MISMATCH",
       );
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
-        const loaded = await load(tx, ctx);
+      await withAccess(ctx, true, async (tx, ctx, authorityNow) => {
+        const loaded = await load(tx, ctx, authorityNow);
         const prior = loaded.restrictions.find(
           (r) => r.request_id === requestId && r.purpose === ctx.purpose,
         );
@@ -846,11 +1128,10 @@ export function createIsolatedTwinRepository(sql: postgres.Sql) {
       });
     },
     async erase(ctx: Context, requestId: string): Promise<void> {
-      context(ctx, true);
+      ctx = snapshotContext(ctx, true);
       requireValue(nonempty(requestId));
       // Separate transaction: an erasure failure can never roll back the use restriction.
-      await sql.begin(async (tx) => {
-        await lock(tx, ctx);
+      await withAccess(ctx, true, async (tx, ctx) => {
         const [request] = await tx<
           RightsRow[]
         >`select * from twin_model_fixture.rights_request where organization_id=${ctx.scope.organizationId} and subject_id=${ctx.scope.subjectId} and purpose=${ctx.purpose} and request_id=${requestId}`;

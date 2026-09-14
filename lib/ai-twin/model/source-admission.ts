@@ -3,6 +3,7 @@ import { assertModelJsonData } from "./persistence-contracts";
 
 /** Human-ratified private source-admission semantics; not consent creation. */
 export const TWIN_SOURCE_ADMISSION_POLICY = "human-approved-2026-09-14/v1";
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type PrivateSourceAdmissionCandidate = Readonly<{
   scope: ModelScope;
@@ -89,8 +90,10 @@ function validateGrant(grant: ModelConsentGrant, expectedScope: ModelScope): voi
     "purpose",
     "sources",
     "mode",
+    "permittedUses",
     "disclosureBoundary",
     "issuedAt",
+    "temporalMode",
     "expiresAt",
     "revokedAt",
     "retentionPolicyId",
@@ -99,6 +102,7 @@ function validateGrant(grant: ModelConsentGrant, expectedScope: ModelScope): voi
   requireValue(sameScope(grant.scope, expectedScope), "SCOPE_MISMATCH");
   requireValue(
     nonempty(grant.id) &&
+      uuid.test(grant.id) &&
       Number.isSafeInteger(grant.version) &&
       grant.version > 0 &&
       nonempty(grant.purpose) &&
@@ -109,14 +113,22 @@ function validateGrant(grant: ModelConsentGrant, expectedScope: ModelScope): voi
   for (const sourceClass of grant.sources)
     requireValue(admittedSourceClasses.has(sourceClass), "SOURCE_CLASS_NOT_ADMITTED");
   requireValue(["private_modelling", "raw_only"].includes(grant.mode));
+  requireValue(
+    Array.isArray(grant.permittedUses) &&
+      new Set(grant.permittedUses).size === grant.permittedUses.length &&
+      grant.permittedUses.every((use) => use === "productive_private_modelling"),
+  );
   requireValue(grant.disclosureBoundary === "private_only");
   const issuedAt = instant(grant.issuedAt);
-  const expiresAt = instant(grant.expiresAt);
+  const expiresAt = grant.expiresAt === null ? null : instant(grant.expiresAt);
   const revokedAt = grant.revokedAt === null ? null : instant(grant.revokedAt);
   requireValue(
     Number.isFinite(issuedAt) &&
-      Number.isFinite(expiresAt) &&
-      issuedAt < expiresAt &&
+      ((grant.temporalMode === "UNTIL_REVOKED" && expiresAt === null) ||
+        (grant.temporalMode === "EXPIRES_AT" &&
+          expiresAt !== null &&
+          Number.isFinite(expiresAt) &&
+          issuedAt < expiresAt)) &&
       (revokedAt === null || (Number.isFinite(revokedAt) && revokedAt >= issuedAt)),
   );
 }
@@ -184,10 +196,12 @@ export function admitPrivateSourceEvent(
       grant.purpose === context.purpose &&
       grant.sources.includes(context.sourceClass) &&
       grant.mode === "private_modelling" &&
+      grant.permittedUses.includes("productive_private_modelling") &&
       grant.disclosureBoundary === "private_only" &&
       grant.retentionPolicyId === context.retentionPolicyId &&
       instant(grant.issuedAt) <= createdAt &&
-      now < instant(grant.expiresAt) &&
+      (grant.temporalMode === "UNTIL_REVOKED" ||
+        (grant.expiresAt !== null && now < instant(grant.expiresAt))) &&
       grant.revokedAt === null,
     "CONSENT_UNAVAILABLE",
   );

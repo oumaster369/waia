@@ -113,6 +113,22 @@ purpose-bound grant for future use and does not rewrite prior collection/use
 history. Unresolvable identity, scope, provenance or rights keeps the material
 quarantined, subject only to independent Human export/delete rights.
 
+ConsentGrant issuance requires an authenticated Human action with
+`actorUserId == subjectUserId` and an exact current organization. Purpose,
+admitted dialogue/Diary sources, productive uses, private disclosure boundary,
+retention/use policy and temporal mode are explicit; trusted server time is the
+issue time. Possession, account/membership, prior consent, Formation,
+subscription/payment, continued use and silence imply no consent.
+
+Temporal mode is exactly `UNTIL_REVOKED` or `EXPIRES_AT`, never missing or
+defaulted. `EXPIRES_AT` requires a valid future trusted timestamp at issuance.
+`UNTIL_REVOKED` is an explicit Human choice and remains usable only while
+unrevoked, purpose/source/policy remain current and no higher-priority rights
+operation blocks use. Expiry or revocation blocks new productive use but does
+not erase data. Later authorization is a new append-only grant/version and
+cannot rewrite history, revive deleted/erased sources or widen purpose,
+sources, use or disclosure without explicit Human authorization.
+
 ### 3.4 Personal-model access
 
 Supabase Auth and WAIA Core are the sole credential, identity, organization,
@@ -133,6 +149,15 @@ guard is a pure fail-closed evaluation of already trusted Core facts. It does
 not authenticate, parse credentials, query model persistence or grant consent,
 disclosure, Society, action or billing authority, and its result is not an
 authorization token for caller-controlled use.
+
+Every protected repository operation must resolve current Core
+identity/membership/subject authority at operation time and, where technically
+possible, within the same authoritative transaction/consistent database
+boundary as the protected read or mutation. A prior guard decision is not
+durable authority, is never reused across transactions and has no invented TTL,
+grace or cache interval. If that atomic authority cannot be provided, the
+repository fails closed rather than substituting matching IDs or a fixture Core
+model.
 
 ## 4. Formation Contract and progress
 
@@ -386,5 +411,6 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-14 | Explicit Human RightsOperation completion decision; DEE-871 | Type-specific cancellation/effects, append-only retry, verified closure and minimized twelve-month terminal receipts |
 | 2026-09-14 | Explicit Human DEE-871 WP-1 closure decision | Dialogue/Diary-only v1 ingress, provenance-only persistence ownership and non-inferred historical consent |
 | 2026-09-14 | Explicit Human DEE-871 WP-2 Core-access decision | Personal-model access requires exact trusted Core actor/subject/organization equality; no role or entitlement bypass |
+| 2026-09-14 | Explicit Human DEE-871 authenticated-repository decision | Transaction-current Core authority plus explicit append-only `UNTIL_REVOKED` / `EXPIRES_AT` consent; no stale guard reuse |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

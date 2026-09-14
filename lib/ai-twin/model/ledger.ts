@@ -17,6 +17,7 @@ function fail(code: string): never {
 function text(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function instant(value: unknown): number {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value))
     return NaN;
@@ -216,17 +217,23 @@ function consentFor(
           "purpose",
           "sources",
           "mode",
+          "permittedUses",
           "disclosureBoundary",
           "issuedAt",
+          "temporalMode",
           "expiresAt",
           "revokedAt",
           "retentionPolicyId",
         ]) ||
+        !uuid.test(grant.id) ||
         !validScope(grant.scope) ||
         !dataArray(grant.sources) ||
         grant.sources.length === 0 ||
         grant.sources.some((source) => !["dialogue", "diary"].includes(source)) ||
-        new Set(grant.sources).size !== grant.sources.length,
+        new Set(grant.sources).size !== grant.sources.length ||
+        !dataArray(grant.permittedUses) ||
+        grant.permittedUses.some((use) => use !== "productive_private_modelling") ||
+        new Set(grant.permittedUses).size !== grant.permittedUses.length,
     )
   )
     return undefined;
@@ -242,14 +249,20 @@ function consentFor(
     grant.purpose !== ctx.purpose ||
     observation.purpose !== ctx.purpose ||
     grant.mode !== "private_modelling" ||
+    !grant.permittedUses.includes("productive_private_modelling") ||
     grant.disclosureBoundary !== "private_only" ||
     grant.revokedAt !== null ||
     !text(grant.retentionPolicyId) ||
     !grant.sources.includes(observation.source) ||
     !Number.isFinite(instant(grant.issuedAt)) ||
-    !Number.isFinite(instant(grant.expiresAt)) ||
     instant(grant.issuedAt) > instant(observation.recordedAt) ||
-    instant(ctx.now) >= instant(grant.expiresAt)
+    (!(grant.temporalMode === "UNTIL_REVOKED" && grant.expiresAt === null) &&
+      !(
+        grant.temporalMode === "EXPIRES_AT" &&
+        Number.isFinite(instant(grant.expiresAt)) &&
+        instant(grant.issuedAt) < instant(grant.expiresAt) &&
+        instant(ctx.now) < instant(grant.expiresAt)
+      ))
   )
     return undefined;
   return grant;

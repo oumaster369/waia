@@ -2,12 +2,17 @@ import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createIsolatedTwinRepository } from "@/lib/ai-twin/model/postgres-repository";
+import { TWIN_PERSONAL_MODEL_ACCESS_POLICY } from "@/lib/ai-twin/model/core-access";
 import type {
   WorkingHypothesis,
   DynamicRelation,
   KnowledgeNeed,
 } from "@/lib/ai-twin/model/persistence-contracts";
-import { experienceFingerprint, type ExperienceDraft } from "@/lib/ai-twin/model/lifecycle";
+import {
+  experienceFingerprint,
+  TWIN_RETENTION_POLICY,
+  type ExperienceDraft,
+} from "@/lib/ai-twin/model/lifecycle";
 import type {
   ModelContext,
   ModelConsentGrant,
@@ -18,7 +23,12 @@ import type {
 
 // Explicit opt-in must fail on bad identity, never silently skip or read ambient DB URLs.
 const enabled = process.env.WAIA_TWIN_PG_FIXTURE === "1";
-const scope = { organizationId: "fixture-org-a", subjectId: "fixture-human-a" };
+const subjectId = "11111111-1111-4111-8111-111111111111";
+function organizationId(label: string): string {
+  const prefix = [...label].reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0);
+  return `${prefix.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`;
+}
+const scope = { organizationId: organizationId("fixture-org-a"), subjectId };
 const now = "2026-09-08T12:00:00.000Z";
 type Context = Omit<ModelContext, "grants">;
 const human: Context = {
@@ -29,17 +39,19 @@ const human: Context = {
 };
 const model: Context = { ...human, actor: { ...human.actor, kind: "model" } };
 const grant: ModelConsentGrant = {
-  id: "grant-a",
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   version: 1,
   scope,
   purpose: "formation",
   sources: ["dialogue", "diary"],
   mode: "private_modelling",
+  permittedUses: ["productive_private_modelling"],
   disclosureBoundary: "private_only",
   issuedAt: now,
+  temporalMode: "EXPIRES_AT",
   expiresAt: "2027-09-08T12:00:00.000Z",
   revokedAt: null,
-  retentionPolicyId: "human-approved-2026-09-08/v1",
+  retentionPolicyId: TWIN_RETENTION_POLICY,
 };
 const observe = (id: string): ObserveCommand => ({
   kind: "observe",
@@ -86,6 +98,86 @@ describe.skipIf(!enabled)(
     let repo: ReturnType<typeof createIsolatedTwinRepository>;
     let reopened: ReturnType<typeof createIsolatedTwinRepository>;
     let created = false;
+    let sessionActor: unknown = { actorClass: "human", actorUserId: subjectId };
+    let afterCoreRead: (() => Promise<void>) | null = null;
+    const authority = {
+      resolveAuthenticatedActor: async (tx: postgres.TransactionSql) => {
+        await tx`select txid_current()`;
+        return sessionActor;
+      },
+      resolveCurrentCoreAccess: async (
+        tx: postgres.TransactionSql,
+        request: {
+          actor: { actorClass: "human"; actorUserId: string };
+          organizationId: string;
+          subjectUserId: string;
+        },
+      ) => {
+        await tx`
+          select pg_advisory_xact_lock(
+            hashtextextended(
+              jsonb_build_array(${request.organizationId}::text,${request.subjectUserId}::text)::text,
+              0
+            )
+          )
+        `;
+        const [state] = await tx<
+          {
+            organization_status: "current" | "stale" | "revoked";
+            membership_status: "current" | "stale" | "revoked";
+            subject_status: "current" | "stale" | "revoked";
+          }[]
+        >`
+          select organization_status,membership_status,subject_status
+          from twin_model_fixture.core_adapter_state
+          where organization_id=${request.organizationId}
+            and subject_id=${request.subjectUserId}
+        `;
+        if (afterCoreRead) await afterCoreRead();
+        return {
+          policyVersion: TWIN_PERSONAL_MODEL_ACCESS_POLICY,
+          target: {
+            organizationId: request.organizationId,
+            subjectUserId: request.subjectUserId,
+          },
+          actor: {
+            authentication: "authenticated",
+            actorClass: request.actor.actorClass,
+            actorUserId: request.actor.actorUserId,
+          },
+          organization: state
+            ? { organizationId: request.organizationId, status: state.organization_status }
+            : null,
+          membership: state
+            ? {
+                organizationId: request.organizationId,
+                actorUserId: request.actor.actorUserId,
+                status: state.membership_status,
+              }
+            : null,
+          subjectBinding: state
+            ? {
+                organizationId: request.organizationId,
+                subjectUserId: request.subjectUserId,
+                status: state.subject_status,
+              }
+            : null,
+        };
+      },
+    };
+    async function seedScopeState(value: typeof scope): Promise<void> {
+      await owner.begin(async (tx) => {
+        await tx`
+          insert into twin_model_fixture.scope_lock
+          values (${value.organizationId},${value.subjectId})
+        `;
+        await tx`
+          insert into twin_model_fixture.core_adapter_state
+            (organization_id,subject_id)
+          values (${value.organizationId},${value.subjectId})
+        `;
+      });
+    }
     beforeAll(async () => {
       const raw = process.env.WAIA_TWIN_PG_FIXTURE_URL;
       const token = process.env.WAIA_TWIN_PG_FIXTURE_TOKEN;
@@ -117,14 +209,17 @@ describe.skipIf(!enabled)(
       await owner.unsafe(
         readFileSync(new URL("../fixtures/ai-twin-model-repository.sql", import.meta.url), "utf8"),
       );
+      const [{ ddl }] =
+        await owner`select format('alter role twin_fixture_service password %L', ${url.password}::text) as ddl`;
+      await owner.unsafe(ddl);
       created = true;
-      await owner`insert into twin_model_fixture.scope_lock values (${scope.organizationId}, ${scope.subjectId})`;
+      await seedScopeState(scope);
       await owner`insert into twin_model_fixture.consent values (${scope.organizationId}, ${scope.subjectId}, ${grant.id}, ${grant.version}, ${owner.json(grant)})`;
       url.username = "twin_fixture_service";
       service = postgres(url.toString(), { max: 2, connect_timeout: 3, onnotice: () => {} });
       second = postgres(url.toString(), { max: 2, connect_timeout: 3, onnotice: () => {} });
-      repo = createIsolatedTwinRepository(service);
-      reopened = createIsolatedTwinRepository(second);
+      repo = createIsolatedTwinRepository(service, authority);
+      reopened = createIsolatedTwinRepository(second, authority);
     });
     afterAll(async () => {
       await Promise.all([service, second].filter(Boolean).map((sql) => sql.end({ timeout: 2 })));
@@ -163,6 +258,281 @@ describe.skipIf(!enabled)(
         (await reopened.current(human)).find((x) => x.claimId === "claim-history")?.basis,
       ).toBe("human_endorsed");
     });
+    it("re-resolves current Core adapter state for every repository transaction", async () => {
+      expect(await repo.current(human)).toBeDefined();
+      await owner`
+        update twin_model_fixture.core_adapter_state
+        set membership_status='revoked'
+        where organization_id=${scope.organizationId} and subject_id=${scope.subjectId}
+      `;
+      try {
+        await expect(repo.current(human)).rejects.toThrow("TWIN_MEMBERSHIP_NOT_CURRENT");
+        await expect(repo.apply(human, observe("revoked-membership"))).rejects.toThrow(
+          "TWIN_MEMBERSHIP_NOT_CURRENT",
+        );
+      } finally {
+        await owner`
+          update twin_model_fixture.core_adapter_state
+          set membership_status='current'
+          where organization_id=${scope.organizationId} and subject_id=${scope.subjectId}
+        `;
+      }
+      expect(await repo.current(human)).toBeDefined();
+    });
+    it("holds current Core authority through protected work and rejects it after revocation", async () => {
+      let entered!: () => void;
+      let release!: () => void;
+      const coreRead = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const continueWork = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      afterCoreRead = async () => {
+        entered();
+        await continueWork;
+      };
+      const operation = repo.current(human);
+      await coreRead;
+      const revocation = owner`
+        update twin_model_fixture.core_adapter_state
+        set membership_status='revoked'
+        where organization_id=${scope.organizationId} and subject_id=${scope.subjectId}
+      `;
+      let revoked = false;
+      void revocation.then(() => {
+        revoked = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(revoked).toBe(false);
+      afterCoreRead = null;
+      release();
+      await expect(operation).resolves.toBeDefined();
+      await revocation;
+      await expect(repo.current(human)).rejects.toThrow("TWIN_MEMBERSHIP_NOT_CURRENT");
+      await owner`
+        update twin_model_fixture.core_adapter_state
+        set membership_status='current'
+        where organization_id=${scope.organizationId} and subject_id=${scope.subjectId}
+      `;
+    });
+    it("rejects non-Human, foreign and hostile session authority", async () => {
+      const original = sessionActor;
+      try {
+        sessionActor = { actorClass: "service", actorUserId: subjectId };
+        await expect(repo.current(human)).rejects.toThrow("TWIN_SESSION_REQUIRED");
+        sessionActor = {
+          actorClass: "human",
+          actorUserId: "33333333-3333-4333-8333-333333333333",
+        };
+        await expect(repo.current(human)).rejects.toThrow("TWIN_PERSONAL_SUBJECT_MISMATCH");
+        sessionActor = new Proxy({ actorClass: "human", actorUserId: subjectId }, {});
+        await expect(repo.current(human)).rejects.toThrow("TWIN_SESSION_REQUIRED");
+        let read = false;
+        const getter = { actorClass: "human" };
+        Object.defineProperty(getter, "actorUserId", {
+          enumerable: true,
+          get() {
+            read = true;
+            return subjectId;
+          },
+        });
+        sessionActor = getter;
+        await expect(repo.current(human)).rejects.toThrow("TWIN_SESSION_REQUIRED");
+        expect(read).toBe(false);
+      } finally {
+        sessionActor = original;
+      }
+    });
+    it("snapshots caller context before asynchronous authority resolution", async () => {
+      let entered!: () => void;
+      let release!: () => void;
+      const coreRead = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const continueWork = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      afterCoreRead = async () => {
+        entered();
+        await continueWork;
+      };
+      const mutable: Context = {
+        ...human,
+        scope: { ...human.scope },
+        actor: { ...human.actor },
+      };
+      const operation = repo.current(mutable);
+      await coreRead;
+      (mutable.scope as { organizationId: string }).organizationId = organizationId("mutated");
+      (mutable.actor as { kind: "human" | "model" }).kind = "model";
+      (mutable as { purpose: string }).purpose = "private_archive";
+      afterCoreRead = null;
+      release();
+      await expect(operation).resolves.toBeDefined();
+
+      let read = false;
+      const hostile = { ...human };
+      Object.defineProperty(hostile, "purpose", {
+        enumerable: true,
+        get() {
+          read = true;
+          return "formation";
+        },
+      });
+      await expect(repo.current(hostile)).rejects.toThrow("INVALID_INPUT");
+      expect(read).toBe(false);
+    });
+    it("snapshots write payloads before asynchronous authority resolution", async () => {
+      const writeScope = { organizationId: organizationId("mutable-write"), subjectId };
+      await seedScopeState(writeScope);
+      const scopedGrant = { ...grant, scope: writeScope };
+      await owner`insert into twin_model_fixture.consent values (${writeScope.organizationId},${subjectId},${grant.id},1,${owner.json(scopedGrant)})`;
+      const scoped: Context = {
+        ...human,
+        scope: writeScope,
+        actor: { kind: "human", subjectId },
+      };
+      const command: ObserveCommand = {
+        ...observe("mutable-write"),
+        scope: writeScope,
+      };
+      let entered!: () => void;
+      let release!: () => void;
+      const coreRead = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const continueWork = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      afterCoreRead = async () => {
+        entered();
+        await continueWork;
+      };
+      const operation = repo.apply(scoped, command);
+      await coreRead;
+      (command as { source: "dialogue" | "diary" }).source = "diary";
+      (command as { text: string }).text = "mutated after validation";
+      afterCoreRead = null;
+      release();
+      await operation;
+      const stored = (await repo.history(scoped)).observations.find(
+        (observation) => observation.id === command.id,
+      );
+      expect(stored?.source).toBe("dialogue");
+      expect(stored?.text).toBe("I chose a quiet walk");
+    });
+    it("issues explicit temporal consent at trusted time and appends revocation", async () => {
+      const consentScope = { organizationId: organizationId("consent-issuance"), subjectId };
+      const consentHuman: Context = {
+        ...human,
+        scope: consentScope,
+        actor: { kind: "human", subjectId },
+      };
+      await seedScopeState(consentScope);
+      const before =
+        await owner`select count(*)::int as n from twin_model_fixture.consent where organization_id=${consentScope.organizationId} and subject_id=${subjectId}`;
+      const issuance = {
+        requestId: "99999999-9999-4999-8999-999999999999",
+        confirmed: true,
+        purpose: "formation",
+        sources: ["dialogue", "diary"],
+        permittedUses: ["productive_private_modelling"],
+        disclosureBoundary: "private_only",
+        retentionPolicyId: TWIN_RETENTION_POLICY,
+        temporal: { mode: "UNTIL_REVOKED", expiresAt: null },
+      } as const;
+      const issued = await repo.issueConsent(consentHuman, issuance);
+      expect(await repo.issueConsent(consentHuman, issuance)).toEqual(issued);
+      await expect(
+        repo.issueConsent(consentHuman, {
+          ...issuance,
+          sources: ["dialogue"],
+        }),
+      ).rejects.toThrow("CONSENT_REPLAY_CONFLICT");
+      expect(issued).toMatchObject({
+        version: 1,
+        scope: consentScope,
+        purpose: "formation",
+        sources: ["dialogue", "diary"],
+        permittedUses: ["productive_private_modelling"],
+        disclosureBoundary: "private_only",
+        temporalMode: "UNTIL_REVOKED",
+        expiresAt: null,
+        revokedAt: null,
+      });
+      expect(issued.issuedAt).not.toBe(consentHuman.now);
+      const atIssue = { ...consentHuman, now: issued.issuedAt };
+      await repo.apply(atIssue, {
+        ...observe("issued-consent"),
+        scope: consentScope,
+        grant: { id: issued.id, version: issued.version },
+        eventTime: issued.issuedAt,
+      });
+      await repo.revokeConsent(atIssue, { id: issued.id, version: issued.version });
+      await repo.revokeConsent(atIssue, { id: issued.id, version: issued.version });
+      expect(
+        (await repo.history(atIssue)).observations.some(
+          (observation) => observation.id === "issued-consent",
+        ),
+      ).toBe(false);
+      await expect(
+        repo.apply(atIssue, {
+          ...observe("issued-consent-later"),
+          scope: consentScope,
+          grant: { id: issued.id, version: issued.version },
+          eventTime: issued.issuedAt,
+        }),
+      ).rejects.toThrow();
+      const after =
+        await owner`select version,payload from twin_model_fixture.consent where organization_id=${consentScope.organizationId} and subject_id=${subjectId} and id=${issued.id} order by version`;
+      expect(after.map((row) => row.version)).toEqual([1, 2]);
+      expect(before[0].n).toBe(0);
+      expect(after[0].payload.revokedAt).toBeNull();
+      expect(after[1].payload.revokedAt).not.toBeNull();
+    });
+    it("rejects expired-at-issuance consent without writing a grant", async () => {
+      const before =
+        await owner`select count(*)::int as n from twin_model_fixture.consent where organization_id=${scope.organizationId} and subject_id=${scope.subjectId}`;
+      await expect(
+        repo.issueConsent(human, {
+          requestId: "88888888-8888-4888-8888-888888888888",
+          confirmed: true,
+          purpose: "formation",
+          sources: ["dialogue"],
+          permittedUses: ["productive_private_modelling"],
+          disclosureBoundary: "private_only",
+          retentionPolicyId: TWIN_RETENTION_POLICY,
+          temporal: { mode: "EXPIRES_AT", expiresAt: "2000-01-01T00:00:00.000Z" },
+        }),
+      ).rejects.toThrow("CONSENT_EXPIRY_REQUIRED");
+      const after =
+        await owner`select count(*)::int as n from twin_model_fixture.consent where organization_id=${scope.organizationId} and subject_id=${scope.subjectId}`;
+      expect(after[0].n).toBe(before[0].n);
+    });
+    it("fails closed for a widened append-only consent lineage", async () => {
+      const lineageScope = { organizationId: organizationId("consent-lineage"), subjectId };
+      await seedScopeState(lineageScope);
+      const initial = {
+        ...grant,
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        scope: lineageScope,
+      };
+      const widened = {
+        ...initial,
+        version: 2,
+        sources: ["dialogue"],
+        revokedAt: "2026-09-14T12:00:00.000Z",
+      };
+      await owner`insert into twin_model_fixture.consent values (${lineageScope.organizationId},${subjectId},${initial.id},1,${owner.json(initial)})`;
+      await owner`insert into twin_model_fixture.consent values (${lineageScope.organizationId},${subjectId},${initial.id},2,${owner.json(widened)})`;
+      const scoped: Context = {
+        ...human,
+        scope: lineageScope,
+        actor: { kind: "human", subjectId },
+      };
+      await expect(repo.current(scoped)).rejects.toThrow("CONSENT_LINEAGE_INVALID");
+    });
     it("rejects conflicting retries and stale concurrent Human corrections", async () => {
       await repo.apply(human, observe("race"));
       await repo.apply(model, propose("race"));
@@ -179,13 +549,17 @@ describe.skipIf(!enabled)(
     it.each(["organizationId", "subjectId"] as const)(
       "isolates %s on reads, writes and rights requests",
       async (key) => {
-        const foreign = { ...human, scope: { ...scope, [key]: "another" } };
+        const foreignValue =
+          key === "organizationId"
+            ? organizationId("foreign")
+            : "33333333-3333-4333-8333-333333333333";
+        const foreign = { ...human, scope: { ...scope, [key]: foreignValue } };
         foreign.actor = { kind: "human", subjectId: foreign.scope.subjectId };
-        expect(await reopened.current(foreign)).toEqual([]);
+        await expect(reopened.current(foreign)).rejects.toThrow();
         await expect(repo.apply(foreign, observe("history"))).rejects.toThrow("SCOPE_MISMATCH");
         await expect(
           repo.withdraw(foreign, "history", `foreign-${key}`, "withdraw_modelling"),
-        ).rejects.toThrow("SOURCE_UNAVAILABLE");
+        ).rejects.toThrow();
       },
     );
     it("immediately restricts use and denies replay before physical erasure", async () => {
@@ -214,6 +588,10 @@ describe.skipIf(!enabled)(
       await expect(
         service`update twin_model_fixture.object set payload='{}'::jsonb`,
       ).rejects.toThrow();
+      await expect(
+        service`update twin_model_fixture.consent set payload='{}'::jsonb`,
+      ).rejects.toThrow();
+      await expect(service`delete from twin_model_fixture.consent`).rejects.toThrow();
       await expect(
         owner.begin(async (sql) => {
           await sql`set local role twin_fixture_browser`;
@@ -260,7 +638,11 @@ describe.skipIf(!enabled)(
       await expect(repo.apply(later, observe("history"))).rejects.toThrow("RETENTION_UNAVAILABLE");
     });
     it("rejects an unknown retention policy before storing a new observation", async () => {
-      const bad = { ...grant, id: "unapproved-grant", retentionPolicyId: "unapproved-policy" };
+      const bad = {
+        ...grant,
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        retentionPolicyId: "unapproved-policy",
+      };
       await owner`insert into twin_model_fixture.consent values (${scope.organizationId},${scope.subjectId},${bad.id},1,${owner.json(bad)})`;
       await expect(
         repo.apply(human, { ...observe("unknown-policy"), grant: { id: bad.id, version: 1 } }),
@@ -274,12 +656,12 @@ describe.skipIf(!enabled)(
     it.each(["retry", "new"] as const)(
       "denies %s of a hypothesis with an ended validity interval",
       async (mode) => {
-        const s = { organizationId: `hypothesis-interval-${mode}`, subjectId: "synthetic-human" };
+        const s = { organizationId: organizationId(`hypothesis-interval-${mode}`), subjectId };
         const h: Context = { ...human, scope: s, actor: { kind: "human", subjectId: s.subjectId } };
         const m: Context = { ...h, actor: { ...h.actor, kind: "model" } };
         const end = "2026-09-08T12:00:01.000Z";
         const g = { ...grant, scope: s };
-        await owner`insert into twin_model_fixture.scope_lock values (${s.organizationId},${s.subjectId})`;
+        await seedScopeState(s);
         await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},1,${owner.json(g)})`;
         await repo.apply(h, { ...observe("interval-source"), scope: s });
         const source = { ...s, kind: "observation" as const, id: "interval-source", version: 1 };
@@ -337,11 +719,11 @@ describe.skipIf(!enabled)(
     });
 
     it("keeps private deletion clocks out of modelling without dropping cross-purpose observation fences", async () => {
-      const s = { organizationId: "private-clock", subjectId: "synthetic-human" };
+      const s = { organizationId: organizationId("private-clock"), subjectId };
       const h: Context = { ...human, scope: s, actor: { kind: "human", subjectId: s.subjectId } };
       const m: Context = { ...h, actor: { ...h.actor, kind: "model" } };
       const g = { ...grant, scope: s };
-      await owner`insert into twin_model_fixture.scope_lock values (${s.organizationId},${s.subjectId})`;
+      await seedScopeState(s);
       await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},1,${owner.json(g)})`;
       await repo.apply(h, { ...observe("public-source"), scope: s });
       const history = await reopened.history(m);
@@ -442,7 +824,7 @@ describe.skipIf(!enabled)(
       "stores grounded %s with current evidence and rights closure",
       async (kind) => {
         expect(typeof repo.proposeGroundedCandidate).toBe("function");
-        const ownScope = { organizationId: `grounded-${kind}`, subjectId: "synthetic-human" };
+        const ownScope = { organizationId: organizationId(`grounded-${kind}`), subjectId };
         const h: Context = {
           ...human,
           scope: ownScope,
@@ -450,7 +832,7 @@ describe.skipIf(!enabled)(
         };
         const m: Context = { ...h, actor: { ...h.actor, kind: "model" } };
         const ownGrant = { ...grant, scope: ownScope };
-        await owner`insert into twin_model_fixture.scope_lock values (${ownScope.organizationId},${ownScope.subjectId})`;
+        await seedScopeState(ownScope);
         await owner`insert into twin_model_fixture.consent values (${ownScope.organizationId},${ownScope.subjectId},${ownGrant.id},1,${owner.json(ownGrant)})`;
         await repo.apply(h, { ...observe("grounded-source"), scope: ownScope });
         await repo.apply(m, { ...propose("grounded-source"), scope: ownScope });
@@ -542,16 +924,22 @@ describe.skipIf(!enabled)(
           ),
         ).rejects.toThrow("REPLAY_CONFLICT");
         for (const field of ["organizationId", "subjectId"] as const) {
-          const foreignScope = { ...ownScope, [field]: "foreign" };
+          const foreignScope = {
+            ...ownScope,
+            [field]:
+              field === "organizationId"
+                ? organizationId(`foreign-${kind}`)
+                : "33333333-3333-4333-8333-333333333333",
+          };
           const foreign = {
             ...m,
             scope: foreignScope,
             actor: { ...m.actor, subjectId: foreignScope.subjectId },
           };
-          expect(await reopened.groundedCandidates(foreign)).toEqual([]);
+          await expect(reopened.groundedCandidates(foreign)).rejects.toThrow();
           await expect(
             repo.proposeGroundedCandidate(foreign, kind, value, "foreign-write"),
-          ).rejects.toThrow("SCOPE_MISMATCH");
+          ).rejects.toThrow();
         }
         if (kind === "relation") {
           const ended = { ...m, now: "2026-09-09T12:00:00.000Z" };
@@ -610,12 +998,12 @@ describe.skipIf(!enabled)(
     );
 
     it("rejects grounded clock rollback and rechecks newly revoked consent before retry", async () => {
-      const s = { organizationId: "grounded-clock", subjectId: "synthetic-human" };
+      const s = { organizationId: organizationId("grounded-clock"), subjectId };
       const h: Context = { ...human, scope: s, actor: { kind: "human", subjectId: s.subjectId } };
       const later = "2026-09-08T12:00:01.000Z";
       const m: Context = { ...h, now: later, actor: { ...h.actor, kind: "model" } };
       const g = { ...grant, scope: s };
-      await owner`insert into twin_model_fixture.scope_lock values (${s.organizationId},${s.subjectId})`;
+      await seedScopeState(s);
       await owner`insert into twin_model_fixture.consent values (${s.organizationId},${s.subjectId},${g.id},1,${owner.json(g)})`;
       await repo.apply(h, { ...observe("clock-source"), scope: s });
       const value: KnowledgeNeed = {
@@ -652,14 +1040,14 @@ describe.skipIf(!enabled)(
     });
 
     it("serializes a newer consent-version revocation with a concurrent writer", async () => {
-      const isolated = { organizationId: "consent-race-org", subjectId: "consent-race-human" };
+      const isolated = { organizationId: organizationId("consent-race-org"), subjectId };
       const ctx = {
         ...human,
         scope: isolated,
         actor: { kind: "human" as const, subjectId: isolated.subjectId },
       };
       const consent = { ...grant, scope: isolated };
-      await owner`insert into twin_model_fixture.scope_lock values (${isolated.organizationId},${isolated.subjectId})`;
+      await seedScopeState(isolated);
       await owner`insert into twin_model_fixture.consent values (${isolated.organizationId},${isolated.subjectId},${consent.id},1,${owner.json(consent)})`;
       let release!: () => void;
       let entered!: () => void;
@@ -801,16 +1189,22 @@ describe.skipIf(!enabled)(
       expect(preserved?.observedOutcomes).toEqual([]);
       expect(preserved?.transferAuthority).toBe("none");
       for (const key of ["organizationId", "subjectId"] as const) {
-        const otherScope = { ...scope, [key]: "foreign-archive" };
+        const otherScope = {
+          ...scope,
+          [key]:
+            key === "organizationId"
+              ? organizationId("foreign-archive")
+              : "33333333-3333-4333-8333-333333333333",
+        };
         const other = {
           ...archive,
           scope: otherScope,
           actor: { kind: "human" as const, subjectId: otherScope.subjectId },
         };
-        expect(await reopened.experience(other, draft.id)).toBeNull();
+        await expect(reopened.experience(other, draft.id)).rejects.toThrow();
         await expect(
           repo.saveExperience(other, draft, experienceFingerprint(draft)),
-        ).rejects.toThrow("SCOPE_MISMATCH");
+        ).rejects.toThrow();
       }
       expect(
         (await reopened.experience({ ...archive, now: "2046-09-08T12:00:00.000Z" }, draft.id))
