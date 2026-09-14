@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  validateEvidenceLink,
   validateWorkingHypothesis,
   validateDynamicRelation,
   validateKnowledgeNeed,
@@ -13,6 +14,7 @@ import {
   FORMATION_INPUT_DOMAINS,
   MODEL_HEALTH_INPUT_FACETS,
   type WorkingHypothesis,
+  type EvidenceLinkValidationContext,
   type VersionedModelReference,
 } from "@/lib/ai-twin/model/persistence-contracts";
 
@@ -772,6 +774,215 @@ describe("AI-TWIN persistence hypothesis contract — synthetic, not extraction"
     value.alternatives[0].statement = "changed";
     expect(result.alternatives[0].statement).not.toBe("changed");
     expect(Object.isFrozen(result.alternatives[0].support[0])).toBe(true);
+  });
+});
+
+const evidenceTarget: VersionedModelReference = {
+  ...scope,
+  kind: "claim",
+  id: "claim-1",
+  version: 2,
+};
+function evidenceLinkContext(
+  changes: Partial<EvidenceLinkValidationContext> = {},
+): EvidenceLinkValidationContext {
+  return {
+    scope,
+    purpose: "private_modelling",
+    retentionPolicyId: "human-approved-2026-09-08/v1",
+    eligibleSources: [source],
+    availableTargets: [evidenceTarget],
+    now,
+    ...changes,
+  };
+}
+function evidenceLinkDraft() {
+  return {
+    ref: { ...scope, kind: "evidence_link", id: "link-1", version: 1 },
+    purpose: "private_modelling",
+    createdAt: now,
+    retentionPolicyId: "human-approved-2026-09-08/v1",
+    source: { ...source },
+    target: { ...evidenceTarget },
+    relationship: "supports",
+    reason: "The scoped self-report is evidence considered for this claim",
+  };
+}
+
+describe("EvidenceLink qualification is lineage, not authority", () => {
+  it.each(["supports", "contradicts", "contextualizes"] as const)(
+    "preserves the closed %s relationship",
+    (relationship) => {
+      const input = { ...evidenceLinkDraft(), relationship };
+      const result = validateEvidenceLink(input, evidenceLinkContext());
+      expect(result).toEqual(input);
+      expect(result).not.toHaveProperty("truth");
+      expect(result).not.toHaveProperty("ratified");
+      expect(result).not.toHaveProperty("writeAuthority");
+      expect(result).not.toHaveProperty("collectionAuthority");
+      expect(result).not.toHaveProperty("disclosureAuthority");
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(Object.isFrozen(result.source)).toBe(true);
+      expect(Object.isFrozen(result.target)).toBe(true);
+    },
+  );
+
+  it.each(["organizationId", "subjectId"] as const)(
+    "rejects foreign %s across link, source, target and trusted context",
+    (field) => {
+      const input = evidenceLinkDraft();
+      for (const changed of [
+        { ...input, ref: { ...input.ref, [field]: "foreign" } },
+        { ...input, source: { ...input.source, [field]: "foreign" } },
+        { ...input, target: { ...input.target, [field]: "foreign" } },
+      ])
+        expect(() => validateEvidenceLink(changed, evidenceLinkContext())).toThrow(
+          "SCOPE_MISMATCH",
+        );
+
+      expect(() =>
+        validateEvidenceLink(input, {
+          ...evidenceLinkContext(),
+          availableTargets: [{ ...evidenceTarget, [field]: "foreign" }],
+        }),
+      ).toThrow("SCOPE_MISMATCH");
+    },
+  );
+
+  it("requires exact current source and target versions", () => {
+    const input = evidenceLinkDraft();
+    for (const context of [
+      evidenceLinkContext({ eligibleSources: [] }),
+      evidenceLinkContext({ eligibleSources: [{ ...source, version: 2 }] }),
+    ])
+      expect(() => validateEvidenceLink(input, context)).toThrow("EVIDENCE_UNAVAILABLE");
+    for (const context of [
+      evidenceLinkContext({ availableTargets: [] }),
+      evidenceLinkContext({ availableTargets: [{ ...evidenceTarget, version: 3 }] }),
+    ])
+      expect(() => validateEvidenceLink(input, context)).toThrow("TARGET_UNAVAILABLE");
+  });
+
+  it("rejects duplicate trusted references and an exact source-target self-link", () => {
+    expect(() =>
+      validateEvidenceLink(
+        evidenceLinkDraft(),
+        evidenceLinkContext({ eligibleSources: [source, source] }),
+      ),
+    ).toThrow("DUPLICATE_EVIDENCE");
+    expect(() =>
+      validateEvidenceLink(
+        evidenceLinkDraft(),
+        evidenceLinkContext({ availableTargets: [evidenceTarget, evidenceTarget] }),
+      ),
+    ).toThrow("DUPLICATE_TARGET");
+
+    const sameClaim = { ...evidenceTarget };
+    expect(() =>
+      validateEvidenceLink(
+        { ...evidenceLinkDraft(), source: sameClaim, target: sameClaim },
+        evidenceLinkContext({
+          eligibleSources: [sameClaim],
+          availableTargets: [sameClaim],
+        }),
+      ),
+    ).toThrow("SELF_REFERENCE");
+  });
+
+  it("keeps source and target kinds inside the ratified v1 boundary", () => {
+    const unsupportedSource = { ...source, kind: "hypothesis" as const };
+    expect(() =>
+      validateEvidenceLink(
+        { ...evidenceLinkDraft(), source: unsupportedSource },
+        evidenceLinkContext({ eligibleSources: [unsupportedSource] }),
+      ),
+    ).toThrow("UNSUPPORTED_SOURCE_KIND");
+
+    const unsupportedTarget = { ...evidenceTarget, kind: "relation" as const };
+    expect(() =>
+      validateEvidenceLink(
+        { ...evidenceLinkDraft(), target: unsupportedTarget },
+        evidenceLinkContext({ availableTargets: [unsupportedTarget] }),
+      ),
+    ).toThrow("UNSUPPORTED_TARGET_KIND");
+  });
+
+  it("binds purpose, policy, creation time, identity and reason", () => {
+    for (const changes of [
+      { purpose: "society" },
+      { retentionPolicyId: "unknown" },
+      { createdAt: "2027-01-01T00:00:00.000Z" },
+      { relationship: "proves" },
+      { reason: "" },
+      { ref: { ...evidenceLinkDraft().ref, kind: "claim" } },
+      { ref: { ...evidenceLinkDraft().ref, version: 0 } },
+    ])
+      expect(() =>
+        validateEvidenceLink({ ...evidenceLinkDraft(), ...changes }, evidenceLinkContext()),
+      ).toThrow();
+  });
+
+  it("rejects undeclared authority, getters, hidden fields, cycles and sparse sets", () => {
+    for (const extra of [
+      { truth: "verified" },
+      { ratified: true },
+      { consentGranted: true },
+      { collectionAuthority: "granted" },
+      { actionAuthority: "execute" },
+    ])
+      expect(() =>
+        validateEvidenceLink({ ...evidenceLinkDraft(), ...extra }, evidenceLinkContext()),
+      ).toThrow("INVALID_INPUT");
+
+    let read = false;
+    const getter = evidenceLinkDraft();
+    Object.defineProperty(getter, "reason", {
+      enumerable: true,
+      get() {
+        read = true;
+        return "forged";
+      },
+    });
+    expect(() => validateEvidenceLink(getter, evidenceLinkContext())).toThrow("INVALID_INPUT");
+    expect(read).toBe(false);
+
+    const hidden = evidenceLinkDraft();
+    Object.defineProperty(hidden, "hiddenAuthority", {
+      enumerable: false,
+      value: true,
+    });
+    expect(() => validateEvidenceLink(hidden, evidenceLinkContext())).toThrow("INVALID_INPUT");
+
+    const cyclic = evidenceLinkDraft() as ReturnType<typeof evidenceLinkDraft> & {
+      cycle?: unknown;
+    };
+    cyclic.cycle = cyclic;
+    expect(() => validateEvidenceLink(cyclic, evidenceLinkContext())).toThrow("INVALID_INPUT");
+    expect(() =>
+      validateEvidenceLink(
+        evidenceLinkDraft(),
+        evidenceLinkContext({
+          eligibleSources: new Array<VersionedModelReference>(1),
+        }),
+      ),
+    ).toThrow("INVALID_INPUT");
+    expect(() =>
+      validateEvidenceLink(
+        Object.assign(Object.create({ inherited: true }), evidenceLinkDraft()),
+        evidenceLinkContext(),
+      ),
+    ).toThrow("INVALID_INPUT");
+  });
+
+  it("returns an independent deeply frozen value", () => {
+    const input = evidenceLinkDraft();
+    const result = validateEvidenceLink(input, evidenceLinkContext());
+    input.reason = "changed";
+    input.source.id = "changed";
+    input.target.version = 9;
+    expect(result.reason).not.toBe("changed");
+    expect(result.source.id).toBe(source.id);
+    expect(result.target.version).toBe(evidenceTarget.version);
   });
 });
 

@@ -249,6 +249,32 @@ P1/P2 review. Do not wire the validator into
 `postgres-repository.ts`; persistence is WP-2. No canonical algorithm change is
 needed because the EvidenceLink relationship meaning is already ratified.
 
+### EvidenceLink implementation and validation receipt
+
+The focused RED executed 99 cases: the 89 existing persistence-contract tests
+passed and all 10 new EvidenceLink cases failed because
+`validateEvidenceLink` did not exist. The minimal GREEN adds the qualified
+object and trusted context described above without a repository caller.
+
+Focused persistence-contract tests pass 99/99 and cumulative AI-TWIN model units
+pass 196/196 across ledger, lifecycle, persistence contracts and legacy
+quarantine. Changed-file ESLint, `pnpm typecheck`, full `pnpm lint`,
+`pnpm build`, `pnpm validate:canon`, `git diff --check` and IDE diagnostics are
+GREEN. Build output contains only the pre-existing Next.js middleware
+convention deprecation warning.
+
+Independent exact-slice review found no P1/P2. It confirmed tenant scope,
+version eligibility, chronology, purpose/policy binding, closed source/target
+and relationship kinds, hostile-object rejection, deep immutability and
+authority-negative coverage. Evidence-known-at, source independence/recency,
+sufficiency, transitive closure, authentication, consent proof and persistence
+remain explicit residual limits rather than implied capability.
+
+Fresh `origin/main` remained
+`d7d5941a995b83473acb6e00c42d5252c44b2303` at this slice boundary. No shared
+migration, journal, Postgres schema, repository, Trader, runtime, environment,
+deployment or Society file changed.
+
 ## Approved outcome
 
 An append-only, tenant-isolated persistence layer represents observations, provenance/projection, evidence links, versioned claims, dynamic relations, hypotheses, knowledge needs, consent and Human corrections without cutting over legacy readiness.
