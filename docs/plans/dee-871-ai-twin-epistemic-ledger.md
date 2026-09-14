@@ -18,8 +18,8 @@ state:
     prUrl: null,
     lastValidatedGitSha: 825314f20d3b85066f345fb44f16e93ecf44cd22,
     lastValidationAt: "2026-09-14T11:28:35Z",
-    blockedReason: "The smallest technically independent WP-2 port is the unmounted Core access seam plus mocked unit tests, but admitting a Core/auth contract requires a separate bounded implementation decision. Production persistence additionally requires shared schema/migration registration and Trader compatibility review.",
-    nextAction: "After explicit bounded admission, port only lib/ai-twin/model/core-access.ts and tests/unit/ai-twin-core-access.test.ts from forensic source, revalidate against current Core contracts, and keep it unmounted. Do not port services/schema or edit migrations, journal, db/schema.postgres.ts, Trader, runtime or production.",
+    blockedReason: "The bounded pure Core guard is implemented, but the forensic consent/observation services depend on the rejected in-module Supabase/entitlement wrapper and unregistered table contracts. A next disconnected consent-persistence slice needs explicit trusted-adapter transaction/freshness and consent-issuance semantics before shared schema.",
+    nextAction: "Seek bounded admission for a fixture-only current-consent persistence/read slice in postgres-repository.ts, its fixture SQL and integration test, after deciding how fresh trusted Core resolution enters the repository transaction and how consent issuance is authorized. Keep migrations, journal, db/schema.postgres.ts, Trader and runtime frozen.",
   }
 provenance:
   {
@@ -761,6 +761,74 @@ The first later hard persistence boundary is 0209-or-later shared migration
 registration together with `db/schema.postgres.ts` and Trader compatible
 additive review. No numbered migration, journal, shared schema, Trader file,
 runtime mount or production apply was edited during this assessment.
+
+### 2026-09-14 Human decision — bounded WP-2 Core access
+
+The Human admitted only a deterministic personal-model guard over a trusted
+resolved Core/auth snapshot. Supabase Auth / WAIA Core remains the sole
+credential, identity and tenancy authority. Access requires current exact
+organization, current actor membership, current subject binding and
+`actorUserId == subjectUserId`. Admin/owner/member roles, service/agent class,
+Formation and subscription cannot bypass that equality or create adjacent
+authority.
+
+Line-by-line forensic review found its `core-access.ts` broader than this
+decision: it invokes Supabase `getUser()`, queries Core tables, owns a
+transaction/locks and requires a `twin` entitlement for Formation access. None
+of those mechanisms was ported. The continuation instead rewrites the minimal
+slice as:
+
+- `lib/ai-twin/model/core-access.ts`: a pure closed-shape evaluator with policy
+  identity, explicit allow/deny reason codes, exact actor/subject/organization
+  binding and explicit current/stale/revoked Core states;
+- `tests/unit/ai-twin-core-access.test.ts`: mocked trusted-context tests with no
+  provider, schema, database or runtime dependency.
+
+The evaluator accepts no role, entitlement, payment, subscription, Formation,
+disclosure, Society, action or billing field. It returns only a frozen personal
+scope/actor on success, authenticates nobody, is not a caller-usable
+authorization token and reads/writes no Core or epistemic state. RED was the
+missing module; focused GREEN is 18/18.
+
+Independent review found one P2: validation repeatedly read live properties,
+so a stateful Proxy could change identity after an earlier check. The evaluator
+now validates only a detached native structured-clone snapshot; root and nested
+Proxy inputs fail closed. Re-review reproduced the former exploit as
+`TWIN_CORE_CONTEXT_MALFORMED` and found no remaining P1/P2.
+
+Checkpoint validation is green:
+
+- focused Core-access unit suite: 18/18;
+- cumulative AI-TWIN model units: 274/274 across seven files;
+- full `pnpm lint` and `pnpm typecheck`;
+- production `pnpm build`;
+- `pnpm validate:canon` and `git diff --check`.
+
+#### Fresh WP-2 reassessment after Core access
+
+The next conceptual independent slice is a disconnected current-consent
+persistence/read boundary using only:
+
+1. `lib/ai-twin/model/postgres-repository.ts`;
+2. `tests/fixtures/ai-twin-model-repository.sql`;
+3. `tests/integration/ai-twin-model-repository.test.ts`.
+
+It would keep fixture-seeded authority and any future consent write/revocation
+inside one isolated repository transaction, without shared DDL. It is not yet
+admitted because the current repository has no consent-creation API and the
+forensic consent service assumes mechanisms rejected by this decision:
+in-module Supabase authentication, an entitlement-gated Core transaction and
+unregistered table contracts. Before implementation, canon must specify how a
+fresh trusted Core resolution enters and remains bound to the repository
+transaction, and what exact Human ceremony authorizes initial consent issuance
+and expiry. Matching IDs or this pure guard's output alone cannot supply that
+authority.
+
+DEE-875-owned Human transition input is not substituted as WP-2 progress.
+Production schema remains the later 0209-or-higher migration,
+`db/schema.postgres.ts` and Trader-compatibility boundary. Stop here after the
+Core checkpoint; no service, fixture, migration, journal, shared schema, Trader
+file, runtime route or production state is admitted.
 
 ## Approved outcome
 

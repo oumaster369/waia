@@ -113,6 +113,27 @@ purpose-bound grant for future use and does not rewrite prior collection/use
 history. Unresolvable identity, scope, provenance or rights keeps the material
 quarantined, subject only to independent Human export/delete rights.
 
+### 3.4 Personal-model access
+
+Supabase Auth and WAIA Core are the sole credential, identity, organization,
+membership, role and permission authorities. AI-TWIN duplicates none of that
+state. Matching caller-supplied identifiers prove nothing.
+
+Ordinary v1 access to a private personal model requires a trusted Core
+resolution proving an authenticated Human, current exact organization,
+current actor membership, current subject-to-organization binding and
+`actorUserId == subjectUserId`. Membership in an organization never grants
+access to another Human's Twin. Admin, owner, member, agent or service status
+creates no bypass; future operator/support access requires a separate audited
+capability contract.
+
+Payment, subscription, Formation or future module-routing entitlement is not a
+prerequisite for the Human's own private Formation/model data. The DEE-871
+guard is a pure fail-closed evaluation of already trusted Core facts. It does
+not authenticate, parse credentials, query model persistence or grant consent,
+disclosure, Society, action or billing authority, and its result is not an
+authorization token for caller-controlled use.
+
 ## 4. Formation Contract and progress
 
 Formation progress answers one narrow question: **how much of the initial evidence contract has been completed?** It does not answer whether the account is genuine, whether the model is currently healthy, whether the Human is ready to socialize, or whether WAIA may act.
@@ -364,5 +385,6 @@ This is the current agreed baseline, not a claim of complete knowledge or a proh
 | 2026-09-14 | Explicit Human source-admission and RightsOperation decision; DEE-871 | Fail-closed private source use, separate disclosure authority and evidence-bearing rights lifecycle |
 | 2026-09-14 | Explicit Human RightsOperation completion decision; DEE-871 | Type-specific cancellation/effects, append-only retry, verified closure and minimized twelve-month terminal receipts |
 | 2026-09-14 | Explicit Human DEE-871 WP-1 closure decision | Dialogue/Diary-only v1 ingress, provenance-only persistence ownership and non-inferred historical consent |
+| 2026-09-14 | Explicit Human DEE-871 WP-2 Core-access decision | Personal-model access requires exact trusted Core actor/subject/organization equality; no role or entitlement bypass |
 
 Unresolved rubric weights, retention schedules, provider choice, release thresholds and Society pilot policy remain subject to their downstream decisions. They are not filled in by the phrase “final vision.”

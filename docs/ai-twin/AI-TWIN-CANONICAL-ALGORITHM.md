@@ -135,6 +135,28 @@ Where safe and useful, the Twin states a falsifiable expectation or offers a rev
 
 All sensitive objects require tenant isolation, subject access/export and deletion/retention semantics. A vector embedding is an index, not the authoritative fact record.
 
+### 3.1 Personal-model Core access — Human-approved 2026-09-14
+
+Supabase Auth / WAIA Core remains the sole authority for credentials, identity,
+organizations, memberships, roles and permissions. AI-TWIN creates no parallel
+auth, tenancy, role or entitlement state, and caller-supplied matching IDs are
+never evidence of authority.
+
+Ordinary v1 private-model access requires trusted resolved Core facts proving:
+an authenticated Human actor; the exact current organization; current
+membership for that actor; current binding of the exact subject to that
+organization; and `actorUserId == subjectUserId`. Organization membership,
+admin/owner/member role, agent/service class, Formation or subscription state
+cannot bypass the personal-subject rule. Future support/operator/service access
+requires a separate explicit audited capability.
+
+The bounded DEE-871 evaluator consumes only the trusted resolved snapshot and
+returns a deterministic allow/deny reason. Missing, malformed, stale,
+contradictory or foreign facts fail closed. It performs no authentication,
+credential parsing, Core mutation, epistemic read/write, disclosure, Society,
+action, billing or runtime mounting. Payment/subscription and future module
+routing are separate from the Human's access to their own private model.
+
 ## 4. Formation engine
 
 ### 4.1 Domain maturity
@@ -318,6 +340,7 @@ V1 implements the private format and composition-control foundation. Actual inhe
 | 2026-09-14, Human source-admission and RightsOperation decision, DEE-871 continuation | Fail-closed source admission, private default, separate disclosure grants and append-only evidence-bearing rights lifecycle | Authorizes deterministic WP-1 contracts/tests only; no shared migration, runtime activation, Society, Trader change or deployment |
 | 2026-09-14, Human RightsOperation completion decision, DEE-871 continuation | Type-specific cancellation/effects, attempt-scoped failure, immutable-clock retry, evidence-qualified closure and minimized twelve-month terminal receipt | Authorizes one pure/disconnected lifecycle contract; account-deletion override and operational proof remain unmounted |
 | 2026-09-14, Human DEE-871 WP-1 closure decision | V1 raw ingress is dialogue/Diary only; persistence owns provenance facts, not scoring; legacy consent is never inferred | Closes pure object/rights design after targeted proof; WP-2 convergence remains read-only before shared schema/migration decisions |
+| 2026-09-14, Human DEE-871 WP-2 Core-access decision | Exact trusted Core actor, subject, organization and current-membership equality for personal-model access; no role/entitlement bypass | Authorizes one pure unmounted evaluator and mocked tests only; no Supabase implementation, persistence, schema, Trader or runtime change |
 
 The current task's explicit decisions are the authority; earlier agent proposals alone were not. This incremental register does not claim all WAIA/OUMASTER conversations have been reread. Existing bounded source limitations remain in the evidence baseline. Subsequent changes must preserve decision history and identify what they supersede.
 
