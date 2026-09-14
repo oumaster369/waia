@@ -49,6 +49,15 @@ const runtime = () =>
   Object.freeze({ node: process.version, os: process.platform, arch: process.arch });
 const SOURCE_ROOT = resolve(".");
 
+function g1KeyOrderDigest(keys: readonly string[]): string {
+  const hash = createHash("sha256");
+  for (const key of keys) {
+    hash.update(key, "utf8");
+    hash.update("\n", "utf8");
+  }
+  return hash.digest("hex");
+}
+
 function corpus(symbol: "BTCUSDT" | "ETHUSDT", count: number, seed = "wf"): SourceAnchor[] {
   return Array.from({ length: count }, (_, i) => ({
     venue: "htx",
@@ -111,7 +120,7 @@ function makeSurface(input: {
     ),
     sourceCorpus: input.sourceCorpus,
   });
-  const expectedKeyOrderDigest = sha(inventory.batches.map((batch) => batch.key).join("\n"));
+  const expectedKeyOrderDigest = g1KeyOrderDigest(inventory.batches.map((batch) => batch.key));
   return {
     development: {
       datasetDigestHex: sha("dataset"),
@@ -371,6 +380,42 @@ function sealOriginBatch(offset: number) {
 }
 
 describe("DEE-950 missing-only Forecast producer", () => {
+  it("defines the independent sealed G1 trailing-newline KEY_ORDER oracle", () => {
+    const keys = ["A", "B", "C"];
+    expect(g1KeyOrderDigest(keys)).toBe(sha("A\nB\nC\n"));
+    expect(g1KeyOrderDigest(keys)).not.toBe(sha("A\nB\nC"));
+  });
+
+  it("refuses a wrong or reordered KEY_ORDER digest", () => {
+    const origin = { hasSealedKey: () => false };
+    const surface = makeSurface({
+      symbol: "BTCUSDT",
+      primaryHorizonMinutes: 30,
+      sourceCorpus: wf,
+      selectedPackage: selectedPackageFields(sha("key-order-package")),
+      k: 2,
+      m: 20,
+    });
+    surface.expectedWfForecastBatchDomain.expectedKeyOrderDigest = sha("wrong-order");
+    const wrongDigestEnvelope = makeEnvelope([surface]);
+    expect(() =>
+      enumerateMissingWfForecastBatchesV1({
+        envelope: wrongDigestEnvelope,
+        surfaceKey: "BTCUSDT:30",
+        sourceCorpus: wf,
+        origin,
+      }),
+    ).toThrow("KEY_ORDER");
+    expect(() =>
+      enumerateMissingWfForecastBatchesV1({
+        envelope,
+        surfaceKey: "BTCUSDT:30",
+        sourceCorpus: [...wf].reverse(),
+        origin,
+      }),
+    ).toThrow("KEY_ORDER");
+  });
+
   it("refuses a package builder fallback instead of constructing a selected package", () => {
     expect(() =>
       enumerateMissingWfForecastBatchesV1({
