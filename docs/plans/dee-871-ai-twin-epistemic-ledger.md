@@ -13,13 +13,13 @@ state:
     status: in-progress,
     currentWorkPackage: WP-2,
     completedWorkPackages: [WP-1],
-    remainingWorkPackages: [WP-2, WP-3],
+    remainingWorkPackages: [WP-3],
     prNumber: null,
     prUrl: null,
-    lastValidatedGitSha: 274ef2e4f8348554b9df26734ebe3a449cb79e96,
-    lastValidationAt: "2026-09-14T12:45:29Z",
-    blockedReason: "WP-2 production 0209 schema, Core resolver and normalized repository are implemented in-repo but not production-applied, not runtime-mounted, and not integration-ready. WP-3 residual-copy/export verification remains. Trader-owner/shared-boundary review of the bounded 0209 compatibility tuple is still required before the final DEE-871 PR.",
-    nextAction: "Qualify the 0209 package locally, keep writers unmounted, do not apply production DDL, do not open a PR, and do not start WP-3. Obtain Trader-owner/shared-boundary review of the bounded FHV compatible-additive exception before integration-ready closeout.",
+    lastValidatedGitSha: 197b079e14f4b3d28543987728b5d0633e3fbbe0,
+    lastValidationAt: "2026-09-14T13:46:00Z",
+    blockedReason: "WP-2 0209 persistence is implemented and locally qualified (fresh/upgrade PG17, tenant-isolation, consent/Core denial) but not production-applied, not runtime-mounted, and not integration-ready. WP-3 residual-copy/export verification remains. Trader-owner/shared-boundary review of the bounded 0209 compatibility tuple is still required before the final DEE-871 PR.",
+    nextAction: "Keep writers unmounted, do not apply production DDL, do not open a PR, and do not start WP-3. Obtain Trader-owner/shared-boundary review of the bounded FHV compatible-additive exception before integration-ready closeout.",
   }
 provenance:
   {
@@ -1063,6 +1063,13 @@ Implemented in-repo, still unmounted and unapplied:
 Not claimed: production DDL apply, runtime writer/route mount, RLS expansion,
 legacy backfill, WP-3 residual-copy verification, or DEE-871 integration-ready
 closeout.
+
+Local qualification at `197b079e14f4b3d28543987728b5d0633e3fbbe0`: 0209
+applies on isolated PostgreSQL 17; the shared fresh-current and 204→current
+upgrade suites passed; `*tenant-isolation*` passed including the AI-TWIN
+gate; production consent issue/revoke and same-org other-subject / cross-org
+denial passed against real Core membership rows. Writers remain unmounted.
+The isolated fixture container was disposable and is not a production apply.
 
 ## Approved outcome
 
