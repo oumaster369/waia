@@ -16,9 +16,13 @@ export type HistoricalSimulationLaunchIdentityV2 = Readonly<{
   symbol: "BTCUSDT" | "ETHUSDT";
 }>;
 
+export type HistoricalSimulationH5ContinuationAuthorityV2 = Readonly<{
+  action: "RESUME_FROM_CHECKPOINT"; releaseSha: string; pausedLifecycleDigestHex: string;
+}>;
+
 export type HistoricalSimulationRunLifecyclePortV2 = Readonly<{
   queue(input: HistoricalSimulationLaunchIdentityV2 & Readonly<{
-    requestedByOperatorId: string;
+    requestedByOperatorId: string; continuationAuthority?: HistoricalSimulationH5ContinuationAuthorityV2;
   }>): Promise<HistoricalSimulationRunLifecycleEventV2>;
   claim(input: Readonly<{
     organizationId: string;
@@ -52,7 +56,8 @@ function validateLaunchIdentity(input: HistoricalSimulationLaunchIdentityV2): vo
  * callers cannot supply totals, record bounds, release state or capital authority.
  */
 export async function queueAuthenticatedHistoricalSimulationLaunchV2(input:
-  HistoricalSimulationLaunchIdentityV2 & Readonly<{ authenticatedOperatorId: string }>,
+  HistoricalSimulationLaunchIdentityV2 & Readonly<{ authenticatedOperatorId: string;
+    continuationAuthority?: HistoricalSimulationH5ContinuationAuthorityV2 }>,
   lifecycle: HistoricalSimulationRunLifecyclePortV2,
 ): Promise<HistoricalSimulationRunLifecycleEventV2> {
   validateLaunchIdentity(input);
@@ -66,6 +71,7 @@ export async function queueAuthenticatedHistoricalSimulationLaunchV2(input:
     partition: input.partition,
     symbol: input.symbol,
     requestedByOperatorId: input.authenticatedOperatorId,
+    ...(input.continuationAuthority ? { continuationAuthority: input.continuationAuthority } : {}),
   });
 }
 
@@ -90,6 +96,8 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
     runId: input.runId,
     releaseSha: input.releaseSha,
   });
+  if (current.phase === "STOPPED" && current.committedCycles === 1 &&
+      current.qualifiedTotalCycles > 1) return current;
   await input.onClaimed?.(current);
   let latestCommittedCycleId = current.latestCommittedCycleId;
   let observedCommittedCycles = current.committedCycles;
@@ -118,6 +126,11 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
             latestCommittedCycleId,
             errorCode: null,
           });
+        } else if (progress.event === "STOPPED" && progress.expectedCycleSequence === 1 &&
+            current.phase === "RUNNING" && current.qualifiedTotalCycles > 1 &&
+            current.errorCode !== "RESUME_FROM_CHECKPOINT") {
+          current = await input.lifecycle.append({ previous: current, phase: "STOPPED",
+            committedCycles: 1, latestCommittedCycleId, errorCode: "PAUSE_AT_CHECKPOINT" });
         } else if (progress.event === "TRANSIENT_RETRY") {
           // An atomic checkpoint may be ahead of the last acknowledged event.
           // Retrying that same cycle is idempotent; publishing stale progress is
@@ -128,12 +141,14 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
             phase: "RUNNING",
             committedCycles: current.committedCycles,
             latestCommittedCycleId: current.latestCommittedCycleId,
-            errorCode: `TRANSIENT_RETRY_${progress.attempt}`,
+            errorCode: current.errorCode === "RESUME_FROM_CHECKPOINT"
+              ? "RESUME_FROM_CHECKPOINT" : `TRANSIENT_RETRY_${progress.attempt}`,
           });
         }
       },
     });
     if (result.status === "TERMINAL" && current.phase === "COMPLETED") return current;
+    if (result.status === "STOPPED" && current.phase === "STOPPED") return current;
     if (observedCommittedCycles > current.committedCycles) {
       throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:COMMITTED_PROGRESS_NOT_PUBLISHED");
     }
@@ -142,7 +157,9 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
       phase: result.status === "TERMINAL" ? "COMPLETED" : "STOPPED",
       committedCycles: result.nextCycleSequence,
       latestCommittedCycleId,
-      errorCode: null,
+      errorCode: result.status === "STOPPED" && result.nextCycleSequence === 1 &&
+        current.qualifiedTotalCycles > 1 && current.errorCode !== "RESUME_FROM_CHECKPOINT"
+        ? "PAUSE_AT_CHECKPOINT" : null,
     });
     return current;
   } catch (error) {
@@ -150,6 +167,11 @@ export async function executeQueuedHistoricalSimulationLaunchV2(input: Readonly<
     // the old frontier. The caller still receives the error; restart reconciles
     // the durable checkpoint under the consumer lease before executing again.
     if (observedCommittedCycles > current.committedCycles) throw error;
+    if (current.phase === "RUNNING" && current.committedCycles === 1 &&
+        current.qualifiedTotalCycles > 1 && current.errorCode !== "RESUME_FROM_CHECKPOINT") {
+      return input.lifecycle.append({ previous: current, phase: "STOPPED", committedCycles: 1,
+        latestCommittedCycleId: current.latestCommittedCycleId, errorCode: "PAUSE_AT_CHECKPOINT" });
+    }
     const code = typeof (error as { code?: unknown } | null)?.code === "string"
       ? String((error as { code: string }).code)
       : error instanceof Error ? error.message.split(":")[0]! : "UNKNOWN";

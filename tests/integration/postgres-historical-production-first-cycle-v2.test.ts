@@ -41,7 +41,9 @@ import {
   resetHistoricalSimulationRunnerRoleV2,
   runHistoricalSimulationLaunchConsumerCliV2,
 } from "@/lib/trader/historical-simulation-v2/launch-consumer-cli-v2";
-import { executeQueuedHistoricalSimulationLaunchV2 } from "@/lib/trader/historical-simulation-v2/launch-orchestrator-v2";
+import { executeQueuedHistoricalSimulationLaunchV2,
+  queueAuthenticatedHistoricalSimulationLaunchV2 } from
+  "@/lib/trader/historical-simulation-v2/launch-orchestrator-v2";
 import {
   createHistoricalSimulationRunLifecyclePostgresV2,
   releaseHistoricalSimulationConsumerLeasePostgresV2,
@@ -53,6 +55,8 @@ import {
   type HistoricalProductionFirstCycleStepV2,
 } from "@/lib/trader/historical-simulation-v2/production-first-cycle-bootstrap-v2";
 import { runHistoricalSimulationNextCyclePostgresV2 } from "@/lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2";
+import { runHistoricalSimulationProductionLoopV2 } from
+  "@/lib/trader/historical-simulation-v2/production-runner-v2";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import {
   barToFhvBarsV2Record,
@@ -1627,10 +1631,95 @@ describe.skipIf(!enabled || !url || !disposable)(
         });
         expect(lifecycleEvent.committedCycles).toBe(1);
         expect(lifecycleEvent.latestCommittedCycleId).toBe(first.committedCycleId);
-        expect(lifecycleEvent.errorCode).toBe("CRASH_RECOVERED_AFTER_COMMIT");
+        expect(lifecycleEvent.phase).toBe("STOPPED");
+        expect(lifecycleEvent.errorCode).toBe("PAUSE_AT_CHECKPOINT");
+
+        await expect(runHistoricalSimulationProductionLoopV2({ sql: runnerSql, organizationId,
+          accountId: productionInput.accountId, runId, partition: "WALK_FORWARD",
+          symbol: "BTCUSDT", initialCycleSequence: 1, terminalCycleSequenceExclusive: 2,
+        })).rejects.toThrow("H5_CONTINUATION_AUTHORITY");
+        const denied = await runnerSql<Array<Readonly<{ checkpoints: string }>>>`
+          SELECT count(*)::text AS checkpoints
+          FROM trader_historical_simulation_resume_checkpoint_v2
+          WHERE organization_id=${organizationId}::uuid AND run_id=${runId}`;
+        expect(denied[0]?.checkpoints).toBe("1");
+
+        await releaseHistoricalSimulationConsumerLeasePostgresV2(runnerSql, launchScope);
+        const continuationInput = { ...launchScope,
+          authenticatedOperatorId: ratified.operatorUserId, continuationAuthority: {
+            action: "RESUME_FROM_CHECKPOINT" as const, releaseSha: RELEASE_SHA,
+            pausedLifecycleDigestHex: lifecycleEvent.contentDigestHex,
+          } };
+        await expect(lifecyclePort.queue(launchScope)).rejects.toThrow(
+          "H5_HUMAN_CONTINUATION_REQUIRED");
+        await expect(queueAuthenticatedHistoricalSimulationLaunchV2({ ...continuationInput,
+          continuationAuthority: { ...continuationInput.continuationAuthority,
+            releaseSha: "f".repeat(40) } }, lifecyclePort)).rejects.toThrow("RELEASE_AUTHORITY");
+        await expect(queueAuthenticatedHistoricalSimulationLaunchV2({ ...continuationInput,
+          continuationAuthority: { ...continuationInput.continuationAuthority,
+            pausedLifecycleDigestHex: "f".repeat(64) } }, lifecyclePort))
+          .rejects.toThrow("H5_CONTINUATION_STALE");
+        await expect(queueAuthenticatedHistoricalSimulationLaunchV2({ ...continuationInput,
+          organizationId: randomUUID() }, lifecyclePort)).rejects.toThrow("RUN_AUTHORITY");
+        await expect(queueAuthenticatedHistoricalSimulationLaunchV2({ ...continuationInput,
+          runId: `${runId}-wrong` }, lifecyclePort)).rejects.toThrow("RUN_AUTHORITY");
+
+        const racingReserved = await pool.reserve();
+        const racingSql = bindPostgresReservedSession(pool, racingReserved);
+        let authorization; let racingAuthorization;
+        try {
+          await racingSql.unsafe(`SET ROLE ${HISTORICAL_RUNNER_ROLE}`);
+          const racingLifecycle = createHistoricalSimulationRunLifecyclePostgresV2(racingSql);
+          [authorization, racingAuthorization] = await Promise.all([
+            queueAuthenticatedHistoricalSimulationLaunchV2(continuationInput, lifecyclePort),
+            queueAuthenticatedHistoricalSimulationLaunchV2(continuationInput, racingLifecycle),
+          ]);
+        } finally {
+          await racingSql.unsafe("RESET ROLE");
+          racingReserved.release();
+        }
+        expect(authorization).toMatchObject({ phase: "QUEUED", committedCycles: 1,
+          errorCode: "RESUME_FROM_CHECKPOINT", requestedByOperatorId: ratified.operatorUserId,
+          previousContentDigestHex: lifecycleEvent.contentDigestHex });
+        expect(racingAuthorization).toEqual(authorization);
+        const abortedResume = new AbortController(); abortedResume.abort();
+        const operationalStop = await executeQueuedHistoricalSimulationLaunchV2({
+          sql: runnerSql, organizationId, runId, releaseSha: RELEASE_SHA,
+          lifecycle: lifecyclePort, signal: abortedResume.signal });
+        expect(operationalStop).toMatchObject({ phase: "STOPPED", committedCycles: 1,
+          errorCode: null });
+        await expect(queueAuthenticatedHistoricalSimulationLaunchV2(continuationInput,
+          lifecyclePort)).rejects.toThrow("H5_CONTINUATION_STALE");
+        await releaseHistoricalSimulationConsumerLeasePostgresV2(runnerSql, launchScope);
+        const operationalRequeue = await lifecyclePort.queue(launchScope);
+        expect(operationalRequeue).toMatchObject({ phase: "QUEUED", committedCycles: 1,
+          errorCode: null });
+        lifecycleEvent = await lifecyclePort.claim({ organizationId, runId,
+          releaseSha: RELEASE_SHA });
+        expect(lifecycleEvent).toMatchObject({ phase: "RUNNING", committedCycles: 1 });
+        const resumed = await runHistoricalSimulationProductionLoopV2({ sql: runnerSql,
+          organizationId, accountId: productionInput.accountId, runId, partition: "WALK_FORWARD",
+          symbol: "BTCUSDT", initialCycleSequence: 1, terminalCycleSequenceExclusive: 2 });
+        expect(resumed).toEqual({ status: "TERMINAL", committedCycles: 1, nextCycleSequence: 2 });
+        process.env.WAIA_RELEASE_SHA = "f".repeat(40);
+        try {
+          await expect(runHistoricalSimulationNextCyclePostgresV2({ sql: runnerSql,
+            organizationId, accountId: productionInput.accountId, runId,
+            partition: "WALK_FORWARD", symbol: "BTCUSDT", expectedCycleSequence: 1,
+          })).rejects.toThrow("H5_CONTINUATION_AUTHORITY");
+        } finally { process.env.WAIA_RELEASE_SHA = RELEASE_SHA; }
+        const secondRows = await runnerSql<Array<Readonly<{
+          checkpoint_json: Awaited<ReturnType<typeof runHistoricalSimulationNextCyclePostgresV2>> }>>>`
+          SELECT checkpoint_json FROM trader_historical_simulation_resume_checkpoint_v2
+          WHERE organization_id=${organizationId}::uuid AND run_id=${runId}
+            AND committed_cycle_sequence=1`;
+        latest = secondRows[0]?.checkpoint_json;
+        if (!latest) throw new Error("DEE1014_SECOND_CYCLE_DID_NOT_COMMIT");
+        lifecycleEvent = await lifecyclePort.append({ previous: lifecycleEvent, phase: "RUNNING",
+          committedCycles: 2, latestCommittedCycleId: latest.committedCycleId, errorCode: null });
 
         latest = first;
-        for (let sequence = 1; sequence < 35; sequence += 1) {
+        for (let sequence = 2; sequence < 35; sequence += 1) {
           latest = await runHistoricalSimulationNextCyclePostgresV2({
             sql: runnerSql,
             organizationId,

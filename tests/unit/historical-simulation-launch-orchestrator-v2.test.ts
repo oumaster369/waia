@@ -148,6 +148,77 @@ describe("Historical Simulation V2 authenticated launch orchestration", () => {
     });
   });
 
+  it("persists the mandatory checkpoint pause after the first committed cycle", async () => {
+    const port = lifecycle();
+    runner.mockImplementationOnce(async (_config, control) => {
+      await control.onProgress({ event: "CYCLE_COMMITTED", expectedCycleSequence: 0,
+        attempt: 0, committedCycleId: "cycle-0" });
+      return { status: "STOPPED", committedCycles: 1, nextCycleSequence: 1 };
+    });
+    const paused = await executeQueuedHistoricalSimulationLaunchV2({
+      sql: vi.fn() as never, organizationId: identity.organizationId,
+      runId: identity.runId, releaseSha, lifecycle: port });
+    expect(paused).toMatchObject({ phase: "STOPPED", committedCycles: 1,
+      nextCycleSequence: 1, errorCode: "PAUSE_AT_CHECKPOINT" });
+    expect(vi.mocked(port.append).mock.calls.map(([call]) =>
+      [call.phase, call.committedCycles, call.errorCode])).toEqual([
+      ["RUNNING", 1, null], ["STOPPED", 1, "PAUSE_AT_CHECKPOINT"],
+    ]);
+  });
+
+  it("recovers the H5 pause if its first lifecycle publication fails", async () => {
+    const port = lifecycle();
+    const running = event({ eventSequence: 1, phase: "RUNNING", committedCycles: 1,
+      nextCycleSequence: 1, latestCommittedCycleId: "cycle-0",
+      previousContentDigestHex: event().contentDigestHex });
+    const paused = event({ eventSequence: 2, phase: "STOPPED", committedCycles: 1,
+      nextCycleSequence: 1, latestCommittedCycleId: "cycle-0", errorCode: "PAUSE_AT_CHECKPOINT",
+      previousContentDigestHex: running.contentDigestHex });
+    vi.mocked(port.append).mockResolvedValueOnce(running)
+      .mockRejectedValueOnce(Object.assign(new Error("serialization"), { code: "40001" }))
+      .mockResolvedValueOnce(paused);
+    runner.mockImplementationOnce(async (_config, control) => {
+      await control.onProgress({ event: "CYCLE_COMMITTED", expectedCycleSequence: 0,
+        attempt: 0, committedCycleId: "cycle-0" });
+      await control.onProgress({ event: "STOPPED", expectedCycleSequence: 1,
+        attempt: 0, committedCycleId: null });
+    });
+    await expect(executeQueuedHistoricalSimulationLaunchV2({ sql: vi.fn() as never,
+      organizationId: identity.organizationId, runId: identity.runId, releaseSha, lifecycle: port,
+    })).resolves.toEqual(paused);
+    expect(port.append).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not create a second H5 generation when an authorized resume stops after retry", async () => {
+    const port = lifecycle();
+    vi.mocked(port.claim).mockResolvedValueOnce(event({ eventSequence: 4, phase: "RUNNING",
+      committedCycles: 1, nextCycleSequence: 1, latestCommittedCycleId: "cycle-0",
+      errorCode: "RESUME_FROM_CHECKPOINT", previousContentDigestHex: "a".repeat(64) }));
+    runner.mockImplementationOnce(async (_config, control) => {
+      await control.onProgress({ event: "TRANSIENT_RETRY", expectedCycleSequence: 1,
+        attempt: 1, committedCycleId: null });
+      return { status: "STOPPED", committedCycles: 0, nextCycleSequence: 1 };
+    });
+    const stopped = await executeQueuedHistoricalSimulationLaunchV2({ sql: vi.fn() as never,
+      organizationId: identity.organizationId, runId: identity.runId, releaseSha, lifecycle: port });
+    expect(stopped).toMatchObject({ phase: "STOPPED", committedCycles: 1, errorCode: null });
+    expect(vi.mocked(port.append).mock.calls.map(([call]) => call.errorCode)).toEqual([
+      "RESUME_FROM_CHECKPOINT", null,
+    ]);
+  });
+
+  it("returns a recovered durable H5 pause without starting another cycle", async () => {
+    const port = lifecycle();
+    vi.mocked(port.claim).mockResolvedValueOnce(event({ eventSequence: 3, phase: "STOPPED",
+      committedCycles: 1, nextCycleSequence: 1, latestCommittedCycleId: "cycle-0",
+      errorCode: "PAUSE_AT_CHECKPOINT", previousContentDigestHex: "a".repeat(64) }));
+    const paused = await executeQueuedHistoricalSimulationLaunchV2({
+      sql: vi.fn() as never, organizationId: identity.organizationId,
+      runId: identity.runId, releaseSha, lifecycle: port });
+    expect(paused).toMatchObject({ phase: "STOPPED", committedCycles: 1 });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
   it("preserves recoverable RUNNING when publication repeatedly fails after an atomic commit", async () => {
     const port = lifecycle();
     vi.mocked(port.append).mockRejectedValue(Object.assign(new Error("serialization"), { code: "40001" }));

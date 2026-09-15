@@ -22,6 +22,22 @@ describe("Historical Simulation V2 production runner", () => {
       status: "TERMINAL", committedCycles: 2, nextCycleSequence: 2 });
     expect(next.mock.calls.map(([value]) => value.expectedCycleSequence)).toEqual([0, 1]);
   });
+  it("stops WALK_FORWARD after the first durable commit before selecting cycle one", async () => {
+    next.mockResolvedValueOnce({ committedCycleId: "c0", nextCycleSequence: 1 });
+    const progress: string[] = [];
+    await expect(runHistoricalSimulationProductionLoopV2({ ...config, partition: "WALK_FORWARD" },
+      { onProgress: (value) => progress.push(value.event) })).resolves.toEqual({
+      status: "STOPPED", committedCycles: 1, nextCycleSequence: 1 });
+    expect(next.mock.calls.map(([value]) => value.expectedCycleSequence)).toEqual([0]);
+    expect(progress).toEqual(["START", "CYCLE_COMMITTED", "STOPPED"]);
+  });
+  it("resumes canonical scheduling from the authorized persisted sequence", async () => {
+    next.mockResolvedValueOnce({ committedCycleId: "c1", nextCycleSequence: 2 });
+    await expect(runHistoricalSimulationProductionLoopV2({ ...config, partition: "WALK_FORWARD",
+      initialCycleSequence: 1 })).resolves.toEqual({
+      status: "TERMINAL", committedCycles: 1, nextCycleSequence: 2 });
+    expect(next.mock.calls.map(([value]) => value.expectedCycleSequence)).toEqual([1]);
+  });
   it("retries the identical sequence for a bounded transient failure", async () => {
     next.mockRejectedValueOnce(Object.assign(new Error("restart"), { code: "08006" }))
       .mockResolvedValueOnce({ committedCycleId: "c0", nextCycleSequence: 1 });

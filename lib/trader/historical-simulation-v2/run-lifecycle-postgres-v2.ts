@@ -4,6 +4,7 @@ import { withPostgresSessionTransaction } from "@/db/postgres-session-transactio
 import { computeSemanticSha256Hex } from
   "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type {
+  HistoricalSimulationH5ContinuationAuthorityV2,
   HistoricalSimulationLaunchIdentityV2,
   HistoricalSimulationRunLifecyclePortV2,
 } from "./launch-orchestrator-v2";
@@ -14,7 +15,11 @@ import {
 } from "./run-lifecycle-v2";
 
 type EventRow = Readonly<{ event_json: HistoricalSimulationRunLifecycleEventV2 }>;
+type H5AuthorizationRow = Readonly<{ authorization_event_json: HistoricalSimulationRunLifecycleEventV2;
+  paused_event_json: HistoricalSimulationRunLifecycleEventV2 }>;
 type Sql = postgres.Sql;
+const H5_PAUSE_ACTION = "PAUSE_AT_CHECKPOINT" as const;
+const H5_RESUME_ACTION = "RESUME_FROM_CHECKPOINT" as const;
 
 function lockKey(organizationId: string, runId: string): string {
   return `waia:historical-simulation-v2:lifecycle:${organizationId}:${runId}`;
@@ -60,6 +65,71 @@ async function insert(tx: Sql, event: HistoricalSimulationRunLifecycleEventV2): 
   if (rows.length !== 1 || rows[0]!.content_digest_hex !== event.contentDigestHex) {
     throw new Error("HISTORICAL_SIMULATION_RUN_LIFECYCLE_REFUSED:PERSISTENCE");
   }
+}
+
+function isH5Paused(event: HistoricalSimulationRunLifecycleEventV2): boolean {
+  return event.phase === "STOPPED" && event.committedCycles === 1 &&
+    event.qualifiedTotalCycles > 1 && event.errorCode === H5_PAUSE_ACTION;
+}
+
+async function requireReleaseAuthority(tx: Sql, organizationId: string, runId: string,
+  releaseSha: string): Promise<void> {
+  const rows = await tx<Array<Readonly<{ release_sha: string }>>>`
+    SELECT release_sha FROM trader_historical_four_surface_ratified_admission_v2
+    WHERE organization_id=${organizationId}::uuid AND run_id=${runId}`;
+  if (rows.length !== 1 || rows[0]?.release_sha !== releaseSha) {
+    throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:RELEASE_AUTHORITY");
+  }
+}
+
+async function loadH5ContinuationAuthorization(tx: Sql, organizationId: string, runId: string,
+  pausedLifecycleDigestHex?: string): Promise<Readonly<{
+    authorization: HistoricalSimulationRunLifecycleEventV2;
+    paused: HistoricalSimulationRunLifecycleEventV2 }> | null> {
+  const rows = await tx<H5AuthorizationRow[]>`
+    SELECT authorized.event_json AS authorization_event_json,
+      paused.event_json AS paused_event_json
+    FROM trader_historical_simulation_run_lifecycle_event_v2 AS authorized
+    JOIN trader_historical_simulation_run_lifecycle_event_v2 AS paused
+      ON paused.organization_id=authorized.organization_id AND paused.run_id=authorized.run_id
+      AND paused.event_sequence+1=authorized.event_sequence
+      AND paused.content_digest_hex=authorized.previous_content_digest_hex
+    WHERE authorized.organization_id=${organizationId}::uuid AND authorized.run_id=${runId}
+      AND authorized.phase='QUEUED' AND authorized.committed_cycles=1
+      AND authorized.error_code=${H5_RESUME_ACTION}
+      AND paused.phase='STOPPED' AND paused.committed_cycles=1
+      AND paused.error_code=${H5_PAUSE_ACTION}
+      AND (${pausedLifecycleDigestHex ?? null}::text IS NULL
+        OR paused.content_digest_hex=${pausedLifecycleDigestHex ?? null})`;
+  if (rows.length > 1) {
+    throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_AMBIGUOUS");
+  }
+  const row = rows[0]; if (!row) return null;
+  const authorization = assertHistoricalSimulationRunLifecycleEventV2(
+    row.authorization_event_json);
+  const paused = assertHistoricalSimulationRunLifecycleEventV2(row.paused_event_json);
+  if (!isH5Paused(paused) || authorization.previousContentDigestHex !== paused.contentDigestHex) {
+    throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_AUTHORITY");
+  }
+  return Object.freeze({ authorization, paused });
+}
+
+function validContinuationAuthority(value: HistoricalSimulationH5ContinuationAuthorityV2 |
+  undefined): value is HistoricalSimulationH5ContinuationAuthorityV2 {
+  return value?.action === H5_RESUME_ACTION && /^[0-9a-f]{40}$/.test(value.releaseSha) &&
+    /^[0-9a-f]{64}$/.test(value.pausedLifecycleDigestHex);
+}
+
+async function withContinuationUniqueRetry<T>(enabled: boolean,
+  operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try { return await operation(); }
+    catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      if (!enabled || code !== "23505" || attempt === 2) throw error;
+    }
+  }
+  throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_RETRY");
 }
 
 function sameIdentity(event: HistoricalSimulationRunLifecycleEventV2,
@@ -168,10 +238,41 @@ export function createHistoricalSimulationRunLifecyclePostgresV2(
 ): HistoricalSimulationRunLifecyclePortV2 {
   return Object.freeze({
     async queue(input) {
-      return withPostgresSessionTransaction(sql, "SERIALIZABLE", async (tx) => {
+      return withContinuationUniqueRetry(Boolean(input.continuationAuthority), () =>
+        withPostgresSessionTransaction(sql, "SERIALIZABLE", async (tx) => {
         await lock(tx, input.organizationId, input.runId);
         const authority = await qualifiedLaunch(tx, input);
         const existing = await latest(tx, input.organizationId, input.runId);
+        if (input.continuationAuthority) {
+          if (!validContinuationAuthority(input.continuationAuthority)) {
+            throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_IDENTITY");
+          }
+          await requireReleaseAuthority(tx, input.organizationId, input.runId,
+            input.continuationAuthority.releaseSha);
+          const duplicate = await loadH5ContinuationAuthorization(tx, input.organizationId,
+            input.runId, input.continuationAuthority.pausedLifecycleDigestHex);
+          if (duplicate) {
+            if (!sameIdentity(duplicate.authorization, input) ||
+                duplicate.authorization.requestedByOperatorId !== input.requestedByOperatorId) {
+              throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_CONFLICT");
+            }
+            if (!existing || existing.phase !== "QUEUED" ||
+                existing.contentDigestHex !== duplicate.authorization.contentDigestHex) {
+              throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_STALE");
+            }
+            return duplicate.authorization;
+          }
+          if (!existing || !isH5Paused(existing) ||
+              existing.contentDigestHex !== input.continuationAuthority.pausedLifecycleDigestHex ||
+              authority.committedCycles !== 1 ||
+              authority.latestCommittedCycleId !== existing.latestCommittedCycleId) {
+            throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_STALE");
+          }
+        } else if ((!existing && authority.committedCycles > 0) ||
+            (existing && isH5Paused(existing))) {
+          throw new Error(
+            "HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_HUMAN_CONTINUATION_REQUIRED");
+        }
         if (existing) {
           // A crash can leave the atomic checkpoint one cycle ahead of the
           // lifecycle event. Only the lease-owning claim may reconcile it;
@@ -188,11 +289,19 @@ export function createHistoricalSimulationRunLifecyclePostgresV2(
               (!progressMatches && !recoverableCommit)) {
             throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:LIFECYCLE_DIVERGENCE");
           }
-          if (["QUEUED", "RUNNING", "COMPLETED"].includes(existing.phase)) return existing;
+          if (["QUEUED", "RUNNING", "COMPLETED"].includes(existing.phase)) {
+            if (input.continuationAuthority) {
+              throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_STALE");
+            }
+            return existing;
+          }
+          if (input.continuationAuthority && !isH5Paused(existing)) {
+            throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_STALE");
+          }
           const requeued = nextEvent(existing, { phase: "QUEUED",
             committedCycles: authority.committedCycles,
             latestCommittedCycleId: authority.latestCommittedCycleId,
-            errorCode: null,
+            errorCode: input.continuationAuthority ? H5_RESUME_ACTION : null,
             requestedByOperatorId: input.requestedByOperatorId });
           await insert(tx, requeued);
           return requeued;
@@ -209,26 +318,28 @@ export function createHistoricalSimulationRunLifecyclePostgresV2(
         });
         await insert(tx, queued);
         return queued;
-      });
+      }));
     },
     async claim(input) {
       return withPostgresSessionTransaction(sql, "SERIALIZABLE", async (tx) => {
         await acquireConsumerLease(tx, input.organizationId, input.runId);
         await lock(tx, input.organizationId, input.runId);
-        const releaseRows = await tx<Array<Readonly<{ release_sha: string }>>>`
-          SELECT release_sha
-          FROM trader_historical_four_surface_ratified_admission_v2
-          WHERE organization_id=${input.organizationId}::uuid AND run_id=${input.runId}
-        `;
-        if (releaseRows.length !== 1 || releaseRows[0]?.release_sha !== input.releaseSha) {
-          throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:RELEASE_AUTHORITY");
-        }
+        await requireReleaseAuthority(tx, input.organizationId, input.runId, input.releaseSha);
         const previous = await latest(tx, input.organizationId, input.runId);
         if (!previous || !["QUEUED", "RUNNING"].includes(previous.phase)) {
           throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:NOT_QUEUED");
         }
         if (previous.partition !== "WALK_FORWARD") {
           throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:PARTITION");
+        }
+        const continuation = previous.committedCycles >= 1
+          ? await loadH5ContinuationAuthorization(tx, input.organizationId, input.runId)
+          : null;
+        if (previous.committedCycles > 1 && !continuation) {
+          throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_PROGRESS_WITHOUT_CONTINUATION");
+        }
+        if (previous.phase === "QUEUED" && previous.committedCycles >= 1 && !continuation) {
+          throw new Error("HISTORICAL_SIMULATION_LAUNCH_REFUSED:H5_CONTINUATION_AUTHORITY");
         }
         if (previous.phase === "RUNNING") {
           const authority = await qualifiedLaunch(tx, {
@@ -249,11 +360,16 @@ export function createHistoricalSimulationRunLifecyclePostgresV2(
           }
           const recovered = nextEvent(previous, {
             phase: authority.committedCycles === authority.qualifiedTotalCycles
-              ? "COMPLETED" : "RUNNING",
+              ? "COMPLETED"
+              : authority.committedCycles === 1 && !continuation ? "STOPPED" : "RUNNING",
             committedCycles: authority.committedCycles,
             latestCommittedCycleId: authority.latestCommittedCycleId,
-            errorCode: progressDelta === 0
-              ? "CRASH_RECOVERED_BEFORE_COMMIT" : "CRASH_RECOVERED_AFTER_COMMIT",
+            errorCode: authority.committedCycles === 1 && !continuation
+              ? H5_PAUSE_ACTION
+              : authority.committedCycles === 1 && continuation
+                ? H5_RESUME_ACTION
+                : progressDelta === 0
+                  ? "CRASH_RECOVERED_BEFORE_COMMIT" : "CRASH_RECOVERED_AFTER_COMMIT",
           });
           await insert(tx, recovered);
           return recovered;
@@ -261,7 +377,7 @@ export function createHistoricalSimulationRunLifecyclePostgresV2(
         const claimed = nextEvent(previous, { phase: "RUNNING",
           committedCycles: previous.committedCycles,
           latestCommittedCycleId: previous.latestCommittedCycleId,
-          errorCode: null });
+          errorCode: previous.committedCycles === 1 && continuation ? H5_RESUME_ACTION : null });
         await insert(tx, claimed);
         return claimed;
       });
