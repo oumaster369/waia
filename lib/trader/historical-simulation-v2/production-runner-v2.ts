@@ -69,7 +69,15 @@ export async function runHistoricalSimulationProductionLoopV2(input: HistoricalS
         }
         await emit({ event: "CYCLE_COMMITTED", expectedCycleSequence: sequence, attempt,
           committedCycleId: cursor.committedCycleId });
-        sequence = cursor.nextCycleSequence; committed += 1; break;
+        sequence = cursor.nextCycleSequence; committed += 1;
+        if (input.partition === "WALK_FORWARD" && sequence === 1 &&
+            sequence < input.terminalCycleSequenceExclusive) {
+          await emit({ event: "STOPPED", expectedCycleSequence: sequence, attempt: 0,
+            committedCycleId: null });
+          return Object.freeze({ status: "STOPPED", committedCycles: committed,
+            nextCycleSequence: sequence });
+        }
+        break;
       } catch (error) {
         if (!transient(error) || attempt >= maxRetries) throw error;
         attempt += 1;

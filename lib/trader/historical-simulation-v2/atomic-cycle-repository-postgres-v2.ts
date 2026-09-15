@@ -2274,6 +2274,46 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
     ) {
       throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DATABASE_RUNNER_ROLE");
     }
+    const cycleSequence = input.expectedCycleSequence;
+    const waiaSha = process.env.WAIA_RELEASE_SHA?.toLowerCase();
+    const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA?.toLowerCase();
+    if (waiaSha && vercelSha && waiaSha !== vercelSha) {
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA_CONFLICT");
+    }
+    const codeSha = waiaSha ?? vercelSha ?? "";
+    if (!/^[0-9a-f]{40}$/.test(codeSha))
+      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA");
+    if (cycleSequence >= 1 && scope.split === "WALK_FORWARD") {
+      const continuation = await tx<Array<Readonly<{ event_sequence: number }>>>`
+        SELECT authorized.event_sequence
+        FROM trader_historical_four_surface_ratified_admission_v2 AS release
+        JOIN trader_historical_simulation_run_lifecycle_event_v2 AS paused
+          ON paused.organization_id=release.organization_id AND paused.run_id=release.run_id
+        JOIN trader_historical_simulation_run_lifecycle_event_v2 AS authorized
+          ON authorized.organization_id=paused.organization_id AND authorized.run_id=paused.run_id
+          AND authorized.event_sequence=paused.event_sequence+1
+          AND authorized.previous_content_digest_hex=paused.content_digest_hex
+        JOIN trader_historical_simulation_resume_checkpoint_v2 AS first_checkpoint
+          ON first_checkpoint.organization_id=paused.organization_id
+          AND first_checkpoint.run_id=paused.run_id AND first_checkpoint.account_id=paused.account_id
+          AND first_checkpoint.committed_cycle_sequence=0
+          AND first_checkpoint.committed_cycle_id=paused.latest_committed_cycle_id
+        JOIN LATERAL (SELECT phase,event_sequence
+          FROM trader_historical_simulation_run_lifecycle_event_v2
+          WHERE organization_id=paused.organization_id AND run_id=paused.run_id
+          ORDER BY event_sequence DESC LIMIT 1) AS current ON true
+        WHERE release.organization_id=${scope.organizationId}::uuid AND release.run_id=${scope.runId}
+          AND release.release_sha=${codeSha} AND paused.account_id=${scope.accountId}
+          AND paused.partition='WALK_FORWARD' AND paused.symbol=${input.symbol}
+          AND paused.phase='STOPPED' AND paused.error_code='PAUSE_AT_CHECKPOINT'
+          AND paused.committed_cycles=1 AND paused.qualified_total_cycles>1
+          AND authorized.phase='QUEUED' AND authorized.committed_cycles=1
+          AND authorized.error_code='RESUME_FROM_CHECKPOINT'
+          AND current.phase IN ('RUNNING','COMPLETED') AND current.event_sequence>authorized.event_sequence`;
+      if (continuation.length !== 1) {
+        throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:H5_CONTINUATION_AUTHORITY");
+      }
+    }
     const exactRows = await tx<
       {
         checkpoint_json: HistoricalSimulationResumeCursorV2;
@@ -2323,7 +2363,6 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
       validateHistoricalSimulationCommitRequestV2(latest[0]!.commit_request_json);
       await verifyCommitRequestSources(tx, latest[0]!.commit_request_json);
     }
-    const cycleSequence = input.expectedCycleSequence;
     if (
       (previousCursor === null && cycleSequence !== 0) ||
       (previousCursor !== null && previousCursor.nextCycleSequence !== cycleSequence)
@@ -2449,15 +2488,6 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
       cycleIdentity = source;
       sourceAuthority = await loadSourceAuthority(source);
     }
-    const waiaSha = process.env.WAIA_RELEASE_SHA?.toLowerCase();
-    const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA?.toLowerCase();
-    if (waiaSha && vercelSha && waiaSha !== vercelSha) {
-      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA_CONFLICT");
-    }
-    const codeSha = waiaSha ?? vercelSha ?? "";
-    if (!/^[0-9a-f]{40}$/.test(codeSha))
-      throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA");
-
     const result = await produceHistoricalSimulationNextCycleV2({
       tx,
       scope,

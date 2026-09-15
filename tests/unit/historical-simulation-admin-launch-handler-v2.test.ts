@@ -62,6 +62,34 @@ describe("Historical Simulation V2 authenticated admin launch route", () => {
     expect(mocks.disposeAuth).toHaveBeenCalledOnce();
   });
 
+  it("binds authenticated resume to the exact paused generation and release", async () => {
+    const queue = vi.fn(async (input) => buildHistoricalSimulationRunLifecycleEventV2({
+      organizationId: input.organizationId, accountId: input.accountId, runId: input.runId,
+      partition: input.partition, symbol: input.symbol, eventSequence: 4, phase: "QUEUED",
+      initialRecordIndex: 240, terminalRecordIndexExclusive: 340, qualifiedTotalCycles: 100,
+      committedCycles: 1, nextCycleSequence: 1, latestCommittedCycleId: "cycle-0",
+      requestedByOperatorId: input.requestedByOperatorId,
+      observedAt: "2026-09-15T15:00:00.000Z", errorCode: "RESUME_FROM_CHECKPOINT",
+      previousContentDigestHex: "b".repeat(64),
+    }));
+    const response = await handleHistoricalSimulationAdminLaunchPostV2(new Request(
+      "https://waia.test/api?organization_id=11111111-1111-4111-8111-111111111111",
+      { method: "POST", body: JSON.stringify({ ...body, action: "RESUME_FROM_CHECKPOINT",
+        paused_lifecycle_digest_hex: "b".repeat(64), release_sha: "a".repeat(40) }) },
+    ), { getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth,
+      openLifecycle: () => ({ lifecycle: { queue, claim: vi.fn(), append: vi.fn() },
+        dispose: vi.fn(async () => undefined) }) });
+    expect(queue).toHaveBeenCalledWith(expect.objectContaining({
+      requestedByOperatorId: "operator-a", continuationAuthority: {
+        action: "RESUME_FROM_CHECKPOINT", pausedLifecycleDigestHex: "b".repeat(64),
+        releaseSha: "a".repeat(40),
+      },
+    }));
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({
+      schemaVersion: "waia.trader.historical_simulation_resume_response.v2" });
+  });
+
   it("refuses permission or CSRF failure before opening the lifecycle database", async () => {
     const openLifecycle = vi.fn();
     const deniedRuntime = { kind: "postgres" };

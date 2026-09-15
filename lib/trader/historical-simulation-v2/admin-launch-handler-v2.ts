@@ -21,6 +21,8 @@ type LaunchBody = Readonly<{
   partition: "WALK_FORWARD";
   symbol: "BTCUSDT" | "ETHUSDT";
 }>;
+type ResumeBody = LaunchBody & Readonly<{ action: "RESUME_FROM_CHECKPOINT";
+  paused_lifecycle_digest_hex: string; release_sha: string }>;
 
 export type HistoricalSimulationAdminLaunchHandlerDepsV2 = AdminRouteHandlerDeps & Readonly<{
   env?: NodeJS.ProcessEnv;
@@ -30,11 +32,19 @@ export type HistoricalSimulationAdminLaunchHandlerDepsV2 = AdminRouteHandlerDeps
   }>;
 }>;
 
-function parseBody(value: unknown): LaunchBody {
+function parseBody(value: unknown): LaunchBody | ResumeBody {
   const body = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown> : {};
-  const exact = ["account_id", "run_id", "partition", "symbol"].sort();
-  if (JSON.stringify(Object.keys(body).sort()) !== JSON.stringify(exact) ||
+  const launchKeys = ["account_id", "run_id", "partition", "symbol"].sort();
+  const resumeKeys = [...launchKeys, "action", "paused_lifecycle_digest_hex", "release_sha"].sort();
+  const keys = Object.keys(body).sort();
+  const initialLaunch = JSON.stringify(keys) === JSON.stringify(launchKeys);
+  const resume = JSON.stringify(keys) === JSON.stringify(resumeKeys) &&
+    body.action === "RESUME_FROM_CHECKPOINT" &&
+    typeof body.paused_lifecycle_digest_hex === "string" &&
+    /^[0-9a-f]{64}$/.test(body.paused_lifecycle_digest_hex) &&
+    typeof body.release_sha === "string" && /^[0-9a-f]{40}$/.test(body.release_sha);
+  if ((!initialLaunch && !resume) ||
       typeof body.account_id !== "string" || body.account_id.trim() !== body.account_id ||
       body.account_id.length === 0 || typeof body.run_id !== "string" ||
       body.run_id.trim() !== body.run_id || body.run_id.length === 0 ||
@@ -42,7 +52,11 @@ function parseBody(value: unknown): LaunchBody {
       !["BTCUSDT", "ETHUSDT"].includes(String(body.symbol))) {
     throw new Error("HISTORICAL_SIMULATION_LAUNCH_REQUEST_INVALID");
   }
-  return body as LaunchBody;
+  return body as LaunchBody | ResumeBody;
+}
+
+function isResumeBody(body: LaunchBody | ResumeBody): body is ResumeBody {
+  return "action" in body && body.action === "RESUME_FROM_CHECKPOINT";
 }
 
 function productionLifecycle() {
@@ -53,7 +67,7 @@ function productionLifecycle() {
   });
 }
 
-/** Admin-only and CSRF-bound. The body intentionally cannot carry total-cycle or release authority. */
+/** Admin-only and CSRF-bound. The body cannot create total-cycle or release authority. */
 export async function handleHistoricalSimulationAdminLaunchPostV2(
   request: Request,
   deps: HistoricalSimulationAdminLaunchHandlerDepsV2,
@@ -70,9 +84,13 @@ export async function handleHistoricalSimulationAdminLaunchPostV2(
       organizationId, auth.userId)) {
       return adminClientError(403, "CSRF_INVALID", "CSRF validation failed.");
     }
-    let body: LaunchBody;
+    let body: LaunchBody | ResumeBody;
     try { body = parseBody(await request.json()); }
     catch { return adminClientError(400, "LAUNCH_REQUEST_INVALID", "Exact historical launch identity required."); }
+    const continuationAuthority = isResumeBody(body) ? {
+      action: body.action, releaseSha: body.release_sha,
+      pausedLifecycleDigestHex: body.paused_lifecycle_digest_hex,
+    } as const : undefined;
     opened = deps.openLifecycle?.() ?? productionLifecycle();
     const lifecycle = await queueAuthenticatedHistoricalSimulationLaunchV2({
       organizationId,
@@ -81,9 +99,12 @@ export async function handleHistoricalSimulationAdminLaunchPostV2(
       partition: body.partition,
       symbol: body.symbol,
       authenticatedOperatorId: auth.userId,
+      ...(continuationAuthority ? { continuationAuthority } : {}),
     }, opened.lifecycle);
     return { status: 202, outcome: "success", waiaDbBackend: auth.runtime.kind,
-      body: { schemaVersion: "waia.trader.historical_simulation_launch_response.v2",
+      body: { schemaVersion: continuationAuthority
+        ? "waia.trader.historical_simulation_resume_response.v2"
+        : "waia.trader.historical_simulation_launch_response.v2",
         lifecycle } };
   } catch {
     return adminClientError(400, "HISTORICAL_SIMULATION_LAUNCH_REFUSED",

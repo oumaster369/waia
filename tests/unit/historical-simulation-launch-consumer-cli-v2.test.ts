@@ -80,6 +80,7 @@ function lifecycleSql(input: Readonly<{
     if (query.includes("trader_historical_four_surface_ratified_admission_v2")) {
       return [{ release_sha: "a".repeat(40) }];
     }
+    if (query.includes("AS authorization_event_json")) return [];
     if (query.includes("FROM trader_historical_simulation_run_lifecycle_event_v2")) {
       return [{ event_json: input.lifecycle }];
     }
@@ -411,43 +412,37 @@ describe("Historical Simulation V2 queued-launch execution consumer", () => {
     expect(queries).toHaveLength(1);
   });
 
-  it.each([
-    [0, "CRASH_RECOVERED_BEFORE_COMMIT", null],
-    [1, "CRASH_RECOVERED_AFTER_COMMIT", "cycle-0"],
-  ] as const)("reconciles restart from the durable checkpoint without replaying a commit", async (
-    checkpointCycles, errorCode, latestCommittedCycleId,
-  ) => {
-    const { sql } = lifecycleSql({ lifecycle: runningEvent(), checkpointCycles });
+  it("reconciles restart before a commit without inventing progress", async () => {
+    const { sql } = lifecycleSql({ lifecycle: runningEvent(), checkpointCycles: 0 });
     const lifecycle = createHistoricalSimulationRunLifecyclePostgresV2(sql);
     const recovered = await lifecycle.claim({
       organizationId: valid.WAIA_HISTORICAL_ORGANIZATION_ID,
       runId: valid.WAIA_HISTORICAL_RUN_ID,
       releaseSha: "a".repeat(40),
     });
-    expect(recovered).toMatchObject({
-      phase: "RUNNING",
-      committedCycles: checkpointCycles,
-      nextCycleSequence: checkpointCycles,
-      latestCommittedCycleId,
-      errorCode,
-    });
+    expect(recovered).toMatchObject({ phase: "RUNNING", committedCycles: 0,
+      nextCycleSequence: 0, latestCommittedCycleId: null,
+      errorCode: "CRASH_RECOVERED_BEFORE_COMMIT" });
   });
 
-  it("reconciles a final committed checkpoint directly to truthful completion", async () => {
-    const { sql } = lifecycleSql({ lifecycle: runningEvent(2), checkpointCycles: 3 });
+  it("recovers a first committed checkpoint into the durable H5 pause", async () => {
+    const { sql } = lifecycleSql({ lifecycle: runningEvent(), checkpointCycles: 1 });
     const lifecycle = createHistoricalSimulationRunLifecyclePostgresV2(sql);
     const recovered = await lifecycle.claim({
       organizationId: valid.WAIA_HISTORICAL_ORGANIZATION_ID,
-      runId: valid.WAIA_HISTORICAL_RUN_ID,
-      releaseSha: "a".repeat(40),
-    });
-    expect(recovered).toMatchObject({
-      phase: "COMPLETED",
-      committedCycles: 3,
-      nextCycleSequence: 3,
-      latestCommittedCycleId: "cycle-2",
-      errorCode: "CRASH_RECOVERED_AFTER_COMMIT",
-    });
+      runId: valid.WAIA_HISTORICAL_RUN_ID, releaseSha: "a".repeat(40) });
+    expect(recovered).toMatchObject({ phase: "STOPPED", committedCycles: 1,
+      nextCycleSequence: 1, latestCommittedCycleId: "cycle-0",
+      errorCode: "PAUSE_AT_CHECKPOINT" });
+  });
+
+  it("refuses historical progress beyond H5 without continuation authority", async () => {
+    const { sql } = lifecycleSql({ lifecycle: runningEvent(2), checkpointCycles: 3 });
+    const lifecycle = createHistoricalSimulationRunLifecyclePostgresV2(sql);
+    await expect(lifecycle.claim({
+      organizationId: valid.WAIA_HISTORICAL_ORGANIZATION_ID,
+      runId: valid.WAIA_HISTORICAL_RUN_ID, releaseSha: "a".repeat(40),
+    })).rejects.toThrow("H5_PROGRESS_WITHOUT_CONTINUATION");
   });
 
   it("fails closed when checkpoint progress is more than one cycle ahead of lifecycle", async () => {
