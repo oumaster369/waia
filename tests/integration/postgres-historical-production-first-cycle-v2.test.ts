@@ -28,12 +28,16 @@ import {
 
 import * as pgSchema from "@/db/schema.postgres";
 import { bindPostgresReservedSession } from "@/db/postgres-session-transaction";
+import { waiaCampaignPostgresDriverOptions } from "@/db/postgres-client";
+import { guardSingleConnectionPostgresPool } from "@/db/postgres-reserved-close-guard";
+import { withHistoricalLaunchCleanupV2 } from "@/lib/trader/historical-simulation-v2/launch-cleanup-v2";
 import {
   createCanonicalDecisionVerificationReceiptServiceV2,
   historicalDatasetAuthorityRunLockKeyV2,
 } from "@/lib/trader/historical-simulation-v2/canonical-verification-receipt-postgres-v2";
 import {
   assumeHistoricalSimulationRunnerRoleV2,
+  requireHistoricalSimulationRunnerLoginV2,
   resetHistoricalSimulationRunnerRoleV2,
   runHistoricalSimulationLaunchConsumerCliV2,
 } from "@/lib/trader/historical-simulation-v2/launch-consumer-cli-v2";
@@ -100,11 +104,18 @@ import { createScientificCheckpointStoreV1 } from "../../scripts/trader/scientif
 import { createStrictScientificEvidenceResolverV1 } from "../../scripts/trader/scientific-evidence-resolver-v1";
 import { buildPredictivePackageV1 } from "@/lib/trader/intelligence/forecast-v2/rv-state-conditional-empirical-joint-v1";
 import {
+  assertHistoricalTechnicalProposalV2,
   createHistoricalRatificationRequestV2,
+  finalizeApprovedHistoricalProposalOnExecutionServerV2,
   ratifyHistoricalTechnicalProposalV2,
   TEST_ONLY_finalizeApprovedHistoricalProposalOnExecutionServerV2,
   TEST_ONLY_prepareHistoricalTechnicalProposalOnExecutionServerV2,
 } from "@/lib/trader/historical-simulation-v2/ratification-split-v2";
+import { bindHistoricalRunnerLoginGuardedPoolV2 } from "../../scripts/trader/historical-simulation-v2-launch-approved";
+import {
+  finalizeBoundHistoricalProposalV1,
+  STRICT_RESOLVER_CONTRACT_VERSION,
+} from "../../scripts/ops/historical-finalize-only-v1.mjs";
 import { createPostgresMiSourceProvenanceService } from "@/lib/trader/mi/source-provenance-service";
 import { loadHistoricalSimulationBootstrapSourceCyclesV2 } from "@/lib/trader/historical-simulation-v2/bootstrap-source-loader-v2";
 import { loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2 } from "@/lib/trader/historical-simulation-v2/development-source-corpus-v2";
@@ -1069,6 +1080,84 @@ describe.skipIf(!enabled || !url || !disposable)(
               AND lifecycle.lifecycle_state='VALIDATED') AS validated_lifecycles
       `;
         expect(humanRowsAfterRetry).toEqual(humanRowsBeforeRetry);
+        const operatorResult = await finalizeBoundHistoricalProposalV1(
+          {
+            databaseUrl: url,
+            organizationId,
+            runId,
+            releaseSha: RELEASE_SHA,
+            proposalId: proposal.id,
+            proposalDigest: proposal.proposal.contentDigestHex,
+            bindingDigest: hex("dee-1013-operator-binding"),
+            evidenceGraph: {
+              origin: {
+                root: originEvidenceRoot,
+                identity: Object.freeze({ releaseSha: RELEASE_SHA, runtime }),
+              },
+              producer: {
+                root: producerEvidenceRoot,
+                identity: Object.freeze({
+                  releaseSha: HARNESS_PRODUCER_RELEASE_SHA,
+                  runtime,
+                }),
+              },
+              evaluator: {
+                root: evaluatorEvidenceRoot,
+                identity: Object.freeze({
+                  releaseSha: HARNESS_EVALUATOR_RELEASE_SHA,
+                  runtime,
+                }),
+              },
+            },
+            originIdentity: Object.freeze({ releaseSha: RELEASE_SHA, runtime }),
+            producerIdentity: Object.freeze({
+              releaseSha: HARNESS_PRODUCER_RELEASE_SHA,
+              runtime,
+            }),
+            evaluatorIdentity: Object.freeze({
+              releaseSha: HARNESS_EVALUATOR_RELEASE_SHA,
+              runtime,
+            }),
+            strictResolverContractVersion: STRICT_RESOLVER_CONTRACT_VERSION,
+          },
+          {
+            postgres: (databaseUrl: string, options: Parameters<typeof postgres>[1]) =>
+              postgres(databaseUrl, { ...options, max: 1, max_lifetime: null }),
+            waiaCampaignPostgresDriverOptions,
+            guardSingleConnectionPostgresPool,
+            bindPostgresReservedSession,
+            bindHistoricalRunnerLoginGuardedPoolV2,
+            withHistoricalLaunchCleanupV2,
+            requireHistoricalSimulationRunnerLoginV2,
+            assumeHistoricalSimulationRunnerRoleV2,
+            resetHistoricalSimulationRunnerRoleV2,
+            assertHistoricalTechnicalProposalV2,
+            computeSemanticSha256Hex,
+            createStrictScientificEvidenceResolverV1,
+            withStrictScientificResolverV1,
+            finalizeApprovedHistoricalProposalOnExecutionServerV2,
+            createScientificCheckpointStoreV1: () => {
+              throw new Error("DEE1013_BUILDER_FALLBACK");
+            },
+            bootstrapAndQueueHistoricalSimulationOnExecutionServerV2: () => {
+              throw new Error("DEE1013_BOOTSTRAP_INVOKED");
+            },
+            runHistoricalSimulationLaunchConsumerCliV2: () => {
+              throw new Error("DEE1013_CONSUMER_INVOKED");
+            },
+            verifyHistoricalTerminalLaunchV1: () => {
+              throw new Error("DEE1013_TERMINAL_INVOKED");
+            },
+          },
+        );
+        expect(operatorResult.proposalId).toBe(proposal.id);
+        expect(operatorResult.proposalContentDigestHex).toBe(proposal.proposal.contentDigestHex);
+        expect(operatorResult.authorityId).toBe(finalized.authorityId);
+        expect(operatorResult.manifestContentDigestHex).toBe(finalized.manifest.contentDigestHex);
+        expect(operatorResult.authorityPresent).toBe(true);
+        expect(operatorResult.bootstrapInvokedByThisDriver).toBe(false);
+        expect(operatorResult.consumerInvokedByThisDriver).toBe(false);
+        expect(operatorResult.terminalReceiptInvokedByThisDriver).toBe(false);
         await pool.begin(async (transaction) => {
           await transaction.unsafe(`SET LOCAL ROLE ${HISTORICAL_RUNNER_ROLE}`);
           await expect(
