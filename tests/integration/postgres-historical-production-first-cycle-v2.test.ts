@@ -116,6 +116,7 @@ import {
   finalizeBoundHistoricalProposalV1,
   STRICT_RESOLVER_CONTRACT_VERSION,
 } from "../../scripts/ops/historical-finalize-only-v1.mjs";
+import { provisionHistoricalRunnerLoginV2 } from "../../scripts/ops/provision-historical-runner-login.mjs";
 import { createPostgresMiSourceProvenanceService } from "@/lib/trader/mi/source-provenance-service";
 import { loadHistoricalSimulationBootstrapSourceCyclesV2 } from "@/lib/trader/historical-simulation-v2/bootstrap-source-loader-v2";
 import { loadHistoricalDevelopmentSourceCorpusSnapshotFromDatasetV2 } from "@/lib/trader/historical-simulation-v2/development-source-corpus-v2";
@@ -156,6 +157,8 @@ if (enabled && url && !disposable) {
 
 const RELEASE_SHA = "d".repeat(40);
 const HISTORICAL_RUNNER_ROLE = "waia_historical_runner";
+const HISTORICAL_RUNNER_LOGIN = "waia_historical_runner_login";
+const HISTORICAL_RUNNER_TEST_PASSWORD = "dee-1013-local-postgres-integration-only-password";
 const HISTORICAL_RUNNER_ORGANIZATION_ID = "3c50b4e9-1138-43a5-a29f-e65088124cfc";
 const BAR_COUNT = 4_240;
 const WF_PREDICTIVE_BAR_COUNT = 1_000;
@@ -1080,9 +1083,19 @@ describe.skipIf(!enabled || !url || !disposable)(
               AND lifecycle.lifecycle_state='VALIDATED') AS validated_lifecycles
       `;
         expect(humanRowsAfterRetry).toEqual(humanRowsBeforeRetry);
+        expect(
+          await pool`SELECT 1 FROM pg_roles WHERE rolname=${HISTORICAL_RUNNER_LOGIN}`,
+        ).toHaveLength(0);
+        await provisionHistoricalRunnerLoginV2({
+          WAIA_POSTGRES_ADMIN_SESSION_URL: url,
+          WAIA_HISTORICAL_RUNNER_DB_PASSWORD: HISTORICAL_RUNNER_TEST_PASSWORD,
+        });
+        const operatorDatabaseUrl = new URL(url);
+        operatorDatabaseUrl.username = HISTORICAL_RUNNER_LOGIN;
+        operatorDatabaseUrl.password = HISTORICAL_RUNNER_TEST_PASSWORD;
         const operatorResult = await finalizeBoundHistoricalProposalV1(
           {
-            databaseUrl: url,
+            databaseUrl: operatorDatabaseUrl.toString(),
             organizationId,
             runId,
             releaseSha: RELEASE_SHA,
@@ -1149,7 +1162,9 @@ describe.skipIf(!enabled || !url || !disposable)(
               throw new Error("DEE1013_TERMINAL_INVOKED");
             },
           },
-        );
+        ).finally(async () => {
+          await pool.unsafe(`DROP ROLE ${HISTORICAL_RUNNER_LOGIN}`);
+        });
         expect(operatorResult.proposalId).toBe(proposal.id);
         expect(operatorResult.proposalContentDigestHex).toBe(proposal.proposal.contentDigestHex);
         expect(operatorResult.authorityId).toBe(finalized.authorityId);
