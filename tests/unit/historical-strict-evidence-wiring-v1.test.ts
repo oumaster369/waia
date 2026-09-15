@@ -47,4 +47,18 @@ describe("DEE-1004 strict resolver launch wiring", () => {
     expect(operator).toContain("withStrictScientificResolverV1");
     expect(operator).not.toMatch(/git rev-parse HEAD|origin\/main\b/);
   });
+
+  it("completes manifest-bound finalization from verified R, not 90de", () => {
+    expect(operator).toContain("from \"./historical-release-binding-v1.mjs\"");
+    expect(operator).toContain("loadManifestBoundFinalizerApiV1");
+    expect(operator).toContain("finalizeHistoricalProposalWithVerifiedOprBindingV1");
+    expect(operator).toContain("RATIFY_FOUR_SURFACE_WF_PREDICTIVE_FOR_HISTORICAL_SIMULATION_ONLY");
+    expect(operator).toContain("binding.namespaces.evaluator.source.root");
+    expect(operator).not.toContain("GENERIC_OPERATOR_LAUNCH_NOT_THIS_ISSUE");
+    const loader = operator.slice(
+      operator.indexOf("export async function loadManifestBoundFinalizerApiV1"),
+      operator.indexOf("export async function assertPersistedHistoricalApprovalV1"),
+    );
+    expect(loader).not.toContain("90de233a192f9b97fa2d6a1ab0c3c1ba5a72df67");
+  });
 });
