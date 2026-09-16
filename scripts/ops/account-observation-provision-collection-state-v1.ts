@@ -151,7 +151,11 @@ export async function runAccountObservationCollectionStateProvisioning(
   input: AccountObservationProvisioningInput,
   dependencies: AccountObservationProvisioningDependencies = {},
 ): Promise<AccountObservationProvisioningReceipt> {
-  if (!isAbsolute(input.manifestPath) || input.manifestPath.includes("\0")) {
+  if (
+    !isAbsolute(input.manifestPath) ||
+    input.manifestPath.includes("\0") ||
+    resolve(input.manifestPath) !== input.manifestPath
+  ) {
     refuse("MANIFEST_PATH");
   }
   const expected = `${input.organizationId}:${input.credentialId}:${input.exchangeAccountId}`;

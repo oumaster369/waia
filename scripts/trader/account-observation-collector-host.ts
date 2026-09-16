@@ -125,7 +125,14 @@ export function parseAccountObservationCollectorRuntime(
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(ownerId)) refuse("WAIA_OBSERVATION_OWNER_ID");
 
   const manifestPath = required(env, "WAIA_OBSERVATION_ASSIGNMENT_MANIFEST");
-  if (!isAbsolute(manifestPath) || manifestPath.includes("\0") || resolve(manifestPath) === "/") {
+  // Already normalized and absolute, so `..` cannot walk the deployed path away from the
+  // reviewed manifest location.
+  if (
+    !isAbsolute(manifestPath) ||
+    manifestPath.includes("\0") ||
+    resolve(manifestPath) !== manifestPath ||
+    manifestPath === "/"
+  ) {
     refuse("WAIA_OBSERVATION_ASSIGNMENT_MANIFEST");
   }
   const manifestSha256 = required(env, "WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256").toLowerCase();

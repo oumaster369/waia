@@ -198,6 +198,21 @@ describe("account observation collector runtime configuration", () => {
     ).toThrow(/REFUSED:WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256/);
   });
 
+  it("requires an already-normalized manifest path so `..` cannot walk away from it", () => {
+    for (const path of [
+      "/srv/waia/../../etc/observation-assignments.json",
+      "/srv/waia//observation-assignments.json",
+      "/srv/waia/./observation-assignments.json",
+      "/srv/waia/observation-assignments.json/",
+    ]) {
+      expect(() =>
+        parseAccountObservationCollectorRuntime(
+          baseEnv({ WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: path }),
+        ),
+      ).toThrow(/REFUSED:WAIA_OBSERVATION_ASSIGNMENT_MANIFEST/);
+    }
+  });
+
   it("binds each database URL to its own non-interchangeable login", () => {
     expect(() =>
       parseAccountObservationCollectorRuntime(

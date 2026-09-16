@@ -245,6 +245,12 @@ describe("account observation host runtime configuration", () => {
     expect(() =>
       parse(recurringEnv({ WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "relative.json" })),
     ).toThrow(/REFUSED:WAIA_OBSERVATION_ASSIGNMENT_MANIFEST/);
+    // Non-normalized paths are refused before the file is even read.
+    for (const path of ["/srv/waia/../../etc/manifest.json", "/srv/waia//manifest.json"]) {
+      expect(() => parse(recurringEnv({ WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: path }))).toThrow(
+        /REFUSED:WAIA_OBSERVATION_ASSIGNMENT_MANIFEST/,
+      );
+    }
     expect(() =>
       parse(recurringEnv({ WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: "b".repeat(64) })),
     ).toThrow(/REFUSED:MANIFEST_DECLARED_DIGEST/);

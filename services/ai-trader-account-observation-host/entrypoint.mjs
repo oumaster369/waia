@@ -154,7 +154,12 @@ export function parseObservationHostRuntimeV1(env, readFile = readFileSync) {
   if (!OWNER_ID.test(ownerId)) refuse("WAIA_OBSERVATION_OWNER_ID");
 
   const manifestPath = required(env, "WAIA_OBSERVATION_ASSIGNMENT_MANIFEST");
-  if (!isAbsolute(manifestPath) || manifestPath.includes("\0") || resolve(manifestPath) === "/") {
+  if (
+    !isAbsolute(manifestPath) ||
+    manifestPath.includes("\0") ||
+    resolve(manifestPath) !== manifestPath ||
+    manifestPath === "/"
+  ) {
     refuse("WAIA_OBSERVATION_ASSIGNMENT_MANIFEST");
   }
   const manifestSha256 = required(env, "WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256").toLowerCase();

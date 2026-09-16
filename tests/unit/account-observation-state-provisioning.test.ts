@@ -292,6 +292,18 @@ describe("account observation collection-state provisioning", () => {
     expect(database.connect).not.toHaveBeenCalled();
   });
 
+  it("refuses a non-normalized manifest path before connecting", async () => {
+    for (const manifestPath of [
+      "/srv/waia/../../etc/observation.json",
+      "/srv/waia//observation.json",
+      "/srv/waia/./observation.json",
+    ]) {
+      const database = fakeDatabase();
+      await expect(run({ manifestPath }, database)).rejects.toThrow(/REFUSED:MANIFEST_PATH/);
+      expect(database.connect).not.toHaveBeenCalled();
+    }
+  });
+
   it("refuses a transaction-pooled or runtime-login connection string", async () => {
     const database = fakeDatabase();
 
