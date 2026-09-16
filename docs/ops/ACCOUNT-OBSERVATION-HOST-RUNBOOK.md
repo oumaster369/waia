@@ -129,9 +129,35 @@ Nothing here is part of the DEE-1015 PR. Stop at the first refusal.
 1. **Read-only preflight.** Confirm the intended production journal state and that exact H2 step `0205`
    is admissible against the then-current live journal and predecessor. If it is not, stop — that
    decision is a separate governance step, not a runbook workaround.
-2. **Provision the three observation LOGIN roles** granted into `waia_account_observer`,
-   `waia_account_observation_reader` and the credential-access role. The collector login must remain
-   without INSERT on `trader_account_collection_state`.
+2. **Provision the three observation LOGIN identities with the reviewed operator.** No ad-hoc or
+   handwritten SQL is used for these recurring runtime identities. Migration `0205` supplies the
+   collector and reader parents; migration `0210` supplies the credential parent. The operator
+   creates LOGIN identities only and derives all data authority from exact parent membership:
+
+| Purpose | LOGIN identity | NOLOGIN parent authority |
+|---------|----------------|--------------------------|
+| Collector | `waia_account_observer_login` | `waia_account_observer` (0205) |
+| Reader | `waia_account_observation_reader_login` | `waia_account_observation_reader` (0205) |
+| Credential | `waia_account_observation_credential_login` | `waia_account_observation_credential` (0210) |
+
+```bash
+WAIA_POSTGRES_ADMIN_SESSION_URL=<administrative session URL> \
+WAIA_OBSERVATION_COLLECTOR_DB_PASSWORD=<>=32 chars, distinct> \
+WAIA_OBSERVATION_READER_DB_PASSWORD=<>=32 chars, distinct> \
+WAIA_OBSERVATION_CREDENTIAL_DB_PASSWORD=<>=32 chars, distinct> \
+pnpm trader:observation:provision-logins --confirm
+```
+
+   Without `--confirm` the operator is a no-op. Only the SCRAM verifier reaches SQL; the plaintext
+   passwords are never logged, echoed or stored by the operator. Every identity is created and then
+   re-read as `LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION` with
+   `CONNECTION LIMIT 2`, exactly one membership in its own parent with `ADMIN FALSE, INHERIT FALSE,
+   SET TRUE`, no object ownership and no direct table, column, schema or function grant. Database
+   `CONNECT` is the only tolerated direct privilege, and must be granted separately if the
+   deployment revokes it from `PUBLIC`. Exact retry is idempotent; a conflicting, overprivileged or
+   foreign-membership role is refused rather than repaired. The collector login still holds no
+   INSERT on `trader_account_collection_state`, and neither the collector nor the reader can read
+   credential ciphertext.
 3. **Deploy the exact merged app SHA**, then build and run the observation image at the same SHA:
 
 ```bash

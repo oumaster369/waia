@@ -130,6 +130,50 @@ describe("DEE-1015 observation authority graph", () => {
     for (const entry of ENTRYPOINTS) expect(closure.has(entry)).toBe(true);
   });
 
+  it("decrypts only through the narrow boundary, never the generic credential repository", () => {
+    expect(closure.has("lib/trader/account-observation/credential-read-boundary.ts")).toBe(true);
+    // The generic paths would need whole-table exchange_credentials SELECT and carry
+    // store/rotate/revoke/audit authority, so they must stay unreachable from this runtime.
+    for (const generic of [
+      "lib/trader/credentials/credential-service.ts",
+      "lib/trader/credentials/repository-adapters.ts",
+      "lib/trader/credentials/repository-postgres.ts",
+    ]) {
+      expect(closure.has(generic)).toBe(false);
+      expect(pathTo(closure, generic)).toEqual([]);
+    }
+    // Envelope decryption itself is reused rather than reimplemented.
+    expect(closure.has("lib/trader/credentials/envelope-crypto.ts")).toBe(true);
+  });
+
+  it("selects an explicit credential projection and never SELECT * on exchange_credentials", () => {
+    const violations: string[] = [];
+    // Only actual projections are inspected, so prose naming a withheld column is not a match.
+    const projections = /SELECT\s+([\s\S]{0,400}?)\s+FROM\s+public\.exchange_credentials/gi;
+    let matched = 0;
+    for (const [file, source] of closureSources) {
+      for (const match of source.matchAll(projections)) {
+        matched += 1;
+        const columns = match[1]!;
+        if (columns.trim() === "*") violations.push(`${file}: unprojected credential read`);
+        for (const withheld of ["permission_metadata", "api_key_masked", "wrapped_dek_key"]) {
+          if (new RegExp(`\\b${withheld}\\b`).test(columns) && !columns.includes("${")) {
+            violations.push(`${file}: reads ${withheld}`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(matched).toBeGreaterThan(0);
+
+    const boundary = closureSources.get(
+      "lib/trader/account-observation/credential-read-boundary.ts",
+    )!;
+    expect(boundary).toContain("SET LOCAL ROLE ${ACCOUNT_OBSERVATION_CREDENTIAL_ROLE}");
+    expect(boundary).toContain("SET TRANSACTION READ ONLY");
+    expect(boundary).toContain("set_config('waia.observation_org'");
+  });
+
   it.each(FORBIDDEN_MODULES)("cannot reach %s", (module) => {
     expect(closure.has(module)).toBe(false);
     expect(pathTo(closure, module)).toEqual([]);

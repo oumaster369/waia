@@ -13,15 +13,14 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import * as pgSchema from "@/db/schema.postgres";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import {
   parseAccountObservationAssignmentManifest,
   type TrustedAccountObservationAssignments,
 } from "@/lib/trader/account-observation/assignment-manifest";
+import { createObservationCredentialReader } from "@/lib/trader/account-observation/credential-read-boundary";
 import {
   createAccountObservationHost,
   type ObservationCredentialResource,
@@ -29,8 +28,6 @@ import {
   type ObservationSqlResource,
 } from "@/lib/trader/account-observation/host";
 import { observationPoolLimits } from "@/lib/trader/account-observation/host-role-probe";
-import { createCredentialService } from "@/lib/trader/credentials/credential-service";
-import { createPostgresExchangeCredentialRepository } from "@/lib/trader/credentials/repository-adapters";
 import { isProductionDeployment } from "@/lib/trader/security/deployment-tier";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
 
@@ -204,8 +201,15 @@ function openObservationSql(url: string, purpose: "collector" | "reader") {
 }
 
 /** Third, deliberately separate resource: the collector/reader logins are attested to have no
- * ciphertext access, so envelope decryption needs its own credential-capable login. */
-function openObservationCredentialService(runtime: AccountObservationCollectorRuntime) {
+ * ciphertext access, so envelope decryption needs its own credential-capable login.
+ *
+ * The generic credential repository is deliberately NOT used here. It performs an unprojected
+ * read, which would require whole-table `exchange_credentials` SELECT; the DEE-1015 boundary reads
+ * only migration 0210's granted projection for a manifest-trusted, assignment-bound row. */
+function openObservationCredentialService(
+  runtime: AccountObservationCollectorRuntime,
+  trusted: TrustedAccountObservationAssignments,
+) {
   return async (): Promise<ObservationCredentialResource> => {
     const sql = postgres(runtime.config.credentialDatabaseUrl, {
       max: 2,
@@ -220,13 +224,16 @@ function openObservationCredentialService(runtime: AccountObservationCollectorRu
         secretGetter: () => runtime.masterKeySecretGetter(),
         productionReady: isProductionDeployment(),
       });
-      const service = createCredentialService({
-        repository: createPostgresExchangeCredentialRepository(drizzle(sql, { schema: pgSchema })),
-        // Observation only decrypts; an audit write from this runtime is a contract violation.
-        writeAudit: () => {
-          throw new Error("ACCOUNT_OBSERVATION_AUDIT_WRITE_FORBIDDEN");
-        },
-        createProvider: async () => provider,
+      const service = createObservationCredentialReader({
+        sql,
+        provider,
+        assignments: trusted.configured.map((assignment) =>
+          Object.freeze({
+            organizationId: assignment.binding.organizationId,
+            credentialId: assignment.binding.credentialId,
+            exchangeAccountId: assignment.binding.exchangeAccountId,
+          }),
+        ),
       });
       return Object.freeze({
         service,
@@ -298,7 +305,7 @@ export async function runAccountObservationCollector(
       dependencies.openCollector ?? openObservationSql(config.collectorDatabaseUrl, "collector"),
     openReader: dependencies.openReader ?? openObservationSql(config.readerDatabaseUrl, "reader"),
     openCredentialService:
-      dependencies.openCredentialService ?? openObservationCredentialService(runtime),
+      dependencies.openCredentialService ?? openObservationCredentialService(runtime, trusted),
     fetchImpl: dependencies.fetchImpl ?? fetch,
     clock: dependencies.clock ?? accountObservationClock,
     report,

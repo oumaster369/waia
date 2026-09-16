@@ -34,10 +34,11 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208+0209 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0210 only as explicit compatible additive", () => {
     expect(compatibleAdditive.map((entry) => entry.tag)).toEqual([
       "0208_historical_terminal_receipts_v1",
       "0209_ai_twin_epistemic_persistence_v1",
+      "0210_trader_account_observation_credential_v1",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
@@ -93,7 +94,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       assertFhvV2CanonicalMigrationsApplied({
         canonical,
         compatibleAdditive,
-        applied: [...baseline, { hash: "a".repeat(64), createdAt: "1780000000210" }],
+        applied: [...baseline, { hash: "a".repeat(64), createdAt: "1780000000211" }],
       }),
     ).toThrow("UNKNOWN_APPLIED_MIGRATION");
   });

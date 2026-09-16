@@ -48,7 +48,8 @@ Verified on the base SHA before writing code:
 | No `trader:*` command starts it | no `package.json`/`scripts/`/`services/` reference to account observation |
 | Historical Execution Server admits only `idle` / `historical-v2-ratified-one-shot` and refuses master/HTX authority | `services/ai-trader-execution-host/entrypoint.mjs` `FORBIDDEN_RUNTIME_KEYS` + `parseExecutionHostRuntimeV2` |
 | `waia_account_observer` has **no** INSERT on `trader_account_collection_state` | `0205:127-132` grants SELECT on both tables, INSERT only on `trader_account_observations`, UPDATE limited to lease/cadence columns |
-| Existing 0205 schema is sufficient | no contradiction reproduced; provisioning is an authority question, not a schema question |
+| 0205 needs no edit for collector/reader authority | no contradiction reproduced; those two logins are a provisioning question, not a schema question |
+| No pre-existing role could lawfully read credential ciphertext | audited every migration, role, policy and operator: observer/reader are denied ciphertext by `0205` and `host-role-probe.ts`; `waia_historical_runner` has no `exchange_credentials` authority; `0007` enables RLS with only `authenticated`/`anon` deny policies, so a bare column grant still returns zero rows. Architect ratified `waia_account_observation_credential` in additive `0210` |
 | Account-observation transport is GET-only | `htx-get-transport.ts:62,112` refuse non-GET and issue `method: "GET"` only |
 | Account-observation code has no Execution V2 order-submission authority | no `placeOrder`/`submitOrder`/`cancelOrder` reference anywhere under `lib/trader/account-observation/` |
 
@@ -118,18 +119,67 @@ and shuts the supervisor down; the container restart policy is a ceremony decisi
 
 ### Database roles
 
-Three distinct logins, all separately provisioned outside this PR:
+Three distinct logins, created by the reviewed Human operator
+`scripts/ops/provision-account-observation-logins.mjs` (`pnpm trader:observation:provision-logins
+--confirm`) — never by ad-hoc SQL. The operator creates LOGIN identities only; all data authority
+derives from exact membership in the NOLOGIN parent, granted `ADMIN FALSE, INHERIT FALSE, SET TRUE`.
 
 | Purpose | Login | Granted role | Authority |
 |---------|-------|--------------|-----------|
-| Collector | `waia_account_observer_login` | `waia_account_observer` | lease/cadence UPDATE + observation INSERT |
-| Reader | `waia_account_observation_reader_login` | `waia_account_observation_reader` | SELECT projection only |
-| Credential | `waia_account_observation_credential_login` | (credential ciphertext read) | `exchange_credentials` ciphertext for envelope decryption |
+| Collector | `waia_account_observer_login` | `waia_account_observer` (0205) | lease/cadence UPDATE + observation INSERT |
+| Reader | `waia_account_observation_reader_login` | `waia_account_observation_reader` (0205) | SELECT projection only |
+| Credential | `waia_account_observation_credential_login` | `waia_account_observation_credential` (0210) | assignment-bound SELECT of the minimal `exchange_credentials` envelope projection |
 | Provisioning | operator-supplied elevated login | migration/provisioning authority | one-row INSERT inside the operator boundary only |
 
 `probeObservationPool` proves collector/reader identity, exclusivity, absent ciphertext access, absent
 destructive privilege and forced RLS before the credential service opens. The credential login is
 deliberately a **third** resource so the collector/reader probes can keep asserting "no ciphertext".
+
+### Credential authority (migration 0210)
+
+The Human Architect ratified `waia_account_observation_credential` after this work proved
+`ARCHITECTURAL_BLOCKER=CREDENTIAL_ACCESS_ROLE_UNDEFINED`: no pre-existing least-privilege role could
+lawfully read credential ciphertext. `0210_trader_account_observation_credential_v1.sql` is additive
+and leaves `0205` and `0007` untouched — in particular it does **not** enable FORCE RLS on
+`exchange_credentials`.
+
+- **Role posture:** NOLOGIN, NOINHERIT, NOSUPERUSER, NOBYPASSRLS, NOCREATEDB, NOCREATEROLE,
+  NOREPLICATION, no ownership, no write authority, no order/execution authority.
+- **No whole-table SELECT.** Column privileges are granted for exactly
+  `id, organization_id, exchange_account_id, status, encrypted_payload, payload_key_version,
+  wrapped_dek_key_version, wrapped_dek_key`. `venue`, `api_key_masked`, `permission_metadata`,
+  `observation_revision`, `created_at`, `updated_at` and `revoked_at` are withheld, so `SELECT *`
+  fails with `42501`.
+- **Assignment-bound RLS, never `USING (true)`.** Policy
+  `trader_observation_credential_read` requires `status = 'active'`, an exact match between the
+  transaction-local `waia.observation_org` / `waia.observation_credential` /
+  `waia.observation_account` context and the credential row tuple, **and** an existing
+  Human-provisioned `public.trader_account_collection_state` row for the same tuple. Unset context
+  yields `NULL` from `current_setting(..., true)` and denies. Knowing a credential UUID grants
+  nothing.
+- The assignment predicate is an RLS subquery evaluated with this role's own privileges, so the role
+  also receives `SELECT (organization_id, credential_id, exchange_account_id)` on the state relation
+  plus the equally GUC-scoped policy `trader_observation_credential_assignment`. That is enough to
+  confirm an assignment the caller already fully named, and not enough to enumerate. Because a
+  narrow grant plus policy expresses the check directly, **no `SECURITY DEFINER` helper was added**.
+
+### Observation credential read path
+
+`lib/trader/account-observation/credential-read-boundary.ts` replaces the generic credential
+repository on the observation path — that repository performs an unprojected read and carries
+store/rotate/revoke/audit authority, neither of which this runtime may hold. The boundary:
+
+- refuses any `(organization, credential)` pair absent from the trusted manifest before any SQL;
+- fails closed on master-key readiness through the existing `assertCredentialDecryptionAllowed`;
+- runs one bounded read-only transaction: `SET TRANSACTION READ ONLY`, `SET LOCAL ROLE
+  waia_account_observation_credential`, statement/lock/transaction timeouts, transaction-local
+  `waia.observation_*` context, then the explicit projection;
+- re-checks the returned identity tuple and active status in process;
+- decrypts through the existing `decryptCredentialPayload`. Crypto is **reused, not forked**: that
+  primitive's parameter type was widened structurally to the four envelope fields it already read,
+  so every existing caller is unchanged;
+- emits fixed `ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:<CODE>` errors that never carry SQL text, row
+  content, ciphertext or key material.
 
 ### Trusted assignment authority
 
@@ -186,7 +236,9 @@ cannot re-collect out of cadence.
 
 No deployment, no image push, no Cloudflare/Supabase/production mutation, no secret injection, no HTX
 credential creation, no real HTX call, no migration apply, no H2/H5/holdout/FHV/Forward-Paper/live step,
-no 0205 edit, no new migration, no 0206–0208 bundling, no order/cancel/amend/transfer/withdraw method,
+no 0205 edit, no 0007 edit, no FORCE RLS change, no `USING (true)` policy, no whole-table
+`exchange_credentials` SELECT, no migration beyond the Architect-authorized additive `0210`, no
+renumbering, no 0206–0208 bundling, no order/cancel/amend/transfer/withdraw method,
 no DEE-978 permission-semantics change, no Execution Server modification, no C3 contact, no AI-TWIN
 worktree change, no UI/SSE/read-projection change, no deploy/rollback shell automation (the ceremony
 runbook documents exact commands instead), no ADR (current canon determines every decision here).
@@ -202,12 +254,16 @@ runbook documents exact commands instead), no ADR (current canon determines ever
    historical Execution Server, whose `FORBIDDEN_RUNTIME_KEYS` refusal stays byte-identical.
 4. A Human-invoked provisioning operator seeds exactly one approved `trader_account_collection_state`
    row, idempotent on an exact match and fail-closed on any conflict, without granting the recurring
-   collector login INSERT authority.
+   collector login INSERT authority. A second Human-only operator provisions exactly the three
+   runtime LOGIN identities, so the recurring Alpha 0 ceremony needs no ad-hoc SQL.
 5. Capital safety is proved by regression: GET-only transport, read-only admission, unchanged
    `legacyOrderSubmissionDisabled()`, and an authority-graph walk showing no reachable Execution V2
    connector dispatch or order/cancel/amend/transfer/withdraw capability.
-6. `db/migrations_postgres/0205_trader_account_observation_v1.sql` is byte-identical and no migration is
-   added or applied.
+6. `db/migrations_postgres/0205_trader_account_observation_v1.sql` and
+   `0007_exchange_credentials_rls.sql` are byte-identical. The single added migration is the
+   Architect-authorized additive `0210_trader_account_observation_credential_v1.sql`; it is not
+   applied by this PR, grants no whole-table credential SELECT, uses no `USING (true)` policy and
+   does not enable FORCE RLS. The credential read is proved assignment-bound on actual PostgreSQL 17.
 7. Local qualification passes: focused unit suites, actual disposable PostgreSQL 17 provisioning
    integration, `pnpm lint`, `pnpm typecheck`, `pnpm build`, canonical-doc validation, PR-governance
    validation, execution consumer/import-graph validation, `git diff --check`.

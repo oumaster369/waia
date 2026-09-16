@@ -1471,6 +1471,13 @@
       "when": 1780000000209,
       "tag": "0209_ai_twin_epistemic_persistence_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 210,
+      "version": "7",
+      "when": 1780000000210,
+      "tag": "0210_trader_account_observation_credential_v1",
+      "breakpoints": true
     }
   ]
 }

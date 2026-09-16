@@ -8,6 +8,7 @@ const suites = [
   "tests/integration/account-observation-migration-postgres.test.ts",
   "tests/integration/trader-account-observation-postgres.test.ts",
   "tests/integration/account-observation-reader-postgres.test.ts",
+  "tests/integration/account-observation-credential-postgres.test.ts",
 ];
 const syntheticUrl = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
 
@@ -76,6 +77,8 @@ describe("account observation PostgreSQL CI contract", () => {
       // DEE-1015: the provisioning proofs in this gate exercise these executable surfaces.
       "scripts/trader/account-observation-collector-host.ts",
       "scripts/ops/account-observation-provision-collection-state-v1.ts",
+      "scripts/ops/provision-account-observation-logins.mjs",
+      "lib/trader/credentials/**", "lib/trader/security/**",
       "services/ai-trader-account-observation-host/**",
       "components/trader/account-observation/**", "app/api/trader/account-observation/**",
       "app/api/trader/admin/account-observation/**", "app/(trader)/admin/account-observation/**",

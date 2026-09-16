@@ -10,7 +10,6 @@ import {
   CredentialDecryptError,
   CredentialPayloadInvalidError,
 } from "@/lib/trader/credentials/errors";
-import type { ExchangeCredentialRow } from "@/lib/trader/credentials/types";
 import {
   DEK_WRAP_AUTH_TAG_BYTE_LENGTH,
   DEK_WRAP_IV_BYTE_LENGTH,
@@ -31,6 +30,18 @@ export type EncryptedCredentialPayload = {
   payloadKeyVersion: string;
   wrappedDekKeyVersion: string;
   wrappedDekKey: string;
+};
+
+/**
+ * The exact stored fields decryption consumes. `ExchangeCredentialRow` satisfies this
+ * structurally, so every existing caller is unchanged, and a narrowly authorized reader can
+ * share this one primitive without selecting credential columns it has no privilege to read.
+ */
+export type StoredCredentialEnvelope = {
+  encryptedPayload: string | null;
+  payloadKeyVersion: string | null;
+  wrappedDekKeyVersion: string | null;
+  wrappedDekKey: string | null;
 };
 
 type CredentialPayloadJson = {
@@ -88,7 +99,7 @@ function parseCredentialPayload(bytes: Uint8Array): ConnectorCredentialInput {
   return result;
 }
 
-function toWrappedDataKey(row: ExchangeCredentialRow): WrappedDataKey {
+function toWrappedDataKey(row: StoredCredentialEnvelope): WrappedDataKey {
   if (!row.wrappedDekKeyVersion || !row.wrappedDekKey) {
     throw new CredentialPayloadInvalidError("Wrapped data key metadata is missing.");
   }
@@ -140,9 +151,9 @@ export async function encryptCredentialPayload(
 }
 
 /** Decrypt envelope-encrypted connector credentials (server-only). */
-export async function decryptCredentialPayload(
+export async function decryptCredentialPayload<Row extends StoredCredentialEnvelope>(
   provider: MasterKeyProvider,
-  row: ExchangeCredentialRow,
+  row: Row,
 ): Promise<ConnectorCredentialInput> {
   if (!row.encryptedPayload || !row.payloadKeyVersion) {
     throw new CredentialPayloadInvalidError();

@@ -15,9 +15,13 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // substitute for the required 0000..0207 prefix.
 // 0209 is DEE-871 AI-TWIN epistemic persistence: unrelated additive tables,
 // never a substitute for the required prefix or a required FHV table.
+// 0210 is DEE-1015 account-observation credential authority: one NOLOGIN role plus
+// narrow column grants and assignment-bound SELECT policies. It creates no table and
+// grants the FHV plane nothing, so it is compatibility-admitted only.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
+  { idx: 210, when: 1780000000210, tag: "0210_trader_account_observation_credential_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
