@@ -5,6 +5,7 @@ if (process.env.VITEST !== "true") {
   require("server-only");
 }
 
+export { credentialPayloadAad } from "@/lib/trader/security/credential-payload-aad";
 export { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 export type { CreateMasterKeyProviderOptions } from "@/lib/trader/security/create-master-key-provider";
 export {
@@ -63,8 +64,3 @@ export {
   SecretsStoreMasterKeyProvider,
   type SecretsStoreBinding,
 } from "@/lib/trader/security/secrets-store-master-key-provider";
-
-// Re-export credential payload AAD prefix for DEE-196 (distinct from DEK wrap AAD).
-export function credentialPayloadAad(keyVersion: string): string {
-  return `waia:trader:cred:${keyVersion}`;
-}

@@ -12,6 +12,14 @@ on:
       - "scripts/postgres-validation/**"
       - "db/local-validation/dee960-account-observation.sql"
       - "lib/trader/account-observation/**"
+      # DEE-1015 executable surfaces: the PostgreSQL provisioning proofs exercise these directly.
+      - "scripts/trader/account-observation-collector-host.ts"
+      - "scripts/ops/account-observation-provision-collection-state-v1.ts"
+      - "scripts/ops/provision-account-observation-logins.mjs"
+      - "services/ai-trader-account-observation-host/**"
+      # DEE-1015 credential authority: the runtime LOGIN and RLS proofs depend on these.
+      - "lib/trader/credentials/**"
+      - "lib/trader/security/**"
       - "components/trader/account-observation/**"
       - "app/api/trader/account-observation/**"
       - "app/api/trader/admin/account-observation/**"
@@ -75,3 +83,4 @@ jobs:
           tests/integration/account-observation-migration-postgres.test.ts
           tests/integration/trader-account-observation-postgres.test.ts
           tests/integration/account-observation-reader-postgres.test.ts
+          tests/integration/account-observation-credential-postgres.test.ts

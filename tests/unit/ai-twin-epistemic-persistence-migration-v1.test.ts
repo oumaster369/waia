@@ -45,13 +45,17 @@ describe("DEE-871 AI-TWIN epistemic persistence migration 0209", () => {
     const journal = JSON.parse(
       readFileSync(join(ROOT, "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<Record<string, unknown>> };
-    expect(journal.entries.at(-1)).toEqual({
-      idx: 209,
-      version: "7",
-      when: 1780000000209,
-      tag: TAG,
-      breakpoints: true,
-    });
+    // Identity is pinned by exact entry, not by journal position: later unrelated additive
+    // migrations may follow without weakening this one.
+    expect(journal.entries.filter((entry) => entry.idx === 209)).toEqual([
+      {
+        idx: 209,
+        version: "7",
+        when: 1780000000209,
+        tag: TAG,
+        breakpoints: true,
+      },
+    ]);
     expect(sql).toContain("--> statement-breakpoint");
     expect(
       createHash("sha256")

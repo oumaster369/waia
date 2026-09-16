@@ -53,7 +53,13 @@ describe("BP-6 architecture boundaries (DEE-339 ratification)", () => {
       .map((entry) => entry.name)
       .sort();
 
-    expect(entries).toEqual(["ai-trader-execution-host", "ai-trader-fhv-observer"]);
+    // DEE-1015 added the dedicated account-observation host as a third approved service; it is a
+    // separate runtime authority and does not relax any execution-host boundary below.
+    expect(entries).toEqual([
+      "ai-trader-account-observation-host",
+      "ai-trader-execution-host",
+      "ai-trader-fhv-observer",
+    ]);
   });
 
   it("keeps execution host free of Cloudflare Worker imports", () => {

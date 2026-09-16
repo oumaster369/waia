@@ -114,9 +114,9 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 129,
-    "sortedPathDigestHex": "0d54b86447d375e244a8faa3a415684eaa5edd78a857e9dcfa1dcc2577b413a0",
-    "sortedContentDigestHex": "4b66aaca0066ed60b19eafe15d5480910bb392fbdce1f140923128782dc7b5ba"
+    "expectedFileCount": 130,
+    "sortedPathDigestHex": "54dec9423bd07eae0d2c28d8fcf5c850ca18edeb3d790625a83491cc7e929b19",
+    "sortedContentDigestHex": "e91232d06d59375d55c3fa85748b6a9fd26ce4a4298bf1b691b0c05cbb3d6c1b"
   },
   "consumerRules": [
     {
@@ -124,6 +124,12 @@
       "pathPattern": "^lib/trader/account-observation/credential-store\\.ts$",
       "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
       "reason": "Explicitly injected protected credential service with authorization and exact binding checks before and after decryption; no exchange calls or canonical Reality/order/capital authority. Separate exact-key exchange admission remains mandatory at the opener."
+    },
+    {
+      "id": "ACCOUNT_OBSERVATION_CREDENTIAL_READ_BOUNDARY",
+      "pathPattern": "^lib/trader/account-observation/credential-read-boundary\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "DEE-1015 assignment-bound credential read for account observation only. Reads one minimal exchange_credentials envelope projection through the dedicated NOLOGIN authority waia_account_observation_credential under transaction-local observation context, reuses the existing envelope decryption primitive and master-key gate, and exposes no list, write, rotate, revoke, audit, order or capital authority. Separate exact-key exchange admission remains mandatory at the opener."
     },
     {
       "id": "ACCOUNT_OBSERVATION_GET_TRANSPORT",
