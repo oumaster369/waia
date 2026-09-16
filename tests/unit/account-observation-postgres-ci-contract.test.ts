@@ -73,6 +73,10 @@ describe("account observation PostgreSQL CI contract", () => {
     expect(workflow).not.toMatch(/^  (?:integration|historical-postgres17):/m);
     for (const path of ["db/migrations_postgres/**", "db/schema.postgres.ts",
       "db/local-validation/dee960-account-observation.sql", "lib/trader/account-observation/**",
+      // DEE-1015: the provisioning proofs in this gate exercise these executable surfaces.
+      "scripts/trader/account-observation-collector-host.ts",
+      "scripts/ops/account-observation-provision-collection-state-v1.ts",
+      "services/ai-trader-account-observation-host/**",
       "components/trader/account-observation/**", "app/api/trader/account-observation/**",
       "app/api/trader/admin/account-observation/**", "app/(trader)/admin/account-observation/**",
       "app/(trader)/trader/**", "tests/helpers/**", "tests/integration/*account-observation*.test.ts",

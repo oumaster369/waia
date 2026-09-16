@@ -16,7 +16,7 @@ import {
   DEK_WRAP_IV_BYTE_LENGTH,
   importAesGcmKey,
 } from "@/lib/trader/security/dek-wrap-crypto";
-import { credentialPayloadAad } from "@/lib/trader/security/index";
+import { credentialPayloadAad } from "@/lib/trader/security/credential-payload-aad";
 import {
   generateDataKey,
   type MasterKeyProvider,

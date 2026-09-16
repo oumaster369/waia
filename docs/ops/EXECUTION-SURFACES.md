@@ -7,6 +7,7 @@ Defines every environment where WAIA work may execute, who may act there, what e
 **Related:**
 
 - [`EXECUTION-SERVER-RUNBOOK.md`](EXECUTION-SERVER-RUNBOOK.md) — AI-TRADER execution plane operations
+- [`ACCOUNT-OBSERVATION-HOST-RUNBOOK.md`](ACCOUNT-OBSERVATION-HOST-RUNBOOK.md) — AI-TRADER account-observation plane operations
 - [`INTEGRATION-BOUNDARY-POLICY.md`](../waia-governance/INTEGRATION-BOUNDARY-POLICY.md) — AUTO / CONFIRM / HUMAN-ONLY
 - [`CURSOR-ENVIRONMENT.md`](CURSOR-ENVIRONMENT.md) — Cursor account restoration
 - [`AGENTS.md`](../../AGENTS.md) — agent execution contract router
@@ -25,6 +26,7 @@ Defines every environment where WAIA work may execute, who may act there, what e
 | `cloudflare-production` | Human | **Yes** (production Worker) | `release.yml` + Cloudflare deploy history |
 | `supabase-postgres` | Infra / operator | **Yes** (schema + data) | Migrations + Supabase advisors/logs |
 | `execution-server` | Human operator | **Yes** (off-Cloudflare host) | `replay-runs/**` + host logs + `deployed-revision.json` |
+| `account-observation-host` | Human operator | **Yes** (off-Cloudflare host) | Provisioning receipt + `/health` identity + host logs |
 
 **No other execution surface exists.** If work requires a new surface, add it here and in the canonical plan schema before use.
 
@@ -155,6 +157,29 @@ Without `--confirm`, each script is a no-op (prints planned actions, exit 0).
 
 ---
 
+## `account-observation-host`
+
+**Purpose:** Off-Cloudflare AI-TRADER **account-observation plane** — a long-lived, credential-capable, read-only observation runtime. A **separate runtime authority** from `execution-server`: that host refuses all credential material, this one refuses historical-runner, live, holdout and venue-plaintext authority. Neither can submit, cancel, amend or transfer anything.
+
+| Aspect | Rule |
+|--------|------|
+| **Host** | Isolated off-Cloudflare host, distinct process and port from the Execution Server |
+| **Service** | `services/ai-trader-account-observation-host/` — own health identity (`:8090`), supervisor + supervised recurring observation consumer, exact-SHA bound |
+| **Code pin** | Image built at an explicit 40-hex SHA; `WAIA_IMAGE_RELEASE_SHA` must equal `WAIA_RELEASE_SHA` or the process refuses to start |
+| **Secrets** | Operator-injected `WAIA_OBSERVATION_MASTER_KEY` + three distinct observation LOGIN URIs — **separate KMS path**, not the Cloudflare Secrets Store binding; `AI_TRADER_MASTER_KEY` and every venue plaintext key are refused |
+| **Assignments** | Digest-bound Human-authored manifest only — never request-, browser- or discovery-derived |
+| **Venue authority** | HTX GET-only against an observation/metadata allowlist, `readonly` key required; no order/cancel/amend/transfer/withdraw path is reachable |
+| **Agents** | Read-only preflight only when the plan lists it; **HUMAN-ONLY** for deploy, secret injection, manifest authoring, collection-state provisioning and start/stop |
+| **Evidence** | Provisioning operator receipt (canonical JSON), `/health` release + manifest digest, host logs |
+
+**Operator runbook:** [`ACCOUNT-OBSERVATION-HOST-RUNBOOK.md`](ACCOUNT-OBSERVATION-HOST-RUNBOOK.md)
+
+Provisioning the initial `trader_account_collection_state` row uses the bounded Human-invoked operator
+[`account-observation-provision-collection-state-v1.ts`](../../scripts/ops/account-observation-provision-collection-state-v1.ts)
+under the provisioning login. The recurring collector login is never granted INSERT authority.
+
+---
+
 ## Classifying work by surface
 
 When grooming or planning an integration batch:
@@ -176,7 +201,8 @@ When grooming or planning an integration batch:
 | `cloudflare-production` | — | — | deploy |
 | `supabase-postgres` | read-only MCP | schema approval | prod data ops |
 | `execution-server` | read-only preflight | — | sync/build/deploy/rollback/live trading |
+| `account-observation-host` | read-only preflight | — | deploy/secrets/manifest/provisioning/start/stop |
 
 ---
 
-*Last updated: 2026-07-10 — vNext Slice D2.*
+*Last updated: 2026-09-16 — DEE-1015 account-observation host surface.*
