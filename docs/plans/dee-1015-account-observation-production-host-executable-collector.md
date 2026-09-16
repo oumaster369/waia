@@ -16,9 +16,9 @@ state:
   currentWorkPackage: WP-5
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4, WP-5]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
+  prNumber: 599
+  prUrl: https://github.com/oumaster369/waia/pull/599
+  lastValidatedGitSha: 8875fc047415c5c2d8c3a80456f93bca12c3edcf
   lastValidationAt: 2026-09-16
   blockedReason: null
   nextAction: "Human review and squash merge; the production Alpha 0 ceremony stays separate and Human-only."
