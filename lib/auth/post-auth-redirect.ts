@@ -1,12 +1,12 @@
 import "server-only";
 
 import { buildModuleUrl, isModuleHost } from "@/lib/hosts/resolve";
-import { hasTraderAccessForUser } from "@/lib/trader/access-gate";
+import { ensureTraderSelfServiceAccessForUser } from "@/lib/trader/self-service-access";
 
 /** Host-aware post-auth redirect target (sign-in / sign-up with session). */
 export async function resolvePostAuthRedirect(request: Request, userId: string): Promise<string> {
   if (isModuleHost(request.headers, "trader")) {
-    const entitled = await hasTraderAccessForUser(userId);
+    const entitled = await ensureTraderSelfServiceAccessForUser(userId);
     if (entitled) {
       return "/trader";
     }

@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     createSessionRow(tx, { sessionId, userId, expiresAtMs });
   });
 
-  const redirectTo = resolvePostSignUpRedirect(request);
+  const redirectTo = await resolvePostAuthRedirect(request, userId);
 
   const res = NextResponse.json({ ok: true as const, redirect: redirectTo }, { status: 201 });
   applySessionCookie(res, sessionId);
