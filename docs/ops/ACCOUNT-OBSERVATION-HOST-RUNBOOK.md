@@ -129,6 +129,12 @@ Nothing here is part of the DEE-1015 PR. Stop at the first refusal.
 1. **Read-only preflight.** Confirm the intended production journal state and that exact H2 step `0205`
    is admissible against the then-current live journal and predecessor. If it is not, stop — that
    decision is a separate governance step, not a runbook workaround.
+
+   The credential parent this host needs lives in migration `0210`, which is applied only through the
+   ordered post-H2 lane ratified in DEE-1018: `0209` first, then `0210`, each as its own Human
+   ceremony via `pnpm trader:post-h2:migrate` —
+   [`POST-H2-MIGRATION-OPERATOR.md`](POST-H2-MIGRATION-OPERATOR.md). Sparse application of `0210`
+   ahead of `0209` is refused, so this host cannot start before both steps have their own receipts.
 2. **Provision the three observation LOGIN identities with the reviewed operator.** No ad-hoc or
    handwritten SQL is used for these recurring runtime identities. Migration `0205` supplies the
    collector and reader parents; migration `0210` supplies the credential parent. The operator
