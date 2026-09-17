@@ -7,7 +7,7 @@ import { TraderLandingPage } from "@/components/trader/public/trader-landing-pag
 import { getOptionalSessionUserId } from "@/lib/auth/session-user";
 import { buildModuleUrl, isModuleHost } from "@/lib/hosts/resolve";
 import { OAUTH_ERROR_QUERY } from "@/lib/oauth/oauth-error-codes";
-import { hasTraderAccessForUser } from "@/lib/trader/access-gate";
+import { ensureTraderSelfServiceAccessForUser } from "@/lib/trader/self-service-access";
 import { readPublicTreasuryForView } from "@/lib/landing/public-data";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -36,7 +36,7 @@ export default async function LandingPage({
 
   if (isTraderHost) {
     if (uid) {
-      const entitled = await hasTraderAccessForUser(uid);
+      const entitled = await ensureTraderSelfServiceAccessForUser(uid);
       if (entitled) {
         redirect("/trader");
       }

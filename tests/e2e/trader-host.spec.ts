@@ -67,14 +67,20 @@ async function gotoExpectingCrossHostRedirect(
 }
 
 test.describe("trader host routing (AT-E1 S2)", () => {
-  test("offers sign-out in exchange and historical workspaces and retains failures", async ({ page }) => {
+  test("offers sign-out in exchange and historical workspaces and retains failures", async ({
+    page,
+  }) => {
     for (const path of ["/trader", "/trader?campaign_run_id=e2e-sign-out"]) {
       await page.goto(path);
       const signOut = page.getByRole("button", { name: "Sign out", exact: true });
       await expect(signOut).toBeVisible();
-      await page.route("**/api/auth/sign-out", (route) => route.fulfill({ status: 503, json: { ok: false } }));
+      await page.route("**/api/auth/sign-out", (route) =>
+        route.fulfill({ status: 503, json: { ok: false } }),
+      );
       await signOut.click();
-      await expect(page.getByRole("alert").filter({ hasText: "Sign out could not be confirmed" })).toBeVisible();
+      await expect(
+        page.getByRole("alert").filter({ hasText: "Sign out could not be confirmed" }),
+      ).toBeVisible();
       await expect(signOut).toBeEnabled();
       expect(new URL(page.url()).pathname).toBe("/trader");
       await page.unroute("**/api/auth/sign-out");
@@ -83,12 +89,18 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     }
   });
 
-  test("signs out an entitled SQLite session and denies subsequent protected reads", async ({ page, baseURL, browser }) => {
+  test("signs out an entitled SQLite session and denies subsequent protected reads", async ({
+    page,
+    baseURL,
+    browser,
+  }) => {
     const email = `e2e-trader-sign-out-${Date.now()}@example.com`;
     const primaryContext = await browser.newContext({ baseURL: primaryBaseUrl(baseURL) });
     try {
       await signUpAndOpenDashboard(await primaryContext.newPage(), email);
-    } finally { await primaryContext.close(); }
+    } finally {
+      await primaryContext.close();
+    }
     grantTraderEntitlementByUserEmail(email);
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
@@ -106,11 +118,18 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     expect(restoredAccess.status()).toBe(200);
   });
 
-  test("signs out from the admin console and removes protected access", async ({ page, baseURL, browser }) => {
+  test("signs out from the admin console and removes protected access", async ({
+    page,
+    baseURL,
+    browser,
+  }) => {
     const email = `e2e-trader-admin-sign-out-${Date.now()}@example.com`;
     const primaryContext = await browser.newContext({ baseURL: primaryBaseUrl(baseURL) });
-    try { await signUpAndOpenDashboard(await primaryContext.newPage(), email); }
-    finally { await primaryContext.close(); }
+    try {
+      await signUpAndOpenDashboard(await primaryContext.newPage(), email);
+    } finally {
+      await primaryContext.close();
+    }
     grantTraderEntitlementByUserEmail(email);
     grantPlatformAdminByUserEmail(email);
     await signInOnLanding(page, email, TRADER_PASSWORD);
@@ -163,7 +182,9 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await expect(page.locator(":focus")).toBeVisible();
   });
 
-  test("keeps Trader registration and login free of Twin wording on desktop and mobile", async ({ page }) => {
+  test("keeps Trader registration and login free of Twin wording on desktop and mobile", async ({
+    page,
+  }) => {
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
@@ -176,7 +197,9 @@ test.describe("trader host routing (AT-E1 S2)", () => {
       await expect(page.getByTestId("landing-auth-submit")).toHaveText("Register");
       await page.getByTestId("landing-auth-submit").click();
       await expect(page.getByTestId("landing-auth-error")).toHaveText("Enter your name.");
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
       await auth.screenshot({ path: `test-results/trader-registration-${width}.png` });
       await page.getByTestId("landing-auth-mode-sign-in").click();
       await expect(auth.getByRole("heading")).toHaveText("Sign in to AI-TRADER");
@@ -208,12 +231,12 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await expect(page.getByTestId("trader-workspace")).toBeVisible();
   });
 
-  test("keeps a non-entitled user in a data-empty shell while APIs reject access", async ({
+  test("admits a partner with no prior entitlement straight into /trader", async ({
     page,
     baseURL,
     browser,
   }) => {
-    const email = `e2e-trader-host-deny-${Date.now()}@example.com`;
+    const email = `e2e-trader-self-service-${Date.now()}@example.com`;
     const primaryContext = await browser.newContext({
       baseURL: primaryBaseUrl(baseURL),
     });
@@ -221,13 +244,34 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signUpAndOpenDashboard(primaryPage, email);
     await primaryContext.close();
 
+    // Deliberately no grantTraderEntitlementByUserEmail: admission must be self-service.
     await signInOnLanding(page, email, TRADER_PASSWORD);
-    await page.waitForURL(primaryLandingUrlPattern(baseURL));
+    await page.waitForURL("**/trader");
 
-    await page.goto("/trader");
+    await expect(page.getByTestId("trader-workspace")).toBeVisible();
+    await expect(page.getByTestId("trader-connect-form")).toBeVisible();
+    expect((await page.request.get("/api/trader/exchange-credentials")).status()).toBe(200);
+
+    // Repeat entry is idempotent and never bounces the partner away.
+    await page.goto("/");
     await expect(page).toHaveURL("/trader");
-    await expectStaticShellContainsNoProtectedData(page);
-    await expectProtectedObserverApisFailClosed(page, 403);
+  });
+
+  test("registers a brand-new partner on the trader host and lands them in /trader", async ({
+    page,
+  }) => {
+    const email = `e2e-trader-register-${Date.now()}@example.com`;
+
+    await page.goto("/");
+    await page.getByTestId("landing-auth-mode-create").click();
+    await page.getByTestId("landing-auth-full-name").fill("Alpha Partner");
+    await page.getByTestId("landing-auth-identity").fill(email);
+    await page.getByTestId("landing-auth-password").fill(TRADER_PASSWORD);
+    await page.getByTestId("landing-auth-submit").click();
+
+    await page.waitForURL("**/trader");
+    await expect(page.getByTestId("trader-connect-form")).toBeVisible();
+    expect((await page.request.get("/api/trader/exchange-credentials")).status()).toBe(200);
   });
 
   test("redirects trader host /dashboard to primary landing", async ({ page, baseURL }) => {

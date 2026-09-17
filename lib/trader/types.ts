@@ -1,6 +1,7 @@
 /** AI-TRADER audit action constants (AT-E1 scaffolding). */
 export const traderAuditActions = {
   orgProfileCreated: "trader.org_profile.created",
+  moduleEntitlementSelfServiceGranted: "trader.module_entitlement.self_service_granted",
   credentialCreated: "trader.credential.created",
   credentialRotated: "trader.credential.rotated",
   credentialRevoked: "trader.credential.revoked",
@@ -93,6 +94,7 @@ export type TraderAuditAction = (typeof traderAuditActions)[keyof typeof traderA
 /** AI-TRADER audit entity type constants. */
 export const traderEntityTypes = {
   orgProfile: "trader.org_profile",
+  moduleEntitlement: "trader.module_entitlement",
   exchangeCredential: "trader.exchange_credential",
   balanceSnapshot: "trader.balance_snapshot",
   positionSnapshot: "trader.position_snapshot",
