@@ -138,22 +138,24 @@ function assertDirectPostgresUrl(value: string): void {
 }
 
 export async function readH2TargetIdentity(sql: Sql): Promise<H2TargetIdentity> {
-  const rows = await sql<Readonly<{
-    database_name: string;
-    database_oid: string;
-    system_identifier: string;
-    current_user_name: string;
-    server_address: string | null;
-    server_port: string | null;
-    server_version_num: string;
-    journal_owner: string | null;
-    transaction_read_only: string;
-    in_recovery: boolean;
-    role_superuser: boolean;
-    role_create_role: boolean;
-    public_schema_usage: boolean;
-    public_schema_create: boolean;
-  }>[]>`
+  const rows = await sql<
+    Readonly<{
+      database_name: string;
+      database_oid: string;
+      system_identifier: string;
+      current_user_name: string;
+      server_address: string | null;
+      server_port: string | null;
+      server_version_num: string;
+      journal_owner: string | null;
+      transaction_read_only: string;
+      in_recovery: boolean;
+      role_superuser: boolean;
+      role_create_role: boolean;
+      public_schema_usage: boolean;
+      public_schema_create: boolean;
+    }>[]
+  >`
     SELECT current_database() AS database_name,
       database.oid::text AS database_oid,
       control.system_identifier::text AS system_identifier,
@@ -293,14 +295,16 @@ async function assertRelevantWritersQuiesced(sql: Sql): Promise<void> {
 }
 
 async function policySnapshot(sql: Sql, policyName: string) {
-  const rows = await sql<Readonly<{
-    policy_name: string;
-    command: string;
-    permissive: boolean;
-    roles: string[];
-    using_expression: string | null;
-    check_expression: string | null;
-  }>[]>`
+  const rows = await sql<
+    Readonly<{
+      policy_name: string;
+      command: string;
+      permissive: boolean;
+      roles: string[];
+      using_expression: string | null;
+      check_expression: string | null;
+    }>[]
+  >`
     SELECT policy.polname AS policy_name, policy.polcmd AS command,
       policy.polpermissive AS permissive,
       ARRAY(
@@ -318,15 +322,17 @@ async function policySnapshot(sql: Sql, policyName: string) {
 }
 
 async function verify0205(sql: Sql): Promise<unknown> {
-  const roles = await sql<Readonly<{
-    rolname: string;
-    rolcanlogin: boolean;
-    rolinherit: boolean;
-    rolsuper: boolean;
-    rolbypassrls: boolean;
-    rolcreatedb: boolean;
-    rolcreaterole: boolean;
-  }>[]>`
+  const roles = await sql<
+    Readonly<{
+      rolname: string;
+      rolcanlogin: boolean;
+      rolinherit: boolean;
+      rolsuper: boolean;
+      rolbypassrls: boolean;
+      rolcreatedb: boolean;
+      rolcreaterole: boolean;
+    }>[]
+  >`
     SELECT rolname,rolcanlogin,rolinherit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole
     FROM pg_roles
     WHERE rolname IN ('waia_account_observer','waia_account_observation_reader')
@@ -334,18 +340,25 @@ async function verify0205(sql: Sql): Promise<unknown> {
   `;
   if (
     roles.length !== 2 ||
-    roles.some((role) =>
-      role.rolcanlogin || role.rolsuper || role.rolbypassrls || role.rolcreatedb ||
-      role.rolcreaterole ||
-      (role.rolname === "waia_account_observation_reader" && role.rolinherit))
+    roles.some(
+      (role) =>
+        role.rolcanlogin ||
+        role.rolsuper ||
+        role.rolbypassrls ||
+        role.rolcreatedb ||
+        role.rolcreaterole ||
+        (role.rolname === "waia_account_observation_reader" && role.rolinherit),
+    )
   ) {
     refuseH2("CATALOG_0205_ROLES", "unsafe role posture");
   }
-  const tables = await sql<Readonly<{
-    relname: string;
-    row_security: boolean;
-    force_row_security: boolean;
-  }>[]>`
+  const tables = await sql<
+    Readonly<{
+      relname: string;
+      row_security: boolean;
+      force_row_security: boolean;
+    }>[]
+  >`
     SELECT relname,relrowsecurity AS row_security,relforcerowsecurity AS force_row_security
     FROM pg_class
     WHERE oid IN (
@@ -354,7 +367,10 @@ async function verify0205(sql: Sql): Promise<unknown> {
     )
     ORDER BY relname
   `;
-  if (tables.length !== 2 || tables.some((table) => !table.row_security || !table.force_row_security)) {
+  if (
+    tables.length !== 2 ||
+    tables.some((table) => !table.row_security || !table.force_row_security)
+  ) {
     refuseH2("CATALOG_0205_RLS", "table posture");
   }
   const columns = await sql<Readonly<{ column_name: string; is_nullable: string }>[]>`
@@ -389,14 +405,17 @@ async function verify0205(sql: Sql): Promise<unknown> {
     "trader_observer_state",
   ];
   const policies = await Promise.all(policyNames.map((name) => policySnapshot(sql, name)));
-  const privileges = (await sql<Readonly<{
-    reader_secret: boolean;
-    reader_insert: boolean;
-    observer_secret: boolean;
-    observer_revision_update: boolean;
-    public_immutable_execute: boolean;
-    public_revision_execute: boolean;
-  }>[]>`
+  const privileges = (
+    await sql<
+      Readonly<{
+        reader_secret: boolean;
+        reader_insert: boolean;
+        observer_secret: boolean;
+        observer_revision_update: boolean;
+        public_immutable_execute: boolean;
+        public_revision_execute: boolean;
+      }>[]
+    >`
     SELECT
       has_column_privilege('waia_account_observation_reader','public.exchange_credentials',
         'encrypted_payload','SELECT') AS reader_secret,
@@ -410,7 +429,8 @@ async function verify0205(sql: Sql): Promise<unknown> {
         'EXECUTE') AS public_immutable_execute,
       has_function_privilege('public','public.trader_observation_credential_revision()',
         'EXECUTE') AS public_revision_execute
-  `)[0];
+  `
+  )[0];
   if (
     !privileges ||
     privileges.reader_secret ||
@@ -434,12 +454,20 @@ async function verifyAdmissionPolicy(sql: Sql, step: "0206" | "0207"): Promise<u
     "694d625c2120d3e5410a7395646bd0bae728ea08e08fc8ea93043061cdb8d8de",
     "REQUEST_EXACT_PRE_HOLDOUT_TECHNICAL_PROPOSAL",
   ];
-  const versionTokens = step === "0206"
-    ? ["scientific-admission-receipt/v3", "predictive-terminal-receipt/v2",
-      "research-harness-admission/v4"]
-    : ["scientific-admission-receipt/v4", "predictive-terminal-receipt/v3",
-      "research-harness-admission/v5", "cdf-erf-cody715/v2",
-      "7b8dfb5540833d8e915ecf2456594e366e0fc9c11c8e33f9df6a0732f3d8a09f"];
+  const versionTokens =
+    step === "0206"
+      ? [
+          "scientific-admission-receipt/v3",
+          "predictive-terminal-receipt/v2",
+          "research-harness-admission/v4",
+        ]
+      : [
+          "scientific-admission-receipt/v4",
+          "predictive-terminal-receipt/v3",
+          "research-harness-admission/v5",
+          "cdf-erf-cody715/v2",
+          "7b8dfb5540833d8e915ecf2456594e366e0fc9c11c8e33f9df6a0732f3d8a09f",
+        ];
   const forbidden = step === "0206" ? ["cdf-erf-cody715/v2"] : ["scientific-admission-receipt/v3"];
   if (
     policy.command !== "a" ||
@@ -459,11 +487,13 @@ async function verify0208(sql: Sql): Promise<unknown> {
     "trader_historical_rehearsal_started_v1",
     "trader_historical_scientific_admission_refusal_v1",
   ] as const;
-  const tables = await sql<Readonly<{
-    relname: string;
-    row_security: boolean;
-    force_row_security: boolean;
-  }>[]>`
+  const tables = await sql<
+    Readonly<{
+      relname: string;
+      row_security: boolean;
+      force_row_security: boolean;
+    }>[]
+  >`
     SELECT relname,relrowsecurity AS row_security,relforcerowsecurity AS force_row_security
     FROM pg_class
     WHERE oid IN (
@@ -472,24 +502,50 @@ async function verify0208(sql: Sql): Promise<unknown> {
     )
     ORDER BY relname
   `;
-  if (tables.length !== 2 || tables.some((table) => !table.row_security || !table.force_row_security)) {
+  if (
+    tables.length !== 2 ||
+    tables.some((table) => !table.row_security || !table.force_row_security)
+  ) {
     refuseH2("CATALOG_0208_RLS", "table posture");
   }
   const expectedColumns = Object.freeze({
     trader_historical_rehearsal_started_v1: [
-      "account_id", "admin_observation_binding_digest_hex", "consumer_claim_digest_hex",
-      "content_digest_hex", "created_at", "four_surface_authority_content_digest_hex",
-      "four_surface_authority_id", "id", "image_health_binding_digest_hex",
-      "lease_digest_hex", "lifecycle_content_digest_hex", "organization_id",
-      "proposal_content_digest_hex", "proposal_id", "ratification_content_digest_hex",
-      "ratification_id", "receipt_json", "release_sha", "run_id",
-      "runtime_release_binding_receipt_digest_hex", "schema_version",
+      "account_id",
+      "admin_observation_binding_digest_hex",
+      "consumer_claim_digest_hex",
+      "content_digest_hex",
+      "created_at",
+      "four_surface_authority_content_digest_hex",
+      "four_surface_authority_id",
+      "id",
+      "image_health_binding_digest_hex",
+      "lease_digest_hex",
+      "lifecycle_content_digest_hex",
+      "organization_id",
+      "proposal_content_digest_hex",
+      "proposal_id",
+      "ratification_content_digest_hex",
+      "ratification_id",
+      "receipt_json",
+      "release_sha",
+      "run_id",
+      "runtime_release_binding_receipt_digest_hex",
+      "schema_version",
       "tenant_observation_binding_digest_hex",
     ],
     trader_historical_scientific_admission_refusal_v1: [
-      "content_digest_hex", "coverage_digest_hex", "created_at", "holm_family_pass", "id",
-      "organization_id", "reason_code", "receipt_json", "release_sha", "run_id",
-      "runtime_release_binding_receipt_digest_hex", "schema_version",
+      "content_digest_hex",
+      "coverage_digest_hex",
+      "created_at",
+      "holm_family_pass",
+      "id",
+      "organization_id",
+      "reason_code",
+      "receipt_json",
+      "release_sha",
+      "run_id",
+      "runtime_release_binding_receipt_digest_hex",
+      "schema_version",
     ],
   });
   const columns = await sql<Readonly<{ table_name: string; column_name: string }>[]>`
@@ -502,10 +558,13 @@ async function verify0208(sql: Sql): Promise<unknown> {
     ORDER BY table_name,column_name
   `;
   for (const tableName of tableNames) {
-    const actual = columns.filter((column) => column.table_name === tableName)
+    const actual = columns
+      .filter((column) => column.table_name === tableName)
       .map((column) => column.column_name);
-    if (canonicalJson(actual) !==
-      canonicalJson(expectedColumns[tableName as keyof typeof expectedColumns])) {
+    if (
+      canonicalJson(actual) !==
+      canonicalJson(expectedColumns[tableName as keyof typeof expectedColumns])
+    ) {
       refuseH2("CATALOG_0208_COLUMNS", tableName);
     }
   }
@@ -562,14 +621,17 @@ async function verify0208(sql: Sql): Promise<unknown> {
   if (functionRows.length !== 1 || functionRows[0]?.volatility !== "i") {
     refuseH2("CATALOG_0208_FUNCTION", "comparison identity validator");
   }
-  const privileges = (await sql<Readonly<{
-    runner_refusal_select: boolean;
-    runner_refusal_insert: boolean;
-    runner_rehearsal_select: boolean;
-    runner_rehearsal_insert: boolean;
-    browser_refusal_insert: boolean;
-    browser_rehearsal_insert: boolean;
-  }>[]>`
+  const privileges = (
+    await sql<
+      Readonly<{
+        runner_refusal_select: boolean;
+        runner_refusal_insert: boolean;
+        runner_rehearsal_select: boolean;
+        runner_rehearsal_insert: boolean;
+        browser_refusal_insert: boolean;
+        browser_rehearsal_insert: boolean;
+      }>[]
+    >`
     SELECT
       has_table_privilege('waia_historical_runner',
         'public.trader_historical_scientific_admission_refusal_v1','SELECT')
@@ -589,7 +651,8 @@ async function verify0208(sql: Sql): Promise<unknown> {
       has_any_column_privilege('authenticated',
         'public.trader_historical_rehearsal_started_v1','INSERT')
         AS browser_rehearsal_insert
-  `)[0];
+  `
+  )[0];
   if (
     !privileges?.runner_refusal_select ||
     !privileges.runner_refusal_insert ||
@@ -618,86 +681,77 @@ function quotedCatalogNames(names: readonly string[]): string {
 }
 
 async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<unknown> {
-  const profile = step === "0205"
-    ? {
-      relations: [
-        "exchange_credentials",
-        "trader_account_collection_state",
-        "trader_account_observations",
-      ],
-      completeRelations: [
-        "trader_account_collection_state",
-        "trader_account_observations",
-      ],
-      policies: [
-        "trader_observation_reader_credential",
-        "trader_observation_reader_records",
-        "trader_observation_reader_state",
-        "trader_observer_credential_lock",
-        "trader_observer_credential_read",
-        "trader_observer_records",
-        "trader_observer_state",
-      ],
-      triggers: [
-        "trader_observation_credential_revision",
-        "trader_observation_immutable",
-      ],
-      functions: [
-        "trader_observation_credential_revision",
-        "trader_observation_immutable",
-      ],
-      roles: ["waia_account_observation_reader", "waia_account_observer"],
-      grantees: [
-        "PUBLIC",
-        "anon",
-        "authenticated",
-        "waia_account_observation_reader",
-        "waia_account_observer",
-      ],
-    }
-    : step === "0206" || step === "0207"
+  const profile =
+    step === "0205"
       ? {
-        relations: ["trader_scientific_admission_receipt_v1"],
-        completeRelations: [],
-        policies: ["historical_scientific_admission_runner_insert_v2"],
-        triggers: [],
-        functions: [],
-        roles: ["waia_historical_runner", "waia_historical_runner_login"],
-        grantees: ["PUBLIC", "anon", "authenticated", "waia_historical_runner"],
-      }
-      : {
-        relations: [
-          "trader_historical_rehearsal_started_v1",
-          "trader_historical_scientific_admission_refusal_v1",
-        ],
-        completeRelations: [
-          "trader_historical_rehearsal_started_v1",
-          "trader_historical_scientific_admission_refusal_v1",
-        ],
-        policies: [
-          "historical_rehearsal_started_v1_deny_browser",
-          "historical_rehearsal_started_v1_owner_read",
-          "historical_rehearsal_started_v1_runner_insert",
-          "historical_rehearsal_started_v1_runner_read",
-          "historical_scientific_admission_refusal_v1_deny_browser",
-          "historical_scientific_admission_refusal_v1_owner_read",
-          "historical_scientific_admission_refusal_v1_runner_insert",
-          "historical_scientific_admission_refusal_v1_runner_read",
-        ],
-        triggers: [
-          "historical_rehearsal_started_v1_block_mutation",
-          "historical_scientific_admission_refusal_v1_block_mutation",
-        ],
-        functions: ["waia_historical_refusal_comparison_identities_valid_v1"],
-        roles: ["waia_historical_runner", "waia_historical_runner_login"],
-        grantees: ["PUBLIC", "anon", "authenticated", "waia_historical_runner"],
-      };
+          relations: [
+            "exchange_credentials",
+            "trader_account_collection_state",
+            "trader_account_observations",
+          ],
+          completeRelations: ["trader_account_collection_state", "trader_account_observations"],
+          policies: [
+            "trader_observation_reader_credential",
+            "trader_observation_reader_records",
+            "trader_observation_reader_state",
+            "trader_observer_credential_lock",
+            "trader_observer_credential_read",
+            "trader_observer_records",
+            "trader_observer_state",
+          ],
+          triggers: ["trader_observation_credential_revision", "trader_observation_immutable"],
+          functions: ["trader_observation_credential_revision", "trader_observation_immutable"],
+          roles: ["waia_account_observation_reader", "waia_account_observer"],
+          grantees: [
+            "PUBLIC",
+            "anon",
+            "authenticated",
+            "waia_account_observation_reader",
+            "waia_account_observer",
+          ],
+        }
+      : step === "0206" || step === "0207"
+        ? {
+            relations: ["trader_scientific_admission_receipt_v1"],
+            completeRelations: [],
+            policies: ["historical_scientific_admission_runner_insert_v2"],
+            triggers: [],
+            functions: [],
+            roles: ["waia_historical_runner", "waia_historical_runner_login"],
+            grantees: ["PUBLIC", "anon", "authenticated", "waia_historical_runner"],
+          }
+        : {
+            relations: [
+              "trader_historical_rehearsal_started_v1",
+              "trader_historical_scientific_admission_refusal_v1",
+            ],
+            completeRelations: [
+              "trader_historical_rehearsal_started_v1",
+              "trader_historical_scientific_admission_refusal_v1",
+            ],
+            policies: [
+              "historical_rehearsal_started_v1_deny_browser",
+              "historical_rehearsal_started_v1_owner_read",
+              "historical_rehearsal_started_v1_runner_insert",
+              "historical_rehearsal_started_v1_runner_read",
+              "historical_scientific_admission_refusal_v1_deny_browser",
+              "historical_scientific_admission_refusal_v1_owner_read",
+              "historical_scientific_admission_refusal_v1_runner_insert",
+              "historical_scientific_admission_refusal_v1_runner_read",
+            ],
+            triggers: [
+              "historical_rehearsal_started_v1_block_mutation",
+              "historical_scientific_admission_refusal_v1_block_mutation",
+            ],
+            functions: ["waia_historical_refusal_comparison_identities_valid_v1"],
+            roles: ["waia_historical_runner", "waia_historical_runner_login"],
+            grantees: ["PUBLIC", "anon", "authenticated", "waia_historical_runner"],
+          };
   const relations = quotedCatalogNames(profile.relations);
   const functions = profile.functions.length > 0 ? quotedCatalogNames(profile.functions) : "''";
   const roles = quotedCatalogNames(profile.roles);
-  const completeRelations = profile.completeRelations.length > 0
-    ? quotedCatalogNames(profile.completeRelations)
-    : "''";
+  const completeRelations =
+    profile.completeRelations.length > 0 ? quotedCatalogNames(profile.completeRelations) : "''";
   const constraintRelations = step === "0205" ? relations : completeRelations;
 
   const relationRows = await sql.unsafe(`
@@ -927,8 +981,9 @@ async function acquireH2Locks(sql: Sql, source: H2CanonicalSource): Promise<void
   }
 }
 
-function buildReceipt(input: Omit<H2OperationReceipt, "schemaVersion" | "contentDigestHex">):
-  H2OperationReceipt {
+function buildReceipt(
+  input: Omit<H2OperationReceipt, "schemaVersion" | "contentDigestHex">,
+): H2OperationReceipt {
   const body = Object.freeze({ schemaVersion: H2_MIGRATION_RECEIPT_SCHEMA, ...input });
   return Object.freeze({ ...body, contentDigestHex: semanticDigest(body) });
 }
@@ -996,10 +1051,7 @@ async function verifyReadOnly(
         catalogVerificationDigest = await verifyH2MigrationCatalog(sql, input.step);
       }
     }
-    if (
-      applyMetadata &&
-      catalogVerificationDigest !== applyMetadata.catalogVerificationDigest
-    ) {
+    if (applyMetadata && catalogVerificationDigest !== applyMetadata.catalogVerificationDigest) {
       refuseH2("POST_COMMIT_CATALOG_MISMATCH", input.step);
     }
     const receipt = buildReceipt({
@@ -1031,9 +1083,10 @@ async function verifyReadOnly(
   } catch (error) {
     if (transactionOpen) await sql.unsafe("ROLLBACK").catch(() => undefined);
     if (error instanceof H2MigrationOperatorError) throw error;
-    const code = typeof error === "object" && error && "code" in error
-      ? String((error as { code?: unknown }).code ?? "UNKNOWN")
-      : "UNKNOWN";
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String((error as { code?: unknown }).code ?? "UNKNOWN")
+        : "UNKNOWN";
     refuseH2("READ_ONLY_VERIFICATION_FAILED", code);
   } finally {
     reserved.release();
@@ -1153,16 +1206,14 @@ export async function runH2MigrationOperation(
       await dependencies.testHooks?.afterCommit?.();
     } catch {
       transactionOpen = false;
-      refuseH2(
-        "COMMIT_RESULT_UNCERTAIN",
-        `do not retry; run --verify-only --step ${input.step}`,
-      );
+      refuseH2("COMMIT_RESULT_UNCERTAIN", `do not retry; run --verify-only --step ${input.step}`);
     }
   } catch (error) {
     if (error instanceof H2MigrationOperatorError) throw error;
-    const code = typeof error === "object" && error && "code" in error
-      ? String((error as { code?: unknown }).code ?? "UNKNOWN")
-      : "UNKNOWN";
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String((error as { code?: unknown }).code ?? "UNKNOWN")
+        : "UNKNOWN";
     if (code === "55P03" || code === "57014") {
       refuseH2("LOCK_TIMEOUT", input.step);
     }
@@ -1172,14 +1223,11 @@ export async function runH2MigrationOperation(
     reserved.release();
     await pool.end({ timeout: 5 }).catch(() => undefined);
   }
-  return verifyReadOnly(
-    input,
-    source,
-    evidence,
-    dependencies,
-    liveJournalDigestBefore,
-    { transactionIdentity, catalogVerificationDigest, commitTimestamp },
-  );
+  return verifyReadOnly(input, source, evidence, dependencies, liveJournalDigestBefore, {
+    transactionIdentity,
+    catalogVerificationDigest,
+    commitTimestamp,
+  });
 }
 
 type CliArguments = Omit<H2OperationInput, "databaseUrl" | "repoRoot">;
@@ -1256,9 +1304,10 @@ if (invokedPath === resolve(fileURLToPath(import.meta.url))) {
     if (error instanceof H2MigrationOperatorError) {
       process.stderr.write(error.message + "\n");
     } else {
-      const code = typeof error === "object" && error && "code" in error
-        ? String((error as { code?: unknown }).code ?? "UNKNOWN")
-        : "UNKNOWN";
+      const code =
+        typeof error === "object" && error && "code" in error
+          ? String((error as { code?: unknown }).code ?? "UNKNOWN")
+          : "UNKNOWN";
       process.stderr.write(`H2_MIGRATION_REFUSED:UNEXPECTED:${code}\n`);
     }
     process.exitCode = 1;
