@@ -126,15 +126,27 @@ describe("DEE-1020 canonical authority classes", () => {
       const file = available.find((name) => name.startsWith(`${step}_`) && name.endsWith(".sql"));
       if (!file) throw new Error(`missing migration for step ${step}`);
       const sql = readFileSync(resolve(directory, file), "utf8");
-      for (const match of sql.matchAll(/REVOKE\s+ALL\s+ON\s+([^;]*?)\s+FROM\s+([^;]+);/gi)) {
-        const [, objects, grantees] = match;
-        if (!objects || !grantees || /^\s*FUNCTION\b/i.test(objects)) continue;
+      // Accepts every table-REVOKE spelling PostgreSQL allows, not just the one the current
+      // migrations happen to use, so a future `REVOKE ALL PRIVILEGES ON TABLE ...` or a revocation of
+      // named privileges cannot leave the parser and the constant jointly blind to a new hardening.
+      const statement =
+        /REVOKE\s+(?:GRANT\s+OPTION\s+FOR\s+)?([A-Z, ()\w]*?)\s+ON\s+(?:TABLE\s+)?([^;]*?)\s+FROM\s+([^;]+);/gi;
+      for (const match of sql.matchAll(statement)) {
+        const [, privileges, objects, grantees] = match;
+        if (!privileges || !objects || !grantees) continue;
+        if (/\b(?:FUNCTION|PROCEDURE|ROUTINE|SCHEMA|SEQUENCE|DATABASE|TYPE)\b/i.test(objects)) {
+          continue;
+        }
         const principals = grantees.split(",").map((name) => name.trim().toLowerCase());
-        if (!principals.includes("anon") || !principals.includes("authenticated")) continue;
-        if (!principals.includes("public")) continue;
+        if (!["public", "anon", "authenticated"].every((name) => principals.includes(name))) {
+          continue;
+        }
         for (const object of objects.split(",")) {
-          const name = object.trim().replace(/^public\./i, "");
-          if (name.length > 0) hardened.add(name);
+          const name = object
+            .trim()
+            .replace(/^public\./i, "")
+            .replace(/"/g, "");
+          if (name.length > 0 && /^\w+$/.test(name)) hardened.add(name);
         }
       }
     }
