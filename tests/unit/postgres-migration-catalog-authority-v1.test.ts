@@ -9,7 +9,11 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+
 import {
+  BROWSER_HARDENED_RELATIONS,
   PLATFORM_BASELINE_TABLE_PRIVILEGES,
   PLATFORM_MANAGED_PRINCIPALS,
   WAIA_DATA_AUTHORITY_PRIVILEGES,
@@ -108,6 +112,33 @@ describe("DEE-1020 canonical authority classes", () => {
         "CATALOG_AUTHORITY_CREATOR_MEMBERSHIP",
       );
     }
+  });
+
+  it("derives the browser-hardened relation set from the ratified migration SQL", () => {
+    // The constant is only sound while it matches what the migrations actually revoke. Reading the
+    // ratified SQL here means adding a step that hardens a relation, or removing a REVOKE, fails this
+    // test instead of silently leaving a structural re-grant admissible.
+    const steps = ["0205", "0206", "0207", "0208", "0209", "0210"] as const;
+    const directory = resolve(process.cwd(), "db/migrations_postgres");
+    const hardened = new Set<string>();
+    const available = readdirSync(directory);
+    for (const step of steps) {
+      const file = available.find((name) => name.startsWith(`${step}_`) && name.endsWith(".sql"));
+      if (!file) throw new Error(`missing migration for step ${step}`);
+      const sql = readFileSync(resolve(directory, file), "utf8");
+      for (const match of sql.matchAll(/REVOKE\s+ALL\s+ON\s+([^;]*?)\s+FROM\s+([^;]+);/gi)) {
+        const [, objects, grantees] = match;
+        if (!objects || !grantees || /^\s*FUNCTION\b/i.test(objects)) continue;
+        const principals = grantees.split(",").map((name) => name.trim().toLowerCase());
+        if (!principals.includes("anon") || !principals.includes("authenticated")) continue;
+        if (!principals.includes("public")) continue;
+        for (const object of objects.split(",")) {
+          const name = object.trim().replace(/^public\./i, "");
+          if (name.length > 0) hardened.add(name);
+        }
+      }
+    }
+    expect([...hardened].sort()).toEqual([...BROWSER_HARDENED_RELATIONS].sort());
   });
 
   it("admits PostgreSQL's stock PUBLIC EXECUTE and refuses any named-role EXECUTE", () => {

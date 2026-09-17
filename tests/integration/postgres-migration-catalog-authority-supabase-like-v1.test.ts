@@ -318,6 +318,31 @@ describe.skipIf(!enabled)("DEE-1020 Supabase-class canonical catalog authority",
       refusal: "CATALOG_AUTHORITY_STRUCTURAL_GRANT",
     },
     {
+      name: "destructive TRUNCATE re-granted to a browser role on a hardened observation table",
+      step: "0205" as Step,
+      injection: "GRANT TRUNCATE ON public.trader_account_observations TO authenticated",
+      refusal: "CATALOG_AUTHORITY_HARDENED_RELATION",
+    },
+    {
+      name: "TRIGGER re-granted to a browser role on a hardened observation table",
+      step: "0205" as Step,
+      injection: "GRANT TRIGGER ON public.trader_account_collection_state TO anon",
+      refusal: "CATALOG_AUTHORITY_HARDENED_RELATION",
+    },
+    {
+      name: "a structural re-grant to a browser role on a hardened historical receipt table",
+      step: "0208" as Step,
+      injection:
+        "GRANT REFERENCES ON public.trader_historical_rehearsal_started_v1 TO authenticated",
+      refusal: "CATALOG_AUTHORITY_HARDENED_RELATION",
+    },
+    {
+      name: "a browser structural re-grant still refused when a later step covers the relation",
+      step: "0210" as Step,
+      injection: "GRANT TRUNCATE ON public.trader_account_collection_state TO authenticated",
+      refusal: "CATALOG_AUTHORITY_HARDENED_RELATION",
+    },
+    {
       name: "named function EXECUTE on an observation trigger function",
       step: "0205" as Step,
       injection: "GRANT EXECUTE ON FUNCTION public.trader_observation_immutable() TO anon",

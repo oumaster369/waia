@@ -31,7 +31,8 @@
  *   • Schema CREATE stays digest-pinned AND is refused outright for every non-owner principal.
  *   • The structural classes and schema USAGE are removed from the digest only in exchange for
  *     fail-closed closure assertions: an unknown principal, an unknown privilege class, a
- *     structural privilege held by a non-platform principal, or any grantable privilege is
+ *     structural privilege held by a non-platform principal, a structural privilege that reappears
+ *     on a relation the migration hardened against browser principals, or any grantable privilege is
  *     refused. Nothing becomes invisible; it becomes explicitly bounded instead.
  *
  * No project id, hostname, database name or instance identity is consulted anywhere in this module.
@@ -75,6 +76,28 @@ export const PLATFORM_MANAGED_PRINCIPALS: readonly string[] = Object.freeze([
   "anon",
   "authenticated",
   "service_role",
+]);
+
+/** The browser-reachable principals. `service_role` is a server principal and is not one of them. */
+const BROWSER_PRINCIPALS: readonly string[] = Object.freeze(["PUBLIC", "anon", "authenticated"]);
+
+/**
+ * Relations whose migration SQL issues an explicit `REVOKE ALL ... FROM PUBLIC, anon, authenticated`
+ * — `0205` for the two observation tables, `0208` for the two historical receipt tables. That
+ * revocation strips the Supabase-class default privileges the platform would otherwise have granted,
+ * so on a lawful target a browser principal holds *nothing at all* on these relations.
+ *
+ * The structural classes are therefore admissible as a platform baseline only on relations the
+ * migration contract never hardened. Here, any privilege of any class held by a browser principal is
+ * refused — which keeps a post-migration `GRANT TRUNCATE ON ... TO authenticated` fail-closed even
+ * though TRUNCATE is not digest-pinned. Once a relation is hardened it stays hardened for every
+ * later step that covers it, so `0210`'s view of `trader_account_collection_state` is bound too.
+ */
+export const BROWSER_HARDENED_RELATIONS: readonly string[] = Object.freeze([
+  "trader_account_collection_state",
+  "trader_account_observations",
+  "trader_historical_rehearsal_started_v1",
+  "trader_historical_scientific_admission_refusal_v1",
 ]);
 
 /**
@@ -130,6 +153,7 @@ function quoted(names: readonly string[], refuse: CatalogRefusal): string {
  */
 function assertPrivilegeBounded(
   rows: readonly Readonly<{
+    relation_name: string;
     grantee_name: string;
     privilege_type: string;
     is_grantable: boolean;
@@ -163,6 +187,18 @@ function assertPrivilegeBounded(
       // Only the platform baseline may hold TRUNCATE/REFERENCES/TRIGGER/MAINTAIN. A WAIA role,
       // PUBLIC or anything else holding a destructive class is refused rather than normalized.
       refuse("CATALOG_AUTHORITY_STRUCTURAL_GRANT", describe(row));
+    }
+    if (
+      PLATFORM_BASELINE_TABLE_PRIVILEGES.includes(row.privilege_type) &&
+      BROWSER_PRINCIPALS.includes(row.grantee_name) &&
+      BROWSER_HARDENED_RELATIONS.includes(row.relation_name)
+    ) {
+      // The platform baseline is admissible only where the migration contract left it in place. On a
+      // hardened relation the migration revoked every privilege from the browser principals, so a
+      // structural class reappearing there is a re-grant, not a baseline — and it must fail closed
+      // even though this projection keeps the structural classes out of the frozen digest. A data
+      // class reappearing on the same relation is caught by the digest itself.
+      refuse("CATALOG_AUTHORITY_HARDENED_RELATION", `${row.relation_name}:${describe(row)}`);
     }
     if (row.is_grantable) {
       // WITH GRANT OPTION lets the holder re-delegate. No migration issues one.
