@@ -33,6 +33,12 @@ import {
   type PostH2CeremonyEvidence,
   type PostH2Step,
 } from "./postgres-post-h2-migration-manifest-v1";
+import {
+  PLATFORM_BASELINE_TABLE_PRIVILEGES,
+  PLATFORM_MANAGED_PRINCIPALS,
+  WAIA_DATA_AUTHORITY_PRIVILEGES,
+  collectCanonicalRelationAuthority,
+} from "./postgres-migration-catalog-authority-v1";
 
 const LOCK_TIMEOUT_MS = 3_000;
 const STATEMENT_TIMEOUT_MS = 120_000;
@@ -547,21 +553,44 @@ async function verify0209(sql: Sql): Promise<unknown> {
     WHERE table_schema='public' AND table_name LIKE 'ai_twin_%' AND grantee<>current_user
     ORDER BY grantee, table_name, privilege_type
   `;
-  if (exposure.length !== 0) {
-    refusePostH2("CATALOG_0209_GRANTS", "AI-TWIN tables must grant nothing");
+  // DEE-871 issues no GRANT on these tables, so no principal may hold read or write authority on
+  // them — this still refuses SELECT/INSERT/UPDATE/DELETE for every grantee, `service_role`
+  // included. What it no longer treats as a grant is the Supabase-class default ACL's structural
+  // set, which reaches only the platform principals and reads nothing; a structural privilege held
+  // by anything else, or any unclassified privilege class, is refused below.
+  if (
+    exposure.some(
+      (row) =>
+        WAIA_DATA_AUTHORITY_PRIVILEGES.includes(row.privilege_type) ||
+        !PLATFORM_BASELINE_TABLE_PRIVILEGES.includes(row.privilege_type) ||
+        !PLATFORM_MANAGED_PRINCIPALS.includes(row.grantee),
+    )
+  ) {
+    refusePostH2("CATALOG_0209_GRANTS", "AI-TWIN tables must grant no data authority");
   }
+  // `service_role` carries BYPASSRLS on the approved target, so proving it holds no data authority
+  // on AI-TWIN relations is exactly the check the Supabase-class platform baseline makes necessary.
+  // `to_regrole` guards the probe because a reference cluster has no such role, and a role that does
+  // not exist holds no privilege — the assertion still bites wherever the principal is real.
   const reachability = (
     await sql<
       Readonly<{
         authenticated_reach: boolean;
         anon_reach: boolean;
         public_reach: boolean;
+        service_role_reach: boolean;
       }>[]
     >`
     SELECT
-      bool_or(has_table_privilege('authenticated', class.oid, 'SELECT')) AS authenticated_reach,
-      bool_or(has_table_privilege('anon', class.oid, 'SELECT')) AS anon_reach,
-      bool_or(has_table_privilege('public', class.oid, 'SELECT')) AS public_reach
+      bool_or(has_table_privilege('authenticated', class.oid, 'SELECT,INSERT,UPDATE,DELETE'))
+        AS authenticated_reach,
+      bool_or(has_table_privilege('anon', class.oid, 'SELECT,INSERT,UPDATE,DELETE')) AS anon_reach,
+      bool_or(has_table_privilege('public', class.oid, 'SELECT,INSERT,UPDATE,DELETE'))
+        AS public_reach,
+      bool_or(
+        to_regrole('service_role') IS NOT NULL
+        AND has_table_privilege('service_role', class.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      ) AS service_role_reach
     FROM pg_class class
     JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
     WHERE namespace.nspname='public' AND class.relkind='r'
@@ -572,9 +601,13 @@ async function verify0209(sql: Sql): Promise<unknown> {
     !reachability ||
     reachability.authenticated_reach ||
     reachability.anon_reach ||
-    reachability.public_reach
+    reachability.public_reach ||
+    reachability.service_role_reach
   ) {
-    refusePostH2("CATALOG_0209_REACHABILITY", "no browser or public role may reach AI-TWIN");
+    refusePostH2(
+      "CATALOG_0209_REACHABILITY",
+      "no browser, public or service role may reach AI-TWIN",
+    );
   }
   // 0209 must leave the Trader observation surface this lane later depends on exactly intact.
   const traderUntouched = (
@@ -662,9 +695,16 @@ async function verify0210(sql: Sql): Promise<unknown> {
   // a posture-compliant role and `GRANT waia_account_observation_credential TO <server_role>`,
   // handing that role inherited column SELECT on the ciphertext while every other check passes.
   const credentialGrantees = await sql<
-    Readonly<{ member_name: string; inherit_option: boolean; admin_option: boolean }>[]
+    Readonly<{
+      member_name: string;
+      inherit_option: boolean;
+      admin_option: boolean;
+      set_option: boolean;
+      member_is_current_user: boolean;
+    }>[]
   >`
-    SELECT member.rolname AS member_name, membership.inherit_option, membership.admin_option
+    SELECT member.rolname AS member_name, membership.inherit_option, membership.admin_option,
+      membership.set_option, member.rolname=current_user AS member_is_current_user
     FROM pg_auth_members membership
     JOIN pg_roles granted ON granted.oid=membership.roleid
     JOIN pg_roles member ON member.oid=membership.member
@@ -672,13 +712,20 @@ async function verify0210(sql: Sql): Promise<unknown> {
     ORDER BY member.rolname
   `;
   if (
-    credentialGrantees.some(
-      (grantee) =>
-        // Only the DEE-1015 credential LOGIN may hold this authority, and only non-inheriting:
-        // it must reach the grants through an explicit SET ROLE inside the observation transaction.
-        grantee.member_name !== "waia_account_observation_credential_login" ||
-        grantee.inherit_option ||
-        grantee.admin_option,
+    credentialGrantees.some((grantee) =>
+      grantee.member_is_current_user
+        ? // PostgreSQL 16+ auto-grants a newly created role back to a NOSUPERUSER CREATEROLE
+          // creator, so the verified migration authority itself appears here on the approved
+          // target. ADMIN OPTION adds nothing to a role that already owns `exchange_credentials`
+          // and holds CREATEROLE, but INHERIT or SET would hand it the ciphertext column grant, so
+          // both must be absent. Any fresh GRANT it later issued would surface as another row.
+          grantee.inherit_option || grantee.set_option
+        : // Only the DEE-1015 credential LOGIN may hold this authority, and only non-inheriting:
+          // it must reach the grants through an explicit SET ROLE inside the observation
+          // transaction.
+          grantee.member_name !== "waia_account_observation_credential_login" ||
+          grantee.inherit_option ||
+          grantee.admin_option,
     )
   ) {
     refusePostH2("CATALOG_0210_ROLE_GRANTEES", "credential authority granted to a foreign role");
@@ -807,9 +854,15 @@ async function verify0210(sql: Sql): Promise<unknown> {
   return { roles, credentialGrantees, grants, privileges, policies, forceRls };
 }
 
+/**
+ * DEE-1020: re-derived from the canonical authority projection. Each value was produced
+ * independently by two disposable PostgreSQL 17 fixtures — the bare reference cluster and the
+ * Supabase-class cluster of `scripts/postgres-validation/prelude-supabase-baseline.sql` — and both
+ * produced the same digest bit-for-bit. None of these constants was fitted to a target by hand.
+ */
 const EXPECTED_POST_H2_CATALOG_DIGESTS: Readonly<Record<PostH2Step, string>> = Object.freeze({
-  "0209": "937acae0d98a7a9c180966f8f0ff9b584ed24c7ee88800eb9c7ca6f082939426",
-  "0210": "2d2ccd3c64d1dcfebe5daa8bc300fc9d93edc2379be782e666243ab9f2996d4d",
+  "0209": "5b8c4ed19f7546a786563ac75044b70d360c49797845d4cee19e4149723779f2",
+  "0210": "4b4074b357b939f6c72b3cc1eb7e0f96b348d23a892c63da8126e066f7bb0ed5",
 });
 
 function quotedCatalogNames(names: readonly string[]): string {
@@ -828,6 +881,7 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
           // No role attributes are pinned here: `anon`/`authenticated` carry environment-specific
           // attributes, so 0209's isolation is proven by the grant and reachability checks instead.
           roles: [] as readonly string[],
+          declaredPrincipals: [] as readonly string[],
         }
       : {
           relations: ["exchange_credentials", "trader_account_collection_state"],
@@ -837,6 +891,11 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
             "waia_account_observation_reader",
             "waia_account_observer",
           ],
+          declaredPrincipals: [
+            "waia_account_observation_credential",
+            "waia_account_observation_reader",
+            "waia_account_observer",
+          ] as readonly string[],
         };
   const relations = quotedCatalogNames(profile.relations);
   const functions = profile.functions.length > 0 ? quotedCatalogNames(profile.functions) : "''";
@@ -947,18 +1006,14 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
     WHERE member.rolname IN (${roles})
     ORDER BY member_name,granted_role
   `);
-  const tableGrantRows = await sql.unsafe(`
-    SELECT table_schema,table_name,grantee,privilege_type,is_grantable
-    FROM information_schema.table_privileges
-    WHERE table_schema='public' AND table_name IN (${relations}) AND grantee<>current_user
-    ORDER BY table_schema,table_name,grantee,privilege_type
-  `);
-  const columnGrantRows = await sql.unsafe(`
-    SELECT table_schema,table_name,column_name,grantee,privilege_type,is_grantable
-    FROM information_schema.column_privileges
-    WHERE table_schema='public' AND table_name IN (${relations}) AND grantee<>current_user
-    ORDER BY table_schema,table_name,column_name,grantee,privilege_type
-  `);
+  // 0209 grants nothing at all, so its declared principal set is empty and only PUBLIC plus the
+  // platform baseline may appear. 0210's declared set is exactly the three observation roles whose
+  // narrow column SELECT it creates; every one of those grants stays inside the frozen digest.
+  const { tableAuthorityRows, columnAuthorityRows } = await collectCanonicalRelationAuthority(sql, {
+    relations: profile.relations,
+    declaredPrincipals: profile.declaredPrincipals,
+    refuse: refusePostH2,
+  });
   return Object.freeze({
     relationRows,
     columnRows,
@@ -969,8 +1024,8 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
     functionRows,
     roleRows,
     membershipRows,
-    tableGrantRows,
-    columnGrantRows,
+    tableAuthorityRows,
+    columnAuthorityRows,
   });
 }
 

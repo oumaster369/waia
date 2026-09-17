@@ -20,6 +20,13 @@ import {
   type H2CeremonyEvidence,
   type H2Step,
 } from "./postgres-h2-migration-manifest-v1";
+import {
+  assertRoutineExecuteBounded,
+  collectCanonicalRelationAuthority,
+  collectCanonicalSchemaAuthority,
+  partitionCreatorMemberships,
+  type MembershipRow,
+} from "./postgres-migration-catalog-authority-v1";
 
 const LOCK_TIMEOUT_MS = 3_000;
 const STATEMENT_TIMEOUT_MS = 120_000;
@@ -666,11 +673,17 @@ async function verify0208(sql: Sql): Promise<unknown> {
   return { tables, columns, triggers, policies, constraintRows, functionRows, privileges };
 }
 
+/**
+ * DEE-1020: re-derived from the canonical authority projection. Each value was produced
+ * independently by two disposable PostgreSQL 17 fixtures — the bare reference cluster and the
+ * Supabase-class cluster of `scripts/postgres-validation/prelude-supabase-baseline.sql` — and both
+ * produced the same digest bit-for-bit. None of these constants was fitted to a target by hand.
+ */
 const EXPECTED_H2_CATALOG_DIGESTS: Readonly<Record<H2Step, string>> = Object.freeze({
-  "0205": "5e9b13c2dbcea08457bd67f6f40900d0dcf841df8bbae6aceac371955dc8b750",
-  "0206": "6b5f3147f92806e5784a89ca62c502d33582c19f3bfee5c32ff8c251b7247367",
-  "0207": "7f5286012d7b5667cdb64aed0453a667291c6467a86f32e4b028db055e1e8db4",
-  "0208": "0c47b398c9dd41ed4a74b9acc3f1b98e2aa6ed7fb1ab1bb345f1db402b5ea990",
+  "0205": "66a37ae088833a64eadded9a578fb22411948f3d230034c28b90dfae84858189",
+  "0206": "27a38ce544ccce8438f87224fafea6460fb3697cadab55619860ca607387fec4",
+  "0207": "acc4776cfbce2b4552522c1bb7abb488ab4ddcb3a34e198dc6c9134333008ef9",
+  "0208": "45a30db82cf4ddcce697d215843b5d6b285758f5cc3169e68fd6b5ad71368420",
 });
 
 function quotedCatalogNames(names: readonly string[]): string {
@@ -861,45 +874,34 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
       rolreplication,rolbypassrls,rolconnlimit
     FROM pg_roles WHERE rolname IN (${roles}) ORDER BY rolname
   `);
-  const membershipRows = await sql.unsafe(`
-    SELECT member.rolname AS member_name,granted.rolname AS granted_role,
-      CASE WHEN grantor.rolname=current_user THEN 'CURRENT_USER' ELSE grantor.rolname END
-        AS grantor_name,
-      membership.admin_option,membership.inherit_option,membership.set_option
-    FROM pg_auth_members membership
-    JOIN pg_roles member ON member.oid=membership.member
-    JOIN pg_roles granted ON granted.oid=membership.roleid
-    JOIN pg_roles grantor ON grantor.oid=membership.grantor
-    WHERE member.rolname IN (${roles}) OR granted.rolname IN (${roles})
-    ORDER BY member_name,granted_role,grantor_name
-  `);
-  const tableGrantRows = await sql.unsafe(`
-    SELECT table_schema,table_name,grantee,privilege_type,is_grantable,
-      CASE WHEN grantor=current_user THEN 'CURRENT_USER' ELSE grantor END AS grantor_name
-    FROM information_schema.table_privileges
-    WHERE table_schema='public' AND table_name IN (${relations}) AND grantee<>current_user
-    ORDER BY table_schema,table_name,grantee,privilege_type,grantor_name
-  `);
-  const columnGrantRows = await sql.unsafe(`
-    SELECT table_schema,table_name,column_name,grantee,privilege_type,is_grantable,
-      CASE WHEN grantor=current_user THEN 'CURRENT_USER' ELSE grantor END AS grantor_name
-    FROM information_schema.column_privileges
-    WHERE table_schema='public' AND table_name IN (${relations}) AND grantee<>current_user
-    ORDER BY table_schema,table_name,column_name,grantee,privilege_type,grantor_name
-  `);
-  const schemaGrantRows = await sql.unsafe(`
-    SELECT CASE WHEN grantee.oid=namespace.nspowner THEN 'CURRENT_USER'
-        WHEN grantee.oid=0 THEN 'PUBLIC' ELSE grantee_role.rolname END AS grantee_name,
-      privilege.privilege_type,privilege.is_grantable
-    FROM pg_namespace namespace
-    CROSS JOIN LATERAL aclexplode(
-      COALESCE(namespace.nspacl,acldefault('n',namespace.nspowner))
-    ) privilege
-    LEFT JOIN pg_roles grantee_role ON grantee_role.oid=privilege.grantee
-    CROSS JOIN LATERAL (SELECT privilege.grantee AS oid) grantee
-    WHERE namespace.nspname='public' AND privilege.grantee<>namespace.nspowner
-    ORDER BY grantee_name,privilege_type,is_grantable
-  `);
+  // The migration authority's own PostgreSQL 16+ creation grants are partitioned out here, not
+  // filtered: `partitionCreatorMemberships` refuses any authority membership that is inheritable or
+  // settable, and every other membership stays pinned exactly as before.
+  const membershipRows = partitionCreatorMemberships(
+    (await sql.unsafe(`
+      SELECT member.rolname AS member_name,granted.rolname AS granted_role,
+        CASE WHEN grantor.rolname=current_user THEN 'CURRENT_USER' ELSE grantor.rolname END
+          AS grantor_name,
+        membership.admin_option,membership.inherit_option,membership.set_option,
+        member.rolname=current_user AS member_is_current_user
+      FROM pg_auth_members membership
+      JOIN pg_roles member ON member.oid=membership.member
+      JOIN pg_roles granted ON granted.oid=membership.roleid
+      JOIN pg_roles grantor ON grantor.oid=membership.grantor
+      WHERE member.rolname IN (${roles}) OR granted.rolname IN (${roles})
+      ORDER BY member_name,granted_role,grantor_name
+    `)) as unknown as readonly MembershipRow[],
+    refuseH2,
+  );
+  const { tableAuthorityRows, columnAuthorityRows } = await collectCanonicalRelationAuthority(sql, {
+    relations: profile.relations,
+    declaredPrincipals: profile.grantees,
+    refuse: refuseH2,
+  });
+  const schemaAuthorityRows = await collectCanonicalSchemaAuthority(sql, {
+    declaredPrincipals: profile.grantees,
+    refuse: refuseH2,
+  });
   const routineGrantRows = await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,procedure.proname AS function_name,
       pg_get_function_identity_arguments(procedure.oid) AS identity_arguments,
@@ -927,6 +929,15 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
     )
     ORDER BY schema_name,function_name,identity_arguments,grantee_name,privilege_type,grantor_name
   `);
+  // Function EXECUTE needs no normalization — both cluster classes leave `proacl` NULL and so keep
+  // PostgreSQL's stock PUBLIC EXECUTE — but a grant to any named role is now refused outright.
+  assertRoutineExecuteBounded(
+    routineGrantRows as unknown as readonly Readonly<{
+      grantee_name: string;
+      privilege_type: string;
+    }>[],
+    refuseH2,
+  );
   return Object.freeze({
     relationRows,
     columnRows,
@@ -937,9 +948,9 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
     functionRows,
     roleRows,
     membershipRows,
-    tableGrantRows,
-    columnGrantRows,
-    schemaGrantRows,
+    tableAuthorityRows,
+    columnAuthorityRows,
+    schemaAuthorityRows,
     routineGrantRows,
   });
 }
