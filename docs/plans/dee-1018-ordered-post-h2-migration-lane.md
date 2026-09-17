@@ -206,6 +206,28 @@ the behavior is recorded, not repaired. This lane deliberately scopes its own me
 `member.rolname` only, and its two digests were verified identical on both a pristine cluster and one
 carrying the provisioned observation logins.
 
+## Independent review hardening (applied in this branch)
+
+Two independent exact-head adversarial reviews ran against `de2bcc9d`. One returned a clean pass. The
+other confirmed the pins, the state machine, the evidence model and the transaction semantics but
+identified that scoping this lane's membership snapshot to `member.rolname` (see the finding above)
+dropped H2's *reverse* coverage without a replacement, and that a few named contract assertions were
+weaker than the digest that backs them. All were closed here, inside the operator only:
+
+| Finding | Closure |
+|---------|---------|
+| Reverse role membership uncovered: a `CREATEROLE` actor could pre-create a posture-compliant role and `GRANT waia_account_observation_credential TO <server_role>`, gaining inherited column `SELECT` on ciphertext while every check and the digest still matched | `verify0210` now refuses `CATALOG_0210_ROLE_GRANTEES` unless the only member is `waia_account_observation_credential_login` without `INHERIT`/`ADMIN`. The digest relaxation stays scoped to the observer/reader roles, whose provisioning state legitimately varies |
+| `--verify-only` never ran a catalog precondition, so a journal row for `0209` with absent `ai_twin_*` tables was receipted as `PREDECESSOR_NOT_APPLIED` | The read-only path now runs `assertCatalogPrecondition` in that branch |
+| `policySnapshot` matched `polname` only, so a same-named policy on another relation would have satisfied the 0210 policy assertions | Bound to `polrelid` for both policies |
+| `relforcerowsecurity = false` was asserted, but `relrowsecurity = true` was not — the assignment-bound contract is inert without RLS | Added `CATALOG_0210_ROW_SECURITY` |
+| The `0209` precondition counted `pg_class` only, so a leftover `ai_twin_*` function surfaced as a raw `42723` instead of a refusal | Precondition now counts relations and routines |
+| `0209` validator ACLs were unobserved; `PUBLIC` holds PostgreSQL's default `EXECUTE` | Asserted `proacl IS NULL` (untouched default) and `IMMUTABLE`, rather than revoking — revoking would alter DEE-871 semantics. Bodies remain pinned verbatim in the digest |
+| An unrecognized bare CLI token was echoed verbatim, so a mis-pasted connection string reached stderr | Only the argument position is reported |
+| Pooler refusal missed port `6432` and trailing whitespace in `pool_mode` | Both ports and `transaction`/`statement`, whitespace-trimmed, are refused |
+| Runbook claimed verify-only refuses catalog-contradictory state and did not mention attestation freshness on recovery | Both corrected, plus the validator-ACL posture stated explicitly |
+
+None of these touch H2, `0209`, `0210`, `_journal.json` or any pinned digest.
+
 ## Production ceremony (Human-only, twice)
 
 Two separate ceremonies, each with its own Human authorization packet:

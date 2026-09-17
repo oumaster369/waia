@@ -212,13 +212,18 @@ function assertDirectPostgresUrl(value: string): void {
   } catch {
     refusePostH2("DATABASE_URL_INVALID", "session/direct PostgreSQL URL required");
   }
-  const poolMode = parsed.searchParams.get("pool_mode") ?? parsed.searchParams.get("poolmode");
+  const poolMode = (parsed.searchParams.get("pool_mode") ?? parsed.searchParams.get("poolmode"))
+    ?.trim()
+    .toLowerCase();
   if (
     !["postgres:", "postgresql:"].includes(parsed.protocol.toLowerCase()) ||
     !parsed.hostname ||
     !parsed.username ||
+    // Supabase transaction pooler and pgbouncer's default port.
     parsed.port === "6543" ||
-    poolMode?.toLowerCase() === "transaction"
+    parsed.port === "6432" ||
+    poolMode === "transaction" ||
+    poolMode === "statement"
   ) {
     refusePostH2("DATABASE_URL_UNSAFE", "transaction pooling and incomplete URLs are forbidden");
   }
@@ -346,12 +351,23 @@ export async function readPostH2LiveJournal(sql: Sql): Promise<PostH2AppliedMigr
   return rows.map((row) => Object.freeze({ hash: row.hash, createdAt: row.created_at }));
 }
 
-async function countAiTwin0209Relations(sql: Sql): Promise<number> {
+/**
+ * Counts relations *and* routines: a leftover `ai_twin_*` function with no tables would otherwise
+ * pass the precondition and surface later as a raw duplicate-object failure instead of a refusal.
+ */
+async function countAiTwin0209Objects(sql: Sql): Promise<number> {
   const rows = await sql<Readonly<{ total: string }>[]>`
-    SELECT count(*)::text AS total
-    FROM pg_class class
-    JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
-    WHERE namespace.nspname='public' AND class.relname LIKE 'ai_twin_%'
+    SELECT (
+      (
+        SELECT count(*) FROM pg_class class
+        JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
+        WHERE namespace.nspname='public' AND class.relname LIKE 'ai_twin_%'
+      ) + (
+        SELECT count(*) FROM pg_proc procedure
+        JOIN pg_namespace namespace ON namespace.oid=procedure.pronamespace
+        WHERE namespace.nspname='public' AND procedure.proname LIKE 'ai_twin_%'
+      )
+    )::text AS total
   `;
   return Number(rows[0]?.total ?? "-1");
 }
@@ -362,7 +378,7 @@ async function countAiTwin0209Relations(sql: Sql): Promise<number> {
  */
 async function assertCatalogPrecondition(sql: Sql, step: PostH2Step): Promise<void> {
   if (step === "0209") {
-    if ((await countAiTwin0209Relations(sql)) !== 0) {
+    if ((await countAiTwin0209Objects(sql)) !== 0) {
       refusePostH2("CATALOG_PRECONDITION", "public.ai_twin_* objects already exist");
     }
     return;
@@ -421,7 +437,8 @@ async function assertRelevantWritersQuiesced(sql: Sql): Promise<void> {
   if (rows.length > 0) refusePostH2("WRITERS_NOT_QUIESCED", String(rows.length));
 }
 
-async function policySnapshot(sql: Sql, policyName: string) {
+/** Bound to `relation` as well as name: a same-named policy on another table proves nothing. */
+async function policySnapshot(sql: Sql, policyName: string, relation: string) {
   const rows = await sql<
     Readonly<{
       policy_name: string;
@@ -442,7 +459,7 @@ async function policySnapshot(sql: Sql, policyName: string) {
       pg_get_expr(policy.polqual, policy.polrelid) AS using_expression,
       pg_get_expr(policy.polwithcheck, policy.polrelid) AS check_expression
     FROM pg_policy policy
-    WHERE policy.polname=${policyName}
+    WHERE policy.polname=${policyName} AND policy.polrelid=to_regclass(${relation})
   `;
   if (rows.length !== 1) refusePostH2("CATALOG_POLICY", policyName);
   return rows[0]!;
@@ -489,11 +506,13 @@ async function verify0209(sql: Sql): Promise<unknown> {
       volatility: string;
       security_definer: boolean;
       owner_is_current_user: boolean;
+      default_acl: boolean;
     }>[]
   >`
     SELECT procedure.proname, procedure.provolatile AS volatility,
       procedure.prosecdef AS security_definer,
-      pg_get_userbyid(procedure.proowner)=current_user AS owner_is_current_user
+      pg_get_userbyid(procedure.proowner)=current_user AS owner_is_current_user,
+      procedure.proacl IS NULL AS default_acl
     FROM pg_proc procedure
     JOIN pg_namespace namespace ON namespace.oid=procedure.pronamespace
     WHERE namespace.nspname='public' AND procedure.proname LIKE 'ai_twin_%'
@@ -502,7 +521,17 @@ async function verify0209(sql: Sql): Promise<unknown> {
   if (
     canonicalJson(functions.map((item) => item.proname)) !==
       canonicalJson(AI_TWIN_0209_FUNCTIONS) ||
-    functions.some((item) => item.security_definer || !item.owner_is_current_user)
+    functions.some(
+      (item) =>
+        item.security_definer ||
+        !item.owner_is_current_user ||
+        item.volatility !== "i" ||
+        // DEE-871 issues no GRANT/REVOKE on these validators, so PostgreSQL's default EXECUTE to
+        // PUBLIC is their ratified posture and must not be "hardened" here. What must hold is that
+        // the ACL is still that untouched default, so no explicit grant was smuggled in. The bodies
+        // themselves are pinned verbatim through `pg_get_functiondef` in the catalog digest.
+        !item.default_acl,
+    )
   ) {
     refusePostH2("CATALOG_0209_FUNCTIONS", "exact immutable validator set required");
   }
@@ -628,6 +657,32 @@ async function verify0210(sql: Sql): Promise<unknown> {
   ) {
     refusePostH2("CATALOG_0210_ROLE", "unsafe credential role posture");
   }
+  // The reverse direction is not covered by the pinned membership digest, which is deliberately
+  // scoped to what these roles inherit. Without this, an actor holding CREATEROLE could pre-create
+  // a posture-compliant role and `GRANT waia_account_observation_credential TO <server_role>`,
+  // handing that role inherited column SELECT on the ciphertext while every other check passes.
+  const credentialGrantees = await sql<
+    Readonly<{ member_name: string; inherit_option: boolean; admin_option: boolean }>[]
+  >`
+    SELECT member.rolname AS member_name, membership.inherit_option, membership.admin_option
+    FROM pg_auth_members membership
+    JOIN pg_roles granted ON granted.oid=membership.roleid
+    JOIN pg_roles member ON member.oid=membership.member
+    WHERE granted.rolname='waia_account_observation_credential'
+    ORDER BY member.rolname
+  `;
+  if (
+    credentialGrantees.some(
+      (grantee) =>
+        // Only the DEE-1015 credential LOGIN may hold this authority, and only non-inheriting:
+        // it must reach the grants through an explicit SET ROLE inside the observation transaction.
+        grantee.member_name !== "waia_account_observation_credential_login" ||
+        grantee.inherit_option ||
+        grantee.admin_option,
+    )
+  ) {
+    refusePostH2("CATALOG_0210_ROLE_GRANTEES", "credential authority granted to a foreign role");
+  }
   const grants = await sql<Readonly<{ column_name: string; privilege_type: string }>[]>`
     SELECT column_name, privilege_type
     FROM information_schema.column_privileges
@@ -702,9 +757,12 @@ async function verify0210(sql: Sql): Promise<unknown> {
     refusePostH2("CATALOG_0210_GRANTS", "restricted credential grants");
   }
   const policies = await Promise.all(
-    ["trader_observation_credential_assignment", "trader_observation_credential_read"].map((name) =>
-      policySnapshot(sql, name),
-    ),
+    (
+      [
+        ["trader_observation_credential_assignment", "public.trader_account_collection_state"],
+        ["trader_observation_credential_read", "public.exchange_credentials"],
+      ] as const
+    ).map(([name, relation]) => policySnapshot(sql, name, relation)),
   );
   for (const policy of policies) {
     const expression = policy.using_expression ?? "";
@@ -733,15 +791,20 @@ async function verify0210(sql: Sql): Promise<unknown> {
     refusePostH2("CATALOG_0210_POLICY", "credential read must be assignment and status bound");
   }
   const forceRls = (
-    await sql<Readonly<{ force_row_security: boolean }>[]>`
-    SELECT relforcerowsecurity AS force_row_security
+    await sql<Readonly<{ force_row_security: boolean; row_security: boolean }>[]>`
+    SELECT relforcerowsecurity AS force_row_security, relrowsecurity AS row_security
     FROM pg_class WHERE oid='public.exchange_credentials'::regclass
   `
   )[0];
   if (forceRls?.force_row_security !== false) {
     refusePostH2("CATALOG_0210_FORCE_RLS", "0007 owner semantics must be preserved");
   }
-  return { roles, grants, privileges, policies, forceRls };
+  // The whole assignment-bound contract is inert if RLS is off: the narrow column grant would then
+  // read every row. Asserting it here keeps the named contract check independent of digest scope.
+  if (forceRls.row_security !== true) {
+    refusePostH2("CATALOG_0210_ROW_SECURITY", "RLS must remain enabled on exchange_credentials");
+  }
+  return { roles, credentialGrantees, grants, privileges, policies, forceRls };
 }
 
 const EXPECTED_POST_H2_CATALOG_DIGESTS: Readonly<Record<PostH2Step, string>> = Object.freeze({
@@ -1012,6 +1075,11 @@ async function verifyReadOnly(
       journalDigestAfter = classified.journalDigest;
       if (classification === "SELECTED_STEP_COMMITTED") {
         catalogVerificationDigest = await verifyPostH2MigrationCatalog(sql, input.step);
+      } else {
+        // A lawful predecessor journal is not yet evidence of a lawful pre-state: the recovery
+        // receipt must not certify "cleanly awaiting this step" while the catalog contradicts it.
+        // The check is read-only and safe inside this REPEATABLE READ READ ONLY transaction.
+        await assertCatalogPrecondition(sql, input.step);
       }
     }
     if (applyMetadata && catalogVerificationDigest !== applyMetadata.catalogVerificationDigest) {
@@ -1224,8 +1292,12 @@ export function parsePostH2CliArguments(argv: readonly string[]): CliArguments {
       "--target-identity-attestation",
       "--ceremony-authorization-attestation",
     ]);
-    if (!allowed.has(argument) || values.has(argument)) {
-      refusePostH2("CLI_OPTION", argument);
+    if (!allowed.has(argument)) {
+      // Report the position only: a mis-pasted connection string must not reach the terminal.
+      refusePostH2("CLI_OPTION", `unrecognized argument at position ${index + 1}`);
+    }
+    if (values.has(argument)) {
+      refusePostH2("CLI_DUPLICATE_OPTION", argument);
     }
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) refusePostH2("CLI_OPTION_VALUE", argument);
@@ -1239,7 +1311,9 @@ export function parsePostH2CliArguments(argv: readonly string[]): CliArguments {
   };
   const step = parsePostH2Step(required("--step"));
   const confirmed = values.get("--confirm-exact-step");
-  if (verifyOnly && confirmed) refusePostH2("VERIFY_ONLY_CONFIRMATION_FORBIDDEN", confirmed);
+  if (verifyOnly && confirmed) {
+    refusePostH2("VERIFY_ONLY_CONFIRMATION_FORBIDDEN", "--confirm-exact-step");
+  }
   return Object.freeze({
     step,
     verifyOnly,

@@ -17,7 +17,11 @@ while `0209` is unapplied — is rejected, and this operator refuses it structur
 
 Applying `0209` is a **schema-only** step. It authorizes no AI-TWIN runtime, ingestion, writer,
 route, backfill or product rollout; the operator proves that by requiring the AI-TWIN tables to grant
-nothing to any other role, so no runtime identity can reach them.
+nothing to any other role, so no runtime identity can reach them. The four `ai_twin_*` validator
+functions keep PostgreSQL's default `EXECUTE` for `PUBLIC`, which is DEE-871's ratified posture and is
+not altered here — they are `IMMUTABLE` pure `jsonb → boolean` predicates that read no table, their
+bodies are pinned verbatim in the catalog digest, and the operator asserts their ACL is still that
+untouched default so no explicit grant can be smuggled in.
 
 ## Why not `drizzle-kit migrate`
 
@@ -29,8 +33,8 @@ This operator reads and executes only the one pinned migration named by `--step`
 
 ## Safety boundary
 
-- Use a direct or session-mode PostgreSQL URL in `DATABASE_URL_POSTGRES_SESSION`. Transaction-pooler
-  port `6543` and `pool_mode=transaction` are refused.
+- Use a direct or session-mode PostgreSQL URL in `DATABASE_URL_POSTGRES_SESSION`. Pooler ports `6543`
+  and `6432`, and `pool_mode=transaction` / `pool_mode=statement`, are refused.
 - Migration SQL is read only from the pinned Git commit/blob. Checkout content is never an apply
   source, even when the working tree differs.
 - Git runs through `/usr/bin/git` with replacement objects and user/system configuration disabled.
@@ -148,14 +152,17 @@ table privileges granted to any other role; no `SELECT` reachability for `authen
 
 **0210 (DEE-1015 account-observation credential authority).** Exact
 `waia_account_observation_credential` posture (NOLOGIN, NOINHERIT, NOSUPERUSER, NOBYPASSRLS,
-NOCREATEDB, NOCREATEROLE, NOREPLICATION, no memberships); exactly the eight granted credential
-columns and three state columns, all `SELECT`; no whole-table credential `SELECT`; no reachability
-for the seven withheld credential columns; no credential INSERT/UPDATE/DELETE; no observer or reader
-access to `encrypted_payload` or `wrapped_dek_key`; both assignment-bound `FOR SELECT` policies
-present, permissive, scoped to that single role, consulting the `waia.observation_*` runtime context
-and never `USING (true)`, with the credential read additionally bound to a provisioned collection
-state and `status = 'active'`; and `FORCE ROW LEVEL SECURITY` still disabled on
-`exchange_credentials` per migration `0007`.
+NOCREATEDB, NOCREATEROLE, NOREPLICATION, no memberships); no role other than
+`waia_account_observation_credential_login` holding this authority, and that one only without
+`INHERIT` or `ADMIN`, so the credential grants are reachable only through an explicit `SET ROLE`
+inside the observation transaction; exactly the eight granted credential columns and three state
+columns, all `SELECT`; no whole-table credential `SELECT`; no reachability for the seven withheld
+credential columns; no credential INSERT/UPDATE/DELETE; no observer or reader access to
+`encrypted_payload` or `wrapped_dek_key`; both assignment-bound `FOR SELECT` policies present on
+their own relation, permissive, scoped to that single role, consulting the `waia.observation_*`
+runtime context and never `USING (true)`, with the credential read additionally bound to a provisioned
+collection state and `status = 'active'`; row-level security still enabled and `FORCE ROW LEVEL
+SECURITY` still disabled on `exchange_credentials` per migration `0007`.
 
 Verification runs before COMMIT. Full relation/column/constraint/index/policy/trigger/function/
 role/membership/grant projections are matched against immutable expected catalog digests validated on
@@ -176,8 +183,11 @@ Persist the stdout receipt in the approved Human evidence store. It contains no 
 
 ## Uncertain COMMIT recovery
 
-`POST_H2_MIGRATION_REFUSED:COMMIT_RESULT_UNCERTAIN` means no DDL retry is allowed. Reuse the exact
-step, target and four attestations with `--verify-only` (which forbids `--confirm-exact-step`):
+`POST_H2_MIGRATION_REFUSED:COMMIT_RESULT_UNCERTAIN` means no DDL retry is allowed. Rerun with the
+exact same step and target under `--verify-only` (which forbids `--confirm-exact-step`). Attestations
+expire 15 minutes after they are issued, so if the ceremony has already run longer than that, the
+Human must mint a fresh packet for the same step and target — this grants no mutation authority,
+because verify-only cannot apply anything:
 
 ```bash
 DATABASE_URL_POSTGRES_SESSION='<same-direct-or-session-secret-url>' \
@@ -194,7 +204,8 @@ pnpm trader:post-h2:migrate \
 
 Verify-only opens a fresh default-read-only connection and returns only `SELECTED_STEP_COMMITTED`
 after exact journal and catalog verification, `PREDECESSOR_NOT_APPLIED` when the exact predecessor
-remains, or a refusal for every partial, later, changed, unknown or catalog-contradictory state.
+journal remains *and* the catalog agrees that the step is cleanly unapplied, or a refusal for every
+partial, later, changed, unknown or catalog-contradictory state.
 
 ## Failure and recovery
 

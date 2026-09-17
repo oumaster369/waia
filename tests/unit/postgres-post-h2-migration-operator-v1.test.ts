@@ -381,7 +381,10 @@ describe("DEE-1018 operator admission guards", () => {
   it("refuses transaction poolers and malformed database URLs", async () => {
     for (const url of [
       "postgres://authority@pooler.example:6543/waia",
+      "postgres://authority@pooler.example:6432/waia",
       "postgres://authority@pooler.example:5432/waia?pool_mode=transaction",
+      "postgres://authority@pooler.example:5432/waia?pool_mode=TRANSACTION%20",
+      "postgres://authority@pooler.example:5432/waia?pool_mode=statement",
       "postgres://127.0.0.1:5432/waia",
       "mysql://authority@127.0.0.1:3306/waia",
       "not-a-url",
@@ -432,9 +435,23 @@ describe("DEE-1018 CLI surface", () => {
     }
   });
 
+  it("never echoes an unrecognized argument, only its position", () => {
+    const pastedUrl = "postgres://human:sup3rs3cret@db.example.internal:5432/postgres";
+    let message = "";
+    try {
+      parsePostH2CliArguments(["--step", "0209", pastedUrl, ...cliBase]);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain("CLI_OPTION");
+    expect(message).toContain("position 3");
+    expect(message).not.toContain("sup3rs3cret");
+    expect(message).not.toContain(pastedUrl);
+  });
+
   it("refuses duplicates, missing options and confirmation under verify-only", () => {
     expect(() => parsePostH2CliArguments(["--step", "0209", "--step", "0210", ...cliBase])).toThrow(
-      "CLI_OPTION",
+      "CLI_DUPLICATE_OPTION",
     );
     expect(() => parsePostH2CliArguments(["--verify-only", "--verify-only", ...cliBase])).toThrow(
       "CLI_DUPLICATE_OPTION",

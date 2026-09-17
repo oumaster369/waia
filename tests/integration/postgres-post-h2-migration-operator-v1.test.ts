@@ -84,6 +84,10 @@ async function createDatabase(name: string, template?: string): Promise<void> {
   if (!/^[a-z0-9_]+$/.test(name) || (template && !/^[a-z0-9_]+$/.test(template))) {
     throw new Error("DEE1018_UNSAFE_TEST_IDENTIFIER");
   }
+  // PostgreSQL truncates at NAMEDATALEN-1, which would silently break target-identity binding.
+  if (Buffer.byteLength(name, "utf8") > 63) {
+    throw new Error("DEE1018_TEST_DATABASE_NAME_TOO_LONG");
+  }
   await admin!.unsafe(
     template ? `CREATE DATABASE "${name}" TEMPLATE "${template}"` : `CREATE DATABASE "${name}"`,
   );
@@ -582,6 +586,80 @@ describe.skipIf(!enabled)("DEE-1018 ordered post-H2 exact-one-step PostgreSQL op
       }),
     ).rejects.toThrow("CATALOG_0210_GRANTS");
     await expect(credentialPolicyCount(ciphertext)).resolves.toBe(0);
+  }, 420_000);
+
+  it("rolls back 0210 when the credential authority is granted to a foreign role", async () => {
+    const database = await apply0209("reverse_membership");
+    await expect(
+      runOperation(await operationInput(database, "0210"), {
+        testHooks: {
+          async beforeCatalogVerification(sql) {
+            // A CREATEROLE actor's lateral path: the role posture, policies, column grants and the
+            // pinned membership digest all still match, because none of them look at who holds
+            // this authority. Created inside the operator transaction, so rollback removes it.
+            await sql.unsafe("CREATE ROLE waia_dee1018_probe_consumer NOLOGIN");
+            await sql.unsafe(
+              "GRANT waia_account_observation_credential TO waia_dee1018_probe_consumer",
+            );
+          },
+        },
+      }),
+    ).rejects.toThrow("CATALOG_0210_ROLE_GRANTEES");
+    expect(await journal(database)).toHaveLength(JOURNAL_ROWS_THROUGH_0208 + 1);
+    await expect(credentialPolicyCount(database)).resolves.toBe(0);
+    await withSql(database, async (sql) => {
+      const rows = await sql<Readonly<{ total: string }>[]>`
+        SELECT count(*)::text AS total FROM pg_roles
+        WHERE rolname='waia_dee1018_probe_consumer'
+      `;
+      expect(rows[0]?.total).toBe("0");
+    });
+  }, 420_000);
+
+  it("rolls back 0210 when row-level security is disabled on the credential table", async () => {
+    const database = await apply0209("security_rollback_row_security");
+    await expect(
+      runOperation(await operationInput(database, "0210"), {
+        testHooks: {
+          async beforeCatalogVerification(sql) {
+            // Without RLS the narrow eight-column grant reads every tenant's ciphertext row, so the
+            // assignment-bound policies this lane just created would be inert.
+            await sql.unsafe("ALTER TABLE public.exchange_credentials DISABLE ROW LEVEL SECURITY");
+          },
+        },
+      }),
+    ).rejects.toThrow("CATALOG_0210_ROW_SECURITY");
+    expect(await journal(database)).toHaveLength(JOURNAL_ROWS_THROUGH_0208 + 1);
+    await expect(credentialPolicyCount(database)).resolves.toBe(0);
+    await withSql(database, async (sql) => {
+      const rows = await sql<Readonly<{ row_security: boolean }>[]>`
+        SELECT relrowsecurity AS row_security FROM pg_class
+        WHERE oid='public.exchange_credentials'::regclass
+      `;
+      expect(rows[0]?.row_security).toBe(true);
+    });
+  }, 420_000);
+
+  it("refuses verify-only recovery when the catalog contradicts a lawful predecessor journal", async () => {
+    // Journal exactly through 0208, so 0209 is genuinely unapplied — but a stray AI-TWIN object
+    // means this target is not cleanly awaiting 0209 and must not be receipted as if it were.
+    const stray = await cloneDatabase("verify_only_stray_twin");
+    await withSql(stray, async (sql) => {
+      await sql.unsafe("CREATE TABLE public.ai_twin_stray_probe(id uuid PRIMARY KEY)");
+    });
+    await expect(runOperation(await operationInput(stray, "0209", true))).rejects.toThrow(
+      "CATALOG_PRECONDITION",
+    );
+
+    // Journal exactly through 0209, so 0210 is genuinely unapplied — but the recorded 0209 history
+    // is contradicted by a missing table, which the journal alone cannot express.
+    const forged = await apply0209("verify_only_missing_twin_table");
+    await withSql(forged, async (sql) => {
+      await sql.unsafe("DROP TABLE public.ai_twin_working_hypotheses");
+    });
+    await expect(runOperation(await operationInput(forged, "0210", true))).rejects.toThrow(
+      "CATALOG_PRECONDITION",
+    );
   }, 420_000);
 
   it("fails closed under concurrent invocations without duplicating a journal identity", async () => {
