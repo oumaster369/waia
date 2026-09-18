@@ -18,10 +18,11 @@ while `0209` is unapplied — is rejected, and this operator refuses it structur
 Applying `0209` is a **schema-only** step. It authorizes no AI-TWIN runtime, ingestion, writer,
 route, backfill or product rollout; the operator proves that by requiring the AI-TWIN tables to grant
 nothing to any other role, so no runtime identity can reach them. The four `ai_twin_*` validator
-functions keep PostgreSQL's default `EXECUTE` for `PUBLIC`, which is DEE-871's ratified posture and is
-not altered here — they are `IMMUTABLE` pure `jsonb → boolean` predicates that read no table, their
-bodies are pinned verbatim in the catalog digest, and the operator asserts their ACL is still that
-untouched default so no explicit grant can be smuggled in.
+functions keep the cluster's untouched function default ACL: stock `PUBLIC EXECUTE` on bare
+PostgreSQL (`proacl` NULL) and owner-only EXECUTE on the approved production target
+(`{postgres=X/postgres}`). They are `IMMUTABLE` pure `jsonb → boolean` predicates that read no
+table, their bodies are pinned verbatim in the catalog digest, and the operator refuses any
+named-role EXECUTE grant.
 
 ## Why not `drizzle-kit migrate`
 
@@ -165,9 +166,11 @@ collection state and `status = 'active'`; row-level security still enabled and `
 SECURITY` still disabled on `exchange_credentials` per migration `0007`.
 
 Verification runs before COMMIT. Full relation/column/constraint/index/policy/trigger/function/
-role/membership/grant projections are matched against immutable expected catalog digests validated on
-PostgreSQL 17. The digest is receipt-bound and must match one fresh read-only, repeatable-snapshot
-post-commit verification transaction.
+role/membership/grant projections are matched against immutable expected catalog digests. Snapshot definition rows are re-sorted bytewise in-process so ICU vs libc punctuation cannot
+reorder identical FOREIGN KEY strings. Digests are re-derived on PostgreSQL 17 for both locale
+providers.
+The digest is receipt-bound and must match one fresh read-only, repeatable-snapshot post-commit
+verification transaction.
 
 ## Receipt
 

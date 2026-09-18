@@ -38,6 +38,7 @@ import {
   PLATFORM_MANAGED_PRINCIPALS,
   WAIA_DATA_AUTHORITY_PRIVILEGES,
   collectCanonicalRelationAuthority,
+  sortCatalogRows,
 } from "./postgres-migration-catalog-authority-v1";
 
 const LOCK_TIMEOUT_MS = 3_000;
@@ -518,7 +519,13 @@ async function verify0209(sql: Sql): Promise<unknown> {
     SELECT procedure.proname, procedure.provolatile AS volatility,
       procedure.prosecdef AS security_definer,
       pg_get_userbyid(procedure.proowner)=current_user AS owner_is_current_user,
-      procedure.proacl IS NULL AS default_acl
+      (
+        procedure.proacl IS NULL
+        OR NOT EXISTS (
+          SELECT 1 FROM aclexplode(procedure.proacl) privilege
+          WHERE privilege.grantee <> procedure.proowner
+        )
+      ) AS default_acl
     FROM pg_proc procedure
     JOIN pg_namespace namespace ON namespace.oid=procedure.pronamespace
     WHERE namespace.nspname='public' AND procedure.proname LIKE 'ai_twin_%'
@@ -532,10 +539,11 @@ async function verify0209(sql: Sql): Promise<unknown> {
         item.security_definer ||
         !item.owner_is_current_user ||
         item.volatility !== "i" ||
-        // DEE-871 issues no GRANT/REVOKE on these validators, so PostgreSQL's default EXECUTE to
-        // PUBLIC is their ratified posture and must not be "hardened" here. What must hold is that
-        // the ACL is still that untouched default, so no explicit grant was smuggled in. The bodies
-        // themselves are pinned verbatim through `pg_get_functiondef` in the catalog digest.
+        // DEE-871 issues no GRANT/REVOKE on these validators. Untouched default is cluster-class
+        // dependent: bare PG leaves `proacl` NULL (stock PUBLIC EXECUTE); the approved production
+        // target's function default ACL is owner-only `{postgres=X/postgres}`. Both mean no named
+        // role was granted EXECUTE. A named-role grant is refused. Function bodies stay pinned
+        // through `pg_get_functiondef` in the catalog digest.
         !item.default_acl,
     )
   ) {
@@ -855,10 +863,9 @@ async function verify0210(sql: Sql): Promise<unknown> {
 }
 
 /**
- * DEE-1020: re-derived from the canonical authority projection. Each value was produced
- * independently by two disposable PostgreSQL 17 fixtures — the bare reference cluster and the
- * Supabase-class cluster of `scripts/postgres-validation/prelude-supabase-baseline.sql` — and both
- * produced the same digest bit-for-bit. None of these constants was fitted to a target by hand.
+ * DEE-1020: re-derived from the canonical authority projection. DEE-1021 re-derived the same
+ * values after pinning snapshot row order to bytewise C/JavaScript string order: libc alpine PG17
+ * and ICU Supabase PG 17.6 then converge bit-for-bit. None of these constants was fitted to a target.
  */
 const EXPECTED_POST_H2_CATALOG_DIGESTS: Readonly<Record<PostH2Step, string>> = Object.freeze({
   "0209": "5b8c4ed19f7546a786563ac75044b70d360c49797845d4cee19e4149723779f2",
@@ -927,7 +934,8 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
       AND class.relname IN (${relations})
     ORDER BY schema_name,relation_name,attribute.attnum
   `);
-  const constraintRows = await sql.unsafe(`
+  const constraintRows = sortCatalogRows(
+    (await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,class.relname AS relation_name,
       item.contype AS constraint_type,pg_get_constraintdef(item.oid,true) AS definition
     FROM pg_constraint item
@@ -935,8 +943,11 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
     JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
     WHERE namespace.nspname='public' AND class.relname IN (${relations})
     ORDER BY schema_name,relation_name,constraint_type,definition
-  `);
-  const indexRows = await sql.unsafe(`
+  `)) as Record<string, unknown>[],
+    ["schema_name", "relation_name", "constraint_type", "definition"],
+  );
+  const indexRows = sortCatalogRows(
+    (await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,class.relname AS relation_name,
       pg_get_indexdef(index_item.indexrelid,0,true) AS definition
     FROM pg_index index_item
@@ -944,7 +955,9 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
     JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
     WHERE namespace.nspname='public' AND class.relname IN (${relations})
     ORDER BY schema_name,relation_name,definition
-  `);
+  `)) as Record<string, unknown>[],
+    ["schema_name", "relation_name", "definition"],
+  );
   const policyRows = await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,class.relname AS relation_name,
       policy.polname AS policy_name,policy.polcmd AS command,

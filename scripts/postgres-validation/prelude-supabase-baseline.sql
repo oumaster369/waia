@@ -8,7 +8,8 @@
 --     owning the database (so it reaches `public` through `pg_database_owner`);
 --   * `anon`, `authenticated` and `service_role` exist and hold explicit `public` USAGE;
 --   * `ALTER DEFAULT PRIVILEGES` gives those three principals a fixed structural privilege set on
---     every newly created relation, and withholds PostgreSQL's stock PUBLIC EXECUTE on functions.
+--     every newly created relation, and the migration authority's function default ACL is
+--     owner-only EXECUTE (`{postgres=X/postgres}` on the approved target), not stock PUBLIC EXECUTE.
 --
 -- Those differences are properties of the *cluster class*, not of one project: any Supabase project
 -- provisioned by the same platform bootstrap produces them. Encoding them here — rather than
@@ -45,21 +46,20 @@ GRANT USAGE ON SCHEMA public TO waia_platform_authority, anon, authenticated, se
 -- 3. Default privileges for objects created by the migration authority in `public`, byte-equivalent
 --    to the approved production target:
 --      relations  postgres=arwdDxtm  anon/authenticated/service_role=Dxtm
---      functions  postgres=X                     (no stock PUBLIC EXECUTE)
+--      functions  postgres=X                     (owner-only; no stock PUBLIC EXECUTE)
 --      sequences  postgres=rwU       anon/authenticated/service_role=w
 --    `Dxtm` = TRUNCATE, REFERENCES, TRIGGER, MAINTAIN — structural/destructive classes only, never
 --    SELECT/INSERT/UPDATE/DELETE. That distinction is the whole basis of the canonical projection.
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public
   GRANT TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLES TO anon, authenticated, service_role;
--- The function entry is reproduced through GRANT-then-REVOKE because a bare REVOKE against an
--- absent entry is a no-op. It is deliberately kept even though it is provably inert: PostgreSQL
--- still stores `proacl = NULL` for functions created under it, so PUBLIC retains EXECUTE in BOTH
--- cluster classes. That is why function EXECUTE posture needs no canonical normalization, and why
--- `CATALOG_0209_FUNCTIONS`' `proacl IS NULL` assertion is portable exactly as merged.
+-- Production's function default ACL is `{postgres=X/postgres}`. GRANT EXECUTE to the creator then
+-- REVOKE from PUBLIC and the platform principals stores that owner-only entry. A bare REVOKE
+-- against an absent default is a no-op and would leave `proacl` NULL (stock PUBLIC EXECUTE), which
+-- is the DEE-1020 fixture bug that would fail 0209's `proacl IS NULL` check on the approved target.
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public
-  GRANT EXECUTE ON FUNCTIONS TO anon;
+  GRANT EXECUTE ON FUNCTIONS TO waia_platform_authority;
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM anon, PUBLIC;
+  REVOKE ALL ON FUNCTIONS FROM PUBLIC, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public
   GRANT UPDATE ON SEQUENCES TO anon, authenticated, service_role;
 
