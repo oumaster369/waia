@@ -5755,6 +5755,99 @@ export const traderMarketPredictions = pgTable(
   ],
 );
 
+/** DEE-771: append-only version lineage for Knowledge edges. */
+export const traderKnowledgeEdgeVersionV2 = pgTable(
+  "trader_knowledge_edge_version_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    knowledgeEdgeId: uuid("knowledge_edge_id")
+      .notNull()
+      .references(() => traderKnowledgeEdges.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    fromRef: text("from_ref").notNull(),
+    toRef: text("to_ref").notNull(),
+    relationKind: text("relation_kind").notNull(),
+    confidence: text("confidence").notNull(),
+    strength: text("strength").notNull(),
+    regimeScope: text("regime_scope").notNull(),
+    failureCasesJson: text("failure_cases_json").notNull(),
+    hypothesisId: uuid("hypothesis_id"),
+    verified: boolean("verified").notNull(),
+    lifecycleState: text("lifecycle_state").notNull(),
+    reasonClass: text("reason_class").notNull(),
+    contentDigestHex: text("content_digest_hex").notNull(),
+    producedByReceiptDigestHex: text("produced_by_receipt_digest_hex").notNull(),
+    supersedesVersionId: uuid("supersedes_version_id"),
+    pitEventAt: timestamp("pit_event_at", { withTimezone: true, mode: "date" }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull(),
+    schemaVersion: text("schema_version").notNull(),
+  },
+  (t) => [
+    unique("trader_knowledge_edge_version_v2_id_organization_unique").on(t.id, t.organizationId),
+    uniqueIndex("tkev2_edge_version_uq").on(t.organizationId, t.knowledgeEdgeId, t.version),
+    uniqueIndex("tkev2_edge_digest_reason_uq").on(
+      t.organizationId,
+      t.knowledgeEdgeId,
+      t.contentDigestHex,
+      t.reasonClass,
+    ),
+    check("tkev2_content_digest_hex_check", sql`${t.contentDigestHex} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tkev2_receipt_digest_hex_check",
+      sql`${t.producedByReceiptDigestHex} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check("tkev2_version_positive_check", sql`${t.version} > 0`),
+    check(
+      "tkev2_reason_class_check",
+      sql`${t.reasonClass} IN ('INITIAL_ASSERTION','EVIDENCE_ONLY_ZERO_DELTA','QUALIFIED_VERDICT_UPDATE','OPERATOR_GOVERNED_CORRECTION','SUPERSEDED_BY_VERSION','RETIRED')`,
+    ),
+    check("tkev2_lifecycle_check", sql`${t.lifecycleState} IN ('ACTIVE','RETIRED')`),
+  ],
+);
+
+/** DEE-771: append-only market-prediction verification lineage. */
+export const traderMarketPredictionVerificationV2 = pgTable(
+  "trader_market_prediction_verification_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    predictionId: uuid("prediction_id")
+      .notNull()
+      .references(() => traderMarketPredictions.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    outcomeJson: text("outcome_json").notNull(),
+    verificationResult: text("verification_result").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull(),
+    contentDigestHex: text("content_digest_hex").notNull(),
+    producedByReceiptDigestHex: text("produced_by_receipt_digest_hex").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+  },
+  (t) => [
+    unique("trader_market_prediction_verification_v2_id_organization_unique").on(
+      t.id,
+      t.organizationId,
+    ),
+    uniqueIndex("tmpv2_prediction_version_uq").on(t.organizationId, t.predictionId, t.version),
+    uniqueIndex("tmpv2_prediction_digest_uq").on(
+      t.organizationId,
+      t.predictionId,
+      t.contentDigestHex,
+    ),
+    check("tmpv2_content_digest_hex_check", sql`${t.contentDigestHex} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "tmpv2_receipt_digest_hex_check",
+      sql`${t.producedByReceiptDigestHex} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check("tmpv2_version_positive_check", sql`${t.version} > 0`),
+  ],
+);
+
 /** RI-P5: AI operator action audit log (append-only). */
 export const traderOperatorAudit = pgTable(
   "trader_operator_audit",

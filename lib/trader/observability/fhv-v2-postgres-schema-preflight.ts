@@ -18,10 +18,14 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // 0210 is DEE-1015 account-observation credential authority: one NOLOGIN role plus
 // narrow column grants and assignment-bound SELECT policies. It creates no table and
 // grants the FHV plane nothing, so it is compatibility-admitted only.
+// 0211 is DEE-771 versioned append-only Knowledge authority. It creates Knowledge
+// version/verification tables and does not add FHV required tables, so it is
+// compatibility-admitted only. It is not an H2 or post-H2 production operator step.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
   { idx: 210, when: 1780000000210, tag: "0210_trader_account_observation_credential_v1" },
+  { idx: 211, when: 1780000000211, tag: "0211_trader_knowledge_edge_version_v2" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

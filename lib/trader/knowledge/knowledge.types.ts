@@ -27,6 +27,9 @@ export type InsertMarketPredictionRow = {
   predictedAt: Date;
   contentDigest: string;
   createdAt: Date;
+  outcomeJson?: string | null;
+  verifiedAt?: Date | null;
+  verificationResult?: MarketPredictionVerificationResult | null;
 };
 
 export type MarketEvent = {

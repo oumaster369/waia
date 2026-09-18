@@ -5,50 +5,37 @@ import * as pgSchema from "@/db/schema.postgres";
 import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
 import { buildMsvEnvelope } from "@/lib/trader/intelligence/cde-v0";
 import { computeFeatureSnapshot } from "@/lib/trader/intelligence/feature-engine-v0";
-import {
-  evaluateCanonicalHistoricalApplicabilityFactsV1,
-} from "@/lib/trader/intelligence/hypothesis/canonical-historical-applicability-v1";
+import { evaluateCanonicalHistoricalApplicabilityFactsV1 } from "@/lib/trader/intelligence/hypothesis/canonical-historical-applicability-v1";
 import {
   sealHistoricalKnowledgeEdgeV1,
   sealHistoricalMarketPredictionV1,
 } from "@/lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1";
-import { computeSemanticSha256Hex } from
-  "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   hypothesisTypeEnum,
   type HypothesisType,
 } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
-import { buildReconstructionSnapshotForClosedPrefix } from
-  "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
+import { buildReconstructionSnapshotForClosedPrefix } from "@/lib/trader/intelligence/reconstruction/build-reconstruction-snapshot";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import {
-  insertKnowledgeEdgePostgres,
-} from "@/lib/trader/knowledge/knowledge-edge-repository-postgres";
-import {
-  recordMarketPrediction,
-  updateEdgeConfidenceFromVerification,
-  verifyMarketPredictionOutcome,
-} from "@/lib/trader/knowledge/market-memory";
+import { insertKnowledgeEdgePostgres } from "@/lib/trader/knowledge/knowledge-edge-repository-postgres";
+import { recordMarketPrediction } from "@/lib/trader/knowledge/market-memory";
 import { createPostgresMiEvidenceService } from "@/lib/trader/mi/evidence-service";
 import { createPostgresMiHypothesisService } from "@/lib/trader/mi/hypothesis-service";
-import type { HypothesisDefinition, MiHypothesis } from
-  "@/lib/trader/mi/hypothesis.types";
+import type { HypothesisDefinition, MiHypothesis } from "@/lib/trader/mi/hypothesis.types";
 import { createPostgresMiMeasurementService } from "@/lib/trader/mi/measurement-service";
 import {
   computeObservationKey,
   createPostgresMiObservationService,
 } from "@/lib/trader/mi/observation-service";
 import { createPostgresMiPatternService } from "@/lib/trader/mi/pattern-service";
-import { createPostgresMiSourceProvenanceRepository } from
-  "@/lib/trader/mi/repository-adapters";
+import { createPostgresMiSourceProvenanceRepository } from "@/lib/trader/mi/repository-adapters";
 import { serializeMsvPayloadJson } from "@/lib/trader/mi/serialize-observation";
 import { createPostgresMiTrialService } from "@/lib/trader/mi/trial-service";
 
 export const HISTORICAL_PRERUN_KNOWLEDGE_BOOTSTRAP_V2 =
   "waia.trader.historical_prerun_knowledge_bootstrap.v2" as const;
 
-export type HistoricalPrerunKnowledgeSurfaceKeyV2 =
-  `${"BTCUSDT" | "ETHUSDT"}:${30 | 60}`;
+export type HistoricalPrerunKnowledgeSurfaceKeyV2 = `${"BTCUSDT" | "ETHUSDT"}:${30 | 60}`;
 
 export type HistoricalPrerunKnowledgeScopeV2 = Readonly<{
   organizationId: string;
@@ -120,8 +107,7 @@ export type HistoricalPrerunKnowledgeSnapshotV2 = Readonly<{
   snapshotContentDigestHex: string;
 }>;
 
-export type HistoricalPrerunKnowledgeBootstrapResultV2 =
-  HistoricalPrerunKnowledgeSnapshotV2;
+export type HistoricalPrerunKnowledgeBootstrapResultV2 = HistoricalPrerunKnowledgeSnapshotV2;
 
 export function computeHistoricalPrerunKnowledgeSnapshotDigestV2(
   snapshot: Omit<HistoricalPrerunKnowledgeSnapshotV2, "snapshotContentDigestHex">,
@@ -144,11 +130,9 @@ function expectedPath(type: HypothesisType): string {
 function claimShape(type: HypothesisType): HypothesisDefinition["claimShape"] {
   return {
     relationshipType: "predictive",
-    isDirectional: ["trend_continuation", "reversal", "breakout", "false_breakout"]
-      .includes(type),
+    isDirectional: ["trend_continuation", "reversal", "breakout", "false_breakout"].includes(type),
     isTrendEdge: type === "trend_continuation" || type === "mean_reversion",
-    isTimingEdge: type === "breakout" || type === "false_breakout" ||
-      type === "liquidity_sweep",
+    isTimingEdge: type === "breakout" || type === "false_breakout" || type === "liquidity_sweep",
   };
 }
 
@@ -177,11 +161,11 @@ export function projectHistoricalPrerunHypothesisV2(
   hypothesis: MiHypothesis,
   definition: HypothesisDefinition,
 ): Readonly<{ hypothesisType: HypothesisType; expectedPath: string }> | null {
-  const type = hypothesisTypeEnum.find((candidate) =>
-    hypothesis.name === hypothesisName({ ...scope, operatorUserId: "" }, candidate));
-  if (!type || definition.regimeScope.notes !== scopeNotes(
-    { ...scope, operatorUserId: "" }, type,
-  )) return null;
+  const type = hypothesisTypeEnum.find(
+    (candidate) => hypothesis.name === hypothesisName({ ...scope, operatorUserId: "" }, candidate),
+  );
+  if (!type || definition.regimeScope.notes !== scopeNotes({ ...scope, operatorUserId: "" }, type))
+    return null;
   return Object.freeze({ hypothesisType: type, expectedPath: expectedPath(type) });
 }
 
@@ -190,21 +174,31 @@ export function projectHistoricalPrerunHypothesisV2(
  * terminal WF_PREDICTIVE reconstruction is evaluated. Only the resulting applicable candidate
  * receives human lifecycle ratification and durable outcome lineage. No economic bars are read.
  */
-export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: Readonly<{
-  sql: postgres.Sql;
-  scope: HistoricalPrerunKnowledgeScopeV2;
-  wfPredictiveBars: readonly Bar[];
-}>): Promise<HistoricalPrerunKnowledgeBootstrapResultV2> {
+export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(
+  input: Readonly<{
+    sql: postgres.Sql;
+    scope: HistoricalPrerunKnowledgeScopeV2;
+    wfPredictiveBars: readonly Bar[];
+  }>,
+): Promise<HistoricalPrerunKnowledgeBootstrapResultV2> {
   const { scope } = input;
   const start = Date.parse(scope.wfPredictiveStartUtc);
   const end = Date.parse(scope.wfPredictiveEndUtc);
   if (
-    input.wfPredictiveBars.length < 240 || !Number.isFinite(start) || !Number.isFinite(end) ||
-    start >= end || input.wfPredictiveBars[0]?.barOpenTime !== scope.wfPredictiveStartUtc ||
+    input.wfPredictiveBars.length < 240 ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start >= end ||
+    input.wfPredictiveBars[0]?.barOpenTime !== scope.wfPredictiveStartUtc ||
     input.wfPredictiveBars.at(-1)?.barCloseTime !== scope.wfPredictiveEndUtc ||
-    input.wfPredictiveBars.some((bar) => bar.symbol !== scope.instrumentId ||
-      Date.parse(bar.barOpenTime) < start || Date.parse(bar.barCloseTime) > end)
-  ) throw new Error("HISTORICAL_PRERUN_KNOWLEDGE_REFUSED:WF_PREDICTIVE_SCOPE");
+    input.wfPredictiveBars.some(
+      (bar) =>
+        bar.symbol !== scope.instrumentId ||
+        Date.parse(bar.barOpenTime) < start ||
+        Date.parse(bar.barCloseTime) > end,
+    )
+  )
+    throw new Error("HISTORICAL_PRERUN_KNOWLEDGE_REFUSED:WF_PREDICTIVE_SCOPE");
 
   const executor = drizzle(input.sql, { schema: pgSchema });
   const context = { organizationId: scope.organizationId };
@@ -238,12 +232,14 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
     measurementKey: measurement.measurementKey,
     measurementDefinitionDigest: measurement.definitionDigest,
   };
-  const candidates: Array<Readonly<{
-    type: HypothesisType;
-    hypothesis: MiHypothesis;
-    trial: Awaited<ReturnType<typeof trialService.registerTrial>>;
-    predictionId: string;
-  }>> = [];
+  const candidates: Array<
+    Readonly<{
+      type: HypothesisType;
+      hypothesis: MiHypothesis;
+      trial: Awaited<ReturnType<typeof trialService.registerTrial>>;
+      predictionId: string;
+    }>
+  > = [];
   const predictedAt = new Date(scope.wfPredictiveStartUtc);
   const actualIngestAt = new Date();
   for (const type of hypothesisTypeEnum) {
@@ -277,10 +273,12 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
           "simple-trend-baseline",
           "random-entry-matched-exposure",
         ],
-        patternRefs: [{
-          patternKey: pattern.patternKey,
-          patternDefinitionDigest: pattern.definitionDigest,
-        }],
+        patternRefs: [
+          {
+            patternKey: pattern.patternKey,
+            patternDefinitionDigest: pattern.definitionDigest,
+          },
+        ],
         measurementRefs: [measurementRef],
         regimeScope: {
           description: `Preregistered ${type} structural claim for ${scope.surfaceKey}`,
@@ -304,19 +302,6 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
       type,
       kind: "market-prediction",
     });
-    await recordMarketPrediction(executor, context, {
-      id: predictionId,
-      subjectRef: `hypothesis:${hypothesis.id}`,
-      predictedAt,
-      prediction: {
-        schemaVersion: HISTORICAL_PRERUN_KNOWLEDGE_BOOTSTRAP_V2,
-        hypothesisType: type,
-        hypothesisDefinitionDigest: hypothesis.definitionDigest,
-        qualificationReceiptDigestHex: scope.qualificationReceiptDigestHex,
-        predictivePackageContentDigestHex: scope.predictivePackageContentDigestHex,
-        marketPitBoundary: scope.wfPredictiveEndUtc,
-      },
-    });
     candidates.push({ type, hypothesis, trial, predictionId });
   }
 
@@ -324,20 +309,21 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
     bars1m: input.wfPredictiveBars,
     evaluatedAt: scope.wfPredictiveEndUtc,
   });
-  const selected = candidates.find(({ type }) =>
-    evaluateCanonicalHistoricalApplicabilityFactsV1(type, reconstruction).applicable);
+  const selected = candidates.find(
+    ({ type }) => evaluateCanonicalHistoricalApplicabilityFactsV1(type, reconstruction).applicable,
+  );
   if (!selected) throw new Error("HISTORICAL_PRERUN_KNOWLEDGE_REFUSED:NO_APPLICABLE_HYPOTHESIS");
 
   const features = computeFeatureSnapshot({
     bars: input.wfPredictiveBars,
     evaluatedAt: scope.wfPredictiveEndUtc,
-    newId: () => deterministicUuid({ runId: scope.runId, symbol: scope.exchangeSymbol,
-      kind: "feature" }),
+    newId: () =>
+      deterministicUuid({ runId: scope.runId, symbol: scope.exchangeSymbol, kind: "feature" }),
   });
   const msv = buildMsvEnvelope({
     features,
-    newId: () => deterministicUuid({ runId: scope.runId, symbol: scope.exchangeSymbol,
-      kind: "msv" }),
+    newId: () =>
+      deterministicUuid({ runId: scope.runId, symbol: scope.exchangeSymbol, kind: "msv" }),
   });
   const source = await observationService.resolveInternalMsvSource(context);
   const marketBoundary = new Date(scope.wfPredictiveEndUtc);
@@ -350,7 +336,9 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
     eventTime: marketBoundary,
   });
   const priorObservation = await observationService.getLatestObservation(context, observationKey);
-  const observation = priorObservation ?? await observationService.recordObservation(context, {
+  const observation =
+    priorObservation ??
+    (await observationService.recordObservation(context, {
       sourceId: source.id,
       observationKind: "msv_envelope",
       subjectRef: scope.instrumentId,
@@ -358,7 +346,7 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
       eventTime: marketBoundary,
       ingestTime: actualIngestAt,
       observedBy: scope.operatorUserId,
-    });
+    }));
   if (observation.payloadJson !== payloadJson || observation.eventTime.getTime() !== end) {
     throw new Error("HISTORICAL_PRERUN_KNOWLEDGE_REFUSED:OBSERVATION_CONFLICT");
   }
@@ -389,15 +377,29 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
     actorType: "admin",
     actorId: scope.operatorUserId,
   });
-  const prediction = await verifyMarketPredictionOutcome(executor, context, {
-    predictionId: selected.predictionId,
-    verifiedAt: marketBoundary,
-    verificationResult: "confirmed",
-    outcome: {
+  const prediction = await recordMarketPrediction(executor, context, {
+    id: selected.predictionId,
+    subjectRef: `hypothesis:${selected.hypothesis.id}`,
+    predictedAt,
+    prediction: {
       schemaVersion: HISTORICAL_PRERUN_KNOWLEDGE_BOOTSTRAP_V2,
-      observedApplicabilityFacts:
-        evaluateCanonicalHistoricalApplicabilityFactsV1(selected.type, reconstruction).facts,
-      pitEvidenceBoundary: scope.wfPredictiveEndUtc,
+      hypothesisType: selected.type,
+      hypothesisDefinitionDigest: selected.hypothesis.definitionDigest,
+      qualificationReceiptDigestHex: scope.qualificationReceiptDigestHex,
+      predictivePackageContentDigestHex: scope.predictivePackageContentDigestHex,
+      marketPitBoundary: scope.wfPredictiveEndUtc,
+    },
+    verification: {
+      verifiedAt: marketBoundary,
+      verificationResult: "confirmed",
+      outcome: {
+        schemaVersion: HISTORICAL_PRERUN_KNOWLEDGE_BOOTSTRAP_V2,
+        observedApplicabilityFacts: evaluateCanonicalHistoricalApplicabilityFactsV1(
+          selected.type,
+          reconstruction,
+        ).facts,
+        pitEvidenceBoundary: scope.wfPredictiveEndUtc,
+      },
     },
   });
   const now = new Date();
@@ -408,7 +410,7 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
     type: selected.type,
     kind: "knowledge-edge",
   });
-  await insertKnowledgeEdgePostgres(executor, context, {
+  const resolved = await insertKnowledgeEdgePostgres(executor, context, {
     id: edgeId,
     fromRef: `market_prediction:${selected.predictionId}`,
     toRef: `hypothesis:${selected.hypothesis.id}`,
@@ -424,14 +426,9 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
       pitEvidenceBoundary: scope.wfPredictiveEndUtc,
     }),
     hypothesisId: selected.hypothesis.id,
-    verified: false,
+    verified: true,
     createdAt: now,
     updatedAt: now,
-  });
-  const resolved = await updateEdgeConfidenceFromVerification(executor, context, {
-    edgeId,
-    verificationResult: "confirmed",
-    updatedAt: new Date(),
   });
   if (!resolved.verified) {
     throw new Error("HISTORICAL_PRERUN_KNOWLEDGE_REFUSED:UNRESOLVED_KNOWLEDGE");

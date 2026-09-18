@@ -16,11 +16,7 @@
   ],
   "sourceDiscovery": {
     "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
-    "roots": [
-      "lib/trader/connectors",
-      "lib/trader/execution/v2",
-      "lib/trader/market-data"
-    ],
+    "roots": ["lib/trader/connectors", "lib/trader/execution/v2", "lib/trader/market-data"],
     "additionalFiles": [
       "lib/trader/execution/index.ts",
       "lib/trader/mi/raw-capture-v1.ts",
@@ -96,10 +92,7 @@
   "consumerDiscovery": {
     "roots": ["lib", "app", "scripts"],
     "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
-    "additionalFiles": [
-      "lib/trader/execution/index.ts",
-      "lib/trader/execution/v2/index.ts"
-    ],
+    "additionalFiles": ["lib/trader/execution/index.ts", "lib/trader/execution/v2/index.ts"],
     "importMarkers": [
       "@/lib/trader/connectors",
       "@/lib/trader/execution/v2",
@@ -116,7 +109,7 @@
     ],
     "expectedFileCount": 130,
     "sortedPathDigestHex": "54dec9423bd07eae0d2c28d8fcf5c850ca18edeb3d790625a83491cc7e929b19",
-    "sortedContentDigestHex": "e91232d06d59375d55c3fa85748b6a9fd26ce4a4298bf1b691b0c05cbb3d6c1b"
+    "sortedContentDigestHex": "1669a7e1bdba4bb69b2d864bdd4ed5a4fdb48ce83e0344669a031dfc92060c12"
   },
   "consumerRules": [
     {

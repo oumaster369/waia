@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
+import { deleteKnowledgeAuthorityRowsForOrg } from "@/tests/helpers/knowledge-authority-test-cleanup";
 import { createPostgresOrderRepository } from "@/lib/trader/execution";
 import { insertMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import { MEAN_REVERSION_V0 } from "@/lib/trader/intelligence/types";
@@ -101,7 +102,7 @@ describe.skipIf(!integrationEnabled || !url)(
       const sql = postgres(url!, { max: 1 });
       const orgId = orgA;
       try {
-        await sql.unsafe(`DELETE FROM trader_knowledge_edges WHERE organization_id = $1`, [orgId]);
+        await deleteKnowledgeAuthorityRowsForOrg(sql, orgId);
         await sql.unsafe(`DELETE FROM trader_market_events WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM trader_blind_validation_results WHERE organization_id = $1`, [
           orgId,

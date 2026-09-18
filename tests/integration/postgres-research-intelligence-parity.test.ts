@@ -10,6 +10,7 @@ import postgres from "postgres";
 
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
+import { deleteKnowledgeAuthorityRowsForOrg } from "@/tests/helpers/knowledge-authority-test-cleanup";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
@@ -196,7 +197,7 @@ describe.skipIf(!integrationEnabled || !url)(
       const sql = postgres(url!, { max: 1 });
       try {
         await deleteAuditLogsForOrg(sql, orgId);
-        await sql.unsafe(`DELETE FROM trader_knowledge_edges WHERE organization_id = $1`, [orgId]);
+        await deleteKnowledgeAuthorityRowsForOrg(sql, orgId);
         await sql.unsafe(`DELETE FROM trader_market_events WHERE organization_id = $1`, [orgId]);
         await sql.unsafe(`DELETE FROM trader_blind_validation_results WHERE organization_id = $1`, [
           orgId,
