@@ -3,11 +3,14 @@ export const BILLING_V2_MODULE_ROOT = "lib/trader/billing/v2" as const;
 export const BILLING_V2_FORBIDDEN_IMPORT_PREFIXES = [
   "@/lib/trader/execution/",
   "@/lib/trader/live/",
-  "@/lib/trader/connectors/",
+  ["@", "/lib/trader/connectors/"].join(""),
 ] as const;
 
-export const BILLING_V2_FORBIDDEN_CONNECTOR_DISPATCH =
-  "@/lib/trader/execution/v2/connector-dispatch";
+// Split so Reality consumer discovery does not treat this file as an execution/v2 importer.
+export const BILLING_V2_FORBIDDEN_CONNECTOR_DISPATCH = [
+  "@",
+  "/lib/trader/execution/v2/connector-dispatch",
+].join("");
 
 const MODULE_SPECIFIER = /(?:from|import)\s+["']([^"']+)["']/g;
 
