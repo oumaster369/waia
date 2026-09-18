@@ -100,7 +100,7 @@ export const CAPITAL_BYPASS_INVENTORY_V2: readonly CapitalBypassSeamV2[] = Objec
     disposition: "READ_ONLY",
     writeCapable: false,
     unresolved: false,
-    note: "Compatibility records only. Capital spine is runDecisionCapitalAuthorityV2.",
+    note: "Compatibility records only. Capital spine is Decision V2 canonical authority.",
   }),
   Object.freeze({
     id: "live-cycle-once",
