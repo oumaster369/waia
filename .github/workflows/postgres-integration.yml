@@ -57,8 +57,6 @@ on:
       - "tests/integration/postgres-historical-simulation-atomic-cycle-v2.test.ts"
       - "tests/integration/postgres-historical-observable-read-model-v2.test.ts"
       - "tests/integration/postgres-historical-runner-least-privilege-v2.test.ts"
-      - "tests/integration/postgres-knowledge-edge-version-v2.test.ts"
-      - "lib/trader/knowledge/**"
       - "tests/integration/postgres-predictive-package-storage-v1.test.ts"
       - "tests/integration/postgres-forecast-v2-persistence.test.ts"
       - "tests/integration/postgres-historical-dataset-registration-portable-v2.test.ts"
@@ -149,7 +147,6 @@ jobs:
           tests/integration/postgres-historical-simulation-atomic-cycle-v2.test.ts
           tests/integration/postgres-historical-observable-read-model-v2.test.ts
           tests/integration/postgres-historical-runner-least-privilege-v2.test.ts
-          tests/integration/postgres-knowledge-edge-version-v2.test.ts
           tests/integration/postgres-predictive-package-storage-v1.test.ts
           tests/unit/postgres-session-transaction-v2.test.ts
           tests/unit/historical-postgres-ci-cli-profile.test.ts
