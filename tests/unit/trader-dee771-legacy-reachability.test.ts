@@ -58,6 +58,8 @@ describe("DEE-771 legacy mutation reachability", () => {
     );
     expect(source).not.toContain("updateEdgeConfidenceFromVerification");
     expect(source).not.toContain("adjustEdgeConfidenceFromVerification");
+    expect(source).not.toContain("verifyMarketPredictionOutcome");
     expect(source).toContain("verified: true");
+    expect(source).toContain('verificationResult: "confirmed"');
   });
 });

@@ -50,6 +50,11 @@ export type RecordMarketPredictionInput = {
   predictedAt: Date;
   id?: string;
   createdAt?: Date;
+  verification?: {
+    outcome: Record<string, unknown>;
+    verificationResult: MarketPredictionVerificationResult;
+    verifiedAt: Date;
+  };
 };
 
 export type VerifyMarketPredictionOutcomeInput = {
@@ -154,6 +159,9 @@ export async function recordMarketPrediction(
     predictedAt,
     contentDigest,
     createdAt: input.createdAt ?? new Date(),
+    outcomeJson: input.verification ? JSON.stringify(input.verification.outcome) : null,
+    verifiedAt: input.verification?.verifiedAt ?? null,
+    verificationResult: input.verification?.verificationResult ?? null,
   });
 }
 

@@ -84,12 +84,55 @@ async function latestVerification(
   };
 }
 
+async function appendPredictionVerification(
+  ex: PgWriteExecutor,
+  scoped: { organizationId: string },
+  input: {
+    predictionId: string;
+    producingReceiptDigestHex: string;
+    version: number;
+    outcomeJson: string;
+    verificationResult: MarketPredictionVerificationResult;
+    verifiedAt: Date;
+  },
+): Promise<void> {
+  const digest = computeMarketPredictionVerificationDigestHex({
+    outcomeJson: input.outcomeJson,
+    verificationResult: input.verificationResult,
+  });
+  const receipt = requireProducingReceiptDigest(input.producingReceiptDigestHex);
+  const id = marketPredictionVerificationRowId(
+    [
+      MARKET_PREDICTION_VERIFICATION_SCHEMA_V2,
+      scoped.organizationId,
+      input.predictionId,
+      String(input.version),
+      digest,
+    ].join("|"),
+  );
+  await ex.insert(pgSchema.traderMarketPredictionVerificationV2).values({
+    id,
+    organizationId: scoped.organizationId,
+    predictionId: input.predictionId,
+    version: input.version,
+    outcomeJson: input.outcomeJson,
+    verificationResult: input.verificationResult,
+    verifiedAt: input.verifiedAt,
+    recordedAt: input.verifiedAt,
+    contentDigestHex: digest,
+    producedByReceiptDigestHex: receipt,
+    schemaVersion: MARKET_PREDICTION_VERIFICATION_SCHEMA_V2,
+  });
+}
+
 export async function insertMarketPredictionPostgres(
   ex: PgWriteExecutor,
   context: OrgContext,
   row: InsertMarketPredictionRow,
 ): Promise<MarketPrediction> {
   const scoped = requireOrgContext(context.organizationId);
+  const sealed =
+    row.outcomeJson != null && row.verifiedAt != null && row.verificationResult != null;
 
   await ex.insert(pgSchema.traderMarketPredictions).values({
     id: row.id,
@@ -97,9 +140,23 @@ export async function insertMarketPredictionPostgres(
     subjectRef: row.subjectRef,
     predictionJson: row.predictionJson,
     predictedAt: row.predictedAt,
+    outcomeJson: sealed ? row.outcomeJson : null,
+    verifiedAt: sealed ? row.verifiedAt : null,
+    verificationResult: sealed ? row.verificationResult : null,
     contentDigest: row.contentDigest,
     createdAt: row.createdAt,
   });
+
+  if (sealed) {
+    await appendPredictionVerification(ex, scoped, {
+      predictionId: row.id,
+      producingReceiptDigestHex: row.contentDigest,
+      version: 1,
+      outcomeJson: row.outcomeJson!,
+      verificationResult: row.verificationResult!,
+      verifiedAt: row.verifiedAt!,
+    });
+  }
 
   const rows = await ex
     .select()
@@ -115,7 +172,16 @@ export async function insertMarketPredictionPostgres(
   if (!rows[0]) {
     throw new Error("[trader] market prediction insert failed");
   }
-  return mapMarketPrediction(rows[0], null);
+  return mapMarketPrediction(
+    rows[0],
+    sealed
+      ? {
+          outcomeJson: row.outcomeJson!,
+          verificationResult: row.verificationResult!,
+          verifiedAt: row.verifiedAt!,
+        }
+      : null,
+  );
 }
 
 export async function getMarketPredictionByIdPostgres(
@@ -181,11 +247,6 @@ export async function verifyMarketPredictionPostgres(
     throw new Error("[trader] market prediction verify failed");
   }
 
-  const digest = computeMarketPredictionVerificationDigestHex({
-    outcomeJson: input.outcomeJson,
-    verificationResult: input.verificationResult,
-  });
-  const receipt = requireProducingReceiptDigest(existing.contentDigest);
   const currentVersion = existing.verifiedAt ? 1 : 0;
   if (existing.verifiedAt && existing.outcomeJson === input.outcomeJson) {
     return existing;
@@ -194,29 +255,14 @@ export async function verifyMarketPredictionPostgres(
     throw new KnowledgeAuthorityError(KNOWLEDGE_AUTHORITY_REASON.INITIAL_ASSERTION_ALREADY_EXISTS);
   }
 
-  const id = marketPredictionVerificationRowId(
-    [
-      MARKET_PREDICTION_VERIFICATION_SCHEMA_V2,
-      scoped.organizationId,
-      predictionId,
-      String(currentVersion + 1),
-      digest,
-    ].join("|"),
-  );
-
   try {
-    await ex.insert(pgSchema.traderMarketPredictionVerificationV2).values({
-      id,
-      organizationId: scoped.organizationId,
+    await appendPredictionVerification(ex, scoped, {
       predictionId,
+      producingReceiptDigestHex: existing.contentDigest,
       version: currentVersion + 1,
       outcomeJson: input.outcomeJson,
       verificationResult: input.verificationResult,
       verifiedAt: input.verifiedAt,
-      recordedAt: input.verifiedAt,
-      contentDigestHex: digest,
-      producedByReceiptDigestHex: receipt,
-      schemaVersion: MARKET_PREDICTION_VERIFICATION_SCHEMA_V2,
     });
   } catch (error) {
     const code = (error as { code?: string }).code;
