@@ -29,9 +29,9 @@
       "lib/trader/execution/historical-simulated-exchange.ts",
       "lib/trader/connectors/mock-exchange-connector.ts"
     ],
-    "expectedFileCount": 154,
-    "sortedPathDigestHex": "d5f2b4b0f3642e52cb8aa1270105d66a4e3286b1d29ae26472bb3a02b951fd31",
-    "sortedContentDigestHex": "7225a5bb99ff8602fa7a9e602041fb68c8fd5987529d8fad2bea41194c2a5b40"
+    "expectedFileCount": 155,
+    "sortedPathDigestHex": "bb13f0f38f9cab1ac3613294524c2d34fe57bde3f3306a6cd61f211edb9edf68",
+    "sortedContentDigestHex": "f7835a8af864c26a5afcc066f9e4b6e980481b4fb03b6eac174e08c8a9377906"
   },
   "sourceRules": [
     {
@@ -107,9 +107,9 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 130,
-    "sortedPathDigestHex": "54dec9423bd07eae0d2c28d8fcf5c850ca18edeb3d790625a83491cc7e929b19",
-    "sortedContentDigestHex": "1669a7e1bdba4bb69b2d864bdd4ed5a4fdb48ce83e0344669a031dfc92060c12"
+    "expectedFileCount": 131,
+    "sortedPathDigestHex": "af0cb3335765f090575642706e764671217fa0c876e206b095cd3dc99e67d4c6",
+    "sortedContentDigestHex": "71036fa31d7262ae48bfe5459f0b6a0c52bc6e7c1ac5c961269c23444e9308e4"
   },
   "consumerRules": [
     {
@@ -150,6 +150,12 @@
       "id": "CURRENT_OPERATIONAL_CONSUMERS",
       "pathPattern": "^lib/trader/(credentials|balances|trade-history|positions|execution|live|security|symbols)/",
       "disposition": "COMPATIBLE_EXISTING_BEHAVIOR_PRESERVED"
+    },
+    {
+      "id": "RUNTIME_V2_COMPOSITION",
+      "pathPattern": "^lib/trader/runtime-v2/",
+      "disposition": "COMPOSITION_NO_REALITY_INGRESS",
+      "reason": "Canonical Runtime V2 envelope, epistemic compose and Decision capital authority. These files prove admission and compose authorities; they are not Reality source adapters and do not place orders."
     },
     {
       "id": "SEPARATE_PRODUCT_CONSUMERS",
