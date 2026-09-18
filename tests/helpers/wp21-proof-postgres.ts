@@ -5,6 +5,7 @@
 import postgres from "postgres";
 
 import { getPostgresDrizzle } from "@/db/postgres-client";
+import { deleteKnowledgeAuthorityRowsForOrg } from "@/tests/helpers/knowledge-authority-test-cleanup";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
@@ -143,7 +144,7 @@ export async function cleanupWp21ProofOrgRows(
     await sql.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`);
   }
   await cleanupWp14AllRows(databaseUrl, orgId);
-  await sql.unsafe(`DELETE FROM trader_knowledge_edges WHERE organization_id = $1`, [orgId]);
+  await deleteKnowledgeAuthorityRowsForOrg(sql, orgId);
   await sql.unsafe(`DELETE FROM trader_market_events WHERE organization_id = $1`, [orgId]);
   await sql.unsafe(`DELETE FROM trader_blind_validation_results WHERE organization_id = $1`, [
     orgId,

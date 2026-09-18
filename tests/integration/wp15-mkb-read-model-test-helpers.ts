@@ -5,6 +5,7 @@
 import postgres from "postgres";
 
 import { getPostgresDrizzle } from "@/db/postgres-client";
+import { deleteKnowledgeAuthorityRowsForOrg } from "@/tests/helpers/knowledge-authority-test-cleanup";
 import { persistForecastDecisionBundle } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { persistIntelligenceCycleBundle } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import { insertKnowledgeEdgePostgres } from "@/lib/trader/knowledge/knowledge-edge-repository-postgres";
@@ -116,19 +117,23 @@ export async function queryWp15PostgresReadModel(organizationId: string, runId: 
 
 export async function seedWp15FutureUpdatedKnowledgeEdge(organizationId: string): Promise<string> {
   const id = "wp15-future-updated-edge";
-  await insertKnowledgeEdgePostgres(getPostgresDrizzle(), { organizationId }, {
-    id,
-    fromRef: "evidence:past",
-    toRef: "hypothesis:past",
-    relationKind: "supports",
-    confidence: "high",
-    strength: "strong",
-    regimeScope: "trend",
-    failureCasesJson: "[]",
-    verified: true,
-    createdAt: new Date(WP15_AS_OF.getTime() - 60_000),
-    updatedAt: new Date(WP15_AS_OF.getTime() + 1),
-  });
+  await insertKnowledgeEdgePostgres(
+    getPostgresDrizzle(),
+    { organizationId },
+    {
+      id,
+      fromRef: "evidence:past",
+      toRef: "hypothesis:past",
+      relationKind: "supports",
+      confidence: "high",
+      strength: "strong",
+      regimeScope: "trend",
+      failureCasesJson: "[]",
+      verified: true,
+      createdAt: new Date(WP15_AS_OF.getTime() - 60_000),
+      updatedAt: new Date(WP15_AS_OF.getTime() + 1),
+    },
+  );
   return id;
 }
 
@@ -151,12 +156,7 @@ export async function queryWp15InMemoryReadModel(
 export async function cleanupWp15KnowledgeRows(url: string, organizationId: string): Promise<void> {
   const sql = postgres(url, { max: 1 });
   try {
-    await sql.unsafe(`DELETE FROM trader_knowledge_edges WHERE organization_id = $1`, [
-      organizationId,
-    ]);
-    await sql.unsafe(`DELETE FROM trader_market_predictions WHERE organization_id = $1`, [
-      organizationId,
-    ]);
+    await deleteKnowledgeAuthorityRowsForOrg(sql, organizationId);
     await sql.unsafe(`DELETE FROM trader_market_events WHERE organization_id = $1`, [
       organizationId,
     ]);

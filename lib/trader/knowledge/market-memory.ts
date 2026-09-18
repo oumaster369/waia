@@ -6,9 +6,10 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
-  getKnowledgeEdgeByIdPostgres,
-  updateKnowledgeEdgePostgres,
-} from "@/lib/trader/knowledge/knowledge-edge-repository-postgres";
+  KNOWLEDGE_AUTHORITY_REASON,
+  KnowledgeAuthorityError,
+} from "@/lib/trader/knowledge/knowledge-edge-version-v2";
+import { legacyMkbHeuristicMutationDisabled } from "@/lib/trader/knowledge/legacy-mkb-mutation";
 import type {
   KnowledgeEdge,
   MarketPrediction,
@@ -93,7 +94,8 @@ function formatConfidence(value: number): string {
   return value.toFixed(4);
 }
 
-export function adjustEdgeConfidenceFromVerification(
+/** Historical arithmetic shape. Unreachable while the production guard is closed. */
+export function applyLegacyMkbHeuristicConfidenceAdjustment(
   currentConfidence: string,
   verificationResult: MarketPredictionVerificationResult,
 ): { confidence: string; verified: boolean } {
@@ -113,6 +115,19 @@ export function adjustEdgeConfidenceFromVerification(
     default:
       return { confidence: currentConfidence, verified: false };
   }
+}
+
+export function adjustEdgeConfidenceFromVerification(
+  currentConfidence: string,
+  verificationResult: MarketPredictionVerificationResult,
+): { confidence: string; verified: boolean } {
+  if (legacyMkbHeuristicMutationDisabled()) {
+    throw new KnowledgeAuthorityError(
+      KNOWLEDGE_AUTHORITY_REASON.LEGACY_MKB_MUTATION_DISABLED,
+      "LEGACY_MKB_MUTATION_DISABLED: versioned append-only Knowledge authority is required",
+    );
+  }
+  return applyLegacyMkbHeuristicConfidenceAdjustment(currentConfidence, verificationResult);
 }
 
 export async function recordMarketPrediction(
@@ -163,21 +178,14 @@ export async function verifyMarketPredictionOutcome(
 }
 
 export async function updateEdgeConfidenceFromVerification(
-  ex: PgExecutor,
-  context: OrgContext,
-  input: UpdateEdgeConfidenceInput,
+  _ex: PgExecutor,
+  _context: OrgContext,
+  _input: UpdateEdgeConfidenceInput,
 ): Promise<KnowledgeEdge> {
-  const edge = await getKnowledgeEdgeByIdPostgres(ex, context, input.edgeId);
-  if (!edge) {
-    throw new MarketMemoryError("MARKET_MEMORY_EDGE_NOT_FOUND");
-  }
-
-  const adjusted = adjustEdgeConfidenceFromVerification(edge.confidence, input.verificationResult);
-  return updateKnowledgeEdgePostgres(ex, context, input.edgeId, {
-    confidence: adjusted.confidence,
-    verified: adjusted.verified,
-    updatedAt: input.updatedAt ?? new Date(),
-  });
+  throw new KnowledgeAuthorityError(
+    KNOWLEDGE_AUTHORITY_REASON.LEGACY_MKB_MUTATION_DISABLED,
+    "LEGACY_MKB_MUTATION_DISABLED: versioned append-only Knowledge authority is required",
+  );
 }
 
 export async function queryMarketKnowledgeReadModel(

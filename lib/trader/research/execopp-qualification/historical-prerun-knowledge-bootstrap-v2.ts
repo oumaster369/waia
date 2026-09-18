@@ -26,7 +26,6 @@ import {
 } from "@/lib/trader/knowledge/knowledge-edge-repository-postgres";
 import {
   recordMarketPrediction,
-  updateEdgeConfidenceFromVerification,
   verifyMarketPredictionOutcome,
 } from "@/lib/trader/knowledge/market-memory";
 import { createPostgresMiEvidenceService } from "@/lib/trader/mi/evidence-service";
@@ -408,7 +407,7 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
     type: selected.type,
     kind: "knowledge-edge",
   });
-  await insertKnowledgeEdgePostgres(executor, context, {
+  const resolved = await insertKnowledgeEdgePostgres(executor, context, {
     id: edgeId,
     fromRef: `market_prediction:${selected.predictionId}`,
     toRef: `hypothesis:${selected.hypothesis.id}`,
@@ -424,14 +423,9 @@ export async function INTERNAL_buildHistoricalPrerunKnowledgeBootstrapV2(input: 
       pitEvidenceBoundary: scope.wfPredictiveEndUtc,
     }),
     hypothesisId: selected.hypothesis.id,
-    verified: false,
+    verified: true,
     createdAt: now,
     updatedAt: now,
-  });
-  const resolved = await updateEdgeConfidenceFromVerification(executor, context, {
-    edgeId,
-    verificationResult: "confirmed",
-    updatedAt: new Date(),
   });
   if (!resolved.verified) {
     throw new Error("HISTORICAL_PRERUN_KNOWLEDGE_REFUSED:UNRESOLVED_KNOWLEDGE");

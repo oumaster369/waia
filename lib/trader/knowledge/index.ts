@@ -52,12 +52,22 @@ export {
 export {
   MarketMemoryError,
   adjustEdgeConfidenceFromVerification,
+  applyLegacyMkbHeuristicConfidenceAdjustment,
   computeMarketPredictionDigest,
   recordMarketPrediction,
   queryMarketKnowledgeReadModel,
   updateEdgeConfidenceFromVerification,
   verifyMarketPredictionOutcome,
 } from "@/lib/trader/knowledge/market-memory";
+export { legacyMkbHeuristicMutationDisabled } from "@/lib/trader/knowledge/legacy-mkb-mutation";
+export {
+  KNOWLEDGE_AUTHORITY_REASON,
+  KNOWLEDGE_EDGE_VERSION_REASON_CLASSES,
+  KnowledgeAuthorityError,
+  computeKnowledgeEdgeVersionContentDigestHex,
+  isKnowledgeEdgeVersionReasonClass,
+  planKnowledgeEdgeVersionAppend,
+} from "@/lib/trader/knowledge/knowledge-edge-version-v2";
 
 export type {
   KnowledgeEdge,

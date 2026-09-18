@@ -45,6 +45,8 @@ const requiredPrivileges = new Map<string, readonly string[]>([
   ["trader_forecast_calibration_observation_v2", ["INSERT", "SELECT"]],
   ["trader_knowledge_confidence_update_record", ["INSERT", "SELECT"]],
   ["trader_knowledge_state_checkpoint_v2", ["INSERT", "SELECT"]],
+  ["trader_knowledge_edge_version_v2", ["INSERT", "SELECT"]],
+  ["trader_market_prediction_verification_v2", ["INSERT", "SELECT"]],
   ["trader_orders", ["INSERT", "SELECT"]],
   ["trader_order_events", ["INSERT", "SELECT"]],
   ["trader_fills", ["INSERT", "SELECT"]],
@@ -53,11 +55,6 @@ const requiredPrivileges = new Map<string, readonly string[]>([
 ]);
 
 const requiredUpdateColumns = new Map<string, readonly string[]>([
-  ["trader_knowledge_edges", [
-    "confidence", "failure_cases_json", "hypothesis_id", "regime_scope", "strength",
-    "updated_at", "verified",
-  ]],
-  ["trader_market_predictions", ["outcome_json", "verification_result", "verified_at"]],
   ["trader_orders", [
     "avg_fill_price", "exchange_order_id", "filled_quantity", "state", "state_version",
     "updated_at",

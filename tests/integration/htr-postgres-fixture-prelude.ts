@@ -10,6 +10,7 @@ import { buildResearchSessionHtxVolumeAuthorityByInstrument } from "@/lib/trader
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import { getPostgresDrizzle } from "@/db/postgres-client";
 import * as pgSchema from "@/db/schema.postgres";
+import { deleteKnowledgeAuthorityRowsForOrg } from "@/tests/helpers/knowledge-authority-test-cleanup";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
@@ -329,7 +330,7 @@ export async function cleanupHtrPostgresOrg(url: string, userId: string): Promis
   const orgId = personalOrganizationIdFromUserId(userId);
   try {
     await deleteHtrPostgresAuditLogsForOrg(url, orgId);
-    await sql.unsafe(`DELETE FROM trader_knowledge_edges WHERE organization_id = $1`, [orgId]);
+    await deleteKnowledgeAuthorityRowsForOrg(sql, orgId);
     await sql.unsafe(`DELETE FROM trader_market_events WHERE organization_id = $1`, [orgId]);
     await sql.unsafe(`DELETE FROM trader_blind_validation_results WHERE organization_id = $1`, [
       orgId,

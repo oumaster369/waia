@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -25,6 +25,8 @@ import type {
 import { assertCausalInputIdentity } from "@/lib/trader/intelligence/records/cycle-envelope-repository-postgres";
 import type { MkbReadModelQuery } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { MkbReadModelSource } from "@/lib/trader/knowledge/mkb-read-model-source";
+import { applyKnowledgeEdgeVersion } from "@/lib/trader/knowledge/knowledge-edge-version-repository-postgres";
+import type { KnowledgeEdgeVersionSnapshot } from "@/lib/trader/knowledge/knowledge-edge-version-v2";
 import { orgScopedWhere, requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 type PgExecutor = Pick<WaiaPostgresDb, "select">;
@@ -443,18 +445,89 @@ export function createMkbReadModelSourcePostgres(ex: PgExecutor): MkbReadModelSo
           .limit(limit)
       ).map(mapKnowledgeEdge);
 
-      const marketPredictions = (
-        await ex
-          .select()
-          .from(pgSchema.traderMarketPredictions)
-          .where(
-            and(
-              orgScopedWhere(pgSchema.traderMarketPredictions.organizationId, scoped),
-              lte(pgSchema.traderMarketPredictions.predictedAt, asOf),
-            ),
-          )
-          .limit(limit)
-      ).map(mapMarketPrediction);
+      const versionRows = await ex
+        .select()
+        .from(pgSchema.traderKnowledgeEdgeVersionV2)
+        .where(
+          and(
+            orgScopedWhere(pgSchema.traderKnowledgeEdgeVersionV2.organizationId, scoped),
+            lte(pgSchema.traderKnowledgeEdgeVersionV2.pitEventAt, asOf),
+          ),
+        )
+        .orderBy(desc(pgSchema.traderKnowledgeEdgeVersionV2.version));
+      const latestVersions = new Map<string, KnowledgeEdgeVersionSnapshot>();
+      for (const row of versionRows) {
+        if (latestVersions.has(row.knowledgeEdgeId)) continue;
+        latestVersions.set(row.knowledgeEdgeId, {
+          id: row.id,
+          version: row.version,
+          contentDigestHex: row.contentDigestHex,
+          reasonClass: row.reasonClass as KnowledgeEdgeVersionSnapshot["reasonClass"],
+          content: {
+            fromRef: row.fromRef,
+            toRef: row.toRef,
+            relationKind: row.relationKind,
+            confidence: row.confidence,
+            strength: row.strength,
+            regimeScope: row.regimeScope,
+            failureCasesJson: row.failureCasesJson,
+            hypothesisId: row.hypothesisId,
+            verified: row.verified,
+            lifecycleState: row.lifecycleState as "ACTIVE" | "RETIRED",
+          },
+        });
+      }
+      const projectedEdges = knowledgeEdges.map((edge) =>
+        applyKnowledgeEdgeVersion(edge, latestVersions.get(edge.id) ?? null),
+      );
+
+      const marketPredictionRows = await ex
+        .select()
+        .from(pgSchema.traderMarketPredictions)
+        .where(
+          and(
+            orgScopedWhere(pgSchema.traderMarketPredictions.organizationId, scoped),
+            lte(pgSchema.traderMarketPredictions.predictedAt, asOf),
+          ),
+        )
+        .limit(limit);
+      const verificationRows = await ex
+        .select()
+        .from(pgSchema.traderMarketPredictionVerificationV2)
+        .where(
+          and(
+            orgScopedWhere(pgSchema.traderMarketPredictionVerificationV2.organizationId, scoped),
+            lte(pgSchema.traderMarketPredictionVerificationV2.verifiedAt, asOf),
+          ),
+        )
+        .orderBy(desc(pgSchema.traderMarketPredictionVerificationV2.version));
+      const latestVerifications = new Map<
+        string,
+        {
+          outcomeJson: string;
+          verificationResult: MarketPrediction["verificationResult"];
+          verifiedAt: Date;
+        }
+      >();
+      for (const row of verificationRows) {
+        if (latestVerifications.has(row.predictionId)) continue;
+        latestVerifications.set(row.predictionId, {
+          outcomeJson: row.outcomeJson,
+          verificationResult: row.verificationResult as MarketPrediction["verificationResult"],
+          verifiedAt: row.verifiedAt,
+        });
+      }
+      const marketPredictions = marketPredictionRows.map((row) => {
+        const mapped = mapMarketPrediction(row);
+        const verification = latestVerifications.get(row.id);
+        if (!verification) return mapped;
+        return {
+          ...mapped,
+          outcomeJson: verification.outcomeJson,
+          verificationResult: verification.verificationResult,
+          verifiedAt: verification.verifiedAt,
+        };
+      });
 
       const marketEvents = (
         await ex
@@ -477,7 +550,7 @@ export function createMkbReadModelSourcePostgres(ex: PgExecutor): MkbReadModelSo
         decisions,
         links,
         entryPurposes,
-        knowledgeEdges,
+        knowledgeEdges: projectedEdges,
         marketPredictions,
         marketEvents,
       };

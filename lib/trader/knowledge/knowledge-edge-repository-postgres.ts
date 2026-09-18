@@ -12,6 +12,18 @@ import type {
   UpdateKnowledgeEdgeRow,
 } from "@/lib/trader/knowledge/knowledge.types";
 import {
+  KNOWLEDGE_AUTHORITY_REASON,
+  KnowledgeAuthorityError,
+  computeKnowledgeEdgeVersionContentDigestHex,
+} from "@/lib/trader/knowledge/knowledge-edge-version-v2";
+import {
+  applyKnowledgeEdgeVersion,
+  assertInitialKnowledgeEdgeVersionPostgres,
+  contentFromEdge,
+  getLatestKnowledgeEdgeVersionPostgres,
+  getLatestKnowledgeEdgeVersionsPostgres,
+} from "@/lib/trader/knowledge/knowledge-edge-version-repository-postgres";
+import {
   orgScopedWhere,
   requireOrgContext,
   type OrgContext,
@@ -76,7 +88,17 @@ export async function insertKnowledgeEdgePostgres(
   if (!rows[0]) {
     throw new Error("[trader] knowledge edge insert failed");
   }
-  return mapKnowledgeEdge(rows[0]);
+  const edge = mapKnowledgeEdge(rows[0]);
+  await assertInitialKnowledgeEdgeVersionPostgres(
+    ex,
+    context,
+    edge,
+    computeKnowledgeEdgeVersionContentDigestHex(contentFromEdge(edge)),
+  );
+  return applyKnowledgeEdgeVersion(
+    edge,
+    await getLatestKnowledgeEdgeVersionPostgres(ex, context, edge.id),
+  );
 }
 
 export async function getKnowledgeEdgeByIdPostgres(
@@ -96,7 +118,12 @@ export async function getKnowledgeEdgeByIdPostgres(
     )
     .limit(1);
 
-  return rows[0] ? mapKnowledgeEdge(rows[0]) : null;
+  if (!rows[0]) return null;
+  const edge = mapKnowledgeEdge(rows[0]);
+  return applyKnowledgeEdgeVersion(
+    edge,
+    await getLatestKnowledgeEdgeVersionPostgres(ex, context, edge.id),
+  );
 }
 
 export async function listKnowledgeEdgesPostgres(
@@ -120,63 +147,34 @@ export async function listKnowledgeEdgesPostgres(
     .where(and(...conditions))
     .orderBy(asc(pgSchema.traderKnowledgeEdges.createdAt));
 
-  return rows.map(mapKnowledgeEdge);
+  const edges = rows.map(mapKnowledgeEdge);
+  const versions = await getLatestKnowledgeEdgeVersionsPostgres(
+    ex,
+    context,
+    edges.map((edge) => edge.id),
+  );
+  return edges.map((edge) => applyKnowledgeEdgeVersion(edge, versions.get(edge.id) ?? null));
 }
 
 export async function updateKnowledgeEdgePostgres(
-  ex: PgWriteExecutor,
-  context: OrgContext,
-  edgeId: string,
-  patch: UpdateKnowledgeEdgeRow,
+  _ex: PgWriteExecutor,
+  _context: OrgContext,
+  _edgeId: string,
+  _patch: UpdateKnowledgeEdgeRow,
 ): Promise<KnowledgeEdge> {
-  const scoped = requireOrgContext(context.organizationId);
-
-  await ex
-    .update(pgSchema.traderKnowledgeEdges)
-    .set({
-      ...(patch.confidence !== undefined ? { confidence: patch.confidence } : {}),
-      ...(patch.strength !== undefined ? { strength: patch.strength } : {}),
-      ...(patch.regimeScope !== undefined ? { regimeScope: patch.regimeScope } : {}),
-      ...(patch.failureCasesJson !== undefined ? { failureCasesJson: patch.failureCasesJson } : {}),
-      ...(patch.hypothesisId !== undefined ? { hypothesisId: patch.hypothesisId } : {}),
-      ...(patch.verified !== undefined ? { verified: patch.verified } : {}),
-      updatedAt: patch.updatedAt,
-    })
-    .where(
-      and(
-        eq(pgSchema.traderKnowledgeEdges.id, edgeId),
-        orgScopedWhere(pgSchema.traderKnowledgeEdges.organizationId, scoped),
-      ),
-    );
-
-  const edge = await getKnowledgeEdgeByIdPostgres(ex, context, edgeId);
-  if (!edge) {
-    throw new Error("[trader] knowledge edge update failed");
-  }
-  return edge;
+  throw new KnowledgeAuthorityError(
+    KNOWLEDGE_AUTHORITY_REASON.LEGACY_MKB_MUTATION_DISABLED,
+    "LEGACY_MKB_MUTATION_DISABLED: in-place Knowledge mutation is refused",
+  );
 }
 
 export async function deleteKnowledgeEdgePostgres(
-  ex: PgDeleteExecutor,
-  context: OrgContext,
-  edgeId: string,
+  _ex: PgDeleteExecutor,
+  _context: OrgContext,
+  _edgeId: string,
 ): Promise<boolean> {
-  const existing = await getKnowledgeEdgeByIdPostgres(ex, context, edgeId);
-  if (!existing) {
-    return false;
-  }
-
-  await ex
-    .delete(pgSchema.traderKnowledgeEdges)
-    .where(
-      and(
-        eq(pgSchema.traderKnowledgeEdges.id, edgeId),
-        orgScopedWhere(
-          pgSchema.traderKnowledgeEdges.organizationId,
-          requireOrgContext(context.organizationId),
-        ),
-      ),
-    );
-
-  return true;
+  throw new KnowledgeAuthorityError(
+    KNOWLEDGE_AUTHORITY_REASON.LEGACY_KNOWLEDGE_DELETE_DISABLED,
+    "LEGACY_KNOWLEDGE_DELETE_DISABLED: Knowledge history is not deletable",
+  );
 }
