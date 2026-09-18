@@ -21,6 +21,10 @@ import {
   type H2Step,
 } from "./postgres-h2-migration-manifest-v1";
 import {
+  extraInsertApplicableRunnerPolicies,
+  LEFTOVER_ORG_SCOPE_POLICY_NAME,
+} from "./postgres-h2-leftover-org-scope-policy-v1";
+import {
   assertRoutineExecuteBounded,
   collectCanonicalRelationAuthority,
   collectCanonicalSchemaAuthority,
@@ -487,7 +491,59 @@ async function verifyAdmissionPolicy(sql: Sql, step: "0206" | "0207"): Promise<u
   ) {
     refuseH2(`CATALOG_${step}_POLICY`, "admission policy identity");
   }
+  const extras = extraInsertApplicableRunnerPolicies(await admissionRunnerPolicies(sql));
+  if (extras.length > 0) {
+    refuseH2(`CATALOG_${step}_EXTRA_INSERT_POLICY`, extras.join(","));
+  }
   return policy;
+}
+
+async function admissionRunnerPolicies(sql: Sql) {
+  const rows = await sql<
+    Readonly<{
+      policy_name: string;
+      command: string;
+      permissive: boolean;
+      roles: string[];
+    }>[]
+  >`
+    SELECT policy.polname AS policy_name, policy.polcmd AS command,
+      policy.polpermissive AS permissive,
+      ARRAY(
+        SELECT role.rolname FROM pg_roles role
+        WHERE role.oid=ANY(policy.polroles)
+        ORDER BY role.rolname
+      ) AS roles
+    FROM pg_policy policy
+    JOIN pg_class class ON class.oid=policy.polrelid
+    JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
+    WHERE namespace.nspname='public'
+      AND class.relname='trader_scientific_admission_receipt_v1'
+    ORDER BY policy.polname
+  `;
+  return rows.map((row) =>
+    Object.freeze({
+      policyName: row.policy_name,
+      command: row.command,
+      permissive: row.permissive,
+      roles: Object.freeze([...row.roles]),
+    }),
+  );
+}
+
+async function assertNoLeftoverOrgScopePolicy(sql: Sql, step: H2Step): Promise<void> {
+  const rows = await sql<Readonly<{ relation_name: string }>[]>`
+    SELECT class.relname AS relation_name
+    FROM pg_policy policy
+    JOIN pg_class class ON class.oid=policy.polrelid
+    JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
+    WHERE namespace.nspname='public'
+      AND policy.polname=${LEFTOVER_ORG_SCOPE_POLICY_NAME}
+    ORDER BY class.relname
+  `;
+  if (rows.length > 0) {
+    refuseH2(`CATALOG_${step}_LEFTOVER_ORG_SCOPE`, rows.map((row) => row.relation_name).join(","));
+  }
 }
 
 async function verify0208(sql: Sql): Promise<unknown> {
@@ -966,8 +1022,10 @@ export async function verifyH2MigrationCatalog(sql: Sql, step: H2Step): Promise<
     await verify0205(sql);
   } else if (step === "0206" || step === "0207") {
     await verifyAdmissionPolicy(sql, step);
+    await assertNoLeftoverOrgScopePolicy(sql, step);
   } else {
     await verify0208(sql);
+    await assertNoLeftoverOrgScopePolicy(sql, step);
   }
   const digest = semanticDigest(await collectExactH2CatalogSnapshot(sql, step));
   const expected = EXPECTED_H2_CATALOG_DIGESTS[step];

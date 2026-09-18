@@ -29,6 +29,7 @@
     "trader:fhv:host-qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/fhv-host-qualify-cli.ts",
     "trader:fhv:execution-server-preflight": "./scripts/ops/fhv-execution-server-preflight.sh",
     "trader:h2:migrate": "WAIA_TRADER_CLI=1 node --import tsx scripts/ops/postgres-h2-migration-operator-v1.ts",
+    "trader:h2:org-scope-hygiene": "WAIA_TRADER_CLI=1 node --import tsx scripts/ops/postgres-h2-org-scope-hygiene-operator-v1.ts",
     "trader:post-h2:migrate": "WAIA_TRADER_CLI=1 node --import tsx scripts/ops/postgres-post-h2-migration-operator-v1.ts",
     "trader:observation:collector": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/account-observation-collector-host.ts",
     "trader:observation:provision-logins": "node scripts/ops/provision-account-observation-logins.mjs",
