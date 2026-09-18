@@ -102,11 +102,22 @@ describe("DEE-772 Knowledge Navigator V2", () => {
           relationKind: "CONTRADICTS",
           contentDigestHex: DIGEST_B,
         }),
+        candidate({
+          knowledgeEdgeId: "independent",
+          fromRef: "other-regime",
+          toRef: "other-move",
+          contentDigestHex: "d".repeat(64),
+        }),
       ],
     });
     expect(receipt.outcome).toBe("UNKNOWN_UNRESOLVED");
     expect(receipt.selected).toEqual([]);
     expect(receipt.rejected.every((row) => row.reason === "CONTRADICTORY")).toBe(true);
+    expect(receipt.rejected.map((row) => row.knowledgeEdgeId).sort()).toEqual([
+      "a",
+      "b",
+      "independent",
+    ]);
   });
 
   it("drops redundant identical content and enforces the evidence budget", () => {

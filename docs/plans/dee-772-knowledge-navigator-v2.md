@@ -15,16 +15,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  status: implementing
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement the pure Navigator receipt/selector, consumer inventory, and targeted unit tests. Do not mutate Knowledge, bypass Predictive Admission, or touch H2/C3/capital."
+  nextAction: "Open one PR to main for the pure Navigator primitive. Do not wire Forecast/Decision, mutate Knowledge, bypass Predictive Admission, or touch H2/C3/capital."
 provenance:
   createdFrom: chat
   gapRegistry: null

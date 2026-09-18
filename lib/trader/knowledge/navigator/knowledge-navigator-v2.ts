@@ -135,28 +135,33 @@ export function selectKnowledgeForQuestionV2(
   }
 
   const unique = [...uniqueByDigest.values()].sort(compareIdentities);
-  const selectedCandidates = unique.slice(0, input.evidenceBudget);
-  for (const extra of unique.slice(input.evidenceBudget)) {
-    rejected.push({
-      knowledgeEdgeId: extra.knowledgeEdgeId,
-      version: extra.version,
-      reason: "BUDGET_EXCLUDED",
-    });
-  }
-
-  const selected: KnowledgeSelectionIdentityV2[] = selectedCandidates.map((candidate) => ({
-    knowledgeEdgeId: candidate.knowledgeEdgeId,
-    version: candidate.version,
-    contentDigestHex: candidate.contentDigestHex,
-  }));
-
+  let selected: KnowledgeSelectionIdentityV2[] = [];
   let outcome: KnowledgeSelectionOutcomeV2;
+
   if (contradictory) {
     outcome = "UNKNOWN_UNRESOLVED";
-  } else if (selected.length === 0) {
-    outcome = "INSUFFICIENT_EVIDENCE";
+    for (const leftover of unique) {
+      rejected.push({
+        knowledgeEdgeId: leftover.knowledgeEdgeId,
+        version: leftover.version,
+        reason: "CONTRADICTORY",
+      });
+    }
   } else {
-    outcome = "SELECTED_MINIMAL_SUFFICIENT";
+    const selectedCandidates = unique.slice(0, input.evidenceBudget);
+    for (const extra of unique.slice(input.evidenceBudget)) {
+      rejected.push({
+        knowledgeEdgeId: extra.knowledgeEdgeId,
+        version: extra.version,
+        reason: "BUDGET_EXCLUDED",
+      });
+    }
+    selected = selectedCandidates.map((candidate) => ({
+      knowledgeEdgeId: candidate.knowledgeEdgeId,
+      version: candidate.version,
+      contentDigestHex: candidate.contentDigestHex,
+    }));
+    outcome = selected.length === 0 ? "INSUFFICIENT_EVIDENCE" : "SELECTED_MINIMAL_SUFFICIENT";
   }
 
   rejected.sort((left, right) => {
