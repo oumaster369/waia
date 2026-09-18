@@ -20,6 +20,7 @@ import {
   WAIA_SCHEMA_USAGE_PRINCIPALS,
   assertRoutineExecuteBounded,
   partitionCreatorMemberships,
+  sortCatalogRows,
   type MembershipRow,
 } from "@/scripts/ops/postgres-migration-catalog-authority-v1";
 
@@ -112,6 +113,31 @@ describe("DEE-1020 canonical authority classes", () => {
         "CATALOG_AUTHORITY_CREATOR_MEMBERSHIP",
       );
     }
+  });
+
+  it("orders identical FOREIGN KEY definitions by C/bytewise punctuation, not ICU", () => {
+    const simple = {
+      schema_name: "public",
+      relation_name: "trader_account_collection_state",
+      constraint_type: "f",
+      definition: "FOREIGN KEY (organization_id) REFERENCES organizations(id)",
+    };
+    const composite = {
+      schema_name: "public",
+      relation_name: "trader_account_collection_state",
+      constraint_type: "f",
+      definition:
+        "FOREIGN KEY (organization_id, credential_id, exchange_account_id, last_observation_id) REFERENCES trader_account_observations(organization_id, credential_id, exchange_account_id, observation_id)",
+    };
+    // ICU en-US sorts ',' before ')'; C/libc/JS sort ')' before ','. Production minted 15721405
+    // from the ICU order of these two identical definitions.
+    expect(simple.definition < composite.definition).toBe(true);
+    expect(
+      sortCatalogRows(
+        [composite, simple],
+        ["schema_name", "relation_name", "constraint_type", "definition"],
+      ).map((row) => row.definition),
+    ).toEqual([simple.definition, composite.definition]);
   });
 
   it("derives the browser-hardened relation set from the ratified migration SQL", () => {

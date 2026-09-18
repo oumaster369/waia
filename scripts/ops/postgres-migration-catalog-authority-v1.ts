@@ -148,6 +148,41 @@ function quoted(names: readonly string[], refuse: CatalogRefusal): string {
 }
 
 /**
+ * Bytewise (C) order for digest-pinned catalog rows.
+ *
+ * PostgreSQL `ORDER BY text` uses the database's default collation. libc `en_US.utf8` and ICU
+ * `en-US` disagree on punctuation: ICU sorts `,` before `)`, so two identical FOREIGN KEY
+ * definitions — `FOREIGN KEY (organization_id)` vs `FOREIGN KEY (organization_id, …)` — reverse
+ * relative to each other. That reordering alone minted production digest `15721405…` against the
+ * DEE-1020 libc expectation `66a37ae0…` with no object, privilege, or owner difference.
+ *
+ * JavaScript `<` on these ASCII strings matches `COLLATE "C"`. Sorting here makes the frozen
+ * snapshot independent of the cluster's locale provider. SQL `ORDER BY` remains for readability;
+ * it is not trusted as the digest identity.
+ */
+export function sortCatalogRows<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  keys: readonly (keyof T & string)[],
+): T[] {
+  return [...rows].sort((left, right) => {
+    for (const key of keys) {
+      const a = catalogSortKey(left[key]);
+      const b = catalogSortKey(right[key]);
+      if (a < b) return -1;
+      if (a > b) return 1;
+    }
+    return 0;
+  });
+}
+
+function catalogSortKey(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
+/**
  * Applies the closure rules that let the structural classes leave the digest. Every rule refuses;
  * none filters. Called for table and column privileges alike.
  */
@@ -394,11 +429,12 @@ export function partitionCreatorMemberships(
 }
 
 /**
- * Refuses EXECUTE on a step's functions for every named role. PostgreSQL's stock PUBLIC EXECUTE is
- * admitted because it is present in both cluster classes — a Supabase-class function default ACL
- * leaves `proacl` NULL, so the stock default still applies — and because the covered functions are
- * either IMMUTABLE argument validators with no relation access or trigger functions the migration
- * explicitly revokes from PUBLIC and the named 0205 verifier independently asserts.
+ * Refuses EXECUTE on a step's functions for every named role. PUBLIC EXECUTE is admitted when
+ * `proacl` is still NULL (bare-cluster stock default). Owner-only EXECUTE (`{owner=X}`) is the
+ * approved production function default ACL and is filtered out of `routineGrantRows` because the
+ * query already drops the owner. Named-role EXECUTE is refused in both cluster classes. Covered
+ * functions are either IMMUTABLE argument validators with no relation access or trigger functions
+ * the migration explicitly revokes from PUBLIC and the named 0205 verifier independently asserts.
  */
 export function assertRoutineExecuteBounded(
   rows: readonly Readonly<{ grantee_name: string; privilege_type: string }>[],

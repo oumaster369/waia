@@ -25,6 +25,7 @@ import {
   collectCanonicalRelationAuthority,
   collectCanonicalSchemaAuthority,
   partitionCreatorMemberships,
+  sortCatalogRows,
   type MembershipRow,
 } from "./postgres-migration-catalog-authority-v1";
 
@@ -674,10 +675,9 @@ async function verify0208(sql: Sql): Promise<unknown> {
 }
 
 /**
- * DEE-1020: re-derived from the canonical authority projection. Each value was produced
- * independently by two disposable PostgreSQL 17 fixtures — the bare reference cluster and the
- * Supabase-class cluster of `scripts/postgres-validation/prelude-supabase-baseline.sql` — and both
- * produced the same digest bit-for-bit. None of these constants was fitted to a target by hand.
+ * DEE-1020: re-derived from the canonical authority projection. DEE-1021 re-derived the same
+ * values after pinning snapshot row order to bytewise C/JavaScript string order: libc alpine PG17
+ * and ICU Supabase PG 17.6 then converge bit-for-bit. None of these constants was fitted to a target.
  */
 const EXPECTED_H2_CATALOG_DIGESTS: Readonly<Record<H2Step, string>> = Object.freeze({
   "0205": "66a37ae088833a64eadded9a578fb22411948f3d230034c28b90dfae84858189",
@@ -795,7 +795,8 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
       )
     ORDER BY schema_name,relation_name,attribute.attnum
   `);
-  const constraintRows = await sql.unsafe(`
+  const constraintRows = sortCatalogRows(
+    (await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,class.relname AS relation_name,
       item.contype AS constraint_type,pg_get_constraintdef(item.oid,true) AS definition
     FROM pg_constraint item
@@ -803,8 +804,11 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
     JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
     WHERE namespace.nspname='public' AND class.relname IN (${constraintRelations})
     ORDER BY schema_name,relation_name,constraint_type,definition
-  `);
-  const indexRows = await sql.unsafe(`
+  `)) as Record<string, unknown>[],
+    ["schema_name", "relation_name", "constraint_type", "definition"],
+  );
+  const indexRows = sortCatalogRows(
+    (await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,class.relname AS relation_name,
       pg_get_indexdef(index_item.indexrelid,0,true) AS definition
     FROM pg_index index_item
@@ -812,7 +816,9 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
     JOIN pg_namespace namespace ON namespace.oid=class.relnamespace
     WHERE namespace.nspname='public' AND class.relname IN (${completeRelations})
     ORDER BY schema_name,relation_name,definition
-  `);
+  `)) as Record<string, unknown>[],
+    ["schema_name", "relation_name", "definition"],
+  );
   const policyRows = await sql.unsafe(`
     SELECT namespace.nspname AS schema_name,class.relname AS relation_name,
       policy.polname AS policy_name,policy.polcmd AS command,
@@ -929,8 +935,8 @@ async function collectExactH2CatalogSnapshot(sql: Sql, step: H2Step): Promise<un
     )
     ORDER BY schema_name,function_name,identity_arguments,grantee_name,privilege_type,grantor_name
   `);
-  // Function EXECUTE needs no normalization — both cluster classes leave `proacl` NULL and so keep
-  // PostgreSQL's stock PUBLIC EXECUTE — but a grant to any named role is now refused outright.
+  // Named-role EXECUTE is refused. Owner-only and stock PUBLIC EXECUTE both leave
+  // `routineGrantRows` empty because the query drops the owner and PUBLIC is not a named role.
   assertRoutineExecuteBounded(
     routineGrantRows as unknown as readonly Readonly<{
       grantee_name: string;

@@ -349,6 +349,13 @@ describe.skipIf(!enabled)("DEE-1020 Supabase-class canonical catalog authority",
       refusal: "CATALOG_ROUTINE_NAMED_GRANT",
     },
     {
+      name: "named function EXECUTE on an AI-TWIN validator",
+      step: "0209" as Step,
+      injection:
+        "GRANT EXECUTE ON FUNCTION public.ai_twin_observation_sources_valid_v1(jsonb) TO anon",
+      refusal: "CATALOG_0209_FUNCTIONS",
+    },
+    {
       name: "schema CREATE on public",
       step: "0205" as Step,
       injection: "GRANT CREATE ON SCHEMA public TO anon",

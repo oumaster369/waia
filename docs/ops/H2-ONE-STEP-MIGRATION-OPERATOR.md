@@ -132,9 +132,12 @@ a new invocation with the next explicit step.
   comparison-identity validator.
 
 Verification runs before COMMIT. Full relation/column/constraint/index/policy/trigger/function/
-role/membership/grant projections are matched against immutable expected catalog digests validated
-on PostgreSQL 16 and 17. The digest is receipt-bound and must match one fresh read-only,
-repeatable-snapshot post-commit verification transaction.
+role/membership/grant projections are matched against immutable expected catalog digests. Snapshot `ORDER BY` of definition text is not trusted: ICU `en-US` (approved Supabase PG 17.6)
+and libc `en_US.utf8` (alpine fixtures) disagree on `,` vs `)`. The frozen snapshot re-sorts
+those rows bytewise in-process so both locale providers converge. Digests are re-derived on
+PostgreSQL 17 for both classes.
+The digest is receipt-bound and must match one fresh read-only, repeatable-snapshot post-commit
+verification transaction.
 
 ## Receipt
 
