@@ -55,8 +55,9 @@ This batch adds the `lib/trader/research-v2` library spine. It does not rewrite
 - Direct `pnl` / `winRate` / `reward` / `profitable` fields cannot be discovery fitness. Reuse
   `no-reinforcement-guard`. Economic outcomes are evaluation evidence, not generator ranking.
 - Negative outcomes persist. Survivorship discard of the evidence package is forbidden.
-- DEE-771/772/773 are consumed, not reimplemented. RESEARCH_ONLY, missing Navigator, raw MKB, and
-  unqualified future-cycle feedback fail closed.
+- DEE-771/772/773 are consumed, not reimplemented. Missing Navigator, raw MKB, unqualified
+  future-cycle feedback, and `NOT_ADMITTED` Predictive Admission fail closed. `RESEARCH_ONLY` is
+  valid on this research plane and still has no capital path.
 - Production write-enabled ingress remains `lib/trader/execution/v2/connector-dispatch.ts`.
 
 ## Work packages

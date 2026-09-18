@@ -255,11 +255,17 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
     expect(result.proposal?.promotionAuthority).toBe("NONE");
   });
 
-  it("fails closed on RESEARCH_ONLY, missing Navigator, raw MKB and unqualified future-cycle feedback", () => {
+  it("keeps RESEARCH_ONLY on the research plane and fails closed on missing Navigator, raw MKB and unqualified future-cycle feedback", () => {
+    const researchOnly = runStrategyEvolutionResearchPassV2(
+      passInput({ predictiveAdmissionVerdict: "RESEARCH_ONLY" }),
+    );
+    expect(researchOnly.status).toBe("HUMAN_PROPOSAL_PENDING");
+    expect(researchOnly.knowledge.status).toBe("ADMITTED");
+    expect(researchOnly.capitalAuthority).toBe("RESEARCH_ONLY");
     expect(
-      runStrategyEvolutionResearchPassV2(passInput({ predictiveAdmissionVerdict: "RESEARCH_ONLY" }))
+      runStrategyEvolutionResearchPassV2(passInput({ predictiveAdmissionVerdict: "NOT_ADMITTED" }))
         .knowledge.reasonCodes,
-    ).toContain("RESEARCH_ONLY_NOT_CAPITAL_ELIGIBLE");
+    ).toContain("PREDICTIVE_ADMISSION_NOT_ADMITTED");
     expect(
       runStrategyEvolutionResearchPassV2(passInput({ navigatorSelect: null })).knowledge
         .reasonCodes,

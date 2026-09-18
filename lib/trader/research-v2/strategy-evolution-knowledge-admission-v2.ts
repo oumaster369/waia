@@ -66,12 +66,8 @@ export function admitStrategyEvolutionKnowledgeV2(
       reasonCodes.push("NAVIGATOR_NOT_MINIMAL_SUFFICIENT");
     }
   }
-  if (input.predictiveAdmissionVerdict !== "ADMITTED") {
-    reasonCodes.push(
-      input.predictiveAdmissionVerdict === "RESEARCH_ONLY"
-        ? "RESEARCH_ONLY_NOT_CAPITAL_ELIGIBLE"
-        : "PREDICTIVE_ADMISSION_NOT_ADMITTED",
-    );
+  if (input.predictiveAdmissionVerdict === "NOT_ADMITTED") {
+    reasonCodes.push("PREDICTIVE_ADMISSION_NOT_ADMITTED");
   }
   if (!input.futureCycleEffect) {
     reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
