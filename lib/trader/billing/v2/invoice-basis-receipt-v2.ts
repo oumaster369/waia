@@ -1,7 +1,10 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { assertBillingV2ForbiddenKeys } from "@/lib/trader/billing/v2/billing-v2-guards";
-import type { BillingAssessmentV2 } from "@/lib/trader/billing/v2/billing-assessment-v2";
+import {
+  assertBillingAssessmentV2,
+  type BillingAssessmentV2,
+} from "@/lib/trader/billing/v2/billing-assessment-v2";
 
 export const INVOICE_BASIS_RECEIPT_V2_SCHEMA = "waia.trader.invoice_basis_receipt.v2" as const;
 
@@ -42,6 +45,7 @@ export function buildInvoiceBasisReceiptV2(
     ["status", "issuedAt", "collection", "payment", "ISSUED"],
     "INVOICE_BASIS_ISSUED_FORBIDDEN",
   );
+  assertBillingAssessmentV2(input.assessment);
   if (input.assessment.capitalAuthority !== "NONE") {
     throw new Error("INVOICE_BASIS_CAPITAL_AUTHORITY_REFUSED");
   }

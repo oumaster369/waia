@@ -109,6 +109,29 @@ export function refuseEquityHwmAsBillingHwmV2(input: { equityHwm: string }): nev
   throw new Error("BILLING_EQUITY_HWM_CANNOT_POPULATE_BILLING_HWM");
 }
 
+export function assertBillingAssessmentV2(value: BillingAssessmentV2): void {
+  if (value.schemaVersion !== BILLING_ASSESSMENT_V2_SCHEMA) {
+    throw new Error("BILLING_ASSESSMENT_UNSUPPORTED_VERSION");
+  }
+  if (value.hwmEvent.schemaVersion !== BILLING_HWM_EVENT_V2_SCHEMA) {
+    throw new Error("BILLING_HWM_EVENT_UNSUPPORTED_VERSION");
+  }
+  const { contentDigestHex: hwmDigest, ...hwmBody } = value.hwmEvent;
+  if (computeSemanticSha256Hex(hwmBody) !== hwmDigest) {
+    throw new Error("BILLING_HWM_EVENT_DIGEST_MISMATCH");
+  }
+  if (value.hwmEvent.receiptDigestHex !== value.receiptDigestHex) {
+    throw new Error("BILLING_HWM_RECEIPT_MISMATCH");
+  }
+  if (value.hwmEvent.policyDigestHex !== value.policyDigestHex) {
+    throw new Error("BILLING_HWM_POLICY_MISMATCH");
+  }
+  const { contentDigestHex, ...body } = value;
+  if (computeSemanticSha256Hex(body) !== contentDigestHex) {
+    throw new Error("BILLING_ASSESSMENT_DIGEST_MISMATCH");
+  }
+}
+
 export function assessBillingV2(input: BillingAssessmentV2Input): BillingAssessmentV2 {
   assertBillingV2ForbiddenKeys(
     input,

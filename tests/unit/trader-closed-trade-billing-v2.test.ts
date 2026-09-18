@@ -273,6 +273,17 @@ describe("DEE-638 closed-trade billing V2", () => {
       }),
     ).toThrow(/BILLING_EQUITY_HWM_CANNOT_POPULATE_BILLING_HWM/);
     expect(() => refuseIssuedInvoiceAuthorityV2()).toThrow(/INVOICE_BASIS_ISSUED_FORBIDDEN/);
+    const intact = assessBillingV2({
+      receipt: receiptFor([]),
+      priorHwm: bootstrapHwm(),
+      policy,
+      assessedAtUtc: ASSESSED_AT,
+    });
+    expect(() =>
+      buildInvoiceBasisReceiptV2({
+        assessment: { ...intact, performanceFee: "999" },
+      }),
+    ).toThrow(/BILLING_ASSESSMENT_DIGEST_MISMATCH/);
     expect(() => buildCanonicalBillingPolicyV2({ feeRate: "0.20" })).toThrow(
       /BILLING_POLICY_RATE_NOT_CALLER_PARAMETER/,
     );

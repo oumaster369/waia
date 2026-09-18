@@ -58,6 +58,7 @@ export {
   BILLING_ASSESSMENT_V2_SCHEMA,
   BILLING_HWM_EVENT_KINDS_V2,
   BILLING_HWM_EVENT_V2_SCHEMA,
+  assertBillingAssessmentV2,
   assessBillingV2,
   refuseEquityHwmAsBillingHwmV2,
 } from "@/lib/trader/billing/v2/billing-assessment-v2";
