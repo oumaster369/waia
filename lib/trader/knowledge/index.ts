@@ -68,6 +68,10 @@ export {
   isKnowledgeEdgeVersionReasonClass,
   planKnowledgeEdgeVersionAppend,
 } from "@/lib/trader/knowledge/knowledge-edge-version-v2";
+export {
+  assessQualifiedVerdictUpdateV2,
+  QUALIFIED_VERDICT_UPDATE_POLICY_V2,
+} from "@/lib/trader/knowledge/qualified-verdict-update-v2";
 
 export type {
   KnowledgeEdge,

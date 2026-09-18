@@ -154,20 +154,49 @@ describe("DEE-771 Knowledge edge version planner", () => {
     });
   });
 
-  it("reserves non-zero QUALIFIED_VERDICT_UPDATE for DEE-773", () => {
+  it("admits a bounded QUALIFIED_VERDICT_UPDATE confidence delta and refuses unbounded or identity mutation", () => {
     const current = snapshot(baseContent);
     expect(
       planKnowledgeEdgeVersionAppend(current, {
         reasonClass: "QUALIFIED_VERDICT_UPDATE",
         producedByReceiptDigestHex: RECEIPT,
         expectedVersion: 1,
-        nextContent: { ...baseContent, confidence: "0.8000" },
+        nextContent: { ...baseContent, confidence: "0.7500" },
+        pitEventAt: PIT,
+        recordedAt: RECORDED,
+      }),
+    ).toMatchObject({
+      ok: true,
+      action: "insert",
+      version: 2,
+      reasonClass: "QUALIFIED_VERDICT_UPDATE",
+      lifecycleState: "ACTIVE",
+    });
+    expect(
+      planKnowledgeEdgeVersionAppend(current, {
+        reasonClass: "QUALIFIED_VERDICT_UPDATE",
+        producedByReceiptDigestHex: RECEIPT,
+        expectedVersion: 1,
+        nextContent: { ...baseContent, confidence: "0.9000" },
         pitEventAt: PIT,
         recordedAt: RECORDED,
       }),
     ).toEqual({
       ok: false,
-      code: KNOWLEDGE_AUTHORITY_REASON.QUALIFIED_VERDICT_DELTA_RESERVED_DEE_773,
+      code: KNOWLEDGE_AUTHORITY_REASON.QUALIFIED_VERDICT_UNBOUNDED_DELTA,
+    });
+    expect(
+      planKnowledgeEdgeVersionAppend(current, {
+        reasonClass: "QUALIFIED_VERDICT_UPDATE",
+        producedByReceiptDigestHex: RECEIPT,
+        expectedVersion: 1,
+        nextContent: { ...baseContent, fromRef: "from:other" },
+        pitEventAt: PIT,
+        recordedAt: RECORDED,
+      }),
+    ).toEqual({
+      ok: false,
+      code: KNOWLEDGE_AUTHORITY_REASON.QUALIFIED_VERDICT_IDENTITY_MUTATION,
     });
   });
 

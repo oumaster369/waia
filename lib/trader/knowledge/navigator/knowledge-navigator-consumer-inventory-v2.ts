@@ -1,6 +1,7 @@
 export const KNOWLEDGE_NAVIGATOR_RUNTIME_MODULES_V2 = {
   receipt: "lib/trader/knowledge/navigator/knowledge-selection-receipt-v2.ts",
   selector: "lib/trader/knowledge/navigator/knowledge-navigator-v2.ts",
+  futureCycleEffect: "lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2.ts",
 } as const;
 
 export const KNOWLEDGE_NAVIGATOR_FORBIDDEN_CONSUMER_PREFIXES_V2 = [
