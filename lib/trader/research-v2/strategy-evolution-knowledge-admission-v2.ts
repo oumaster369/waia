@@ -5,7 +5,10 @@ import {
   type KnowledgeSelectionReceiptV2,
   type SelectKnowledgeForQuestionV2Input,
 } from "@/lib/trader/knowledge/navigator";
-import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
+import {
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2,
+  type FutureCycleEpistemicEffectReceiptV2,
+} from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
 import { uniqueSortedReasonCodes } from "@/lib/trader/research-v2/research-v2-guards";
 
 export const STRATEGY_EVOLUTION_KNOWLEDGE_ADMISSION_V2_SCHEMA =
@@ -72,11 +75,28 @@ export function admitStrategyEvolutionKnowledgeV2(
   if (!input.futureCycleEffect) {
     reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
   } else {
+    const { contentDigestHex, ...body } = input.futureCycleEffect;
+    if (
+      input.futureCycleEffect.schemaVersion !== FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2 ||
+      computeSemanticSha256Hex(body) !== contentDigestHex
+    ) {
+      reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
+    }
     if (input.futureCycleEffect.capitalAuthority !== "NONE") {
       reasonCodes.push("FUTURE_CYCLE_CAPITAL_AUTHORITY_FORBIDDEN");
     }
     if (input.futureCycleEffect.evidenceClass !== "SEALED_FORECAST_OUTCOME_CALIBRATION") {
       reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
+    }
+    if (input.futureCycleEffect.effectKind === "ZERO_EFFECT") {
+      reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
+    }
+    if (
+      navigatorReceipt &&
+      input.futureCycleEffect.futureNavigatorReceiptContentDigestHex !==
+        navigatorReceipt.contentDigestHex
+    ) {
+      reasonCodes.push("FUTURE_CYCLE_NAVIGATOR_MISMATCH");
     }
   }
 

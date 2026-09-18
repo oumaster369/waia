@@ -289,6 +289,21 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
     expect(unqualifiedPass.status).toBe("FAIL_CLOSED");
     expect(unqualifiedPass.proposal).toBeNull();
     expect(unqualifiedPass.capitalAuthority).toBe("NONE");
+
+    const zeroEffect = qualifyFutureCycleEpistemicEffectV2({
+      evidenceClass: "SEALED_FORECAST_OUTCOME_CALIBRATION",
+      effectKind: "SUPPORT",
+      producedByReceiptDigestHex: DIGEST.d,
+      prior: navigatorSelect({ pitAnchor: PRIOR_PIT, runId: "run-0" }),
+      future: navigatorSelect({ pitAnchor: PRIOR_PIT, runId: "run-1" }),
+    });
+    expect(zeroEffect.effectKind).toBe("ZERO_EFFECT");
+    const zeroPass = runStrategyEvolutionResearchPassV2(
+      passInput({ futureCycleEffect: zeroEffect }),
+    );
+    expect(zeroPass.knowledge.reasonCodes).toContain("UNQUALIFIED_FEEDBACK_FORBIDDEN");
+    expect(zeroPass.status).toBe("FAIL_CLOSED");
+    expect(zeroPass.proposal).toBeNull();
   });
 
   it("explicitly refuses blind holdout as iterative fitness", () => {
