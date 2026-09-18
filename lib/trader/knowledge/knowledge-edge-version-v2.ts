@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { assessQualifiedVerdictUpdateV2 } from "@/lib/trader/knowledge/qualified-verdict-update-v2";
 
 export const KNOWLEDGE_EDGE_VERSION_SCHEMA_V2 = "knowledge-edge-version/v2" as const;
 
@@ -26,6 +27,8 @@ export const KNOWLEDGE_AUTHORITY_REASON = {
   PRODUCING_RECEIPT_UNRESOLVABLE: "PRODUCING_RECEIPT_UNRESOLVABLE",
   STALE_VERSION: "STALE_VERSION",
   QUALIFIED_VERDICT_DELTA_RESERVED_DEE_773: "QUALIFIED_VERDICT_DELTA_RESERVED_DEE_773",
+  QUALIFIED_VERDICT_UNBOUNDED_DELTA: "QUALIFIED_VERDICT_UNBOUNDED_DELTA",
+  QUALIFIED_VERDICT_IDENTITY_MUTATION: "QUALIFIED_VERDICT_IDENTITY_MUTATION",
   TERMINAL_STATE: "TERMINAL_STATE",
   INITIAL_ASSERTION_ALREADY_EXISTS: "INITIAL_ASSERTION_ALREADY_EXISTS",
   ZERO_DELTA_REQUIRED: "ZERO_DELTA_REQUIRED",
@@ -167,23 +170,15 @@ export function planKnowledgeEdgeVersionAppend(
 
   if (
     input.reasonClass === "EVIDENCE_ONLY_ZERO_DELTA" ||
-    input.reasonClass === "QUALIFIED_VERDICT_UPDATE" ||
     input.reasonClass === "SUPERSEDED_BY_VERSION"
   ) {
     if (!current) {
       return { ok: false, code: KNOWLEDGE_AUTHORITY_REASON.STALE_VERSION };
     }
     if (input.nextContent.confidence !== current.content.confidence) {
-      return {
-        ok: false,
-        code:
-          input.reasonClass === "QUALIFIED_VERDICT_UPDATE"
-            ? KNOWLEDGE_AUTHORITY_REASON.QUALIFIED_VERDICT_DELTA_RESERVED_DEE_773
-            : KNOWLEDGE_AUTHORITY_REASON.ZERO_DELTA_REQUIRED,
-      };
+      return { ok: false, code: KNOWLEDGE_AUTHORITY_REASON.ZERO_DELTA_REQUIRED };
     }
     if (
-      input.reasonClass !== "QUALIFIED_VERDICT_UPDATE" &&
       !epistemicEquals(
         { ...current.content, lifecycleState: input.nextContent.lifecycleState },
         { ...input.nextContent, lifecycleState: current.content.lifecycleState },
@@ -191,14 +186,15 @@ export function planKnowledgeEdgeVersionAppend(
     ) {
       return { ok: false, code: KNOWLEDGE_AUTHORITY_REASON.ZERO_DELTA_REQUIRED };
     }
-    if (
-      input.reasonClass === "QUALIFIED_VERDICT_UPDATE" &&
-      !epistemicEquals(current.content, input.nextContent)
-    ) {
-      return {
-        ok: false,
-        code: KNOWLEDGE_AUTHORITY_REASON.QUALIFIED_VERDICT_DELTA_RESERVED_DEE_773,
-      };
+  }
+
+  if (input.reasonClass === "QUALIFIED_VERDICT_UPDATE") {
+    if (!current) {
+      return { ok: false, code: KNOWLEDGE_AUTHORITY_REASON.STALE_VERSION };
+    }
+    const assessment = assessQualifiedVerdictUpdateV2(current.content, input.nextContent);
+    if (!assessment.ok) {
+      return { ok: false, code: assessment.code };
     }
   }
 

@@ -19,6 +19,17 @@ export type {
   SelectKnowledgeForQuestionV2Input,
 } from "@/lib/trader/knowledge/navigator/knowledge-navigator-v2";
 export {
+  applyQualifiedVerdictToNavigatorCandidateV2,
+  qualifyFutureCycleEpistemicEffectV2,
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_POLICY_V2,
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2,
+} from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
+export type {
+  FutureCycleEffectKindV2,
+  FutureCycleEpistemicEffectReceiptV2,
+  FutureCycleEvidenceClassV2,
+} from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
+export {
   KNOWLEDGE_NAVIGATOR_CAPITAL_FIELDS_V2,
   KNOWLEDGE_NAVIGATOR_FORBIDDEN_CONSUMER_PREFIXES_V2,
   KNOWLEDGE_NAVIGATOR_RAW_MKB_INJECTION_SYMBOLS_V2,

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   KNOWLEDGE_NAVIGATOR_FORBIDDEN_CONSUMER_PREFIXES_V2,
   KNOWLEDGE_NAVIGATOR_RAW_MKB_INJECTION_SYMBOLS_V2,
+  KNOWLEDGE_NAVIGATOR_RUNTIME_MODULES_V2,
   isKnowledgeNavigatorCapitalConsumerForbiddenV2,
 } from "@/lib/trader/knowledge/navigator";
 
@@ -68,5 +69,8 @@ describe("DEE-772 Knowledge Navigator consumer inventory", () => {
     }
     expect(hits).toEqual([]);
     expect(KNOWLEDGE_NAVIGATOR_FORBIDDEN_CONSUMER_PREFIXES_V2.length).toBeGreaterThan(0);
+    expect(
+      existsSync(resolve(process.cwd(), KNOWLEDGE_NAVIGATOR_RUNTIME_MODULES_V2.futureCycleEffect)),
+    ).toBe(true);
   });
 });
