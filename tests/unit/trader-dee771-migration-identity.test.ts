@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { readFhvV2CompatibleAdditiveMigrations } from "@/lib/trader/observability/fhv-v2-postgres-schema-preflight";
+
 const REPO = process.cwd();
 
 describe("DEE-771 migration identity", () => {
@@ -14,6 +16,9 @@ describe("DEE-771 migration identity", () => {
 
   it("owns 0211 without rewriting 0192 or 0201", () => {
     expect(journal).toContain("0211_trader_knowledge_edge_version_v2");
+    expect(readFhvV2CompatibleAdditiveMigrations(REPO).map((entry) => entry.tag)).toContain(
+      "0211_trader_knowledge_edge_version_v2",
+    );
     expect(sql).toContain("trader_knowledge_edge_version_v2");
     expect(sql).toContain("trader_market_prediction_verification_v2");
     expect(sql).toContain("trader_knowledge_edges_immutable_all_v2");

@@ -34,11 +34,22 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0210 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0211 only as explicit compatible additive", () => {
+    const journal = JSON.parse(
+      readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
+    ) as { entries: Array<{ idx: number; when: number; tag: string }> };
+    expect(
+      compatibleAdditive.map((entry) => ({ idx: entry.idx, when: entry.when, tag: entry.tag })),
+    ).toEqual(
+      journal.entries
+        .filter((entry) => entry.idx > 207)
+        .map((entry) => ({ idx: entry.idx, when: entry.when, tag: entry.tag })),
+    );
     expect(compatibleAdditive.map((entry) => entry.tag)).toEqual([
       "0208_historical_terminal_receipts_v1",
       "0209_ai_twin_epistemic_persistence_v1",
       "0210_trader_account_observation_credential_v1",
+      "0211_trader_knowledge_edge_version_v2",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
@@ -90,11 +101,12 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   });
 
   it("does not automatically admit the next migration", () => {
+    const nextWhen = String(Math.max(...compatibleAdditive.map((entry) => entry.when)) + 1);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({
         canonical,
         compatibleAdditive,
-        applied: [...baseline, { hash: "a".repeat(64), createdAt: "1780000000211" }],
+        applied: [...baseline, { hash: "a".repeat(64), createdAt: nextWhen }],
       }),
     ).toThrow("UNKNOWN_APPLIED_MIGRATION");
   });
