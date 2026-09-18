@@ -200,3 +200,21 @@ pnpm test --run tests/integration/postgres-h2-migration-operator-v1.test.ts
 ```
 
 Never set this variable to a production, Supabase, remote, or shared database.
+
+### Supabase-class catalog authority (DEE-1020)
+
+The suite above runs against a bare cluster whose migration authority is the bootstrap superuser.
+The approved target is a Supabase-class managed cluster, whose platform bootstrap changes catalog
+ACL and membership rows. A second opt-in suite builds that cluster class from
+`scripts/postgres-validation/prelude-supabase-baseline.sql`, proves `0205`–`0210` reach the same
+frozen digests there, and injects unsafe grants to prove each one is refused. Run it in a separate
+disposable container — it provisions cluster-level roles of its own:
+
+```bash
+WAIA_TEST_DEE1020_SUPABASE_LIKE_PG_ADMIN_URL='postgres://waia_validate:waia_validate_local_only@127.0.0.1:54330/waia_validate' \
+pnpm test --run tests/integration/postgres-migration-catalog-authority-supabase-like-v1.test.ts
+```
+
+Both suites must pass before a ceremony: the bare lane proves the operator's step semantics, and
+this one proves the frozen digests are reachable on the target's cluster class without concealing
+authority. Neither is wired into GitHub CI, because each provisions cluster-level roles.

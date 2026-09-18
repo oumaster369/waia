@@ -227,3 +227,8 @@ pnpm test --run tests/integration/postgres-post-h2-migration-operator-v1.test.ts
 ```
 
 Never set this variable to a production, Supabase, remote or shared database.
+
+`0209` and `0210` are additionally covered on the target's cluster class by
+`tests/integration/postgres-migration-catalog-authority-supabase-like-v1.test.ts` — see the
+DEE-1020 section of [`H2-ONE-STEP-MIGRATION-OPERATOR.md`](H2-ONE-STEP-MIGRATION-OPERATOR.md) for how
+to run it.
