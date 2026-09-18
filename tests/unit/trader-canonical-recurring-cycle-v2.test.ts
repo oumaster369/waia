@@ -24,13 +24,19 @@ const DIGEST = "a".repeat(64);
 const PIT = "2026-02-01T12:00:00.000Z";
 const digest = (character: string) => character.repeat(64);
 
-function context() {
+function context(
+  runtimePosture:
+    | "FULL_ANALYSIS_AND_NEW_RISK"
+    | "NO_NEW_RISK"
+    | "CLOSE_ONLY"
+    | "HALT" = "FULL_ANALYSIS_AND_NEW_RISK",
+) {
   return buildAuthoritativeRuntimeContextV2({
     organizationId: ORG,
     accountId: "account-1",
     symbol: "BTCUSDT",
     pitAnchor: PIT,
-    runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
+    runtimePosture,
     runtimeAssessmentDigestHex: DIGEST,
     driftPosture: "NORMAL",
     driftRestrictionDigestHex: DIGEST,
@@ -167,10 +173,11 @@ function cycleInput(
     predictiveAdmissionVerdict?: "ADMITTED" | "NOT_ADMITTED" | "RESEARCH_ONLY";
     mkbInjectionAttempted?: boolean;
     currentRuntimePosture?: "FULL_ANALYSIS_AND_NEW_RISK" | "NO_NEW_RISK" | "CLOSE_ONLY" | "HALT";
+    runtimePosture?: "FULL_ANALYSIS_AND_NEW_RISK" | "NO_NEW_RISK" | "CLOSE_ONLY" | "HALT";
     capitalDeps?: CanonicalDecisionCapitalAuthorityV2Deps;
   } = {},
 ) {
-  const runtimeContext = context();
+  const runtimeContext = context(overrides.runtimePosture ?? "FULL_ANALYSIS_AND_NEW_RISK");
   return {
     epistemic: {
       context: runtimeContext,
@@ -181,7 +188,8 @@ function cycleInput(
     },
     admissionTemplate: {
       context: runtimeContext,
-      currentRuntimePosture: overrides.currentRuntimePosture ?? "FULL_ANALYSIS_AND_NEW_RISK",
+      currentRuntimePosture:
+        overrides.currentRuntimePosture ?? overrides.runtimePosture ?? "FULL_ANALYSIS_AND_NEW_RISK",
       currentDriftPosture: "NORMAL" as const,
       navigatorOutcome: "SELECTED_MINIMAL_SUFFICIENT" as const,
       predictiveAdmissionVerdict: overrides.predictiveAdmissionVerdict ?? "ADMITTED",
@@ -226,6 +234,7 @@ describe("DEE-639 canonical ordinary capital cycle", () => {
     const restricted = deps();
     const restrictedResult = await runCanonicalOrdinaryCapitalCycleV2(
       cycleInput({
+        runtimePosture: "NO_NEW_RISK",
         currentRuntimePosture: "NO_NEW_RISK",
         capitalDeps: restricted,
       }),
@@ -236,5 +245,19 @@ describe("DEE-639 canonical ordinary capital cycle", () => {
       reasonCodes: ["NEW_EXPOSURE_NOT_PERMITTED"],
     });
     expect(restricted.execute).not.toHaveBeenCalled();
+
+    const mismatched = deps();
+    const mismatchedResult = await runCanonicalOrdinaryCapitalCycleV2(
+      cycleInput({
+        currentRuntimePosture: "NO_NEW_RISK",
+        capitalDeps: mismatched,
+      }),
+    );
+    expect(mismatchedResult).toMatchObject({
+      status: "NO_TRADE",
+      stage: "ADMISSION",
+      reasonCodes: ["ADMISSION_INPUT_MISMATCH"],
+    });
+    expect(mismatched.decide).not.toHaveBeenCalled();
   });
 });

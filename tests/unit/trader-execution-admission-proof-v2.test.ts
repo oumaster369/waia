@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   proveOrdinaryExecutionAdmissionV2,
   proveProtectiveExecutionAdmissionV2,
+  assertOrdinaryCapitalAdmissionGateV2,
   type ProveOrdinaryExecutionAdmissionV2Input,
   type ProveProtectiveExecutionAdmissionV2Input,
 } from "@/lib/trader/execution/v2/execution-admission-proof-v2";
@@ -145,6 +146,14 @@ describe("DEE-639 ExecutionAdmissionProofV2", () => {
     const replay = proveOrdinaryExecutionAdmissionV2(ordinary());
     if (!replay.ok) throw new Error("expected replay");
     expect(replay.proof.contentDigestHex).toBe(result.proof.contentDigestHex);
+    const gate = assertOrdinaryCapitalAdmissionGateV2({
+      ...ordinary(),
+    });
+    expect(gate.ok).toBe(true);
+    if (!gate.ok) throw new Error("expected gate");
+    expect(gate.gate.planBound).toBe(false);
+    expect(gate.gate.executionPlanDigestHex).toBeNull();
+    expect(gate.gate.executionPlanDigestHex).not.toBe(result.proof.executionPlanDigestHex);
   });
 
   it("refuses emergency, StrategySignal-ineligible PA, halt, restriction, consumed allowance, mismatch and amplification", () => {

@@ -138,42 +138,42 @@ function identityMismatch(
   return false;
 }
 
-export function assertOrdinaryCapitalAdmissionGateV2(
-  input: Omit<ProveOrdinaryExecutionAdmissionV2Input, "executionPlan">,
-): ExecutionAdmissionResultV2 {
-  return proveOrdinaryExecutionAdmissionV2({
-    ...input,
-    executionPlan: {
-      contentDigestHex: input.riskAllowance.contentDigestHex,
-      organizationId: input.identity.organizationId,
-      accountId: input.identity.accountId,
-      symbol: input.identity.symbol,
-      action: "ENTER_LONG",
-      direction: "BUY",
-      quantity: input.identity.quantity,
-      expanding: true,
-    },
-  });
-}
+export type OrdinaryCapitalAdmissionGateV2 = Readonly<{
+  schemaVersion: typeof EXECUTION_ADMISSION_PROOF_SCHEMA_V2;
+  authority: "GATE_ONLY";
+  capitalAuthority: "NONE";
+  planBound: false;
+  executionPlanDigestHex: null;
+  runtimeContextDigestHex: string;
+  decisionDigestHex: string;
+  riskAllowanceDigestHex: string;
+  identity: ExecutionAdmissionIdentityV2;
+  admittedAt: string;
+  contentDigestHex: string;
+}>;
 
-export function proveOrdinaryExecutionAdmissionV2(
-  input: ProveOrdinaryExecutionAdmissionV2Input,
-): ExecutionAdmissionResultV2 {
-  if (input.emergency) return { ok: false, code: "EMERGENCY_FLAG_NOT_AUTHORITY" };
+export type OrdinaryCapitalAdmissionGateResultV2 =
+  | { ok: true; gate: OrdinaryCapitalAdmissionGateV2 }
+  | { ok: false; code: string };
+
+function refuseOrdinaryNewExposureV2(
+  input: Omit<ProveOrdinaryExecutionAdmissionV2Input, "executionPlan">,
+): string | null {
+  if (input.emergency) return "EMERGENCY_FLAG_NOT_AUTHORITY";
   if (input.navigatorOutcome !== "SELECTED_MINIMAL_SUFFICIENT") {
-    return { ok: false, code: "NAVIGATOR_RECEIPT_MISSING_OR_INSUFFICIENT" };
+    return "NAVIGATOR_RECEIPT_MISSING_OR_INSUFFICIENT";
   }
   if (input.predictiveAdmissionVerdict !== "ADMITTED") {
-    return { ok: false, code: "PREDICTIVE_ADMISSION_NOT_CAPITAL_ELIGIBLE" };
+    return "PREDICTIVE_ADMISSION_NOT_CAPITAL_ELIGIBLE";
   }
   if (input.context.runtimePosture === "HALT" || input.currentRuntimePosture === "HALT") {
-    return { ok: false, code: "RUNTIME_HALTED" };
+    return "RUNTIME_HALTED";
   }
   if (
     input.currentDriftPosture === "SUPERVISED_STOP" ||
     input.context.driftPosture === "SUPERVISED_STOP"
   ) {
-    return { ok: false, code: "DRIFT_SUPERVISED_STOP" };
+    return "DRIFT_SUPERVISED_STOP";
   }
   if (
     input.currentRuntimePosture === "NO_NEW_RISK" ||
@@ -183,43 +183,95 @@ export function proveOrdinaryExecutionAdmissionV2(
     input.currentDriftPosture === "NO_NEW_RISK" ||
     input.currentDriftPosture === "CLOSE_ONLY"
   ) {
-    return { ok: false, code: "NEW_EXPOSURE_NOT_PERMITTED" };
+    return "NEW_EXPOSURE_NOT_PERMITTED";
   }
   if (
     RUNTIME_POSTURE_RANK[input.currentRuntimePosture] >
     RUNTIME_POSTURE_RANK[input.riskAllowance.postureAtIssuance]
   ) {
-    return { ok: false, code: "STALE_ALLOWANCE_AFTER_RUNTIME_DOWNGRADE" };
+    return "STALE_ALLOWANCE_AFTER_RUNTIME_DOWNGRADE";
   }
-  if (input.riskAllowance.state !== "ACTIVE") return { ok: false, code: "RISK_ALLOWANCE_UNUSABLE" };
+  if (input.riskAllowance.state !== "ACTIVE") return "RISK_ALLOWANCE_UNUSABLE";
+  if (
+    identityMismatch(input.context, input.decision) ||
+    identityMismatch(input.decision, input.riskAllowance) ||
+    identityMismatch(input.riskAllowance, input.identity)
+  ) {
+    return "IDENTITY_MISMATCH";
+  }
+  if (
+    !requireHex(input.decision.contentDigestHex) ||
+    !requireHex(input.riskAllowance.contentDigestHex) ||
+    !requireHex(input.context.contentDigestHex)
+  ) {
+    return "DIGEST_INVALID";
+  }
+  if (
+    compareDecimal(input.riskAllowance.quantity, input.decision.quantity) > 0 ||
+    compareDecimal(input.identity.quantity, input.riskAllowance.quantity) > 0
+  ) {
+    return "QUANTITY_AMPLIFICATION_FORBIDDEN";
+  }
+  if (input.identity.action !== "ENTER_LONG" || input.identity.direction !== "BUY") {
+    return "ORDINARY_ACTION_INVALID";
+  }
+  if (
+    input.currentRuntimePosture !== input.context.runtimePosture ||
+    input.currentDriftPosture !== input.context.driftPosture
+  ) {
+    return "ADMISSION_CONTEXT_POSTURE_MISMATCH";
+  }
+  return null;
+}
+
+export function assertOrdinaryCapitalAdmissionGateV2(
+  input: Omit<ProveOrdinaryExecutionAdmissionV2Input, "executionPlan">,
+): OrdinaryCapitalAdmissionGateResultV2 {
+  const refused = refuseOrdinaryNewExposureV2(input);
+  if (refused) return { ok: false, code: refused };
+  const body = {
+    schemaVersion: EXECUTION_ADMISSION_PROOF_SCHEMA_V2,
+    authority: "GATE_ONLY" as const,
+    capitalAuthority: "NONE" as const,
+    planBound: false as const,
+    executionPlanDigestHex: null,
+    runtimeContextDigestHex: input.context.contentDigestHex,
+    decisionDigestHex: input.decision.contentDigestHex,
+    riskAllowanceDigestHex: input.riskAllowance.contentDigestHex,
+    identity: input.identity,
+    admittedAt: input.admittedAt,
+  };
+  return {
+    ok: true,
+    gate: Object.freeze({
+      ...body,
+      contentDigestHex: computeSemanticSha256Hex(body),
+    }),
+  };
+}
+
+export function proveOrdinaryExecutionAdmissionV2(
+  input: ProveOrdinaryExecutionAdmissionV2Input,
+): ExecutionAdmissionResultV2 {
+  const refused = refuseOrdinaryNewExposureV2(input);
+  if (refused) return { ok: false, code: refused };
   if (input.executionPlan.expanding !== true) {
     return { ok: false, code: "ORDINARY_PLAN_MUST_BE_FRESH_EXPOSURE" };
   }
   if (
-    identityMismatch(input.context, input.decision) ||
-    identityMismatch(input.decision, input.riskAllowance) ||
     identityMismatch(input.riskAllowance, input.executionPlan) ||
     identityMismatch(input.executionPlan, input.identity)
   ) {
     return { ok: false, code: "IDENTITY_MISMATCH" };
   }
-  if (
-    !requireHex(input.decision.contentDigestHex) ||
-    !requireHex(input.riskAllowance.contentDigestHex) ||
-    !requireHex(input.executionPlan.contentDigestHex) ||
-    !requireHex(input.context.contentDigestHex)
-  ) {
+  if (!requireHex(input.executionPlan.contentDigestHex)) {
     return { ok: false, code: "DIGEST_INVALID" };
   }
   if (
     compareDecimal(input.executionPlan.quantity, input.riskAllowance.quantity) > 0 ||
-    compareDecimal(input.riskAllowance.quantity, input.decision.quantity) > 0 ||
     compareDecimal(input.identity.quantity, input.executionPlan.quantity) > 0
   ) {
     return { ok: false, code: "QUANTITY_AMPLIFICATION_FORBIDDEN" };
-  }
-  if (input.identity.action !== "ENTER_LONG" || input.identity.direction !== "BUY") {
-    return { ok: false, code: "ORDINARY_ACTION_INVALID" };
   }
 
   return {

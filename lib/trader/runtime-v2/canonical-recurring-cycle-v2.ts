@@ -40,13 +40,39 @@ export async function runCanonicalOrdinaryCapitalCycleV2(input: {
     return { status: "NO_TRADE", stage: "EPISTEMIC", reasonCodes: compose.reasonCodes };
   }
 
+  const boundContext = input.epistemic.context;
+  const navigatorOutcome = input.epistemic.navigatorReceipt?.outcome ?? "UNKNOWN_UNRESOLVED";
+  if (
+    input.admissionTemplate.context.contentDigestHex !== boundContext.contentDigestHex ||
+    input.admissionTemplate.currentRuntimePosture !== boundContext.runtimePosture ||
+    input.admissionTemplate.currentDriftPosture !== boundContext.driftPosture ||
+    input.admissionTemplate.predictiveAdmissionVerdict !==
+      input.epistemic.predictiveAdmissionVerdict ||
+    input.admissionTemplate.navigatorOutcome !== navigatorOutcome
+  ) {
+    return {
+      status: "NO_TRADE",
+      stage: "ADMISSION",
+      reasonCodes: ["ADMISSION_INPUT_MISMATCH"],
+    };
+  }
+
+  const boundAdmission = {
+    ...input.admissionTemplate,
+    context: boundContext,
+    currentRuntimePosture: boundContext.runtimePosture,
+    currentDriftPosture: boundContext.driftPosture,
+    navigatorOutcome,
+    predictiveAdmissionVerdict: input.epistemic.predictiveAdmissionVerdict,
+  };
+
   let admissionProofDigestHex: string | null = null;
   const execute = input.capitalDeps.execute;
   const gated: CanonicalDecisionCapitalAuthorityV2Deps = {
     ...input.capitalDeps,
     execute: async (stage) => {
       const admission = assertOrdinaryCapitalAdmissionGateV2({
-        ...input.admissionTemplate,
+        ...boundAdmission,
         decision: {
           contentDigestHex: stage.decision.contentDigestHex,
           organizationId: stage.request.organizationId,
@@ -62,7 +88,7 @@ export async function runCanonicalOrdinaryCapitalCycleV2(input: {
           symbol: stage.request.symbol,
           quantity: stage.permission.approvedQualifiedQuantity,
           state: "ACTIVE",
-          postureAtIssuance: input.admissionTemplate.currentRuntimePosture,
+          postureAtIssuance: boundContext.runtimePosture,
         },
         identity: {
           ...input.admissionTemplate.identity,
@@ -72,7 +98,7 @@ export async function runCanonicalOrdinaryCapitalCycleV2(input: {
       if (!admission.ok) {
         throw new Error(`EXECUTION_ADMISSION_REFUSED:${admission.code}`);
       }
-      admissionProofDigestHex = admission.proof.contentDigestHex;
+      admissionProofDigestHex = admission.gate.contentDigestHex;
       return execute(stage);
     },
   };
