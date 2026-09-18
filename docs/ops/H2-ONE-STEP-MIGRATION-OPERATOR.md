@@ -124,9 +124,13 @@ a new invocation with the next explicit step.
 - **0205:** exact observer/reader role posture; revision column; RLS/FORCE RLS; seven scoped
   policies; revision/immutability triggers; no secret grants; no public function execution.
 - **0206:** one permissive runner INSERT policy with exact Brier-v3 receipt/harness identities
-  and amendment digest; no Cody-v2 identity.
+  and amendment digest; no Cody-v2 identity; **no additional INSERT-applicable permissive policy**
+  for `waia_historical_runner` on the admission table; leftover `waia_historical_runner_org_scope`
+  must be absent cluster-wide. If leftovers remain, stop and use
+  [`H2-ORG-SCOPE-HYGIENE-OPERATOR.md`](H2-ORG-SCOPE-HYGIENE-OPERATOR.md) before retrying 0206.
 - **0207:** the same policy replaced by exact admission-v4, terminal-v3, harness-v5 and
-  Cody-7.15/v2 identities and amendment digest; old admission-v3 identity absent.
+  Cody-7.15/v2 identities and amendment digest; old admission-v3 identity absent; same extra-INSERT
+  and leftover-name refuse as 0206.
 - **0208:** exact terminal table columns, constraints and lineage FKs; RLS/FORCE RLS;
   append-only triggers; owner/runner/browser policies; restricted runner/browser grants; immutable
   comparison-identity validator.

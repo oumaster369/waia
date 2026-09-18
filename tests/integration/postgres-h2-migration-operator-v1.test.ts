@@ -32,6 +32,25 @@ import {
   type H2OperationInput,
   type H2OperatorDependencies,
 } from "@/scripts/ops/postgres-h2-migration-operator-v1";
+import {
+  AUTHORIZED_PARTNER_ALPHA0_ORG_ID,
+  LEFTOVER_ORG_SCOPE_POLICY_NAME,
+  LEFTOVER_ORG_SCOPE_RELATIONS,
+  LEFTOVER_ORG_SCOPE_USING_EXPRESSION,
+} from "@/scripts/ops/postgres-h2-leftover-org-scope-policy-v1";
+import {
+  H2_ORG_SCOPE_HYGIENE_HUMAN_ATTESTATION_SCHEMA,
+  leftoverOrgScopeRelationDigest,
+  type H2OrgScopeHygieneAttestationKind,
+} from "@/scripts/ops/postgres-h2-org-scope-hygiene-manifest-v1";
+import {
+  computeHygieneTargetFingerprint,
+  readHygieneLiveJournal,
+  readHygieneTargetIdentity,
+  readLeftoverOrgScopePolicies,
+  runHygieneOperation,
+  type HygieneOperationInput,
+} from "@/scripts/ops/postgres-h2-org-scope-hygiene-operator-v1";
 
 const adminUrl = process.env.WAIA_TEST_DEE1010_PG_ADMIN_URL?.trim();
 const enabled = Boolean(adminUrl);
@@ -42,9 +61,7 @@ const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
 const templateDatabase = `waia_h2_1010_template_${suffix}`;
 const createdDatabases = new Set<string>();
 const humanKeys = generateKeyPairSync("ed25519");
-const humanPublicKey = Buffer.from(
-  humanKeys.publicKey.export({ format: "pem", type: "spki" }),
-);
+const humanPublicKey = Buffer.from(humanKeys.publicKey.export({ format: "pem", type: "spki" }));
 const humanPublicKeySha256 = sha256(humanPublicKey);
 const humanPublicKeyPath = join(scratch, "human-public-key.pem");
 writeFileSync(humanPublicKeyPath, humanPublicKey, { mode: 0o600 });
@@ -84,9 +101,7 @@ async function createDatabase(name: string, template?: string): Promise<void> {
     throw new Error("DEE1010_UNSAFE_TEST_IDENTIFIER");
   }
   await admin!.unsafe(
-    template
-      ? `CREATE DATABASE "${name}" TEMPLATE "${template}"`
-      : `CREATE DATABASE "${name}"`,
+    template ? `CREATE DATABASE "${name}" TEMPLATE "${template}"` : `CREATE DATABASE "${name}"`,
   );
   createdDatabases.add(name);
 }
@@ -134,9 +149,10 @@ function attestationPath(
     expectedMigrationAuthority: migrationAuthority,
     operatorIdentity: "dee1010-local-operator",
     humanApproverIdentity: "dee1010-local-human-fixture",
-    evidenceDigestHex: kind === "TARGET_IDENTITY"
-      ? targetFingerprint
-      : createHash("sha256").update(`${kind}:${ceremonyId}`).digest("hex"),
+    evidenceDigestHex:
+      kind === "TARGET_IDENTITY"
+        ? targetFingerprint
+        : createHash("sha256").update(`${kind}:${ceremonyId}`).digest("hex"),
     signingKeySha256: humanPublicKeySha256,
     issuedAt: new Date().toISOString(),
   } as const;
@@ -179,31 +195,156 @@ async function operationInput(
     confirmedStep: verifyOnly ? undefined : step,
     trustedHumanPublicKeyPath: humanPublicKeyPath,
     restorePointAttestationPath: attestationPath(
-      "RESTORE_POINT", step, targetFingerprint, databaseName, identity.currentUser, ceremonyId,
+      "RESTORE_POINT",
+      step,
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
       requestId,
     ),
     writerQuiescenceAttestationPath: attestationPath(
-      "WRITER_QUIESCENCE", step, targetFingerprint, databaseName, identity.currentUser, ceremonyId,
+      "WRITER_QUIESCENCE",
+      step,
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
       requestId,
     ),
     targetIdentityAttestationPath: attestationPath(
-      "TARGET_IDENTITY", step, targetFingerprint, databaseName, identity.currentUser, ceremonyId,
+      "TARGET_IDENTITY",
+      step,
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
       requestId,
     ),
     ceremonyAuthorizationAttestationPath: attestationPath(
-      "CEREMONY_AUTHORIZATION", step, targetFingerprint, databaseName, identity.currentUser,
-      ceremonyId, requestId,
+      "CEREMONY_AUTHORIZATION",
+      step,
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
+      requestId,
     ),
   });
 }
 
-function runOperation(
-  input: H2OperationInput,
-  dependencies: H2OperatorDependencies = {},
-) {
+function runOperation(input: H2OperationInput, dependencies: H2OperatorDependencies = {}) {
   return runH2MigrationOperation(input, {
     ...dependencies,
     approvedHumanKeySha256: humanPublicKeySha256,
+  });
+}
+
+function hygieneAttestationPath(
+  kind: H2OrgScopeHygieneAttestationKind,
+  targetFingerprint: string,
+  databaseName: string,
+  migrationAuthority: string,
+  ceremonyId: string,
+  requestId: string,
+): string {
+  const assertion = {
+    RESTORE_POINT: "APPROVED_RESTORE_POINT_AVAILABLE",
+    WRITER_QUIESCENCE: "WRITERS_QUIESCED",
+    TARGET_IDENTITY: "TARGET_IDENTITY_APPROVED",
+    CEREMONY_AUTHORIZATION: "AUTHORIZE_EXACT_ORG_SCOPE_HYGIENE",
+  } as const;
+  const leftoverDigest = leftoverOrgScopeRelationDigest();
+  const body = {
+    schemaVersion: H2_ORG_SCOPE_HYGIENE_HUMAN_ATTESTATION_SCHEMA,
+    kind,
+    assertion: assertion[kind],
+    ceremonyId,
+    requestId,
+    selectedStep: "DROP_ORG_SCOPE" as const,
+    targetFingerprint,
+    expectedDatabaseName: databaseName,
+    expectedMigrationAuthority: migrationAuthority,
+    operatorIdentity: "dee1022-local-operator",
+    humanApproverIdentity: "dee1022-local-human-fixture",
+    leftoverPolicyName: LEFTOVER_ORG_SCOPE_POLICY_NAME,
+    leftoverRelationDigest: leftoverDigest,
+    authorizedOrganizationId: AUTHORIZED_PARTNER_ALPHA0_ORG_ID,
+    evidenceDigestHex:
+      kind === "TARGET_IDENTITY"
+        ? targetFingerprint
+        : kind === "CEREMONY_AUTHORIZATION"
+          ? leftoverDigest
+          : createHash("sha256").update(`${kind}:${ceremonyId}`).digest("hex"),
+    signingKeySha256: humanPublicKeySha256,
+    issuedAt: new Date().toISOString(),
+  } as const;
+  const contentDigestHex = semanticDigest(body);
+  const evidence = {
+    ...body,
+    contentDigestHex,
+    signatureBase64: sign(
+      null,
+      Buffer.from(contentDigestHex, "utf8"),
+      humanKeys.privateKey,
+    ).toString("base64"),
+  };
+  const path = join(scratch, `${ceremonyId}-hygiene-${kind.toLowerCase()}.json`);
+  writeFileSync(path, JSON.stringify(evidence), { mode: 0o600 });
+  return path;
+}
+
+async function hygieneOperationInput(databaseName: string): Promise<HygieneOperationInput> {
+  const probe = await connectDatabase(databaseName, "dee1022-identity-probe");
+  let identity;
+  try {
+    identity = await readHygieneTargetIdentity(probe);
+  } finally {
+    await probe.end({ timeout: 3 });
+  }
+  const targetFingerprint = computeHygieneTargetFingerprint(identity);
+  const ceremonyId = randomUUID();
+  const requestId = randomUUID();
+  return Object.freeze({
+    step: "DROP_ORG_SCOPE",
+    expectedTargetFingerprint: targetFingerprint,
+    databaseUrl: databaseUrl(databaseName),
+    repoRoot: process.cwd(),
+    verifyOnly: false,
+    confirmedStep: "DROP_ORG_SCOPE",
+    trustedHumanPublicKeyPath: humanPublicKeyPath,
+    restorePointAttestationPath: hygieneAttestationPath(
+      "RESTORE_POINT",
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
+      requestId,
+    ),
+    writerQuiescenceAttestationPath: hygieneAttestationPath(
+      "WRITER_QUIESCENCE",
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
+      requestId,
+    ),
+    targetIdentityAttestationPath: hygieneAttestationPath(
+      "TARGET_IDENTITY",
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
+      requestId,
+    ),
+    ceremonyAuthorizationAttestationPath: hygieneAttestationPath(
+      "CEREMONY_AUTHORIZATION",
+      targetFingerprint,
+      databaseName,
+      identity.currentUser,
+      ceremonyId,
+      requestId,
+    ),
   });
 }
 
@@ -247,13 +388,17 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
         );
       }
       await migrate(drizzle(template), { migrationsFolder: baselineRoot });
-      await template.unsafe(`
+      await template
+        .unsafe(
+          `
         CREATE ROLE waia_historical_runner_login
           LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
           NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 2;
         GRANT waia_historical_runner TO waia_historical_runner_login
           WITH ADMIN FALSE, INHERIT FALSE, SET TRUE
-      `).simple();
+      `,
+        )
+        .simple();
       expect(await readH2LiveJournal(template)).toHaveLength(205);
     } finally {
       await template.end({ timeout: 3 });
@@ -310,9 +455,9 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
     } finally {
       await sql.end({ timeout: 3 });
     }
-    await expect(
-      runOperation(await operationInput(database, "0205")),
-    ).rejects.toThrow("TRANSACTION_FAILED");
+    await expect(runOperation(await operationInput(database, "0205"))).rejects.toThrow(
+      "TRANSACTION_FAILED",
+    );
     expect(await journal(database)).toHaveLength(205);
   }, 60_000);
 
@@ -334,8 +479,7 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
     const sql = await connectDatabase(database);
     try {
       expect(
-        (await sql`SELECT to_regclass('public.trader_account_observations')::text AS name`)[0]
-          .name,
+        (await sql`SELECT to_regclass('public.trader_account_observations')::text AS name`)[0].name,
       ).toBeNull();
     } finally {
       await sql.end({ timeout: 3 });
@@ -345,10 +489,7 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
   it("fails closed under concurrent operator attempts without duplicate journal identity", async () => {
     const database = await cloneDatabase("concurrent");
     const input = await operationInput(database, "0205");
-    const results = await Promise.allSettled([
-      runOperation(input),
-      runOperation(input),
-    ]);
+    const results = await Promise.allSettled([runOperation(input), runOperation(input)]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
     const rows = await journal(database);
@@ -402,9 +543,9 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
           hashtextextended('waia.trader.h2.migration-operator.v1',0)
         )
       `;
-      await expect(
-        runOperation(await operationInput(database, "0205")),
-      ).rejects.toThrow("LOCK_TIMEOUT");
+      await expect(runOperation(await operationInput(database, "0205"))).rejects.toThrow(
+        "LOCK_TIMEOUT",
+      );
     } finally {
       await blocker`
         SELECT pg_advisory_unlock(
@@ -430,9 +571,9 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
     } finally {
       await partialSql.end({ timeout: 3 });
     }
-    await expect(
-      runOperation(await operationInput(partial, "0207")),
-    ).rejects.toThrow("LIVE_JOURNAL_GAP");
+    await expect(runOperation(await operationInput(partial, "0207"))).rejects.toThrow(
+      "LIVE_JOURNAL_GAP",
+    );
 
     const unknown = await cloneDatabase("unknown");
     const unknownSql = await connectDatabase(unknown);
@@ -444,9 +585,9 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
     } finally {
       await unknownSql.end({ timeout: 3 });
     }
-    await expect(
-      runOperation(await operationInput(unknown, "0205")),
-    ).rejects.toThrow("LIVE_JOURNAL_EXTRA");
+    await expect(runOperation(await operationInput(unknown, "0205"))).rejects.toThrow(
+      "LIVE_JOURNAL_EXTRA",
+    );
   }, 90_000);
 
   it("classifies uncertain COMMIT only through read-only verify-only recovery", async () => {
@@ -481,4 +622,91 @@ describe.skipIf(!enabled)("DEE-1010 owned-local H2 one-step PostgreSQL operator"
     });
     expect(await journal(database)).toHaveLength(206);
   }, 90_000);
+
+  it("refuses 0206 by named extra-INSERT when leftover org_scope remains", async () => {
+    const database = await cloneDatabase("leftover_insert");
+    await runOperation(await operationInput(database, "0205"));
+    const sql = await connectDatabase(database);
+    try {
+      await sql.unsafe(`
+        CREATE POLICY ${LEFTOVER_ORG_SCOPE_POLICY_NAME}
+          ON public.trader_scientific_admission_receipt_v1
+          FOR ALL TO waia_historical_runner
+          USING ${LEFTOVER_ORG_SCOPE_USING_EXPRESSION}
+          WITH CHECK ${LEFTOVER_ORG_SCOPE_USING_EXPRESSION}
+      `);
+    } finally {
+      await sql.end({ timeout: 3 });
+    }
+    await expect(runOperation(await operationInput(database, "0206"))).rejects.toThrow(
+      "CATALOG_0206_EXTRA_INSERT_POLICY",
+    );
+    expect(await journal(database)).toHaveLength(206);
+  }, 90_000);
+
+  it("drops frozen leftover org_scope without advancing the journal, then admits 0206", async () => {
+    const database = await cloneDatabase("hygiene");
+    await runOperation(await operationInput(database, "0205"));
+    const sql = await connectDatabase(database);
+    try {
+      for (const relation of LEFTOVER_ORG_SCOPE_RELATIONS) {
+        await sql.unsafe(`
+          CREATE POLICY ${LEFTOVER_ORG_SCOPE_POLICY_NAME}
+            ON public.${relation}
+            FOR ALL TO waia_historical_runner
+            USING ${LEFTOVER_ORG_SCOPE_USING_EXPRESSION}
+            WITH CHECK ${LEFTOVER_ORG_SCOPE_USING_EXPRESSION}
+        `);
+      }
+    } finally {
+      await sql.end({ timeout: 3 });
+    }
+
+    const hygieneInput = await hygieneOperationInput(database);
+    const preview = await runHygieneOperation(
+      {
+        ...hygieneInput,
+        verifyOnly: true,
+        confirmedStep: undefined,
+      },
+      { approvedHumanKeySha256: humanPublicKeySha256 },
+    );
+    expect(preview).toMatchObject({
+      mode: "VERIFY_ONLY",
+      classification: "LEFTOVER_ORG_SCOPE_PRESENT",
+      leftoverCountAfter: 28,
+    });
+
+    const receipt = await runHygieneOperation(hygieneInput, {
+      approvedHumanKeySha256: humanPublicKeySha256,
+    });
+    expect(receipt).toMatchObject({
+      mode: "APPLY",
+      classification: "SELECTED_STEP_COMMITTED",
+      leftoverCountBefore: 28,
+      leftoverCountAfter: 0,
+      nextStepExecuted: false,
+      postCommitVerification: {
+        leftoverDropped: true,
+        journalUnchanged: true,
+        policiesCreated: false,
+        genericMigratorUsed: false,
+      },
+    });
+    expect(await journal(database)).toHaveLength(206);
+    const after = await connectDatabase(database);
+    try {
+      expect(await readLeftoverOrgScopePolicies(after)).toEqual([]);
+      expect(await readHygieneLiveJournal(after)).toHaveLength(206);
+    } finally {
+      await after.end({ timeout: 3 });
+    }
+
+    const step0206 = await runOperation(await operationInput(database, "0206"));
+    expect(step0206).toMatchObject({
+      classification: "SELECTED_STEP_COMMITTED",
+      selectedStep: "0206",
+    });
+    expect(await journal(database)).toHaveLength(207);
+  }, 180_000);
 });
