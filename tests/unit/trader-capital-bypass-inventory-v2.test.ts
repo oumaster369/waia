@@ -74,6 +74,7 @@ describe("DEE-639 capital-bypass inventory", () => {
       "lib/trader/billing",
       "lib/trader/discovery",
       "lib/trader/research",
+      "lib/trader/research-v2",
     ]) {
       const abs = resolve(root, tree);
       for (const file of walkTs(abs)) {

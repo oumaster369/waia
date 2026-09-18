@@ -17,6 +17,8 @@ export const BANNED_DISCOVERY_FIELDS = [
   "r_multiple",
   "promotionOutcome",
   "promotion_outcome",
+  "fitnessScore",
+  "rewardSignal",
 ] as const;
 
 export type BannedDiscoveryField = (typeof BANNED_DISCOVERY_FIELDS)[number];
@@ -75,4 +77,12 @@ export function assertNoBannedFields(payload: unknown, context = "discovery payl
 export function isBannedDiscoveryField(field: string): field is BannedDiscoveryField {
   const normalized = field.toLowerCase();
   return BANNED_DISCOVERY_FIELDS.some((banned) => banned.toLowerCase() === normalized);
+}
+
+/** Discovery fitness surface — economic evaluation fields belong in qualification, not ranking. */
+export function assertNoDiscoveryFitnessPayload(
+  payload: unknown,
+  context = "discovery fitness",
+): void {
+  assertNoBannedFields(payload, context);
 }
