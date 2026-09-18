@@ -1,4 +1,4 @@
-import { isZeroDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import { compareDecimal, isZeroDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 
 export const BILLING_V2_DIGEST_HEX = /^[0-9a-f]{64}$/;
 
@@ -25,6 +25,13 @@ export function requireBillingV2Decimal(value: string, code: string): void {
   try {
     parseDecimal(value);
   } catch {
+    throw new Error(code);
+  }
+}
+
+export function requireBillingV2NonNegative(value: string, code: string): void {
+  requireBillingV2Decimal(value, code);
+  if (compareDecimal(value, "0") < 0) {
     throw new Error(code);
   }
 }

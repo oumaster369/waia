@@ -8,9 +8,9 @@ import {
 import {
   assertBillingV2ForbiddenKeys,
   BILLING_V2_NAKED_FINANCIAL_KEYS,
-  requireBillingV2Decimal,
   requireBillingV2DigestHex,
   requireBillingV2IsoUtc,
+  requireBillingV2NonNegative,
 } from "@/lib/trader/billing/v2/billing-v2-guards";
 import {
   assertCanonicalBillingPolicyV2,
@@ -19,8 +19,10 @@ import {
 } from "@/lib/trader/billing/v2/billing-policy-v2";
 import {
   assertRealizedStrategyProfitReceiptV2,
+  buildRealizedStrategyProfitReceiptV2,
   type RealizedStrategyProfitReceiptV2,
 } from "@/lib/trader/billing/v2/realized-strategy-profit-receipt-v2";
+import type { ClosedTradeSettlementV2 } from "@/lib/trader/billing/v2/closed-trade-settlement-v2";
 
 export const BILLING_ASSESSMENT_V2_SCHEMA = "waia.trader.billing_assessment.v2" as const;
 
@@ -70,6 +72,7 @@ export type BillingAssessmentV2 = Readonly<{
 
 export type BillingAssessmentV2Input = Readonly<{
   receipt: RealizedStrategyProfitReceiptV2;
+  settlements: readonly ClosedTradeSettlementV2[];
   priorHwm: BillingHwmPriorV2;
   policy: BillingPolicyV2;
   assessedAtUtc: string;
@@ -147,12 +150,30 @@ export function assessBillingV2(input: BillingAssessmentV2Input): BillingAssessm
     throw new Error("BILLING_EQUITY_HWM_CANNOT_POPULATE_BILLING_HWM");
   }
   requireBillingV2IsoUtc(input.assessedAtUtc, "BILLING_ASSESSED_AT_INVALID");
-  requireBillingV2Decimal(input.priorHwm.highWaterMark, "BILLING_HWM_INVALID");
+  requireBillingV2NonNegative(input.priorHwm.highWaterMark, "BILLING_HWM_NEGATIVE");
+  if (
+    input.priorHwm.eventDigestHex === null &&
+    compareDecimal(input.priorHwm.highWaterMark, "0") !== 0
+  ) {
+    throw new Error("BILLING_HWM_BOOTSTRAP_MUST_BE_ZERO");
+  }
   if (input.priorHwm.eventDigestHex !== null) {
     requireBillingV2DigestHex(input.priorHwm.eventDigestHex, "BILLING_HWM_EVENT_DIGEST_INVALID");
   }
 
   assertRealizedStrategyProfitReceiptV2(input.receipt);
+  const rebuiltReceipt = buildRealizedStrategyProfitReceiptV2({
+    organizationId: input.receipt.organizationId,
+    accountId: input.receipt.accountId,
+    strategyId: input.receipt.strategyId,
+    reportingScopeId: input.receipt.reportingScopeId,
+    realityFrontierDigestHex: input.receipt.realityFrontierDigestHex,
+    settlements: input.settlements,
+    nonProfitCashflowFacts: input.receipt.nonProfitCashflowFacts,
+  });
+  if (rebuiltReceipt.contentDigestHex !== input.receipt.contentDigestHex) {
+    throw new Error("BILLING_RECEIPT_SETTLEMENT_MISMATCH");
+  }
   assertCanonicalBillingPolicyV2(input.policy);
   if (input.receipt.capitalAuthority !== "NONE") {
     throw new Error("BILLING_CAPITAL_AUTHORITY_REFUSED");

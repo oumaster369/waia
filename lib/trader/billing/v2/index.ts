@@ -6,6 +6,7 @@ export {
   requireBillingV2DigestHex,
   requireBillingV2IsoUtc,
   requireBillingV2NonEmpty,
+  requireBillingV2NonNegative,
   requireBillingV2ZeroQuantity,
 } from "@/lib/trader/billing/v2/billing-v2-guards";
 

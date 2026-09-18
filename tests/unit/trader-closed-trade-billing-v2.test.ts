@@ -13,6 +13,7 @@ import {
   type ClosedTradeSettlementV2Input,
 } from "@/lib/trader/billing/v2";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 const HEX = {
   frontier: "1".repeat(64),
@@ -99,6 +100,7 @@ describe("DEE-638 closed-trade billing V2", () => {
 
     const peakAssessment = assessBillingV2({
       receipt: receiptFor([peak]),
+      settlements: [peak],
       priorHwm: bootstrapHwm(),
       policy,
       assessedAtUtc: ASSESSED_AT,
@@ -111,6 +113,7 @@ describe("DEE-638 closed-trade billing V2", () => {
 
     const afterLoss = assessBillingV2({
       receipt: receiptFor([peak, loss]),
+      settlements: [peak, loss],
       priorHwm: {
         namespace: "BILLING_HWM",
         highWaterMark: peakAssessment.hwmEvent.newHwm,
@@ -127,6 +130,7 @@ describe("DEE-638 closed-trade billing V2", () => {
 
     const recovered = assessBillingV2({
       receipt: receiptFor([peak, loss, recover]),
+      settlements: [peak, loss, recover],
       priorHwm: {
         namespace: "BILLING_HWM",
         highWaterMark: afterLoss.hwmEvent.newHwm,
@@ -142,6 +146,7 @@ describe("DEE-638 closed-trade billing V2", () => {
 
     const abovePeak = assessBillingV2({
       receipt: receiptFor([peak, loss, recover, rise]),
+      settlements: [peak, loss, recover, rise],
       priorHwm: {
         namespace: "BILLING_HWM",
         highWaterMark: recovered.hwmEvent.newHwm,
@@ -172,6 +177,7 @@ describe("DEE-638 closed-trade billing V2", () => {
     expect(compareDecimal(empty.netRealizedStrategyProfit, "0")).toBe(0);
     const assessment = assessBillingV2({
       receipt: empty,
+      settlements: [],
       priorHwm: bootstrapHwm(),
       policy,
       assessedAtUtc: ASSESSED_AT,
@@ -248,6 +254,7 @@ describe("DEE-638 closed-trade billing V2", () => {
     expect(() =>
       assessBillingV2({
         receipt: receiptFor([]),
+        settlements: [],
         priorHwm: bootstrapHwm(),
         policy,
         assessedAtUtc: ASSESSED_AT,
@@ -263,6 +270,7 @@ describe("DEE-638 closed-trade billing V2", () => {
     expect(() =>
       assessBillingV2({
         receipt: receiptFor([]),
+        settlements: [],
         priorHwm: {
           namespace: "EQUITY_HWM",
           highWaterMark: "999",
@@ -275,6 +283,7 @@ describe("DEE-638 closed-trade billing V2", () => {
     expect(() => refuseIssuedInvoiceAuthorityV2()).toThrow(/INVOICE_BASIS_ISSUED_FORBIDDEN/);
     const intact = assessBillingV2({
       receipt: receiptFor([]),
+      settlements: [],
       priorHwm: bootstrapHwm(),
       policy,
       assessedAtUtc: ASSESSED_AT,
@@ -294,12 +303,14 @@ describe("DEE-638 closed-trade billing V2", () => {
     const receipt = receiptFor([closed]);
     const first = assessBillingV2({
       receipt,
+      settlements: [closed],
       priorHwm: bootstrapHwm(),
       policy,
       assessedAtUtc: ASSESSED_AT,
     });
     const second = assessBillingV2({
       receipt,
+      settlements: [closed],
       priorHwm: bootstrapHwm(),
       policy,
       assessedAtUtc: ASSESSED_AT,
@@ -310,6 +321,64 @@ describe("DEE-638 closed-trade billing V2", () => {
     expect(buildInvoiceBasisReceiptV2({ assessment: first }).contentDigestHex).toBe(
       buildInvoiceBasisReceiptV2({ assessment: second }).contentDigestHex,
     );
+  });
+
+  it("refuses negative HWM, negative costs, and forged receipts that do not rebuild from settlements", () => {
+    expect(() =>
+      assessBillingV2({
+        receipt: receiptFor([]),
+        settlements: [],
+        priorHwm: {
+          namespace: "BILLING_HWM",
+          highWaterMark: "-1000",
+          eventDigestHex: null,
+        },
+        policy,
+        assessedAtUtc: ASSESSED_AT,
+      }),
+    ).toThrow(/BILLING_HWM_NEGATIVE/);
+
+    expect(() =>
+      buildClosedTradeSettlementV2(
+        settlementInput({
+          lifecycleId: "negcost",
+          cashflowFacts: [
+            {
+              truthRecordDigestHex: HEX.cash,
+              amount: "100",
+              cause: "STRATEGY_REALIZED",
+            },
+          ],
+          costFacts: [
+            {
+              truthRecordDigestHex: HEX.cost,
+              amount: "-900",
+              admitted: true,
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/CLOSED_TRADE_NEGATIVE_COST/);
+
+    const honest = receiptFor([]);
+    const { contentDigestHex: _ignored, ...body } = honest;
+    const forged = {
+      ...body,
+      netRealizedStrategyProfit: "1000000",
+      contentDigestHex: computeSemanticSha256Hex({
+        ...body,
+        netRealizedStrategyProfit: "1000000",
+      }),
+    };
+    expect(() =>
+      assessBillingV2({
+        receipt: forged,
+        settlements: [],
+        priorHwm: bootstrapHwm(),
+        policy,
+        assessedAtUtc: ASSESSED_AT,
+      }),
+    ).toThrow(/BILLING_RECEIPT_SETTLEMENT_MISMATCH/);
   });
 
   it("refuses partial or incomplete closed-trade lifecycle", () => {

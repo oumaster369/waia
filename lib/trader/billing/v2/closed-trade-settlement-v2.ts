@@ -9,6 +9,7 @@ import {
   requireBillingV2Decimal,
   requireBillingV2DigestHex,
   requireBillingV2NonEmpty,
+  requireBillingV2NonNegative,
   requireBillingV2ZeroQuantity,
 } from "@/lib/trader/billing/v2/billing-v2-guards";
 
@@ -120,7 +121,7 @@ function freezeCostFacts(
       throw new Error("CLOSED_TRADE_COST_NOT_ADMITTED");
     }
     requireBillingV2DigestHex(fact.truthRecordDigestHex, "CLOSED_TRADE_MISSING_TRUTH_RECORD");
-    requireBillingV2Decimal(fact.amount, "CLOSED_TRADE_INVALID_COST");
+    requireBillingV2NonNegative(fact.amount, "CLOSED_TRADE_NEGATIVE_COST");
     return Object.freeze({
       truthRecordDigestHex: fact.truthRecordDigestHex,
       amount: formatDecimal(parseDecimal(fact.amount)),
