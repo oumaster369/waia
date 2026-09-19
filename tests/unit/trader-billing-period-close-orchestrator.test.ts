@@ -24,6 +24,7 @@ import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const USER_ID = "00000000-0000-4000-8000-0000000310o";
@@ -350,12 +351,16 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
     });
 
     const closed = await lifecycle.closeReportingPeriod(context, {
-      exchangeAccountId: accountId,
-      periodEnd: new Date("2026-04-30T23:59:59.000Z"),
-      endingEquity: "5100.00",
-      endingSnapshotAt: new Date("2026-04-30T23:55:00.000Z"),
-      realizedPnl: "50.00",
-      unrealizedPnl: "0",
+      ...billingV2PeriodCloseEvidence({
+        organizationId,
+        accountId,
+        periodStart: new Date("2026-04-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-04-30T23:59:59.000Z"),
+        realizedPnl: "50.00",
+        unrealizedPnl: "0",
+        endingEquity: "5100.00",
+        endingSnapshotAt: new Date("2026-04-30T23:55:00.000Z"),
+      }),
     });
 
     const result = await orchestrator.materializeDraft(context, {

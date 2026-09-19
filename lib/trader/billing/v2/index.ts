@@ -93,9 +93,16 @@ export {
 export {
   BILLING_ORCHESTRATOR_FORBIDDEN_PROFIT_KEYS,
   NAKED_REALIZED_PNL_REFUSED,
+  BILLING_RECEIPT_PNL_MISMATCH,
   BillingCanonicalProfitAdmissionError,
   admitCanonicalPeriodProfitFromReceiptV2,
   billingPeriodReportingScopeIdV2,
   refuseNakedRealizedPnl,
 } from "@/lib/trader/billing/v2/admit-realized-profit-receipt-v2";
 export type { AdmitCanonicalPeriodProfitInputV2 } from "@/lib/trader/billing/v2/admit-realized-profit-receipt-v2";
+
+export { lookupClosedTradeSettlementsFromRealityV2 } from "@/lib/trader/billing/v2/lookup-closed-trades-from-reality-v2";
+export type {
+  LookupClosedTradeSettlementsFromRealityV2Input,
+  LookupClosedTradeSettlementsFromRealityV2Result,
+} from "@/lib/trader/billing/v2/lookup-closed-trades-from-reality-v2";

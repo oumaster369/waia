@@ -24,6 +24,7 @@ import { traderAuditActions, traderEntityTypes } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const USER_ID = "00000000-0000-4000-8000-0000000306";
@@ -67,14 +68,16 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
   }
 
   function closeInput() {
-    return {
-      exchangeAccountId: EXCHANGE_ACCOUNT_ID,
+    return billingV2PeriodCloseEvidence({
+      organizationId,
+      accountId: EXCHANGE_ACCOUNT_ID,
+      periodStart: PERIOD_START,
       periodEnd: PERIOD_END,
-      endingEquity: "11250.00",
-      endingSnapshotAt: ENDING_SNAPSHOT_AT,
       realizedPnl: "800.00",
       unrealizedPnl: "450.00",
-    };
+      endingEquity: "11250.00",
+      endingSnapshotAt: ENDING_SNAPSHOT_AT,
+    });
   }
 
   it("opens a reporting period with digest and audit", async () => {
@@ -177,6 +180,32 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
     expect(() => assertAllowedReportingPeriodTransition("CLOSED", "CLOSED")).toThrow(
       ReportingPeriodInvalidTransitionError,
     );
+  });
+
+  it("refuses a naked realizedPnl close without a receipt", async () => {
+    const db = getDb();
+    const service = createSqliteReportingPeriodLifecycleService(db);
+    const context = requireOrgContext(organizationId);
+    const accountId = `${EXCHANGE_ACCOUNT_ID}-naked`;
+
+    await service.openReportingPeriod(context, {
+      ...openInput(),
+      exchangeAccountId: accountId,
+    });
+
+    await expect(
+      service.closeReportingPeriod(context, {
+        exchangeAccountId: accountId,
+        periodEnd: PERIOD_END,
+        endingEquity: "11250.00",
+        endingSnapshotAt: ENDING_SNAPSHOT_AT,
+        realizedPnl: "800.00",
+        unrealizedPnl: "450.00",
+      } as never),
+    ).rejects.toMatchObject({ code: "NAKED_REALIZED_PNL_REFUSED" });
+
+    const stillOpen = await service.findOpenPeriod(context, accountId);
+    expect(stillOpen?.status).toBe("OPEN");
   });
 
   it("changes digest when ending equity changes", () => {

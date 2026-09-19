@@ -19,6 +19,7 @@ import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const USER_ID = "00000000-0000-4000-8000-0000000310";
@@ -93,12 +94,16 @@ describe("draft invoice service (DEE-310 S5)", () => {
     });
 
     return lifecycle.closeReportingPeriod(context, {
-      exchangeAccountId,
-      periodEnd,
-      endingEquity: "10100.00",
-      endingSnapshotAt: new Date(`2026-${month}-28T23:55:00.000Z`),
-      realizedPnl: options.realizedPnl,
-      unrealizedPnl: options.unrealizedPnl ?? "0",
+      ...billingV2PeriodCloseEvidence({
+        organizationId,
+        accountId: exchangeAccountId,
+        periodStart,
+        periodEnd,
+        realizedPnl: options.realizedPnl,
+        unrealizedPnl: options.unrealizedPnl ?? "0",
+        endingEquity: "10100.00",
+        endingSnapshotAt: new Date(`2026-${month}-28T23:55:00.000Z`),
+      }),
     });
   }
 

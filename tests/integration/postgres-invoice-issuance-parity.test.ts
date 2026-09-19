@@ -17,6 +17,7 @@ import {
 import { traderAuditActions } from "@/lib/trader/types";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
 import {
   deleteHtrPostgresBillingArtifactsForOrg,
@@ -101,12 +102,16 @@ describe.skipIf(!integrationEnabled || !url)(
 
       const periodEnd = new Date("2026-01-28T23:59:59.000Z");
       const closed = await lifecycleService.closeReportingPeriod(context, {
-        exchangeAccountId: EXCHANGE_ACCOUNT_ID,
-        periodEnd,
-        endingEquity: "10100.00",
-        endingSnapshotAt: new Date("2026-01-28T23:55:00.000Z"),
-        realizedPnl: "100.00",
-        unrealizedPnl: "0",
+        ...billingV2PeriodCloseEvidence({
+          organizationId: orgA,
+          accountId: EXCHANGE_ACCOUNT_ID,
+          periodStart: new Date("2026-01-01T00:00:00.000Z"),
+          periodEnd,
+          realizedPnl: "100.00",
+          unrealizedPnl: "0",
+          endingEquity: "10100.00",
+          endingSnapshotAt: new Date("2026-01-28T23:55:00.000Z"),
+        }),
       });
 
       const draft = await draftService.generateDraftInvoice(context, {
