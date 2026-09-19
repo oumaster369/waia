@@ -143,6 +143,7 @@ export type {
 } from "@/lib/trader/paper/paper-loop-worker.types";
 export { runFixturePaperCyclesHarness } from "@/lib/trader/paper/run-fixture-paper-cycles";
 export type {
+  PaperCanonicalOrdinaryCapitalEnvelopeV2,
   PaperCycleDeps,
   PaperCycleExecutionMode,
   PaperCycleInput,

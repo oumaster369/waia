@@ -50,6 +50,7 @@ import type { PlaceOrderInput } from "@/lib/trader/connectors/types";
 import type { BreachCancellationResultV1 } from "@/lib/trader/execution/execution-service.types";
 import type { HistoricalSimulatedExchange } from "@/lib/trader/execution/historical-simulated-exchange";
 import type {
+  PaperCanonicalOrdinaryCapitalEnvelopeV2,
   PaperCycleDeps,
   PaperCycleGuardianExecution,
   PaperCycleInput,
@@ -61,7 +62,12 @@ import type {
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
-import { runDecisionCapitalAuthorityV2 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
+import { buildAuthoritativeRuntimeContextV2 } from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
+import type { ComposeCanonicalEpistemicSpineV2Input } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
+import {
+  runCanonicalOrdinaryCapitalCycleV2,
+  type CanonicalRecurringCycleV2Result,
+} from "@/lib/trader/runtime-v2/canonical-recurring-cycle-v2";
 
 export async function resolveHtxInformationInquiryCycleV1(input: {
   poll: HtxBarPollSource;
@@ -128,6 +134,59 @@ export type PaperCycleResultWithHtrBreachCancellation = PaperCycleResult & {
 
 /** Separate risk-reducing lane; never admitted or denied by NEW_OPPORTUNITY authority. */
 export const PAPER_GUARDIAN_INFORMATION_PURPOSE_V2 = "OPEN_POSITION_REASSESSMENT" as const;
+
+function resolvePaperCanonicalEpistemicSpineV2(input: {
+  envelope: PaperCanonicalOrdinaryCapitalEnvelopeV2 | undefined;
+  organizationId: string;
+  accountId: string;
+  symbol: string;
+  pitAnchor: string;
+}):
+  | { ok: true; epistemic: ComposeCanonicalEpistemicSpineV2Input }
+  | {
+      ok: false;
+      reasonCode:
+        | "CANONICAL_ENVELOPE_MISSING"
+        | "CANONICAL_ENVELOPE_INVALID"
+        | "ENVELOPE_IDENTITY_MISMATCH";
+    } {
+  if (!input.envelope) return { ok: false, reasonCode: "CANONICAL_ENVELOPE_MISSING" };
+  try {
+    const context =
+      input.envelope.context ??
+      (input.envelope.contextInputs
+        ? buildAuthoritativeRuntimeContextV2({
+            organizationId: input.organizationId,
+            accountId: input.accountId,
+            symbol: input.symbol,
+            pitAnchor: input.pitAnchor,
+            ...input.envelope.contextInputs,
+          })
+        : null);
+    if (!context) return { ok: false, reasonCode: "CANONICAL_ENVELOPE_INVALID" };
+    if (
+      context.organizationId !== input.organizationId ||
+      context.accountId !== input.accountId ||
+      context.symbol !== input.symbol ||
+      context.pitAnchor !== input.pitAnchor
+    ) {
+      return { ok: false, reasonCode: "ENVELOPE_IDENTITY_MISMATCH" };
+    }
+    return {
+      ok: true,
+      epistemic: {
+        context,
+        navigatorReceipt: input.envelope.navigatorReceipt,
+        predictiveAdmissionVerdict: input.envelope.predictiveAdmissionVerdict,
+        futureCycleEffect: input.envelope.futureCycleEffect,
+        mkbInjectionAttempted: input.envelope.mkbInjectionAttempted,
+        legacyKnowledgeMutationAttempted: input.envelope.legacyKnowledgeMutationAttempted,
+      },
+    };
+  } catch {
+    return { ok: false, reasonCode: "CANONICAL_ENVELOPE_INVALID" };
+  }
+}
 
 /**
  * Runs one paper trading cycle: intelligence evaluation → signal mapping → mock/paper
@@ -559,7 +618,8 @@ export async function runPaperCycleOnce(
   const { snapshot, context } = input;
   const executionMode = input.executionMode ?? "mock";
   const cycleNewId = input.newId ?? deps.researchReplayDeterminism?.newId;
-  const canonicalRuntimeIntelligenceState = input.canonicalRuntimeIntelligenceState ??
+  const canonicalRuntimeIntelligenceState =
+    input.canonicalRuntimeIntelligenceState ??
     (deps.canonicalRuntimeIntelligenceProvider
       ? await deps.canonicalRuntimeIntelligenceProvider({
           context,
@@ -788,21 +848,60 @@ export async function runPaperCycleOnce(
         hypothesisSessionState: evaluation.hypothesisSessionState,
       };
     }
-    const authority = await runDecisionCapitalAuthorityV2(deps.decisionCapitalAuthorityV2, {
+    const symbol = snapshot.bars[0]?.symbol ?? snapshot.quote.symbol;
+    const pitAnchor = snapshot.evaluatedAt;
+    const envelope =
+      input.canonicalOrdinaryCapitalEnvelopeV2 ?? deps.canonicalOrdinaryCapitalEnvelopeV2;
+    const resolved = resolvePaperCanonicalEpistemicSpineV2({
+      envelope,
       organizationId: context.organizationId,
       accountId: input.accountKey,
-      cycleId: snapshot.cycleId,
-      symbol: snapshot.bars[0]?.symbol ?? snapshot.quote.symbol,
-      referencePrice: evaluation.features.features.close,
-      executionMode: "paper",
-      forecastOutcome: evaluation.forecastRuntimeOutcome!,
-      proposal: {
-        action: "ENTER_LONG",
-        quantity: input.defaultQuantity,
-        strategySignalId: signal.strategySignalId,
-      },
+      symbol,
+      pitAnchor,
     });
-    if (authority.status === "NO_TRADE") {
+    const cycle: CanonicalRecurringCycleV2Result =
+      resolved.ok && envelope
+        ? await runCanonicalOrdinaryCapitalCycleV2({
+            epistemic: resolved.epistemic,
+            admissionTemplate: {
+              context: resolved.epistemic.context,
+              currentRuntimePosture: envelope.currentRuntimePosture,
+              currentDriftPosture: envelope.currentDriftPosture,
+              navigatorOutcome: envelope.navigatorReceipt?.outcome ?? "UNKNOWN_UNRESOLVED",
+              predictiveAdmissionVerdict: envelope.predictiveAdmissionVerdict,
+              admittedAt: pitAnchor,
+              identity: {
+                organizationId: context.organizationId,
+                accountId: input.accountKey,
+                symbol,
+                action: "ENTER_LONG",
+                direction: "BUY",
+                quantity: input.defaultQuantity,
+                externalEffectId: snapshot.cycleId,
+              },
+            },
+            capitalDeps: deps.decisionCapitalAuthorityV2,
+            capitalRequest: {
+              organizationId: context.organizationId,
+              accountId: input.accountKey,
+              cycleId: snapshot.cycleId,
+              symbol,
+              referencePrice: evaluation.features.features.close,
+              executionMode: "paper",
+              forecastOutcome: evaluation.forecastRuntimeOutcome!,
+              proposal: {
+                action: "ENTER_LONG",
+                quantity: input.defaultQuantity,
+                strategySignalId: signal.strategySignalId,
+              },
+            },
+          })
+        : {
+            status: "NO_TRADE",
+            stage: "EPISTEMIC",
+            reasonCodes: [resolved.ok ? "CANONICAL_ENVELOPE_MISSING" : resolved.reasonCode],
+          };
+    if (cycle.status === "NO_TRADE") {
       strategyExecutions.push({
         signal,
         submitBlocked: true,
@@ -811,7 +910,7 @@ export async function runPaperCycleOnce(
         reconciliation: null,
       });
     } else {
-      const execution = authority.execution.execution;
+      const execution = cycle.capital.execution.execution;
       const reconciliation =
         execution.status === "submitted" && !shouldDeferReconciliationToHistoricalExchange(input)
           ? await deps.reconciliation.reconcile(context, {
@@ -836,7 +935,8 @@ export async function runPaperCycleOnce(
       htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
       htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
       hypothesisSessionState: evaluation.hypothesisSessionState,
-      decisionCapitalAuthorityV2: authority,
+      canonicalOrdinaryCapitalCycleV2: cycle,
+      ...(cycle.status === "EXECUTION_BOUND" ? { decisionCapitalAuthorityV2: cycle.capital } : {}),
     };
   }
 
@@ -1035,7 +1135,8 @@ export async function runFixturePaperCycles(
       );
     }
 
-    const forecastRuntimeInput = (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined;
+    const forecastRuntimeInput =
+      (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot: next.snapshot,
@@ -1066,8 +1167,10 @@ export async function runFixturePaperCycles(
         result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
           ? result.evaluation.forecastRuntimeOutcome
           : null,
-      runtimeInput: result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
-        ? forecastRuntimeInput : undefined,
+      runtimeInput:
+        result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
+          ? forecastRuntimeInput
+          : undefined,
     });
 
     hypothesisSessionState = result.hypothesisSessionState;
@@ -1105,7 +1208,8 @@ export async function runPollPaperCycles(
       snapshot = await input.poll.fetchSnapshot();
     }
 
-    const forecastRuntimeInput = (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined;
+    const forecastRuntimeInput =
+      (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
       context: input.context,
       snapshot,
@@ -1131,8 +1235,10 @@ export async function runPollPaperCycles(
         result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
           ? result.evaluation.forecastRuntimeOutcome
           : null,
-      runtimeInput: result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
-        ? forecastRuntimeInput : undefined,
+      runtimeInput:
+        result.evaluation.forecastRuntimeOutcome?.status === "FORECAST_AUTHORIZED"
+          ? forecastRuntimeInput
+          : undefined,
     });
 
     results.push(result);

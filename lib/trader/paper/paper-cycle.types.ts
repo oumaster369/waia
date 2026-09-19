@@ -47,6 +47,34 @@ import type {
   CanonicalDecisionCapitalAuthorityV2Deps,
   DecisionCapitalAuthorityV2Result,
 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
+import type {
+  AuthoritativeRuntimeContextV2,
+  AuthoritativeRuntimeContextV2Input,
+} from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
+import type { CanonicalRecurringCycleV2Result } from "@/lib/trader/runtime-v2/canonical-recurring-cycle-v2";
+import type { KnowledgeSelectionReceiptV2 } from "@/lib/trader/knowledge/navigator/knowledge-selection-receipt-v2";
+import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
+import type { RuntimePostureV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-assessment-v2";
+import type { LiveEdgeDriftPostureV2 } from "@/lib/trader/restriction/live-edge-drift-restriction-v2";
+
+/**
+ * Caller-supplied epistemic envelope for paper ordinary ENTER_LONG.
+ * Navigator and future-cycle receipts are never invented: omit or pass null.
+ */
+export type PaperCanonicalOrdinaryCapitalEnvelopeV2 = Readonly<{
+  context?: AuthoritativeRuntimeContextV2;
+  contextInputs?: Omit<
+    AuthoritativeRuntimeContextV2Input,
+    "organizationId" | "accountId" | "symbol" | "pitAnchor"
+  >;
+  navigatorReceipt: KnowledgeSelectionReceiptV2 | null;
+  predictiveAdmissionVerdict: "ADMITTED" | "NOT_ADMITTED" | "RESEARCH_ONLY";
+  futureCycleEffect: FutureCycleEpistemicEffectReceiptV2 | null;
+  currentRuntimePosture: RuntimePostureV2;
+  currentDriftPosture: LiveEdgeDriftPostureV2;
+  mkbInjectionAttempted?: boolean;
+  legacyKnowledgeMutationAttempted?: boolean;
+}>;
 
 /**
  * Research replay determinism hook (M9+ / DEE-397 / ADR-0021).
@@ -80,20 +108,16 @@ export type PortfolioCycleContext = {
 
 export type PaperCycleExecutionMode = Extract<OrderExecutionMode, "mock" | "paper">;
 
-export type PaperInformationInquiryResolverV1 = (
-  mandatoryBundle: GatewayPollResult,
-) =>
-  | Promise<
-      Readonly<{
-        planningInput: BuildInformationNeedPlanV1Input;
-        refresh(selectedBundle: GatewayPollResult): Promise<
-          Readonly<{
-            finalEvidence: readonly InformationEvidenceV2[];
-            attempts: readonly InformationAcquisitionAttemptInputV1[];
-          }>
-        >;
-      }> | null
-    >
+export type PaperInformationInquiryResolverV1 = (mandatoryBundle: GatewayPollResult) =>
+  | Promise<Readonly<{
+      planningInput: BuildInformationNeedPlanV1Input;
+      refresh(selectedBundle: GatewayPollResult): Promise<
+        Readonly<{
+          finalEvidence: readonly InformationEvidenceV2[];
+          attempts: readonly InformationAcquisitionAttemptInputV1[];
+        }>
+      >;
+    }> | null>
   | Readonly<{
       planningInput: BuildInformationNeedPlanV1Input;
       refresh(selectedBundle: GatewayPollResult): Promise<
@@ -142,6 +166,8 @@ export type PaperCycleDeps = {
   canonicalRuntimeIntelligenceProvider?: CanonicalRuntimeIntelligenceStateProviderV1;
   /** DEE-634: mandatory for the capital-shaped paper path; omission fails closed. */
   decisionCapitalAuthorityV2?: CanonicalDecisionCapitalAuthorityV2Deps;
+  /** DEE-1024: optional epistemic envelope; omission fails closed without inventing receipts. */
+  canonicalOrdinaryCapitalEnvelopeV2?: PaperCanonicalOrdinaryCapitalEnvelopeV2;
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
@@ -209,6 +235,8 @@ export type PaperCycleInput = {
   informationSufficiencySyntheticBinding?: SyntheticResearchNonCapitalBindingV2;
   /** DEE-633: exact issuance-time Forecast V2 input; omission remains NON_ACTIONABLE. */
   forecastRuntimeInput?: ForecastRuntimeInputV2;
+  /** DEE-1024: per-cycle epistemic envelope; wins over the same field on deps. */
+  canonicalOrdinaryCapitalEnvelopeV2?: PaperCanonicalOrdinaryCapitalEnvelopeV2;
   /**
    * IDHPS STREAM_ONLY hot path: skip WP13/WP14 artifact assembly when no sinks consume them.
    */
@@ -262,6 +290,8 @@ export type PaperCycleResult = {
   hypothesisSessionState?: HypothesisSessionState;
   /** Canonical V2 authority proof for capital-shaped paper execution. */
   decisionCapitalAuthorityV2?: DecisionCapitalAuthorityV2Result;
+  /** DEE-1024: ordinary recurring-cycle proof (compose → GATE_ONLY → Decision V2). */
+  canonicalOrdinaryCapitalCycleV2?: CanonicalRecurringCycleV2Result;
 };
 
 /** Shared N-cycle runner context (fixture replay + poll sources). */
