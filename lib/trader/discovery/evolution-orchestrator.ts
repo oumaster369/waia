@@ -16,11 +16,13 @@ import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 import type { ResearchRejectionRecord } from "@/lib/trader/research/research-rejection-record.types";
 import {
+  deriveStrategyEvolutionGenerationV2,
   runStrategyEvolutionResearchPassV2,
   type ClosedTradeOutcomeInputV2,
   type ClosedTradeOutcomePolarityV2,
   type QualificationEvaluationV2,
   type QualificationVerdictV2,
+  type ResearchMemoryV2,
   type StrategyCandidateGenerationKindV2,
   type StrategyEvolutionLoopStatusV2,
   type StrategyParentRefV2,
@@ -59,6 +61,8 @@ export type DiscoveryEvolutionPassInput = {
   failureReasons?: readonly string[];
   evidenceCutoffUtc?: string;
   symbol?: string;
+  parentStrategies?: readonly StrategyParentRefV2[];
+  priorMemory?: ResearchMemoryV2;
 };
 
 export type DiscoveryEvolutionPassResult = {
@@ -84,7 +88,6 @@ type EnabledResearchV2Admission = {
   futureCycleEffect: FutureCycleEpistemicEffectReceiptV2 | null;
   researchCodeIdentity: string;
   costModelIdentity: string;
-  generation: DiscoveryResearchV2GenerationInput;
   development: QualificationEvaluationV2;
   walkForward: QualificationEvaluationV2;
   qualificationVerdict: QualificationVerdictV2;
@@ -108,7 +111,6 @@ function resolveEnabledResearchV2Admission(
     input.predictiveAdmissionVerdict === undefined ||
     input.researchCodeIdentity === undefined ||
     input.costModelIdentity === undefined ||
-    input.generation === undefined ||
     input.development === undefined ||
     input.walkForward === undefined ||
     input.qualificationVerdict === undefined
@@ -121,7 +123,6 @@ function resolveEnabledResearchV2Admission(
     futureCycleEffect: input.futureCycleEffect,
     researchCodeIdentity: input.researchCodeIdentity,
     costModelIdentity: input.costModelIdentity,
-    generation: input.generation,
     development: input.development,
     walkForward: input.walkForward,
     qualificationVerdict: input.qualificationVerdict,
@@ -174,6 +175,19 @@ export async function runDiscoveryEvolutionPass(
     return failClosed("research_v2_admission_incomplete");
   }
 
+  const generation =
+    input.generation ??
+    (input.parentStrategies && input.parentStrategies.length > 0
+      ? deriveStrategyEvolutionGenerationV2({
+          candidateId: input.newId?.() ?? `${input.runContext.campaignRef.campaignId}:candidate`,
+          parents: input.parentStrategies,
+          researchCodeIdentity: admission.researchCodeIdentity,
+        })
+      : null);
+  if (!generation) {
+    return failClosed("research_v2_generation_incomplete");
+  }
+
   const outcomes = mapClosedTradesToOutcomeInputsV2(input.closedTrades);
   const symbol = input.symbol ?? input.closedTrades[0]?.symbol ?? input.bars[0]?.symbol ?? "";
   const evidenceCutoffUtc =
@@ -199,11 +213,12 @@ export async function runDiscoveryEvolutionPass(
     mkbInjectionAttempted: input.mkbInjectionAttempted,
     legacyKnowledgeMutationAttempted: input.legacyKnowledgeMutationAttempted,
     holdoutQueryAttempted: input.holdoutQueryAttempted,
-    generation: admission.generation,
+    generation,
     development: admission.development,
     walkForward: admission.walkForward,
     qualificationVerdict: admission.qualificationVerdict,
     failureReasons: input.failureReasons,
+    priorMemory: input.priorMemory,
   });
 
   return {

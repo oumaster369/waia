@@ -10,8 +10,10 @@ import {
 import {
   assignStrategyCandidateToAccountV2,
   buildClosedTradeOutcomeEvidencePackageV2,
+  deriveStrategyEvolutionGenerationV2,
   discardLosingOutcomesFromEvidencePackageV2,
   filterResearchMemoryByProfitabilityV2,
+  FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2,
   generateStrategyEvolutionCandidateV2,
   promoteStrategyCandidateV2,
   queryBlindHoldoutAsIterativeFitnessV2,
@@ -57,14 +59,25 @@ function parent(id: string, digest: string): StrategyParentRefV2 {
   };
 }
 
-function evaluation(): QualificationEvaluationV2 {
+function evaluation(overrides: Partial<QualificationEvaluationV2> = {}): QualificationEvaluationV2 {
   return {
     netEconomicResult: "2.5",
     maxDrawdown: "-1.0",
     tailEventCount: 1,
     sampleSize: 12,
     incumbentComparisonDigestHex: DIGEST.b,
+    ...overrides,
   };
+}
+
+function walkForwardEvaluation(): QualificationEvaluationV2 {
+  return evaluation({
+    netEconomicResult: "1.25",
+    maxDrawdown: "-1.5",
+    tailEventCount: 2,
+    sampleSize: 8,
+    incumbentComparisonDigestHex: DIGEST.a,
+  });
 }
 
 function navigatorCandidate(
@@ -115,6 +128,17 @@ function futureCycle() {
   });
 }
 
+function defaultGeneration() {
+  return {
+    kind: "PARAMETER_MUTATION" as const,
+    candidateId: "cand-646",
+    strategyId: "mean_reversion_research",
+    strategyVersion: "1.1.0",
+    parents: [parent("mean_reversion_research", DIGEST.e)],
+    params: { lookbackBars: "24", holdBars: "4" },
+  };
+}
+
 function passInput(
   overrides: Partial<RunStrategyEvolutionResearchPassV2Input> = {},
 ): RunStrategyEvolutionResearchPassV2Input {
@@ -132,16 +156,9 @@ function passInput(
     navigatorSelect: navigatorSelect(),
     predictiveAdmissionVerdict: "ADMITTED",
     futureCycleEffect: futureCycle(),
-    generation: {
-      kind: "PARAMETER_MUTATION",
-      candidateId: "cand-646",
-      strategyId: "mean_reversion_research",
-      strategyVersion: "1.1.0",
-      parents: [parent("mean_reversion_research", DIGEST.e)],
-      params: { lookbackBars: "24", holdBars: "4" },
-    },
+    generation: defaultGeneration(),
     development: evaluation(),
-    walkForward: evaluation(),
+    walkForward: walkForwardEvaluation(),
     qualificationVerdict: "QUALIFIED",
     ...overrides,
   };
@@ -205,7 +222,7 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
       runStrategyEvolutionResearchPassV2(
         passInput({
           generation: {
-            ...passInput().generation,
+            ...defaultGeneration(),
             params: { lookbackBars: "24", winRate: "0.9" },
           },
         }),
@@ -386,5 +403,104 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
   it("is a StrategyEvolutionResearchError for lineage and survivorship codes", () => {
     const error = new StrategyEvolutionResearchError("SURVIVORSHIP_DISCARD_FORBIDDEN");
     expect(error.code).toBe("SURVIVORSHIP_DISCARD_FORBIDDEN");
+  });
+
+  it("derives PARAMETER_MUTATION from one parent without reading outcome PnL", () => {
+    const derived = deriveStrategyEvolutionGenerationV2({
+      candidateId: "cand-derived",
+      parents: [parent("mean_reversion_research", DIGEST.e)],
+      researchCodeIdentity: "research-code/v2",
+    });
+    expect(derived.kind).toBe("PARAMETER_MUTATION");
+    expect(derived.strategyId).toBe("mean_reversion_research");
+    expect(derived.strategyVersion).toBe("1.0.1");
+    expect(derived.params.holdBars).toBe("5");
+    expect(derived.params.lookbackBars).toBe("20");
+    expect(derived.params).not.toEqual(parent("mean_reversion_research", DIGEST.e).params);
+
+    const result = runStrategyEvolutionResearchPassV2(
+      passInput({
+        generation: undefined,
+        parentStrategies: [parent("mean_reversion_research", DIGEST.e)],
+      }),
+    );
+    expect(result.candidate.lineage.generationKind).toBe("PARAMETER_MUTATION");
+    expect(result.candidate.params.holdBars).toBe("5");
+    expect(result.status).toBe("HUMAN_PROPOSAL_PENDING");
+  });
+
+  it("derives MULTI_PARENT_COMBINATION from two distinct parents", () => {
+    const second: StrategyParentRefV2 = {
+      ...parent("breakout_research", DIGEST.d),
+      params: { lookbackBars: "16", breakoutBars: "8" },
+    };
+    const derived = deriveStrategyEvolutionGenerationV2({
+      candidateId: "cand-combo",
+      parents: [parent("mean_reversion_research", DIGEST.e), second],
+      researchCodeIdentity: "research-code/v2",
+    });
+    expect(derived.kind).toBe("MULTI_PARENT_COMBINATION");
+    expect(derived.strategyId).toBe("combination/breakout_research+mean_reversion_research");
+    expect(derived.params.breakoutBars).toBe("8");
+    expect(derived.params.lookbackBars).toBe("16");
+
+    const result = runStrategyEvolutionResearchPassV2(
+      passInput({
+        generation: undefined,
+        parentStrategies: [parent("mean_reversion_research", DIGEST.e), second],
+      }),
+    );
+    expect(result.candidate.lineage.generationKind).toBe("MULTI_PARENT_COMBINATION");
+    expect(result.candidate.lineage.parents).toHaveLength(2);
+  });
+
+  it("refuses the default template identity and incomplete generation", () => {
+    expect(FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2).toBe("mean_reversion_v0");
+    expect(() =>
+      deriveStrategyEvolutionGenerationV2({
+        candidateId: "cand-template",
+        parents: [parent(FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2, DIGEST.e)],
+        researchCodeIdentity: "research-code/v2",
+      }),
+    ).toThrow(/FORBIDDEN_TEMPLATE_STRATEGY_IDENTITY/);
+    expect(() => runStrategyEvolutionResearchPassV2(passInput({ generation: undefined }))).toThrow(
+      /GENERATION_INCOMPLETE/,
+    );
+  });
+
+  it("refuses identical DEVELOPMENT and walk-forward evaluations", () => {
+    expect(() =>
+      runStrategyEvolutionResearchPassV2(
+        passInput({
+          walkForward: evaluation(),
+        }),
+      ),
+    ).toThrow(/QUALIFICATION_PARTITIONS_NOT_INDEPENDENT/);
+  });
+
+  it("resumes campaign memory without dropping a prior LOSS", () => {
+    const first = runStrategyEvolutionResearchPassV2(passInput());
+    expect(first.memory.records.some((record) => record.outcomeId === "loss-1")).toBe(true);
+
+    const second = runStrategyEvolutionResearchPassV2(
+      passInput({
+        priorMemory: first.memory,
+        outcomes: [
+          outcome({ outcomeId: "win-1", netEconomicResult: "12.5" }),
+          outcome({ outcomeId: "loss-1", netEconomicResult: "-8.25" }),
+          outcome({ outcomeId: "loss-2", netEconomicResult: "-3.5" }),
+        ],
+      }),
+    );
+    expect(second.memory.records.map((record) => record.outcomeId).sort()).toEqual([
+      "loss-1",
+      "loss-2",
+      "win-1",
+    ]);
+    expect(second.memory.contradictingCount).toBe(2);
+    expect(second.proposal?.negativeEvidence.map((row) => row.outcomeId).sort()).toEqual([
+      "loss-1",
+      "loss-2",
+    ]);
   });
 });

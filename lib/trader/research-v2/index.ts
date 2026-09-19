@@ -32,6 +32,7 @@ export {
   assertResearchMemoryRetainsPackageV2,
   filterResearchMemoryByProfitabilityV2,
   queryContradictingResearchMemoryV2,
+  resumeResearchMemoryV2,
 } from "@/lib/trader/research-v2/research-memory-v2";
 export type { ResearchMemoryV2 } from "@/lib/trader/research-v2/research-memory-v2";
 
@@ -47,9 +48,11 @@ export type {
 } from "@/lib/trader/research-v2/research-question-hypothesis-v2";
 
 export {
+  FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2,
   STRATEGY_CANDIDATE_GENERATION_KINDS_V2,
   STRATEGY_EVOLUTION_CANDIDATE_V2_SCHEMA,
   STRATEGY_EVOLUTION_GENERATOR_VERSION_V2,
+  assertResearchStrategyIdentityAllowedV2,
   assignStrategyCandidateToAccountV2,
   generateStrategyEvolutionCandidateV2,
   promoteStrategyCandidateV2,
@@ -62,10 +65,17 @@ export type {
   StrategyParentRefV2,
 } from "@/lib/trader/research-v2/strategy-candidate-generation-v2";
 
+export { deriveStrategyEvolutionGenerationV2 } from "@/lib/trader/research-v2/strategy-candidate-generation-derive-v2";
+export type {
+  DeriveStrategyEvolutionGenerationV2Input,
+  DerivedStrategyEvolutionGenerationV2,
+} from "@/lib/trader/research-v2/strategy-candidate-generation-derive-v2";
+
 export {
   QUALIFICATION_PARTITIONS_V2,
   QUALIFICATION_RECORD_V2_SCHEMA,
   QUALIFICATION_VERDICTS_V2,
+  assertQualificationPartitionsIndependentV2,
   queryBlindHoldoutAsIterativeFitnessV2,
   recordQualificationV2,
   recordRejectedCandidateV2,

@@ -12,6 +12,7 @@ import {
   queryBlindHoldoutAsIterativeFitnessV2,
   recordQualificationV2,
   recordRejectedCandidateV2,
+  assertQualificationPartitionsIndependentV2,
   type QualificationEvaluationV2,
   type QualificationRecordV2,
   type QualificationVerdictV2,
@@ -27,12 +28,14 @@ import {
   type FalsifiableHypothesisV2,
   type ResearchQuestionV2,
 } from "@/lib/trader/research-v2/research-question-hypothesis-v2";
+import { deriveStrategyEvolutionGenerationV2 } from "@/lib/trader/research-v2/strategy-candidate-generation-derive-v2";
 import {
   generateStrategyEvolutionCandidateV2,
   type StrategyCandidateGenerationKindV2,
   type StrategyEvolutionCandidateV2,
   type StrategyParentRefV2,
 } from "@/lib/trader/research-v2/strategy-candidate-generation-v2";
+import { StrategyEvolutionResearchError } from "@/lib/trader/research-v2/research-v2-guards";
 import {
   admitStrategyEvolutionKnowledgeV2,
   type StrategyEvolutionKnowledgeAdmissionV2,
@@ -56,7 +59,7 @@ export type RunStrategyEvolutionResearchPassV2Input = Readonly<{
   mkbInjectionAttempted?: boolean;
   legacyKnowledgeMutationAttempted?: boolean;
   holdoutQueryAttempted?: boolean;
-  generation: {
+  generation?: {
     kind: StrategyCandidateGenerationKindV2;
     candidateId: string;
     strategyId: string;
@@ -64,6 +67,8 @@ export type RunStrategyEvolutionResearchPassV2Input = Readonly<{
     parents: readonly StrategyParentRefV2[];
     params: Readonly<Record<string, string>>;
   };
+  parentStrategies?: readonly StrategyParentRefV2[];
+  priorMemory?: ResearchMemoryV2;
   development: QualificationEvaluationV2;
   walkForward: QualificationEvaluationV2;
   qualificationVerdict: QualificationVerdictV2;
@@ -94,6 +99,20 @@ export function runStrategyEvolutionResearchPassV2(
   if (input.holdoutQueryAttempted) {
     queryBlindHoldoutAsIterativeFitnessV2();
   }
+  assertQualificationPartitionsIndependentV2(input.development, input.walkForward);
+
+  const generation =
+    input.generation ??
+    (input.parentStrategies && input.parentStrategies.length > 0
+      ? deriveStrategyEvolutionGenerationV2({
+          candidateId: `${input.campaignId}:candidate`,
+          parents: input.parentStrategies,
+          researchCodeIdentity: input.researchCodeIdentity,
+        })
+      : null);
+  if (!generation) {
+    throw new StrategyEvolutionResearchError("GENERATION_INCOMPLETE");
+  }
 
   const evidencePackage = buildClosedTradeOutcomeEvidencePackageV2({
     organizationId: input.organizationId,
@@ -102,7 +121,7 @@ export function runStrategyEvolutionResearchPassV2(
     evidenceCutoffUtc: input.evidenceCutoffUtc,
     outcomes: input.outcomes,
   });
-  const memory = appendResearchMemoryV2(evidencePackage);
+  const memory = appendResearchMemoryV2(evidencePackage, input.priorMemory);
   const question = buildResearchQuestionV2({
     questionId: `${input.campaignId}:question`,
     memory,
@@ -111,15 +130,15 @@ export function runStrategyEvolutionResearchPassV2(
   const hypothesis = buildFalsifiableHypothesisV2({
     hypothesisId: `${input.campaignId}:hypothesis`,
     question,
-    generationKind: input.generation.kind,
+    generationKind: generation.kind,
   });
   const candidate = generateStrategyEvolutionCandidateV2({
-    candidateId: input.generation.candidateId,
-    strategyId: input.generation.strategyId,
-    strategyVersion: input.generation.strategyVersion,
-    kind: input.generation.kind,
-    parents: input.generation.parents,
-    params: input.generation.params,
+    candidateId: generation.candidateId,
+    strategyId: generation.strategyId,
+    strategyVersion: generation.strategyVersion,
+    kind: generation.kind,
+    parents: generation.parents,
+    params: generation.params,
     hypothesis,
     evidenceCutoffUtc: input.evidenceCutoffUtc,
     researchCodeIdentity: input.researchCodeIdentity,
