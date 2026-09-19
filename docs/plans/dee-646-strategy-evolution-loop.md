@@ -18,13 +18,13 @@ state:
   status: in-progress
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  remainingWorkPackages: [WP-5]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Library spine PR to main with Linear keep-open. Remaining WP-5 is wiring runDiscoveryEvolutionPass, not this merge."
+  nextAction: "WP-5 discovery wiring is owned by DEE-1025 (docs/plans/dee-1025-discovery-research-v2-wiring.md)."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -87,10 +87,11 @@ Pending Human-only promotion proposals include positive and negative evidence. K
 consumes Navigator V2 and future-cycle epistemic effect. Research-v2 modules must not import
 connector-dispatch or `placeOrder`.
 
-### WP-5 — Discovery orchestrator wiring (deferred)
+### WP-5 — Discovery orchestrator wiring
 
-Do not rewrite `runDiscoveryEvolutionPass` in this batch. A later WP may consume the research-v2
-spine from that default-off orchestrator. Keep Linear in progress until that wiring is proven.
+Owned by [DEE-1025](https://linear.app/deepsense/issue/DEE-1025) /
+[`docs/plans/dee-1025-discovery-research-v2-wiring.md`](./dee-1025-discovery-research-v2-wiring.md).
+This DEE-646 batch does not rewrite `runDiscoveryEvolutionPass`.
 
 ## Non-goals
 
