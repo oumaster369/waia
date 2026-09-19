@@ -324,4 +324,22 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
     expect(v2Input?.generation?.kind).toBe("PARAMETER_MUTATION");
     expect(v2Input?.generation?.params.holdBars).toBe("5");
   });
+
+  it("yields enabled discovery to capital runtime without calling research-v2", async () => {
+    const result = await runDiscoveryEvolutionPass(EX, {
+      runContext: runContext({
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      }),
+      config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      bars: [],
+      closedTrades: [closedTrade({ fillId: "win-1", tradePnl: "12.5" })],
+      capitalRuntimeActive: true,
+    });
+    expect(result).toEqual({
+      skipped: true,
+      reason: "research_yielded_to_capital_runtime",
+      capitalAuthority: "NONE",
+    });
+    expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
+  });
 });

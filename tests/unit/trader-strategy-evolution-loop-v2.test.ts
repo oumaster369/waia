@@ -8,13 +8,18 @@ import {
   type SelectKnowledgeForQuestionV2Input,
 } from "@/lib/trader/knowledge/navigator";
 import {
+  admitHumanResearchCandidateAssignmentV2,
+  assertResearchJobCannotClaimCapitalRuntimeV2,
   assignStrategyCandidateToAccountV2,
   buildClosedTradeOutcomeEvidencePackageV2,
+  completeResearchJobV2,
   deriveStrategyEvolutionGenerationV2,
   discardLosingOutcomesFromEvidencePackageV2,
+  enqueueResearchJobV2,
   filterResearchMemoryByProfitabilityV2,
   FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2,
   generateStrategyEvolutionCandidateV2,
+  mergeHumanResearchAssignmentsV2,
   promoteStrategyCandidateV2,
   queryBlindHoldoutAsIterativeFitnessV2,
   recordQualificationV2,
@@ -361,6 +366,13 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
     expect(() => rerecordRejectedCandidateAsPromotedV2(rejectedRecord)).toThrow(
       /CANDIDATE_SELF_PROMOTION_FORBIDDEN/,
     );
+    expect(result.retirementProposal?.approvalAuthority).toBe("HUMAN_ONLY");
+    expect(result.retirementProposal?.capitalAuthority).toBe("NONE");
+    expect(result.retirementProposal?.liveDemotionAuthority).toBe("NONE");
+    expect(result.retirementProposal?.disposition).toBe("pending");
+    expect(result.retirementProposal?.rejectedRecordDigestHex).toBe(
+      rejectedRecord.contentDigestHex,
+    );
   });
 
   it("includes positive and negative evidence and states Human-only approval", () => {
@@ -502,5 +514,161 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
       "loss-1",
       "loss-2",
     ]);
+  });
+
+  it("admits Human RESEARCH assignment of one strategy to many accounts and one account to many strategies", () => {
+    const first = runStrategyEvolutionResearchPassV2(passInput());
+    const firstProposal = first.proposal;
+    expect(firstProposal).not.toBeNull();
+    if (!firstProposal) {
+      throw new Error("expected promotion proposal");
+    }
+    expect(first.retirementProposal).toBeNull();
+
+    const firstAssignment = admitHumanResearchCandidateAssignmentV2({
+      organizationId: "org-646",
+      proposal: firstProposal,
+      candidate: first.candidate,
+      humanActorId: "human-adamar",
+      operatorAttestationDigestHex: DIGEST.a,
+      lifecycle: "RESEARCH",
+      accounts: [
+        { organizationId: "org-646", accountId: "acct-a" },
+        { organizationId: "org-646", accountId: "acct-b" },
+      ],
+    });
+    expect(firstAssignment.assignmentAuthority).toBe("HUMAN_ONLY");
+    expect(firstAssignment.liveAuthority).toBe("NONE");
+    expect(firstAssignment.capitalAuthority).toBe("NONE");
+    expect(firstAssignment.accountIds).toEqual(["acct-a", "acct-b"]);
+    expect(firstAssignment.strategyId).toBe(first.candidate.strategyId);
+
+    const second = runStrategyEvolutionResearchPassV2(
+      passInput({
+        generation: {
+          kind: "PARAMETER_MUTATION",
+          candidateId: "cand-breakout",
+          strategyId: "breakout_research",
+          strategyVersion: "1.1.0",
+          parents: [parent("breakout_research", DIGEST.d)],
+          params: { lookbackBars: "16", holdBars: "5" },
+        },
+      }),
+    );
+    expect(second.proposal).not.toBeNull();
+    if (!second.proposal) {
+      throw new Error("expected second promotion proposal");
+    }
+
+    const secondAssignment = admitHumanResearchCandidateAssignmentV2({
+      organizationId: "org-646",
+      proposal: second.proposal,
+      candidate: second.candidate,
+      humanActorId: "human-adamar",
+      operatorAttestationDigestHex: DIGEST.a,
+      lifecycle: "PAPER",
+      accounts: [{ organizationId: "org-646", accountId: "acct-a" }],
+    });
+    expect(secondAssignment.strategyId).toBe("breakout_research");
+    expect(secondAssignment.accountIds).toEqual(["acct-a"]);
+
+    const merged = mergeHumanResearchAssignmentsV2(firstAssignment, secondAssignment);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.strategyId).sort()).toEqual([
+      "breakout_research",
+      first.candidate.strategyId,
+    ]);
+
+    expect(() =>
+      admitHumanResearchCandidateAssignmentV2({
+        organizationId: "org-646",
+        proposal: firstProposal,
+        candidate: first.candidate,
+        humanActorId: "human-adamar",
+        operatorAttestationDigestHex: DIGEST.a,
+        lifecycle: "RESEARCH",
+        accounts: [{ organizationId: "org-foreign", accountId: "acct-a" }],
+      }),
+    ).toThrow(/HUMAN_ASSIGNMENT_TENANT_ISOLATION/);
+
+    expect(() =>
+      admitHumanResearchCandidateAssignmentV2({
+        organizationId: "org-646",
+        proposal: firstProposal,
+        candidate: first.candidate,
+        humanActorId: "human-adamar",
+        operatorAttestationDigestHex: DIGEST.a,
+        lifecycle: "LIVE",
+        accounts: [{ organizationId: "org-646", accountId: "acct-a" }],
+      }),
+    ).toThrow(/LIVE_ASSIGNMENT_FORBIDDEN/);
+
+    expect(() =>
+      admitHumanResearchCandidateAssignmentV2({
+        organizationId: "org-646",
+        proposal: firstProposal,
+        candidate: first.candidate,
+        humanActorId: "human-adamar",
+        operatorAttestationDigestHex: DIGEST.a,
+        lifecycle: "RESEARCH",
+        accounts: [{ organizationId: "org-646", accountId: "acct-a" }],
+        candidateSelfAssignAttempted: true,
+      }),
+    ).toThrow(/CANDIDATE_ACCOUNT_ASSIGNMENT_FORBIDDEN/);
+  });
+
+  it("isolates research jobs from capital runtime classes and yields when capital is active", () => {
+    expect(() => assertResearchJobCannotClaimCapitalRuntimeV2("GUARDIAN")).toThrow(
+      /RESEARCH_CANNOT_CLAIM_CAPITAL_RUNTIME/,
+    );
+    expect(() =>
+      enqueueResearchJobV2({
+        jobId: "job-1",
+        organizationId: "org-646",
+        campaignId: "camp-646",
+        budgetMs: 1,
+        claimedRuntimeClass: "EXECUTION",
+      }),
+    ).toThrow(/RESEARCH_CANNOT_CLAIM_CAPITAL_RUNTIME/);
+    expect(() =>
+      enqueueResearchJobV2({
+        jobId: "job-1",
+        organizationId: "org-646",
+        campaignId: "camp-646",
+        budgetMs: 1,
+        mutateAssignmentAttempted: true,
+      }),
+    ).toThrow(/RESEARCH_CANNOT_MUTATE_ASSIGNMENT/);
+    expect(() =>
+      enqueueResearchJobV2({
+        jobId: "job-1",
+        organizationId: "org-646",
+        campaignId: "camp-646",
+        budgetMs: 1,
+        holdoutQueryAttempted: true,
+      }),
+    ).toThrow(/BLIND_HOLDOUT_ITERATIVE_FITNESS_FORBIDDEN/);
+
+    const yielded = enqueueResearchJobV2({
+      jobId: "job-yield",
+      organizationId: "org-646",
+      campaignId: "camp-646",
+      budgetMs: 25,
+      capitalRuntimeActive: true,
+    });
+    expect(yielded.status).toBe("YIELDED");
+    expect(yielded.yieldReason).toBe("CAPITAL_RUNTIME_ACTIVE");
+    expect(yielded.jobClass).toBe("RESEARCH_BACKGROUND");
+    expect(yielded.capitalAuthority).toBe("NONE");
+    expect(() => completeResearchJobV2(yielded)).toThrow(/RESEARCH_JOB_YIELDED_TO_CAPITAL_RUNTIME/);
+
+    const queued = enqueueResearchJobV2({
+      jobId: "job-ok",
+      organizationId: "org-646",
+      campaignId: "camp-646",
+      budgetMs: 25,
+    });
+    expect(queued.status).toBe("QUEUED");
+    expect(completeResearchJobV2(queued).status).toBe("COMPLETED");
   });
 });
