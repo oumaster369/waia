@@ -89,3 +89,13 @@ export {
   BILLING_V2_MODULE_ROOT,
   billingV2SourceHasForbiddenVenueWrite,
 } from "@/lib/trader/billing/v2/billing-v2-consumer-inventory";
+
+export {
+  BILLING_ORCHESTRATOR_FORBIDDEN_PROFIT_KEYS,
+  NAKED_REALIZED_PNL_REFUSED,
+  BillingCanonicalProfitAdmissionError,
+  admitCanonicalPeriodProfitFromReceiptV2,
+  billingPeriodReportingScopeIdV2,
+  refuseNakedRealizedPnl,
+} from "@/lib/trader/billing/v2/admit-realized-profit-receipt-v2";
+export type { AdmitCanonicalPeriodProfitInputV2 } from "@/lib/trader/billing/v2/admit-realized-profit-receipt-v2";

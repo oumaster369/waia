@@ -25,6 +25,11 @@ import {
   createSqliteBillingPeriodCloseOrchestrator,
 } from "@/lib/trader/billing/billing-period-close-orchestrator";
 import {
+  NAKED_REALIZED_PNL_REFUSED,
+  type ClosedTradeSettlementV2,
+  type RealizedStrategyProfitReceiptV2,
+} from "@/lib/trader/billing/v2";
+import {
   createPostgresBillingGovernanceService,
   createSqliteBillingGovernanceService,
 } from "@/lib/trader/billing/governance/billing-governance-service";
@@ -486,11 +491,43 @@ type ReportingPeriodCommandBody = {
   open_positions_snapshot_ref?: string;
   valuation_source?: string;
   realized_pnl?: string;
+  realized_strategy_profit_receipt?: unknown;
+  closed_trade_settlements?: unknown;
   unrealized_pnl?: string;
   net_deposits?: string;
   net_withdrawals?: string;
   computed_at?: string;
 };
+
+function refuseNakedRealizedPnlResponse(): AdminRouteHandlerResult {
+  return adminClientError(400, NAKED_REALIZED_PNL_REFUSED, NAKED_REALIZED_PNL_REFUSED);
+}
+
+function parseCanonicalProfitEvidence(body: ReportingPeriodCommandBody):
+  | {
+      receipt: RealizedStrategyProfitReceiptV2;
+      settlements: readonly ClosedTradeSettlementV2[];
+    }
+  | AdminRouteHandlerResult {
+  if (Object.prototype.hasOwnProperty.call(body, "realized_pnl")) {
+    return refuseNakedRealizedPnlResponse();
+  }
+  const receipt = body.realized_strategy_profit_receipt;
+  const settlements = body.closed_trade_settlements;
+  if (receipt == null || typeof receipt !== "object" || Array.isArray(receipt)) {
+    return refuseNakedRealizedPnlResponse();
+  }
+  if (
+    !Array.isArray(settlements) ||
+    settlements.some((row) => row == null || typeof row !== "object")
+  ) {
+    return refuseNakedRealizedPnlResponse();
+  }
+  return {
+    receipt: receipt as RealizedStrategyProfitReceiptV2,
+    settlements: settlements as ClosedTradeSettlementV2[],
+  };
+}
 
 function parseReportingPeriodCommandBody(
   raw: unknown,
@@ -592,13 +629,13 @@ export async function handleAdminReportingPeriodCommandPost(
       if (typeof valuationSource !== "string") {
         return valuationSource;
       }
-      const realizedPnl = parseRequiredString(body.realized_pnl, "realized_pnl");
-      if (typeof realizedPnl !== "string") {
-        return realizedPnl;
-      }
       const unrealizedPnl = parseRequiredString(body.unrealized_pnl, "unrealized_pnl");
       if (typeof unrealizedPnl !== "string") {
         return unrealizedPnl;
+      }
+      const profitEvidence = parseCanonicalProfitEvidence(body);
+      if ("status" in profitEvidence) {
+        return profitEvidence;
       }
 
       const result = await orchestrator.closeAndMaterialize(context, {
@@ -611,7 +648,8 @@ export async function handleAdminReportingPeriodCommandPost(
         endingSnapshotAt,
         openPositionsSnapshotRef,
         valuationSource,
-        realizedPnl,
+        realizedStrategyProfitReceipt: profitEvidence.receipt,
+        closedTradeSettlements: profitEvidence.settlements,
         unrealizedPnl,
         netDeposits: body.net_deposits?.trim(),
         netWithdrawals: body.net_withdrawals?.trim(),

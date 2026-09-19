@@ -23,6 +23,15 @@ import {
   createPostgresReportingPeriodLifecycleService,
   createSqliteReportingPeriodLifecycleService,
 } from "@/lib/trader/billing/reporting-period-lifecycle-service";
+import { MAX_REPORTING_PERIODS_LIST_LIMIT } from "@/lib/trader/billing/reporting-period-repository.types";
+import {
+  admitCanonicalPeriodProfitFromReceiptV2,
+  billingPeriodReportingScopeIdV2,
+  BillingCanonicalProfitAdmissionError,
+  refuseNakedRealizedPnl,
+  type ClosedTradeSettlementV2,
+  type RealizedStrategyProfitReceiptV2,
+} from "@/lib/trader/billing/v2";
 import { traderAuditActions } from "@/lib/trader/types";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -36,7 +45,8 @@ export type CloseAndMaterializeInput = {
   endingSnapshotAt: Date;
   openPositionsSnapshotRef: string;
   valuationSource: string;
-  realizedPnl: string;
+  realizedStrategyProfitReceipt: RealizedStrategyProfitReceiptV2;
+  closedTradeSettlements: readonly ClosedTradeSettlementV2[];
   unrealizedPnl: string;
   netDeposits?: string;
   netWithdrawals?: string;
@@ -53,6 +63,7 @@ export type BillingPeriodCloseResult = {
   invoiceIdPrefix: string | null;
   invoiceStatus: string | null;
   billable: boolean;
+  realizedStrategyProfitReceiptDigestHex: string | null;
   auditActions: string[];
 };
 
@@ -75,6 +86,51 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
       const scoped = requireOrgContext(context.organizationId);
       const auditActions: string[] = [];
 
+      if (
+        input.realizedStrategyProfitReceipt == null ||
+        input.closedTradeSettlements == null ||
+        Object.prototype.hasOwnProperty.call(input, "realizedPnl")
+      ) {
+        refuseNakedRealizedPnl();
+      }
+
+      const expectedReportingScopeId = billingPeriodReportingScopeIdV2({
+        organizationId: scoped.organizationId,
+        accountId: input.exchangeAccountId,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+      });
+
+      const existingOpen = await deps.reportingPeriodLifecycle.findOpenPeriod(
+        scoped,
+        input.exchangeAccountId,
+      );
+      if (existingOpen && existingOpen.periodStart.getTime() !== input.periodStart.getTime()) {
+        throw new BillingCanonicalProfitAdmissionError("PERIOD_START_MISMATCH");
+      }
+
+      const realizedPnl = admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: scoped.organizationId,
+        accountId: input.exchangeAccountId,
+        receipt: input.realizedStrategyProfitReceipt,
+        settlements: input.closedTradeSettlements,
+        expectedReportingScopeId,
+      });
+
+      const existingClosed = await deps.reportingPeriodLifecycle.listClosedPeriods(scoped, {
+        exchangeAccountId: input.exchangeAccountId,
+        limit: MAX_REPORTING_PERIODS_LIST_LIMIT,
+      });
+      if (existingClosed.length >= MAX_REPORTING_PERIODS_LIST_LIMIT) {
+        throw new BillingCanonicalProfitAdmissionError("BILLING_PERIOD_LIST_TRUNCATED");
+      }
+      const duplicateWindow = existingClosed.some(
+        (period) => period.periodStart.getTime() === input.periodStart.getTime(),
+      );
+      if (duplicateWindow) {
+        throw new BillingCanonicalProfitAdmissionError("DUPLICATE_BILLING_PERIOD_SCOPE");
+      }
+
       const existingHwm = await deps.hwmLedger.getCurrentHwm(scoped, input.exchangeAccountId);
       if (!existingHwm) {
         await deps.hwmLedger.bootstrapHwm(scoped, {
@@ -86,12 +142,8 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
         auditActions.push(traderAuditActions.hwmBootstrapped);
       }
 
-      let openPeriod = await deps.reportingPeriodLifecycle.findOpenPeriod(
-        scoped,
-        input.exchangeAccountId,
-      );
-      if (!openPeriod) {
-        openPeriod = await deps.reportingPeriodLifecycle.openReportingPeriod(scoped, {
+      if (!existingOpen) {
+        await deps.reportingPeriodLifecycle.openReportingPeriod(scoped, {
           exchangeAccountId: input.exchangeAccountId,
           periodStart: input.periodStart,
           startingEquity: input.startingEquity,
@@ -107,7 +159,7 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
         periodEnd: input.periodEnd,
         endingEquity: input.endingEquity,
         endingSnapshotAt: input.endingSnapshotAt,
-        realizedPnl: input.realizedPnl,
+        realizedPnl,
         unrealizedPnl: input.unrealizedPnl,
         netDeposits: input.netDeposits,
         netWithdrawals: input.netWithdrawals,
@@ -129,6 +181,8 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
         invoiceIdPrefix: invoice ? idPrefix(invoice.id) : null,
         invoiceStatus: invoice?.status ?? null,
         billable: invoice?.billable ?? false,
+        realizedStrategyProfitReceiptDigestHex:
+          input.realizedStrategyProfitReceipt.contentDigestHex,
         auditActions,
       };
     },
@@ -169,6 +223,7 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
           invoiceIdPrefix: idPrefix(invoice.id),
           invoiceStatus: invoice.status,
           billable: invoice.billable,
+          realizedStrategyProfitReceiptDigestHex: null,
           auditActions,
         };
       } catch (error) {
@@ -178,6 +233,7 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
             invoiceIdPrefix: null,
             invoiceStatus: null,
             billable: false,
+            realizedStrategyProfitReceiptDigestHex: null,
             auditActions,
           };
         }

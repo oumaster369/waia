@@ -56,6 +56,9 @@ export function selectClosedPeriodsUpToTarget(
   return selected;
 }
 
+/** Folds stored reporting-period projections. Canonical period-close writes those
+ *  projections from RealizedStrategyProfitReceiptV2; a naked caller number is not
+ *  billing authority. */
 export function foldCumulativeRealizedStrategyProfit(periods: ReportingPeriodRecordView[]): string {
   return periods.reduce((sum, period) => addDecimal(sum, period.realizedPnl!), "0");
 }

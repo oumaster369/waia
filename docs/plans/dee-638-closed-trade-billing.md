@@ -19,12 +19,12 @@ state:
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
   remainingWorkPackages: [WP-5]
-  prNumber: null
-  prUrl: null
+  prNumber: 610
+  prUrl: https://github.com/oumaster369/waia/pull/610
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Library spine only. Remaining WP-5 is orchestrator cutover of CloseAndMaterializeInput.realizedPnl. Keep Linear in progress after this merge."
+  nextAction: "Library spine merged in #610. Orchestrator cutover is DEE-1023. Remaining on DEE-638: Reality lookup, receipt persistence, unique index, lifecycle naked-close quarantine."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -81,11 +81,11 @@ replay is deterministic.
 DRAFT basis only; not ISSUED or collection authority. Billing V2 modules must not import
 execution/live/connector `placeOrder`.
 
-### WP-5 — Orchestrator cutover (deferred)
+### WP-5 — Orchestrator cutover (DEE-1023)
 
-Do not rewrite `billing-period-close-orchestrator` in this batch. A later WP must stop treating
-`CloseAndMaterializeInput.realizedPnl` as canonical profit and consume
-`RealizedStrategyProfitReceiptV2` instead. Keep Linear in progress until that cutover is proven.
+Do not rewrite `billing-period-close-orchestrator` in the DEE-638 library-spine
+batch. The cutover lives on [DEE-1023](https://linear.app/deepsense/issue/DEE-1023)
+and `docs/plans/dee-1023-billing-period-close-receipt.md`.
 
 ## Non-goals
 
