@@ -37,7 +37,9 @@ docker run --rm \
   -e "WAIA_RELEASE_SHA=$TARGET_SHA" \
   "$IMAGE_TAG" node --import tsx --conditions=react-server \
   services/ai-trader-execution-host/entrypoint.mjs --preflight-image
-docker history "$IMAGE_TAG" | head -n 20
+# Consume docker-history fully. `head -n 20` closed the pipe early under
+# `set -o pipefail` (SIGPIPE 141) after a successful image build (DEE-942).
+docker history "$IMAGE_TAG" | sed -n '1,20p'
 ( cd "$REPO_ROOT" && pnpm install --frozen-lockfile )
 revision_merge_json "$REVISION_PATH" "$(node -e "process.stdout.write(JSON.stringify({imageTag:process.argv[1],gitSha:process.argv[2],imageId:process.argv[3]}))" "$IMAGE_TAG" "$TARGET_SHA" "$IMAGE_ID")"
 log "result: OK"
