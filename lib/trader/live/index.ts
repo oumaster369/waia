@@ -49,8 +49,10 @@ export { mapSignalToLiveSubmitOrder } from "@/lib/trader/live/signal-to-live-ord
 export {
   runLiveCycleOnce,
   liveCycleOrderKeys,
+  type LiveCanonicalOrdinaryCapitalEnvelopeV2,
   type LiveCycleDeps,
   type LiveCycleResult,
+  type RunLiveCycleInput,
 } from "@/lib/trader/live/run-live-cycle";
 export {
   proveLiveFillReportingReadable,
