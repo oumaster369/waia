@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  admitCanonicalPeriodProfitFromReceiptV2,
   assessBillingV2,
   buildCanonicalBillingPolicyV2,
   buildClosedTradeSettlementV2,
@@ -442,5 +443,80 @@ describe("DEE-638 closed-trade billing V2", () => {
     const profit = receiptFor([withCosts]);
     expect(profit.closedTradeSettlementDigests).toEqual([withCosts.contentDigestHex]);
     expect(compareDecimal(profit.netRealizedStrategyProfit, "100")).toBe(0);
+  });
+
+  it("admits period profit only from a rebuilt receipt bound to the expected reporting scope", () => {
+    const closed = settlement("admit", "100", digestChar("7"));
+    const receipt = receiptFor([closed]);
+    expect(
+      admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: "org-638",
+        accountId: "acct-638",
+        receipt,
+        settlements: [closed],
+        expectedReportingScopeId: "scope-638",
+      }),
+    ).toBe(receipt.netRealizedStrategyProfit);
+
+    expect(() =>
+      admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: "org-638",
+        accountId: "acct-638",
+        receipt,
+        settlements: [closed],
+        expectedReportingScopeId: "scope-638",
+        realizedPnl: "100",
+      } as never),
+    ).toThrow(/NAKED_REALIZED_PNL_REFUSED/);
+
+    expect(() =>
+      admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: "org-638",
+        accountId: "acct-other",
+        receipt,
+        settlements: [closed],
+        expectedReportingScopeId: "scope-638",
+      }),
+    ).toThrow(/RECEIPT_ACCOUNT_MISMATCH/);
+
+    expect(() =>
+      admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: "org-other",
+        accountId: "acct-638",
+        receipt,
+        settlements: [closed],
+        expectedReportingScopeId: "scope-638",
+      }),
+    ).toThrow(/RECEIPT_ORGANIZATION_MISMATCH/);
+
+    expect(() =>
+      admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: "org-638",
+        accountId: "acct-638",
+        receipt,
+        settlements: [closed],
+        expectedReportingScopeId: "scope-OTHER",
+      }),
+    ).toThrow(/RECEIPT_REPORTING_SCOPE_MISMATCH/);
+
+    const honest = receiptFor([]);
+    const { contentDigestHex: _ignored, ...body } = honest;
+    const forged = {
+      ...body,
+      netRealizedStrategyProfit: "1000000",
+      contentDigestHex: computeSemanticSha256Hex({
+        ...body,
+        netRealizedStrategyProfit: "1000000",
+      }),
+    };
+    expect(() =>
+      admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: "org-638",
+        accountId: "acct-638",
+        receipt: forged,
+        settlements: [],
+        expectedReportingScopeId: "scope-638",
+      }),
+    ).toThrow(/BILLING_RECEIPT_SETTLEMENT_MISMATCH/);
   });
 });
