@@ -24,7 +24,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Library spine PR to main with Linear keep-open. Remaining WP-5 is paper/live cutover, not this merge."
+  nextAction: "Paper cutover is DEE-1024. Remaining WP-5 live cutover stays deferred; do not mark DEE-639 Done."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -76,10 +76,12 @@ runtime/drift halt, new exposure under restriction, and emergency flags refuse.
 Frozen seam list with `CANONICAL | MIGRATE | READ_ONLY | RESEARCH_ONLY | QUARANTINE`.
 Unresolved write-capable findings must be empty. Forbidden prefixes cannot call `placeOrder`.
 
-### WP-5 — Paper/live cutover (deferred)
+### WP-5 — Paper/live cutover (DEE-1024 paper; live deferred)
 
-Wire `run-live-cycle.ts` / `paper-cycle-runner.ts` to the recurring builder without breaking
-existing paper Decision V2 tests. Keep Linear open until this WP is proven.
+Do not rewrite `paper-cycle-runner.ts` in the DEE-639 library-spine batch. Paper ordinary
+ENTER_LONG cutover lives on [DEE-1024](https://linear.app/deepsense/issue/DEE-1024)
+and `docs/plans/dee-1024-paper-canonical-recurring-cutover.md`. Live remains deferred;
+do not claim DEE-639 Done.
 
 ## Non-goals
 

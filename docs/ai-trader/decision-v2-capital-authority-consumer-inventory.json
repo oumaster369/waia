@@ -53,7 +53,6 @@
   "canonicalReferences": [
     "lib/trader/backtest/historical-simulation-v2.ts",
     "lib/trader/live/run-live-cycle.ts",
-    "lib/trader/paper/paper-cycle-runner.ts",
     "lib/trader/runtime-v2/canonical-recurring-cycle-v2.ts",
     "lib/trader/runtime-v2/decision-capital-authority-v2.ts"
   ],

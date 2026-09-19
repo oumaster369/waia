@@ -115,10 +115,10 @@ export const CAPITAL_BYPASS_INVENTORY_V2: readonly CapitalBypassSeamV2[] = Objec
     id: "paper-cycle-runner",
     path: "lib/trader/paper/paper-cycle-runner.ts",
     kind: "orchestrator",
-    disposition: "MIGRATE",
+    disposition: "CANONICAL",
     writeCapable: false,
     unresolved: false,
-    note: "Paper loop still calls Decision V2; venue write remains Execution V2. Cutover to canonical recurring builder is this issue's remaining runtime switch.",
+    note: "Paper ordinary ENTER_LONG uses runCanonicalOrdinaryCapitalCycleV2; venue write remains Execution V2. Guardian/HTR protective cancel stays the reducing lane.",
   }),
   Object.freeze({
     id: "guardian-partial-entry-cancel",
