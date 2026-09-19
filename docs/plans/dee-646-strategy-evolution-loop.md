@@ -24,7 +24,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Remaining research-only loop WPs are owned by DEE-1028 (docs/plans/dee-1028-autonomous-research-generation-qualification.md). Keep this parent In Progress."
+  nextAction: "Remaining research-only loop WPs after DEE-1028 are owned by DEE-1029 (docs/plans/dee-1029-human-assignment-research-job-isolation.md). Keep this parent In Progress."
 provenance:
   createdFrom: chat
   gapRegistry: null

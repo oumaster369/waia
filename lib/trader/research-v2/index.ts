@@ -96,6 +96,41 @@ export {
 export type { HumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-promotion-proposal-v2";
 
 export {
+  HUMAN_RESEARCH_ASSIGNMENT_LIFECYCLES_V2,
+  HUMAN_RESEARCH_ASSIGNMENT_V2_SCHEMA,
+  admitHumanResearchCandidateAssignmentV2,
+  mergeHumanResearchAssignmentsV2,
+} from "@/lib/trader/research-v2/human-research-assignment-v2";
+export type {
+  AdmitHumanResearchCandidateAssignmentV2Input,
+  HumanResearchAssignmentLifecycleV2,
+  HumanResearchAssignmentV2,
+  ResearchAccountRefV2,
+} from "@/lib/trader/research-v2/human-research-assignment-v2";
+
+export {
+  CAPITAL_RUNTIME_CLASSES_V2,
+  RESEARCH_JOB_CLASS_V2,
+  RESEARCH_JOB_STATUSES_V2,
+  RESEARCH_JOB_V2_SCHEMA,
+  assertResearchJobCannotClaimCapitalRuntimeV2,
+  completeResearchJobV2,
+  enqueueResearchJobV2,
+} from "@/lib/trader/research-v2/research-job-v2";
+export type {
+  CapitalRuntimeClassV2,
+  EnqueueResearchJobV2Input,
+  ResearchJobStatusV2,
+  ResearchJobV2,
+} from "@/lib/trader/research-v2/research-job-v2";
+
+export {
+  RESEARCH_RETIREMENT_PROPOSAL_V2_SCHEMA,
+  buildResearchRetirementProposalV2,
+} from "@/lib/trader/research-v2/research-retirement-proposal-v2";
+export type { ResearchRetirementProposalV2 } from "@/lib/trader/research-v2/research-retirement-proposal-v2";
+
+export {
   STRATEGY_EVOLUTION_KNOWLEDGE_ADMISSION_V2_SCHEMA,
   admitStrategyEvolutionKnowledgeV2,
 } from "@/lib/trader/research-v2/strategy-evolution-knowledge-admission-v2";

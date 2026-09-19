@@ -8,6 +8,8 @@ import {
 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
 import { buildHumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-promotion-proposal-v2";
 import type { HumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-promotion-proposal-v2";
+import { buildResearchRetirementProposalV2 } from "@/lib/trader/research-v2/research-retirement-proposal-v2";
+import type { ResearchRetirementProposalV2 } from "@/lib/trader/research-v2/research-retirement-proposal-v2";
 import {
   queryBlindHoldoutAsIterativeFitnessV2,
   recordQualificationV2,
@@ -90,6 +92,7 @@ export type StrategyEvolutionResearchPassV2 = Readonly<{
   knowledge: StrategyEvolutionKnowledgeAdmissionV2;
   proposal: HumanPromotionProposalV2 | null;
   rejectedRecord: RejectedCandidateRecordV2 | null;
+  retirementProposal: ResearchRetirementProposalV2 | null;
   contentDigestHex: string;
 }>;
 
@@ -169,6 +172,7 @@ export function runStrategyEvolutionResearchPassV2(
   let status: StrategyEvolutionLoopStatusV2 = "HUMAN_PROPOSAL_PENDING";
   let proposal: HumanPromotionProposalV2 | null = null;
   let rejectedRecord: RejectedCandidateRecordV2 | null = null;
+  let retirementProposal: ResearchRetirementProposalV2 | null = null;
   let capitalAuthority: "NONE" | "RESEARCH_ONLY" = "RESEARCH_ONLY";
 
   if (knowledge.status === "FAIL_CLOSED") {
@@ -177,6 +181,12 @@ export function runStrategyEvolutionResearchPassV2(
   } else if (development.verdict === "REJECTED" || walkForward.verdict === "REJECTED") {
     status = "REJECTED";
     rejectedRecord = recordRejectedCandidateV2({ candidate, development, walkForward });
+    retirementProposal = buildResearchRetirementProposalV2({
+      proposalId: `${input.campaignId}:retirement`,
+      candidate,
+      memory,
+      rejectedRecord,
+    });
   } else {
     proposal = buildHumanPromotionProposalV2({
       proposalId: `${input.campaignId}:proposal`,
@@ -203,6 +213,7 @@ export function runStrategyEvolutionResearchPassV2(
     knowledge,
     proposal,
     rejectedRecord,
+    retirementProposal,
   };
   return Object.freeze({
     ...body,

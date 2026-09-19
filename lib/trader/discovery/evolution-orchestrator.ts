@@ -17,6 +17,7 @@ import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.ty
 import type { ResearchRejectionRecord } from "@/lib/trader/research/research-rejection-record.types";
 import {
   deriveStrategyEvolutionGenerationV2,
+  enqueueResearchJobV2,
   runStrategyEvolutionResearchPassV2,
   type ClosedTradeOutcomeInputV2,
   type ClosedTradeOutcomePolarityV2,
@@ -63,6 +64,7 @@ export type DiscoveryEvolutionPassInput = {
   symbol?: string;
   parentStrategies?: readonly StrategyParentRefV2[];
   priorMemory?: ResearchMemoryV2;
+  capitalRuntimeActive?: boolean;
 };
 
 export type DiscoveryEvolutionPassResult = {
@@ -167,6 +169,21 @@ export async function runDiscoveryEvolutionPass(
     return {
       skipped: true,
       reason: "campaign_not_active",
+    };
+  }
+
+  if (input.capitalRuntimeActive === true) {
+    enqueueResearchJobV2({
+      jobId: input.newId?.() ?? `${input.runContext.campaignRef.campaignId}:research-job`,
+      organizationId: input.runContext.context.organizationId,
+      campaignId: input.runContext.campaignRef.campaignId,
+      budgetMs: 1,
+      capitalRuntimeActive: true,
+    });
+    return {
+      skipped: true,
+      reason: "research_yielded_to_capital_runtime",
+      capitalAuthority: "NONE",
     };
   }
 
