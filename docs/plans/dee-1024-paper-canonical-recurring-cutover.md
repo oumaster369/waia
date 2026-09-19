@@ -79,6 +79,10 @@ capital-bypass inventory so `paper-cycle-runner` is `CANONICAL`; leave
   Execution V2 deps and reconciles as today.
 - Existing `decision_v2_authority_missing` tests stay green.
 - `unresolvedWriteCapableCapitalBypassesV2()` remains empty.
+- Reality V2 consumer graph stays at 131 files / same path digest; only
+  `consumerDiscovery.sortedContentDigestHex` refreshes because already-listed
+  `paper-cycle-runner.ts` (`PlaceOrderInput` from `@/lib/trader/connectors/types`)
+  changed. No new Reality source, boundary, or consumer rule.
 - `pnpm lint`, `pnpm typecheck`, `pnpm build`, targeted paper + runtime-v2 unit
   tests, `pnpm validate:canon`.
 
