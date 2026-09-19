@@ -71,6 +71,8 @@ capital-bypass inventory so `paper-cycle-runner` is `CANONICAL`; leave
 - Paper actionable buy path with V2 deps calls `runCanonicalOrdinaryCapitalCycleV2`
   and does not call `runDecisionCapitalAuthorityV2` except inside that builder.
 - Missing Navigator → no paper submit.
+- Missing envelope / envelope bound to another org-account-symbol-PIT → no paper submit.
+- RESEARCH_ONLY Predictive Admission → no paper submit.
 - RESEARCH_ONLY Predictive Admission → no paper submit.
 - Admission template posture ≠ envelope → no paper submit.
 - Successful compose + Decision/Risk still submits through existing paper

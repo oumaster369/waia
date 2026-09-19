@@ -348,6 +348,56 @@ describe("DEE-1024 paper canonical recurring cutover", () => {
     expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
   });
 
+  it("does not submit when the epistemic envelope is omitted", async () => {
+    const authority = capitalDeps();
+    const deps = paperDeps({
+      decisionCapitalAuthorityV2: authority,
+    });
+    const result = await runPaper(deps);
+    expect(result.submitBlocked).toBe(true);
+    expect(result.skipReason).toBe("decision_v2_no_trade");
+    expect(result.canonicalOrdinaryCapitalCycleV2).toMatchObject({
+      status: "NO_TRADE",
+      stage: "EPISTEMIC",
+      reasonCodes: ["CANONICAL_ENVELOPE_MISSING"],
+    });
+    expect(authority.decide).not.toHaveBeenCalled();
+    expect(authority.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not submit when a prebuilt envelope context belongs to another account", async () => {
+    const authority = capitalDeps();
+    const foreignContext = buildAuthoritativeRuntimeContextV2({
+      organizationId: ORG,
+      accountId: "acct-other",
+      symbol: SYMBOL,
+      pitAnchor: PIT,
+      runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
+      runtimeAssessmentDigestHex: DIGEST,
+      driftPosture: "NORMAL",
+      driftRestrictionDigestHex: DIGEST,
+      qualificationTupleDigestHex: DIGEST,
+      packageDigestHex: DIGEST,
+      informationContractDigestHex: DIGEST,
+      informationNeedPlanDigestHex: DIGEST,
+      releaseDigestHex: DIGEST,
+    });
+    const deps = paperDeps({
+      decisionCapitalAuthorityV2: authority,
+      canonicalOrdinaryCapitalEnvelopeV2: envelope({ context: foreignContext }),
+    });
+    const result = await runPaper(deps);
+    expect(result.submitBlocked).toBe(true);
+    expect(result.skipReason).toBe("decision_v2_no_trade");
+    expect(result.canonicalOrdinaryCapitalCycleV2).toMatchObject({
+      status: "NO_TRADE",
+      stage: "EPISTEMIC",
+      reasonCodes: ["ENVELOPE_IDENTITY_MISMATCH"],
+    });
+    expect(authority.decide).not.toHaveBeenCalled();
+    expect(authority.execute).not.toHaveBeenCalled();
+  });
+
   it("does not submit when Navigator is missing", async () => {
     const authority = capitalDeps();
     const deps = paperDeps({

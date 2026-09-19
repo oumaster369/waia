@@ -141,8 +141,16 @@ function resolvePaperCanonicalEpistemicSpineV2(input: {
   accountId: string;
   symbol: string;
   pitAnchor: string;
-}): ComposeCanonicalEpistemicSpineV2Input | null {
-  if (!input.envelope) return null;
+}):
+  | { ok: true; epistemic: ComposeCanonicalEpistemicSpineV2Input }
+  | {
+      ok: false;
+      reasonCode:
+        | "CANONICAL_ENVELOPE_MISSING"
+        | "CANONICAL_ENVELOPE_INVALID"
+        | "ENVELOPE_IDENTITY_MISMATCH";
+    } {
+  if (!input.envelope) return { ok: false, reasonCode: "CANONICAL_ENVELOPE_MISSING" };
   try {
     const context =
       input.envelope.context ??
@@ -155,17 +163,28 @@ function resolvePaperCanonicalEpistemicSpineV2(input: {
             ...input.envelope.contextInputs,
           })
         : null);
-    if (!context) return null;
+    if (!context) return { ok: false, reasonCode: "CANONICAL_ENVELOPE_INVALID" };
+    if (
+      context.organizationId !== input.organizationId ||
+      context.accountId !== input.accountId ||
+      context.symbol !== input.symbol ||
+      context.pitAnchor !== input.pitAnchor
+    ) {
+      return { ok: false, reasonCode: "ENVELOPE_IDENTITY_MISMATCH" };
+    }
     return {
-      context,
-      navigatorReceipt: input.envelope.navigatorReceipt,
-      predictiveAdmissionVerdict: input.envelope.predictiveAdmissionVerdict,
-      futureCycleEffect: input.envelope.futureCycleEffect,
-      mkbInjectionAttempted: input.envelope.mkbInjectionAttempted,
-      legacyKnowledgeMutationAttempted: input.envelope.legacyKnowledgeMutationAttempted,
+      ok: true,
+      epistemic: {
+        context,
+        navigatorReceipt: input.envelope.navigatorReceipt,
+        predictiveAdmissionVerdict: input.envelope.predictiveAdmissionVerdict,
+        futureCycleEffect: input.envelope.futureCycleEffect,
+        mkbInjectionAttempted: input.envelope.mkbInjectionAttempted,
+        legacyKnowledgeMutationAttempted: input.envelope.legacyKnowledgeMutationAttempted,
+      },
     };
   } catch {
-    return null;
+    return { ok: false, reasonCode: "CANONICAL_ENVELOPE_INVALID" };
   }
 }
 
@@ -833,7 +852,7 @@ export async function runPaperCycleOnce(
     const pitAnchor = snapshot.evaluatedAt;
     const envelope =
       input.canonicalOrdinaryCapitalEnvelopeV2 ?? deps.canonicalOrdinaryCapitalEnvelopeV2;
-    const epistemic = resolvePaperCanonicalEpistemicSpineV2({
+    const resolved = resolvePaperCanonicalEpistemicSpineV2({
       envelope,
       organizationId: context.organizationId,
       accountId: input.accountKey,
@@ -841,11 +860,11 @@ export async function runPaperCycleOnce(
       pitAnchor,
     });
     const cycle: CanonicalRecurringCycleV2Result =
-      epistemic && envelope
+      resolved.ok && envelope
         ? await runCanonicalOrdinaryCapitalCycleV2({
-            epistemic,
+            epistemic: resolved.epistemic,
             admissionTemplate: {
-              context: epistemic.context,
+              context: resolved.epistemic.context,
               currentRuntimePosture: envelope.currentRuntimePosture,
               currentDriftPosture: envelope.currentDriftPosture,
               navigatorOutcome: envelope.navigatorReceipt?.outcome ?? "UNKNOWN_UNRESOLVED",
@@ -880,7 +899,7 @@ export async function runPaperCycleOnce(
         : {
             status: "NO_TRADE",
             stage: "EPISTEMIC",
-            reasonCodes: ["NAVIGATOR_RECEIPT_MISSING"],
+            reasonCodes: [resolved.ok ? "CANONICAL_ENVELOPE_MISSING" : resolved.reasonCode],
           };
     if (cycle.status === "NO_TRADE") {
       strategyExecutions.push({
