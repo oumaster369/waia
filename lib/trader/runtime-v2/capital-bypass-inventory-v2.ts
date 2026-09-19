@@ -145,7 +145,16 @@ export const CAPITAL_BYPASS_INVENTORY_V2: readonly CapitalBypassSeamV2[] = Objec
     disposition: "RESEARCH_ONLY",
     writeCapable: false,
     unresolved: false,
-    note: "No capital path before Human admission.",
+    note: "Default-off discovery orchestrator. No capital path before Human admission.",
+  }),
+  Object.freeze({
+    id: "research-v2-strategy-evolution",
+    path: "lib/trader/research-v2",
+    kind: "research",
+    disposition: "RESEARCH_ONLY",
+    writeCapable: false,
+    unresolved: false,
+    note: "DEE-646 canonical research spine. Human proposal only; no venue write or account assignment.",
   }),
   Object.freeze({
     id: "admin-ui-trade-endpoints",
@@ -187,5 +196,6 @@ export const CAPITAL_BYPASS_FORBIDDEN_VENUE_WRITE_PREFIXES_V2 = [
   "lib/trader/billing/",
   "lib/trader/discovery/",
   "lib/trader/research/",
+  "lib/trader/research-v2/",
   "app/",
 ] as const;
