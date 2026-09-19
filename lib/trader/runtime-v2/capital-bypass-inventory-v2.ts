@@ -106,10 +106,10 @@ export const CAPITAL_BYPASS_INVENTORY_V2: readonly CapitalBypassSeamV2[] = Objec
     id: "live-cycle-once",
     path: "lib/trader/live/run-live-cycle.ts",
     kind: "orchestrator",
-    disposition: "MIGRATE",
+    disposition: "CANONICAL",
     writeCapable: false,
     unresolved: false,
-    note: "One-cycle helper. Must consume canonical compose + ExecutionAdmissionProofV2; currently fail-closes without Decision V2.",
+    note: "Live-equivalent ordinary ENTER_LONG uses runCanonicalOrdinaryCapitalCycleV2; venue write remains Execution V2. Org live-enable is unchanged.",
   }),
   Object.freeze({
     id: "paper-cycle-runner",

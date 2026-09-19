@@ -97,12 +97,13 @@ describe("Execution V2 whole-repository consumer graph (DEE-670 / E651-D)", () =
   it("fails every raw mock/paper/live caller before Risk, persistence, or network", async () => {
     for (const mode of ["mock", "paper", "live"] as const) {
       const fixture = serviceFixture();
-      await expect(fixture.service.submitOrder(requireOrgContext(ORG), rawInput(mode)))
-        .resolves.toEqual({
-          status: "execution_v2_required",
-          order: null,
-          reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
-        });
+      await expect(
+        fixture.service.submitOrder(requireOrgContext(ORG), rawInput(mode)),
+      ).resolves.toEqual({
+        status: "execution_v2_required",
+        order: null,
+        reason: "LEGACY_ORDER_SUBMISSION_DISABLED",
+      });
       expect(fixture.evaluateOrderRequest).not.toHaveBeenCalled();
       expect(fixture.consumeRiskAllowanceV2).not.toHaveBeenCalled();
       expect(fixture.repository.createOrder).not.toHaveBeenCalled();
@@ -136,7 +137,8 @@ describe("Execution V2 whole-repository consumer graph (DEE-670 / E651-D)", () =
     for (const file of migratedProductionConsumers) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
       expect(source).not.toContain(".submitOrder(");
-      expect(source).toContain("runDecisionCapitalAuthorityV2");
+      expect(source).toContain("runCanonicalOrdinaryCapitalCycleV2");
+      expect(source).not.toContain("runDecisionCapitalAuthorityV2");
       expect(source).toContain("decision_v2_authority_missing");
     }
     for (const file of migratedTestOnlyConsumers) {
