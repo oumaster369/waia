@@ -54,6 +54,29 @@ refuses a caller-supplied `realizedPnl` before any Billing HWM or period write.
 - No production `0211`. Reality-store lookup, receipt tables, DB unique index, and
   lifecycle naked-close quarantine remain on DEE-638.
 
+## Work packages
+
+### WP-5 — Orchestrator cutover
+
+`closeAndMaterialize` consumes a rebuilt `RealizedStrategyProfitReceiptV2` whose
+`reportingScopeId` is `billing-period/v2:{org}:{account}:{periodStart}/{periodEnd}`.
+Naked `realizedPnl` is refused before any HWM or period write. An already-open
+period must share `periodStart`. A second close of the same `periodStart` is
+refused. Truncated closed-period listing fails closed. `materializeDraft` does
+not mint receipt-grade evidence for a legacy naked close.
+
+## Acceptance
+
+- Naked `realizedPnl` on `closeAndMaterialize` is refused with
+  `NAKED_REALIZED_PNL_REFUSED`; HWM ledger is unchanged.
+- Receipt scoped to a different window is refused (`RECEIPT_REPORTING_SCOPE_MISMATCH`).
+- Replaying the same `periodStart` is refused (`DUPLICATE_BILLING_PERIOD_SCOPE`).
+- Writing into an already-open period with a different start is refused
+  (`PERIOD_START_MISMATCH`).
+- Truncated closed-period listing fails closed (`BILLING_PERIOD_LIST_TRUNCATED`).
+- Receipt-backed close still materializes a billable DRAFT when fee ≥ threshold.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build`, targeted billing unit tests.
+
 ## Non-goals
 
 - No C3, holdout, live/capital, Execution Server, observation host.

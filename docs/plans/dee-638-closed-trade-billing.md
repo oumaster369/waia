@@ -90,5 +90,6 @@ and `docs/plans/dee-1023-billing-period-close-receipt.md`.
 ## Non-goals
 
 - No production `0211`, H2/post-H2, C3, observation host, live-enable, capital, or Execution Server.
-- No paper/billing orchestrator rewrite in this PR.
+- Do not wire billing restriction into Risk/Execution (DEE-774).
+- No paper/billing orchestrator rewrite in the DEE-638 library-spine PR.
 - No DRAFT → ISSUED automation and no collection/payment authority.
