@@ -24,7 +24,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "WP-5 discovery wiring is owned by DEE-1025 (docs/plans/dee-1025-discovery-research-v2-wiring.md)."
+  nextAction: "Remaining research-only loop WPs are owned by DEE-1028 (docs/plans/dee-1028-autonomous-research-generation-qualification.md). Keep this parent In Progress."
 provenance:
   createdFrom: chat
   gapRegistry: null

@@ -42,14 +42,37 @@ export function filterResearchMemoryByProfitabilityV2(
 
 export function appendResearchMemoryV2(
   evidencePackage: ClosedTradeOutcomeEvidencePackageV2,
+  prior?: ResearchMemoryV2,
 ): ResearchMemoryV2 {
   if (evidencePackage.records.length === 0) {
     throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_EMPTY");
   }
-  const supportingCount = evidencePackage.records.filter(
-    (record) => record.evaluationRole === "SUPPORTING",
-  ).length;
-  const contradictingCount = evidencePackage.records.filter(
+  if (prior) {
+    if (
+      prior.organizationId !== evidencePackage.organizationId ||
+      prior.campaignId !== evidencePackage.campaignId
+    ) {
+      throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_SCOPE_MISMATCH");
+    }
+  }
+
+  const merged: ClosedTradeOutcomeRecordV2[] = prior ? [...prior.records] : [];
+  const seen = new Map(merged.map((record) => [record.outcomeId, record] as const));
+  for (const record of evidencePackage.records) {
+    const existing = seen.get(record.outcomeId);
+    if (existing) {
+      if (computeSemanticSha256Hex(existing) !== computeSemanticSha256Hex(record)) {
+        throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_OUTCOME_CONFLICT");
+      }
+      continue;
+    }
+    merged.push(record);
+    seen.set(record.outcomeId, record);
+  }
+  merged.sort((left, right) => (left.outcomeId < right.outcomeId ? -1 : 1));
+
+  const supportingCount = merged.filter((record) => record.evaluationRole === "SUPPORTING").length;
+  const contradictingCount = merged.filter(
     (record) => record.evaluationRole === "CONTRADICTING",
   ).length;
   const body = {
@@ -59,14 +82,30 @@ export function appendResearchMemoryV2(
     organizationId: evidencePackage.organizationId,
     campaignId: evidencePackage.campaignId,
     evidencePackageDigestHex: evidencePackage.contentDigestHex,
-    records: evidencePackage.records,
+    records: Object.freeze(merged),
     supportingCount,
     contradictingCount,
   };
-  return Object.freeze({
+  const memory = Object.freeze({
     ...body,
     contentDigestHex: computeSemanticSha256Hex(body),
   });
+  assertResearchMemoryRetainsPackageV2(memory, evidencePackage);
+  if (prior) {
+    for (const record of prior.records) {
+      if (!memory.records.some((row) => row.outcomeId === record.outcomeId)) {
+        filterResearchMemoryByProfitabilityV2(memory, "PROFIT");
+      }
+    }
+  }
+  return memory;
+}
+
+export function resumeResearchMemoryV2(
+  prior: ResearchMemoryV2,
+  evidencePackage: ClosedTradeOutcomeEvidencePackageV2,
+): ResearchMemoryV2 {
+  return appendResearchMemoryV2(evidencePackage, prior);
 }
 
 export function assertResearchMemoryRetainsPackageV2(

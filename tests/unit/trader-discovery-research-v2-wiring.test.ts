@@ -65,14 +65,25 @@ function parent(id: string, digest: string): StrategyParentRefV2 {
   };
 }
 
-function evaluation(): QualificationEvaluationV2 {
+function evaluation(overrides: Partial<QualificationEvaluationV2> = {}): QualificationEvaluationV2 {
   return {
     netEconomicResult: "2.5",
     maxDrawdown: "-1.0",
     tailEventCount: 1,
     sampleSize: 12,
     incumbentComparisonDigestHex: DIGEST.b,
+    ...overrides,
   };
+}
+
+function walkForwardEvaluation(): QualificationEvaluationV2 {
+  return evaluation({
+    netEconomicResult: "1.25",
+    maxDrawdown: "-1.5",
+    tailEventCount: 2,
+    sampleSize: 8,
+    incumbentComparisonDigestHex: DIGEST.a,
+  });
 }
 
 function navigatorCandidate(
@@ -154,7 +165,7 @@ function enabledAdmission() {
       params: { lookbackBars: "24", holdBars: "4" },
     },
     development: evaluation(),
-    walkForward: evaluation(),
+    walkForward: walkForwardEvaluation(),
     qualificationVerdict: "QUALIFIED" as const,
     evidenceCutoffUtc: CUTOFF,
     symbol: "BTCUSDT",
@@ -267,5 +278,50 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
       }),
     ).rejects.toThrow(NoReinforcementGuardError);
     expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when enabled admission is present but generation and parents are missing", async () => {
+    const { generation: _generation, ...admission } = enabledAdmission();
+    void _generation;
+    const result = await runDiscoveryEvolutionPass(EX, {
+      runContext: runContext({
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      }),
+      config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      bars: [],
+      closedTrades: [
+        closedTrade({ fillId: "win-1", tradePnl: "12.5" }),
+        closedTrade({ fillId: "loss-1", tradePnl: "-8.25" }),
+      ],
+      ...admission,
+    });
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("research_v2_generation_incomplete");
+    expect(result.status).toBe("FAIL_CLOSED");
+    expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
+  });
+
+  it("derives PARAMETER_MUTATION from parentStrategies when generation is omitted", async () => {
+    const { generation: _generation, ...admission } = enabledAdmission();
+    void _generation;
+    const result = await runDiscoveryEvolutionPass(EX, {
+      runContext: runContext({
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      }),
+      config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      bars: [],
+      closedTrades: [
+        closedTrade({ fillId: "win-1", tradePnl: "12.5" }),
+        closedTrade({ fillId: "loss-1", tradePnl: "-8.25" }),
+      ],
+      ...admission,
+      parentStrategies: [parent("mean_reversion_research", DIGEST.e)],
+    });
+    expect(result.skipped).toBe(false);
+    expect(result.status).toBe("HUMAN_PROPOSAL_PENDING");
+    expect(result.candidateProposalId).toBe("camp-1025:candidate");
+    const v2Input = vi.mocked(runStrategyEvolutionResearchPassV2).mock.calls[0]?.[0];
+    expect(v2Input?.generation?.kind).toBe("PARAMETER_MUTATION");
+    expect(v2Input?.generation?.params.holdBars).toBe("5");
   });
 });

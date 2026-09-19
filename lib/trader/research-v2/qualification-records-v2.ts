@@ -55,6 +55,20 @@ export function queryBlindHoldoutAsIterativeFitnessV2(): never {
   );
 }
 
+export function assertQualificationPartitionsIndependentV2(
+  development: QualificationEvaluationV2,
+  walkForward: QualificationEvaluationV2,
+): void {
+  const developmentDigest = computeSemanticSha256Hex(development);
+  const walkForwardDigest = computeSemanticSha256Hex(walkForward);
+  if (developmentDigest === walkForwardDigest) {
+    throw new StrategyEvolutionResearchError(
+      "QUALIFICATION_PARTITIONS_NOT_INDEPENDENT",
+      "DEVELOPMENT and walk-forward evaluations must not be identical",
+    );
+  }
+}
+
 export function recordQualificationV2(input: {
   candidate: StrategyEvolutionCandidateV2;
   partition: QualificationPartitionV2 | "BLIND_HOLDOUT";

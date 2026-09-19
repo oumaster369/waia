@@ -14,6 +14,8 @@ export const STRATEGY_EVOLUTION_CANDIDATE_V2_SCHEMA =
 
 export const STRATEGY_EVOLUTION_GENERATOR_VERSION_V2 = "strategy-evolution-research/v2" as const;
 
+export const FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2 = "mean_reversion_v0" as const;
+
 export const STRATEGY_CANDIDATE_GENERATION_KINDS_V2 = [
   "PARAMETER_MUTATION",
   "MULTI_PARENT_COMBINATION",
@@ -68,6 +70,16 @@ export type GenerateStrategyEvolutionCandidateV2Input = Readonly<{
   assignedAccountId?: string;
 }>;
 
+export function assertResearchStrategyIdentityAllowedV2(strategyId: string): void {
+  requireResearchV2NonEmpty(strategyId, "CANDIDATE_LINEAGE_INVALID");
+  if (strategyId === FORBIDDEN_RESEARCH_TEMPLATE_STRATEGY_ID_V2) {
+    throw new StrategyEvolutionResearchError(
+      "FORBIDDEN_TEMPLATE_STRATEGY_IDENTITY",
+      "Default template identity is not a research candidate",
+    );
+  }
+}
+
 export function promoteStrategyCandidateV2(_candidate: StrategyEvolutionCandidateV2): never {
   void _candidate;
   throw new StrategyEvolutionResearchError(
@@ -101,6 +113,7 @@ export function generateStrategyEvolutionCandidateV2(
   }
   requireResearchV2NonEmpty(input.candidateId, "CANDIDATE_LINEAGE_INVALID");
   requireResearchV2NonEmpty(input.strategyId, "CANDIDATE_LINEAGE_INVALID");
+  assertResearchStrategyIdentityAllowedV2(input.strategyId);
   requireResearchV2NonEmpty(input.strategyVersion, "CANDIDATE_LINEAGE_INVALID");
   requireResearchV2IsoUtc(input.evidenceCutoffUtc, "CANDIDATE_LINEAGE_INVALID");
   requireResearchV2NonEmpty(input.researchCodeIdentity, "CANDIDATE_LINEAGE_INVALID");
@@ -115,6 +128,7 @@ export function generateStrategyEvolutionCandidateV2(
 
   const parents = input.parents.map((parent) => {
     requireResearchV2NonEmpty(parent.strategyId, "CANDIDATE_LINEAGE_INVALID");
+    assertResearchStrategyIdentityAllowedV2(parent.strategyId);
     requireResearchV2NonEmpty(parent.strategyVersion, "CANDIDATE_LINEAGE_INVALID");
     requireResearchV2DigestHex(parent.artifactDigestHex, "CANDIDATE_LINEAGE_INVALID");
     assertResearchDiscoveryFitnessV2(parent.params, "parent params");
