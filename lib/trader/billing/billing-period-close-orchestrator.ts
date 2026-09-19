@@ -163,6 +163,8 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
         unrealizedPnl: input.unrealizedPnl,
         netDeposits: input.netDeposits,
         netWithdrawals: input.netWithdrawals,
+        realizedStrategyProfitReceipt: input.realizedStrategyProfitReceipt,
+        closedTradeSettlements: input.closedTradeSettlements,
       });
       auditActions.push(traderAuditActions.reportingPeriodClosed);
 

@@ -51,8 +51,9 @@ refuses a caller-supplied `realizedPnl` before any Billing HWM or period write.
 - A second close of the same `periodStart` is refused.
 - Truncated closed-period listing fails closed.
 - `materializeDraft` does not mint receipt-grade evidence for a legacy naked close.
-- No production `0211`. Reality-store lookup, receipt tables, DB unique index, and
-  lifecycle naked-close quarantine remain on DEE-638.
+- No production `0211`. Reality-store lookup, lifecycle naked-close, and
+  reporting-bridge quarantine packed into DEE-1027. Receipt tables and DB unique
+  index remain Human-blocked.
 
 ## Work packages
 

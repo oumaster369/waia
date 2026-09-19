@@ -31,6 +31,14 @@ import {
 } from "@/lib/trader/billing/repository-adapters";
 import type { ReportingPeriodRecordView } from "@/lib/trader/billing/reporting-period.types";
 import { buildReportingPeriodRecordPayload } from "@/lib/trader/billing/serialize-reporting-period";
+import {
+  BILLING_RECEIPT_PNL_MISMATCH,
+  BillingCanonicalProfitAdmissionError,
+  admitCanonicalPeriodProfitFromReceiptV2,
+  billingPeriodReportingScopeIdV2,
+  refuseNakedRealizedPnl,
+} from "@/lib/trader/billing/v2";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/lib/trader/types";
 import {
   assertOrgMembershipPostgres,
@@ -175,12 +183,33 @@ export function createReportingPeriodLifecycleService(
       const scoped = requireOrgContext(context.organizationId);
       await assertMembershipIfNeeded(scoped, deps.assertMembership);
 
+      if (input.realizedStrategyProfitReceipt == null || input.closedTradeSettlements == null) {
+        refuseNakedRealizedPnl();
+      }
+
       const openPeriod = await deps.repository.findOpenPeriod(scoped, input.exchangeAccountId);
       if (!openPeriod) {
         throw new ReportingPeriodNotOpenError(input.exchangeAccountId);
       }
 
       assertAllowedReportingPeriodTransition(openPeriod.status, "CLOSED");
+
+      const admitted = admitCanonicalPeriodProfitFromReceiptV2({
+        organizationId: scoped.organizationId,
+        accountId: input.exchangeAccountId,
+        receipt: input.realizedStrategyProfitReceipt,
+        settlements: input.closedTradeSettlements,
+        expectedReportingScopeId: billingPeriodReportingScopeIdV2({
+          organizationId: scoped.organizationId,
+          accountId: input.exchangeAccountId,
+          periodStart: openPeriod.periodStart,
+          periodEnd: input.periodEnd,
+        }),
+      });
+      if (input.realizedPnl != null && compareDecimal(input.realizedPnl, admitted) !== 0) {
+        throw new BillingCanonicalProfitAdmissionError(BILLING_RECEIPT_PNL_MISMATCH);
+      }
+      const realizedPnl = input.realizedPnl ?? admitted;
 
       const payload = buildReportingPeriodRecordPayload({
         organizationId: openPeriod.organizationId,
@@ -190,7 +219,7 @@ export function createReportingPeriodLifecycleService(
         startingEquity: openPeriod.startingEquity,
         endingEquity: input.endingEquity,
         openPositionsSnapshotRef: openPeriod.openPositionsSnapshotRef,
-        realizedPnl: input.realizedPnl,
+        realizedPnl,
         unrealizedPnl: input.unrealizedPnl,
         netDeposits: input.netDeposits ?? openPeriod.netDeposits,
         netWithdrawals: input.netWithdrawals ?? openPeriod.netWithdrawals,
@@ -211,7 +240,7 @@ export function createReportingPeriodLifecycleService(
           periodEnd: input.periodEnd.toISOString(),
           endingEquity: input.endingEquity,
           endingSnapshotAt: input.endingSnapshotAt.toISOString(),
-          realizedPnl: input.realizedPnl,
+          realizedPnl,
           unrealizedPnl: input.unrealizedPnl,
           netDeposits: payload.netDeposits,
           netWithdrawals: payload.netWithdrawals,

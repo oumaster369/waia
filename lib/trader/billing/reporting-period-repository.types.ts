@@ -2,6 +2,10 @@ import type {
   ReportingPeriodRecordPayload,
   ReportingPeriodRecordView,
 } from "@/lib/trader/billing/reporting-period.types";
+import type {
+  ClosedTradeSettlementV2,
+  RealizedStrategyProfitReceiptV2,
+} from "@/lib/trader/billing/v2";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type OpenReportingPeriodInput = {
@@ -22,6 +26,8 @@ export type CloseReportingPeriodInput = {
   unrealizedPnl: string | null;
   netDeposits?: string;
   netWithdrawals?: string;
+  realizedStrategyProfitReceipt: RealizedStrategyProfitReceiptV2;
+  closedTradeSettlements: readonly ClosedTradeSettlementV2[];
 };
 
 export type InsertOpenReportingPeriodRepoInput = {

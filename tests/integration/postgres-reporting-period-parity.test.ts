@@ -17,6 +17,7 @@ import {
 } from "@/lib/trader/billing";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { verifyHtrPostgresConnectionIdentity } from "@/lib/trader/readiness/htr-postgres-connection-preflight";
 import {
   deleteHtrPostgresBillingArtifactsForOrg,
@@ -107,12 +108,16 @@ describe.skipIf(!integrationEnabled || !url)(
 
       const openDigest = open.recordContentDigest;
       const closed = await service.closeReportingPeriod(context, {
-        exchangeAccountId: EXCHANGE_ACCOUNT_ID,
-        periodEnd: PERIOD_END,
-        endingEquity: "11250.00",
-        endingSnapshotAt: ENDING_SNAPSHOT_AT,
-        realizedPnl: "800.00",
-        unrealizedPnl: "450.00",
+        ...billingV2PeriodCloseEvidence({
+          organizationId: orgA,
+          accountId: EXCHANGE_ACCOUNT_ID,
+          periodStart: PERIOD_START,
+          periodEnd: PERIOD_END,
+          realizedPnl: "800.00",
+          unrealizedPnl: "450.00",
+          endingEquity: "11250.00",
+          endingSnapshotAt: ENDING_SNAPSHOT_AT,
+        }),
       });
 
       expect(closed.status).toBe("CLOSED");
@@ -121,12 +126,16 @@ describe.skipIf(!integrationEnabled || !url)(
 
       await expect(
         service.closeReportingPeriod(context, {
-          exchangeAccountId: EXCHANGE_ACCOUNT_ID,
-          periodEnd: PERIOD_END,
-          endingEquity: "11250.00",
-          endingSnapshotAt: ENDING_SNAPSHOT_AT,
-          realizedPnl: "800.00",
-          unrealizedPnl: "450.00",
+          ...billingV2PeriodCloseEvidence({
+            organizationId: orgA,
+            accountId: EXCHANGE_ACCOUNT_ID,
+            periodStart: PERIOD_START,
+            periodEnd: PERIOD_END,
+            realizedPnl: "800.00",
+            unrealizedPnl: "450.00",
+            endingEquity: "11250.00",
+            endingSnapshotAt: ENDING_SNAPSHOT_AT,
+          }),
         }),
       ).rejects.toThrow(ReportingPeriodNotOpenError);
 

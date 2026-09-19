@@ -18,13 +18,13 @@ state:
   status: in-progress
   currentWorkPackage: WP-4
   completedWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  remainingWorkPackages: [WP-5]
+  remainingWorkPackages: [WP-5-persistence]
   prNumber: 610
   prUrl: https://github.com/oumaster369/waia/pull/610
   lastValidatedGitSha: null
   lastValidationAt: null
-  blockedReason: null
-  nextAction: "Library spine merged in #610. Orchestrator cutover is DEE-1023. Remaining on DEE-638: Reality lookup, receipt persistence, unique index, lifecycle naked-close quarantine."
+  blockedReason: "Receipt tables and unique index need production 0211 (Human-blocked while C3 is live)."
+  nextAction: "Library spine #610 and orchestrator #612 merged. Remaining fail-closed seams without 0211 packed into DEE-1027. Persistence/index stay Human-blocked."
 provenance:
   createdFrom: chat
   gapRegistry: null

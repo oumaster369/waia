@@ -7,6 +7,7 @@ import {
 import type { ClosedTradeSettlementV2 } from "@/lib/trader/billing/v2/closed-trade-settlement-v2";
 
 export const NAKED_REALIZED_PNL_REFUSED = "NAKED_REALIZED_PNL_REFUSED" as const;
+export const BILLING_RECEIPT_PNL_MISMATCH = "BILLING_RECEIPT_PNL_MISMATCH" as const;
 
 export const BILLING_ORCHESTRATOR_FORBIDDEN_PROFIT_KEYS = [
   "realizedPnl",

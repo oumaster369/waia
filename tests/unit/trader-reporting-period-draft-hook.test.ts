@@ -16,6 +16,7 @@ import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const USER_ID = "00000000-0000-4000-8000-0000000310h";
@@ -76,12 +77,17 @@ describe("reporting period close draft hook (AT-E11 S5 runtime)", () => {
     });
 
     return lifecycle.closeReportingPeriod(context, {
-      exchangeAccountId: EXCHANGE_ACCOUNT_ID,
-      periodEnd: new Date("2026-03-28T23:59:59.000Z"),
-      endingEquity: "10100.00",
-      endingSnapshotAt: new Date("2026-03-28T23:55:00.000Z"),
-      realizedPnl,
-      unrealizedPnl: "0",
+      ...billingV2PeriodCloseEvidence({
+        organizationId,
+        accountId: EXCHANGE_ACCOUNT_ID,
+        periodStart: new Date("2026-03-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-03-28T23:59:59.000Z"),
+        realizedPnl,
+        unrealizedPnl: "0",
+        endingEquity: "10100.00",
+        endingSnapshotAt: new Date("2026-03-28T23:55:00.000Z"),
+        lifecycleId: `close/${EXCHANGE_ACCOUNT_ID}/${suffix}`,
+      }),
     });
   }
 
@@ -130,12 +136,16 @@ describe("reporting period close draft hook (AT-E11 S5 runtime)", () => {
       startingSnapshotAt: new Date("2026-02-01T00:05:00.000Z"),
     });
     await lifecycle.closeReportingPeriod(context, {
-      exchangeAccountId: accountId,
-      periodEnd: new Date("2026-02-28T23:59:59.000Z"),
-      endingEquity: "10000.00",
-      endingSnapshotAt: new Date("2026-02-28T23:55:00.000Z"),
-      realizedPnl: "0",
-      unrealizedPnl: "0",
+      ...billingV2PeriodCloseEvidence({
+        organizationId,
+        accountId,
+        periodStart: new Date("2026-02-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-02-28T23:59:59.000Z"),
+        realizedPnl: "0",
+        unrealizedPnl: "0",
+        endingEquity: "10000.00",
+        endingSnapshotAt: new Date("2026-02-28T23:55:00.000Z"),
+      }),
     });
 
     const invoices = listInvoicesByAccountSqlite(db, context, accountId);

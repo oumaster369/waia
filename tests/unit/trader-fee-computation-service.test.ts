@@ -22,6 +22,7 @@ import { buildReportingPeriodRecordPayload } from "@/lib/trader/billing/serializ
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
+import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const USER_ID = "00000000-0000-4000-8000-0000000309";
@@ -97,14 +98,18 @@ describe("fee computation service (DEE-309 S4)", () => {
     });
 
     return lifecycle.closeReportingPeriod(context, {
-      exchangeAccountId,
-      periodEnd,
-      endingEquity: "10100.00",
-      endingSnapshotAt,
-      realizedPnl: options.realizedPnl,
-      unrealizedPnl: options.unrealizedPnl ?? "0",
-      netDeposits: options.netDeposits,
-      netWithdrawals: options.netWithdrawals,
+      ...billingV2PeriodCloseEvidence({
+        organizationId,
+        accountId: exchangeAccountId,
+        periodStart,
+        periodEnd,
+        realizedPnl: options.realizedPnl,
+        unrealizedPnl: options.unrealizedPnl ?? "0",
+        endingEquity: "10100.00",
+        endingSnapshotAt,
+        netDeposits: options.netDeposits,
+        netWithdrawals: options.netWithdrawals,
+      }),
     });
   }
 
@@ -214,12 +219,16 @@ describe("fee computation service (DEE-309 S4)", () => {
     });
 
     const closed = await lifecycle.closeReportingPeriod(context, {
-      exchangeAccountId: "htx-paper-309-no-hwm",
-      periodEnd: new Date("2026-09-30T23:59:59.000Z"),
-      endingEquity: "10100.00",
-      endingSnapshotAt: new Date("2026-09-30T23:55:00.000Z"),
-      realizedPnl: "50.00",
-      unrealizedPnl: "0",
+      ...billingV2PeriodCloseEvidence({
+        organizationId,
+        accountId: "htx-paper-309-no-hwm",
+        periodStart: new Date("2026-09-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-09-30T23:59:59.000Z"),
+        realizedPnl: "50.00",
+        unrealizedPnl: "0",
+        endingEquity: "10100.00",
+        endingSnapshotAt: new Date("2026-09-30T23:55:00.000Z"),
+      }),
     });
 
     await expect(service.computeFeeForPeriod(context, { periodId: closed.id })).rejects.toThrow(
@@ -320,12 +329,17 @@ describe("fee computation service (DEE-309 S4)", () => {
 
       closedPeriods.push(
         await lifecycle.closeReportingPeriod(context, {
-          exchangeAccountId: accountId,
-          periodEnd: new Date(`2026-${month}-28T23:59:59.000Z`),
-          endingEquity: "10100.00",
-          endingSnapshotAt: new Date(`2026-${month}-28T23:55:00.000Z`),
-          realizedPnl: rspSequence[index],
-          unrealizedPnl: "0",
+          ...billingV2PeriodCloseEvidence({
+            organizationId,
+            accountId,
+            periodStart: new Date(`2026-${month}-01T00:00:00.000Z`),
+            periodEnd: new Date(`2026-${month}-28T23:59:59.000Z`),
+            realizedPnl: rspSequence[index]!,
+            unrealizedPnl: "0",
+            endingEquity: "10100.00",
+            endingSnapshotAt: new Date(`2026-${month}-28T23:55:00.000Z`),
+            lifecycleId: `seq-${accountId}-${month}`,
+          }),
         }),
       );
 
