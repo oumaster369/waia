@@ -309,7 +309,8 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     render(<AccountObservationPanel view={view} />);
     expect(screen.getByText("obs-a")).toBeInTheDocument();
     expect(screen.getByText("BTC: free 1, locked 0.1, total 1.1")).toBeInTheDocument();
-    expect(screen.getAllByText("Observed zero rows.")).toHaveLength(2);
+    expect(screen.getByText("No working orders.")).toBeInTheDocument();
+    expect(screen.getByText("No fills in this window.")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     cleanup();
     render(<AccountObservationPanel view={view} />);
@@ -349,9 +350,9 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("Live");
     expect(screen.getByRole("status")).toHaveTextContent("PARTIAL");
-    expect(screen.getByText("USDT: free 12.5, locked 0, total 12.5")).toBeInTheDocument();
+    expect(screen.getByTestId("cabinet-usdt-free")).toHaveTextContent("12.5");
     expect(screen.queryByText(/1INCH: free 0/)).not.toBeInTheDocument();
-    expect(screen.getByText(/1 zero-dust rows hidden/)).toBeInTheDocument();
+    expect(screen.queryByText(/zero-dust/)).not.toBeInTheDocument();
   });
   it("renders financial decimal strings without float rounding", () => {
     const o = observation({
@@ -365,6 +366,6 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
       ]),
     });
     render(<AccountObservationPanel view={{ status: "CURRENT", observation: o, stale: false }} />);
-    expect(screen.getByText(/free 9007199254740993.00000001/)).toBeInTheDocument();
+    expect(screen.getByTestId("cabinet-usdt-free")).toHaveTextContent("9007199254740993.00000001");
   });
 });

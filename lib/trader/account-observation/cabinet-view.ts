@@ -10,6 +10,7 @@ export type CabinetLiveInput = Readonly<{
 
 /** Collector cadence is 60s; UI older-than-this is stale. Must exceed one poll. */
 export const ACCOUNT_OBSERVATION_STALE_AFTER_MS = 90_000;
+export const ACCOUNT_OBSERVATION_POLL_INTERVAL_MS = 60_000;
 
 const ZERO_AMOUNT = /^(?:0+(?:\.0+)?)$/;
 const MAJOR_ASSETS = ["USDT", "USDC", "BTC", "ETH", "HT"] as const;
@@ -100,7 +101,62 @@ export function cabinetLiveLabel(view: CabinetLiveInput): string {
   return "Live";
 }
 
+export function usdtSpot(rows: readonly Balance[] | null | undefined): {
+  free: string;
+  locked: string;
+  total: string;
+} | null {
+  if (!rows) return null;
+  const row = rows.find((item) => item.asset === "USDT");
+  return row ? { free: row.free, locked: row.locked, total: row.total } : null;
+}
+
+export function nonUsdtInventory(rows: readonly Balance[] | null | undefined): readonly Balance[] {
+  return nonZeroBalances(rows).filter((row) => row.asset !== "USDT" && row.asset !== "USDC");
+}
+
+export function secondsUntilNextPoll(
+  completedAtMs: number,
+  nowMs: number,
+  intervalMs = ACCOUNT_OBSERVATION_POLL_INTERVAL_MS,
+): number {
+  if (!Number.isFinite(completedAtMs) || !Number.isFinite(intervalMs) || intervalMs <= 0) return 0;
+  if (completedAtMs > nowMs) return Math.ceil(intervalMs / 1000);
+  return Math.max(0, Math.ceil((completedAtMs + intervalMs - nowMs) / 1000));
+}
+
 export function cabinetSpotSource(observation: AccountObservation): readonly Balance[] | null {
   if (observation.holdings && observation.holdings.length > 0) return observation.holdings;
   return observation.balances.values;
+}
+
+export type CabinetObservationSummary = Readonly<{
+  usdtFree: string | null;
+  usdtLocked: string | null;
+  openOrdersCount: number | null;
+  lastTickMs: number | null;
+  observationStatus: string | null;
+}>;
+
+export function summarizeCabinetObservation(
+  observation: AccountObservation | null,
+): CabinetObservationSummary {
+  if (!observation) {
+    return {
+      usdtFree: null,
+      usdtLocked: null,
+      openOrdersCount: null,
+      lastTickMs: null,
+      observationStatus: null,
+    };
+  }
+  const usdt = usdtSpot(observation.balances.values);
+  return {
+    usdtFree: usdt?.free ?? null,
+    usdtLocked: usdt?.locked ?? null,
+    openOrdersCount:
+      observation.openOrders.values === null ? null : observation.openOrders.values.length,
+    lastTickMs: observation.collectionCompletedAtMs,
+    observationStatus: observation.status,
+  };
 }

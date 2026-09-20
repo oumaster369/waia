@@ -105,7 +105,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await page.goto("/trader");
   const tenantPanel = page.getByRole("region", { name: "Account observation", exact: true });
   await expect(tenantPanel.getByText(observation().observationId)).toBeVisible();
-  await expect(page.getByTestId("trader-legacy-diagnostics")).toBeVisible();
+  await expect(page.getByTestId("trader-unpublished-note")).toBeVisible();
   await expect(tenantPanel.getByRole("button")).toHaveCount(0);
 
   const admin = await context.newPage();

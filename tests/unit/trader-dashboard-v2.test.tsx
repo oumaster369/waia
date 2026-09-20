@@ -31,98 +31,55 @@ describe("Trader Dashboard V2", () => {
     expect(snapshotAgeText("2026-08-28T12:00:01.000Z", now)).toBeNull();
   });
 
-  it("renders verified tenant data and keeps protected posture read-only and unavailable", async () => {
-    const responses: Record<string, unknown> = {
-      "/api/trader/exchange-credentials": {
-        credentials: [
-          {
-            id: "credential-1",
-            venue: "htx",
-            exchangeAccountId: "account-1",
-            apiKeyMasked: "abc…xyz",
-            status: "active",
-            permissionMetadata: null,
-            createdAt: "2026-08-28T11:00:00.000Z",
-            updatedAt: "2026-08-28T11:00:00.000Z",
-            revokedAt: null,
-          },
-        ],
-      },
-      "/api/trader/balance-snapshots?credentialId=credential-1&limit=5": {
-        snapshots: [
-          {
-            id: "balance-1",
-            credentialId: "credential-1",
-            venue: "htx",
-            exchangeAccountId: "account-1",
-            balances: [],
-            assetCount: 0,
-            syncedAt: "2999-08-28T11:00:00.000Z",
-            createdAt: "2026-08-28T11:00:00.000Z",
-          },
-        ],
-      },
-      "/api/trader/position-snapshots?credentialId=credential-1&limit=5": {
-        snapshots: [
-          {
-            id: "position-1",
-            credentialId: "credential-1",
-            venue: "htx",
-            exchangeAccountId: "account-1",
-            positions: [],
-            positionCount: 0,
-            syncedAt: "2020-08-28T11:00:00.000Z",
-            createdAt: "2020-08-28T11:00:00.000Z",
-          },
-        ],
-      },
-      "/api/trader/trade-history-snapshots?credentialId=credential-1&symbol=ETH%2FUSDT&limit=5": {
-        snapshots: [
-          {
-            id: "trade-1",
-            credentialId: "credential-1",
-            venue: "htx",
-            exchangeAccountId: "account-1",
-            symbol: "ETH/USDT",
-            trades: [],
-            tradeCount: 0,
-            syncedAt: "not-a-timestamp",
-            createdAt: "2026-08-28T11:00:00.000Z",
-          },
-        ],
-      },
-    };
+  it("renders the live cabinet without manual sync, invented PnL, or live controls", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
         const url =
           typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-        const body = responses[url];
+        if (url === "/api/trader/exchange-credentials") {
+          return new Response(
+            JSON.stringify({
+              credentials: [
+                {
+                  id: "22222222-2222-4222-8222-222222222222",
+                  venue: "htx",
+                  exchangeAccountId: "account-1",
+                  apiKeyMasked: "abc…xyz",
+                  status: "active",
+                  permissionMetadata: null,
+                  createdAt: "2026-08-28T11:00:00.000Z",
+                  updatedAt: "2026-08-28T11:00:00.000Z",
+                  revokedAt: null,
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.includes("/api/trader/account-observation/binding?")) {
+          return new Response(null, { status: 204 });
+        }
         return new Response(
-          JSON.stringify(body ?? { error: { code: "NOT_FOUND", message: "not found" } }),
-          {
-            status: body ? 200 : 404,
-            headers: { "Content-Type": "application/json" },
-          },
+          JSON.stringify({ error: { code: "NOT_FOUND", message: "not found" } }),
+          { status: 404, headers: { "Content-Type": "application/json" } },
         );
       }),
     );
 
     render(<TraderWorkspace />);
 
-    await waitFor(() => expect(screen.getByTestId("trader-system-posture")).toBeInTheDocument());
-    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connected");
-    expect(screen.getAllByTestId("trader-unavailable-read-model")).toHaveLength(6);
-    expect(screen.getByText("This snapshot contains no asset balances.")).toBeInTheDocument();
-    expect(screen.getByText("This snapshot contains no open spot positions.")).toBeInTheDocument();
-    expect(screen.getByText("This snapshot contains no trades for ETH/USDT.")).toBeInTheDocument();
-    expect(screen.getAllByText("Timestamp unknown")).toHaveLength(2);
-    expect(screen.getByText(/Observed \d+ minutes ago/)).toBeInTheDocument();
-    expect(screen.queryByText("Current")).not.toBeInTheDocument();
-    expect(screen.queryByText("Stale")).not.toBeInTheDocument();
-    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent(
-      "Live enablement, kill switches, strategy promotion",
+    await waitFor(() => expect(screen.getByTestId("trader-unpublished-note")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/Waiting for observation admit/)).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connected");
+    expect(screen.getByText("User account")).toBeInTheDocument();
+    expect(screen.getByText(/cannot enable live trading/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for observation admit/)).toBeInTheDocument();
+    expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("trader-unavailable-read-model")).not.toBeInTheDocument();
+    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Observation only");
     expect(screen.queryByRole("button", { name: /enable live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kill switch/i })).not.toBeInTheDocument();
   });
@@ -131,11 +88,23 @@ describe("Trader Dashboard V2", () => {
     mockSearchParams.set("campaign_run_id", "historical-run-1");
     mockSearchParams.set("account_id", "tenant-account-1");
     const fetchMock = vi.fn();
-    const source = { addEventListener: vi.fn(), removeEventListener: vi.fn(), close: vi.fn(), onopen: null, onerror: null };
+    const source = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      close: vi.fn(),
+      onopen: null,
+      onerror: null,
+    };
     vi.stubGlobal("fetch", fetchMock);
-    const EventSourceMock=vi.fn(() => source);vi.stubGlobal("EventSource", EventSourceMock);
+    const EventSourceMock = vi.fn(() => source);
+    vi.stubGlobal("EventSource", EventSourceMock);
     render(<TraderWorkspace />);
-    await waitFor(()=>expect(EventSourceMock).toHaveBeenCalledWith("/api/trader/historical-v2/stream?run_id=historical-run-1&account_id=tenant-account-1",{withCredentials:true}));
+    await waitFor(() =>
+      expect(EventSourceMock).toHaveBeenCalledWith(
+        "/api/trader/historical-v2/stream?run_id=historical-run-1&account_id=tenant-account-1",
+        { withCredentials: true },
+      ),
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
     expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
@@ -144,37 +113,224 @@ describe("Trader Dashboard V2", () => {
 
   it("waits through an empty tenant projection and renders the first exact account snapshot", async () => {
     let snapshotListener: ((event: MessageEvent<string>) => void) | undefined;
-    const source = { addEventListener: vi.fn((kind:string,listener:(event:MessageEvent<string>)=>void)=>{if(kind==="historical.snapshot")snapshotListener=listener;}), close: vi.fn(), onopen: null, onerror: null };
-    vi.stubGlobal("EventSource",vi.fn(()=>source));
-    render(<HistoricalV2ObservationDashboard endpoint="/tenant-stream" runId="run-1" accountId="account-1"/>);
-    const base={schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,organizationId:"org-1",runId:"run-1",eventId:"empty",observedAt:"2026-09-01T00:00:00.000Z",lifecycle:{phase:"QUEUED",qualifiedTotalCycles:10,committedCycles:0,remainingCycles:10,progressBps:0,nextCycleSequence:0,latestCommittedCycleId:null,observedAt:"2026-09-01T00:00:00.000Z",errorCode:null,contentDigestHex:"f".repeat(64)},aggregate:{accountCount:0,cash:null,equity:null,netPnl:null,cycles:0,decisions:0,riskVetoes:0,orders:0,fills:0,processedRecords:0,latestCycleSequence:null,qualifiedTotalCycles:10,committedCycles:0,progressBps:0,runPhase:"QUEUED"},accounts:[]};
-    await waitFor(()=>expect(snapshotListener).toBeTypeOf("function"));
-    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify(base)})));
+    const source = {
+      addEventListener: vi.fn((kind: string, listener: (event: MessageEvent<string>) => void) => {
+        if (kind === "historical.snapshot") snapshotListener = listener;
+      }),
+      close: vi.fn(),
+      onopen: null,
+      onerror: null,
+    };
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn(() => source),
+    );
+    render(
+      <HistoricalV2ObservationDashboard
+        endpoint="/tenant-stream"
+        runId="run-1"
+        accountId="account-1"
+      />,
+    );
+    const base = {
+      schemaVersion: "waia.trader.historical_observable_read_model.v2",
+      mode: "HISTORICAL_SIMULATION",
+      capitalEligible: false,
+      organizationId: "org-1",
+      runId: "run-1",
+      eventId: "empty",
+      observedAt: "2026-09-01T00:00:00.000Z",
+      lifecycle: {
+        phase: "QUEUED",
+        qualifiedTotalCycles: 10,
+        committedCycles: 0,
+        remainingCycles: 10,
+        progressBps: 0,
+        nextCycleSequence: 0,
+        latestCommittedCycleId: null,
+        observedAt: "2026-09-01T00:00:00.000Z",
+        errorCode: null,
+        contentDigestHex: "f".repeat(64),
+      },
+      aggregate: {
+        accountCount: 0,
+        cash: null,
+        equity: null,
+        netPnl: null,
+        cycles: 0,
+        decisions: 0,
+        riskVetoes: 0,
+        orders: 0,
+        fills: 0,
+        processedRecords: 0,
+        latestCycleSequence: null,
+        qualifiedTotalCycles: 10,
+        committedCycles: 0,
+        progressBps: 0,
+        runPhase: "QUEUED",
+      },
+      accounts: [],
+    };
+    await waitFor(() => expect(snapshotListener).toBeTypeOf("function"));
+    act(() =>
+      snapshotListener?.(new MessageEvent("historical.snapshot", { data: JSON.stringify(base) })),
+    );
     expect(screen.getByTestId("historical-v2-streaming-dashboard")).toBeInTheDocument();
     expect(screen.getByText("Qualified progress · 0 / 10 cycles")).toBeInTheDocument();
-    const account={accountId:"account-1",cycleSequence:0,cycleId:"c0",symbol:"BTCUSDT",partition:"DEVELOPMENT",replayBarClosedAtUtc:"2026-01-01T00:00:00.000Z",cash:"100.00000000",equity:"100.00000000",grossRealizedPnl:"0.00000000",netRealizedPnl:"0.00000000",netUnrealizedPnl:"0.00000000",netPnl:"0.00000000",buyAndHoldGrossEquity:"100.00000000",strategyMinusBuyAndHoldGross:"0.00000000",buyAndHoldConvention:"GROSS_MARK_TO_MARKET_NO_FEES",openPositionsCount:0,decisionsCount:1,riskVetoCount:0,ordersCount:0,fillsCount:0,lastForecast:{reasonCodes:["FORECAST_READY"]},lastDecision:{reasonCodes:["CASH"]},lastPortfolio:{reasonCodes:["PORTFOLIO_CASH"]},lastRisk:{reasonCodes:["RISK_NOT_EVALUATED"]},lastExecution:{reasonCodes:["NO_DISPATCH"]},lastAccounting:{positions:{}},lastGuardian:{reasonCodes:["GUARDIAN_NONE"]},lastLearning:{reasonCodes:["NO_UPDATE"]},observedExecutionEffects:[],modeledRealityArtifacts:[{sourcePayload:{reasonCodes:["REALITY_RECONCILED"]}}],knowledgeArtifacts:[{sourcePayload:{reasonCodes:["KNOWLEDGE_BOUND"]}}],stages:[],snapshots:[],checkpoint:null,ledgerHeadContentDigestHex:"a".repeat(64)};
-    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify({...base,eventId:"first",aggregate:{...base.aggregate,accountCount:1,processedRecords:1,latestCycleSequence:0},accounts:[account]})})));
+    const account = {
+      accountId: "account-1",
+      cycleSequence: 0,
+      cycleId: "c0",
+      symbol: "BTCUSDT",
+      partition: "DEVELOPMENT",
+      replayBarClosedAtUtc: "2026-01-01T00:00:00.000Z",
+      cash: "100.00000000",
+      equity: "100.00000000",
+      grossRealizedPnl: "0.00000000",
+      netRealizedPnl: "0.00000000",
+      netUnrealizedPnl: "0.00000000",
+      netPnl: "0.00000000",
+      buyAndHoldGrossEquity: "100.00000000",
+      strategyMinusBuyAndHoldGross: "0.00000000",
+      buyAndHoldConvention: "GROSS_MARK_TO_MARKET_NO_FEES",
+      openPositionsCount: 0,
+      decisionsCount: 1,
+      riskVetoCount: 0,
+      ordersCount: 0,
+      fillsCount: 0,
+      lastForecast: { reasonCodes: ["FORECAST_READY"] },
+      lastDecision: { reasonCodes: ["CASH"] },
+      lastPortfolio: { reasonCodes: ["PORTFOLIO_CASH"] },
+      lastRisk: { reasonCodes: ["RISK_NOT_EVALUATED"] },
+      lastExecution: { reasonCodes: ["NO_DISPATCH"] },
+      lastAccounting: { positions: {} },
+      lastGuardian: { reasonCodes: ["GUARDIAN_NONE"] },
+      lastLearning: { reasonCodes: ["NO_UPDATE"] },
+      observedExecutionEffects: [],
+      modeledRealityArtifacts: [{ sourcePayload: { reasonCodes: ["REALITY_RECONCILED"] } }],
+      knowledgeArtifacts: [{ sourcePayload: { reasonCodes: ["KNOWLEDGE_BOUND"] } }],
+      stages: [],
+      snapshots: [],
+      checkpoint: null,
+      ledgerHeadContentDigestHex: "a".repeat(64),
+    };
+    act(() =>
+      snapshotListener?.(
+        new MessageEvent("historical.snapshot", {
+          data: JSON.stringify({
+            ...base,
+            eventId: "first",
+            aggregate: {
+              ...base.aggregate,
+              accountCount: 1,
+              processedRecords: 1,
+              latestCycleSequence: 0,
+            },
+            accounts: [account],
+          }),
+        }),
+      ),
+    );
     expect(screen.getByText("account-1")).toBeInTheDocument();
     expect(screen.getAllByText(/FORECAST_READY/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/PORTFOLIO_CASH/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/REALITY_RECONCILED/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/KNOWLEDGE_BOUND/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/scope mismatch/i)).not.toBeInTheDocument();
-    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify({...base,lifecycle:null,eventId:"legacy-no-lifecycle",aggregate:{...base.aggregate,accountCount:1,processedRecords:1,latestCycleSequence:0},accounts:[account]})})));
-    expect(screen.getByText(/start\/completion status cannot be confirmed/)).toHaveAttribute("role", "status");
-    expect(screen.getByText(/Pending-order evidence unavailable/)).toHaveAttribute("role", "status");
+    act(() =>
+      snapshotListener?.(
+        new MessageEvent("historical.snapshot", {
+          data: JSON.stringify({
+            ...base,
+            lifecycle: null,
+            eventId: "legacy-no-lifecycle",
+            aggregate: {
+              ...base.aggregate,
+              accountCount: 1,
+              processedRecords: 1,
+              latestCycleSequence: 0,
+            },
+            accounts: [account],
+          }),
+        }),
+      ),
+    );
+    expect(screen.getByText(/start\/completion status cannot be confirmed/)).toHaveAttribute(
+      "role",
+      "status",
+    );
+    expect(screen.getByText(/Pending-order evidence unavailable/)).toHaveAttribute(
+      "role",
+      "status",
+    );
     expect(screen.queryByText("No run has started.", { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText("Complete reason journal · 1 committed cycles")).toBeInTheDocument();
   });
 
   it("surfaces the durable lifecycle stop/refusal code", async () => {
     let snapshotListener: ((event: MessageEvent<string>) => void) | undefined;
-    const source = { addEventListener: vi.fn((kind:string,listener:(event:MessageEvent<string>)=>void)=>{if(kind==="historical.snapshot")snapshotListener=listener;}), close: vi.fn(), onopen: null, onerror: null };
-    vi.stubGlobal("EventSource",vi.fn(()=>source));
-    render(<HistoricalV2ObservationDashboard endpoint="/tenant-stream" runId="run-1"/>);
-    await waitFor(()=>expect(snapshotListener).toBeTypeOf("function"));
-    const projection={schemaVersion:"waia.trader.historical_observable_read_model.v2",mode:"HISTORICAL_SIMULATION",capitalEligible:false,organizationId:"org-1",runId:"run-1",eventId:"failed",observedAt:"2026-09-01T00:00:00.000Z",lifecycle:{phase:"FAILED",qualifiedTotalCycles:35,committedCycles:4,remainingCycles:31,progressBps:1142,nextCycleSequence:4,latestCommittedCycleId:"c3",observedAt:"2026-09-01T00:04:00.000Z",errorCode:"FORECAST_PERSISTED_REFUSED",contentDigestHex:"f".repeat(64)},aggregate:{accountCount:0,cash:null,equity:null,netPnl:null,buyAndHoldGrossEquity:null,strategyMinusBuyAndHoldGross:null,cycles:0,decisions:0,riskVetoes:0,orders:0,fills:0,processedRecords:0,latestCycleSequence:null,qualifiedTotalCycles:35,committedCycles:4,progressBps:1142,runPhase:"FAILED"},accounts:[]};
-    act(()=>snapshotListener?.(new MessageEvent("historical.snapshot",{data:JSON.stringify(projection)})));
-    expect(screen.getByTestId("historical-lifecycle-error")).toHaveTextContent("FORECAST_PERSISTED_REFUSED");
+    const source = {
+      addEventListener: vi.fn((kind: string, listener: (event: MessageEvent<string>) => void) => {
+        if (kind === "historical.snapshot") snapshotListener = listener;
+      }),
+      close: vi.fn(),
+      onopen: null,
+      onerror: null,
+    };
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn(() => source),
+    );
+    render(<HistoricalV2ObservationDashboard endpoint="/tenant-stream" runId="run-1" />);
+    await waitFor(() => expect(snapshotListener).toBeTypeOf("function"));
+    const projection = {
+      schemaVersion: "waia.trader.historical_observable_read_model.v2",
+      mode: "HISTORICAL_SIMULATION",
+      capitalEligible: false,
+      organizationId: "org-1",
+      runId: "run-1",
+      eventId: "failed",
+      observedAt: "2026-09-01T00:00:00.000Z",
+      lifecycle: {
+        phase: "FAILED",
+        qualifiedTotalCycles: 35,
+        committedCycles: 4,
+        remainingCycles: 31,
+        progressBps: 1142,
+        nextCycleSequence: 4,
+        latestCommittedCycleId: "c3",
+        observedAt: "2026-09-01T00:04:00.000Z",
+        errorCode: "FORECAST_PERSISTED_REFUSED",
+        contentDigestHex: "f".repeat(64),
+      },
+      aggregate: {
+        accountCount: 0,
+        cash: null,
+        equity: null,
+        netPnl: null,
+        buyAndHoldGrossEquity: null,
+        strategyMinusBuyAndHoldGross: null,
+        cycles: 0,
+        decisions: 0,
+        riskVetoes: 0,
+        orders: 0,
+        fills: 0,
+        processedRecords: 0,
+        latestCycleSequence: null,
+        qualifiedTotalCycles: 35,
+        committedCycles: 4,
+        progressBps: 1142,
+        runPhase: "FAILED",
+      },
+      accounts: [],
+    };
+    act(() =>
+      snapshotListener?.(
+        new MessageEvent("historical.snapshot", { data: JSON.stringify(projection) }),
+      ),
+    );
+    expect(screen.getByTestId("historical-lifecycle-error")).toHaveTextContent(
+      "FORECAST_PERSISTED_REFUSED",
+    );
   });
 });

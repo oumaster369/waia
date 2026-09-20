@@ -5,13 +5,11 @@ import type { ObservationComponent } from "@/lib/trader/account-observation/type
 import {
   ageLabel,
   cabinetLiveLabel,
-  cabinetSpotSource,
-  formatBalanceLine,
   formatOrderLine,
   formatTradeLine,
-  isObservedZeroAmount,
-  majorSpotTotals,
-  nonZeroBalances,
+  nonUsdtInventory,
+  secondsUntilNextPoll,
+  usdtSpot,
 } from "@/lib/trader/account-observation/cabinet-view";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import type { AccountObservationView } from "./use-account-observation";
@@ -33,9 +31,19 @@ function LiveDot({ live }: { live: boolean }) {
   );
 }
 
-function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Metric({
+  label,
+  value,
+  hint,
+  testId,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  testId?: string;
+}) {
   return (
-    <WaiaSurface variant="raised" className="p-4">
+    <WaiaSurface variant="raised" className="p-4" data-testid={testId}>
       <p className="text-muted-foreground text-xs tracking-wide uppercase">{label}</p>
       <p className="mt-2 font-mono text-xl font-semibold tabular-nums">{value}</p>
       {hint ? <p className="text-muted-foreground mt-1 text-xs">{hint}</p> : null}
@@ -56,22 +64,12 @@ function Rows<T>({
 }) {
   return (
     <section aria-label={title} className="border-border space-y-2 rounded-lg border p-3">
-      <h3 className="font-medium">
-        {title} · {component.status}
-      </h3>
-      <p className="text-waia-fg-muted text-xs">
-        Source as of: {time(component.sourceAsOfMs)} · Read window:{" "}
-        {time(component.readStartedAtMs)} – {time(component.readCompletedAtMs)}
-      </p>
+      <h3 className="font-medium">{title}</h3>
       {component.error && <p>Read error: {component.error}</p>}
       {component.values === null ? (
         <p>Unavailable — not an observed zero.</p>
       ) : component.values.length === 0 ? (
-        <p>
-          {component.status === "COMPLETE"
-            ? emptyComplete
-            : "No rows received; collection incomplete."}
-        </p>
+        <p>{emptyComplete}</p>
       ) : (
         <>
           <ul className="space-y-1 text-sm">
@@ -109,14 +107,9 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     view.status !== "ERROR" &&
     view.status !== "DISCONNECTED" &&
     view.status !== "REVOKED";
-  const spot = observation ? cabinetSpotSource(observation) : null;
-  const active = observation ? nonZeroBalances(spot) : [];
-  const majors = majorSpotTotals(spot);
-  const dustCount = spot ? spot.filter((row) => isObservedZeroAmount(row.total)).length : 0;
-  const openCount = observation?.openOrders.values?.length ?? null;
-  const tradeCount =
-    observation?.trades.reduce((sum, item) => sum + (item.component.values?.length ?? 0), 0) ??
-    null;
+  const usdt = observation ? usdtSpot(observation.balances.values) : null;
+  const inventory = observation ? nonUsdtInventory(observation.balances.values) : [];
+  const nextIn = observation ? secondsUntilNextPoll(observation.collectionCompletedAtMs, nowMs) : 0;
 
   return (
     <section
@@ -125,9 +118,9 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Account observation</h2>
+          <h2 className="text-lg font-semibold">Live account</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Live HTX spot evidence. Holdings are not strategy positions. PnL is not calculated here.
+            Read-only HTX spot. This cabinet does not place orders or calculate PnL.
           </p>
         </div>
         <p
@@ -152,97 +145,56 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
       ) : (
         <>
           <p className="text-sm">
-            HTX account {observation.binding.exchangeAccountId} · updated{" "}
-            {ageLabel(observation.collectionCompletedAtMs, nowMs)}
+            HTX {observation.binding.exchangeAccountId} · last update{" "}
+            {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
+            {nextIn > 0 ? `next update in ${nextIn}s` : "next update due now"}
           </p>
-          {view.status !== "CURRENT" && (
-            <p>
-              Last received observation — do not treat it as a current complete account snapshot.
-            </p>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <p className="text-muted-foreground text-xs">
+            Last received observation — do not treat it as a current complete account snapshot.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <Metric
-              label="USDT"
-              value={majors.USDT ?? "—"}
-              hint={majors.USDT === null ? "Not in this snapshot" : "Spot total"}
+              label="USDT free"
+              value={usdt ? usdt.free : "—"}
+              hint={usdt ? "Available to open orders" : "Not in this snapshot"}
+              testId="cabinet-usdt-free"
             />
             <Metric
-              label="BTC"
-              value={majors.BTC ?? "—"}
-              hint={majors.BTC === null ? "Not in this snapshot" : "Spot total"}
-            />
-            <Metric
-              label="ETH"
-              value={majors.ETH ?? "—"}
-              hint={majors.ETH === null ? "Not in this snapshot" : "Spot total"}
+              label="USDT in open orders"
+              value={usdt ? usdt.locked : "—"}
+              hint={usdt ? "Locked on HTX" : "Not in this snapshot"}
+              testId="cabinet-usdt-locked"
             />
             <Metric
               label="Open orders"
-              value={openCount === null ? "—" : String(openCount)}
-              hint={
-                observation.openOrders.status === "COMPLETE" ? "Complete book" : "Bounded window"
+              value={
+                observation.openOrders.values === null
+                  ? "—"
+                  : String(observation.openOrders.values.length)
               }
-            />
-            <Metric
-              label="Spot assets"
-              value={String(active.length)}
-              hint={dustCount > 0 ? `${dustCount} zero-dust rows hidden` : "Non-zero totals"}
+              hint="Working orders, not marked positions"
+              testId="cabinet-open-orders"
             />
           </div>
-          <section className="border-border space-y-2 rounded-lg border p-3">
-            <h3 className="font-medium">Holdings (balance-derived, not positions)</h3>
-            {spot === null ? (
-              <p>Unavailable — not an observed zero.</p>
-            ) : spot.length === 0 ? (
-              <p>
-                {observation.balances.status === "COMPLETE"
-                  ? "Observed zero rows."
-                  : "No rows received; collection incomplete."}
-              </p>
-            ) : active.length === 0 ? (
-              <p>
-                No non-zero spot balances. HTX listed {dustCount} zero-dust rows; they are hidden so
-                they are not mistaken for a portfolio.
-              </p>
-            ) : (
+          {observation.balances.error ? <p>Read error: {observation.balances.error}</p> : null}
+          {observation.balances.values === null ? <p>Unavailable — not an observed zero.</p> : null}
+          {observation.holdings === null ? <p>Unavailable — not an observed zero.</p> : null}
+          {inventory.length > 0 ? (
+            <section className="border-border space-y-2 rounded-lg border p-3">
+              <h3 className="font-medium">Spot inventory (not PnL)</h3>
               <ul>
-                {active.slice(0, MAX_VISIBLE_ROWS).map((row, i) => (
+                {inventory.slice(0, MAX_VISIBLE_ROWS).map((row, i) => (
                   <li key={`${row.asset}-${i}`}>
-                    {row.asset}: {row.total}
+                    {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
                   </li>
                 ))}
               </ul>
-            )}
-          </section>
-          <Rows
-            title="Balances"
-            component={
-              observation.balances.values === null
-                ? observation.balances
-                : {
-                    ...observation.balances,
-                    values: nonZeroBalances(observation.balances.values),
-                  }
-            }
-            emptyComplete={
-              observation.balances.values &&
-              observation.balances.values.length > 0 &&
-              nonZeroBalances(observation.balances.values).length === 0
-                ? "No non-zero balances in this complete list."
-                : "Observed zero rows."
-            }
-          >
-            {(row, i) => <li key={`${row.asset}-${i}`}>{formatBalanceLine(row)}</li>}
-          </Rows>
-          {observation.balances.values && dustCount > 0 && (
-            <p className="text-muted-foreground text-xs">
-              HTX zero-dust catalog · {dustCount} rows hidden from the live book.
-            </p>
-          )}
+            </section>
+          ) : null}
           <Rows
             title="Open orders"
             component={observation.openOrders}
-            emptyComplete="Observed zero rows."
+            emptyComplete="No working orders."
           >
             {(row, i) => <li key={`${row.orderId}-${i}`}>{formatOrderLine(row)}</li>}
           </Rows>
@@ -254,31 +206,24 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
               key={symbol}
               title={`Trades · ${symbol}`}
               component={component}
-              emptyComplete="Observed zero rows."
+              emptyComplete="No fills in this window."
             >
               {(row, i) => <li key={`${row.tradeId}-${i}`}>{formatTradeLine(row)}</li>}
             </Rows>
           ))}
-          {tradeCount === 0 && observation.trades.length > 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No fills in the observed window. Empty is a real observation, not a missing stream.
-            </p>
-          ) : null}
+          <p className="text-muted-foreground text-sm">
+            Monthly statement is not published in this cabinet yet. Nothing is inferred.
+          </p>
           <dl className="text-muted-foreground grid gap-1 text-xs">
             <dt>Observation ID</dt>
             <dd>{observation.observationId}</dd>
-            <dt>Organization</dt>
-            <dd>{observation.binding.organizationId}</dd>
-            <dt>Exchange account</dt>
+            <dt>HTX account</dt>
             <dd>{observation.binding.exchangeAccountId}</dd>
             <dt>Collection completed</dt>
             <dd>{time(observation.collectionCompletedAtMs)}</dd>
             <dt>Completeness</dt>
             <dd>{observation.status}</dd>
           </dl>
-          <p className="text-waia-fg-muted text-xs">
-            Components have separate read windows; this is not an atomic exchange snapshot.
-          </p>
         </>
       )}
     </section>
