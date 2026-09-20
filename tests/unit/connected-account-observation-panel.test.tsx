@@ -172,7 +172,7 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       .mockImplementation(async () => new Response(null, { status: 204 }));
     render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
     await settle();
-    expect(screen.getByText(/Automatic collection is not configured/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for observation admit/)).toBeInTheDocument();
     expect(screen.queryByText("Observed zero rows.")).not.toBeInTheDocument();
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(fetcher).toHaveBeenCalledTimes(2);

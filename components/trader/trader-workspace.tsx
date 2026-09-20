@@ -9,45 +9,13 @@ import { WaiaSurface } from "@/components/waia/waia-surface";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
 import { TraderSignOut } from "@/components/trader/trader-sign-out";
 import { ConnectedAccountObservationPanel } from "@/components/trader/account-observation/connected-account-observation-panel";
-import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
-import type { BalanceSnapshotDto } from "@/lib/trader/balances/types";
-import type { PositionSnapshotDto } from "@/lib/trader/positions/types";
-import type { TradeHistorySnapshotDto } from "@/lib/trader/trade-history/types";
 import {
   assertNoSecretsInPayload,
   connectHtxClient,
-  listBalanceSnapshotsClient,
   listExchangeCredentialsClient,
-  listPositionSnapshotsClient,
-  listTradeHistorySnapshotsClient,
-  syncBalancesClient,
-  syncPositionsClient,
-  syncTradeHistoryClient,
 } from "@/lib/trader/trader-workspace-client";
 import { parseHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
-import {
-  normalizeHtxSpotSymbol,
-  TRADER_WORKSPACE_SUPPORTED_HTX_SPOT_PAIR_MESSAGE,
-} from "@/lib/trader/symbols/normalize-htx-spot-symbol";
-
-const DEFAULT_TRADE_SYMBOL = "ETH/USDT";
-
-const dateFormatter =
-  typeof Intl !== "undefined"
-    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })
-    : null;
-
-function formatTimestamp(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) {
-      return iso;
-    }
-    return dateFormatter ? dateFormatter.format(d) : d.toLocaleString();
-  } catch {
-    return iso;
-  }
-}
+import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
 
 export function snapshotAgeText(iso: string | undefined, nowMs = Date.now()): string | null {
   if (!iso) return null;
@@ -58,71 +26,30 @@ export function snapshotAgeText(iso: string | undefined, nowMs = Date.now()): st
   return `Observed ${ageMinutes} ${ageMinutes === 1 ? "minute" : "minutes"} ago`;
 }
 
-function StatusPill({ status }: { status: "unknown" | "unavailable" }) {
-  const label = status === "unknown" ? "Timestamp unknown" : "Unavailable";
-  return (
-    <span
-      className="border-border bg-muted/30 text-muted-foreground rounded-full border px-2 py-0.5 text-xs"
-      data-state={status}
-    >
-      {label}
-    </span>
-  );
-}
-
-function SnapshotObservation({ iso, label = "Last sync" }: { iso: string; label?: string }) {
-  const age = snapshotAgeText(iso);
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-      <p className="text-muted-foreground">
-        {label}: {formatTimestamp(iso)}
-      </p>
-      {age ? (
-        <span className="border-border bg-muted/30 text-muted-foreground rounded-full border px-2 py-0.5 text-xs">
-          {age}
-        </span>
-      ) : (
-        <StatusPill status="unknown" />
-      )}
-    </div>
-  );
-}
-
-function UnavailableReadModel({ title, description }: { title: string; description: string }) {
-  return (
-    <WaiaSurface variant="raised" className="p-5" data-testid="trader-unavailable-read-model">
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <StatusPill status="unavailable" />
-      </div>
-      <p className="text-muted-foreground mt-3 text-sm">{description}</p>
-      <p className="text-muted-foreground mt-3 text-xs">
-        No verified tenant-scoped read model is published. Nothing is inferred.
-      </p>
-    </WaiaSurface>
-  );
-}
-
 function PermissionExplainer() {
   return (
     <div
       data-testid="trader-permission-explainer"
       className="border-border bg-muted/20 text-muted-foreground rounded-lg border p-4 text-sm"
     >
-      <p className="text-foreground font-medium">HTX API key permissions (spot)</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
+      <p className="text-foreground font-medium">How to create the HTX key</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5">
+        <li>On HTX open API Management and create an HMAC API key.</li>
         <li>
-          <span className="text-foreground">Required:</span> Read and Trade scopes for balance and
-          position sync.
+          Enable <span className="text-foreground">Read</span> only. Do not enable Withdraw. Trade
+          is not required for this cabinet.
         </li>
         <li>
-          <span className="text-foreground">Forbidden:</span> Withdraw and Transfer — WAIA rejects
-          keys with withdraw permission.
+          IP whitelist the observation host:{" "}
+          <span className="text-foreground font-mono">84.32.9.146</span>.
         </li>
-      </ul>
+        <li>
+          Copy Access Key and Secret Key into the fields below. The secret is shown only once.
+        </li>
+      </ol>
       <p className="mt-2 text-xs">
-        HTX spot uses API key + secret only (no passphrase). Secrets are encrypted server-side and
-        never shown again after connect.
+        HTX spot uses API key + secret only (no passphrase). This is your personal AI-TRADER
+        account. Nobody else is joined to it.
       </p>
     </div>
   );
@@ -173,301 +100,59 @@ function CredentialStatus({ credential }: { credential: CredentialMetadataDto })
   );
 }
 
-function BalancesPanel({
-  snapshots,
-  syncing,
-  onSync,
-}: {
-  snapshots: BalanceSnapshotDto[];
-  syncing: boolean;
-  onSync: () => void;
-}) {
-  const latest = snapshots[0];
-  return (
-    <WaiaSurface variant="raised" className="p-5" data-testid="trader-balances-panel">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">Balances</h2>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={syncing}
-          data-testid="trader-sync-balances"
-          onClick={onSync}
-        >
-          {syncing ? "Syncing…" : "Sync balances"}
-        </Button>
-      </div>
-      {latest ? (
-        <div className="space-y-2 text-sm">
-          <SnapshotObservation iso={latest.syncedAt} />
-          {latest.balances.length > 0 ? (
-            <ul className="divide-border divide-y" data-testid="trader-balance-list">
-              {latest.balances.map((balance) => (
-                <li key={balance.asset} className="flex justify-between py-2">
-                  <span>{balance.asset.toUpperCase()}</span>
-                  <span>{balance.total}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground">This snapshot contains no asset balances.</p>
-          )}
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          No balance snapshot yet. Sync to fetch HTX balances.
-        </p>
-      )}
-    </WaiaSurface>
-  );
-}
-
-function PositionsPanel({
-  snapshots,
-  syncing,
-  onSync,
-}: {
-  snapshots: PositionSnapshotDto[];
-  syncing: boolean;
-  onSync: () => void;
-}) {
-  const latest = snapshots[0];
-  return (
-    <WaiaSurface variant="raised" className="p-5" data-testid="trader-positions-panel">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">Positions</h2>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={syncing}
-          data-testid="trader-sync-positions"
-          onClick={onSync}
-        >
-          {syncing ? "Syncing…" : "Sync positions"}
-        </Button>
-      </div>
-      {latest ? (
-        <div className="space-y-2 text-sm">
-          <SnapshotObservation iso={latest.syncedAt} />
-          {latest.positions.length > 0 ? (
-            <ul className="divide-border divide-y" data-testid="trader-position-list">
-              {latest.positions.map((position) => (
-                <li key={position.symbol} className="flex justify-between py-2">
-                  <span>{position.symbol}</span>
-                  <span>{position.quantity}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground">This snapshot contains no open spot positions.</p>
-          )}
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          No position snapshot yet. Sync to fetch HTX positions.
-        </p>
-      )}
-    </WaiaSurface>
-  );
-}
-
-function TradeHistoryPanel({
-  symbol,
-  onSymbolChange,
-  snapshots,
-  syncing,
-  onSync,
-}: {
-  symbol: string;
-  onSymbolChange: (value: string) => void;
-  snapshots: TradeHistorySnapshotDto[];
-  syncing: boolean;
-  onSync: () => void;
-}) {
-  const latest = snapshots[0];
-  return (
-    <WaiaSurface variant="raised" className="p-5" data-testid="trader-trades-panel">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium">Recent trades</h2>
-          <label className="text-muted-foreground mt-2 block text-xs" htmlFor="trader-trade-symbol">
-            Symbol (HTX spot pair)
-          </label>
-          <Input
-            id="trader-trade-symbol"
-            data-testid="trader-trade-symbol"
-            className="mt-1 max-w-xs"
-            value={symbol}
-            onChange={(e) => onSymbolChange(e.target.value)}
-            placeholder="ETH/USDT"
-          />
-          <p className="text-muted-foreground mt-1 text-xs">
-            Use an HTX spot pair with trade history, e.g. ETH/USDT.
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={syncing || symbol.length === 0}
-          data-testid="trader-sync-trades"
-          onClick={onSync}
-        >
-          {syncing ? "Syncing…" : "Sync trades"}
-        </Button>
-      </div>
-      {latest ? (
-        <div className="space-y-2 text-sm">
-          <SnapshotObservation iso={latest.syncedAt} label={`Last sync (${latest.symbol})`} />
-          {latest.trades.length > 0 ? (
-            <ul className="divide-border divide-y" data-testid="trader-trade-list">
-              {latest.trades.slice(0, 10).map((trade) => (
-                <li key={trade.tradeId} className="flex justify-between gap-2 py-2">
-                  <span>
-                    {trade.side.toUpperCase()} {trade.quantity} @ {trade.price}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    {formatTimestamp(trade.executedAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground">
-              This snapshot contains no trades for {latest.symbol}.
-            </p>
-          )}
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-sm">Sync to fetch recent HTX trade history.</p>
-      )}
-    </WaiaSurface>
-  );
-}
-
 function ExchangeTraderWorkspace() {
   const [credentials, setCredentials] = React.useState<CredentialMetadataDto[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [connecting, setConnecting] = React.useState(false);
-  const [syncingBalances, setSyncingBalances] = React.useState(false);
-  const [syncingPositions, setSyncingPositions] = React.useState(false);
-  const [syncingTrades, setSyncingTrades] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [apiKey, setApiKey] = React.useState("");
   const [apiSecret, setApiSecret] = React.useState("");
   const [accountLabel, setAccountLabel] = React.useState("");
-  const [balanceSnapshots, setBalanceSnapshots] = React.useState<BalanceSnapshotDto[]>([]);
-  const [positionSnapshots, setPositionSnapshots] = React.useState<PositionSnapshotDto[]>([]);
-  const [tradeSnapshots, setTradeSnapshots] = React.useState<TradeHistorySnapshotDto[]>([]);
-  const [tradeSymbol, setTradeSymbol] = React.useState(DEFAULT_TRADE_SYMBOL);
   const scope = React.useRef(0);
-  const tradeRequest = React.useRef(0);
-  const selectedSymbol = React.useRef(DEFAULT_TRADE_SYMBOL);
   const pending = React.useRef(new Map<string, object>());
-  const asyncError = "Account request could not be confirmed. Please retry; no account values were inferred.";
+  const asyncError =
+    "Account request could not be confirmed. Please retry; no account values were inferred.";
 
   const activeCredential = credentials.find((c) => c.status === "active") ?? credentials[0];
 
-  const refreshSnapshots = React.useCallback(async (credentialId: string, symbol: string, generation: number) => {
-    const tradeGeneration = ++tradeRequest.current;
-    const normalized = normalizeHtxSpotSymbol(symbol);
-    const listSymbol = normalized.ok ? normalized.symbol : symbol.trim();
-    const [balances, positions, trades] = await Promise.all([
-      listBalanceSnapshotsClient(credentialId),
-      listPositionSnapshotsClient(credentialId),
-      listTradeHistorySnapshotsClient(credentialId, listSymbol),
-    ]);
-    if (scope.current !== generation) return;
-    if (balances.kind === "ok") {
-      setBalanceSnapshots(balances.data);
-    }
-    if (positions.kind === "ok") {
-      setPositionSnapshots(positions.data);
-    }
-    if (trades.kind === "ok" && tradeRequest.current === tradeGeneration) {
-      setTradeSnapshots(trades.data);
+  const loadWorkspace = React.useCallback(async () => {
+    const generation = ++scope.current;
+    pending.current.clear();
+    setConnecting(false);
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const result = await listExchangeCredentialsClient();
+      if (scope.current !== generation) return;
+      if (result.kind === "err") {
+        setErrorMessage(result.displayMessage);
+        setCredentials([]);
+        return;
+      }
+      assertNoSecretsInPayload(JSON.stringify(result.data));
+      setCredentials(result.data);
+    } catch {
+      if (scope.current === generation) setErrorMessage(asyncError);
+    } finally {
+      if (scope.current === generation) setLoading(false);
     }
   }, []);
 
-  const loadWorkspace = React.useCallback(
-    async (symbol: string) => {
-      const generation = ++scope.current;
-      ++tradeRequest.current;
-      // New account scope owns fresh operation flags. Retired finally blocks
-      // must not release a successor operation with the same name.
-      pending.current.clear();
-      setConnecting(false);
-      setSyncingBalances(false);
-      setSyncingPositions(false);
-      setSyncingTrades(false);
-      setBalanceSnapshots([]);
-      setPositionSnapshots([]);
-      setTradeSnapshots([]);
-      setLoading(true);
-      setErrorMessage(null);
-      try {
-        const result = await listExchangeCredentialsClient();
-        if (scope.current !== generation) return;
-        if (result.kind === "err") {
-          setErrorMessage(result.displayMessage);
-          setCredentials([]);
-          return;
-        }
-        assertNoSecretsInPayload(JSON.stringify(result.data));
-        setCredentials(result.data);
-        setLoading(false);
-        const active = result.data.find((c) => c.status === "active") ?? result.data[0];
-        if (active) await refreshSnapshots(active.id, symbol, generation);
-      } catch {
-        if (scope.current === generation) setErrorMessage(asyncError);
-      } finally {
-        if (scope.current === generation) setLoading(false);
-      }
-    },
-    [refreshSnapshots],
-  );
-
-  const retireScope = React.useCallback(() => { ++scope.current; ++tradeRequest.current; }, []);
+  const retireScope = React.useCallback(() => {
+    ++scope.current;
+  }, []);
   React.useEffect(() => {
     void (async () => {
-      await loadWorkspace(DEFAULT_TRADE_SYMBOL);
+      await loadWorkspace();
     })();
     return retireScope;
   }, [loadWorkspace, retireScope]);
 
-  const handleTradeSymbolChange = (value: string) => {
-    const generation = scope.current;
-    const request = ++tradeRequest.current;
-    selectedSymbol.current = value;
-    setTradeSymbol(value);
-    setTradeSnapshots([]);
-    if (activeCredential && value.trim()) {
-      const normalized = normalizeHtxSpotSymbol(value);
-      if (!normalized.ok) {
-        setTradeSnapshots([]);
-        return;
-      }
-      void listTradeHistorySnapshotsClient(activeCredential.id, normalized.symbol).then(
-        (result) => {
-          if (scope.current !== generation || tradeRequest.current !== request) return;
-          if (result.kind === "ok") {
-            setTradeSnapshots(result.data);
-          } else {
-            setErrorMessage(result.displayMessage);
-          }
-        },
-        () => {
-          if (scope.current === generation && tradeRequest.current === request) setErrorMessage(asyncError);
-        },
-      );
-    }
-  };
-
-  // Each operation owns its pending flag and retires with the mounted account scope.
-  const runRequest = (name: string, setPending: (value: boolean) => void,
-    work: (isCurrent: () => boolean, generation: number) => Promise<void>) => {
+  const runRequest = (
+    name: string,
+    setPending: (value: boolean) => void,
+    work: (isCurrent: () => boolean) => Promise<void>,
+  ) => {
     if (pending.current.has(name)) return;
     const owner = {};
     pending.current.set(name, owner);
@@ -476,9 +161,11 @@ function ExchangeTraderWorkspace() {
     setPending(true);
     setErrorMessage(null);
     void (async () => {
-      try { await work(isCurrent, generation); }
-      catch { if (isCurrent()) setErrorMessage(asyncError); }
-      finally {
+      try {
+        await work(isCurrent);
+      } catch {
+        if (isCurrent()) setErrorMessage(asyncError);
+      } finally {
         if (pending.current.get(name) === owner) {
           pending.current.delete(name);
           if (isCurrent()) setPending(false);
@@ -510,60 +197,7 @@ function ExchangeTraderWorkspace() {
       setApiKey("");
       setApiSecret("");
       setConnecting(false);
-      await loadWorkspace(selectedSymbol.current);
-    });
-  };
-
-  const handleSyncBalances = () => {
-    if (!activeCredential) {
-      return;
-    }
-    runRequest("balances", setSyncingBalances, async (isCurrent, generation) => {
-      const result = await syncBalancesClient(activeCredential.id);
-      if (!isCurrent()) return;
-      if (result.kind === "err") {
-        setErrorMessage(result.displayMessage);
-        return;
-      }
-      await refreshSnapshots(activeCredential.id, selectedSymbol.current, generation);
-    });
-  };
-
-  const handleSyncPositions = () => {
-    if (!activeCredential) {
-      return;
-    }
-    runRequest("positions", setSyncingPositions, async (isCurrent, generation) => {
-      const result = await syncPositionsClient(activeCredential.id);
-      if (!isCurrent()) return;
-      if (result.kind === "err") {
-        setErrorMessage(result.displayMessage);
-        return;
-      }
-      await refreshSnapshots(activeCredential.id, selectedSymbol.current, generation);
-    });
-  };
-
-  const handleSyncTrades = () => {
-    if (!activeCredential || !tradeSymbol.trim()) {
-      return;
-    }
-    const normalized = normalizeHtxSpotSymbol(tradeSymbol);
-    if (!normalized.ok) {
-      setErrorMessage(TRADER_WORKSPACE_SUPPORTED_HTX_SPOT_PAIR_MESSAGE);
-      return;
-    }
-    const request = tradeRequest.current;
-    runRequest("trades", setSyncingTrades, async (isCurrent, generation) => {
-      const result = await syncTradeHistoryClient(activeCredential.id, normalized.symbol);
-      if (!isCurrent() || tradeRequest.current !== request) return;
-      if (result.kind === "err") {
-        setErrorMessage(result.displayMessage);
-        return;
-      }
-      setTradeSymbol(normalized.symbol);
-      selectedSymbol.current = normalized.symbol;
-      await refreshSnapshots(activeCredential.id, normalized.symbol, generation);
+      await loadWorkspace();
     });
   };
 
@@ -576,7 +210,7 @@ function ExchangeTraderWorkspace() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
           <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">
-            User observation workspace
+            User account
           </span>
           <TraderSignOut />
         </div>
@@ -587,8 +221,8 @@ function ExchangeTraderWorkspace() {
           AI-TRADER
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-          Observe your connected exchange account and the verified posture of the trading system.
-          This workspace cannot enable live trading or change capital authority.
+          Live read-only HTX account. This workspace cannot enable live trading or change capital
+          authority.
         </p>
       </header>
 
@@ -619,91 +253,24 @@ function ExchangeTraderWorkspace() {
           </section>
           <ConnectedAccountObservationPanel
             key={`${activeCredential.id}:${activeCredential.status}:${activeCredential.updatedAt}`}
-            target={activeCredential.status === "active" ? {
-              credentialId: activeCredential.id,
-              exchangeAccountId: activeCredential.exchangeAccountId,
-            } : null}
+            target={
+              activeCredential.status === "active"
+                ? {
+                    credentialId: activeCredential.id,
+                    exchangeAccountId: activeCredential.exchangeAccountId,
+                  }
+                : null
+            }
           />
-          <section aria-labelledby="trader-portfolio-heading" className="space-y-4">
-            <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">Separate diagnostics</p>
-              <h2 id="trader-portfolio-heading" className="mt-1 text-xl font-semibold">
-                Manually collected diagnostic snapshots
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                These legacy balance, position and activity snapshots are collected separately.
-                They are not the shared current account observation above and may have different timestamps.
-              </p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              <BalancesPanel
-                snapshots={balanceSnapshots}
-                syncing={syncingBalances}
-                onSync={handleSyncBalances}
-              />
-              <PositionsPanel
-                snapshots={positionSnapshots}
-                syncing={syncingPositions}
-                onSync={handleSyncPositions}
-              />
-              <TradeHistoryPanel
-                symbol={tradeSymbol}
-                onSymbolChange={handleTradeSymbolChange}
-                snapshots={tradeSnapshots}
-                syncing={syncingTrades}
-                onSync={handleSyncTrades}
-              />
-            </div>
-          </section>
-          <section
-            aria-labelledby="trader-system-heading"
-            className="space-y-4"
-            data-testid="trader-system-posture"
-          >
-            <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">
-                System posture
-              </p>
-              <h2 id="trader-system-heading" className="mt-1 text-xl font-semibold">
-                Verified runtime evidence
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Read-only explanations become available only when tenant-scoped evidence APIs are
-                published.
-              </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <UnavailableReadModel
-                title="Execution mode"
-                description="Paper/live mode and its authorization state are not exposed to the user read model."
-              />
-              <UnavailableReadModel
-                title="Forecast & Decision"
-                description="No tenant-scoped Forecast V2 or Decision V2 explanation stream is available."
-              />
-              <UnavailableReadModel
-                title="Risk & Guardian"
-                description="No tenant-scoped risk verdict or Guardian posture stream is available."
-              />
-              <UnavailableReadModel
-                title="Execution & Reality"
-                description="No tenant-scoped execution-to-reality evidence projection is available."
-              />
-              <UnavailableReadModel
-                title="Runtime health"
-                description="Operator runtime health exists only behind administrative authority."
-              />
-              <UnavailableReadModel
-                title="Calibration & drift"
-                description="No tenant-scoped calibration or drift posture read model is available."
-              />
-            </div>
-          </section>
+          <p className="text-muted-foreground text-sm" data-testid="trader-unpublished-note">
+            Strategy, forecast, news and monthly statement are not published in this cabinet yet.
+            Nothing is inferred.
+          </p>
           <aside
             className="border-border bg-muted/10 rounded-lg border p-4 text-sm"
             data-testid="trader-authority-boundary"
           >
-            <p className="font-medium">Authority boundary</p>
+            <p className="font-medium">Observation only</p>
             <p className="text-muted-foreground mt-1">
               This dashboard is observational. Live enablement, kill switches, strategy promotion,
               administrative controls and capital changes are intentionally absent.
@@ -715,8 +282,8 @@ function ExchangeTraderWorkspace() {
           <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
             <h2 className="text-lg font-medium">Connect HTX</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Create an HTX API key with Read + Trade permissions. Do not enable Withdraw. Paste the
-              Access Key and Secret Key from HTX below.
+              Create a Read-only HTX HMAC key. Do not enable Withdraw. Paste the Access Key and
+              Secret Key below.
             </p>
             <form
               className="mt-6 space-y-4"
@@ -782,22 +349,43 @@ function ExchangeTraderWorkspace() {
 }
 
 function HistoricalTraderWorkspace(): React.ReactNode {
-  const params=useSearchParams();const runId=params.get("campaign_run_id")?.trim()??"";
-  const accountId=params.get("account_id")?.trim()??"";
+  const params = useSearchParams();
+  const runId = params.get("campaign_run_id")?.trim() ?? "";
+  const accountId = params.get("account_id")?.trim() ?? "";
   return (
-    <div data-testid="trader-workspace" className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10">
+    <div
+      data-testid="trader-workspace"
+      className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10"
+    >
       <header className="border-border mb-10 border-b pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
-          <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">Historical simulation workspace</span>
+          <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">
+            Historical simulation workspace
+          </span>
           <TraderSignOut />
         </div>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">AI-TRADER</h1>
-        <p className="text-muted-foreground mt-2 max-w-2xl text-sm">Observe your tenant-scoped historical simulation automatically. No exchange credentials, real balances, live trading, or capital controls are loaded.</p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
+          Observe your tenant-scoped historical simulation automatically. No exchange credentials,
+          real balances, live trading, or capital controls are loaded.
+        </p>
       </header>
-      {accountId?<HistoricalV2ObservationDashboard runId={runId} accountId={accountId}
-        endpoint={`/api/trader/historical-v2/stream?run_id=${encodeURIComponent(runId)}&account_id=${encodeURIComponent(accountId)}`}/>
-        :<WaiaSurface variant="raised" className="p-5"><p className="font-medium">Account identity required</p><p className="text-muted-foreground mt-2 text-sm">Open the account-scoped historical observation link containing both campaign_run_id and account_id.</p></WaiaSurface>}
+      {accountId ? (
+        <HistoricalV2ObservationDashboard
+          runId={runId}
+          accountId={accountId}
+          endpoint={`/api/trader/historical-v2/stream?run_id=${encodeURIComponent(runId)}&account_id=${encodeURIComponent(accountId)}`}
+        />
+      ) : (
+        <WaiaSurface variant="raised" className="p-5">
+          <p className="font-medium">Account identity required</p>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Open the account-scoped historical observation link containing both campaign_run_id and
+            account_id.
+          </p>
+        </WaiaSurface>
+      )}
     </div>
   );
 }

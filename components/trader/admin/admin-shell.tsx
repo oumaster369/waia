@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview" },
+  { href: "/admin/account-observation", label: "Accounts" },
   { href: "/admin/kill-switches", label: "Kill switches" },
   { href: "/admin/live-enable", label: "Live enable" },
   { href: "/admin/strategy-promotions", label: "Strategy promotions" },
