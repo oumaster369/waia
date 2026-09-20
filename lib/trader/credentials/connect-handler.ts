@@ -41,7 +41,7 @@ import {
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 import { assertCredentialStorageAllowed } from "@/lib/trader/security/credential-storage-gate";
 import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
-import { MasterKeyNotReadyError } from "@/lib/trader/security/errors";
+import { MasterKeyConfigError, MasterKeyNotReadyError } from "@/lib/trader/security/errors";
 import { sanitizeClientErrorMessage } from "@/lib/trader/security/redaction";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -78,6 +78,22 @@ function clientError(status: number, code: string, message: string): ConnectHand
     body: errorEnvelope(code, message),
     outcome: "client_error",
   };
+}
+
+function postgresSqlState(err: unknown): string | undefined {
+  if (err === null || typeof err !== "object" || !("code" in err)) {
+    return undefined;
+  }
+  const code = err.code;
+  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code) ? code : undefined;
+}
+
+function connectStoreFailureMessage(err: unknown): string {
+  const errorClass = safeTelemetryErrorClass(err) ?? "Error";
+  const sqlState = postgresSqlState(err);
+  return sqlState
+    ? `Could not store HTX credentials (${errorClass}:${sqlState}).`
+    : `Could not store HTX credentials (${errorClass}).`;
 }
 
 function parseConnectBody(raw: unknown): HtxConnectRequestBody | ConnectHandlerResult {
@@ -267,7 +283,7 @@ export async function handleHtxConnectPost(
     provider = await deps.createProvider();
     assertCredentialStorageAllowed(provider);
   } catch (err) {
-    if (err instanceof MasterKeyNotReadyError) {
+    if (err instanceof MasterKeyNotReadyError || err instanceof MasterKeyConfigError) {
       return clientError(
         503,
         HTX_CONNECT_ERROR_CODES.MASTER_KEY_NOT_READY,
@@ -313,7 +329,17 @@ export async function handleHtxConnectPost(
   const context = requireOrgContext(organizationId);
   context.userId = auth.userId;
 
-  const accountInfo = await connector.getAccountInfo();
+  let accountInfo;
+  try {
+    accountInfo = await connector.getAccountInfo();
+  } catch (err) {
+    const detail = err instanceof Error ? err.name : "ACCOUNT_INFO";
+    return clientError(
+      400,
+      HTX_CONNECT_ERROR_CODES.CREDENTIAL_VALIDATION_FAILED,
+      sanitizeClientErrorMessage(`HTX credential validation failed (${detail}).`),
+    );
+  }
 
   if (
     accountInfo.accountId !== validation.accountId ||
@@ -373,7 +399,7 @@ export async function handleHtxConnectPost(
     const outcome = !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
     return {
       status: 500,
-      body: errorEnvelope(HTX_CONNECT_ERROR_CODES.INTERNAL_ERROR, "Something went wrong."),
+      body: errorEnvelope(HTX_CONNECT_ERROR_CODES.INTERNAL_ERROR, connectStoreFailureMessage(err)),
       outcome,
       errorClass: safeTelemetryErrorClass(err),
       waiaDbBackend: resolvedRuntime?.kind,

@@ -64,10 +64,14 @@ export async function insertCredentialRowPostgres(
       revokedAt: null,
     })
     .returning();
-  if (!row) {
+  if (row) {
+    return mapRow(row);
+  }
+  const reread = await getCredentialRowByIdPostgres(ex, scoped, id);
+  if (!reread) {
     throw new Error("[trader] exchange credential insert failed");
   }
-  return mapRow(row);
+  return reread;
 }
 
 export async function getCredentialRowByIdPostgres(

@@ -59,8 +59,19 @@ export function toCredentialMetadataDto(metadata: CredentialMetadata): Credentia
     apiKeyMasked: metadata.apiKeyMasked,
     status: metadata.status,
     permissionMetadata: metadata.permissionMetadata,
-    createdAt: metadata.createdAt.toISOString(),
-    updatedAt: metadata.updatedAt.toISOString(),
-    revokedAt: metadata.revokedAt?.toISOString() ?? null,
+    createdAt: toIsoTimestamp(metadata.createdAt),
+    updatedAt: toIsoTimestamp(metadata.updatedAt),
+    revokedAt: metadata.revokedAt ? toIsoTimestamp(metadata.revokedAt) : null,
   };
+}
+
+function toIsoTimestamp(value: Date | string): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error("[trader] credential timestamp is not serializable");
+  }
+  return parsed.toISOString();
 }

@@ -78,11 +78,13 @@ describe("legacy credential SQL remains compatible before optional migration 020
         exchangeAccountId: "123",
       }),
     ).rejects.toThrow("[trader] exchange credential insert failed");
-    expect(queries).toHaveLength(1);
+    expect(queries).toHaveLength(2);
     expect(queries[0].sql).toMatch(/^insert into "exchange_credentials" /);
     expect(queries[0].sql).toContain(" returning ");
     expectLegacyProjection(queries[0].sql);
     expect(queries[0].params).toContain(context.organizationId);
+    expect(queries[1].sql).toMatch(/^select /);
+    expectLegacyProjection(queries[1].sql);
   });
 
   it("revokes only the scoped active credential with a legacy RETURNING projection", async () => {
