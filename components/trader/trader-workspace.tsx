@@ -112,7 +112,7 @@ function ExchangeTraderWorkspace() {
   const scope = React.useRef(0);
   const pending = React.useRef(new Map<string, object>());
   const asyncError =
-    "Account request could not be confirmed. Please retry; no account values were inferred.";
+    "Connect did not complete. Keep HTX IP restrictions empty (do not whitelist 84.32.9.146 yet) and retry once.";
 
   const activeCredential = credentials.find((c) => c.status === "active") ?? credentials[0];
 

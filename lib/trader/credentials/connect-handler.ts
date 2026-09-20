@@ -30,6 +30,11 @@ import {
 import type { CredentialService } from "@/lib/trader/credentials/types";
 import { CredentialConflictError, CredentialNotFoundError } from "@/lib/trader/credentials/errors";
 import {
+  HTX_AWS_REST_HOST,
+  HTX_DEFAULT_REST_HOST,
+  HTX_OPTIONAL_REST_HOST,
+} from "@/lib/trader/connectors/htx/config";
+import {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
@@ -156,6 +161,69 @@ function isHandlerErrorResult(value: unknown): value is ConnectHandlerResult {
   );
 }
 
+/** Cloudflare-friendly HTX hosts first. `api.huobi.pro` is last because some colos black-hole it. */
+const HTX_CONNECT_REST_HOSTS = [
+  HTX_AWS_REST_HOST,
+  HTX_OPTIONAL_REST_HOST,
+  HTX_DEFAULT_REST_HOST,
+] as const;
+
+const HTX_CONNECT_TRANSPORT_POLICY = {
+  minIntervalMs: 0,
+  maxRetries: 0,
+  baseDelayMs: 0,
+  maxDelayMs: 0,
+} as const;
+
+type ConnectValidation = Awaited<ReturnType<HtxExchangeConnector["validateCredentials"]>>;
+
+const HTX_CONNECT_FETCH_TIMEOUT_MS = 8_000;
+
+function createConnectHtxFetch(timeoutMs: number): typeof fetch {
+  return (input, init) => {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal =
+      init?.signal && typeof AbortSignal.any === "function"
+        ? AbortSignal.any([init.signal, timeout])
+        : timeout;
+    return fetch(input, { ...init, signal });
+  };
+}
+
+function isRetryableConnectValidation(result: ConnectValidation): boolean {
+  return !result.valid && result.errorCode === "VALIDATION_FAILED";
+}
+
+async function validateHtxConnectCredentials(
+  deps: ConnectHandlerDeps,
+  body: HtxConnectRequestBody,
+): Promise<{ connector: HtxExchangeConnector; validation: ConnectValidation }> {
+  const fetchImpl = createConnectHtxFetch(HTX_CONNECT_FETCH_TIMEOUT_MS);
+  let lastConnector: HtxExchangeConnector | undefined;
+  let lastValidation: ConnectValidation | undefined;
+
+  for (const restHost of HTX_CONNECT_REST_HOSTS) {
+    const connector = deps.createConnector({
+      apiKey: body.apiKey,
+      apiSecret: body.apiSecret,
+      restHost,
+      transportPolicy: HTX_CONNECT_TRANSPORT_POLICY,
+      fetchImpl,
+    });
+    lastConnector = connector;
+    const validation = await connector.validateCredentials({
+      apiKey: body.apiKey,
+      apiSecret: body.apiSecret,
+    });
+    lastValidation = validation;
+    if (validation.valid || !isRetryableConnectValidation(validation)) {
+      return { connector, validation };
+    }
+  }
+
+  return { connector: lastConnector!, validation: lastValidation! };
+}
+
 async function requireAuthenticatedTrader(
   deps: ConnectHandlerDeps,
 ): Promise<{ userId: string } | ConnectHandlerResult> {
@@ -209,15 +277,20 @@ export async function handleHtxConnectPost(
     throw err;
   }
 
-  const connector = deps.createConnector({
-    apiKey: body.apiKey,
-    apiSecret: body.apiSecret,
-  });
-
-  const validation = await connector.validateCredentials({
-    apiKey: body.apiKey,
-    apiSecret: body.apiSecret,
-  });
+  let connector: HtxExchangeConnector;
+  let validation: ConnectValidation;
+  try {
+    const confirmed = await validateHtxConnectCredentials(deps, body);
+    connector = confirmed.connector;
+    validation = confirmed.validation;
+  } catch (err) {
+    const detail = err instanceof Error ? err.name : "VALIDATION_FAILED";
+    return clientError(
+      400,
+      HTX_CONNECT_ERROR_CODES.CREDENTIAL_VALIDATION_FAILED,
+      sanitizeClientErrorMessage(`HTX credential validation failed (${detail}).`),
+    );
+  }
 
   if (!validation.valid) {
     const detail = validation.errorCode ?? "VALIDATION_FAILED";

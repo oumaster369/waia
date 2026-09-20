@@ -15,7 +15,7 @@ import { auditLogs, organizationEntitlements } from "@/db/schema";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { WaiaDb } from "@/db/types";
 import * as sessionUser from "@/lib/auth/session-user";
-import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
+import { HTX_AWS_REST_HOST, HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
 import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import {
   handleExchangeCredentialsGet,
@@ -276,6 +276,48 @@ describe("HTX connect API (DEE-236)", () => {
       HTX_CONNECT_ERROR_CODES.MASTER_KEY_NOT_READY,
     );
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("retries the next HTX host when the first host cannot be reached", async () => {
+    const fallbackAccountId = 100010;
+    const mockFetch = defaultHtxHandlers({
+      "/v1/account/accounts": () =>
+        jsonResponse({
+          status: "ok",
+          data: [{ id: fallbackAccountId, type: "spot", state: "working" }],
+        }),
+    });
+    const createConnector = vi.fn(
+      (config: ConstructorParameters<typeof HtxExchangeConnector>[0]) => {
+        if (config.restHost === HTX_AWS_REST_HOST) {
+          return {
+            validateCredentials: async () => ({
+              valid: false,
+              errorCode: "VALIDATION_FAILED",
+              errorMessage: "timeout",
+            }),
+            getAccountInfo: async () => {
+              throw new Error("unreachable first host");
+            },
+          } as unknown as HtxExchangeConnector;
+        }
+        return new HtxExchangeConnector({
+          ...config,
+          fetchImpl: mockFetch,
+        });
+      },
+    );
+
+    const result = await handleHtxConnectPost(
+      connectPostRequest({ venue: "htx", ...VALID_CREDS }),
+      createDeps({ createConnector }),
+    );
+    expect(result.status).toBe(200);
+    expect((result.body as { exchangeAccountId: string }).exchangeAccountId).toBe(
+      String(fallbackAccountId),
+    );
+    expect(createConnector.mock.calls[0]?.[0].restHost).toBe(HTX_AWS_REST_HOST);
+    expect(createConnector.mock.calls.length).toBeGreaterThan(1);
   });
 
   it("returns 400 when HTX validation fails", async () => {
