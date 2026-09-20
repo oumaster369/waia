@@ -14,9 +14,9 @@ export type CabinetLiveInput = Readonly<{
   transport?: "STREAMING" | "POLLING" | "RECONNECTING";
 }>;
 
-/** Collector cadence is 60s; UI older-than-this is stale. Must exceed one poll. */
-export const ACCOUNT_OBSERVATION_STALE_AFTER_MS = 90_000;
-export const ACCOUNT_OBSERVATION_POLL_INTERVAL_MS = 60_000;
+/** HTX collection itself takes ~80–90s; UI older-than-this is stale. Must exceed one cycle. */
+export const ACCOUNT_OBSERVATION_STALE_AFTER_MS = 180_000;
+export const ACCOUNT_OBSERVATION_POLL_INTERVAL_MS = 90_000;
 
 const ZERO_AMOUNT = /^(?:0+(?:\.0+)?)$/;
 const MAJOR_ASSETS = ["USDT", "USDC", "BTC", "ETH", "HT"] as const;
@@ -98,14 +98,10 @@ export function cabinetLiveLabel(view: CabinetLiveInput): string {
   if (view.status === "DISCONNECTED") return "Idle";
   if (!view.observation && view.status === "LOADING") return "Connecting";
   if (!view.observation && view.status === "ERROR") return "Unavailable";
-  if (view.status === "ERROR") return "Reconnecting";
   if (view.status === "STALE" || view.stale) return "Last tick";
-  if (view.transport === "RECONNECTING") return "Live";
-  if (view.transport === "POLLING") return "Live";
-  if (view.transport === "STREAMING") return "Live";
-  if (view.status === "PARTIAL") return "Live";
-  if (view.status === "CURRENT") return "Live";
+  if (view.observation) return "Live";
   if (view.status === "LOADING") return "Connecting";
+  if (view.status === "ERROR") return "Reconnecting";
   return "Live";
 }
 

@@ -45,28 +45,29 @@ export async function insertCredentialRowPostgres(
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await ex.insert(pgSchema.exchangeCredentials).values({
-    id,
-    organizationId: scoped.organizationId,
-    venue: input.venue,
-    exchangeAccountId: input.exchangeAccountId,
-    apiKeyMasked: input.apiKeyMasked ?? null,
-    encryptedPayload: input.encryptedPayload ?? null,
-    payloadKeyVersion: input.payloadKeyVersion ?? null,
-    wrappedDekKeyVersion: input.wrappedDekKeyVersion ?? null,
-    wrappedDekKey: input.wrappedDekKey ?? null,
-    permissionMetadata: input.permissionMetadata ?? null,
-    status: "active",
-    createdAt: now,
-    updatedAt: now,
-    revokedAt: null,
-  });
-
-  const row = await getCredentialRowByIdPostgres(ex, scoped, id);
+  const [row] = await ex
+    .insert(pgSchema.exchangeCredentials)
+    .values({
+      id,
+      organizationId: scoped.organizationId,
+      venue: input.venue,
+      exchangeAccountId: input.exchangeAccountId,
+      apiKeyMasked: input.apiKeyMasked ?? null,
+      encryptedPayload: input.encryptedPayload ?? null,
+      payloadKeyVersion: input.payloadKeyVersion ?? null,
+      wrappedDekKeyVersion: input.wrappedDekKeyVersion ?? null,
+      wrappedDekKey: input.wrappedDekKey ?? null,
+      permissionMetadata: input.permissionMetadata ?? null,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+      revokedAt: null,
+    })
+    .returning();
   if (!row) {
     throw new Error("[trader] exchange credential insert failed");
   }
-  return row;
+  return mapRow(row);
 }
 
 export async function getCredentialRowByIdPostgres(

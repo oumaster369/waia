@@ -40,11 +40,12 @@ function PermissionExplainer() {
           is not required for this cabinet.
         </li>
         <li>
-          IP whitelist the observation host:{" "}
-          <span className="text-foreground font-mono">84.32.9.146</span>.
+          Leave the IP whitelist empty, then paste Access Key and Secret below. The secret is shown
+          only once.
         </li>
         <li>
-          Copy Access Key and Secret Key into the fields below. The secret is shown only once.
+          After Connect succeeds, edit the same HTX key and IP-whitelist only{" "}
+          <span className="text-foreground font-mono">84.32.9.146</span>.
         </li>
       </ol>
       <p className="mt-2 text-xs">
