@@ -1,5 +1,11 @@
-import type { Balance } from "@/lib/trader/connectors/types";
 import type { AccountObservation } from "./types";
+
+type SpotBalance = Readonly<{
+  asset: string;
+  free: string;
+  locked: string;
+  total: string;
+}>;
 
 export type CabinetLiveInput = Readonly<{
   status: string;
@@ -19,13 +25,15 @@ export function isObservedZeroAmount(value: string): boolean {
   return ZERO_AMOUNT.test(value.trim());
 }
 
-export function nonZeroBalances(rows: readonly Balance[] | null | undefined): readonly Balance[] {
+export function nonZeroBalances(
+  rows: readonly SpotBalance[] | null | undefined,
+): readonly SpotBalance[] {
   if (!rows) return [];
   return rows.filter((row) => !isObservedZeroAmount(row.total));
 }
 
 export function majorSpotTotals(
-  rows: readonly Balance[] | null | undefined,
+  rows: readonly SpotBalance[] | null | undefined,
 ): Readonly<Record<(typeof MAJOR_ASSETS)[number], string | null>> {
   const found = Object.fromEntries(MAJOR_ASSETS.map((asset) => [asset, null])) as Record<
     (typeof MAJOR_ASSETS)[number],
@@ -43,7 +51,7 @@ export function majorSpotTotals(
   return found;
 }
 
-export function formatBalanceLine(row: Balance): string {
+export function formatBalanceLine(row: SpotBalance): string {
   return `${row.asset}: free ${row.free}, locked ${row.locked}, total ${row.total}`;
 }
 
@@ -101,7 +109,7 @@ export function cabinetLiveLabel(view: CabinetLiveInput): string {
   return "Live";
 }
 
-export function usdtSpot(rows: readonly Balance[] | null | undefined): {
+export function usdtSpot(rows: readonly SpotBalance[] | null | undefined): {
   free: string;
   locked: string;
   total: string;
@@ -111,7 +119,9 @@ export function usdtSpot(rows: readonly Balance[] | null | undefined): {
   return row ? { free: row.free, locked: row.locked, total: row.total } : null;
 }
 
-export function nonUsdtInventory(rows: readonly Balance[] | null | undefined): readonly Balance[] {
+export function nonUsdtInventory(
+  rows: readonly SpotBalance[] | null | undefined,
+): readonly SpotBalance[] {
   return nonZeroBalances(rows).filter((row) => row.asset !== "USDT" && row.asset !== "USDC");
 }
 
@@ -125,7 +135,7 @@ export function secondsUntilNextPoll(
   return Math.max(0, Math.ceil((completedAtMs + intervalMs - nowMs) / 1000));
 }
 
-export function cabinetSpotSource(observation: AccountObservation): readonly Balance[] | null {
+export function cabinetSpotSource(observation: AccountObservation): readonly SpotBalance[] | null {
   if (observation.holdings && observation.holdings.length > 0) return observation.holdings;
   return observation.balances.values;
 }
