@@ -105,9 +105,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await page.goto("/trader");
   const tenantPanel = page.getByRole("region", { name: "Account observation", exact: true });
   await expect(tenantPanel.getByText(observation().observationId)).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Manually collected diagnostic snapshots" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("trader-legacy-diagnostics")).toBeVisible();
   await expect(tenantPanel.getByRole("button")).toHaveCount(0);
 
   const admin = await context.newPage();
@@ -157,9 +155,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
 
 test("account observation admin page does not expose the form anonymously", async ({ page }) => {
   await page.goto("/admin/account-observation");
-  await expect(page.getByRole("heading", { name: "Account observation operations" })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("heading", { name: "Live HTX account" })).toHaveCount(0);
   await expect(page.getByLabel("Credential record ID (not an API key)")).toHaveCount(0);
 });
 

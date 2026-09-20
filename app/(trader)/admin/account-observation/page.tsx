@@ -39,10 +39,10 @@ export default function AdminAccountObservationPage() {
   return (
     <main className="space-y-5">
       <WaiaSurface variant="raised" className="space-y-4 p-5">
-        <h1 className="text-xl font-semibold">Account observation operations</h1>
+        <h1 className="text-xl font-semibold">Live HTX account</h1>
         <p className="text-waia-fg-muted text-sm">
-          The same stored observation shown in the tenant workspace updates automatically. This page
-          neither connects an HTX account nor enables trading.
+          The same live observation as the user cabinet. This page does not connect HTX or enable
+          trading.
         </p>
         {loading && <AdminLoadingState label="Loading authorized organizations…" />}
         {error && <AdminErrorState message="Authorized organizations are unavailable." />}

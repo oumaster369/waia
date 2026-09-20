@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ACCOUNT_OBSERVATION_STALE_AFTER_MS } from "@/lib/trader/account-observation/cabinet-view";
 import type {
   AccountObservation,
   ObservationBinding,
@@ -49,14 +50,17 @@ type StoredView = {
 export function useAccountObservation({
   binding,
   subscribe,
-  staleAfterMs = 30_000,
+  staleAfterMs = ACCOUNT_OBSERVATION_STALE_AFTER_MS,
 }: {
   binding: ObservationBinding | null;
   subscribe: ObservationSubscriber;
   staleAfterMs?: number;
 }): AccountObservationView {
   const key = bindingKey(binding);
-  const expiryMs = Number.isFinite(staleAfterMs) && staleAfterMs > 0 ? staleAfterMs : 30_000;
+  const expiryMs =
+    Number.isFinite(staleAfterMs) && staleAfterMs > 0
+      ? staleAfterMs
+      : ACCOUNT_OBSERVATION_STALE_AFTER_MS;
   const scope = useMemo(() => ({ key, subscribe, expiryMs }), [key, subscribe, expiryMs]);
   const [stored, setStored] = useState<StoredView | null>(null);
   const [now, setNow] = useState(() => Date.now());

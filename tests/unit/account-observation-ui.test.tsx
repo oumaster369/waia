@@ -84,10 +84,12 @@ describe("DEE-961 injected observation subscription", () => {
       binding: exactBinding,
       observationId: "33333333-3333-4333-8333-333333333333",
     });
-    const response = () => new Response(JSON.stringify(snapshot), {
-      headers: { "content-type": "application/json" },
-    });
-    const fetcher = vi.fn<typeof fetch>()
+    const response = () =>
+      new Response(JSON.stringify(snapshot), {
+        headers: { "content-type": "application/json" },
+      });
+    const fetcher = vi
+      .fn<typeof fetch>()
       .mockImplementationOnce(async () => response())
       .mockRejectedValueOnce(new Error("synthetic transient failure"))
       .mockImplementation(async () => response());
@@ -98,8 +100,12 @@ describe("DEE-961 injected observation subscription", () => {
       requestTimeoutMs: 1000,
       maxBackoffMs: 4000,
     });
-    const { result } = renderHook(() => useAccountObservation({ binding: exactBinding, subscribe }));
-    await act(async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); });
+    const { result } = renderHook(() =>
+      useAccountObservation({ binding: exactBinding, subscribe }),
+    );
+    await act(async () => {
+      for (let i = 0; i < 30; i++) await Promise.resolve();
+    });
     expect(result.current.status).toBe("CURRENT");
     const first = result.current.observation;
     await act(async () => vi.advanceTimersByTimeAsync(1000));
@@ -324,6 +330,28 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     expect(screen.getByText("Read error: TIMEOUT")).toBeInTheDocument();
     expect(screen.getAllByText("Unavailable — not an observed zero.")).toHaveLength(2);
     expect(screen.getByText(/Last received observation/)).toBeInTheDocument();
+  });
+  it("hides HTX zero-dust and keeps the non-zero evidence line", () => {
+    const dusty = observation({
+      balances: component([
+        { asset: "1INCH", free: "0", locked: "0", total: "0" },
+        { asset: "USDT", free: "12.5", locked: "0", total: "12.5" },
+      ]),
+      holdings: [
+        { asset: "1INCH", free: "0", locked: "0", total: "0" },
+        { asset: "USDT", free: "12.5", locked: "0", total: "12.5" },
+      ],
+    });
+    render(
+      <AccountObservationPanel
+        view={{ status: "PARTIAL", observation: dusty, stale: false, transport: "POLLING" }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Live");
+    expect(screen.getByRole("status")).toHaveTextContent("PARTIAL");
+    expect(screen.getByText("USDT: free 12.5, locked 0, total 12.5")).toBeInTheDocument();
+    expect(screen.queryByText(/1INCH: free 0/)).not.toBeInTheDocument();
+    expect(screen.getByText(/1 zero-dust rows hidden/)).toBeInTheDocument();
   });
   it("renders financial decimal strings without float rounding", () => {
     const o = observation({

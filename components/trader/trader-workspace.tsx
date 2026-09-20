@@ -366,30 +366,34 @@ function ExchangeTraderWorkspace() {
   const tradeRequest = React.useRef(0);
   const selectedSymbol = React.useRef(DEFAULT_TRADE_SYMBOL);
   const pending = React.useRef(new Map<string, object>());
-  const asyncError = "Account request could not be confirmed. Please retry; no account values were inferred.";
+  const asyncError =
+    "Account request could not be confirmed. Please retry; no account values were inferred.";
 
   const activeCredential = credentials.find((c) => c.status === "active") ?? credentials[0];
 
-  const refreshSnapshots = React.useCallback(async (credentialId: string, symbol: string, generation: number) => {
-    const tradeGeneration = ++tradeRequest.current;
-    const normalized = normalizeHtxSpotSymbol(symbol);
-    const listSymbol = normalized.ok ? normalized.symbol : symbol.trim();
-    const [balances, positions, trades] = await Promise.all([
-      listBalanceSnapshotsClient(credentialId),
-      listPositionSnapshotsClient(credentialId),
-      listTradeHistorySnapshotsClient(credentialId, listSymbol),
-    ]);
-    if (scope.current !== generation) return;
-    if (balances.kind === "ok") {
-      setBalanceSnapshots(balances.data);
-    }
-    if (positions.kind === "ok") {
-      setPositionSnapshots(positions.data);
-    }
-    if (trades.kind === "ok" && tradeRequest.current === tradeGeneration) {
-      setTradeSnapshots(trades.data);
-    }
-  }, []);
+  const refreshSnapshots = React.useCallback(
+    async (credentialId: string, symbol: string, generation: number) => {
+      const tradeGeneration = ++tradeRequest.current;
+      const normalized = normalizeHtxSpotSymbol(symbol);
+      const listSymbol = normalized.ok ? normalized.symbol : symbol.trim();
+      const [balances, positions, trades] = await Promise.all([
+        listBalanceSnapshotsClient(credentialId),
+        listPositionSnapshotsClient(credentialId),
+        listTradeHistorySnapshotsClient(credentialId, listSymbol),
+      ]);
+      if (scope.current !== generation) return;
+      if (balances.kind === "ok") {
+        setBalanceSnapshots(balances.data);
+      }
+      if (positions.kind === "ok") {
+        setPositionSnapshots(positions.data);
+      }
+      if (trades.kind === "ok" && tradeRequest.current === tradeGeneration) {
+        setTradeSnapshots(trades.data);
+      }
+    },
+    [],
+  );
 
   const loadWorkspace = React.useCallback(
     async (symbol: string) => {
@@ -429,7 +433,10 @@ function ExchangeTraderWorkspace() {
     [refreshSnapshots],
   );
 
-  const retireScope = React.useCallback(() => { ++scope.current; ++tradeRequest.current; }, []);
+  const retireScope = React.useCallback(() => {
+    ++scope.current;
+    ++tradeRequest.current;
+  }, []);
   React.useEffect(() => {
     void (async () => {
       await loadWorkspace(DEFAULT_TRADE_SYMBOL);
@@ -459,15 +466,19 @@ function ExchangeTraderWorkspace() {
           }
         },
         () => {
-          if (scope.current === generation && tradeRequest.current === request) setErrorMessage(asyncError);
+          if (scope.current === generation && tradeRequest.current === request)
+            setErrorMessage(asyncError);
         },
       );
     }
   };
 
   // Each operation owns its pending flag and retires with the mounted account scope.
-  const runRequest = (name: string, setPending: (value: boolean) => void,
-    work: (isCurrent: () => boolean, generation: number) => Promise<void>) => {
+  const runRequest = (
+    name: string,
+    setPending: (value: boolean) => void,
+    work: (isCurrent: () => boolean, generation: number) => Promise<void>,
+  ) => {
     if (pending.current.has(name)) return;
     const owner = {};
     pending.current.set(name, owner);
@@ -476,9 +487,11 @@ function ExchangeTraderWorkspace() {
     setPending(true);
     setErrorMessage(null);
     void (async () => {
-      try { await work(isCurrent, generation); }
-      catch { if (isCurrent()) setErrorMessage(asyncError); }
-      finally {
+      try {
+        await work(isCurrent, generation);
+      } catch {
+        if (isCurrent()) setErrorMessage(asyncError);
+      } finally {
         if (pending.current.get(name) === owner) {
           pending.current.delete(name);
           if (isCurrent()) setPending(false);
@@ -587,8 +600,8 @@ function ExchangeTraderWorkspace() {
           AI-TRADER
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-          Observe your connected exchange account and the verified posture of the trading system.
-          This workspace cannot enable live trading or change capital authority.
+          Live read-only HTX account. This workspace cannot enable trading or change capital
+          authority.
         </p>
       </header>
 
@@ -619,86 +632,105 @@ function ExchangeTraderWorkspace() {
           </section>
           <ConnectedAccountObservationPanel
             key={`${activeCredential.id}:${activeCredential.status}:${activeCredential.updatedAt}`}
-            target={activeCredential.status === "active" ? {
-              credentialId: activeCredential.id,
-              exchangeAccountId: activeCredential.exchangeAccountId,
-            } : null}
+            target={
+              activeCredential.status === "active"
+                ? {
+                    credentialId: activeCredential.id,
+                    exchangeAccountId: activeCredential.exchangeAccountId,
+                  }
+                : null
+            }
           />
-          <section aria-labelledby="trader-portfolio-heading" className="space-y-4">
-            <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">Separate diagnostics</p>
-              <h2 id="trader-portfolio-heading" className="mt-1 text-xl font-semibold">
-                Manually collected diagnostic snapshots
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                These legacy balance, position and activity snapshots are collected separately.
-                They are not the shared current account observation above and may have different timestamps.
-              </p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              <BalancesPanel
-                snapshots={balanceSnapshots}
-                syncing={syncingBalances}
-                onSync={handleSyncBalances}
-              />
-              <PositionsPanel
-                snapshots={positionSnapshots}
-                syncing={syncingPositions}
-                onSync={handleSyncPositions}
-              />
-              <TradeHistoryPanel
-                symbol={tradeSymbol}
-                onSymbolChange={handleTradeSymbolChange}
-                snapshots={tradeSnapshots}
-                syncing={syncingTrades}
-                onSync={handleSyncTrades}
-              />
-            </div>
-          </section>
-          <section
-            aria-labelledby="trader-system-heading"
-            className="space-y-4"
+          <details
+            data-testid="trader-legacy-diagnostics"
+            className="border-border rounded-lg border px-4 py-3"
+          >
+            <summary className="text-muted-foreground cursor-pointer text-sm">
+              Manual HTX sync (legacy diagnostics — not the live cabinet)
+            </summary>
+            <section aria-labelledby="trader-portfolio-heading" className="mt-4 space-y-4">
+              <div>
+                <p className="text-muted-foreground text-xs tracking-wide uppercase">
+                  Separate diagnostics
+                </p>
+                <h2 id="trader-portfolio-heading" className="mt-1 text-xl font-semibold">
+                  Manually collected diagnostic snapshots
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  These legacy balance, position and activity snapshots are collected separately.
+                  They are not the shared current account observation above and may have different
+                  timestamps.
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <BalancesPanel
+                  snapshots={balanceSnapshots}
+                  syncing={syncingBalances}
+                  onSync={handleSyncBalances}
+                />
+                <PositionsPanel
+                  snapshots={positionSnapshots}
+                  syncing={syncingPositions}
+                  onSync={handleSyncPositions}
+                />
+                <TradeHistoryPanel
+                  symbol={tradeSymbol}
+                  onSymbolChange={handleTradeSymbolChange}
+                  snapshots={tradeSnapshots}
+                  syncing={syncingTrades}
+                  onSync={handleSyncTrades}
+                />
+              </div>
+            </section>
+          </details>
+          <details
+            className="border-border rounded-lg border px-4 py-3"
             data-testid="trader-system-posture"
           >
-            <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">
-                System posture
-              </p>
-              <h2 id="trader-system-heading" className="mt-1 text-xl font-semibold">
-                Verified runtime evidence
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Read-only explanations become available only when tenant-scoped evidence APIs are
-                published.
-              </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <UnavailableReadModel
-                title="Execution mode"
-                description="Paper/live mode and its authorization state are not exposed to the user read model."
-              />
-              <UnavailableReadModel
-                title="Forecast & Decision"
-                description="No tenant-scoped Forecast V2 or Decision V2 explanation stream is available."
-              />
-              <UnavailableReadModel
-                title="Risk & Guardian"
-                description="No tenant-scoped risk verdict or Guardian posture stream is available."
-              />
-              <UnavailableReadModel
-                title="Execution & Reality"
-                description="No tenant-scoped execution-to-reality evidence projection is available."
-              />
-              <UnavailableReadModel
-                title="Runtime health"
-                description="Operator runtime health exists only behind administrative authority."
-              />
-              <UnavailableReadModel
-                title="Calibration & drift"
-                description="No tenant-scoped calibration or drift posture read model is available."
-              />
-            </div>
-          </section>
+            <summary className="text-muted-foreground cursor-pointer text-sm">
+              Strategy and runtime evidence is not published to this workspace yet
+            </summary>
+            <section aria-labelledby="trader-system-heading" className="mt-4 space-y-4">
+              <div>
+                <p className="text-muted-foreground text-xs tracking-wide uppercase">
+                  System posture
+                </p>
+                <h2 id="trader-system-heading" className="mt-1 text-xl font-semibold">
+                  Verified runtime evidence
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Read-only explanations become available only when tenant-scoped evidence APIs are
+                  published.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <UnavailableReadModel
+                  title="Execution mode"
+                  description="Paper/live mode and its authorization state are not exposed to the user read model."
+                />
+                <UnavailableReadModel
+                  title="Forecast & Decision"
+                  description="No tenant-scoped Forecast V2 or Decision V2 explanation stream is available."
+                />
+                <UnavailableReadModel
+                  title="Risk & Guardian"
+                  description="No tenant-scoped risk verdict or Guardian posture stream is available."
+                />
+                <UnavailableReadModel
+                  title="Execution & Reality"
+                  description="No tenant-scoped execution-to-reality evidence projection is available."
+                />
+                <UnavailableReadModel
+                  title="Runtime health"
+                  description="Operator runtime health exists only behind administrative authority."
+                />
+                <UnavailableReadModel
+                  title="Calibration & drift"
+                  description="No tenant-scoped calibration or drift posture read model is available."
+                />
+              </div>
+            </section>
+          </details>
           <aside
             className="border-border bg-muted/10 rounded-lg border p-4 text-sm"
             data-testid="trader-authority-boundary"
@@ -782,22 +814,43 @@ function ExchangeTraderWorkspace() {
 }
 
 function HistoricalTraderWorkspace(): React.ReactNode {
-  const params=useSearchParams();const runId=params.get("campaign_run_id")?.trim()??"";
-  const accountId=params.get("account_id")?.trim()??"";
+  const params = useSearchParams();
+  const runId = params.get("campaign_run_id")?.trim() ?? "";
+  const accountId = params.get("account_id")?.trim() ?? "";
   return (
-    <div data-testid="trader-workspace" className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10">
+    <div
+      data-testid="trader-workspace"
+      className="bg-background flex min-h-screen flex-col px-6 py-10 md:px-10"
+    >
       <header className="border-border mb-10 border-b pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
-          <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">Historical simulation workspace</span>
+          <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">
+            Historical simulation workspace
+          </span>
           <TraderSignOut />
         </div>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">AI-TRADER</h1>
-        <p className="text-muted-foreground mt-2 max-w-2xl text-sm">Observe your tenant-scoped historical simulation automatically. No exchange credentials, real balances, live trading, or capital controls are loaded.</p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
+          Observe your tenant-scoped historical simulation automatically. No exchange credentials,
+          real balances, live trading, or capital controls are loaded.
+        </p>
       </header>
-      {accountId?<HistoricalV2ObservationDashboard runId={runId} accountId={accountId}
-        endpoint={`/api/trader/historical-v2/stream?run_id=${encodeURIComponent(runId)}&account_id=${encodeURIComponent(accountId)}`}/>
-        :<WaiaSurface variant="raised" className="p-5"><p className="font-medium">Account identity required</p><p className="text-muted-foreground mt-2 text-sm">Open the account-scoped historical observation link containing both campaign_run_id and account_id.</p></WaiaSurface>}
+      {accountId ? (
+        <HistoricalV2ObservationDashboard
+          runId={runId}
+          accountId={accountId}
+          endpoint={`/api/trader/historical-v2/stream?run_id=${encodeURIComponent(runId)}&account_id=${encodeURIComponent(accountId)}`}
+        />
+      ) : (
+        <WaiaSurface variant="raised" className="p-5">
+          <p className="font-medium">Account identity required</p>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Open the account-scoped historical observation link containing both campaign_run_id and
+            account_id.
+          </p>
+        </WaiaSurface>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
 import { observationBindingSchema } from "@/lib/trader/account-observation/validation";
+import { ACCOUNT_OBSERVATION_STALE_AFTER_MS } from "@/lib/trader/account-observation/cabinet-view";
 import { AccountObservationPanel } from "./account-observation-panel";
 import { readBoundedObservationJson } from "./polling-subscriber";
 import { createStreamingObservationSubscriber } from "./streaming-subscriber";
@@ -150,6 +151,7 @@ export function ConnectedAccountObservationPanel({
   const view = useAccountObservation({
     binding: key ? (current?.binding ?? null) : null,
     subscribe,
+    staleAfterMs: ACCOUNT_OBSERVATION_STALE_AFTER_MS,
   });
   if (!key)
     return (
