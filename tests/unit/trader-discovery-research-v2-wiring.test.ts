@@ -280,6 +280,89 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
     expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
   });
 
+  it("derives the research-v2 evaluations from the recorded windows", async () => {
+    const {
+      development: _development,
+      walkForward: _walkForward,
+      developmentWindows: _developmentWindows,
+      walkForwardWindows: _walkForwardWindows,
+      ...admission
+    } = enabledAdmission();
+    void _development;
+    void _walkForward;
+    void _developmentWindows;
+    void _walkForwardWindows;
+    const developmentWindows = [
+      windowFor(
+        "DEVELOPMENT",
+        evaluation({
+          netEconomicResult: "1",
+          maxDrawdown: "-0.5",
+          tailEventCount: 1,
+          sampleSize: 3,
+        }),
+        "dev-1",
+      ),
+      windowFor(
+        "DEVELOPMENT",
+        evaluation({
+          netEconomicResult: "0.25",
+          maxDrawdown: "-1.5",
+          tailEventCount: 1,
+          sampleSize: 5,
+        }),
+        "dev-2",
+      ),
+    ];
+    const result = await runDiscoveryEvolutionPass(EX, {
+      runContext: runContext({
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      }),
+      config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      bars: [],
+      closedTrades: [
+        closedTrade({ fillId: "win-1", tradePnl: "12.5" }),
+        closedTrade({ fillId: "loss-1", tradePnl: "-8.25" }),
+      ],
+      ...admission,
+      developmentWindows,
+      walkForwardWindows: [windowFor("WALK_FORWARD", walkForwardEvaluation(), "wf-1")],
+    });
+    expect(result.skipped).toBe(false);
+    const v2Input = vi.mocked(runStrategyEvolutionResearchPassV2).mock.calls[0]?.[0];
+    expect(v2Input?.development).toEqual({
+      netEconomicResult: "1.25",
+      maxDrawdown: "-1.5",
+      tailEventCount: 2,
+      sampleSize: 8,
+      incumbentComparisonDigestHex: DIGEST.b,
+    });
+    expect(v2Input?.walkForward).toEqual(walkForwardEvaluation());
+    expect(v2Input?.development.netEconomicResult).not.toBe("-8.25");
+  });
+
+  it("fails closed when enabled admission omits the partition windows", async () => {
+    const {
+      developmentWindows: _developmentWindows,
+      walkForwardWindows: _walkForwardWindows,
+      ...admission
+    } = enabledAdmission();
+    void _developmentWindows;
+    void _walkForwardWindows;
+    const result = await runDiscoveryEvolutionPass(EX, {
+      runContext: runContext({
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      }),
+      config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      bars: [],
+      closedTrades: [closedTrade({ fillId: "loss-1", tradePnl: "-8.25" })],
+      ...admission,
+    });
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("research_v2_admission_incomplete");
+    expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
+  });
+
   it("refuses holdoutQueryAttempted as iterative fitness", async () => {
     await expect(
       runDiscoveryEvolutionPass(EX, {

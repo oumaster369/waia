@@ -23,7 +23,7 @@ function window(
 }
 
 describe("partition qualification metrics", () => {
-  it("matches one recorded window without reading closed-trade outcomes", () => {
+  it("copies one recorded window", () => {
     expect(
       deriveQualificationEvaluationFromPartitionWindowsV2([window({ windowId: "dev-1" })]),
     ).toEqual({
