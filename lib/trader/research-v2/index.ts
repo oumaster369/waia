@@ -72,6 +72,12 @@ export type {
 } from "@/lib/trader/research-v2/strategy-candidate-generation-derive-v2";
 
 export {
+  assertPartitionEvaluationMatchesWindowsV2,
+  deriveQualificationEvaluationFromPartitionWindowsV2,
+} from "@/lib/trader/research-v2/partition-qualification-metrics-v2";
+export type { PartitionWindowMetricV2 } from "@/lib/trader/research-v2/partition-qualification-metrics-v2";
+
+export {
   QUALIFICATION_PARTITIONS_V2,
   QUALIFICATION_RECORD_V2_SCHEMA,
   QUALIFICATION_VERDICTS_V2,
