@@ -26,6 +26,7 @@ import {
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 import {
   runStrategyEvolutionResearchPassV2,
+  type PartitionWindowMetricV2,
   type QualificationEvaluationV2,
   type StrategyParentRefV2,
 } from "@/lib/trader/research-v2";
@@ -84,6 +85,22 @@ function walkForwardEvaluation(): QualificationEvaluationV2 {
     sampleSize: 8,
     incumbentComparisonDigestHex: DIGEST.a,
   });
+}
+
+function windowFor(
+  partition: PartitionWindowMetricV2["partition"],
+  source: QualificationEvaluationV2,
+  windowId: string,
+): PartitionWindowMetricV2 {
+  return {
+    windowId,
+    partition,
+    netEconomicResult: source.netEconomicResult,
+    maxDrawdown: source.maxDrawdown,
+    tailEventCount: source.tailEventCount,
+    closedTradeCount: source.sampleSize,
+    incumbentComparisonDigestHex: source.incumbentComparisonDigestHex,
+  };
 }
 
 function navigatorCandidate(
@@ -166,6 +183,8 @@ function enabledAdmission() {
     },
     development: evaluation(),
     walkForward: walkForwardEvaluation(),
+    developmentWindows: [windowFor("DEVELOPMENT", evaluation(), "dev-1")],
+    walkForwardWindows: [windowFor("WALK_FORWARD", walkForwardEvaluation(), "wf-1")],
     qualificationVerdict: "QUALIFIED" as const,
     evidenceCutoffUtc: CUTOFF,
     symbol: "BTCUSDT",
@@ -244,6 +263,21 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
     expect(result.promotionProposalId).toBe("camp-1025:proposal");
     expect(result.researchQuestionId).toBe("camp-1025:question");
     expect(result.hypothesisProposalId).toBe("camp-1025:hypothesis");
+  });
+
+  it("fails closed when a supplied evaluation does not match the recorded windows", async () => {
+    const result = runDiscoveryEvolutionPass(EX, {
+      runContext: runContext({
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      }),
+      config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+      bars: [],
+      closedTrades: [closedTrade({ fillId: "loss-1", tradePnl: "-8.25" })],
+      ...enabledAdmission(),
+      development: evaluation({ netEconomicResult: "99" }),
+    });
+    await expect(result).rejects.toThrow(/QUALIFICATION_PARTITION_METRICS_MISMATCH/);
+    expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
   });
 
   it("refuses holdoutQueryAttempted as iterative fitness", async () => {
