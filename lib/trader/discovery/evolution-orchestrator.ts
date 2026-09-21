@@ -16,11 +16,14 @@ import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 import type { ResearchRejectionRecord } from "@/lib/trader/research/research-rejection-record.types";
 import {
+  assertPartitionEvaluationMatchesWindowsV2,
+  deriveQualificationEvaluationFromPartitionWindowsV2,
   deriveStrategyEvolutionGenerationV2,
   enqueueResearchJobV2,
   runStrategyEvolutionResearchPassV2,
   type ClosedTradeOutcomeInputV2,
   type ClosedTradeOutcomePolarityV2,
+  type PartitionWindowMetricV2,
   type QualificationEvaluationV2,
   type QualificationVerdictV2,
   type ResearchMemoryV2,
@@ -55,6 +58,8 @@ export type DiscoveryEvolutionPassInput = {
   generation?: DiscoveryResearchV2GenerationInput;
   development?: QualificationEvaluationV2;
   walkForward?: QualificationEvaluationV2;
+  developmentWindows?: readonly PartitionWindowMetricV2[];
+  walkForwardWindows?: readonly PartitionWindowMetricV2[];
   qualificationVerdict?: QualificationVerdictV2;
   holdoutQueryAttempted?: boolean;
   mkbInjectionAttempted?: boolean;
@@ -113,20 +118,24 @@ function resolveEnabledResearchV2Admission(
     input.predictiveAdmissionVerdict === undefined ||
     input.researchCodeIdentity === undefined ||
     input.costModelIdentity === undefined ||
-    input.development === undefined ||
-    input.walkForward === undefined ||
+    input.developmentWindows === undefined ||
+    input.walkForwardWindows === undefined ||
     input.qualificationVerdict === undefined
   ) {
     return null;
   }
+  const development = deriveQualificationEvaluationFromPartitionWindowsV2(input.developmentWindows);
+  const walkForward = deriveQualificationEvaluationFromPartitionWindowsV2(input.walkForwardWindows);
+  assertPartitionEvaluationMatchesWindowsV2(input.development, development);
+  assertPartitionEvaluationMatchesWindowsV2(input.walkForward, walkForward);
   return {
     navigatorSelect: input.navigatorSelect,
     predictiveAdmissionVerdict: input.predictiveAdmissionVerdict,
     futureCycleEffect: input.futureCycleEffect,
     researchCodeIdentity: input.researchCodeIdentity,
     costModelIdentity: input.costModelIdentity,
-    development: input.development,
-    walkForward: input.walkForward,
+    development,
+    walkForward,
     qualificationVerdict: input.qualificationVerdict,
   };
 }
