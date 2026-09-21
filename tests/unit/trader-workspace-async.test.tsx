@@ -40,7 +40,13 @@ afterEach(() => {
 
 describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
   it("ends initial loading with a generic error after a rejected fetch", async () => {
-    setup().mockRejectedValueOnce(new Error("secret transport details"));
+    const fetcher = setup();
+    fetcher.mockImplementation(async (input) => {
+      if (String(input) === "/api/trader/exchange-credentials") {
+        throw new Error("secret transport details");
+      }
+      return json({});
+    });
     render(<TraderWorkspace />);
     await waitFor(() => expect(screen.queryByText("Loading account…")).not.toBeInTheDocument());
     expect(screen.getByRole("alert")).not.toHaveTextContent("secret transport details");

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
+import { TraderProfileSettings } from "@/components/trader/trader-profile-settings";
 import { TraderSignOut } from "@/components/trader/trader-sign-out";
 import { ConnectedAccountObservationPanel } from "@/components/trader/account-observation/connected-account-observation-panel";
 import {
@@ -226,6 +227,7 @@ function ExchangeTraderWorkspace() {
           authority.
         </p>
       </header>
+      <TraderProfileSettings />
 
       {errorMessage ? (
         <p
