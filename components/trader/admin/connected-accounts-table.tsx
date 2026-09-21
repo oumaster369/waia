@@ -10,6 +10,7 @@ import {
 } from "@/components/trader/admin/admin-org-selector";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import {
+  ACCOUNT_OBSERVATION_STALE_AFTER_MS,
   ageLabel,
   summarizeCabinetObservation,
 } from "@/lib/trader/account-observation/cabinet-view";
@@ -27,6 +28,23 @@ type RowView = ConnectedHtxAccountDto & {
   lastTickMs: number | null;
 };
 
+/** Operator list refresh. Must stay slower than one HTX cabinet tick. */
+export const ADMIN_CONNECTED_ACCOUNTS_POLL_MS = 60_000;
+
+const EMPTY_OBSERVATION = {
+  usdtFree: null,
+  usdtLocked: null,
+  openOrdersCount: null,
+  lastTickMs: null,
+} as const;
+
+function freshnessLabel(row: RowView, nowMs: number): string {
+  if (row.observation === "loading") return "Loading…";
+  if (row.observation === "unavailable") return "Unavailable";
+  if (row.observation === "waiting" || row.lastTickMs === null) return "Connecting";
+  return nowMs - row.lastTickMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS ? "Last tick" : "Live";
+}
+
 function drillHref(account: ConnectedHtxAccountDto): string {
   const params = new URLSearchParams({
     organization_id: account.organizationId,
@@ -42,12 +60,7 @@ async function readObservationRow(
 ): Promise<
   Pick<RowView, "observation" | "usdtFree" | "usdtLocked" | "openOrdersCount" | "lastTickMs">
 > {
-  const empty = {
-    usdtFree: null,
-    usdtLocked: null,
-    openOrdersCount: null,
-    lastTickMs: null,
-  };
+  const empty = EMPTY_OBSERVATION;
   const bindingParams = new URLSearchParams({
     organizationId: account.organizationId,
     credentialId: account.credentialId,
@@ -102,31 +115,41 @@ export function ConnectedAccountsTable() {
 
   React.useEffect(() => {
     const controller = new AbortController();
+    let generation = 0;
     async function load() {
-      setLoading(true);
-      setError(null);
+      const ticket = ++generation;
+      const first = ticket === 1;
+      if (first) {
+        setLoading(true);
+        setError(null);
+      }
       const result = await adminFetch<{ accounts?: ConnectedHtxAccountDto[] }>(
         "/api/trader/admin/connected-accounts",
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || ticket !== generation) return;
       if (!result.ok) {
-        setError(result.message);
-        setRows([]);
-        setLoading(false);
+        if (first) {
+          setError(result.message);
+          setRows([]);
+          setLoading(false);
+        }
         return;
       }
       const accounts = result.data.accounts ?? [];
-      setRows(
-        accounts.map((account) => ({
-          ...account,
-          observation: "loading",
-          usdtFree: null,
-          usdtLocked: null,
-          openOrdersCount: null,
-          lastTickMs: null,
-        })),
-      );
-      setLoading(false);
+      setRows((current) => {
+        const previous = new Map(current.map((row) => [row.credentialId, row]));
+        return accounts.map((account) => {
+          const prior = previous.get(account.credentialId);
+          return prior
+            ? { ...prior, accountName: account.accountName, updatedAt: account.updatedAt }
+            : {
+                ...account,
+                observation: "loading" as const,
+                ...EMPTY_OBSERVATION,
+              };
+        });
+      });
+      if (first) setLoading(false);
       const observed = await Promise.all(
         accounts.map(async (account) => {
           try {
@@ -138,15 +161,12 @@ export function ConnectedAccountsTable() {
             return {
               credentialId: account.credentialId,
               observation: "unavailable" as const,
-              usdtFree: null,
-              usdtLocked: null,
-              openOrdersCount: null,
-              lastTickMs: null,
+              ...EMPTY_OBSERVATION,
             };
           }
         }),
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || ticket !== generation) return;
       const byId = new Map(observed.map((row) => [row.credentialId, row]));
       setRows((current) =>
         current.map((row) => {
@@ -156,7 +176,11 @@ export function ConnectedAccountsTable() {
       );
     }
     void load();
-    return () => controller.abort();
+    const timer = window.setInterval(() => void load(), ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
   }, []);
 
   if (loading) return <AdminLoadingState label="Loading HTX accounts…" />;
@@ -179,7 +203,8 @@ export function ConnectedAccountsTable() {
               <tr className="text-muted-foreground border-b">
                 <th className="py-2 pr-3 font-medium">Account</th>
                 <th className="py-2 pr-3 font-medium">HTX</th>
-                <th className="py-2 pr-3 font-medium">Last tick</th>
+                <th className="py-2 pr-3 font-medium">Status</th>
+                <th className="py-2 pr-3 font-medium">Age</th>
                 <th className="py-2 pr-3 font-medium">USDT free</th>
                 <th className="py-2 pr-3 font-medium">USDT locked</th>
                 <th className="py-2 font-medium">Open orders</th>
@@ -194,16 +219,9 @@ export function ConnectedAccountsTable() {
                     </Link>
                   </td>
                   <td className="py-2 pr-3 font-mono">{row.exchangeAccountId}</td>
+                  <td className="py-2 pr-3">{freshnessLabel(row, nowMs)}</td>
                   <td className="py-2 pr-3">
-                    {row.observation === "loading"
-                      ? "Loading…"
-                      : row.observation === "waiting"
-                        ? "Waiting for observation"
-                        : row.observation === "unavailable"
-                          ? "Unavailable"
-                          : row.lastTickMs
-                            ? ageLabel(row.lastTickMs, nowMs)
-                            : "—"}
+                    {row.lastTickMs ? ageLabel(row.lastTickMs, nowMs) : "—"}
                   </td>
                   <td className="py-2 pr-3 font-mono">{row.usdtFree ?? "—"}</td>
                   <td className="py-2 pr-3 font-mono">{row.usdtLocked ?? "—"}</td>
