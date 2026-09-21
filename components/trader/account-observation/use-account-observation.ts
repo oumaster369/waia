@@ -142,7 +142,8 @@ export function useAccountObservation({
         publish("CONNECTED");
       } else if (event.type === "error" || event.type === "disconnected") {
         transport = "RECONNECTING";
-        publish(latest ? "CONNECTED" : "ERROR");
+        // A missing first snapshot is not a cabinet failure; keep waiting while transport retries.
+        publish(latest ? "CONNECTED" : "LOADING");
       }
     };
     // Defer initial subscribe one microtask so effect cleanup can cancel StrictMode's first pass.
@@ -161,7 +162,7 @@ export function useAccountObservation({
       () => {
         if (stopped || revoked) return;
         setNow(Date.now());
-        if (!latest && Date.now() - startedAt >= expiryMs) publish("ERROR");
+        if (!latest && Date.now() - startedAt >= expiryMs) publish("LOADING");
       },
       Math.max(250, Math.min(1_000, expiryMs)),
     );

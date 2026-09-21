@@ -167,18 +167,9 @@ export function ConnectedAccountObservationPanel({
             stale: false,
           }}
         />
-        {current?.status === "NOT_CONFIGURED" && (
-          <p className="text-waia-fg-muted text-sm">
-            Waiting for observation admit. This HTX connection is stored; live balances appear after
-            the account is added to the observation host. Checking again automatically.
-          </p>
-        )}
-        {current?.status === "ERROR" && (
-          <p className="text-waia-fg-muted text-sm">
-            Account observation is unavailable. Retrying automatically; no account values are
-            inferred.
-          </p>
-        )}
+        {current?.status === "NOT_CONFIGURED" || current?.status === "ERROR" ? (
+          <p className="text-waia-fg-muted text-sm">Checking again automatically.</p>
+        ) : null}
       </div>
     );
   }

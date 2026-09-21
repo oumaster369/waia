@@ -14,9 +14,11 @@ export type CabinetLiveInput = Readonly<{
   transport?: "STREAMING" | "POLLING" | "RECONNECTING";
 }>;
 
-/** HTX collection itself takes ~80–90s; UI older-than-this is stale. Must exceed one cycle. */
-export const ACCOUNT_OBSERVATION_STALE_AFTER_MS = 180_000;
-export const ACCOUNT_OBSERVATION_POLL_INTERVAL_MS = 90_000;
+/** Two sequential HTX reads are ~80–90s each; UI older-than-this is stale. Must exceed one multi-account sweep. */
+export const ACCOUNT_OBSERVATION_STALE_AFTER_MS = 600_000;
+export const ACCOUNT_OBSERVATION_POLL_INTERVAL_MS = 180_000;
+export const ACCOUNT_OBSERVATION_FIRST_TICK_COPY =
+  "HTX is connected. Waiting for the first live snapshot — usually about a minute.";
 
 const ZERO_AMOUNT = /^(?:0+(?:\.0+)?)$/;
 const MAJOR_ASSETS = ["USDT", "USDC", "BTC", "ETH", "HT"] as const;
@@ -69,6 +71,7 @@ export function formatOrderLine(row: {
 }
 
 export function formatTradeLine(row: {
+  symbol?: string;
   side: string;
   quantity: string;
   price: string;
@@ -77,7 +80,8 @@ export function formatTradeLine(row: {
   executedAt: string;
   tradeId: string;
 }): string {
-  return `${row.side} ${row.quantity} @ ${row.price} · fee ${row.fee} ${row.feeAsset} · ${row.executedAt} · trade ${row.tradeId}`;
+  const fill = `${row.side} ${row.quantity} @ ${row.price} · fee ${row.fee} ${row.feeAsset} · ${row.executedAt} · trade ${row.tradeId}`;
+  return row.symbol ? `${row.symbol} · ${fill}` : fill;
 }
 
 export function ageLabel(completedAtMs: number, nowMs: number): string {
@@ -96,8 +100,7 @@ export function ageLabel(completedAtMs: number, nowMs: number): string {
 export function cabinetLiveLabel(view: CabinetLiveInput): string {
   if (view.status === "REVOKED") return "Revoked";
   if (view.status === "DISCONNECTED") return "Idle";
-  if (!view.observation && view.status === "LOADING") return "Connecting";
-  if (!view.observation && view.status === "ERROR") return "Unavailable";
+  if (!view.observation) return "Connecting";
   if (view.status === "STALE" || view.stale) return "Last tick";
   if (view.observation) return "Live";
   if (view.status === "LOADING") return "Connecting";

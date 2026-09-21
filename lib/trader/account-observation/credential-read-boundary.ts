@@ -82,9 +82,11 @@ function key(organizationId: string, credentialId: string): string {
  *
  * Every read is one bounded read-only transaction that SET LOCAL ROLEs to the 0210 parent and
  * publishes transaction-local `waia.observation_*` context, so the assignment-bound RLS policy
- * decides visibility. Callers cannot widen scope: an (organization, credential) pair absent from
- * the trusted assignment set is refused before any SQL runs, and the returned row's identity
- * tuple is re-checked in process afterwards.
+ * decides visibility. A constructor assignment is decrypted from that trusted tuple alone.
+ * Connect-enrolled cabinets are named with the same identity triple (organization, credential,
+ * exchange account); migration 0210 still requires a live collection-state row, and the returned
+ * row's identity tuple is re-checked in process afterwards. An organization/credential pair with
+ * no account and no constructor assignment is refused before any SQL runs.
  */
 export function createObservationCredentialReader(
   input: Readonly<{
@@ -95,7 +97,7 @@ export function createObservationCredentialReader(
   }>,
 ): Readonly<{
   getDecryptedCredentials(
-    context: Readonly<{ organizationId: string }>,
+    context: Readonly<{ organizationId: string; exchangeAccountId?: string }>,
     credentialId: string,
   ): Promise<ConnectorCredentialInput>;
 }> {
@@ -145,14 +147,39 @@ export function createObservationCredentialReader(
 
   return Object.freeze({
     async getDecryptedCredentials(
-      context: Readonly<{ organizationId: string }>,
+      context: Readonly<{ organizationId: string; exchangeAccountId?: string }>,
       credentialId: string,
     ): Promise<ConnectorCredentialInput> {
       const organizationId = context?.organizationId;
-      if (!UUID.test(organizationId ?? "") || !UUID.test(credentialId ?? "")) {
+      const requestedAccount = context?.exchangeAccountId;
+      if (
+        !organizationId ||
+        !credentialId ||
+        !UUID.test(organizationId) ||
+        !UUID.test(credentialId)
+      ) {
         refuse("NOT_ASSIGNED");
       }
-      const assignment = assignments.get(key(organizationId, credentialId));
+      if (requestedAccount !== undefined && !ACCOUNT.test(requestedAccount)) {
+        refuse("NOT_ASSIGNED");
+      }
+      const mapped = assignments.get(key(organizationId, credentialId));
+      if (
+        mapped &&
+        requestedAccount !== undefined &&
+        requestedAccount !== mapped.exchangeAccountId
+      ) {
+        refuse("NOT_ASSIGNED");
+      }
+      const assignment =
+        mapped ??
+        (requestedAccount
+          ? Object.freeze({
+              organizationId,
+              credentialId,
+              exchangeAccountId: requestedAccount,
+            })
+          : undefined);
       if (!assignment) refuse("NOT_ASSIGNED");
 
       // Fail closed on master-key readiness before any credential row is touched.

@@ -140,14 +140,17 @@ describe("DEE-961 injected observation subscription", () => {
     expect(result.current.status).toBe("STALE");
     expect(result.current.observation?.observationId).toBe("obs-a");
   });
-  it("bounds silent initial subscription instead of loading forever", async () => {
+  it("keeps waiting for the first snapshot instead of surfacing a false error", async () => {
     const t = transport();
     const { result } = renderHook(() =>
       useAccountObservation({ binding, subscribe: t.subscribe, staleAfterMs: 1000 }),
     );
     await subscribed();
+    act(() => t.listeners[0].emit({ type: "error" }));
+    expect(result.current.status).toBe("LOADING");
+    expect(result.current.observation).toBeNull();
     act(() => vi.advanceTimersByTime(1000));
-    expect(result.current.status).toBe("ERROR");
+    expect(result.current.status).toBe("LOADING");
     expect(result.current.observation).toBeNull();
   });
   it.each(["disconnected", "error"] as const)(
@@ -323,6 +326,8 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     expect(screen.getByText("obs-a")).toBeInTheDocument();
     expect(screen.getByText("BTC: free 1, locked 0.1, total 1.1")).toBeInTheDocument();
     expect(screen.getByText("No working orders.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Trades" })).toBeInTheDocument();
+    expect(screen.queryByText("Trades · BTCUSDT")).not.toBeInTheDocument();
     expect(screen.getByText("No fills in this window.")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     cleanup();
@@ -380,6 +385,17 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     });
     render(<AccountObservationPanel view={{ status: "CURRENT", observation: o, stale: false }} />);
     expect(screen.getByTestId("cabinet-usdt-free")).toHaveTextContent("9007199254740993.00000001");
+  });
+  it("treats a missing first snapshot as Connecting, not Unavailable", () => {
+    render(
+      <AccountObservationPanel
+        view={{ status: "ERROR", observation: null, stale: false, transport: "RECONNECTING" }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting");
+    expect(screen.queryByText("Unavailable")).not.toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
+    expect(screen.queryByText("Reconnecting automatically.")).not.toBeInTheDocument();
   });
   it("keeps Live and last tick when the stream is reconnecting", () => {
     render(
