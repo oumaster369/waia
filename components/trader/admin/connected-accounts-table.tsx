@@ -104,6 +104,7 @@ export function ConnectedAccountsTable() {
   const [rows, setRows] = React.useState<RowView[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = React.useState<string | null>(null);
   const [nowMs, setNowMs] = React.useState(() => Date.now());
   const hasTicks = rows.some((row) => row.lastTickMs !== null);
 
@@ -132,9 +133,12 @@ export function ConnectedAccountsTable() {
           setError(result.message);
           setRows([]);
           setLoading(false);
+        } else {
+          setRefreshNotice("The latest refresh failed. The table still shows the previous read.");
         }
         return;
       }
+      setRefreshNotice(null);
       const accounts = result.data.accounts ?? [];
       setRows((current) => {
         const previous = new Map(current.map((row) => [row.credentialId, row]));
@@ -193,6 +197,11 @@ export function ConnectedAccountsTable() {
         <p className="text-muted-foreground mt-1 text-sm">
           Personal AI-TRADER cabinets with an active HTX connection. No PnL is calculated here.
         </p>
+        {refreshNotice ? (
+          <p className="text-destructive mt-2 text-sm" role="status">
+            {refreshNotice}
+          </p>
+        ) : null}
       </div>
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">No HTX-connected accounts yet.</p>
