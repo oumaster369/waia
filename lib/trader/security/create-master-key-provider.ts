@@ -47,9 +47,14 @@ async function resolveCloudflareEnv(
     return explicitEnv;
   }
   try {
-    return getCloudflareContext().env as Record<string, unknown>;
+    const context = await getCloudflareContext({ async: true });
+    return context.env as Record<string, unknown>;
   } catch {
-    return undefined;
+    try {
+      return getCloudflareContext().env as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
   }
 }
 

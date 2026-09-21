@@ -59,6 +59,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Connect HTX" })).toBeEnabled());
     expect(screen.getByRole("alert")).not.toHaveTextContent("secret transport details");
+    expect(screen.getByRole("alert")).toHaveTextContent("Keep HTX IP restrictions empty");
   });
   it("fences a retired mount and does not start credential requests after it resolves", async () => {
     const fetcher = setup();

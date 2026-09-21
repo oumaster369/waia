@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cabinetLiveLabel,
   nonUsdtInventory,
   secondsUntilNextPoll,
   summarizeCabinetObservation,
@@ -76,9 +77,27 @@ describe("cabinet observation view", () => {
     ]);
   });
 
-  it("counts down to the next 60s collector poll", () => {
-    expect(secondsUntilNextPoll(now, now + 15_000)).toBe(45);
-    expect(secondsUntilNextPoll(now, now + 60_000)).toBe(0);
+  it("counts down to the next 90s collector cycle", () => {
+    expect(secondsUntilNextPoll(now, now + 15_000)).toBe(75);
+    expect(secondsUntilNextPoll(now, now + 90_000)).toBe(0);
+  });
+
+  it("keeps Live as the headline while a snapshot is on screen", () => {
+    expect(
+      cabinetLiveLabel({
+        status: "ERROR",
+        observation,
+        stale: false,
+        transport: "RECONNECTING",
+      }),
+    ).toBe("Live");
+    expect(
+      cabinetLiveLabel({
+        status: "ERROR",
+        observation: null,
+        stale: false,
+      }),
+    ).toBe("Unavailable");
   });
 
   it("summarizes a cabinet without inventing PnL", () => {

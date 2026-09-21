@@ -57,20 +57,31 @@ export type HtxConnectInput = {
   accountLabel?: string;
 };
 
+export const HTX_CONNECT_CLIENT_TIMEOUT_MS = 25_000;
+
+export const HTX_CONNECT_NETWORK_ERROR =
+  "Connect did not complete. Keep HTX IP restrictions empty (do not whitelist 84.32.9.146 yet) and retry once.";
+
 export async function connectHtxClient(
   input: HtxConnectInput,
 ): Promise<TraderClientOk<CredentialMetadataDto> | TraderClientErr> {
-  const response = await fetch("/api/trader/exchange-credentials/connect", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      venue: "htx",
-      apiKey: input.apiKey,
-      apiSecret: input.apiSecret,
-      accountLabel: input.accountLabel,
-    }),
-    credentials: "same-origin",
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/trader/exchange-credentials/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venue: "htx",
+        apiKey: input.apiKey,
+        apiSecret: input.apiSecret,
+        accountLabel: input.accountLabel,
+      }),
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(HTX_CONNECT_CLIENT_TIMEOUT_MS),
+    });
+  } catch {
+    return { kind: "err", status: 0, displayMessage: HTX_CONNECT_NETWORK_ERROR };
+  }
   const raw = await readJson(response);
   if (!response.ok) {
     return errFromResponse(response.status, raw);

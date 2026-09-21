@@ -30,13 +30,18 @@ import {
 import type { CredentialService } from "@/lib/trader/credentials/types";
 import { CredentialConflictError, CredentialNotFoundError } from "@/lib/trader/credentials/errors";
 import {
+  HTX_AWS_REST_HOST,
+  HTX_DEFAULT_REST_HOST,
+  HTX_OPTIONAL_REST_HOST,
+} from "@/lib/trader/connectors/htx/config";
+import {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 import { assertCredentialStorageAllowed } from "@/lib/trader/security/credential-storage-gate";
 import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
-import { MasterKeyNotReadyError } from "@/lib/trader/security/errors";
+import { MasterKeyConfigError, MasterKeyNotReadyError } from "@/lib/trader/security/errors";
 import { sanitizeClientErrorMessage } from "@/lib/trader/security/redaction";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -73,6 +78,22 @@ function clientError(status: number, code: string, message: string): ConnectHand
     body: errorEnvelope(code, message),
     outcome: "client_error",
   };
+}
+
+function postgresSqlState(err: unknown): string | undefined {
+  if (err === null || typeof err !== "object" || !("code" in err)) {
+    return undefined;
+  }
+  const code = err.code;
+  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code) ? code : undefined;
+}
+
+function connectStoreFailureMessage(err: unknown): string {
+  const errorClass = safeTelemetryErrorClass(err) ?? "Error";
+  const sqlState = postgresSqlState(err);
+  return sqlState
+    ? `Could not store HTX credentials (${errorClass}:${sqlState}).`
+    : `Could not store HTX credentials (${errorClass}).`;
 }
 
 function parseConnectBody(raw: unknown): HtxConnectRequestBody | ConnectHandlerResult {
@@ -156,6 +177,69 @@ function isHandlerErrorResult(value: unknown): value is ConnectHandlerResult {
   );
 }
 
+/** Cloudflare-friendly HTX hosts first. `api.huobi.pro` is last because some colos black-hole it. */
+const HTX_CONNECT_REST_HOSTS = [
+  HTX_AWS_REST_HOST,
+  HTX_OPTIONAL_REST_HOST,
+  HTX_DEFAULT_REST_HOST,
+] as const;
+
+const HTX_CONNECT_TRANSPORT_POLICY = {
+  minIntervalMs: 0,
+  maxRetries: 0,
+  baseDelayMs: 0,
+  maxDelayMs: 0,
+} as const;
+
+type ConnectValidation = Awaited<ReturnType<HtxExchangeConnector["validateCredentials"]>>;
+
+const HTX_CONNECT_FETCH_TIMEOUT_MS = 8_000;
+
+function createConnectHtxFetch(timeoutMs: number): typeof fetch {
+  return (input, init) => {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal =
+      init?.signal && typeof AbortSignal.any === "function"
+        ? AbortSignal.any([init.signal, timeout])
+        : timeout;
+    return fetch(input, { ...init, signal });
+  };
+}
+
+function isRetryableConnectValidation(result: ConnectValidation): boolean {
+  return !result.valid && result.errorCode === "VALIDATION_FAILED";
+}
+
+async function validateHtxConnectCredentials(
+  deps: ConnectHandlerDeps,
+  body: HtxConnectRequestBody,
+): Promise<{ connector: HtxExchangeConnector; validation: ConnectValidation }> {
+  const fetchImpl = createConnectHtxFetch(HTX_CONNECT_FETCH_TIMEOUT_MS);
+  let lastConnector: HtxExchangeConnector | undefined;
+  let lastValidation: ConnectValidation | undefined;
+
+  for (const restHost of HTX_CONNECT_REST_HOSTS) {
+    const connector = deps.createConnector({
+      apiKey: body.apiKey,
+      apiSecret: body.apiSecret,
+      restHost,
+      transportPolicy: HTX_CONNECT_TRANSPORT_POLICY,
+      fetchImpl,
+    });
+    lastConnector = connector;
+    const validation = await connector.validateCredentials({
+      apiKey: body.apiKey,
+      apiSecret: body.apiSecret,
+    });
+    lastValidation = validation;
+    if (validation.valid || !isRetryableConnectValidation(validation)) {
+      return { connector, validation };
+    }
+  }
+
+  return { connector: lastConnector!, validation: lastValidation! };
+}
+
 async function requireAuthenticatedTrader(
   deps: ConnectHandlerDeps,
 ): Promise<{ userId: string } | ConnectHandlerResult> {
@@ -199,7 +283,7 @@ export async function handleHtxConnectPost(
     provider = await deps.createProvider();
     assertCredentialStorageAllowed(provider);
   } catch (err) {
-    if (err instanceof MasterKeyNotReadyError) {
+    if (err instanceof MasterKeyNotReadyError || err instanceof MasterKeyConfigError) {
       return clientError(
         503,
         HTX_CONNECT_ERROR_CODES.MASTER_KEY_NOT_READY,
@@ -209,15 +293,20 @@ export async function handleHtxConnectPost(
     throw err;
   }
 
-  const connector = deps.createConnector({
-    apiKey: body.apiKey,
-    apiSecret: body.apiSecret,
-  });
-
-  const validation = await connector.validateCredentials({
-    apiKey: body.apiKey,
-    apiSecret: body.apiSecret,
-  });
+  let connector: HtxExchangeConnector;
+  let validation: ConnectValidation;
+  try {
+    const confirmed = await validateHtxConnectCredentials(deps, body);
+    connector = confirmed.connector;
+    validation = confirmed.validation;
+  } catch (err) {
+    const detail = err instanceof Error ? err.name : "VALIDATION_FAILED";
+    return clientError(
+      400,
+      HTX_CONNECT_ERROR_CODES.CREDENTIAL_VALIDATION_FAILED,
+      sanitizeClientErrorMessage(`HTX credential validation failed (${detail}).`),
+    );
+  }
 
   if (!validation.valid) {
     const detail = validation.errorCode ?? "VALIDATION_FAILED";
@@ -240,7 +329,17 @@ export async function handleHtxConnectPost(
   const context = requireOrgContext(organizationId);
   context.userId = auth.userId;
 
-  const accountInfo = await connector.getAccountInfo();
+  let accountInfo;
+  try {
+    accountInfo = await connector.getAccountInfo();
+  } catch (err) {
+    const detail = err instanceof Error ? err.name : "ACCOUNT_INFO";
+    return clientError(
+      400,
+      HTX_CONNECT_ERROR_CODES.CREDENTIAL_VALIDATION_FAILED,
+      sanitizeClientErrorMessage(`HTX credential validation failed (${detail}).`),
+    );
+  }
 
   if (
     accountInfo.accountId !== validation.accountId ||
@@ -300,7 +399,7 @@ export async function handleHtxConnectPost(
     const outcome = !resolvedRuntime && isWaiaConfigError(err) ? "config_error" : "internal_error";
     return {
       status: 500,
-      body: errorEnvelope(HTX_CONNECT_ERROR_CODES.INTERNAL_ERROR, "Something went wrong."),
+      body: errorEnvelope(HTX_CONNECT_ERROR_CODES.INTERNAL_ERROR, connectStoreFailureMessage(err)),
       outcome,
       errorClass: safeTelemetryErrorClass(err),
       waiaDbBackend: resolvedRuntime?.kind,

@@ -109,7 +109,8 @@ describe("DEE-961 injected observation subscription", () => {
     expect(result.current.status).toBe("CURRENT");
     const first = result.current.observation;
     await act(async () => vi.advanceTimersByTimeAsync(1000));
-    expect(result.current.status).toBe("ERROR");
+    expect(result.current.status).toBe("CURRENT");
+    expect(result.current.transport).toBe("RECONNECTING");
     expect(result.current.observation).toBe(first);
     await act(async () => vi.advanceTimersByTimeAsync(2000));
     expect(fetcher).toHaveBeenCalledTimes(3);
@@ -150,7 +151,7 @@ describe("DEE-961 injected observation subscription", () => {
     expect(result.current.observation).toBeNull();
   });
   it.each(["disconnected", "error"] as const)(
-    "retains labeled last evidence on %s and recovers",
+    "keeps the last live snapshot on %s and recovers",
     async (type) => {
       const t = transport();
       const { result } = renderHook(() =>
@@ -159,7 +160,8 @@ describe("DEE-961 injected observation subscription", () => {
       await subscribed();
       act(() => t.listeners[0].emit({ type: "observation", observation: observation() }));
       act(() => t.listeners[0].emit({ type }));
-      expect(result.current.status).toBe(type.toUpperCase());
+      expect(result.current.status).toBe("CURRENT");
+      expect(result.current.transport).toBe("RECONNECTING");
       expect(result.current.observation?.observationId).toBe("obs-a");
       act(() => t.listeners[0].emit({ type: "connected" }));
       expect(result.current.status).toBe("CURRENT");
@@ -271,6 +273,17 @@ describe("DEE-961 injected observation subscription", () => {
     act(() => t.listeners[0].emit({ type: "observation", observation: partial }));
     expect(result.current.status).toBe("PARTIAL");
     expect(result.current.observation?.balances.values).toBeNull();
+    const failedPoll = observation({
+      observationId: "failed",
+      collectionCompletedAtMs: now + 2,
+      status: "ERROR",
+      balances: { ...component([]), values: null, status: "ERROR", error: "TIMEOUT" },
+      holdings: null,
+      openOrders: { ...component([]), values: null, status: "ERROR", error: "READ_FAILED" },
+    });
+    act(() => t.listeners[0].emit({ type: "observation", observation: failedPoll }));
+    expect(result.current.observation?.observationId).toBe("new");
+    expect(result.current.status).toBe("PARTIAL");
   });
   it("catches subscriber exceptions without exposing raw details", async () => {
     const subscribe = () => {
@@ -367,5 +380,20 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     });
     render(<AccountObservationPanel view={{ status: "CURRENT", observation: o, stale: false }} />);
     expect(screen.getByTestId("cabinet-usdt-free")).toHaveTextContent("9007199254740993.00000001");
+  });
+  it("keeps Live and last tick when the stream is reconnecting", () => {
+    render(
+      <AccountObservationPanel
+        view={{
+          status: "ERROR",
+          observation: observation(),
+          stale: false,
+          transport: "RECONNECTING",
+        }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Live");
+    expect(screen.getByText("Reconnecting automatically.")).toBeVisible();
+    expect(screen.getByText(/awaiting the next collector tick|next update in/)).toBeVisible();
   });
 });

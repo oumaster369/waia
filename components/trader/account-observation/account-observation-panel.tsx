@@ -102,11 +102,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [observation]);
-  const live =
-    Boolean(observation) &&
-    view.status !== "ERROR" &&
-    view.status !== "DISCONNECTED" &&
-    view.status !== "REVOKED";
+  const live = Boolean(observation) && !view.stale && view.status !== "REVOKED";
   const usdt = observation ? usdtSpot(observation.balances.values) : null;
   const inventory = observation ? nonUsdtInventory(observation.balances.values) : [];
   const nextIn = observation ? secondsUntilNextPoll(observation.collectionCompletedAtMs, nowMs) : 0;
@@ -147,7 +143,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
           <p className="text-sm">
             HTX {observation.binding.exchangeAccountId} · last update{" "}
             {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
-            {nextIn > 0 ? `next update in ${nextIn}s` : "next update due now"}
+            {nextIn > 0 ? `next update in ${nextIn}s` : "awaiting the next collector tick"}
           </p>
           <p className="text-muted-foreground text-xs">
             Last received observation — do not treat it as a current complete account snapshot.

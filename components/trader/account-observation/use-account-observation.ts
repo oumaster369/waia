@@ -122,20 +122,27 @@ export function useAccountObservation({
           publish("ERROR");
           return;
         }
+        // A failed collector poll must not replace a newer-or-equal good snapshot.
+        if (
+          incoming.status === "ERROR" &&
+          latest &&
+          latest.status !== "ERROR" &&
+          incoming.collectionCompletedAtMs >= latest.collectionCompletedAtMs
+        ) {
+          publish("CONNECTED");
+          return;
+        }
         // A valid reply restores transport health even when collection has not advanced.
         // Keep the newest evidence (and its original age) on duplicate/older replies.
         if (!latest || incoming.collectionCompletedAtMs > latest.collectionCompletedAtMs) {
           latest = incoming;
         }
         publish("CONNECTED");
-      } else {
-        publish(
-          event.type === "connected"
-            ? "CONNECTED"
-            : event.type === "error"
-              ? "ERROR"
-              : "DISCONNECTED",
-        );
+      } else if (event.type === "connected") {
+        publish("CONNECTED");
+      } else if (event.type === "error" || event.type === "disconnected") {
+        transport = "RECONNECTING";
+        publish(latest ? "CONNECTED" : "ERROR");
       }
     };
     // Defer initial subscribe one microtask so effect cleanup can cancel StrictMode's first pass.
