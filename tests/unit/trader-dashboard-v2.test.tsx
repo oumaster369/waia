@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { snapshotAgeText, TraderWorkspace } from "@/components/trader/trader-workspace";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
+import { ACCOUNT_OBSERVATION_FIRST_TICK_COPY } from "@/lib/trader/account-observation/cabinet-view";
 
 const { mockSearchParams } = vi.hoisted(() => ({ mockSearchParams: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => mockSearchParams }));
@@ -71,12 +72,12 @@ describe("Trader Dashboard V2", () => {
 
     await waitFor(() => expect(screen.getByTestId("trader-unpublished-note")).toBeInTheDocument());
     await waitFor(() =>
-      expect(screen.getByText(/Waiting for observation admit/)).toBeInTheDocument(),
+      expect(screen.getByText(ACCOUNT_OBSERVATION_FIRST_TICK_COPY)).toBeInTheDocument(),
     );
     expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connected");
     expect(screen.getByText("User account")).toBeInTheDocument();
     expect(screen.getByText(/cannot enable live trading/)).toBeInTheDocument();
-    expect(screen.getByText(/Waiting for observation admit/)).toBeInTheDocument();
+    expect(screen.getByText(ACCOUNT_OBSERVATION_FIRST_TICK_COPY)).toBeInTheDocument();
     expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
     expect(screen.queryByTestId("trader-unavailable-read-model")).not.toBeInTheDocument();
     expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Observation only");

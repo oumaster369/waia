@@ -77,9 +77,9 @@ describe("cabinet observation view", () => {
     ]);
   });
 
-  it("counts down to the next 90s collector cycle", () => {
-    expect(secondsUntilNextPoll(now, now + 15_000)).toBe(75);
-    expect(secondsUntilNextPoll(now, now + 90_000)).toBe(0);
+  it("counts down to the next collector cycle", () => {
+    expect(secondsUntilNextPoll(now, now + 15_000)).toBe(165);
+    expect(secondsUntilNextPoll(now, now + 180_000)).toBe(0);
   });
 
   it("keeps Live as the headline while a snapshot is on screen", () => {
@@ -97,7 +97,7 @@ describe("cabinet observation view", () => {
         observation: null,
         stale: false,
       }),
-    ).toBe("Unavailable");
+    ).toBe("Connecting");
   });
 
   it("summarizes a cabinet without inventing PnL", () => {

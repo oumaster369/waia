@@ -46,6 +46,10 @@ import { sanitizeClientErrorMessage } from "@/lib/trader/security/redaction";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import {
+  AccountObservationSelfServiceEnrollError,
+  enrollSelfServiceAccountObservation,
+} from "@/lib/trader/account-observation/self-service-enroll";
 
 export type ConnectHandlerResult = {
   status: number;
@@ -256,6 +260,25 @@ async function requireAuthenticatedTrader(
   return { userId };
 }
 
+async function enrollStoredHtxObservation(
+  runtime: WaiaRuntimeDb,
+  input: Readonly<{
+    organizationId: string;
+    credentialId: string;
+    exchangeAccountId: string;
+    venue: string;
+    status: string;
+  }>,
+): Promise<void> {
+  if (runtime.kind !== "postgres") return;
+  if (input.venue !== HTX_CONNECT_VENUE || input.status !== "active") return;
+  await enrollSelfServiceAccountObservation(runtime.db, {
+    organizationId: input.organizationId,
+    credentialId: input.credentialId,
+    exchangeAccountId: input.exchangeAccountId,
+  });
+}
+
 export async function handleHtxConnectPost(
   request: Request,
   deps: ConnectHandlerDeps,
@@ -381,6 +404,24 @@ export async function handleHtxConnectPost(
       actorId: auth.userId,
       expectedActiveCredentialId: body.replacementCredentialId ?? null,
     });
+    try {
+      await enrollStoredHtxObservation(runtime, {
+        organizationId,
+        credentialId: metadata.id,
+        exchangeAccountId: metadata.exchangeAccountId,
+        venue: metadata.venue,
+        status: metadata.status,
+      });
+    } catch (err) {
+      if (err instanceof AccountObservationSelfServiceEnrollError && err.code === "CAPACITY") {
+        return clientError(
+          503,
+          HTX_CONNECT_ERROR_CODES.INTERNAL_ERROR,
+          "HTX is stored. Observation capacity is full; live snapshot cannot start yet.",
+        );
+      }
+      throw err;
+    }
 
     return {
       status: 200,
@@ -483,6 +524,19 @@ export async function handleExchangeCredentialsGet(
 
     const service = deps.createCredentialService(runtime, deps.createProvider);
     const rows = await service.listCredentialMetadata(context);
+    for (const row of rows) {
+      try {
+        await enrollStoredHtxObservation(runtime, {
+          organizationId,
+          credentialId: row.id,
+          exchangeAccountId: row.exchangeAccountId,
+          venue: row.venue,
+          status: row.status,
+        });
+      } catch {
+        /* List still returns stored credentials if enrollment is delayed. */
+      }
+    }
 
     return {
       status: 200,

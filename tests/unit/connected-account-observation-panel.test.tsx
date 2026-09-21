@@ -143,7 +143,7 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       <ConnectedAccountObservationPanel target={null} fetcher={fetcher} />,
     );
     await settle();
-    expect(screen.getByRole("status")).toHaveTextContent("DISCONNECTED");
+    expect(screen.getByRole("status")).toHaveTextContent("Idle");
     rerender(
       <ConnectedAccountObservationPanel
         target={{ ...target, credentialId: "not-a-record-id" }}
@@ -152,7 +152,8 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
     );
     await settle();
     expect(fetcher).not.toHaveBeenCalled();
-    expect(screen.getByRole("status")).toHaveTextContent("ERROR");
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting");
+    expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
   });
   it.each([401, 403])(
     "HTTP %s during binding lookup clears and stops without a retry",
@@ -172,7 +173,7 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       .mockImplementation(async () => new Response(null, { status: 204 }));
     render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
     await settle();
-    expect(screen.getByText(/Waiting for observation admit/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
     expect(screen.queryByText("Observed zero rows.")).not.toBeInTheDocument();
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -184,8 +185,10 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       .mockImplementation(async () => new Response("private-server-detail", { status: 503 }));
     render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
     await settle();
-    expect(screen.getByRole("status")).toHaveTextContent("ERROR");
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting");
+    expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
     expect(screen.queryByText("private-server-detail")).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
     await act(async () => vi.advanceTimersByTimeAsync(9999));
     expect(fetcher).toHaveBeenCalledTimes(1);
     await act(async () => vi.advanceTimersByTimeAsync(1));
@@ -209,7 +212,7 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
         />,
       );
       await settle();
-      expect(screen.getByRole("status")).toHaveTextContent("ERROR");
+      expect(screen.getByRole("status")).toHaveTextContent("Connecting");
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(screen.queryByText("private")).not.toBeInTheDocument();
     },
@@ -247,7 +250,7 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
     );
     await settle();
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
-    expect(screen.getByRole("status")).toHaveTextContent("ERROR");
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
     unmount();

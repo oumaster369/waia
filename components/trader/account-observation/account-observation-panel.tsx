@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { ObservationComponent } from "@/lib/trader/account-observation/types";
 import {
+  ACCOUNT_OBSERVATION_FIRST_TICK_COPY,
   ageLabel,
   cabinetLiveLabel,
   formatOrderLine,
@@ -86,10 +87,11 @@ function Rows<T>({
   );
 }
 
-function transportCopy(transport: AccountObservationView["transport"]): string | null {
-  if (transport === "STREAMING") return "Automatic stream connected.";
-  if (transport === "POLLING") return "Automatic polling fallback; stream retry scheduled.";
-  if (transport === "RECONNECTING") return "Reconnecting automatically.";
+function transportCopy(view: AccountObservationView): string | null {
+  if (!view.observation) return null;
+  if (view.transport === "STREAMING") return "Automatic stream connected.";
+  if (view.transport === "POLLING") return "Automatic polling fallback; stream retry scheduled.";
+  if (view.transport === "RECONNECTING") return "Reconnecting automatically.";
   return null;
 }
 
@@ -125,18 +127,24 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
         >
           <LiveDot live={live} />
           <span className="font-medium">{cabinetLiveLabel(view)}</span>
-          <span className="text-muted-foreground">{view.status}</span>
+          {observation ? (
+            <span className="text-muted-foreground">{view.status}</span>
+          ) : (
+            <span className="sr-only">{view.status}</span>
+          )}
           {view.stale && view.status !== "STALE" ? " · STALE" : ""}
         </p>
       </div>
-      {view.transport && (
-        <p className="text-waia-fg-muted text-sm">{transportCopy(view.transport)}</p>
-      )}
+      {transportCopy(view) ? (
+        <p className="text-waia-fg-muted text-sm">{transportCopy(view)}</p>
+      ) : null}
       {!observation ? (
         <p>
           {view.status === "REVOKED"
             ? "Access revoked; account data cleared."
-            : "No observation available."}
+            : view.status === "DISCONNECTED"
+              ? "No observation available."
+              : ACCOUNT_OBSERVATION_FIRST_TICK_COPY}
         </p>
       ) : (
         <>
@@ -200,11 +208,13 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
           {observation.trades.map(({ symbol, component }) => (
             <Rows
               key={symbol}
-              title={`Trades · ${symbol}`}
+              title="Trades"
               component={component}
               emptyComplete="No fills in this window."
             >
-              {(row, i) => <li key={`${row.tradeId}-${i}`}>{formatTradeLine(row)}</li>}
+              {(row, i) => (
+                <li key={`${row.tradeId}-${i}`}>{formatTradeLine({ ...row, symbol })}</li>
+              )}
             </Rows>
           ))}
           <p className="text-muted-foreground text-sm">

@@ -140,6 +140,25 @@ describe("DEE-1015 account-observation credential read boundary", () => {
     expect(statements).toEqual([]);
   });
 
+  it("decrypts a Connect-enrolled cabinet named with the full identity triple", async () => {
+    const { sql, statements, parameters } = fakeSql([await encryptedRow({ id: OTHER_CREDENTIAL })]);
+    const reader = createObservationCredentialReader({
+      sql,
+      provider: await provider(),
+      assignments: [ASSIGNMENT],
+    });
+    await expect(
+      reader.getDecryptedCredentials(
+        { organizationId: ORGANIZATION, exchangeAccountId: ACCOUNT },
+        OTHER_CREDENTIAL,
+      ),
+    ).resolves.toEqual({ apiKey: "unit-api-key", apiSecret: "unit-api-secret" });
+    expect(parameters[5]).toEqual([ORGANIZATION, OTHER_CREDENTIAL, ACCOUNT]);
+    expect(statements[6]).toContain(
+      "WHERE id = $1 AND organization_id = $2 AND exchange_account_id = $3",
+    );
+  });
+
   it("fails closed on master-key readiness before touching a credential row", async () => {
     const { sql, statements } = fakeSql(await encryptedRow().then((row) => [row]));
     const reader = createObservationCredentialReader({
