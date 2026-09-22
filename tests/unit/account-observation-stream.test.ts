@@ -16,6 +16,7 @@ const dependencies = (): ObservationReadDependencies => ({
   hasTraderAccess: vi.fn(async () => true),
   hasOrgMembership: vi.fn(async () => true),
   hasOperatorAccess: vi.fn(async () => true),
+  isAdminListedOrganization: vi.fn(async () => true),
   resolveActiveBinding: vi.fn(async () => binding),
   readLatest: vi.fn(async () => observation()),
 });
@@ -60,15 +61,39 @@ describe("bounded SSE uses the real scoped read handler with injected storage/au
       expect(deps.readLatest).not.toHaveBeenCalled();
     },
   );
-  it.each(["getUserId", "hasTraderAccess", "hasOrgMembership", "hasOperatorAccess"] as const)(
-    "rechecks %s on the next bounded read",
+  it("admin stream keeps reading after membership loss and still revokes on operator loss", async () => {
+    const deps = dependencies();
+    const response = await handleAccountObservationStream(request(), (next) =>
+      handleAccountObservationGet(next, "admin", deps),
+    );
+    const reader = response.body!.getReader();
+    expect(text(await reader.read())).toContain(observation().observationId);
+    vi.mocked(deps.hasOrgMembership).mockResolvedValue(false);
+    const continued = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await continued)).toContain(observation().observationId);
+    vi.mocked(deps.hasOperatorAccess).mockResolvedValue(false);
+    const revoked = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await revoked)).toBe("event: revoked\ndata: null\n\n");
+    expect((await reader.read()).done).toBe(true);
+  });
+  it("admin stream refuses an organization outside the connected-account list before opening data", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.isAdminListedOrganization).mockResolvedValue(false);
+    const result = await handleAccountObservationStream(request(), (next) =>
+      handleAccountObservationGet(next, "admin", deps),
+    );
+    expect(result.status).toBe(403);
+    expect(deps.readLatest).not.toHaveBeenCalled();
+  });
+  it.each(["getUserId", "hasTraderAccess", "hasOrgMembership"] as const)(
+    "rechecks %s on the next bounded tenant read",
     async (gate) => {
       const deps = dependencies();
       const response = await handleAccountObservationStream(request(), (next) =>
-        handleAccountObservationGet(next, "admin", deps),
+        handleAccountObservationGet(next, "tenant", deps),
       );
-      expect(response.headers.get("cache-control")).toContain("no-store");
-      expect(response.headers.get("vary")).toBe("Cookie");
       const reader = response.body!.getReader();
       expect(text(await reader.read())).toContain(observation().observationId);
       if (gate === "getUserId") vi.mocked(deps.getUserId).mockResolvedValue(null);
@@ -77,9 +102,31 @@ describe("bounded SSE uses the real scoped read handler with injected storage/au
       await vi.advanceTimersByTimeAsync(5000);
       expect(text(await second)).toBe("event: revoked\ndata: null\n\n");
       expect((await reader.read()).done).toBe(true);
-      expect(deps.readLatest).toHaveBeenCalledTimes(2);
+      expect(deps.isAdminListedOrganization).not.toHaveBeenCalled();
     },
   );
+  it.each([
+    "getUserId",
+    "hasTraderAccess",
+    "hasOperatorAccess",
+    "isAdminListedOrganization",
+  ] as const)("rechecks %s on the next bounded admin read", async (gate) => {
+    const deps = dependencies();
+    const response = await handleAccountObservationStream(request(), (next) =>
+      handleAccountObservationGet(next, "admin", deps),
+    );
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("vary")).toBe("Cookie");
+    const reader = response.body!.getReader();
+    expect(text(await reader.read())).toContain(observation().observationId);
+    if (gate === "getUserId") vi.mocked(deps.getUserId).mockResolvedValue(null);
+    else vi.mocked(deps[gate]).mockResolvedValue(false);
+    const second = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await second)).toBe("event: revoked\ndata: null\n\n");
+    expect((await reader.read()).done).toBe(true);
+    expect(deps.readLatest).toHaveBeenCalledTimes(2);
+  });
   it("fences rotation during a subsequent read and never emits the old observation", async () => {
     const deps = dependencies();
     const response = await handleAccountObservationStream(request(), (next) =>

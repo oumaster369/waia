@@ -9,6 +9,7 @@ import type { WaiaDb } from "@/db/types";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { eq } from "drizzle-orm";
 import type { AdminRouteHandlerDeps } from "@/lib/trader/admin-route-shared";
+import { isAdminConnectedAccountScope } from "@/lib/trader/credentials/admin-connected-account-scope";
 import { handleAdminConnectedAccountsGet } from "@/lib/trader/credentials/admin-connected-accounts-handler";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
@@ -144,5 +145,28 @@ describe("admin connected HTX accounts", () => {
       ],
     });
     expect(JSON.stringify(result.body)).not.toMatch(/ciphertext|wrapped-dek|apiSecret/i);
+    const listed = (result.body as { accounts: { organizationId: string }[] }).accounts;
+    expect(listed.map((row) => row.organizationId)).not.toContain(BUSINESS_ORG);
+    expect(
+      isAdminConnectedAccountScope({
+        organizationKind: "personal",
+        venue: "htx",
+        credentialStatus: "active",
+      }),
+    ).toBe(true);
+    expect(
+      isAdminConnectedAccountScope({
+        organizationKind: "business",
+        venue: "htx",
+        credentialStatus: "active",
+      }),
+    ).toBe(false);
+    expect(
+      isAdminConnectedAccountScope({
+        organizationKind: "personal",
+        venue: "htx",
+        credentialStatus: "revoked",
+      }),
+    ).toBe(false);
   });
 });
