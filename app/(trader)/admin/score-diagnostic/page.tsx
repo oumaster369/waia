@@ -1,5 +1,14 @@
-import { ScoreDiagnosticReport } from "@/components/trader/admin/score-diagnostic-report";
+import { readFileSync } from "node:fs";
+
+import {
+  loadScoreDiagnosticArtifact,
+  ScoreDiagnosticReport,
+} from "@/components/trader/admin/score-diagnostic-report";
 
 export default function AdminScoreDiagnosticPage() {
-  return <ScoreDiagnosticReport report={null} />;
+  const artifact = loadScoreDiagnosticArtifact(
+    process.env.WAIA_SCORE_DIAGNOSTIC_REPORT_PATH,
+    (filePath) => readFileSync(filePath, "utf8"),
+  );
+  return <ScoreDiagnosticReport artifact={artifact} />;
 }

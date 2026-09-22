@@ -21,6 +21,7 @@
     "trader:historical:v2:prepare-proposal": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/historical-simulation-v2-prepare-proposal.ts",
     "trader:historical:v2:launch-approved": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/historical-simulation-v2-launch-approved.ts",
     "trader:forecast:missing-only": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/missing-only-forecast-producer-cli-v1.ts",
+    "trader:score-diagnostic": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/scientific-score-diagnostic-v1.ts",
     "trader:replay:build-dataset": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/build-dee-337-replay-dataset.ts",
     "trader:replay:benchmark": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-benchmark.ts",
     "trader:replay:qualify": "WAIA_TRADER_CLI=1 node --import tsx --conditions=react-server scripts/trader/replay-qualify.ts",
