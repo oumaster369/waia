@@ -16,6 +16,12 @@ import {
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
+import {
+  ADMIN_LISTED_CREDENTIAL_STATUS,
+  ADMIN_LISTED_ORGANIZATION_KIND,
+  ADMIN_LISTED_VENUE,
+  isAdminConnectedAccountScope,
+} from "@/lib/trader/credentials/admin-connected-account-scope";
 import type { ConnectedHtxAccountDto } from "@/lib/trader/credentials/connected-accounts.types";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 
@@ -29,6 +35,7 @@ function toIso(value: Date | string): string {
 
 function toDto(row: {
   organizationId: string;
+  organizationKind: string;
   accountName: string | null;
   credentialId: string;
   exchangeAccountId: string;
@@ -36,7 +43,14 @@ function toDto(row: {
   status: string;
   updatedAt: Date | string;
 }): ConnectedHtxAccountDto | null {
-  if (row.venue !== "htx" || row.status !== "active") return null;
+  if (
+    !isAdminConnectedAccountScope({
+      organizationKind: row.organizationKind,
+      venue: row.venue,
+      credentialStatus: row.status,
+    })
+  )
+    return null;
   return {
     organizationId: row.organizationId,
     accountName: row.accountName?.trim() || "Account",
@@ -70,6 +84,7 @@ export async function handleAdminConnectedAccountsGet(
       const rows = runtime.db
         .select({
           organizationId: organizations.id,
+          organizationKind: organizations.kind,
           accountName: organizations.name,
           credentialId: exchangeCredentials.id,
           exchangeAccountId: exchangeCredentials.exchangeAccountId,
@@ -81,9 +96,9 @@ export async function handleAdminConnectedAccountsGet(
         .innerJoin(organizations, eq(organizations.id, exchangeCredentials.organizationId))
         .where(
           and(
-            eq(exchangeCredentials.status, "active"),
-            eq(exchangeCredentials.venue, "htx"),
-            eq(organizations.kind, "personal"),
+            eq(exchangeCredentials.status, ADMIN_LISTED_CREDENTIAL_STATUS),
+            eq(exchangeCredentials.venue, ADMIN_LISTED_VENUE),
+            eq(organizations.kind, ADMIN_LISTED_ORGANIZATION_KIND),
           ),
         )
         .orderBy(desc(exchangeCredentials.updatedAt))
@@ -98,6 +113,7 @@ export async function handleAdminConnectedAccountsGet(
     const rows = await runtime.db
       .select({
         organizationId: pgSchema.organizations.id,
+        organizationKind: pgSchema.organizations.kind,
         accountName: pgSchema.organizations.name,
         credentialId: pgSchema.exchangeCredentials.id,
         exchangeAccountId: pgSchema.exchangeCredentials.exchangeAccountId,
@@ -112,9 +128,9 @@ export async function handleAdminConnectedAccountsGet(
       )
       .where(
         and(
-          eq(pgSchema.exchangeCredentials.status, "active"),
-          eq(pgSchema.exchangeCredentials.venue, "htx"),
-          eq(pgSchema.organizations.kind, "personal"),
+          eq(pgSchema.exchangeCredentials.status, ADMIN_LISTED_CREDENTIAL_STATUS),
+          eq(pgSchema.exchangeCredentials.venue, ADMIN_LISTED_VENUE),
+          eq(pgSchema.organizations.kind, ADMIN_LISTED_ORGANIZATION_KIND),
         ),
       )
       .orderBy(desc(pgSchema.exchangeCredentials.updatedAt))
