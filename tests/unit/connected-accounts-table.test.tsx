@@ -167,4 +167,75 @@ describe("admin connected accounts table", () => {
     render(<ConnectedAccountsTable />);
     await waitFor(() => expect(screen.getByText("Last tick")).toBeInTheDocument());
   });
+
+  it("keeps the previous list and says when a later refresh fails", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let listCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/api/trader/admin/connected-accounts") {
+          listCalls += 1;
+          if (listCalls > 1) {
+            return Response.json({ error: { message: "Unavailable." } }, { status: 503 });
+          }
+          return Response.json({ accounts: [account] });
+        }
+        return new Response(null, { status: 204 });
+      }),
+    );
+    render(<ConnectedAccountsTable />);
+    await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText("The latest refresh failed. The table still shows the previous read."),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
+    expect(screen.getByText("Connecting")).toBeInTheDocument();
+  });
+
+  it("clears the refresh notice after the next successful read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let listCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/api/trader/admin/connected-accounts") {
+          listCalls += 1;
+          if (listCalls === 2) {
+            return Response.json({ error: { message: "Unavailable." } }, { status: 503 });
+          }
+          return Response.json({ accounts: [account] });
+        }
+        return new Response(null, { status: 204 });
+      }),
+    );
+    render(<ConnectedAccountsTable />);
+    await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText("The latest refresh failed. The table still shows the previous read."),
+      ).toBeInTheDocument(),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText("The latest refresh failed. The table still shows the previous read."),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
+  });
 });
