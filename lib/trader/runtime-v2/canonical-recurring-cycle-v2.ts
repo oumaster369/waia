@@ -1,4 +1,7 @@
-import { composeCanonicalEpistemicSpineV2 } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
+import {
+  composeCanonicalEpistemicSpineV2,
+  predictiveAdmissionReasonCode,
+} from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
 import type { ComposeCanonicalEpistemicSpineV2Input } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
 import {
   proveProtectiveExecutionAdmissionV2,
@@ -28,6 +31,7 @@ export type CanonicalRecurringCycleV2Result =
 export type CanonicalContextUnavailableV2 = Readonly<{
   kind: "CONTEXT_UNAVAILABLE";
   sources: readonly string[];
+  predictiveAdmissionVerdict: "ADMITTED" | "NOT_ADMITTED" | "RESEARCH_ONLY";
 }>;
 
 type QualifiedCanonicalOrdinaryCapitalCycleV2Input = Readonly<{
@@ -67,10 +71,16 @@ export async function runCanonicalOrdinaryCapitalCycleV2(
         reasonCodes: ["PAPER_EXECUTION_MODE_REQUIRED"],
       };
     }
+    const admissionReason = predictiveAdmissionReasonCode(
+      input.epistemic.predictiveAdmissionVerdict,
+    );
     return {
       status: "NO_TRADE",
       stage: "EPISTEMIC",
-      reasonCodes: input.epistemic.sources.map((source) => `UNAVAILABLE:${source}`),
+      reasonCodes: [
+        ...input.epistemic.sources.map((source) => `UNAVAILABLE:${source}`),
+        ...(admissionReason ? [admissionReason] : []),
+      ],
     };
   }
   const compose = composeCanonicalEpistemicSpineV2(input.epistemic);

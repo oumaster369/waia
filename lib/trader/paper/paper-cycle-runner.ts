@@ -62,6 +62,7 @@ import type {
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import { admissionPosturesForQualifiedEnvelope } from "@/lib/trader/paper/pre-qualification-paper-envelope";
 import { buildAuthoritativeRuntimeContextV2 } from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
 import type { ComposeCanonicalEpistemicSpineV2Input } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
 import {
@@ -854,20 +855,24 @@ export async function runPaperCycleOnce(
       input.canonicalOrdinaryCapitalEnvelopeV2 ?? deps.canonicalOrdinaryCapitalEnvelopeV2;
     const unavailableSources = envelope?.unavailableContextSources ?? [];
     let cycle: CanonicalRecurringCycleV2Result;
-    if (unavailableSources.length > 0) {
+    if (envelope && unavailableSources.length > 0) {
       cycle =
-        envelope?.context ||
-        envelope?.contextInputs ||
-        envelope?.predictiveAdmissionVerdict === "ADMITTED" ||
-        envelope?.navigatorReceipt ||
-        envelope?.futureCycleEffect
+        envelope.context ||
+        envelope.contextInputs ||
+        envelope.predictiveAdmissionVerdict === "ADMITTED" ||
+        envelope.navigatorReceipt ||
+        envelope.futureCycleEffect
           ? {
               status: "NO_TRADE",
               stage: "EPISTEMIC",
               reasonCodes: ["PRE_QUALIFICATION_PRESENTED_AS_QUALIFIED"],
             }
           : await runCanonicalOrdinaryCapitalCycleV2({
-              epistemic: { kind: "CONTEXT_UNAVAILABLE", sources: unavailableSources },
+              epistemic: {
+                kind: "CONTEXT_UNAVAILABLE",
+                sources: unavailableSources,
+                predictiveAdmissionVerdict: envelope.predictiveAdmissionVerdict,
+              },
               capitalRequest: { executionMode: "paper" },
             });
     } else {
@@ -878,14 +883,15 @@ export async function runPaperCycleOnce(
         symbol,
         pitAnchor,
       });
+      const postures = envelope ? admissionPosturesForQualifiedEnvelope(envelope) : null;
       cycle =
-        resolved.ok && envelope
+        resolved.ok && envelope && postures
           ? await runCanonicalOrdinaryCapitalCycleV2({
               epistemic: resolved.epistemic,
               admissionTemplate: {
                 context: resolved.epistemic.context,
-                currentRuntimePosture: envelope.currentRuntimePosture,
-                currentDriftPosture: envelope.currentDriftPosture,
+                currentRuntimePosture: postures.currentRuntimePosture,
+                currentDriftPosture: postures.currentDriftPosture,
                 navigatorOutcome: envelope.navigatorReceipt?.outcome ?? "UNKNOWN_UNRESOLVED",
                 predictiveAdmissionVerdict: envelope.predictiveAdmissionVerdict,
                 admittedAt: pitAnchor,

@@ -83,8 +83,8 @@ export type PaperCanonicalOrdinaryCapitalEnvelopeV2 = Readonly<{
     | "informationNeedPlan"
     | "release"
   )[];
-  currentRuntimePosture: RuntimePostureV2;
-  currentDriftPosture: LiveEdgeDriftPostureV2;
+  currentRuntimePosture?: RuntimePostureV2;
+  currentDriftPosture?: LiveEdgeDriftPostureV2;
   mkbInjectionAttempted?: boolean;
   legacyKnowledgeMutationAttempted?: boolean;
 }>;

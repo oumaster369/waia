@@ -24,6 +24,7 @@ import {
   encodePaperSignalSseEvent,
 } from "@/lib/trader/paper/paper-signal-ledger";
 import {
+  admissionPosturesForQualifiedEnvelope,
   buildPreQualificationPaperEnvelope,
   PRE_QUALIFICATION_UNAVAILABLE_SOURCES,
 } from "@/lib/trader/paper/pre-qualification-paper-envelope";
@@ -190,6 +191,7 @@ describe("paper loop canonical wiring", () => {
       epistemic: {
         kind: "CONTEXT_UNAVAILABLE",
         sources: PRE_QUALIFICATION_UNAVAILABLE_SOURCES,
+        predictiveAdmissionVerdict: "NOT_ADMITTED",
       },
       capitalRequest: { executionMode: "paper" },
     });
@@ -197,11 +199,15 @@ describe("paper loop canonical wiring", () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.strategySignalId).toBe("signal-paper-1");
     expect(records[0]?.riskVerdict).toBe("NO_TRADE");
-    expect(records[0]?.reasonCodes).toEqual(
-      PRE_QUALIFICATION_UNAVAILABLE_SOURCES.map((source) => `UNAVAILABLE:${source}`),
-    );
+    expect(records[0]?.reasonCodes).toContain("PREDICTIVE_ADMISSION_NOT_ADMITTED");
+    for (const source of PRE_QUALIFICATION_UNAVAILABLE_SOURCES) {
+      expect(records[0]?.reasonCodes).toContain(`UNAVAILABLE:${source}`);
+    }
     expect(cycleDeps.execution.submitOrder).not.toHaveBeenCalled();
     expect(cycleDeps.decisionCapitalAuthorityV2?.decide).not.toHaveBeenCalled();
+    expect(() =>
+      admissionPosturesForQualifiedEnvelope(buildPreQualificationPaperEnvelope()),
+    ).toThrow("ADMISSION_TEMPLATE_FROM_UNAVAILABLE_CONTEXT");
   });
 
   it("appends signal records to a jsonl file", async () => {
