@@ -1485,6 +1485,20 @@
       "when": 1780000000211,
       "tag": "0211_trader_knowledge_edge_version_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "7",
+      "when": 1780000000212,
+      "tag": "0212_trader_human_promotion_tables_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 213,
+      "version": "7",
+      "when": 1780000000213,
+      "tag": "0213_trader_human_promotion_tables_rls_v2",
+      "breakpoints": true
     }
   ]
 }
