@@ -105,26 +105,28 @@ describe("bounded SSE uses the real scoped read handler with injected storage/au
       expect(deps.isAdminListedOrganization).not.toHaveBeenCalled();
     },
   );
-  it.each(["getUserId", "hasTraderAccess", "hasOperatorAccess"] as const)(
-    "rechecks %s on the next bounded admin read",
-    async (gate) => {
-      const deps = dependencies();
-      const response = await handleAccountObservationStream(request(), (next) =>
-        handleAccountObservationGet(next, "admin", deps),
-      );
-      expect(response.headers.get("cache-control")).toContain("no-store");
-      expect(response.headers.get("vary")).toBe("Cookie");
-      const reader = response.body!.getReader();
-      expect(text(await reader.read())).toContain(observation().observationId);
-      if (gate === "getUserId") vi.mocked(deps.getUserId).mockResolvedValue(null);
-      else vi.mocked(deps[gate]).mockResolvedValue(false);
-      const second = reader.read();
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(text(await second)).toBe("event: revoked\ndata: null\n\n");
-      expect((await reader.read()).done).toBe(true);
-      expect(deps.readLatest).toHaveBeenCalledTimes(2);
-    },
-  );
+  it.each([
+    "getUserId",
+    "hasTraderAccess",
+    "hasOperatorAccess",
+    "isAdminListedOrganization",
+  ] as const)("rechecks %s on the next bounded admin read", async (gate) => {
+    const deps = dependencies();
+    const response = await handleAccountObservationStream(request(), (next) =>
+      handleAccountObservationGet(next, "admin", deps),
+    );
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("vary")).toBe("Cookie");
+    const reader = response.body!.getReader();
+    expect(text(await reader.read())).toContain(observation().observationId);
+    if (gate === "getUserId") vi.mocked(deps.getUserId).mockResolvedValue(null);
+    else vi.mocked(deps[gate]).mockResolvedValue(false);
+    const second = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await second)).toBe("event: revoked\ndata: null\n\n");
+    expect((await reader.read()).done).toBe(true);
+    expect(deps.readLatest).toHaveBeenCalledTimes(2);
+  });
   it("fences rotation during a subsequent read and never emits the old observation", async () => {
     const deps = dependencies();
     const response = await handleAccountObservationStream(request(), (next) =>
