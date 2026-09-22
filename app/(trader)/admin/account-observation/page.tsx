@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { ConnectedAccountsTable } from "@/components/trader/admin/connected-accounts-table";
+import { FleetPortfolioPanel } from "@/components/trader/admin/fleet-portfolio-panel";
 import { ConnectedAccountObservationPanel } from "@/components/trader/account-observation/connected-account-observation-panel";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 
@@ -24,6 +25,7 @@ export default function AdminAccountObservationPage() {
   if (!target) {
     return (
       <main className="space-y-5">
+        <FleetPortfolioPanel />
         <ConnectedAccountsTable />
       </main>
     );
