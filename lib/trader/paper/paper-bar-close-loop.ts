@@ -14,10 +14,14 @@ import {
 import { runPaperCycleOnce } from "@/lib/trader/paper/paper-cycle-runner";
 import { resolveHtxInformationInquiryCycleV1 } from "@/lib/trader/paper/paper-cycle-runner";
 import type {
+  PaperCanonicalOrdinaryCapitalEnvelopeV2,
   PaperCycleDeps,
+  PaperCycleExecutionMode,
   PaperInformationInquiryResolverV1,
 } from "@/lib/trader/paper/paper-cycle.types";
+import type { PaperSignalLedger } from "@/lib/trader/paper/paper-signal-ledger";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
+import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -47,6 +51,11 @@ export type PaperBarCloseLoopConfig = {
   abortSignal?: AbortSignal;
   newId?: () => string;
   informationInquiryResolver?: PaperInformationInquiryResolverV1;
+  /** Paper reaches the canonical cycle. Mock keeps the legacy multi-strategy path. */
+  executionMode?: PaperCycleExecutionMode;
+  canonicalOrdinaryCapitalEnvelopeV2?: PaperCanonicalOrdinaryCapitalEnvelopeV2;
+  signalLedger?: PaperSignalLedger;
+  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
 };
 
 export type PaperBarCloseLoopResult = {
@@ -142,22 +151,41 @@ export async function runPaperBarCloseLoop(
         : null;
     const snapshot = resolvedInquiry?.bundle.snapshot ?? (await config.poll.fetchSnapshot());
 
+    const executionMode = config.executionMode ?? "mock";
     const result = await runPaperCycleOnce(config.deps, {
       context: config.context,
       snapshot,
       accountKey: config.accountKey,
       defaultQuantity: config.defaultQuantity,
       accountState,
-      executionMode: "mock",
+      executionMode,
+      canonicalOrdinaryCapitalEnvelopeV2: config.canonicalOrdinaryCapitalEnvelopeV2,
       telemetrySink,
       newId,
       fusedContext: resolvedInquiry?.bundle.fusedContext,
-      informationSufficiencyAuthority: resolvedInquiry?.informationSufficiencyAuthority,
+      informationSufficiencyAuthority:
+        resolvedInquiry?.informationSufficiencyAuthority ?? config.informationSufficiencyAuthority,
       orderRepository: config.orderRepository,
       refreshAccountStateBetweenStrategies: Boolean(
         config.refreshAccountState && config.orderRepository,
       ),
     });
+    if (config.signalLedger) {
+      const cycle = result.canonicalOrdinaryCapitalCycleV2;
+      for (const execution of result.strategyExecutions) {
+        await config.signalLedger.append({
+          cycleId: snapshot.cycleId,
+          strategySignalId: execution.signal.strategySignalId,
+          riskVerdict:
+            cycle?.status === "EXECUTION_BOUND"
+              ? "EXECUTION_BOUND"
+              : cycle
+                ? "NO_TRADE"
+                : "NOT_RECORDED",
+          reasonCodes: cycle?.status === "NO_TRADE" ? cycle.reasonCodes : [],
+        });
+      }
+    }
 
     cyclesRun += 1;
 
@@ -180,6 +208,7 @@ export async function runPaperBarCloseLoop(
           result,
           stateRefreshed: false,
           accountStateAfterCycle: accountState,
+          executionMode,
           errorClass: safeTraderTelemetryErrorClass(err),
         },
         telemetrySink,
@@ -195,6 +224,7 @@ export async function runPaperBarCloseLoop(
       result,
       stateRefreshed,
       accountStateAfterCycle: accountState,
+      executionMode,
     };
 
     emitPaperBarCloseCycleComplete(cycleCompletePayloadInput, telemetrySink);
