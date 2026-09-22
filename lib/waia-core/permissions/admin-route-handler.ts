@@ -5,8 +5,13 @@ if (process.env.VITEST !== "true") {
   require("server-only");
 }
 
-import { organizations } from "@/db/schema";
+import { organizationEntitlements, organizations } from "@/db/schema";
 import * as pgSchema from "@/db/schema.postgres";
+import { and, eq } from "drizzle-orm";
+import {
+  filterOrganizationsByTraderEntitlement,
+  TRADER_ADMIN_ENTITLEMENT_KEY,
+} from "@/lib/waia-core/permissions/trader-org-filter";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import {
   adminClientError,
@@ -38,7 +43,25 @@ export async function handleAdminOrganizationsList(
         .select({ id: organizations.id, name: organizations.name, kind: organizations.kind })
         .from(organizations)
         .all();
-      return adminSuccess({ organizations: rows }, "sqlite");
+      const entitled = runtime.db
+        .select({ organizationId: organizationEntitlements.organizationId })
+        .from(organizationEntitlements)
+        .where(
+          and(
+            eq(organizationEntitlements.entitlementKey, TRADER_ADMIN_ENTITLEMENT_KEY),
+            eq(organizationEntitlements.enabled, true),
+          ),
+        )
+        .all();
+      return adminSuccess(
+        {
+          organizations: filterOrganizationsByTraderEntitlement(
+            rows,
+            new Set(entitled.map((row) => row.organizationId)),
+          ),
+        },
+        "sqlite",
+      );
     }
 
     const rows = await runtime.db
@@ -48,7 +71,24 @@ export async function handleAdminOrganizationsList(
         kind: pgSchema.organizations.kind,
       })
       .from(pgSchema.organizations);
-    return adminSuccess({ organizations: rows }, "postgres");
+    const entitled = await runtime.db
+      .select({ organizationId: pgSchema.organizationEntitlements.organizationId })
+      .from(pgSchema.organizationEntitlements)
+      .where(
+        and(
+          eq(pgSchema.organizationEntitlements.entitlementKey, TRADER_ADMIN_ENTITLEMENT_KEY),
+          eq(pgSchema.organizationEntitlements.enabled, true),
+        ),
+      );
+    return adminSuccess(
+      {
+        organizations: filterOrganizationsByTraderEntitlement(
+          rows,
+          new Set(entitled.map((row) => row.organizationId)),
+        ),
+      },
+      "postgres",
+    );
   } finally {
     await deps.disposeRuntimeDb(runtime);
   }
