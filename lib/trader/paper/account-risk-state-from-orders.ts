@@ -9,7 +9,7 @@ import { derivePaperBook } from "@/lib/trader/paper/derive-paper-book";
 export type DeriveAccountRiskStateInput = {
   context: OrgContext;
   orderRepository: OrderRepository;
-  executionMode?: "mock";
+  executionMode?: "mock" | "paper";
 };
 
 function parseQuoteCurrency(symbol: string): string {

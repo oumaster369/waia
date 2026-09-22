@@ -55,6 +55,12 @@ function buildPaperLoopPortfolioContext(
   };
 }
 
+function portfolioExecutionMode(input: RunPaperLoopCycleInput): "mock" | "paper" {
+  const deps = input.deps.paperCycleDeps;
+  if (deps.decisionCapitalAuthorityV2 && deps.canonicalOrdinaryCapitalEnvelopeV2) return "paper";
+  return "mock";
+}
+
 function buildMarkPricesFromSnapshot(bars: readonly Bar[]): PaperPnLMarkPrices | undefined {
   if (bars.length === 0) {
     return undefined;
@@ -77,11 +83,11 @@ async function refreshPortfolioAccountState(
     runConfig: portfolio.runConfig,
     limits: portfolio.limits,
     stopDistanceProvider: portfolio.stopDistanceProvider,
-    executionMode: "mock",
+    executionMode: portfolioExecutionMode(input),
     markPrices: portfolio.markPrices,
   });
   const openOrders = await input.deps.orderRepository.listOpenOrders(context, {
-    executionMode: "mock",
+    executionMode: portfolioExecutionMode(input),
   });
   return toAccountRiskState({ portfolio: portfolioState, openOrderCount: openOrders.length });
 }
@@ -144,7 +150,7 @@ export async function runPaperLoopCycle(
     accountKey: config.accountKey,
     defaultQuantity: config.defaultQuantity,
     accountState,
-    executionMode: "mock",
+    executionMode: portfolioExecutionMode(input),
     telemetrySink,
     newId: input.newId,
     informationSufficiencyAuthority: resolvedInquiry?.informationSufficiencyAuthority,
