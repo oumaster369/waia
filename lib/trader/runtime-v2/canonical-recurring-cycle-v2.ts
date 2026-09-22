@@ -1,4 +1,7 @@
-import { composeCanonicalEpistemicSpineV2 } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
+import {
+  composeCanonicalEpistemicSpineV2,
+  predictiveAdmissionReasonCode,
+} from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
 import type { ComposeCanonicalEpistemicSpineV2Input } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
 import {
   proveProtectiveExecutionAdmissionV2,
@@ -25,7 +28,13 @@ export type CanonicalRecurringCycleV2Result =
       capital: Extract<DecisionCapitalAuthorityV2Result, { status: "EXECUTION_BOUND" }>;
     }>;
 
-export async function runCanonicalOrdinaryCapitalCycleV2(input: {
+export type CanonicalContextUnavailableV2 = Readonly<{
+  kind: "CONTEXT_UNAVAILABLE";
+  sources: readonly string[];
+  predictiveAdmissionVerdict: "ADMITTED" | "NOT_ADMITTED" | "RESEARCH_ONLY";
+}>;
+
+type QualifiedCanonicalOrdinaryCapitalCycleV2Input = Readonly<{
   epistemic: ComposeCanonicalEpistemicSpineV2Input;
   admissionTemplate: Omit<
     ProveOrdinaryExecutionAdmissionV2Input,
@@ -34,7 +43,46 @@ export async function runCanonicalOrdinaryCapitalCycleV2(input: {
     Pick<ProveOrdinaryExecutionAdmissionV2Input, "identity">;
   capitalDeps: CanonicalDecisionCapitalAuthorityV2Deps;
   capitalRequest: DecisionCapitalRequestV2;
-}): Promise<CanonicalRecurringCycleV2Result> {
+}>;
+
+type UnavailableCanonicalOrdinaryCapitalCycleV2Input = Readonly<{
+  epistemic: CanonicalContextUnavailableV2;
+  capitalRequest: Pick<DecisionCapitalRequestV2, "executionMode">;
+}>;
+
+function isUnavailableCanonicalCycleInput(
+  input:
+    | QualifiedCanonicalOrdinaryCapitalCycleV2Input
+    | UnavailableCanonicalOrdinaryCapitalCycleV2Input,
+): input is UnavailableCanonicalOrdinaryCapitalCycleV2Input {
+  return "kind" in input.epistemic && input.epistemic.kind === "CONTEXT_UNAVAILABLE";
+}
+
+export async function runCanonicalOrdinaryCapitalCycleV2(
+  input:
+    | QualifiedCanonicalOrdinaryCapitalCycleV2Input
+    | UnavailableCanonicalOrdinaryCapitalCycleV2Input,
+): Promise<CanonicalRecurringCycleV2Result> {
+  if (isUnavailableCanonicalCycleInput(input)) {
+    if (input.capitalRequest.executionMode !== "paper") {
+      return {
+        status: "NO_TRADE",
+        stage: "EPISTEMIC",
+        reasonCodes: ["PAPER_EXECUTION_MODE_REQUIRED"],
+      };
+    }
+    const admissionReason = predictiveAdmissionReasonCode(
+      input.epistemic.predictiveAdmissionVerdict,
+    );
+    return {
+      status: "NO_TRADE",
+      stage: "EPISTEMIC",
+      reasonCodes: [
+        ...input.epistemic.sources.map((source) => `UNAVAILABLE:${source}`),
+        ...(admissionReason ? [admissionReason] : []),
+      ],
+    };
+  }
   const compose = composeCanonicalEpistemicSpineV2(input.epistemic);
   if (compose.status !== "ADMITTED") {
     return { status: "NO_TRADE", stage: "EPISTEMIC", reasonCodes: compose.reasonCodes };

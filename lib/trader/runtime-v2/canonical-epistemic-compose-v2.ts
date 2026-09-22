@@ -45,6 +45,14 @@ function freezeCompose(
   });
 }
 
+export function predictiveAdmissionReasonCode(
+  verdict: "ADMITTED" | "NOT_ADMITTED" | "RESEARCH_ONLY",
+): "PREDICTIVE_ADMISSION_NOT_ADMITTED" | "RESEARCH_ONLY_NOT_CAPITAL_ELIGIBLE" | null {
+  if (verdict === "ADMITTED") return null;
+  if (verdict === "RESEARCH_ONLY") return "RESEARCH_ONLY_NOT_CAPITAL_ELIGIBLE";
+  return "PREDICTIVE_ADMISSION_NOT_ADMITTED";
+}
+
 export function composeCanonicalEpistemicSpineV2(
   input: ComposeCanonicalEpistemicSpineV2Input,
 ): CanonicalEpistemicComposeV2 {
@@ -73,13 +81,8 @@ export function composeCanonicalEpistemicSpineV2(
       reasonCodes.push("NAVIGATOR_NOT_MINIMAL_SUFFICIENT");
     }
   }
-  if (input.predictiveAdmissionVerdict !== "ADMITTED") {
-    reasonCodes.push(
-      input.predictiveAdmissionVerdict === "RESEARCH_ONLY"
-        ? "RESEARCH_ONLY_NOT_CAPITAL_ELIGIBLE"
-        : "PREDICTIVE_ADMISSION_NOT_ADMITTED",
-    );
-  }
+  const admissionReason = predictiveAdmissionReasonCode(input.predictiveAdmissionVerdict);
+  if (admissionReason) reasonCodes.push(admissionReason);
   if (input.futureCycleEffect) {
     if (input.futureCycleEffect.capitalAuthority !== "NONE") {
       reasonCodes.push("FUTURE_CYCLE_CAPITAL_AUTHORITY_FORBIDDEN");
