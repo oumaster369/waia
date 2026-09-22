@@ -63,6 +63,7 @@ function sharedStore(): Store {
       hasTraderAccess: vi.fn(async () => true),
       hasOrgMembership: vi.fn(async () => true),
       hasOperatorAccess: vi.fn(async () => true),
+      isAdminListedOrganization: vi.fn(async () => true),
       resolveActiveBinding,
       readLatest,
     },

@@ -1,10 +1,18 @@
 import "server-only";
+import { and, eq } from "drizzle-orm";
 import postgres, { type Sql } from "postgres";
 import { getFreshOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
+import * as pgSchema from "@/db/schema.postgres";
 import { assertOrgMembershipPostgres } from "@/lib/waia-core/scope/org-context";
 import { hasModuleEntitlementPostgres } from "@/lib/waia-core/entitlements/authoritative";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
+import {
+  ADMIN_LISTED_CREDENTIAL_STATUS,
+  ADMIN_LISTED_ORGANIZATION_KIND,
+  ADMIN_LISTED_VENUE,
+  isAdminConnectedAccountScope,
+} from "@/lib/trader/credentials/admin-connected-account-scope";
 import { createPostgresObservationReader } from "./postgres-reader";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "./read-handler";
 
@@ -49,6 +57,31 @@ export function createAccountObservationRouteDependencies() {
     },
     async hasOperatorAccess(userId, organizationId, signal) {
       return (await assertAdminPermission(await runtime(signal), userId, organizationId, "admin.audit.read")).allowed;
+    },
+    async isAdminListedOrganization(organizationId, signal) {
+      const db = await runtime(signal);
+      const rows = await db.db
+        .select({
+          organizationKind: pgSchema.organizations.kind,
+          venue: pgSchema.exchangeCredentials.venue,
+          credentialStatus: pgSchema.exchangeCredentials.status,
+        })
+        .from(pgSchema.exchangeCredentials)
+        .innerJoin(
+          pgSchema.organizations,
+          eq(pgSchema.organizations.id, pgSchema.exchangeCredentials.organizationId),
+        )
+        .where(
+          and(
+            eq(pgSchema.organizations.id, organizationId),
+            eq(pgSchema.organizations.kind, ADMIN_LISTED_ORGANIZATION_KIND),
+            eq(pgSchema.exchangeCredentials.venue, ADMIN_LISTED_VENUE),
+            eq(pgSchema.exchangeCredentials.status, ADMIN_LISTED_CREDENTIAL_STATUS),
+          ),
+        )
+        .limit(1);
+      const row = rows[0];
+      return row !== undefined && isAdminConnectedAccountScope(row);
     },
     async resolveActiveBinding(scope, _userId, signal) { return reader(signal).resolveActiveBinding(scope); },
     async readLatest(binding, signal) { return reader(signal).readLatest(binding); },
