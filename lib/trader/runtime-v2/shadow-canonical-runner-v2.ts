@@ -1,10 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { FORECAST_RUNTIME_NON_ACTIONABLE_V2_VERSION } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { buildAuthoritativeRuntimeContextV2 } from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
-import type { DecisionCapitalRequestV2 } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 import {
   runShadowCanonicalCycleV2,
   shadowBarKeyV2,
@@ -12,45 +8,26 @@ import {
   type ShadowCycleStoreV2,
 } from "@/lib/trader/runtime-v2/shadow-canonical-cycle-v2";
 
-export type ShadowContextDigestHexV2 = Readonly<{
-  runtimeAssessmentDigestHex: string;
-  driftRestrictionDigestHex: string;
-  qualificationTupleDigestHex: string;
-  packageDigestHex: string;
-  informationContractDigestHex: string;
-  informationNeedPlanDigestHex: string;
-  releaseDigestHex: string;
-}>;
+/** Sources that do not exist before qualification. No digest is supplied for them. */
+export const SHADOW_PRE_QUALIFICATION_UNAVAILABLE_SOURCES = [
+  "runtimeAssessment",
+  "driftRestriction",
+  "qualificationTuple",
+  "package",
+  "informationContract",
+  "informationNeedPlan",
+  "release",
+] as const;
+
+export const SHADOW_PRE_QUALIFICATION_ADMISSION = "NOT_ADMITTED" as const;
 
 export type ClosedBarSourceV2 = Readonly<{
   nextClosedBar(): Promise<Bar | null>;
 }>;
 
-const refusalDeps = {
-  decide: async () => {
-    throw new Error("SHADOW_EXECUTION_FORBIDDEN");
-  },
-  assessRisk: async () => {
-    throw new Error("SHADOW_EXECUTION_FORBIDDEN");
-  },
-  execute: async () => {
-    throw new Error("SHADOW_EXECUTION_FORBIDDEN");
-  },
-};
-
-function nonActionableForecast(): DecisionCapitalRequestV2["forecastOutcome"] {
-  const body = {
-    schemaVersion: FORECAST_RUNTIME_NON_ACTIONABLE_V2_VERSION,
-    status: "NON_ACTIONABLE" as const,
-    capitalAuthority: "NONE" as const,
-    reason: "MISSING_OR_NOT_ADMITTED" as const,
-    predictiveAdmissionReceiptContentDigestHex: null,
-    marketStateSnapshotContentDigestHex: null,
-    selectedPredictivePackageContentDigestHex: null,
-    upstreamReasonCodes: [] as string[],
-  };
-  return { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
-}
+export type ShadowLiveBarTransportV2 = Readonly<{
+  fetchBars(): Promise<readonly Bar[]>;
+}>;
 
 function recordedBarSource(bars: readonly Bar[]): ClosedBarSourceV2 {
   let index = 0;
@@ -64,16 +41,16 @@ function recordedBarSource(bars: readonly Bar[]): ClosedBarSourceV2 {
 }
 
 /**
- * One pass over already-closed bars. Qualification stays NOT_ADMITTED.
- * The bar source is injected: tests pass recorded bars and this function does not open a socket.
+ * One pass over an injected closed-bar source.
+ * There is no live HTX wait. Every bar takes the unavailable-context path.
  */
 export async function runShadowCanonicalBarCloseLoopV2(input: {
   source: ClosedBarSourceV2;
   store: ShadowCycleStoreV2;
   organizationId: string;
   accountId: string;
-  contextDigests: ShadowContextDigestHexV2;
   maxBars?: number;
+  liveTransport?: ShadowLiveBarTransportV2;
 }): Promise<readonly ShadowCycleRecordV2[]> {
   const records: ShadowCycleRecordV2[] = [];
   const limit = input.maxBars ?? Number.POSITIVE_INFINITY;
@@ -81,15 +58,6 @@ export async function runShadowCanonicalBarCloseLoopV2(input: {
     const bar = await input.source.nextClosedBar();
     if (!bar) break;
     if (!bar.barCloseTime) throw new Error("SHADOW_BAR_NOT_CLOSED");
-    const context = buildAuthoritativeRuntimeContextV2({
-      organizationId: input.organizationId,
-      accountId: input.accountId,
-      symbol: bar.symbol,
-      pitAnchor: bar.barCloseTime,
-      runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
-      driftPosture: "NORMAL",
-      ...input.contextDigests,
-    });
     const barKey = shadowBarKeyV2({
       organizationId: input.organizationId,
       accountId: input.accountId,
@@ -99,23 +67,11 @@ export async function runShadowCanonicalBarCloseLoopV2(input: {
     records.push(
       await runShadowCanonicalCycleV2(input.store, barKey, {
         epistemic: {
-          context,
-          navigatorReceipt: null,
-          predictiveAdmissionVerdict: "NOT_ADMITTED",
-          futureCycleEffect: null,
+          kind: "CONTEXT_UNAVAILABLE",
+          sources: SHADOW_PRE_QUALIFICATION_UNAVAILABLE_SOURCES,
+          predictiveAdmissionVerdict: SHADOW_PRE_QUALIFICATION_ADMISSION,
         },
-        admissionTemplate: {} as never,
-        capitalDeps: refusalDeps,
-        capitalRequest: {
-          organizationId: input.organizationId,
-          accountId: input.accountId,
-          cycleId: barKey,
-          symbol: bar.symbol,
-          referencePrice: bar.close,
-          executionMode: "paper",
-          forecastOutcome: nonActionableForecast(),
-          proposal: { action: "ENTER_LONG", quantity: "1", strategySignalId: null },
-        },
+        capitalRequest: { executionMode: "paper" },
       }),
     );
   }
@@ -127,61 +83,40 @@ export async function runRecordedShadowCanonicalBarsV2(input: {
   store: ShadowCycleStoreV2;
   organizationId: string;
   accountId: string;
-  contextDigests: ShadowContextDigestHexV2;
 }): Promise<readonly ShadowCycleRecordV2[]> {
   return runShadowCanonicalBarCloseLoopV2({
-    ...input,
     source: recordedBarSource(input.bars),
+    store: input.store,
+    organizationId: input.organizationId,
+    accountId: input.accountId,
   });
 }
 
-function readDigests(path: string): ShadowContextDigestHexV2 {
-  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-  if (!parsed || typeof parsed !== "object") throw new Error("SHADOW_DIGESTS_INVALID");
-  const digests = parsed as Partial<ShadowContextDigestHexV2>;
-  const keys: (keyof ShadowContextDigestHexV2)[] = [
-    "runtimeAssessmentDigestHex",
-    "driftRestrictionDigestHex",
-    "qualificationTupleDigestHex",
-    "packageDigestHex",
-    "informationContractDigestHex",
-    "informationNeedPlanDigestHex",
-    "releaseDigestHex",
-  ];
-  for (const key of keys) {
-    if (typeof digests[key] !== "string") throw new Error("SHADOW_DIGESTS_INVALID");
-  }
-  return digests as ShadowContextDigestHexV2;
-}
-
-/** Exit 64 unless every required flag is present. Does not contact HTX. */
+/** Exit 64 unless --journal, --bars, --organization, and --account are present. */
 export async function runShadowRunnerCliV2(
   args: readonly string[],
   storeForDirectory: (directory: string) => ShadowCycleStoreV2,
 ): Promise<number> {
   if (
-    args.length !== 10 ||
+    args.length !== 8 ||
     args[0] !== "--journal" ||
     args[2] !== "--bars" ||
-    args[4] !== "--digests" ||
-    args[6] !== "--organization" ||
-    args[8] !== "--account"
+    args[4] !== "--organization" ||
+    args[6] !== "--account"
   ) {
     return 64;
   }
   const journalDirectory = args[1];
   const barsPath = args[3];
-  const digestsPath = args[5];
-  const organizationId = args[7];
-  const accountId = args[9];
-  if (!journalDirectory || !barsPath || !digestsPath || !organizationId || !accountId) return 64;
+  const organizationId = args[5];
+  const accountId = args[7];
+  if (!journalDirectory || !barsPath || !organizationId || !accountId) return 64;
   const bars = JSON.parse(readFileSync(barsPath, "utf8")) as Bar[];
   await runRecordedShadowCanonicalBarsV2({
     bars,
     store: storeForDirectory(journalDirectory),
     organizationId,
     accountId,
-    contextDigests: readDigests(digestsPath),
   });
   return 0;
 }
