@@ -1,3 +1,5 @@
+import { ReadReviewActionShell } from "@/components/trader/admin/read-review-action-shell";
+
 export type ScoreDiagnosticReportView = Readonly<{
   format: "waia-scientific-score-diagnostic/v1";
   qualification: "NOT_RUN";
@@ -58,18 +60,31 @@ export function loadScoreDiagnosticArtifact(
 
 export function ScoreDiagnosticReport({ artifact }: { artifact: ScoreDiagnosticArtifact }) {
   return (
-    <section aria-label="Score diagnostic">
-      <p>qualification: NOT_RUN</p>
-      <p>This is a diagnostic readout. It is not a qualification pass or fail.</p>
-      {artifact.state === "absent" ? (
-        <p>Diagnostic report is absent. Source: {artifact.source}</p>
-      ) : null}
-      {artifact.state === "unreadable" ? (
-        <p>Diagnostic report could not be read. Source: {artifact.source}</p>
-      ) : null}
-      {artifact.state === "report" ? (
-        <p>Saved forecast count: {artifact.report.forecastCount}</p>
-      ) : null}
-    </section>
+    <ReadReviewActionShell
+      title="Score diagnostic"
+      readContent={
+        <div className="space-y-2">
+          <p className="text-waia-fg text-sm">qualification: NOT_RUN</p>
+          <p className="text-waia-fg-muted text-sm">
+            This is a diagnostic readout. It is not a qualification pass or fail.
+          </p>
+          {artifact.state === "absent" ? (
+            <p className="text-waia-fg text-sm">
+              Diagnostic report is absent. Source: {artifact.source}
+            </p>
+          ) : null}
+          {artifact.state === "unreadable" ? (
+            <p className="text-waia-fg text-sm">
+              Diagnostic report could not be read. Source: {artifact.source}
+            </p>
+          ) : null}
+          {artifact.state === "report" ? (
+            <p className="text-waia-fg text-sm">
+              Saved forecast count: {artifact.report.forecastCount}
+            </p>
+          ) : null}
+        </div>
+      }
+    />
   );
 }

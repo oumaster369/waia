@@ -10,5 +10,9 @@ export default function AdminScoreDiagnosticPage() {
     process.env.WAIA_SCORE_DIAGNOSTIC_REPORT_PATH,
     (filePath) => readFileSync(filePath, "utf8"),
   );
-  return <ScoreDiagnosticReport artifact={artifact} />;
+  return (
+    <main className="space-y-5">
+      <ScoreDiagnosticReport artifact={artifact} />
+    </main>
+  );
 }

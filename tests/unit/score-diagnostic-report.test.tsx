@@ -57,6 +57,7 @@ describe("score diagnostic report", () => {
     );
     expect(artifact.state).toBe("report");
     render(<ScoreDiagnosticReport artifact={artifact} />);
+    expect(screen.getByRole("heading", { name: "Score diagnostic" })).toBeTruthy();
     expect(screen.getByText("qualification: NOT_RUN")).toBeTruthy();
     expect(screen.getByText("Saved forecast count: 12")).toBeTruthy();
     expect(screen.queryByText(/PASS/)).toBeNull();
