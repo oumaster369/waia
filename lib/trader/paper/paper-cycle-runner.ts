@@ -852,55 +852,75 @@ export async function runPaperCycleOnce(
     const pitAnchor = snapshot.evaluatedAt;
     const envelope =
       input.canonicalOrdinaryCapitalEnvelopeV2 ?? deps.canonicalOrdinaryCapitalEnvelopeV2;
-    const resolved = resolvePaperCanonicalEpistemicSpineV2({
-      envelope,
-      organizationId: context.organizationId,
-      accountId: input.accountKey,
-      symbol,
-      pitAnchor,
-    });
-    const cycle: CanonicalRecurringCycleV2Result =
-      resolved.ok && envelope
-        ? await runCanonicalOrdinaryCapitalCycleV2({
-            epistemic: resolved.epistemic,
-            admissionTemplate: {
-              context: resolved.epistemic.context,
-              currentRuntimePosture: envelope.currentRuntimePosture,
-              currentDriftPosture: envelope.currentDriftPosture,
-              navigatorOutcome: envelope.navigatorReceipt?.outcome ?? "UNKNOWN_UNRESOLVED",
-              predictiveAdmissionVerdict: envelope.predictiveAdmissionVerdict,
-              admittedAt: pitAnchor,
-              identity: {
+    const unavailableSources = envelope?.unavailableContextSources ?? [];
+    let cycle: CanonicalRecurringCycleV2Result;
+    if (unavailableSources.length > 0) {
+      cycle =
+        envelope?.context ||
+        envelope?.contextInputs ||
+        envelope?.predictiveAdmissionVerdict === "ADMITTED" ||
+        envelope?.navigatorReceipt ||
+        envelope?.futureCycleEffect
+          ? {
+              status: "NO_TRADE",
+              stage: "EPISTEMIC",
+              reasonCodes: ["PRE_QUALIFICATION_PRESENTED_AS_QUALIFIED"],
+            }
+          : await runCanonicalOrdinaryCapitalCycleV2({
+              epistemic: { kind: "CONTEXT_UNAVAILABLE", sources: unavailableSources },
+              capitalRequest: { executionMode: "paper" },
+            });
+    } else {
+      const resolved = resolvePaperCanonicalEpistemicSpineV2({
+        envelope,
+        organizationId: context.organizationId,
+        accountId: input.accountKey,
+        symbol,
+        pitAnchor,
+      });
+      cycle =
+        resolved.ok && envelope
+          ? await runCanonicalOrdinaryCapitalCycleV2({
+              epistemic: resolved.epistemic,
+              admissionTemplate: {
+                context: resolved.epistemic.context,
+                currentRuntimePosture: envelope.currentRuntimePosture,
+                currentDriftPosture: envelope.currentDriftPosture,
+                navigatorOutcome: envelope.navigatorReceipt?.outcome ?? "UNKNOWN_UNRESOLVED",
+                predictiveAdmissionVerdict: envelope.predictiveAdmissionVerdict,
+                admittedAt: pitAnchor,
+                identity: {
+                  organizationId: context.organizationId,
+                  accountId: input.accountKey,
+                  symbol,
+                  action: "ENTER_LONG",
+                  direction: "BUY",
+                  quantity: input.defaultQuantity,
+                  externalEffectId: snapshot.cycleId,
+                },
+              },
+              capitalDeps: deps.decisionCapitalAuthorityV2,
+              capitalRequest: {
                 organizationId: context.organizationId,
                 accountId: input.accountKey,
+                cycleId: snapshot.cycleId,
                 symbol,
-                action: "ENTER_LONG",
-                direction: "BUY",
-                quantity: input.defaultQuantity,
-                externalEffectId: snapshot.cycleId,
+                referencePrice: evaluation.features.features.close,
+                executionMode: "paper",
+                forecastOutcome: evaluation.forecastRuntimeOutcome!,
+                proposal: {
+                  action: "ENTER_LONG",
+                  quantity: input.defaultQuantity,
+                  strategySignalId: signal.strategySignalId,
+                },
               },
-            },
-            capitalDeps: deps.decisionCapitalAuthorityV2,
-            capitalRequest: {
-              organizationId: context.organizationId,
-              accountId: input.accountKey,
-              cycleId: snapshot.cycleId,
-              symbol,
-              referencePrice: evaluation.features.features.close,
-              executionMode: "paper",
-              forecastOutcome: evaluation.forecastRuntimeOutcome!,
-              proposal: {
-                action: "ENTER_LONG",
-                quantity: input.defaultQuantity,
-                strategySignalId: signal.strategySignalId,
-              },
-            },
-          })
-        : {
-            status: "NO_TRADE",
-            stage: "EPISTEMIC",
-            reasonCodes: [resolved.ok ? "CANONICAL_ENVELOPE_MISSING" : resolved.reasonCode],
-          };
+            })
+          : {
+              status: "NO_TRADE",
+              stage: "EPISTEMIC",
+              reasonCodes: [resolved.ok ? "CANONICAL_ENVELOPE_MISSING" : resolved.reasonCode],
+            };
+    }
     if (cycle.status === "NO_TRADE") {
       strategyExecutions.push({
         signal,

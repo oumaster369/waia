@@ -4,6 +4,15 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/trader/runtime-v2/canonical-recurring-cycle-v2", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/trader/runtime-v2/canonical-recurring-cycle-v2")>();
+  return {
+    ...actual,
+    runCanonicalOrdinaryCapitalCycleV2: vi.fn(actual.runCanonicalOrdinaryCapitalCycleV2),
+  };
+});
+
 import * as evaluationCycleModule from "@/lib/trader/intelligence/evaluation-cycle";
 import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import type { EvaluationCycleResult } from "@/lib/trader/intelligence/types";
@@ -14,7 +23,11 @@ import {
   createMemoryPaperSignalLedger,
   encodePaperSignalSseEvent,
 } from "@/lib/trader/paper/paper-signal-ledger";
-import { buildPreQualificationPaperEnvelope } from "@/lib/trader/paper/pre-qualification-paper-envelope";
+import {
+  buildPreQualificationPaperEnvelope,
+  PRE_QUALIFICATION_UNAVAILABLE_SOURCES,
+} from "@/lib/trader/paper/pre-qualification-paper-envelope";
+import { runCanonicalOrdinaryCapitalCycleV2 } from "@/lib/trader/runtime-v2/canonical-recurring-cycle-v2";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import {
   renderPaperLoopSystemdUnit,
@@ -110,7 +123,7 @@ function snapshot(): MarketSnapshot {
         barCloseTime: PIT,
       },
     ],
-    quote: { symbol: "BTC/USDT", bid: "64000", ask: "64000", ts: PIT },
+    quote: { symbol: "BTC/USDT", bid: "64000", ask: "64000", last: "64000", timestamp: PIT },
     evaluatedAt: PIT,
     cycleIndex: 0,
     cycleId: "cycle-paper-1",
@@ -144,7 +157,10 @@ describe("paper loop canonical wiring", () => {
   it("reaches the canonical cycle in paper mode and records the signal", async () => {
     const ledger = createMemoryPaperSignalLedger();
     const cycleDeps = deps();
-    const poll: BarPollSource = { fetchSnapshot: async () => snapshot() };
+    const poll: BarPollSource = {
+      fetchSnapshot: async () => snapshot(),
+      reset() {},
+    };
     const result = await runPaperBarCloseLoop({
       poll,
       deps: cycleDeps,
@@ -164,12 +180,28 @@ describe("paper loop canonical wiring", () => {
       sleep: async () => {},
     });
     expect(result.cyclesRun).toBe(1);
+    const envelope = buildPreQualificationPaperEnvelope();
+    expect(envelope.predictiveAdmissionVerdict).toBe("NOT_ADMITTED");
+    expect(envelope.context).toBeUndefined();
+    expect(envelope.contextInputs).toBeUndefined();
+    expect(JSON.stringify(envelope)).not.toContain("0".repeat(64));
+    expect(runCanonicalOrdinaryCapitalCycleV2).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runCanonicalOrdinaryCapitalCycleV2).mock.calls[0]?.[0]).toMatchObject({
+      epistemic: {
+        kind: "CONTEXT_UNAVAILABLE",
+        sources: PRE_QUALIFICATION_UNAVAILABLE_SOURCES,
+      },
+      capitalRequest: { executionMode: "paper" },
+    });
     const records = await ledger.list();
     expect(records).toHaveLength(1);
     expect(records[0]?.strategySignalId).toBe("signal-paper-1");
     expect(records[0]?.riskVerdict).toBe("NO_TRADE");
-    expect(records[0]?.reasonCodes).toContain("PREDICTIVE_ADMISSION_NOT_ADMITTED");
+    expect(records[0]?.reasonCodes).toEqual(
+      PRE_QUALIFICATION_UNAVAILABLE_SOURCES.map((source) => `UNAVAILABLE:${source}`),
+    );
     expect(cycleDeps.execution.submitOrder).not.toHaveBeenCalled();
+    expect(cycleDeps.decisionCapitalAuthorityV2?.decide).not.toHaveBeenCalled();
   });
 
   it("appends signal records to a jsonl file", async () => {

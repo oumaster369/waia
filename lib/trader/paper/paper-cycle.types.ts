@@ -70,6 +70,19 @@ export type PaperCanonicalOrdinaryCapitalEnvelopeV2 = Readonly<{
   navigatorReceipt: KnowledgeSelectionReceiptV2 | null;
   predictiveAdmissionVerdict: "ADMITTED" | "NOT_ADMITTED" | "RESEARCH_ONLY";
   futureCycleEffect: FutureCycleEpistemicEffectReceiptV2 | null;
+  /**
+   * Named context sources that do not exist yet. When set, the envelope has no
+   * digest hex and must not be treated as a qualified runtime context.
+   */
+  unavailableContextSources?: readonly (
+    | "runtimeAssessment"
+    | "driftRestriction"
+    | "qualificationTuple"
+    | "package"
+    | "informationContract"
+    | "informationNeedPlan"
+    | "release"
+  )[];
   currentRuntimePosture: RuntimePostureV2;
   currentDriftPosture: LiveEdgeDriftPostureV2;
   mkbInjectionAttempted?: boolean;

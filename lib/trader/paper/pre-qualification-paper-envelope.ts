@@ -1,29 +1,27 @@
 import type { PaperCanonicalOrdinaryCapitalEnvelopeV2 } from "@/lib/trader/paper/paper-cycle.types";
 
-/** Structural placeholder. It is not a scientific qualification digest. */
-export const PRE_QUALIFICATION_CONTEXT_DIGEST_HEX = "0".repeat(64);
+/** Sources that do not exist before qualification. No digest is invented for them. */
+export const PRE_QUALIFICATION_UNAVAILABLE_SOURCES = [
+  "runtimeAssessment",
+  "driftRestriction",
+  "qualificationTuple",
+  "package",
+  "informationContract",
+  "informationNeedPlan",
+  "release",
+] as const;
 
 /**
- * Envelope for a paper bar before C3 qualification exists.
- * Navigator and future-cycle receipts stay null. The canonical cycle must refuse at EPISTEMIC.
+ * Envelope for a paper bar before qualification artifacts exist.
+ * It names the missing sources and is not a qualified runtime context.
  */
 export function buildPreQualificationPaperEnvelope(): PaperCanonicalOrdinaryCapitalEnvelopeV2 {
   return {
-    contextInputs: {
-      runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
-      runtimeAssessmentDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-      driftPosture: "NORMAL",
-      driftRestrictionDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-      qualificationTupleDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-      packageDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-      informationContractDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-      informationNeedPlanDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-      releaseDigestHex: PRE_QUALIFICATION_CONTEXT_DIGEST_HEX,
-    },
     navigatorReceipt: null,
     predictiveAdmissionVerdict: "NOT_ADMITTED",
     futureCycleEffect: null,
     currentRuntimePosture: "FULL_ANALYSIS_AND_NEW_RISK",
     currentDriftPosture: "NORMAL",
+    unavailableContextSources: PRE_QUALIFICATION_UNAVAILABLE_SOURCES,
   };
 }
