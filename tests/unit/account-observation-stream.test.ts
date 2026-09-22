@@ -60,8 +60,25 @@ describe("bounded SSE uses the real scoped read handler with injected storage/au
       expect(deps.readLatest).not.toHaveBeenCalled();
     },
   );
-  it.each(["getUserId", "hasTraderAccess", "hasOrgMembership", "hasOperatorAccess"] as const)(
-    "rechecks %s on the next bounded read",
+  it("admin stream keeps reading after membership loss and still revokes on operator loss", async () => {
+    const deps = dependencies();
+    const response = await handleAccountObservationStream(request(), (next) =>
+      handleAccountObservationGet(next, "admin", deps),
+    );
+    const reader = response.body!.getReader();
+    expect(text(await reader.read())).toContain(observation().observationId);
+    vi.mocked(deps.hasOrgMembership).mockResolvedValue(false);
+    const continued = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await continued)).toContain(observation().observationId);
+    vi.mocked(deps.hasOperatorAccess).mockResolvedValue(false);
+    const revoked = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await revoked)).toBe("event: revoked\ndata: null\n\n");
+    expect((await reader.read()).done).toBe(true);
+  });
+  it.each(["getUserId", "hasTraderAccess", "hasOperatorAccess"] as const)(
+    "rechecks %s on the next bounded admin read",
     async (gate) => {
       const deps = dependencies();
       const response = await handleAccountObservationStream(request(), (next) =>
