@@ -38,8 +38,11 @@ import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { FixtureBarPollAdapter } from "@/lib/trader/market-data/fixture-bar-poll-adapter";
 import { ScenarioSequenceBarPollAdapter } from "@/lib/trader/market-data/scenario-sequence-bar-poll-adapter";
 import type { BarPollSource, BarReplayMode } from "@/lib/trader/market-data/types";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency";
 import { deriveAccountRiskStateFromMockOrders } from "@/lib/trader/paper/account-risk-state-from-orders";
 import { runPaperBarCloseLoop } from "@/lib/trader/paper/paper-bar-close-loop";
+import { buildPreQualificationPaperEnvelope } from "@/lib/trader/paper/pre-qualification-paper-envelope";
+import { createJsonlPaperSignalLedger } from "@/lib/trader/paper/paper-signal-ledger";
 import type { PaperCycleDeps } from "@/lib/trader/paper/paper-cycle.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
@@ -111,7 +114,8 @@ Environment:
 
 Cadence: sleeps to the next bar-close boundary before each poll + mock paper cycle.
 With --fixture-path, polls a pinned OHLCV artifact instead of live HTX REST.
-Execution mode is locked to mock (MockExchangeConnector only).`);
+Execution mode is paper. The venue connector stays MockExchangeConnector.
+Without a scientific admission the canonical cycle records why the bar did not trade.`);
 }
 
 function parseArgs(argv: string[]): CliConfig | "help" {
@@ -391,22 +395,44 @@ async function main(): Promise<void> {
   const effectiveReplayMode =
     parsed.replayMode ?? (parsed.fixturePath ? "scenario-sequence" : "n/a");
   console.info(
-    `[trader:paper-loop] executionMode=mock marketDataMode=${marketDataMode} orgId=${context.organizationId} accountKey=${parsed.accountKey} barIntervalMs=${parsed.barIntervalMs} maxCycles=${parsed.maxCycles ?? "∞"} fixturePath=${parsed.fixturePath ?? "none"} replayMode=${effectiveReplayMode}`,
+    `[trader:paper-loop] executionMode=paper marketDataMode=${marketDataMode} orgId=${context.organizationId} accountKey=${parsed.accountKey} barIntervalMs=${parsed.barIntervalMs} maxCycles=${parsed.maxCycles ?? "∞"} fixturePath=${parsed.fixturePath ?? "none"} replayMode=${effectiveReplayMode}`,
   );
 
+  const signalLedgerPath = process.env.WAIA_PAPER_SIGNAL_LEDGER?.trim();
   const result = await runPaperBarCloseLoop({
     poll,
-    deps,
+    deps: {
+      ...deps,
+      decisionCapitalAuthorityV2: {
+        decide: async () => {
+          throw new Error("PAPER_LOOP_DECISION_BEFORE_QUALIFICATION");
+        },
+        assessRisk: async () => {
+          throw new Error("PAPER_LOOP_RISK_BEFORE_QUALIFICATION");
+        },
+        execute: async () => {
+          throw new Error("PAPER_LOOP_EXECUTE_BEFORE_QUALIFICATION");
+        },
+      },
+      canonicalOrdinaryCapitalEnvelopeV2: buildPreQualificationPaperEnvelope(),
+    },
     context,
     accountKey: parsed.accountKey,
     defaultQuantity: parsed.quantity,
     accountState: EMPTY_STATE,
     orderRepository,
+    executionMode: "paper",
+    canonicalOrdinaryCapitalEnvelopeV2: buildPreQualificationPaperEnvelope(),
+    signalLedger: signalLedgerPath ? createJsonlPaperSignalLedger(signalLedgerPath) : undefined,
+    informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
+      organizationId: context.organizationId,
+      reason: "TRADER_PAPER_LOOP_PRE_QUALIFICATION",
+    }),
     refreshAccountState: ({ context: refreshContext, orderRepository: repo }) =>
       deriveAccountRiskStateFromMockOrders({
         context: refreshContext,
         orderRepository: repo,
-        executionMode: "mock",
+        executionMode: "paper",
       }),
     barIntervalMs: parsed.barIntervalMs,
     maxCycles: parsed.maxCycles,

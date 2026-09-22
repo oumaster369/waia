@@ -18,6 +18,7 @@ export type PaperBarCloseCycleCompleteInput = {
   stateRefreshed: boolean;
   accountStateAfterCycle: AccountRiskState;
   errorClass?: string;
+  executionMode?: "mock" | "paper";
 };
 
 export type PaperBarCloseRollupInput = {
@@ -140,7 +141,7 @@ export function buildPaperBarCloseCycleCompletePayload(
     duration_ms: input.durationMs,
     cycle_id: input.cycleId,
     cycles_run: input.cyclesRun,
-    execution_mode: "mock",
+    execution_mode: input.executionMode ?? "mock",
     signal_outcome: signalOutcome,
     skip_reason: skipReason,
     execution_status: executionStatus,
