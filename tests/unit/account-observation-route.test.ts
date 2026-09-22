@@ -48,7 +48,26 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "");
   mocks.user.mockResolvedValue("synthetic-user");
-  mocks.access.mockResolvedValue({ kind: "postgres", db: {} });
+  mocks.access.mockResolvedValue({
+    kind: "postgres",
+    db: {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            where: () => ({
+              limit: async () => [
+                {
+                  organizationKind: "personal",
+                  venue: "htx",
+                  credentialStatus: "active",
+                },
+              ],
+            }),
+          }),
+        }),
+      }),
+    },
+  });
   mocks.entitlement.mockResolvedValue(true);
   mocks.membership.mockResolvedValue(undefined);
   mocks.permission.mockResolvedValue({ allowed: true });

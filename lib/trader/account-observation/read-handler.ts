@@ -12,6 +12,8 @@ export type ObservationReadDependencies = Readonly<{
   hasTraderAccess(userId: string, organizationId: string, signal: AbortSignal): Promise<boolean>;
   hasOrgMembership(userId: string, organizationId: string, signal: AbortSignal): Promise<boolean>;
   hasOperatorAccess(userId: string, organizationId: string, signal: AbortSignal): Promise<boolean>;
+  /** True only when this organization is inside the admin connected-account list scope. */
+  isAdminListedOrganization(organizationId: string, signal: AbortSignal): Promise<boolean>;
   /** Must consult current stored metadata, never echo the caller's requested identity. */
   resolveActiveBinding(
     scope: Pick<ObservationBinding, "organizationId" | "credentialId" | "exchangeAccountId">,
@@ -30,7 +32,8 @@ const error = (status: number) =>
 
 /** Shared Admin/tenant HTTP adapter. No exchange credential access.
  * Every poll independently validates session, entitlement and account, then rechecks before return.
- * Admin requires operator permission on the target organization, not membership.
+ * Admin requires operator permission on the target organization, not membership,
+ * and only for an organization the connected-account list would return.
  * Tenant requires membership and never operator permission.
  * 204 means missing; it never means a successfully observed zero balance.
  */
@@ -101,7 +104,9 @@ export async function handleAccountObservationGet(
         // Admin is platform-operator authority on the target org, not membership.
         // Tenant stays membership-gated. RLS still binds the row to this exact account.
         if (surface === "admin") {
-          return deps.hasOperatorAccess(userId!, scope.organizationId, abort.signal);
+          if (!(await deps.hasOperatorAccess(userId!, scope.organizationId, abort.signal)))
+            return false;
+          return deps.isAdminListedOrganization(scope.organizationId, abort.signal);
         }
         return deps.hasOrgMembership(userId!, scope.organizationId, abort.signal);
       }
