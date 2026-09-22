@@ -2359,6 +2359,50 @@ export const traderDiscoveryStrategySynthesis = pgTable(
   ],
 );
 
+export const traderHumanPromotionProposalV2 = pgTable(
+  "trader_human_promotion_proposal_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    payloadJson: text("payload_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    disposition: text("disposition").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_human_promotion_proposal_v2_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_human_promotion_proposal_v2_organization_id_idx").on(t.organizationId),
+    index("trader_human_promotion_proposal_v2_org_disposition_idx").on(
+      t.organizationId,
+      t.disposition,
+    ),
+  ],
+);
+
+export const traderHumanResearchAssignmentV2 = pgTable(
+  "trader_human_research_assignment_v2",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    payloadJson: text("payload_json").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    disposition: text("disposition").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("trader_human_research_assignment_v2_id_organization_unique").on(t.id, t.organizationId),
+    index("trader_human_research_assignment_v2_organization_id_idx").on(t.organizationId),
+    index("trader_human_research_assignment_v2_org_disposition_idx").on(
+      t.organizationId,
+      t.disposition,
+    ),
+  ],
+);
+
 export const traderDiscoveryEvidenceRecord = pgTable(
   "trader_discovery_evidence_record",
   {

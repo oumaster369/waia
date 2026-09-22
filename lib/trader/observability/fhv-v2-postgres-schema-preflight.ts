@@ -21,11 +21,17 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // 0211 is DEE-771 versioned append-only Knowledge authority. It creates Knowledge
 // version/verification tables and does not add FHV required tables, so it is
 // compatibility-admitted only. It is not an H2 or post-H2 production operator step.
+// 0212 and 0213 are DEE-1049 additive Human promotion tables: one proposal table
+// and one research-assignment table, then deny-by-default RLS. They add no required
+// FHV table. RLS denies SELECT, INSERT, UPDATE, and DELETE to authenticated and anon.
+// This admission is not an H2 or post-H2 production operator step.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
   { idx: 210, when: 1780000000210, tag: "0210_trader_account_observation_credential_v1" },
   { idx: 211, when: 1780000000211, tag: "0211_trader_knowledge_edge_version_v2" },
+  { idx: 212, when: 1780000000212, tag: "0212_trader_human_promotion_tables_v2" },
+  { idx: 213, when: 1780000000213, tag: "0213_trader_human_promotion_tables_rls_v2" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

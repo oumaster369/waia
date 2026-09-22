@@ -381,7 +381,7 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     const dependencies: ObservationReadDependencies = {
       getUserId: async () => "local-test-user", hasTraderAccess: async () => true,
       hasOrgMembership: async (_user, org) => org === b.organizationId,
-      hasOperatorAccess: async () => true, resolveActiveBinding: async () => b,
+      hasOperatorAccess: async () => true, isAdminListedOrganization: async () => true, resolveActiveBinding: async () => b,
       readLatest: binding => repo.readLatest(binding),
     };
     const req = () => new Request("http://localhost/api/local-observation?" + new URLSearchParams(b));
