@@ -133,6 +133,22 @@ describe("admin console routes on sqlite", () => {
     );
     expect(trace.status).toBe(200);
     expect(JSON.stringify(trace.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsoleFillsGet } =
+      await import("@/lib/trader/admin-console/handlers/fills");
+    const { handleAdminConsoleClosedTradesGet } =
+      await import("@/lib/trader/admin-console/handlers/closed-trades");
+    const fills = await handleAdminConsoleFillsGet(
+      new Request("http://localhost/api/trader/admin/console/fills"),
+      deps(ADMIN_ID),
+    );
+    const closed = await handleAdminConsoleClosedTradesGet(
+      new Request("http://localhost/api/trader/admin/console/closed-trades"),
+      deps(ADMIN_ID),
+    );
+    expect(fills.status).toBe(200);
+    expect(closed.status).toBe(200);
+    expect(JSON.stringify(fills.body)).toContain("POSTGRES_REQUIRED");
+    expect(JSON.stringify(closed.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {
