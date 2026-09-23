@@ -77,7 +77,7 @@ state:
   lastValidatedGitSha: 86fbe1e3d0e21b52184d6730f6d985a6ee75d47d
   lastValidationAt: "2026-09-23T20:15:30Z"
   blockedReason: "The slice gate, admin Postgres e2e, and WAIA_PG_INTEGRATION suite were not run here. This environment has no local Postgres service. The billing idempotency proof still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329). Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
-  nextAction: "Human review of PR 639 after GitHub re-runs admin-console-postgres. The pinned integration job stays byte-for-byte. Slice-gate and the admin browser e2e stay unrun."
+  nextAction: "GitHub must re-run unit shards after the Reality V2 inventory pin. The pinned integration job stays byte-for-byte. Slice-gate and the admin browser e2e stay unrun. Human merge only."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -101,6 +101,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 On 2026-09-23 the pinned `integration` job in `.github/workflows/postgres-integration.yml` was restored byte-for-byte. The admin console change-log command runs in a new `admin-console-postgres` job so the account-observation checksum contract stays intact. That job still needs GitHub Postgres. Billing idempotency skips there because `verifyHtrPostgresConnectionIdentity` only accepts the local validate stack. `pnpm lint` (0 errors), `pnpm exec tsc --noEmit`, and `pnpm build` passed on `86fbe1e3`. Slice-gate and admin Postgres e2e were not attempted.
 
 The first `admin-console-postgres` run rejected the stream fixture: historical rows were `execution_mode = live` with only `historical_run_id` set, which violates `trader_orders_historical_lineage_complete`. Those rows are now `mock` with both `historical_run_id` and `historical_account_key`. Order, fill, and position filters compare the mode sentinel as text, so `all` is not bound as `order_execution_mode`.
+
+Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connector edits changed the source content digest, and three public admin reads (`fetch-news`, `run-due`, `htx-public-tickers`) are new consumers. They are pinned as `EXCLUDED_PUBLIC_MARKET_READ_NO_CANONICAL_AUTHORITY`. They do not admit Reality or place orders. The pinned postgres `integration` job was not edited.
 
 - [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
