@@ -11,7 +11,9 @@ export type AdminReleaseFact =
   | { state: "unavailable"; reason: "WAIA_RELEASE_SHA_NOT_SET" };
 
 export function readAdminRelease(
-  env: { WAIA_RELEASE_SHA?: string | undefined } = process.env,
+  env: { WAIA_RELEASE_SHA?: string | undefined } = {
+    WAIA_RELEASE_SHA: process.env.WAIA_RELEASE_SHA,
+  },
 ): AdminReleaseFact {
   const sha = env.WAIA_RELEASE_SHA?.trim().toLowerCase() ?? "";
   if (!SHA.test(sha)) {
