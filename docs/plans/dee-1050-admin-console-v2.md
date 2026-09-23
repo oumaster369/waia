@@ -38,46 +38,46 @@ includedIssues:
   - id: DEE-1052
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1053
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1054
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1055
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1056
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1058
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1057
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C8-rest
-  completedWorkPackages: [C1, C2, C5-core, C7-shell, C8-overview, C3-display, C3-routes]
-  remainingWorkPackages: [C4-rest, C5-rest, C6-routes, C8-rest, slice-gate]
+  currentWorkPackage: C6-routes
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards]
+  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C6-routes, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Add account reads and the remaining section pages, then the Postgres slice."
+  nextAction: "Add assistant routes. Postgres proof and the slice gate stay open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -93,6 +93,31 @@ provenance:
 First PR acceptance is section 9.1 below. AC-14, AC-29, and AC-32 are partial. AC-16 stays open. Full v2 readiness is F1a, F1b, F2, F3a, F3b, F4, F5, F6 plus Human ratification of DEE-1059 and DEE-1060. Human merge. Not a bounded autonomous merge.
 
 Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DEE-1056, C7 DEE-1058, C8 DEE-1057.
+
+## Progress
+
+A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. Postgres integration tests and the browser slice have not been run.
+
+- [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
+- [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
+- [x] C2 reads: valuation, operational PnL, attribution, overview, orders, account list without ciphertext (DEE-1052).
+- [ ] C2 rest: lots in valuation, fills, closed trades, order cursor in SQL, positions, attention HTTP.
+- [x] C3 display: invoice status, fee preview, fee chain, six unchecked attestations (DEE-1053).
+- [x] C3 routes: clients, invoices, invoice detail, reporting periods.
+- [ ] C3 rest: payments, disputes, export HTTP, billing idempotency on Postgres, DEE-1046 absorb, old billing page attestations.
+- [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
+- [ ] C4 rest: proposals, compare, cycles, NO_TRADE map, holdout column firewall, DEE-1044 absorb.
+- [x] C5 core: redaction, fingerprint, incident transitions, news normalize, collector flag, job catalog, CI path (DEE-1055).
+- [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
+- [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
+- [x] C6 guards: tool cap, holdout refusal, aggregate whitelist, fact check, cache key, injection clip (DEE-1056).
+- [ ] C6 routes: conversations, messages, quick answers, help, budget.
+- [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
+- [ ] C7 rest: market strip, status bar, full emergency dialog, delivery ack in the UI.
+- [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
+- [ ] C8 rest: assistant panel, legacy redirects, e2e, a11y.
+- [ ] Slice gate `admin-console-pg-slice.spec.ts`.
+- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm build`, e2e, pr-governance, PR to `main`.
 
 ## WP-C1
 

@@ -76,5 +76,13 @@ describe("admin console routes on sqlite", () => {
     expect(invoices.status).toBe(200);
     expect(JSON.stringify(clients.body)).toContain("POSTGRES_REQUIRED");
     expect(JSON.stringify(invoices.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsoleIncidentsGet } =
+      await import("@/lib/trader/admin-console/handlers/incidents");
+    const incidents = await handleAdminConsoleIncidentsGet(
+      new Request("http://localhost/api/trader/admin/console/incidents"),
+      deps(ADMIN_ID),
+    );
+    expect(incidents.status).toBe(200);
+    expect(JSON.stringify(incidents.body)).toContain("POSTGRES_REQUIRED");
   });
 });

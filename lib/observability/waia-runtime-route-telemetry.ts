@@ -58,6 +58,8 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_console_strategies"
   | "trader_admin_console_research_runs"
   | "trader_admin_console_accounts"
+  | "trader_admin_console_incidents"
+  | "trader_admin_console_system"
   | "trader_admin_kill_switches"
   | "trader_admin_kill_switch_commands"
   | "trader_admin_org_live_enable"
