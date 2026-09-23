@@ -77,7 +77,7 @@ state:
   lastValidatedGitSha: 86fbe1e3d0e21b52184d6730f6d985a6ee75d47d
   lastValidationAt: "2026-09-23T20:15:30Z"
   blockedReason: "The slice gate, admin Postgres e2e, and WAIA_PG_INTEGRATION suite were not run here. This environment has no local Postgres service. The billing idempotency proof still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329). Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
-  nextAction: "GitHub must re-run unit shards after the Reality V2 inventory pin. The pinned integration job stays byte-for-byte. Slice-gate and the admin browser e2e stay unrun. Human merge only."
+  nextAction: "GitHub must re-run e2e after the runtime-authority button pin. The HALT card stays without buttons. Slice-gate and admin Postgres browser e2e stay unrun. Human merge only."
 provenance:
   createdFrom: chat
   gapRegistry: null
