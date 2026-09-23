@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C3-rest
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
-  remainingWorkPackages: [C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
+  currentWorkPackage: C5-rest
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  remainingWorkPackages: [C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Absorb the remaining DEE-1046 governance surfaces into the billing reads. A retry after a failed billing transaction and the invoice export query are still not executed on Postgres."
+  nextAction: "Persist quote, news, and fear-and-greed collector rows. Host diagnostics, the local seed, and the Postgres e2e job are still open. Source branches dee-1044 and dee-1046 are not on origin."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -108,12 +108,12 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C3 payments and disputes: trader payment events and invoice disputes. Amounts stay text. Other products are excluded.
 - [x] C3 export and billing retry: the invoice CSV route returns POSTGRES_REQUIRED on sqlite, and formula cells stay prefixed. On local Postgres a repeated approve, issue, and close leave one invoice, one HWM row for that invoice, one period, and one issued audit. Closing an already closed period throws.
 - [x] C3 billing redirect: `/admin/billing` now redirects to `/admin/clients?tab=invoices` and no longer submits attestations as already true.
-- [ ] C3 rest: DEE-1046 absorb. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
+- [x] C3 rest: closed reporting periods are listed by `GET /api/trader/admin/reporting-periods`, and an already-fetched audit page can be filtered by actor, action, and entity. `dee-1046-admin-governance-surfaces` is not on origin, so the files were written from the DEE-1046 contract. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
 - [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
 - [x] C4 proposals: the proposals route returns POSTGRES_REQUIRED on sqlite. A proposal summary keeps decision fields and drops evidence arrays.
 - [x] C4 cycle trace: stored hypothesis, forecast, decision, risk verdict, execution plan, and order ids mark stages 10–16 completed. Stages without that link, including sufficiency and Guardian, stay `NOT_PERSISTED_FOR_CYCLE`. The route returns POSTGRES_REQUIRED on sqlite and does not select cycle payloads.
-- [ ] C4 rest: DEE-1044 absorb. The proposals query and the cycle trace query were not executed on Postgres.
+- [x] C4 rest: a promotion request includes research evidence and rejects an empty or invalid document before POST. Closed-trade PnL for the current and previous UTC months ignores open trades and other strategies. `dee-1044-promotion-research-evidence` is not on origin. The proposals query and the cycle trace query were not executed on Postgres.
 - [x] C5 core: redaction, fingerprint, incident transitions, news normalize, collector flag, job catalog, CI path (DEE-1055).
 - [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
 - [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
