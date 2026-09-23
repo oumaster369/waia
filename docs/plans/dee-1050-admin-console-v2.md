@@ -74,10 +74,10 @@ state:
   remainingWorkPackages: [C8-rest, slice-gate]
   prNumber: 639
   prUrl: https://github.com/oumaster369/waia/pull/639
-  lastValidatedGitSha: c8475e3bfeb792ebb2bc276d76d63065ada91896
-  lastValidationAt: null
-  blockedReason: "The slice gate and admin Postgres e2e were not run. This environment has no local Postgres service. Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
-  nextAction: "Run lint, typecheck, and the admin-console unit tests, then open the Human-merge PR. Do not replace the runtime-authority page until its browser spec has a new home."
+  lastValidatedGitSha: 86fbe1e3d0e21b52184d6730f6d985a6ee75d47d
+  lastValidationAt: "2026-09-23T20:15:30Z"
+  blockedReason: "The slice gate, admin Postgres e2e, and WAIA_PG_INTEGRATION suite were not run here. This environment has no local Postgres service. The billing idempotency proof still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329). Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
+  nextAction: "Human review of PR 639. GitHub must re-run the restored postgres integration job and the separate admin-console Postgres job. Slice-gate and the admin browser e2e stay unrun."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -97,6 +97,8 @@ Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DE
 ## Progress
 
 A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. The assistant persistence test and the billing idempotency test have been run on local Postgres. The rest of the Postgres integration suite and the browser slice have not been run. The invoice export query itself has not been run on Postgres.
+
+On 2026-09-23 the pinned `integration` job in `.github/workflows/postgres-integration.yml` was restored byte-for-byte. The admin console change-log command runs in a new `admin-console-postgres` job so the account-observation checksum contract stays intact. That job still needs GitHub Postgres. Billing idempotency skips there because `verifyHtrPostgresConnectionIdentity` only accepts the local validate stack. `pnpm lint` (0 errors), `pnpm exec tsc --noEmit`, and `pnpm build` passed on `86fbe1e3`. Slice-gate and admin Postgres e2e were not attempted.
 
 - [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
