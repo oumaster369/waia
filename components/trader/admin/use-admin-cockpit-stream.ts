@@ -33,18 +33,23 @@ export function resetCockpitStreamBudget() {
 
 export type CockpitConnection = "live" | "reconnecting" | "poll";
 
-export function useAdminCockpitStream(organizationId: string): {
+export function useAdminCockpitStream(
+  organizationId: string,
+  campaignRunId = "",
+): {
   snapshot: CockpitSnapshot | null;
   connection: CockpitConnection;
   lastContactMs: number | null;
 } {
   const scope = organizationId.trim();
-  const [renderedScope, setRenderedScope] = React.useState(scope);
+  const campaign = campaignRunId.trim();
+  const scopeKey = campaign ? `${scope}\n${campaign}` : scope;
+  const [renderedScope, setRenderedScope] = React.useState(scopeKey);
   const [snapshot, setSnapshot] = React.useState<CockpitSnapshot | null>(null);
   const [connection, setConnection] = React.useState<CockpitConnection>("reconnecting");
   const [lastContactMs, setLastContactMs] = React.useState<number | null>(null);
-  if (renderedScope !== scope) {
-    setRenderedScope(scope);
+  if (renderedScope !== scopeKey) {
+    setRenderedScope(scopeKey);
     setSnapshot(null);
     setConnection("reconnecting");
     setLastContactMs(null);
@@ -61,7 +66,9 @@ export function useAdminCockpitStream(organizationId: string): {
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let renewalTimer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
-    const endpoint = `/api/trader/admin/cockpit/stream?organization_id=${encodeURIComponent(scope)}`;
+    const params = new URLSearchParams({ organization_id: scope });
+    if (campaign) params.set("campaign_run_id", campaign);
+    const endpoint = `/api/trader/admin/cockpit/stream?${params.toString()}`;
     const touch = () => setLastContactMs(Date.now());
     const accept = (raw: string) => {
       if (stopped) return;
@@ -156,7 +163,7 @@ export function useAdminCockpitStream(organizationId: string): {
       if (pollTimer) clearTimeout(pollTimer);
       if (renewalTimer) clearTimeout(renewalTimer);
     };
-  }, [scope]);
+  }, [scope, campaign]);
 
   return { snapshot, connection, lastContactMs };
 }

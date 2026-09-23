@@ -2,7 +2,10 @@
 
 import * as React from "react";
 
-import { useAdminCockpitStream } from "@/components/trader/admin/use-admin-cockpit-stream";
+import {
+  useAdminCockpitStream,
+  type CockpitConnection,
+} from "@/components/trader/admin/use-admin-cockpit-stream";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import {
   COCKPIT_FACT_KEYS,
@@ -10,6 +13,7 @@ import {
   cockpitStreamIsStale,
   formatCockpitAge,
   type CockpitFact,
+  type CockpitSnapshot,
 } from "@/lib/trader/admin/cockpit-client";
 
 const LABELS: Record<(typeof COCKPIT_FACT_KEYS)[number], string> = {
@@ -24,18 +28,28 @@ function FactTile({
   label,
   nowMs,
   stale,
+  onSelect,
 }: {
   fact: CockpitFact;
   label: string;
   nowMs: number;
   stale: boolean;
+  onSelect?: () => void;
 }) {
   return (
     <article
       className="border-border space-y-1 rounded-md border p-3"
       data-testid={`cockpit-fact-${label}`}
     >
-      <h3 className="text-sm font-medium">{label}</h3>
+      <h3 className="text-sm font-medium">
+        {onSelect ? (
+          <button type="button" className="hover:underline" onClick={onSelect}>
+            {label}
+          </button>
+        ) : (
+          label
+        )}
+      </h3>
       <p className="text-base">{cockpitFactValueText(fact)}</p>
       <p className="text-muted-foreground text-xs">Source {fact.source}</p>
       <p className="text-muted-foreground text-xs">{formatCockpitAge(fact.asOf, nowMs)}</p>
@@ -47,27 +61,28 @@ function FactTile({
   );
 }
 
-export function AdminCockpitFacts({
-  organizationId,
+export function CockpitFactsBody({
   organizationName,
+  snapshot,
+  connection,
+  stale,
+  nowMs,
+  onSelectFact,
 }: {
-  organizationId: string;
-  organizationName: string | null;
+  organizationName: string;
+  snapshot: CockpitSnapshot | null;
+  connection: CockpitConnection;
+  stale: boolean;
+  nowMs: number;
+  onSelectFact?: (factKey: (typeof COCKPIT_FACT_KEYS)[number]) => void;
 }) {
-  const { snapshot, connection, lastContactMs } = useAdminCockpitStream(organizationId);
-  const [nowMs, setNowMs] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const stale = cockpitStreamIsStale(lastContactMs, nowMs);
   const connectionLabel =
     connection === "live" ? "Live" : connection === "poll" ? "Polling" : "Reconnecting";
 
   return (
     <WaiaSurface variant="raised" className="space-y-3 p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-medium">{organizationName ?? organizationId}</h2>
+        <h2 className="text-lg font-medium">{organizationName}</h2>
         <p
           data-stale={stale ? "true" : "false"}
           data-state={connection}
@@ -85,6 +100,7 @@ export function AdminCockpitFacts({
               label={LABELS[key]}
               nowMs={nowMs}
               stale={stale}
+              onSelect={onSelectFact ? () => onSelectFact(key) : undefined}
             />
           ))}
         </div>
@@ -92,5 +108,31 @@ export function AdminCockpitFacts({
         <p className="text-muted-foreground text-sm">Waiting for the cockpit read.</p>
       )}
     </WaiaSurface>
+  );
+}
+
+export function AdminCockpitFacts({
+  organizationId,
+  organizationName,
+}: {
+  organizationId: string;
+  organizationName: string | null;
+}) {
+  const { snapshot, connection, lastContactMs } = useAdminCockpitStream(organizationId);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const stale = cockpitStreamIsStale(lastContactMs, nowMs);
+
+  return (
+    <CockpitFactsBody
+      organizationName={organizationName ?? organizationId}
+      snapshot={snapshot}
+      connection={connection}
+      stale={stale}
+      nowMs={nowMs}
+    />
   );
 }

@@ -135,7 +135,7 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
     await page.goto("/admin");
-    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ops Night" })).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL("/");
@@ -219,8 +219,13 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
     await page.goto(`/admin?organization_id=${organizationId}`);
-    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ops Night" })).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
+    await expect(page.getByTestId("pulse-connection")).toBeVisible();
+    await expect(page.getByRole("link", { name: "HALT" })).toHaveAttribute(
+      "href",
+      `/admin/kill-switches?organization_id=${organizationId}&switch_type=EMERGENCY_STOP`,
+    );
     await expect(
       page.getByRole("list").getByRole("link", { name: "Kill switches" }),
     ).toHaveAttribute("href", `/admin/kill-switches?organization_id=${organizationId}`);

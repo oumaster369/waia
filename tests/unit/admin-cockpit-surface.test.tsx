@@ -1,7 +1,8 @@
-import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminCockpitFacts } from "@/components/trader/admin/admin-cockpit-facts";
+import { PulseShell } from "@/components/trader/admin/pulse-shell";
 import {
   resetCockpitStreamBudget,
   useAdminCockpitStream,
@@ -23,6 +24,8 @@ const CREDENTIAL = "33333333-3333-4333-8333-333333333333";
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
     new URLSearchParams(search.organizationId ? `organization_id=${search.organizationId}` : ""),
+  usePathname: () => "/admin",
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 type Source = {
@@ -222,31 +225,53 @@ describe("admin cockpit stream", () => {
     unmount();
     expect(sources[0]!.close).toHaveBeenCalled();
   });
+
+  it("adds a campaign run id without changing the snapshot event", () => {
+    installSources();
+    renderHook(() => useAdminCockpitStream(ORG, "run-1"));
+    expect(String(vi.mocked(EventSource).mock.calls[0]?.[0])).toBe(
+      `/api/trader/admin/cockpit/stream?organization_id=${ORG}&campaign_run_id=run-1`,
+    );
+  });
 });
 
+function renderDesk() {
+  return render(
+    <PulseShell>
+      <AdminDashboardPage />
+    </PulseShell>,
+  );
+}
+
 describe("admin dashboard", () => {
-  it("has no organization selector and keeps organization_id on section links", async () => {
+  it("keeps organization_id on legacy links and does not trip HALT", async () => {
     installSources();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.includes("/api/trader/admin/organizations")) {
-          return Response.json({ organizations: [{ id: ORG, name: "Alpha", kind: "team" }] });
-        }
-        return Response.json({ accounts: [] });
-      }),
-    );
-    render(<AdminDashboardPage />);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/trader/admin/organizations")) {
+        return Response.json({ organizations: [{ id: ORG, name: "Alpha", kind: "team" }] });
+      }
+      return Response.json({ accounts: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderDesk();
     expect(screen.queryByTestId("admin-org-select")).not.toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "Kill switches" })).toHaveAttribute(
-      "href",
-      `/admin/kill-switches?organization_id=${ORG}`,
-    );
+    expect(await screen.findByTestId("pulse-org-select")).toHaveValue(ORG);
+    expect(screen.getByRole("heading", { name: "Ops Night" })).toBeVisible();
+    expect(
+      within(screen.getByRole("list")).getByRole("link", { name: "Kill switches" }),
+    ).toHaveAttribute("href", `/admin/kill-switches?organization_id=${ORG}`);
     expect(screen.getByRole("link", { name: "Audit" })).toHaveAttribute(
       "href",
       `/admin/audit?organization_id=${ORG}`,
     );
+    expect(screen.getByRole("link", { name: "HALT" })).toHaveAttribute(
+      "href",
+      `/admin/kill-switches?organization_id=${ORG}&switch_type=EMERGENCY_STOP`,
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/kill-switches/commands")),
+    ).toBe(false);
   });
 
   it("mounts the admin observation stream for a connected account", async () => {
@@ -274,7 +299,7 @@ describe("admin dashboard", () => {
       return new Response(null, { status: 204 });
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<AdminDashboardPage />);
+    renderDesk();
     await act(async () => {
       await Promise.resolve();
     });

@@ -21,7 +21,9 @@ export default function AdminKillSwitchesPage() {
     searchParams.get("organization_id") ?? "",
   );
   const organizationId = selectedOrganizationId || organizations[0]?.id || "";
-  const [switchType, setSwitchType] = React.useState("EMERGENCY_STOP");
+  const [switchType, setSwitchType] = React.useState(
+    () => searchParams.get("switch_type")?.trim() || "EMERGENCY_STOP",
+  );
   const [readState, setReadState] = React.useState<Record<string, unknown> | null>(null);
   const [previewState, setPreviewState] = React.useState<Record<string, unknown> | null>(null);
   const [readLoading, setReadLoading] = React.useState(false);
