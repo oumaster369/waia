@@ -15,16 +15,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: abandoned
   currentWorkPackage: WP-1
   completedWorkPackages: [WP-1]
   remainingWorkPackages: []
-  prNumber: null
+  prNumber: 627
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
-  blockedReason: null
-  nextAction: "PR to main after required CI."
+  blockedReason: "Cabinet Profile was removed by DEE-1040."
+  nextAction: "Do not resume. DEE-1040 removes the cabinet block."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -32,6 +32,8 @@ provenance:
 ---
 
 # DEE-1037 — Trader profile settings
+
+Cancelled. The cabinet Profile block shipped in PR 627 and is removed by DEE-1040. This file is archived because the plan was abandoned.
 
 ### WP-1
 

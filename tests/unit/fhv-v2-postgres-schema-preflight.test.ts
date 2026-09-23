@@ -34,7 +34,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0211 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0213 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -50,6 +50,8 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0209_ai_twin_epistemic_persistence_v1",
       "0210_trader_account_observation_credential_v1",
       "0211_trader_knowledge_edge_version_v2",
+      "0212_trader_human_promotion_tables_v2",
+      "0213_trader_human_promotion_tables_rls_v2",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),

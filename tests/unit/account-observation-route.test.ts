@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/pg-proxy";
+import * as pgSchema from "@/db/schema.postgres";
 const mocks = vi.hoisted(() => ({
   user: vi.fn(),
   access: vi.fn(),
@@ -32,7 +35,10 @@ vi.mock("@/lib/trader/account-observation/postgres-reader", () => ({
     readLatest: mocks.latest,
   }),
 }));
-import { accountObservationRoute } from "@/lib/trader/account-observation/route";
+import {
+  accountObservationRoute,
+  createAccountObservationRouteDependencies,
+} from "@/lib/trader/account-observation/route";
 import { GET as tenantStream } from "@/app/api/trader/account-observation/stream/route";
 import { GET as adminStream } from "@/app/api/trader/admin/account-observation/stream/route";
 const binding = {
@@ -44,11 +50,60 @@ const binding = {
 };
 const request = () =>
   new Request("http://localhost/api/trader/account-observation?" + new URLSearchParams(binding));
+
+function postgresSqlOnSqlite(sqlite: Database.Database) {
+  return drizzle(
+    async (query, params) => {
+      const sql = query.replace(/\$(\d+)/g, "?");
+      const objects = sqlite.prepare(sql).all(...(params ?? [])) as Record<string, unknown>[];
+      return { rows: objects.map((row) => Object.values(row)) };
+    },
+    { schema: pgSchema },
+  );
+}
+
+function cabinetSqlite() {
+  const sqlite = new Database(":memory:");
+  sqlite.exec(`
+    CREATE TABLE organizations (id text PRIMARY KEY, kind text NOT NULL);
+    CREATE TABLE exchange_credentials (
+      id text PRIMARY KEY,
+      organization_id text NOT NULL,
+      venue text NOT NULL,
+      status text NOT NULL
+    );
+  `);
+  return sqlite;
+}
+
+function seedCabinet(
+  sqlite: Database.Database,
+  row: { id: string; kind: string; credentialId?: string; venue?: string; status?: string },
+) {
+  sqlite.prepare("INSERT INTO organizations (id, kind) VALUES (?, ?)").run(row.id, row.kind);
+  if (row.credentialId) {
+    sqlite
+      .prepare(
+        "INSERT INTO exchange_credentials (id, organization_id, venue, status) VALUES (?, ?, ?, ?)",
+      )
+      .run(row.credentialId, row.id, row.venue, row.status);
+  }
+}
+
+let cabinet: Database.Database;
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "");
+  cabinet = cabinetSqlite();
+  seedCabinet(cabinet, {
+    id: binding.organizationId,
+    kind: "personal",
+    credentialId: binding.credentialId,
+    venue: "htx",
+    status: "active",
+  });
   mocks.user.mockResolvedValue("synthetic-user");
-  mocks.access.mockResolvedValue({ kind: "postgres", db: {} });
+  mocks.access.mockResolvedValue({ kind: "postgres", db: postgresSqlOnSqlite(cabinet) });
   mocks.entitlement.mockResolvedValue(true);
   mocks.membership.mockResolvedValue(undefined);
   mocks.permission.mockResolvedValue({ allowed: true });
@@ -57,7 +112,10 @@ beforeEach(() => {
   mocks.end.mockResolvedValue(undefined);
   mocks.postgres.mockReturnValue({ end: mocks.end });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  cabinet?.close();
+  vi.unstubAllEnvs();
+});
 describe("account observation route wiring, no external requests", () => {
   it.each([tenantStream, adminStream])(
     "stream wrapper opens/disposes independent read contexts and revalidates fresh identity",
@@ -108,6 +166,32 @@ describe("account observation route wiring, no external requests", () => {
     expect(mocks.end).toHaveBeenCalledOnce();
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it.each([
+    ["personal active htx", "personal", "htx", "active", true],
+    ["business active htx", "business", "htx", "active", false],
+    ["personal revoked htx", "personal", "htx", "revoked", false],
+    ["personal without a credential", "personal", null, null, false],
+  ] as const)(
+    "executes the cabinet-list query: %s",
+    async (_label, kind, venue, status, listed) => {
+      const organizationId = "00000000-0000-4000-8000-0000000000aa";
+      seedCabinet(cabinet, {
+        id: organizationId,
+        kind,
+        ...(venue && status
+          ? { credentialId: "00000000-0000-4000-8000-0000000000bb", venue, status }
+          : {}),
+      });
+      const context = createAccountObservationRouteDependencies();
+      try {
+        await expect(
+          context.deps.isAdminListedOrganization(organizationId, new AbortController().signal),
+        ).resolves.toBe(listed);
+      } finally {
+        await context.dispose();
+      }
+    },
+  );
   it("does not give an unauthorized operator a projection connection", async () => {
     mocks.permission.mockResolvedValue({ allowed: false });
     expect((await accountObservationRoute(request(), "admin")).status).toBe(403);

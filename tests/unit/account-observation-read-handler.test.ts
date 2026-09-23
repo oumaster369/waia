@@ -20,6 +20,7 @@ const deps = (): ObservationReadDependencies => ({
   hasTraderAccess: vi.fn(async () => true),
   hasOrgMembership: vi.fn(async () => true),
   hasOperatorAccess: vi.fn(async () => true),
+  isAdminListedOrganization: vi.fn(async () => true),
   resolveActiveBinding: vi.fn(async () => binding),
   readLatest: vi.fn(async () => null),
 });
@@ -44,7 +45,34 @@ describe("shared account observation HTTP boundary (injected auth, no production
     vi.mocked(d.hasOrgMembership).mockResolvedValue(false);
     expect((await handleAccountObservationGet(request(), "admin", d)).status).toBe(204);
     expect(d.hasOrgMembership).not.toHaveBeenCalled();
+    expect(d.isAdminListedOrganization).toHaveBeenCalledWith(
+      binding.organizationId,
+      expect.any(AbortSignal),
+    );
     expect(d.readLatest).toHaveBeenCalledOnce();
+  });
+  it("admin observation and binding refuse an organization the connected-account list omits", async () => {
+    const d = deps();
+    vi.mocked(d.isAdminListedOrganization).mockResolvedValue(false);
+    expect((await handleAccountObservationGet(request(), "admin", d)).status).toBe(403);
+    const url =
+      "http://localhost/api/trader/admin/account-observation/binding?" +
+      new URLSearchParams({
+        organizationId: binding.organizationId,
+        credentialId: binding.credentialId,
+        exchangeAccountId: binding.exchangeAccountId,
+      });
+    expect(
+      (await handleAccountObservationGet(new Request(url), "admin", d, "binding")).status,
+    ).toBe(403);
+    expect(d.readLatest).not.toHaveBeenCalled();
+    expect(d.resolveActiveBinding).not.toHaveBeenCalled();
+  });
+  it("tenant does not consult the admin cabinet list", async () => {
+    const d = deps();
+    vi.mocked(d.isAdminListedOrganization).mockResolvedValue(false);
+    expect((await handleAccountObservationGet(request(), "tenant", d)).status).toBe(204);
+    expect(d.isAdminListedOrganization).not.toHaveBeenCalled();
   });
   it("tenant still fails closed without membership and does not open the store", async () => {
     const d = deps();
