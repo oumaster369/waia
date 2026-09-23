@@ -1,4 +1,5 @@
 export const ADMIN_TOOL_POLICY = "admin-tools/v1" as const;
+export const ASSISTANT_PROMPT_VERSION = "admin-assistant/v1" as const;
 
 export const ADMIN_TOOLS = [
   "get_overview",

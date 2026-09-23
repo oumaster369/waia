@@ -85,4 +85,86 @@ describe("admin console routes on sqlite", () => {
     expect(incidents.status).toBe(200);
     expect(JSON.stringify(incidents.body)).toContain("POSTGRES_REQUIRED");
   });
+
+  function assistantMessage(flag: string | undefined): Request {
+    if (flag === undefined) delete process.env.WAIA_ADMIN_ASSISTANT_ENABLED;
+    else process.env.WAIA_ADMIN_ASSISTANT_ENABLED = flag;
+    return new Request("http://localhost/api/trader/admin/console/assistant/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost" },
+      body: JSON.stringify({
+        conversationId: "00000000-0000-4000-8000-00000000a952",
+        content: "Какие ордера ещё работают?",
+      }),
+    });
+  }
+
+  it("serves help and model-free quick answers, and refuses the model when the flag is off", async () => {
+    const { handleAdminConsoleAssistantHelpGet } =
+      await import("@/lib/trader/admin-console/handlers/assistant-help");
+    const { handleAdminConsoleAssistantQuickAnswersGet } =
+      await import("@/lib/trader/admin-console/handlers/assistant-quick-answers");
+    const { handleAdminConsoleAssistantMessagesPost } =
+      await import("@/lib/trader/admin-console/handlers/assistant-messages");
+    const { handleAdminConsoleAssistantConversationsGet } =
+      await import("@/lib/trader/admin-console/handlers/assistant-conversations");
+    const help = await handleAdminConsoleAssistantHelpGet(
+      new Request("http://localhost/api/trader/admin/console/assistant/help"),
+      deps(ADMIN_ID),
+    );
+    expect(help.status).toBe(200);
+    expect(JSON.stringify(help.body)).toContain("Сводка");
+    expect(JSON.stringify(help.body)).not.toContain("POSTGRES_REQUIRED");
+    const anonymous = await handleAdminConsoleAssistantHelpGet(
+      new Request("http://localhost/api/trader/admin/console/assistant/help"),
+      deps(null),
+    );
+    expect(anonymous.status).toBe(401);
+
+    const previous = process.env.WAIA_ADMIN_ASSISTANT_ENABLED;
+    delete process.env.WAIA_ADMIN_ASSISTANT_ENABLED;
+    try {
+      const catalog = await handleAdminConsoleAssistantQuickAnswersGet(
+        new Request("http://localhost/api/trader/admin/console/assistant/quick-answers"),
+        deps(ADMIN_ID),
+      );
+      expect(catalog.status).toBe(200);
+      expect(JSON.stringify(catalog.body)).toContain("withoutModel");
+      const incidentsAnswer = await handleAdminConsoleAssistantQuickAnswersGet(
+        new Request(
+          "http://localhost/api/trader/admin/console/assistant/quick-answers?id=incidents",
+        ),
+        deps(ADMIN_ID),
+      );
+      expect(incidentsAnswer.status).toBe(200);
+      const incidentsBody = JSON.stringify(incidentsAnswer.body);
+      expect(incidentsBody).toContain("withoutModel");
+      expect(incidentsBody).toContain("POSTGRES_REQUIRED");
+      expect(incidentsBody).not.toContain("ASSISTANT_DISABLED");
+
+      const disabled = await handleAdminConsoleAssistantMessagesPost(
+        assistantMessage(undefined),
+        deps(ADMIN_ID),
+      );
+      expect(disabled.status).toBe(200);
+      expect(JSON.stringify(disabled.body)).toContain("ASSISTANT_DISABLED");
+
+      const enabled = await handleAdminConsoleAssistantMessagesPost(
+        assistantMessage("on"),
+        deps(ADMIN_ID),
+      );
+      expect(enabled.status).toBe(200);
+      expect(JSON.stringify(enabled.body)).toContain("POSTGRES_REQUIRED");
+    } finally {
+      if (previous === undefined) delete process.env.WAIA_ADMIN_ASSISTANT_ENABLED;
+      else process.env.WAIA_ADMIN_ASSISTANT_ENABLED = previous;
+    }
+
+    const conversations = await handleAdminConsoleAssistantConversationsGet(
+      new Request("http://localhost/api/trader/admin/console/assistant/conversations"),
+      deps(ADMIN_ID),
+    );
+    expect(conversations.status).toBe(200);
+    expect(JSON.stringify(conversations.body)).toContain("POSTGRES_REQUIRED");
+  });
 });

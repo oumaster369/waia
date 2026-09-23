@@ -18,6 +18,7 @@ export const ADMIN_REASON = {
   releaseShaUnverified: "RELEASE_SHA_UNVERIFIED",
   collectorsDisabled: "COLLECTORS_DISABLED",
   assistantDisabled: "ASSISTANT_DISABLED",
+  assistantBudgetExhausted: "ASSISTANT_BUDGET_EXHAUSTED",
   providerUnavailable: "PROVIDER_UNAVAILABLE",
   returnMethodNotRatified: "RETURN_METHOD_NOT_RATIFIED",
   unknownTopic: "UNKNOWN_TOPIC",

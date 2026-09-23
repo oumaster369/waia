@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C6-routes
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards]
-  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C6-routes, C7-rest, C8-rest, slice-gate, validate, pr]
+  currentWorkPackage: C6-routes-rest
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards, C6-help, C6-quick-answers, C6-budget]
+  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C6-routes-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Add assistant routes. Postgres proof and the slice gate stay open."
+  nextAction: "Prove persisted assistant turns on Postgres and stream the answer. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -111,7 +111,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
 - [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
 - [x] C6 guards: tool cap, holdout refusal, aggregate whitelist, fact check, cache key, injection clip (DEE-1056).
-- [ ] C6 routes: conversations, messages, quick answers, help, budget.
+- [x] C6 routes started: help lists only wired reads, quick answers run without a model, budget math refuses an exhausted or fake path, the model route returns ASSISTANT_DISABLED when the flag is off. Conversations and trace stay POSTGRES_REQUIRED on sqlite.
+- [ ] C6 routes rest: persisted turns proven on Postgres, SSE, a live trace, the nine required questions.
 - [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
 - [ ] C7 rest: market strip, status bar, full emergency dialog, delivery ack in the UI.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).

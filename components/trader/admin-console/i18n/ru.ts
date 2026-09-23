@@ -30,5 +30,8 @@ export const RU = {
     EXTERNAL_FLOWS_NOT_OBSERVED: "Вводы и выводы не наблюдаются",
     COLLECTORS_DISABLED: "Сборщики выключены",
     RETURN_METHOD_NOT_RATIFIED: "Методика доходности ещё не утверждена",
+    ASSISTANT_DISABLED: "Помощник выключен. Быстрые ответы работают без языковой модели",
+    ASSISTANT_BUDGET_EXHAUSTED: "Дневной лимит помощника исчерпан",
+    PROVIDER_UNAVAILABLE: "Языковая модель недоступна",
   },
 } as const;

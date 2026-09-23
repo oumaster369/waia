@@ -1,0 +1,20 @@
+import { createProductionAdminRouteDeps } from "@/lib/trader/admin-route-deps";
+import { runAdminRoute } from "@/lib/trader/admin-route-http";
+import {
+  handleAdminConsoleAssistantConversationsGet,
+  handleAdminConsoleAssistantConversationsPost,
+} from "@/lib/trader/admin-console/handlers/assistant-conversations";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  return runAdminRoute("trader_admin_console_assistant_conversations", () =>
+    handleAdminConsoleAssistantConversationsGet(request, createProductionAdminRouteDeps()),
+  );
+}
+
+export async function POST(request: Request) {
+  return runAdminRoute("trader_admin_console_assistant_conversations", () =>
+    handleAdminConsoleAssistantConversationsPost(request, createProductionAdminRouteDeps()),
+  );
+}
