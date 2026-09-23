@@ -74,10 +74,10 @@ state:
   remainingWorkPackages: [C8-rest, slice-gate]
   prNumber: 639
   prUrl: https://github.com/oumaster369/waia/pull/639
-  lastValidatedGitSha: 86fbe1e3d0e21b52184d6730f6d985a6ee75d47d
-  lastValidationAt: "2026-09-23T20:15:30Z"
-  blockedReason: "The slice gate, admin Postgres e2e, and WAIA_PG_INTEGRATION suite were not run here. This environment has no local Postgres service. The billing idempotency proof still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329). Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
-  nextAction: "GitHub must re-run e2e after the runtime-authority button pin. The HALT card stays without buttons. Slice-gate and admin Postgres browser e2e stay unrun. Human merge only."
+  lastValidatedGitSha: 34bcb39c32ba2c2a7f1841a0955892721b17013a
+  lastValidationAt: "2026-09-23T22:30:14Z"
+  blockedReason: "GitHub CI is green on 34bcb39c, including unit shards, postgres migrate, admin-console Postgres, and sqlite e2e. Slice-gate and the admin Postgres browser e2e were not run. Billing idempotency still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329). Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render."
+  nextAction: "Human review and Human merge of PR 639. No further safe slice remains without slice-gate, a Postgres browser, or a decision to redirect the operator pages. Do not merge autonomously."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -102,7 +102,7 @@ On 2026-09-23 the pinned `integration` job in `.github/workflows/postgres-integr
 
 The first `admin-console-postgres` run rejected the stream fixture: historical rows were `execution_mode = live` with only `historical_run_id` set, which violates `trader_orders_historical_lineage_complete`. Those rows are now `mock` with both `historical_run_id` and `historical_account_key`. Order, fill, and position filters compare the mode sentinel as text, so `all` is not bound as `order_execution_mode`.
 
-Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connector edits changed the source content digest, and three public admin reads (`fetch-news`, `run-due`, `htx-public-tickers`) are new consumers. They are pinned as `EXCLUDED_PUBLIC_MARKET_READ_NO_CANONICAL_AUTHORITY`. They do not admit Reality or place orders. The pinned postgres `integration` job was not edited.
+Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connector edits changed the source content digest, and three public admin reads (`fetch-news`, `run-due`, `htx-public-tickers`) are new consumers. They are pinned as `EXCLUDED_PUBLIC_MARKET_READ_NO_CANONICAL_AUTHORITY`. They do not admit Reality or place orders. The pinned postgres `integration` job was not edited. On `8b97496d` both unit shards and the postgres migrate guard passed. The sqlite e2e then failed because `/admin/runtime-authority` now sits in the console shell, which adds three buttons beside Sign out. The HALT region still has no buttons. The spec pins those four buttons and no others.
 
 - [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
