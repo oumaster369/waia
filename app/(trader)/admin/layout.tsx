@@ -1,4 +1,5 @@
 import { AdminShell } from "@/components/trader/admin/admin-shell";
+import { AdminConsoleShell } from "@/components/trader/admin-console/shell/admin-console-shell";
 import { notFound, redirect } from "next/navigation";
 import { createProductionAdminRouteDeps } from "@/lib/trader/admin-route-deps";
 import { authorizeAdminRoute } from "@/lib/trader/admin-route-shared";
@@ -30,5 +31,9 @@ export default async function TraderAdminLayout({
   } finally {
     await deps.disposeRuntimeDb(runtime);
   }
-  return <AdminShell>{children}</AdminShell>;
+  return (
+    <AdminShell>
+      <AdminConsoleShell>{children}</AdminConsoleShell>
+    </AdminShell>
+  );
 }
