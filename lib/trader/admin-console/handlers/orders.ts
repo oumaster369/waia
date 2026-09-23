@@ -14,6 +14,7 @@ import {
 } from "@/lib/trader/admin-console/read-models/order-trace";
 import { decodePageCursor, encodePageCursor } from "@/lib/trader/admin-console/cursor";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
   return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
@@ -45,11 +46,7 @@ export async function handleAdminConsoleOrdersGet(
                historical_run_id, symbol, side, state, quantity, filled_quantity,
                client_order_id, exchange_order_id, created_at
         FROM trader_orders
-        WHERE (
-          ${parsed.query.mode} = 'all'
-          OR (${parsed.query.mode} = 'history' AND historical_run_id IS NOT NULL)
-          OR (${parsed.query.mode} <> 'history' AND historical_run_id IS NULL AND execution_mode = ${parsed.query.mode})
-        )
+        WHERE ${orderVisibleInMode(parsed.query.mode, false)}
         AND (
           ${tab} = 'all'
           OR state IN ('CREATED','RISK_APPROVED','SENT_TO_EXCHANGE','ACCEPTED','PARTIALLY_FILLED','CANCEL_REQUESTED','RECONCILIATION_REQUIRED')

@@ -17,6 +17,7 @@ import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import type { AdminMode } from "@/lib/trader/admin-console/contracts";
 import { presentOpenLot } from "@/lib/trader/admin-console/read-models/positions";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
 
 const require = createRequire(import.meta.url);
 if (process.env.VITEST !== "true") require("server-only");
@@ -116,7 +117,7 @@ export async function handleAdminConsolePositionsGet(
         WHERE l.state = 'OPEN'
           AND (${organizationId}::uuid IS NULL OR l.organization_id = ${organizationId}::uuid)
           AND (
-            ${parsed.query.mode} = 'all'
+            ${parsed.query.mode}::text = 'all'
             OR EXISTS (
               SELECT 1
               FROM trader_trade_legs leg
@@ -125,14 +126,7 @@ export async function handleAdminConsolePositionsGet(
                AND o.organization_id = leg.organization_id
               WHERE leg.position_lot_id = l.id
                 AND leg.organization_id = l.organization_id
-                AND (
-                  (${parsed.query.mode} = 'history' AND o.historical_run_id IS NOT NULL)
-                  OR (
-                    ${parsed.query.mode} <> 'history'
-                    AND o.historical_run_id IS NULL
-                    AND o.execution_mode = ${parsed.query.mode}
-                  )
-                )
+                AND ${orderVisibleInMode(parsed.query.mode, true)}
             )
           )
           AND (
@@ -246,7 +240,8 @@ export async function handleAdminConsolePositionsGet(
         remainingQty: String(row.remaining_qty),
         avgCost: String(row.avg_cost),
         openedAt: iso(row.opened_at) ?? "",
-        exchangeAccountId: attribution.state === "attributed" ? attribution.exchangeAccountId : null,
+        exchangeAccountId:
+          attribution.state === "attributed" ? attribution.exchangeAccountId : null,
         mode: attribution.state === "attributed" ? (attribution.mode as AdminMode) : null,
         attribution:
           attribution.state === "attributed"

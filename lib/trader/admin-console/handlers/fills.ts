@@ -9,6 +9,7 @@ import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { orderMode } from "@/lib/trader/admin-console/modes/order-mode";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
   return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
@@ -79,15 +80,7 @@ export async function handleAdminConsoleFillsGet(
           ON o.id = f.order_id
          AND o.organization_id = f.organization_id
         WHERE (${organizationId}::uuid IS NULL OR f.organization_id = ${organizationId}::uuid)
-          AND (
-            ${parsed.query.mode} = 'all'
-            OR (${parsed.query.mode} = 'history' AND o.historical_run_id IS NOT NULL)
-            OR (
-              ${parsed.query.mode} <> 'history'
-              AND o.historical_run_id IS NULL
-              AND o.execution_mode = ${parsed.query.mode}
-            )
-          )
+          AND ${orderVisibleInMode(parsed.query.mode, true)}
         ORDER BY f.executed_at DESC, f.id DESC
         LIMIT ${parsed.query.limit}
       `),

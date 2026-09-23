@@ -49,10 +49,11 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     await sql`INSERT INTO organizations (id, owner_user_id, kind, name) VALUES (${orgId}, ${userId}, ${"personal"}, ${"console"})`;
     await sql`
       INSERT INTO trader_orders (
-        id, organization_id, venue, execution_mode, historical_run_id, symbol, side, type,
-        quantity, state, client_order_id, idempotency_key, risk_decision_id
+        id, organization_id, venue, execution_mode, historical_run_id, historical_account_key,
+        symbol, side, type, quantity, state, client_order_id, idempotency_key, risk_decision_id
       )
-      SELECT gen_random_uuid(), ${orgId}::uuid, 'htx', 'live', 'hist-run', 'BTCUSDT', 'buy', 'market',
+      SELECT gen_random_uuid(), ${orgId}::uuid, 'htx', 'mock', 'hist-run', 'hist-account',
+             'BTCUSDT', 'buy', 'market',
              '1', 'CREATED', 'hist-' || g::text, 'hist-key-' || g::text, 'risk'
       FROM generate_series(1, 100) AS g
     `;
