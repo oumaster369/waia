@@ -69,12 +69,12 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: validate
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest, C7-rest, C8-links]
-  remainingWorkPackages: [C8-rest, slice-gate, validate, pr]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
+  currentWorkPackage: pr
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest, C7-rest, C8-links, pr]
+  remainingWorkPackages: [C8-rest, slice-gate]
+  prNumber: 639
+  prUrl: https://github.com/oumaster369/waia/pull/639
+  lastValidatedGitSha: c8475e3bfeb792ebb2bc276d76d63065ada91896
   lastValidationAt: null
   blockedReason: "The slice gate and admin Postgres e2e were not run. This environment has no local Postgres service. Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
   nextAction: "Run lint, typecheck, and the admin-console unit tests, then open the Human-merge PR. Do not replace the runtime-authority page until its browser spec has a new home."
