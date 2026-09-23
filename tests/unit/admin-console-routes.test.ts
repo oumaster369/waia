@@ -108,6 +108,14 @@ describe("admin console routes on sqlite", () => {
     );
     expect(exported.status).toBe(200);
     expect(JSON.stringify(exported.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsoleProposalsGet } =
+      await import("@/lib/trader/admin-console/handlers/proposals");
+    const proposals = await handleAdminConsoleProposalsGet(
+      new Request("http://localhost/api/trader/admin/console/proposals"),
+      deps(ADMIN_ID),
+    );
+    expect(proposals.status).toBe(200);
+    expect(JSON.stringify(proposals.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {
