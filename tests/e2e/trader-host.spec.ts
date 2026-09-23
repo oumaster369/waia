@@ -136,9 +136,99 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await page.waitForURL("**/trader");
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL("/");
     await expectProtectedObserverApisFailClosed(page, 401);
+  });
+
+  test("admin cockpit shows a streamed fact without an organization selector", async ({
+    page,
+    baseURL,
+    browser,
+  }) => {
+    test.setTimeout(90_000);
+    const organizationId = "11111111-1111-4111-8111-111111111111";
+    const email = `e2e-admin-cockpit-${Date.now()}@example.com`;
+    const primaryContext = await browser.newContext({ baseURL: primaryBaseUrl(baseURL) });
+    try {
+      await signUpAndOpenDashboard(await primaryContext.newPage(), email);
+    } finally {
+      await primaryContext.close();
+    }
+    grantTraderEntitlementByUserEmail(email);
+    grantPlatformAdminByUserEmail(email);
+    let posture = "HALT";
+    const snapshot = () => ({
+      organizationId,
+      releaseIdentity: {
+        state: "unavailable",
+        source: "missing:admin-release-identity-read-model",
+        asOf: { state: "unknown" },
+      },
+      runtimeAuthority: {
+        state: "value",
+        source: "runtime-authority-read-model-v2",
+        asOf: { state: "known", at: "2026-09-23T10:00:00.000Z" },
+        value: { availability: "READ", posture },
+      },
+      observationFreshness: {
+        state: "unavailable",
+        source: "account-observation.readLatest",
+        asOf: { state: "unknown" },
+      },
+      c3: {
+        state: "unavailable",
+        source: "missing:operator-selected-campaign-run-id",
+        asOf: { state: "unknown" },
+      },
+    });
+    // Browser transport fixture only. It does not authorize a cockpit read,
+    // open a collector, or stand in for the backend contract tests.
+    await page.route("**/api/trader/admin/organizations", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          organizations: [{ id: organizationId, name: "Alpha", kind: "team" }],
+        }),
+      }),
+    );
+    await page.route("**/api/trader/admin/connected-accounts", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ accounts: [] }),
+      }),
+    );
+    await page.route("**/api/trader/admin/cockpit/stream**", (route) => {
+      const body = snapshot();
+      if (route.request().url().includes("transport=poll")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(body),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `event: cockpit.snapshot\ndata: ${JSON.stringify(body)}\n\n`,
+      });
+    });
+    await signInOnLanding(page, email, TRADER_PASSWORD);
+    await page.waitForURL("**/trader");
+    await page.goto(`/admin?organization_id=${organizationId}`);
+    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
+    await expect(
+      page.getByRole("list").getByRole("link", { name: "Kill switches" }),
+    ).toHaveAttribute("href", `/admin/kill-switches?organization_id=${organizationId}`);
+    await expect(page.getByText("READ · HALT")).toBeVisible();
+    await expect(page.getByText("Age unknown").first()).toBeVisible();
+    await expect(page.getByText("Source missing:admin-release-identity-read-model")).toBeVisible();
+    posture = "FULL";
+    await expect(page.getByText("READ · FULL")).toBeVisible({ timeout: 15_000 });
   });
 
   test("renders landing on trader host root when unauthenticated", async ({ page, baseURL }) => {
