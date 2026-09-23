@@ -69,8 +69,8 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C6-guards
-  completedWorkPackages: [C1, C2, C5-core, C7-shell, C8-overview, C3-display]
+  currentWorkPackage: C4-catalog
+  completedWorkPackages: [C1, C2, C5-core, C7-shell, C8-overview, C3-display, C3-routes]
   remainingWorkPackages: [C6-routes, C3-routes, C4, C5-rest, C8-rest, slice-gate]
   prNumber: null
   prUrl: null
