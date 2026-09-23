@@ -33,5 +33,10 @@ export const RU = {
     ASSISTANT_DISABLED: "Помощник выключен. Быстрые ответы работают без языковой модели",
     ASSISTANT_BUDGET_EXHAUSTED: "Дневной лимит помощника исчерпан",
     PROVIDER_UNAVAILABLE: "Языковая модель недоступна",
+    UNATTRIBUTED: "Не распределено",
+    GUARDIAN_ASSESSMENT_MISSING: "Оценки Guardian ещё нет",
+    GUARDIAN_ASSESSMENT_STALE: "Оценка Guardian старше 15 минут",
+    RISK_PERMISSION_NOT_LINKED: "Разрешение Risk не связано с лотом",
+    EXECUTED_REDUCTION_NOT_LINKED: "Исполненное сокращение не связано с лотом",
   },
 } as const;
