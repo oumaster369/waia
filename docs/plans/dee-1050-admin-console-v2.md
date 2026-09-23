@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C4-catalog
+  currentWorkPackage: C8-rest
   completedWorkPackages: [C1, C2, C5-core, C7-shell, C8-overview, C3-display, C3-routes]
-  remainingWorkPackages: [C6-routes, C3-routes, C4, C5-rest, C8-rest, slice-gate]
+  remainingWorkPackages: [C4-rest, C5-rest, C6-routes, C8-rest, slice-gate]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Finish C8 orders and accounts, then the slice gate, then C3 billing reads."
+  nextAction: "Add account reads and the remaining section pages, then the Postgres slice."
 provenance:
   createdFrom: chat
   gapRegistry: null
