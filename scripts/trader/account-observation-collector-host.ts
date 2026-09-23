@@ -368,20 +368,47 @@ async function main(): Promise<void> {
   });
 }
 
+async function reportObservationHostFailure(error: unknown): Promise<void> {
+  try {
+    const { reportHostFailure } = await import("@/lib/trader/admin-console/diagnostics/host");
+    const { recordHostDiagnostic } =
+      await import("@/lib/trader/admin-console/diagnostics/record-host");
+    await reportHostFailure(
+      (input) => recordHostDiagnostic(input),
+      ACCOUNT_OBSERVATION_COLLECTOR_SERVICE,
+      error,
+    );
+  } catch {
+    // Diagnostic storage is optional. The refusal below stays the host result.
+  }
+}
+
 if (isMainModule()) {
+  void import("@/lib/trader/admin-console/diagnostics/host").then(({ installHostDiagnostics }) =>
+    installHostDiagnostics({
+      service: ACCOUNT_OBSERVATION_COLLECTOR_SERVICE,
+      exitOnUncaught: true,
+      record: async ({ error }) => {
+        const { recordHostDiagnostic } =
+          await import("@/lib/trader/admin-console/diagnostics/record-host");
+        await recordHostDiagnostic({ service: ACCOUNT_OBSERVATION_COLLECTOR_SERVICE, error });
+      },
+    }),
+  );
   main().then(
     () => {
       process.exitCode = 0;
     },
-    (error: unknown) => {
-      // Only fixed refusal/failure codes; never a secret-bearing dependency payload.
-      const message =
-        error instanceof AccountObservationCollectorError ||
-        (error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message))
-          ? error.message
-          : "ACCOUNT_OBSERVATION_COLLECTOR_REFUSED:UNCLASSIFIED";
-      process.stderr.write(`[${ACCOUNT_OBSERVATION_COLLECTOR_SERVICE}] ${message}\n`);
-      process.exitCode = 1;
-    },
+    (error: unknown) =>
+      reportObservationHostFailure(error).finally(() => {
+        // Only fixed refusal/failure codes; never a secret-bearing dependency payload.
+        const message =
+          error instanceof AccountObservationCollectorError ||
+          (error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message))
+            ? error.message
+            : "ACCOUNT_OBSERVATION_COLLECTOR_REFUSED:UNCLASSIFIED";
+        process.stderr.write(`[${ACCOUNT_OBSERVATION_COLLECTOR_SERVICE}] ${message}\n`);
+        process.exitCode = 1;
+      }),
   );
 }

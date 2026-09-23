@@ -226,16 +226,16 @@ export default {
 
     ctx.waitUntil(
       (async () => {
-        const { collectorsEnabled, runAdminConsoleCollectorCycle } =
-          await import("@/lib/trader/admin-console/collectors/run-collectors-cycle");
-        const envRecord = env as { WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED?: string };
-        if (!collectorsEnabled(envRecord)) {
-          console.log(
-            JSON.stringify({ event: "waia_admin_console_collectors", phase: "disabled" }),
-          );
-          return;
-        }
-        await runAdminConsoleCollectorCycle({ env: envRecord, tasks: [] });
+        const { runDueAdminCollectors } =
+          await import("@/lib/trader/admin-console/collectors/run-due");
+        const envRecord = env as {
+          WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED?: string;
+          DATABASE_URL_POSTGRES?: string;
+        };
+        await runDueAdminCollectors(envRecord, {
+          log: (message) =>
+            console.log(JSON.stringify({ event: "waia_admin_console_collectors", phase: message })),
+        });
       })(),
     );
   },

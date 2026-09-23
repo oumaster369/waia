@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C5-rest
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
-  remainingWorkPackages: [C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
+  currentWorkPackage: C7-rest
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest]
+  remainingWorkPackages: [C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Persist quote, news, and fear-and-greed collector rows. Host diagnostics, the local seed, and the Postgres e2e job are still open. Source branches dee-1044 and dee-1046 are not on origin."
+  nextAction: "Add the emergency-stop dialog and the delivery acknowledgement in the shell. The Postgres e2e job still waits on the C8 Playwright config. Account valuation is not written by the collector."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -116,7 +116,7 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C4 rest: a promotion request includes research evidence and rejects an empty or invalid document before POST. Closed-trade PnL for the current and previous UTC months ignores open trades and other strategies. `dee-1044-promotion-research-evidence` is not on origin. The proposals query and the cycle trace query were not executed on Postgres.
 - [x] C5 core: redaction, fingerprint, incident transitions, news normalize, collector flag, job catalog, CI path (DEE-1055).
 - [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
-- [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
+- [x] C5 rest: quote, news, and fear-and-greed rows are built from fetched values and written by the Postgres collector store. A zero fear-and-greed point stays zero. A missing price is skipped. Host entrypoints record a diagnostic and still exit on their own error when that write fails. The local seed refuses any host other than loopback and writes no balances or index values. These writes were not executed on Postgres. Account valuation is not collected. The existing worker chains are not wrapped. The Postgres browser job waits until C8 adds `playwright.admin-pg.config.ts`.
 - [x] C6 guards: tool cap, holdout refusal, aggregate whitelist, fact check, cache key, injection clip (DEE-1056).
 - [x] C6 routes started: help lists only wired reads, quick answers run without a model, budget math refuses an exhausted or fake path, the model route returns ASSISTANT_DISABLED when the flag is off. Conversations and trace stay POSTGRES_REQUIRED on sqlite.
 - [x] C6 persisted turn: on local Postgres a fake-provider question and unavailable answer are stored, and the reply is an SSE `error` event. Stage labels are encoded before `tool_result_ready`.

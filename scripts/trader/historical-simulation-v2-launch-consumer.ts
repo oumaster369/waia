@@ -1,8 +1,7 @@
 import postgres from "postgres";
 import { fileURLToPath } from "node:url";
 
-import { bindPostgresReservedSession } from
-  "../../db/postgres-session-transaction";
+import { bindPostgresReservedSession } from "../../db/postgres-session-transaction";
 
 import {
   assumeHistoricalSimulationRunnerRoleV2,
@@ -10,9 +9,7 @@ import {
   resetHistoricalSimulationRunnerRoleV2,
   runHistoricalSimulationLaunchConsumerCliV2,
 } from "../../lib/trader/historical-simulation-v2/launch-consumer-cli-v2";
-import {
-  executeQueuedHistoricalSimulationLaunchV2,
-} from "../../lib/trader/historical-simulation-v2/launch-orchestrator-v2";
+import { executeQueuedHistoricalSimulationLaunchV2 } from "../../lib/trader/historical-simulation-v2/launch-orchestrator-v2";
 import {
   createHistoricalSimulationRunLifecyclePostgresV2,
   releaseHistoricalSimulationConsumerLeasePostgresV2,
@@ -26,53 +23,60 @@ export async function runHistoricalSimulationLaunchConsumerMainV2(
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
   try {
-    const result = await runHistoricalSimulationLaunchConsumerCliV2(env, {
-    async openDatabase(databaseUrl) {
-      const pool = postgres(databaseUrl, { max: 1, idle_timeout: 20, connect_timeout: 15 });
-      try {
-        const reserved = await pool.reserve();
-        const bound = bindPostgresReservedSession(pool, reserved);
-        return Object.freeze({
-          sql: bound,
-          async close() {
-            reserved.release();
+    const result = await runHistoricalSimulationLaunchConsumerCliV2(
+      env,
+      {
+        async openDatabase(databaseUrl) {
+          const pool = postgres(databaseUrl, { max: 1, idle_timeout: 20, connect_timeout: 15 });
+          try {
+            const reserved = await pool.reserve();
+            const bound = bindPostgresReservedSession(pool, reserved);
+            return Object.freeze({
+              sql: bound,
+              async close() {
+                reserved.release();
+                await pool.end({ timeout: 5 });
+              },
+            });
+          } catch (error) {
             await pool.end({ timeout: 5 });
-          },
-        });
-      } catch (error) {
-        await pool.end({ timeout: 5 });
-        throw error;
-      }
-    },
-    requireRunnerLogin: requireHistoricalSimulationRunnerLoginV2,
-    assumeRunnerRole: assumeHistoricalSimulationRunnerRoleV2,
-    resetRunnerRole: resetHistoricalSimulationRunnerRoleV2,
-    createLifecycle: createHistoricalSimulationRunLifecyclePostgresV2,
-    execute: (input) => executeQueuedHistoricalSimulationLaunchV2({
-      ...input,
-      onClaimed(event) {
-        process.send?.({
-          type: "waia.historical_consumer.claimed.v2",
-          runId: event.runId,
-          lifecycleDigestHex: event.contentDigestHex,
-        });
+            throw error;
+          }
+        },
+        requireRunnerLogin: requireHistoricalSimulationRunnerLoginV2,
+        assumeRunnerRole: assumeHistoricalSimulationRunnerRoleV2,
+        resetRunnerRole: resetHistoricalSimulationRunnerRoleV2,
+        createLifecycle: createHistoricalSimulationRunLifecyclePostgresV2,
+        execute: (input) =>
+          executeQueuedHistoricalSimulationLaunchV2({
+            ...input,
+            onClaimed(event) {
+              process.send?.({
+                type: "waia.historical_consumer.claimed.v2",
+                runId: event.runId,
+                lifecycleDigestHex: event.contentDigestHex,
+              });
+            },
+          }),
+        releaseLease: releaseHistoricalSimulationConsumerLeasePostgresV2,
       },
-    }),
-    releaseLease: releaseHistoricalSimulationConsumerLeasePostgresV2,
-    }, controller.signal);
-    process.stdout.write(`${JSON.stringify({
-      schemaVersion: "waia.trader.historical_simulation_launch_consumer_result.v2",
-      organizationId: result.organizationId,
-      accountId: result.accountId,
-      runId: result.runId,
-      partition: result.partition,
-      symbol: result.symbol,
-      phase: result.phase,
-      committedCycles: result.committedCycles,
-      qualifiedTotalCycles: result.qualifiedTotalCycles,
-      latestCommittedCycleId: result.latestCommittedCycleId,
-      errorCode: result.errorCode,
-    })}\n`);
+      controller.signal,
+    );
+    process.stdout.write(
+      `${JSON.stringify({
+        schemaVersion: "waia.trader.historical_simulation_launch_consumer_result.v2",
+        organizationId: result.organizationId,
+        accountId: result.accountId,
+        runId: result.runId,
+        partition: result.partition,
+        symbol: result.symbol,
+        phase: result.phase,
+        committedCycles: result.committedCycles,
+        qualifiedTotalCycles: result.qualifiedTotalCycles,
+        latestCommittedCycleId: result.latestCommittedCycleId,
+        errorCode: result.errorCode,
+      })}\n`,
+    );
   } finally {
     process.removeListener("SIGTERM", stop);
     process.removeListener("SIGINT", stop);
@@ -80,8 +84,35 @@ export async function runHistoricalSimulationLaunchConsumerMainV2(
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  void runHistoricalSimulationLaunchConsumerMainV2().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  });
+  void import("@/lib/trader/admin-console/diagnostics/host").then(({ installHostDiagnostics }) =>
+    installHostDiagnostics({
+      service: "historical-simulation-v2-consumer",
+      exitOnUncaught: true,
+      record: async ({ error }) => {
+        const { recordHostDiagnostic } =
+          await import("@/lib/trader/admin-console/diagnostics/record-host");
+        await recordHostDiagnostic({ service: "historical-simulation-v2-consumer", error });
+      },
+    }),
+  );
+  void runHistoricalSimulationLaunchConsumerMainV2().catch((error: unknown) =>
+    import("@/lib/trader/admin-console/diagnostics/host")
+      .then(({ reportHostFailure }) =>
+        reportHostFailure(
+          async (input) => {
+            const { recordHostDiagnostic } =
+              await import("@/lib/trader/admin-console/diagnostics/record-host");
+            await recordHostDiagnostic(input);
+          },
+          "historical-simulation-v2-consumer",
+          error,
+        ),
+      )
+      .finally(() => {
+        process.stderr.write(
+          `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+        );
+        process.exitCode = 1;
+      }),
+  );
 }

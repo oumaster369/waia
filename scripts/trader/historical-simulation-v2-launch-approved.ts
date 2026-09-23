@@ -201,8 +201,33 @@ export async function runHistoricalSimulationApprovedLaunchMainV2(
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  void runHistoricalSimulationApprovedLaunchMainV2().catch((error: unknown) => {
-    process.stderr.write(`${formatHistoricalLaunchErrorV2(error)}\n`);
-    process.exitCode = 1;
-  });
+  void import("@/lib/trader/admin-console/diagnostics/host").then(({ installHostDiagnostics }) =>
+    installHostDiagnostics({
+      service: "historical-simulation-v2-approved",
+      exitOnUncaught: true,
+      record: async ({ error }) => {
+        const { recordHostDiagnostic } =
+          await import("@/lib/trader/admin-console/diagnostics/record-host");
+        await recordHostDiagnostic({ service: "historical-simulation-v2-approved", error });
+      },
+    }),
+  );
+  void runHistoricalSimulationApprovedLaunchMainV2().catch((error: unknown) =>
+    import("@/lib/trader/admin-console/diagnostics/host")
+      .then(({ reportHostFailure }) =>
+        reportHostFailure(
+          async (input) => {
+            const { recordHostDiagnostic } =
+              await import("@/lib/trader/admin-console/diagnostics/record-host");
+            await recordHostDiagnostic(input);
+          },
+          "historical-simulation-v2-approved",
+          error,
+        ),
+      )
+      .finally(() => {
+        process.stderr.write(`${formatHistoricalLaunchErrorV2(error)}\n`);
+        process.exitCode = 1;
+      }),
+  );
 }
