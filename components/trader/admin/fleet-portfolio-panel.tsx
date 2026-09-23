@@ -30,8 +30,11 @@ export function FleetPortfolioPanel() {
 
   React.useEffect(() => {
     const timer = window.setInterval(() => void load(), 60_000);
-    void load();
-    return () => window.clearInterval(timer);
+    const initial = window.setTimeout(() => void load(), 0);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(initial);
+    };
   }, [load]);
 
   return (

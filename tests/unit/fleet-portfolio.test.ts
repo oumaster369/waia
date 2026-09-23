@@ -70,6 +70,29 @@ function observed(input: {
 }
 
 describe("fleet portfolio fan-out", () => {
+  it("sums one account and keeps its order", async () => {
+    const only = account("1", "One");
+    const portfolio = await buildFleetPortfolio({
+      accounts: [only],
+      read: async () => ({
+        ok: true,
+        observation: observed({
+          asset: "USDT",
+          free: "3",
+          locked: "1",
+          total: "4",
+          orderId: "order-1",
+        }),
+      }),
+    });
+    expect(portfolio.status).toBe("COMPLETE");
+    expect(portfolio.accountsConsidered).toBe(1);
+    expect(portfolio.unavailableAccounts).toEqual([]);
+    expect(portfolio.balances).toEqual([{ asset: "USDT", free: "3", locked: "1", total: "4" }]);
+    expect(portfolio.openOrders.map((order) => order.exchangeAccountId)).toEqual(["htx-1"]);
+    expect(portfolio.pnl.state).toBe("NO_TRADING_ACTIVITY");
+  });
+
   it("sums two accounts and keeps the order's account", async () => {
     const first = account("1", "One");
     const second = account("2", "Two");
@@ -124,6 +147,63 @@ describe("fleet portfolio fan-out", () => {
     expect(portfolio.unavailableAccounts).toEqual([
       { organizationId: hidden.organizationId, exchangeAccountId: "htx-2", reason: "HTTP_403" },
     ]);
+  });
+
+  it("names a failed read and does not count that account as zero", async () => {
+    const visible = account("1", "One");
+    const failed = account("2", "Two");
+    const portfolio = await buildFleetPortfolio({
+      accounts: [visible, failed],
+      read: async (row) => {
+        if (row.exchangeAccountId === "htx-2") throw new Error("upstream down");
+        return {
+          ok: true,
+          observation: observed({ asset: "USDT", free: "4", locked: "0", total: "4" }),
+        };
+      },
+    });
+    expect(portfolio.status).toBe("PARTIAL");
+    expect(portfolio.unavailableAccounts).toEqual([
+      {
+        organizationId: failed.organizationId,
+        exchangeAccountId: "htx-2",
+        reason: "READ_FAILED",
+      },
+    ]);
+    expect(portfolio.balances).toEqual([{ asset: "USDT", free: "4", locked: "0", total: "4" }]);
+  });
+
+  it("names an account that hits the read budget", async () => {
+    const visible = account("1", "One");
+    const slow = account("2", "Two");
+    const portfolio = await buildFleetPortfolio({
+      accounts: [visible, slow],
+      budgetMs: 40,
+      read: (row, signal) => {
+        if (row.exchangeAccountId === "htx-2") {
+          return new Promise((_, reject) => {
+            if (signal.aborted) {
+              reject(new Error("aborted"));
+              return;
+            }
+            signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          });
+        }
+        return Promise.resolve({
+          ok: true as const,
+          observation: observed({ asset: "USDT", free: "4", locked: "0", total: "4" }),
+        });
+      },
+    });
+    expect(portfolio.status).toBe("PARTIAL");
+    expect(portfolio.unavailableAccounts).toEqual([
+      {
+        organizationId: slow.organizationId,
+        exchangeAccountId: "htx-2",
+        reason: "BUDGET",
+      },
+    ]);
+    expect(portfolio.balances).toEqual([{ asset: "USDT", free: "4", locked: "0", total: "4" }]);
   });
 
   it("names accounts dropped by the cap instead of pretending the sum is complete", async () => {
