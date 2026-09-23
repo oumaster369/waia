@@ -77,7 +77,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement C5 core collectors, diagnostics store, and job runs."
+  nextAction: "Finish C8 orders and accounts, then the slice gate, then C3 billing reads."
 provenance:
   createdFrom: chat
   gapRegistry: null

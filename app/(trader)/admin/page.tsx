@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { AdminCockpitFacts } from "@/components/trader/admin/admin-cockpit-facts";
+import { OverviewLoader } from "@/components/trader/admin-console/sections/overview/overview-loader";
 import {
   AdminErrorState,
   AdminLoadingState,
@@ -56,6 +57,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <OverviewLoader />
       {loading ? <AdminLoadingState label="Loading organizations…" /> : null}
       {error ? <AdminErrorState message={error} /> : null}
 
