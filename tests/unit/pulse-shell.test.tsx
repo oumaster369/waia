@@ -1,15 +1,20 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PulseShell } from "@/components/trader/admin/pulse-shell";
 import { resetCockpitStreamBudget } from "@/components/trader/admin/use-admin-cockpit-stream";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
+const navigation = vi.hoisted(() => ({
+  pathname: "/admin/runtime-authority",
+  search: "organization_id=11111111-1111-4111-8111-111111111111",
+  replace: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(`organization_id=${ORG}`),
-  usePathname: () => "/admin/runtime-authority",
-  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(navigation.search),
+  usePathname: () => navigation.pathname,
+  useRouter: () => ({ replace: navigation.replace }),
 }));
 
 type Source = {
@@ -71,6 +76,9 @@ function snapshot() {
 
 afterEach(() => {
   cleanup();
+  navigation.pathname = "/admin/runtime-authority";
+  navigation.search = `organization_id=${ORG}`;
+  navigation.replace.mockReset();
   resetCockpitStreamBudget();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -113,6 +121,53 @@ describe("PulseShell", () => {
     expect(screen.getByTestId("pulse-connection")).toHaveAttribute("data-state", "stale");
     expect(screen.getByTestId("pulse-connection")).toHaveAttribute("data-transport", "live");
     expect(screen.getByTestId("pulse-runtime-posture")).toHaveTextContent("READ · HALT");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("saves a typed campaign run id onto the cockpit query without using FHV commands", () => {
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn(() => ({
+        close: vi.fn(),
+        addEventListener: vi.fn(),
+        onerror: null,
+      })),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ organizations: [], accounts: [] })),
+    );
+    render(
+      <PulseShell>
+        <p>Legacy page fixture</p>
+      </PulseShell>,
+    );
+    expect(screen.getByTestId("pulse-campaign-status")).toHaveAttribute("data-saved", "false");
+    expect(screen.getByRole("link", { name: "Runtime authority" })).toHaveAttribute(
+      "href",
+      `/admin/runtime-authority?organization_id=${ORG}`,
+    );
+    expect(screen.getByRole("link", { name: "FHV operations" })).toHaveAttribute(
+      "href",
+      `/admin/fhv-operations?organization_id=${ORG}`,
+    );
+    const halt = screen.getByRole("link", { name: "HALT" });
+    expect(halt).toHaveAttribute(
+      "href",
+      `/admin/kill-switches?organization_id=${ORG}&switch_type=EMERGENCY_STOP`,
+    );
+    expect(halt.getAttribute("href")).not.toContain("fhv");
+    const runId = screen.getByLabelText("Campaign run id");
+    fireEvent.change(runId, { target: { value: "bad id" } });
+    fireEvent.keyDown(runId, { key: "Enter" });
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pulse-campaign-status")).toHaveTextContent("format is invalid");
+    fireEvent.change(runId, { target: { value: "run-1" } });
+    fireEvent.keyDown(runId, { key: "Enter" });
+    expect(navigation.replace).toHaveBeenCalledWith(
+      `/admin/runtime-authority?organization_id=${ORG}&campaign_run_id=run-1`,
+      { scroll: false },
+    );
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 });

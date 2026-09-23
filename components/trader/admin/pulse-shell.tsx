@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { PulseDeskProvider, usePulseDesk } from "@/components/trader/admin/pulse-desk-context";
 import { TraderSignOut } from "@/components/trader/trader-sign-out";
+import { Input } from "@/components/ui/input";
 import { formatCockpitAge } from "@/lib/trader/admin/cockpit-client";
 import {
   campaignRunIdForCockpit,
@@ -79,7 +80,7 @@ function PulseStrip() {
         )}
       </div>
       <p className="text-waia-fg-muted text-xs" data-testid="pulse-freshness">
-        Observation {freshness}
+        Freshness {freshness}
       </p>
       <p
         className="flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase"
@@ -92,7 +93,7 @@ function PulseStrip() {
       </p>
       <Link
         href={pulseHaltHref(desk.organizationId)}
-        title="Opens the audited kill-switch console. Does not trip a switch."
+        title="Opens the audited kill-switch console. Does not trip a switch and does not send FHV commands."
         className="bg-waia-danger text-waia-danger-fg ml-auto rounded-md px-3 py-1.5 text-sm font-semibold"
       >
         HALT
@@ -174,6 +175,10 @@ function PulseLeftRail() {
     desk.setCampaignRunId(next);
   }
 
+  const savedCampaign = campaignRunIdForCockpit(desk.campaignRunId);
+  const draftCampaign = campaignRunIdForCockpit(draft);
+  const campaignSaved = draftCampaign !== "" && draftCampaign === savedCampaign;
+
   return (
     <aside
       aria-label="Pulse filters"
@@ -220,24 +225,40 @@ function PulseLeftRail() {
           </select>
         </label>
 
-        <label className="block space-y-1 text-xs">
-          <span className="text-waia-fg-muted font-medium">Campaign</span>
-          <input
+        <div className="space-y-1 text-xs">
+          <label htmlFor="pulse-campaign-run-id" className="text-waia-fg-muted font-medium">
+            Campaign run id
+          </label>
+          <Input
+            id="pulse-campaign-run-id"
             data-testid="pulse-campaign-run-id"
-            className="border-waia-divider bg-waia-field w-full rounded-md border px-2 py-1.5 font-mono text-sm"
+            className="border-waia-divider bg-waia-field h-8 font-mono"
             value={draft}
             aria-invalid={draftInvalid}
+            aria-describedby="pulse-campaign-help"
             maxLength={128}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={() => commitCampaign(draft)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") commitCampaign(draft);
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitCampaign(draft);
+              }
             }}
           />
-          {draftInvalid ? (
-            <span className="text-waia-danger">Campaign run id format is invalid.</span>
-          ) : null}
-        </label>
+          <span
+            id="pulse-campaign-help"
+            data-testid="pulse-campaign-status"
+            data-saved={campaignSaved ? "true" : "false"}
+            className={draftInvalid ? "text-waia-danger" : "text-waia-fg-muted"}
+          >
+            {draftInvalid
+              ? "Campaign run id format is invalid."
+              : campaignSaved
+                ? "Saved on the cockpit stream. C3 stays unavailable until this id matches a progress channel."
+                : "Press Enter to save. C3 stays unavailable until the saved run id matches a progress channel."}
+          </span>
+        </div>
       </div>
 
       <nav aria-label="Admin pages" className="mt-4">

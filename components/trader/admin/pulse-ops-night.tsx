@@ -37,11 +37,12 @@ export function PulseOpsNight() {
       <header className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">Ops Night</h1>
         <p className="text-waia-fg-muted text-sm">
-          Live cockpit for this organization. Legacy admin pages stay in the left rail.
+          Cockpit facts and account observation stay on separate streams. Legacy admin pages stay in
+          the left rail.
         </p>
       </header>
 
-      <section aria-label="Observatory">
+      <section aria-label="Observatory" data-stream="cockpit">
         <CockpitFactsBody
           organizationName={desk.organizationName || "Observatory"}
           snapshot={desk.snapshot}
@@ -104,10 +105,17 @@ export function PulseOpsNight() {
         )}
       </WaiaSurface>
 
-      <WaiaSurface variant="raised" className="space-y-3 p-4">
+      <WaiaSurface
+        variant="raised"
+        role="region"
+        aria-label="Accounts and positions"
+        data-stream="account-observation"
+        className="space-y-3 p-4"
+      >
         <h2 className="text-sm font-medium">Accounts / positions</h2>
         <p className="text-waia-fg-muted text-xs">
-          Positions come from the selected account observation. This desk does not place orders.
+          Positions come from the account observation stream, not the cockpit stream. This desk does
+          not place orders or send FHV commands.
         </p>
         {desk.accountsLoading ? (
           <p className="text-waia-fg-muted text-sm">Loading accounts…</p>

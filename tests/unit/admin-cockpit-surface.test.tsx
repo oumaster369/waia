@@ -261,14 +261,32 @@ describe("admin dashboard", () => {
     expect(
       within(screen.getByRole("list")).getByRole("link", { name: "Kill switches" }),
     ).toHaveAttribute("href", `/admin/kill-switches?organization_id=${ORG}`);
+    expect(screen.getByRole("link", { name: "Runtime authority" })).toHaveAttribute(
+      "href",
+      `/admin/runtime-authority?organization_id=${ORG}`,
+    );
+    expect(screen.getByRole("link", { name: "FHV operations" })).toHaveAttribute(
+      "href",
+      `/admin/fhv-operations?organization_id=${ORG}`,
+    );
     expect(screen.getByRole("link", { name: "Audit" })).toHaveAttribute(
       "href",
       `/admin/audit?organization_id=${ORG}`,
     );
-    expect(screen.getByRole("link", { name: "HALT" })).toHaveAttribute(
+    expect(screen.getByRole("region", { name: "Observatory" })).toHaveAttribute(
+      "data-stream",
+      "cockpit",
+    );
+    expect(screen.getByRole("region", { name: "Accounts and positions" })).toHaveAttribute(
+      "data-stream",
+      "account-observation",
+    );
+    const halt = screen.getByRole("link", { name: "HALT" });
+    expect(halt).toHaveAttribute(
       "href",
       `/admin/kill-switches?organization_id=${ORG}&switch_type=EMERGENCY_STOP`,
     );
+    expect(halt.getAttribute("href")).not.toContain("fhv");
     expect(
       fetchMock.mock.calls.some(([input]) => String(input).includes("/kill-switches/commands")),
     ).toBe(false);
