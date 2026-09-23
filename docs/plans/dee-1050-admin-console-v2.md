@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C8-rest
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest, C7-rest]
+  currentWorkPackage: validate
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest, C7-rest, C8-links]
   remainingWorkPackages: [C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
-  blockedReason: null
-  nextAction: "Add the remaining legacy admin redirects and the shell e2e. The Postgres browser slice still needs a local Postgres and the Playwright config."
+  blockedReason: "The slice gate and admin Postgres e2e were not run. This environment has no local Postgres service. Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render, and tests/e2e/runtime-authority-observability.spec.ts opens /admin/runtime-authority."
+  nextAction: "Run lint, typecheck, and the admin-console unit tests, then open the Human-merge PR. Do not replace the runtime-authority page until its browser spec has a new home."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -128,7 +128,7 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C7 rest: the emergency dialog walks scope, effect, and confirmation, and it does not send a trip when the kill-switch version was not read. An order row with a stored version records one render acknowledgement.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
 - [x] C8 assistant panel: the shell shows the disabled-assistant banner and quick-answer titles.
-- [ ] C8 rest: legacy redirects, e2e, a11y.
+- [ ] C8 rest: legacy redirects, e2e, a11y. The system, strategy, and research sections now link to the existing operator pages. Audit, runtime authority, and score diagnostic stay on their current routes because a redirect would drop those tools and the runtime-authority browser spec.
 - [ ] Slice gate `admin-console-pg-slice.spec.ts`.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm build`, e2e, pr-governance, PR to `main`.
 

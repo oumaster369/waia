@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
+import { GovernedProcessLinks } from "@/components/trader/admin-console/shell/governed-links";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 import { AdminTimeSeriesChart } from "@/components/trader/admin-console/primitives/time-series-chart";
 
@@ -49,6 +50,7 @@ export default function AdminSystemPage() {
         <p>{`Пропущенные минутные задания: ${body.missedMinuteJobs.join(", ")}`}</p>
       ) : null}
       <AdminTimeSeriesChart />
+      <GovernedProcessLinks section="system" />
     </section>
   );
 }
