@@ -84,6 +84,22 @@ describe("admin console routes on sqlite", () => {
     );
     expect(incidents.status).toBe(200);
     expect(JSON.stringify(incidents.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsolePaymentsGet } =
+      await import("@/lib/trader/admin-console/handlers/payments");
+    const { handleAdminConsoleDisputesGet } =
+      await import("@/lib/trader/admin-console/handlers/disputes");
+    const payments = await handleAdminConsolePaymentsGet(
+      new Request("http://localhost/api/trader/admin/console/payments"),
+      deps(ADMIN_ID),
+    );
+    const disputes = await handleAdminConsoleDisputesGet(
+      new Request("http://localhost/api/trader/admin/console/disputes"),
+      deps(ADMIN_ID),
+    );
+    expect(payments.status).toBe(200);
+    expect(disputes.status).toBe(200);
+    expect(JSON.stringify(payments.body)).toContain("POSTGRES_REQUIRED");
+    expect(JSON.stringify(disputes.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {

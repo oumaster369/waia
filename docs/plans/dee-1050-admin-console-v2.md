@@ -70,14 +70,14 @@ linearStatusFlow:
 state:
   status: in-progress
   currentWorkPackage: C3-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
   remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Route the nine required assistant questions. The slice gate stays open."
+  nextAction: "Add payments and disputes reads. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -104,7 +104,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [ ] C2 rest: lots in valuation, fills, closed trades, order cursor in SQL, positions, attention HTTP.
 - [x] C3 display: invoice status, fee preview, fee chain, six unchecked attestations (DEE-1053).
 - [x] C3 routes: clients, invoices, invoice detail, reporting periods.
-- [ ] C3 rest: payments, disputes, export HTTP, billing idempotency on Postgres, DEE-1046 absorb, old billing page attestations.
+- [x] C3 payments and disputes: trader payment events and invoice disputes. Amounts stay text. Other products are excluded.
+- [ ] C3 rest: export HTTP, billing idempotency on Postgres, DEE-1046 absorb, old billing page attestations.
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
 - [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
 - [ ] C4 rest: proposals HTTP, cycle trace loaded from stored records, DEE-1044 absorb.
