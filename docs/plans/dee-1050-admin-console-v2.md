@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C3-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  currentWorkPackage: C4-rest
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
   remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Keep the old billing page from sending attestations as already true, without merging DEE-1046. The slice gate stays open."
+  nextAction: "Add the proposals HTTP read. Do not merge DEE-1044. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -106,7 +106,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C3 routes: clients, invoices, invoice detail, reporting periods.
 - [x] C3 payments and disputes: trader payment events and invoice disputes. Amounts stay text. Other products are excluded.
 - [x] C3 export and billing retry: the invoice CSV route returns POSTGRES_REQUIRED on sqlite, and formula cells stay prefixed. On local Postgres a repeated approve, issue, and close leave one invoice, one HWM row for that invoice, one period, and one issued audit. Closing an already closed period throws.
-- [ ] C3 rest: DEE-1046 absorb, old billing page attestations. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
+- [x] C3 billing redirect: `/admin/billing` now redirects to `/admin/clients?tab=invoices` and no longer submits attestations as already true.
+- [ ] C3 rest: DEE-1046 absorb. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
 - [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
 - [ ] C4 rest: proposals HTTP, cycle trace loaded from stored records, DEE-1044 absorb.
