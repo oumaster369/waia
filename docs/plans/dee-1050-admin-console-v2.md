@@ -74,10 +74,10 @@ state:
   remainingWorkPackages: [C8-rest, slice-gate]
   prNumber: 639
   prUrl: https://github.com/oumaster369/waia/pull/639
-  lastValidatedGitSha: 34bcb39c32ba2c2a7f1841a0955892721b17013a
-  lastValidationAt: "2026-09-23T22:30:14Z"
-  blockedReason: "GitHub CI is green on 34bcb39c, including unit shards, postgres migrate, admin-console Postgres, and sqlite e2e. Slice-gate and the admin Postgres browser e2e were not run. Billing idempotency still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329). Redirecting /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic would remove the operator pages those routes still render."
-  nextAction: "Human review and Human merge of PR 639. No further safe slice remains without slice-gate, a Postgres browser, or a decision to redirect the operator pages. Do not merge autonomously."
+  lastValidatedGitSha: 0af6dfc39e168d0cade1e1b6f5e757445c3d092b
+  lastValidationAt: "2026-09-23T23:30:20Z"
+  blockedReason: "GitHub CI is green on 0af6dfc3 (27/27), including Cloudflare OpenNext, the preview Worker, Workers Builds, both unit shards, postgres migrate, admin-console Postgres, and sqlite e2e. Cormorant Garamond is self-hosted. Slice-gate and the admin Postgres browser e2e were not run. C8-rest redirects of /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic stay blocked because they would remove those operator pages. Billing idempotency still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329)."
+  nextAction: "Human review and Human merge of PR 639. Remaining C8-rest redirects and the slice-gate stay blocked. No further safe slice remains without slice-gate, a Postgres browser, or a decision to redirect the operator pages. Do not merge autonomously."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -136,7 +136,9 @@ Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connecto
 - [x] C8 assistant panel: the shell shows the disabled-assistant banner and quick-answer titles.
 - [ ] C8 rest: legacy redirects, e2e, a11y. The system, strategy, and research sections now link to the existing operator pages. Audit, runtime authority, and score diagnostic stay on their current routes because a redirect would drop those tools and the runtime-authority browser spec.
 - [ ] Slice gate `admin-console-pg-slice.spec.ts`.
-- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm build`, e2e, pr-governance, PR to `main`.
+- [x] GitHub on `34bcb39c`: `pnpm lint`, typecheck, both unit shards, build, sqlite e2e, pr-governance, postgres migrate, and admin-console Postgres. PR #639 is open. Human merge only.
+- [x] GitHub on `0af6dfc3`: 27/27, including Cloudflare OpenNext after self-hosting Cormorant Garamond. The OpenNext failure was Google's `/l/font?kit=&skey=&v=` CSS, which Turbopack split into more than one font query.
+- [ ] Slice gate and admin Postgres browser e2e.
 
 ## WP-C1
 
