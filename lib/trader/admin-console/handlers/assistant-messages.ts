@@ -25,6 +25,12 @@ import {
 import { assistantEnabled, wrapToolResult } from "@/lib/trader/admin-console/assistant/guard";
 import { runLiveAssistantTurn } from "@/lib/trader/admin-console/assistant/live-turn";
 import {
+  assistantToolEvents,
+  encodeAssistantSse,
+  wantsAssistantSse,
+  type AssistantSseEvent,
+} from "@/lib/trader/admin-console/assistant/sse";
+import {
   ADMIN_TOOL_POLICY,
   ASSISTANT_PROMPT_VERSION,
 } from "@/lib/trader/admin-console/assistant/tools";
@@ -89,6 +95,26 @@ function revisionOf(body: unknown): string | null {
   return typeof revision === "string" ? revision : null;
 }
 
+function finishAssistant(
+  request: Request,
+  result: AdminRouteHandlerResult,
+  events: readonly AssistantSseEvent[],
+): AdminRouteHandlerResult {
+  if (!wantsAssistantSse(request)) return result;
+  return {
+    ...result,
+    binaryBody: encodeAssistantSse(events),
+    responseHeaders: {
+      ...result.responseHeaders,
+      "Content-Type": "text/event-stream; charset=utf-8",
+    },
+  };
+}
+
+function errorEvents(reason: string): AssistantSseEvent[] {
+  return [{ event: "error", data: { reason } }];
+}
+
 export async function handleAdminConsoleAssistantMessagesPost(
   request: Request,
   deps: AdminRouteHandlerDeps,
@@ -114,21 +140,35 @@ export async function handleAdminConsoleAssistantMessagesPost(
     !assistantEnabled({ WAIA_ADMIN_ASSISTANT_ENABLED: process.env.WAIA_ADMIN_ASSISTANT_ENABLED })
   ) {
     await deps.disposeRuntimeDb(auth.runtime);
-    return unavailable(ADMIN_REASON.assistantDisabled, backend);
+    return finishAssistant(
+      request,
+      unavailable(ADMIN_REASON.assistantDisabled, backend),
+      errorEvents(ADMIN_REASON.assistantDisabled),
+    );
   }
   const sqlite = requirePostgres(auth.runtime);
   if (sqlite) {
     await deps.disposeRuntimeDb(auth.runtime);
-    return sqlite;
+    return finishAssistant(request, sqlite, errorEvents(ADMIN_REASON.postgresRequired));
   }
   if (auth.runtime.kind !== "postgres") {
     await deps.disposeRuntimeDb(auth.runtime);
-    return schemaNotAppliedResult();
+    return finishAssistant(
+      request,
+      schemaNotAppliedResult(),
+      errorEvents(ADMIN_REASON.schemaNotApplied),
+    );
   }
   const runtime = auth.runtime;
   try {
     const present = await probeAdminConsoleSchema(runtime);
-    if (!present) return schemaNotAppliedResult();
+    if (!present) {
+      return finishAssistant(
+        request,
+        schemaNotAppliedResult(),
+        errorEvents(ADMIN_REASON.schemaNotApplied),
+      );
+    }
     const owned = await runtime.db
       .select({ id: traderAdminAssistantConversation.id })
       .from(traderAdminAssistantConversation)
@@ -190,7 +230,11 @@ export async function handleAdminConsoleAssistantMessagesPost(
         createdAt: now,
       });
       await touchConversation(runtime, parsed.data.conversationId, now);
-      return unavailable(budget.reason, "postgres");
+      return finishAssistant(
+        request,
+        unavailable(budget.reason, "postgres"),
+        errorEvents(budget.reason),
+      );
     }
     const profile = resolveTraderAIFoundation();
     if (isTraderReasoningFakePath(profile)) {
@@ -206,7 +250,11 @@ export async function handleAdminConsoleAssistantMessagesPost(
         createdAt: now,
       });
       await touchConversation(runtime, parsed.data.conversationId, now);
-      return unavailable(ADMIN_REASON.providerUnavailable, "postgres");
+      return finishAssistant(
+        request,
+        unavailable(ADMIN_REASON.providerUnavailable, "postgres"),
+        errorEvents(ADMIN_REASON.providerUnavailable),
+      );
     }
     const tables: { tool: string; body: unknown; text: string }[] = [];
     for (const tool of READ_TOOLS) {
@@ -274,7 +322,11 @@ export async function handleAdminConsoleAssistantMessagesPost(
           createdAt: now,
         });
         await touchConversation(runtime, parsed.data.conversationId, now);
-        return unavailable(ADMIN_REASON.providerUnavailable, "postgres");
+        return finishAssistant(
+          request,
+          unavailable(ADMIN_REASON.providerUnavailable, "postgres"),
+          errorEvents(ADMIN_REASON.providerUnavailable),
+        );
       }
     }
     const content =
@@ -311,18 +363,22 @@ export async function handleAdminConsoleAssistantMessagesPost(
       })),
     );
     await touchConversation(runtime, parsed.data.conversationId, now);
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          withoutModel: false,
-          messageId: assistantMessageId,
-          status,
-          content,
-          usage: turn.usage,
-        },
-        scope: { kind: "fleet" },
-      }),
-      "postgres",
+    return finishAssistant(
+      request,
+      adminSuccess(
+        adminEnvelope({
+          data: {
+            withoutModel: false,
+            messageId: assistantMessageId,
+            status,
+            content,
+            usage: turn.usage,
+          },
+          scope: { kind: "fleet" },
+        }),
+        "postgres",
+      ),
+      [...assistantToolEvents(READ_TOOLS), { event: "answer", data: { status, content } }],
     );
   } finally {
     await deps.disposeRuntimeDb(runtime);

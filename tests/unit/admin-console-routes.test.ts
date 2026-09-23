@@ -148,6 +148,24 @@ describe("admin console routes on sqlite", () => {
       );
       expect(disabled.status).toBe(200);
       expect(JSON.stringify(disabled.body)).toContain("ASSISTANT_DISABLED");
+      const streamed = await handleAdminConsoleAssistantMessagesPost(
+        new Request("http://localhost/api/trader/admin/console/assistant/messages", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost",
+            accept: "text/event-stream",
+          },
+          body: JSON.stringify({
+            conversationId: "00000000-0000-4000-8000-00000000a952",
+            content: "Какие ордера ещё работают?",
+          }),
+        }),
+        deps(ADMIN_ID),
+      );
+      expect(streamed.status).toBe(200);
+      expect(new TextDecoder().decode(streamed.binaryBody)).toContain("event: error");
+      expect(new TextDecoder().decode(streamed.binaryBody)).toContain("ASSISTANT_DISABLED");
 
       const enabled = await handleAdminConsoleAssistantMessagesPost(
         assistantMessage("on"),

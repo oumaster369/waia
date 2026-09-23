@@ -70,14 +70,14 @@ linearStatusFlow:
 state:
   status: in-progress
   currentWorkPackage: C6-routes-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards, C6-help, C6-quick-answers, C6-budget]
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist]
   remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C6-routes-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Prove persisted assistant turns on Postgres and stream the answer. The slice gate stays open."
+  nextAction: "Stream a live answer with tool stages and record those calls on the trace. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -96,7 +96,7 @@ Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DE
 
 ## Progress
 
-A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. Postgres integration tests and the browser slice have not been run.
+A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. The assistant persistence test has been run on local Postgres. The rest of the Postgres integration suite and the browser slice have not been run.
 
 - [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
@@ -112,7 +112,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
 - [x] C6 guards: tool cap, holdout refusal, aggregate whitelist, fact check, cache key, injection clip (DEE-1056).
 - [x] C6 routes started: help lists only wired reads, quick answers run without a model, budget math refuses an exhausted or fake path, the model route returns ASSISTANT_DISABLED when the flag is off. Conversations and trace stay POSTGRES_REQUIRED on sqlite.
-- [ ] C6 routes rest: persisted turns proven on Postgres, SSE, a live trace, the nine required questions.
+- [x] C6 persisted turn: on local Postgres a fake-provider question and unavailable answer are stored, and the reply is an SSE `error` event. Stage labels are encoded before `tool_result_ready`.
+- [ ] C6 routes rest: a live answer with tool stages, a trace that contains tool rows, the nine required questions.
 - [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
 - [ ] C7 rest: market strip, status bar, full emergency dialog, delivery ack in the UI.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
