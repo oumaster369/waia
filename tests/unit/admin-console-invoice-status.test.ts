@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { invoiceDisplayStatus } from "@/lib/trader/admin-console/billing/invoice-display-status";
+import {
+  invoiceDisplayStatus,
+  invoiceDueAt,
+} from "@/lib/trader/admin-console/billing/invoice-display-status";
 
 const base = {
   state: "ISSUED" as const,
@@ -53,5 +56,6 @@ describe("admin console invoice status", () => {
     expect(overdue.flags).toContain("На сверке");
     expect(JSON.stringify(overdue)).not.toContain("Частично оплачен");
     expect(overdue.dueNote).toContain("DEE-ADR-A");
+    expect(invoiceDueAt("2026-09-01T00:00:00.000Z", 86_400_000)).toBe("2026-09-02T00:00:00.000Z");
   });
 });

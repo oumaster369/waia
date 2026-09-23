@@ -21,6 +21,13 @@ export type InvoiceDisplay = {
 
 export const DUE_NOTE = "по текущей политике; закреплённый срок требует DEE-ADR-A";
 
+export function invoiceDueAt(issuedAt: string | null, graceMs: number): string | null {
+  if (!issuedAt) return null;
+  const issuedMs = Date.parse(issuedAt);
+  if (!Number.isFinite(issuedMs)) return null;
+  return new Date(issuedMs + graceMs).toISOString();
+}
+
 export function invoiceDisplayStatus(input: InvoiceDisplayInput): InvoiceDisplay {
   const flags = [
     input.reconciliation ? "На сверке" : null,

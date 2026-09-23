@@ -58,4 +58,23 @@ describe("admin console routes on sqlite", () => {
     expect(allowed.status).toBe(200);
     expect(JSON.stringify(allowed.body)).toContain("POSTGRES_REQUIRED");
   });
+
+  it("returns POSTGRES_REQUIRED for client and invoice reads on sqlite", async () => {
+    const { handleAdminConsoleClientsGet } =
+      await import("@/lib/trader/admin-console/handlers/clients");
+    const { handleAdminConsoleInvoicesGet } =
+      await import("@/lib/trader/admin-console/handlers/invoices");
+    const clients = await handleAdminConsoleClientsGet(
+      new Request("http://localhost/api/trader/admin/console/clients"),
+      deps(ADMIN_ID),
+    );
+    const invoices = await handleAdminConsoleInvoicesGet(
+      new Request("http://localhost/api/trader/admin/console/invoices"),
+      deps(ADMIN_ID),
+    );
+    expect(clients.status).toBe(200);
+    expect(invoices.status).toBe(200);
+    expect(JSON.stringify(clients.body)).toContain("POSTGRES_REQUIRED");
+    expect(JSON.stringify(invoices.body)).toContain("POSTGRES_REQUIRED");
+  });
 });
