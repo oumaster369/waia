@@ -24,6 +24,7 @@ import {
   readLatestTenantRuntimeAuthorityV2,
   type RuntimeAuthorityReadModelV2,
 } from "@/lib/trader/runtime-authority/v2/runtime-authority-read-model-v2";
+import { readAdminRelease } from "@/lib/trader/admin-console/release";
 
 export const ADMIN_COCKPIT_SOURCES = {
   releaseIdentityMissing: "missing:admin-release-identity-read-model",
@@ -114,11 +115,28 @@ function asOfFromSource(at: string | number | null | undefined): CockpitAsOf {
   return COCKPIT_AS_OF_UNKNOWN;
 }
 
-export function cockpitReleaseFact(): CockpitUnavailable {
+export function cockpitReleaseFact(): CockpitFact<{
+  sha: string;
+  verified: false;
+  reason: "RELEASE_SHA_UNVERIFIED";
+}> {
+  const release = readAdminRelease();
+  if (release.state === "unavailable") {
+    return {
+      state: "unavailable",
+      source: release.reason,
+      asOf: COCKPIT_AS_OF_UNKNOWN,
+    };
+  }
   return {
-    state: "unavailable",
-    source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+    state: "value",
+    source: release.source,
     asOf: COCKPIT_AS_OF_UNKNOWN,
+    value: {
+      sha: release.sha,
+      verified: false,
+      reason: release.reason,
+    },
   };
 }
 

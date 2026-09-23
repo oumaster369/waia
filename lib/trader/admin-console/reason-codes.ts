@@ -1,0 +1,27 @@
+export const ADMIN_REASON = {
+  postgresRequired: "POSTGRES_REQUIRED",
+  schemaNotApplied: "ADMIN_CONSOLE_SCHEMA_NOT_APPLIED",
+  originRejected: "ADMIN_CONSOLE_ORIGIN_REJECTED",
+  staleRevision: "STALE_REVISION",
+  noQuote: "NO_QUOTE",
+  quoteStale: "QUOTE_STALE",
+  valuationSkew: "VALUATION_SKEW",
+  accountCap: "ACCOUNT_CAP",
+  ownershipConflict: "OWNERSHIP_CONFLICT",
+  attributionAmbiguous: "ATTRIBUTION_AMBIGUOUS",
+  unattributed: "UNATTRIBUTED",
+  externalFlowsNotObserved: "EXTERNAL_FLOWS_NOT_OBSERVED",
+  costBasisUnknown: "COST_BASIS_UNKNOWN",
+  feeAssetUnconvertible: "FEE_ASSET_UNCONVERTIBLE",
+  notPersistedForCycle: "NOT_PERSISTED_FOR_CYCLE",
+  releaseShaNotSet: "WAIA_RELEASE_SHA_NOT_SET",
+  releaseShaUnverified: "RELEASE_SHA_UNVERIFIED",
+  collectorsDisabled: "COLLECTORS_DISABLED",
+  assistantDisabled: "ASSISTANT_DISABLED",
+  providerUnavailable: "PROVIDER_UNAVAILABLE",
+  returnMethodNotRatified: "RETURN_METHOD_NOT_RATIFIED",
+  unknownTopic: "UNKNOWN_TOPIC",
+  queryTooShort: "QUERY_TOO_SHORT",
+} as const;
+
+export type AdminReasonCode = (typeof ADMIN_REASON)[keyof typeof ADMIN_REASON];

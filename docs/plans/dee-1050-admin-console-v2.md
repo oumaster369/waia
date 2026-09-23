@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C1
-  completedWorkPackages: []
-  remainingWorkPackages: [C1, C2, C5-core, C7, C8-part1, slice-gate, C3, C4, C5-rest, C6, C8-part2]
+  currentWorkPackage: C2
+  completedWorkPackages: [C1]
+  remainingWorkPackages: [C2, C5-core, C7, C8-part1, slice-gate, C3, C4, C5-rest, C6, C8-part2]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement C1 contracts, migrations 0214-0216, and the change-log stream."
+  nextAction: "Implement C2 money, accounts, orders, positions, and overview."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1305,3 +1305,29 @@ AC закрыт в первом PR только при автоматическ�
 - **`splitRationale`:** объём значительно больше ориентира (~800 строк / ~20 файлов). Общие контракты, одна модель чтения для UI, потока и ИИ, и единая оболочка не работают по частям. Каждая дочерняя задача — отдельная серия коммитов с одной меткой для постадийного ревью. Контрольная точка среза проверяет архитектуру до расширения. Откат описан выше: флаги для частичного, откат версии Worker для полного, runbook триггеров.
 - `gh pr create --base main --title "DEE-<P> feat(trader-admin): admin console v2" --body-file .cursor/pr-body-DEE-<P>.md`; родитель и дочерние → In Review.
 - После Human merge: синхронизировать `origin/main`, выполнить пункты «Поглощённые задачи», передать Human последовательность rollout, F1–F6 остаются открытыми.
+
+## WP-C1-runbook
+
+Disable one trigger at a time. `SHARE ROW EXCLUSIVE` blocks writers briefly. On timeout, retry. Enable in the same order.
+
+```sql
+SET lock_timeout = '2s';
+ALTER TABLE public.trader_orders DISABLE TRIGGER trader_admin_change_log_trg;
+```
+
+Repeat for every table in section 6.1. `exchange_credentials` uses the same trigger name. Reverse with `ENABLE TRIGGER`.
+
+Read-only volume estimate for the last 7 days:
+
+```sql
+SELECT 'trader_order_events' AS source, count(*) AS rows
+FROM trader_order_events
+WHERE occurred_at >= now() - interval '7 days'
+UNION ALL
+SELECT 'trader_fills', count(*) FROM trader_fills WHERE created_at >= now() - interval '7 days'
+UNION ALL
+SELECT 'trader_account_collection_state', count(*) FROM trader_account_collection_state;
+```
+
+The change log stores identifiers only. A journal failure has no `EXCEPTION` handler, so it fails the caller transaction.
+

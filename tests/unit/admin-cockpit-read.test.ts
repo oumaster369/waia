@@ -77,17 +77,21 @@ function runtimeModel(
 }
 
 describe("admin cockpit fact selectors", () => {
-  it("names the missing release source and does not echo a release SHA", () => {
+  it("returns an unverified release SHA when the variable is a 40-hex digest", () => {
     const previous = process.env.WAIA_RELEASE_SHA;
     process.env.WAIA_RELEASE_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     try {
       const fact = cockpitReleaseFact();
       expect(fact).toEqual({
-        state: "unavailable",
-        source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+        state: "value",
+        source: "WAIA_RELEASE_SHA",
         asOf: { state: "unknown" },
+        value: {
+          sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          verified: false,
+          reason: "RELEASE_SHA_UNVERIFIED",
+        },
       });
-      expect(JSON.stringify(fact)).not.toContain(process.env.WAIA_RELEASE_SHA);
     } finally {
       if (previous === undefined) {
         delete process.env.WAIA_RELEASE_SHA;
@@ -371,14 +375,19 @@ describe("admin cockpit read handler", () => {
       expect(serialized).not.toContain(LEAKED_C3);
       expect(serialized).not.toContain("2099-01-01T00:00:00.000Z");
       expect(serialized).not.toContain("2099-02-02T00:00:00.000Z");
-      expect(serialized).not.toContain(process.env.WAIA_RELEASE_SHA ?? "");
+      expect(serialized).toContain("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
       expect(serialized).not.toContain("executionHostHealthy");
       expect(result.body).toMatchObject({
         organizationId: adminOrgId,
         releaseIdentity: {
-          state: "unavailable",
-          source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+          state: "value",
+          source: "WAIA_RELEASE_SHA",
           asOf: { state: "unknown" },
+          value: {
+            sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            verified: false,
+            reason: "RELEASE_SHA_UNVERIFIED",
+          },
         },
         runtimeAuthority: { state: "unavailable", asOf: { state: "unknown" } },
         observationFreshness: { state: "unavailable", asOf: { state: "unknown" } },
