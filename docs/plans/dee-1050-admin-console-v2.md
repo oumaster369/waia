@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C7-rest
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest]
-  remainingWorkPackages: [C7-rest, C8-rest, slice-gate, validate, pr]
+  currentWorkPackage: C8-rest
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest, C7-rest]
+  remainingWorkPackages: [C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Add the emergency-stop dialog and the delivery acknowledgement in the shell. The Postgres e2e job still waits on the C8 Playwright config. Account valuation is not written by the collector."
+  nextAction: "Add the remaining legacy admin redirects and the shell e2e. The Postgres browser slice still needs a local Postgres and the Playwright config."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -125,7 +125,7 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [ ] C6 routes rest: the brief file is not in the repo, so these nine are the section questions rather than a verbatim §13.3 list.
 - [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
 - [x] C7 chrome started: market strip does not call USDT BTC/USD, status bar has no fake p95, assistant panel sits in the shell.
-- [ ] C7 rest: emergency dialog, delivery ack in the UI.
+- [x] C7 rest: the emergency dialog walks scope, effect, and confirmation, and it does not send a trip when the kill-switch version was not read. An order row with a stored version records one render acknowledgement.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
 - [x] C8 assistant panel: the shell shows the disabled-assistant banner and quick-answer titles.
 - [ ] C8 rest: legacy redirects, e2e, a11y.
