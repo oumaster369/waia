@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { AdminCockpitFacts } from "@/components/trader/admin/admin-cockpit-facts";
 import {
   AdminErrorState,
   AdminLoadingState,
-  AdminOrgSelector,
-  adminFetch,
   useAdminOrganizations,
 } from "@/components/trader/admin/admin-org-selector";
+import { ConnectedAccountObservationPanel } from "@/components/trader/account-observation/connected-account-observation-panel";
 import { WaiaSurface } from "@/components/waia/waia-surface";
+import { adminScopedHref } from "@/lib/trader/admin/cockpit-client";
+import type { ConnectedHtxAccountDto } from "@/lib/trader/credentials/connected-accounts.types";
 
 const SECTIONS = [
   { href: "/admin/account-observation", label: "Accounts" },
@@ -24,43 +27,37 @@ const SECTIONS = [
 ] as const;
 
 export default function AdminDashboardPage() {
+  const searchParams = useSearchParams();
+  const organizationId = searchParams.get("organization_id")?.trim() ?? "";
   const { organizations, loading, error } = useAdminOrganizations();
-  const [selectedOrganizationId, setSelectedOrganizationId] = React.useState("");
-  const organizationId = selectedOrganizationId || organizations[0]?.id || "";
-  const [overview, setOverview] = React.useState<Record<string, unknown> | null>(null);
-  const [overviewError, setOverviewError] = React.useState<string | null>(null);
-  const [overviewLoading, setOverviewLoading] = React.useState(false);
+  const [accounts, setAccounts] = React.useState<ConnectedHtxAccountDto[]>([]);
+  const [accountsError, setAccountsError] = React.useState<string | null>(null);
 
-  const loadOverview = React.useCallback(async () => {
-    if (!organizationId) {
-      return;
-    }
-    setOverviewLoading(true);
-    setOverviewError(null);
-    const result = await adminFetch<Record<string, unknown>>(
-      `/api/trader/admin/overview?organization_id=${encodeURIComponent(organizationId)}`,
-    );
-    if (!result.ok) {
-      setOverviewError(result.message);
-      setOverview(null);
-    } else {
-      setOverview(result.data);
-    }
-    setOverviewLoading(false);
-  }, [organizationId]);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/trader/admin/connected-accounts", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          if (!controller.signal.aborted) setAccountsError("Connected accounts are unavailable.");
+          return;
+        }
+        const body = (await response.json()) as { accounts?: ConnectedHtxAccountDto[] };
+        if (!controller.signal.aborted) setAccounts(body.accounts ?? []);
+      } catch {
+        if (!controller.signal.aborted) setAccountsError("Connected accounts are unavailable.");
+      }
+    })();
+    return () => controller.abort();
+  }, []);
 
   return (
     <div className="space-y-6">
       {loading ? <AdminLoadingState label="Loading organizations…" /> : null}
       {error ? <AdminErrorState message={error} /> : null}
-
-      {!loading && !error ? (
-        <AdminOrgSelector
-          organizations={organizations}
-          value={organizationId}
-          onChange={setSelectedOrganizationId}
-        />
-      ) : null}
 
       <WaiaSurface variant="raised" className="space-y-3 p-4">
         <h2 className="text-lg font-medium">Sections</h2>
@@ -68,7 +65,7 @@ export default function AdminDashboardPage() {
           {SECTIONS.map((section) => (
             <li key={section.href}>
               <Link
-                href={`${section.href}?organization_id=${encodeURIComponent(organizationId)}`}
+                href={adminScopedHref(section.href, organizationId)}
                 className="hover:bg-muted/40 border-border block rounded-md border px-3 py-2 text-sm"
               >
                 {section.label}
@@ -78,28 +75,26 @@ export default function AdminDashboardPage() {
         </ul>
       </WaiaSurface>
 
-      <WaiaSurface variant="raised" className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">Overview snapshot</h2>
-          <button
-            type="button"
-            className="border-border hover:bg-muted/40 rounded-md border px-3 py-1.5 text-sm"
-            onClick={() => void loadOverview()}
-            disabled={!organizationId || overviewLoading}
-          >
-            Load overview
-          </button>
-        </div>
-        {overviewLoading ? <AdminLoadingState /> : null}
-        {overviewError ? (
-          <AdminErrorState message={overviewError} onRetry={() => void loadOverview()} />
-        ) : null}
-        {overview ? (
-          <pre className="bg-muted/30 overflow-x-auto rounded-md p-3 text-xs">
-            {JSON.stringify(overview, null, 2)}
-          </pre>
-        ) : null}
-      </WaiaSurface>
+      {organizations.map((organization) => (
+        <AdminCockpitFacts
+          key={organization.id}
+          organizationId={organization.id}
+          organizationName={organization.name}
+        />
+      ))}
+
+      {accountsError ? <AdminErrorState message={accountsError} /> : null}
+      {accounts.map((account) => (
+        <ConnectedAccountObservationPanel
+          key={account.credentialId}
+          mode="admin"
+          target={{
+            organizationId: account.organizationId,
+            credentialId: account.credentialId,
+            exchangeAccountId: account.exchangeAccountId,
+          }}
+        />
+      ))}
     </div>
   );
 }
