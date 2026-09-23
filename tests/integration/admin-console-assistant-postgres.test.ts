@@ -222,4 +222,62 @@ describePostgres("admin assistant turns persist on postgres", () => {
     expect(trace.status).toBe(200);
     expect(JSON.stringify(trace.body)).toContain('"calls":[]');
   });
+
+  it("streams tool stages and stores the tool rows for a stubbed answer", async () => {
+    const created = await handleAdminConsoleAssistantConversationsPost(
+      new Request("http://localhost/api/trader/admin/console/assistant/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost" },
+        body: JSON.stringify({ title: "Инструменты" }),
+      }),
+      deps(),
+    );
+    const conversationId = (created.body as { data?: { conversation?: { id?: string } } }).data
+      ?.conversation?.id;
+    expect(conversationId).toMatch(/^[0-9a-f-]{36}$/i);
+
+    const posted = await handleAdminConsoleAssistantMessagesPost(
+      new Request("http://localhost/api/trader/admin/console/assistant/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost",
+          accept: "text/event-stream",
+        },
+        body: JSON.stringify({ conversationId, content: "Что на счетах?" }),
+      }),
+      deps(),
+      {
+        complete: async () => ({
+          text: JSON.stringify({ action: "answer", summary: "Готово", citations: [] }),
+          usage: { totalTokens: 4 },
+        }),
+      },
+    );
+    expect(posted.status).toBe(200);
+    const streamed = new TextDecoder().decode(posted.binaryBody);
+    const stageAt = streamed.indexOf("event: stage");
+    const readyAt = streamed.indexOf("event: tool_result_ready");
+    const answerAt = streamed.indexOf("event: answer");
+    expect(stageAt).toBeGreaterThanOrEqual(0);
+    expect(stageAt).toBeLessThan(readyAt);
+    expect(readyAt).toBeLessThan(answerAt);
+    expect(streamed).toContain("Получаю счета…");
+
+    const assistant = await sqlClient<{ id: string; status: string }[]>`
+      SELECT id, status FROM trader_admin_assistant_message
+      WHERE conversation_id = ${conversationId!}::uuid AND role = 'assistant'
+    `;
+    expect(assistant[0]?.status).toBe("complete");
+    const trace = await handleAdminConsoleAssistantTraceGet(
+      new Request("http://localhost/api/trader/admin/console/assistant/messages/trace"),
+      deps(),
+      assistant[0]!.id,
+    );
+    expect(trace.status).toBe(200);
+    const traceBody = JSON.stringify(trace.body);
+    expect(traceBody).toContain("list_accounts");
+    expect(traceBody).toContain("list_orders");
+    expect(traceBody).toContain('"status":"complete"');
+  });
 });

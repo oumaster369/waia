@@ -70,14 +70,14 @@ linearStatusFlow:
 state:
   status: in-progress
   currentWorkPackage: C6-routes-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist]
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer]
   remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C6-routes-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Stream a live answer with tool stages and record those calls on the trace. The slice gate stays open."
+  nextAction: "Route the nine required assistant questions. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -113,7 +113,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C6 guards: tool cap, holdout refusal, aggregate whitelist, fact check, cache key, injection clip (DEE-1056).
 - [x] C6 routes started: help lists only wired reads, quick answers run without a model, budget math refuses an exhausted or fake path, the model route returns ASSISTANT_DISABLED when the flag is off. Conversations and trace stay POSTGRES_REQUIRED on sqlite.
 - [x] C6 persisted turn: on local Postgres a fake-provider question and unavailable answer are stored, and the reply is an SSE `error` event. Stage labels are encoded before `tool_result_ready`.
-- [ ] C6 routes rest: a live answer with tool stages, a trace that contains tool rows, the nine required questions.
+- [x] C6 live answer: a stubbed completion reads the wired tools, streams `stage`, then `tool_result_ready`, then `answer`, and the trace stores those tool rows. A failed read is stored as `failed`.
+- [ ] C6 routes rest: the nine required questions.
 - [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
 - [ ] C7 rest: market strip, status bar, full emergency dialog, delivery ack in the UI.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
