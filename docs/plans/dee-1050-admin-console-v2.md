@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C2-rest
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
-  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
+  currentWorkPackage: C3-rest
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  remainingWorkPackages: [C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Add the positions read with the latest Guardian assessment per lot. The slice gate stays open."
+  nextAction: "Absorb the remaining DEE-1046 governance surfaces into the billing reads. A retry after a failed billing transaction and the invoice export query are still not executed on Postgres."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -102,7 +102,7 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
 - [x] C2 reads: valuation, operational PnL, attribution, overview, orders, account list without ciphertext (DEE-1052).
 - [x] C2 fills and closed trades: one row per fill, amounts stay text, and closed trades are `CLOSED` or `FORCED_FLAT` inside a half-open `closed_at` period. Both routes return POSTGRES_REQUIRED on sqlite.
-- [ ] C2 rest: lots in valuation, order cursor in SQL, positions, attention HTTP. The fills and closed-trade queries were not executed on Postgres.
+- [x] C2 rest: open lots carry the latest Guardian assessment (`DISTINCT ON (lot_id)`), a missing or >15 minute assessment is `stale`, and Guardian recommendation, Risk posture, and executed reduction stay separate. Valuation of a real account includes attributed live lots. The orders page cursor is applied in SQL. `GET /console/attention` builds the queue from stored rows. These SQL reads, and the fills and closed-trade queries, were not executed on Postgres.
 - [x] C3 display: invoice status, fee preview, fee chain, six unchecked attestations (DEE-1053).
 - [x] C3 routes: clients, invoices, invoice detail, reporting periods.
 - [x] C3 payments and disputes: trader payment events and invoice disputes. Amounts stay text. Other products are excluded.

@@ -1,3 +1,42 @@
+export function consecutiveFailedJobStreak(
+  runs: readonly { jobKey: string; startedAtMs: number; status: string }[],
+): number {
+  const byJob = new Map<string, { startedAtMs: number; status: string }[]>();
+  for (const run of runs) {
+    const list = byJob.get(run.jobKey) ?? [];
+    list.push(run);
+    byJob.set(run.jobKey, list);
+  }
+  let max = 0;
+  for (const list of byJob.values()) {
+    list.sort((left, right) => right.startedAtMs - left.startedAtMs);
+    let streak = 0;
+    for (const run of list) {
+      if (run.status !== "failed") break;
+      streak += 1;
+    }
+    if (streak > max) max = streak;
+  }
+  return max;
+}
+
+export function splitStaleAccounts(
+  rows: readonly {
+    exchangeAccountId: string;
+    stale: boolean;
+    active: boolean;
+  }[],
+): { active: string[]; quiet: string[] } {
+  const active: string[] = [];
+  const quiet: string[] = [];
+  for (const row of rows) {
+    if (!row.stale) continue;
+    if (row.active) active.push(row.exchangeAccountId);
+    else quiet.push(row.exchangeAccountId);
+  }
+  return { active, quiet };
+}
+
 export type AttentionInput = {
   reconciliationRequiredOrderIds: string[];
   sentWithoutReportOrderIds: string[];

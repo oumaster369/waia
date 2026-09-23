@@ -149,6 +149,22 @@ describe("admin console routes on sqlite", () => {
     expect(closed.status).toBe(200);
     expect(JSON.stringify(fills.body)).toContain("POSTGRES_REQUIRED");
     expect(JSON.stringify(closed.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsolePositionsGet } =
+      await import("@/lib/trader/admin-console/handlers/positions");
+    const { handleAdminConsoleAttentionGet } =
+      await import("@/lib/trader/admin-console/handlers/attention");
+    const positions = await handleAdminConsolePositionsGet(
+      new Request("http://localhost/api/trader/admin/console/positions"),
+      deps(ADMIN_ID),
+    );
+    const attention = await handleAdminConsoleAttentionGet(
+      new Request("http://localhost/api/trader/admin/console/attention"),
+      deps(ADMIN_ID),
+    );
+    expect(positions.status).toBe(200);
+    expect(attention.status).toBe(200);
+    expect(JSON.stringify(positions.body)).toContain("POSTGRES_REQUIRED");
+    expect(JSON.stringify(attention.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {

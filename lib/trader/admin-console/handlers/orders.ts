@@ -54,7 +54,12 @@ export async function handleAdminConsoleOrdersGet(
           ${tab} = 'all'
           OR state IN ('CREATED','RISK_APPROVED','SENT_TO_EXCHANGE','ACCEPTED','PARTIALLY_FILLED','CANCEL_REQUESTED','RECONCILIATION_REQUIRED')
         )
-        ORDER BY created_at DESC, id DESC
+        AND (
+          ${cursor ? cursor.t : null}::timestamptz IS NULL
+          OR created_at < ${cursor ? cursor.t : null}::timestamptz
+          OR (created_at = ${cursor ? cursor.t : null}::timestamptz AND id::text < ${cursor ? cursor.id : null})
+        )
+        ORDER BY created_at DESC, id::text DESC
         LIMIT ${limit + 1}
       `),
     );

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   attributeLegs,
+  riskStateMatchesLot,
   type AttributionOrder,
 } from "@/lib/trader/admin-console/attribution/trade-attribution";
 
@@ -119,5 +120,13 @@ describe("trade attribution", () => {
       [credential],
     );
     expect(result.state).toBe("unattributed");
+  });
+
+  it("matches risk state only to the lot account key", () => {
+    expect(riskStateMatchesLot({ lotAccountKey: "paper-1", riskAccountId: "paper-1" })).toBe(true);
+    expect(riskStateMatchesLot({ lotAccountKey: "paper-1", riskAccountId: "exchange-1" })).toBe(
+      false,
+    );
+    expect(riskStateMatchesLot({ lotAccountKey: "paper-1", riskAccountId: null })).toBe(false);
   });
 });

@@ -47,6 +47,20 @@ export type ValuationResult = {
   excludedAssets: string[];
 };
 
+/** Quote gaps and skew block equity. A missing lot match does not. */
+export function equityInclusion(
+  reasons: readonly string[],
+  equity: string | null,
+): { included: boolean; stale: boolean } {
+  const blocksEquity = reasons.some(
+    (reason) => reason !== ADMIN_REASON.costBasisUnknown && reason !== ADMIN_REASON.quoteStale,
+  );
+  return {
+    included: equity !== null && !blocksEquity,
+    stale: reasons.includes(ADMIN_REASON.quoteStale),
+  };
+}
+
 function quoteByAsset(quotes: readonly AssetQuote[]): Map<string, AssetQuote> {
   return new Map(quotes.map((quote) => [quote.asset.toUpperCase(), quote]));
 }

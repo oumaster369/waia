@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { valueObservation, type ValuationInput } from "@/lib/trader/admin-console/money/valuation";
+import {
+  equityInclusion,
+  valueObservation,
+  type ValuationInput,
+} from "@/lib/trader/admin-console/money/valuation";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 
 const now = Date.parse("2026-09-23T12:00:00.000Z");
@@ -113,5 +117,15 @@ describe("admin console valuation", () => {
     );
     expect(value.traderUnrealized).toBeNull();
     expect(value.reasons).toContain("COST_BASIS_UNKNOWN");
+  });
+
+  it("keeps confirmed equity when only the lot match is missing", () => {
+    expect(equityInclusion(["COST_BASIS_UNKNOWN"], "10")).toEqual({
+      included: true,
+      stale: false,
+    });
+    expect(equityInclusion(["QUOTE_STALE"], "10")).toEqual({ included: true, stale: true });
+    expect(equityInclusion(["NO_QUOTE:BTC"], "10").included).toBe(false);
+    expect(equityInclusion(["COST_BASIS_UNKNOWN"], null).included).toBe(false);
   });
 });
