@@ -13,20 +13,25 @@ export function useRenderAck(input: {
   entityVersion: string;
   offscreen?: boolean;
 }): number {
-  const [acks, setAcks] = React.useState<readonly RenderAck[]>([]);
   const offscreen = input.offscreen ?? false;
-  React.useEffect(() => {
-    setAcks((current) =>
-      recordRenderAck(current, {
+  const identity = `${input.topic}\n${input.entityId}\n${input.entityVersion}\n${offscreen ? "1" : "0"}`;
+  const [stored, setStored] = React.useState<{ identity: string; acks: readonly RenderAck[] }>({
+    identity: "",
+    acks: [],
+  });
+  if (stored.identity !== identity) {
+    setStored({
+      identity,
+      acks: recordRenderAck(stored.acks, {
         topic: input.topic,
         entityId: input.entityId,
         entityVersion: input.entityVersion,
-        renderedAtMs: Date.now(),
+        renderedAtMs: 0,
         offscreen,
       }),
-    );
-  }, [input.topic, input.entityId, input.entityVersion, offscreen]);
-  return acks.length;
+    });
+  }
+  return stored.acks.length;
 }
 
 export function RenderAckMarker(input: {
