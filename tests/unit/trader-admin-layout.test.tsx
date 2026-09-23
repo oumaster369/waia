@@ -43,7 +43,7 @@ describe("trader admin page admission", () => {
   });
   it("renders only after canonical audit permission and disposes runtime", async () => {
     const result = await TraderAdminLayout({ children: "protected" });
-    expect(result.props.children.props.children).toBe("protected");
+    expect(result.props.children.props.children.props.children).toBe("protected");
     expect(mocks.authorize).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),

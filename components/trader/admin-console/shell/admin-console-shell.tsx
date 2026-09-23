@@ -1,7 +1,8 @@
 "use client";
 
+import { Command, CommandInput, CommandItem, CommandList } from "cmdk";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
@@ -28,9 +29,21 @@ export function AdminConsoleShell({
   right?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = React.useState(
     () => typeof window !== "undefined" && window.localStorage.getItem(NAV_KEY) === "1",
   );
+  const [palette, setPalette] = React.useState(false);
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPalette(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   return (
     <div lang="ru" className="grid gap-4 md:grid-cols-[auto_1fr_auto]">
       <nav
@@ -49,6 +62,9 @@ export function AdminConsoleShell({
         >
           {collapsed ? "Развернуть меню" : "Свернуть меню"}
         </button>
+        <button type="button" onClick={() => setPalette(true)}>
+          Поиск
+        </button>
         {LINKS.map((link) => {
           const active =
             link.href === "/admin" ? pathname === "/admin" : pathname.startsWith(link.href);
@@ -65,6 +81,18 @@ export function AdminConsoleShell({
       </nav>
       <div className="min-w-0">{children}</div>
       {right ? <aside aria-label="Правая панель">{right}</aside> : null}
+      {palette ? (
+        <Command label="Поиск по консоли">
+          <CommandInput placeholder="Раздел" />
+          <CommandList>
+            {LINKS.map((link) => (
+              <CommandItem key={link.href} onSelect={() => router.push(link.href)}>
+                {link.label}
+              </CommandItem>
+            ))}
+          </CommandList>
+        </Command>
+      ) : null}
     </div>
   );
 }

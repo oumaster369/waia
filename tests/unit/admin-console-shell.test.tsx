@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/admin",
+  useRouter: () => ({ push: () => undefined }),
+}));
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
 import { AdminConsoleShell } from "@/components/trader/admin-console/shell/admin-console-shell";
