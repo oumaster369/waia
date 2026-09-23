@@ -69,9 +69,9 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C6-routes-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C3-display, C3-routes, C4-catalog, C4-runs, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer]
-  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C6-routes-rest, C7-rest, C8-rest, slice-gate, validate, pr]
+  currentWorkPackage: C3-rest
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
@@ -106,7 +106,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C3 routes: clients, invoices, invoice detail, reporting periods.
 - [ ] C3 rest: payments, disputes, export HTTP, billing idempotency on Postgres, DEE-1046 absorb, old billing page attestations.
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
-- [ ] C4 rest: proposals, compare, cycles, NO_TRADE map, holdout column firewall, DEE-1044 absorb.
+- [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
+- [ ] C4 rest: proposals HTTP, cycle trace loaded from stored records, DEE-1044 absorb.
 - [x] C5 core: redaction, fingerprint, incident transitions, news normalize, collector flag, job catalog, CI path (DEE-1055).
 - [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
 - [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
@@ -114,11 +115,14 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C6 routes started: help lists only wired reads, quick answers run without a model, budget math refuses an exhausted or fake path, the model route returns ASSISTANT_DISABLED when the flag is off. Conversations and trace stay POSTGRES_REQUIRED on sqlite.
 - [x] C6 persisted turn: on local Postgres a fake-provider question and unavailable answer are stored, and the reply is an SSE `error` event. Stage labels are encoded before `tool_result_ready`.
 - [x] C6 live answer: a stubbed completion reads the wired tools, streams `stage`, then `tool_result_ready`, then `answer`, and the trace stores those tool rows. A failed read is stored as `failed`.
-- [ ] C6 routes rest: the nine required questions.
+- [x] C6 questions: nine section questions route to read tools and carry scope, period, currency, coverage, and citations.
+- [ ] C6 routes rest: the brief file is not in the repo, so these nine are the section questions rather than a verbatim §13.3 list.
 - [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
-- [ ] C7 rest: market strip, status bar, full emergency dialog, delivery ack in the UI.
+- [x] C7 chrome started: market strip does not call USDT BTC/USD, status bar has no fake p95, assistant panel sits in the shell.
+- [ ] C7 rest: emergency dialog, delivery ack in the UI.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
-- [ ] C8 rest: assistant panel, legacy redirects, e2e, a11y.
+- [x] C8 assistant panel: the shell shows the disabled-assistant banner and quick-answer titles.
+- [ ] C8 rest: legacy redirects, e2e, a11y.
 - [ ] Slice gate `admin-console-pg-slice.spec.ts`.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm build`, e2e, pr-governance, PR to `main`.
 

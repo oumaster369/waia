@@ -5,6 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
+import { QUICK_ANSWERS } from "@/lib/trader/admin-console/assistant/quick-answers";
+import { AssistantPanel } from "@/components/trader/admin-console/assistant/assistant-panel";
+import { MarketStrip } from "@/components/trader/admin-console/shell/market-strip";
+import { StatusBar } from "@/components/trader/admin-console/shell/status-bar";
 import { RU } from "@/components/trader/admin-console/i18n/ru";
 import { cn } from "@/lib/utils";
 
@@ -79,8 +83,18 @@ export function AdminConsoleShell({
           );
         })}
       </nav>
-      <div className="min-w-0">{children}</div>
-      {right ? <aside aria-label="Правая панель">{right}</aside> : null}
+      <div className="min-w-0">
+        <MarketStrip />
+        <StatusBar />
+        {children}
+      </div>
+      <aside aria-label="Правая панель">
+        <AssistantPanel
+          enabled={false}
+          answers={QUICK_ANSWERS.map((answer) => ({ id: answer.id, title: answer.title }))}
+        />
+        {right}
+      </aside>
       {palette ? (
         <Command label="Поиск по консоли">
           <CommandInput placeholder="Раздел" />
