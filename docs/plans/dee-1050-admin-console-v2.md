@@ -70,14 +70,14 @@ linearStatusFlow:
 state:
   status: in-progress
   currentWorkPackage: C3-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C4-catalog, C4-runs, C4-maps, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
   remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Add payments and disputes reads. The slice gate stays open."
+  nextAction: "Keep the old billing page from sending attestations as already true, without merging DEE-1046. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -96,7 +96,7 @@ Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DE
 
 ## Progress
 
-A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. The assistant persistence test has been run on local Postgres. The rest of the Postgres integration suite and the browser slice have not been run.
+A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. The assistant persistence test and the billing idempotency test have been run on local Postgres. The rest of the Postgres integration suite and the browser slice have not been run. The invoice export query itself has not been run on Postgres.
 
 - [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
@@ -105,7 +105,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C3 display: invoice status, fee preview, fee chain, six unchecked attestations (DEE-1053).
 - [x] C3 routes: clients, invoices, invoice detail, reporting periods.
 - [x] C3 payments and disputes: trader payment events and invoice disputes. Amounts stay text. Other products are excluded.
-- [ ] C3 rest: export HTTP, billing idempotency on Postgres, DEE-1046 absorb, old billing page attestations.
+- [x] C3 export and billing retry: the invoice CSV route returns POSTGRES_REQUIRED on sqlite, and formula cells stay prefixed. On local Postgres a repeated approve, issue, and close leave one invoice, one HWM row for that invoice, one period, and one issued audit. Closing an already closed period throws.
+- [ ] C3 rest: DEE-1046 absorb, old billing page attestations. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
 - [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
 - [ ] C4 rest: proposals HTTP, cycle trace loaded from stored records, DEE-1044 absorb.

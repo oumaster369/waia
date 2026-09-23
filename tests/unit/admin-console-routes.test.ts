@@ -100,6 +100,14 @@ describe("admin console routes on sqlite", () => {
     expect(disputes.status).toBe(200);
     expect(JSON.stringify(payments.body)).toContain("POSTGRES_REQUIRED");
     expect(JSON.stringify(disputes.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsoleExportGet } =
+      await import("@/lib/trader/admin-console/handlers/export");
+    const exported = await handleAdminConsoleExportGet(
+      new Request("http://localhost/api/trader/admin/console/export?dataset=invoices"),
+      deps(ADMIN_ID),
+    );
+    expect(exported.status).toBe(200);
+    expect(JSON.stringify(exported.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {

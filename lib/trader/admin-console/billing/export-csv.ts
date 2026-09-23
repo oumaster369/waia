@@ -11,6 +11,22 @@ export function assertExportWithinLimits(rows: number, elapsedMs: number): void 
   }
 }
 
+export function buildAdminCsv(input: {
+  generatedAt: string;
+  financeRevision: string;
+  filters: string;
+  currency: string;
+  scope: string;
+  headers: readonly string[];
+  rows: readonly (readonly string[])[];
+  elapsedMs: number;
+}): string {
+  assertExportWithinLimits(input.rows.length, input.elapsedMs);
+  const header = input.headers.map((cell) => escapeCsvCell(cell)).join(",");
+  const body = input.rows.map((row) => row.map((cell) => escapeCsvCell(cell)).join(","));
+  return [...exportPreamble(input), header, ...body].join("\n");
+}
+
 export function exportPreamble(input: {
   generatedAt: string;
   financeRevision: string;

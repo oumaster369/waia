@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertExportWithinLimits,
+  buildAdminCsv,
   escapeCsvCell,
   exportPreamble,
 } from "@/lib/trader/admin-console/billing/export-csv";
@@ -21,5 +22,18 @@ describe("admin console export", () => {
       })[0],
     ).toContain("generatedAt=");
     expect(() => assertExportWithinLimits(50_001, 0)).toThrow("EXPORT_LIMIT");
+    const csv = buildAdminCsv({
+      generatedAt: "2026-09-23T00:00:00.000Z",
+      financeRevision: "abc",
+      filters: "none",
+      currency: "USDT",
+      scope: "fleet",
+      headers: ["amount"],
+      rows: [["=1+1"], ["10.5"]],
+      elapsedMs: 1,
+    });
+    expect(csv).toContain("# generatedAt=");
+    expect(csv).toContain("'=1+1");
+    expect(csv).toContain("10.5");
   });
 });
