@@ -223,6 +223,21 @@ export default {
         }
       })(),
     );
+
+    ctx.waitUntil(
+      (async () => {
+        const { collectorsEnabled, runAdminConsoleCollectorCycle } =
+          await import("@/lib/trader/admin-console/collectors/run-collectors-cycle");
+        const envRecord = env as { WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED?: string };
+        if (!collectorsEnabled(envRecord)) {
+          console.log(
+            JSON.stringify({ event: "waia_admin_console_collectors", phase: "disabled" }),
+          );
+          return;
+        }
+        await runAdminConsoleCollectorCycle({ env: envRecord, tasks: [] });
+      })(),
+    );
   },
 };
 

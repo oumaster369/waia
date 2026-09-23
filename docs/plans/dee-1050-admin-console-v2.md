@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C5-core
-  completedWorkPackages: [C1, C2]
-  remainingWorkPackages: [C5-core, C7, C8-part1, slice-gate, C3, C4, C5-rest, C6, C8-part2]
+  currentWorkPackage: C7
+  completedWorkPackages: [C1, C2, C5-core]
+  remainingWorkPackages: [C7, C8-part1, slice-gate, C3, C4, C5-rest, C6, C8-part2]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement C2 money, accounts, orders, positions, and overview."
+  nextAction: "Implement C5 core collectors, diagnostics store, and job runs."
 provenance:
   createdFrom: chat
   gapRegistry: null

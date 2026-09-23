@@ -18,6 +18,10 @@ on:
     paths:
       - "db/migrations_postgres/**"
       - "db/schema.postgres.ts"
+      - "lib/trader/admin-console/**"
+      - "app/api/trader/admin/console/**"
+      - "components/trader/admin-console/**"
+      - "tests/integration/admin-console-*.test.ts"
       - "scripts/postgres-validation/**"
       - "lib/trader/execution/v2/**"
       - "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts"
@@ -118,6 +122,10 @@ jobs:
         run: pnpm db:smoke:postgres
       - name: Historical complete migration journal regression
         run: pnpm test --run tests/unit/fhv-v2-postgres-schema-preflight.test.ts
+      - name: Admin console change log on Postgres
+        env:
+          WAIA_PG_INTEGRATION: "1"
+        run: pnpm test --run --no-file-parallelism tests/integration/admin-console-*.test.ts
       - name: DEE-651 TEST_ONLY Decision → Risk → Execution V2 proof
         env:
           WAIA_PG_INTEGRATION: "1"
