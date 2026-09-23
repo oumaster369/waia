@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C4-rest
-  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C4-proposals, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
+  currentWorkPackage: C2-rest
+  completedWorkPackages: [C1-code, C2-reads, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
   remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Load a cycle trace from stored records when a record exists. Do not merge DEE-1044. The slice gate stays open."
+  nextAction: "Add fills and closed-trade reads from stored rows. Do not merge the DEE-1044 branch. The slice gate stays open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -111,7 +111,8 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
 - [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
 - [x] C4 proposals: the proposals route returns POSTGRES_REQUIRED on sqlite. A proposal summary keeps decision fields and drops evidence arrays.
-- [ ] C4 rest: cycle trace loaded from stored records, DEE-1044 absorb. The proposals query was not executed on Postgres.
+- [x] C4 cycle trace: stored hypothesis, forecast, decision, risk verdict, execution plan, and order ids mark stages 10–16 completed. Stages without that link, including sufficiency and Guardian, stay `NOT_PERSISTED_FOR_CYCLE`. The route returns POSTGRES_REQUIRED on sqlite and does not select cycle payloads.
+- [ ] C4 rest: DEE-1044 absorb. The proposals query and the cycle trace query were not executed on Postgres.
 - [x] C5 core: redaction, fingerprint, incident transitions, news normalize, collector flag, job catalog, CI path (DEE-1055).
 - [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
 - [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.

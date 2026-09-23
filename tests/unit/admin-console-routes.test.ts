@@ -116,6 +116,23 @@ describe("admin console routes on sqlite", () => {
     );
     expect(proposals.status).toBe(200);
     expect(JSON.stringify(proposals.body)).toContain("POSTGRES_REQUIRED");
+    const { handleAdminConsoleCycleTraceGet } =
+      await import("@/lib/trader/admin-console/handlers/cycle-trace");
+    const invalid = await handleAdminConsoleCycleTraceGet(
+      new Request("http://localhost/api/trader/admin/console/cycles/not-a-uuid"),
+      deps(ADMIN_ID),
+      "not-a-uuid",
+    );
+    expect(invalid.status).toBe(400);
+    const trace = await handleAdminConsoleCycleTraceGet(
+      new Request(
+        "http://localhost/api/trader/admin/console/cycles/00000000-0000-4000-8000-000000000001",
+      ),
+      deps(ADMIN_ID),
+      "00000000-0000-4000-8000-000000000001",
+    );
+    expect(trace.status).toBe(200);
+    expect(JSON.stringify(trace.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {
