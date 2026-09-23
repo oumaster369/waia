@@ -44,6 +44,7 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     const orgId = crypto.randomUUID();
     const userId = crypto.randomUUID();
     const liveId = crypto.randomUUID();
+    await sql`INSERT INTO auth.users (id) VALUES (${userId}::uuid)`;
     await sql`INSERT INTO users (id, identity_label, email) VALUES (${userId}, ${"admin-console"}, ${`${userId}@waia.invalid`})`;
     await sql`INSERT INTO organizations (id, owner_user_id, kind, name) VALUES (${orgId}, ${userId}, ${"personal"}, ${"console"})`;
     await sql`
@@ -126,6 +127,7 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     await sql`DELETE FROM trader_admin_change_log WHERE entity_id IN (${heldId}, ${liveId})`;
     await sql`DELETE FROM organizations WHERE id = ${orgId}::uuid`;
     await sql`DELETE FROM users WHERE id = ${userId}::uuid`;
+    await sql`DELETE FROM auth.users WHERE id = ${userId}::uuid`;
   }, 90_000);
 
   it("keeps a repeatable-read snapshot stable while another transaction commits", async () => {
@@ -134,7 +136,12 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     const before = await sql<
       { count: string }[]
     >`SELECT count(*)::text AS count FROM trader_admin_fear_greed`;
+    let snapshotOpen!: () => void;
+    const snapshotReady = new Promise<void>((resolve) => {
+      snapshotOpen = resolve;
+    });
     const snapshot = withAdminReadSnapshot(db, async (tx) => {
+      snapshotOpen();
       await new Promise((resolve) => setTimeout(resolve, 200));
       const result = await tx.execute(
         // drizzle sql tag is used by the helper; this callback uses the same executor.
@@ -144,6 +151,7 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
       return result;
     });
     const day = "2099-01-01";
+    await snapshotReady;
     await sql`
       INSERT INTO trader_admin_fear_greed (day, value, classification, observed_at)
       VALUES (${day}::date, 10, 'fear', now())
