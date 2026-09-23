@@ -42,15 +42,23 @@ const OBSERVATION_KEYS = [
   "configurationRevision",
 ] as const;
 
+export type CockpitAsOf =
+  | { readonly state: "known"; readonly at: string | number }
+  | { readonly state: "unknown" };
+
+export const COCKPIT_AS_OF_UNKNOWN: CockpitAsOf = { state: "unknown" };
+
 export type CockpitValue<T> = {
   readonly state: "value";
   readonly source: string;
+  readonly asOf: CockpitAsOf;
   readonly value: T;
 };
 
 export type CockpitUnavailable = {
   readonly state: "unavailable";
   readonly source: string;
+  readonly asOf: CockpitAsOf;
   readonly operatorCampaignRunId?: string;
 };
 
@@ -75,6 +83,8 @@ export type C3ChannelReading = {
   readonly organizationId: string;
   readonly campaignRunId: string;
   readonly progress: unknown;
+  /** Present only when the existing channel itself reports a time. */
+  readonly sourceAsOf?: string | null;
 };
 
 type RuntimeDb = Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>;
@@ -94,10 +104,21 @@ export type AdminCockpitReadDeps = AdminRouteHandlerDeps & {
   }) => Promise<C3ChannelReading | null>;
 };
 
+function asOfFromSource(at: string | number | null | undefined): CockpitAsOf {
+  if (typeof at === "number" && Number.isFinite(at)) {
+    return { state: "known", at };
+  }
+  if (typeof at === "string" && at.trim() !== "") {
+    return { state: "known", at };
+  }
+  return COCKPIT_AS_OF_UNKNOWN;
+}
+
 export function cockpitReleaseFact(): CockpitUnavailable {
   return {
     state: "unavailable",
     source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+    asOf: COCKPIT_AS_OF_UNKNOWN,
   };
 }
 
@@ -106,11 +127,16 @@ export function cockpitRuntimeFact(
   model: RuntimeAuthorityReadModelV2 | null,
 ): CockpitFact<AdminCockpitRuntimeValue> {
   if (!model || model.organizationId !== organizationId) {
-    return { state: "unavailable", source: ADMIN_COCKPIT_SOURCES.runtimeAuthority };
+    return {
+      state: "unavailable",
+      source: ADMIN_COCKPIT_SOURCES.runtimeAuthority,
+      asOf: COCKPIT_AS_OF_UNKNOWN,
+    };
   }
   return {
     state: "value",
     source: ADMIN_COCKPIT_SOURCES.runtimeAuthority,
+    asOf: asOfFromSource(model.adjudicatedAtUtc),
     value: {
       availability: model.availability,
       organizationId: model.organizationId,
@@ -158,11 +184,16 @@ export function cockpitFreshnessFact(
     reading.organizationId !== organizationId ||
     !Number.isFinite(reading.collectionCompletedAtMs)
   ) {
-    return { state: "unavailable", source: ADMIN_COCKPIT_SOURCES.observationFreshness };
+    return {
+      state: "unavailable",
+      source: ADMIN_COCKPIT_SOURCES.observationFreshness,
+      asOf: COCKPIT_AS_OF_UNKNOWN,
+    };
   }
   return {
     state: "value",
     source: ADMIN_COCKPIT_SOURCES.observationFreshness,
+    asOf: asOfFromSource(reading.collectionCompletedAtMs),
     value: { collectionCompletedAtMs: reading.collectionCompletedAtMs },
   };
 }
@@ -182,7 +213,11 @@ export function cockpitC3Fact(
   channel: C3ChannelReading | null,
 ): CockpitFact<unknown> {
   if (!campaignRunId) {
-    return { state: "unavailable", source: ADMIN_COCKPIT_SOURCES.c3MissingRun };
+    return {
+      state: "unavailable",
+      source: ADMIN_COCKPIT_SOURCES.c3MissingRun,
+      asOf: COCKPIT_AS_OF_UNKNOWN,
+    };
   }
   const embeddedOrganizationId = channel ? progressOrganizationId(channel.progress) : null;
   const sameOrganization =
@@ -192,12 +227,14 @@ export function cockpitC3Fact(
     return {
       state: "value",
       source: ADMIN_COCKPIT_SOURCES.c3Channel,
+      asOf: asOfFromSource(channel.sourceAsOf),
       value: channel.progress,
     };
   }
   return {
     state: "unavailable",
     source: ADMIN_COCKPIT_SOURCES.c3TypedRunOnly,
+    asOf: COCKPIT_AS_OF_UNKNOWN,
     operatorCampaignRunId: campaignRunId,
   };
 }

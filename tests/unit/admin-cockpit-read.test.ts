@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +26,10 @@ import {
   type C3ChannelReading,
   type ObservationFreshnessReading,
 } from "@/lib/trader/admin/cockpit-read";
+import {
+  createAdminCockpitPollingStream,
+  serveAdminCockpit,
+} from "@/lib/trader/admin/cockpit-stream";
 import type { AdminRouteHandlerDeps } from "@/lib/trader/admin-route-shared";
 import type { RuntimeAuthorityReadModelV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-read-model-v2";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -59,6 +63,7 @@ function createDeps(getUserId: () => Promise<string | null>): AdminRouteHandlerD
 function runtimeModel(
   organizationId: string,
   runtimeInstanceId: string,
+  adjudicatedAtUtc = "2026-09-23T00:00:00.000Z",
 ): RuntimeAuthorityReadModelV2 {
   return {
     availability: "AVAILABLE",
@@ -67,7 +72,7 @@ function runtimeModel(
     posture: "HALT",
     reasonCodes: [],
     assessmentId: "assessment-1",
-    adjudicatedAtUtc: "2026-09-23T00:00:00.000Z",
+    adjudicatedAtUtc,
   };
 }
 
@@ -80,6 +85,7 @@ describe("admin cockpit fact selectors", () => {
       expect(fact).toEqual({
         state: "unavailable",
         source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+        asOf: { state: "unknown" },
       });
       expect(JSON.stringify(fact)).not.toContain(process.env.WAIA_RELEASE_SHA);
     } finally {
@@ -99,7 +105,9 @@ describe("admin cockpit fact selectors", () => {
     expect(fact).toEqual({
       state: "unavailable",
       source: ADMIN_COCKPIT_SOURCES.runtimeAuthority,
+      asOf: { state: "unknown" },
     });
+    expect(JSON.stringify(fact)).not.toContain("2026-09-23T00:00:00.000Z");
     expect(JSON.stringify(fact)).not.toContain(LEAKED_RUNTIME);
   });
 
@@ -111,6 +119,7 @@ describe("admin cockpit fact selectors", () => {
     expect(fact).toMatchObject({
       state: "value",
       source: ADMIN_COCKPIT_SOURCES.runtimeAuthority,
+      asOf: { state: "known", at: "2026-09-23T00:00:00.000Z" },
       value: { organizationId: binding.organizationId, runtimeInstanceId: "local-runtime" },
     });
   });
@@ -142,6 +151,7 @@ describe("admin cockpit fact selectors", () => {
     expect(fact).toEqual({
       state: "value",
       source: ADMIN_COCKPIT_SOURCES.observationFreshness,
+      asOf: { state: "known", at: 1_700_000_000_000 },
       value: { collectionCompletedAtMs: 1_700_000_000_000 },
     });
     expect(JSON.stringify(fact)).not.toContain(LEAKED_BALANCE);
@@ -156,6 +166,7 @@ describe("admin cockpit fact selectors", () => {
     expect(fact).toEqual({
       state: "unavailable",
       source: ADMIN_COCKPIT_SOURCES.c3MissingRun,
+      asOf: { state: "unknown" },
     });
     expect(JSON.stringify(fact)).not.toContain(LEAKED_C3);
   });
@@ -169,6 +180,7 @@ describe("admin cockpit fact selectors", () => {
     expect(fact).toEqual({
       state: "unavailable",
       source: ADMIN_COCKPIT_SOURCES.c3TypedRunOnly,
+      asOf: { state: "unknown" },
       operatorCampaignRunId: "run-typed",
     });
     expect(JSON.stringify(fact)).not.toContain(LEAKED_C3);
@@ -193,7 +205,21 @@ describe("admin cockpit fact selectors", () => {
     expect(fact).toEqual({
       state: "value",
       source: ADMIN_COCKPIT_SOURCES.c3Channel,
+      asOf: { state: "unknown" },
       value: { phase: "observed", organizationId: binding.organizationId },
+    });
+  });
+
+  it("uses a channel time only when that channel reports one", () => {
+    const fact = cockpitC3Fact(binding.organizationId, "run-typed", {
+      organizationId: binding.organizationId,
+      campaignRunId: "run-typed",
+      progress: { phase: "observed" },
+      sourceAsOf: "2026-09-23T01:02:03.000Z",
+    });
+    expect(fact).toMatchObject({
+      state: "value",
+      asOf: { state: "known", at: "2026-09-23T01:02:03.000Z" },
     });
   });
 });
@@ -270,7 +296,9 @@ describe("admin cockpit read handler", () => {
 
   function readers() {
     return {
-      readRuntimeAuthority: vi.fn(async () => runtimeModel(otherOrgId, LEAKED_RUNTIME)),
+      readRuntimeAuthority: vi.fn(async () =>
+        runtimeModel(otherOrgId, LEAKED_RUNTIME, "2099-01-01T00:00:00.000Z"),
+      ),
       readObservationFreshness: vi.fn(
         async (): Promise<ObservationFreshnessReading> => ({
           organizationId: otherOrgId,
@@ -282,6 +310,7 @@ describe("admin cockpit read handler", () => {
           organizationId: otherOrgId,
           campaignRunId: "run-typed",
           progress: { marker: LEAKED_C3 },
+          sourceAsOf: "2099-02-02T00:00:00.000Z",
         }),
       ),
     };
@@ -340,6 +369,8 @@ describe("admin cockpit read handler", () => {
       expect(serialized).not.toContain(LEAKED_RUNTIME);
       expect(serialized).not.toContain(String(LEAKED_FRESHNESS_MS));
       expect(serialized).not.toContain(LEAKED_C3);
+      expect(serialized).not.toContain("2099-01-01T00:00:00.000Z");
+      expect(serialized).not.toContain("2099-02-02T00:00:00.000Z");
       expect(serialized).not.toContain(process.env.WAIA_RELEASE_SHA ?? "");
       expect(serialized).not.toContain("executionHostHealthy");
       expect(result.body).toMatchObject({
@@ -347,12 +378,14 @@ describe("admin cockpit read handler", () => {
         releaseIdentity: {
           state: "unavailable",
           source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+          asOf: { state: "unknown" },
         },
-        runtimeAuthority: { state: "unavailable" },
-        observationFreshness: { state: "unavailable" },
+        runtimeAuthority: { state: "unavailable", asOf: { state: "unknown" } },
+        observationFreshness: { state: "unavailable", asOf: { state: "unknown" } },
         c3: {
           state: "unavailable",
           source: ADMIN_COCKPIT_SOURCES.c3TypedRunOnly,
+          asOf: { state: "unknown" },
           operatorCampaignRunId: "run-typed",
         },
       });
@@ -380,11 +413,13 @@ describe("admin cockpit read handler", () => {
       runtimeAuthority: {
         state: "value",
         source: ADMIN_COCKPIT_SOURCES.runtimeAuthority,
+        asOf: { state: "unknown" },
         value: {
           availability: "UNAVAILABLE",
           organizationId: adminOrgId,
           posture: null,
           reasonCodes: ["RUNTIME_AUTHORITY_UNAVAILABLE"],
+          adjudicatedAtUtc: null,
         },
       },
       observationFreshness: {
@@ -424,25 +459,205 @@ describe("admin cockpit read handler", () => {
     expect(extra.readObservationFreshness).not.toHaveBeenCalled();
     expect(extra.readC3Progress).not.toHaveBeenCalled();
   });
+
+  it("serves the same cockpit body over SSE and the poll fallback", async () => {
+    const extra = {
+      readRuntimeAuthority: vi.fn(async () => runtimeModel(adminOrgId, "local-runtime")),
+      readObservationFreshness: vi.fn(async () => ({
+        organizationId: adminOrgId,
+        collectionCompletedAtMs: 1_700_000_000_000,
+      })),
+      readC3Progress: vi.fn(async () => ({
+        organizationId: adminOrgId,
+        campaignRunId: "run-local",
+        progress: { phase: "observed" },
+        sourceAsOf: "2026-09-23T01:02:03.000Z",
+      })),
+    };
+    const params = new URLSearchParams({
+      organization_id: adminOrgId,
+      credentialId: binding.credentialId,
+      exchangeAccountId: binding.exchangeAccountId,
+      credentialRevision: binding.credentialRevision,
+      configurationRevision: binding.configurationRevision,
+      campaign_run_id: "run-local",
+    });
+    const deps = cockpitDeps(async () => ADMIN_ID, extra);
+    const rest = await handleAdminCockpitRead(
+      new Request(`http://localhost/api/trader/admin/cockpit?${params}`),
+      deps,
+    );
+    const poll = await serveAdminCockpit(
+      new Request(`http://localhost/api/trader/admin/cockpit/stream?${params}&transport=poll`, {
+        headers: { accept: "text/event-stream" },
+      }),
+      deps,
+    );
+    const streamResponse = await serveAdminCockpit(
+      new Request(`http://localhost/api/trader/admin/cockpit/stream?${params}`, {
+        headers: { accept: "text/event-stream" },
+      }),
+      deps,
+    );
+    expect(poll.status).toBe(200);
+    expect(poll.headers.get("content-type")).toContain("application/json");
+    expect(await poll.json()).toEqual(rest.body);
+    expect(streamResponse.status).toBe(200);
+    expect(streamResponse.headers.get("content-type")).toContain("text/event-stream");
+    const reader = streamResponse.body?.getReader();
+    const snapshot = parseSse((await reader?.read())?.value);
+    expect(snapshot).toEqual({ event: "cockpit.snapshot", data: rest.body });
+    await reader?.cancel();
+  });
+
+  it("drops another organization's facts on the stream the same way as REST", async () => {
+    const extra = readers();
+    const params = new URLSearchParams({
+      organization_id: adminOrgId,
+      credentialId: binding.credentialId,
+      exchangeAccountId: binding.exchangeAccountId,
+      credentialRevision: binding.credentialRevision,
+      configurationRevision: binding.configurationRevision,
+      campaign_run_id: "run-typed",
+    });
+    const deps = cockpitDeps(async () => ADMIN_ID, extra);
+    const rest = await handleAdminCockpitRead(
+      new Request(`http://localhost/api/trader/admin/cockpit?${params}`),
+      deps,
+    );
+    const streamResponse = await serveAdminCockpit(
+      new Request(`http://localhost/api/trader/admin/cockpit/stream?${params}`, {
+        headers: { accept: "text/event-stream" },
+      }),
+      deps,
+    );
+    const reader = streamResponse.body?.getReader();
+    const snapshot = parseSse((await reader?.read())?.value);
+    expect(snapshot.data).toEqual(rest.body);
+    const serialized = JSON.stringify(snapshot.data);
+    expect(serialized).not.toContain(LEAKED_RUNTIME);
+    expect(serialized).not.toContain(String(LEAKED_FRESHNESS_MS));
+    expect(serialized).not.toContain(LEAKED_C3);
+    expect(serialized).not.toContain("2099-01-01T00:00:00.000Z");
+    expect(serialized).not.toContain("2099-02-02T00:00:00.000Z");
+    await reader?.cancel();
+  });
 });
 
 describe("cockpit route source boundary", () => {
   it("does not call the execution host, HTX, or a release SHA", () => {
-    const handler = fs.readFileSync(
-      path.join(process.cwd(), "lib/trader/admin/cockpit-read.ts"),
-      "utf8",
-    );
-    const route = fs.readFileSync(
-      path.join(process.cwd(), "app/api/trader/admin/cockpit/route.ts"),
-      "utf8",
-    );
-    for (const source of [handler, route]) {
+    const files = [
+      "lib/trader/admin/cockpit-read.ts",
+      "lib/trader/admin/cockpit-stream.ts",
+      "app/api/trader/admin/cockpit/route.ts",
+      "app/api/trader/admin/cockpit/stream/route.ts",
+    ];
+    for (const file of files) {
+      const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
       expect(source).not.toContain("probeExecutionHostHealth");
       expect(source).not.toContain("WAIA_RELEASE_SHA");
       expect(source).not.toContain("WAIA_TRADER_EXECUTION_HOST");
       expect(source).not.toContain("fetchStatus");
       expect(source).not.toContain("historical-simulation");
     }
-    expect(route).not.toContain("readC3Progress");
+    const rest = fs.readFileSync(
+      path.join(process.cwd(), "app/api/trader/admin/cockpit/route.ts"),
+      "utf8",
+    );
+    const stream = fs.readFileSync(
+      path.join(process.cwd(), "app/api/trader/admin/cockpit/stream/route.ts"),
+      "utf8",
+    );
+    expect(rest).not.toContain("readC3Progress");
+    expect(stream).not.toContain("readC3Progress");
+  });
+});
+
+function parseSse(bytes: Uint8Array | undefined): { event: string; data: unknown } {
+  const text = new TextDecoder().decode(bytes);
+  const event = text.match(/^event: (.+)$/m)?.[1] ?? "";
+  const dataLine = text.match(/^data: (.+)$/m)?.[1] ?? "null";
+  return { event, data: JSON.parse(dataLine) as unknown };
+}
+
+describe("admin cockpit live transport", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const successBody = {
+    organizationId: "org",
+    releaseIdentity: {
+      state: "unavailable",
+      source: ADMIN_COCKPIT_SOURCES.releaseIdentityMissing,
+      asOf: { state: "unknown" },
+    },
+  };
+
+  it("emits a heartbeat without a read clock when the snapshot is unchanged", async () => {
+    vi.useFakeTimers();
+    const abort = new AbortController();
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const stream = createAdminCockpitPollingStream({
+      signal: abort.signal,
+      lastEventId: null,
+      load: async () => ({ status: 200, body: successBody }),
+      pollMs: 250,
+      heartbeatMs: 250,
+      maxLifetimeMs: 10_000,
+      dispose,
+    });
+    const reader = stream.getReader();
+    const first = await reader.read();
+    expect(parseSse(first.value)).toMatchObject({
+      event: "cockpit.snapshot",
+      data: successBody,
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    const second = await reader.read();
+    const heartbeat = parseSse(second.value);
+    expect(heartbeat).toEqual({ event: "heartbeat", data: { kind: "heartbeat" } });
+    expect(JSON.stringify(heartbeat.data)).not.toContain("T");
+    abort.abort();
+    await reader.cancel();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("stops and disposes when the client disconnects during a read", async () => {
+    let release!: (value: { status: number; body: typeof successBody }) => void;
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const abort = new AbortController();
+    const stream = createAdminCockpitPollingStream({
+      signal: abort.signal,
+      lastEventId: null,
+      load: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      dispose,
+      pollMs: 250,
+    });
+    const reader = stream.getReader();
+    const read = reader.read();
+    abort.abort();
+    release({ status: 200, body: successBody });
+    await expect(read).resolves.toMatchObject({ done: true });
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("tears the server stream down at the lifetime cap and disposes once", async () => {
+    vi.useFakeTimers();
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const reader = createAdminCockpitPollingStream({
+      signal: new AbortController().signal,
+      lastEventId: null,
+      maxLifetimeMs: 120_000,
+      load: () => new Promise(() => {}),
+      dispose,
+    }).getReader();
+    const read = reader.read();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(read).resolves.toMatchObject({ done: true });
+    expect(dispose).toHaveBeenCalledOnce();
   });
 });
