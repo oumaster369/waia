@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { adminEnvelope, adminFact } from "@/lib/trader/admin-console/data-state";
-import { decodePageCursor, encodePageCursor } from "@/lib/trader/admin-console/cursor";
+import {
+  decodePageCursor,
+  encodePageCursor,
+  rowFollowsOrderCursor,
+} from "@/lib/trader/admin-console/cursor";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
 import {
   periodBounds,
@@ -34,6 +38,26 @@ describe("admin console contracts", () => {
     const encoded = encodePageCursor({ t: "2026-09-23T00:00:00.000Z", id: "order-1" });
     expect(decodePageCursor(encoded)).toEqual({ t: "2026-09-23T00:00:00.000Z", id: "order-1" });
     expect(decodePageCursor("not-a-cursor")).toBeNull();
+    const cursor = { t: "2026-09-23T00:00:00.000Z", id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" };
+    expect(
+      rowFollowsOrderCursor(
+        { createdAt: "2026-09-22T00:00:00.000Z", id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
+        cursor,
+      ),
+    ).toBe(true);
+    expect(
+      rowFollowsOrderCursor(
+        { createdAt: "2026-09-24T00:00:00.000Z", id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        cursor,
+      ),
+    ).toBe(false);
+    expect(
+      rowFollowsOrderCursor(
+        { createdAt: cursor.t, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        cursor,
+      ),
+    ).toBe(true);
+    expect(rowFollowsOrderCursor({ createdAt: cursor.t, id: cursor.id }, cursor)).toBe(false);
   });
 
   it("uses one scope parser for the same query", () => {

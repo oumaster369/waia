@@ -19,3 +19,13 @@ export function decodePageCursor(value: string): AdminPageCursor | null {
     return null;
   }
 }
+
+/** Rows that belong on the next page of `ORDER BY created_at DESC, id DESC`. */
+export function rowFollowsOrderCursor(
+  row: { createdAt: string; id: string },
+  cursor: AdminPageCursor | null,
+): boolean {
+  if (!cursor) return true;
+  if (row.createdAt !== cursor.t) return row.createdAt < cursor.t;
+  return row.id < cursor.id;
+}

@@ -28,7 +28,7 @@ export async function handleAdminConsoleOrdersGet(
   if (!parsed.ok) return parsed.result;
   const tab = url.searchParams.get("tab") === "all" ? "all" : "working";
   const cursor = parsed.query.cursor ? decodePageCursor(parsed.query.cursor) : null;
-  if (parsed.query.cursor && !cursor) {
+  if (parsed.query.cursor && (!cursor || !/^[0-9a-f-]{36}$/i.test(cursor.id))) {
     return {
       status: 400,
       outcome: "client_error",
@@ -37,6 +37,8 @@ export async function handleAdminConsoleOrdersGet(
   }
   const opened = await openAdminConsole(request, deps);
   if (!opened.ok) return opened.result;
+  const cursorAt = cursor?.t ?? null;
+  const cursorId = cursor?.id ?? null;
   try {
     const limit = parsed.query.limit;
     const rows = rowsOf(
@@ -53,6 +55,11 @@ export async function handleAdminConsoleOrdersGet(
         AND (
           ${tab} = 'all'
           OR state IN ('CREATED','RISK_APPROVED','SENT_TO_EXCHANGE','ACCEPTED','PARTIALLY_FILLED','CANCEL_REQUESTED','RECONCILIATION_REQUIRED')
+        )
+        AND (
+          ${cursorAt}::timestamptz IS NULL
+          OR created_at < ${cursorAt}::timestamptz
+          OR (created_at = ${cursorAt}::timestamptz AND id < ${cursorId}::uuid)
         )
         ORDER BY created_at DESC, id DESC
         LIMIT ${limit + 1}
