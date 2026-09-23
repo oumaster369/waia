@@ -43,6 +43,7 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_audit_list"
   | "trader_admin_runtime_health"
   | "trader_admin_overview"
+  | "trader_admin_cockpit"
   | "trader_admin_kill_switches"
   | "trader_admin_kill_switch_commands"
   | "trader_admin_org_live_enable"
