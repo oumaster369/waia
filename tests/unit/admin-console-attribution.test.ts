@@ -23,6 +23,26 @@ function order(overrides: Partial<AttributionOrder> = {}): AttributionOrder {
 }
 
 describe("trade attribution", () => {
+  it.each(["order-1", null])(
+    "rejects a foreign credential for direct or legacy order binding %s",
+    (orderId) => {
+      const result = attributeLegs(
+        [
+          {
+            id: "l1",
+            organizationId: "org-1",
+            orderId,
+            strategySignalId: "signal-1",
+            symbol: "BTCUSDT",
+            accountKey: null,
+          },
+        ],
+        [order()],
+        [{ ...credential, organizationId: "other" }],
+      );
+      expect(result.state).toBe("unattributed");
+    },
+  );
   it("attributes several fills of one order to that order's account", () => {
     const result = attributeLegs(
       [

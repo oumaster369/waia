@@ -2,12 +2,6 @@ import { sql } from "drizzle-orm";
 
 import type { AdminPostgresDb } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { withAdminReadSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
-import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
-import {
-  equityInclusion,
-  valueObservation,
-  type ValuationBalance,
-} from "@/lib/trader/admin-console/money/valuation";
 import {
   assembleAttributedLots,
   lotsForExchangeAccount,
@@ -16,11 +10,12 @@ import {
 import type { AssetQuote } from "@/lib/trader/admin-console/money/quotes";
 import { selectMarketQuote } from "@/lib/trader/admin-console/money/market-quote";
 import { dedupeAccounts, type AccountCredential } from "@/lib/trader/admin-console/accounts/dedupe";
+import { buildOverview } from "@/lib/trader/admin-console/read-models/overview";
+import type { AdminScope } from "@/lib/trader/admin-console/contracts";
 import {
-  buildOverview,
-  type OverviewAccount,
-} from "@/lib/trader/admin-console/read-models/overview";
-import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
+  buildAccountFinance,
+  type ObservationEvidence,
+} from "@/lib/trader/admin-console/read-models/account-finance";
 
 const ACCOUNT_CAP = 64;
 
@@ -34,11 +29,27 @@ function text(value: unknown): string | null {
   return null;
 }
 
+function iso(value: unknown): string | null {
+  const stamp = text(value);
+  return stamp && Number.isFinite(Date.parse(stamp)) ? new Date(stamp).toISOString() : null;
+}
+
 export async function readOverviewSnapshot(
   db: AdminPostgresDb,
-  input: { currency: "USDT" | "USD"; mode: string; start: string; end: string; nowMs: number },
+  input: {
+    currency: "USDT" | "USD";
+    mode: string;
+    start: string;
+    end: string;
+    nowMs: number;
+    scope?: AdminScope;
+  },
 ) {
   return withAdminReadSnapshot(db, async (tx) => {
+    const scope = input.scope ?? { kind: "fleet" };
+    const organizationId = scope.kind === "fleet" ? null : scope.organizationId;
+    const exchangeAccountId = scope.kind === "account" ? scope.exchangeAccountId : null;
+    const mode = input.mode === "all" ? "live" : input.mode;
     const credentialRows = rowsOf(
       await tx.execute(sql`
         SELECT c.id::text AS credential_id,
@@ -58,7 +69,7 @@ export async function readOverviewSnapshot(
       const organizationId = text(row.organization_id);
       const venue = text(row.venue);
       const exchangeAccountId = text(row.exchange_account_id);
-      const createdAt = text(row.created_at);
+      const createdAt = iso(row.created_at);
       if (!credentialId || !organizationId || !venue || !exchangeAccountId || !createdAt) return [];
       return [
         {
@@ -71,7 +82,66 @@ export async function readOverviewSnapshot(
         },
       ];
     });
-    const grouped = dedupeAccounts(credentials);
+    // Detect cross-tenant ownership conflicts before applying the requested scope.
+    const grouped = dedupeAccounts(credentials).filter(
+      (group) =>
+        (!organizationId || group.organizationIds.includes(organizationId)) &&
+        (!exchangeAccountId || group.exchangeAccountId === exchangeAccountId),
+    );
+    const observationRows = rowsOf(
+      await tx.execute(sql`
+      WITH keys AS (
+        SELECT DISTINCT c.venue, c.organization_id, c.exchange_account_id
+        FROM exchange_credentials c
+        WHERE (${organizationId}::uuid IS NULL OR c.organization_id = ${organizationId}::uuid)
+          AND (${exchangeAccountId}::text IS NULL OR c.exchange_account_id = ${exchangeAccountId})
+      )
+      SELECT k.venue, k.organization_id::text, k.exchange_account_id,
+             latest.observation_id::text AS latest_id, latest.payload AS latest_payload,
+             latest.recorded_at AS latest_recorded_at,
+             good.observation_id::text AS good_id, good.payload AS good_payload,
+             good.recorded_at AS good_recorded_at, first_connected.recorded_at AS connected_since
+      FROM keys k
+      LEFT JOIN LATERAL (
+        SELECT o.observation_id, o.payload, o.recorded_at
+        FROM trader_account_observations o
+        JOIN trader_account_collection_state s
+          ON s.organization_id = o.organization_id AND s.credential_id = o.credential_id
+          AND s.exchange_account_id = o.exchange_account_id AND s.last_observation_id = o.observation_id
+        JOIN exchange_credentials c ON c.id = o.credential_id AND c.organization_id = o.organization_id
+          AND c.exchange_account_id = o.exchange_account_id
+        WHERE o.organization_id = k.organization_id AND o.exchange_account_id = k.exchange_account_id
+          AND c.venue = k.venue
+        ORDER BY o.recorded_at DESC, o.observation_id DESC LIMIT 1
+      ) latest ON true
+      LEFT JOIN LATERAL (
+        SELECT o.observation_id, o.payload, o.recorded_at
+        FROM trader_account_observations o
+        JOIN exchange_credentials c ON c.id = o.credential_id AND c.organization_id = o.organization_id
+          AND c.exchange_account_id = o.exchange_account_id
+        WHERE o.organization_id = k.organization_id AND o.exchange_account_id = k.exchange_account_id
+          AND c.venue = k.venue AND o.payload->>'status' = 'COMPLETE'
+          AND o.payload->'balances'->>'status' = 'COMPLETE'
+        ORDER BY o.recorded_at DESC, o.observation_id DESC LIMIT 1
+      ) good ON true
+      LEFT JOIN LATERAL (
+        SELECT o.recorded_at
+        FROM trader_account_observations o
+        JOIN exchange_credentials c ON c.id = o.credential_id AND c.organization_id = o.organization_id
+          AND c.exchange_account_id = o.exchange_account_id
+        WHERE o.organization_id = k.organization_id AND o.exchange_account_id = k.exchange_account_id
+          AND c.venue = k.venue AND o.payload->>'status' = 'COMPLETE'
+          AND o.payload->'balances'->>'status' = 'COMPLETE'
+        ORDER BY o.recorded_at, o.observation_id LIMIT 1
+      ) first_connected ON true
+    `),
+    );
+    const observations = new Map(
+      observationRows.map((row) => [
+        `${row.venue}:${row.organization_id}:${row.exchange_account_id}`,
+        row,
+      ]),
+    );
     const quoteRows = rowsOf(
       await tx.execute(sql`
         SELECT base, quote, last, source, source_ts, observed_at
@@ -83,9 +153,17 @@ export async function readOverviewSnapshot(
       const asset = text(row.base);
       const price = text(row.last);
       const source = text(row.source);
-      const observedAt = text(row.observed_at);
-      if (!asset || !price || !source || !observedAt) return [];
-      return [{ asset, price, source, sourceTs: text(row.source_ts), observedAt }];
+      const observedAt = iso(row.observed_at);
+      const quoteCurrency = text(row.quote);
+      if (
+        !asset ||
+        !price ||
+        !source ||
+        !observedAt ||
+        (quoteCurrency !== "USD" && quoteCurrency !== "USDT")
+      )
+        return [];
+      return [{ asset, price, source, sourceTs: iso(row.source_ts), observedAt, quoteCurrency }];
     });
     const lotRows = rowsOf(
       await tx.execute(sql`
@@ -117,6 +195,7 @@ export async function readOverviewSnapshot(
           ON c.id = o.credential_id
          AND c.organization_id = o.organization_id
         WHERE l.state = 'OPEN'
+          AND (${organizationId}::uuid IS NULL OR l.organization_id = ${organizationId}::uuid)
       `),
     );
     const attributedLots = assembleAttributedLots(
@@ -128,7 +207,7 @@ export async function readOverviewSnapshot(
         const avgCost = text(row.avg_cost);
         const accountKey = text(row.account_key);
         const legId = text(row.leg_id);
-        const legCreatedAt = text(row.leg_created_at);
+        const legCreatedAt = iso(row.leg_created_at);
         if (
           !lotId ||
           !organizationId ||
@@ -182,114 +261,46 @@ export async function readOverviewSnapshot(
         return [source];
       }),
     );
-    const accounts: OverviewAccount[] = [];
-    for (const group of grouped.slice(0, ACCOUNT_CAP)) {
-      if (group.conflict) {
-        accounts.push({
-          id: `${group.venue}:${group.exchangeAccountId}`,
-          valuationKey: "conflict",
-          included: false,
-          reason: ADMIN_REASON.ownershipConflict,
-          stale: false,
-          equity: null,
-          freeQuote: null,
-          lockedQuote: null,
-          holdingsValue: null,
-          traderPnl: null,
-        });
-        continue;
-      }
-      const observation = rowsOf(
-        await tx.execute(sql`
-          SELECT o.observation_id::text AS observation_id, o.payload, o.recorded_at
-          FROM trader_account_collection_state s
-          JOIN trader_account_observations o
-            ON o.organization_id = s.organization_id
-           AND o.observation_id = s.last_observation_id
-          WHERE s.organization_id = ${group.organizationIds[0]}::uuid
-            AND s.exchange_account_id = ${group.exchangeAccountId}
-          ORDER BY o.recorded_at DESC
-          LIMIT 1
-        `),
-      )[0];
-      if (!observation) {
-        accounts.push({
-          id: `${group.venue}:${group.exchangeAccountId}`,
-          valuationKey: "missing-observation",
-          included: false,
-          reason: "OBSERVATION_MISSING",
-          stale: false,
-          equity: null,
-          freeQuote: null,
-          lockedQuote: null,
-          holdingsValue: null,
-          traderPnl: null,
-        });
-        continue;
-      }
-      let balances: ValuationBalance[] = [];
-      try {
-        const parsed = parseAccountObservation(observation.payload);
-        balances =
-          parsed.balances.values?.map((balance) => ({
-            asset: balance.asset,
-            free: balance.free,
-            locked: balance.locked,
-          })) ?? [];
-      } catch {
-        accounts.push({
-          id: `${group.venue}:${group.exchangeAccountId}`,
-          valuationKey: "invalid-observation",
-          included: false,
-          reason: "OBSERVATION_INVALID",
-          stale: false,
-          equity: null,
-          freeQuote: null,
-          lockedQuote: null,
-          holdingsValue: null,
-          traderPnl: null,
-        });
-        continue;
-      }
-      const recordedAt = text(observation.recorded_at) ?? new Date(0).toISOString();
+    const accounts = grouped.map((group, index) => {
+      const row = observations.get(
+        `${group.venue}:${group.organizationIds[0]}:${group.exchangeAccountId}`,
+      );
+      const evidence = (prefix: "latest" | "good"): ObservationEvidence | null => {
+        const id = text(row?.[`${prefix}_id`]);
+        const recordedAt = iso(row?.[`${prefix}_recorded_at`]);
+        return id && recordedAt ? { id, recordedAt, payload: row?.[`${prefix}_payload`] } : null;
+      };
       const accountLots = lotsForExchangeAccount({
+        organizationId: group.organizationIds[0],
         exchangeAccountId: group.exchangeAccountId,
-        mode: input.mode,
+        mode: "live",
         lots: attributedLots,
       });
-      const valued = valueObservation({
-        observationId: text(observation.observation_id) ?? "unknown",
-        recordedAt,
-        balances,
-        lots: accountLots.lots,
-        lotsRevision: accountLots.lotsRevision,
-        quotes,
+      return buildAccountFinance({
+        group,
+        latest: evidence("latest"),
+        lastComplete: evidence("good"),
+        connectedSince: iso(row?.connected_since),
         currency: input.currency,
+        mode,
         nowMs: input.nowMs,
+        quotes,
+        valuationDeferred: index >= ACCOUNT_CAP,
+        ...accountLots,
       });
-      const inclusion = equityInclusion(valued.reasons, valued.equity);
-      accounts.push({
-        id: `${group.venue}:${group.exchangeAccountId}`,
-        valuationKey: valued.valuationKey,
-        included: inclusion.included,
-        reason: valued.reasons[0] ?? null,
-        stale: inclusion.stale,
-        equity: valued.equity,
-        freeQuote: valued.freeQuote,
-        lockedQuote: valued.lockedQuote,
-        holdingsValue: valued.holdingsValue,
-        traderPnl: null,
-      });
-    }
+    });
     return {
       market: selectMarketQuote(quoteRows, "BTC"),
       overview: buildOverview(accounts, {
         currency: input.currency,
-        method: input.currency === "USD" ? "usdt_usd:coinbase" : "htx_spot_last:usdt",
+        method:
+          accounts.find((account) => account.included)?.method ??
+          (input.currency === "USD" ? "usdt_usd:unavailable" : "htx_spot_last:usdt"),
         periodBounds: { start: input.start, end: input.end },
-        mode: input.mode,
+        mode,
       }),
       accounts,
+      mode: mode as "live" | "paper" | "history",
       capped: grouped.length > ACCOUNT_CAP,
     };
   });

@@ -19,7 +19,9 @@ export async function readAssistantTool(
   request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const read = new Request(new URL("/api/trader/admin/console/assistant", request.url), {
+  const url = new URL(request.url);
+  url.pathname = "/api/trader/admin/console/assistant";
+  const read = new Request(url, {
     headers: request.headers,
   });
   if (tool === "get_overview") return handleAdminConsoleOverviewGet(read, deps);

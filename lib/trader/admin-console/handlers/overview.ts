@@ -27,6 +27,7 @@ export async function handleAdminConsoleOverviewGet(
   try {
     const bounds = periodBounds(parsed.query, new Date());
     const snapshot = await readOverviewSnapshot(opened.runtime.db, {
+      scope: adminScopeFromQuery(parsed.query),
       currency: parsed.query.currency,
       mode: parsed.query.mode,
       start: bounds.start,
@@ -36,9 +37,13 @@ export async function handleAdminConsoleOverviewGet(
     const missing = snapshot.value.capped ? [ADMIN_REASON.accountCap] : [];
     return adminSuccess(
       adminEnvelope({
-        data: { ...snapshot.value.overview, market: snapshot.value.market },
+        data: {
+          ...snapshot.value.overview,
+          market: snapshot.value.market,
+          accounts: snapshot.value.accounts,
+        },
         scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
+        mode: snapshot.value.mode,
         cursor: snapshot.cursor,
         financeRevision: snapshot.value.overview.financeRevision,
         missingSources: missing,

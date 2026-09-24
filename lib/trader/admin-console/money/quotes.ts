@@ -13,6 +13,7 @@ export type AssetQuote = {
   source: string;
   sourceTs: string | null;
   observedAt: string;
+  quoteCurrency?: "USDT" | "USD";
 };
 
 export function quoteAgeMs(quote: AssetQuote, nowMs: number): number | null {
@@ -24,7 +25,7 @@ export function quoteAgeMs(quote: AssetQuote, nowMs: number): number | null {
 
 export function quoteIsStale(quote: AssetQuote, nowMs: number): boolean {
   const age = quoteAgeMs(quote, nowMs);
-  return age === null || age > QUOTE_STALE_AFTER_MS;
+  return age === null || age < 0 || age > QUOTE_STALE_AFTER_MS;
 }
 
 export function quoteSetDigest(quotes: readonly AssetQuote[]): string {
@@ -34,6 +35,8 @@ export function quoteSetDigest(quotes: readonly AssetQuote[]): string {
       source: quote.source,
       price: quote.price,
       sourceTs: quote.sourceTs,
+      observedAt: quote.observedAt,
+      quoteCurrency: quote.quoteCurrency ?? (quote.source === "htx" ? "USDT" : "USD"),
     }))
     .sort((left, right) => left.asset.localeCompare(right.asset));
   return createHash("sha256").update(canonicalizeSemanticJsonString(body)).digest("hex");

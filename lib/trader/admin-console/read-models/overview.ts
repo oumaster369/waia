@@ -16,6 +16,8 @@ export type OverviewAccount = {
   lockedQuote: string | null;
   holdingsValue: string | null;
   traderPnl: string | null;
+  observedAt?: string | null;
+  reasons?: string[];
 };
 
 export type OverviewSnapshot = {
@@ -67,15 +69,42 @@ export function buildOverview(
   const pnlValues = included.flatMap((account) =>
     account.traderPnl === null ? [] : [account.traderPnl],
   );
-  const pnl = pnlValues.length === included.length ? sum(pnlValues) : null;
-  const partial = included.length < accounts.length;
-  const state = partial ? "partial" : "ok";
-  const reasons = accounts.flatMap((account) => (account.reason ? [account.reason] : []));
+  const pnl = included.length > 0 && pnlValues.length === included.length ? sum(pnlValues) : null;
+  const partial =
+    included.length < accounts.length ||
+    included.some((account) => account.reasons?.some((reason) => reason !== "COST_BASIS_UNKNOWN"));
+  const state =
+    accounts.length === 0
+      ? "empty"
+      : included.length === 0
+        ? "unavailable"
+        : partial
+          ? "partial"
+          : "ok";
+  const reasons = [
+    ...new Set(
+      accounts.flatMap((account) => account.reasons ?? (account.reason ? [account.reason] : [])),
+    ),
+  ];
+  if (accounts.length === 0) reasons.push("NO_ACCOUNTS_IN_SCOPE");
+  const dates = included
+    .flatMap((account) => (account.observedAt ? [account.observedAt] : []))
+    .sort();
+  const observedAt = dates[0] ?? null;
+  const times = { sourceAt: observedAt, observedAt, effectiveAt: observedAt };
+  const value = (amount: string) =>
+    included.length === 0 ? null : money(amount, input.currency, input.method);
   const financeRevision = createHash("sha256")
     .update(
       canonicalizeSemanticJsonString({
         accounts: [...accounts]
-          .map((account) => [account.id, account.valuationKey])
+          .map((account) => [
+            account.id,
+            account.valuationKey,
+            String(account.included),
+            String(account.stale),
+            account.reason ?? "",
+          ])
           .sort((left, right) => left[0]!.localeCompare(right[0]!)),
         periodBounds: input.periodBounds,
         currency: input.currency,
@@ -87,17 +116,19 @@ export function buildOverview(
     finance: {
       equity: adminFact({
         state,
-        value: money(equity, input.currency, input.method),
+        value: value(equity),
         reasons,
+        times,
         breakdownRef: "accounts",
       }),
-      free: adminFact({ state, value: money(free, input.currency, input.method), reasons }),
-      holdings: adminFact({ state, value: money(holdings, input.currency, input.method), reasons }),
-      reserved: adminFact({ state, value: money(reserved, input.currency, input.method), reasons }),
+      free: adminFact({ state, value: value(free), reasons, times }),
+      holdings: adminFact({ state, value: value(holdings), reasons, times }),
+      reserved: adminFact({ state, value: value(reserved), reasons, times }),
       pnl: adminFact({
-        state: pnl === null ? "partial" : state,
+        state: pnl === null ? (accounts.length === 0 ? "empty" : "unavailable") : state,
         value: pnl === null ? null : money(pnl, input.currency, input.method),
-        reasons,
+        reasons: pnl === null ? [...reasons, "PNL_PERIOD_EVIDENCE_MISSING"] : reasons,
+        times,
       }),
     },
     coverageLabel: `По ${included.length} актуальным счетам из ${accounts.length}`,

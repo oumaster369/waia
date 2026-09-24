@@ -1,3 +1,4 @@
+import { adminRevision } from "@/lib/trader/admin-console/revision";
 import type { AdminMode } from "@/lib/trader/admin-console/contracts";
 import {
   attributeLegs,
@@ -23,6 +24,7 @@ export type LotLegSource = {
 
 export type AttributedOpenLot = {
   lotId: string;
+  organizationId?: string;
   symbol: string;
   remainingQty: string;
   avgCost: string;
@@ -70,6 +72,7 @@ export function assembleAttributedLots(rows: readonly LotLegSource[]): Attribute
     );
     return {
       lotId: first.lotId,
+      organizationId: first.organizationId,
       symbol: first.symbol,
       remainingQty: first.remainingQty,
       avgCost: first.avgCost,
@@ -87,11 +90,13 @@ export function assembleAttributedLots(rows: readonly LotLegSource[]): Attribute
  * non-USDT lot is kept so unrealized stays unavailable.
  */
 export function lotsForExchangeAccount(input: {
+  organizationId?: string;
   exchangeAccountId: string;
   mode: string;
   lots: readonly AttributedOpenLot[];
 }): { lots: ValuationLot[]; lotsRevision: string } {
   const selected = input.lots.filter((lot) => {
+    if (input.organizationId && lot.organizationId !== input.organizationId) return false;
     if (lot.exchangeAccountId !== input.exchangeAccountId) return false;
     if (input.mode === "paper") return lot.mode === "paper";
     if (input.mode === "history") return lot.mode === "history";
@@ -107,6 +112,10 @@ export function lotsForExchangeAccount(input: {
         accountMatched: lot.matched && asset !== null,
       };
     }),
-    lotsRevision: lotsRevisionFromLegs(selected.flatMap((lot) => lot.legCreatedAts)),
+    lotsRevision: adminRevision(
+      [...selected]
+        .map((lot) => ({ ...lot, legCreatedAts: [...lot.legCreatedAts].sort() }))
+        .sort((a, b) => a.lotId.localeCompare(b.lotId)),
+    ),
   };
 }

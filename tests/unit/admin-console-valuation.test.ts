@@ -36,6 +36,78 @@ function input(overrides: Partial<ValuationInput> = {}): ValuationInput {
 }
 
 describe("admin console valuation", () => {
+  it("preserves exact trailing zeroes without rounding unsupported precision or throwing", () => {
+    expect(
+      valueObservation(
+        input({
+          balances: [{ asset: "USDT", free: "10.000000000000", locked: "0" }],
+          lots: [],
+          quotes: [],
+        }),
+      ),
+    ).toMatchObject({ equity: "10", state: "ok" });
+    expect(
+      valueObservation(
+        input({
+          balances: [{ asset: "USDT", free: "10.000000001", locked: "0" }],
+          lots: [],
+          quotes: [],
+        }),
+      ),
+    ).toMatchObject({
+      equity: null,
+      state: "unavailable",
+      reasons: ["MONEY_PRECISION_UNSUPPORTED"],
+    });
+  });
+  it("does not let a USD venue overwrite an HTX/USDT valuation", () => {
+    const htx = input().quotes[0]!;
+    const coinbase = { ...htx, source: "coinbase", price: "999", quoteCurrency: "USD" as const };
+    for (const quotes of [
+      [htx, coinbase],
+      [coinbase, htx],
+    ]) {
+      const value = valueObservation(
+        input({ balances: [{ asset: "BTC", free: "1", locked: "0" }], lots: [], quotes }),
+      );
+      expect(value.equity).toBe("100");
+      expect(value.method).toBe("htx_spot_last:usdt");
+    }
+  });
+
+  it("includes FX value and time in the revision and applies age/skew to FX", () => {
+    const fx = {
+      ...input().quotes[0]!,
+      asset: "USDT",
+      source: "coinbase",
+      quoteCurrency: "USD" as const,
+      price: "1",
+    };
+    const args = input({
+      currency: "USD",
+      balances: [{ asset: "USDT", free: "10", locked: "0" }],
+      lots: [],
+      quotes: [fx],
+    });
+    const first = valueObservation(args);
+    const next = valueObservation({ ...args, quotes: [{ ...fx, price: "0.9" }] });
+    expect(next.equity).toBe("9");
+    expect(next.valuationKey).not.toBe(first.valuationKey);
+    const old = valueObservation({
+      ...args,
+      quotes: [{ ...fx, sourceTs: "2026-09-20T00:00:00Z" }],
+    });
+    expect(old.reasons).toEqual(expect.arrayContaining(["QUOTE_STALE", "VALUATION_SKEW"]));
+    expect(old.valuationKey).not.toBe(first.valuationKey);
+  });
+
+  it("does not require a market quote for a confirmed zero holding", () => {
+    const value = valueObservation(
+      input({ balances: [{ asset: "USDC", free: "0", locked: "0.000" }], lots: [], quotes: [] }),
+    );
+    expect(value).toMatchObject({ equity: "0", state: "ok", reasons: [] });
+  });
+
   it("prices locked BTC, excludes an unquoted stablecoin, and splits trader lots", () => {
     const value = valueObservation(input());
     expect(value.state).toBe("partial");
@@ -125,7 +197,7 @@ describe("admin console valuation", () => {
       stale: false,
     });
     expect(equityInclusion(["QUOTE_STALE"], "10")).toEqual({ included: true, stale: true });
-    expect(equityInclusion(["NO_QUOTE:BTC"], "10").included).toBe(false);
+    expect(equityInclusion(["NO_QUOTE:BTC"], "10").included).toBe(true);
     expect(equityInclusion(["COST_BASIS_UNKNOWN"], null).included).toBe(false);
   });
 });

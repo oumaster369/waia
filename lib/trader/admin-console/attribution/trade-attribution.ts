@@ -62,7 +62,8 @@ export function attributeLegs(
         return { state: "unattributed", reason: ADMIN_REASON.unattributed };
       }
       const credential = order.credentialId ? credentialById.get(order.credentialId) : undefined;
-      if (!credential) return { state: "unattributed", reason: ADMIN_REASON.unattributed };
+      if (!credential || credential.organizationId !== order.organizationId)
+        return { state: "unattributed", reason: ADMIN_REASON.unattributed };
       resolved.push({
         mode: orderMode(order),
         exchangeAccountId: credential.exchangeAccountId,
@@ -75,7 +76,9 @@ export function attributeLegs(
       if (order.strategySignalId !== leg.strategySignalId) return false;
       if (order.symbol !== leg.symbol) return false;
       if (!order.credentialId) return false;
-      const account = credentialById.get(order.credentialId)?.exchangeAccountId;
+      const credential = credentialById.get(order.credentialId);
+      if (!credential || credential.organizationId !== order.organizationId) return false;
+      const account = credential.exchangeAccountId;
       return leg.accountKey == null || account === leg.accountKey;
     });
     if (candidates.length === 0) {

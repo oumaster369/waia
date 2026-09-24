@@ -12,6 +12,7 @@ type InvoiceItem = {
   performanceFee: string;
   currency: string;
   display: { status: string; payment: string | null };
+  revision?: string;
 };
 
 type DisputeItem = {
@@ -26,6 +27,8 @@ export function InvoicesPanel() {
   const [disputes, setDisputes] = React.useState<DisputeItem[]>([]);
   const [reason, setReason] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<string | null>(null);
+  const [confirmationEpoch, setConfirmationEpoch] = React.useState(0);
+  const [pending, setPending] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
@@ -58,19 +61,27 @@ export function InvoicesPanel() {
   const invoice = items?.find((item) => item.id === selected) ?? null;
 
   async function command(body: Record<string, unknown>) {
-    if (!invoice) return;
+    if (!invoice || pending) return;
+    setPending(true);
+    setConfirmationEpoch((epoch) => epoch + 1);
     setMessage(null);
-    const response = await fetch(`/api/trader/admin/invoices/${invoice.id}/commands`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ organization_id: invoice.organizationId, ...body }),
-    });
-    if (!response.ok) {
-      setMessage("Команда не выполнена");
-      return;
+    try {
+      const response = await fetch(`/api/trader/admin/invoices/${invoice.id}/commands`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organization_id: invoice.organizationId, ...body }),
+      });
+      if (!response.ok) {
+        setMessage("Команда не выполнена");
+        return;
+      }
+      setMessage("Команда принята");
+      load();
+    } catch {
+      setMessage("Связь прервалась. Проверьте состояние счёта перед повтором.");
+    } finally {
+      setPending(false);
     }
-    setMessage("Команда принята");
-    load();
   }
 
   return (
@@ -91,11 +102,14 @@ export function InvoicesPanel() {
       {invoice ? (
         <div className="grid gap-2">
           <p>{invoice.display.payment}</p>
-          <InvoiceAttestations
-            onApprove={(attestations: IssuanceAttestation) =>
-              void command({ command: "approve", attestations })
-            }
-          />
+          <fieldset disabled={pending}>
+            <InvoiceAttestations
+              key={`${invoice.id}:${invoice.revision ?? JSON.stringify(invoice)}:${confirmationEpoch}`}
+              onApprove={(attestations: IssuanceAttestation) =>
+                void command({ command: "approve", attestations })
+              }
+            />
+          </fieldset>
           <button type="button" onClick={() => void command({ command: "issue" })}>
             Выпустить
           </button>
