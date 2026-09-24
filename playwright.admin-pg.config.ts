@@ -17,7 +17,8 @@ export default defineConfig({
   workers: 1,
   use: { baseURL: "http://trader.localhost:3000", trace: "on-first-retry" },
   webServer: {
-    command: "pnpm db:migrate && pnpm exec next dev --hostname 0.0.0.0 --port 3000",
+    command:
+      "mkdir -p .data && pnpm db:migrate && pnpm exec next dev --hostname 0.0.0.0 --port 3000",
     url: "http://127.0.0.1:3000/",
     reuseExistingServer: false,
     timeout: 180_000,
