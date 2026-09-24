@@ -280,7 +280,11 @@ export async function readOverviewSnapshot(
         traderPnl: null,
       });
     }
+    const btc =
+      quotes.find((quote) => quote.asset === "BTC" && quote.source === "htx") ??
+      quotes.find((quote) => quote.asset === "BTC");
     return {
+      market: btc ? { symbol: "BTC" as const, currency: "USDT" as const, price: btc.price } : null,
       overview: buildOverview(accounts, {
         currency: input.currency,
         method: input.currency === "USD" ? "usdt_usd:coinbase" : "htx_spot_last:usdt",
