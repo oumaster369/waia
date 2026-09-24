@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 const mocks = vi.hoisted(() => ({
   user: "admin" as string | null,
@@ -14,7 +16,15 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOT_FOUND");
   },
 }));
-vi.mock("@/components/trader/admin/admin-shell", () => ({ AdminShell: () => null }));
+vi.mock("@/components/trader/admin-console/shell/admin-console-shell", () => ({
+  AdminConsoleShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+}));
+vi.mock("@/components/trader/admin-console/data/query-provider", () => ({
+  AdminQueryProvider: ({ children }: { children: ReactNode }) => children,
+}));
+vi.mock("@/components/trader/admin-console/data/read-context", () => ({
+  AdminReadContextProvider: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock("@/lib/trader/admin-route-deps", () => ({
   createProductionAdminRouteDeps: () => ({
     getUserId: async () => mocks.user,
@@ -43,7 +53,8 @@ describe("trader admin page admission", () => {
   });
   it("renders only after canonical audit permission and disposes runtime", async () => {
     const result = await TraderAdminLayout({ children: "protected" });
-    expect(result.props.children.props.children.props.children).toBe("protected");
+    render(result);
+    expect(screen.getByRole("main")).toHaveTextContent("protected");
     expect(mocks.authorize).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
