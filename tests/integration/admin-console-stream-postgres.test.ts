@@ -44,14 +44,16 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     const orgId = crypto.randomUUID();
     const userId = crypto.randomUUID();
     const liveId = crypto.randomUUID();
+    await sql`INSERT INTO auth.users (id) VALUES (${userId}::uuid)`;
     await sql`INSERT INTO users (id, identity_label, email) VALUES (${userId}, ${"admin-console"}, ${`${userId}@waia.invalid`})`;
     await sql`INSERT INTO organizations (id, owner_user_id, kind, name) VALUES (${orgId}, ${userId}, ${"personal"}, ${"console"})`;
     await sql`
       INSERT INTO trader_orders (
-        id, organization_id, venue, execution_mode, historical_run_id, symbol, side, type,
-        quantity, state, client_order_id, idempotency_key, risk_decision_id
+        id, organization_id, venue, execution_mode, historical_run_id, historical_account_key,
+        symbol, side, type, quantity, state, client_order_id, idempotency_key, risk_decision_id
       )
-      SELECT gen_random_uuid(), ${orgId}::uuid, 'htx', 'live', 'hist-run', 'BTCUSDT', 'buy', 'market',
+      SELECT gen_random_uuid(), ${orgId}::uuid, 'htx', 'mock', 'hist-run', 'hist-account',
+             'BTCUSDT', 'buy', 'market',
              '1', 'CREATED', 'hist-' || g::text, 'hist-key-' || g::text, 'risk'
       FROM generate_series(1, 100) AS g
     `;
@@ -126,6 +128,7 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     await sql`DELETE FROM trader_admin_change_log WHERE entity_id IN (${heldId}, ${liveId})`;
     await sql`DELETE FROM organizations WHERE id = ${orgId}::uuid`;
     await sql`DELETE FROM users WHERE id = ${userId}::uuid`;
+    await sql`DELETE FROM auth.users WHERE id = ${userId}::uuid`;
   }, 90_000);
 
   it("keeps a repeatable-read snapshot stable while another transaction commits", async () => {
@@ -134,7 +137,12 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     const before = await sql<
       { count: string }[]
     >`SELECT count(*)::text AS count FROM trader_admin_fear_greed`;
+    let snapshotOpen!: () => void;
+    const snapshotReady = new Promise<void>((resolve) => {
+      snapshotOpen = resolve;
+    });
     const snapshot = withAdminReadSnapshot(db, async (tx) => {
+      snapshotOpen();
       await new Promise((resolve) => setTimeout(resolve, 200));
       const result = await tx.execute(
         // drizzle sql tag is used by the helper; this callback uses the same executor.
@@ -144,6 +152,7 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
       return result;
     });
     const day = "2099-01-01";
+    await snapshotReady;
     await sql`
       INSERT INTO trader_admin_fear_greed (day, value, classification, observed_at)
       VALUES (${day}::date, 10, 'fear', now())

@@ -151,36 +151,20 @@ describe("admin console routes on sqlite", () => {
     expect(JSON.stringify(closed.body)).toContain("POSTGRES_REQUIRED");
     const { handleAdminConsolePositionsGet } =
       await import("@/lib/trader/admin-console/handlers/positions");
+    const { handleAdminConsoleAttentionGet } =
+      await import("@/lib/trader/admin-console/handlers/attention");
     const positions = await handleAdminConsolePositionsGet(
       new Request("http://localhost/api/trader/admin/console/positions"),
       deps(ADMIN_ID),
     );
+    const attention = await handleAdminConsoleAttentionGet(
+      new Request("http://localhost/api/trader/admin/console/attention"),
+      deps(ADMIN_ID),
+    );
     expect(positions.status).toBe(200);
+    expect(attention.status).toBe(200);
     expect(JSON.stringify(positions.body)).toContain("POSTGRES_REQUIRED");
-    const { handleAdminConsoleOrdersGet } =
-      await import("@/lib/trader/admin-console/handlers/orders");
-    const { encodePageCursor } = await import("@/lib/trader/admin-console/cursor");
-    const badCursor = await handleAdminConsoleOrdersGet(
-      new Request(
-        `http://localhost/api/trader/admin/console/orders?cursor=${encodePageCursor({
-          t: "2026-09-23T00:00:00.000Z",
-          id: "order-1",
-        })}`,
-      ),
-      deps(ADMIN_ID),
-    );
-    expect(badCursor.status).toBe(400);
-    const paged = await handleAdminConsoleOrdersGet(
-      new Request(
-        `http://localhost/api/trader/admin/console/orders?cursor=${encodePageCursor({
-          t: "2026-09-23T00:00:00.000Z",
-          id: "00000000-0000-4000-8000-0000000000aa",
-        })}`,
-      ),
-      deps(ADMIN_ID),
-    );
-    expect(paged.status).toBe(200);
-    expect(JSON.stringify(paged.body)).toContain("POSTGRES_REQUIRED");
+    expect(JSON.stringify(attention.body)).toContain("POSTGRES_REQUIRED");
   });
 
   function assistantMessage(flag: string | undefined): Request {

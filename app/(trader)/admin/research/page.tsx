@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
+import { GovernedProcessLinks } from "@/components/trader/admin-console/shell/governed-links";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 
 type RunItem = {
@@ -46,6 +47,7 @@ export default function AdminResearchPage() {
           ))}
         </ul>
       ) : null}
+      <GovernedProcessLinks section="research" />
     </section>
   );
 }

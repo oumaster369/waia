@@ -4,6 +4,7 @@ export type FearGreedDataPoint = {
   value: string;
   value_classification: string;
   timestamp: string;
+  time_until_update?: string;
 };
 
 export type FearGreedResponse = {
@@ -39,5 +40,16 @@ export class AlternativeMeFearGreedClient {
       throw new Error("[alternative.me] fear-greed empty data");
     }
     return point;
+  }
+
+  async getHistory(limit: number): Promise<FearGreedDataPoint[]> {
+    const bounded = Math.min(90, Math.max(1, Math.trunc(limit)));
+    const url = `${this.baseUrl}/fng/?limit=${bounded}&format=json`;
+    const response = await this.fetchImpl(url, { method: "GET" });
+    if (!response.ok) {
+      throw new Error(`[alternative.me] fear-greed HTTP ${response.status}`);
+    }
+    const body = (await response.json()) as FearGreedResponse;
+    return body.data ?? [];
   }
 }

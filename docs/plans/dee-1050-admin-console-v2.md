@@ -69,15 +69,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: C2-rest
-  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-positions, C2-order-cursor, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions]
-  remainingWorkPackages: [C2-rest, C3-rest, C4-rest, C5-rest, C7-rest, C8-rest, slice-gate, validate, pr]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
-  blockedReason: null
-  nextAction: "Add the attention HTTP read from stored facts. The slice gate stays open."
+  currentWorkPackage: pr
+  completedWorkPackages: [C1-code, C2-reads, C2-fills, C2-rest, C5-core, C5-reads, C7-shell, C7-chrome, C8-overview, C8-accounts, C8-orders, C8-errors, C8-system, C8-assistant-panel, C3-display, C3-routes, C3-payments, C3-export, C3-billing-redirect, C3-rest, C4-catalog, C4-runs, C4-maps, C4-proposals, C4-cycle-trace, C4-rest, C6-guards, C6-help, C6-quick-answers, C6-budget, C6-persist, C6-live-answer, C6-questions, C5-rest, C7-rest, C8-links, pr]
+  remainingWorkPackages: [C8-rest, slice-gate]
+  prNumber: 639
+  prUrl: https://github.com/oumaster369/waia/pull/639
+  lastValidatedGitSha: 0af6dfc39e168d0cade1e1b6f5e757445c3d092b
+  lastValidationAt: "2026-09-23T23:30:20Z"
+  blockedReason: "GitHub CI is green on 0af6dfc3 (27/27), including Cloudflare OpenNext, the preview Worker, Workers Builds, both unit shards, postgres migrate, admin-console Postgres, and sqlite e2e. Cormorant Garamond is self-hosted. Slice-gate and the admin Postgres browser e2e were not run. C8-rest redirects of /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic stay blocked because they would remove those operator pages. Billing idempotency still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329)."
+  nextAction: "Human review and Human merge of PR 639. Remaining C8-rest redirects and the slice-gate stay blocked. No further safe slice remains without slice-gate, a Postgres browser, or a decision to redirect the operator pages. Do not merge autonomously."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -98,27 +98,31 @@ Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DE
 
 A box is checked only when that slice is on `dee-1050-admin-console-v2` and its unit test passed. `includedIssues.status` stays `in-progress` until the package meets section 9.1. The assistant persistence test and the billing idempotency test have been run on local Postgres. The rest of the Postgres integration suite and the browser slice have not been run. The invoice export query itself has not been run on Postgres.
 
+On 2026-09-23 the pinned `integration` job in `.github/workflows/postgres-integration.yml` was restored byte-for-byte. The admin console change-log command runs in a new `admin-console-postgres` job so the account-observation checksum contract stays intact. That job still needs GitHub Postgres. Billing idempotency skips there because `verifyHtrPostgresConnectionIdentity` only accepts the local validate stack. `pnpm lint` (0 errors), `pnpm exec tsc --noEmit`, and `pnpm build` passed on `86fbe1e3`. Slice-gate and admin Postgres e2e were not attempted.
+
+The first `admin-console-postgres` run rejected the stream fixture: historical rows were `execution_mode = live` with only `historical_run_id` set, which violates `trader_orders_historical_lineage_complete`. Those rows are now `mock` with both `historical_run_id` and `historical_account_key`. Order, fill, and position filters compare the mode sentinel as text, so `all` is not bound as `order_execution_mode`.
+
+Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connector edits changed the source content digest, and three public admin reads (`fetch-news`, `run-due`, `htx-public-tickers`) are new consumers. They are pinned as `EXCLUDED_PUBLIC_MARKET_READ_NO_CANONICAL_AUTHORITY`. They do not admit Reality or place orders. The pinned postgres `integration` job was not edited. On `8b97496d` both unit shards and the postgres migrate guard passed. The sqlite e2e then failed because `/admin/runtime-authority` now sits in the console shell, which adds three buttons beside Sign out. The HALT region still has no buttons. The spec pins those four buttons and no others.
+
 - [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
 - [x] C2 reads: valuation, operational PnL, attribution, overview, orders, account list without ciphertext (DEE-1052).
 - [x] C2 fills and closed trades: one row per fill, amounts stay text, and closed trades are `CLOSED` or `FORCED_FLAT` inside a half-open `closed_at` period. Both routes return POSTGRES_REQUIRED on sqlite.
-- [x] C2 positions: open lots keep quantities as text. The latest Guardian assessment per lot stays fresh for 15 minutes and stale after that. A lot without an account link is «Не распределено». Risk permission and executed reduction stay unlinked. The route returns POSTGRES_REQUIRED on sqlite.
-- [x] C2 order cursor: a non-uuid cursor is rejected, and the orders query keeps only rows before that `(created_at, id)` keyset. The predicate was not executed on Postgres.
-- [ ] C2 rest: lots in valuation, attention HTTP. The fills, closed-trade, and positions queries were not executed on Postgres.
+- [x] C2 rest: open lots carry the latest Guardian assessment (`DISTINCT ON (lot_id)`), a missing or >15 minute assessment is `stale`, and Guardian recommendation, Risk posture, and executed reduction stay separate. Valuation of a real account includes attributed live lots. The orders page cursor is applied in SQL. `GET /console/attention` builds the queue from stored rows. These SQL reads, and the fills and closed-trade queries, were not executed on Postgres.
 - [x] C3 display: invoice status, fee preview, fee chain, six unchecked attestations (DEE-1053).
 - [x] C3 routes: clients, invoices, invoice detail, reporting periods.
 - [x] C3 payments and disputes: trader payment events and invoice disputes. Amounts stay text. Other products are excluded.
 - [x] C3 export and billing retry: the invoice CSV route returns POSTGRES_REQUIRED on sqlite, and formula cells stay prefixed. On local Postgres a repeated approve, issue, and close leave one invoice, one HWM row for that invoice, one period, and one issued audit. Closing an already closed period throws.
 - [x] C3 billing redirect: `/admin/billing` now redirects to `/admin/clients?tab=invoices` and no longer submits attestations as already true.
-- [ ] C3 rest: DEE-1046 absorb. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
+- [x] C3 rest: closed reporting periods are listed by `GET /api/trader/admin/reporting-periods`, and an already-fetched audit page can be filtered by actor, action, and entity. `dee-1046-admin-governance-surfaces` is not on origin, so the files were written from the DEE-1046 contract. A retry after a failed billing transaction was not run, and the export query was not executed on Postgres.
 - [x] C4 catalog and stats: registry ∪ trades, no percent return, research run progress (DEE-1054).
 - [x] C4 maps: no-trade categories keep a justified refusal out of the incident queue, research compare separates conditions from profit, 23 stages stay unavailable until a record exists, console sources do not name a holdout payload.
 - [x] C4 proposals: the proposals route returns POSTGRES_REQUIRED on sqlite. A proposal summary keeps decision fields and drops evidence arrays.
 - [x] C4 cycle trace: stored hypothesis, forecast, decision, risk verdict, execution plan, and order ids mark stages 10–16 completed. Stages without that link, including sufficiency and Guardian, stay `NOT_PERSISTED_FOR_CYCLE`. The route returns POSTGRES_REQUIRED on sqlite and does not select cycle payloads.
-- [ ] C4 rest: DEE-1044 absorb. The proposals query and the cycle trace query were not executed on Postgres.
+- [x] C4 rest: a promotion request includes research evidence and rejects an empty or invalid document before POST. Closed-trade PnL for the current and previous UTC months ignores open trades and other strategies. `dee-1044-promotion-research-evidence` is not on origin. The proposals query and the cycle trace query were not executed on Postgres.
 - [x] C5 core: redaction, fingerprint, incident transitions, news normalize, collector flag, job catalog, CI path (DEE-1055).
 - [x] C5 reads: incident list and system release, job catalog, missed minute jobs. Research reasoning stays unavailable.
-- [ ] C5 rest: quote/news/F&G persistence, host diagnostics, seed, PG e2e job.
+- [x] C5 rest: quote, news, and fear-and-greed rows are built from fetched values and written by the Postgres collector store. A zero fear-and-greed point stays zero. A missing price is skipped. Host entrypoints record a diagnostic and still exit on their own error when that write fails. The local seed refuses any host other than loopback and writes no balances or index values. These writes were not executed on Postgres. Account valuation is not collected. The existing worker chains are not wrapped. The Postgres browser job waits until C8 adds `playwright.admin-pg.config.ts`.
 - [x] C6 guards: tool cap, holdout refusal, aggregate whitelist, fact check, cache key, injection clip (DEE-1056).
 - [x] C6 routes started: help lists only wired reads, quick answers run without a model, budget math refuses an exhausted or fake path, the model route returns ASSISTANT_DISABLED when the flag is off. Conversations and trace stay POSTGRES_REQUIRED on sqlite.
 - [x] C6 persisted turn: on local Postgres a fake-provider question and unavailable answer are stored, and the reply is an SSE `error` event. Stage labels are encoded before `tool_result_ready`.
@@ -127,12 +131,14 @@ A box is checked only when that slice is on `dee-1050-admin-console-v2` and its 
 - [ ] C6 routes rest: the brief file is not in the repo, so these nine are the section questions rather than a verbatim §13.3 list.
 - [x] C7 shell: Russian nav, stream session, scope key, emergency trip body, query/table/chart/palette dependencies (DEE-1058).
 - [x] C7 chrome started: market strip does not call USDT BTC/USD, status bar has no fake p95, assistant panel sits in the shell.
-- [ ] C7 rest: emergency dialog, delivery ack in the UI.
+- [x] C7 rest: the emergency dialog walks scope, effect, and confirmation, and it does not send a trip when the kill-switch version was not read. An order row with a stored version records one render acknowledgement.
 - [x] C8 pages started: overview, accounts, orders, clients, strategies, research runs, errors, system (DEE-1057).
 - [x] C8 assistant panel: the shell shows the disabled-assistant banner and quick-answer titles.
-- [ ] C8 rest: legacy redirects, e2e, a11y.
+- [ ] C8 rest: legacy redirects, e2e, a11y. The system, strategy, and research sections now link to the existing operator pages. Audit, runtime authority, and score diagnostic stay on their current routes because a redirect would drop those tools and the runtime-authority browser spec.
 - [ ] Slice gate `admin-console-pg-slice.spec.ts`.
-- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm build`, e2e, pr-governance, PR to `main`.
+- [x] GitHub on `34bcb39c`: `pnpm lint`, typecheck, both unit shards, build, sqlite e2e, pr-governance, postgres migrate, and admin-console Postgres. PR #639 is open. Human merge only.
+- [x] GitHub on `0af6dfc3`: 27/27, including Cloudflare OpenNext after self-hosting Cormorant Garamond. The OpenNext failure was Google's `/l/font?kit=&skey=&v=` CSS, which Turbopack split into more than one font query.
+- [ ] Slice gate and admin Postgres browser e2e.
 
 ## WP-C1
 

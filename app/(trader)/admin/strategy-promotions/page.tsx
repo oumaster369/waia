@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { REQUIRED_EFFECTIVE_ACK } from "@/lib/trader/validation-gate/operator-promotion-inputs";
+import { buildStrategyPromotionRequestBody } from "@/lib/trader/validation-gate/promotion-request-body";
 
 const STRATEGY_IDS = ["mean_reversion_v0", "liquidity_sweep_reversal_v0"] as const;
 
@@ -25,21 +26,6 @@ type PromotionRecordSummary = {
   stateVersion?: number;
   requestedAt?: string | null;
 };
-
-function parseJsonField(
-  raw: string,
-  label: string,
-): { ok: true; value: unknown } | { ok: false; message: string } {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return { ok: false, message: `${label} must not be empty.` };
-  }
-  try {
-    return { ok: true, value: JSON.parse(trimmed) as unknown };
-  } catch {
-    return { ok: false, message: `${label} must be valid JSON.` };
-  }
-}
 
 async function readJsonFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -72,6 +58,7 @@ export default function AdminStrategyPromotionsPage() {
   const [expectedVersion, setExpectedVersion] = React.useState("0");
   const [commandMessage, setCommandMessage] = React.useState<string | null>(null);
   const [evidenceJson, setEvidenceJson] = React.useState("");
+  const [researchEvidenceJson, setResearchEvidenceJson] = React.useState("");
   const [inputsJson, setInputsJson] = React.useState("");
   const [idempotencyKey, setIdempotencyKey] = React.useState("");
   const [requestLoading, setRequestLoading] = React.useState(false);
@@ -137,14 +124,16 @@ export default function AdminStrategyPromotionsPage() {
     setRequestError(null);
     setRequestSuccess(null);
 
-    const evidenceParsed = parseJsonField(evidenceJson, "Evidence JSON");
-    if (!evidenceParsed.ok) {
-      setRequestError(evidenceParsed.message);
-      return;
-    }
-    const inputsParsed = parseJsonField(inputsJson, "Operator inputs JSON");
-    if (!inputsParsed.ok) {
-      setRequestError(inputsParsed.message);
+    const requestBody = buildStrategyPromotionRequestBody({
+      organizationId,
+      strategyId,
+      evidenceJson,
+      researchEvidenceJson,
+      inputsJson,
+      idempotencyKey,
+    });
+    if (!requestBody.ok) {
+      setRequestError(requestBody.message);
       return;
     }
 
@@ -154,14 +143,7 @@ export default function AdminStrategyPromotionsPage() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          command: "request",
-          organization_id: organizationId,
-          strategy_id: strategyId,
-          evidence: evidenceParsed.value,
-          inputs: inputsParsed.value,
-          idempotency_key: idempotencyKey.trim() || undefined,
-        }),
+        body: JSON.stringify(requestBody.body),
       },
     );
     setRequestLoading(false);
@@ -298,6 +280,23 @@ export default function AdminStrategyPromotionsPage() {
             accept=".json,application/json"
             className="text-muted-foreground text-xs"
             onChange={(event) => void handleJsonFileLoad(event, setEvidenceJson)}
+          />
+        </label>
+
+        <label className="block space-y-1 text-sm">
+          <span className="font-medium">Research evidence JSON</span>
+          <Textarea
+            value={researchEvidenceJson}
+            onChange={(event) => setResearchEvidenceJson(event.target.value)}
+            rows={8}
+            className="font-mono text-xs"
+            placeholder="Paste research evidence export JSON"
+          />
+          <input
+            type="file"
+            accept=".json,application/json"
+            className="text-muted-foreground text-xs"
+            onChange={(event) => void handleJsonFileLoad(event, setResearchEvidenceJson)}
           />
         </label>
 

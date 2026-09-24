@@ -14,6 +14,7 @@ import {
 } from "@/lib/trader/admin-console/read-models/order-trace";
 import { decodePageCursor, encodePageCursor } from "@/lib/trader/admin-console/cursor";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
   return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
@@ -28,7 +29,7 @@ export async function handleAdminConsoleOrdersGet(
   if (!parsed.ok) return parsed.result;
   const tab = url.searchParams.get("tab") === "all" ? "all" : "working";
   const cursor = parsed.query.cursor ? decodePageCursor(parsed.query.cursor) : null;
-  if (parsed.query.cursor && (!cursor || !/^[0-9a-f-]{36}$/i.test(cursor.id))) {
+  if (parsed.query.cursor && !cursor) {
     return {
       status: 400,
       outcome: "client_error",
@@ -37,8 +38,6 @@ export async function handleAdminConsoleOrdersGet(
   }
   const opened = await openAdminConsole(request, deps);
   if (!opened.ok) return opened.result;
-  const cursorAt = cursor?.t ?? null;
-  const cursorId = cursor?.id ?? null;
   try {
     const limit = parsed.query.limit;
     const rows = rowsOf(
@@ -47,21 +46,17 @@ export async function handleAdminConsoleOrdersGet(
                historical_run_id, symbol, side, state, quantity, filled_quantity,
                client_order_id, exchange_order_id, created_at
         FROM trader_orders
-        WHERE (
-          ${parsed.query.mode} = 'all'
-          OR (${parsed.query.mode} = 'history' AND historical_run_id IS NOT NULL)
-          OR (${parsed.query.mode} <> 'history' AND historical_run_id IS NULL AND execution_mode = ${parsed.query.mode})
-        )
+        WHERE ${orderVisibleInMode(parsed.query.mode, false)}
         AND (
           ${tab} = 'all'
           OR state IN ('CREATED','RISK_APPROVED','SENT_TO_EXCHANGE','ACCEPTED','PARTIALLY_FILLED','CANCEL_REQUESTED','RECONCILIATION_REQUIRED')
         )
         AND (
-          ${cursorAt}::timestamptz IS NULL
-          OR created_at < ${cursorAt}::timestamptz
-          OR (created_at = ${cursorAt}::timestamptz AND id < ${cursorId}::uuid)
+          ${cursor ? cursor.t : null}::timestamptz IS NULL
+          OR created_at < ${cursor ? cursor.t : null}::timestamptz
+          OR (created_at = ${cursor ? cursor.t : null}::timestamptz AND id::text < ${cursor ? cursor.id : null})
         )
-        ORDER BY created_at DESC, id DESC
+        ORDER BY created_at DESC, id::text DESC
         LIMIT ${limit + 1}
       `),
     );

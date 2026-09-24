@@ -32,6 +32,18 @@ export type Attribution =
   | { state: "ambiguous"; reason: typeof ADMIN_REASON.attributionAmbiguous }
   | { state: "unattributed"; reason: typeof ADMIN_REASON.unattributed };
 
+/**
+ * `trader_risk_account_state_v2.account_id` is the runtime account key.
+ * The paper loop writes `accountKey` there. It is not `exchange_account_id`.
+ * A lot matches that row only when `trader_position_lots.account_key` is equal.
+ */
+export function riskStateMatchesLot(input: {
+  lotAccountKey: string;
+  riskAccountId: string | null;
+}): boolean {
+  return input.riskAccountId !== null && input.riskAccountId === input.lotAccountKey;
+}
+
 export function attributeLegs(
   legs: readonly AttributionLeg[],
   orders: readonly AttributionOrder[],

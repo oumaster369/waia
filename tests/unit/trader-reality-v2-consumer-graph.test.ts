@@ -26,7 +26,9 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         sources: 155,
         // DEE-1015 adds exactly one observation-only consumer: the assignment-bound
         // credential read boundary that replaces the generic repository on that path.
-        consumers: 131,
+        // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and
+        // the HTX public ticker host. None admit Reality or place orders.
+        consumers: 134,
         connectorReferences: 25,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),

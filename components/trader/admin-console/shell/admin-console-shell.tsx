@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { QUICK_ANSWERS } from "@/lib/trader/admin-console/assistant/quick-answers";
 import { AssistantPanel } from "@/components/trader/admin-console/assistant/assistant-panel";
+import { EmergencyStopDialog } from "@/components/trader/admin-console/primitives/emergency-stop-dialog";
 import { MarketStrip } from "@/components/trader/admin-console/shell/market-strip";
 import { StatusBar } from "@/components/trader/admin-console/shell/status-bar";
 import { RU } from "@/components/trader/admin-console/i18n/ru";
@@ -38,6 +39,7 @@ export function AdminConsoleShell({
     () => typeof window !== "undefined" && window.localStorage.getItem(NAV_KEY) === "1",
   );
   const [palette, setPalette] = React.useState(false);
+  const [emergency, setEmergency] = React.useState(false);
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -84,6 +86,9 @@ export function AdminConsoleShell({
         })}
       </nav>
       <div className="min-w-0">
+        <button type="button" onClick={() => setEmergency(true)}>
+          {RU.emergency.open}
+        </button>
         <MarketStrip />
         <StatusBar />
         {children}
@@ -107,6 +112,12 @@ export function AdminConsoleShell({
           </CommandList>
         </Command>
       ) : null}
+      <EmergencyStopDialog
+        open={emergency}
+        onClose={() => setEmergency(false)}
+        expectedStateVersion={null}
+        onSubmit={() => undefined}
+      />
     </div>
   );
 }

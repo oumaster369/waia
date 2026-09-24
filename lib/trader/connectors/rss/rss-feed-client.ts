@@ -5,6 +5,8 @@ export type RssFeedItem = {
   link: string;
   publishedAt?: string;
   summary?: string;
+  guid?: string;
+  canonicalLink?: string;
 };
 
 export type RssFeedClientConfig = {
@@ -28,6 +30,16 @@ function extractTag(block: string, tag: string): string | undefined {
   return decodeXmlEntities(match[1].trim());
 }
 
+function extractCanonicalLink(block: string): string | undefined {
+  const hrefFirst = block.match(
+    /<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*\/?>/i,
+  );
+  const relFirst = block.match(
+    /<link[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["'][^>]*\/?>/i,
+  );
+  return hrefFirst?.[1] ?? relFirst?.[1];
+}
+
 function parseRssItems(xml: string): RssFeedItem[] {
   const items: RssFeedItem[] = [];
   const itemBlocks = xml.match(/<item[\s\S]*?<\/item>/gi) ?? [];
@@ -37,11 +49,15 @@ function parseRssItems(xml: string): RssFeedItem[] {
     if (!title || !link) {
       continue;
     }
+    const guid = extractTag(block, "guid");
+    const canonicalLink = extractCanonicalLink(block);
     items.push({
       title,
       link,
       publishedAt: extractTag(block, "pubDate"),
       summary: extractTag(block, "description"),
+      ...(guid ? { guid } : {}),
+      ...(canonicalLink ? { canonicalLink } : {}),
     });
   }
   return items;

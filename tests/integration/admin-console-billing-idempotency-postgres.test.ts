@@ -25,6 +25,7 @@ import {
 } from "@/tests/integration/htr-postgres-fixture-prelude";
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
+const validateStack = process.env.WAIA_DB_BACKEND === "postgres";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const USER_ID = "00000000-0000-4000-8022-000000031156";
 const EXCHANGE_ACCOUNT_ID = "htx-paper-1053-pg";
@@ -38,7 +39,7 @@ const COMPLETE_ATTESTATIONS = {
   realizedFillFinalityVerified: true,
 };
 
-describe.skipIf(!integrationEnabled || !url)("admin console billing idempotency", () => {
+describe.skipIf(!integrationEnabled || !validateStack || !url)("admin console billing idempotency", () => {
   let orgId: string;
 
   async function cleanup(): Promise<void> {

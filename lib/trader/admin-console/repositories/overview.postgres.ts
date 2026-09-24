@@ -4,9 +4,15 @@ import type { AdminPostgresDb } from "@/lib/trader/admin-console/repositories/sn
 import { withAdminReadSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
 import {
+  equityInclusion,
   valueObservation,
   type ValuationBalance,
 } from "@/lib/trader/admin-console/money/valuation";
+import {
+  assembleAttributedLots,
+  lotsForExchangeAccount,
+  type LotLegSource,
+} from "@/lib/trader/admin-console/money/account-lots";
 import type { AssetQuote } from "@/lib/trader/admin-console/money/quotes";
 import { dedupeAccounts, type AccountCredential } from "@/lib/trader/admin-console/accounts/dedupe";
 import {
@@ -80,6 +86,101 @@ export async function readOverviewSnapshot(
       if (!asset || !price || !source || !observedAt) return [];
       return [{ asset, price, source, sourceTs: text(row.source_ts), observedAt }];
     });
+    const lotRows = rowsOf(
+      await tx.execute(sql`
+        SELECT l.id::text AS lot_id,
+               l.organization_id::text AS organization_id,
+               l.symbol,
+               l.remaining_qty,
+               l.avg_cost,
+               l.account_key,
+               leg.id::text AS leg_id,
+               leg.created_at AS leg_created_at,
+               leg.order_id::text AS order_id,
+               o.historical_run_id,
+               o.execution_mode,
+               o.credential_id::text AS credential_id,
+               o.strategy_signal_id,
+               o.symbol AS order_symbol,
+               c.id::text AS credential_row_id,
+               c.organization_id::text AS credential_organization_id,
+               c.exchange_account_id
+        FROM trader_position_lots l
+        JOIN trader_trade_legs leg
+          ON leg.position_lot_id = l.id
+         AND leg.organization_id = l.organization_id
+        LEFT JOIN trader_orders o
+          ON o.id = leg.order_id
+         AND o.organization_id = leg.organization_id
+        LEFT JOIN exchange_credentials c
+          ON c.id = o.credential_id
+         AND c.organization_id = o.organization_id
+        WHERE l.state = 'OPEN'
+      `),
+    );
+    const attributedLots = assembleAttributedLots(
+      lotRows.flatMap((row) => {
+        const lotId = text(row.lot_id);
+        const organizationId = text(row.organization_id);
+        const symbol = text(row.symbol);
+        const remainingQty = text(row.remaining_qty);
+        const avgCost = text(row.avg_cost);
+        const accountKey = text(row.account_key);
+        const legId = text(row.leg_id);
+        const legCreatedAt = text(row.leg_created_at);
+        if (
+          !lotId ||
+          !organizationId ||
+          !symbol ||
+          !remainingQty ||
+          !avgCost ||
+          !accountKey ||
+          !legId ||
+          !legCreatedAt
+        ) {
+          return [];
+        }
+        const orderId = text(row.order_id);
+        const executionMode = text(row.execution_mode);
+        const credentialId = text(row.credential_id);
+        const credentialRowId = text(row.credential_row_id);
+        const credentialOrganizationId = text(row.credential_organization_id);
+        const exchangeAccountId = text(row.exchange_account_id);
+        const source: LotLegSource = {
+          lotId,
+          organizationId,
+          symbol,
+          remainingQty,
+          avgCost,
+          accountKey,
+          legId,
+          legCreatedAt,
+          orderId,
+          strategySignalId: text(row.strategy_signal_id),
+          order:
+            orderId && executionMode
+              ? {
+                  id: orderId,
+                  organizationId,
+                  historicalRunId: text(row.historical_run_id),
+                  executionMode,
+                  credentialId,
+                  strategySignalId: text(row.strategy_signal_id),
+                  symbol: text(row.order_symbol) ?? symbol,
+                }
+              : null,
+          credential:
+            credentialRowId && credentialOrganizationId && exchangeAccountId
+              ? {
+                  id: credentialRowId,
+                  organizationId: credentialOrganizationId,
+                  exchangeAccountId,
+                }
+              : null,
+        };
+        return [source];
+      }),
+    );
     const accounts: OverviewAccount[] = [];
     for (const group of grouped.slice(0, ACCOUNT_CAP)) {
       if (group.conflict) {
@@ -150,22 +251,28 @@ export async function readOverviewSnapshot(
         continue;
       }
       const recordedAt = text(observation.recorded_at) ?? new Date(0).toISOString();
+      const accountLots = lotsForExchangeAccount({
+        exchangeAccountId: group.exchangeAccountId,
+        mode: input.mode,
+        lots: attributedLots,
+      });
       const valued = valueObservation({
         observationId: text(observation.observation_id) ?? "unknown",
         recordedAt,
         balances,
-        lots: [],
-        lotsRevision: "0",
+        lots: accountLots.lots,
+        lotsRevision: accountLots.lotsRevision,
         quotes,
         currency: input.currency,
         nowMs: input.nowMs,
       });
+      const inclusion = equityInclusion(valued.reasons, valued.equity);
       accounts.push({
         id: `${group.venue}:${group.exchangeAccountId}`,
         valuationKey: valued.valuationKey,
-        included: valued.equity !== null && (valued.state === "ok" || valued.state === "stale"),
+        included: inclusion.included,
         reason: valued.reasons[0] ?? null,
-        stale: valued.reasons.includes(ADMIN_REASON.quoteStale),
+        stale: inclusion.stale,
         equity: valued.equity,
         freeQuote: valued.freeQuote,
         lockedQuote: valued.lockedQuote,

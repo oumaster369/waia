@@ -4,6 +4,7 @@ import { flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-tabl
 import { useVirtualizer } from "@tanstack/react-virtual";
 import * as React from "react";
 
+import { RenderAckMarker } from "@/components/trader/admin-console/data/render-ack";
 import { ORDER_STATUS_LABELS } from "@/lib/trader/admin-console/read-models/order-trace";
 
 export type OrderRowView = {
@@ -11,6 +12,7 @@ export type OrderRowView = {
   symbol: string;
   state: string;
   label: string;
+  entityVersion?: string;
 };
 
 export function orderRowView(row: { id: string; symbol: string; state: string }): OrderRowView {
@@ -46,6 +48,15 @@ export function OrdersPanel({ rows }: { rows: readonly OrderRowView[] }) {
         <tbody>
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id}>
+              {row.original.entityVersion ? (
+                <td>
+                  <RenderAckMarker
+                    topic="orders"
+                    entityId={row.original.id}
+                    entityVersion={row.original.entityVersion}
+                  />
+                </td>
+              ) : null}
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
               ))}
