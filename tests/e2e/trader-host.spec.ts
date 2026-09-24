@@ -158,7 +158,7 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     }
     grantTraderEntitlementByUserEmail(email);
     grantPlatformAdminByUserEmail(email);
-    let posture = "HALT";
+    const posture = "HALT";
     const snapshot = () => ({
       organizationId,
       releaseIdentity: {

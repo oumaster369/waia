@@ -12,18 +12,22 @@ export function workerEnvString(key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function bridgeEnvKey(env: Record<string, unknown>, key: string): void {
+function bridgeEnvKey(
+  env: Record<string, unknown>,
+  key: string,
+  mode: "override" | "fill" = "override",
+): void {
   const value = env[key];
-  if (typeof value === "string" && value.trim() !== "") {
-    process.env[key] = value;
-  }
+  if (typeof value !== "string" || value.trim() === "") return;
+  if (mode === "fill" && (process.env[key]?.trim() ?? "") !== "") return;
+  process.env[key] = value;
 }
 
 /** Cron scheduled handlers receive secrets on `env`, not always on `process.env`. */
 export function bridgeTraderCronEnvToProcess(env: Record<string, unknown>): void {
-  bridgeEnvKey(env, "DATABASE_URL_POSTGRES");
-  bridgeEnvKey(env, "DATABASE_URL");
-  bridgeEnvKey(env, "WAIA_DB_BACKEND");
+  bridgeEnvKey(env, "DATABASE_URL_POSTGRES", "override");
+  bridgeEnvKey(env, "DATABASE_URL", "override");
+  bridgeEnvKey(env, "WAIA_DB_BACKEND", "override");
   bridgeEnvKey(env, "MARKET_BRAIN_ENABLED");
   bridgeEnvKey(env, "MARKET_BRAIN_ORGANIZATION_ID");
   bridgeEnvKey(env, "HTX_REST_HOST");
@@ -43,15 +47,22 @@ export function bridgeTraderCronEnvToProcess(env: Record<string, unknown>): void
   bridgeEnvKey(env, "SETTLEMENT_MAX_PAYMENTS_PER_CYCLE");
 }
 
+function fillRequestDatabaseEnv(env: Record<string, unknown>): void {
+  rememberWorkerEnv(env);
+  bridgeEnvKey(env, "DATABASE_URL_POSTGRES", "fill");
+  bridgeEnvKey(env, "DATABASE_URL", "fill");
+  bridgeEnvKey(env, "WAIA_DB_BACKEND", "fill");
+}
+
 /** Request handlers see Worker secrets on the Cloudflare env, not on process.env. */
 export async function bridgeRequestDatabaseEnv(): Promise<void> {
   try {
     const context = await getCloudflareContext({ async: true });
-    bridgeTraderCronEnvToProcess(context.env as unknown as Record<string, unknown>);
+    fillRequestDatabaseEnv(context.env as unknown as Record<string, unknown>);
   } catch {
     try {
       const context = getCloudflareContext();
-      bridgeTraderCronEnvToProcess(context.env as unknown as Record<string, unknown>);
+      fillRequestDatabaseEnv(context.env as unknown as Record<string, unknown>);
     } catch {
       // Local tests and non-Worker runs keep the process environment they already have.
     }
