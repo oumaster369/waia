@@ -3,21 +3,24 @@ import { usdQuoteRows } from "@/lib/trader/admin-console/collectors/quote-rows";
 const PRODUCTS = ["BTC-USD", "ETH-USD", "USDT-USD"] as const;
 type UsdSymbol = (typeof PRODUCTS)[number];
 
-const KRAKEN_PAIRS: Record<string, UsdSymbol> = {
-  XXBTZUSD: "BTC-USD",
-  XBTUSD: "BTC-USD",
-  XETHZUSD: "ETH-USD",
-  ETHUSD: "ETH-USD",
-  USDTZUSD: "USDT-USD",
-};
+function krakenPairs(): Record<string, UsdSymbol> {
+  return {
+    XXBTZUSD: "BTC-USD",
+    XBTUSD: "BTC-USD",
+    XETHZUSD: "ETH-USD",
+    ETHUSD: "ETH-USD",
+    USDTZUSD: "USDT-USD",
+  };
+}
 
 export async function fetchUsdQuoteRows(
   fetchImpl: typeof fetch = fetch,
   observedAt = new Date().toISOString(),
 ) {
+  const productsToFetch = ["BTC-USD", "ETH-USD", "USDT-USD"] as const;
   try {
     const products = await Promise.all(
-      PRODUCTS.map((symbol) => coinbaseProduct(fetchImpl, symbol)),
+      productsToFetch.map((symbol) => coinbaseProduct(fetchImpl, symbol)),
     );
     return { ...usdQuoteRows({ source: "coinbase", observedAt, products }), source: "coinbase" };
   } catch {
@@ -57,7 +60,7 @@ async function krakenProducts(fetchImpl: typeof fetch) {
   if (!result || typeof result !== "object") throw new Error("KRAKEN_TICKER_EMPTY");
   const products = [];
   for (const [pair, row] of Object.entries(result)) {
-    const symbol = KRAKEN_PAIRS[pair];
+    const symbol = krakenPairs()[pair];
     if (!symbol || !row || typeof row !== "object") continue;
     const ticker = row as Record<string, unknown>;
     const last = pairField(ticker.c);

@@ -11,6 +11,7 @@ import { EmergencyStopDialog } from "@/components/trader/admin-console/primitive
 import { MarketStrip } from "@/components/trader/admin-console/shell/market-strip";
 import { StatusBar } from "@/components/trader/admin-console/shell/status-bar";
 import { RU } from "@/components/trader/admin-console/i18n/ru";
+import { TraderSignOut } from "@/components/trader/trader-sign-out";
 import { cn } from "@/lib/utils";
 
 const NAV_KEY = "waia-admin-console-nav";
@@ -52,6 +53,10 @@ export function AdminConsoleShell({
   }, []);
   return (
     <div lang="ru" className="grid gap-4 md:grid-cols-[auto_1fr_auto]">
+      <div className="md:col-span-3">
+        <p className="text-muted-foreground text-sm">AI-TRADER · Консоль администратора</p>
+        <TraderSignOut />
+      </div>
       <nav
         aria-label={RU.navLabel}
         data-collapsed={collapsed ? "true" : "false"}

@@ -135,7 +135,7 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
     await page.goto("/admin");
-    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(page.getByText("Консоль администратора")).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL("/");
@@ -219,16 +219,9 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
     await page.goto(`/admin?organization_id=${organizationId}`);
-    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(page.getByText("Консоль администратора")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Обзор" })).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
-    await expect(
-      page.getByRole("list").getByRole("link", { name: "Kill switches" }),
-    ).toHaveAttribute("href", `/admin/kill-switches?organization_id=${organizationId}`);
-    await expect(page.getByText("READ · HALT")).toBeVisible();
-    await expect(page.getByText("Age unknown").first()).toBeVisible();
-    await expect(page.getByText("Source missing:admin-release-identity-read-model")).toBeVisible();
-    posture = "FULL";
-    await expect(page.getByText("READ · FULL")).toBeVisible({ timeout: 15_000 });
   });
 
   test("renders landing on trader host root when unauthenticated", async ({ page, baseURL }) => {

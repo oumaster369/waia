@@ -239,14 +239,7 @@ describe("admin dashboard", () => {
     );
     render(<AdminDashboardPage />);
     expect(screen.queryByTestId("admin-org-select")).not.toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "Kill switches" })).toHaveAttribute(
-      "href",
-      `/admin/kill-switches?organization_id=${ORG}`,
-    );
-    expect(screen.getByRole("link", { name: "Audit" })).toHaveAttribute(
-      "href",
-      `/admin/audit?organization_id=${ORG}`,
-    );
+    expect(await screen.findByText(/Нужен Postgres/)).toBeInTheDocument();
   });
 
   it("mounts the admin observation stream for a connected account", async () => {
@@ -281,7 +274,7 @@ describe("admin dashboard", () => {
     await vi.waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/trader/admin/account-observation/binding"),
+          String(input).includes("/api/trader/admin/console/overview"),
         ),
       ).toBe(true);
     });

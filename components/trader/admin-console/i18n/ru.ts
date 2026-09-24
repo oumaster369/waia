@@ -29,6 +29,7 @@ export const RU = {
     OWNERSHIP_CONFLICT: "Счёт заявлен в двух организациях",
     EXTERNAL_FLOWS_NOT_OBSERVED: "Вводы и выводы не наблюдаются",
     COLLECTORS_DISABLED: "Сборщики выключены",
+    QUOTE_PENDING: "Котировка ещё записывается",
     RETURN_METHOD_NOT_RATIFIED: "Методика доходности ещё не утверждена",
     GUARDIAN_ASSESSMENT_MISSING: "Нет оценки Guardian по открытому лоту",
     GUARDIAN_ASSESSMENT_STALE: "Оценка Guardian старше 15 минут",

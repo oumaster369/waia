@@ -10,7 +10,7 @@ export function MarketStrip({
   if (!quote) {
     return (
       <div>
-        Рынок сейчас <DataState state="unavailable" reason="COLLECTORS_DISABLED" />
+        Рынок сейчас <DataState state="unavailable" reason="QUOTE_PENDING" />
       </div>
     );
   }
