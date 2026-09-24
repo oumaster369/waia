@@ -1,30 +1,45 @@
-import { z } from "zod";
-
 import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
 
-const numberLike = z.union([z.number(), z.string()]);
+export type HtxPublicTicker = {
+  symbol: string;
+  open: number | string;
+  high: number | string;
+  low: number | string;
+  close: number | string;
+  amount: number | string;
+  vol: number | string;
+  bid: number | string;
+  ask: number | string;
+};
 
-function tickerSchema() {
-  return z.object({
-    status: z.string(),
-    ts: z.number(),
-    data: z.array(
-      z.object({
-        symbol: z.string(),
-        open: numberLike,
-        high: numberLike,
-        low: numberLike,
-        close: numberLike,
-        amount: numberLike,
-        vol: numberLike,
-        bid: numberLike,
-        ask: numberLike,
-      }),
-    ),
-  });
+function numberLike(value: unknown): value is number | string {
+  return typeof value === "number" || typeof value === "string";
 }
 
-export type HtxPublicTicker = z.infer<ReturnType<typeof tickerSchema>>["data"][number];
+function parseTickers(body: unknown): HtxPublicTicker[] {
+  if (!body || typeof body !== "object") throw new Error("HTX_TICKERS_BODY");
+  const record = body as Record<string, unknown>;
+  if (record.status !== "ok") throw new Error("HTX_TICKERS_STATUS");
+  if (!Array.isArray(record.data)) throw new Error("HTX_TICKERS_BODY");
+  return record.data.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const ticker = row as Record<string, unknown>;
+    if (typeof ticker.symbol !== "string" || !numberLike(ticker.close)) return [];
+    return [
+      {
+        symbol: ticker.symbol,
+        open: numberLike(ticker.open) ? ticker.open : ticker.close,
+        high: numberLike(ticker.high) ? ticker.high : ticker.close,
+        low: numberLike(ticker.low) ? ticker.low : ticker.close,
+        close: ticker.close,
+        amount: numberLike(ticker.amount) ? ticker.amount : "0",
+        vol: numberLike(ticker.vol) ? ticker.vol : "0",
+        bid: numberLike(ticker.bid) ? ticker.bid : ticker.close,
+        ask: numberLike(ticker.ask) ? ticker.ask : ticker.close,
+      },
+    ];
+  });
+}
 
 export async function fetchHtxPublicTickers(
   fetchImpl: typeof fetch = fetch,
@@ -35,9 +50,7 @@ export async function fetchHtxPublicTickers(
   try {
     const response = await fetchImpl(`${host}/market/tickers`, { signal: controller.signal });
     if (!response.ok) throw new Error("HTX_TICKERS_HTTP");
-    const parsed = tickerSchema().parse(await response.json());
-    if (parsed.status !== "ok") throw new Error("HTX_TICKERS_STATUS");
-    return parsed.data;
+    return parseTickers(await response.json());
   } finally {
     clearTimeout(timer);
   }
