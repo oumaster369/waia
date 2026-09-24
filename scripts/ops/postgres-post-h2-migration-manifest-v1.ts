@@ -2,8 +2,9 @@
  * DEE-1018: pinned identity + Human evidence model for the ordered post-H2 migration lane.
  *
  * The Human Architect rejected sparse application: the production journal advances strictly
- * `0205 -> 0206 -> 0207 -> 0208 -> 0209 -> 0210`. H2 owns `0205..0208` and is frozen; this lane
- * owns exactly `0209` and `0210`, one Human-authorized step per invocation.
+ * `0205 -> 0206 -> 0207 -> 0208 -> 0209 -> 0210 -> 0211 -> 0212 -> 0213 -> 0214 -> 0215`.
+ * H2 owns `0205..0208` and is frozen; this lane owns `0209` through `0215`, one Human-authorized
+ * step per invocation.
  *
  * Only the pure, already-exported helpers of the H2 manifest are reused (`sha256`,
  * `canonicalJson`, `semanticDigest`, the pinned `0000..0208` closure). Nothing in the H2 lane is
@@ -39,7 +40,7 @@ export const POST_H2_MIGRATION_RECEIPT_SCHEMA =
 export const POST_H2_HUMAN_ATTESTATION_SCHEMA = "waia.trader.post-h2.human-attestation.v1" as const;
 
 /** Exactly the additive range after the frozen H2 ladder. No future step is implicit. */
-export const POST_H2_STEPS = ["0209", "0210"] as const;
+export const POST_H2_STEPS = ["0209", "0210", "0211", "0212", "0213", "0214", "0215"] as const;
 export type PostH2Step = (typeof POST_H2_STEPS)[number];
 export type PostH2AttestationKind =
   | "RESTORE_POINT"
@@ -59,7 +60,7 @@ export type PostH2MigrationIdentity = Readonly<{
   sourceCommit: string;
   sourceBlob: string;
   sha256: string;
-  predecessor: "0208" | "0209";
+  predecessor: "0208" | "0209" | "0210" | "0211" | "0212" | "0213" | "0214";
   lockRelations: readonly string[];
   ownerRelations: readonly string[];
 }>;
@@ -164,6 +165,113 @@ export const POST_H2_MIGRATION_MANIFEST: Readonly<Record<PostH2Step, PostH2Migra
       predecessor: "0209",
       lockRelations: ["public.exchange_credentials", "public.trader_account_collection_state"],
       ownerRelations: ["public.exchange_credentials", "public.trader_account_collection_state"],
+    }),
+    "0211": Object.freeze({
+      step: "0211",
+      idx: 211,
+      when: 1780000000211,
+      tag: "0211_trader_knowledge_edge_version_v2",
+      path: "db/migrations_postgres/0211_trader_knowledge_edge_version_v2.sql",
+      sourceCommit: "8121eef576bcc8e32b5429c46e2bf0a54d73f25a",
+      sourceBlob: "1fa106097cb2913cbd624b871ed6fa3509d7229b",
+      sha256: "6e1fd8ab8cefd9a9b03841709584db116193d2a2074e81e3650c8ea03aca08c2",
+      predecessor: "0210",
+      lockRelations: ["public.trader_knowledge_edges", "public.trader_market_predictions"],
+      ownerRelations: ["public.trader_knowledge_edges", "public.trader_market_predictions"],
+    }),
+    "0212": Object.freeze({
+      step: "0212",
+      idx: 212,
+      when: 1780000000212,
+      tag: "0212_trader_human_promotion_tables_v2",
+      path: "db/migrations_postgres/0212_trader_human_promotion_tables_v2.sql",
+      sourceCommit: "d356d39727e7310d815abbdb44d8b73c454531c4",
+      sourceBlob: "ec36226c119d9121efff9100ba81ed74a04051cc",
+      sha256: "4dca64d100c7a410fce764966080e7ce9b925e5838880b7932c62cc0248a8cb0",
+      predecessor: "0211",
+      lockRelations: [],
+      ownerRelations: [],
+    }),
+    "0213": Object.freeze({
+      step: "0213",
+      idx: 213,
+      when: 1780000000213,
+      tag: "0213_trader_human_promotion_tables_rls_v2",
+      path: "db/migrations_postgres/0213_trader_human_promotion_tables_rls_v2.sql",
+      sourceCommit: "d356d39727e7310d815abbdb44d8b73c454531c4",
+      sourceBlob: "449dfeef8e3726cb8146b8c7aa83ddc2ec0bb9e9",
+      sha256: "aae00fa4a90d5421103a9a78eb1ec31c98683e77b31faf4576160295da5e58f4",
+      predecessor: "0212",
+      lockRelations: [
+        "public.trader_human_promotion_proposal_v2",
+        "public.trader_human_research_assignment_v2",
+      ],
+      ownerRelations: [
+        "public.trader_human_promotion_proposal_v2",
+        "public.trader_human_research_assignment_v2",
+      ],
+    }),
+    "0214": Object.freeze({
+      step: "0214",
+      idx: 214,
+      when: 1780000000214,
+      tag: "0214_trader_admin_console_v2",
+      path: "db/migrations_postgres/0214_trader_admin_console_v2.sql",
+      sourceCommit: "c6e5349bf7a8e3b7eb3d546b1210445ec38dee0e",
+      sourceBlob: "a7a9c3185aa1809cc94ea72c4388beed4ad29662",
+      sha256: "3f6299469575115d531bab8c0c32e2eb619313458b02738c9d1fda73b47de49c",
+      predecessor: "0213",
+      lockRelations: [],
+      ownerRelations: [],
+    }),
+    "0215": Object.freeze({
+      step: "0215",
+      idx: 215,
+      when: 1780000000215,
+      tag: "0215_trader_admin_console_v2_rls",
+      path: "db/migrations_postgres/0215_trader_admin_console_v2_rls.sql",
+      sourceCommit: "c6e5349bf7a8e3b7eb3d546b1210445ec38dee0e",
+      sourceBlob: "a7656ba91f49a6670cb3a8d75cab217235557d13",
+      sha256: "5b7808ce91078cc598d177685b20bb4c6bed95f15c2a692d39741ef4312ee5fe",
+      predecessor: "0214",
+      lockRelations: [
+        "public.trader_admin_market_quote_latest",
+        "public.trader_admin_market_quote_minute",
+        "public.trader_admin_fear_greed",
+        "public.trader_admin_change_log",
+        "public.trader_admin_news_item",
+        "public.trader_admin_news_item_version",
+        "public.trader_admin_account_valuation",
+        "public.trader_admin_equity_point",
+        "public.trader_admin_diagnostic_event",
+        "public.trader_admin_incident",
+        "public.trader_admin_incident_event",
+        "public.trader_admin_job_run",
+        "public.trader_admin_assistant_conversation",
+        "public.trader_admin_assistant_message",
+        "public.trader_admin_assistant_tool_call",
+        "public.trader_admin_saved_view",
+        "public.trader_admin_visit_marker",
+      ],
+      ownerRelations: [
+        "public.trader_admin_market_quote_latest",
+        "public.trader_admin_market_quote_minute",
+        "public.trader_admin_fear_greed",
+        "public.trader_admin_change_log",
+        "public.trader_admin_news_item",
+        "public.trader_admin_news_item_version",
+        "public.trader_admin_account_valuation",
+        "public.trader_admin_equity_point",
+        "public.trader_admin_diagnostic_event",
+        "public.trader_admin_incident",
+        "public.trader_admin_incident_event",
+        "public.trader_admin_job_run",
+        "public.trader_admin_assistant_conversation",
+        "public.trader_admin_assistant_message",
+        "public.trader_admin_assistant_tool_call",
+        "public.trader_admin_saved_view",
+        "public.trader_admin_visit_marker",
+      ],
     }),
   });
 

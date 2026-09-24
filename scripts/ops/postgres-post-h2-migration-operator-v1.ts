@@ -1,15 +1,15 @@
 /**
  * DEE-1018: fail-closed post-H2 exact-one-step migration operator.
  *
- * The ratified production journal order is `0205 -> 0206 -> 0207 -> 0208 -> 0209 -> 0210`. The H2
- * operator owns `0205..0208` and is untouched; this operator owns exactly `0209` and `0210`.
+ * The ratified production journal order is `0205 -> … -> 0215`. The H2 operator owns `0205..0208`
+ * and is untouched; this operator owns `0209` through `0215`.
  *
  * It never uses Drizzle's generic migrator. Drizzle applies every journal entry above a single
  * `max(created_at)` high-water mark, which would silently apply AI-TWIN 0209 together with Trader
  * 0210 and, if 0210 were ever recorded first, would silently skip 0209 forever. This operator
  * instead executes exactly the one pinned migration named by `--step`, requires the live journal to
  * equal the canonical predecessor prefix exactly, and commits SQL plus its single journal row
- * atomically. One invocation applies one step; 0210 requires a second Human ceremony.
+ * atomically. One invocation applies one step; each later step requires its own Human ceremony.
  */
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -383,6 +383,13 @@ async function countAiTwin0209Objects(sql: Sql): Promise<number> {
  * Catalog preconditions the journal alone cannot express: a step must not already be half-present,
  * and 0210 must observe the objects 0209 actually created rather than trusting its journal row.
  */
+async function relationPresent(sql: Sql, name: string): Promise<boolean> {
+  const rows = await sql<Readonly<{ present: boolean }>[]>`
+    SELECT to_regclass(${`public.${name}`}) IS NOT NULL AS present
+  `;
+  return rows[0]?.present === true;
+}
+
 async function assertCatalogPrecondition(sql: Sql, step: PostH2Step): Promise<void> {
   if (step === "0209") {
     if ((await countAiTwin0209Objects(sql)) !== 0) {
@@ -418,9 +425,57 @@ async function assertCatalogPrecondition(sql: Sql, step: PostH2Step): Promise<vo
   // The role is cluster-wide, so its mere presence is not proof of application; the two
   // database-scoped policies are. An unsafely pre-existing role is refused by 0210's own guard and
   // re-proven by `verify0210` before commit.
-  if (Number(row.credential_policies) !== 0) {
-    refusePostH2("CATALOG_PRECONDITION", "migration 0210 objects already exist");
+  if (step === "0210") {
+    if (Number(row.credential_policies) !== 0) {
+      refusePostH2("CATALOG_PRECONDITION", "migration 0210 objects already exist");
+    }
+    return;
   }
+  if (Number(row.credential_policies) !== 2) {
+    refusePostH2("CATALOG_PRECONDITION", "migration 0210 objects are not present");
+  }
+  const versionTable = await relationPresent(sql, "trader_knowledge_edge_version_v2");
+  const promotionTable = await relationPresent(sql, "trader_human_promotion_proposal_v2");
+  const promotionDeny = await policyPresent(
+    sql,
+    "trader_human_promotion_proposal_v2_deny_authenticated_select",
+  );
+  const consoleTable = await relationPresent(sql, "trader_admin_market_quote_latest");
+  const consoleDeny = await policyPresent(
+    sql,
+    "trader_admin_market_quote_latest_deny_authenticated_select",
+  );
+  if (step === "0211") {
+    if (versionTable) refusePostH2("CATALOG_PRECONDITION", "migration 0211 objects already exist");
+    return;
+  }
+  if (!versionTable) refusePostH2("CATALOG_PRECONDITION", "migration 0211 objects are not present");
+  if (step === "0212") {
+    if (promotionTable)
+      refusePostH2("CATALOG_PRECONDITION", "migration 0212 objects already exist");
+    return;
+  }
+  if (!promotionTable)
+    refusePostH2("CATALOG_PRECONDITION", "migration 0212 objects are not present");
+  if (step === "0213") {
+    if (promotionDeny) refusePostH2("CATALOG_PRECONDITION", "migration 0213 objects already exist");
+    return;
+  }
+  if (!promotionDeny)
+    refusePostH2("CATALOG_PRECONDITION", "migration 0213 objects are not present");
+  if (step === "0214") {
+    if (consoleTable) refusePostH2("CATALOG_PRECONDITION", "migration 0214 objects already exist");
+    return;
+  }
+  if (!consoleTable) refusePostH2("CATALOG_PRECONDITION", "migration 0214 objects are not present");
+  if (consoleDeny) refusePostH2("CATALOG_PRECONDITION", "migration 0215 objects already exist");
+}
+
+async function policyPresent(sql: Sql, name: string): Promise<boolean> {
+  const rows = await sql<Readonly<{ total: string }>[]>`
+    SELECT count(*)::text AS total FROM pg_policy WHERE polname = ${name}
+  `;
+  return Number(rows[0]?.total ?? "0") > 0;
 }
 
 async function assertRelevantWritersQuiesced(sql: Sql): Promise<void> {
@@ -862,14 +917,140 @@ async function verify0210(sql: Sql): Promise<unknown> {
   return { roles, credentialGrantees, grants, privileges, policies, forceRls };
 }
 
+const KNOWLEDGE_0211_TABLES = Object.freeze([
+  "trader_knowledge_edge_version_v2",
+  "trader_market_prediction_verification_v2",
+] as const);
+const PROMOTION_0212_TABLES = Object.freeze([
+  "trader_human_promotion_proposal_v2",
+  "trader_human_research_assignment_v2",
+] as const);
+const CONSOLE_0214_TABLES = Object.freeze([
+  "trader_admin_market_quote_latest",
+  "trader_admin_market_quote_minute",
+  "trader_admin_fear_greed",
+  "trader_admin_change_log",
+  "trader_admin_news_item",
+  "trader_admin_news_item_version",
+  "trader_admin_account_valuation",
+  "trader_admin_equity_point",
+  "trader_admin_diagnostic_event",
+  "trader_admin_incident",
+  "trader_admin_incident_event",
+  "trader_admin_job_run",
+  "trader_admin_assistant_conversation",
+  "trader_admin_assistant_message",
+  "trader_admin_assistant_tool_call",
+  "trader_admin_saved_view",
+  "trader_admin_visit_marker",
+] as const);
+
+async function verify0211(sql: Sql): Promise<void> {
+  const copied = await sql<
+    Readonly<{ edges: string; versions: string; predictions: string; verifications: string }>[]
+  >`
+    SELECT
+      (SELECT count(*)::text FROM public.trader_knowledge_edges) AS edges,
+      (SELECT count(*)::text FROM public.trader_knowledge_edge_version_v2) AS versions,
+      (
+        SELECT count(*)::text FROM public.trader_market_predictions
+        WHERE verified_at IS NOT NULL AND outcome_json IS NOT NULL AND verification_result IS NOT NULL
+      ) AS predictions,
+      (SELECT count(*)::text FROM public.trader_market_prediction_verification_v2) AS verifications
+  `;
+  const row = copied[0];
+  if (!row || row.edges !== row.versions || row.predictions !== row.verifications) {
+    refusePostH2("CATALOG_0211_COPY", "copied row counts must equal the source counts");
+  }
+  const triggers = await sql<Readonly<{ trigger_name: string; definition: string }>[]>`
+    SELECT trigger.tgname AS trigger_name, pg_get_triggerdef(trigger.oid, true) AS definition
+    FROM pg_trigger trigger
+    JOIN pg_class class ON class.oid = trigger.tgrelid
+    WHERE NOT trigger.tgisinternal
+      AND class.relname IN ('trader_knowledge_edges', 'trader_market_predictions')
+      AND trigger.tgname IN (
+        'trader_knowledge_edges_immutable_all_v2',
+        'trader_market_predictions_immutable_all_v2'
+      )
+  `;
+  if (
+    triggers.length !== 2 ||
+    !triggers.every((item) => /BEFORE (UPDATE OR DELETE|DELETE OR UPDATE)/i.test(item.definition))
+  ) {
+    refusePostH2("CATALOG_0211_TRIGGER", "immutability triggers required");
+  }
+  const grants = await sql<Readonly<{ total: string }>[]>`
+    SELECT count(*)::text AS total
+    FROM information_schema.role_table_grants
+    WHERE table_schema = 'public'
+      AND table_name IN ('trader_knowledge_edges', 'trader_market_predictions')
+      AND privilege_type IN ('UPDATE', 'DELETE')
+      AND grantee <> current_user
+  `;
+  if (Number(grants[0]?.total ?? "-1") !== 0) {
+    refusePostH2("CATALOG_0211_GRANTS", "UPDATE and DELETE must be revoked");
+  }
+}
+
+async function verifyDenyRls(sql: Sql, tables: readonly string[], code: string): Promise<void> {
+  const rows = await sql<Readonly<{ relname: string; policies: string; rls: boolean }>[]>`
+    SELECT class.relname, class.relrowsecurity AS rls,
+      (
+        SELECT count(*)::text FROM pg_policy policy
+        WHERE policy.polrelid = class.oid
+          AND policy.polname LIKE class.relname || '_deny_authenticated_%'
+          AND (
+            pg_get_expr(policy.polqual, policy.polrelid) IS NOT DISTINCT FROM 'false'
+            OR pg_get_expr(policy.polwithcheck, policy.polrelid) IS NOT DISTINCT FROM 'false'
+          )
+      ) AS policies
+    FROM pg_class class
+    JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
+    WHERE namespace.nspname = 'public' AND class.relname = ANY(${tables as unknown as string[]})
+  `;
+  if (
+    rows.length !== tables.length ||
+    rows.some((item) => !item.rls || Number(item.policies) < 4)
+  ) {
+    refusePostH2(code, "deny-by-default RLS required");
+  }
+}
+
+async function verify0212(sql: Sql): Promise<void> {
+  if (!(await relationPresent(sql, "trader_human_promotion_proposal_v2"))) {
+    refusePostH2("CATALOG_0212_TABLES", "promotion tables required");
+  }
+  if (!(await relationPresent(sql, "trader_human_research_assignment_v2"))) {
+    refusePostH2("CATALOG_0212_TABLES", "promotion tables required");
+  }
+}
+
+async function verify0214(sql: Sql): Promise<void> {
+  for (const name of CONSOLE_0214_TABLES) {
+    if (!(await relationPresent(sql, name))) refusePostH2("CATALOG_0214_TABLES", name);
+  }
+  const trigger = await sql<Readonly<{ total: string }>[]>`
+    SELECT count(*)::text AS total FROM pg_trigger WHERE tgname = 'trader_admin_change_log_trg'
+  `;
+  if (Number(trigger[0]?.total ?? "-1") !== 0) {
+    refusePostH2("CATALOG_0214_TRIGGER", "trader_admin_change_log_trg must be absent");
+  }
+}
+
 /**
  * DEE-1020: re-derived from the canonical authority projection. DEE-1021 re-derived the same
  * values after pinning snapshot row order to bytewise C/JavaScript string order: libc alpine PG17
- * and ICU Supabase PG 17.6 then converge bit-for-bit. None of these constants was fitted to a target.
+ * and ICU Supabase PG 17.6 then converge bit-for-bit. DEE-1070 re-derived 0211–0215 on PostgreSQL
+ * 17.11 (postgres:17-alpine). None of these constants was fitted to a target.
  */
 const EXPECTED_POST_H2_CATALOG_DIGESTS: Readonly<Record<PostH2Step, string>> = Object.freeze({
   "0209": "5b8c4ed19f7546a786563ac75044b70d360c49797845d4cee19e4149723779f2",
   "0210": "4b4074b357b939f6c72b3cc1eb7e0f96b348d23a892c63da8126e066f7bb0ed5",
+  "0211": "3a7c54c0b970708e245c099eedcfe967e185040e406bf7a6629a01418c6c8bb7",
+  "0212": "79848f756ae6a1fc05b648212f7ed507adc7cc94f933c09ac020ff7fa4379e60",
+  "0213": "1c8b18c3283f379b5721d739f782de3689234033ff7674830b8577817b9167aa",
+  "0214": "5524fbb6ae55aef2321b4ded21b3b2cea1548053367b4b5945d24880d40d4ea5",
+  "0215": "2abdbf01abc81295ed4d28a1b326d020003c117a61501ab9768fa645b21ef1bb",
 });
 
 function quotedCatalogNames(names: readonly string[]): string {
@@ -879,31 +1060,52 @@ function quotedCatalogNames(names: readonly string[]): string {
   return names.map((name) => `'${name}'`).join(",");
 }
 
+function catalogProfile(step: PostH2Step): {
+  relations: readonly string[];
+  functions: readonly string[];
+  roles: readonly string[];
+  declaredPrincipals: readonly string[];
+} {
+  if (step === "0209") {
+    return {
+      relations: AI_TWIN_0209_TABLES,
+      functions: AI_TWIN_0209_FUNCTIONS,
+      roles: [],
+      declaredPrincipals: [],
+    };
+  }
+  if (step === "0211") {
+    return {
+      relations: KNOWLEDGE_0211_TABLES,
+      functions: ["trader_knowledge_authority_block_mutation_v2"],
+      roles: [],
+      declaredPrincipals: ["waia_historical_runner"],
+    };
+  }
+  if (step === "0212" || step === "0213") {
+    return { relations: PROMOTION_0212_TABLES, functions: [], roles: [], declaredPrincipals: [] };
+  }
+  if (step === "0214" || step === "0215") {
+    return { relations: CONSOLE_0214_TABLES, functions: [], roles: [], declaredPrincipals: [] };
+  }
+  return {
+    relations: ["exchange_credentials", "trader_account_collection_state"],
+    functions: [],
+    roles: [
+      "waia_account_observation_credential",
+      "waia_account_observation_reader",
+      "waia_account_observer",
+    ],
+    declaredPrincipals: [
+      "waia_account_observation_credential",
+      "waia_account_observation_reader",
+      "waia_account_observer",
+    ],
+  };
+}
+
 async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Promise<unknown> {
-  const profile =
-    step === "0209"
-      ? {
-          relations: AI_TWIN_0209_TABLES,
-          functions: AI_TWIN_0209_FUNCTIONS,
-          // No role attributes are pinned here: `anon`/`authenticated` carry environment-specific
-          // attributes, so 0209's isolation is proven by the grant and reachability checks instead.
-          roles: [] as readonly string[],
-          declaredPrincipals: [] as readonly string[],
-        }
-      : {
-          relations: ["exchange_credentials", "trader_account_collection_state"],
-          functions: [] as readonly string[],
-          roles: [
-            "waia_account_observation_credential",
-            "waia_account_observation_reader",
-            "waia_account_observer",
-          ],
-          declaredPrincipals: [
-            "waia_account_observation_credential",
-            "waia_account_observation_reader",
-            "waia_account_observer",
-          ] as readonly string[],
-        };
+  const profile = catalogProfile(step);
   const relations = quotedCatalogNames(profile.relations);
   const functions = profile.functions.length > 0 ? quotedCatalogNames(profile.functions) : "''";
   const roles = profile.roles.length > 0 ? quotedCatalogNames(profile.roles) : "''";
@@ -1043,10 +1245,15 @@ async function collectExactPostH2CatalogSnapshot(sql: Sql, step: PostH2Step): Pr
 }
 
 export async function verifyPostH2MigrationCatalog(sql: Sql, step: PostH2Step): Promise<string> {
-  if (step === "0209") {
-    await verify0209(sql);
-  } else {
-    await verify0210(sql);
+  if (step === "0209") await verify0209(sql);
+  else if (step === "0210") await verify0210(sql);
+  else if (step === "0211") await verify0211(sql);
+  else if (step === "0212") await verify0212(sql);
+  else if (step === "0213") await verifyDenyRls(sql, PROMOTION_0212_TABLES, "CATALOG_0213_RLS");
+  else if (step === "0214") await verify0214(sql);
+  else {
+    await verify0214(sql);
+    await verifyDenyRls(sql, CONSOLE_0214_TABLES, "CATALOG_0215_RLS");
   }
   const digest = semanticDigest(await collectExactPostH2CatalogSnapshot(sql, step));
   const expected = EXPECTED_POST_H2_CATALOG_DIGESTS[step];

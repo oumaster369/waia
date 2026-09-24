@@ -164,8 +164,8 @@ afterAll(() => {
 });
 
 describe("DEE-1018 post-H2 lane identity", () => {
-  it("supports exactly 0209 and 0210 and leaves the H2 ladder to H2", () => {
-    expect(POST_H2_STEPS).toEqual(["0209", "0210"]);
+  it("supports 0209 through 0215 and leaves the H2 ladder to H2", () => {
+    expect(POST_H2_STEPS).toEqual(["0209", "0210", "0211", "0212", "0213", "0214", "0215"]);
     expect(H2_STEPS).toEqual(["0205", "0206", "0207", "0208"]);
     expect(POST_H2_STEPS.filter((step) => (H2_STEPS as readonly string[]).includes(step))).toEqual(
       [],
@@ -173,11 +173,12 @@ describe("DEE-1018 post-H2 lane identity", () => {
     for (const step of H2_STEPS) {
       expect(() => parsePostH2Step(step)).toThrow("H2_LANE_STEP");
     }
-    for (const step of ["0204", "0211", "209", "0209 ", "", "latest", "all"]) {
+    for (const step of ["0204", "0216", "209", "0209 ", "", "latest", "all"]) {
       expect(() => parsePostH2Step(step)).toThrow("UNSUPPORTED_STEP");
     }
     expect(parsePostH2Step("0209")).toBe("0209");
     expect(parsePostH2Step("0210")).toBe("0210");
+    expect(parsePostH2Step("0215")).toBe("0215");
   });
 
   it("pins each supported migration to the canonical journal entry and Git object", () => {
@@ -220,6 +221,20 @@ describe("DEE-1018 post-H2 lane identity", () => {
     });
     expect(source0210.expectedAppliedPrefix).toHaveLength(211);
     expect(sha256(source0210.sql)).toBe(POST_H2_MIGRATION_MANIFEST["0210"].sha256);
+
+    let previous = source0210;
+    for (const step of ["0211", "0212", "0213", "0214", "0215"] as const) {
+      const source = loadPostH2CanonicalSource(repoRoot, step);
+      expect(source.expectedPredecessorPrefix).toEqual(previous.expectedAppliedPrefix);
+      expect(source.expectedPredecessorPrefix.at(-1)).toEqual({
+        hash: POST_H2_MIGRATION_MANIFEST[previous.selected.step].sha256,
+        createdAt: String(POST_H2_MIGRATION_MANIFEST[previous.selected.step].when),
+      });
+      expect(source.expectedAppliedPrefix).toHaveLength(previous.expectedAppliedPrefix.length + 1);
+      expect(sha256(source.sql)).toBe(POST_H2_MIGRATION_MANIFEST[step].sha256);
+      previous = source;
+    }
+    expect(previous.expectedAppliedPrefix).toHaveLength(216);
   });
 
   it("never reaches for Drizzle's generic high-water migrator or a multi-step option", () => {

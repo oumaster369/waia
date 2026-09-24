@@ -369,6 +369,67 @@ describe.skipIf(!enabled)("DEE-1018 ordered post-H2 exact-one-step PostgreSQL op
     expect(new Set(afterSecond.map((row) => row.createdAt)).size).toBe(afterSecond.length);
   }, 300_000);
 
+  it("advances 0210 through 0215 one authorized step at a time", async () => {
+    const database = await cloneDatabase("lane_0215");
+    await runOperation(await operationInput(database, "0209"));
+    await runOperation(await operationInput(database, "0210"));
+    const steps = ["0211", "0212", "0213", "0214", "0215"] as const;
+    for (const [offset, step] of steps.entries()) {
+      const receipt = await runOperation(await operationInput(database, step));
+      expect(receipt).toMatchObject({
+        mode: "APPLY",
+        classification: "SELECTED_STEP_COMMITTED",
+        selectedStep: step,
+        predecessorMigration: offset === 0 ? "0210" : steps[offset - 1],
+        sourceSha256: POST_H2_MIGRATION_MANIFEST[step].sha256,
+        nextStepExecuted: false,
+        postCommitVerification: {
+          readOnlyConnection: true,
+          exactJournal: true,
+          exactCatalog: true,
+        },
+      });
+      const rows = await journal(database);
+      expect(rows).toHaveLength(JOURNAL_ROWS_THROUGH_0208 + 2 + offset + 1);
+      expect(rows.at(-1)).toEqual({
+        hash: POST_H2_MIGRATION_MANIFEST[step].sha256,
+        createdAt: String(POST_H2_MIGRATION_MANIFEST[step].when),
+      });
+    }
+  }, 300_000);
+
+  it("refuses sparse 0212 while 0211 is unapplied", async () => {
+    const database = await cloneDatabase("sparse_0212");
+    await runOperation(await operationInput(database, "0209"));
+    await runOperation(await operationInput(database, "0210"));
+    await expect(runOperation(await operationInput(database, "0212"))).rejects.toThrow(
+      "LIVE_JOURNAL_GAP",
+    );
+    expect(await journal(database)).toHaveLength(JOURNAL_ROWS_THROUGH_0208 + 2);
+  }, 180_000);
+
+  it("refuses a repeated 0211 and answers --verify-only without writing", async () => {
+    const database = await cloneDatabase("repeat_0211");
+    await runOperation(await operationInput(database, "0209"));
+    await runOperation(await operationInput(database, "0210"));
+    const preview = await runOperation(await operationInput(database, "0211", true));
+    expect(preview).toMatchObject({
+      mode: "VERIFY_ONLY",
+      classification: "PREDECESSOR_NOT_APPLIED",
+    });
+    expect(await journal(database)).toHaveLength(JOURNAL_ROWS_THROUGH_0208 + 2);
+    await runOperation(await operationInput(database, "0211"));
+    await expect(runOperation(await operationInput(database, "0211"))).rejects.toThrow(
+      "LIVE_JOURNAL_EXTRA",
+    );
+    const verified = await runOperation(await operationInput(database, "0211", true));
+    expect(verified).toMatchObject({
+      mode: "VERIFY_ONLY",
+      classification: "SELECTED_STEP_COMMITTED",
+    });
+    expect(await journal(database)).toHaveLength(JOURNAL_ROWS_THROUGH_0208 + 3);
+  }, 180_000);
+
   it("refuses sparse 0210 while 0209 is unapplied", async () => {
     const database = await cloneDatabase("sparse");
     await expect(runOperation(await operationInput(database, "0210"))).rejects.toThrow(
