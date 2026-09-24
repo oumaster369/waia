@@ -6,6 +6,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { ADMIN_JOB_CATALOG, missedJobRuns } from "@/lib/trader/admin-console/jobs/job-catalog";
 import { readAdminRelease } from "@/lib/trader/admin-console/release";
@@ -24,7 +25,9 @@ export async function handleAdminConsoleSystemGet(
 ): Promise<AdminRouteHandlerResult> {
   const parsed = parseAdminConsoleQuery(new URL(request.url));
   if (!parsed.ok) return parsed.result;
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.system,
+  });
   if (!opened.ok) return opened.result;
   try {
     const rows = rowsOf(

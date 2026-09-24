@@ -38,6 +38,7 @@ import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { readAssistantTool } from "@/lib/trader/admin-console/handlers/assistant-reads";
 import { requirePostgres, schemaNotAppliedResult } from "@/lib/trader/admin-console/postgres-guard";
 import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { probeAdminConsoleSchema } from "@/lib/trader/admin-console/schema-probe";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 
@@ -164,7 +165,7 @@ export async function handleAdminConsoleAssistantMessagesPost(
   }
   const runtime = auth.runtime;
   try {
-    const present = await probeAdminConsoleSchema(runtime);
+    const present = await probeAdminConsoleSchema(runtime, HANDLER_TABLES.assistantMessages);
     if (!present) {
       return finishAssistant(
         request,

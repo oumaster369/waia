@@ -8,6 +8,7 @@ import {
 } from "@/lib/trader/admin-route-shared";
 import { buildAdminCsv } from "@/lib/trader/admin-console/billing/export-csv";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
@@ -22,7 +23,9 @@ export async function handleAdminConsoleExportGet(
   if (dataset !== "invoices") {
     return adminClientError(400, "BAD_REQUEST", "Export dataset is invalid.");
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.exportInvoices,
+  });
   if (!opened.ok) return opened.result;
   const started = Date.now();
   try {

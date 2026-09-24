@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
+import { COLLECTOR_SCHEMA_TABLES } from "@/lib/trader/admin-console/handler-tables";
+import { probeAdminConsoleSchema } from "@/lib/trader/admin-console/schema-probe";
 import { AlternativeMeFearGreedClient } from "@/lib/trader/connectors/alternative-me/fear-greed-client";
 import type { CollectorTask } from "@/lib/trader/admin-console/collectors/run-collectors-cycle";
 import {
@@ -135,6 +137,11 @@ export async function runDueAdminCollectors(
   process.env.DATABASE_URL_POSTGRES = url;
   const runtime = createPerRequestPostgresRuntime();
   try {
+    const present = await probeAdminConsoleSchema(runtime, COLLECTOR_SCHEMA_TABLES);
+    if (!present) {
+      options.log?.("schema_not_applied");
+      return { ran: [], failed: [] };
+    }
     const fetchImpl = options.fetchImpl ?? fetch;
     const store = createPostgresCollectorStore(runtime.db);
     const dueTasks = collectorTasksFor({

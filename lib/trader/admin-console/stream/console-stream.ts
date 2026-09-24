@@ -8,6 +8,7 @@ import {
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import {
   credentialRevoked,
@@ -97,7 +98,9 @@ export async function handleAdminConsoleStreamPoll(
   if (!query.ok) return query.result;
   const topics = parseAdminStreamTopics(query.query.topics);
   if (!topics.ok) return topics.result;
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.stream,
+  });
   if (!opened.ok) return opened.result;
   const resume = query.query.resume ?? request.headers.get("last-event-id");
   const cursor = resume && resume.length > 0 ? resume : null;
@@ -152,7 +155,9 @@ export async function serveAdminConsoleStream(
   if (!topics.ok) {
     return Response.json(topics.result.body, { status: topics.result.status });
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.stream,
+  });
   if (!opened.ok) {
     emitWaiaRuntimeRouteTelemetry({
       event: "waia_runtime_route",

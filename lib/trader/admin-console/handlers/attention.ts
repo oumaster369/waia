@@ -16,6 +16,7 @@ import {
 } from "@/lib/trader/admin-console/attention";
 import { invoiceDueAt } from "@/lib/trader/admin-console/billing/invoice-display-status";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { withAdminReadSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
@@ -57,7 +58,9 @@ export async function handleAdminConsoleAttentionGet(
 ): Promise<AdminRouteHandlerResult> {
   const parsed = parseAdminConsoleQuery(new URL(request.url));
   if (!parsed.ok) return parsed.result;
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.attention,
+  });
   if (!opened.ok) return opened.result;
   const organizationId = parsed.query.organization_id ?? null;
   const nowMs = Date.now();
@@ -70,15 +73,18 @@ export async function handleAdminConsoleAttentionGet(
         if (page.capped) missing.push("ATTENTION_LIST_CAPPED");
         return page.ids;
       };
-      const reconciliationRequiredOrderIds = await take(tx.execute(sql`
+      const reconciliationRequiredOrderIds = await take(
+        tx.execute(sql`
         SELECT id::text AS id
         FROM trader_orders
         WHERE state = 'RECONCILIATION_REQUIRED'
           AND historical_run_id IS NULL
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
-      const sentWithoutReportOrderIds = await take(tx.execute(sql`
+      `),
+      );
+      const sentWithoutReportOrderIds = await take(
+        tx.execute(sql`
         SELECT o.id::text AS id
         FROM trader_orders o
         WHERE o.state = 'SENT_TO_EXCHANGE'
@@ -95,7 +101,8 @@ export async function handleAdminConsoleAttentionGet(
           )
           AND (${organizationId}::uuid IS NULL OR o.organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
+      `),
+      );
       const halted = rowsOf(
         await tx.execute(sql`
           SELECT organization_id::text AS id
@@ -118,7 +125,8 @@ export async function handleAdminConsoleAttentionGet(
           LIMIT 1
         `),
       );
-      const lotsMissingGuardian = await take(tx.execute(sql`
+      const lotsMissingGuardian = await take(
+        tx.execute(sql`
         SELECT l.id::text AS id
         FROM trader_position_lots l
         LEFT JOIN LATERAL (
@@ -135,7 +143,8 @@ export async function handleAdminConsoleAttentionGet(
           )
           AND (${organizationId}::uuid IS NULL OR l.organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
+      `),
+      );
       const divergentAccountIds = await take(
         tx.execute(sql`
           SELECT account_id AS id
@@ -145,13 +154,15 @@ export async function handleAdminConsoleAttentionGet(
           LIMIT ${LIST_CAP + 1}
         `),
       );
-      const openReconciliationCaseIds = await take(tx.execute(sql`
+      const openReconciliationCaseIds = await take(
+        tx.execute(sql`
         SELECT id::text AS id
         FROM trader_settlement_reconciliation_cases
         WHERE status NOT IN ('RESOLVED', 'CANCELLED')
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
+      `),
+      );
       const observationRows = rowsOf(
         await tx.execute(sql`
           SELECT s.exchange_account_id,
@@ -206,15 +217,14 @@ export async function handleAdminConsoleAttentionGet(
             typeof row.exchange_account_id === "string" ? row.exchange_account_id : null;
           if (!exchangeAccountId) return [];
           const recordedAt = iso(row.recorded_at);
-          const age = recordedAt === null ? Number.POSITIVE_INFINITY : nowMs - Date.parse(recordedAt);
+          const age =
+            recordedAt === null ? Number.POSITIVE_INFINITY : nowMs - Date.parse(recordedAt);
           const failures = Number(row.consecutive_failures ?? 0);
           return [
             {
               exchangeAccountId,
               stale:
-                !Number.isFinite(age) ||
-                age > ACCOUNT_OBSERVATION_STALE_AFTER_MS ||
-                failures > 0,
+                !Number.isFinite(age) || age > ACCOUNT_OBSERVATION_STALE_AFTER_MS || failures > 0,
               active: flag(row.active),
             },
           ];
@@ -302,14 +312,17 @@ export async function handleAdminConsoleAttentionGet(
         if (!dueAt || Date.parse(nowIso) <= Date.parse(dueAt)) return [];
         return typeof row.id === "string" ? [row.id] : [];
       });
-      const settlementExceptions = await take(tx.execute(sql`
+      const settlementExceptions = await take(
+        tx.execute(sql`
         SELECT id::text AS id
         FROM trader_settlements
         WHERE outcome = 'EXCEPTION'
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
-      const blockedPeriodIds = await take(tx.execute(sql`
+      `),
+      );
+      const blockedPeriodIds = await take(
+        tx.execute(sql`
         SELECT id::text AS id
         FROM trader_reporting_periods
         WHERE status = 'OPEN'
@@ -317,14 +330,17 @@ export async function handleAdminConsoleAttentionGet(
           AND period_end < now() - interval '24 hours'
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
-      const promotionProposalIds = await take(tx.execute(sql`
+      `),
+      );
+      const promotionProposalIds = await take(
+        tx.execute(sql`
         SELECT id::text AS id
         FROM trader_human_promotion_proposal_v2
         WHERE disposition = 'pending'
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
         LIMIT ${LIST_CAP + 1}
-      `));
+      `),
+      );
       return {
         missing,
         items: buildAttention({

@@ -3,11 +3,12 @@ import { sql } from "drizzle-orm";
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 
 const TTL_MS = 60_000;
+const TABLE_NAME = /^[a-z][a-z0-9_]*$/;
 
-let cached: { at: number; present: boolean } | null = null;
+const cache = new Map<string, { at: number; present: boolean }>();
 
 export function resetAdminConsoleSchemaProbeForTests(): void {
-  cached = null;
+  cache.clear();
 }
 
 function rowsOf(result: unknown): readonly Record<string, unknown>[] {
@@ -19,21 +20,47 @@ function rowsOf(result: unknown): readonly Record<string, unknown>[] {
   return [];
 }
 
+function cacheKey(tables: readonly string[]): string {
+  return [...new Set(tables)].sort().join("\n");
+}
+
+function presentValue(value: unknown): boolean {
+  return value === true;
+}
+
+/**
+ * True when every named public table exists.
+ * The cache key is the table set, so one handler's miss does not hide another's tables.
+ */
 export async function probeAdminConsoleSchema(
   runtime: WaiaRuntimeDb,
+  tables: readonly string[],
   now = Date.now(),
 ): Promise<boolean> {
   if (runtime.kind !== "postgres") return false;
-  if (cached && now - cached.at < TTL_MS) return cached.present;
+  const names = [...new Set(tables)];
+  const key = cacheKey(names);
+  const hit = cache.get(key);
+  if (hit && now - hit.at < TTL_MS) return hit.present;
+  if (names.length === 0) {
+    cache.set(key, { at: now, present: true });
+    return true;
+  }
+  if (names.some((name) => !TABLE_NAME.test(name))) {
+    cache.set(key, { at: now, present: false });
+    return false;
+  }
   try {
-    const result = await runtime.db.execute(
-      sql`SELECT to_regclass('public.trader_admin_change_log') IS NOT NULL AS present`,
+    const predicate = sql.join(
+      names.map((table) => sql`to_regclass(${`public.${table}`}) IS NOT NULL`),
+      sql` AND `,
     );
-    const present = rowsOf(result)[0]?.present === true;
-    cached = { at: now, present };
+    const result = await runtime.db.execute(sql`SELECT (${predicate}) AS present`);
+    const present = presentValue(rowsOf(result)[0]?.present);
+    cache.set(key, { at: now, present });
     return present;
   } catch {
-    cached = { at: now, present: false };
+    cache.set(key, { at: now, present: false });
     return false;
   }
 }

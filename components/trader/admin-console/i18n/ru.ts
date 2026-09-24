@@ -21,7 +21,7 @@ export const RU = {
   },
   reasons: {
     POSTGRES_REQUIRED: "Нужен Postgres",
-    ADMIN_CONSOLE_SCHEMA_NOT_APPLIED: "Миграции консоли ещё не применены",
+    ADMIN_CONSOLE_SCHEMA_NOT_APPLIED: "Появится после применения схемы консоли",
     NO_QUOTE: "Нет котировки",
     QUOTE_STALE: "Котировка устарела",
     VALUATION_SKEW: "Котировка и наблюдение разошлись по времени",

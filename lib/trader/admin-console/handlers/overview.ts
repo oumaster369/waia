@@ -4,6 +4,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
 import { readOverviewSnapshot } from "@/lib/trader/admin-console/repositories/overview.postgres";
@@ -19,7 +20,9 @@ export async function handleAdminConsoleOverviewGet(
 ): Promise<AdminRouteHandlerResult> {
   const parsed = parseAdminConsoleQuery(new URL(request.url));
   if (!parsed.ok) return parsed.result;
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.overview,
+  });
   if (!opened.ok) return opened.result;
   try {
     const bounds = periodBounds(parsed.query, new Date());

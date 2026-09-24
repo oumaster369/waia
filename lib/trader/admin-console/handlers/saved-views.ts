@@ -9,6 +9,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { staleRevisionResult } from "@/lib/trader/admin-console/auth";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
 
@@ -59,7 +60,9 @@ export async function handleAdminConsoleSavedViewsGet(
   request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.savedViews,
+  });
   if (!opened.ok) return opened.result;
   try {
     const rows = await opened.runtime.db
@@ -76,7 +79,10 @@ export async function handleAdminConsoleSavedViewsPost(
   request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const opened = await openAdminConsole(request, deps, { mutate: true });
+  const opened = await openAdminConsole(request, deps, {
+    mutate: true,
+    requiredTables: HANDLER_TABLES.savedViews,
+  });
   if (!opened.ok) return opened.result;
   let body: unknown;
   try {
@@ -143,7 +149,10 @@ export async function handleAdminConsoleSavedViewsDelete(
   request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const opened = await openAdminConsole(request, deps, { mutate: true });
+  const opened = await openAdminConsole(request, deps, {
+    mutate: true,
+    requiredTables: HANDLER_TABLES.savedViews,
+  });
   if (!opened.ok) return opened.result;
   let body: unknown;
   try {

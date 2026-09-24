@@ -15,6 +15,7 @@ import {
   type InvoiceDisplayInput,
 } from "@/lib/trader/admin-console/billing/invoice-display-status";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
 import { subtractDecimal } from "@/lib/trader/risk/numeric";
@@ -108,7 +109,9 @@ export async function handleAdminConsoleInvoicesGet(
 ): Promise<AdminRouteHandlerResult> {
   const parsed = parseAdminConsoleQuery(new URL(request.url));
   if (!parsed.ok) return parsed.result;
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.invoices,
+  });
   if (!opened.ok) return opened.result;
   try {
     const organizationId = parsed.query.organization_id ?? null;
@@ -154,7 +157,9 @@ export async function handleAdminConsoleInvoiceDetailGet(
   if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) {
     return adminClientError(400, "BAD_REQUEST", "invoice id is invalid.");
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.invoices,
+  });
   if (!opened.ok) return opened.result;
   try {
     const rows = rowsOf(

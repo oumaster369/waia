@@ -7,6 +7,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { assembleCycleTrace } from "@/lib/trader/admin-console/research/cycle-trace";
 
@@ -33,7 +34,9 @@ export async function handleAdminConsoleCycleTraceGet(
   if (!/^[0-9a-f-]{36}$/i.test(envelopeId)) {
     return adminClientError(400, "BAD_REQUEST", "cycle id is invalid.");
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.cycleTrace,
+  });
   if (!opened.ok) return opened.result;
   try {
     const rows = rowsOf(

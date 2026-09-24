@@ -13,6 +13,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 
 export async function handleAdminConsoleAssistantTraceGet(
@@ -23,7 +24,9 @@ export async function handleAdminConsoleAssistantTraceGet(
   if (!z.string().uuid().safeParse(messageId).success) {
     return adminClientError(400, "BAD_REQUEST", "Message id is invalid.");
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.assistantTrace,
+  });
   if (!opened.ok) return opened.result;
   try {
     const owned = await opened.runtime.db

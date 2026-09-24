@@ -13,6 +13,7 @@ import {
 } from "@/lib/trader/admin-console/attribution/trade-attribution";
 import { decodePageCursor, encodePageCursor } from "@/lib/trader/admin-console/cursor";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import type { AdminMode } from "@/lib/trader/admin-console/contracts";
 import { presentOpenLot } from "@/lib/trader/admin-console/read-models/positions";
@@ -66,7 +67,9 @@ export async function handleAdminConsolePositionsGet(
       body: { error: { code: "BAD_REQUEST", message: "cursor is invalid." } },
     };
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.positions,
+  });
   if (!opened.ok) return opened.result;
   const organizationId = parsed.query.organization_id ?? null;
   const cursorTime = cursor?.t ?? null;

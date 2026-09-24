@@ -9,6 +9,7 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 
 const writeSchema = z.object({
@@ -28,7 +29,9 @@ export async function handleAdminConsoleAssistantConversationsGet(
   _request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const opened = await openAdminConsole(_request, deps);
+  const opened = await openAdminConsole(_request, deps, {
+    requiredTables: HANDLER_TABLES.assistantConversations,
+  });
   if (!opened.ok) return opened.result;
   try {
     const rows = await opened.runtime.db
@@ -63,7 +66,10 @@ export async function handleAdminConsoleAssistantConversationsPost(
   request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const opened = await openAdminConsole(request, deps, { mutate: true });
+  const opened = await openAdminConsole(request, deps, {
+    mutate: true,
+    requiredTables: HANDLER_TABLES.assistantConversations,
+  });
   if (!opened.ok) return opened.result;
   let body: unknown;
   try {
@@ -115,7 +121,9 @@ export async function handleAdminConsoleAssistantConversationGet(
   if (!z.string().uuid().safeParse(conversationId).success) {
     return adminClientError(400, "BAD_REQUEST", "Conversation id is invalid.");
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.assistantConversations,
+  });
   if (!opened.ok) return opened.result;
   try {
     const rows = await opened.runtime.db

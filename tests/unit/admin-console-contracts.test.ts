@@ -96,9 +96,11 @@ describe("admin console contracts", () => {
         },
       },
     } as unknown as WaiaRuntimeDb;
-    expect(await probeAdminConsoleSchema(runtime, 1_000)).toBe(false);
-    expect(await probeAdminConsoleSchema(runtime, 2_000)).toBe(false);
+    expect(await probeAdminConsoleSchema(runtime, ["trader_admin_change_log"], 1_000)).toBe(false);
+    expect(await probeAdminConsoleSchema(runtime, ["trader_admin_change_log"], 2_000)).toBe(false);
     expect(calls).toBe(1);
+    expect(await probeAdminConsoleSchema(runtime, ["trader_invoices"], 2_000)).toBe(false);
+    expect(calls).toBe(2);
     resetAdminConsoleSchemaProbeForTests();
   });
 });

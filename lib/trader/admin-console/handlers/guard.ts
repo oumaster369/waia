@@ -16,10 +16,14 @@ export type OpenAdminConsole =
     }
   | { ok: false; result: AdminRouteHandlerResult };
 
+export type OpenAdminConsoleOptions =
+  | { mutate?: boolean; requireSchema: false }
+  | { mutate?: boolean; requiredTables: readonly string[] };
+
 export async function openAdminConsole(
   request: Request,
   deps: AdminRouteHandlerDeps,
-  options?: { mutate?: boolean; requireSchema?: boolean },
+  options?: OpenAdminConsoleOptions,
 ): Promise<OpenAdminConsole> {
   if (options?.mutate) {
     const origin = assertAdminConsoleSameOrigin(request);
@@ -39,8 +43,13 @@ export async function openAdminConsole(
     await deps.disposeRuntimeDb(auth.runtime);
     return { ok: false, result: schemaNotAppliedResult() };
   }
-  if (options?.requireSchema !== false) {
-    const present = await probeAdminConsoleSchema(auth.runtime);
+  if (!(options && "requireSchema" in options && options.requireSchema === false)) {
+    const tables = options && "requiredTables" in options ? options.requiredTables : null;
+    if (!tables) {
+      await deps.disposeRuntimeDb(auth.runtime);
+      return { ok: false, result: schemaNotAppliedResult() };
+    }
+    const present = await probeAdminConsoleSchema(auth.runtime, tables);
     if (!present) {
       await deps.disposeRuntimeDb(auth.runtime);
       return { ok: false, result: schemaNotAppliedResult() };

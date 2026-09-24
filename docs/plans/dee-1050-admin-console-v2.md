@@ -75,8 +75,8 @@ state:
   prUrl: https://github.com/oumaster369/waia/pull/639
   lastValidatedGitSha: 0af6dfc39e168d0cade1e1b6f5e757445c3d092b
   lastValidationAt: "2026-09-23T23:30:20Z"
-  blockedReason: "Variant A moves 0216, the slice gate, admin-console-pg-slo, the UI stream, Postgres browser e2e, and the three operator-page redirects to PR-2. This PR still needs Human to apply 0214 and 0215 on production, then squash-merge. Do not migrate the shared validate database on port 54329."
-  nextAction: "Human: применить 0214/0215 к проду, затем Human squash-merge PR #639"
+  blockedReason: "Production Postgres is on 0210. 0211–0215 stay unapplied and move to a separate ordered ceremony. This PR deploys without migrations. Variant A still defers 0216, the slice gate, admin-console-pg-slo, the UI stream, Postgres browser e2e, and the three operator-page redirects to PR-2."
+  nextAction: "Human squash-merge PR #639 (деплой без миграций)"
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -89,7 +89,19 @@ provenance:
 
 ## Acceptance
 
-Human decision, variant A, recorded on PR #639: migration 0216 leaves this PR. First-PR acceptance is redefined. The console ships with a 5-second poll and the invoices tab. AC-14, AC-29, and AC-32 stay partial. AC-16 and AC-30 stay open. Full v2 readiness is still F1a, F1b, F2, F3a, F3b, F4, F5, F6 plus Human ratification of DEE-1059 and DEE-1060. Human merge. Not a bounded autonomous merge.
+Human decision, variant A, recorded on PR #639: migration 0216 leaves this PR. First-PR acceptance is redefined. The console ships with a 5-second poll and the invoices tab. Production stays on migration 0210. Migrations 0211–0215 are a separate ordered Human ceremony, not part of this merge. AC-14, AC-29, and AC-32 stay partial. AC-16 and AC-30 stay open. Full v2 readiness is still F1a, F1b, F2, F3a, F3b, F4, F5, F6 plus Human ratification of DEE-1059 and DEE-1060. Human merge. Not a bounded autonomous merge.
+
+## Deploy without migrations
+
+Production is on 0210. A read-only `to_regclass` check confirmed every table used by the «работает сразу» handlers. Screens that need a later table return `ADMIN_CONSOLE_SCHEMA_NOT_APPLIED` and show «Появится после применения схемы консоли». Collectors log `schema_not_applied` and do not write.
+
+| Экран / обработчик | Группа |
+| --- | --- |
+| Счета, ордера, клиенты, вкладка счетов, споры, экспорт счетов, платежи, позиции, fills, закрытые сделки, отчётные периоды, стратегии, прогоны исследований, трассировка цикла | работает сразу |
+| Предложения продвижения (`proposals`) | ждёт 0212 |
+| Обзор, внимание, поиск, ошибки, система, сохранённые виды, маркер визита, диалоги помощника, поток | ждёт 0214 |
+
+Команды по счёту идут прежним маршрутом `/api/trader/admin/invoices/[invoiceId]/commands` и не проверяют схему консоли. 0211–0215 применяются отдельной упорядоченной церемонией (новая задача Linear).
 
 Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DEE-1056, C7 DEE-1058, C8 DEE-1057.
 
@@ -1354,7 +1366,7 @@ Human переопределил эту приёмку вариантом A. П�
   - Test plan с результатами команд, включая артефакт `admin-console-pg-slo` и контрольную точку среза; скриншоты 8 разделов;
   - раздел «Граница первого PR»: приёмка 9.1, частичные AC-14/AC-29/AC-32, AC-16 не закрыт, ссылки на F1–F6; раздел «Обнаруженные и исправленные дефекты»; раздел «Честные недоступности».
 - **Rollout** (Human; порядок обязателен):
-  1. Human применяет 0214 → 0215 к production Postgres. 0216 в этот PR не входит. Без таблиц консоль отдаёт `ADMIN_CONSOLE_SCHEMA_NOT_APPLIED` (раздел 3).
+  1. Human squash-merge этого PR деплоит Worker без миграций. Прод остаётся на 0210. 0211–0215 — отдельная упорядоченная церемония. 0216 в этот PR не входит. Экран без своей таблицы отдаёт `ADMIN_CONSOLE_SCHEMA_NOT_APPLIED`.
   2. деплой `main` (OpenNext → Cloudflare Workers); Human задаёт `WAIA_DIAGNOSTICS_ENVIRONMENT` и проверяет `WAIA_RELEASE_SHA`;
   3. включить `WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED` → проверить «Задания» и полосу рынка;
   4. включить `WAIA_ADMIN_ASSISTANT_ENABLED` (+ при необходимости `WAIA_ADMIN_ASSISTANT_DAILY_TOKEN_BUDGET`);

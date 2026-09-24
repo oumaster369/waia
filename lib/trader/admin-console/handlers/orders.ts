@@ -5,6 +5,7 @@ import {
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
+import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { orderMode } from "@/lib/trader/admin-console/modes/order-mode";
@@ -36,7 +37,9 @@ export async function handleAdminConsoleOrdersGet(
       body: { error: { code: "BAD_REQUEST", message: "cursor is invalid." } },
     };
   }
-  const opened = await openAdminConsole(request, deps);
+  const opened = await openAdminConsole(request, deps, {
+    requiredTables: HANDLER_TABLES.orders,
+  });
   if (!opened.ok) return opened.result;
   try {
     const limit = parsed.query.limit;
