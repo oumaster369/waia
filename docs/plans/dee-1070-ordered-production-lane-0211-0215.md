@@ -11,22 +11,22 @@ includedIssues:
   - id: DEE-1070
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: done
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: in-review
   currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
+  prNumber: 640
+  prUrl: https://github.com/oumaster369/waia/pull/640
+  lastValidatedGitSha: 1a95e2a0a417f1cd498ef514ed58b7ae44aeb91e
+  lastValidationAt: "2026-09-24T14:20:59Z"
   blockedReason: null
-  nextAction: "Extend pnpm trader:post-h2:migrate through 0215 and open the PR. Do not apply production."
+  nextAction: "Human squash-merge PR #640. Do not apply 0211–0215 until a later confirmation phrase."
 provenance:
   createdFrom: chat
   gapRegistry: null
