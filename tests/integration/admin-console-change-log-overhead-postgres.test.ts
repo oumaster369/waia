@@ -1,7 +1,8 @@
 /**
  * Opt-in profile 9.3.3. Requires an isolated local Postgres:
  * WAIA_PG_INTEGRATION=1, WAIA_ADMIN_CONSOLE_PROFILE=1, DATABASE_URL_POSTGRES on 127.0.0.1.
- * Never reads .env.local. CI assert is 2x. The tighter plan budgets are reported, not the hard fail.
+ * Never reads .env.local. Each mode warms 40 orders before the timed 5000, and WAL starts after that warmup.
+ * CI assert is 2x. The tighter plan budgets are reported, not the hard fail.
  */
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -80,6 +81,33 @@ describe.skipIf(!enabled)("admin console change-log overhead profile 9.3.3", () 
         await sql.unsafe(
           `ALTER TABLE public.${table} ${triggersOn ? "ENABLE" : "DISABLE"} TRIGGER trader_admin_change_log_trg`,
         );
+      }
+      const label = triggersOn ? "on" : "off";
+      for (let index = 0; index < 40; index += 1) {
+        const suffix = `warm-${label}-${index}`;
+        const created = await createOrderPostgres(db, context, {
+          venue: "htx",
+          executionMode: "live",
+          symbol: "BTCUSDT",
+          side: "buy",
+          type: "market",
+          quantity: "1",
+          clientOrderId: `client-${suffix}`,
+          idempotencyKey: `idem-${suffix}`,
+          riskDecisionId: "risk",
+        });
+        await transitionOrderPostgres(db, context, {
+          orderId: created.id,
+          expectedStateVersion: 1,
+          toState: "RISK_APPROVED",
+        });
+        await recordFillPostgres(db, context, {
+          orderId: created.id,
+          exchangeTradeId: `trade-${suffix}`,
+          price: "1",
+          quantity: "1",
+          executedAt: new Date("2026-09-24T00:00:00.000Z"),
+        });
       }
       const startLsn = await sql<{ lsn: string }[]>`SELECT pg_current_wal_lsn()::text AS lsn`;
       const samples: number[] = [];
