@@ -31,6 +31,21 @@ export function bridgeTraderCronEnvToProcess(env: Record<string, unknown>): void
   bridgeEnvKey(env, "SETTLEMENT_MAX_PAYMENTS_PER_CYCLE");
 }
 
+/** Request handlers see Worker secrets on the Cloudflare env, not on process.env. */
+export async function bridgeRequestDatabaseEnv(): Promise<void> {
+  try {
+    const context = await getCloudflareContext({ async: true });
+    bridgeTraderCronEnvToProcess(context.env as unknown as Record<string, unknown>);
+  } catch {
+    try {
+      const context = getCloudflareContext();
+      bridgeTraderCronEnvToProcess(context.env as unknown as Record<string, unknown>);
+    } catch {
+      // Local tests and non-Worker runs keep the process environment they already have.
+    }
+  }
+}
+
 export function mergeCronEnv(explicitEnv?: Record<string, unknown>): Record<string, unknown> {
   if (explicitEnv) {
     // Cron passes secrets on `env`; avoid Object.entries(process.env) in workerd.
