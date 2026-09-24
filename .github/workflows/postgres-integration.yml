@@ -22,6 +22,9 @@ on:
       - "app/api/trader/admin/console/**"
       - "components/trader/admin-console/**"
       - "tests/integration/admin-console-*.test.ts"
+      - "tests/e2e/admin-console-*.spec.ts"
+      - "playwright.admin-pg.config.ts"
+      - "app/(trader)/admin/**"
       - "scripts/postgres-validation/**"
       - "lib/trader/execution/v2/**"
       - "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts"
@@ -244,7 +247,89 @@ jobs:
       - name: Admin console change log on Postgres
         env:
           WAIA_PG_INTEGRATION: "1"
-        run: pnpm test --run --no-file-parallelism tests/integration/admin-console-*.test.ts
+        run: >-
+          pnpm test --run --no-file-parallelism
+          --exclude tests/integration/admin-console-change-log-overhead-postgres.test.ts
+          tests/integration/admin-console-*.test.ts
+
+  admin-console-overhead-postgres:
+    name: admin console change-log overhead profile 9.3.3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_profile
+          POSTGRES_PASSWORD: waia_profile_local_only
+          POSTGRES_DB: waia_profile
+        ports:
+          - 54328:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_profile -d waia_profile"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL_POSTGRES: postgresql://waia_profile:waia_profile_local_only@127.0.0.1:54328/waia_profile
+      DATABASE_URL_POSTGRES_SESSION: postgresql://waia_profile:waia_profile_local_only@127.0.0.1:54328/waia_profile
+      WAIA_PG_INTEGRATION: "1"
+      WAIA_ADMIN_CONSOLE_PROFILE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and migrations on the isolated profile database
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: 5000 real writes with triggers and without
+        run: pnpm test --run tests/integration/admin-console-change-log-overhead-postgres.test.ts
+
+  admin-console-pg-e2e:
+    name: admin console slice and SLO on Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_e2e
+          POSTGRES_PASSWORD: waia_e2e_local_only
+          POSTGRES_DB: waia_e2e
+        ports:
+          - 54327:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_e2e -d waia_e2e"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL_POSTGRES: postgresql://waia_e2e:waia_e2e_local_only@127.0.0.1:54327/waia_e2e
+      DATABASE_URL_POSTGRES_SESSION: postgresql://waia_e2e:waia_e2e_local_only@127.0.0.1:54327/waia_e2e
+      WAIA_DB_BACKEND: sqlite
+      WAIA_ADMIN_CONSOLE_DB: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and migrations on the isolated e2e database
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Slice gate and SLO
+        run: pnpm test:e2e:admin-pg
+
 
   admin-console-billing-postgres:
     name: admin console billing idempotency on Postgres

@@ -130,6 +130,7 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:e2e": "playwright test",
+    "test:e2e:admin-pg": "playwright test --config=playwright.admin-pg.config.ts",
     "test:e2e:fhv-csrf": "playwright test --config=playwright.fhv-csrf.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:fhv:official-scale:probe": "vitest run --config vitest.fhv-official-scale.config.ts tests/fhv/official-scale/blocking/fhv-official-throughput-probe.test.ts",
