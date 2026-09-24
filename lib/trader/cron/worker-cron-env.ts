@@ -56,6 +56,9 @@ function fillRequestDatabaseEnv(env: Record<string, unknown>): void {
 
 /** Request handlers see Worker secrets on the Cloudflare env, not on process.env. */
 export async function bridgeRequestDatabaseEnv(): Promise<void> {
+  const backendReady = (process.env.WAIA_DB_BACKEND?.trim() ?? "") !== "";
+  const urlReady = (process.env.DATABASE_URL_POSTGRES?.trim() ?? "") !== "";
+  if (backendReady && urlReady) return;
   try {
     const context = await getCloudflareContext({ async: true });
     fillRequestDatabaseEnv(context.env as unknown as Record<string, unknown>);
