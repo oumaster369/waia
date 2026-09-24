@@ -142,7 +142,7 @@ export async function runDueAdminCollectors(
       options.log?.("schema_not_applied");
       return { ran: [], failed: [] };
     }
-    const fetchImpl = options.fetchImpl ?? fetch;
+    const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const store = createPostgresCollectorStore(runtime.db);
     const dueTasks = collectorTasksFor({
       now,

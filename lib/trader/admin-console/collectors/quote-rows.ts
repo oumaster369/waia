@@ -36,7 +36,9 @@ export type QuoteMinuteRow = {
   observedAt: string;
 };
 
-const MINUTE_SYMBOLS = new Set(["BTC-USD", "ETH-USD", "USDT-USD", "btcusdt", "ethusdt"]);
+function minuteSymbols(): Set<string> {
+  return new Set(["BTC-USD", "ETH-USD", "USDT-USD", "btcusdt", "ethusdt"]);
+}
 
 export function minuteBucket(iso: string): string {
   const at = Date.parse(iso);
@@ -74,7 +76,7 @@ export function htxQuoteRows(
       sourceTs: input.sourceTs,
       observedAt: input.observedAt,
     });
-    if (MINUTE_SYMBOLS.has(symbol)) {
+    if (minuteSymbols().has(symbol)) {
       minute.push({
         source: "htx",
         symbol,
