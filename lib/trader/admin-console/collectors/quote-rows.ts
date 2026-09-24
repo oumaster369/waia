@@ -2,13 +2,13 @@ import { decimalText } from "@/lib/trader/admin-console/collectors/decimal-text"
 
 export type HtxTickerFields = {
   symbol: string;
-  open: string | number;
-  high: string | number;
-  low: string | number;
+  open: string | number | null;
+  high: string | number | null;
+  low: string | number | null;
   close: string | number;
-  vol: string | number;
-  bid: string | number;
-  ask: string | number;
+  vol: string | number | null;
+  bid: string | number | null;
+  ask: string | number | null;
 };
 
 export type QuoteLatestRow = {

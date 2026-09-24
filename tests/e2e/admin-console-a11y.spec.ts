@@ -30,7 +30,9 @@ test("admin console main screens have no serious accessibility violations", asyn
   await page.waitForURL("**/trader");
   for (const path of SCREENS) {
     await page.goto(path);
-    await expect(page.getByRole("heading", { name: "Operator admin" })).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER" }),
+    ).toBeVisible();
     const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
     const serious = results.violations.filter(
       (violation) => violation.impact === "serious" || violation.impact === "critical",
