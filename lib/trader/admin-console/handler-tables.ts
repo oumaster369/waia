@@ -80,7 +80,11 @@ export const HANDLER_TABLES = {
     "trader_admin_assistant_message",
     "trader_admin_assistant_tool_call",
   ],
-  assistantTrace: ["trader_admin_assistant_message", "trader_admin_assistant_tool_call"],
+  assistantTrace: [
+    "trader_admin_assistant_conversation",
+    "trader_admin_assistant_message",
+    "trader_admin_assistant_tool_call",
+  ],
   clients: [
     "organizations",
     "users",
@@ -154,5 +158,6 @@ export const HANDLER_TABLES = {
   strategies: ["trader_trades"],
   system: ["trader_admin_job_run"],
   visitMarker: ["trader_admin_visit_marker"],
+  // The change-log table arrives in 0214. Triggers arrive in 0216. This list stays on both.
   stream: ["trader_admin_change_log", "exchange_credentials"],
 } as const;

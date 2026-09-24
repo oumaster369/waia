@@ -218,7 +218,7 @@ export function planStreamTick(input: StreamTickInput): StreamTickResult {
       detectedAt: input.now,
       projectedAt: input.now,
       sentAt: input.now,
-      cursor: nextCursor,
+      cursor: row.xid,
       payload: projected.payload,
     });
   }

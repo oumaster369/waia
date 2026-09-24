@@ -8,11 +8,11 @@ describe("admin console governed process links", () => {
     render(<GovernedProcessLinks section="system" />);
     expect(screen.getByRole("link", { name: "Журнал аудита" })).toHaveAttribute(
       "href",
-      "/admin/audit",
+      "/admin/system?tab=audit",
     );
     expect(screen.getByRole("link", { name: "Полномочия исполнения" })).toHaveAttribute(
       "href",
-      "/admin/runtime-authority",
+      "/admin/system?tab=controls",
     );
   });
 });

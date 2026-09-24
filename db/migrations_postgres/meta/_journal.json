@@ -1513,6 +1513,13 @@
       "when": 1780000000215,
       "tag": "0215_trader_admin_console_v2_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1780000000216,
+      "tag": "0216_trader_admin_change_log_triggers",
+      "breakpoints": true
     }
   ]
 }

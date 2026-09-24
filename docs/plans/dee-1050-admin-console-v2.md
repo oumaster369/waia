@@ -91,6 +91,18 @@ provenance:
 
 Human decision, variant A, recorded on PR #639: migration 0216 leaves this PR. First-PR acceptance is redefined. The console ships with a 5-second poll and the invoices tab. Production stays on migration 0210. Migrations 0211–0215 are a separate ordered Human ceremony, not part of this merge. AC-14, AC-29, and AC-32 stay partial. AC-16 and AC-30 stay open. Full v2 readiness is still F1a, F1b, F2, F3a, F3b, F4, F5, F6 plus Human ratification of DEE-1059 and DEE-1060. Human merge. Not a bounded autonomous merge.
 
+## PR-2 — DEE-1071
+
+DEE-1071 carries the deferred stream batch on branch `dee-1071-admin-console-stream`:
+
+- Migration `0216_trader_admin_change_log_triggers.sql`: one static `SECURITY DEFINER` function per table on the same 25 tables, `SET search_path = public, pg_temp`, `REVOKE ALL FROM PUBLIC`. The journal stores identifiers, `organization_id`, and `state_version`. Historical rows are skipped with static `NEW` / `OLD` checks. The post-H2 operator is not extended here; that is a separate PR after the squash commit of this one.
+- Profile 9.3.3 runs on an isolated CI Postgres: 1250 creates, 1250 order transitions, 1250 fills, 625 account-collection updates, and 625 kill-switch inserts, with triggers and without. The CI assert is 2×. The plan budgets (+20 % or +1 ms p95, +30 % WAL) are printed as threshold / fact / ok and filled from that CI log.
+- Orders and errors subscribe through `components/trader/admin-console/data/stream-session.ts`, fall back to a 5-second poll, and pause on a hidden tab. `HANDLER_TABLES.stream` still waits on 0214 and 0216.
+- Slice gate, `admin-console-pg-slo` (p95 ≤ 500 ms, 0 losses, 0 duplicates), Postgres console e2e, and a11y of the main screens.
+- Redirects: `/admin/audit` → `/admin/system?tab=audit`, `/admin/runtime-authority` → `/admin/system?tab=controls`, `/admin/score-diagnostic` → `/admin/research?tab=data`.
+
+0216 is not applied to production by this PR. Production remains on 0210 until Humans apply 0211–0215 in order. 0216 is not a post-H2 operator step.
+
 ## Deploy without migrations
 
 Production is on 0210. A read-only `to_regclass` check confirmed every table used by the «работает сразу» handlers. Screens that need a later table return `ADMIN_CONSOLE_SCHEMA_NOT_APPLIED` and show «Появится после применения схемы консоли». Collectors log `schema_not_applied` and do not write.
@@ -1126,14 +1138,13 @@ Human переопределил эту приёмку вариантом A. П�
 
 ### PR-2
 
-Сюда перенесено решением Human (вариант A). Не входит в PR #639.
+Delivered by DEE-1071. Not part of PR #639.
 
-- 0216 со статическими функциями `NEW.col` / `OLD.col` и профиль 9.3.3. Вместе с ней возвращаются удалённые из этого PR проверки: `admin-console-change-log-overhead-postgres.test.ts` и тест потока «held commit + пропуск исторических ордеров» из `admin-console-stream-postgres.test.ts`.
+- 0216 со статическими функциями `NEW.col` / `OLD.col` и профиль 9.3.3. Вместе с ней возвращаются проверки `admin-console-change-log-overhead-postgres.test.ts` и тест потока «held commit + пропуск исторических ордеров».
 - Подключение потока к UI.
-- Slice gate.
-- `admin-console-pg-slo`.
-- e2e на Postgres.
-- Редиректы `/admin/audit`, `/admin/runtime-authority` и `/admin/score-diagnostic` — только после отдельного решения Human. В PR #639 их нет.
+- Slice gate, `admin-console-pg-slo`, e2e на Postgres, a11y основных экранов.
+- Редиректы `/admin/audit`, `/admin/runtime-authority` и `/admin/score-diagnostic` на разделы консоли. Панели этих страниц остаются на целевых вкладках, чтобы e2e Runtime Authority сохранил карточку HALT и четыре кнопки оболочки.
+- Расширение пошагового post-H2 оператора до 0216 — отдельный PR после squash-коммита DEE-1071. Этот PR оператор не меняет.
 
 Исходный текст приёмки до решения A, оставлен как объём PR-2:
 
@@ -1251,10 +1262,10 @@ Human переопределил эту приёмку вариантом A. П�
    - Вставка в журнал не имеет FK и ограничений кроме PK `bigserial`, поэтому она падает только при отказе самой БД, когда падает и основная запись.
    - `EXCEPTION` в plpgsql открывает субтранзакцию на каждую строку. При более чем 64 субтранзакциях в транзакции растут накладные расходы, и массовые writers пострадают сильнее, чем от самого триггера.
 2. **Замер накладных расходов** — `tests/integration/admin-console-change-log-overhead-postgres.test.ts`.
-   - Одна нагрузка с выключенными и включёнными триггерами: 5 000 переходов через `transitionOrderPostgres`, 5 000 fills с legs, 1 000 обновлений счетов на оплату.
-   - Метрики: p50/p95 времени транзакции, прирост WAL (разность `pg_current_wal_lsn()`), рост журнала.
-   - Предлагаемый бюджет: p95 транзакции исполнения — не более +20 % или +1 мс (что больше); WAL — не более +30 %.
-   - Assert в CI — не хуже 2× (запас на шум). Точные числа — в PR.
+   - Одна нагрузка с выключенными и включёнными триггерами: 5 000 записей через реальные пути — 1 250 `createOrderPostgres`, 1 250 `transitionOrderPostgres`, 1 250 `recordFillPostgres`, 625 обновлений `trader_account_collection_state`, 625 `insertKillSwitchRowPostgres`.
+   - Метрики: p95, p99, прирост WAL (`pg_wal_lsn_diff` от `pg_current_wal_lsn()`).
+   - Бюджет плана: p95 не больше +20 % или +1 мс; WAL не больше +30 %. Assert в CI — не хуже 2×. Таблица «порог / факт / ok» печатается в логе изолированного job и переносится в тело PR.
+   - Локальный прогон и CI job `admin-console-overhead-postgres` (изолированный `postgres:16`, 40 прогревочных ордеров вне окна, затем 5000 записей, триггеры сначала). CI на `4f2cea71`: p95 порог 6.891 мс / факт 6.158 мс / ok; p99 факт 9.336 мс; WAL порог 9888372 байт / факт 7778296 байт / ok; CI p95 порог 11.485 мс / факт 6.158 мс / ok; CI WAL порог 15212880 байт / факт 7778296 байт / ok. База без триггеров: p95 5.742 мс, p99 7.679 мс, WAL 7606440 байт. Следующий прогон печатает свою таблицу заново.
 3. **Объём.** В PR — оценка строк журнала в сутки по seed. Для Human — готовый read-only SQL по `trader_order_events`, `trader_fills`, `trader_account_collection_state` за 7 дней, чтобы оценить объём в production.
 4. **Эксплуатация.**
    - Runbook отключения: `SET lock_timeout = '2s'` перед `ALTER TABLE … DISABLE TRIGGER trader_admin_change_log_trg`. Команда берёт `SHARE ROW EXCLUSIVE` и кратко блокирует записи.

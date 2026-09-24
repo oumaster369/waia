@@ -13,14 +13,26 @@ export type OrderRowView = {
   state: string;
   label: string;
   entityVersion?: string;
+  acceptedAt?: string;
+  eventId?: string;
 };
 
-export function orderRowView(row: { id: string; symbol: string; state: string }): OrderRowView {
+export function orderRowView(row: {
+  id: string;
+  symbol: string;
+  state: string;
+  entityVersion?: string;
+  acceptedAt?: string;
+  eventId?: string;
+}): OrderRowView {
   return {
     id: row.id,
     symbol: row.symbol,
     state: row.state,
     label: ORDER_STATUS_LABELS[row.state as keyof typeof ORDER_STATUS_LABELS] ?? row.state,
+    entityVersion: row.entityVersion,
+    acceptedAt: row.acceptedAt,
+    eventId: row.eventId,
   };
 }
 
@@ -47,7 +59,13 @@ export function OrdersPanel({ rows }: { rows: readonly OrderRowView[] }) {
       <table>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
+            <tr
+              key={row.id}
+              data-order-id={row.original.id}
+              data-event-id={row.original.eventId}
+              data-accepted-at={row.original.acceptedAt}
+              data-rendered-at={row.original.entityVersion ? String(Date.now()) : undefined}
+            >
               {row.original.entityVersion ? (
                 <td>
                   <RenderAckMarker
