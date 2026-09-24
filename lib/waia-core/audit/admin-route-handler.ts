@@ -5,6 +5,7 @@ if (process.env.VITEST !== "true") {
   require("server-only");
 }
 
+import { filterAuditRows } from "@/lib/waia-core/audit/audit-log-filter";
 import {
   listAuditLogsForAdminPostgres,
   listAuditLogsForEntityPostgres,
@@ -61,6 +62,11 @@ export async function handleAdminAuditList(
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 50;
     const scoped = requireOrgContext(orgParsed);
 
+    const pageFilter = {
+      actor: url.searchParams.get("actor"),
+      action: url.searchParams.get("action"),
+      entity: url.searchParams.get("entity"),
+    };
     if (entityType && entityId) {
       const rows =
         runtime.kind === "sqlite"
@@ -76,7 +82,10 @@ export async function handleAdminAuditList(
               entityId,
               limit,
             });
-      return adminSuccess({ auditLogs: rows.map(serializeAuditRow) }, runtime.kind);
+      return adminSuccess(
+        { auditLogs: filterAuditRows(rows, pageFilter).map(serializeAuditRow) },
+        runtime.kind,
+      );
     }
 
     const rows =
@@ -92,7 +101,10 @@ export async function handleAdminAuditList(
             limit,
           });
 
-    return adminSuccess({ auditLogs: rows.map(serializeAuditRow) }, runtime.kind);
+    return adminSuccess(
+      { auditLogs: filterAuditRows(rows, pageFilter).map(serializeAuditRow) },
+      runtime.kind,
+    );
   } finally {
     await deps.disposeRuntimeDb(runtime);
   }

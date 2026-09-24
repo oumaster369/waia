@@ -52,7 +52,7 @@
     oklch(0.12 0.055 268 / 0.72) 100%
   );
 
-  /* --- Typography: next/font sets --font-manrope / --font-cormorant on <html> (see app/layout.tsx) --- */
+  /* --- Typography: next/font sets --font-manrope on <html>; --font-cormorant is self-hosted (app/fonts/cormorant-garamond.css) --- */
   --font-waia-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
   --font-waia-serif: var(--font-cormorant), "Cormorant Garamond", ui-serif, Georgia, serif;
 

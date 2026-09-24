@@ -31,7 +31,7 @@
     ],
     "expectedFileCount": 155,
     "sortedPathDigestHex": "bb13f0f38f9cab1ac3613294524c2d34fe57bde3f3306a6cd61f211edb9edf68",
-    "sortedContentDigestHex": "f7835a8af864c26a5afcc066f9e4b6e980481b4fb03b6eac174e08c8a9377906"
+    "sortedContentDigestHex": "2ef2920abb2d7dde37d55e8c87e73c58ca95e6c4e8ef4649d53d578fac671348"
   },
   "sourceRules": [
     {
@@ -107,9 +107,9 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 131,
-    "sortedPathDigestHex": "af0cb3335765f090575642706e764671217fa0c876e206b095cd3dc99e67d4c6",
-    "sortedContentDigestHex": "81a52cba276f277d36be49c0684710dbc8063fba5c85af9beafdb0c849a1bf0a"
+    "expectedFileCount": 134,
+    "sortedPathDigestHex": "e07814e366d0b73f3398f20c75fe40abab1898d54f233577e3a0eb0fa67c3473",
+    "sortedContentDigestHex": "ff5bc29e847f0d154a388b25d2e8ff1c30569fa25f4906f589cdeddcc37d920c"
   },
   "consumerRules": [
     {
@@ -181,6 +181,12 @@
       "id": "APPLICATION_ROUTE",
       "pathPattern": "^app/",
       "disposition": "COMPATIBLE_HANDLER_ONLY"
+    },
+    {
+      "id": "ADMIN_CONSOLE_PUBLIC_READS",
+      "pathPattern": "^lib/trader/admin-console/(collectors/(fetch-news|run-due)|money/htx-public-tickers)\\.ts$",
+      "disposition": "EXCLUDED_PUBLIC_MARKET_READ_NO_CANONICAL_AUTHORITY",
+      "reason": "DEE-1050 admin console reads public RSS, Alternative.me, and the HTX public ticker host. These files do not place orders, read private account state, or admit Reality V2 lineage."
     }
   ],
   "explicitCompatibilityChecks": [

@@ -109,6 +109,8 @@ Secrets never enter plans. Review before commit.
 
 vNext DEV OS integration (Slices A–H) completed 2026-07. For new work, create `docs/plans/dee-<NN>-<slug>.md` when the Linear integration issue is approved — one file per integration batch, following the schema above.
 
+Active batch: [DEE-1050 admin console v2](dee-1050-admin-console-v2.md).
+
 ---
 
 ## Commands

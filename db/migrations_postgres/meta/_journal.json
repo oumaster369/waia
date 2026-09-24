@@ -1499,6 +1499,20 @@
       "when": 1780000000213,
       "tag": "0213_trader_human_promotion_tables_rls_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 214,
+      "version": "7",
+      "when": 1780000000214,
+      "tag": "0214_trader_admin_console_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 215,
+      "version": "7",
+      "when": 1780000000215,
+      "tag": "0215_trader_admin_console_v2_rls",
+      "breakpoints": true
     }
   ]
 }

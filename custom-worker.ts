@@ -223,6 +223,21 @@ export default {
         }
       })(),
     );
+
+    ctx.waitUntil(
+      (async () => {
+        const { runDueAdminCollectors } =
+          await import("@/lib/trader/admin-console/collectors/run-due");
+        const envRecord = env as {
+          WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED?: string;
+          DATABASE_URL_POSTGRES?: string;
+        };
+        await runDueAdminCollectors(envRecord, {
+          log: (message) =>
+            console.log(JSON.stringify({ event: "waia_admin_console_collectors", phase: message })),
+        });
+      })(),
+    );
   },
 };
 
