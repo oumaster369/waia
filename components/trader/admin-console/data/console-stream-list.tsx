@@ -99,6 +99,8 @@ export function useConsoleStreamList<T extends { id: string }>(
           const parsed = consoleListFromBody(body);
           if (parsed.ok) {
             paint(parsed.items);
+            live = true;
+            if (!source && session.transport === "sse") openStream();
             return;
           }
           setReason(parsed.reason);
@@ -112,6 +114,7 @@ export function useConsoleStreamList<T extends { id: string }>(
 
     let refresh = 0;
     let failures = 0;
+    let live = false;
     const stopTimers = () => {
       window.clearInterval(timer);
       timer = 0;
@@ -212,11 +215,10 @@ export function useConsoleStreamList<T extends { id: string }>(
         return;
       }
       load();
-      openStream();
+      if (live && session.transport === "sse") openStream();
     };
 
     load();
-    openStream();
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
