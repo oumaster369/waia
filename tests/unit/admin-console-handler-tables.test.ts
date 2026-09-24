@@ -20,6 +20,7 @@ function symbolTables(): Map<string, string> {
 }
 
 function sqlTables(source: string, symbols: Map<string, string>): Set<string> {
+  source = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const tables = new Set<string>();
   const ctes = new Set(
     [...source.matchAll(/(?:WITH|,)\s+([a-z_][a-z0-9_]*)\s+AS\s*\(/gi)].map((match) =>
@@ -40,10 +41,12 @@ function sqlTables(source: string, symbols: Map<string, string>): Set<string> {
   return tables;
 }
 
-function followedSources(source: string): string {
+function followedSources(source: string, seen = new Set<string>()): string {
   let combined = source;
   for (const match of source.matchAll(/from "@\/lib\/trader\/admin-console\/([^"]+)"/g)) {
     const specifier = match[1];
+    if (seen.has(specifier)) continue;
+    seen.add(specifier);
     if (
       specifier.startsWith("handler-tables") ||
       specifier.startsWith("handlers/guard") ||
@@ -57,7 +60,11 @@ function followedSources(source: string): string {
     ) {
       continue;
     }
-    combined += `\n${readFileSync(join(root, "lib/trader/admin-console", `${specifier}.ts`), "utf8")}`;
+    const imported = readFileSync(
+      join(root, "lib/trader/admin-console", `${specifier}.ts`),
+      "utf8",
+    );
+    combined += `\n${specifier.startsWith("sql/") || specifier.startsWith("repositories/") ? followedSources(imported, seen) : imported}`;
   }
   return combined;
 }
@@ -76,7 +83,9 @@ describe("admin console handler tables match handler SQL", () => {
   byKey.set(
     "stream",
     [
-      readFileSync(join(root, "lib/trader/admin-console/stream/console-stream.ts"), "utf8"),
+      followedSources(
+        readFileSync(join(root, "lib/trader/admin-console/stream/console-stream.ts"), "utf8"),
+      ),
       readFileSync(
         join(root, "lib/trader/admin-console/repositories/change-log.postgres.ts"),
         "utf8",

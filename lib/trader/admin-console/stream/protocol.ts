@@ -81,7 +81,7 @@ export function compareXid(left: string, right: string): number {
 }
 
 export function isXidCursor(value: string): boolean {
-  return /^[0-9]+$/.test(value);
+  return /^[0-9]{1,20}$/.test(value) && BigInt(value) <= 18446744073709551615n;
 }
 
 export function topicForTable(sourceTable: string): AdminStreamTopic | null {
@@ -109,6 +109,9 @@ export function collapseChangeRows(rows: readonly ChangeLogRow[]): ChangeLogRow[
 }
 
 export type ProjectedChange = {
+  invalidation?: boolean;
+  entityId?: string;
+  organizationId?: string | null;
   topic: string;
   removed: boolean;
   payload: unknown;
@@ -183,6 +186,8 @@ function emptyTick(now: string, cursor: string): StreamTickResult {
 export function planStreamTick(input: StreamTickInput): StreamTickResult {
   const project = input.project ?? projectChangeRow;
   if (input.cursor !== null && !isXidCursor(input.cursor)) return emptyTick(input.now, input.w1);
+  if (input.cursor !== null && compareXid(input.cursor, input.w1) > 0)
+    return emptyTick(input.now, input.w1);
   if (
     input.cursor !== null &&
     input.minRetainedXid !== null &&
@@ -208,17 +213,21 @@ export function planStreamTick(input: StreamTickInput): StreamTickResult {
     events.push({
       eventId: `cl:${row.seq}`,
       schemaVersion: "admin-stream/v1",
-      type: projected.removed ? "entity_removed" : "upsert",
+      type: projected.removed ? "entity_removed" : projected.invalidation ? "snapshot" : "upsert",
       topic: projected.topic,
-      entityId: entityKey(row),
-      organizationId: row.organizationId,
+      entityId: projected.entityId ?? entityKey(row),
+      organizationId:
+        projected.organizationId === undefined ? row.organizationId : projected.organizationId,
       entityVersion: versionOf(row),
       occurredAt: row.changedAt,
       acceptedAt: row.changedAt,
       detectedAt: input.now,
       projectedAt: input.now,
       sentAt: input.now,
-      cursor: row.xid,
+      // A reconnect between events must replay the unfinished batch, including
+      // transactions committed out of xid/sequence order. Only the final marker
+      // acknowledges completion of the entire batch.
+      cursor: watermark,
       payload: projected.payload,
     });
   }
@@ -239,7 +248,7 @@ export function planStreamTick(input: StreamTickInput): StreamTickResult {
         detectedAt: input.now,
         projectedAt: input.now,
         sentAt: input.now,
-        cursor: nextCursor,
+        cursor: watermark,
         payload: { reason: "source_changed" },
       });
     }
@@ -254,6 +263,8 @@ export function planStreamTick(input: StreamTickInput): StreamTickResult {
   }
   if (retained.size > STREAM_SENT_CAP) return emptyTick(input.now, input.w1);
 
+  if (advanced && nextCursor !== watermark) events.push(heartbeatEvent(nextCursor, input.now));
+
   return {
     events,
     cursor: nextCursor,
@@ -264,7 +275,9 @@ export function planStreamTick(input: StreamTickInput): StreamTickResult {
   };
 }
 
-export type EntityCache = Map<string, { version: string; payload: unknown }>;
+export type EntityCache = Map<string, { version: string; payload: unknown }> & {
+  removedVersions?: Map<string, string>;
+};
 
 export function applyConsoleEvent(
   cache: EntityCache,
@@ -273,12 +286,18 @@ export function applyConsoleEvent(
   if (event.type !== "upsert" && event.type !== "entity_removed" && event.type !== "snapshot") {
     return "ignored";
   }
+  if (!isXidCursor(event.entityVersion)) return "ignored";
   const known = cache.get(event.entityId);
   if (known && BigInt(event.entityVersion) <= BigInt(known.version)) return "ignored";
+  const removedVersion = cache.removedVersions?.get(event.entityId);
+  if (removedVersion && BigInt(event.entityVersion) <= BigInt(removedVersion)) return "ignored";
   if (event.type === "entity_removed") {
     cache.delete(event.entityId);
+    cache.removedVersions ??= new Map();
+    cache.removedVersions.set(event.entityId, event.entityVersion);
     return "applied";
   }
+  cache.removedVersions?.delete(event.entityId);
   cache.set(event.entityId, { version: event.entityVersion, payload: event.payload });
   return "applied";
 }

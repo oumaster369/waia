@@ -50,3 +50,14 @@ export async function withAdminReadSnapshot<T>(
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
+
+/** Bind a route response and its stream handoff to the same read-only snapshot. */
+export async function withAdminRouteSnapshot<T extends { status: number; body: unknown }>(
+  db: AdminPostgresDb,
+  fn: (tx: AdminReadTx) => Promise<T>,
+): Promise<T> {
+  const snapshot = await withAdminReadSnapshot(db, fn);
+  const result = snapshot.value;
+  if (result.status !== 200 || !result.body || typeof result.body !== "object") return result;
+  return { ...result, body: { ...result.body, cursor: snapshot.cursor } };
+}

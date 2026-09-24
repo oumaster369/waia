@@ -42,7 +42,7 @@ describe("admin console stream protocol", () => {
       rows: [row({ seq: "1", xid: "95", entityVersion: "2" })],
       sent: new Map([["1", "95"]]),
     });
-    expect(tick.events).toEqual([]);
+    expect(tick.events.map((event) => event.type)).toEqual(["heartbeat"]);
     const encoded = new TextDecoder().decode(encodeAdminConsoleSse(heartbeatEvent("90", base.now)));
     expect(encoded.startsWith("id: 90\nevent: heartbeat\n")).toBe(true);
   });
@@ -56,7 +56,9 @@ describe("admin console stream protocol", () => {
         row({ seq: "2", xid: "96", entityVersion: "3" }),
       ],
     });
-    expect(tick.events.map((event) => event.eventId)).toEqual(["cl:2"]);
+    expect(
+      tick.events.filter((event) => event.type !== "heartbeat").map((event) => event.eventId),
+    ).toEqual(["cl:2"]);
     expect(tick.events[0]?.entityVersion).toBe("3");
     const cache: EntityCache = new Map();
     expect(applyConsoleEvent(cache, tick.events[0]!)).toBe("applied");
@@ -126,5 +128,27 @@ describe("admin console stream protocol", () => {
     });
     expect(tick.cursor).toBe("90");
     expect(tick.advanced).toBe(false);
+    expect(tick.events[0]?.cursor).toBe("90");
+  });
+
+  it("acknowledges a completed batch only after all entity events", () => {
+    const tick = planStreamTick({
+      ...base,
+      cursor: "90",
+      rows: [row({ seq: "11", xid: "111" }), row({ seq: "12", xid: "99", entityId: "second" })],
+    });
+    expect(tick.events.map((event) => [event.type, event.cursor])).toEqual([
+      ["upsert", "90"],
+      ["upsert", "90"],
+      ["heartbeat", "100"],
+    ]);
+    // Disconnect after the first upsert: resume 90 cannot skip the second row,
+    // or a lower-xid transaction that has not committed yet.
+    const resumed = planStreamTick({
+      ...base,
+      cursor: tick.events[0]!.cursor,
+      rows: [row({ seq: "12", xid: "99", entityId: "second" })],
+    });
+    expect(resumed.events[0]?.entityId).toBe("trader_orders:second");
   });
 });

@@ -1,3 +1,4 @@
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -26,29 +27,31 @@ export async function handleAdminConsoleStrategiesGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT DISTINCT strategy_id, strategy_version
         FROM trader_trades
         ORDER BY strategy_id, strategy_version
         LIMIT 200
       `),
-    );
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items: mergeStrategyCatalog(
-            rows.map((row) => ({
-              strategyId: String(row.strategy_id),
-              version: String(row.strategy_version),
-            })),
-          ),
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items: mergeStrategyCatalog(
+              rows.map((row) => ({
+                strategyId: String(row.strategy_id),
+                version: String(row.strategy_version),
+              })),
+            ),
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

@@ -106,7 +106,7 @@ export const HANDLER_TABLES = {
     "trader_position_lots",
     "trader_account_observations",
   ],
-  closedTrades: ["trader_trades"],
+  closedTrades: ["trader_trades", "trader_trade_legs", "trader_orders", "exchange_credentials"],
   cycleTrace: [
     "trader_intelligence_cycle_envelope",
     "trader_intelligence_hypothesis_record",
@@ -117,10 +117,18 @@ export const HANDLER_TABLES = {
     "trader_fills",
     "trader_orders",
   ],
-  disputes: ["trader_invoice_disputes"],
-  exportInvoices: ["trader_invoices"],
-  fills: ["trader_fills", "trader_orders"],
-  incidents: ["trader_admin_incident"],
+  disputes: ["trader_invoice_disputes", "trader_invoices"],
+  exportInvoices: [
+    "trader_invoices",
+    "trader_invoice_disputes",
+    "trader_invoice_corrections",
+    "trader_settlement_applications",
+    "trader_settlements",
+    "trader_settlement_reconciliation_cases",
+    "payment_events",
+  ],
+  fills: ["trader_fills", "trader_orders", "exchange_credentials"],
+  incidents: ["trader_admin_incident", "trader_admin_diagnostic_event"],
   invoices: [
     "trader_invoices",
     "trader_invoice_disputes",
@@ -131,9 +139,9 @@ export const HANDLER_TABLES = {
     "payment_events",
     "trader_hwm_ledger",
   ],
-  orders: ["trader_orders"],
+  orders: ["trader_orders", "exchange_credentials"],
   overview: FINANCIAL_SNAPSHOT_TABLES,
-  payments: ["payment_events"],
+  payments: ["payment_events", "trader_invoices"],
   positions: [
     "trader_position_lots",
     "trader_guardian_assessments_v2",
@@ -161,5 +169,5 @@ export const HANDLER_TABLES = {
   system: ["trader_admin_job_run"],
   visitMarker: ["trader_admin_visit_marker"],
   // The change-log table arrives in 0214. Triggers arrive in 0216. This list stays on both.
-  stream: ["trader_admin_change_log", "exchange_credentials"],
+  stream: ["trader_admin_change_log", "exchange_credentials", "trader_orders"],
 } as const;

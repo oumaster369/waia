@@ -25,6 +25,24 @@ function event(id: number, version = String(id)): ClientStreamEvent {
 }
 
 describe("admin console stream client", () => {
+  it("retains the selected scope in the stream URL", () => {
+    expect(
+      streamRequestUrl(
+        "/stream?organization_id=org-a&mode=paper",
+        createStreamSession("9"),
+        "orders",
+      ),
+    ).toBe("/stream?organization_id=org-a&mode=paper&topics=orders&resume=9");
+  });
+  it("does not resurrect a deleted entity on delayed delivery", () => {
+    let session = applyStreamBurst(createStreamSession(), [
+      event(2),
+      { ...event(3), type: "entity_removed" },
+    ]);
+    session = applyStreamBurst(session, [event(1)]);
+    expect(session.cache.has("trader_orders:1")).toBe(false);
+    expect(session.cache.removedVersions?.get("trader_orders:1")).toBe("3");
+  });
   it("resumes the last cursor on a new stream and on the poll fallback", () => {
     const session = { ...createStreamSession("42"), cursor: "42" };
     expect(streamRequestUrl("/api/trader/admin/console/stream", session)).toBe(

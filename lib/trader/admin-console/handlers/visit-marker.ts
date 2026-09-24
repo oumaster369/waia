@@ -1,16 +1,26 @@
-import { eq } from "drizzle-orm";
-
+import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { traderAdminVisitMarker } from "@/db/schema.postgres";
 import {
+  adminClientError,
   adminSuccess,
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
+import { staleRevisionResult } from "@/lib/trader/admin-console/auth";
+import { adminRevision } from "@/lib/trader/admin-console/revision";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 
-function iso(value: Date | null): string | null {
-  return value ? value.toISOString() : null;
+const writeSchema = z
+  .object({ expectedRevision: z.string().min(1), adminUserId: z.string().uuid().optional() })
+  .strict();
+function dto(row: { lastSeenAt: Date; previousSeenAt: Date | null } | undefined) {
+  const data = {
+    lastSeenAt: row?.lastSeenAt.toISOString() ?? null,
+    previousSeenAt: row?.previousSeenAt?.toISOString() ?? null,
+  };
+  return { ...data, revision: adminRevision(data) };
 }
 
 export async function handleAdminConsoleVisitMarkerGet(
@@ -22,19 +32,15 @@ export async function handleAdminConsoleVisitMarkerGet(
   });
   if (!opened.ok) return opened.result;
   try {
+    const owner = new URL(request.url).searchParams.get("admin_user_id");
+    if (owner && owner !== opened.userId)
+      return adminClientError(404, "NOT_FOUND", "Visit marker was not found.");
     const rows = await opened.runtime.db
       .select()
       .from(traderAdminVisitMarker)
       .where(eq(traderAdminVisitMarker.adminUserId, opened.userId))
       .limit(1);
-    const row = rows[0];
-    return adminSuccess(
-      {
-        lastSeenAt: row ? iso(row.lastSeenAt) : null,
-        previousSeenAt: row ? iso(row.previousSeenAt) : null,
-      },
-      "postgres",
-    );
+    return adminSuccess(dto(rows[0]), "postgres");
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }
@@ -50,33 +56,36 @@ export async function handleAdminConsoleVisitMarkerPost(
   });
   if (!opened.ok) return opened.result;
   try {
-    const now = new Date();
-    const rows = await opened.runtime.db
-      .select()
-      .from(traderAdminVisitMarker)
-      .where(eq(traderAdminVisitMarker.adminUserId, opened.userId))
-      .limit(1);
-    const current = rows[0];
-    if (!current) {
-      await opened.runtime.db.insert(traderAdminVisitMarker).values({
-        adminUserId: opened.userId,
-        organizationId: opened.contextOrgId,
-        lastSeenAt: now,
-        previousSeenAt: null,
-      });
-    } else {
-      await opened.runtime.db
-        .update(traderAdminVisitMarker)
-        .set({ previousSeenAt: current.lastSeenAt, lastSeenAt: now })
-        .where(eq(traderAdminVisitMarker.adminUserId, opened.userId));
-    }
-    return adminSuccess(
-      {
-        lastSeenAt: now.toISOString(),
-        previousSeenAt: current ? iso(current.lastSeenAt) : null,
-      },
-      "postgres",
-    );
+    const parsed = writeSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success)
+      return adminClientError(400, "BAD_REQUEST", "Visit marker requires expectedRevision.");
+    if (parsed.data.adminUserId && parsed.data.adminUserId !== opened.userId)
+      return adminClientError(404, "NOT_FOUND", "Visit marker was not found.");
+    return await opened.runtime.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`admin-visit-marker:${opened.userId}`}, 0))`,
+      );
+      const rows = await tx
+        .select()
+        .from(traderAdminVisitMarker)
+        .where(eq(traderAdminVisitMarker.adminUserId, opened.userId))
+        .limit(1);
+      const current = rows[0];
+      const view = dto(current);
+      if (parsed.data.expectedRevision !== view.revision) return staleRevisionResult(view);
+      const now = new Date(Math.max(Date.now(), (current?.lastSeenAt.getTime() ?? 0) + 1));
+      const values = { lastSeenAt: now, previousSeenAt: current?.lastSeenAt ?? null };
+      if (!current)
+        await tx
+          .insert(traderAdminVisitMarker)
+          .values({ adminUserId: opened.userId, organizationId: opened.contextOrgId, ...values });
+      else
+        await tx
+          .update(traderAdminVisitMarker)
+          .set(values)
+          .where(eq(traderAdminVisitMarker.adminUserId, opened.userId));
+      return adminSuccess(dto(values), "postgres");
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

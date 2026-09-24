@@ -1,4 +1,6 @@
-import { sql } from "drizzle-orm";
+import { withAdminReadSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
+import { readInvoiceList } from "@/lib/trader/admin-console/repositories/invoices.postgres";
+import { parseAdminConsoleQuery, adminScopeFromQuery } from "@/lib/trader/admin-console/scope";
 
 import {
   adminClientError,
@@ -7,19 +9,17 @@ import {
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
 import { buildAdminCsv } from "@/lib/trader/admin-console/billing/export-csv";
-import { adminRevision } from "@/lib/trader/admin-console/revision";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
-
-function rowsOf(result: unknown): Record<string, unknown>[] {
-  return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
-}
 
 export async function handleAdminConsoleExportGet(
   request: Request,
   deps: AdminRouteHandlerDeps,
 ): Promise<AdminRouteHandlerResult> {
-  const dataset = new URL(request.url).searchParams.get("dataset");
+  const url = new URL(request.url);
+  const parsed = parseAdminConsoleQuery(url);
+  if (!parsed.ok) return parsed.result;
+  const dataset = url.searchParams.get("dataset");
   if (dataset !== "invoices") {
     return adminClientError(400, "BAD_REQUEST", "Export dataset is invalid.");
   }
@@ -29,29 +29,22 @@ export async function handleAdminConsoleExportGet(
   if (!opened.ok) return opened.result;
   const started = Date.now();
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
-        SELECT id::text AS id,
-               status,
-               currency,
-               performance_fee
-        FROM trader_invoices
-        ORDER BY created_at DESC, id
-        LIMIT 50000
-      `),
+    const snapshot = await withAdminReadSnapshot(opened.runtime.db, (tx) =>
+      readInvoiceList(tx, parsed.query, 50_000),
     );
-    const table = rows.map((row) => [
-      String(row.id),
-      String(row.status),
-      String(row.currency),
-      row.performance_fee == null ? "" : String(row.performance_fee),
+    if (snapshot.value.truncated) throw new Error("EXPORT_LIMIT");
+    const table = snapshot.value.items.map((row) => [
+      row.id,
+      row.status,
+      row.currency,
+      row.performanceFee,
     ]);
     const csv = buildAdminCsv({
       generatedAt: new Date().toISOString(),
-      financeRevision: adminRevision(table),
-      filters: "dataset=invoices",
-      currency: "USDT",
-      scope: "fleet",
+      financeRevision: snapshot.value.financeRevision,
+      filters: url.searchParams.toString(),
+      currency: "stored_invoice_currency",
+      scope: JSON.stringify(adminScopeFromQuery(parsed.query)),
       headers: ["id", "status", "currency", "performance_fee"],
       rows: table,
       elapsedMs: Date.now() - started,

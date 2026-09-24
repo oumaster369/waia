@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { traderAdminSavedView } from "@/db/schema.postgres";
@@ -36,13 +36,15 @@ type SavedRow = {
 
 function viewRevision(rows: readonly SavedRow[]): string {
   return adminRevision(
-    rows.map((row) => ({
-      id: row.id,
-      section: row.section,
-      name: row.name,
-      state: row.stateJson,
-      updatedAt: row.updatedAt.toISOString(),
-    })),
+    [...rows]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((row) => ({
+        id: row.id,
+        section: row.section,
+        name: row.name,
+        state: row.stateJson,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
   );
 }
 
@@ -97,49 +99,56 @@ export async function handleAdminConsoleSavedViewsPost(
     return adminClientError(400, "BAD_REQUEST", "Saved view body is invalid.");
   }
   try {
-    const rows = await opened.runtime.db
-      .select()
-      .from(traderAdminSavedView)
-      .where(eq(traderAdminSavedView.adminUserId, opened.userId));
-    const revision = viewRevision(rows);
-    if (parsed.data.expectedRevision !== revision) {
-      return staleRevisionResult({ revision, views: rows.map(toDto) });
-    }
-    const now = new Date();
-    if (parsed.data.id) {
-      const owned = rows.find((row) => row.id === parsed.data.id);
-      if (!owned) return adminClientError(404, "NOT_FOUND", "Saved view was not found.");
-      await opened.runtime.db
-        .update(traderAdminSavedView)
-        .set({
+    return await opened.runtime.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`admin-saved-views:${opened.userId}`}, 0))`,
+      );
+      const rows = await tx
+        .select()
+        .from(traderAdminSavedView)
+        .where(eq(traderAdminSavedView.adminUserId, opened.userId));
+      if (parsed.data.id && !rows.some((row) => row.id === parsed.data.id))
+        return adminClientError(404, "NOT_FOUND", "Saved view was not found.");
+      const revision = viewRevision(rows);
+      if (parsed.data.expectedRevision !== revision) {
+        return staleRevisionResult({ revision, views: rows.map(toDto) });
+      }
+      const now = new Date();
+      if (parsed.data.id) {
+        const owned = rows.find((row) => row.id === parsed.data.id);
+        if (!owned) return adminClientError(404, "NOT_FOUND", "Saved view was not found.");
+        await tx
+          .update(traderAdminSavedView)
+          .set({
+            section: parsed.data.section,
+            name: parsed.data.name,
+            stateJson: parsed.data.state,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(traderAdminSavedView.id, parsed.data.id),
+              eq(traderAdminSavedView.adminUserId, opened.userId),
+            ),
+          );
+      } else {
+        await tx.insert(traderAdminSavedView).values({
+          id: crypto.randomUUID(),
+          organizationId: opened.contextOrgId,
+          adminUserId: opened.userId,
           section: parsed.data.section,
           name: parsed.data.name,
           stateJson: parsed.data.state,
+          createdAt: now,
           updatedAt: now,
-        })
-        .where(
-          and(
-            eq(traderAdminSavedView.id, parsed.data.id),
-            eq(traderAdminSavedView.adminUserId, opened.userId),
-          ),
-        );
-    } else {
-      await opened.runtime.db.insert(traderAdminSavedView).values({
-        id: crypto.randomUUID(),
-        organizationId: opened.contextOrgId,
-        adminUserId: opened.userId,
-        section: parsed.data.section,
-        name: parsed.data.name,
-        stateJson: parsed.data.state,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-    const next = await opened.runtime.db
-      .select()
-      .from(traderAdminSavedView)
-      .where(eq(traderAdminSavedView.adminUserId, opened.userId));
-    return adminSuccess({ revision: viewRevision(next), views: next.map(toDto) }, "postgres");
+        });
+      }
+      const next = await tx
+        .select()
+        .from(traderAdminSavedView)
+        .where(eq(traderAdminSavedView.adminUserId, opened.userId));
+      return adminSuccess({ revision: viewRevision(next), views: next.map(toDto) }, "postgres");
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }
@@ -167,26 +176,33 @@ export async function handleAdminConsoleSavedViewsDelete(
     return adminClientError(400, "BAD_REQUEST", "Saved view body is invalid.");
   }
   try {
-    const rows = await opened.runtime.db
-      .select()
-      .from(traderAdminSavedView)
-      .where(eq(traderAdminSavedView.adminUserId, opened.userId));
-    const revision = viewRevision(rows);
-    if (parsed.data.expectedRevision !== revision) {
-      return staleRevisionResult({ revision, views: rows.map(toDto) });
-    }
-    const owned = rows.find((row) => row.id === parsed.data.id);
-    if (!owned) return adminClientError(404, "NOT_FOUND", "Saved view was not found.");
-    await opened.runtime.db
-      .delete(traderAdminSavedView)
-      .where(
-        and(
-          eq(traderAdminSavedView.id, parsed.data.id),
-          eq(traderAdminSavedView.adminUserId, opened.userId),
-        ),
+    return await opened.runtime.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`admin-saved-views:${opened.userId}`}, 0))`,
       );
-    const next = rows.filter((row) => row.id !== parsed.data.id);
-    return adminSuccess({ revision: viewRevision(next), views: next.map(toDto) }, "postgres");
+      const rows = await tx
+        .select()
+        .from(traderAdminSavedView)
+        .where(eq(traderAdminSavedView.adminUserId, opened.userId));
+      if (parsed.data.id && !rows.some((row) => row.id === parsed.data.id))
+        return adminClientError(404, "NOT_FOUND", "Saved view was not found.");
+      const revision = viewRevision(rows);
+      if (parsed.data.expectedRevision !== revision) {
+        return staleRevisionResult({ revision, views: rows.map(toDto) });
+      }
+      const owned = rows.find((row) => row.id === parsed.data.id);
+      if (!owned) return adminClientError(404, "NOT_FOUND", "Saved view was not found.");
+      await tx
+        .delete(traderAdminSavedView)
+        .where(
+          and(
+            eq(traderAdminSavedView.id, parsed.data.id),
+            eq(traderAdminSavedView.adminUserId, opened.userId),
+          ),
+        );
+      const next = rows.filter((row) => row.id !== parsed.data.id);
+      return adminSuccess({ revision: viewRevision(next), views: next.map(toDto) }, "postgres");
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

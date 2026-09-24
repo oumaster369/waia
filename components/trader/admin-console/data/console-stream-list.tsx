@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { notifyAdminAccessRevoked } from "@/components/trader/admin-console/data/access-events";
+import { WORKING_ORDER_STATES } from "@/lib/trader/admin-console/read-models/order-trace";
+import { isXidCursor } from "@/lib/trader/admin-console/stream/protocol";
 
 import {
   consoleListFromBody,
@@ -34,7 +37,16 @@ function eventFromMessage(raw: string): ClientStreamEvent | null {
       typeof parsed.type !== "string" ||
       typeof parsed.topic !== "string" ||
       typeof parsed.entityId !== "string" ||
-      typeof parsed.entityVersion !== "string"
+      typeof parsed.entityVersion !== "string" ||
+      !isXidCursor(parsed.entityVersion) ||
+      ![
+        "upsert",
+        "entity_removed",
+        "snapshot",
+        "resync_required",
+        "access_revoked",
+        "heartbeat",
+      ].includes(parsed.type)
     ) {
       return null;
     }
@@ -57,62 +69,94 @@ export function useConsoleStreamList<T extends { id: string }>(
   listUrl: string,
   topic: string,
 ): { items: (T & LiveListRow)[] | null; reason: string | null } {
-  const [items, setItems] = React.useState<(T & LiveListRow)[] | null>(null);
-  const [reason, setReason] = React.useState<string | null>(null);
+  const [snapshot, setSnapshot] = React.useState<{
+    key: string;
+    items: (T & LiveListRow)[] | null;
+    reason: string | null;
+  }>({ key: "", items: null, reason: null });
+  const key = `${topic}:${listUrl}`;
+  const items = snapshot.key === key ? snapshot.items : null;
+  const reason = snapshot.key === key ? snapshot.reason : null;
   React.useEffect(() => {
     let stopped = false;
     let generation = 0;
+    let paintedStreamVersion = 0;
     let timer = 0;
+    let reconnect = 0;
+    const setReason = (reason: string | null) =>
+      setSnapshot((current) => ({
+        key,
+        items: current.key === key ? current.items : null,
+        reason,
+      }));
+    const clearData = (reason: string | null) => setSnapshot({ key, items: null, reason });
     let source: EventSource | null = null;
     let session: StreamSession = createStreamSession();
     const versions = new Map<string, VersionMark>();
     let controller: AbortController | null = null;
 
-    const paint = (rows: T[]) => {
-      setItems(
-        rows.map((row) => {
-          const mark = versions.get(
-            `${topic === "orders" ? "trader_orders" : "trader_admin_incident"}:${row.id}`,
-          );
-          return mark
-            ? {
-                ...row,
-                entityVersion: mark.version,
-                acceptedAt: mark.acceptedAt,
-                eventId: mark.eventId,
-              }
-            : row;
-        }),
-      );
-      setReason(null);
+    const paint = (rows: T[], observedVersions: Map<string, VersionMark>) => {
+      const next = rows.map((row) => {
+        const mark = observedVersions.get(
+          `${topic === "orders" ? "trader_orders" : "trader_admin_incident"}:${row.id}`,
+        );
+        return mark
+          ? {
+              ...row,
+              entityVersion: mark.version,
+              acceptedAt: mark.acceptedAt,
+              eventId: mark.eventId,
+            }
+          : row;
+      });
+      setSnapshot({ key, items: next, reason: null });
     };
 
     const load = () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" || session.accessRevoked || stopped) return;
       controller?.abort();
       const request = ++generation;
       controller = new AbortController();
+      const observedVersions = new Map(versions);
+      const versionAtRequest = paintedStreamVersion;
       void fetch(listUrl, {
         signal: controller.signal,
         cache: "no-store",
         credentials: "same-origin",
       })
-        .then(async (response) => response.json() as Promise<ConsoleListBody<T>>)
+        .then(async (response) => {
+          if (response.status === 401 || response.status === 403)
+            return { error: { code: "FORBIDDEN" } } as ConsoleListBody<T>;
+          if (!response.ok)
+            return { error: { code: `ADMIN_HTTP_${response.status}` } } as ConsoleListBody<T>;
+          return response.json() as Promise<ConsoleListBody<T>>;
+        })
         .then((body) => {
           if (stopped || request !== generation) return;
           const parsed = consoleListFromBody(body);
           if (parsed.ok) {
-            paint(parsed.items);
+            if (paintedStreamVersion !== versionAtRequest) return;
+            paint(parsed.items, observedVersions);
+            if (!session.cursor && body.cursor && isXidCursor(body.cursor))
+              session = createStreamSession(body.cursor);
             live = true;
-            if (!source && session.transport === "sse") openStream();
+            if (!source && session.transport === "sse" && session.cursor) openStream();
             return;
           }
-          setReason(parsed.reason);
+          if (parsed.reason === "FORBIDDEN" || parsed.reason === "UNAUTHORIZED") {
+            session = { ...createStreamSession(), accessRevoked: true };
+            versions.clear();
+            stopTimers();
+            clearData("FORBIDDEN");
+            notifyAdminAccessRevoked();
+            return;
+          }
+          clearData(parsed.reason);
         })
         .catch((error: unknown) => {
           if (stopped || request !== generation) return;
           if (error instanceof DOMException && error.name === "AbortError") return;
-          setReason("POSTGRES_REQUIRED");
+          setReason("ADMIN_NETWORK_UNAVAILABLE");
         });
     };
 
@@ -122,6 +166,7 @@ export function useConsoleStreamList<T extends { id: string }>(
     const stopTimers = () => {
       window.clearInterval(timer);
       timer = 0;
+      window.clearTimeout(reconnect);
       window.clearTimeout(refresh);
       refresh = 0;
       source?.close();
@@ -142,32 +187,74 @@ export function useConsoleStreamList<T extends { id: string }>(
     };
 
     const remember = (event: ClientStreamEvent) => {
+      const previous = versions.get(event.entityId);
       const next = enqueueStreamEvent(session, event);
       if (next === session) return false;
       session = drainStreamFrame(next);
-      if (event.type === "upsert" && event.topic === topic) {
+      if (
+        event.type === "upsert" &&
+        event.topic === topic &&
+        (!previous || BigInt(event.entityVersion) > BigInt(previous.version))
+      ) {
         versions.set(event.entityId, {
           version: event.entityVersion,
           acceptedAt: event.acceptedAt ?? "",
           eventId: event.eventId,
         });
-        const target = window as Window & {
-          __waiaAdminDelivery?: {
-            eventId: string;
-            entityId: string;
-            acceptedAt: string;
-            renderedAt: number;
-          }[];
-        };
-        const bucket = target.__waiaAdminDelivery ?? [];
-        bucket.push({
-          eventId: event.eventId,
-          entityId: event.entityId,
-          acceptedAt: event.acceptedAt ?? "",
-          renderedAt: Date.now(),
-        });
-        target.__waiaAdminDelivery = bucket;
       }
+      return true;
+    };
+
+    const applyOrderProjection = (event: ClientStreamEvent): boolean => {
+      if (topic !== "orders" || event.topic !== "orders") return false;
+      if (event.type === "entity_removed") {
+        paintedStreamVersion++;
+        setSnapshot((current) =>
+          current.key !== key
+            ? current
+            : {
+                ...current,
+                items:
+                  current.items?.filter((r) => `trader_orders:${r.id}` !== event.entityId) ?? null,
+              },
+        );
+        return true;
+      }
+      const row = event.payload as (T & { state?: string; createdAt?: string }) | null;
+      if (
+        event.type !== "upsert" ||
+        !row ||
+        typeof row.id !== "string" ||
+        event.entityId !== `trader_orders:${row.id}` ||
+        typeof row.state !== "string"
+      )
+        return false;
+      paintedStreamVersion++;
+      const query = new URL(listUrl, window.location.origin).searchParams;
+      const visible =
+        query.get("tab") === "all" ||
+        WORKING_ORDER_STATES.includes(row.state as (typeof WORKING_ORDER_STATES)[number]);
+      setSnapshot((current) => {
+        if (current.key !== key || !current.items) return current;
+        const next = current.items.filter((item) => item.id !== row.id);
+        if (visible)
+          next.push({
+            ...row,
+            entityVersion: event.entityVersion,
+            acceptedAt: event.acceptedAt,
+            eventId: event.eventId,
+          });
+        next.sort((a, b) => {
+          const left = (a as { createdAt?: string }).createdAt ?? "";
+          const right = (b as { createdAt?: string }).createdAt ?? "";
+          return right.localeCompare(left) || b.id.localeCompare(a.id);
+        });
+        return {
+          ...current,
+          items: next.slice(0, Math.min(200, Number(query.get("limit") ?? "50"))),
+          reason: null,
+        };
+      });
       return true;
     };
 
@@ -177,15 +264,43 @@ export function useConsoleStreamList<T extends { id: string }>(
         hidden: document.visibilityState === "hidden",
         connected: true,
       });
-      if (activity === "paused") return;
-      const url = streamRequestUrl("/api/trader/admin/console/stream", session, topic);
+      if (activity === "paused" || session.accessRevoked || !session.cursor) return;
+      const context = new URL(listUrl, window.location.origin);
+      context.pathname = "/api/trader/admin/console/stream";
+      context.searchParams.delete("cursor");
+      const url = streamRequestUrl(`${context.pathname}${context.search}`, session, topic);
       source = new EventSource(url);
       const onEvent = (message: Event) => {
         const data = (message as MessageEvent<string>).data;
         const event = eventFromMessage(data);
         if (!event || !remember(event)) return;
         failures = 0;
-        scheduleLoad();
+        if (session.accessRevoked) {
+          generation++;
+          controller?.abort();
+          stopTimers();
+          versions.clear();
+          clearData("FORBIDDEN");
+          notifyAdminAccessRevoked();
+          return;
+        }
+        if (session.resync) {
+          stopTimers();
+          versions.clear();
+          session = createStreamSession();
+          clearData(null);
+          load();
+          return;
+        }
+        if (event.type === "upsert" && event.topic === topic) {
+          const target = window as Window & {
+            __waiaAdminReceived?: { eventId: string; entityId: string; receivedAt: number }[];
+          };
+          const bucket = (target.__waiaAdminReceived ??= []);
+          bucket.push({ eventId: event.eventId, entityId: event.entityId, receivedAt: Date.now() });
+          if (bucket.length > 10_000) bucket.splice(0, bucket.length - 10_000);
+        }
+        if (event.type !== "heartbeat" && !applyOrderProjection(event)) scheduleLoad();
       };
       for (const name of [
         "upsert",
@@ -193,6 +308,7 @@ export function useConsoleStreamList<T extends { id: string }>(
         "snapshot",
         "resync_required",
         "access_revoked",
+        "heartbeat",
       ]) {
         source.addEventListener(name, onEvent);
       }
@@ -206,7 +322,7 @@ export function useConsoleStreamList<T extends { id: string }>(
           startPoll();
           return;
         }
-        window.setTimeout(() => {
+        reconnect = window.setTimeout(() => {
           if (!stopped && !source) openStream();
         }, 250);
       };
@@ -219,11 +335,13 @@ export function useConsoleStreamList<T extends { id: string }>(
         return;
       }
       load();
-      if (live && session.transport === "sse") openStream();
+      if (live && session.transport === "sse" && session.cursor) openStream();
     };
 
     load();
-    const listRefresh = window.setInterval(load, STREAM_DISCONNECT_POLL_MS);
+    const listRefresh = window.setInterval(() => {
+      if (!source) load();
+    }, STREAM_DISCONNECT_POLL_MS);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
@@ -233,6 +351,6 @@ export function useConsoleStreamList<T extends { id: string }>(
       stopTimers();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [listUrl, topic]);
+  }, [listUrl, topic, key]);
   return { items, reason };
 }

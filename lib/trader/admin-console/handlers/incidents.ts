@@ -1,3 +1,4 @@
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -32,8 +33,9 @@ export async function handleAdminConsoleIncidentsGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT id::text AS id,
                environment,
                service,
@@ -47,33 +49,42 @@ export async function handleAdminConsoleIncidentsGet(
                affected_accounts,
                state_version
         FROM trader_admin_incident
+        WHERE (${parsed.query.organization_id ?? null}::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM trader_admin_diagnostic_event scoped_diagnostic
+          WHERE scoped_diagnostic.environment = trader_admin_incident.environment
+            AND scoped_diagnostic.service = trader_admin_incident.service
+            AND scoped_diagnostic.fingerprint = trader_admin_incident.fingerprint
+            AND scoped_diagnostic.organization_id = ${parsed.query.organization_id ?? null}::uuid
+            AND (${parsed.query.exchange_account_id ?? null}::text IS NULL OR scoped_diagnostic.exchange_account_id = ${parsed.query.exchange_account_id ?? null})
+        ))
         ORDER BY last_seen_at DESC, id
         LIMIT ${parsed.query.limit}
       `),
-    );
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items: rows.map((row) => ({
-            id: String(row.id),
-            environment: String(row.environment),
-            service: String(row.service),
-            fingerprint: String(row.fingerprint),
-            title: String(row.title),
-            severity: String(row.severity),
-            status: String(row.status),
-            firstSeenAt: iso(row.first_seen_at),
-            lastSeenAt: iso(row.last_seen_at),
-            occurrences: Number(row.occurrences),
-            affectedAccounts: Number(row.affected_accounts),
-            stateVersion: Number(row.state_version),
-          })),
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items: rows.map((row) => ({
+              id: String(row.id),
+              environment: String(row.environment),
+              service: String(row.service),
+              fingerprint: String(row.fingerprint),
+              title: String(row.title),
+              severity: String(row.severity),
+              status: String(row.status),
+              firstSeenAt: iso(row.first_seen_at),
+              lastSeenAt: iso(row.last_seen_at),
+              occurrences: Number(row.occurrences),
+              affectedAccounts: Number(row.affected_accounts),
+              stateVersion: Number(row.state_version),
+            })),
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

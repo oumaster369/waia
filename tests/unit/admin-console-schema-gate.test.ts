@@ -12,7 +12,13 @@ vi.mock("@/lib/trader/admin-console/auth", () => ({
     ok: true,
     userId: "00000000-0000-4000-8000-000000000001",
     contextOrgId: "00000000-0000-4000-8000-000000000002",
-    runtime: { kind: "postgres", db: { execute } },
+    runtime: {
+      kind: "postgres",
+      db: {
+        execute,
+        transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ execute }),
+      },
+    },
   })),
   assertAdminConsoleSameOrigin: () => null,
 }));
@@ -20,7 +26,7 @@ vi.mock("@/lib/trader/admin-console/auth", () => ({
 vi.mock("@/db/postgres-client", () => ({
   createPerRequestPostgresRuntime: () => ({
     kind: "postgres",
-    db: { execute },
+    db: { execute, transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ execute }) },
     _sql: { end: runtimeEnd },
   }),
 }));
@@ -62,6 +68,9 @@ const row = {
 function installDb(): void {
   execute.mockImplementation(async (query: unknown) => {
     const blob = texts(query).join(" ");
+    if (blob.includes("string_agg"))
+      return [{ currency: "USDT", total: 1, amount: "1.00", digest: "fixture" }];
+    if (blob.includes("pg_snapshot_xmin")) return [{ xmin: "42" }];
     if (blob.includes("to_regclass")) {
       const missing =
         blob.includes("trader_admin_") || blob.includes("trader_human_promotion_proposal_v2");

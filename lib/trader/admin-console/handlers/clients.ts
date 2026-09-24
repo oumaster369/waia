@@ -1,3 +1,4 @@
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -37,9 +38,10 @@ export async function handleAdminConsoleClientsGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const organizationId = parsed.query.organization_id ?? null;
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const organizationId = parsed.query.organization_id ?? null;
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT o.id::text AS id,
                COALESCE(o.name, '') AS name,
                u.email AS owner_email,
@@ -68,12 +70,22 @@ export async function handleAdminConsoleClientsGet(
                  SELECT MIN(obs.recorded_at)
                  FROM trader_account_observations obs
                  WHERE obs.organization_id = o.id
+                   AND obs.payload->>'status' = 'COMPLETE' AND obs.payload->'balances'->>'status' = 'COMPLETE'
                ) AS first_connected_at
         FROM organizations o
         JOIN users u ON u.id = o.owner_user_id
         WHERE (
           ${organizationId}::uuid IS NULL OR o.id = ${organizationId}::uuid
         )
+        AND (${parsed.query.exchange_account_id ?? null}::text IS NULL OR EXISTS (
+          SELECT 1 FROM exchange_credentials scoped_credential
+          WHERE scoped_credential.organization_id = o.id
+            AND scoped_credential.exchange_account_id = ${parsed.query.exchange_account_id ?? null}
+        ) OR EXISTS (
+          SELECT 1 FROM trader_invoices scoped_invoice
+          WHERE scoped_invoice.organization_id = o.id
+            AND scoped_invoice.exchange_account_id = ${parsed.query.exchange_account_id ?? null}
+        ))
         AND (
           EXISTS (
             SELECT 1 FROM organization_entitlements e
@@ -93,30 +105,31 @@ export async function handleAdminConsoleClientsGet(
         ORDER BY o.created_at DESC, o.id
         LIMIT ${parsed.query.limit}
       `),
-    );
-    const items = rows.flatMap((row) => {
-      const client = presentClient({
-        id: String(row.id),
-        name: String(row.name ?? ""),
-        ownerEmail: String(row.owner_email ?? ""),
-        registeredAt: iso(row.registered_at),
-        firstConnectedAt: iso(row.first_connected_at),
-        entitlementEnabled: flag(row.entitlement_enabled),
-        hasInvoice: flag(row.has_invoice),
-        hasCredential: flag(row.has_credential),
-        hasDebt: flag(row.has_debt),
-        hasOpenLots: flag(row.has_open_lots),
+      );
+      const items = rows.flatMap((row) => {
+        const client = presentClient({
+          id: String(row.id),
+          name: String(row.name ?? ""),
+          ownerEmail: String(row.owner_email ?? ""),
+          registeredAt: iso(row.registered_at),
+          firstConnectedAt: iso(row.first_connected_at),
+          entitlementEnabled: flag(row.entitlement_enabled),
+          hasInvoice: flag(row.has_invoice),
+          hasCredential: flag(row.has_credential),
+          hasDebt: flag(row.has_debt),
+          hasOpenLots: flag(row.has_open_lots),
+        });
+        return client ? [client] : [];
       });
-      return client ? [client] : [];
+      return adminSuccess(
+        adminEnvelope({
+          data: { items },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
     });
-    return adminSuccess(
-      adminEnvelope({
-        data: { items },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

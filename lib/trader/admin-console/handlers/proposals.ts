@@ -1,3 +1,4 @@
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -34,8 +35,9 @@ export async function handleAdminConsoleProposalsGet(
   if (!opened.ok) return opened.result;
   const organizationId = parsed.query.organization_id ?? null;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT id::text AS id,
                organization_id::text AS organization_id,
                disposition,
@@ -46,25 +48,26 @@ export async function handleAdminConsoleProposalsGet(
         ORDER BY created_at DESC, id
         LIMIT ${parsed.query.limit}
       `),
-    );
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items: rows.map((row) =>
-            presentPromotionProposal({
-              id: String(row.id),
-              organizationId: String(row.organization_id),
-              disposition: String(row.disposition),
-              createdAt: iso(row.created_at),
-              payloadJson: String(row.payload_json ?? ""),
-            }),
-          ),
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items: rows.map((row) =>
+              presentPromotionProposal({
+                id: String(row.id),
+                organizationId: String(row.organization_id),
+                disposition: String(row.disposition),
+                createdAt: iso(row.created_at),
+                payloadJson: String(row.payload_json ?? ""),
+              }),
+            ),
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

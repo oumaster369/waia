@@ -64,13 +64,14 @@ export function OrdersPanel({ rows }: { rows: readonly OrderRowView[] }) {
               data-order-id={row.original.id}
               data-event-id={row.original.eventId}
               data-accepted-at={row.original.acceptedAt}
-              data-rendered-at={row.original.entityVersion ? String(Date.now()) : undefined}
             >
               {row.original.entityVersion ? (
                 <td>
                   <RenderAckMarker
                     topic="orders"
-                    entityId={row.original.id}
+                    entityId={`trader_orders:${row.original.id}`}
+                    eventId={row.original.eventId}
+                    acceptedAt={row.original.acceptedAt}
                     entityVersion={row.original.entityVersion}
                   />
                 </td>

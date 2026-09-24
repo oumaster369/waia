@@ -1,3 +1,4 @@
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -39,8 +40,9 @@ export async function handleAdminConsoleCycleTraceGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT e.id::text AS id,
                e.organization_id::text AS organization_id,
                e.run_id,
@@ -76,18 +78,18 @@ export async function handleAdminConsoleCycleTraceGet(
         WHERE e.id = ${envelopeId}::uuid
         LIMIT 1
       `),
-    );
-    const row = rows[0];
-    if (!row) return adminClientError(404, "NOT_FOUND", "cycle was not found.");
-    const decisionId = text(row.decision_id);
-    const organizationId = String(row.organization_id);
-    let riskVerdictId: string | null = null;
-    let executionPlanId: string | null = null;
-    let orderId: string | null = null;
-    let fillId: string | null = null;
-    if (decisionId) {
-      const linked = rowsOf(
-        await opened.runtime.db.execute(sql`
+      );
+      const row = rows[0];
+      if (!row) return adminClientError(404, "NOT_FOUND", "cycle was not found.");
+      const decisionId = text(row.decision_id);
+      const organizationId = String(row.organization_id);
+      let riskVerdictId: string | null = null;
+      let executionPlanId: string | null = null;
+      let orderId: string | null = null;
+      let fillId: string | null = null;
+      if (decisionId) {
+        const linked = rowsOf(
+          await tx.execute(sql`
           SELECT (
                    SELECT v.id::text
                    FROM trader_risk_verdicts_v2 v
@@ -105,13 +107,13 @@ export async function handleAdminConsoleCycleTraceGet(
                    LIMIT 1
                  ) AS execution_plan_id
         `),
-      );
-      riskVerdictId = text(linked[0]?.risk_verdict_id);
-      executionPlanId = text(linked[0]?.execution_plan_id);
-    }
-    if (executionPlanId) {
-      const orders = rowsOf(
-        await opened.runtime.db.execute(sql`
+        );
+        riskVerdictId = text(linked[0]?.risk_verdict_id);
+        executionPlanId = text(linked[0]?.execution_plan_id);
+      }
+      if (executionPlanId) {
+        const orders = rowsOf(
+          await tx.execute(sql`
           SELECT o.id::text AS order_id,
                  (
                    SELECT f.id::text
@@ -127,37 +129,38 @@ export async function handleAdminConsoleCycleTraceGet(
           ORDER BY o.created_at DESC, o.id
           LIMIT 1
         `),
-      );
-      orderId = text(orders[0]?.order_id);
-      fillId = text(orders[0]?.fill_id);
-    }
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          envelope: {
-            id: String(row.id),
-            organizationId,
-            runId: String(row.run_id),
-            cycleId: String(row.cycle_id),
-            symbol: String(row.symbol),
-            evaluatedAt: iso(row.evaluated_at),
-            terminalReasonCode: String(row.terminal_reason_code),
+        );
+        orderId = text(orders[0]?.order_id);
+        fillId = text(orders[0]?.fill_id);
+      }
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            envelope: {
+              id: String(row.id),
+              organizationId,
+              runId: String(row.run_id),
+              cycleId: String(row.cycle_id),
+              symbol: String(row.symbol),
+              evaluatedAt: iso(row.evaluated_at),
+              terminalReasonCode: String(row.terminal_reason_code),
+            },
+            stages: assembleCycleTrace({
+              hypothesisId: text(row.hypothesis_id),
+              forecastId: text(row.forecast_id),
+              decisionId,
+              riskVerdictId,
+              executionPlanId,
+              orderId,
+              fillId,
+            }),
           },
-          stages: assembleCycleTrace({
-            hypothesisId: text(row.hypothesis_id),
-            forecastId: text(row.forecast_id),
-            decisionId,
-            riskVerdictId,
-            executionPlanId,
-            orderId,
-            fillId,
-          }),
-        },
-        scope: { kind: "organization", organizationId },
-        mode: "history",
-      }),
-      "postgres",
-    );
+          scope: { kind: "organization", organizationId },
+          mode: "history",
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }
