@@ -50,6 +50,16 @@ Catalog checks:
 - `0212` / `0213`: promotion tables, then deny-by-default RLS.
 - `0214` / `0215`: console tables, then deny-by-default RLS. Trigger `trader_admin_change_log_trg` must be absent.
 
+## Acceptance
+
+- `pnpm trader:post-h2:migrate` accepts exactly one of `0211`–`0215` per invocation and refuses a gap, a sparse step, a wrong hash, and a repeat.
+- Each step verifies its catalog before commit and again in a read-only transaction.
+- Migration bytes `0205`–`0215` and `_journal.json` stay unchanged. Production stays on `0210` in this PR.
+
+## WP-1 — Extend the operator through 0215
+
+Pin `0211`–`0215` on the existing post-H2 operator, add the catalog checks above, and cover the ordered chain, a sparse `0212`, a repeat, and `--verify-only` on isolated PostgreSQL 17.
+
 ## Out of scope
 
 Do not change migration bytes `0205`–`0215`, `_journal.json`, the H2 operator, C3, or FHV. Do not run `pnpm db:migrate:postgres` against production. Do not apply `0211`–`0215` in this PR. Do not enable `WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED`.
