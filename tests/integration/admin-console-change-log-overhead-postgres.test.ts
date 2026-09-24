@@ -50,10 +50,18 @@ describe.skipIf(!enabled)("admin console change-log overhead", () => {
       }
       return percentile(samples, 0.95);
     };
-    const disabled = await measure(false);
-    const enabledP95 = await measure(true);
-    await sql.unsafe(
-      "ALTER TABLE trader_admin_diagnostic_event ENABLE TRIGGER trader_admin_change_log_trg",
+    let disabled = 0;
+    let enabledP95 = 0;
+    try {
+      disabled = await measure(false);
+      enabledP95 = await measure(true);
+    } finally {
+      await sql.unsafe(
+        "ALTER TABLE trader_admin_diagnostic_event ENABLE TRIGGER trader_admin_change_log_trg",
+      );
+    }
+    console.info(
+      `admin-console change-log overhead p95 disabled=${disabled.toFixed(3)}ms enabled=${enabledP95.toFixed(3)}ms sample=${SAMPLE} table=trader_admin_diagnostic_event`,
     );
     expect(enabledP95).toBeLessThanOrEqual(Math.max(disabled * 2, disabled + 1));
   }, 120_000);

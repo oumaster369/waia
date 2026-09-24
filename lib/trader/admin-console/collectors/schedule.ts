@@ -8,6 +8,11 @@ export function dueCollectorKeys(now: Date): readonly string[] {
   return keys;
 }
 
+/** Journal cleanup stays due even when market collectors are switched off. */
+export function tasksWhenCollectorsDisabled(due: readonly string[]): readonly string[] {
+  return due.includes("admin_retention") ? ["admin_retention"] : [];
+}
+
 export function retentionCutoff(now: Date, days: number): string {
   return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
 }

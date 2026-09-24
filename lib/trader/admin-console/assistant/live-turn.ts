@@ -1,5 +1,8 @@
 import { tokensFromUsage, type AssistantUsage } from "@/lib/trader/admin-console/assistant/budget";
-import { numbersInText } from "@/lib/trader/admin-console/assistant/segments";
+import {
+  citationIdsInToolPayload,
+  numbersInToolPayload,
+} from "@/lib/trader/admin-console/assistant/segments";
 import {
   runAssistantTurn,
   type AssistantAnswer,
@@ -17,8 +20,8 @@ export async function runLiveAssistantTurn(input: {
   let tokens = 0;
   let estimated = false;
   const turn = await runAssistantTurn({
-    knownCitations: [],
-    factRefs: numbersInText(input.toolText).map((value) => ({ value })),
+    knownCitations: citationIdsInToolPayload(input.toolText),
+    factRefs: numbersInToolPayload(input.toolText).map((value) => ({ value })),
     complete: async (prompt) => {
       const result = await input.complete(`${prompt}\n${input.toolText}\n${input.content}`);
       const counted = tokensFromUsage(result.usage ?? null, result.text);

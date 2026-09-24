@@ -17,7 +17,11 @@ import {
 import { collectorTasksFor } from "@/lib/trader/admin-console/collectors/run-due";
 import { runAdminConsoleCollectorCycle } from "@/lib/trader/admin-console/collectors/run-collectors-cycle";
 import { assertAdminConsoleSeedLocal } from "@/lib/trader/admin-console/collectors/seed-guard";
-import { dueCollectorKeys, retentionCutoff } from "@/lib/trader/admin-console/collectors/schedule";
+import {
+  dueCollectorKeys,
+  retentionCutoff,
+  tasksWhenCollectorsDisabled,
+} from "@/lib/trader/admin-console/collectors/schedule";
 import type { CollectorStore } from "@/lib/trader/admin-console/collectors/collector-store";
 import {
   installHostDiagnostics,
@@ -219,6 +223,12 @@ describe("admin console collector persistence", () => {
     expect(dueCollectorKeys(new Date("2026-09-23T12:00:00.000Z"))).toContain("admin_news");
     expect(dueCollectorKeys(new Date("2026-09-23T12:05:00.000Z"))).toContain("admin_fear_greed");
     expect(dueCollectorKeys(new Date("2026-09-23T12:35:00.000Z"))).toContain("admin_retention");
+    expect(
+      tasksWhenCollectorsDisabled(dueCollectorKeys(new Date("2026-09-23T12:35:00.000Z"))),
+    ).toEqual(["admin_retention"]);
+    expect(
+      tasksWhenCollectorsDisabled(dueCollectorKeys(new Date("2026-09-23T12:06:00.000Z"))),
+    ).toEqual([]);
     expect(dueCollectorKeys(new Date("2026-09-23T12:05:00.000Z"))).not.toContain(
       "admin_account_valuation",
     );

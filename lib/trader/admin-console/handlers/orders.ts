@@ -44,7 +44,7 @@ export async function handleAdminConsoleOrdersGet(
       await opened.runtime.db.execute(sql`
         SELECT id::text AS id, organization_id::text AS organization_id, execution_mode,
                historical_run_id, symbol, side, state, quantity, filled_quantity,
-               client_order_id, exchange_order_id, created_at
+               client_order_id, exchange_order_id, created_at::text AS created_at
         FROM trader_orders
         WHERE ${orderVisibleInMode(parsed.query.mode, false)}
         AND (
@@ -77,8 +77,7 @@ export async function handleAdminConsoleOrdersGet(
         filledQuantity: String(row.filled_quantity),
         clientOrderId: String(row.client_order_id),
         exchangeOrderId: row.exchange_order_id ? String(row.exchange_order_id) : null,
-        createdAt:
-          row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+        createdAt: String(row.created_at),
       };
     });
     const last = page[page.length - 1];

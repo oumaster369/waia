@@ -86,7 +86,7 @@ export type OpenLotView = {
   };
 };
 
-/** Mirrors `DISTINCT ON (lot_id) ORDER BY lot_id, created_at DESC`. */
+/** Mirrors `DISTINCT ON (lot_id) ORDER BY lot_id, created_at DESC, assessment_id DESC`. */
 export function latestGuardianByLot<T extends GuardianAssessmentPick>(
   rows: readonly T[],
 ): Map<string, T> {
@@ -94,6 +94,9 @@ export function latestGuardianByLot<T extends GuardianAssessmentPick>(
   const ordered = [...rows].sort((left, right) => {
     if (left.lotId !== right.lotId) return left.lotId < right.lotId ? -1 : 1;
     if (left.createdAt !== right.createdAt) return left.createdAt < right.createdAt ? 1 : -1;
+    if (left.assessmentId !== right.assessmentId) {
+      return left.assessmentId < right.assessmentId ? 1 : -1;
+    }
     return 0;
   });
   for (const row of ordered) {
@@ -102,10 +105,10 @@ export function latestGuardianByLot<T extends GuardianAssessmentPick>(
   return latest;
 }
 
-export function guardianFreshness(input: {
-  assessedAt: string | null;
-  nowMs: number;
-}): { state: "ok" | "stale"; reasons: string[] } {
+export function guardianFreshness(input: { assessedAt: string | null; nowMs: number }): {
+  state: "ok" | "stale";
+  reasons: string[];
+} {
   if (!input.assessedAt) {
     return { state: "stale", reasons: [ADMIN_REASON.guardianAssessmentMissing] };
   }
@@ -116,7 +119,10 @@ export function guardianFreshness(input: {
   return { state: "ok", reasons: [] };
 }
 
-function executedReduction(openQty: string, remainingQty: string): OpenLotView["executedReduction"] {
+function executedReduction(
+  openQty: string,
+  remainingQty: string,
+): OpenLotView["executedReduction"] {
   try {
     if (compareDecimal(remainingQty, openQty) > 0) {
       return { state: "unavailable", quantity: null, reasons: [ADMIN_REASON.lotQtyInconsistent] };

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { UNVERIFIED_SEGMENT } from "@/lib/trader/admin-console/assistant/segments";
+import {
+  citationIdsInToolPayload,
+  numbersInToolPayload,
+  UNVERIFIED_SEGMENT,
+} from "@/lib/trader/admin-console/assistant/segments";
 import { runAssistantTurn } from "@/lib/trader/admin-console/assistant/run-assistant";
 
 describe("admin assistant loop", () => {
@@ -47,5 +51,14 @@ describe("admin assistant loop", () => {
       factRefs: [],
     });
     expect(result).toEqual({ status: "stopped" });
+  });
+
+  it("does not treat identifier digits as facts and keeps ids that the tool returned", () => {
+    const payload = JSON.stringify({
+      id: "00000000-0000-4000-8022-000000031156",
+      performanceFee: "10.50",
+    });
+    expect(numbersInToolPayload(payload)).toEqual(["10.50"]);
+    expect(citationIdsInToolPayload(payload)).toEqual(["00000000-0000-4000-8022-000000031156"]);
   });
 });

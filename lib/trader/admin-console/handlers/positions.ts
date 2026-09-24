@@ -27,10 +27,11 @@ function rowsOf(result: unknown): Record<string, unknown>[] {
 }
 
 function iso(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value))) {
+    return value;
+  }
   if (value instanceof Date) return value.toISOString();
-  if (typeof value !== "string" || value.length === 0) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  return null;
 }
 
 function text(value: unknown): string | null {
@@ -81,7 +82,7 @@ export async function handleAdminConsolePositionsGet(
                l.open_qty,
                l.remaining_qty,
                l.avg_cost,
-               l.opened_at,
+               l.opened_at::text AS opened_at,
                g.recommendation,
                g.open_position_sufficiency,
                g.new_opportunity_sufficiency,
@@ -100,7 +101,7 @@ export async function handleAdminConsolePositionsGet(
           FROM trader_guardian_assessments_v2 a
           WHERE a.lot_id = l.id
             AND a.organization_id = l.organization_id
-          ORDER BY a.lot_id, a.created_at DESC
+          ORDER BY a.lot_id, a.created_at DESC, a.assessment_id DESC
         ) g ON true
         LEFT JOIN trader_risk_account_state_v2 r
           ON r.organization_id = l.organization_id

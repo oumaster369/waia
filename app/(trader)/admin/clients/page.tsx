@@ -1,9 +1,11 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
+import { InvoicesPanel } from "@/components/trader/admin-console/sections/clients/invoices-panel";
 
 type ClientItem = {
   id: string;
@@ -14,6 +16,20 @@ type ClientItem = {
 };
 
 export default function AdminClientsPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <ClientsBody />
+    </React.Suspense>
+  );
+}
+
+function ClientsBody() {
+  const tab = useSearchParams().get("tab");
+  if (tab === "invoices") return <InvoicesPanel />;
+  return <ClientsList />;
+}
+
+function ClientsList() {
   const [items, setItems] = React.useState<ClientItem[] | null>(null);
   const [reason, setReason] = React.useState<string | null>(null);
   React.useEffect(() => {

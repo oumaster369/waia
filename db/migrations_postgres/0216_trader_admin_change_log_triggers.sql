@@ -8,56 +8,78 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  row_data jsonb;
+  src record;
   entity_id text;
   org_id uuid;
   version bigint;
-  order_id uuid;
+  historical text;
+  order_text text;
+  org_text text;
+  second_text text;
+  third_text text;
+  version_text text;
 BEGIN
   IF TG_OP = 'DELETE' THEN
-    row_data := to_jsonb(OLD);
+    src := OLD;
   ELSE
-    row_data := to_jsonb(NEW);
+    src := NEW;
   END IF;
 
   IF TG_TABLE_NAME = 'trader_orders' THEN
-    IF NULLIF(row_data ->> 'historical_run_id', '') IS NOT NULL THEN
+    EXECUTE 'SELECT ($1).historical_run_id::text' INTO historical USING src;
+    IF NULLIF(historical, '') IS NOT NULL THEN
       RETURN COALESCE(NEW, OLD);
     END IF;
   END IF;
 
   IF TG_TABLE_NAME IN ('trader_fills', 'trader_trade_legs') THEN
-    order_id := NULLIF(row_data ->> 'order_id', '')::uuid;
-    IF order_id IS NOT NULL AND EXISTS (
+    EXECUTE 'SELECT ($1).order_id::text' INTO order_text USING src;
+    IF NULLIF(order_text, '') IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.trader_orders o
-      WHERE o.id = order_id AND o.historical_run_id IS NOT NULL
+      WHERE o.id = order_text::uuid AND o.historical_run_id IS NOT NULL
     ) THEN
       RETURN COALESCE(NEW, OLD);
     END IF;
   END IF;
 
   IF TG_TABLE_NAME = 'trader_account_collection_state' THEN
-    entity_id := (row_data ->> 'organization_id') || ':' || (row_data ->> 'credential_id') || ':' || (row_data ->> 'exchange_account_id');
-    org_id := NULLIF(row_data ->> 'organization_id', '')::uuid;
+    EXECUTE 'SELECT ($1).organization_id::text, ($1).credential_id::text, ($1).exchange_account_id::text'
+      INTO org_text, second_text, third_text USING src;
+    entity_id := org_text || ':' || second_text || ':' || third_text;
+    org_id := NULLIF(org_text, '')::uuid;
   ELSIF TG_TABLE_NAME = 'trader_account_status' THEN
-    entity_id := (row_data ->> 'organization_id') || ':' || (row_data ->> 'exchange_account_id');
-    org_id := NULLIF(row_data ->> 'organization_id', '')::uuid;
+    EXECUTE 'SELECT ($1).organization_id::text, ($1).exchange_account_id::text'
+      INTO org_text, second_text USING src;
+    entity_id := org_text || ':' || second_text;
+    org_id := NULLIF(org_text, '')::uuid;
   ELSIF TG_TABLE_NAME = 'trader_org_live_enable' THEN
-    entity_id := row_data ->> 'organization_id';
-    org_id := NULLIF(row_data ->> 'organization_id', '')::uuid;
+    EXECUTE 'SELECT ($1).organization_id::text, ($1).state_version::text'
+      INTO org_text, version_text USING src;
+    entity_id := org_text;
+    org_id := NULLIF(org_text, '')::uuid;
+    version := NULLIF(version_text, '')::bigint;
   ELSIF TG_TABLE_NAME = 'trader_risk_account_state_v2' THEN
-    entity_id := (row_data ->> 'organization_id') || ':' || (row_data ->> 'account_id');
-    org_id := NULLIF(row_data ->> 'organization_id', '')::uuid;
+    EXECUTE 'SELECT ($1).organization_id::text, ($1).account_id::text, ($1).state_version::text'
+      INTO org_text, second_text, version_text USING src;
+    entity_id := org_text || ':' || second_text;
+    org_id := NULLIF(org_text, '')::uuid;
+    version := NULLIF(version_text, '')::bigint;
   ELSIF TG_TABLE_NAME = 'trader_historical_simulation_run_lifecycle_event_v2' THEN
-    entity_id := (row_data ->> 'organization_id') || ':' || (row_data ->> 'run_id') || ':' || (row_data ->> 'event_sequence');
-    org_id := NULLIF(row_data ->> 'organization_id', '')::uuid;
+    EXECUTE 'SELECT ($1).organization_id::text, ($1).run_id::text, ($1).event_sequence::text'
+      INTO org_text, second_text, third_text USING src;
+    entity_id := org_text || ':' || second_text || ':' || third_text;
+    org_id := NULLIF(org_text, '')::uuid;
   ELSE
-    entity_id := row_data ->> TG_ARGV[0];
+    IF TG_ARGV[0] IS NOT NULL AND TG_ARGV[0] <> '' THEN
+      EXECUTE format('SELECT ($1).%I::text', TG_ARGV[0]) INTO entity_id USING src;
+    END IF;
     IF TG_ARGV[1] IS NOT NULL AND TG_ARGV[1] <> '' THEN
-      org_id := NULLIF(row_data ->> TG_ARGV[1], '')::uuid;
+      EXECUTE format('SELECT ($1).%I::text', TG_ARGV[1]) INTO org_text USING src;
+      org_id := NULLIF(org_text, '')::uuid;
     END IF;
     IF TG_ARGV[2] IS NOT NULL AND TG_ARGV[2] <> '' THEN
-      version := NULLIF(row_data ->> TG_ARGV[2], '')::bigint;
+      EXECUTE format('SELECT ($1).%I::text', TG_ARGV[2]) INTO version_text USING src;
+      version := NULLIF(version_text, '')::bigint;
     END IF;
   END IF;
 
@@ -141,7 +163,7 @@ CREATE TRIGGER trader_admin_change_log_trg AFTER INSERT OR UPDATE OR DELETE ON p
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS trader_admin_change_log_trg ON public.trader_kill_switches;
 --> statement-breakpoint
-CREATE TRIGGER trader_admin_change_log_trg AFTER INSERT OR UPDATE OR DELETE ON public.trader_kill_switches FOR EACH ROW EXECUTE FUNCTION public.trader_admin_record_change('id','organization_id','');
+CREATE TRIGGER trader_admin_change_log_trg AFTER INSERT OR UPDATE OR DELETE ON public.trader_kill_switches FOR EACH ROW EXECUTE FUNCTION public.trader_admin_record_change('id','organization_id','state_version');
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS trader_admin_change_log_trg ON public.trader_org_live_enable;
 --> statement-breakpoint
@@ -177,7 +199,7 @@ CREATE TRIGGER trader_admin_change_log_trg AFTER INSERT OR UPDATE OR DELETE ON p
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS trader_admin_change_log_trg ON public.trader_strategy_promotion_records;
 --> statement-breakpoint
-CREATE TRIGGER trader_admin_change_log_trg AFTER INSERT OR UPDATE OR DELETE ON public.trader_strategy_promotion_records FOR EACH ROW EXECUTE FUNCTION public.trader_admin_record_change('id','organization_id','');
+CREATE TRIGGER trader_admin_change_log_trg AFTER INSERT OR UPDATE OR DELETE ON public.trader_strategy_promotion_records FOR EACH ROW EXECUTE FUNCTION public.trader_admin_record_change('id','organization_id','state_version');
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS trader_admin_change_log_trg ON public.trader_strategy_lifecycle_event;
 --> statement-breakpoint

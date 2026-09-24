@@ -54,6 +54,12 @@ describe("open positions", () => {
       { lotId: "lot-1", assessmentId: "new", createdAt: "2026-09-23T11:40:00.000Z" },
       { lotId: "lot-2", assessmentId: "other", createdAt: "2026-09-23T11:10:00.000Z" },
     ]);
+    expect(
+      latestGuardianByLot([
+        { lotId: "lot-1", assessmentId: "a", createdAt: "2026-09-23T11:00:00.000Z" },
+        { lotId: "lot-1", assessmentId: "b", createdAt: "2026-09-23T11:00:00.000Z" },
+      ]).get("lot-1")?.assessmentId,
+    ).toBe("b");
     expect(latest.get("lot-1")?.assessmentId).toBe("new");
     expect(latest.get("lot-2")?.assessmentId).toBe("other");
   });

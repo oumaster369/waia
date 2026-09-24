@@ -23,7 +23,10 @@ import {
   type QuoteLatestRow,
   type QuoteMinuteRow,
 } from "@/lib/trader/admin-console/collectors/quote-rows";
-import { dueCollectorKeys } from "@/lib/trader/admin-console/collectors/schedule";
+import {
+  dueCollectorKeys,
+  tasksWhenCollectorsDisabled,
+} from "@/lib/trader/admin-console/collectors/schedule";
 import {
   fetchHtxPublicTickers,
   type HtxPublicTicker,
@@ -118,7 +121,9 @@ export async function runDueAdminCollectors(
   env: { WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED?: string; DATABASE_URL_POSTGRES?: string },
   options: { log?: (message: string) => void; now?: Date; fetchImpl?: typeof fetch } = {},
 ): Promise<{ ran: string[]; failed: string[] }> {
-  if (!collectorsEnabled(env)) {
+  const now = options.now ?? new Date();
+  const enabled = collectorsEnabled(env);
+  if (!enabled && tasksWhenCollectorsDisabled(dueCollectorKeys(now)).length === 0) {
     options.log?.("disabled");
     return { ran: [], failed: [] };
   }
@@ -132,8 +137,8 @@ export async function runDueAdminCollectors(
   try {
     const fetchImpl = options.fetchImpl ?? fetch;
     const store = createPostgresCollectorStore(runtime.db);
-    const tasks = collectorTasksFor({
-      now: options.now ?? new Date(),
+    const dueTasks = collectorTasksFor({
+      now,
       store,
       fetchers: {
         htx: async () => ({ tickers: await fetchHtxPublicTickers(fetchImpl), sourceTs: null }),
@@ -142,7 +147,12 @@ export async function runDueAdminCollectors(
         fearGreed: (limit) => new AlternativeMeFearGreedClient({ fetchImpl }).getHistory(limit),
       },
     });
-    return await runAdminConsoleCollectorCycle({ env, tasks, log: options.log });
+    const tasks = enabled ? dueTasks : dueTasks.filter((task) => task.key === "admin_retention");
+    return await runAdminConsoleCollectorCycle({
+      env: enabled ? env : { ...env, WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED: "1" },
+      tasks,
+      log: options.log,
+    });
   } finally {
     await runtime._sql.end({ timeout: 5 });
   }

@@ -2,7 +2,11 @@ export const EXPORT_ROW_LIMIT = 50_000;
 export const EXPORT_TIME_LIMIT_MS = 60_000;
 
 export function escapeCsvCell(value: string): string {
-  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  const prefixed = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  if (/^[=+\-@\t\r]/.test(value) || /[",\n\r]/.test(prefixed)) {
+    return `"${prefixed.replaceAll('"', '""')}"`;
+  }
+  return prefixed;
 }
 
 export function assertExportWithinLimits(rows: number, elapsedMs: number): void {

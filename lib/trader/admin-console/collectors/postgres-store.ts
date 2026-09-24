@@ -390,6 +390,13 @@ async function retainBatch(db: AdminPostgresDb, now: Date): Promise<number> {
     const result = await db.execute(statement);
     removed += rowCount(result);
   }
+  const changeDelete = sql`DELETE FROM trader_admin_change_log WHERE seq IN (SELECT seq FROM trader_admin_change_log WHERE changed_at < ${cuts.change}::timestamptz LIMIT ${BATCH})`;
+  for (let extra = 1; extra < 24; extra += 1) {
+    const result = await db.execute(changeDelete);
+    const count = rowCount(result);
+    removed += count;
+    if (count < BATCH) break;
+  }
   return removed;
 }
 

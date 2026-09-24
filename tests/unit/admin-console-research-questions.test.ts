@@ -110,6 +110,9 @@ describe("admin console research and required questions", () => {
 
   it("does not select a holdout payload from the console", () => {
     expect(sqlTouchesHoldoutPayload("select blind_holdout_payload from t")).toBe(true);
+    expect(sqlTouchesHoldoutPayload("select holdout_pnl from t")).toBe(true);
+    expect(sqlTouchesHoldoutPayload("select holdoutPnl from t")).toBe(true);
+    expect(sqlTouchesHoldoutPayload("partitions/blind-holdout")).toBe(true);
     const roots = ["lib/trader/admin-console", "app/api/trader/admin/console"];
     for (const root of roots) {
       for (const file of sourceFiles(path.join(process.cwd(), root))) {
