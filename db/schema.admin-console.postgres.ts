@@ -1,5 +1,5 @@
 /**
- * AI-TRADER admin console tables (DEE-1050). DDL lives in migrations 0214–0216.
+ * AI-TRADER admin console tables (DEE-1050). DDL lives in migrations 0214–0215.
  * The change log stores identifiers only.
  */
 

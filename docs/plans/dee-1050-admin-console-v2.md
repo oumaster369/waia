@@ -11,14 +11,13 @@ requiredValidation:
 approvalGates:
   - plan-approved
   - schema-and-rls
-  - change-log-triggers-0216
   - custom-worker
   - public-fetch-flag-default-off
   - diagnostic-contract
   - ai-orchestration
   - integration-ready
   - human-merge
-firstPrAcceptance: "section 9.1 of the executor plan below"
+firstPrAcceptance: "Variant A: console with a 5-second poll and the invoices tab. Migrations 0214 and 0215 only. Slice gate, admin-console-pg-slo, stream wired to the UI, Postgres browser e2e, and 0216 are PR-2."
 fullReadinessPackages: [F1a, F1b, F2, F3a, F3b, F4, F5, F6, DEE-1059, DEE-1060]
 ownerDecisions:
   - id: DEE-1059
@@ -29,7 +28,7 @@ ownerDecisions:
     status: proposed
   - id: triggers-0216
     topic: change-log-triggers
-    status: pending-pr-review
+    status: deferred-to-pr-2-variant-a
 includedIssues:
   - id: DEE-1051
     role: work-package
@@ -76,8 +75,8 @@ state:
   prUrl: https://github.com/oumaster369/waia/pull/639
   lastValidatedGitSha: 0af6dfc39e168d0cade1e1b6f5e757445c3d092b
   lastValidationAt: "2026-09-23T23:30:20Z"
-  blockedReason: "GitHub CI is green on 0af6dfc3 (27/27), including Cloudflare OpenNext, the preview Worker, Workers Builds, both unit shards, postgres migrate, admin-console Postgres, and sqlite e2e. Cormorant Garamond is self-hosted. Slice-gate and the admin Postgres browser e2e were not run. C8-rest redirects of /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic stay blocked because they would remove those operator pages. Billing idempotency still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329)."
-  nextAction: "Human did not select variant A or B, so 0216 stays in PR 639 and packages A* and B* were not started. Do not merge as section 9.1. AC-30 and AC-32 stay partial, AC-16 stays open, trigger approval 9.3.3 is unsigned, and the slice gate, admin-console-pg-slo, and Postgres browser e2e were not run. Do not redirect /admin/audit, /admin/runtime-authority, or /admin/score-diagnostic. Do not migrate the shared validate database on port 54329."
+  blockedReason: "Variant A moves 0216, the slice gate, admin-console-pg-slo, the UI stream, Postgres browser e2e, and the three operator-page redirects to PR-2. This PR still needs Human to apply 0214 and 0215 on production, then squash-merge. Do not migrate the shared validate database on port 54329."
+  nextAction: "Human: применить 0214/0215 к проду, затем Human squash-merge PR #639"
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -90,7 +89,7 @@ provenance:
 
 ## Acceptance
 
-First PR acceptance is section 9.1 below. AC-14, AC-29, and AC-32 are partial. AC-16 stays open. Full v2 readiness is F1a, F1b, F2, F3a, F3b, F4, F5, F6 plus Human ratification of DEE-1059 and DEE-1060. Human merge. Not a bounded autonomous merge.
+Human decision, variant A, recorded on PR #639: migration 0216 leaves this PR. First-PR acceptance is redefined. The console ships with a 5-second poll and the invoices tab. AC-14, AC-29, and AC-32 stay partial. AC-16 and AC-30 stay open. Full v2 readiness is still F1a, F1b, F2, F3a, F3b, F4, F5, F6 plus Human ratification of DEE-1059 and DEE-1060. Human merge. Not a bounded autonomous merge.
 
 Children: C1 DEE-1051, C2 DEE-1052, C3 DEE-1053, C4 DEE-1054, C5 DEE-1055, C6 DEE-1056, C7 DEE-1058, C8 DEE-1057.
 
@@ -104,7 +103,7 @@ The first `admin-console-postgres` run rejected the stream fixture: historical r
 
 Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connector edits changed the source content digest, and three public admin reads (`fetch-news`, `run-due`, `htx-public-tickers`) are new consumers. They are pinned as `EXCLUDED_PUBLIC_MARKET_READ_NO_CANONICAL_AUTHORITY`. They do not admit Reality or place orders. The pinned postgres `integration` job was not edited. On `8b97496d` both unit shards and the postgres migrate guard passed. The sqlite e2e then failed because `/admin/runtime-authority` now sits in the console shell, which adds three buttons beside Sign out. The HALT region still has no buttons. The spec pins those four buttons and no others.
 
-- [x] C1 code: contracts, migrations 0214–0216, change-log stream, search, release, visit marker, saved views (DEE-1051).
+- [x] C1 code: contracts, migrations 0214–0215, change-log stream module, search, release, visit marker, saved views (DEE-1051). Trigger migration 0216 is not on this branch; it moves to PR-2.
 - [ ] C1 Postgres proof: 30s held commit, historical-order skip, anon `42501`, overhead profile 9.3.3.
 - [x] C2 reads: valuation, operational PnL, attribution, overview, orders, account list without ciphertext (DEE-1052).
 - [x] C2 fills and closed trades: one row per fill, amounts stay text, and closed trades are `CLOSED` or `FORCED_FLAT` inside a half-open `closed_at` period. Both routes return POSTGRES_REQUIRED on sqlite.
@@ -143,7 +142,7 @@ Unit shard 2/2 on `26efc88b` failed `trader-reality-v2-consumer-graph`: connecto
 
 ## WP-C1
 
-Contracts, migrations 0214-0216, change-log stream, search, release, visit marker, saved views. Issue DEE-1051.
+Contracts, migrations 0214-0215, change-log stream module, search, release, visit marker, saved views. Issue DEE-1051. Trigger migration 0216 is PR-2.
 
 
 # AI-TRADER Admin Console v2 — план для исполнителя (Grok 4.7)
@@ -1108,6 +1107,24 @@ AC закрыт в первом PR только при автоматическ�
 
 ### 9.1 Приёмка первого PR
 
+Human переопределил эту приёмку вариантом A. Первый PR — консоль с опросом раз в 5 секунд и вкладка счетов. Миграции этого PR — 0214 и 0215. Триггеров журнала в нём нет.
+
+- AC-14 / AC-29 / AC-32 — частично. AC-16 и AC-30 не закрыты. Это явно указано в PR.
+- Контрольная точка среза, `admin-console-pg-slo`, подключение потока к UI и e2e на Postgres в этот PR не входят.
+
+### PR-2
+
+Сюда перенесено решением Human (вариант A). Не входит в PR #639.
+
+- 0216 со статическими функциями `NEW.col` / `OLD.col` и профиль 9.3.3. Вместе с ней возвращаются удалённые из этого PR проверки: `admin-console-change-log-overhead-postgres.test.ts` и тест потока «held commit + пропуск исторических ордеров» из `admin-console-stream-postgres.test.ts`.
+- Подключение потока к UI.
+- Slice gate.
+- `admin-console-pg-slo`.
+- e2e на Postgres.
+- Редиректы `/admin/audit`, `/admin/runtime-authority` и `/admin/score-diagnostic` — только после отдельного решения Human. В PR #639 их нет.
+
+Исходный текст приёмки до решения A, оставлен как объём PR-2:
+
 - Все AC раздела 8, помеченные `unit` / `pg` / `e2e-pg` / `e2e`, зелёные в CI.
 - Контрольная точка среза пройдена (раздел 7).
 - `admin-console-pg-slo` выполнен: p95 ≤ 500 мс, 0 потерь и дублей.
@@ -1337,7 +1354,7 @@ AC закрыт в первом PR только при автоматическ�
   - Test plan с результатами команд, включая артефакт `admin-console-pg-slo` и контрольную точку среза; скриншоты 8 разделов;
   - раздел «Граница первого PR»: приёмка 9.1, частичные AC-14/AC-29/AC-32, AC-16 не закрыт, ссылки на F1–F6; раздел «Обнаруженные и исправленные дефекты»; раздел «Честные недоступности».
 - **Rollout** (Human; порядок обязателен):
-  1. Human применяет 0214 → 0215 → 0216 к production Postgres. Сборка безопасна в любом порядке: без таблиц консоль отдаёт `ADMIN_CONSOLE_SCHEMA_NOT_APPLIED` (раздел 3), существующие пути триггеры не читают;
+  1. Human применяет 0214 → 0215 к production Postgres. 0216 в этот PR не входит. Без таблиц консоль отдаёт `ADMIN_CONSOLE_SCHEMA_NOT_APPLIED` (раздел 3).
   2. деплой `main` (OpenNext → Cloudflare Workers); Human задаёт `WAIA_DIAGNOSTICS_ENVIRONMENT` и проверяет `WAIA_RELEASE_SHA`;
   3. включить `WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED` → проверить «Задания» и полосу рынка;
   4. включить `WAIA_ADMIN_ASSISTANT_ENABLED` (+ при необходимости `WAIA_ADMIN_ASSISTANT_DAILY_TOKEN_BUDGET`);
