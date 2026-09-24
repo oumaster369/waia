@@ -1,3 +1,38 @@
+---
+integrationIssue: DEE-1072
+integrationTitle: "Admin console scoped financial snapshots and confirmation safety"
+branch: dee-1072-admin-console-financial-snapshots
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local, github-pr-ci, postgres-integration]
+requiredValidation: [lint, typecheck, build, targeted-unit, postgres-integration, e2e, validate-canon, validate-pr-governance]
+approvalGates: [plan-approved, integration-ready, human-merge]
+includedIssues:
+  - id: DEE-1072
+    role: work-package
+    completionPolicy: manual-at-integration-ready
+    status: done
+linearStatusFlow:
+  onPlanApproved: In Progress
+  onPrOpened: In Review
+  onMerge: Done
+state:
+  status: in-review
+  currentWorkPackage: WP-1
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
+  prNumber: 643
+  prUrl: https://github.com/oumaster369/waia/pull/643
+  lastValidatedGitSha: 59b8a8c20a014fed9920ef71fdb9b12d8299454a
+  lastValidationAt: "2026-09-24T21:38:00Z"
+  blockedReason: null
+  nextAction: "Pass exact-head CI, then squash-merge under the user's explicit operational delegation."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
+---
+
 # DEE-1072 — scoped financial snapshots and confirmation safety
 
 ## Context and goal
@@ -22,7 +57,7 @@ No schema migration, credential secret read, external exchange call on a read pa
 
 The user explicitly delegated operational PR review/merge/deployment gates on 2026-09-24. That delegation is not an invoice attestation or a financial policy decision. Merge only after required exact-head CI passes.
 
-## Acceptance and verification
+## Acceptance
 
 - Unit regression cases distinguish observed zero, missing/ERROR/invalid/stale evidence, source binding, paper/history cash, empty scope, FX revision/age and quote provenance; ownership mismatch and quantity changes cannot inherit prior lot evidence.
 - Real migrated PostgreSQL tests cover two organizations, exact decimal amounts beyond JavaScript safe integer range, two credentials for one account, ownership conflict, last complete evidence, full denominator above 64, and HTTP/assistant revision equality under identical scope and period.
