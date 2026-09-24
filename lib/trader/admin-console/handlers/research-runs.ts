@@ -1,3 +1,5 @@
+import { organizationFilter } from "@/lib/trader/admin-console/sql/read-scope";
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -33,8 +35,9 @@ export async function handleAdminConsoleResearchRunsGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT DISTINCT ON (organization_id, run_id)
                organization_id::text AS organization_id,
                run_id,
@@ -45,37 +48,39 @@ export async function handleAdminConsoleResearchRunsGet(
                symbol,
                partition
         FROM trader_historical_simulation_run_lifecycle_event_v2
+        WHERE ${organizationFilter(parsed.query)}
         ORDER BY organization_id, run_id, event_sequence DESC
         LIMIT ${parsed.query.limit}
       `),
-    );
-    const nowMs = Date.now();
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items: rows.flatMap((row) => {
-            const observedAt = iso(row.observed_at);
-            if (!observedAt) return [];
-            return [
-              presentResearchRun({
-                organizationId: String(row.organization_id),
-                runId: String(row.run_id),
-                phase: String(row.phase),
-                committedCycles: Number(row.committed_cycles),
-                qualifiedTotalCycles: Number(row.qualified_total_cycles),
-                observedAt,
-                symbol: String(row.symbol),
-                partition: String(row.partition),
-                nowMs,
-              }),
-            ];
-          }),
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      const nowMs = Date.now();
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items: rows.flatMap((row) => {
+              const observedAt = iso(row.observed_at);
+              if (!observedAt) return [];
+              return [
+                presentResearchRun({
+                  organizationId: String(row.organization_id),
+                  runId: String(row.run_id),
+                  phase: String(row.phase),
+                  committedCycles: Number(row.committed_cycles),
+                  qualifiedTotalCycles: Number(row.qualified_total_cycles),
+                  observedAt,
+                  symbol: String(row.symbol),
+                  partition: String(row.partition),
+                  nowMs,
+                }),
+              ];
+            }),
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

@@ -3,6 +3,7 @@ import { applyConsoleEvent, type EntityCache } from "@/lib/trader/admin-console/
 export const STREAM_TOPIC_BUFFER_CAP = 500;
 export const STREAM_FRAME_LIMIT = 50;
 export const STREAM_DISCONNECT_POLL_MS = 5_000;
+export const STREAM_CLIENT_MEMORY_CAP = 10_000;
 
 export type StreamActivity = "paused" | "sse" | "poll";
 
@@ -57,12 +58,13 @@ export function streamRequestUrl(
   session: Pick<StreamSession, "cursor" | "transport">,
   topics?: string,
 ): string {
-  const params = new URLSearchParams();
+  const [path, queryString] = base.split("?", 2);
+  const params = new URLSearchParams(queryString);
   if (topics) params.set("topics", topics);
   if (session.cursor) params.set("resume", session.cursor);
   if (session.transport === "poll") params.set("transport", "poll");
   const query = params.toString();
-  return query.length > 0 ? `${base}?${query}` : base;
+  return query.length > 0 ? `${path}?${query}` : path!;
 }
 
 export function failStream(session: StreamSession): StreamSession {
@@ -92,6 +94,13 @@ export function enqueueStreamEvent(
   if (event.type === "resync_required") {
     return { ...createStreamSession(null), seen: [...session.seen, event.eventId], resync: true };
   }
+  if (session.accessRevoked || session.resync) return session;
+  if (
+    session.seen.length >= STREAM_CLIENT_MEMORY_CAP ||
+    session.cache.size + (session.cache.removedVersions?.size ?? 0) >= STREAM_CLIENT_MEMORY_CAP
+  ) {
+    return { ...createStreamSession(null), resync: true };
+  }
   const queued = session.queue.filter((row) => row.topic === event.topic).length;
   if (queued >= STREAM_TOPIC_BUFFER_CAP) {
     return { ...createStreamSession(null), seen: session.seen, resync: true };
@@ -109,7 +118,8 @@ export function drainStreamFrame(
   limit = STREAM_FRAME_LIMIT,
 ): StreamSession {
   const batch = session.queue.slice(0, limit);
-  const cache = new Map(session.cache);
+  const cache: EntityCache = new Map(session.cache);
+  cache.removedVersions = new Map(session.cache.removedVersions);
   for (const event of batch) applyConsoleEvent(cache, event);
   return { ...session, queue: session.queue.slice(batch.length), cache };
 }

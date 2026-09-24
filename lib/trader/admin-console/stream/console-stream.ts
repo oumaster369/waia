@@ -1,3 +1,5 @@
+import { projectScopedChanges } from "@/lib/trader/admin-console/repositories/stream-projection.postgres";
+import type { AdminConsoleQuery } from "@/lib/trader/admin-console/scope";
 import {
   ADMIN_COCKPIT_MAX_STREAM_MS,
   ADMIN_COCKPIT_STREAM_HEADERS,
@@ -11,7 +13,6 @@ import {
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import {
-  credentialRevoked,
   readChangeLogBacklog,
   readChangeLogSince,
   readMinChangeLogXid,
@@ -24,11 +25,9 @@ import { parseAdminConsoleQuery, parseAdminStreamTopics } from "@/lib/trader/adm
 import {
   accessRevokedEvent,
   heartbeatEvent,
+  isXidCursor,
   planStreamTick,
-  projectChangeRow,
-  type ChangeLogRow,
   type ConsoleStreamEvent,
-  type ProjectedChange,
 } from "@/lib/trader/admin-console/stream/protocol";
 import {
   emitWaiaRuntimeRouteTelemetry,
@@ -43,42 +42,43 @@ export function encodeAdminConsoleSse(event: ConsoleStreamEvent): Uint8Array {
   );
 }
 
-async function projectRow(
-  tx: Parameters<typeof credentialRevoked>[0],
-  row: ChangeLogRow,
-): Promise<ProjectedChange | null> {
-  const projected = projectChangeRow(row);
-  if (!projected) return null;
-  if (row.sourceTable !== "exchange_credentials") return projected;
-  const revoked = row.op === "DELETE" || (await credentialRevoked(tx, row.entityId));
-  return { ...projected, removed: revoked || projected.removed };
-}
-
 async function readTick(
   db: Parameters<typeof withAdminReadSnapshot>[0],
   cursor: string | null,
   sent: Map<string, string>,
   topics: readonly string[],
   now: string,
+  query: AdminConsoleQuery,
+  poll = false,
 ) {
   return withAdminReadSnapshot(db, async (tx) => {
     const w1 = await readSnapshotXmin(tx);
+    if (cursor !== null && !isXidCursor(cursor)) {
+      return planStreamTick({
+        cursor,
+        w1,
+        rows: [],
+        moreRemain: false,
+        backlog: 0,
+        sent,
+        minRetainedXid: null,
+        now,
+        topics,
+      });
+    }
     const watermark = cursor ?? w1;
     const [{ rows, moreRemain }, backlog, minRetainedXid] = await Promise.all([
-      readChangeLogSince(tx, watermark),
+      readChangeLogSince(tx, watermark, [...sent.keys()]),
       readChangeLogBacklog(tx, watermark),
       readMinChangeLogXid(tx),
     ]);
-    const projected = new Map<string, ProjectedChange | null>();
-    for (const row of rows) {
-      projected.set(row.seq, await projectRow(tx, row));
-    }
+    const projected = await projectScopedChanges(tx, rows, query);
     const tick = planStreamTick({
       cursor,
       w1,
       rows,
       moreRemain,
-      backlog,
+      backlog: poll && moreRemain ? 20_001 : backlog,
       sent,
       minRetainedXid,
       now,
@@ -111,6 +111,8 @@ export async function handleAdminConsoleStreamPoll(
       new Map(),
       topics.topics,
       new Date().toISOString(),
+      query.query,
+      true,
     );
     return adminSuccess({ cursor: tick.value.cursor, events: tick.value.events }, "postgres");
   } finally {
@@ -207,6 +209,7 @@ export async function serveAdminConsoleStream(
             sent,
             topics.topics,
             new Date().toISOString(),
+            query.query,
           );
           cursor = tick.value.cursor;
           sent.clear();
@@ -216,6 +219,7 @@ export async function serveAdminConsoleStream(
           } else if (Date.now() - lastWrite >= 15_000) {
             write(heartbeatEvent(cursor ?? "0", new Date().toISOString()));
           }
+          if (tick.value.resync) break;
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
       } catch (err) {

@@ -6,7 +6,7 @@ import {
 } from "@/lib/trader/risk/numeric";
 
 export type FeeChainInput = {
-  previousCumulative: string;
+  previousCumulative: string | null;
   periodProfit: string;
   cumulative: string;
   previousHwm: string;
@@ -15,10 +15,25 @@ export type FeeChainInput = {
   performanceFee: string;
   billable: boolean;
   minFeeThreshold: string;
-  ledgerPreviousHwm: string;
+  ledgerPreviousHwm: string | null;
 };
 
-export function checkFeeChain(input: FeeChainInput): { ok: true } | { ok: false; link: string } {
+export function checkFeeChain(
+  input: FeeChainInput,
+):
+  | { ok: true }
+  | { ok: false; link: string }
+  | { ok: null; state: "unavailable"; reasons: string[] } {
+  if (input.previousCumulative === null || input.ledgerPreviousHwm === null) {
+    return {
+      ok: null,
+      state: "unavailable",
+      reasons: [
+        ...(input.previousCumulative === null ? ["PREVIOUS_CUMULATIVE_NOT_OBSERVED"] : []),
+        ...(input.ledgerPreviousHwm === null ? ["HWM_LEDGER_NOT_OBSERVED"] : []),
+      ],
+    };
+  }
   if (
     compareDecimal(input.cumulative, addDecimal(input.previousCumulative, input.periodProfit)) !== 0
   ) {

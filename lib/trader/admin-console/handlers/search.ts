@@ -1,3 +1,4 @@
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -77,49 +78,50 @@ export async function handleAdminConsoleSearchGet(
   if (!opened.ok) return opened.result;
   const pattern = likePattern(query);
   try {
-    const db = opened.runtime.db;
-    const [
-      organizations,
-      owners,
-      accounts,
-      invoices,
-      payments,
-      orders,
-      strategies,
-      runs,
-      incidents,
-    ] = await Promise.all([
-      db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const db = tx;
+      const [
+        organizations,
+        owners,
+        accounts,
+        invoices,
+        payments,
+        orders,
+        strategies,
+        runs,
+        incidents,
+      ] = await Promise.all([
+        db.execute(sql`
           SELECT id::text AS id, COALESCE(name, id::text) AS label, kind AS sublabel
           FROM organizations
           WHERE name ILIKE ${pattern} OR id::text ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, email AS label, NULL::text AS sublabel
           FROM users
           WHERE email ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, exchange_account_id AS label, organization_id::text AS sublabel
           FROM exchange_credentials
           WHERE exchange_account_id ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, id::text AS label, organization_id::text AS sublabel
           FROM trader_invoices
           WHERE id::text ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, settlement_tx_hash AS label, organization_id::text AS sublabel
           FROM payment_events
           WHERE settlement_tx_hash ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id,
                  COALESCE(exchange_order_id, client_order_id, id::text) AS label,
                  organization_id::text AS sublabel
@@ -129,64 +131,65 @@ export async function handleAdminConsoleSearchGet(
              OR client_order_id ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, strategy_id AS label, strategy_version AS sublabel
           FROM trader_strategy_promotion_records
           WHERE strategy_id ILIKE ${pattern} OR strategy_version ILIKE ${pattern} OR id::text ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, id::text AS label, strategy_id AS sublabel
           FROM trader_backtest_runs
           WHERE id::text ILIKE ${pattern} OR strategy_id ILIKE ${pattern}
           LIMIT 5
         `),
-      db.execute(sql`
+        db.execute(sql`
           SELECT id::text AS id, title AS label, fingerprint AS sublabel
           FROM trader_admin_incident
           WHERE title ILIKE ${pattern} OR fingerprint ILIKE ${pattern} OR id::text ILIKE ${pattern}
           LIMIT 5
         `),
-    ]);
-    const grouped = {
-      organizations: rowsOf(organizations).flatMap((row) => {
-        const item = hit("organizations", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      owners: rowsOf(owners).flatMap((row) => {
-        const item = hit("owners", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      accounts: rowsOf(accounts).flatMap((row) => {
-        const item = hit("accounts", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      invoices: rowsOf(invoices).flatMap((row) => {
-        const item = hit("invoices", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      payments: rowsOf(payments).flatMap((row) => {
-        const item = hit("payments", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      orders: rowsOf(orders).flatMap((row) => {
-        const item = hit("orders", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      strategies: rowsOf(strategies).flatMap((row) => {
-        const item = hit("strategies", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      runs: rowsOf(runs).flatMap((row) => {
-        const item = hit("runs", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-      incidents: rowsOf(incidents).flatMap((row) => {
-        const item = hit("incidents", row.id, row.label, row.sublabel);
-        return item ? [item] : [];
-      }),
-    };
-    return adminSuccess({ groups: GROUPS, results: grouped }, "postgres");
+      ]);
+      const grouped = {
+        organizations: rowsOf(organizations).flatMap((row) => {
+          const item = hit("organizations", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        owners: rowsOf(owners).flatMap((row) => {
+          const item = hit("owners", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        accounts: rowsOf(accounts).flatMap((row) => {
+          const item = hit("accounts", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        invoices: rowsOf(invoices).flatMap((row) => {
+          const item = hit("invoices", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        payments: rowsOf(payments).flatMap((row) => {
+          const item = hit("payments", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        orders: rowsOf(orders).flatMap((row) => {
+          const item = hit("orders", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        strategies: rowsOf(strategies).flatMap((row) => {
+          const item = hit("strategies", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        runs: rowsOf(runs).flatMap((row) => {
+          const item = hit("runs", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+        incidents: rowsOf(incidents).flatMap((row) => {
+          const item = hit("incidents", row.id, row.label, row.sublabel);
+          return item ? [item] : [];
+        }),
+      };
+      return adminSuccess({ groups: GROUPS, results: grouped }, "postgres");
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

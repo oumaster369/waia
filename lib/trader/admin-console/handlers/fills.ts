@@ -1,3 +1,5 @@
+import { orderScopeFilter } from "@/lib/trader/admin-console/sql/order-scope-filter";
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -9,7 +11,11 @@ import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { orderMode } from "@/lib/trader/admin-console/modes/order-mode";
-import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import {
+  adminScopeFromQuery,
+  parseAdminConsoleQuery,
+  periodBounds,
+} from "@/lib/trader/admin-console/scope";
 import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
@@ -59,14 +65,16 @@ export async function handleAdminConsoleFillsGet(
 ): Promise<AdminRouteHandlerResult> {
   const parsed = parseAdminConsoleQuery(new URL(request.url));
   if (!parsed.ok) return parsed.result;
+  const bounds = periodBounds(parsed.query, new Date());
   const opened = await openAdminConsole(request, deps, {
     requiredTables: HANDLER_TABLES.fills,
   });
   if (!opened.ok) return opened.result;
   const organizationId = parsed.query.organization_id ?? null;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT f.id::text AS id,
                f.organization_id::text AS organization_id,
                f.order_id::text AS order_id,
@@ -84,34 +92,38 @@ export async function handleAdminConsoleFillsGet(
          AND o.organization_id = f.organization_id
         WHERE (${organizationId}::uuid IS NULL OR f.organization_id = ${organizationId}::uuid)
           AND ${orderVisibleInMode(parsed.query.mode, true)}
+          AND ${orderScopeFilter(parsed.query, "o")}
+          AND f.executed_at >= ${bounds.start}::timestamptz
+          AND f.executed_at < ${bounds.end}::timestamptz
         ORDER BY f.executed_at DESC, f.id DESC
         LIMIT ${parsed.query.limit}
       `),
-    );
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items: rows.map((row) =>
-            presentFill({
-              id: String(row.id),
-              organizationId: String(row.organization_id),
-              orderId: String(row.order_id),
-              symbol: String(row.symbol),
-              price: String(row.price),
-              quantity: String(row.quantity),
-              fee: String(row.fee),
-              feeAsset: String(row.fee_asset),
-              executedAt: iso(row.executed_at),
-              historicalRunId: row.historical_run_id ? String(row.historical_run_id) : null,
-              executionMode: String(row.execution_mode),
-            }),
-          ),
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items: rows.map((row) =>
+              presentFill({
+                id: String(row.id),
+                organizationId: String(row.organization_id),
+                orderId: String(row.order_id),
+                symbol: String(row.symbol),
+                price: String(row.price),
+                quantity: String(row.quantity),
+                fee: String(row.fee),
+                feeAsset: String(row.fee_asset),
+                executedAt: iso(row.executed_at),
+                historicalRunId: row.historical_run_id ? String(row.historical_run_id) : null,
+                executionMode: String(row.execution_mode),
+              }),
+            ),
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

@@ -20,6 +20,6 @@ describe("console list refresh", () => {
       ok: false,
       reason: "ADMIN_CONSOLE_SCHEMA_NOT_APPLIED",
     });
-    expect(consoleListFromBody({})).toEqual({ ok: false, reason: "POSTGRES_REQUIRED" });
+    expect(consoleListFromBody({})).toEqual({ ok: false, reason: "ADMIN_RESPONSE_INVALID" });
   });
 });

@@ -47,6 +47,7 @@ export async function readChangeLogPage(
   tx: AdminReadTx,
   watermark: string,
   afterSeq: string,
+  sentSeqs: readonly string[] = [],
 ): Promise<ChangeLogRow[]> {
   const result = await tx.execute(sql`
     SELECT seq::text AS seq,
@@ -60,7 +61,8 @@ export async function readChangeLogPage(
     FROM trader_admin_change_log
     WHERE xid >= ${watermark}::xid8
       AND seq > ${afterSeq}::bigint
-    ORDER BY seq
+      AND NOT (seq = ANY(string_to_array(${sentSeqs.join(",")}, ',')::bigint[]))
+    ORDER BY trader_admin_change_log.seq
     LIMIT ${STREAM_PAGE_LIMIT}
   `);
   return rowsOf(result).flatMap((row) => {
@@ -72,12 +74,13 @@ export async function readChangeLogPage(
 export async function readChangeLogSince(
   tx: AdminReadTx,
   watermark: string,
+  sentSeqs: readonly string[] = [],
 ): Promise<{ rows: ChangeLogRow[]; moreRemain: boolean }> {
   const rows: ChangeLogRow[] = [];
   let afterSeq = "0";
   let moreRemain = false;
   for (let page = 0; page < STREAM_MAX_PAGES; page += 1) {
-    const batch = await readChangeLogPage(tx, watermark, afterSeq);
+    const batch = await readChangeLogPage(tx, watermark, afterSeq, sentSeqs);
     rows.push(...batch);
     if (batch.length < STREAM_PAGE_LIMIT) return { rows, moreRemain: false };
     afterSeq = batch[batch.length - 1]?.seq ?? afterSeq;

@@ -29,6 +29,16 @@ function valid(): FeeChainInput {
 }
 
 describe("admin console invoice detail", () => {
+  it("does not certify a chain from the invoice's own values when independent evidence is missing", () => {
+    expect(checkFeeChain({ ...valid(), previousCumulative: null })).toMatchObject({
+      ok: null,
+      reasons: ["PREVIOUS_CUMULATIVE_NOT_OBSERVED"],
+    });
+    expect(checkFeeChain({ ...valid(), ledgerPreviousHwm: null })).toMatchObject({
+      ok: null,
+      reasons: ["HWM_LEDGER_NOT_OBSERVED"],
+    });
+  });
   it("accepts a consistent stored chain and names the broken link without using trades", () => {
     expect(checkFeeChain(valid()).ok).toBe(true);
     expect(checkFeeChain({ ...valid(), cumulative: "9999" })).toMatchObject({

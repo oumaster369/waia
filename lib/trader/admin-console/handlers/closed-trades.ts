@@ -1,3 +1,5 @@
+import { legScopeFilter } from "@/lib/trader/admin-console/sql/leg-scope-filter";
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -8,8 +10,11 @@ import {
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
-import { tradePeriodBounds } from "@/lib/trader/admin-console/read-models/trade-period";
-import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import {
+  adminScopeFromQuery,
+  parseAdminConsoleQuery,
+  periodBounds,
+} from "@/lib/trader/admin-console/scope";
 
 const CLOSED_TRADE_LABELS: Record<string, string> = {
   CLOSED: "Закрыта",
@@ -54,15 +59,11 @@ export async function handleAdminConsoleClosedTradesGet(
   });
   if (!opened.ok) return opened.result;
   const organizationId = parsed.query.organization_id ?? null;
-  const bounds = tradePeriodBounds({
-    period: parsed.query.period,
-    from: parsed.query.from,
-    to: parsed.query.to,
-    now: new Date(),
-  });
+  const bounds = periodBounds(parsed.query, new Date());
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT id::text AS id,
                organization_id::text AS organization_id,
                symbol,
@@ -73,6 +74,7 @@ export async function handleAdminConsoleClosedTradesGet(
                closed_at
         FROM trader_trades
         WHERE state IN ('CLOSED', 'FORCED_FLAT')
+          AND ${legScopeFilter(parsed.query, "trade", "trader_trades")}
           AND closed_at IS NOT NULL
           AND closed_at >= ${bounds.start}::timestamptz
           AND closed_at < ${bounds.end}::timestamptz
@@ -80,29 +82,30 @@ export async function handleAdminConsoleClosedTradesGet(
         ORDER BY closed_at DESC, id DESC
         LIMIT ${parsed.query.limit}
       `),
-    );
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items: rows.map((row) =>
-            presentClosedTrade({
-              id: String(row.id),
-              organizationId: String(row.organization_id),
-              symbol: String(row.symbol),
-              strategyId: String(row.strategy_id),
-              strategyVersion: String(row.strategy_version),
-              state: String(row.state),
-              realizedPnl: String(row.realized_pnl),
-              closedAt: iso(row.closed_at),
-            }),
-          ),
-          period: bounds,
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items: rows.map((row) =>
+              presentClosedTrade({
+                id: String(row.id),
+                organizationId: String(row.organization_id),
+                symbol: String(row.symbol),
+                strategyId: String(row.strategy_id),
+                strategyVersion: String(row.strategy_version),
+                state: String(row.state),
+                realizedPnl: String(row.realized_pnl),
+                closedAt: iso(row.closed_at),
+              }),
+            ),
+            period: bounds,
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

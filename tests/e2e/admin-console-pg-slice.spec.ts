@@ -43,9 +43,11 @@ test("slice gate shows a live order transition and an incident", async ({
     await page.waitForURL("**/trader");
     await page.goto("/admin/orders");
     await expect(page.getByText("SLICEBTC")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Создан")).toBeVisible();
+    await expect(page.locator(`[data-order-id="${orderId}"]`).getByText("Создан")).toBeVisible();
     await sql`UPDATE trader_orders SET state = 'RISK_APPROVED', state_version = 2 WHERE id = ${orderId}::uuid`;
-    await expect(page.getByText("Риск одобрил")).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.locator(`[data-order-id="${orderId}"]`).getByText("Риск одобрил"),
+    ).toBeVisible({ timeout: 20_000 });
     await sql`
       INSERT INTO trader_admin_incident (
         id, environment, service, fingerprint, title, severity, status,

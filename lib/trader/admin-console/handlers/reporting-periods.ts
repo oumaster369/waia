@@ -1,3 +1,5 @@
+import { exchangeAccountFilter } from "@/lib/trader/admin-console/sql/read-scope";
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 
 import {
@@ -32,9 +34,10 @@ export async function handleAdminConsoleReportingPeriodsGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const organizationId = parsed.query.organization_id ?? null;
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const organizationId = parsed.query.organization_id ?? null;
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT id::text AS id,
                organization_id::text AS organization_id,
                exchange_account_id,
@@ -42,30 +45,32 @@ export async function handleAdminConsoleReportingPeriodsGet(
                period_start,
                period_end
         FROM trader_reporting_periods
-        WHERE ${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid
+        WHERE (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+          AND ${exchangeAccountFilter(parsed.query, "")}
         ORDER BY period_start DESC, id
         LIMIT ${parsed.query.limit}
       `),
-    );
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          bounds: "[start, end)",
-          timezone: parsed.query.tz,
-          items: rows.map((row) => ({
-            id: String(row.id),
-            organizationId: String(row.organization_id),
-            exchangeAccountId: String(row.exchange_account_id),
-            status: String(row.status),
-            start: iso(row.period_start),
-            end: iso(row.period_end),
-          })),
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
+      );
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            bounds: "[start, end)",
+            timezone: parsed.query.tz,
+            items: rows.map((row) => ({
+              id: String(row.id),
+              organizationId: String(row.organization_id),
+              exchangeAccountId: String(row.exchange_account_id),
+              status: String(row.status),
+              start: iso(row.period_start),
+              end: iso(row.period_end),
+            })),
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
+    });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }

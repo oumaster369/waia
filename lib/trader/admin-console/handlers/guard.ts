@@ -6,6 +6,7 @@ import type {
   AdminRouteHandlerDeps,
   AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
+import { assertAdminPermission, adminClientError } from "@/lib/trader/admin-route-shared";
 
 export type OpenAdminConsole =
   | {
@@ -29,11 +30,26 @@ export async function openAdminConsole(
     const origin = assertAdminConsoleSameOrigin(request);
     if (origin) return { ok: false, result: origin };
   }
-  const auth = await authorizeFleetAdmin(
-    deps,
-    options?.mutate ? "admin.trader.operations.mutate" : "admin.audit.read",
-  );
+  const auth = await authorizeFleetAdmin(deps, "admin.audit.read");
   if (!auth.ok) return auth;
+  if (options?.mutate) {
+    const permission = await assertAdminPermission(
+      auth.runtime,
+      auth.userId,
+      auth.contextOrgId,
+      "admin.trader.operations.mutate",
+    ).catch(async (error: unknown) => {
+      await deps.disposeRuntimeDb(auth.runtime);
+      throw error;
+    });
+    if (!permission.allowed) {
+      await deps.disposeRuntimeDb(auth.runtime);
+      return {
+        ok: false,
+        result: adminClientError(403, "FORBIDDEN", "Admin operation permission required."),
+      };
+    }
+  }
   const sqlite = requirePostgres(auth.runtime);
   if (sqlite) {
     await deps.disposeRuntimeDb(auth.runtime);

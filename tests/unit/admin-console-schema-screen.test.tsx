@@ -7,11 +7,11 @@ vi.mock("next/navigation", () => ({
 
 vi.stubGlobal(
   "fetch",
-  vi.fn(async () => ({
-    json: async () => ({
+  vi.fn(async () =>
+    Response.json({
       data: { state: "unavailable", reasons: ["ADMIN_CONSOLE_SCHEMA_NOT_APPLIED"] },
     }),
-  })),
+  ),
 );
 
 const PHRASE = "Появится после применения схемы консоли";

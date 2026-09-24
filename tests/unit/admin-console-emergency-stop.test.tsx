@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
@@ -92,7 +92,7 @@ describe("admin console emergency stop", () => {
     expect(screen.getByText(RU.emergency.versionMissing)).toBeInTheDocument();
   });
 
-  it("acks the first painted order version once", () => {
+  it("acks the first painted order version once", async () => {
     const row = {
       id: "order-1",
       symbol: "btcusdt",
@@ -101,9 +101,11 @@ describe("admin console emergency stop", () => {
       entityVersion: "7",
     };
     const view = render(<OrdersPanel rows={[row]} />);
-    expect(view.container.querySelector("[data-render-ack]")).toHaveAttribute(
-      "data-render-ack",
-      "1",
+    await waitFor(() =>
+      expect(view.container.querySelector("[data-render-ack]")).toHaveAttribute(
+        "data-render-ack",
+        "1",
+      ),
     );
     view.rerender(<OrdersPanel rows={[row]} />);
     expect(view.container.querySelector("[data-render-ack]")).toHaveAttribute(

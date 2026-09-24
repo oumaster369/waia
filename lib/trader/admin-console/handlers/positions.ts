@@ -1,3 +1,5 @@
+import { legScopeFilter } from "@/lib/trader/admin-console/sql/leg-scope-filter";
+import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { createRequire } from "node:module";
 import { sql } from "drizzle-orm";
 
@@ -18,7 +20,6 @@ import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import type { AdminMode } from "@/lib/trader/admin-console/contracts";
 import { presentOpenLot } from "@/lib/trader/admin-console/read-models/positions";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
-import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
 
 const require = createRequire(import.meta.url);
 if (process.env.VITEST !== "true") require("server-only");
@@ -76,8 +77,9 @@ export async function handleAdminConsolePositionsGet(
   const cursorId = cursor?.id ?? null;
   const limit = parsed.query.limit;
   try {
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
+    return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
+      const rows = rowsOf(
+        await tx.execute(sql`
         SELECT l.id::text AS id,
                l.organization_id::text AS organization_id,
                l.symbol,
@@ -120,19 +122,7 @@ export async function handleAdminConsolePositionsGet(
          AND groups.account_key = l.account_key
         WHERE l.state = 'OPEN'
           AND (${organizationId}::uuid IS NULL OR l.organization_id = ${organizationId}::uuid)
-          AND (
-            ${parsed.query.mode}::text = 'all'
-            OR EXISTS (
-              SELECT 1
-              FROM trader_trade_legs leg
-              JOIN trader_orders o
-                ON o.id = leg.order_id
-               AND o.organization_id = leg.organization_id
-              WHERE leg.position_lot_id = l.id
-                AND leg.organization_id = l.organization_id
-                AND ${orderVisibleInMode(parsed.query.mode, true)}
-            )
-          )
+          AND ${legScopeFilter(parsed.query, "lot", "l")}
           AND (
             ${cursorTime}::timestamptz IS NULL
             OR l.opened_at < ${cursorTime}::timestamptz
@@ -141,14 +131,14 @@ export async function handleAdminConsolePositionsGet(
         ORDER BY l.opened_at DESC, l.id::text DESC
         LIMIT ${limit + 1}
       `),
-    );
-    const page = rows.slice(0, limit);
-    const lotIds = page.map((row) => String(row.id));
-    const legRows =
-      lotIds.length === 0
-        ? []
-        : rowsOf(
-            await opened.runtime.db.execute(sql`
+      );
+      const page = rows.slice(0, limit);
+      const lotIds = page.map((row) => String(row.id));
+      const legRows =
+        lotIds.length === 0
+          ? []
+          : rowsOf(
+              await tx.execute(sql`
               SELECT leg.position_lot_id::text AS lot_id,
                      leg.id::text AS leg_id,
                      leg.organization_id::text AS organization_id,
@@ -169,113 +159,114 @@ export async function handleAdminConsolePositionsGet(
                AND c.organization_id = o.organization_id
               WHERE leg.position_lot_id::text = ANY(string_to_array(${lotIds.join(",")}, ','))
             `),
-          );
-    const legsByLot = new Map<string, Record<string, unknown>[]>();
-    for (const leg of legRows) {
-      const lotId = String(leg.lot_id);
-      const list = legsByLot.get(lotId) ?? [];
-      list.push(leg);
-      legsByLot.set(lotId, list);
-    }
-    const nowMs = Date.now();
-    const items = page.map((row) => {
-      const lotId = String(row.id);
-      const organizationIdText = String(row.organization_id);
-      const symbol = String(row.symbol);
-      const accountKey = String(row.account_key);
-      const legs = legsByLot.get(lotId) ?? [];
-      const orders: AttributionOrder[] = [];
-      const credentials: AttributionCredential[] = [];
-      for (const leg of legs) {
-        const orderId = text(leg.order_id);
-        if (!orderId || !text(leg.execution_mode)) continue;
-        orders.push({
-          id: orderId,
-          organizationId: organizationIdText,
-          historicalRunId: text(leg.historical_run_id),
-          executionMode: String(leg.execution_mode),
-          credentialId: text(leg.credential_id),
-          strategySignalId: text(leg.strategy_signal_id),
-          symbol: text(leg.order_symbol) ?? symbol,
-        });
-        const credentialId = text(leg.credential_row_id);
-        const exchangeAccountId = text(leg.exchange_account_id);
-        if (credentialId && exchangeAccountId) {
-          credentials.push({
-            id: credentialId,
-            organizationId: organizationIdText,
-            exchangeAccountId,
-          });
-        }
+            );
+      const legsByLot = new Map<string, Record<string, unknown>[]>();
+      for (const leg of legRows) {
+        const lotId = String(leg.lot_id);
+        const list = legsByLot.get(lotId) ?? [];
+        list.push(leg);
+        legsByLot.set(lotId, list);
       }
-      const attribution = attributeLegs(
-        legs.map((leg) => ({
-          id: String(leg.leg_id),
+      const nowMs = Date.now();
+      const items = page.map((row) => {
+        const lotId = String(row.id);
+        const organizationIdText = String(row.organization_id);
+        const symbol = String(row.symbol);
+        const accountKey = String(row.account_key);
+        const legs = legsByLot.get(lotId) ?? [];
+        const orders: AttributionOrder[] = [];
+        const credentials: AttributionCredential[] = [];
+        for (const leg of legs) {
+          const orderId = text(leg.order_id);
+          if (!orderId || !text(leg.execution_mode)) continue;
+          orders.push({
+            id: orderId,
+            organizationId: organizationIdText,
+            historicalRunId: text(leg.historical_run_id),
+            executionMode: String(leg.execution_mode),
+            credentialId: text(leg.credential_id),
+            strategySignalId: text(leg.strategy_signal_id),
+            symbol: text(leg.order_symbol) ?? symbol,
+          });
+          const credentialId = text(leg.credential_row_id);
+          const exchangeAccountId = text(leg.exchange_account_id);
+          if (credentialId && exchangeAccountId) {
+            credentials.push({
+              id: credentialId,
+              organizationId: organizationIdText,
+              exchangeAccountId,
+            });
+          }
+        }
+        const attribution = attributeLegs(
+          legs.map((leg) => ({
+            id: String(leg.leg_id),
+            organizationId: organizationIdText,
+            orderId: text(leg.order_id),
+            strategySignalId: text(leg.strategy_signal_id),
+            symbol,
+            accountKey,
+          })),
+          orders,
+          credentials,
+        );
+        const guardianAt = iso(row.guardian_at);
+        const recommendation = text(row.recommendation);
+        const openSufficiency = text(row.open_position_sufficiency);
+        const newSufficiency = text(row.new_opportunity_sufficiency);
+        const reduction = bps(row.target_reduction_bps);
+        const guardian =
+          guardianAt && recommendation && openSufficiency && newSufficiency && reduction !== null
+            ? {
+                recommendation,
+                openPositionSufficiency: openSufficiency,
+                newOpportunitySufficiency: newSufficiency,
+                targetReductionBps: reduction,
+                assessedAt: guardianAt,
+              }
+            : null;
+        return presentOpenLot({
+          lotId,
           organizationId: organizationIdText,
-          orderId: text(leg.order_id),
-          strategySignalId: text(leg.strategy_signal_id),
           symbol,
           accountKey,
-        })),
-        orders,
-        credentials,
-      );
-      const guardianAt = iso(row.guardian_at);
-      const recommendation = text(row.recommendation);
-      const openSufficiency = text(row.open_position_sufficiency);
-      const newSufficiency = text(row.new_opportunity_sufficiency);
-      const reduction = bps(row.target_reduction_bps);
-      const guardian =
-        guardianAt && recommendation && openSufficiency && newSufficiency && reduction !== null
-          ? {
-              recommendation,
-              openPositionSufficiency: openSufficiency,
-              newOpportunitySufficiency: newSufficiency,
-              targetReductionBps: reduction,
-              assessedAt: guardianAt,
-            }
-          : null;
-      return presentOpenLot({
-        lotId,
-        organizationId: organizationIdText,
-        symbol,
-        accountKey,
-        openQty: String(row.open_qty),
-        remainingQty: String(row.remaining_qty),
-        avgCost: String(row.avg_cost),
-        openedAt: iso(row.opened_at) ?? "",
-        exchangeAccountId:
-          attribution.state === "attributed" ? attribution.exchangeAccountId : null,
-        mode: attribution.state === "attributed" ? (attribution.mode as AdminMode) : null,
-        attribution:
-          attribution.state === "attributed"
-            ? "attributed"
-            : attribution.state === "ambiguous"
-              ? "ambiguous"
-              : "unattributed",
-        openLotsInGroup: countOf(row.open_lot_count),
-        guardian,
-        riskPosture: text(row.risk_posture),
-        nowMs,
+          openQty: String(row.open_qty),
+          remainingQty: String(row.remaining_qty),
+          avgCost: String(row.avg_cost),
+          openedAt: iso(row.opened_at) ?? "",
+          exchangeAccountId:
+            attribution.state === "attributed" ? attribution.exchangeAccountId : null,
+          mode: attribution.state === "attributed" ? (attribution.mode as AdminMode) : null,
+          attribution:
+            attribution.state === "attributed"
+              ? "attributed"
+              : attribution.state === "ambiguous"
+                ? "ambiguous"
+                : "unattributed",
+          openLotsInGroup: countOf(row.open_lot_count),
+          guardian,
+          riskPosture: text(row.risk_posture),
+          nowMs,
+        });
       });
+      const last = items[items.length - 1];
+      return adminSuccess(
+        adminEnvelope({
+          data: {
+            items,
+            total: null,
+            nextCursor:
+              rows.length > limit && last
+                ? encodePageCursor({ t: last.openedAt, id: last.lotId })
+                : null,
+            truncated: rows.length > limit,
+          },
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
+        }),
+        "postgres",
+      );
     });
-    const last = items[items.length - 1];
-    return adminSuccess(
-      adminEnvelope({
-        data: {
-          items,
-          total: null,
-          nextCursor:
-            rows.length > limit && last
-              ? encodePageCursor({ t: last.openedAt, id: last.lotId })
-              : null,
-          truncated: rows.length > limit,
-        },
-        scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
-      }),
-      "postgres",
-    );
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }
