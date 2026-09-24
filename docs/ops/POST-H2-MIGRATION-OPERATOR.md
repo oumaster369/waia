@@ -3,7 +3,11 @@
 DEE-1018 provides the fail-closed Human-operated surface for the additive range **after** the frozen
 H2 ladder:
 
-`0208 → 0209 → verify → STOP → 0210 → verify → STOP`
+`0208 → 0209 → verify → STOP → 0210 → verify → STOP → 0211 → … → 0215`
+
+DEE-1070 extends the same operator through `0211`, `0212`, `0213`, `0214`, and `0215`. Each of those
+steps is still one Human ceremony. The operator does not apply a later step because an earlier one
+succeeded.
 
 It does not authorize or perform anything by itself. Each step is a separate Human ceremony. The
 frozen H2 operator ([`H2-ONE-STEP-MIGRATION-OPERATOR.md`](H2-ONE-STEP-MIGRATION-OPERATOR.md)) keeps
@@ -12,8 +16,9 @@ frozen H2 operator ([`H2-ONE-STEP-MIGRATION-OPERATOR.md`](H2-ONE-STEP-MIGRATION-
 ## Ratified rollout model
 
 The Human Architect selected the **ordered global post-H2 lane** for DEE-1018. The production
-journal advances `0205 → 0206 → 0207 → 0208 → 0209 → 0210`. Sparse application — recording `0210`
-while `0209` is unapplied — is rejected, and this operator refuses it structurally.
+journal advances `0205 → 0206 → 0207 → 0208 → 0209 → 0210 → 0211 → 0212 → 0213 → 0214 → 0215`.
+Sparse application — recording any later step while its predecessor is unapplied — is rejected, and
+this operator refuses it structurally.
 
 Applying `0209` is a **schema-only** step. It authorizes no AI-TWIN runtime, ingestion, writer,
 route, backfill or product rollout; the operator proves that by requiring the AI-TWIN tables to grant
@@ -27,9 +32,10 @@ named-role EXECUTE grant.
 ## Why not `drizzle-kit migrate`
 
 Drizzle selects unapplied migrations by a single `max(created_at)` high-water mark, not by strict
-prefix. From a live journal at `0208` a generic migrate would apply `0209` **and** `0210` in one
-uninterruptible run, collapsing two independently gated module rollouts into one decision. Worse, if
-`0210` were ever recorded first, `0209` would fall below the high-water mark and be skipped forever.
+prefix. From a live journal at `0208` a generic migrate would apply `0209` through `0215` in one
+uninterruptible run, collapsing independently gated module rollouts into one decision. Worse, if a
+later step were ever recorded first, its predecessor would fall below the high-water mark and be
+skipped forever.
 This operator reads and executes only the one pinned migration named by `--step`.
 
 ## Safety boundary
@@ -43,11 +49,12 @@ This operator reads and executes only the one pinned migration named by `--step`
 - There is no `--latest`, `--all`, `--continue`, `--next`, loop, DDL retry or next-step behavior, and
   no generic Drizzle migrate path.
 - The complete live journal must equal the pinned predecessor prefix exactly. Gaps, extra rows,
-  duplicates, changed hashes or timestamps, reordering, unknown or later identities, sparse `0210`
+  duplicates, changed hashes or timestamps, reordering, unknown or later identities, a sparse step
   and an already-applied step all refuse.
-- The catalog is cross-checked against the journal: `0209` refuses if any `public.ai_twin_*` object
-  already exists, and `0210` refuses unless the 18 AI-TWIN tables `0209` created are actually
-  present. A journal row without its objects is treated as a forged history.
+- The catalog is cross-checked against the journal. `0209` refuses if any `public.ai_twin_*` object
+  already exists. Each later step refuses unless the previous step's objects are present, and
+  refuses if its own objects are already present. A journal row without its objects is treated as a
+  forged history.
 - Exact SQL and its single Drizzle journal row share one manually controlled, non-retrying
   `SERIALIZABLE` transaction.
 - A pre-commit catalog contradiction rolls back both. An uncertain COMMIT must never be retried; use
@@ -60,11 +67,21 @@ This operator reads and executes only the one pinned migration named by `--step`
 |---|---|---|---|---|---|
 | 0209 | 209 | 1780000000209 | `b10f7edcb2187253355399ca5dfb82bac0177c12` | `baa60df04b1d8e2efa128ec645c44d7c956ae620` | `abed7b094260866d33f82aa420481bf910e70c0e331f470ef4999e66e6c6f397` |
 | 0210 | 210 | 1780000000210 | `4b6081342702e0322d0bda4c64f00cbf04704b4e` | `302d215e41ff9f3e2409473479b81d1611ca919e` | `1ab9f641f02cdf51f7fbefcc910163e3834c20aacbe7ea12a71163f547983efb` |
+| 0211 | 211 | 1780000000211 | `8121eef576bcc8e32b5429c46e2bf0a54d73f25a` | `1fa106097cb2913cbd624b871ed6fa3509d7229b` | `6e1fd8ab8cefd9a9b03841709584db116193d2a2074e81e3650c8ea03aca08c2` |
+| 0212 | 212 | 1780000000212 | `d356d39727e7310d815abbdb44d8b73c454531c4` | `ec36226c119d9121efff9100ba81ed74a04051cc` | `4dca64d100c7a410fce764966080e7ce9b925e5838880b7932c62cc0248a8cb0` |
+| 0213 | 213 | 1780000000213 | `d356d39727e7310d815abbdb44d8b73c454531c4` | `449dfeef8e3726cb8146b8c7aa83ddc2ec0bb9e9` | `aae00fa4a90d5421103a9a78eb1ec31c98683e77b31faf4576160295da5e58f4` |
+| 0214 | 214 | 1780000000214 | `c6e5349bf7a8e3b7eb3d546b1210445ec38dee0e` | `a7a9c3185aa1809cc94ea72c4388beed4ad29662` | `3f6299469575115d531bab8c0c32e2eb619313458b02738c9d1fda73b47de49c` |
+| 0215 | 215 | 1780000000215 | `c6e5349bf7a8e3b7eb3d546b1210445ec38dee0e` | `a7656ba91f49a6670cb3a8d75cab217235557d13` | `5b7808ce91078cc598d177685b20bb4c6bed95f15c2a692d39741ef4312ee5fe` |
 
 | `--step` | Accepted live journal | Resulting journal |
 |---|---|---|
 | `0209` | exactly `0000..0208` (209 rows) | `0000..0209` (210 rows) |
 | `0210` | exactly `0000..0209` (210 rows) | `0000..0210` (211 rows) |
+| `0211` | exactly `0000..0210` (211 rows) | `0000..0211` (212 rows) |
+| `0212` | exactly `0000..0211` (212 rows) | `0000..0212` (213 rows) |
+| `0213` | exactly `0000..0212` (213 rows) | `0000..0213` (214 rows) |
+| `0214` | exactly `0000..0213` (214 rows) | `0000..0214` (215 rows) |
+| `0215` | exactly `0000..0214` (215 rows) | `0000..0215` (216 rows) |
 
 The `0000..0208` prefix is taken from the H2 operator's own pinned baseline closure, so the two lanes
 cannot disagree about what "canonical through 0208" means. Preparing `0210` re-pins the `0209`
@@ -114,7 +131,8 @@ Before every step, the Human ceremony must establish:
    `public`, and can create roles for `0210`.
 6. The complete live journal is exactly through the requested predecessor.
 7. For `0209`: no `public.ai_twin_*` object exists. For `0210`: `0209`'s objects exist and neither
-   `0210` policy exists.
+   `0210` policy exists. For `0211`–`0215`: the predecessor step's objects exist and this step's
+   objects do not.
 
 The operator independently checks relevant `pg_stat_activity` writer identities, then obtains a
 transaction advisory lock for `waia.trader.post-h2.migration-operator.v1`, `ACCESS EXCLUSIVE` on
@@ -139,8 +157,9 @@ pnpm trader:post-h2:migrate \
   --ceremony-authorization-attestation '/private/post-h2/ceremony-authorization.json'
 ```
 
-After a successful `0209` receipt, **stop**. `0210` requires a new Human decision, a new evidence
-packet and a second invocation with `--step 0210`.
+After a successful receipt, **stop**. The next step requires a new Human decision, a new evidence
+packet and a second invocation that names that exact step. Substitute `--step 0211` (or `0212`,
+`0213`, `0214`, `0215`) only when that step is the one the Human just authorized.
 
 ## Migration-specific pre-commit verification
 
@@ -164,6 +183,19 @@ their own relation, permissive, scoped to that single role, consulting the `waia
 runtime context and never `USING (true)`, with the credential read additionally bound to a provisioned
 collection state and `status = 'active'`; row-level security still enabled and `FORCE ROW LEVEL
 SECURITY` still disabled on `exchange_credentials` per migration `0007`.
+
+**0211 (knowledge edge and prediction versions).** The two version tables exist. Immutability
+triggers `trader_knowledge_edges_immutable_all_v2` and `trader_market_predictions_immutable_all_v2`
+are `BEFORE UPDATE OR DELETE`. Copied edge rows equal `trader_knowledge_edges`. Copied verification
+rows equal predictions whose `verified_at`, `outcome_json`, and `verification_result` are all
+non-null. No non-owner `UPDATE` or `DELETE` grant remains on the two source tables.
+
+**0212 / 0213 (human promotion).** `0212` requires `trader_human_promotion_proposal_v2` and
+`trader_human_research_assignment_v2`. `0213` requires deny-by-default row-level security on both.
+
+**0214 / 0215 (admin console).** `0214` requires the seventeen console tables and the absence of
+trigger `trader_admin_change_log_trg`. `0215` requires deny-by-default row-level security on those
+tables and the same absent trigger.
 
 Verification runs before COMMIT. Full relation/column/constraint/index/policy/trigger/function/
 role/membership/grant projections are matched against immutable expected catalog digests. Snapshot definition rows are re-sorted bytewise in-process so ICU vs libc punctuation cannot
@@ -225,11 +257,12 @@ The integration suite is opt-in and hard-requires a loopback PostgreSQL administ
 disposable databases, applies the baseline through `0208`, and never uses a shared target:
 
 ```bash
-WAIA_TEST_DEE1018_PG_ADMIN_URL='postgres://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate' \
+WAIA_TEST_DEE1018_PG_ADMIN_URL='postgres://postgres@127.0.0.1:55492/postgres' \
 pnpm test --run tests/integration/postgres-post-h2-migration-operator-v1.test.ts
 ```
 
-Never set this variable to a production, Supabase, remote or shared database.
+Use a disposable loopback PostgreSQL 17 on its own port. Do not point this variable at port `54329`
+(the shared local validate database), `.env.local`, production, Supabase, or any remote database.
 
 `0209` and `0210` are additionally covered on the target's cluster class by
 `tests/integration/postgres-migration-catalog-authority-supabase-like-v1.test.ts` — see the
