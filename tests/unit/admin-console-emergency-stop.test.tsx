@@ -1,97 +1,122 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-
-import { RU } from "@/components/trader/admin-console/i18n/ru";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { EmergencyWorkflow } from "@/components/trader/admin-console/primitives/emergency-workflow";
 import { OrdersPanel } from "@/components/trader/admin-console/sections/orders/orders-panel";
-import { EmergencyStopDialog } from "@/components/trader/admin-console/primitives/emergency-stop-dialog";
-import {
-  emergencyEffect,
-  emergencyTripBody,
-} from "@/components/trader/admin-console/primitives/emergency-stop";
-import { killSwitchEnforcementModeEnum, killSwitchTypeEnum } from "@/db/schema";
 
-describe("admin console emergency stop", () => {
-  it("uses switch types and enforcement modes the kill switch already stores", () => {
-    for (const type of ["PAUSE", "CLOSE_ONLY", "EMERGENCY_STOP"]) {
-      expect(killSwitchTypeEnum).toContain(type);
-    }
-    expect([...killSwitchEnforcementModeEnum]).toEqual(["STOP_ACCOUNT", "CLOSE_ONLY", "REJECT"]);
+beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+    configurable: true,
+    value() {
+      this.setAttribute("open", "");
+    },
   });
-
-  it("does not build a trip until the reason is confirmed, and says the command does not close positions", () => {
-    const incomplete = emergencyTripBody({
-      organizationId: "org-1",
-      switchType: "EMERGENCY_STOP",
-      enforcementMode: "STOP_ACCOUNT",
-      expectedStateVersion: 3,
-      reason: "биржа не отвечает",
-      confirmed: false,
-    });
-    expect(incomplete.ok).toBe(false);
-    const ready = emergencyTripBody({
-      organizationId: "org-1",
-      switchType: "EMERGENCY_STOP",
-      enforcementMode: "STOP_ACCOUNT",
-      expectedStateVersion: 3,
-      reason: "биржа не отвечает",
-      confirmed: true,
-    });
-    expect(ready.ok).toBe(true);
-    if (ready.ok) expect(ready.body.command).toBe("trip");
-    expect(emergencyEffect("EMERGENCY_STOP", "STOP_ACCOUNT")).toContain(
-      "Закрытие позиций эта команда не выполняет.",
-    );
+  Object.defineProperty(HTMLDialogElement.prototype, "close", {
+    configurable: true,
+    value() {
+      this.removeAttribute("open");
+    },
   });
-
-  it("walks scope, effect, and confirmation, then waits for a fresh read", () => {
-    const onSubmit = vi.fn();
-    render(
-      <EmergencyStopDialog
-        open
-        expectedStateVersion={4}
-        onClose={() => undefined}
-        onSubmit={onSubmit}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText("Идентификатор организации"), {
-      target: { value: "org-1" },
+});
+afterEach(() => vi.unstubAllGlobals());
+function snapshot(revision = "read-4", state = "INACTIVE") {
+  return {
+    schemaVersion: "admin-console/v1",
+    revision,
+    scope: { kind: "fleet" },
+    data: {
+      target: { scope: "platform", switch_type: "PAUSE" },
+      expectedStateVersion: state === "ACTIVE" ? 5 : 4,
+      state,
+      enforcementMode: state === "ACTIVE" ? "CLOSE_ONLY" : null,
+      updatedAt: "2026-09-24T20:00:00.000Z",
+    },
+  };
+}
+async function confirm() {
+  render(<EmergencyWorkflow open onClose={() => undefined} catalogue={null} />);
+  fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Дальше" })).toBeEnabled());
+  expect(screen.getByText(/Команда не размещает и не отменяет ордера/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
+  expect(screen.getByRole("button", { name: "Отправить команду" })).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "Причина" }), {
+    target: { value: "Нарушение сверки" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Подтверждаю область и эффект команды" }));
+}
+describe("admin console emergency workflow", () => {
+  it("requires a read revision and verifies persisted state before showing success", async () => {
+    let resolveReadBack!: (response: Response) => void;
+    let posted: Record<string, unknown> | null = null;
+    let reads = 0;
+    const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posted = JSON.parse(String(init.body));
+        return Response.json(snapshot("written-5", "ACTIVE"));
+      }
+      if (++reads === 1) return Response.json(snapshot());
+      return new Promise<Response>((resolve) => {
+        resolveReadBack = resolve;
+      });
     });
-    fireEvent.click(screen.getByRole("button", { name: RU.emergency.next }));
-    expect(screen.getByText(/Закрытие позиций эта команда не выполняет/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: RU.emergency.next }));
-    fireEvent.change(screen.getByLabelText(RU.emergency.reason), {
-      target: { value: "биржа не отвечает" },
-    });
-    fireEvent.click(screen.getByRole("checkbox", { name: RU.emergency.confirm }));
-    fireEvent.click(screen.getByRole("button", { name: RU.emergency.submit }));
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: "trip",
-        organization_id: "org-1",
-        expected_state_version: 4,
+    vi.stubGlobal("fetch", fetcher);
+    await confirm();
+    fireEvent.click(screen.getByRole("button", { name: "Отправить команду" }));
+    await waitFor(() =>
+      expect(posted).toMatchObject({
+        target: { scope: "platform", switch_type: "PAUSE" },
+        expectedRevision: "read-4",
+        expectedStateVersion: 4,
+        confirmed: true,
+        reason: "Нарушение сверки",
       }),
     );
-    expect(screen.getByText(RU.emergency.pending)).toBeInTheDocument();
+    expect(screen.queryByText("Состояние подтверждено повторным чтением")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ожидаем повторного чтения…" })).toBeDisabled();
+    resolveReadBack(Response.json(snapshot("written-5", "ACTIVE")));
+    await screen.findByText("Состояние подтверждено повторным чтением");
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
-
-  it("does not send a trip when the kill-switch version was not read", () => {
-    render(
-      <EmergencyStopDialog
-        open
-        expectedStateVersion={null}
-        onClose={() => undefined}
-        onSubmit={vi.fn()}
-      />,
+  it("keeps submission unavailable without a state read", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: { code: "READ_FAILED" } }, { status: 503 })),
     );
-    fireEvent.change(screen.getByLabelText("Идентификатор организации"), {
-      target: { value: "org-1" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: RU.emergency.next }));
-    fireEvent.click(screen.getByRole("button", { name: RU.emergency.next }));
-    expect(screen.getByRole("button", { name: RU.emergency.submit })).toBeDisabled();
-    expect(screen.getByText(RU.emergency.versionMissing)).toBeInTheDocument();
+    render(<EmergencyWorkflow open onClose={() => undefined} catalogue={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
+    await screen.findByText(/READ_FAILED/);
+    expect(screen.getByRole("button", { name: "Дальше" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Отправить команду" })).not.toBeInTheDocument();
   });
-
+  it("returns to fresh review on conflict and never retries the command", async () => {
+    const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) =>
+      init?.method === "POST"
+        ? Response.json({ error: { code: "STALE_REVISION" } }, { status: 409 })
+        : Response.json(snapshot()),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    await confirm();
+    fireEvent.click(screen.getByRole("button", { name: "Отправить команду" }));
+    await screen.findByText(/Состояние изменилось/);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+  it("blocks repeat when the write acknowledgement cannot be verified", async () => {
+    let written = false;
+    const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        written = true;
+        return Response.json(snapshot("written-5", "ACTIVE"));
+      }
+      return Response.json(snapshot(written ? "other-revision" : "read-4"));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await confirm();
+    fireEvent.click(screen.getByRole("button", { name: "Отправить команду" }));
+    await screen.findByText(/Команда могла примениться/);
+    expect(screen.queryByRole("button", { name: "Отправить команду" })).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
   it("acks the first painted order version once", async () => {
     const row = {
       id: "order-1",

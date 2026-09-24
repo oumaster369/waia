@@ -12,7 +12,7 @@ describe("admin console governed process links", () => {
     );
     expect(screen.getByRole("link", { name: "Полномочия исполнения" })).toHaveAttribute(
       "href",
-      "/admin/system?tab=controls",
+      "/admin/system?tab=authority",
     );
   });
 });

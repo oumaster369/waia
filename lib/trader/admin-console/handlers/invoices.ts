@@ -4,6 +4,7 @@ import {
   INVOICE_SELECT,
   displayOf,
   readInvoiceList,
+  invoiceReadRevision,
 } from "@/lib/trader/admin-console/repositories/invoices.postgres";
 
 import { MIN_FEE_THRESHOLD } from "@/lib/trader/billing/fee-computation.types";
@@ -141,6 +142,16 @@ export async function handleAdminConsoleInvoiceDetailGet(
       return adminSuccess(
         adminEnvelope({
           data: {
+            id: String(row.id),
+            revision: invoiceReadRevision(row),
+            organizationId: String(row.organization_id),
+            exchangeAccountId: String(row.exchange_account_id),
+            currency: String(row.currency),
+            status: String(row.status),
+            approvedAt: iso(row.issuance_approved_at),
+            coolingOffUntil: iso(row.cooling_off_until),
+            issuedAt: iso(row.issued_at),
+            paidAt: iso(row.paid_at),
             stored: {
               periodProfit,
               cumulative,
@@ -154,7 +165,7 @@ export async function handleAdminConsoleInvoiceDetailGet(
             ...displayOf(row, now, graceMs),
             tradesNote: "оперативная выборка, не база комиссии",
           },
-          scope: { kind: "organization", organizationId: String(row.organization_id) },
+          scope: adminScopeFromQuery(parsed.query),
           missingSources: chain.ok === null ? chain.reasons : [],
         }),
         "postgres",

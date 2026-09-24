@@ -1,5 +1,9 @@
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 import { formatAdminMoney } from "@/components/trader/admin-console/primitives/money";
+import {
+  ConsolePanel,
+  EvidenceTime,
+} from "@/components/trader/admin-console/primitives/console-ui";
 import { RU } from "@/components/trader/admin-console/i18n/ru";
 
 export type OverviewView = {
@@ -14,6 +18,8 @@ export type OverviewView = {
   pnl: string | null;
   excluded: { id: string; reason: string }[];
   lastKnownEstimate: string | null;
+  observedAt?: string | null;
+  reasons?: Record<string, string[]>;
 };
 
 function amountOf(fact: unknown): string | null {
@@ -42,12 +48,20 @@ export function overviewFromEnvelope(body: unknown): OverviewView {
   }
   const finance = "finance" in data ? data.finance : null;
   const record = finance && typeof finance === "object" ? finance : {};
+  const facts = record as Record<
+    string,
+    { value?: { currency?: string }; reasons?: string[]; times?: { observedAt?: string } }
+  >;
   return {
     state: "ready",
     reason: null,
     coverageLabel:
       "coverageLabel" in data && typeof data.coverageLabel === "string" ? data.coverageLabel : null,
-    currency: "USDT",
+    currency: Object.values(facts).find((fact) => fact.value?.currency)?.value?.currency ?? "USDT",
+    observedAt: facts.equity?.times?.observedAt ?? null,
+    reasons: Object.fromEntries(
+      Object.entries(facts).map(([key, fact]) => [key, fact.reasons ?? []]),
+    ),
     equity: amountOf(record && "equity" in record ? record.equity : null),
     free: amountOf(record && "free" in record ? record.free : null),
     holdings: amountOf(record && "holdings" in record ? record.holdings : null),
@@ -77,38 +91,86 @@ function empty(reason: string): OverviewView {
   };
 }
 
-function figure(label: string, amount: string | null, currency: string) {
+function figure(
+  label: string,
+  amount: string | null,
+  currency: string,
+  reason?: string,
+  subtitle?: string,
+) {
   return (
-    <p>
-      <span>{label}</span>{" "}
-      <span data-testid={`overview-${label}`}>
-        {amount === null ? "—" : formatAdminMoney(amount, currency)}
-      </span>
-    </p>
+    <div className="border-waia-divider bg-waia-field-mid min-w-0 rounded-xl border p-5">
+      <p className="text-waia-fg-muted text-xs">{label}</p>
+      <p
+        data-testid={`overview-${label}`}
+        className="mt-4 text-xl font-semibold tracking-tight break-words tabular-nums"
+      >
+        {amount === null ? (
+          "—"
+        ) : (
+          <>
+            {formatAdminMoney(amount, "").trim()}
+            <span className="text-waia-fg-muted mt-1 block text-xs font-normal tracking-normal">
+              {currency}
+            </span>
+          </>
+        )}
+      </p>
+      {amount === null ? (
+        <div className="mt-3">
+          <DataState state="unavailable" reason={reason ?? "PNL_PERIOD_EVIDENCE_MISSING"} />
+        </div>
+      ) : null}
+      {subtitle ? (
+        <p className="text-waia-fg-muted mt-3 text-[10px] leading-5">{subtitle}</p>
+      ) : null}
+    </div>
   );
 }
-
 export function OverviewPanel({ view }: { view: OverviewView }) {
-  if (view.state === "unavailable") {
-    return <DataState state="unavailable" reason={view.reason} />;
-  }
+  if (view.state === "unavailable") return <DataState state="unavailable" reason={view.reason} />;
   return (
-    <section aria-label={RU.sections.overview}>
-      {figure("Оценка", view.equity, view.currency)}
-      {figure("Свободно", view.free, view.currency)}
-      {figure("В активах", view.holdings, view.currency)}
-      {figure("Занято", view.reserved, view.currency)}
-      {figure("Результат", view.pnl, view.currency)}
-      {view.coverageLabel ? <p>{view.coverageLabel}</p> : null}
-      {view.excluded.length > 0 ? (
-        <ul>
-          {view.excluded.map((row) => (
-            <li key={row.id}>{`${row.id}: ${row.reason}`}</li>
-          ))}
-        </ul>
+    <section aria-label={RU.sections.overview} className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {figure("Общий капитал", view.equity, view.currency, view.reasons?.equity?.[0])}
+        {figure("Свободно", view.free, view.currency, view.reasons?.free?.[0])}
+        {figure("В позициях", view.holdings, view.currency, view.reasons?.holdings?.[0])}
+        {figure("Резерв в ордерах", view.reserved, view.currency, view.reasons?.reserved?.[0])}
+        {figure(
+          "Результат Трейдера",
+          view.pnl,
+          view.currency,
+          view.reasons?.pnl?.[0],
+          "До комиссии сервиса 30%",
+        )}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
+        <p className="text-waia-fg-muted">{view.coverageLabel}</p>
+        <EvidenceTime at={view.observedAt} />
+      </div>
+      {view.lastKnownEstimate !== null ? (
+        <p
+          data-testid="overview-last-known"
+          className="border-waia-warning/25 bg-waia-warning/5 text-waia-warning rounded-lg border px-4 py-3 text-xs leading-6"
+        >
+          Последняя известная оценка устаревших счетов:{" "}
+          {formatAdminMoney(view.lastKnownEstimate, view.currency)}. В актуальную сумму не включена.
+        </p>
       ) : null}
-      {view.lastKnownEstimate ? (
-        <p data-testid="overview-last-known">{`Последняя известная оценка ${formatAdminMoney(view.lastKnownEstimate, view.currency)}`}</p>
+      {view.excluded.length > 0 ? (
+        <ConsolePanel
+          title="Ограничения охвата"
+          note="Причина исключения каждого счёта из текущей оценки"
+        >
+          <ul className="divide-waia-divider divide-y">
+            {view.excluded.map((row) => (
+              <li key={row.id} className="flex flex-wrap justify-between gap-2 px-5 py-3">
+                <span className="text-sm">{row.id}</span>
+                <DataState state="unavailable" reason={row.reason} />
+              </li>
+            ))}
+          </ul>
+        </ConsolePanel>
       ) : null}
     </section>
   );

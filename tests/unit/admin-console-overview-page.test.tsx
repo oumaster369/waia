@@ -23,11 +23,12 @@ describe("admin console overview page", () => {
       coverage: { excluded: [{ id: "acc-2", reason: "NO_QUOTE:BTC" }] },
     });
     render(<OverviewPanel view={view} />);
-    expect(screen.getByTestId("overview-Оценка")).toHaveTextContent("10");
-    expect(screen.getByTestId("overview-Оценка")).not.toHaveTextContent("4");
+    expect(screen.getByTestId("overview-Общий капитал")).toHaveTextContent("10");
+    expect(screen.getByTestId("overview-Общий капитал")).not.toHaveTextContent("4");
     expect(screen.getByTestId("overview-last-known")).toHaveTextContent("4");
-    expect(screen.getByText("acc-2: NO_QUOTE:BTC")).toBeInTheDocument();
-    expect(screen.getByTestId("overview-Результат")).toHaveTextContent("—");
+    expect(screen.getByText("acc-2")).toBeInTheDocument();
+    expect(screen.getByText(/NO_QUOTE:BTC/)).toBeInTheDocument();
+    expect(screen.getByTestId("overview-Результат Трейдера")).toHaveTextContent("—");
   });
 
   it("shows postgres required instead of zeros", () => {

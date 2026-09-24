@@ -6,9 +6,16 @@ export function DataState({ state, reason }: { state: AdminDataState; reason?: s
   const reasonText =
     reason && reason in RU.reasons ? RU.reasons[reason as keyof typeof RU.reasons] : reason;
   return (
-    <p>
-      <span>{label}</span>
-      {reasonText ? <span>{` — ${reasonText}`}</span> : null}
+    <p
+      data-state={state}
+      data-reason={reason ?? undefined}
+      className="text-waia-fg-muted text-xs leading-5"
+      title={reason ?? undefined}
+    >
+      <span className={state === "partial" || state === "stale" ? "text-waia-warning" : undefined}>
+        {label}
+      </span>
+      {reasonText ? <span>{` · ${reasonText}`}</span> : null}
     </p>
   );
 }

@@ -30,8 +30,7 @@ describe("admin console shell", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Свернуть меню" }));
     expect(screen.getByRole("navigation")).toHaveAttribute("data-collapsed", "true");
-    expect(screen.getByRole("complementary", { name: "Правая панель" })).toHaveTextContent(
-      "помощник",
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Помощник" }));
+    expect(screen.getByRole("complementary", { name: "Помощник" })).toHaveTextContent("помощник");
   });
 });

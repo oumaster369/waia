@@ -1,3 +1,4 @@
+import { adminRuntimeFlag } from "@/lib/trader/admin-console/runtime-flags";
 const SHA = /^[0-9a-f]{40}$/;
 
 export type AdminReleaseFact =
@@ -12,7 +13,7 @@ export type AdminReleaseFact =
 
 export function readAdminRelease(
   env: { WAIA_RELEASE_SHA?: string | undefined } = {
-    WAIA_RELEASE_SHA: process.env.WAIA_RELEASE_SHA,
+    WAIA_RELEASE_SHA: adminRuntimeFlag("WAIA_RELEASE_SHA"),
   },
 ): AdminReleaseFact {
   const sha = env.WAIA_RELEASE_SHA?.trim().toLowerCase() ?? "";

@@ -9,21 +9,30 @@ function returnToLanding() {
   window.location.replace("/");
 }
 
-export function TraderSignOut({ onSignedOut = returnToLanding }: { onSignedOut?: () => void }) {
+export function TraderSignOut({
+  onSignedOut = returnToLanding,
+  locale = "en",
+}: {
+  onSignedOut?: () => void;
+  locale?: "en" | "ru";
+}) {
   const inFlight = useRef(false);
   const activeRequest = useRef<{ controller: AbortController; timeout: number } | null>(null);
   const errorId = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => () => {
-    const request = activeRequest.current;
-    activeRequest.current = null;
-    if (request) {
-      window.clearTimeout(request.timeout);
-      request.controller.abort();
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      const request = activeRequest.current;
+      activeRequest.current = null;
+      if (request) {
+        window.clearTimeout(request.timeout);
+        request.controller.abort();
+      }
+    },
+    [],
+  );
 
   async function signOut() {
     if (inFlight.current) return;
@@ -54,7 +63,11 @@ export function TraderSignOut({ onSignedOut = returnToLanding }: { onSignedOut?:
       // Keep locked until navigation removes this view; no second submission.
     } catch {
       if (activeRequest.current !== request) return;
-      setError("Sign out could not be confirmed. Please retry; do not assume your session has ended.");
+      setError(
+        locale === "ru"
+          ? "Выход не подтверждён. Повторите попытку: сессия могла остаться открытой."
+          : "Sign out could not be confirmed. Please retry; do not assume your session has ended.",
+      );
       inFlight.current = false;
       setPending(false);
     } finally {
@@ -65,12 +78,22 @@ export function TraderSignOut({ onSignedOut = returnToLanding }: { onSignedOut?:
 
   return (
     <div className="flex max-w-sm flex-col items-start gap-2">
-      <Button type="button" variant="outline" size="sm" disabled={pending}
-        aria-busy={pending} aria-describedby={error ? errorId : undefined}
-        onClick={() => void signOut()}>
-        {pending ? "Signing out…" : "Sign out"}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        aria-busy={pending}
+        aria-describedby={error ? errorId : undefined}
+        onClick={() => void signOut()}
+      >
+        {locale === "ru" ? (pending ? "Выходим…" : "Выйти") : pending ? "Signing out…" : "Sign out"}
       </Button>
-      {error ? <p id={errorId} role="alert" className="text-destructive text-sm">{error}</p> : null}
+      {error ? (
+        <p id={errorId} role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

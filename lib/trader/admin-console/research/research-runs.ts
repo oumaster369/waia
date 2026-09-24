@@ -19,6 +19,8 @@ export function presentResearchRun(input: {
   symbol: string;
   partition: string;
   observedAt: string;
+  committedCycles: number;
+  qualifiedTotalCycles: number;
   progress: ReturnType<typeof researchProgress>;
   inactive: boolean;
 } {
@@ -31,6 +33,8 @@ export function presentResearchRun(input: {
     symbol: input.symbol,
     partition: input.partition,
     observedAt: input.observedAt,
+    committedCycles: input.committedCycles,
+    qualifiedTotalCycles: input.qualifiedTotalCycles,
     progress: researchProgress(input.committedCycles, input.qualifiedTotalCycles),
     inactive: active && Number.isFinite(observedMs) && input.nowMs - observedMs > STALE_AFTER_MS,
   };

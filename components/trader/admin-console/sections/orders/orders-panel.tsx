@@ -1,12 +1,11 @@
 "use client";
-
-import { flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import * as React from "react";
-
 import { RenderAckMarker } from "@/components/trader/admin-console/data/render-ack";
+import {
+  ConsoleBadge,
+  ConsoleEmpty,
+  EvidenceTime,
+} from "@/components/trader/admin-console/primitives/console-ui";
 import { ORDER_STATUS_LABELS } from "@/lib/trader/admin-console/read-models/order-trace";
-
 export type OrderRowView = {
   id: string;
   symbol: string;
@@ -15,75 +14,87 @@ export type OrderRowView = {
   entityVersion?: string;
   acceptedAt?: string;
   eventId?: string;
+  side?: string;
+  quantity?: string;
+  filledQuantity?: string;
+  mode?: string;
+  createdAt?: string;
 };
-
-export function orderRowView(row: {
-  id: string;
-  symbol: string;
-  state: string;
-  entityVersion?: string;
-  acceptedAt?: string;
-  eventId?: string;
-}): OrderRowView {
+export function orderRowView(row: Omit<OrderRowView, "label">): OrderRowView {
   return {
-    id: row.id,
-    symbol: row.symbol,
-    state: row.state,
+    ...row,
     label: ORDER_STATUS_LABELS[row.state as keyof typeof ORDER_STATUS_LABELS] ?? row.state,
-    entityVersion: row.entityVersion,
-    acceptedAt: row.acceptedAt,
-    eventId: row.eventId,
   };
 }
-
 export function OrdersPanel({ rows }: { rows: readonly OrderRowView[] }) {
-  const parent = React.useRef<HTMLDivElement>(null);
-  const data = React.useMemo(() => [...rows], [rows]);
-  // TanStack Table returns functions the React compiler cannot memoize.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
-    data,
-    columns: [
-      { accessorKey: "symbol", header: "Инструмент" },
-      { accessorKey: "label", header: "Статус" },
-    ],
-    getCoreRowModel: getCoreRowModel(),
-  });
-  const virtualizer = useVirtualizer({
-    count: data.length,
-    getScrollElement: () => parent.current,
-    estimateSize: () => 40,
-  });
+  if (!rows.length) return <ConsoleEmpty title="Ордеров в выбранном охвате нет" />;
   return (
-    <div ref={parent}>
-      <table>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <caption className="sr-only">Ордера</caption>
+        <thead className="border-waia-divider text-waia-fg-muted border-b text-[11px]">
+          <tr>
+            {["Инструмент", "Направление", "Количество / исполнено", "Статус", "Создан"].map(
+              (title) => (
+                <th key={title} scope="col" className="px-5 py-3 font-medium">
+                  {title}
+                </th>
+              ),
+            )}
+          </tr>
+        </thead>
+        <tbody className="divide-waia-divider divide-y">
+          {rows.map((row) => (
             <tr
               key={row.id}
-              data-order-id={row.original.id}
-              data-event-id={row.original.eventId}
-              data-accepted-at={row.original.acceptedAt}
+              data-order-id={row.id}
+              data-event-id={row.eventId}
+              data-accepted-at={row.acceptedAt}
+              className="hover:bg-waia-elevated/20"
             >
-              {row.original.entityVersion ? (
-                <td>
+              <td className="px-5 py-4">
+                <p className="font-medium">{row.symbol}</p>
+                <p className="text-waia-fg-muted mt-1 text-[10px]">{row.mode}</p>
+                {row.entityVersion ? (
                   <RenderAckMarker
                     topic="orders"
-                    entityId={`trader_orders:${row.original.id}`}
-                    eventId={row.original.eventId}
-                    acceptedAt={row.original.acceptedAt}
-                    entityVersion={row.original.entityVersion}
+                    entityId={`trader_orders:${row.id}`}
+                    eventId={row.eventId}
+                    acceptedAt={row.acceptedAt}
+                    entityVersion={row.entityVersion}
                   />
-                </td>
-              ) : null}
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
-              ))}
+                ) : null}
+              </td>
+              <td className="px-5 py-4">
+                {row.side === "buy"
+                  ? "Покупка"
+                  : row.side === "sell"
+                    ? "Продажа"
+                    : "Не установлено"}
+              </td>
+              <td className="px-5 py-4 tabular-nums">
+                {row.quantity ?? "—"} / {row.filledQuantity ?? "—"}
+              </td>
+              <td className="px-5 py-4">
+                <ConsoleBadge
+                  tone={
+                    row.state === "RECONCILIATION_REQUIRED"
+                      ? "warning"
+                      : row.state === "FILLED"
+                        ? "good"
+                        : "neutral"
+                  }
+                >
+                  {row.label}
+                </ConsoleBadge>
+              </td>
+              <td className="px-5 py-4 text-xs">
+                <EvidenceTime at={row.createdAt} label="" />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <span className="sr-only">{virtualizer.getTotalSize()}</span>
     </div>
   );
 }

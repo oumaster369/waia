@@ -7,6 +7,7 @@ import {
 } from "@/lib/trader/admin-route-shared";
 import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+import { moduleOrigin } from "@/lib/hosts/config";
 
 export type FleetAdminSession = {
   ok: true;
@@ -44,7 +45,7 @@ export async function authorizeFleetAdmin(
 
 export function assertAdminConsoleSameOrigin(request: Request): AdminRouteHandlerResult | null {
   const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().includes("application/json")) {
+  if (contentType.split(";")[0]?.trim().toLowerCase() !== "application/json") {
     return adminClientError(403, ADMIN_REASON.originRejected, "JSON content type required.");
   }
   const origin = request.headers.get("origin");
@@ -57,7 +58,18 @@ export function assertAdminConsoleSameOrigin(request: Request): AdminRouteHandle
   } catch {
     return adminClientError(403, ADMIN_REASON.originRejected, "Origin rejected.");
   }
-  if (originUrl.origin !== new URL(request.url).origin) {
+  if (origin !== originUrl.origin) {
+    return adminClientError(403, ADMIN_REASON.originRejected, "Origin rejected.");
+  }
+  const requestUrl = new URL(request.url);
+  const publicOrigin = new URL(moduleOrigin("trader"));
+  // Next can reconstruct Request.url with its internal listening address. Only
+  // the configured trader origin plus an exact Host match can bridge that hop.
+  // An arbitrary forwarded-host header must never widen this CSRF boundary.
+  const configuredHostMatches =
+    originUrl.origin === publicOrigin.origin &&
+    request.headers.get("host")?.toLowerCase() === publicOrigin.host.toLowerCase();
+  if (originUrl.origin !== requestUrl.origin && !configuredHostMatches) {
     return adminClientError(403, ADMIN_REASON.originRejected, "Origin rejected.");
   }
   return null;
