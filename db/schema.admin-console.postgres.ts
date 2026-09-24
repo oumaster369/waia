@@ -1,5 +1,6 @@
 /**
  * AI-TRADER admin console tables (DEE-1050). DDL lives in migrations 0214–0215.
+ * DEE-1071 adds id-only change-log triggers in 0216.
  * The change log stores identifiers only.
  */
 

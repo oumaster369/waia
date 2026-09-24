@@ -21,7 +21,8 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: /trader-host\.spec\.ts|fhv-operations-csrf-browser\.spec\.ts/,
+      testIgnore:
+        /trader-host\.spec\.ts|fhv-operations-csrf-browser\.spec\.ts|admin-console-pg.*\.spec\.ts|admin-console-soak\.spec\.ts|admin-console-a11y\.spec\.ts/,
     },
     {
       name: "trader-host",
@@ -29,7 +30,7 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         baseURL: `http://trader.localhost:${PLAYWRIGHT_PORT}`,
       },
-      testMatch: /trader-host\.spec\.ts/,
+      testMatch: /trader-host\.spec\.ts|admin-console-a11y\.spec\.ts/,
     },
   ],
   webServer: {

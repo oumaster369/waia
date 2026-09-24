@@ -1,7 +1,7 @@
 "use client";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
-import { useConsoleList } from "@/components/trader/admin-console/data/console-list-refresh";
+import { useConsoleStreamList } from "@/components/trader/admin-console/data/console-stream-list";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 import {
   orderRowView,
@@ -11,7 +11,10 @@ import {
 type OrderItem = { id: string; symbol: string; state: string };
 
 export default function AdminOrdersPage() {
-  const { items, reason } = useConsoleList<OrderItem>("/api/trader/admin/console/orders");
+  const { items, reason } = useConsoleStreamList<OrderItem>(
+    "/api/trader/admin/console/orders",
+    "orders",
+  );
   return (
     <section className="grid gap-3">
       <h2 className="text-xl font-semibold">{RU.sections.orders}</h2>

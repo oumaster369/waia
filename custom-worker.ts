@@ -1,6 +1,7 @@
 // Wrangler entrypoint (see wrangler.jsonc). Excluded from root tsconfig — Next.js
 // typechecks during `next build` before OpenNext emits `.open-next/worker.js`.
 import { default as handler } from "./.open-next/worker.js";
+import { bridgeTraderCronEnvToProcess } from "@/lib/trader/cron/worker-cron-env";
 
 async function runPaymentWatcherCycle(env: Record<string, unknown>): Promise<void> {
   console.log(
@@ -96,7 +97,10 @@ async function runTreasuryWatcherScheduled(env: Record<string, unknown>): Promis
 }
 
 export default {
-  fetch: handler.fetch,
+  async fetch(request: Request, env: Record<string, unknown>, ctx: ExecutionContext) {
+    bridgeTraderCronEnvToProcess(env);
+    return handler.fetch(request, env, ctx);
+  },
 
   async scheduled(
     _event: unknown,

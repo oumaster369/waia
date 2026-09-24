@@ -6,6 +6,8 @@ import {
   drainStreamFrame,
   enqueueStreamEvent,
   failStream,
+  STREAM_DISCONNECT_POLL_MS,
+  streamActivity,
   streamRequestUrl,
   type ClientStreamEvent,
 } from "@/components/trader/admin-console/data/stream-session";
@@ -65,5 +67,12 @@ describe("admin console stream client", () => {
     expect(session.resync).toBe(false);
     expect(session.cache.size).toBe(1000);
     expect(session.queue).toHaveLength(0);
+  });
+
+  it("polls every 5 seconds after a disconnect and pauses while the tab is hidden", () => {
+    expect(STREAM_DISCONNECT_POLL_MS).toBe(5_000);
+    expect(streamActivity({ hidden: true, connected: true })).toBe("paused");
+    expect(streamActivity({ hidden: false, connected: true })).toBe("sse");
+    expect(streamActivity({ hidden: false, connected: false })).toBe("poll");
   });
 });
