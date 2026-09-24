@@ -1,7 +1,7 @@
 "use client";
 
 import { RU } from "@/components/trader/admin-console/i18n/ru";
-import { useConsoleList } from "@/components/trader/admin-console/data/console-list-refresh";
+import { useConsoleStreamList } from "@/components/trader/admin-console/data/console-stream-list";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 
 type IncidentItem = {
@@ -13,7 +13,10 @@ type IncidentItem = {
 };
 
 export default function AdminErrorsPage() {
-  const { items, reason } = useConsoleList<IncidentItem>("/api/trader/admin/console/incidents");
+  const { items, reason } = useConsoleStreamList<IncidentItem>(
+    "/api/trader/admin/console/incidents",
+    "incidents",
+  );
   return (
     <section className="grid gap-3">
       <h2 className="text-xl font-semibold">{RU.sections.errors}</h2>
@@ -23,6 +26,7 @@ export default function AdminErrorsPage() {
           {items.map((item) => (
             <li
               key={item.id}
+              data-incident-id={item.id}
             >{`${item.severity} ${item.title} — ${item.status} (${item.occurrences})`}</li>
           ))}
         </ul>

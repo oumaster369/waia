@@ -2,6 +2,16 @@ import { applyConsoleEvent, type EntityCache } from "@/lib/trader/admin-console/
 
 export const STREAM_TOPIC_BUFFER_CAP = 500;
 export const STREAM_FRAME_LIMIT = 50;
+export const STREAM_DISCONNECT_POLL_MS = 5_000;
+
+export type StreamActivity = "paused" | "sse" | "poll";
+
+/** Hidden tabs do not read. A broken stream falls back to a 5 second poll. */
+export function streamActivity(input: { hidden: boolean; connected: boolean }): StreamActivity {
+  if (input.hidden) return "paused";
+  if (input.connected) return "sse";
+  return "poll";
+}
 
 export type ClientStreamEvent = {
   eventId: string;
@@ -17,6 +27,7 @@ export type ClientStreamEvent = {
   entityVersion: string;
   cursor: string;
   payload: unknown;
+  acceptedAt?: string;
 };
 
 export type StreamSession = {
@@ -44,8 +55,10 @@ export function createStreamSession(cursor: string | null = null): StreamSession
 export function streamRequestUrl(
   base: string,
   session: Pick<StreamSession, "cursor" | "transport">,
+  topics?: string,
 ): string {
   const params = new URLSearchParams();
+  if (topics) params.set("topics", topics);
   if (session.cursor) params.set("resume", session.cursor);
   if (session.transport === "poll") params.set("transport", "poll");
   const query = params.toString();
