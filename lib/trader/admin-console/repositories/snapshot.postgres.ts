@@ -52,12 +52,10 @@ export async function withAdminReadSnapshot<T>(
 }
 
 /** Bind a route response and its stream handoff to the same read-only snapshot. */
-export async function withAdminRouteSnapshot(
+export async function withAdminRouteSnapshot<T extends { status: number; body: unknown }>(
   db: AdminPostgresDb,
-  fn: (
-    tx: AdminReadTx,
-  ) => Promise<import("@/lib/trader/admin-route-shared").AdminRouteHandlerResult>,
-): Promise<import("@/lib/trader/admin-route-shared").AdminRouteHandlerResult> {
+  fn: (tx: AdminReadTx) => Promise<T>,
+): Promise<T> {
   const snapshot = await withAdminReadSnapshot(db, fn);
   const result = snapshot.value;
   if (result.status !== 200 || !result.body || typeof result.body !== "object") return result;
