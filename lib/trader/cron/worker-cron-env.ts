@@ -1,5 +1,17 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
+const workerEnvGlobal = globalThis as { __waiaWorkerEnv?: Record<string, unknown> };
+
+/** Keep the Worker env for code that only reads process.env. */
+export function rememberWorkerEnv(env: Record<string, unknown>): void {
+  workerEnvGlobal.__waiaWorkerEnv = env;
+}
+
+export function workerEnvString(key: string): string {
+  const value = workerEnvGlobal.__waiaWorkerEnv?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function bridgeEnvKey(env: Record<string, unknown>, key: string): void {
   const value = env[key];
   if (typeof value === "string" && value.trim() !== "") {

@@ -11,7 +11,11 @@ export function MarketStrip({ quote: quoteProp }: { quote?: MarketQuote | null }
   React.useEffect(() => {
     if (quoteProp) return;
     const controller = new AbortController();
-    void fetch("/api/trader/admin/console/overview", { signal: controller.signal })
+    void fetch("/api/trader/admin/console/overview", {
+      signal: controller.signal,
+      credentials: "same-origin",
+      cache: "no-store",
+    })
       .then((response) => response.json())
       .then((body: unknown) => {
         const data =
