@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { adminRevision } from "@/lib/trader/admin-console/revision";
 
 import { MIN_FEE_THRESHOLD } from "@/lib/trader/billing/fee-computation.types";
 import { parseInvoicePaymentGracePeriodMs } from "@/lib/trader/settlement/account-status-policy";
@@ -131,6 +132,7 @@ export async function handleAdminConsoleInvoicesGet(
         data: {
           items: rows.map((row) => ({
             id: String(row.id),
+            revision: adminRevision(row),
             organizationId: String(row.organization_id),
             exchangeAccountId: String(row.exchange_account_id),
             performanceFee: String(row.performance_fee),

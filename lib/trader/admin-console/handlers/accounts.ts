@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { readOverviewSnapshot } from "@/lib/trader/admin-console/repositories/overview.postgres";
 
 import {
   adminSuccess,
@@ -8,18 +8,11 @@ import {
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
-import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
-
-function rowsOf(result: unknown): Record<string, unknown>[] {
-  return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
-}
-
-function iso(value: unknown): string | null {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value !== "string" || value.length === 0) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
-}
+import {
+  adminScopeFromQuery,
+  parseAdminConsoleQuery,
+  periodBounds,
+} from "@/lib/trader/admin-console/scope";
 
 export async function handleAdminConsoleAccountsGet(
   request: Request,
@@ -32,35 +25,32 @@ export async function handleAdminConsoleAccountsGet(
   });
   if (!opened.ok) return opened.result;
   try {
-    const organizationId = parsed.query.organization_id ?? null;
-    const rows = rowsOf(
-      await opened.runtime.db.execute(sql`
-        SELECT id::text AS id,
-               organization_id::text AS organization_id,
-               venue,
-               exchange_account_id,
-               revoked_at,
-               created_at
-        FROM exchange_credentials
-        WHERE ${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid
-        ORDER BY created_at DESC, id
-        LIMIT ${parsed.query.limit}
-      `),
-    );
+    const now = new Date();
+    const snapshot = await readOverviewSnapshot(opened.runtime.db, {
+      ...periodBounds(parsed.query, now),
+      scope: adminScopeFromQuery(parsed.query),
+      currency: parsed.query.currency,
+      mode: parsed.query.mode,
+      nowMs: now.getTime(),
+    });
     return adminSuccess(
       adminEnvelope({
         data: {
-          items: rows.map((row) => ({
-            id: String(row.id),
-            organizationId: String(row.organization_id),
-            venue: String(row.venue),
-            exchangeAccountId: String(row.exchange_account_id),
-            revokedAt: iso(row.revoked_at),
-            createdAt: iso(row.created_at),
-          })),
+          items: snapshot.value.accounts,
+          aggregate: snapshot.value.overview,
+        },
+        financeRevision: snapshot.value.overview.financeRevision,
+        missingSources: snapshot.value.capped ? ["ACCOUNT_CAP"] : [],
+        cursor: snapshot.cursor,
+        coverage: {
+          included: snapshot.value.overview.included,
+          total: snapshot.value.overview.total,
+          excluded: snapshot.value.accounts
+            .filter((account) => !account.included)
+            .map((account) => ({ id: account.id, reason: account.reason ?? "EXCLUDED" })),
         },
         scope: adminScopeFromQuery(parsed.query),
-        mode: parsed.query.mode,
+        mode: snapshot.value.mode,
       }),
       "postgres",
     );

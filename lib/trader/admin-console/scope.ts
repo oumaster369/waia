@@ -57,6 +57,18 @@ export function parseAdminConsoleQuery(
       result: adminClientError(400, "BAD_REQUEST", "custom period requires from and to."),
     };
   }
+  if (parsed.data.exchange_account_id && !parsed.data.organization_id) {
+    return {
+      ok: false,
+      result: adminClientError(400, "BAD_REQUEST", "Account scope requires organization_id."),
+    };
+  }
+  if (
+    parsed.data.period === "custom" &&
+    Date.parse(parsed.data.from!) >= Date.parse(parsed.data.to!)
+  ) {
+    return { ok: false, result: adminClientError(400, "BAD_REQUEST", "from must precede to.") };
+  }
   return { ok: true, query: parsed.data };
 }
 

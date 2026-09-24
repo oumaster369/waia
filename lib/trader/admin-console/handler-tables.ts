@@ -53,8 +53,20 @@ export const COLLECTOR_SCHEMA_TABLES = [
   "trader_admin_diagnostic_event",
 ] as const;
 
+const FINANCIAL_SNAPSHOT_TABLES = [
+  "exchange_credentials",
+  "organizations",
+  "users",
+  "trader_admin_market_quote_latest",
+  "trader_position_lots",
+  "trader_trade_legs",
+  "trader_orders",
+  "trader_account_observations",
+  "trader_account_collection_state",
+] as const;
+
 export const HANDLER_TABLES = {
-  accounts: ["exchange_credentials"],
+  accounts: FINANCIAL_SNAPSHOT_TABLES,
   attention: [
     "trader_orders",
     "trader_execution_reports_v2",
@@ -120,17 +132,7 @@ export const HANDLER_TABLES = {
     "trader_hwm_ledger",
   ],
   orders: ["trader_orders"],
-  overview: [
-    "exchange_credentials",
-    "organizations",
-    "users",
-    "trader_admin_market_quote_latest",
-    "trader_position_lots",
-    "trader_trade_legs",
-    "trader_orders",
-    "trader_account_collection_state",
-    "trader_account_observations",
-  ],
+  overview: FINANCIAL_SNAPSHOT_TABLES,
   payments: ["payment_events"],
   positions: [
     "trader_position_lots",

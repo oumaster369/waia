@@ -194,7 +194,21 @@ describe("lots in valuation", () => {
     expect(selected.lots).toEqual([
       { asset: "BTC", remainingQty: "0.5", avgCost: "90", accountMatched: true },
     ]);
-    expect(selected.lotsRevision).toBe(lotsRevisionFromLegs(["2026-09-23T10:00:00.000Z"]));
+    expect(selected.lotsRevision).toMatch(/^[a-f0-9]{64}$/);
+    const changed = lotsForExchangeAccount({
+      exchangeAccountId: "acct-1",
+      mode: "all",
+      lots: lots.map((lot) => ({ ...lot, remainingQty: "0.25" })),
+    });
+    expect(changed.lotsRevision).not.toBe(selected.lotsRevision);
+    expect(
+      lotsForExchangeAccount({
+        organizationId: "other",
+        exchangeAccountId: "acct-1",
+        mode: "live",
+        lots,
+      }).lots,
+    ).toEqual([]);
     expect(riskStateMatchesLot({ lotAccountKey: "paper-1", riskAccountId: "acct-1" })).toBe(false);
   });
 
@@ -216,7 +230,7 @@ describe("lots in valuation", () => {
       ],
     });
     expect(selected.lots[0]?.accountMatched).toBe(false);
-    expect(selected.lotsRevision).toBe("2026-09-23T10:00:00.000Z:2");
+    expect(selected.lotsRevision).toMatch(/^[a-f0-9]{64}$/);
   });
 });
 

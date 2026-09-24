@@ -9,7 +9,13 @@ import {
   type AssetQuote,
 } from "@/lib/trader/admin-console/money/quotes";
 import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
-import { addDecimal, multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
+import {
+  InvalidDecimalError,
+  addDecimal,
+  compareDecimal,
+  multiplyDecimal,
+  subtractDecimal,
+} from "@/lib/trader/risk/numeric";
 
 export type ValuationBalance = { asset: string; free: string; locked: string };
 export type ValuationLot = {
@@ -47,13 +53,16 @@ export type ValuationResult = {
   excludedAssets: string[];
 };
 
-/** Quote gaps and skew block equity. A missing lot match does not. */
+/** Unknown assets are excluded individually; known assets retain a partial value. */
 export function equityInclusion(
   reasons: readonly string[],
   equity: string | null,
 ): { included: boolean; stale: boolean } {
   const blocksEquity = reasons.some(
-    (reason) => reason !== ADMIN_REASON.costBasisUnknown && reason !== ADMIN_REASON.quoteStale,
+    (reason) =>
+      reason !== ADMIN_REASON.costBasisUnknown &&
+      reason !== ADMIN_REASON.quoteStale &&
+      !reason.startsWith(`${ADMIN_REASON.noQuote}:`),
   );
   return {
     included: equity !== null && !blocksEquity,
@@ -62,7 +71,23 @@ export function equityInclusion(
 }
 
 function quoteByAsset(quotes: readonly AssetQuote[]): Map<string, AssetQuote> {
-  return new Map(quotes.map((quote) => [quote.asset.toUpperCase(), quote]));
+  const selected = new Map<string, AssetQuote>();
+  const rank = (quote: AssetQuote) => (quote.source === "coinbase" ? 0 : 1);
+  for (const quote of [...quotes].sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      b.observedAt.localeCompare(a.observedAt) ||
+      a.price.localeCompare(b.price),
+  )) {
+    const asset = quote.asset.toUpperCase();
+    const denomination = quote.quoteCurrency ?? (quote.source === "htx" ? "USDT" : "USD");
+    const spot = asset !== "USDT" && quote.source === "htx" && denomination === "USDT";
+    const fx =
+      asset === "USDT" && ["coinbase", "kraken"].includes(quote.source) && denomination === "USD";
+    if ((spot || fx) && /^\d+(?:\.\d+)?$/.test(quote.price) && !selected.has(asset))
+      selected.set(asset, quote);
+  }
+  return selected;
 }
 
 function worse(current: AdminDataState, next: AdminDataState): AdminDataState {
@@ -78,7 +103,54 @@ function worse(current: AdminDataState, next: AdminDataState): AdminDataState {
   return rank[next] > rank[current] ? next : current;
 }
 
+// Removing insignificant trailing zeroes is exact; rounding observed money is not.
+function exactDecimal(value: string): string {
+  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+}
+
 export function valueObservation(input: ValuationInput): ValuationResult {
+  try {
+    return computeObservation({
+      ...input,
+      balances: input.balances.map((balance) => ({
+        ...balance,
+        free: exactDecimal(balance.free),
+        locked: exactDecimal(balance.locked),
+      })),
+      lots: input.lots.map((lot) => ({
+        ...lot,
+        remainingQty: exactDecimal(lot.remainingQty),
+        avgCost: exactDecimal(lot.avgCost),
+      })),
+      quotes: input.quotes.map((quote) => ({ ...quote, price: exactDecimal(quote.price) })),
+    });
+  } catch (error) {
+    if (!(error instanceof InvalidDecimalError)) throw error;
+    return {
+      state: "unavailable",
+      reasons: ["MONEY_PRECISION_UNSUPPORTED"],
+      method: input.currency === "USDT" ? VALUATION_METHOD_VERSION : "usdt_usd:unavailable",
+      currency: input.currency,
+      freeQuote: null,
+      lockedQuote: null,
+      holdingsValue: null,
+      equity: null,
+      traderLotsValue: null,
+      traderCostBasis: null,
+      traderUnrealized: null,
+      externalValue: null,
+      excludedAssets: [],
+      valuationKey: valuationKey({
+        observationId: input.observationId,
+        lotsRevision: input.lotsRevision,
+        quoteSetDigest: quoteSetDigest(input.quotes),
+        methodVersion: "MONEY_PRECISION_UNSUPPORTED",
+      }),
+    };
+  }
+}
+
+function computeObservation(input: ValuationInput): ValuationResult {
   const quotes = quoteByAsset(input.quotes);
   const reasons: string[] = [];
   let state: AdminDataState = "ok";
@@ -87,6 +159,21 @@ export function valueObservation(input: ValuationInput): ValuationResult {
   let holdingsValue = "0";
   const excluded: string[] = [];
   const usedQuotes: AssetQuote[] = [];
+  const recordQuote = (quote: AssetQuote) => {
+    if (usedQuotes.includes(quote)) return;
+    usedQuotes.push(quote);
+    if (quoteIsStale(quote, input.nowMs)) {
+      reasons.push(ADMIN_REASON.quoteStale);
+      state = worse(state, "stale");
+    }
+    const skew = Math.abs(
+      Date.parse(quote.sourceTs ?? quote.observedAt) - Date.parse(input.recordedAt),
+    );
+    if (Number.isFinite(skew) && skew > VALUATION_SKEW_AFTER_MS) {
+      reasons.push(ADMIN_REASON.valuationSkew);
+      state = worse(state, "partial");
+    }
+  };
 
   for (const balance of input.balances) {
     const asset = balance.asset.toUpperCase();
@@ -95,6 +182,7 @@ export function valueObservation(input: ValuationInput): ValuationResult {
       lockedQuote = addDecimal(lockedQuote, balance.locked);
       continue;
     }
+    if (compareDecimal(addDecimal(balance.free, balance.locked), "0") === 0) continue;
     const quote = quotes.get(asset);
     if (!quote) {
       excluded.push(asset);
@@ -102,20 +190,9 @@ export function valueObservation(input: ValuationInput): ValuationResult {
       state = worse(state, "partial");
       continue;
     }
-    usedQuotes.push(quote);
+    recordQuote(quote);
     const quantity = addDecimal(balance.free, balance.locked);
     holdingsValue = addDecimal(holdingsValue, multiplyDecimal(quantity, quote.price));
-    if (quoteIsStale(quote, input.nowMs)) {
-      reasons.push(ADMIN_REASON.quoteStale);
-      state = worse(state, "stale");
-    }
-    if (quote.sourceTs) {
-      const skew = Math.abs(Date.parse(quote.sourceTs) - Date.parse(input.recordedAt));
-      if (Number.isFinite(skew) && skew > VALUATION_SKEW_AFTER_MS) {
-        reasons.push(ADMIN_REASON.valuationSkew);
-        state = worse(state, "partial");
-      }
-    }
   }
 
   const equityUsdt = addDecimal(addDecimal(freeQuote, lockedQuote), holdingsValue);
@@ -137,6 +214,7 @@ export function valueObservation(input: ValuationInput): ValuationResult {
       state = worse(state, "partial");
       continue;
     }
+    recordQuote(quote);
     traderLotsValue = addDecimal(traderLotsValue, multiplyDecimal(lot.remainingQty, quote.price));
     traderCostBasis = addDecimal(traderCostBasis, multiplyDecimal(lot.remainingQty, lot.avgCost));
   }
@@ -144,16 +222,22 @@ export function valueObservation(input: ValuationInput): ValuationResult {
   const externalValue =
     lotsKnown && excluded.length === 0 ? subtractDecimal(holdingsValue, traderLotsValue) : null;
 
+  const usd = input.currency === "USD" ? quotes.get("USDT") : undefined;
+  if (usd) recordQuote(usd);
+  const method =
+    input.currency === "USD"
+      ? `usdt_usd:${usd?.source ?? "unavailable"}`
+      : VALUATION_METHOD_VERSION;
   const digest = quoteSetDigest(usedQuotes);
   const key = valuationKey({
     observationId: input.observationId,
     lotsRevision: input.lotsRevision,
     quoteSetDigest: digest,
+    methodVersion: method,
   });
 
   if (input.currency === "USD") {
-    const usd = quotes.get("USDT");
-    if (!usd || usd.source !== "coinbase") {
+    if (!usd) {
       return {
         state: "unavailable",
         reasons: [...new Set([...reasons, `${ADMIN_REASON.noQuote}:USDT-USD`])],
@@ -173,8 +257,8 @@ export function valueObservation(input: ValuationInput): ValuationResult {
     }
     return {
       state,
-      reasons,
-      method: USD_METHOD_VERSION,
+      reasons: [...new Set(reasons)],
+      method,
       currency: "USD",
       freeQuote: multiplyDecimal(freeQuote, usd.price),
       lockedQuote: multiplyDecimal(lockedQuote, usd.price),

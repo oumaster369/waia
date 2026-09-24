@@ -19,6 +19,18 @@ import {
 import type { WaiaRuntimeDb } from "@/db/waia-runtime-db";
 
 describe("admin console contracts", () => {
+  it("rejects an account without its organization and an inverted custom period", () => {
+    expect(
+      parseAdminConsoleQuery(new URL("http://localhost/?exchange_account_id=foreign")).ok,
+    ).toBe(false);
+    expect(
+      parseAdminConsoleQuery(
+        new URL(
+          "http://localhost/?period=custom&from=2026-09-24T00:00:00Z&to=2026-09-23T00:00:00Z",
+        ),
+      ).ok,
+    ).toBe(false);
+  });
   it("builds a deterministic revision for the same data", () => {
     const first = adminRevision({ b: 1, a: "2" });
     const second = adminRevision({ a: "2", b: 1 });

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 describe("admin console accounts read", () => {
   it("does not select credential ciphertext", () => {
     const source = readFileSync(
-      join(process.cwd(), "lib/trader/admin-console/handlers/accounts.ts"),
+      join(process.cwd(), "lib/trader/admin-console/repositories/overview.postgres.ts"),
       "utf8",
     );
     expect(source).toContain("exchange_account_id");

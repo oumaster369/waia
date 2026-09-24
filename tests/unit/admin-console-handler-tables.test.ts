@@ -21,9 +21,14 @@ function symbolTables(): Map<string, string> {
 
 function sqlTables(source: string, symbols: Map<string, string>): Set<string> {
   const tables = new Set<string>();
+  const ctes = new Set(
+    [...source.matchAll(/(?:WITH|,)\s+([a-z_][a-z0-9_]*)\s+AS\s*\(/gi)].map((match) =>
+      match[1].toLowerCase(),
+    ),
+  );
   for (const match of source.matchAll(/\b(?:FROM|JOIN)\s+(?:LATERAL\s+)?([a-z_][a-z0-9_]*)/gi)) {
     const name = match[1].toLowerCase();
-    if (name === "select" || name === "lateral") continue;
+    if (name === "select" || name === "lateral" || ctes.has(name)) continue;
     tables.add(name);
   }
   for (const match of source.matchAll(

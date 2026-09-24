@@ -54,6 +54,24 @@ describe("invoice attestations", () => {
 });
 
 describe("invoices panel", () => {
+  it("never carries six manual confirmations from invoice A to invoice B", async () => {
+    const second = { ...invoice, id: "33333333-3333-4333-8333-333333333333", revision: "B" };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/console/invoices")
+        ? json({ data: { items: [{ ...invoice, revision: "A" }, second] } })
+        : json({ data: { items: [] } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InvoicesPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: new RegExp(invoice.id) }));
+    for (const box of screen.getAllByRole("checkbox")) fireEvent.click(box);
+    expect(screen.getByRole("button", { name: "Подтвердить выпуск" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(second.id) }));
+    expect(screen.getByRole("button", { name: "Подтвердить выпуск" })).toBeDisabled();
+    for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/commands"))).toBe(false);
+  });
+
   it("sends only the checked attestations and a cancel reason", async () => {
     const calls: { url: string; body?: string }[] = [];
     vi.stubGlobal(
