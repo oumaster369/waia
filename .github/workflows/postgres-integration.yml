@@ -245,3 +245,40 @@ jobs:
         env:
           WAIA_PG_INTEGRATION: "1"
         run: pnpm test --run --no-file-parallelism tests/integration/admin-console-*.test.ts
+
+  admin-console-billing-postgres:
+    name: admin console billing idempotency on Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_validate
+          POSTGRES_PASSWORD: waia_validate_local_only
+          POSTGRES_DB: waia_validate
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_validate -d waia_validate"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL_POSTGRES: postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate
+      DATABASE_URL_POSTGRES_SESSION: postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate
+      WAIA_PG_INTEGRATION: "1"
+      WAIA_DB_BACKEND: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude (roles + auth.users) + apply Postgres migrations
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Billing idempotency on the CI validate identity
+        run: pnpm test --run tests/integration/admin-console-billing-idempotency-postgres.test.ts

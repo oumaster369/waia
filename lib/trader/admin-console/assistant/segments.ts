@@ -1,19 +1,14 @@
 const NUMBER = /-?\d+(?:[.,]\d+)?%?/g;
-const JSON_NUMBER = /(?<=[:[,]\s*)-?\d+(?:\.\d+)?(?=\s*[,\]}])/g;
-const JSON_NUMERIC_STRING = /(?<=[:[,]\s*)"(-?\d+(?:[.,]\d+)?%?)"/g;
+const STANDALONE_NUMBER = /(?<![\w.-])-?\d+(?:[.,]\d+)?%?(?![\w.-])/g;
 const CITATION_ID = /"(?:id|invoiceId|orderId|entityId|fillId|accountId)"\s*:\s*"([^"]+)"/g;
 
 export function numbersInText(text: string): string[] {
   return text.match(NUMBER) ?? [];
 }
 
-/** Numeric JSON values only. Digits inside identifiers are not facts. */
+/** Standalone numbers only. Digits inside identifiers, dates, and hashes are not facts. */
 export function numbersInToolPayload(text: string): string[] {
-  const values = [...text.matchAll(JSON_NUMBER)].map((match) => match[0]);
-  for (const match of text.matchAll(JSON_NUMERIC_STRING)) {
-    if (match[1]) values.push(match[1]);
-  }
-  return values;
+  return [...text.matchAll(STANDALONE_NUMBER)].map((match) => match[0]);
 }
 
 export function citationIdsInToolPayload(text: string): string[] {

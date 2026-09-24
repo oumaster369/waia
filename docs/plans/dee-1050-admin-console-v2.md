@@ -77,7 +77,7 @@ state:
   lastValidatedGitSha: 0af6dfc39e168d0cade1e1b6f5e757445c3d092b
   lastValidationAt: "2026-09-23T23:30:20Z"
   blockedReason: "GitHub CI is green on 0af6dfc3 (27/27), including Cloudflare OpenNext, the preview Worker, Workers Builds, both unit shards, postgres migrate, admin-console Postgres, and sqlite e2e. Cormorant Garamond is self-hosted. Slice-gate and the admin Postgres browser e2e were not run. C8-rest redirects of /admin/audit, /admin/runtime-authority, and /admin/score-diagnostic stay blocked because they would remove those operator pages. Billing idempotency still requires the local validate stack (WAIA_DB_BACKEND=postgres on 127.0.0.1:54329)."
-  nextAction: "Do not merge PR 639 as section 9.1. Audit fixes are local and unpushed: invoices tab is mounted, change-log retention runs with collectors off, 0216 reads named columns and state_version, CSV cells are quoted, cursors keep timestamp text, assistant facts ignore identifier digits. Still Human: trigger approval 9.3.3, slice gate, admin-console-pg-slo, and redirects of /admin/audit, /admin/runtime-authority, /admin/score-diagnostic. Do not migrate the shared validate database."
+  nextAction: "Human did not select variant A or B, so 0216 stays in PR 639 and packages A* and B* were not started. Do not merge as section 9.1. AC-30 and AC-32 stay partial, AC-16 stays open, trigger approval 9.3.3 is unsigned, and the slice gate, admin-console-pg-slo, and Postgres browser e2e were not run. Do not redirect /admin/audit, /admin/runtime-authority, or /admin/score-diagnostic. Do not migrate the shared validate database on port 54329."
 provenance:
   createdFrom: chat
   gapRegistry: null
