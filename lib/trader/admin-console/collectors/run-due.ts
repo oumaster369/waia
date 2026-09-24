@@ -30,7 +30,7 @@ import {
   tasksWhenCollectorsDisabled,
 } from "@/lib/trader/admin-console/collectors/schedule";
 import {
-  fetchHtxPublicTickers,
+  fetchHtxPublicTickerSnapshot,
   type HtxPublicTicker,
 } from "@/lib/trader/admin-console/money/htx-public-tickers";
 import { fetchUsdQuoteRows } from "@/lib/trader/admin-console/money/usd-quotes";
@@ -142,13 +142,13 @@ export async function runDueAdminCollectors(
       options.log?.("schema_not_applied");
       return { ran: [], failed: [] };
     }
-    const fetchImpl = options.fetchImpl ?? fetch;
+    const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const store = createPostgresCollectorStore(runtime.db);
     const dueTasks = collectorTasksFor({
       now,
       store,
       fetchers: {
-        htx: async () => ({ tickers: await fetchHtxPublicTickers(fetchImpl), sourceTs: null }),
+        htx: () => fetchHtxPublicTickerSnapshot(fetchImpl),
         usd: () => fetchUsdQuoteRows(fetchImpl, (options.now ?? new Date()).toISOString()),
         news: () => fetchAdminNewsDrafts(fetchImpl, (options.now ?? new Date()).toISOString()),
         fearGreed: (limit) => new AlternativeMeFearGreedClient({ fetchImpl }).getHistory(limit),

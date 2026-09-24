@@ -14,6 +14,7 @@ import {
   type LotLegSource,
 } from "@/lib/trader/admin-console/money/account-lots";
 import type { AssetQuote } from "@/lib/trader/admin-console/money/quotes";
+import { selectMarketQuote } from "@/lib/trader/admin-console/money/market-quote";
 import { dedupeAccounts, type AccountCredential } from "@/lib/trader/admin-console/accounts/dedupe";
 import {
   buildOverview,
@@ -73,7 +74,7 @@ export async function readOverviewSnapshot(
     const grouped = dedupeAccounts(credentials);
     const quoteRows = rowsOf(
       await tx.execute(sql`
-        SELECT base, last, source, source_ts, observed_at
+        SELECT base, quote, last, source, source_ts, observed_at
         FROM trader_admin_market_quote_latest
         WHERE last IS NOT NULL
       `),
@@ -281,6 +282,7 @@ export async function readOverviewSnapshot(
       });
     }
     return {
+      market: selectMarketQuote(quoteRows, "BTC"),
       overview: buildOverview(accounts, {
         currency: input.currency,
         method: input.currency === "USD" ? "usdt_usd:coinbase" : "htx_spot_last:usdt",

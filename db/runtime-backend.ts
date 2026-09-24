@@ -1,5 +1,7 @@
 import "server-only";
 
+import { workerEnvString } from "@/lib/trader/cron/worker-cron-env";
+
 /**
  * Declares which DB backend WAIA will use once routing lands (DEE-64B2+).
  * Default remains SQLite; does not affect `getDb()` until wired.
@@ -16,6 +18,14 @@ export type ResolvedWaiaDbRuntimeConfig =
  * when backend is `postgres`, `DATABASE_URL_POSTGRES` must be non-empty.
  */
 export function getResolvedWaiaDbRuntimeConfig(): ResolvedWaiaDbRuntimeConfig {
+  const workerBackend = workerEnvString("WAIA_DB_BACKEND");
+  const workerUrl = workerEnvString("DATABASE_URL_POSTGRES");
+  if (workerBackend !== "" && !process.env.WAIA_DB_BACKEND?.trim()) {
+    process.env.WAIA_DB_BACKEND = workerBackend;
+  }
+  if (workerUrl !== "" && !process.env.DATABASE_URL_POSTGRES?.trim()) {
+    process.env.DATABASE_URL_POSTGRES = workerUrl;
+  }
   const trimmed = process.env.WAIA_DB_BACKEND?.trim() ?? "";
   if (trimmed === "") {
     return { backend: "sqlite" };

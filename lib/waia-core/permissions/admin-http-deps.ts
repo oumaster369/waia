@@ -3,6 +3,7 @@ import "server-only";
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import { getOptionalAdminSessionUserId } from "@/lib/auth/session-user";
+import { bridgeRequestDatabaseEnv } from "@/lib/trader/cron/worker-cron-env";
 import type { AdminRouteHandlerDeps } from "@/lib/waia-core/permissions/admin-http";
 
 function localAdminConsolePostgres(): WaiaRuntimeDb | null {
@@ -23,7 +24,10 @@ function localAdminConsolePostgres(): WaiaRuntimeDb | null {
 export function createProductionAdminRouteDeps(): AdminRouteHandlerDeps {
   return {
     getUserId: getOptionalAdminSessionUserId,
-    getRuntimeDb: async () => localAdminConsolePostgres() ?? getWaiaRuntimeDb(),
+    getRuntimeDb: async () => {
+      await bridgeRequestDatabaseEnv();
+      return localAdminConsolePostgres() ?? getWaiaRuntimeDb();
+    },
     disposeRuntimeDb: disposeWaiaRuntimeDb,
   };
 }

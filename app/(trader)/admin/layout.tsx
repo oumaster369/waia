@@ -1,4 +1,3 @@
-import { AdminShell } from "@/components/trader/admin/admin-shell";
 import { AdminQueryProvider } from "@/components/trader/admin-console/data/query-provider";
 import { AdminConsoleShell } from "@/components/trader/admin-console/shell/admin-console-shell";
 import { notFound, redirect } from "next/navigation";
@@ -33,10 +32,10 @@ export default async function TraderAdminLayout({
     await deps.disposeRuntimeDb(runtime);
   }
   return (
-    <AdminShell>
+    <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <AdminQueryProvider>
         <AdminConsoleShell>{children}</AdminConsoleShell>
       </AdminQueryProvider>
-    </AdminShell>
+    </div>
   );
 }

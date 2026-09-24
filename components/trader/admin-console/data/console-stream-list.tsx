@@ -92,7 +92,11 @@ export function useConsoleStreamList<T extends { id: string }>(
       controller?.abort();
       const request = ++generation;
       controller = new AbortController();
-      void fetch(listUrl, { signal: controller.signal })
+      void fetch(listUrl, {
+        signal: controller.signal,
+        cache: "no-store",
+        credentials: "same-origin",
+      })
         .then(async (response) => response.json() as Promise<ConsoleListBody<T>>)
         .then((body) => {
           if (stopped || request !== generation) return;
@@ -219,11 +223,13 @@ export function useConsoleStreamList<T extends { id: string }>(
     };
 
     load();
+    const listRefresh = window.setInterval(load, STREAM_DISCONNECT_POLL_MS);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
       generation += 1;
       controller?.abort();
+      window.clearInterval(listRefresh);
       stopTimers();
       document.removeEventListener("visibilitychange", onVisibility);
     };

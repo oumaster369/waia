@@ -36,7 +36,7 @@ export async function handleAdminConsoleOverviewGet(
     const missing = snapshot.value.capped ? [ADMIN_REASON.accountCap] : [];
     return adminSuccess(
       adminEnvelope({
-        data: snapshot.value.overview,
+        data: { ...snapshot.value.overview, market: snapshot.value.market },
         scope: adminScopeFromQuery(parsed.query),
         mode: parsed.query.mode,
         cursor: snapshot.cursor,
