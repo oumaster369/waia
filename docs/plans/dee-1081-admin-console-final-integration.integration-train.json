@@ -475,7 +475,8 @@
         "8712dda75b5ff22eda660d563b064fa098c61ac5",
         "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
         "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
-        "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9"
+        "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9",
+        "2812afae740567bbf5e8a594fd3295072f402598"
       ],
       "actualFiles": [
         "app/(trader)/admin/accounts/page.tsx",
@@ -500,6 +501,7 @@
         "lib/trader/admin-console/assistant/quick-answers.ts",
         "lib/trader/admin-console/collectors/postgres-store.ts",
         "lib/trader/admin-console/collectors/run-due.ts",
+        "lib/trader/admin-console/collectors/valuation-persist.ts",
         "lib/trader/admin-console/handler-tables.ts",
         "lib/trader/admin-console/handlers/assistant-reads.ts",
         "lib/trader/admin-console/handlers/changes.ts",
@@ -509,6 +511,8 @@
         "lib/trader/admin-console/handlers/paper-portfolios.ts",
         "lib/trader/admin-console/handlers/promotion-commands.ts",
         "lib/trader/admin-console/handlers/promotions.ts",
+        "lib/trader/admin-console/money/quotes.ts",
+        "lib/trader/admin-console/money/valuation.ts",
         "lib/trader/admin-console/read-models/account-finance.ts",
         "lib/trader/admin-console/repositories/overview.postgres.ts",
         "lib/trader/admin-console/repositories/period-finance.postgres.ts",
@@ -516,15 +520,18 @@
         "tests/e2e/admin-console-pg-slice.spec.ts",
         "tests/e2e/admin-console-pg-workflows.spec.ts",
         "tests/integration/admin-console-final-acceptance-postgres.test.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
         "tests/integration/admin-console-promotion-request-postgres.test.ts",
         "tests/integration/admin-console-retention-postgres.test.ts",
         "tests/unit/admin-console-account-finance.test.ts",
-        "tests/unit/admin-console-collector-coldstart.test.ts"
+        "tests/unit/admin-console-collector-coldstart.test.ts",
+        "tests/unit/admin-console-valuation.test.ts"
       ],
       "acceptanceEvidence": [
         "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
         "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit.",
-        "Final visual correction: 29 additional Russian reason descriptions and persisted campaign-state labels retain machine diagnostics. Existing real-Postgres eight-section workflow passed again at all four widths (35.2s); focused 6 unit checks, lint and typecheck pass. Held-xmin 6001+late-event external proof and 49 governed negative tests also pass. Exact updated-head full CI remains required."
+        "Final visual correction: 29 additional Russian reason descriptions and persisted campaign-state labels retain machine diagnostics. Existing real-Postgres eight-section workflow passed again at all four widths (35.2s); focused 6 unit checks, lint and typecheck pass. Held-xmin 6001+late-event external proof and 49 governed negative tests also pass. Exact updated-head full CI remains required.",
+        "Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass."
       ],
       "tests": [
         "pnpm lint (0 errors; existing warnings retained)",
@@ -713,7 +720,8 @@
           "8712dda75b5ff22eda660d563b064fa098c61ac5",
           "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
           "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
-          "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9"
+          "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9",
+          "2812afae740567bbf5e8a594fd3295072f402598"
         ],
         "reviewedFiles": [
           "app/(trader)/admin/accounts/page.tsx",
@@ -738,6 +746,7 @@
           "lib/trader/admin-console/assistant/quick-answers.ts",
           "lib/trader/admin-console/collectors/postgres-store.ts",
           "lib/trader/admin-console/collectors/run-due.ts",
+          "lib/trader/admin-console/collectors/valuation-persist.ts",
           "lib/trader/admin-console/handler-tables.ts",
           "lib/trader/admin-console/handlers/assistant-reads.ts",
           "lib/trader/admin-console/handlers/changes.ts",
@@ -747,6 +756,8 @@
           "lib/trader/admin-console/handlers/paper-portfolios.ts",
           "lib/trader/admin-console/handlers/promotion-commands.ts",
           "lib/trader/admin-console/handlers/promotions.ts",
+          "lib/trader/admin-console/money/quotes.ts",
+          "lib/trader/admin-console/money/valuation.ts",
           "lib/trader/admin-console/read-models/account-finance.ts",
           "lib/trader/admin-console/repositories/overview.postgres.ts",
           "lib/trader/admin-console/repositories/period-finance.postgres.ts",
@@ -754,10 +765,12 @@
           "tests/e2e/admin-console-pg-slice.spec.ts",
           "tests/e2e/admin-console-pg-workflows.spec.ts",
           "tests/integration/admin-console-final-acceptance-postgres.test.ts",
+          "tests/integration/admin-console-period-finance-postgres.test.ts",
           "tests/integration/admin-console-promotion-request-postgres.test.ts",
           "tests/integration/admin-console-retention-postgres.test.ts",
           "tests/unit/admin-console-account-finance.test.ts",
-          "tests/unit/admin-console-collector-coldstart.test.ts"
+          "tests/unit/admin-console-collector-coldstart.test.ts",
+          "tests/unit/admin-console-valuation.test.ts"
         ],
         "reviewer": "Codex serial source and acceptance review under explicit user delegation; not an independent reviewer."
       }
@@ -836,7 +849,7 @@
           "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
           "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
         ],
-        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation. Final Russian-label delta reviewed against saved UI; six targeted units, typecheck/lint, repeated eight-section browser acceptance passed; final build and exact-head full CI recorded in PR."
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation. Final Russian-label delta reviewed against saved UI; six targeted units, typecheck/lint, repeated eight-section browser acceptance passed; final build and exact-head full CI recorded in PR. Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass."
       }
     ],
     "fullDiffFrozen": true,
