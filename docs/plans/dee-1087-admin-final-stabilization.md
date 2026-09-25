@@ -11,22 +11,22 @@ includedIssues:
   - id: DEE-1087
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: in-progress
+    status: complete
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: implementing
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidationAt: "2026-09-25T08:36:00Z"
   blockedReason: null
-  nextAction: "Serially import reviewed children, validate cumulatively, freeze and run all exact-head CI."
+  nextAction: "Run all exact-head CI, merge guarded squash, verify merged-main production."
 provenance:
   createdFrom: chat
   gapRegistry: null

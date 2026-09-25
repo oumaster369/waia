@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-1087",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -10,7 +10,7 @@
   "includedChildren": [
     {
       "issue": "DEE-1085",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Normalize console news text and translate persisted strategy evidence labels without rewriting history.",
       "dependencies": [],
@@ -44,11 +44,31 @@
         "wave": 1,
         "mode": "serialized"
       },
-      "sourceCommit": "f00877c218d11f46274be28049c34eb51b6648d6"
+      "sourceCommit": "f00877c218d11f46274be28049c34eb51b6648d6",
+      "integratedCommits": ["a87276d68d41f3c6e521f2541a2f00fd6f2910ce"],
+      "actualFiles": [
+        "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+        "docs/plans/dee-1085-admin-news-text.md",
+        "lib/trader/admin-console/collectors/news-persist.ts",
+        "lib/trader/admin-console/handlers/news.ts",
+        "lib/trader/admin-console/news-text.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "54 cumulative targeted tests passed immediately after this serial import. Final combined selection: 70 unit/real-Postgres tests passed, including stored-news immutability, scheduled-time regressions and merged financial valuation checks. All five real-Postgres browser scenarios passed (2.7m).",
+        "Original source diff retained; no unexpected conflict edits, schema, arithmetic, permission or watcher ordering change."
+      ],
+      "tests": [
+        "pnpm test --run targeted collector, financial and real-Postgres regression (70 passed final combination)",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck"
+      ]
     },
     {
       "issue": "DEE-1086",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Preserve the scheduled minute for collector dispatch while retaining actual evidence timestamps.",
       "dependencies": ["DEE-1085"],
@@ -80,7 +100,25 @@
         "wave": 2,
         "mode": "serialized"
       },
-      "sourceCommit": "202b3edb44b5ab7146e1ca9288b074fa8dac54c2"
+      "sourceCommit": "202b3edb44b5ab7146e1ca9288b074fa8dac54c2",
+      "integratedCommits": ["4e09a8bb4036ce42680d50ac45aeecfc734c1e22"],
+      "actualFiles": [
+        "custom-worker.ts",
+        "docs/plans/dee-1086-admin-collector-schedule.md",
+        "lib/trader/admin-console/collectors/run-due.ts",
+        "lib/trader/admin-console/collectors/schedule.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "59 cumulative targeted tests passed immediately after this serial import. Final combined selection: 70 unit/real-Postgres tests passed, including stored-news immutability, scheduled-time regressions and merged financial valuation checks. All five real-Postgres browser scenarios passed (2.7m).",
+        "Original source diff retained; no unexpected conflict edits, schema, arithmetic, permission or watcher ordering change."
+      ],
+      "tests": [
+        "pnpm test --run targeted collector, financial and real-Postgres regression (70 passed final combination)",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck"
+      ]
     }
   ],
   "deferredChildren": [],
@@ -88,7 +126,66 @@
     "admissionEvidence": {
       "status": "pass",
       "reviewer": "Codex source self-review under explicit user delegation; new integration admission before source imports, not retrospective implementation admission."
-    }
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestCommit": "d8e1665e39e1609e34d1e2f8abb06a1cb32add2c",
+      "manifestPath": "docs/plans/dee-1087-admin-final-stabilization.integration-train.json",
+      "manifestDigest": "eff7b9214367b179d76c2e8936c5996363bf549de005359bb442de6f2184b4d2",
+      "reviewer": "Codex integration owner; import admission preceded these cherry-pick commits. Original implementation chronology is explicitly separate."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-1085",
+        "status": "pass",
+        "reviewedCommits": ["a87276d68d41f3c6e521f2541a2f00fd6f2910ce"],
+        "reviewedFiles": [
+          "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+          "docs/plans/dee-1085-admin-news-text.md",
+          "lib/trader/admin-console/collectors/news-persist.ts",
+          "lib/trader/admin-console/handlers/news.ts",
+          "lib/trader/admin-console/news-text.ts",
+          "tests/integration/admin-console-period-finance-postgres.test.ts",
+          "tests/unit/admin-console-collectors.test.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent reviewer claimed."
+      },
+      {
+        "issue": "DEE-1086",
+        "status": "pass",
+        "reviewedCommits": ["4e09a8bb4036ce42680d50ac45aeecfc734c1e22"],
+        "reviewedFiles": [
+          "custom-worker.ts",
+          "docs/plans/dee-1086-admin-collector-schedule.md",
+          "lib/trader/admin-console/collectors/run-due.ts",
+          "lib/trader/admin-console/collectors/schedule.ts",
+          "tests/unit/admin-console-collectors.test.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent reviewer claimed."
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-1085",
+        "status": "pass",
+        "commands": [
+          "Cumulative targeted suite after import (54 passed)",
+          "Final combined 70 targeted tests and 5 real-Postgres browser scenarios"
+        ],
+        "evidence": "/tmp/waia-1087-wave1.log; /tmp/waia-1087-final-targeted.log; /tmp/waia-1087-browser.log"
+      },
+      {
+        "afterIssue": "DEE-1086",
+        "status": "pass",
+        "commands": [
+          "Cumulative targeted suite after import (59 passed)",
+          "Final combined 70 targeted tests and 5 real-Postgres browser scenarios"
+        ],
+        "evidence": "/tmp/waia-1087-wave2.log; /tmp/waia-1087-final-targeted.log; /tmp/waia-1087-browser.log"
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "Eight Russian sections and all existing finance, authority and schema invariants unchanged.",
