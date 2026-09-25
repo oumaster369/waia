@@ -318,13 +318,28 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     return { accountId, allowance, attempt, plan, policy };
   }
 
-  async function admittedBindInput(): Promise<BindExecutionAuthorityV2Input> {
+  async function admittedBindInput(
+    options: { reduction?: boolean; validForMs?: number } = {},
+  ): Promise<BindExecutionAuthorityV2Input> {
     const accountId = "atomic-bind";
-    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account(accountId));
+    const state = account(accountId);
+    if (options.reduction) state.reconciledInstrumentExposures[0]!.baseQuantity = "0.002";
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, state);
+    const request = admission(accountId);
     const admitted = await admitRiskAllowanceV2Postgres(
       db,
       { organizationId: orgA },
-      admission(accountId),
+      {
+        ...request,
+        validForMs: options.validForMs ?? request.validForMs,
+        verdict: {
+          ...request.verdict,
+          decision: {
+            ...request.verdict.decision,
+            action: options.reduction ? "REDUCE" : "ENTER_LONG",
+          },
+        },
+      },
     );
     const allowance = admitted.allowance;
     const now = Date.now();
@@ -374,7 +389,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       allowance,
       policy,
       plan: {
-        approvedNotionalCeiling: "25",
+        approvedNotionalCeiling: options.reduction ? "0" : "25",
         plannedQuantity: "0.001",
         orderType: "limit",
         liquidityRole: "MAKER",
@@ -887,6 +902,222 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       order_count: "0",
       attempt_count: "0",
     });
+  });
+
+  it.each([
+    ["kill", { killState: "TRIPPED" as const }, "CURRENT_AUTHORITY_BINDING_MISMATCH"],
+    ["unknown kill", { killState: "UNKNOWN" as const }, "CURRENT_AUTHORITY_BINDING_MISMATCH"],
+    ["halt", { posture: "HALT" as const }, "EXECUTION_FAIL_CLOSED"],
+    ["close only", { posture: "CLOSE_ONLY" as const }, "CURRENT_POSTURE_RESTRICTED"],
+    [
+      "divergent reconciliation",
+      { reconciliationStatus: "DIVERGENT" as const },
+      "CURRENT_AUTHORITY_BINDING_MISMATCH",
+    ],
+    [
+      "stale reconciliation",
+      { reconciliationStatus: "STALE" as const },
+      "CURRENT_AUTHORITY_BINDING_MISMATCH",
+    ],
+    [
+      "changed Reality",
+      { realitySnapshotId: "new-reality-after-bind" },
+      "CURRENT_AUTHORITY_BINDING_MISMATCH",
+    ],
+    [
+      "changed reconciliation authority",
+      { reconciliationAuthorityDigest: hex64("new-reconciliation") },
+      "CURRENT_AUTHORITY_BINDING_MISMATCH",
+    ],
+  ])("refuses post-bind %s before submission admission", async (_name, patch, reason) => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    await db
+      .update(pgSchema.traderRiskAccountStateV2)
+      .set(patch)
+      .where(
+        and(
+          eq(pgSchema.traderRiskAccountStateV2.organizationId, orgA),
+          eq(pgSchema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+        ),
+      );
+    let networkCalls = 0;
+    await expect(
+      dispatchCommittedExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          networkCalls += 1;
+          return { synthetic: true };
+        },
+      ),
+    ).rejects.toThrow(reason);
+    expect(networkCalls).toBe(0);
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("BOUND");
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.some((report) => report.reportType === "SUBMIT_STARTED")).toBe(false);
+  });
+
+  it("refuses a consumed allowance expiring before the still-open execution window", async () => {
+    const input = await admittedBindInput({ validForMs: 2_000 });
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    await sql`SELECT pg_sleep(2.2)`;
+    let networkCalls = 0;
+    await expect(
+      dispatchCommittedExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          networkCalls += 1;
+          return { synthetic: true };
+        },
+      ),
+    ).rejects.toThrow("ALLOWANCE_EXPIRED");
+    expect(networkCalls).toBe(0);
+  });
+
+  it.each([false, true])(
+    "rechecks current strict reduction under CLOSE_ONLY, exposure changed=%s",
+    async (changed) => {
+      const input = await admittedBindInput({ reduction: true });
+      const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+      await db
+        .update(pgSchema.traderRiskAccountStateV2)
+        .set({
+          posture: "CLOSE_ONLY",
+          reconciledInstrumentExposures: [
+            {
+              instrumentIdentityDigestHex: input.allowance.instrumentIdentityDigestHex,
+              symbol: "BTCUSDT",
+              baseQuantity: changed ? "0.0005" : "0.002",
+            },
+          ],
+        })
+        .where(
+          and(
+            eq(pgSchema.traderRiskAccountStateV2.organizationId, orgA),
+            eq(pgSchema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+          ),
+        );
+      let networkCalls = 0;
+      const dispatch = dispatchCommittedExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          networkCalls += 1;
+          return { synthetic: true };
+        },
+      );
+      if (changed) await expect(dispatch).rejects.toThrow("STRICT_REDUCTION_PROOF_INVALID");
+      else expect((await dispatch).status).toBe("SUBMITTED");
+      expect(networkCalls).toBe(changed ? 0 : 1);
+    },
+  );
+
+  it("waits for an in-flight Risk restriction and observes its commit before admission", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let signalLocked!: (pid: number) => void;
+    const locked = new Promise<number>((resolve) => {
+      signalLocked = resolve;
+    });
+    const restriction = sql.begin(async (tx) => {
+      await tx`UPDATE trader_risk_account_state_v2 SET kill_state='TRIPPED'
+        WHERE organization_id=${orgA}::uuid AND account_id=${input.allowance.accountId}`;
+      const [row] = await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+      signalLocked(row!.pid);
+      await released;
+    });
+    const blockerPid = await locked;
+    let networkCalls = 0;
+    const dispatch = dispatchCommittedExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        networkCalls += 1;
+        return { synthetic: true };
+      },
+    ).then(
+      (result) => ({ result, error: null }),
+      (error: Error) => ({ result: null, error }),
+    );
+    try {
+      // Observe an actual PostgreSQL lock wait, rather than relying on a sleep
+      // to guess whether dispatch reached its admission boundary.
+      await expect
+        .poll(
+          async () => {
+            const [row] = await sql<{ waiting: boolean }[]>`SELECT EXISTS (
+          SELECT 1 FROM pg_stat_activity WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+        ) AS waiting`;
+            return row!.waiting;
+          },
+          { timeout: 5_000 },
+        )
+        .toBe(true);
+      expect(networkCalls).toBe(0);
+    } finally {
+      release();
+      await restriction;
+    }
+    const outcome = await dispatch;
+    expect(outcome.error?.message).toContain("CURRENT_AUTHORITY_BINDING_MISMATCH");
+    expect(networkCalls).toBe(0);
+  }, 15_000);
+
+  it("admits one concurrent sender and releases Risk locks before network I/O", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let networkCalls = 0;
+    const submit = async () => {
+      networkCalls += 1;
+      const reports = await listExecutionReportsV2Postgres(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+      );
+      expect(reports.filter((report) => report.reportType === "SUBMIT_STARTED")).toHaveLength(1);
+      // A restriction AFTER admission must not deadlock on locks held across
+      // the callback, and does not license a retry of this admitted effect.
+      await sql.begin(async (tx) => {
+        await tx`SET LOCAL lock_timeout='2s'`;
+        await tx`UPDATE trader_risk_account_state_v2 SET kill_state='TRIPPED'
+          WHERE organization_id=${orgA}::uuid AND account_id=${input.allowance.accountId}`;
+      });
+      return { synthetic: true };
+    };
+    const outcomes = await Promise.all(
+      [0, 1].map(() =>
+        dispatchCommittedExecutionAttemptV2(
+          db,
+          { organizationId: orgA },
+          bound.attempt.executionAttemptId,
+          submit,
+        ),
+      ),
+    );
+    expect(outcomes.map((result) => result.status).sort()).toEqual([
+      "REFUSED_ALREADY_STARTED",
+      "SUBMITTED",
+    ]);
+    expect(networkCalls).toBe(1);
   });
 
   it("rechecks the planned effect ceiling against the locked Risk reservation", async () => {

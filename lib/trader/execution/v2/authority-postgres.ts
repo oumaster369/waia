@@ -12,7 +12,11 @@ import {
   serializeOpeningCausalLineageV1,
 } from "@/lib/trader/lifecycle/opening-causal-lineage-v1";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
-import { consumeRiskAllowanceForOrderV2FromTransaction } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import {
+  consumeRiskAllowanceForOrderV2FromTransaction,
+  readRiskAccountStateV2Postgres,
+  revalidateConsumedRiskAllowanceForExecutionV2,
+} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
@@ -312,7 +316,12 @@ export type DispatchCommittedExecutionV2Result<T> =
   | Readonly<{ status: "FAIL_UNKNOWN"; attempt: ExecutionAttemptV2; error: unknown }>
   | Readonly<{ status: "REFUSED_ALREADY_STARTED"; lifecycleState: string }>;
 
-/** Marks the one allowed submission durably, commits, and only then invokes the network callback. */
+/**
+ * Serializes current Risk admission with the one durable SUBMIT_STARTED record,
+ * commits, then invokes the network callback. A restriction committed before
+ * admission prevents submission. A later restriction cannot recall an already
+ * admitted network effect; recovery must reconcile that effect without resend.
+ */
 export async function dispatchCommittedExecutionAttemptV2<T>(
   db: WaiaPostgresDb,
   context: OrgContext,
@@ -321,6 +330,24 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
 ): Promise<DispatchCommittedExecutionV2Result<T>> {
   const scoped = requireOrgContext(context.organizationId);
   const ready = await runWaiaPostgresTransaction(db, async (tx) => {
+    // Read immutable identity without taking the projection lock first: bind and
+    // Risk consumption lock account before allowance/order/attempt. Reverse order
+    // here could deadlock a restart bind against dispatch.
+    const identity = await readExecutionAttemptProjectionV2Postgres(tx, scoped, executionAttemptId);
+    if (!identity) throw new ExecutionV2AuthorityRefusedError("ATTEMPT_NOT_FOUND");
+    if (identity.lifecycleState !== "BOUND") {
+      return {
+        status: "REFUSED_ALREADY_STARTED" as const,
+        lifecycleState: identity.lifecycleState,
+      };
+    }
+    const currentRisk = await readRiskAccountStateV2Postgres(
+      tx,
+      scoped,
+      identity.attempt.accountId,
+      true,
+    );
+    if (!currentRisk) throw new ExecutionV2AuthorityRefusedError("RISK_ACCOUNT_STATE_MISSING");
     const projection = await readExecutionAttemptProjectionV2Postgres(
       tx,
       scoped,
@@ -412,6 +439,14 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     }
     const durableAt = await durableTransactionTime(tx);
     requireCurrentWindow(plan, policy, durableAt);
+    await revalidateConsumedRiskAllowanceForExecutionV2(tx, scoped, {
+      accountId: projection.attempt.accountId,
+      riskAllowanceId: allowance.id,
+      riskAllowanceContentDigestHex: projection.attempt.riskAllowanceContentDigestHex,
+      effectNotionalCeiling: plan.approvedNotionalCeiling,
+      order,
+      durableAt,
+    });
     await appendExecutionReportV2FromExecutor(tx, scoped, {
       executionReportId: deterministicExecutionUuidV2("report", {
         executionAttemptContentDigestHex: projection.attempt.contentDigestHex,
