@@ -6,6 +6,7 @@ const requiredFiles = [
   "postgres-execution-v2.test.ts",
   "postgres-risk-v2.test.ts",
   "postgres-risk-limits-bootstrap.test.ts",
+  "postgres-trader-service-actor-authorization.test.ts",
   "postgres-reality-v2.test.ts",
   "postgres-canonical-decision-verification-v2.test.ts",
 ];

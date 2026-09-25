@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -32,7 +33,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -53,15 +53,6 @@ export type MiSourceProvenanceService = {
   getTrustHistory: (context: OrgContext, sourceId: string) => Promise<TrustRevision[]>;
   listSources: (context: OrgContext) => Promise<MiSourceIdentity[]>;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiSourceProvenanceServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function normalizeSymbol(symbol: string | null | undefined): string | null {
   if (symbol === undefined || symbol === null) {
@@ -98,8 +89,7 @@ function createService(
 ): MiSourceProvenanceService {
   return {
     async createSource(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const venue = input.venue.trim();
       const feedKind = input.feedKind.trim();
@@ -131,8 +121,7 @@ function createService(
     },
 
     async setSourceStatus(context, sourceId, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const existing = await repo.getSourceById(scoped, sourceId);
       if (!existing) {
@@ -161,8 +150,7 @@ function createService(
     },
 
     async appendTrustRevision(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const source = await repo.getSourceById(scoped, input.sourceId);
       if (!source) {
@@ -235,20 +223,17 @@ function createService(
     },
 
     async getCurrentTrust(context, sourceId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.getLatestTrustRevision(scoped, sourceId);
     },
 
     async getTrustHistory(context, sourceId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listTrustHistory(scoped, sourceId);
     },
 
     async listSources(context) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listSources(scoped);
     },
   };
@@ -259,7 +244,9 @@ export function createSqliteMiSourceProvenanceService(
   deps: MiSourceProvenanceServiceDeps = {},
 ): MiSourceProvenanceService {
   const repo = createSqliteMiSourceProvenanceRepository(db);
-  return createService(repo, deps, (input) => writeTraderAuditLogSqlite(db, input));
+  return createService(repo,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
+    (input) => writeTraderAuditLogSqlite(db, input));
 }
 
 export function createPostgresMiSourceProvenanceService(
@@ -267,7 +254,9 @@ export function createPostgresMiSourceProvenanceService(
   deps: MiSourceProvenanceServiceDeps = {},
 ): MiSourceProvenanceService {
   const repo = createPostgresMiSourceProvenanceRepository(ex);
-  return createService(repo, deps, (input) => writeTraderAuditLogPostgres(ex, input));
+  return createService(repo,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
+    (input) => writeTraderAuditLogPostgres(ex, input));
 }
 
 export function createSqliteMiSourceProvenanceServiceWithMembership(

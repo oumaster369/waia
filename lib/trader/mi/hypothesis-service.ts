@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -61,7 +62,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -150,15 +150,6 @@ function assertLifecycleTransitionAllowed(
     throw new MiHypothesisLifecycleError(
       `MI_HYPOTHESIS_LIFECYCLE_INVALID: transition ${currentState} → ${toState} is forbidden`,
     );
-  }
-}
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiHypothesisServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
   }
 }
 
@@ -344,8 +335,7 @@ function createService(
 ): MiHypothesisService {
   return {
     async registerHypothesis(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       validateDefinition(input.definition);
       await assertPinnedRefs(scoped, measurementRepo, patternRepo, input.definition);
       await assertSupersedesTargets(scoped, repo, input.supersedes);
@@ -434,8 +424,7 @@ function createService(
     },
 
     async appendHypothesisVersion(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       validateDefinition(input.definition);
       await assertPinnedRefs(scoped, measurementRepo, patternRepo, input.definition);
 
@@ -507,39 +496,33 @@ function createService(
     },
 
     async getLatestHypothesis(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.getLatestHypothesis(scoped, hypothesisKey);
     },
 
     async getHypothesisHistory(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listHypothesisHistory(scoped, hypothesisKey);
     },
 
     async listHypotheses(context, hypothesisKind) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listHypotheses(scoped, hypothesisKind);
     },
 
     async getCurrentLifecycleState(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const latest = await repo.getLatestLifecycleEvent(scoped, hypothesisKey);
       return latest?.lifecycleState ?? null;
     },
 
     async listLifecycleEvents(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listLifecycleEvents(scoped, hypothesisKey);
     },
 
     async transitionHypothesisLifecycle(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const actor = assertHumanLifecycleActor(input, deps);
 
       const latestHypothesis = await repo.getLatestHypothesis(scoped, input.hypothesisKey);
@@ -601,8 +584,7 @@ function createService(
     },
 
     async getHypothesisWithCurrentState(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const hypothesis = await repo.getLatestHypothesis(scoped, hypothesisKey);
       if (!hypothesis) {
@@ -635,7 +617,7 @@ export function createSqliteMiHypothesisService(
     hypothesisRepository,
     measurementRepository,
     patternRepository,
-    deps,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
     (input) => writeTraderAuditLogSqlite(db, input),
   );
   return { hypothesis, hypothesisRepository };
@@ -652,7 +634,7 @@ export function createPostgresMiHypothesisService(
     hypothesisRepository,
     measurementRepository,
     patternRepository,
-    deps,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
     (input) => writeTraderAuditLogPostgres(ex, input),
   );
   return { hypothesis, hypothesisRepository };

@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -45,7 +46,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -89,15 +89,6 @@ function toCredentialMetadata(row: ExchangeCredentialRow): CredentialMetadata {
   };
 }
 
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: CredentialServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
-
 async function findActiveCredential(
   repository: CredentialServiceDeps["repository"],
   context: OrgContext,
@@ -139,8 +130,7 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
 
   return {
     async storeCredentials(context, input: StoreCredentialsInput): Promise<CredentialMetadata> {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const provider = await createProvider();
       assertCredentialStorageAllowed(provider);
@@ -202,8 +192,7 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
       context: OrgContext,
       credentialId: string,
     ): Promise<ConnectorCredentialInput> {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const provider = await createProvider();
       assertCredentialDecryptionAllowed(provider);
@@ -221,8 +210,7 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
       credentialId: string,
       input: RevokeCredentialsInput = {},
     ): Promise<CredentialMetadata> {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const existing = await deps.repository.getCredentialRowById(scoped, credentialId);
       if (!existing) {
@@ -259,8 +247,7 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
     },
 
     async listCredentialMetadata(context: OrgContext): Promise<CredentialMetadata[]> {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const rows = await deps.repository.listCredentialRowsForOrg(scoped);
       return rows.map(toCredentialMetadata);
@@ -306,8 +293,7 @@ export function createSqliteCredentialService(
   return {
     ...base,
     async storeCredentials(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, assertMembership);
+      const scoped = await requireServiceOrgContext(context, assertMembership);
       const provider = await createProvider();
       assertCredentialStorageAllowed(provider);
       const encrypted = await encryptCredentialPayload(provider, input.credentials);
@@ -359,8 +345,7 @@ export function createSqliteCredentialService(
       });
     },
     async revokeCredentials(context, credentialId, input = {}) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, assertMembership);
+      const scoped = await requireServiceOrgContext(context, assertMembership);
       return db.transaction((tx) => {
         const sqlite = tx as WaiaDb;
         const existing = getCredentialRowByIdSqlite(sqlite, scoped, credentialId);

@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -37,7 +38,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -64,15 +64,6 @@ export type MiTrialIntegrityServiceBundle = {
   trialIntegrity: MiTrialIntegrityService;
   trialIntegrityRepository: MiTrialIntegrityRepository;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiTrialIntegrityServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -158,8 +149,7 @@ function createService(
 ): MiTrialIntegrityService {
   return {
     async invalidateTrial(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const { rationale, causeRef } = assertInvalidateInput(input);
       assertPit(input.eventTime, input.ingestTime);
@@ -239,8 +229,7 @@ function createService(
     },
 
     async getTrialIntegrity(context, trialId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const trial = await trialRepo.findTrialById(scoped, trialId);
       if (!trial) return null;
@@ -250,8 +239,7 @@ function createService(
     },
 
     async listTrialIntegrityEvents(context, trialId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const trial = await trialRepo.findTrialById(scoped, trialId);
       if (!trial) {
@@ -271,7 +259,9 @@ export function createSqliteMiTrialIntegrityService(
 ): MiTrialIntegrityServiceBundle {
   const trialIntegrityRepository = createSqliteMiTrialIntegrityRepository(db);
   const trialRepository = createSqliteMiTrialRepository(db);
-  const trialIntegrity = createService(trialIntegrityRepository, trialRepository, deps, (input) =>
+  const trialIntegrity = createService(trialIntegrityRepository, trialRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
+    (input) =>
     writeTraderAuditLogSqlite(db, input),
   );
   return { trialIntegrity, trialIntegrityRepository };
@@ -283,7 +273,9 @@ export function createPostgresMiTrialIntegrityService(
 ): MiTrialIntegrityServiceBundle {
   const trialIntegrityRepository = createPostgresMiTrialIntegrityRepository(ex);
   const trialRepository = createPostgresMiTrialRepository(ex);
-  const trialIntegrity = createService(trialIntegrityRepository, trialRepository, deps, (input) =>
+  const trialIntegrity = createService(trialIntegrityRepository, trialRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
+    (input) =>
     writeTraderAuditLogPostgres(ex, input),
   );
   return { trialIntegrity, trialIntegrityRepository };

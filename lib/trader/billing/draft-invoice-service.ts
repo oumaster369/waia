@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -44,7 +45,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -79,15 +79,6 @@ export type DraftInvoiceService = {
     reportingPeriodId: string,
   ): Promise<InvoiceRecordView | null>;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: DraftInvoiceServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -177,8 +168,7 @@ function reconcileExistingDraftInvoice(
 export function createDraftInvoiceService(deps: DraftInvoiceServiceDeps): DraftInvoiceService {
   return {
     async generateDraftInvoice(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const artifact = await deps.feeComputationService.computeFeeForPeriod(scoped, input);
 
@@ -244,8 +234,7 @@ export function createDraftInvoiceService(deps: DraftInvoiceServiceDeps): DraftI
     },
 
     async getDraftInvoiceByPeriod(context, exchangeAccountId, reportingPeriodId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return deps.invoiceRepository.findByReportingPeriod(
         scoped,
         exchangeAccountId,
@@ -260,7 +249,7 @@ export function createSqliteDraftInvoiceService(
   deps: Partial<DraftInvoiceServiceDeps> = {},
 ): DraftInvoiceService {
   return createDraftInvoiceService({
-    feeComputationService: deps.feeComputationService ?? createSqliteFeeComputationService(db),
+    feeComputationService: deps.feeComputationService ?? createSqliteFeeComputationService(db, { assertMembership: deps.assertMembership }),
     reportingPeriodRepository:
       deps.reportingPeriodRepository ?? createSqliteReportingPeriodRepository(db),
     invoiceRepository: deps.invoiceRepository ?? createSqliteInvoiceRepository(db),
@@ -280,7 +269,7 @@ export function createPostgresDraftInvoiceService(
 ): DraftInvoiceService {
   return createDraftInvoiceService({
     feeComputationService:
-      deps.feeComputationService ?? createPostgresFeeComputationService(ex, {}, db),
+      deps.feeComputationService ?? createPostgresFeeComputationService(ex, { assertMembership: deps.assertMembership }, db),
     reportingPeriodRepository:
       deps.reportingPeriodRepository ?? createPostgresReportingPeriodRepository(ex, db),
     invoiceRepository: deps.invoiceRepository ?? createPostgresInvoiceRepository(ex, db),

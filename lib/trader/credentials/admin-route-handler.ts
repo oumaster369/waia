@@ -1,3 +1,4 @@
+import { createAdminServiceOrgAccess } from "@/lib/trader/security/admin-service-org-access";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -26,10 +27,11 @@ function createCredentialService(
   runtime: Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>,
 ) {
   const createProvider = () => createMasterKeyProvider();
+  const assertMembership = createAdminServiceOrgAccess(runtime, "admin.audit.read");
   if (runtime.kind === "sqlite") {
-    return createSqliteCredentialService(runtime.db, { createProvider });
+    return createSqliteCredentialService(runtime.db, { createProvider, assertMembership });
   }
-  return createPostgresCredentialService(runtime.db, { createProvider });
+  return createPostgresCredentialService(runtime.db, { createProvider, assertMembership });
 }
 
 export async function handleAdminExchangeCredentialsGet(

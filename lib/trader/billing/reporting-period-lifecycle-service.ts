@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -43,7 +44,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -78,15 +78,6 @@ export type ReportingPeriodLifecycleService = {
     query?: ListReportingPeriodsQuery,
   ): Promise<ReportingPeriodRecordView[]>;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: ReportingPeriodLifecycleServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   action: TraderAuditInput["action"],
@@ -136,8 +127,7 @@ export function createReportingPeriodLifecycleService(
 ): ReportingPeriodLifecycleService {
   return {
     async openReportingPeriod(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const existing = await deps.repository.findOpenPeriod(scoped, input.exchangeAccountId);
       if (existing) {
@@ -180,8 +170,7 @@ export function createReportingPeriodLifecycleService(
     },
 
     async closeReportingPeriod(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       if (input.realizedStrategyProfitReceipt == null || input.closedTradeSettlements == null) {
         refuseNakedRealizedPnl();
@@ -254,20 +243,17 @@ export function createReportingPeriodLifecycleService(
     },
 
     async findOpenPeriod(context, exchangeAccountId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return deps.repository.findOpenPeriod(scoped, exchangeAccountId);
     },
 
     async getReportingPeriodById(context, id) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return deps.repository.getById(scoped, id);
     },
 
     async listClosedPeriods(context, query = {}) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return deps.repository.listClosedPeriods(scoped, query);
     },
   };
@@ -280,7 +266,7 @@ export function createSqliteReportingPeriodLifecycleService(
   return createReportingPeriodLifecycleService({
     repository: deps.repository ?? createSqliteReportingPeriodRepository(db),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
-    draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db),
+    draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db, { assertMembership: deps.assertMembership }),
     assertMembership:
       deps.assertMembership ??
       ((context) => {
@@ -297,7 +283,7 @@ export function createPostgresReportingPeriodLifecycleService(
   return createReportingPeriodLifecycleService({
     repository: deps.repository ?? createPostgresReportingPeriodRepository(ex, db),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(ex, input)),
-    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, {}, db),
+    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, { assertMembership: deps.assertMembership }, db),
     assertMembership:
       deps.assertMembership ??
       (async (context) => {

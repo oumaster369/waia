@@ -1,3 +1,4 @@
+import { createAdminServiceOrgAccess } from "@/lib/trader/security/admin-service-org-access";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
@@ -5,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { getDb } from "@/db/client";
-import { auditLogs } from "@/db/schema";
+import { auditLogs, userPlatformRoles } from "@/db/schema";
 import {
   createSqliteBillingPeriodCloseOrchestrator,
   createSqliteHwmLedgerService,
@@ -28,6 +29,7 @@ import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-
 import { insertEmailPasswordUser } from "@/tests/helpers/test-users";
 
 const USER_ID = "00000000-0000-4000-8000-0000000310o";
+const ADMIN_ID = crypto.randomUUID();
 const EXCHANGE_ACCOUNT_ID = "htx-spot-1-drill";
 const HEX = {
   frontier: "1".repeat(64),
@@ -100,30 +102,36 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
       password: "password123",
       identityLabel: "Billing Orch User",
     });
+    insertEmailPasswordUser(db, { id: ADMIN_ID, email: `${ADMIN_ID}@waia.invalid`, password: "fixture-password" });
+    ensureUserCoreSeedSqlite(db, { userId: ADMIN_ID, displayName: "Cross-org admin" });
+    db.update(userPlatformRoles).set({ role: "admin" }).where(eq(userPlatformRoles.userId, ADMIN_ID)).run();
     organizationId = ensureUserCoreSeedSqlite(db, {
       userId: USER_ID,
       displayName: "Billing Orch User",
     });
   });
 
-  it("close-and-materialize returns billable DRAFT prefixes from a realized-profit receipt", async () => {
+  it.each(["internal", "member", "admin"] as const)("%s authority closes and drafts through the full native billing chain", async (authority) => {
     const db = getDb();
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db);
-    const context = requireOrgContext(organizationId);
+    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db, authority === "admin"
+      ? { assertMembership: createAdminServiceOrgAccess({ kind: "sqlite", db }, "admin.audit.read") } : {});
+    const context = { ...requireOrgContext(organizationId),
+      ...(authority === "internal" ? {} : { userId: authority === "admin" ? ADMIN_ID : USER_ID }) };
+    const accountId = authority === "internal" ? EXCHANGE_ACCOUNT_ID : `${EXCHANGE_ACCOUNT_ID}-${authority}`;
     const periodStart = new Date("2026-05-01T00:00:00.000Z");
     const periodEnd = new Date("2026-05-31T23:59:59.000Z");
     const { settlement, receipt } = profitEvidence({
       organizationId,
-      accountId: EXCHANGE_ACCOUNT_ID,
+      accountId,
       amount: "100.00",
-      lifecycleId: "lc-close-100",
+      lifecycleId: `lc-close-100-${authority}`,
       cashDigest: "c".repeat(64),
       periodStart,
       periodEnd,
     });
 
     const result = await orchestrator.closeAndMaterialize(context, {
-      exchangeAccountId: EXCHANGE_ACCOUNT_ID,
+      exchangeAccountId: accountId,
       periodStart,
       periodEnd,
       startingEquity: "10000.00",

@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -34,7 +35,6 @@ import {
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -59,15 +59,6 @@ export type FeeComputationService = {
   ): Promise<FeeComputationArtifact>;
 };
 
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: FeeComputationServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
-
 function assertClosedPeriodRealizedPnl(
   periodId: string,
   realizedPnl: string | null,
@@ -82,8 +73,7 @@ export function createFeeComputationService(
 ): FeeComputationService {
   return {
     async computeFeeForPeriod(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const period = await deps.reportingPeriodRepository.getById(scoped, input.periodId);
       if (!period) {
@@ -144,7 +134,7 @@ export function createSqliteFeeComputationService(
   return createFeeComputationService({
     reportingPeriodRepository:
       deps.reportingPeriodRepository ?? createSqliteReportingPeriodRepository(db),
-    hwmLedgerService: deps.hwmLedgerService ?? createSqliteHwmLedgerService(db),
+    hwmLedgerService: deps.hwmLedgerService ?? createSqliteHwmLedgerService(db, { assertMembership: deps.assertMembership }),
     assertMembership:
       deps.assertMembership ??
       ((context) => {
@@ -161,7 +151,7 @@ export function createPostgresFeeComputationService(
   return createFeeComputationService({
     reportingPeriodRepository:
       deps.reportingPeriodRepository ?? createPostgresReportingPeriodRepository(ex, db),
-    hwmLedgerService: deps.hwmLedgerService ?? createPostgresHwmLedgerService(ex, {}, db),
+    hwmLedgerService: deps.hwmLedgerService ?? createPostgresHwmLedgerService(ex, { assertMembership: deps.assertMembership }, db),
     assertMembership:
       deps.assertMembership ??
       (async (context) => {
