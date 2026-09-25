@@ -33,26 +33,40 @@ test("Admin drill-down remains separately authorized and renders HALT read-only"
   await signUpAndOpenDashboard(page, email);
   grantTraderEntitlementByUserEmail(email);
   grantPlatformAdminByUserEmail(email);
-  await page.route("**/api/trader/admin/organizations", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ organizations: [{ id: "org-a", name: "Org A" }] }),
-    }),
-  );
-  await page.route("**/api/trader/admin/runtime-authority?organization_id=org-a", (route) =>
+  // The legacy path redirects to the canonical read-only System authority table.
+  await page.route("**/api/trader/admin/console/system?**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        runtimeAuthority: {
-          availability: "AVAILABLE",
-          organizationId: "org-a",
-          runtimeInstanceId: "runtime-a",
-          posture: "HALT",
-          reasonCodes: ["RUNTIME_REALITY_REBUILD_INCOMPLETE", "RUNTIME_CONTROL_LEASE_INVALID"],
-          assessmentId: "assessment",
-          adjudicatedAtUtc: "2026-08-30T03:00:00.000Z",
+        schemaVersion: "admin-console/v1",
+        generatedAt: new Date().toISOString(),
+        revision: "fixture",
+        scope: { kind: "fleet" },
+        mode: "live",
+        coverage: null,
+        missingSources: [],
+        data: {
+          controls: {
+            killSwitches: [],
+            liveEnable: [],
+            risk: [],
+            truncated: false,
+            accountBindingReason: null,
+            runtimeAuthority: [
+              {
+                organizationId: "org-a",
+                id: "assessment",
+                instance: "runtime-a",
+                posture: "HALT",
+                reasonCodes: [
+                  "RUNTIME_REALITY_REBUILD_INCOMPLETE",
+                  "RUNTIME_CONTROL_LEASE_INVALID",
+                ],
+                at: "2026-08-30T03:00:00.000Z",
+              },
+            ],
+          },
         },
       }),
     }),
@@ -60,15 +74,11 @@ test("Admin drill-down remains separately authorized and renders HALT read-only"
   await page.goto("/admin/runtime-authority");
   await expect(page.getByText("HALT", { exact: true })).toBeVisible();
   await expect(page.getByText("RUNTIME_CONTROL_LEASE_INVALID")).toBeVisible();
-  // The HALT card stays free of buttons. The console shell adds navigation and an
-  // emergency opener that does not submit without a stored kill-switch version.
-  await expect(
-    page
-      .getByRole("region", { name: "Runtime Authority", exact: true })
-      .getByRole("button", { includeHidden: true }),
-  ).toHaveCount(0);
-  for (const name of ["Sign out", "Свернуть меню", "Поиск", "Аварийная остановка"]) {
+  await expect(page).toHaveURL(/\/admin\/system\?tab=controls/);
+  const authority = page.getByRole("table", { name: "Runtime Authority", exact: true });
+  await expect(authority.getByRole("button", { includeHidden: true })).toHaveCount(0);
+  await expect(authority.getByText("HALT", { exact: true })).toBeVisible();
+  for (const name of ["Выйти", "Свернуть меню", "Поиск по консоли", "Аварийная остановка"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("button", { includeHidden: true })).toHaveCount(4);
 });

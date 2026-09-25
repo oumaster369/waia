@@ -1,5 +1,6 @@
 import { AdminQueryProvider } from "@/components/trader/admin-console/data/query-provider";
 import { AdminConsoleShell } from "@/components/trader/admin-console/shell/admin-console-shell";
+import { AdminReadContextProvider } from "@/components/trader/admin-console/data/read-context";
 import { notFound, redirect } from "next/navigation";
 import { createProductionAdminRouteDeps } from "@/lib/trader/admin-route-deps";
 import { authorizeAdminRoute } from "@/lib/trader/admin-route-shared";
@@ -32,9 +33,11 @@ export default async function TraderAdminLayout({
     await deps.disposeRuntimeDb(runtime);
   }
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8">
+    <div className="dark bg-waia-field text-waia-fg-primary min-h-dvh w-full font-sans">
       <AdminQueryProvider>
-        <AdminConsoleShell>{children}</AdminConsoleShell>
+        <AdminReadContextProvider>
+          <AdminConsoleShell>{children}</AdminConsoleShell>
+        </AdminReadContextProvider>
       </AdminQueryProvider>
     </div>
   );

@@ -17,7 +17,7 @@ describe("admin console chrome", () => {
 
   it("shows the assistant banner and an empty delivery sample", () => {
     render(<StatusBar />);
-    expect(screen.getByText(/измерений ещё нет/)).toBeInTheDocument();
+    expect(screen.getByText(/p95: нет измерения/)).toBeInTheDocument();
     render(
       <AssistantPanel enabled={false} answers={[{ id: "orders", title: "Рабочие ордера" }]} />,
     );

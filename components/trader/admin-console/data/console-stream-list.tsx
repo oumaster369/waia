@@ -78,6 +78,13 @@ export function useConsoleStreamList<T extends { id: string }>(
   const items = snapshot.key === key ? snapshot.items : null;
   const reason = snapshot.key === key ? snapshot.reason : null;
   React.useEffect(() => {
+    const transport = (status: "STREAMING" | "POLLING" | "RECONNECTING" | "OFFLINE") =>
+      window.dispatchEvent(
+        new CustomEvent("waia:admin-transport", {
+          detail: { status: navigator.onLine ? status : "OFFLINE", key },
+        }),
+      );
+    transport("POLLING");
     let stopped = false;
     let generation = 0;
     let paintedStreamVersion = 0;
@@ -174,6 +181,7 @@ export function useConsoleStreamList<T extends { id: string }>(
     };
 
     const startPoll = () => {
+      transport("POLLING");
       window.clearInterval(timer);
       timer = window.setInterval(load, STREAM_DISCONNECT_POLL_MS);
     };
@@ -270,6 +278,10 @@ export function useConsoleStreamList<T extends { id: string }>(
       context.searchParams.delete("cursor");
       const url = streamRequestUrl(`${context.pathname}${context.search}`, session, topic);
       source = new EventSource(url);
+      transport("RECONNECTING");
+      source.onopen = () => {
+        if (!stopped) transport("STREAMING");
+      };
       const onEvent = (message: Event) => {
         const data = (message as MessageEvent<string>).data;
         const event = eventFromMessage(data);
@@ -313,6 +325,7 @@ export function useConsoleStreamList<T extends { id: string }>(
         source.addEventListener(name, onEvent);
       }
       source.onerror = () => {
+        transport("RECONNECTING");
         source?.close();
         source = null;
         failures += 1;
@@ -344,6 +357,7 @@ export function useConsoleStreamList<T extends { id: string }>(
     }, STREAM_DISCONNECT_POLL_MS);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      transport("POLLING");
       stopped = true;
       generation += 1;
       controller?.abort();

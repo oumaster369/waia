@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { assertAdminConsoleSameOrigin, staleRevisionResult } from "@/lib/trader/admin-console/auth";
 import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
@@ -35,6 +35,31 @@ describe("admin console order mode", () => {
 });
 
 describe("admin console origin and revision", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("accepts an internal Next address only for the configured trader origin and matching Host", () => {
+    vi.stubEnv("NEXT_PUBLIC_TRADER_URL", "https://trader.waia.example");
+    const check = (origin: string, host: string, extra: Record<string, string> = {}) =>
+      assertAdminConsoleSameOrigin(
+        new Request("http://0.0.0.0:3000/api/trader/admin/console/kill-switch", {
+          method: "POST",
+          headers: { "content-type": "application/json; charset=utf-8", origin, host, ...extra },
+        }),
+      );
+    expect(check("https://trader.waia.example", "trader.waia.example")).toBeNull();
+    expect(check("https://evil.example", "evil.example")?.status).toBe(403);
+    expect(
+      check("https://trader.waia.example", "evil.example", {
+        "x-forwarded-host": "trader.waia.example",
+      })?.status,
+    ).toBe(403);
+    expect(check("http://trader.waia.example", "trader.waia.example")?.status).toBe(403);
+    expect(check("https://trader.waia.example/path", "trader.waia.example")?.status).toBe(403);
+    expect(
+      check("https://trader.waia.example", "trader.waia.example", {
+        "content-type": "text/application/json",
+      })?.status,
+    ).toBe(403);
+  });
   it("rejects a missing origin, a foreign origin, and a non-JSON content type", () => {
     const missing = assertAdminConsoleSameOrigin(
       new Request("http://localhost/api/trader/admin/console/saved-views", {

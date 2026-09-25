@@ -9,6 +9,8 @@ vi.stubGlobal(
   "fetch",
   vi.fn(async () =>
     Response.json({
+      schemaVersion: "admin-console/v1",
+      scope: { kind: "fleet" },
       data: { state: "unavailable", reasons: ["ADMIN_CONSOLE_SCHEMA_NOT_APPLIED"] },
     }),
   ),

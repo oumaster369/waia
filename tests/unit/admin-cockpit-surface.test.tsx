@@ -225,7 +225,7 @@ describe("admin cockpit stream", () => {
 });
 
 describe("admin dashboard", () => {
-  it("has no organization selector and keeps organization_id on section links", async () => {
+  it("shows the explicit Postgres requirement from the console v1 envelope", async () => {
     installSources();
     vi.stubGlobal(
       "fetch",
@@ -234,15 +234,18 @@ describe("admin dashboard", () => {
         if (url.includes("/api/trader/admin/organizations")) {
           return Response.json({ organizations: [{ id: ORG, name: "Alpha", kind: "team" }] });
         }
-        return Response.json({ accounts: [] });
+        return Response.json({
+          schemaVersion: "admin-console/v1",
+          data: { state: "unavailable", reasons: ["POSTGRES_REQUIRED"] },
+        });
       }),
     );
     render(<AdminDashboardPage />);
     expect(screen.queryByTestId("admin-org-select")).not.toBeInTheDocument();
-    expect(await screen.findByText(/Нужен Postgres/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Нужен Postgres/)).length).toBeGreaterThan(0);
   });
 
-  it("mounts the admin observation stream for a connected account", async () => {
+  it("reads the canonical console overview endpoint", async () => {
     installSources();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

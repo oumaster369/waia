@@ -25,6 +25,9 @@ function iso(value: unknown): string | null {
     ? new Date(value).toISOString()
     : null;
 }
+export function invoiceReadRevision(row: Record<string, unknown>): string {
+  return adminRevision(JSON.parse(JSON.stringify(row)));
+}
 export function displayOf(row: Record<string, unknown>, now: string, graceMs: number) {
   const issuedAt = iso(row.issued_at);
   const dueAt = invoiceDueAt(issuedAt, graceMs);
@@ -126,7 +129,7 @@ export async function readInvoiceList(
   return {
     items: rows.slice(0, limit).map((row) => ({
       id: String(row.id),
-      revision: adminRevision(JSON.parse(JSON.stringify(row))),
+      revision: invoiceReadRevision(row),
       organizationId: String(row.organization_id),
       exchangeAccountId: String(row.exchange_account_id),
       status: String(row.status),

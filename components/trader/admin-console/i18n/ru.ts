@@ -20,6 +20,45 @@ export const RU = {
     not_applicable: "Не применяется",
   },
   reasons: {
+    ADMIN_NETWORK_UNAVAILABLE:
+      "Не удалось обновить данные. Последний подтверждённый снимок сохранён",
+    ADMIN_MODE_MISMATCH: "Ответ относится к другому контуру данных и скрыт",
+    RESEARCH_EXCHANGE_ACCOUNT_BINDING_NOT_PERSISTED:
+      "Исследования привязаны к клиенту; связь с биржевым счётом не сохранена",
+    RESEARCH_REQUIRES_HISTORY_MODE: "Исторические запуски доступны в контуре History",
+    RESEARCH_STATE_NOT_PERSISTED: "Состояние исследования не сохранено",
+    STRATEGY_ACCOUNT_DEPLOYMENT_NOT_PERSISTED:
+      "Продвижение записано для организации; назначение на этот биржевой счёт не подтверждено",
+    STRATEGY_EVIDENCE_TRUNCATED: "Список доказательств ограничен; общий счётчик недоступен",
+    RUNTIME_EXCHANGE_ACCOUNT_BINDING_NOT_PERSISTED:
+      "Связь runtime-счёта с выбранным биржевым счётом не сохранена",
+    AUDIT_EXCHANGE_ACCOUNT_BINDING_NOT_PERSISTED:
+      "Этот журнал привязан к организации; связь с биржевым счётом не сохранена",
+    EXECUTION_HOST_DIAGNOSTICS_UNAVAILABLE: "Диагностика внешнего хоста исполнения недоступна",
+    MANUAL_OPERATION_NOT_SCHEDULED: "Ручная операция, без расписания",
+    JOB_RUN_NOT_OBSERVED: "Запуск задания ещё не наблюдался",
+    JOB_RUN_STALE: "Сохранённый запуск старше ожидаемого интервала",
+    ASSISTANT_TELEMETRY_NOT_OBSERVED:
+      "Измерения доступности, задержки, токенов и стоимости пока не наблюдаются",
+    RESEARCH_REASONING_NOT_IN_CONSOLE:
+      "Исследовательские рассуждения из файлов в консоли недоступны",
+    HOLDOUT_PROTECTED: "Запечатанная выборка защищена; доступен только факт запечатывания",
+    LIST_TRUNCATED: "Показана только часть записей",
+    ADMIN_SCOPE_MISMATCH: "Ответ не соответствует выбранному охвату и скрыт",
+    ADMIN_RESPONSE_INVALID: "Источник вернул неизвестный формат данных",
+    OBSERVATION_MISSING: "Наблюдение биржевого счёта ещё не получено",
+    OBSERVATION_INVALID: "Наблюдение не прошло проверку",
+    OBSERVATION_STALE: "Наблюдение счёта устарело",
+    EXCHANGE_BALANCE_LIVE_ONLY:
+      "Баланс реального счёта доступен в Live; виртуальный портфель учитывается отдельно",
+    NO_ACCOUNTS_IN_SCOPE: "В выбранном охвате нет биржевых счетов",
+    PNL_PERIOD_EVIDENCE_MISSING: "Недостаточно сохранённых данных для результата за период",
+    USD_FX_UNAVAILABLE: "Нет подтверждённой котировки USDT/USD",
+    COST_BASIS_UNKNOWN: "Себестоимость активов не установлена",
+    MONEY_PRECISION_UNSUPPORTED: "Точность суммы превышает поддерживаемую методику",
+    FEAR_GREED_UNAVAILABLE: "Индекс страха и жадности ещё не получен",
+    KILL_SWITCH_SCOPE_UNSUPPORTED: "Такая область остановки не поддерживается runtime",
+    FORBIDDEN: "Нет действующего допуска администратора",
     POSTGRES_REQUIRED: "Нужен Postgres",
     ADMIN_CONSOLE_SCHEMA_NOT_APPLIED: "Появится после применения схемы консоли",
     NO_QUOTE: "Нет котировки",

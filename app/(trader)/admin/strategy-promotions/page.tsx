@@ -18,7 +18,8 @@ import { WaiaSurface } from "@/components/waia/waia-surface";
 import { REQUIRED_EFFECTIVE_ACK } from "@/lib/trader/validation-gate/operator-promotion-inputs";
 import { buildStrategyPromotionRequestBody } from "@/lib/trader/validation-gate/promotion-request-body";
 
-const STRATEGY_IDS = ["mean_reversion_v0", "liquidity_sweep_reversal_v0"] as const;
+import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
+import type { StrategyWorkspace } from "@/lib/trader/admin-console/research/strategy-workspace";
 
 type PromotionRecordSummary = {
   id?: string;
@@ -49,7 +50,12 @@ export default function AdminStrategyPromotionsPage() {
     searchParams.get("organization_id") ?? "",
   );
   const organizationId = selectedOrganizationId || organizations[0]?.id || "";
-  const [strategyId, setStrategyId] = React.useState<string>(STRATEGY_IDS[0]);
+  const catalogue = useAdminRead<StrategyWorkspace>("/api/trader/admin/console/strategies");
+  const strategyIds = [
+    ...new Set((catalogue.envelope?.data.items ?? []).map((row) => row.strategyId)),
+  ];
+  const [selectedStrategyId, setStrategyId] = React.useState(searchParams.get("strategy_id") ?? "");
+  const strategyId = selectedStrategyId || strategyIds[0] || "";
   const [recordId, setRecordId] = React.useState("");
   const [readState, setReadState] = React.useState<Record<string, unknown> | null>(null);
   const [previewState, setPreviewState] = React.useState<Record<string, unknown> | null>(null);
@@ -69,7 +75,7 @@ export default function AdminStrategyPromotionsPage() {
   const hasBlockingPending = Boolean(pendingRecord?.id);
 
   const loadReadState = React.useCallback(async () => {
-    if (!organizationId) {
+    if (!organizationId || !strategyId) {
       return;
     }
     setReadLoading(true);
@@ -108,7 +114,7 @@ export default function AdminStrategyPromotionsPage() {
   }, [organizationId, strategyId]);
 
   React.useEffect(() => {
-    if (!organizationId) {
+    if (!organizationId || !strategyId) {
       return;
     }
     const handle = window.setTimeout(() => {
@@ -118,7 +124,7 @@ export default function AdminStrategyPromotionsPage() {
   }, [organizationId, strategyId, loadReadState]);
 
   async function submitRequest() {
-    if (!organizationId || hasBlockingPending) {
+    if (!organizationId || !strategyId || hasBlockingPending) {
       return;
     }
     setRequestError(null);
@@ -169,7 +175,7 @@ export default function AdminStrategyPromotionsPage() {
   }
 
   async function runCommand(command: string) {
-    if (!organizationId) {
+    if (!organizationId || !strategyId) {
       return;
     }
     setCommandMessage(null);
@@ -232,7 +238,7 @@ export default function AdminStrategyPromotionsPage() {
             value={strategyId}
             onChange={(event) => setStrategyId(event.target.value)}
           >
-            {STRATEGY_IDS.map((id) => (
+            {strategyIds.map((id) => (
               <option key={id} value={id}>
                 {id}
               </option>
@@ -330,7 +336,7 @@ export default function AdminStrategyPromotionsPage() {
           <Button
             type="button"
             size="sm"
-            disabled={!organizationId || hasBlockingPending || requestLoading}
+            disabled={!organizationId || !strategyId || hasBlockingPending || requestLoading}
             onClick={() => void submitRequest()}
           >
             {requestLoading ? "Submitting…" : "Request"}

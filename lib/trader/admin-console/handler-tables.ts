@@ -66,6 +66,14 @@ const FINANCIAL_SNAPSHOT_TABLES = [
 ] as const;
 
 export const HANDLER_TABLES = {
+  context: [
+    "organizations",
+    "organization_entitlements",
+    "exchange_credentials",
+    "trader_invoices",
+  ],
+  market: ["trader_admin_market_quote_latest", "trader_admin_fear_greed"],
+  killSwitch: ["trader_kill_switches"],
   accounts: FINANCIAL_SNAPSHOT_TABLES,
   attention: [
     "trader_orders",
@@ -129,6 +137,11 @@ export const HANDLER_TABLES = {
   ],
   fills: ["trader_fills", "trader_orders", "exchange_credentials"],
   incidents: ["trader_admin_incident", "trader_admin_diagnostic_event"],
+  incidentCommands: [
+    "trader_admin_incident",
+    "trader_admin_diagnostic_event",
+    "trader_admin_incident_event",
+  ],
   invoices: [
     "trader_invoices",
     "trader_invoice_disputes",
@@ -138,6 +151,15 @@ export const HANDLER_TABLES = {
     "trader_settlement_reconciliation_cases",
     "payment_events",
     "trader_hwm_ledger",
+  ],
+  invoiceCommands: [
+    "trader_invoices",
+    "trader_invoice_disputes",
+    "trader_invoice_corrections",
+    "trader_settlement_applications",
+    "trader_settlements",
+    "trader_settlement_reconciliation_cases",
+    "payment_events",
   ],
   orders: ["trader_orders", "exchange_credentials"],
   overview: FINANCIAL_SNAPSHOT_TABLES,
@@ -152,6 +174,14 @@ export const HANDLER_TABLES = {
   ],
   proposals: ["trader_human_promotion_proposal_v2"],
   reportingPeriods: ["trader_reporting_periods"],
+  researchCatalog: [
+    "trader_discovery_research_campaign",
+    "trader_mi_hypothesis",
+    "trader_mi_hypothesis_lifecycle",
+    "trader_knowledge_edges",
+    "research_dataset",
+    "trader_strategy_candidates",
+  ],
   researchRuns: ["trader_historical_simulation_run_lifecycle_event_v2"],
   savedViews: ["trader_admin_saved_view"],
   search: [
@@ -165,8 +195,27 @@ export const HANDLER_TABLES = {
     "trader_backtest_runs",
     "trader_admin_incident",
   ],
-  strategies: ["trader_trades"],
-  system: ["trader_admin_job_run"],
+  strategies: [
+    "trader_trades",
+    "trader_trade_legs",
+    "trader_orders",
+    "exchange_credentials",
+    "trader_strategy_lifecycle_event",
+    "trader_strategy_promotion_records",
+    "trader_strategy_candidates",
+    "trader_backtest_runs",
+  ],
+  system: [
+    "trader_admin_job_run",
+    "trader_admin_market_quote_latest",
+    "trader_admin_fear_greed",
+    "trader_admin_news_item",
+    "trader_kill_switches",
+    "trader_org_live_enable",
+    "trader_runtime_authority_assessments_v2",
+    "trader_risk_account_state_v2",
+    "audit_logs",
+  ],
   visitMarker: ["trader_admin_visit_marker"],
   // The change-log table arrives in 0214. Triggers arrive in 0216. This list stays on both.
   stream: ["trader_admin_change_log", "exchange_credentials", "trader_orders"],

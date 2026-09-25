@@ -1,135 +1,415 @@
 "use client";
-
 import * as React from "react";
-
+import { Download } from "lucide-react";
+import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
+import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
+import { notifyAdminAccessRevoked } from "@/components/trader/admin-console/data/access-events";
 import { InvoiceAttestations } from "@/components/trader/admin-console/sections/clients/invoice-attestations";
+import {
+  ConsoleBadge,
+  ConsoleDialog,
+  ConsoleLoading,
+  ConsolePanel,
+  ConsoleTable,
+  DetailLink,
+  EvidenceTime,
+  controlClass,
+} from "@/components/trader/admin-console/primitives/console-ui";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
+import { formatAdminMoney } from "@/components/trader/admin-console/primitives/money";
 import type { IssuanceAttestation } from "@/lib/trader/billing/invoice-issuance.types";
-
+import type { InvoiceDisplay } from "@/lib/trader/admin-console/billing/invoice-display-status";
 type InvoiceItem = {
   id: string;
   organizationId: string;
+  exchangeAccountId: string;
   performanceFee: string;
   currency: string;
-  display: { status: string; payment: string | null };
-  revision?: string;
-};
-
-type DisputeItem = {
-  id: string;
-  invoiceId: string;
   status: string;
-  reason: string;
+  display: InvoiceDisplay;
+  revision: string;
 };
-
+type Detail = {
+  id: string;
+  revision: string;
+  organizationId: string;
+  currency: string;
+  status: string;
+  display: InvoiceDisplay;
+  approvedAt: string | null;
+  coolingOffUntil: string | null;
+  issuedAt: string | null;
+  paidAt: string | null;
+  dueAt: string | null;
+  stored: {
+    periodProfit: string;
+    cumulative: string;
+    previousHwm: string;
+    newProfitAboveHwm: string;
+    feeRate: string;
+    performanceFee: string;
+    billable: boolean;
+  };
+  chain: { ok: boolean | null; reasons?: string[]; mismatches?: string[] };
+};
 export function InvoicesPanel() {
-  const [items, setItems] = React.useState<InvoiceItem[] | null>(null);
-  const [disputes, setDisputes] = React.useState<DisputeItem[]>([]);
-  const [reason, setReason] = React.useState<string | null>(null);
-  const [selected, setSelected] = React.useState<string | null>(null);
-  const [confirmationEpoch, setConfirmationEpoch] = React.useState(0);
-  const [pending, setPending] = React.useState(false);
-  const [message, setMessage] = React.useState<string | null>(null);
-
-  const load = React.useCallback(() => {
-    void fetch("/api/trader/admin/console/invoices")
-      .then(
-        async (response) =>
-          response.json() as Promise<{ data?: { items?: InvoiceItem[]; reasons?: string[] } }>,
-      )
-      .then((body) => {
-        if (Array.isArray(body.data?.items)) {
-          setItems(body.data.items);
-          setReason(null);
-          return;
-        }
-        setReason(body.data?.reasons?.[0] ?? "POSTGRES_REQUIRED");
-      })
-      .catch(() => setReason("POSTGRES_REQUIRED"));
-    void fetch("/api/trader/admin/console/disputes")
-      .then(async (response) => response.json() as Promise<{ data?: { items?: DisputeItem[] } }>)
-      .then((body) => {
-        if (Array.isArray(body.data?.items)) setDisputes(body.data.items);
-      })
-      .catch(() => setDisputes([]));
-  }, []);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
+  const context = useAdminReadContext();
+  const list = useAdminRead<{
+    items: InvoiceItem[];
+    aggregate: { currency: string; amount: string | null; count: number }[];
+    total: number;
+    truncated: boolean;
+  }>("/api/trader/admin/console/invoices");
+  const items = list.envelope?.data.items;
+  const selected = context.params.get("sel");
   const invoice = items?.find((item) => item.id === selected) ?? null;
-
+  const detail = useAdminRead<Detail>(
+    invoice ? `/api/trader/admin/console/invoices/${invoice.id}` : null,
+  );
+  const current = detail.envelope?.data.stored ? detail.envelope.data : null;
+  const [epoch, resetConfirmations] = React.useReducer((n: number) => n + 1, 0);
+  const [pending, setPending] = React.useState(false);
+  const [readBackRequired, setReadBackRequired] = React.useState(false);
+  const inFlight = React.useRef(false);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [cancelReason, setCancelReason] = React.useState("");
+  const [issueConfirmed, setIssueConfirmed] = React.useState(false);
+  const identity = `${context.query}:${invoice?.id ?? ""}:${current?.revision ?? ""}:${epoch}`;
+  const [issueIdentity, setIssueIdentity] = React.useState<string | null>(null);
   async function command(body: Record<string, unknown>) {
-    if (!invoice || pending) return;
+    if (!invoice || !current || pending || inFlight.current || readBackRequired) return;
+    inFlight.current = true;
     setPending(true);
-    setConfirmationEpoch((epoch) => epoch + 1);
+    setReadBackRequired(true);
+    resetConfirmations();
+    setIssueConfirmed(false);
     setMessage(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
     try {
-      const response = await fetch(`/api/trader/admin/invoices/${invoice.id}/commands`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ organization_id: invoice.organizationId, ...body }),
-      });
-      if (!response.ok) {
-        setMessage("Команда не выполнена");
+      const response = await fetch(
+        context.href(`/api/trader/admin/console/invoices/${invoice.id}/commands`),
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            organization_id: invoice.organizationId,
+            expectedRevision: current.revision,
+            ...body,
+          }),
+        },
+      );
+      if (response.status === 401 || response.status === 403) {
+        notifyAdminAccessRevoked();
         return;
       }
-      setMessage("Команда принята");
-      load();
+      const result = await response.json();
+      const verify = await fetch(context.href(`/api/trader/admin/console/invoices/${invoice.id}`), {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (verify.status === 401 || verify.status === 403) {
+        notifyAdminAccessRevoked();
+        return;
+      }
+      const fresh = await verify.json();
+      if (!verify.ok || fresh.data?.id !== invoice.id || typeof fresh.data.revision !== "string")
+        throw new Error("READ_BACK_FAILED");
+      detail.reload();
+      list.reload();
+      setReadBackRequired(false);
+      setMessage(
+        response.status === 409
+          ? "Документ изменился. Проверьте свежий расчёт и отметьте подтверждения заново."
+          : response.ok && fresh.data.revision === result.revision
+            ? "Команда подтверждена повторным чтением документа."
+            : response.ok
+              ? "После команды документ изменился ещё раз. Проверьте актуальное состояние."
+              : `Команда отклонена: ${result.error?.code ?? "UNKNOWN"}. Сохранённый документ перечитан.`,
+      );
     } catch {
-      setMessage("Связь прервалась. Проверьте состояние счёта перед повтором.");
+      setMessage(
+        "Подтверждение не получено. Команда могла примениться. Повтор закрыт до отдельного чтения документа.",
+      );
     } finally {
+      window.clearTimeout(timeout);
       setPending(false);
+      inFlight.current = false;
     }
   }
-
+  const canIssue =
+    current?.status === "DRAFT" &&
+    Boolean(current.approvedAt && current.coolingOffUntil) &&
+    Date.parse(current.coolingOffUntil!) <= Date.parse(detail.envelope?.generatedAt ?? "");
   return (
-    <section className="grid gap-3">
-      <h2 className="text-xl font-semibold">Счета</h2>
-      {reason ? <DataState state="unavailable" reason={reason} /> : null}
-      {items ? (
-        <ul>
-          {items.map((item) => (
-            <li key={item.id}>
-              <button type="button" onClick={() => setSelected(item.id)}>
-                {`${item.id} — ${item.display.status} — ${item.performanceFee} ${item.currency}`}
-              </button>
-            </li>
+    <div className="space-y-5">
+      {list.loading ? <ConsoleLoading /> : null}
+      {list.reason ? <DataState state="unavailable" reason={list.reason} /> : null}
+      {list.envelope?.data.aggregate ? (
+        <div className="flex flex-wrap gap-3">
+          {list.envelope.data.aggregate.map((row) => (
+            <div
+              key={row.currency}
+              className="border-waia-divider bg-waia-field-mid rounded-xl border px-5 py-4"
+            >
+              <p className="text-waia-fg-muted text-xs">
+                Сохранённая комиссия · {row.count} документов
+              </p>
+              <p className="mt-2 text-xl font-semibold tabular-nums">
+                {row.amount === null ? "—" : formatAdminMoney(row.amount, row.currency)}
+              </p>
+            </div>
           ))}
-        </ul>
-      ) : null}
-      {invoice ? (
-        <div className="grid gap-2">
-          <p>{invoice.display.payment}</p>
-          <fieldset disabled={pending}>
-            <InvoiceAttestations
-              key={`${invoice.id}:${invoice.revision ?? JSON.stringify(invoice)}:${confirmationEpoch}`}
-              onApprove={(attestations: IssuanceAttestation) =>
-                void command({ command: "approve", attestations })
-              }
-            />
-          </fieldset>
-          <button type="button" onClick={() => void command({ command: "issue" })}>
-            Выпустить
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              void command({ command: "cancel-pending", reason: "отмена в период ожидания" })
-            }
-          >
-            Отменить выпуск
-          </button>
         </div>
       ) : null}
-      {message ? <p>{message}</p> : null}
-      <h3 className="text-lg font-semibold">Споры</h3>
-      <ul>
-        {disputes.map((dispute) => (
-          <li key={dispute.id}>{`${dispute.invoiceId} — ${dispute.status} — ${dispute.reason}`}</li>
-        ))}
-      </ul>
-    </section>
+      {items ? (
+        <ConsolePanel
+          title="Счета на оплату"
+          note="Расчёт и черновик автоматические. Выпуск — после подтверждения администратора."
+          action={
+            <a
+              className="inline-flex items-center gap-2 text-xs underline underline-offset-4"
+              href={context.href("/api/trader/admin/console/export?entity=invoices")}
+            >
+              <Download size={13} />
+              CSV
+            </a>
+          }
+        >
+          <ConsoleTable
+            rows={items}
+            rowKey={(row) => row.id}
+            caption="Счета на оплату"
+            columns={[
+              {
+                title: "Документ / биржевой счёт",
+                render: (row) => (
+                  <div>
+                    <DetailLink
+                      onClick={() => {
+                        context.update({ sel: row.id });
+                        resetConfirmations();
+                        setCancelReason("");
+                        setIssueConfirmed(false);
+                        setMessage(null);
+                      }}
+                    >
+                      {row.id}
+                    </DetailLink>
+                    <p className="text-waia-fg-muted mt-1 text-xs">{row.exchangeAccountId}</p>
+                  </div>
+                ),
+              },
+              {
+                title: "Статус",
+                render: (row) => (
+                  <div className="space-y-2">
+                    <ConsoleBadge>{row.display.status}</ConsoleBadge>
+                    {row.display.payment ? (
+                      <p className="text-waia-fg-muted text-xs">{row.display.payment}</p>
+                    ) : null}
+                    {row.display.flags?.map((flag) => (
+                      <p key={flag} className="text-waia-warning text-xs">
+                        {flag}
+                      </p>
+                    ))}
+                  </div>
+                ),
+              },
+              {
+                title: "Комиссия сервиса",
+                align: "right",
+                render: (row) => formatAdminMoney(row.performanceFee, row.currency),
+              },
+            ]}
+          />
+          {list.envelope?.data.truncated ? (
+            <p className="border-waia-divider text-waia-fg-muted border-t p-4 text-xs">
+              Показано {items.length} из {list.envelope.data.total}. Экспорт содержит полную выборку
+              в пределах опубликованного лимита.
+            </p>
+          ) : null}
+        </ConsolePanel>
+      ) : null}
+      <ConsoleDialog
+        open={Boolean(invoice)}
+        onClose={() => context.update({ sel: null })}
+        dismissible={!pending}
+        title="Счёт на оплату"
+        description={invoice?.id}
+        wide
+      >
+        {detail.loading ? <ConsoleLoading /> : null}
+        {detail.reason ? <DataState state="unavailable" reason={detail.reason} /> : null}
+        {current ? (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <ConsoleBadge>{current.display.status}</ConsoleBadge>
+              <span className="text-xl font-semibold tabular-nums">
+                {formatAdminMoney(current.stored.performanceFee, current.currency)}
+              </span>
+            </div>
+            {invoice?.revision !== current.revision ? (
+              <p className="text-waia-warning text-xs">
+                Документ обновился после списка. Ниже показан свежий сохранённый расчёт; сумма
+                списка обновляется отдельно.
+              </p>
+            ) : null}
+            <ConsolePanel title="Сохранённый расчёт">
+              <dl className="divide-waia-divider divide-y">
+                {[
+                  ["Результат отчётного периода", current.stored.periodProfit],
+                  ["Накопленный реализованный результат", current.stored.cumulative],
+                  ["Предыдущий HWM", current.stored.previousHwm],
+                  ["Новая прибыль выше HWM", current.stored.newProfitAboveHwm],
+                  ["Комиссия сервиса", current.stored.performanceFee],
+                ].map(([label, amount]) => (
+                  <div
+                    key={label}
+                    className="flex flex-wrap justify-between gap-2 px-5 py-3 text-sm"
+                  >
+                    <dt className="text-waia-fg-muted">{label}</dt>
+                    <dd className="tabular-nums">{formatAdminMoney(amount, current.currency)}</dd>
+                  </div>
+                ))}
+                <div className="flex justify-between px-5 py-3 text-sm">
+                  <dt className="text-waia-fg-muted">Сохранённая ставка (доля)</dt>
+                  <dd>{current.stored.feeRate}</dd>
+                </div>
+              </dl>
+            </ConsolePanel>
+            {current.chain.ok === true ? (
+              <p className="text-waia-success text-xs">Цепочка сохранённого расчёта согласована.</p>
+            ) : (
+              <div className="border-waia-warning/30 bg-waia-warning/5 text-waia-warning rounded-lg border p-4 text-sm leading-6">
+                {current.chain.ok === false
+                  ? "Цепочка расчёта не сходится. Значения сохранённого документа не изменены."
+                  : "Для полной проверки цепочки не хватает сохранённых предыдущих значений."}
+                {current.chain.reasons?.map((reason) => (
+                  <DataState key={reason} state="unavailable" reason={reason} />
+                ))}
+              </div>
+            )}
+            {current.coolingOffUntil ? (
+              <p className="text-xs">
+                <EvidenceTime at={current.coolingOffUntil} label="Период ожидания до" />
+              </p>
+            ) : null}
+            {current.issuedAt ? (
+              <p className="text-xs">
+                <EvidenceTime at={current.issuedAt} label="Выпущен" />
+              </p>
+            ) : null}
+            {current.paidAt ? (
+              <p className="text-xs">
+                <EvidenceTime at={current.paidAt} label="Оплачен" />
+              </p>
+            ) : null}
+            {message ? (
+              <p role="status" className="border-waia-rim rounded-lg border p-3 text-sm leading-6">
+                {message}
+              </p>
+            ) : null}
+            {readBackRequired && !pending ? (
+              <button
+                type="button"
+                className={controlClass}
+                onClick={async () => {
+                  const response = await fetch(
+                    context.href(`/api/trader/admin/console/invoices/${current.id}`),
+                    { credentials: "same-origin", cache: "no-store" },
+                  ).catch(() => null);
+                  if (response?.status === 401 || response?.status === 403) {
+                    notifyAdminAccessRevoked();
+                    return;
+                  }
+                  const body = response?.ok ? await response.json().catch(() => null) : null;
+                  if (body?.data?.id !== current.id || typeof body?.data?.revision !== "string") {
+                    setMessage(
+                      "Документ не удалось перечитать. Повторная отправка остаётся закрытой.",
+                    );
+                    return;
+                  }
+                  resetConfirmations();
+                  setReadBackRequired(false);
+                  detail.reload();
+                  list.reload();
+                  setMessage("Документ перечитан. Проверьте его перед новой командой.");
+                }}
+              >
+                Перечитать документ
+              </button>
+            ) : null}
+            {current.status === "DRAFT" && current.stored.billable ? (
+              <fieldset
+                disabled={pending || readBackRequired || detail.refreshing}
+                className="border-waia-divider space-y-5 rounded-xl border p-5"
+              >
+                <legend className="px-2 text-sm font-semibold">Ручное подтверждение</legend>
+                <p className="text-waia-fg-muted text-xs leading-6">
+                  Отметьте каждый пункт после проверки. Смена документа или его ревизии сбрасывает
+                  все отметки.
+                </p>
+                <InvoiceAttestations
+                  key={identity}
+                  onApprove={(attestations: IssuanceAttestation) =>
+                    void command({ command: "approve", attestations })
+                  }
+                />
+                {current.approvedAt ? (
+                  <>
+                    <label className="flex gap-3 text-sm leading-6">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4"
+                        checked={issueConfirmed && issueIdentity === identity}
+                        onChange={(event) => {
+                          setIssueConfirmed(event.target.checked);
+                          setIssueIdentity(identity);
+                        }}
+                      />
+                      Подтверждаю выпуск проверенного документа
+                    </label>
+                    <button
+                      type="button"
+                      className={controlClass}
+                      disabled={!canIssue || !issueConfirmed || issueIdentity !== identity}
+                      onClick={() => void command({ command: "issue", confirmed: true })}
+                    >
+                      Выпустить
+                    </button>
+                    <label className="grid gap-2 text-sm">
+                      Причина отмены подтверждения
+                      <textarea
+                        className={`${controlClass} h-20 py-2`}
+                        value={cancelReason}
+                        onChange={(event) => setCancelReason(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={controlClass}
+                      disabled={!cancelReason.trim()}
+                      onClick={() =>
+                        void command({ command: "cancel-pending", reason: cancelReason.trim() })
+                      }
+                    >
+                      Отменить выпуск
+                    </button>
+                  </>
+                ) : null}
+              </fieldset>
+            ) : null}
+            <p className="text-waia-fg-muted text-xs leading-6">
+              Закреплённый срок оплаты, частичная оплата и PDF недоступны до отдельной ратификации.
+              Обнаружение платежа не равно его зачёту.
+            </p>
+          </div>
+        ) : null}
+      </ConsoleDialog>
+    </div>
   );
 }

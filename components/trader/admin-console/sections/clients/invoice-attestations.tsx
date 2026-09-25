@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { controlClass } from "@/components/trader/admin-console/primitives/console-ui";
 
 import {
   ISSUANCE_ATTESTATION_KEYS,
@@ -35,15 +36,17 @@ export function InvoiceAttestations({
   const ready = isIssuanceAttestationComplete(attestations);
   return (
     <form
+      className="grid gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (ready) onApprove(attestations);
       }}
     >
       {ISSUANCE_ATTESTATION_KEYS.map((key) => (
-        <label key={key}>
+        <label key={key} className="flex items-start gap-3 text-sm leading-6">
           <input
             type="checkbox"
+            className="mt-1 h-4 w-4"
             checked={attestations[key]}
             onChange={(event) =>
               setAttestations((current) => ({ ...current, [key]: event.target.checked }))
@@ -52,7 +55,7 @@ export function InvoiceAttestations({
           {LABELS[key]}
         </label>
       ))}
-      <button type="submit" disabled={!ready}>
+      <button type="submit" className={`${controlClass} mt-2 justify-self-start`} disabled={!ready}>
         Подтвердить выпуск
       </button>
     </form>
