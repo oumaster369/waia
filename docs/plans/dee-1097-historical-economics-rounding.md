@@ -69,3 +69,7 @@ Review checkpoint incompatibility before any historical executor rollout: pinned
 ## Integration validation
 
 Rebased onto main a4c2f777 after PR#660 passed all31 checks and merged. Local final consumer regression80 tests/6files PASS, resume regression66/5files PASS (overlapping suites), actual PostgreSQL atomic-cycle12 PASS. Lint0errors/324 pre-existing warnings, typecheck/build/canon/governance PASS. On the combined tree,62 targeted tests/3files and both consumer graphs PASS. Reality inventory source-content seal refreshed for the sole reviewed source member historical-simulated-exchange.ts;155sources/134consumers/25connector references and path identities unchanged. Authoritative full exact-head CI remains a PR gate.
+
+## Full CI follow-up
+
+PR #661 first exact-head full unit shard found one additional indirect fixture in `historical-current-modeled-guardian-v2.test.ts` that encoded the previous arithmetic (cash726.94/loss273.06). Independently checked unchanged D-5 rates: buy9 at gross100 costs903.15, sell9 at gross70 returns627.795; final cash724.645/loss275.355, drawdown2753bps after existing accounting truncation. Update this oracle with the calculation beside it; retain all Guardian STOP_ACCOUNT/Risk veto/no-submission and threshold assertions. This is not a new Guardian threshold or policy. Rerun the affected Guardian/accounting/economics regressions and require fresh full CI at the new head.
