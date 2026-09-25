@@ -117,7 +117,7 @@ export const HANDLER_TABLES = {
     "trader_reporting_periods",
     "trader_human_promotion_proposal_v2",
   ],
-  assistantConversations: ["trader_admin_assistant_conversation"],
+  assistantConversations: ["trader_admin_assistant_conversation", "trader_admin_assistant_message"],
   assistantMessages: [
     "trader_admin_assistant_conversation",
     "trader_admin_assistant_message",
@@ -248,6 +248,8 @@ export const HANDLER_TABLES = {
     "trader_strategy_promotion_records",
     "trader_backtest_runs",
     "trader_admin_incident",
+    "organization_entitlements",
+    "trader_admin_diagnostic_event",
   ],
   strategies: [
     "trader_trades",

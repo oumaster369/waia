@@ -45,7 +45,7 @@ describe("admin assistant budget", () => {
     ).toBe("call");
   });
 
-  it("keeps a number that came from the tool text and drops one that did not", async () => {
+  it("refuses unbound numeric text even when the number appears in a tool payload", async () => {
     const kept = await runLiveAssistantTurn({
       content: "сколько",
       toolText: "открыто 12",
@@ -55,7 +55,7 @@ describe("admin assistant budget", () => {
     });
     expect(kept.status).toBe("answer");
     if (kept.status !== "answer") return;
-    expect(kept.answer.summary).toBe("Открыто 12");
+    expect(kept.answer.summary).toBe(UNVERIFIED_SEGMENT);
     expect(kept.usage.estimated).toBe(true);
 
     const dropped = await runLiveAssistantTurn({
