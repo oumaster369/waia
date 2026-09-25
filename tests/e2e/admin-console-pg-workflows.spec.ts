@@ -100,7 +100,9 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       assistant.getByRole("link", { name: "Источник", exact: true }).first(),
     ).toHaveAttribute("href", new RegExp(`organization_id=${clients[0].id}`));
     await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
-    await expect(assistant).not.toContainText("12540.125");
+    await expect(page).toHaveURL(new RegExp(`organization_id=${clients[1].id}`));
+    await expect(page.getByLabel("Охват: клиент")).toHaveValue(clients[1].id);
+    await expect(assistant).not.toContainText(/12\s540,125/);
     await assistant.getByRole("button", { name: "Сводка", exact: true }).click();
     await expect(assistant.getByRole("region", { name: "Быстрый ответ" })).toContainText(
       /890,5\s*USDT/,
