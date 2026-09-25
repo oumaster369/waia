@@ -21,6 +21,7 @@ import {
 } from "@/components/trader/admin-console/sections/orders/orders-workspace";
 import { OrderDetails } from "@/components/trader/admin-console/sections/orders/order-details";
 import { InvoicesPanel } from "@/components/trader/admin-console/sections/clients/invoices-panel";
+import { AccountAssets } from "@/components/trader/admin-console/sections/accounts/account-assets";
 import type { AccountFinance } from "@/lib/trader/admin-console/read-models/account-finance";
 import type { AccountModeView } from "@/lib/trader/admin-console/accounts/account-mode";
 import type { StrategyWorkspace } from "@/lib/trader/admin-console/research/strategy-workspace";
@@ -208,45 +209,7 @@ function AccountPortfolio({
         </ConsoleBadge>
       </div>
       <DataState state="unavailable" reason="STRATEGY_ACCOUNT_DEPLOYMENT_NOT_PERSISTED" />
-      <ConsolePanel
-        title="Наблюдаемые активы"
-        note={`Оценка ${finance.currency}; метод ${finance.method}. Включает количество, заблокированное в sell-ордерах.`}
-      >
-        {finance.assets?.length ? (
-          <ConsoleTable
-            rows={finance.assets}
-            rowKey={(r) => r.asset}
-            caption="Активы счёта"
-            columns={[
-              { title: "Актив", render: (r) => r.asset },
-              { title: "Свободно", align: "right", render: (r) => r.free },
-              { title: "В ордерах", align: "right", render: (r) => r.locked },
-              {
-                title: "Рыночная стоимость",
-                align: "right",
-                render: (r) =>
-                  r.value === null ? (
-                    <DataState state={r.state} reason={r.reasons[0]} />
-                  ) : (
-                    <div>
-                      {formatAdminMoney(r.value, finance.currency)}
-                      {r.reasons.map((reason) => (
-                        <DataState key={reason} state={r.state} reason={reason} />
-                      ))}
-                    </div>
-                  ),
-              },
-            ]}
-          />
-        ) : (
-          <div className="p-5">
-            <DataState
-              state={finance.observedAt ? "empty" : "unavailable"}
-              reason={finance.observedAt ? "NO_ASSETS_OBSERVED" : finance.reason}
-            />
-          </div>
-        )}
-      </ConsolePanel>
+      <AccountAssets key={finance.id} finance={finance} />
       <div className="text-xs">
         <EvidenceTime at={finance.observedAt} />
       </div>

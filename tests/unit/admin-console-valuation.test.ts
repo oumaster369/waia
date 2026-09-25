@@ -36,6 +36,50 @@ function input(overrides: Partial<ValuationInput> = {}): ValuationInput {
 }
 
 describe("admin console valuation", () => {
+  it("does not let an unrelated or confirmed-zero tiny-price asset invalidate cash", () => {
+    const unrelated = { ...input().quotes[0]!, asset: "DUST", price: "0.000000001" };
+    for (const balances of [
+      [{ asset: "USDT", free: "600.02906483", locked: "0" }],
+      [
+        { asset: "USDT", free: "600.02906483", locked: "0" },
+        { asset: "DUST", free: "0.000000000000", locked: "0" },
+      ],
+      [{ asset: "DUST", free: "0", locked: "0" }],
+    ]) {
+      const args = input({ balances, lots: [], quotes: [] });
+      const baseline = valueObservation(args);
+      const valued = valueObservation({ ...args, quotes: [unrelated] });
+      expect(valued).toEqual(baseline);
+      expect(valued.state).toBe("ok");
+    }
+  });
+
+  it("still refuses unsupported precision of a quote needed by a held asset", () => {
+    const valued = valueObservation(
+      input({
+        balances: [{ asset: "DUST", free: "1", locked: "0" }],
+        lots: [],
+        quotes: [{ ...input().quotes[0]!, asset: "DUST", price: "0.000000001" }],
+      }),
+    );
+    expect(valued).toMatchObject({
+      state: "unavailable",
+      equity: null,
+      reasons: ["MONEY_PRECISION_UNSUPPORTED"],
+    });
+  });
+
+  it("does not parse an older quote after selecting the current quote for that asset", () => {
+    const fresh = input().quotes[0]!;
+    const old = { ...fresh, price: "0.000000001", observedAt: "2026-09-22T00:00:00Z" };
+    const args = input({
+      balances: [{ asset: "BTC", free: "1", locked: "0" }],
+      lots: [],
+      quotes: [fresh],
+    });
+    expect(valueObservation({ ...args, quotes: [old, fresh] })).toEqual(valueObservation(args));
+  });
+
   it("uses a fresh USD fallback instead of a stale preferred source and preserves its provenance", () => {
     const stale = {
       asset: "USDT",
