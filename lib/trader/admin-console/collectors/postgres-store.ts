@@ -99,42 +99,79 @@ export function createPostgresCollectorStore(db: AdminPostgresDb): CollectorStor
     },
     async applyNews(write) {
       if (write.action === "unchanged") return;
-      if (write.action === "insert") {
-        const id = randomUUID();
-        await db.insert(traderAdminNewsItem).values({
-          id,
-          dedupeKey: write.dedupeKey,
-          clusterKey: write.clusterKey,
-          source: write.source,
-          url: write.url,
-          publishedAt: write.publishedAt ? new Date(write.publishedAt) : null,
-          firstObservedAt: new Date(write.firstObservedAt),
-          symbols: write.symbols,
-          category: write.category,
-          currentVersion: write.version.version,
-        });
-        await db.insert(traderAdminNewsItemVersion).values({
-          newsItemId: id,
-          version: write.version.version,
-          title: write.version.title,
-          summary: write.version.summary,
-          contentHash: write.version.contentHash,
-          observedAt: new Date(write.version.observedAt),
-        });
-        return;
-      }
-      await db.insert(traderAdminNewsItemVersion).values({
-        newsItemId: write.newsItemId,
-        version: write.version.version,
-        title: write.version.title,
-        summary: write.version.summary,
-        contentHash: write.version.contentHash,
-        observedAt: new Date(write.version.observedAt),
-      });
-      await db
-        .update(traderAdminNewsItem)
-        .set({ currentVersion: write.version.version })
-        .where(eq(traderAdminNewsItem.id, write.newsItemId));
+      await db.transaction(
+        async (tx) => {
+          // Plans are read before persistence; overlapping cron runs may share a
+          // stale plan. Serialize even the first insert, then read the actual head.
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtextextended(${`admin-news:${write.dedupeKey}`}, 0))`,
+          );
+          const [item] = await tx
+            .select({
+              id: traderAdminNewsItem.id,
+              currentVersion: traderAdminNewsItem.currentVersion,
+            })
+            .from(traderAdminNewsItem)
+            .where(eq(traderAdminNewsItem.dedupeKey, write.dedupeKey))
+            .for("update");
+          let id: string;
+          let version: number;
+          if (item) {
+            if (write.action === "version" && item.id !== write.newsItemId)
+              throw new Error("ADMIN_NEWS_IDENTITY_CHANGED");
+            const [head] = await tx
+              .select({
+                contentHash: traderAdminNewsItemVersion.contentHash,
+                observedAt: traderAdminNewsItemVersion.observedAt,
+              })
+              .from(traderAdminNewsItemVersion)
+              .where(
+                and(
+                  eq(traderAdminNewsItemVersion.newsItemId, item.id),
+                  eq(traderAdminNewsItemVersion.version, item.currentVersion),
+                ),
+              );
+            if (!head) throw new Error("ADMIN_NEWS_CURRENT_VERSION_MISSING");
+            if (
+              head.contentHash === write.version.contentHash ||
+              head.observedAt.getTime() > Date.parse(write.version.observedAt)
+            )
+              return;
+            id = item.id;
+            version = item.currentVersion + 1;
+          } else {
+            if (write.action !== "insert") throw new Error("ADMIN_NEWS_ITEM_MISSING");
+            id = randomUUID();
+            version = 1;
+            await tx.insert(traderAdminNewsItem).values({
+              id,
+              dedupeKey: write.dedupeKey,
+              clusterKey: write.clusterKey,
+              source: write.source,
+              url: write.url,
+              publishedAt: write.publishedAt ? new Date(write.publishedAt) : null,
+              firstObservedAt: new Date(write.firstObservedAt),
+              symbols: write.symbols,
+              category: write.category,
+              currentVersion: version,
+            });
+          }
+          await tx.insert(traderAdminNewsItemVersion).values({
+            newsItemId: id,
+            version,
+            title: write.version.title,
+            summary: write.version.summary,
+            contentHash: write.version.contentHash,
+            observedAt: new Date(write.version.observedAt),
+          });
+          if (item)
+            await tx
+              .update(traderAdminNewsItem)
+              .set({ currentVersion: version })
+              .where(eq(traderAdminNewsItem.id, id));
+        },
+        { isolationLevel: "read committed" },
+      );
     },
     async retain(now) {
       return retainBatch(db, now);

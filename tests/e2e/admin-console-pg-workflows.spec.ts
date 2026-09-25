@@ -82,7 +82,9 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       await sql`INSERT INTO trader_intelligence_cycle_envelope(id,organization_id,run_id,cycle_id,symbol,evaluated_at,historical_profile_id,historical_profile_digest,matrix_digest,terminal_reason_code,input_semantic_digest,output_semantic_digest,content_digest,schema_version) VALUES (${crypto.randomUUID()}::uuid,${client.id}::uuid,${crypto.randomUUID()},'browser-cycle','QA-CYCLE',now(),'fixture','fixture','fixture','NO_TRADE','fixture','fixture','fixture','fixture')`;
     }
     const incidentId = crypto.randomUUID();
-    await sql`INSERT INTO trader_admin_incident(id,environment,service,fingerprint,title,severity,status,first_seen_at,last_seen_at) VALUES (${incidentId}::uuid,'local','browser-acceptance',${incidentId},'Проверка уведомлений','error','new',now(),now())`;
+    const incidentTitle =
+      "Illegal invocation: function called with incorrect this reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.";
+    await sql`INSERT INTO trader_admin_incident(id,environment,service,fingerprint,title,severity,status,first_seen_at,last_seen_at) VALUES (${incidentId}::uuid,'local','browser-acceptance',${incidentId},${incidentTitle},'error','new',now(),now())`;
     await sql`INSERT INTO trader_admin_diagnostic_event(id,occurred_at,received_at,environment,service,severity,error_class,message_redacted,fingerprint,organization_id,exchange_account_id) VALUES (${crypto.randomUUID()}::uuid,now(),now(),'local','browser-acceptance','error','Fixture','Сохранённое событие проверки',${incidentId},${clients[0].id}::uuid,${accounts[0]})`;
     const invoiceId = crypto.randomUUID();
     await sql`INSERT INTO trader_invoices (id, organization_id, exchange_account_id, reporting_period_id, fee_artifact_digest, status, currency, period_realized_strategy_profit, cumulative_realized_strategy_profit, previous_high_water_mark, new_profit_above_hwm, fee_rate, performance_fee, proposed_new_high_water_mark, billable, realized_fill_finality, starting_equity, ending_equity, net_deposits, net_withdrawals, period_start, period_end, valuation_source, fee_computed_at, schema_version, record_content_digest)
@@ -366,12 +368,38 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         ).toBeVisible();
       }
       if (path === "errors") {
-        await page.getByRole("button", { name: "Проверка уведомлений", exact: true }).click();
+        await page.getByRole("button", { name: incidentTitle, exact: true }).click();
         const incidentDialog = page.getByRole("dialog", {
-          name: "Проверка уведомлений",
+          name: incidentTitle,
           exact: true,
         });
         await expect(incidentDialog).toContainText("Сохранённое событие проверки");
+        for (const width of [1280, 720, 360]) {
+          await page.setViewportSize({ width, height: 900 });
+          expect(
+            await incidentDialog.evaluate((element) => element.scrollWidth <= element.clientWidth),
+          ).toBe(true);
+          const close = incidentDialog.getByRole("button", { name: "Закрыть", exact: true });
+          const dialogBox = await incidentDialog.boundingBox();
+          const closeBox = await close.boundingBox();
+          expect(dialogBox).not.toBeNull();
+          expect(closeBox).not.toBeNull();
+          expect(closeBox!.x).toBeGreaterThanOrEqual(dialogBox!.x);
+          expect(closeBox!.x + closeBox!.width).toBeLessThanOrEqual(
+            dialogBox!.x + dialogBox!.width,
+          );
+          await page.screenshot({
+            path: testInfo.outputPath(`incident-long-title-${width}.png`),
+            fullPage: false,
+          });
+          await close.click();
+          await expect(incidentDialog).not.toBeVisible();
+          await expect(page).not.toHaveURL(/sel=/);
+          await page.getByRole("button", { name: incidentTitle, exact: true }).click();
+          await expect(incidentDialog).toContainText("Сохранённое событие проверки");
+        }
+        await page.setViewportSize({ width: 1280, height: 900 });
+
         const mute = incidentDialog.getByRole("button", {
           name: "Скрыть уведомления на час",
           exact: true,
