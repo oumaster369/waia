@@ -206,7 +206,8 @@ export function updatePromotionGovernanceSqlite(
     throw new Error("STRATEGY_PROMOTION_STATE_VERSION_MISMATCH");
   }
 
-  db.update(traderStrategyPromotionRecords)
+  const changed = db
+    .update(traderStrategyPromotionRecords)
     .set({
       state: patch.state,
       confirmedAt: patch.confirmedAt,
@@ -226,6 +227,10 @@ export function updatePromotionGovernanceSqlite(
       ),
     )
     .run();
+
+  if (changed.changes !== 1) {
+    throw new Error("STRATEGY_PROMOTION_STATE_VERSION_MISMATCH");
+  }
 
   return getPromotionRecordByIdSqlite(db, scoped, recordId)!;
 }

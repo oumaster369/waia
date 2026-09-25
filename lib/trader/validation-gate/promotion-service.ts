@@ -50,7 +50,8 @@ import { assertAllowedPromotionTransition } from "@/lib/trader/validation-gate/t
 import { traderAuditActions, traderEntityTypes } from "@/lib/trader/types";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
-type PgPromotionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgPromotionExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update"> &
+  Partial<Pick<WaiaPostgresDb, "transaction">>;
 
 export type StrategyPromotionRepository = {
   insert(input: InsertPromotionRecordInput): Promise<StrategyPromotionRecordView>;
@@ -75,22 +76,56 @@ export type StrategyPromotionRepository = {
   ): Promise<StrategyPromotionRecordView>;
 };
 
+export type PromotionMutation =
+  | { kind: "insert"; input: InsertPromotionRecordInput }
+  | {
+      kind: "update";
+      context: OrgContext;
+      recordId: string;
+      expectedStateVersion: number;
+      patch: PromotionGovernancePatch;
+    };
+
+export type PromotionAuditIntent = {
+  actor: PromotionActor;
+  action: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type StrategyPromotionServiceDeps = {
   repository: StrategyPromotionRepository;
   nowMs: () => number;
-  writeAudit: (
-    actor: PromotionActor,
-    organizationId: string,
-    action: string,
-    record: StrategyPromotionRecordView,
-    metadata?: Record<string, unknown>,
-  ) => Promise<string> | string;
+  /** Must commit the mutation and its Core audit together, or roll back both. */
+  commitMutation: (
+    mutation: PromotionMutation,
+    audit: PromotionAuditIntent,
+  ) => Promise<StrategyPromotionRecordView>;
   /** Postgres-only: cross-check research evidence artifact IDs before assembly. */
   validateAssembly?: (
     context: OrgContext,
     assembly: AssembleStrategyPromotionRecordInput,
   ) => Promise<void>;
 };
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as { code?: unknown; cause?: unknown };
+  return (
+    value.code === "23505" ||
+    value.code === "SQLITE_CONSTRAINT_UNIQUE" ||
+    (value.cause !== error && value.cause !== undefined && isUniqueViolation(value.cause))
+  );
+}
+
+function assertSameIdempotentRequest(
+  record: StrategyPromotionRecordView,
+  recordContentDigest: string,
+  actor: PromotionActor,
+): void {
+  if (record.recordContentDigest !== recordContentDigest || record.actorId !== actor.actorId) {
+    throw new StrategyPromotionConflictError("STRATEGY_PROMOTION_IDEMPOTENCY_CONFLICT");
+  }
+}
 
 function validateCoolingOffMsOverride(value: number | undefined): number {
   if (value === undefined) {
@@ -152,7 +187,7 @@ function mapResearchProvenanceError(error: unknown): never {
 }
 
 export function createStrategyPromotionService(deps: StrategyPromotionServiceDeps) {
-  const { repository, nowMs, writeAudit, validateAssembly } = deps;
+  const { repository, nowMs, validateAssembly } = deps;
 
   async function getRecord(
     context: OrgContext,
@@ -170,9 +205,18 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
     recordId: string,
     expectedStateVersion: number,
     patch: PromotionGovernancePatch,
+    audit: PromotionAuditIntent,
   ): Promise<StrategyPromotionRecordView> {
+    // The patch was derived from the service's observed version. A caller cannot
+    // nominate a future revision and adopt a different command's intervening write.
+    if (patch.stateVersion !== expectedStateVersion + 1) {
+      throw new StrategyPromotionConcurrencyError();
+    }
     try {
-      return await repository.updateGovernance(context, recordId, expectedStateVersion, patch);
+      return await deps.commitMutation(
+        { kind: "update", context, recordId, expectedStateVersion, patch },
+        audit,
+      );
     } catch (error) {
       mapRepositoryError(error);
     }
@@ -203,6 +247,7 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       if (input.idempotencyKey) {
         const existing = await repository.findByIdempotencyKey(scoped, input.idempotencyKey);
         if (existing) {
+          assertSameIdempotentRequest(existing, payload.recordContentDigest, actor);
           return existing;
         }
       }
@@ -211,27 +256,34 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       assertNoEffectivePromotion(effective, payload.strategyId);
 
       const now = new Date(nowMs());
-      const record = await repository.insert({
-        ...payload,
-        id: crypto.randomUUID(),
-        state: "PENDING_CONFIRM",
-        actorId: actor.actorId,
-        requestedAt: now,
-        idempotencyKey: input.idempotencyKey ?? null,
-      });
-
-      await writeAudit(
-        actor,
-        scoped.organizationId,
-        traderAuditActions.promotionRequested,
-        record,
-        {
-          strategyId: record.strategyId,
-          strategyVersion: record.strategyVersion,
+      const mutation: PromotionMutation = {
+        kind: "insert",
+        input: {
+          ...payload,
+          id: crypto.randomUUID(),
+          state: "PENDING_CONFIRM",
+          actorId: actor.actorId,
+          requestedAt: now,
+          idempotencyKey: input.idempotencyKey ?? null,
         },
-      );
-
-      return record;
+      };
+      try {
+        return await deps.commitMutation(mutation, {
+          actor,
+          action: traderAuditActions.promotionRequested,
+          metadata: { strategyId: payload.strategyId, strategyVersion: payload.strategyVersion },
+        });
+      } catch (error) {
+        // A concurrent exact-key winner has already committed both record and audit.
+        if (input.idempotencyKey && isUniqueViolation(error)) {
+          const winner = await repository.findByIdempotencyKey(scoped, input.idempotencyKey);
+          if (winner) {
+            assertSameIdempotentRequest(winner, payload.recordContentDigest, actor);
+            return winner;
+          }
+        }
+        throw error;
+      }
     },
 
     async previewPromotion(context: OrgContext, recordId: string): Promise<PromotionPreview> {
@@ -256,22 +308,21 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       const now = new Date(nowMs());
       const coolingOffEndsAt = new Date(now.getTime() + coolingOffMs);
 
-      const updated = await updateGovernance(scoped, recordId, input.expectedStateVersion, {
-        state: "COOLING_OFF",
-        confirmedAt: now,
-        coolingOffEndsAt,
-        stateVersion: existing.stateVersion + 1,
-        updatedAt: now,
-      });
-
-      await writeAudit(
-        actor,
-        scoped.organizationId,
-        traderAuditActions.promotionConfirmed,
-        updated,
+      const updated = await updateGovernance(
+        scoped,
+        recordId,
+        input.expectedStateVersion,
         {
-          coolingOffMs,
-          coolingOffEndsAt: coolingOffEndsAt.toISOString(),
+          state: "COOLING_OFF",
+          confirmedAt: now,
+          coolingOffEndsAt,
+          stateVersion: existing.stateVersion + 1,
+          updatedAt: now,
+        },
+        {
+          actor,
+          action: traderAuditActions.promotionConfirmed,
+          metadata: { coolingOffMs, coolingOffEndsAt: coolingOffEndsAt.toISOString() },
         },
       );
 
@@ -298,20 +349,20 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       assertNoEffectivePromotion(effective, existing.strategyId);
 
       const effectiveAt = new Date(now);
-      const updated = await updateGovernance(scoped, recordId, input.expectedStateVersion, {
-        state: "EFFECTIVE",
-        effectiveAt,
-        stateVersion: existing.stateVersion + 1,
-        updatedAt: effectiveAt,
-      });
-
-      await writeAudit(
-        actor,
-        scoped.organizationId,
-        traderAuditActions.promotionEffective,
-        updated,
+      const updated = await updateGovernance(
+        scoped,
+        recordId,
+        input.expectedStateVersion,
         {
-          effectiveAt: effectiveAt.toISOString(),
+          state: "EFFECTIVE",
+          effectiveAt,
+          stateVersion: existing.stateVersion + 1,
+          updatedAt: effectiveAt,
+        },
+        {
+          actor,
+          action: traderAuditActions.promotionEffective,
+          metadata: { effectiveAt: effectiveAt.toISOString() },
         },
       );
 
@@ -331,18 +382,17 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       }
 
       const now = new Date(nowMs());
-      const updated = await updateGovernance(scoped, recordId, input.expectedStateVersion, {
-        state: "CANCELLED",
-        cancelledAt: now,
-        stateVersion: existing.stateVersion + 1,
-        updatedAt: now,
-      });
-
-      await writeAudit(
-        actor,
-        scoped.organizationId,
-        traderAuditActions.promotionCancelled,
-        updated,
+      const updated = await updateGovernance(
+        scoped,
+        recordId,
+        input.expectedStateVersion,
+        {
+          state: "CANCELLED",
+          cancelledAt: now,
+          stateVersion: existing.stateVersion + 1,
+          updatedAt: now,
+        },
+        { actor, action: traderAuditActions.promotionCancelled, metadata: undefined },
       );
 
       return updated;
@@ -361,16 +411,22 @@ export function createStrategyPromotionService(deps: StrategyPromotionServiceDep
       }
 
       const now = new Date(nowMs());
-      const updated = await updateGovernance(scoped, existing.id, input.expectedStateVersion, {
-        state: "REVOKED",
-        revokedAt: now,
-        stateVersion: existing.stateVersion + 1,
-        updatedAt: now,
-      });
-
-      await writeAudit(actor, scoped.organizationId, traderAuditActions.promotionDemoted, updated, {
-        reason: input.reason ?? null,
-      });
+      const updated = await updateGovernance(
+        scoped,
+        existing.id,
+        input.expectedStateVersion,
+        {
+          state: "REVOKED",
+          revokedAt: now,
+          stateVersion: existing.stateVersion + 1,
+          updatedAt: now,
+        },
+        {
+          actor,
+          action: traderAuditActions.promotionDemoted,
+          metadata: { reason: input.reason ?? null },
+        },
+      );
 
       return updated;
     },
@@ -430,28 +486,46 @@ export function createPostgresStrategyPromotionRepository(
   };
 }
 
+function promotionAuditInput(record: StrategyPromotionRecordView, intent: PromotionAuditIntent) {
+  return {
+    actorType: intent.actor.actorType,
+    actorId: intent.actor.actorId,
+    action: intent.action,
+    entityType: traderEntityTypes.strategyPromotion,
+    entityId: record.id,
+    organizationId: record.organizationId,
+    metadata: {
+      strategyId: record.strategyId,
+      strategyVersion: record.strategyVersion,
+      state: record.state,
+      ...intent.metadata,
+    },
+  };
+}
+
 export function createSqliteStrategyPromotionService(
   db: WaiaDb,
   deps: { nowMs?: () => number } = {},
 ): StrategyPromotionService {
-  const nowMs = deps.nowMs ?? (() => Date.now());
   return createStrategyPromotionService({
     repository: createSqliteStrategyPromotionRepository(db),
-    nowMs,
-    writeAudit: (actor, organizationId, action, record, metadata) =>
-      writeAuditLogSqlite(db, {
-        actorType: actor.actorType,
-        actorId: actor.actorId,
-        action,
-        entityType: traderEntityTypes.strategyPromotion,
-        entityId: record.id,
-        organizationId,
-        metadata: {
-          strategyId: record.strategyId,
-          strategyVersion: record.strategyVersion,
-          state: record.state,
-          ...metadata,
-        },
+    nowMs: deps.nowMs ?? (() => Date.now()),
+    commitMutation: async (mutation, intent) =>
+      db.transaction((tx) => {
+        // No await in SQLite's transaction: both writes complete synchronously.
+        const executor = tx as WaiaDb;
+        const record =
+          mutation.kind === "insert"
+            ? insertPromotionRecordSqlite(executor, mutation.input)
+            : updatePromotionGovernanceSqlite(
+                executor,
+                mutation.context,
+                mutation.recordId,
+                mutation.expectedStateVersion,
+                mutation.patch,
+              );
+        writeAuditLogSqlite(executor, promotionAuditInput(record, intent));
+        return record;
       }),
   });
 }
@@ -460,11 +534,10 @@ export function createPostgresStrategyPromotionService(
   ex: PgPromotionExecutor,
   deps: { nowMs?: () => number; validateResearchProvenance?: boolean } = {},
 ): StrategyPromotionService {
-  const nowMs = deps.nowMs ?? (() => Date.now());
   const validateResearchProvenance = deps.validateResearchProvenance ?? true;
   return createStrategyPromotionService({
     repository: createPostgresStrategyPromotionRepository(ex),
-    nowMs,
+    nowMs: deps.nowMs ?? (() => Date.now()),
     validateAssembly: validateResearchProvenance
       ? async (context, assembly) => {
           await validateResearchEvidenceProvenancePostgres(
@@ -474,20 +547,23 @@ export function createPostgresStrategyPromotionService(
           );
         }
       : undefined,
-    writeAudit: async (actor, organizationId, action, record, metadata) =>
-      writeAuditLogPostgres(ex, {
-        actorType: actor.actorType,
-        actorId: actor.actorId,
-        action,
-        entityType: traderEntityTypes.strategyPromotion,
-        entityId: record.id,
-        organizationId,
-        metadata: {
-          strategyId: record.strategyId,
-          strategyVersion: record.strategyVersion,
-          state: record.state,
-          ...metadata,
-        },
-      }),
+    commitMutation: async (mutation, intent) => {
+      if (!ex.transaction)
+        throw new StrategyPromotionValidationError("STRATEGY_PROMOTION_TRANSACTION_REQUIRED");
+      return ex.transaction(async (tx) => {
+        const record =
+          mutation.kind === "insert"
+            ? await insertPromotionRecordPostgres(tx, mutation.input)
+            : await updatePromotionGovernancePostgres(
+                tx,
+                mutation.context,
+                mutation.recordId,
+                mutation.expectedStateVersion,
+                mutation.patch,
+              );
+        await writeAuditLogPostgres(tx, promotionAuditInput(record, intent));
+        return record;
+      });
+    },
   });
 }

@@ -36,6 +36,9 @@ on:
       - "lib/trader/security/admin-service-org-access.ts"
       - "tests/helpers/trader-actor-services.ts"
       - "tests/integration/postgres-trader-service-actor-authorization.test.ts"
+      - "lib/trader/validation-gate/**"
+      - "tests/helpers/atomic-promotion-assembly.ts"
+      - "tests/integration/postgres-promotion-audit-atomicity.test.ts"
       - "lib/trader/execution/v2/**"
       - "lib/trader/risk/v2/**"
       - "lib/trader/risk/limits/**"
@@ -153,7 +156,8 @@ jobs:
             tests/integration/postgres-risk-limits-bootstrap.test.ts \
             tests/integration/postgres-trader-service-actor-authorization.test.ts \
             tests/integration/postgres-reality-v2.test.ts \
-            tests/integration/postgres-canonical-decision-verification-v2.test.ts
+            tests/integration/postgres-canonical-decision-verification-v2.test.ts \
+            tests/integration/postgres-promotion-audit-atomicity.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   integration:
