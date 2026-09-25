@@ -19,6 +19,7 @@ const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   tab: z.string().max(80).optional(),
   sort: z.string().max(80).optional(),
+  status: z.string().max(80).optional(),
   topics: z.string().max(500).optional(),
   resume: z.string().max(80).optional(),
   transport: z.enum(["poll"]).optional(),

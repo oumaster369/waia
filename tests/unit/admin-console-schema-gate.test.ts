@@ -1,3 +1,4 @@
+import { ADMIN_EXPORT_DATASETS } from "@/lib/trader/admin-console/export-datasets";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetAdminConsoleSchemaProbeForTests } from "@/lib/trader/admin-console/schema-probe";
@@ -100,7 +101,7 @@ describe("admin console schema gate on a 0210 database", () => {
     expect(consoleSchemaGate(HANDLER_TABLES.invoices)).toBe("ready-on-0210");
     expect(consoleSchemaGate(HANDLER_TABLES.disputes)).toBe("ready-on-0210");
     expect(consoleSchemaGate(HANDLER_TABLES.clients)).toBe("ready-on-0210");
-    expect(consoleSchemaGate(HANDLER_TABLES.exportInvoices)).toBe("ready-on-0210");
+    expect(consoleSchemaGate(ADMIN_EXPORT_DATASETS.invoices.tables)).toBe("ready-on-0210");
     expect(consoleSchemaGate(HANDLER_TABLES.incidents)).toBe("waits-0214");
     expect(consoleSchemaGate(HANDLER_TABLES.proposals)).toBe("waits-0212");
   });

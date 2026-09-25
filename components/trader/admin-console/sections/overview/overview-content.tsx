@@ -516,7 +516,18 @@ export function ResearchPreview() {
                 {item.title}
               </Link>
               <div className="text-right text-xs">
-                <p>{item.state ?? "Состояние не сохранено"}</p>
+                <p>
+                  {(
+                    {
+                      DRAFT: "Черновик",
+                      ACTIVE: "Активна",
+                      PAUSED: "Приостановлена",
+                      ARCHIVED: "В архиве",
+                    } as Record<string, string>
+                  )[item.state ?? ""] ??
+                    item.state ??
+                    "Состояние не сохранено"}
+                </p>
                 <EvidenceTime at={item.observedAt} />
               </div>
             </li>

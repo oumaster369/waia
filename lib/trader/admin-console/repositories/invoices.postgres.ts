@@ -86,6 +86,16 @@ export const INVOICE_SELECT = sql`
       JOIN trader_settlement_reconciliation_cases r ON r.settlement_id = a.settlement_id
       WHERE a.invoice_id = i.id AND r.status NOT IN ('RESOLVED', 'CANCELLED')
     )
+    OR EXISTS (
+      SELECT 1 FROM trader_settlements s
+      JOIN payments p ON p.payment_id = s.payment_id AND p.organization_id = s.organization_id
+      WHERE s.organization_id = i.organization_id AND s.exchange_account_id = i.exchange_account_id
+        AND p.subject_module = 'trader' AND p.subject_invoice_id = i.id::text
+        AND (s.outcome = 'EXCEPTION' OR EXISTS (
+          SELECT 1 FROM trader_settlement_reconciliation_cases r WHERE r.settlement_id = s.id
+            AND r.organization_id = i.organization_id AND r.status NOT IN ('RESOLVED','CANCELLED')
+        ))
+    )
   ) AS reconciliation,
   EXISTS (
     SELECT 1 FROM payment_events e
@@ -106,6 +116,7 @@ export async function readInvoiceList(
 ) {
   const bounds = periodBounds(query, new Date());
   const filter = sql`${organizationFilter(query, "i")} AND ${exchangeAccountFilter(query, "i")}
+    AND (${query.status ?? null}::text IS NULL OR i.status::text = ${query.status ?? null})
     AND i.period_start < ${bounds.end}::timestamptz AND i.period_end >= ${bounds.start}::timestamptz`;
   const raw = await tx.execute(sql`SELECT ${INVOICE_SELECT} FROM trader_invoices i
     WHERE ${filter} ORDER BY i.created_at DESC, i.id LIMIT ${limit + 1}`);

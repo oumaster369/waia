@@ -14,6 +14,7 @@ import {
   handleAdminConsoleInvoicesGet,
   handleAdminConsoleInvoiceDetailGet,
 } from "@/lib/trader/admin-console/handlers/invoices";
+import { handleAdminConsoleDisputesGet } from "@/lib/trader/admin-console/handlers/disputes";
 import { handleAdminConsoleExportGet } from "@/lib/trader/admin-console/handlers/export";
 import { handleAdminConsoleStreamPoll } from "@/lib/trader/admin-console/stream/console-stream";
 import { readAssistantTool } from "@/lib/trader/admin-console/handlers/assistant-reads";
@@ -117,7 +118,7 @@ describe.skipIf(!enabled)("scope parity for admin read surfaces on Postgres", ()
     expect(body.data.items[0]).toMatchObject({ id: invoice, performanceFee: "30.00000001" });
     expect(body.data.total).toBe(1);
     const csv = await handleAdminConsoleExportGet(request("export", "&dataset=invoices"), deps());
-    const contents = new TextDecoder().decode(csv.binaryBody as Uint8Array);
+    const contents = await new Response(csv.streamBody).text();
     expect(contents).toContain(`# financeRevision=${body.financeRevision}`);
     expect(contents).toContain("30.00000001");
     expect(contents).not.toContain(foreignInvoice);
@@ -158,5 +159,115 @@ describe.skipIf(!enabled)("scope parity for admin read surfaces on Postgres", ()
         }),
       ]),
     });
+  });
+  it("exports all canonical list datasets without losing scope, decimal strings or persisted invoice evidence", async () => {
+    for (const dataset of [
+      "clients",
+      "invoices",
+      "payments",
+      "accounts",
+      "orders",
+      "fills",
+      "closed_trades",
+    ]) {
+      const result = await handleAdminConsoleExportGet(
+        request("export", `&dataset=${dataset}`),
+        deps(),
+      );
+      expect(result.status, dataset).toBe(200);
+      expect(result.responseHeaders?.["Content-Disposition"], dataset).toContain("attachment");
+      const csv = await new Response(result.streamBody).text();
+      expect(csv, dataset).toContain(`# scope={"kind":"account","organizationId":"${org}"`);
+      expect(csv, dataset).not.toContain(foreignOrder);
+      expect(csv, dataset).not.toContain(foreignInvoice);
+      expect(csv, dataset).not.toContain("synthetic-not-a-key");
+      if (dataset === "fills") expect(csv).toContain("11.01,2,0.1,USDT");
+    }
+    const saved = await handleAdminConsoleExportGet(
+      request("export", "&format=json"),
+      deps(),
+      invoice,
+    );
+    const document = JSON.parse(new TextDecoder().decode(saved.binaryBody));
+    expect(document.data.stored.performanceFee).toBe("30.00000001");
+    expect(document.data.chain.ok).toBe(null);
+    const hidden = await handleAdminConsoleExportGet(
+      request("export", "&format=csv"),
+      deps(),
+      foreignInvoice,
+    );
+    expect(hidden.status).toBe(404);
+    const aborted = new AbortController();
+    aborted.abort();
+    const cancelled = await handleAdminConsoleExportGet(
+      new Request(request("export", "&dataset=orders"), { signal: aborted.signal }),
+      deps(),
+    );
+    expect(cancelled.status).toBe(499);
+  });
+  it("applies saved-view filters before canonical list and CSV limits", async () => {
+    const filtered = await handleAdminConsoleExportGet(
+      request("export", "&dataset=invoices&status=ISSUED"),
+      deps(),
+    );
+    expect(await new Response(filtered.streamBody).text()).not.toContain(invoice);
+    const rejected = await handleAdminConsoleOrdersGet(
+      request("orders", "&tab=all&status=REJECTED"),
+      deps(),
+    );
+    expect(rejected.body).toMatchObject({ data: { items: [] } });
+  });
+  it("shows a settlement exception before any application without marking the invoice paid", async () => {
+    const payment = randomUUID();
+    const settlement = randomUUID();
+    await client`INSERT INTO payments (payment_id,organization_id,status,direction,subject_module,subject_invoice_id,last_event_seq,last_event_digest) VALUES (${payment}::uuid,${org}::uuid,'CONFIRMED','INBOUND','trader',${invoice},1,'fixture')`;
+    await client`INSERT INTO trader_settlements (id,organization_id,exchange_account_id,payment_id,outcome,exception_reason,schema_version,record_content_digest) VALUES (${settlement}::uuid,${org}::uuid,${account},${payment}::uuid,'EXCEPTION','AMOUNT_MISMATCH','fixture','fixture')`;
+    const caseId = randomUUID();
+    await client`INSERT INTO trader_settlement_reconciliation_cases (id,organization_id,settlement_id,payment_id,exchange_account_id,exception_reason,status,priority,last_event_seq,last_event_digest) VALUES (${caseId}::uuid,${org}::uuid,${settlement}::uuid,${payment}::uuid,${account},'AMOUNT_MISMATCH','OPEN',1,1,'fixture')`;
+    await client`INSERT INTO audit_logs (id,organization_id,actor_type,actor_id,action,entity_type,entity_id) VALUES (${randomUUID()}::uuid,${org}::uuid,'admin',${admin},'trader.invoice.issuance_approved','trader.invoice',${invoice})`;
+    const reconciliation = await handleAdminConsoleDisputesGet(request("disputes"), deps());
+    expect(reconciliation.body).toMatchObject({
+      data: {
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: caseId,
+            kind: "reconciliation",
+            invoiceId: invoice,
+            status: "OPEN",
+          }),
+        ]),
+      },
+    });
+    const detail = await handleAdminConsoleInvoiceDetailGet(
+      request(`invoices/${invoice}`),
+      deps(),
+      invoice,
+    );
+    expect(detail.body).toMatchObject({
+      data: {
+        stored: { performanceFee: "30.00000001" },
+        display: { status: "Черновик", flags: ["На сверке"] },
+      },
+    });
+    expect(detail.body).toMatchObject({
+      data: {
+        evidence: {
+          settlements: [
+            expect.objectContaining({
+              id: settlement,
+              outcome: "EXCEPTION",
+              applicationId: null,
+              reconciliationStatus: "OPEN",
+            }),
+          ],
+          history: [
+            expect.objectContaining({ type: "trader.invoice.issuance_approved", actorId: admin }),
+          ],
+        },
+      },
+    });
+    expect(
+      await client`SELECT count(*)::int AS n FROM trader_settlement_applications WHERE settlement_id=${settlement}::uuid`,
+    ).toMatchObject([{ n: 0 }]);
   });
 });

@@ -151,15 +151,12 @@ export const HANDLER_TABLES = {
     "trader_fills",
     "trader_orders",
   ],
-  disputes: ["trader_invoice_disputes", "trader_invoices"],
-  exportInvoices: [
-    "trader_invoices",
+  disputes: [
     "trader_invoice_disputes",
     "trader_invoice_corrections",
-    "trader_settlement_applications",
-    "trader_settlements",
     "trader_settlement_reconciliation_cases",
-    "payment_events",
+    "trader_settlements",
+    "payments",
   ],
   fills: ["trader_fills", "trader_orders", "exchange_credentials"],
   paperPortfolios: [
@@ -187,7 +184,9 @@ export const HANDLER_TABLES = {
     "trader_settlements",
     "trader_settlement_reconciliation_cases",
     "payment_events",
+    "payments",
     "trader_hwm_ledger",
+    "audit_logs",
   ],
   invoiceCommands: [
     "trader_invoices",
@@ -197,6 +196,7 @@ export const HANDLER_TABLES = {
     "trader_settlements",
     "trader_settlement_reconciliation_cases",
     "payment_events",
+    "payments",
   ],
   clientHistory: [
     "organizations",
@@ -229,7 +229,12 @@ export const HANDLER_TABLES = {
   ],
   orders: ["trader_orders", "exchange_credentials"],
   overview: FINANCIAL_SNAPSHOT_TABLES,
-  payments: ["payment_events", "trader_invoices"],
+  payments: [
+    "payment_events",
+    "trader_invoices",
+    "trader_settlements",
+    "trader_settlement_applications",
+  ],
   positions: [
     "trader_position_lots",
     "trader_guardian_assessments_v2",

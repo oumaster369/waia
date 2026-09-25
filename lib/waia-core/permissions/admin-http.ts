@@ -22,6 +22,7 @@ export type AdminRouteHandlerResult = {
   waiaDbBackend?: "sqlite" | "postgres";
   responseHeaders?: Record<string, string>;
   binaryBody?: Uint8Array;
+  streamBody?: ReadableStream<Uint8Array>;
 };
 
 export type AdminRouteHandlerDeps = {

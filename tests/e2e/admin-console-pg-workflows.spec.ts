@@ -215,6 +215,39 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await expect(page.locator("main")).not.toContainText(accounts[0]);
     await page.getByLabel("Охват: клиент").selectOption(clients[0].id);
     await expect(page.locator("main")).toContainText(accounts[0]);
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByLabel("Название представления", { exact: true }).fill("Контрольный охват А");
+    await page.getByRole("button", { name: "Сохранить текущий вид", exact: true }).click();
+    await expect(
+      page.getByRole("link", { name: "Контрольный охват А", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
+    await expect(page.locator("main")).toContainText(accounts[1]);
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByRole("link", { name: "Контрольный охват А", exact: true }).click();
+    await expect(page.getByLabel("Охват: клиент")).toHaveValue(clients[0].id);
+    await expect(page.locator("main")).toContainText(accounts[0]);
+    await expect(page.locator("main")).not.toContainText(accounts[1]);
+    const downloaded = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Скачать CSV", exact: true }).click();
+    const exportFile = await downloaded;
+    expect(exportFile.suggestedFilename()).toBe("accounts.csv");
+    const stream = await exportFile.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    const csv = Buffer.concat(chunks).toString("utf8");
+    expect(csv).toContain(accounts[0]);
+    expect(csv).not.toContain(accounts[1]);
+    expect(csv).toContain("12540.125");
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Удалить представление Контрольный охват А", exact: true })
+      .click();
+    await expect(page.getByRole("link", { name: "Контрольный охват А", exact: true })).toHaveCount(
+      0,
+    );
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
     await verifySizes("accounts");
     for (const [path, title] of [
       ["orders", "Ордера"],

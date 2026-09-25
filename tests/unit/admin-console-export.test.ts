@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertExportWithinLimits,
   buildAdminCsv,
+  streamAdminCsv,
   escapeCsvCell,
   exportPreamble,
 } from "@/lib/trader/admin-console/billing/export-csv";
@@ -38,4 +39,30 @@ describe("admin console export", () => {
     expect(csv).toContain(`"'=1+1"`);
     expect(csv).toContain("10.5");
   });
+});
+
+it("streams the exact validated snapshot and rejects limits before the first byte", async () => {
+  const input = {
+    generatedAt: "2026-09-25T00:00:00.000Z",
+    financeRevision: "r1",
+    filters: "none",
+    currency: "USDT",
+    scope: "fleet",
+    headers: ["amount", "note"],
+    rows: Array.from({ length: 130 }, () => ["-0.00000001", "=SUM(A1)\nnext"]),
+    elapsedMs: 1,
+  };
+  const abort = new AbortController();
+  const streamed = await new Response(streamAdminCsv(input, abort.signal)).text();
+  expect(streamed).toBe(buildAdminCsv(input));
+  expect(() =>
+    streamAdminCsv({ ...input, rows: Array.from({ length: 50001 }, () => ["1"]) }, abort.signal),
+  ).toThrow("EXPORT_LIMIT");
+  expect(() => streamAdminCsv({ ...input, elapsedMs: 60001 }, abort.signal)).toThrow(
+    "EXPORT_LIMIT",
+  );
+  const interrupted = streamAdminCsv(input, abort.signal).getReader();
+  await interrupted.read();
+  abort.abort();
+  await expect(interrupted.read()).rejects.toThrow("EXPORT_ABORTED");
 });

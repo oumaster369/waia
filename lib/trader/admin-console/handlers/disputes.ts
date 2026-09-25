@@ -1,3 +1,4 @@
+import { redactDiagnosticText } from "@/lib/trader/admin-console/diagnostics/redact";
 import { organizationFilter } from "@/lib/trader/admin-console/sql/read-scope";
 import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
@@ -37,38 +38,47 @@ export async function handleAdminConsoleDisputesGet(
     return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
       const rows = rowsOf(
         await tx.execute(sql`
-        SELECT id::text AS id,
-               organization_id::text AS organization_id,
-               invoice_id::text AS invoice_id,
-               status,
-               reason,
-               opened_at,
-               resolved_at
-        FROM trader_invoice_disputes
-        WHERE ${organizationFilter(parsed.query, "trader_invoice_disputes")}
-          AND (${parsed.query.exchange_account_id ?? null}::text IS NULL OR EXISTS (
-            SELECT 1 FROM trader_invoices scoped_invoice
-            WHERE scoped_invoice.id = trader_invoice_disputes.invoice_id
-              AND scoped_invoice.organization_id = trader_invoice_disputes.organization_id
-              AND scoped_invoice.exchange_account_id = ${parsed.query.exchange_account_id ?? null}
-          ))
-        ORDER BY opened_at DESC, id
-        LIMIT ${parsed.query.limit}
+        WITH cases AS (
+          SELECT 'dispute'::text AS kind, d.id::text AS id, d.organization_id, d.invoice_id::text AS invoice_id,
+            d.exchange_account_id, d.status::text AS status, d.reason, d.opened_at, d.resolved_at,
+            NULL::text AS amount, NULL::text AS currency
+          FROM trader_invoice_disputes d
+          UNION ALL
+          SELECT 'correction', c.id::text, c.organization_id, c.invoice_id::text, c.exchange_account_id,
+            c.correction_type::text, c.reason, c.created_at, c.created_at, c.amount, c.currency
+          FROM trader_invoice_corrections c
+          UNION ALL
+          SELECT 'reconciliation', r.id::text, r.organization_id, p.subject_invoice_id, r.exchange_account_id,
+            r.status::text, r.exception_reason, r.opened_at, r.resolved_at, s.on_chain_amount, s.asset
+          FROM trader_settlement_reconciliation_cases r
+          JOIN trader_settlements s ON s.id=r.settlement_id AND s.organization_id=r.organization_id
+          JOIN payments p ON p.payment_id=r.payment_id AND p.organization_id=r.organization_id AND p.subject_module='trader'
+        )
+        SELECT *, count(*) OVER()::integer AS total FROM cases
+        WHERE ${organizationFilter(parsed.query, "cases")}
+          AND (${parsed.query.exchange_account_id ?? null}::text IS NULL OR exchange_account_id=${parsed.query.exchange_account_id ?? null})
+        ORDER BY opened_at DESC, id LIMIT ${parsed.query.limit + 1}
       `),
       );
       return adminSuccess(
         adminEnvelope({
           data: {
-            items: rows.map((row) => ({
+            items: rows.slice(0, parsed.query.limit).map((row) => ({
+              kind: String(row.kind ?? "dispute"),
+              amount: row.amount == null ? null : String(row.amount),
+              currency: row.currency == null ? null : String(row.currency),
               id: String(row.id),
               organizationId: String(row.organization_id),
-              invoiceId: String(row.invoice_id),
+              invoiceId: row.invoice_id == null ? null : String(row.invoice_id),
               status: String(row.status),
-              reason: row.reason == null ? null : String(row.reason),
+              reason: row.reason == null ? null : redactDiagnosticText(String(row.reason)),
               openedAt: iso(row.opened_at),
               resolvedAt: iso(row.resolved_at),
             })),
+            total: rows[0]?.total ?? 0,
+            truncated: rows.length > parsed.query.limit,
           },
+          missingSources: rows.length > parsed.query.limit ? ["LIST_COVERAGE_LIMITED"] : [],
           scope: adminScopeFromQuery(parsed.query),
           mode: parsed.query.mode,
         }),

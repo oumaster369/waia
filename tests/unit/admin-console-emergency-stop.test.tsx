@@ -84,7 +84,9 @@ describe("admin console emergency workflow", () => {
     );
     render(<EmergencyWorkflow open onClose={() => undefined} catalogue={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
-    await screen.findByText(/READ_FAILED/);
+    expect(
+      (await screen.findByText(/Не удалось прочитать данные/)).closest("[data-reason]"),
+    ).toHaveAttribute("data-reason", "READ_FAILED");
     expect(screen.getByRole("button", { name: "Дальше" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Отправить команду" })).not.toBeInTheDocument();
   });

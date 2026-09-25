@@ -80,7 +80,8 @@ export async function handleAdminConsoleResearchCatalogGet(
           status::text, strategy_version, NULL, updated_at, trial_id::text
         FROM trader_strategy_candidates WHERE ${organizationFilter(query)}`;
       const result = await tx.execute(sql`WITH catalogue AS (${selection})
-        SELECT *, count(*) OVER()::text AS total FROM catalogue ORDER BY observed_at DESC NULLS LAST, id LIMIT ${query.limit}`);
+        SELECT *, count(*) OVER()::text AS total FROM catalogue
+        WHERE (${query.status ?? null}::text IS NULL OR (${query.status ?? null} = 'inactive' AND kind = 'campaign' AND state IN ('DRAFT', 'PAUSED', 'ARCHIVED'))) ORDER BY observed_at DESC NULLS LAST, id LIMIT ${query.limit}`);
       const rows = Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
       const items: ResearchCatalogItem[] = rows.map((row) => ({
         id: String(row.id),
