@@ -3,6 +3,7 @@ import { RenderAckMarker } from "@/components/trader/admin-console/data/render-a
 import {
   ConsoleBadge,
   ConsoleEmpty,
+  DetailLink,
   EvidenceTime,
 } from "@/components/trader/admin-console/primitives/console-ui";
 import { ORDER_STATUS_LABELS } from "@/lib/trader/admin-console/read-models/order-trace";
@@ -26,7 +27,13 @@ export function orderRowView(row: Omit<OrderRowView, "label">): OrderRowView {
     label: ORDER_STATUS_LABELS[row.state as keyof typeof ORDER_STATUS_LABELS] ?? row.state,
   };
 }
-export function OrdersPanel({ rows }: { rows: readonly OrderRowView[] }) {
+export function OrdersPanel({
+  rows,
+  onSelect,
+}: {
+  rows: readonly OrderRowView[];
+  onSelect?: (id: string) => void;
+}) {
   if (!rows.length) return <ConsoleEmpty title="Ордеров в выбранном охвате нет" />;
   return (
     <div className="overflow-x-auto">
@@ -53,7 +60,11 @@ export function OrdersPanel({ rows }: { rows: readonly OrderRowView[] }) {
               className="hover:bg-waia-elevated/20"
             >
               <td className="px-5 py-4">
-                <p className="font-medium">{row.symbol}</p>
+                {onSelect ? (
+                  <DetailLink onClick={() => onSelect(row.id)}>{row.symbol}</DetailLink>
+                ) : (
+                  <p className="font-medium">{row.symbol}</p>
+                )}
                 <p className="text-waia-fg-muted mt-1 text-[10px]">{row.mode}</p>
                 {row.entityVersion ? (
                   <RenderAckMarker

@@ -14,6 +14,15 @@ import { quoteSetDigest } from "@/lib/trader/admin-console/money/quotes";
 
 export type ObservationEvidence = { id: string; payload: unknown; recordedAt: string };
 export type AccountFinance = OverviewAccount & {
+  assets?: {
+    asset: string;
+    free: string;
+    locked: string;
+    value: string | null;
+    state: AdminDataState;
+    reasons: string[];
+  }[];
+  observationStatus?: string | null;
   organizationId: string | null;
   venue: string;
   exchangeAccountId: string;
@@ -55,6 +64,8 @@ export function buildAccountFinance(input: {
   const { group } = input;
   const result: AccountFinance = {
     id: `${group.venue}:${group.exchangeAccountId}`,
+    assets: [],
+    observationStatus: null,
     organizationId: group.conflict ? null : group.organizationIds[0]!,
     venue: group.venue,
     exchangeAccountId: group.exchangeAccountId,
@@ -114,6 +125,7 @@ export function buildAccountFinance(input: {
     }
   };
   const latest = parse(input.latest);
+  result.observationStatus = latest?.status ?? null;
   const complete = (observation: ReturnType<typeof parse>) =>
     observation?.status === "COMPLETE" &&
     observation.balances.status === "COMPLETE" &&
@@ -162,6 +174,29 @@ export function buildAccountFinance(input: {
   const inclusion = equityInclusion(valued.reasons, valued.equity);
   return {
     ...result,
+    observationStatus: latest?.status ?? null,
+    assets: observation.balances.values!.map((balance) => {
+      const assetValue = valueObservation({
+        observationId: selected.id,
+        recordedAt: selected.recordedAt,
+        balances: [balance],
+        quotes: input.quotes,
+        lots: [],
+        lotsRevision: input.lotsRevision,
+        currency: input.currency,
+        nowMs: input.nowMs,
+      });
+      return {
+        asset: balance.asset,
+        free: balance.free,
+        locked: balance.locked,
+        value: assetValue.excludedAssets.includes(balance.asset.toUpperCase())
+          ? null
+          : assetValue.equity,
+        state: observationStale ? ("stale" as const) : assetValue.state,
+        reasons: assetValue.reasons,
+      };
+    }),
     valuationKey: adminRevision({
       valuation: valued.valuationKey,
       latest: input.latest.id,

@@ -108,7 +108,45 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await expect(page.locator("main")).not.toContainText(accounts[1]);
     await page.getByRole("button", { name: `HTX · ${accounts[0]}`, exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    await page.getByRole("button", { name: "Закрыть", exact: true }).click();
+    const accountDialog = page.getByRole("dialog");
+    await expect(
+      accountDialog.getByRole("table", { name: "Активы счёта", exact: true }),
+    ).toBeVisible();
+    await expect(accountDialog.getByText("Подключение", { exact: true })).toBeVisible();
+    for (const [tabLabel, evidence] of [
+      ["Ордера и сделки", "Все ордера периода"],
+      ["Стратегии", "Стратегии и версии"],
+      ["Риск и Guardian", "Сохранённое состояние Risk"],
+      ["Биллинг", "Счета на оплату"],
+      ["События", "Ключи подключения"],
+    ]) {
+      await accountDialog.getByRole("button", { name: tabLabel, exact: true }).click();
+      await expect(
+        accountDialog.getByRole("heading", { name: evidence, exact: true }),
+      ).toBeVisible();
+      await expect(accountDialog.locator('[data-reason="ADMIN_SCOPE_MISMATCH"]')).toHaveCount(0);
+      await expect(accountDialog.locator('[data-reason="ADMIN_HTTP_500"]')).toHaveCount(0);
+    }
+    await accountDialog.getByRole("button", { name: "Ордера и сделки", exact: true }).click();
+    await accountDialog.getByRole("button", { name: "QA0BTC0", exact: true }).click();
+    const orderDialog = page.getByRole("dialog", { name: "Ордер · QA0BTC0", exact: true });
+    await expect(orderDialog).toBeVisible();
+    await expect(orderDialog.locator('[data-reason="LEGACY_ORDER_NO_V2_BINDING"]')).toBeVisible();
+    await expect(
+      orderDialog.getByRole("heading", { name: "Исполнения", exact: true }),
+    ).toBeVisible();
+    await expect(orderDialog.getByRole("button")).toHaveCount(1);
+    await orderDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await expect(orderDialog).not.toBeVisible();
+    await accountDialog.getByRole("button", { name: "Портфель", exact: true }).click();
+    expect((await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations).toEqual(
+      [],
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("account-details-real-postgres.png"),
+      fullPage: true,
+    });
+    await accountDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
     await expect(page).not.toHaveURL(/sel=/);
     await page.goBack();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -154,6 +192,35 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         result.violations.filter((row) => row.impact === "critical" || row.impact === "serious"),
         path,
       ).toEqual([]);
+      if (path === "clients") {
+        await page.getByRole("button", { name: clients[0].name, exact: true }).click();
+        const clientDialog = page.getByRole("dialog", { name: clients[0].name, exact: true });
+        for (const [label, heading] of [
+          ["Биржевые счета", "Биржевые счета клиента"],
+          ["Результаты", "История капитала и результата"],
+          ["Счета на оплату", "Счета на оплату"],
+          ["Платежи", "Платежи AI-TRADER"],
+          ["Отчётные периоды", "Отчётные периоды"],
+          ["История", "Сохранённая история клиента"],
+        ]) {
+          await clientDialog.getByRole("button", { name: label, exact: true }).click();
+          await expect(
+            clientDialog.getByRole("heading", { name: heading, exact: true }),
+          ).toBeVisible();
+          await expect(clientDialog).not.toContainText(accounts[1]);
+        }
+        await expect(clientDialog).toContainText("Добавлен ключ подключения");
+        await clientDialog.getByRole("button", { name: "Сводка", exact: true }).click();
+        await expect(clientDialog).toContainText("12 540,125");
+        expect(
+          (await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations,
+        ).toEqual([]);
+        await page.screenshot({
+          path: testInfo.outputPath("client-details-real-postgres.png"),
+          fullPage: true,
+        });
+        await clientDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+      }
       await page.screenshot({
         path: testInfo.outputPath(`${path}-real-postgres.png`),
         fullPage: true,

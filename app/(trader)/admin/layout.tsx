@@ -33,7 +33,7 @@ export default async function TraderAdminLayout({
     await deps.disposeRuntimeDb(runtime);
   }
   return (
-    <div className="dark bg-waia-field text-waia-fg-primary min-h-dvh w-full font-sans">
+    <div className="dark bg-waia-field text-waia-fg min-h-dvh w-full font-sans">
       <AdminQueryProvider>
         <AdminReadContextProvider>
           <AdminConsoleShell>{children}</AdminConsoleShell>

@@ -28,6 +28,7 @@ export function presentClient(input: {
   ownerEmailNote: string;
   registeredAt: string | null;
   connectedSince: string;
+  connectedSinceValue: string | null;
   access: ReturnType<typeof clientAccessStatus>;
 } | null {
   if (!includeClient(input)) return null;
@@ -38,6 +39,7 @@ export function presentClient(input: {
     ownerEmailNote: OWNER_EMAIL_NOTE,
     registeredAt: input.registeredAt,
     connectedSince: connectedSinceLabel(input.firstConnectedAt),
+    connectedSinceValue: input.firstConnectedAt,
     access: clientAccessStatus(input),
   };
 }

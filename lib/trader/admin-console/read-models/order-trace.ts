@@ -101,7 +101,7 @@ export function buildOrderTrace(input: OrderTraceInput): {
       {
         step: "order_events",
         state: input.events.length > 0 ? "ok" : "unavailable",
-        reason: null,
+        reason: input.events.length > 0 ? null : "ORDER_EVENTS_MISSING",
         recordId: input.events[0]?.id ?? null,
         at: input.events[0]?.at ?? null,
       },
