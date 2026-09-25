@@ -461,7 +461,7 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
       news = randomUUID();
     await client`INSERT INTO trader_intelligence_cycle_envelope (id,organization_id,run_id,cycle_id,symbol,evaluated_at,historical_profile_id,historical_profile_digest,matrix_digest,terminal_reason_code,input_semantic_digest,output_semantic_digest,content_digest,schema_version) VALUES (${cycle}::uuid,${binding.organizationId}::uuid,${randomUUID()},'cycle-fixture','BTCUSDT',${iso(now - 60000)}::timestamptz,'fixture','fixture','fixture','NO_TRADE','fixture','fixture','fixture','fixture')`;
     await client`INSERT INTO trader_admin_news_item (id,dedupe_key,source,url,published_at,first_observed_at,symbols,category,current_version) VALUES (${news}::uuid,${news},'Fixture','https://example.invalid/news',${iso(now - 60000)}::timestamptz,${iso(now - 60000)}::timestamptz,'{}','news',1)`;
-    await client`INSERT INTO trader_admin_news_item_version (news_item_id,version,title,summary,content_hash,observed_at) VALUES (${news}::uuid,1,'A saved news title',NULL,${news},${iso(now - 60000)}::timestamptz)`;
+    await client`INSERT INTO trader_admin_news_item_version (news_item_id,version,title,summary,content_hash,observed_at) VALUES (${news}::uuid,1,'<![CDATA[A saved news title]]>','<![CDATA[Forecast < 1 & > 0]]>',${news},${iso(now - 60000)}::timestamptz)`;
     const query = new URLSearchParams({
       organization_id: binding.organizationId,
       mode: "all",
@@ -507,8 +507,22 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
     );
     expect(newsResponse.status).toBe(200);
     expect((newsResponse.body as { data: { items: unknown[] } }).data.items).toContainEqual(
-      expect.objectContaining({ id: news, title: "A saved news title" }),
+      expect.objectContaining({
+        id: news,
+        title: "A saved news title",
+        summary: "Forecast < 1 & > 0",
+        source: "Fixture",
+        url: "https://example.invalid/news",
+        publishedAt: iso(now - 60000),
+        observedAt: iso(now - 60000),
+      }),
     );
+    const stored =
+      await client`SELECT title,summary FROM trader_admin_news_item_version WHERE news_item_id=${news}::uuid AND version=1`;
+    expect(stored[0]).toEqual({
+      title: "<![CDATA[A saved news title]]>",
+      summary: "<![CDATA[Forecast < 1 & > 0]]>",
+    });
   });
   it("strategy details preserve version/mode boundaries and the exact period fee semantics", async () => {
     const binding = await seed();
