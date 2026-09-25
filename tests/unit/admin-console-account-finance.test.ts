@@ -42,6 +42,37 @@ const context = {
 };
 
 describe("observed account finance", () => {
+  it("values a production-sized zero-filled catalog without unrelated price contamination", () => {
+    const latest = evidence("600.02906483");
+    const values = [
+      ...latest.payload.balances.values!,
+      ...Array.from({ length: 1675 }, (_, i) => ({
+        asset: `ZERO${i}`,
+        free: "0",
+        locked: "0",
+        total: "0",
+      })),
+    ];
+    latest.payload = {
+      ...latest.payload,
+      balances: { ...latest.payload.balances, values },
+      holdings: values,
+    };
+    const quotes = Array.from({ length: 592 }, (_, i) => ({
+      asset: `ZERO${i}`,
+      price: "0.000000001",
+      source: "htx",
+      sourceTs: new Date(now).toISOString(),
+      observedAt: new Date(now).toISOString(),
+    }));
+    const row = account({ latest, quotes });
+    expect(row).toMatchObject({ state: "ok", included: true, equity: "600.02906483", reasons: [] });
+    expect(row.assets).toHaveLength(1676);
+    expect(row.assets!.every((a) => a.state === "ok" && a.reasons.length === 0)).toBe(true);
+    expect(row.assets!.filter((a) => a.asset !== "USDT").every((a) => a.value === "0")).toBe(true);
+    expect(buildOverview([row], context).finance.equity.value?.amount).toBe("600.02906483");
+  });
+
   it("keeps observed zero, missing, invalid and failed observations distinct", () => {
     expect(account({ latest: evidence("0") })).toMatchObject({
       equity: "0",

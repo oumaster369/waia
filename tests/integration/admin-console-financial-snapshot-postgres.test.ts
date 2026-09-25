@@ -105,6 +105,16 @@ describe.skipIf(!enabled)("scoped financial snapshot on Postgres", () => {
       connectedSince: new Date(now).toISOString(),
     });
   });
+  it("keeps exact cash and its valuation evidence when an unrelated tiny market quote arrives", async () => {
+    const before = (await read(a)).value.accounts[0]!;
+    const asset = `UNHELD${adminId.replaceAll("-", "")}`;
+    await client`INSERT INTO trader_admin_market_quote_latest (source,symbol,base,quote,last,price_definition,source_ts,observed_at)
+      VALUES ('htx',${`${asset}USDT`},${asset},'USDT','0.000000001','last',${new Date(now).toISOString()}::timestamptz,${new Date(now).toISOString()}::timestamptz)`;
+    const after = (await read(a)).value.accounts[0]!;
+    expect(after.equity).toBe("9007199254740993.00000001");
+    expect(after.valuationKey).toBe(before.valuationKey);
+    expect(after.reasons).not.toContain("MONEY_PRECISION_UNSUPPORTED");
+  });
   it("does not repeat real funds in paper or history", async () => {
     for (const mode of ["paper", "history"]) {
       const snapshot = await read(a, mode);

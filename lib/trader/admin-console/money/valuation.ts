@@ -84,9 +84,9 @@ function quoteByAsset(quotes: readonly AssetQuote[], nowMs: number): Map<string,
     const spot = asset !== "USDT" && quote.source === "htx" && denomination === "USDT";
     if (
       spot &&
+      !selected.has(asset) &&
       /^\d+(?:\.\d+)?$/.test(quote.price) &&
-      compareDecimal(quote.price, "0") > 0 &&
-      !selected.has(asset)
+      compareDecimal(quote.price, "0") > 0
     )
       selected.set(asset, quote);
   }
@@ -112,20 +112,38 @@ function exactDecimal(value: string): string {
 }
 
 export function valueObservation(input: ValuationInput): ValuationResult {
+  let relevantQuotes = input.quotes;
   try {
+    const balances = input.balances.map((balance) => ({
+      ...balance,
+      free: exactDecimal(balance.free),
+      locked: exactDecimal(balance.locked),
+    }));
+    const lots = input.lots.map((lot) => ({
+      ...lot,
+      remainingQty: exactDecimal(lot.remainingQty),
+      avgCost: exactDecimal(lot.avgCost),
+    }));
+    const assets = new Set(
+      balances
+        .filter(
+          (balance) =>
+            compareDecimal(addDecimal(balance.free, balance.locked), "0") !== 0 &&
+            balance.asset.toUpperCase() !== "USDT",
+        )
+        .map((balance) => balance.asset.toUpperCase()),
+    );
+    for (const lot of lots) if (lot.accountMatched) assets.add(lot.asset.toUpperCase());
+    if (input.currency === "USD") assets.add("USDT");
+    // Only prices used by this valuation can affect its result or precision state.
+    relevantQuotes = input.quotes
+      .filter((quote) => assets.has(quote.asset.toUpperCase()))
+      .map((quote) => ({ ...quote, price: exactDecimal(quote.price) }));
     return computeObservation({
       ...input,
-      balances: input.balances.map((balance) => ({
-        ...balance,
-        free: exactDecimal(balance.free),
-        locked: exactDecimal(balance.locked),
-      })),
-      lots: input.lots.map((lot) => ({
-        ...lot,
-        remainingQty: exactDecimal(lot.remainingQty),
-        avgCost: exactDecimal(lot.avgCost),
-      })),
-      quotes: input.quotes.map((quote) => ({ ...quote, price: exactDecimal(quote.price) })),
+      balances,
+      lots,
+      quotes: relevantQuotes,
     });
   } catch (error) {
     if (!(error instanceof InvalidDecimalError)) throw error;
@@ -146,7 +164,7 @@ export function valueObservation(input: ValuationInput): ValuationResult {
       valuationKey: valuationKey({
         observationId: input.observationId,
         lotsRevision: input.lotsRevision,
-        quoteSetDigest: quoteSetDigest(input.quotes),
+        quoteSetDigest: quoteSetDigest(relevantQuotes),
         methodVersion: "MONEY_PRECISION_UNSUPPORTED",
       }),
     };
