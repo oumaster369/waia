@@ -300,108 +300,121 @@ async function insertDiagnostic(
   const now = new Date();
   const environment = diagnosticsEnvironment();
   const release = process.env.WAIA_RELEASE_SHA?.trim() || null;
-  await db.insert(traderAdminDiagnosticEvent).values({
-    id: randomUUID(),
-    occurredAt: now,
-    receivedAt: now,
-    service: input.service,
-    environment,
-    release,
-    severity: "error",
-    errorClass: error.name,
-    messageRedacted: message,
-    stackRedacted: stack,
-    fingerprint,
-    route: null,
-    organizationId: null,
-    exchangeAccountId: null,
-    strategyId: null,
-    stage: null,
-    cycleId: null,
-    orderId: null,
-    traceId: null,
-    contextJson: input.jobKey ? { jobKey: input.jobKey } : {},
-  });
-  const existing = await db
-    .select({
-      id: traderAdminIncident.id,
-      status: traderAdminIncident.status,
-      occurrences: traderAdminIncident.occurrences,
-      stateVersion: traderAdminIncident.stateVersion,
-    })
-    .from(traderAdminIncident)
-    .where(
-      and(
-        eq(traderAdminIncident.environment, environment),
-        eq(traderAdminIncident.service, input.service),
-        eq(traderAdminIncident.fingerprint, fingerprint),
-      ),
-    )
-    .limit(1);
-  const current = existing[0];
-  const next = incidentAfterDiagnostic(
-    current
-      ? {
-          status: current.status as "new" | "resolved",
-          occurrences: current.occurrences,
-          stateVersion: current.stateVersion,
-        }
-      : null,
-  );
-  if (!current) {
-    const id = randomUUID();
-    await db.insert(traderAdminIncident).values({
-      id,
-      environment,
-      service: input.service,
-      fingerprint,
-      title: message.slice(0, 200),
-      severity: "error",
-      status: next.status,
-      firstSeenAt: now,
-      lastSeenAt: now,
-      occurrences: next.occurrences,
-      affectedAccounts: 0,
-      firstRelease: release,
-      lastRelease: release,
-      stateVersion: next.stateVersion,
-    });
-    if (next.history) {
-      await db.insert(traderAdminIncidentEvent).values({
+  await db.transaction(
+    async (tx) => {
+      // Serialize first observations too; a row lock alone cannot lock an absent
+      // incident. Re-read under the row lock shared with guarded operator commands.
+      const identity = JSON.stringify([environment, input.service, fingerprint]);
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`admin-incident:${identity}`}, 0))`,
+      );
+      await tx.insert(traderAdminDiagnosticEvent).values({
         id: randomUUID(),
-        incidentId: id,
-        fromStatus: next.history.from,
-        toStatus: next.history.to,
-        actorUserId: null,
-        reason: "diagnostic",
-        evidence: null,
-        createdAt: now,
+        occurredAt: now,
+        receivedAt: now,
+        service: input.service,
+        environment,
+        release,
+        severity: "error",
+        errorClass: error.name,
+        messageRedacted: message,
+        stackRedacted: stack,
+        fingerprint,
+        route: null,
+        organizationId: null,
+        exchangeAccountId: null,
+        strategyId: null,
+        stage: null,
+        cycleId: null,
+        orderId: null,
+        traceId: null,
+        contextJson: input.jobKey ? { jobKey: input.jobKey } : {},
       });
-    }
-    return;
-  }
-  await db
-    .update(traderAdminIncident)
-    .set({
-      status: next.status,
-      lastSeenAt: now,
-      occurrences: next.occurrences,
-      lastRelease: release,
-      stateVersion: next.stateVersion,
-    })
-    .where(eq(traderAdminIncident.id, current.id));
-  if (next.history) {
-    await db.insert(traderAdminIncidentEvent).values({
-      id: randomUUID(),
-      incidentId: current.id,
-      fromStatus: next.history.from,
-      toStatus: next.history.to,
-      actorUserId: null,
-      reason: "diagnostic",
-      evidence: null,
-      createdAt: now,
-    });
-  }
+      const existing = await tx
+        .select({
+          id: traderAdminIncident.id,
+          status: traderAdminIncident.status,
+          occurrences: traderAdminIncident.occurrences,
+          stateVersion: traderAdminIncident.stateVersion,
+        })
+        .from(traderAdminIncident)
+        .where(
+          and(
+            eq(traderAdminIncident.environment, environment),
+            eq(traderAdminIncident.service, input.service),
+            eq(traderAdminIncident.fingerprint, fingerprint),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      const current = existing[0];
+      const next = incidentAfterDiagnostic(
+        current
+          ? {
+              status: current.status as "new" | "resolved",
+              occurrences: current.occurrences,
+              stateVersion: current.stateVersion,
+            }
+          : null,
+      );
+      if (!current) {
+        const id = randomUUID();
+        await tx.insert(traderAdminIncident).values({
+          id,
+          environment,
+          service: input.service,
+          fingerprint,
+          title: message.slice(0, 200),
+          severity: "error",
+          status: next.status,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          occurrences: next.occurrences,
+          affectedAccounts: 0,
+          firstRelease: release,
+          lastRelease: release,
+          stateVersion: next.stateVersion,
+        });
+        if (next.history) {
+          await tx.insert(traderAdminIncidentEvent).values({
+            id: randomUUID(),
+            incidentId: id,
+            fromStatus: next.history.from,
+            toStatus: next.history.to,
+            actorUserId: null,
+            reason: "diagnostic",
+            evidence: null,
+            createdAt: new Date(),
+          });
+        }
+        return;
+      }
+      await tx
+        .update(traderAdminIncident)
+        .set({
+          status: next.status,
+          lastSeenAt: sql`greatest(${traderAdminIncident.lastSeenAt}, ${now.toISOString()}::timestamptz)`,
+          resolvedAt: current.status === "resolved" ? null : undefined,
+          occurrences: next.occurrences,
+          lastRelease: release,
+          stateVersion: next.stateVersion,
+        })
+        .where(eq(traderAdminIncident.id, current.id));
+      if (next.history) {
+        await tx.insert(traderAdminIncidentEvent).values({
+          id: randomUUID(),
+          incidentId: current.id,
+          fromStatus: next.history.from,
+          toStatus: next.history.to,
+          actorUserId: null,
+          reason: "diagnostic",
+          evidence: null,
+          createdAt: new Date(),
+        });
+      }
+    },
+    { isolationLevel: "read committed" },
+  );
 }
 
 async function retainBatch(db: AdminPostgresDb, now: Date): Promise<number> {
