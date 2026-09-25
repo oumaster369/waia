@@ -28,6 +28,9 @@ on:
       - "scripts/postgres-validation/**"
       - "lib/trader/execution/v2/**"
       - "lib/trader/risk/v2/**"
+      - "lib/trader/risk/limits/**"
+      - "lib/trader/paper/build-worker-deps.ts"
+      - "tests/integration/postgres-risk-limits-bootstrap.test.ts"
       - "lib/trader/reality/v2/**"
       - "tests/integration/postgres-execution-v2.test.ts"
       - "tests/integration/postgres-risk-v2.test.ts"
@@ -137,6 +140,7 @@ jobs:
           pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/capital-postgres-results.json \
             tests/integration/postgres-execution-v2.test.ts \
             tests/integration/postgres-risk-v2.test.ts \
+            tests/integration/postgres-risk-limits-bootstrap.test.ts \
             tests/integration/postgres-reality-v2.test.ts \
             tests/integration/postgres-canonical-decision-verification-v2.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json

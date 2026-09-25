@@ -82,6 +82,17 @@ describe("trader risk limits tenant isolation (DEE-239 / ADR-0007)", () => {
     expect(crossOrgRead?.id).not.toBe(orgARow!.id);
   });
 
+  it("rejects an outsider actor before reading or changing another org profile", async () => {
+    const service = createSqliteRiskLimitsService(getDb());
+    const outsider = { organizationId: orgA, userId: USER_B };
+    const before = await service.getLimitsForOrg(requireOrgContext(orgA));
+    await expect(service.getLimitsForOrg(outsider)).rejects.toThrow("ORG_MEMBERSHIP_REQUIRED");
+    await expect(service.getOrCreateLimitsForOrg(outsider)).rejects.toThrow("ORG_MEMBERSHIP_REQUIRED");
+    await expect(service.upsertLimitsForOrg(outsider, DEFAULT_ORG_RISK_LIMITS)).rejects.toThrow("ORG_MEMBERSHIP_REQUIRED");
+    expect(await service.getLimitsForOrg(requireOrgContext(orgA))).toEqual(before);
+    await expect(service.getLimitsForOrg({ organizationId: orgA, userId: USER_A })).resolves.not.toBeNull();
+  });
+
   it("empty organization id throws OrgScopeError", () => {
     expect(() => requireOrgContext("")).toThrow(OrgScopeError);
   });

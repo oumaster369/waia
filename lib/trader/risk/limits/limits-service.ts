@@ -9,7 +9,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import type { WaiaDb } from "@/db/types";
+import { runSqliteTransaction, type WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { writeTraderAuditLogPostgres, writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
@@ -17,7 +17,10 @@ import {
   createPostgresRiskLimitsRepository,
   createSqliteRiskLimitsRepository,
 } from "@/lib/trader/risk/limits/repository-adapters";
+import { insertLimitsRowIfAbsentPostgres, getLimitsRowForScopePostgres } from "@/lib/trader/risk/limits/repository-postgres";
+import { insertLimitsRowIfAbsentSqlite, getLimitsRowForScopeSqlite } from "@/lib/trader/risk/limits/repository-sqlite";
 import type {
+  RiskLimitsRow,
   OrgRiskLimitsMetadata,
   OrgRiskLimitsScope,
   RiskLimitsService,
@@ -43,7 +46,8 @@ import {
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
-type PgRiskLimitsExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgRiskLimitsExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update"> &
+  Partial<Pick<WaiaPostgresDb, "transaction">>;
 
 const ORG_SCOPE: OrgRiskLimitsScope = {
   scopeType: "organization",
@@ -162,7 +166,7 @@ export function createRiskLimitsService(deps: RiskLimitsServiceDeps): RiskLimits
   return {
     async getLimitsForOrg(context: OrgContext): Promise<OrgRiskLimitsMetadata | null> {
       const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      await assertMembershipIfNeeded({ ...scoped, userId: context.userId }, deps.assertMembership);
 
       const row = await deps.repository.getLimitsRowForScope(scoped, ORG_SCOPE);
       return row ? toOrgRiskLimitsMetadata(row) : null;
@@ -170,16 +174,16 @@ export function createRiskLimitsService(deps: RiskLimitsServiceDeps): RiskLimits
 
     async getOrCreateLimitsForOrg(context: OrgContext): Promise<OrgRiskLimitsMetadata> {
       const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      await assertMembershipIfNeeded({ ...scoped, userId: context.userId }, deps.assertMembership);
 
       const existing = await deps.repository.getLimitsRowForScope(scoped, ORG_SCOPE);
       if (existing) {
         return toOrgRiskLimitsMetadata(existing);
       }
 
-      const candidate = normalizeAndValidateRiskLimitsInput(DEFAULT_ORG_RISK_LIMITS);
-      const result = await persistLimitsChange(deps, scoped, candidate);
-      return result.metadata;
+      // Do not route initialization through upsert: a concurrent operator
+      // profile must win without any defaults, version or audit overwrite.
+      return deps.initializeLimitsForOrg(scoped);
     },
 
     async upsertLimitsForOrg(
@@ -187,7 +191,7 @@ export function createRiskLimitsService(deps: RiskLimitsServiceDeps): RiskLimits
       input: UpsertOrgRiskLimitsInput,
     ): Promise<OrgRiskLimitsMetadata> {
       const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      await assertMembershipIfNeeded({ ...scoped, userId: context.userId }, deps.assertMembership);
 
       const candidate = normalizeAndValidateRiskLimitsInput(input);
       const result = await persistLimitsChange(deps, scoped, candidate, input);
@@ -198,10 +202,24 @@ export function createRiskLimitsService(deps: RiskLimitsServiceDeps): RiskLimits
 
 export function createSqliteRiskLimitsService(
   db: WaiaDb,
-  deps: Partial<RiskLimitsServiceDeps> = {},
+  deps: Omit<Partial<RiskLimitsServiceDeps>, "writeAudit"> & {
+    writeAudit?: (input: TraderAuditInput) => string;
+  } = {},
 ): RiskLimitsService {
   return createRiskLimitsService({
     repository: deps.repository ?? createSqliteRiskLimitsRepository(db),
+    initializeLimitsForOrg: deps.initializeLimitsForOrg ?? ((context) =>
+      runSqliteTransaction(db, (tx) => {
+        const inserted = insertLimitsRowIfAbsentSqlite(tx, context, ORG_SCOPE, defaultRowInput());
+        if (inserted) {
+          (deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(tx, input)))(
+            initializationAudit(context, inserted),
+          );
+        }
+        const row = inserted ?? getLimitsRowForScopeSqlite(tx, context, ORG_SCOPE);
+        if (!row) throw new Error("[trader] risk limits initialization unavailable");
+        return toOrgRiskLimitsMetadata(row);
+      })),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
     assertMembership:
       deps.assertMembership ??
@@ -217,11 +235,40 @@ export function createPostgresRiskLimitsService(
 ): RiskLimitsService {
   return createRiskLimitsService({
     repository: deps.repository ?? createPostgresRiskLimitsRepository(ex),
+    initializeLimitsForOrg: deps.initializeLimitsForOrg ?? (async (context) => {
+      if (!ex.transaction) {
+        throw new Error("RISK_LIMITS_INITIALIZATION_TRANSACTION_REQUIRED");
+      }
+      return ex.transaction(async (tx) => {
+        const inserted = await insertLimitsRowIfAbsentPostgres(tx, context, ORG_SCOPE, defaultRowInput());
+        if (inserted) {
+          await (deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(tx, input)))(
+            initializationAudit(context, inserted),
+          );
+        }
+        // After ON CONFLICT waits, a fresh READ COMMITTED statement sees the
+        // winning committed profile. Never recover with a default UPDATE.
+        const row = inserted ?? await getLimitsRowForScopePostgres(tx, context, ORG_SCOPE);
+        if (!row) throw new Error("[trader] risk limits initialization unavailable");
+        return toOrgRiskLimitsMetadata(row);
+      });
+    }),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(ex, input)),
     assertMembership:
       deps.assertMembership ??
       (async (context) => {
         await assertOrgMembershipPostgres(ex, context);
       }),
+  });
+}
+
+function defaultRowInput() {
+  return normalizedConfigToRowInput(normalizeAndValidateRiskLimitsInput(DEFAULT_ORG_RISK_LIMITS), 1);
+}
+
+function initializationAudit(context: OrgContext, row: RiskLimitsRow): TraderAuditInput {
+  return buildAuditInput(context, row.id, traderAuditActions.riskLimitsCreated, {
+    scopeType: row.scopeType,
+    configVersion: row.configVersion,
   });
 }

@@ -71,6 +71,35 @@ describe("trader risk limits service (DEE-239)", () => {
     );
   });
 
+  it("initialization never overwrites an existing strict profile", async () => {
+    const { service, writeAudit, context } = createService();
+    const strict = await service.upsertLimitsForOrg(context, {
+      ...DEFAULT_ORG_RISK_LIMITS, maxNotional: "1",
+    });
+    writeAudit.mockClear();
+    const results = await Promise.all(Array.from({ length: 8 }, () => service.getOrCreateLimitsForOrg(context)));
+    expect(results.every((result) => JSON.stringify(result) === JSON.stringify(strict))).toBe(true);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("concurrent first initializers produce one profile and one creation audit", async () => {
+    const { service, writeAudit, context } = createService();
+    const results = await Promise.all(Array.from({ length: 8 }, () => service.getOrCreateLimitsForOrg(context)));
+    expect(new Set(results.map((result) => result.id)).size).toBe(1);
+    expect(writeAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it("creation audit failure rolls back the new profile", async () => {
+    const context = requireOrgContext(orgA);
+    const service = createSqliteRiskLimitsService(getDb(), {
+      writeAudit: () => { throw new Error("INJECTED_AUDIT_FAILURE"); },
+    });
+    await expect(service.getOrCreateLimitsForOrg(context)).rejects.toThrow("INJECTED_AUDIT_FAILURE");
+    await expect(service.getLimitsForOrg(context)).resolves.toBeNull();
+    const retried = await createSqliteRiskLimitsService(getDb()).getOrCreateLimitsForOrg(context);
+    expect(retried.configVersion).toBe(1);
+  });
+
   it("upsertLimitsForOrg updates changed values and bumps configVersion", async () => {
     const { service, writeAudit, context } = createService();
 

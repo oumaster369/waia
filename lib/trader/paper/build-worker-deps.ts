@@ -16,7 +16,6 @@ import type {
   PaperLoopWorkerConfig,
 } from "@/lib/trader/paper/paper-loop-worker.types";
 import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
-import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { createPostgresRiskLimitsService } from "@/lib/trader/risk/limits/limits-service";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import type { TraderAuditInput } from "@/lib/trader/types";
@@ -100,11 +99,15 @@ export async function buildPaperLoopDepsFromEnv(
   const connector = new MockExchangeConnector();
   await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
 
-  const limits = createPostgresRiskLimitsService(db);
-  if (config.organizationId) {
-    await limits.upsertLimitsForOrg(requireOrgContext(config.organizationId), {
-      ...DEFAULT_ORG_RISK_LIMITS,
-    });
+  if (config.enabled) {
+    const limits = createPostgresRiskLimitsService(db);
+    try {
+      await limits.getOrCreateLimitsForOrg(requireOrgContext(config.organizationId));
+    } catch (error) {
+      // The caller cannot dispose a dependency bundle that was never returned.
+      await runtime._sql?.end({ timeout: 5 }).catch(() => {});
+      throw error;
+    }
   }
 
   const execution = createPostgresOrderExecutionService(db, {

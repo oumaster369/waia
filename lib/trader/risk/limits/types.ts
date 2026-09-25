@@ -99,6 +99,8 @@ export type RiskLimitsRepository = {
 
 export type RiskLimitsServiceDeps = {
   repository: RiskLimitsRepository;
+  /** Insert-only initialization and creation audit must commit atomically. */
+  initializeLimitsForOrg: (context: OrgContext) => Promise<OrgRiskLimitsMetadata>;
   writeAudit: (input: TraderAuditInput) => string | Promise<string>;
   assertMembership?: (context: OrgContext & { userId: string }) => void | Promise<void>;
 };
