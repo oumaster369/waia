@@ -17,16 +17,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidationAt: "2026-09-25T12:32:46.381986+00:00"
   blockedReason: null
-  nextAction: "Reproduce concurrent diagnostic/audit failures on local Postgres, apply the minimal transaction/locking correction, then integrate merged658 before publication."
+  nextAction: "Require all exact-head CI, guarded squash and verified merged-main publication, followed by the separately audited DEE-1094 projection repair."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -48,3 +48,7 @@ Files: this plan, lib/trader/admin-console/collectors/postgres-store.ts, tests/i
 ## Validation evidence
 
 Six real-Postgres tests fail against original code, including an actual guarded operator command being overwritten. A seventh test separately reproduces reversed resolution/recurrence history timestamps after waiting on the row lock. All seven pass after atomic persistence, locked re-read and recording history at the transition write time; diagnostic occurrence time remains unchanged. The combined six-file suite passes41tests. Changed-file lint and types pass; final merged-main readiness remains required. DEE-1094 separately owns the one proven pre-existing production count mismatch (three diagnostic rows versus one occurrence); this code change does not rewrite historical records.
+
+## Combined readiness
+
+Merged verified maina9c05e05 (#658) into this source without conflict, commit4346868e. All60combineddata tests and all5real-Postgres browser workflows pass (2.7m); lint0errors324pre-existing warnings, types, both graphs, canon/governance pass. Final Next/OpenNext build passes. Rendered preflight is checked before PR publication.
