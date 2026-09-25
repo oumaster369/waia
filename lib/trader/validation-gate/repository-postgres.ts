@@ -214,7 +214,7 @@ export async function updatePromotionGovernancePostgres(
     throw new Error("STRATEGY_PROMOTION_STATE_VERSION_MISMATCH");
   }
 
-  await ex
+  const changed = await ex
     .update(pgSchema.traderStrategyPromotionRecords)
     .set({
       state: patch.state,
@@ -233,7 +233,12 @@ export async function updatePromotionGovernancePostgres(
         orgScopedWhere(pgSchema.traderStrategyPromotionRecords.organizationId, scoped),
         eq(pgSchema.traderStrategyPromotionRecords.stateVersion, expectedStateVersion),
       ),
-    );
+    )
+    .returning({ id: pgSchema.traderStrategyPromotionRecords.id });
+
+  if (changed.length !== 1) {
+    throw new Error("STRATEGY_PROMOTION_STATE_VERSION_MISMATCH");
+  }
 
   const updated = await getPromotionRecordByIdPostgres(ex, scoped, recordId);
   if (!updated) {
