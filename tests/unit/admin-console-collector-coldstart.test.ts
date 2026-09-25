@@ -16,15 +16,16 @@ describe("collector cold start outside Next", () => {
       platform: "node",
       format: "cjs",
       packages: "external",
+      alias: { "@": process.cwd() },
       define: { "import.meta.url": "undefined" },
       logLevel: "silent",
     });
-    const execution = spawnSync(
-      process.execPath,
-      [
-        "-e",
+    const execution = spawnSync(process.execPath, ["-"], {
+      // Linux limits each argv entry to 128 KiB; the real collector bundle is
+      // larger. Send it over stdin so the same cold-start proof runs in CI.
+      input:
         bundle.outputFiles[0]!.text +
-          `
+        `
 (async()=>{let count=0;const {PgDialect}=require("drizzle-orm/pg-core");
 await module.exports.createPostgresCollectorStore({execute:async(statement)=>{
  const query=new PgDialect().sqlToQuery(statement);
@@ -32,13 +33,11 @@ await module.exports.createPostgresCollectorStore({execute:async(statement)=>{
  count++;return {count:0};
 }}).retain(new Date());if(count!==8)throw new Error("MISSING_RETENTION_BATCH");})().catch(e=>{console.error(e);process.exitCode=1;});
 `,
-      ],
-      {
-        cwd: process.cwd(),
-        env: { ...process.env, VITEST: "false", WAIA_POSTGRES_CLI: "" },
-        encoding: "utf8",
-      },
-    );
+      cwd: process.cwd(),
+      env: { ...process.env, VITEST: "false", WAIA_POSTGRES_CLI: "" },
+      encoding: "utf8",
+    });
+    expect(execution.error).toBeUndefined();
     expect(execution.stderr).toBe("");
     expect(execution.status).toBe(0);
   });
