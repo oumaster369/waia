@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1087",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1085",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Normalize console news text and translate persisted strategy evidence labels without rewriting history.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Serial integration: shared collector test file is reviewed after each delivery; source commits and prior acceptance retained."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+        "docs/plans/dee-1085-admin-news-text.md",
+        "lib/trader/admin-console/collectors/news-persist.ts",
+        "lib/trader/admin-console/handlers/news.ts",
+        "lib/trader/admin-console/news-text.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T1",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. Both children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact source diff, unchanged financial/authority semantics and cumulative tests."
+      ],
+      "expectedTests": [
+        "pnpm test --run targeted console collectors, finance and Postgres acceptance",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "sourceCommit": "f00877c218d11f46274be28049c34eb51b6648d6"
+    },
+    {
+      "issue": "DEE-1086",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Preserve the scheduled minute for collector dispatch while retaining actual evidence timestamps.",
+      "dependencies": ["DEE-1085"],
+      "dependencyEvidence": [
+        "Serial integration: shared collector test file is reviewed after each delivery; source commits and prior acceptance retained."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "custom-worker.ts",
+        "docs/plans/dee-1086-admin-collector-schedule.md",
+        "lib/trader/admin-console/collectors/run-due.ts",
+        "lib/trader/admin-console/collectors/schedule.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. Both children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact source diff, unchanged financial/authority semantics and cumulative tests."
+      ],
+      "expectedTests": [
+        "pnpm test --run targeted console collectors, finance and Postgres acceptance",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      },
+      "sourceCommit": "202b3edb44b5ab7146e1ca9288b074fa8dac54c2"
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Codex source self-review under explicit user delegation; new integration admission before source imports, not retrospective implementation admission."
+    }
+  },
+  "crossCuttingInvariants": [
+    "Eight Russian sections and all existing finance, authority and schema invariants unchanged.",
+    "No old news/receipt rewrite, no real trading or billing commands.",
+    "All exact final-head protected and applicable checks required."
+  ],
+  "rollbackStrategy": "Revert one integration squash and restore the prior verified financial Worker; no schema or historical data changes.",
+  "reviewDisposition": {
+    "authority": "Explicit user operational delegation.",
+    "independentReview": "Not performed; no automatic DEE-653 admission claimed.",
+    "mergePath": "Direct delegated operational self-acceptance.",
+    "unchangedGates": "Full exact-head CI, tests, scope validation and production verification."
+  }
+}
