@@ -13,6 +13,7 @@ import {
 } from "@/lib/trader/execution/fill-economics";
 import {
   EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
+  HISTORICAL_EXECUTION_SIMULATOR_VERSION,
   type HistoricalExecutionCheckpointSlice,
   type HistoricalExecutionEventClass,
   type HistoricalExecutionModelV1,
@@ -254,6 +255,7 @@ export function createHistoricalSimulatedExchange(
   function buildCheckpointSlice(): HistoricalExecutionCheckpointSlice {
     return {
       schemaVersion: "htr-wp17-execution-checkpoint/v1",
+      simulatorVersion: HISTORICAL_EXECUTION_SIMULATOR_VERSION,
       openOrders: [...openOrders.values()].map((entry) => ({
         orderId: entry.order.id,
         acceptedAtTs: entry.acceptedAtTs,
@@ -273,6 +275,15 @@ export function createHistoricalSimulatedExchange(
     slice: HistoricalExecutionCheckpointSlice,
     ordersById: Map<string, OrderRow>,
   ): void {
+    // Validate before clearing current state. Resuming old arithmetic under a
+    // new implementation would silently mix economics within one replay.
+    if (
+      slice.schemaVersion !== "htr-wp17-execution-checkpoint/v1" ||
+      slice.executionModelSchemaVersion !== model.schemaVersion ||
+      slice.simulatorVersion !== HISTORICAL_EXECUTION_SIMULATOR_VERSION
+    ) {
+      throw new Error("HISTORICAL_EXECUTION_CHECKPOINT_IDENTITY_MISMATCH");
+    }
     openOrders.clear();
     for (const row of slice.openOrders) {
       const order = ordersById.get(row.orderId);

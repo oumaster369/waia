@@ -2,6 +2,7 @@ import {
   EXECUTION_FACT_KIND_HISTORICAL_SIMULATED,
   HISTORICAL_EXECUTION_MODEL_ID,
   HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,
+  HISTORICAL_EXECUTION_SIMULATOR_VERSION,
   type CostedFillEconomics,
   type HistoricalExecutionModelV1,
   type SimulatedFillEvent,
@@ -31,16 +32,6 @@ export class FillEconomicsInvariantError extends Error {
 }
 
 const SIMULATOR_ID = "htr-historical-simulated-exchange" as const;
-const SIMULATOR_VERSION = "1.0.0" as const;
-
-function roundHalfUpScaled(scaled: bigint): bigint {
-  const negative = scaled < 0n;
-  const abs = negative ? -scaled : scaled;
-  const half = DECIMAL_SCALE_FACTOR / 2n;
-  const rounded = (abs + half) / DECIMAL_SCALE_FACTOR;
-  const result = rounded * DECIMAL_SCALE_FACTOR;
-  return negative ? -result : result;
-}
 
 /**
  * monetaryAmount = notional × bps / 10000 at scale-8 with HALF_UP.
@@ -63,9 +54,13 @@ function divideRoundHalfUp(numerator: string, denominator: string): string {
   if (den === 0n) {
     throw new FillEconomicsInvariantError("[trader] divide by zero in economics");
   }
-  const scaled = (num * DECIMAL_SCALE_FACTOR * 2n) / den;
-  const rounded = roundHalfUpScaled(scaled);
-  return formatDecimal(rounded / 2n);
+  const negative = num < 0n !== den < 0n;
+  const scaledMagnitude = (num < 0n ? -num : num) * DECIMAL_SCALE_FACTOR;
+  const divisor = den < 0n ? -den : den;
+  // Round once to the smallest scale-8 unit. Rounding the scaled quotient
+  // again to whole units would quantize the price adjustment to 0.5 steps.
+  const rounded = (scaledMagnitude + divisor / 2n) / divisor;
+  return formatDecimal(negative ? -rounded : rounded);
 }
 
 export function computeEconomicsContentDigest(
@@ -174,7 +169,7 @@ export function applyHistoricalExecutionEconomics(
     executionModelId: HISTORICAL_EXECUTION_MODEL_ID,
     executionModelSchemaVersion: HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION,
     simulatorId: SIMULATOR_ID,
-    simulatorVersion: SIMULATOR_VERSION,
+    simulatorVersion: HISTORICAL_EXECUTION_SIMULATOR_VERSION,
     sourceBarTimestamp: new Date(event.sourceBar.barCloseTime),
     sourceBarIndex: event.sourceBarIndex,
     acceptedAt: event.acceptedAt,

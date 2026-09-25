@@ -73,6 +73,7 @@ function fixture(runId: string) {
       stateKind: "MODELED_EXECUTION_REGISTRY", state: { receipts: [] } }),
     modeledExchangeSnapshot: createHistoricalSimulationDurableStateSnapshotV2({ ...identity, stateKind: "MODELED_EXCHANGE",
       state: { checkpoint: { schemaVersion: "htr-wp17-execution-checkpoint/v1", openOrders: [],
+        simulatorVersion: "1.0.1",
         executionModelSchemaVersion: "waia.trader.historical-execution-model.v1" }, openOrders: [] } }),
     accountingFrontierSnapshot: createHistoricalSimulationDurableStateSnapshotV2({ ...identity,
       stateKind: "ACCOUNTING_FRONTIER", state: { ...accountingBody,

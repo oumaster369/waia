@@ -237,6 +237,7 @@ function snapshots(cycleId: string, sequence: number) {
       state: {
         checkpoint: {
           schemaVersion: "htr-wp17-execution-checkpoint/v1",
+          simulatorVersion: "1.0.1",
           openOrders: [],
           executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
         },
@@ -861,6 +862,7 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
       state: {
         checkpoint: {
           schemaVersion: "htr-wp17-execution-checkpoint/v1",
+          simulatorVersion: "1.0.1",
           openOrders: [openOrder],
           executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
         },
@@ -929,6 +931,7 @@ describe("Historical Simulation V2 atomic cycle commit and durable resume founda
       state: {
         checkpoint: {
           schemaVersion: "htr-wp17-execution-checkpoint/v1",
+          simulatorVersion: "1.0.1",
           openOrders: [{ ...openOrder, remainingQty: "0.50000000" }],
           executionModelSchemaVersion: "waia.trader.historical-execution-model.v1",
         },
