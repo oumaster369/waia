@@ -37,7 +37,8 @@ export type AttributedOpenLot = {
 
 /** Base asset of a USDT spot symbol. Other quotes are not priced as USDT. */
 export function baseAssetFromUsdtSymbol(symbol: string): string | null {
-  if (symbol.endsWith("USDT") && symbol.length > 4) return symbol.slice(0, -4);
+  const normalized = symbol.toUpperCase().replace(/[\/_-]/g, "");
+  if (/^[A-Z0-9]+USDT$/.test(normalized) && normalized.length > 4) return normalized.slice(0, -4);
   return null;
 }
 
