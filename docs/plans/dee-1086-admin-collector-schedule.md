@@ -44,3 +44,7 @@ Extract the finite Cloudflare scheduled timestamp once and pass it solely as the
 Do not alter the payment watcher, its ordering, settlement or trading loops, cron expression, financial arithmetic, permissions, live gates, or database schema. The user's operational Human delegation covers this minimal shared-entrypoint repair; no policy ratification or independent review is claimed.
 
 Validate delayed news/Fear & Greed/retention and actual evidence timestamps, collector cold start, lint/types/build, OpenNext bundle, canon/governance and all exact-head CI. Deploy merged main and verify subsequently scheduled job receipts on the real database; prior missing receipts remain missing and are not backfilled.
+
+## Integration correction — DEE-1089
+
+PR #655 full CI exposed the omitted Reality consumer-content pin update. The independently reconstructed inventory remains 134 consumers with path digest `e07814e366d0b73f3398f20c75fe40abab1898d54f233577e3a0eb0fa67c3473` and 25 connector references. Against financial main2b1d, the only changed inventoried consumer is `lib/trader/admin-console/collectors/run-due.ts`, reviewed above for scheduled due selection with unchanged actual observation/cutoff time. Its reviewed combined content digest is `999b34af21c2096799158c1e0de29a5da35700b71b8e0b91090158f975525f6e`. Update only that pin; no source/path digest, count, membership, reference/disposition rules or validator changes. Require both Reality/Execution graph validators and the eight-test Reality graph suite before final CI.
