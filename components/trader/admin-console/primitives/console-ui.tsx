@@ -240,7 +240,7 @@ export function ConsoleDialog({
       )}
     >
       <header className="border-waia-divider bg-waia-field-mid sticky top-0 z-10 flex items-start justify-between gap-4 border-b px-6 py-5">
-        <div>
+        <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           <h2 id={titleId} className="text-lg font-semibold">
             {title}
           </h2>
@@ -255,7 +255,7 @@ export function ConsoleDialog({
           aria-label="Закрыть"
           disabled={!dismissible}
           onClick={onClose}
-          className="text-waia-fg-muted hover:bg-waia-elevated focus-visible:outline-waia-accent-cool rounded-lg p-1.5 focus-visible:outline-2 disabled:opacity-40"
+          className="text-waia-fg-muted hover:bg-waia-elevated focus-visible:outline-waia-accent-cool shrink-0 rounded-lg p-1.5 focus-visible:outline-2 disabled:opacity-40"
         >
           <X size={20} />
         </button>
