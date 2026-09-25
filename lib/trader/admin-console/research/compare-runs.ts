@@ -17,6 +17,7 @@ export function compareResearchRuns(runs: readonly ResearchCompareRun[]):
       ok: true;
       differences: string[];
       sameConditions: boolean;
+      unknownConditions: string[];
       profitability: { id: string; netPnl: string | null }[];
       forecastQuality: { id: string; forecastQuality: string | null }[];
     } {
@@ -25,10 +26,14 @@ export function compareResearchRuns(runs: readonly ResearchCompareRun[]):
     const values = new Set(runs.map((run) => run[field]));
     return values.size > 1;
   });
+  const unknownConditions = CONDITION_FIELDS.filter((field) =>
+    runs.some((run) => run[field] === null),
+  );
   return {
     ok: true,
+    unknownConditions: [...unknownConditions],
     differences: [...differences],
-    sameConditions: differences.length === 0,
+    sameConditions: differences.length === 0 && unknownConditions.length === 0,
     profitability: runs.map((run) => ({ id: run.id, netPnl: run.netPnl })),
     forecastQuality: runs.map((run) => ({ id: run.id, forecastQuality: run.forecastQuality })),
   };

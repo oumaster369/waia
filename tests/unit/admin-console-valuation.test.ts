@@ -36,6 +36,43 @@ function input(overrides: Partial<ValuationInput> = {}): ValuationInput {
 }
 
 describe("admin console valuation", () => {
+  it("uses a fresh USD fallback instead of a stale preferred source and preserves its provenance", () => {
+    const stale = {
+      asset: "USDT",
+      source: "coinbase",
+      quoteCurrency: "USD" as const,
+      price: "2",
+      sourceTs: new Date(now - 240000).toISOString(),
+      observedAt: new Date(now).toISOString(),
+    };
+    const fresh = {
+      ...stale,
+      source: "kraken",
+      price: "0.99",
+      sourceTs: new Date(now).toISOString(),
+    };
+    for (const quotes of [
+      [stale, fresh],
+      [fresh, stale],
+    ]) {
+      expect(
+        valueObservation(
+          input({
+            currency: "USD",
+            balances: [{ asset: "USDT", free: "10", locked: "0" }],
+            lots: [],
+            quotes,
+          }),
+        ),
+      ).toMatchObject({
+        state: "ok",
+        equity: "9.9",
+        method: "usdt_usd:kraken",
+        quoteSet: [fresh],
+        reasons: [],
+      });
+    }
+  });
   it("refuses a zero market quote and keeps excess Trader lots out of attributed PnL", () => {
     const zero = valueObservation(
       input({

@@ -6,7 +6,7 @@ import { useAdminReadContext } from "@/components/trader/admin-console/data/read
 import type { AdminSection } from "@/components/trader/admin-console/navigation/sections";
 
 export const controlClass =
-  "h-9 rounded-lg border border-waia-rim bg-waia-field-mid px-3 text-sm text-waia-fg-primary outline-none transition-colors hover:border-waia-accent-cool focus-visible:ring-2 focus-visible:ring-waia-accent-cool disabled:cursor-not-allowed disabled:opacity-50";
+  "h-9 rounded-lg border border-waia-rim bg-waia-field-mid px-3 text-sm text-waia-fg outline-none transition-colors hover:border-waia-accent-cool focus-visible:ring-2 focus-visible:ring-waia-accent-cool disabled:cursor-not-allowed disabled:opacity-50";
 export function ConsolePanel({
   title,
   note,
@@ -25,7 +25,7 @@ export function ConsolePanel({
       {title ? (
         <header className="border-waia-divider flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
           <div>
-            <h2 className="text-waia-fg-primary text-sm font-semibold">{title}</h2>
+            <h2 className="text-waia-fg text-sm font-semibold">{title}</h2>
             {note ? <p className="text-waia-fg-muted mt-1 text-xs leading-5">{note}</p> : null}
           </div>
           {action}
@@ -104,8 +104,8 @@ export function SectionTabs({ section }: { section: AdminSection }) {
           className={cn(
             "focus-visible:ring-waia-accent-cool relative shrink-0 border-b-2 px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset",
             selected === id
-              ? "border-waia-accent-cool text-waia-fg-primary font-semibold"
-              : "text-waia-fg-muted hover:text-waia-fg-primary border-transparent",
+              ? "border-waia-accent-cool text-waia-fg font-semibold"
+              : "text-waia-fg-muted hover:text-waia-fg border-transparent",
           )}
           onClick={() => update({ tab: id })}
         >
@@ -215,7 +215,11 @@ export function ConsoleDialog({
   React.useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    if (open && !node.open) node.showModal();
+    if (open && !node.open) {
+      node.showModal();
+      // React mounts inputs before the native dialog becomes focusable.
+      node.querySelector<HTMLElement>("[data-console-autofocus]")?.focus();
+    }
     else if (!open && node.open) node.close();
   }, [open]);
   return (
@@ -231,7 +235,7 @@ export function ConsoleDialog({
         if (event.target === ref.current && dismissible) onClose();
       }}
       className={cn(
-        "dark border-waia-rim bg-waia-field-mid text-waia-fg-primary m-auto max-h-[88dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border p-0 shadow-2xl backdrop:bg-black/65",
+        "dark border-waia-rim bg-waia-field-mid text-waia-fg m-auto max-h-[88dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border p-0 shadow-2xl backdrop:bg-black/65",
         wide ? "max-w-4xl" : "max-w-xl",
       )}
     >
@@ -271,7 +275,7 @@ export function DetailLink({
     <button
       type="button"
       onClick={onClick}
-      className="text-waia-fg-primary focus-visible:outline-waia-accent-cool inline-flex items-center gap-1.5 text-left font-medium underline-offset-4 hover:underline focus-visible:outline-2"
+      className="text-waia-fg focus-visible:outline-waia-accent-cool inline-flex items-center gap-1.5 text-left font-medium underline-offset-4 hover:underline focus-visible:outline-2"
     >
       {children}
       <ArrowUpRight size={13} aria-hidden="true" className="text-waia-fg-muted" />
@@ -292,6 +296,7 @@ export function EvidenceTime({
       {label}{" "}
       {new Intl.DateTimeFormat("ru-RU", {
         timeZone: "Europe/Moscow",
+        year: "numeric",
         day: "2-digit",
         month: "2-digit",
         hour: "2-digit",

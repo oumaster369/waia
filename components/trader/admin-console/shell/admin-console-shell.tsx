@@ -4,7 +4,6 @@ import { ChevronLeft, ChevronRight, CircleStop, Search, Sparkles, X } from "luci
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
-import { QUICK_ANSWERS } from "@/lib/trader/admin-console/assistant/quick-answers";
 import { AssistantPanel } from "@/components/trader/admin-console/assistant/assistant-panel";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
 import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
@@ -129,8 +128,8 @@ export function AdminConsoleShell({
                 className={cn(
                   "focus-visible:ring-waia-accent-cool flex min-h-11 shrink-0 items-center gap-3 rounded-lg px-3 text-sm transition-colors outline-none focus-visible:ring-2",
                   active
-                    ? "bg-waia-elevated text-waia-fg-primary font-semibold"
-                    : "text-waia-fg-muted hover:bg-waia-elevated/50 hover:text-waia-fg-primary",
+                    ? "bg-waia-elevated text-waia-fg font-semibold"
+                    : "text-waia-fg-muted hover:bg-waia-elevated/50 hover:text-waia-fg",
                 )}
               >
                 <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
@@ -231,7 +230,7 @@ export function AdminConsoleShell({
             <aside
               id="admin-assistant"
               aria-label="Помощник"
-              className="border-waia-divider bg-waia-field-mid fixed inset-y-0 right-0 z-30 w-80 max-w-[90vw] overflow-y-auto border-l p-5 shadow-2xl xl:sticky xl:top-0 xl:z-auto xl:h-dvh xl:shrink-0 xl:shadow-none"
+              className="border-waia-divider bg-waia-field-mid fixed inset-y-0 right-0 z-30 w-96 max-w-[90vw] overflow-y-auto border-l p-5 shadow-2xl 2xl:sticky 2xl:top-0 2xl:z-auto 2xl:h-dvh 2xl:shrink-0 2xl:shadow-none"
             >
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -247,10 +246,7 @@ export function AdminConsoleShell({
                   <X size={17} />
                 </button>
               </div>
-              <AssistantPanel
-                enabled={false}
-                answers={QUICK_ANSWERS.map((answer) => ({ id: answer.id, title: answer.title }))}
-              />
+              <AssistantPanel />
               {right}
             </aside>
           ) : null}
@@ -264,7 +260,7 @@ export function AdminConsoleShell({
       >
         <Command label="Поиск по консоли">
           <CommandInput
-            autoFocus
+            data-console-autofocus
             placeholder="Название раздела…"
             className={`${controlClass} mb-3 w-full`}
           />

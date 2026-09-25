@@ -121,6 +121,8 @@ export const ADMIN_SECTIONS = [
 export const ConsoleBrandIcon = ChartNoAxesCombined;
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];
 export function sectionForPath(pathname: string): AdminSection {
+  if (pathname === "/admin/strategy-promotions")
+    return ADMIN_SECTIONS.find((s) => s.id === "strategies")!;
   return (
     ADMIN_SECTIONS.find(
       (s) => s.href !== "/admin" && (pathname === s.href || pathname.startsWith(`${s.href}/`)),

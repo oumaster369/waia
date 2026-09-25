@@ -13,9 +13,21 @@ import {
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 import type { ResearchCatalog } from "@/lib/trader/admin-console/research/catalog";
 import type { presentResearchRun } from "@/lib/trader/admin-console/research/research-runs";
+import { ResearchRunDetails, selectedResearchRuns } from "./run-details";
 import { CycleDetails } from "@/components/trader/admin-console/sections/research/cycle-details";
 
-type Runs = { items: ReturnType<typeof presentResearchRun>[]; total: number };
+type Runs = {
+  items: (Omit<
+    ReturnType<typeof presentResearchRun>,
+    "committedCycles" | "qualifiedTotalCycles"
+  > & {
+    id: string;
+    kind: string;
+    committedCycles: number | null;
+    qualifiedTotalCycles: number | null;
+  })[];
+  total: number;
+};
 const labels: Record<string, string> = {
   QUEUED: "В очереди",
   RUNNING: "Выполняется",
@@ -31,6 +43,10 @@ const labels: Record<string, string> = {
   VERIFIED: "Подтверждена",
   UNVERIFIED: "Не подтверждена",
   SEALED: "Запечатан",
+  DRAFT: "Черновик",
+  ACTIVE: "Активна",
+  PAUSED: "Приостановлена",
+  ARCHIVED: "В архиве",
   draft: "Черновик",
   registered: "Зарегистрирована",
   backtested: "Тест завершён",
@@ -51,10 +67,12 @@ export function ResearchSection() {
     tab !== "runs" ? `/api/trader/admin/console/research/catalog?tab=${tab}` : null,
   );
   const read = tab === "runs" ? runs : catalogue;
+  const compared = selectedResearchRuns(context.params.get("compare"));
   const title = section.tabs.find(([id]) => id === tab)![1];
   return (
     <section>
       <CycleDetails />
+      <ResearchRunDetails />
       {read.loading ? <ConsoleLoading /> : null}
       {read.reason ? (
         <div className="mb-4">
@@ -80,16 +98,55 @@ export function ResearchSection() {
       {!read.reason && tab === "runs" && runs.envelope ? (
         <ConsolePanel
           title={title}
+          action={
+            <button
+              className={controlClass}
+              disabled={compared.length < 2}
+              onClick={() => context.update({ compare_open: "1", run: null })}
+            >
+              Сравнить {compared.length ? `(${compared.length})` : "2–4 запуска"}
+            </button>
+          }
           note="Исторический контур. Завершение теста не означает рекомендацию или допуск к торговле."
         >
           <ConsoleTable
             rows={runs.envelope.data.items ?? []}
-            rowKey={(row) => `${row.organizationId}:${row.runId}`}
+            rowKey={(row) => row.id}
             caption="Исторические запуски"
             columns={[
               {
+                title: "Сравнить",
+                render: (row) => (
+                  <input
+                    type="checkbox"
+                    aria-label={`Сравнить запуск ${row.runId}`}
+                    checked={compared.includes(row.id)}
+                    disabled={!compared.includes(row.id) && compared.length >= 4}
+                    onChange={(e) =>
+                      context.update({
+                        compare: JSON.stringify(
+                          e.target.checked
+                            ? [...compared, row.id]
+                            : compared.filter((id) => id !== row.id),
+                        ),
+                      })
+                    }
+                  />
+                ),
+              },
+              {
                 title: "Запуск",
-                render: (row) => <span className="font-mono text-xs break-all">{row.runId}</span>,
+                render: (row) => (
+                  <button
+                    className="text-waia-accent-cool text-left text-xs break-all hover:underline"
+                    onClick={() => context.update({ run: row.id, run_tab: null })}
+                  >
+                    {row.runId}
+                    <span className="text-waia-fg-muted mt-1 block">
+                      {row.kind === "backtest" ? "Тест стратегии" : "Историческое воспроизведение"}
+                    </span>
+                  </button>
+                ),
               },
               {
                 title: "Рынок / выборка",
@@ -109,7 +166,7 @@ export function ResearchSection() {
                         row.inactive ? "warning" : row.phase === "FAILED" ? "danger" : "neutral"
                       }
                     >
-                      {labels[row.phase] ?? row.phase}
+                      {labels[row.phase] ?? labels[row.phase.toLowerCase()] ?? row.phase}
                     </ConsoleBadge>
                     {row.inactive ? (
                       <p className="text-waia-warning mt-2 text-xs">
@@ -123,9 +180,16 @@ export function ResearchSection() {
                 title: "Подтверждённые циклы",
                 align: "right",
                 render: (row) =>
-                  row.qualifiedTotalCycles > 0
-                    ? `${row.committedCycles} / ${row.qualifiedTotalCycles}`
-                    : String(row.committedCycles),
+                  row.qualifiedTotalCycles !== null && row.qualifiedTotalCycles > 0 ? (
+                    `${row.committedCycles} / ${row.qualifiedTotalCycles}`
+                  ) : row.committedCycles === null ? (
+                    <DataState
+                      state="not_applicable"
+                      reason="BACKTEST_CYCLE_BINDING_NOT_PERSISTED"
+                    />
+                  ) : (
+                    String(row.committedCycles)
+                  ),
               },
               {
                 title: "Последнее наблюдение",
@@ -178,7 +242,9 @@ export function ResearchSection() {
                 title: "Состояние",
                 render: (row) =>
                   row.state ? (
-                    <ConsoleBadge>{labels[row.state] ?? row.state}</ConsoleBadge>
+                    <ConsoleBadge>
+                      {labels[row.state] ?? labels[row.state.toLowerCase()] ?? row.state}
+                    </ConsoleBadge>
                   ) : (
                     <DataState state="unavailable" reason="RESEARCH_STATE_NOT_PERSISTED" />
                   ),

@@ -1,8 +1,5 @@
 import { tokensFromUsage, type AssistantUsage } from "@/lib/trader/admin-console/assistant/budget";
-import {
-  citationIdsInToolPayload,
-  numbersInToolPayload,
-} from "@/lib/trader/admin-console/assistant/segments";
+import type { AssistantFact } from "@/lib/trader/admin-console/assistant/facts";
 import {
   runAssistantTurn,
   type AssistantAnswer,
@@ -10,7 +7,8 @@ import {
 
 export async function runLiveAssistantTurn(input: {
   content: string;
-  toolText: string;
+  toolText?: string;
+  facts?: readonly AssistantFact[];
   complete: (prompt: string) => Promise<{ text: string; usage?: { totalTokens?: number } }>;
 }): Promise<
   | { status: "answer"; answer: AssistantAnswer; usage: AssistantUsage }
@@ -20,10 +18,11 @@ export async function runLiveAssistantTurn(input: {
   let tokens = 0;
   let estimated = false;
   const turn = await runAssistantTurn({
-    knownCitations: citationIdsInToolPayload(input.toolText),
-    factRefs: numbersInToolPayload(input.toolText).map((value) => ({ value })),
+    facts: input.facts ?? [],
     complete: async (prompt) => {
-      const result = await input.complete(`${prompt}\n${input.toolText}\n${input.content}`);
+      const result = await input.complete(
+        `${prompt}\nВопрос оператора: ${JSON.stringify(input.content)}`,
+      );
       const counted = tokensFromUsage(result.usage ?? null, result.text);
       tokens += counted.tokens;
       estimated = estimated || counted.estimated;

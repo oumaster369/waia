@@ -16,6 +16,13 @@ import { handleAdminConsoleCyclesGet } from "@/lib/trader/admin-console/handlers
 import { handleAdminConsoleCycleTraceGet } from "@/lib/trader/admin-console/handlers/cycle-trace";
 import type { AdminRouteHandlerDeps } from "@/lib/trader/admin-route-shared";
 
+import { handleAdminConsoleStrategyDetailGet } from "@/lib/trader/admin-console/handlers/strategy-detail";
+import { createLifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
+import { createPostgresLifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository-postgres";
+import { pairFillsFifo, type PairingFillEvent } from "@/lib/trader/lifecycle/trade-pairing";
+import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import type { FillRow, OrderRow } from "@/lib/trader/execution/order-repository.types";
+
 const url = process.env.DATABASE_URL_POSTGRES;
 const enabled = process.env.WAIA_PG_INTEGRATION === "1" && Boolean(url);
 const now = Math.floor(Date.now() / 300_000) * 300_000;
@@ -50,8 +57,29 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
     binding: Parameters<typeof consoleObservation>[0],
     amount: string | null,
     at: number,
+    partialOrders = false,
+    unpricedAsset = false,
   ) {
-    const observation = consoleObservation(binding, amount, at);
+    const full = consoleObservation(binding, amount, at);
+    const balances = unpricedAsset
+      ? {
+          ...full.balances,
+          values: [
+            ...(full.balances.values ?? []),
+            { asset: "XQAZUNPRICEDFIXTURE", free: "1", locked: "0", total: "1" },
+          ],
+        }
+      : full.balances;
+    const observation = {
+      ...full,
+      balances,
+      holdings: balances.values,
+      status: partialOrders ? "PARTIAL" : full.status,
+      openOrders: {
+        ...full.openOrders,
+        status: partialOrders ? "PARTIAL" : full.openOrders.status,
+      },
+    };
     await client`INSERT INTO trader_account_observations (organization_id,credential_id,exchange_account_id,observation_id,credential_revision,configuration_revision,lease_token,payload,recorded_at) VALUES (${binding.organizationId}::uuid,${binding.credentialId}::uuid,${binding.exchangeAccountId},${observation.observationId}::uuid,1,'test',${randomUUID()}::uuid,${JSON.stringify(observation)}::jsonb,${iso(at)}::timestamptz)`;
     await client`UPDATE trader_account_collection_state SET last_observation_id=${observation.observationId}::uuid WHERE credential_id=${binding.credentialId}::uuid`;
   }
@@ -145,6 +173,139 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
       reasons: ["CLOSE_FEE_DENOMINATION_UNVERIFIED"],
     });
   });
+  it("persists native-fee net lots and exact partial closes, with reader and reconstruction parity", async () => {
+    const binding = await seed();
+    const context = requireOrgContext(binding.organizationId);
+    const repo = createPostgresLifecycleRepository(db);
+    const recorder = createLifecycleRecorder({ repository: repo });
+    const signal = randomUUID();
+    const events: PairingFillEvent[] = [];
+    for (const [side, quantity, price, fee, at] of [
+      ["buy", "1.02", "100", "0.01", now - 120000],
+      ["sell", "0.4", "110", "0.005", now - 90000],
+      ["sell", "0.6", "110", "0.005", now - 60000],
+    ] as const) {
+      const orderId = randomUUID(),
+        fillId = randomUUID();
+      await client`INSERT INTO trader_orders (id,organization_id,credential_id,venue,execution_mode,symbol,side,type,quantity,state,client_order_id,idempotency_key,risk_decision_id,strategy_signal_id) VALUES (${orderId}::uuid,${binding.organizationId}::uuid,${binding.credentialId}::uuid,'htx','live','BTC/USDT',${side}::order_side,'market',${quantity},'FILLED',${orderId},${orderId},'test',${signal})`;
+      await client`INSERT INTO trader_fills (id,organization_id,order_id,exchange_trade_id,price,quantity,fee,fee_asset,executed_at) VALUES (${fillId}::uuid,${binding.organizationId}::uuid,${orderId}::uuid,${fillId},${price},${quantity},${fee},'BTC',${iso(at)}::timestamptz)`;
+      const order: OrderRow = {
+        id: orderId,
+        organizationId: binding.organizationId,
+        credentialId: binding.credentialId,
+        venue: "htx",
+        executionMode: "live",
+        symbol: "BTC/USDT",
+        side,
+        type: "market",
+        price: null,
+        quantity,
+        filledQuantity: quantity,
+        avgFillPrice: price,
+        state: "FILLED",
+        stateVersion: 1,
+        exchangeOrderId: orderId,
+        clientOrderId: orderId,
+        idempotencyKey: orderId,
+        riskDecisionId: "test",
+        allocationDecisionId: null,
+        strategySignalId: signal,
+        createdAt: new Date(at),
+        updatedAt: new Date(at),
+      };
+      const fill: FillRow = {
+        id: fillId,
+        orderId,
+        organizationId: binding.organizationId,
+        exchangeTradeId: fillId,
+        price,
+        quantity,
+        fee,
+        feeAsset: "BTC",
+        executedAt: new Date(at),
+        createdAt: new Date(at),
+      };
+      const event = {
+        order,
+        fill,
+        accountKey: binding.exchangeAccountId,
+        lineage: {
+          strategySignalId: signal,
+          strategyId: "test",
+          strategyVersion: "1",
+          riskDecisionId: "test",
+        },
+      };
+      events.push(event);
+      await recorder.recordFillLifecycle({ context, ...event });
+      if (side === "buy") {
+        expect((await repo.listOpenPositionLots(context))[0]?.remainingQty).toBe("1.01");
+        const legsBefore = await repo.listTradeLegs(
+          context,
+          (await repo.listTrades(context))[0]!.id,
+        );
+        await expect(
+          recorder.recordFillLifecycle({
+            context,
+            ...event,
+            order: { ...order, side: "sell" },
+            fill: { ...fill, quantity: "2" },
+          }),
+        ).rejects.toThrow(/insufficient open qty/);
+        expect((await repo.listOpenPositionLots(context))[0]?.remainingQty).toBe("1.01");
+        expect(await repo.listTradeLegs(context, (await repo.listTrades(context))[0]!.id)).toEqual(
+          legsBefore,
+        );
+      }
+      if (quantity === "0.4")
+        expect((await repo.listOpenPositionLots(context))[0]?.remainingQty).toBe("0.605");
+    }
+    expect(await repo.listOpenPositionLots(context)).toEqual([]);
+    const trades = await repo.listTrades(context);
+    expect(trades[0]).toMatchObject({ state: "CLOSED", realizedPnl: "9" });
+    expect(pairFillsFifo({ events }).trades[0]?.realizedPnl).toBe(trades[0]?.realizedPnl);
+    const legs = await repo.listTradeLegs(context, trades[0]!.id);
+    expect(legs.filter((l) => l.kind === "CLOSE_FILL").map((l) => l.quantity)).toEqual([
+      "0.405",
+      "0.605",
+    ]);
+    await point(binding, now - 300000);
+    await point(binding, now);
+    expect((await read(binding)).value.accounts[0]?.periodResult).toMatchObject({
+      total: "8",
+      realized: "8",
+      openFees: "1",
+      closeFees: "1.1",
+      tradingFees: "2.1",
+      state: "ok",
+    });
+    const before = (await repo.listLifecycleEvents(context)).length;
+    await expect(
+      recorder.recordFillLifecycle({
+        context,
+        ...events[0]!,
+        fill: { ...events[0]!.fill, feeAsset: "HT" },
+      }),
+    ).rejects.toThrow(/FEE_ASSET_UNCONVERTIBLE/);
+    await expect(recorder.recordFillLifecycle({ context, ...events[2]! })).rejects.toThrow(
+      /no open lot/,
+    );
+    expect((await repo.listLifecycleEvents(context)).length).toBe(before);
+    expect(await repo.listTrades(context)).toEqual(trades);
+  });
+  it("does not accept another leg's fee proof for legacy close PnL", async () => {
+    const binding = await seed();
+    await trade(binding, "live", "BTC");
+    const fills =
+      await client`SELECT f.id FROM trader_fills f JOIN trader_orders o ON o.id=f.order_id AND o.organization_id=f.organization_id WHERE f.organization_id=${binding.organizationId}::uuid AND o.side='sell'`;
+    await client`INSERT INTO trader_lifecycle_events(id,organization_id,entity_type,entity_id,phase,payload,occurred_at) VALUES (${randomUUID()}::uuid,${binding.organizationId}::uuid,'FILL',${String(fills[0]!.id)},'ORDER_FILLED',${JSON.stringify({ feeAccountingVersion: "native-fee-inventory/v1", legId: randomUUID(), nativeFee: "2", inventoryQuantity: "1", quoteFee: "220" })},${iso(now - 60000)}::timestamptz)`;
+    await point(binding, now - 300000);
+    await point(binding, now);
+    expect((await read(binding)).value.accounts[0]?.periodResult).toMatchObject({
+      total: null,
+      reasons: ["CLOSE_FEE_DENOMINATION_UNVERIFIED"],
+    });
+  });
   it("does not turn a legacy closed trade without executions into zero profit", async () => {
     const binding = await seed(),
       id = randomUUID();
@@ -178,6 +339,59 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
       realized: "14",
       unrealizedChange: "-20",
       currency: "USD",
+    });
+    await client`UPDATE trader_admin_market_quote_latest SET source_ts=${iso(now - 240000)}::timestamptz WHERE source='coinbase' AND symbol='USDT-USD'`;
+    await client`INSERT INTO trader_admin_market_quote_latest (source,symbol,base,quote,last,price_definition,source_ts,observed_at) VALUES ('kraken','USDT-USD','USDT','USD','0.99','last',${iso(now)}::timestamptz,${iso(now)}::timestamptz) ON CONFLICT (source,symbol) DO UPDATE SET last='0.99',source_ts=excluded.source_ts,observed_at=excluded.observed_at`;
+    expect((await read(binding, true, "USD")).value.accounts[0]).toMatchObject({
+      equity: "990",
+      method: "usdt_usd:kraken",
+      periodResult: {
+        total: "-2.97",
+        realized: "6.93",
+        unrealizedChange: "-9.9",
+        method: "operational_pnl:usdt_usd:kraken",
+      },
+    });
+  });
+  it("persists a complete monetary valuation despite partial order evidence and uses its current endpoint", async () => {
+    const binding = await seed();
+    await observe(binding, "1000.12345678", now, true);
+    expect(await collectAccountValuations(db, new Date(now), scope(binding))).toEqual({
+      processed: 2,
+      blocked: 0,
+    });
+    const saved =
+      await client`SELECT state,reasons,equity FROM trader_admin_account_valuation WHERE organization_id=${binding.organizationId}::uuid`;
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      state: "ok",
+      equity: "1000.12345678",
+      reasons: ["OPEN_ORDERS_PARTIAL"],
+    });
+    await observe(binding, "2000.12345678", now + 60000, true);
+    const result = await readOverviewSnapshot(db, {
+      scope: scope(binding),
+      start: iso(now),
+      end: iso(now + 60000),
+      nowMs: now + 60000,
+      currency: "USDT",
+      mode: "live",
+      currentPeriod: true,
+    });
+    expect(result.value.accounts[0]).toMatchObject({
+      state: "partial",
+      reasons: ["OPEN_ORDERS_PARTIAL"],
+      periodResult: { total: "0", unrealizedChange: "0", coverageEnd: iso(now + 60000) },
+    });
+    await observe(binding, "2000.12345678", now + 60500, true, true);
+    expect(await collectAccountValuations(db, new Date(now + 60500), scope(binding))).toEqual({
+      processed: 0,
+      blocked: 1,
+    });
+    await observe(binding, null, now + 61000);
+    expect(await collectAccountValuations(db, new Date(now + 61000), scope(binding))).toEqual({
+      processed: 0,
+      blocked: 1,
     });
   });
   it("persists immutable versions and one point per bucket, never an error as zero", async () => {
@@ -295,5 +509,50 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
     expect((newsResponse.body as { data: { items: unknown[] } }).data.items).toContainEqual(
       expect.objectContaining({ id: news, title: "A saved news title" }),
     );
+  });
+  it("strategy details preserve version/mode boundaries and the exact period fee semantics", async () => {
+    const binding = await seed();
+    await trade(binding, "live", "USDT", "8");
+    await trade(binding, "paper", "USDT", "108");
+    await trade(binding, "mock", "USDT", "1008");
+    const read = async (version: string) =>
+      handleAdminConsoleStrategyDetailGet(
+        new Request(
+          `http://localhost/api/trader/admin/console/strategies/detail?organization_id=${binding.organizationId}&strategy_id=test&strategy_version=${version}&mode=all&period=7d`,
+        ),
+        deps(),
+      );
+    const result = await read("1");
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      data: {
+        performance: [
+          expect.objectContaining({
+            mode: "live",
+            realized: "7",
+            tradingFees: "3",
+            closedTradeCount: 1,
+          }),
+          expect.objectContaining({
+            mode: "paper",
+            realized: "107",
+            tradingFees: "3",
+            closedTradeCount: 1,
+          }),
+          expect.objectContaining({ mode: "history", state: "empty", realized: "0" }),
+        ],
+      },
+    });
+    expect(JSON.stringify(result.body)).not.toContain("1008");
+    const otherVersion = await read("2");
+    expect(otherVersion.body).toMatchObject({
+      data: {
+        performance: [
+          expect.objectContaining({ mode: "live", state: "empty", totalTrades: 0 }),
+          expect.objectContaining({ mode: "paper", state: "empty", totalTrades: 0 }),
+          expect.objectContaining({ mode: "history", state: "empty", totalTrades: 0 }),
+        ],
+      },
+    });
   });
 });

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 
 import {
   adminSuccess,
+  adminClientError,
   type AdminRouteHandlerDeps,
   type AdminRouteHandlerResult,
 } from "@/lib/trader/admin-route-shared";
@@ -11,6 +12,7 @@ import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import { decodePageCursor, encodePageCursor } from "@/lib/trader/admin-console/cursor";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
   return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
@@ -30,9 +32,17 @@ function iso(value: unknown): string | null {
 export async function handleAdminConsoleClientsGet(
   request: Request,
   deps: AdminRouteHandlerDeps,
+  clientId?: string,
 ): Promise<AdminRouteHandlerResult> {
   const parsed = parseAdminConsoleQuery(new URL(request.url));
   if (!parsed.ok) return parsed.result;
+  const cursor = !clientId && parsed.query.cursor ? decodePageCursor(parsed.query.cursor) : null;
+  if (!clientId && parsed.query.cursor && !cursor)
+    return adminClientError(400, "BAD_REQUEST", "Cursor is invalid.");
+  if (clientId && !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(clientId))
+    return adminClientError(400, "BAD_REQUEST", "Client id is invalid.");
+  if (clientId && parsed.query.organization_id && parsed.query.organization_id !== clientId)
+    return adminClientError(404, "NOT_FOUND", "Client not found in scope.");
   const opened = await openAdminConsole(request, deps, {
     requiredTables: HANDLER_TABLES.clients,
   });
@@ -42,7 +52,10 @@ export async function handleAdminConsoleClientsGet(
       const organizationId = parsed.query.organization_id ?? null;
       const rows = rowsOf(
         await tx.execute(sql`
-        SELECT o.id::text AS id,
+        WITH eligible AS (SELECT o.id::text AS id,
+               o.created_at AS organization_created_at,
+               o.created_at::text AS pagination_created_at,
+               count(*) OVER ()::integer AS total,
                COALESCE(o.name, '') AS name,
                u.email AS owner_email,
                u.created_at AS registered_at,
@@ -77,6 +90,7 @@ export async function handleAdminConsoleClientsGet(
         WHERE (
           ${organizationId}::uuid IS NULL OR o.id = ${organizationId}::uuid
         )
+        AND (${clientId ?? null}::uuid IS NULL OR o.id = ${clientId ?? null}::uuid)
         AND (${parsed.query.exchange_account_id ?? null}::text IS NULL OR EXISTS (
           SELECT 1 FROM exchange_credentials scoped_credential
           WHERE scoped_credential.organization_id = o.id
@@ -102,11 +116,15 @@ export async function handleAdminConsoleClientsGet(
             WHERE l.organization_id = o.id AND l.state = 'OPEN'
           )
         )
-        ORDER BY o.created_at DESC, o.id
-        LIMIT ${parsed.query.limit}
+        ) SELECT * FROM eligible
+        WHERE (${cursor?.t ?? null}::timestamptz IS NULL
+          OR organization_created_at < ${cursor?.t ?? null}::timestamptz
+          OR (organization_created_at = ${cursor?.t ?? null}::timestamptz AND id < ${cursor?.id ?? null}))
+        ORDER BY organization_created_at DESC, id DESC
+        LIMIT ${parsed.query.limit + 1}
       `),
       );
-      const items = rows.flatMap((row) => {
+      const items = rows.slice(0, parsed.query.limit).flatMap((row) => {
         const client = presentClient({
           id: String(row.id),
           name: String(row.name ?? ""),
@@ -121,9 +139,24 @@ export async function handleAdminConsoleClientsGet(
         });
         return client ? [client] : [];
       });
+      if (clientId && !items.length)
+        return adminClientError(404, "NOT_FOUND", "Client not found in scope.");
       return adminSuccess(
         adminEnvelope({
-          data: { items },
+          data: clientId
+            ? { client: items[0] }
+            : {
+                items,
+                aggregate: { total: rows[0]?.total ?? (cursor ? null : 0) },
+                truncated: rows.length > parsed.query.limit,
+                nextCursor:
+                  rows.length > parsed.query.limit
+                    ? encodePageCursor({
+                        t: String(rows[parsed.query.limit - 1]!.pagination_created_at),
+                        id: String(rows[parsed.query.limit - 1]!.id),
+                      })
+                    : null,
+              },
           scope: adminScopeFromQuery(parsed.query),
           mode: parsed.query.mode,
         }),

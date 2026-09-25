@@ -147,7 +147,7 @@ async function postCommand(
   const result = await handleAdminStrategyPromotionCommandPost(
     new Request("http://localhost/api/trader/admin/strategy-promotions/commands", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: "http://localhost" },
       body: JSON.stringify(body),
     }),
     deps,
@@ -256,6 +256,15 @@ describe("trader admin strategy promotion routes (IMP-U1 S4)", () => {
     expect(confirmResult.status).toBe(200);
     const confirmed = confirmResult.body.record as { state: string; stateVersion: number };
     expect(confirmed.state).toBe("COOLING_OFF");
+    const staleCancel = await postCommand(adminDeps, {
+      command: "cancel",
+      organization_id: orgId,
+      record_id: requested.id,
+      expected_state_version: requested.stateVersion,
+      reason: "stale synthetic test",
+    });
+    expect(staleCancel.status).toBe(409);
+    expect(staleCancel.body).toMatchObject({ error: { code: "STALE_REVISION" } });
 
     const effectiveResult = await postCommand(adminDeps, {
       command: "mark-effective",

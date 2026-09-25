@@ -117,7 +117,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
                 type="button"
                 key={id}
                 aria-pressed={params.get("mode") === id}
-                className={`focus-visible:ring-waia-accent-cool rounded-md px-3 text-xs font-medium outline-none focus-visible:ring-2 ${params.get("mode") === id ? "bg-waia-elevated text-waia-fg-primary" : "text-waia-fg-muted hover:text-waia-fg-primary"}`}
+                className={`focus-visible:ring-waia-accent-cool rounded-md px-3 text-xs font-medium outline-none focus-visible:ring-2 ${params.get("mode") === id ? "bg-waia-elevated text-waia-fg" : "text-waia-fg-muted hover:text-waia-fg"}`}
                 onClick={() => update({ mode: id })}
               >
                 {label}

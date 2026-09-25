@@ -1,3 +1,4 @@
+import { AdminVisitMarker } from "@/components/trader/admin-console/data/visit-marker";
 import { AdminQueryProvider } from "@/components/trader/admin-console/data/query-provider";
 import { AdminConsoleShell } from "@/components/trader/admin-console/shell/admin-console-shell";
 import { AdminReadContextProvider } from "@/components/trader/admin-console/data/read-context";
@@ -33,7 +34,8 @@ export default async function TraderAdminLayout({
     await deps.disposeRuntimeDb(runtime);
   }
   return (
-    <div className="dark bg-waia-field text-waia-fg-primary min-h-dvh w-full font-sans">
+    <div className="dark bg-waia-field text-waia-fg min-h-dvh w-full font-sans">
+      <AdminVisitMarker userId={userId} />
       <AdminQueryProvider>
         <AdminReadContextProvider>
           <AdminConsoleShell>{children}</AdminConsoleShell>

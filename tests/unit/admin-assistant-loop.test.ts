@@ -35,7 +35,7 @@ describe("admin assistant loop", () => {
     });
     expect(result.status).toBe("answer");
     if (result.status === "answer") {
-      expect(result.answer.citations).toEqual(["invoice:1"]);
+      expect(result.answer.citations).toEqual([]);
       expect(result.answer.summary).toBe(UNVERIFIED_SEGMENT);
     }
   });

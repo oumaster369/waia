@@ -65,18 +65,18 @@ export async function handleAdminConsoleResearchRunsGet(
       const rows = rowsOf(
         await tx.execute(sql`
         WITH latest AS (SELECT DISTINCT ON (organization_id, run_id)
-               organization_id::text AS organization_id,
-               run_id,
-               phase,
-               committed_cycles,
-               qualified_total_cycles,
-               observed_at,
-               symbol,
-               partition
+               organization_id::text AS organization_id, run_id, phase, committed_cycles,
+               qualified_total_cycles, observed_at, symbol, partition
         FROM trader_historical_simulation_run_lifecycle_event_v2
         WHERE ${organizationFilter(parsed.query)}
-        ORDER BY organization_id, run_id, event_sequence DESC)
-        SELECT *, count(*) OVER()::text AS total FROM latest
+        ORDER BY organization_id, run_id, event_sequence DESC), combined AS (
+        SELECT *, 'historical' AS kind FROM latest WHERE partition IN ('DEVELOPMENT','WALK_FORWARD')
+        UNION ALL
+        SELECT r.organization_id::text,r.id::text,upper(r.status::text),NULL::integer,NULL::integer,
+          COALESCE(r.completed_at,r.started_at,r.created_at),d.symbol,r.split::text,'backtest'
+        FROM trader_backtest_runs r JOIN research_dataset d ON d.id=r.dataset_id AND d.organization_id=r.organization_id
+        WHERE ${organizationFilter(parsed.query, "r")} AND r.split IN ('train','validation'))
+        SELECT *, count(*) OVER()::text AS total FROM combined
         WHERE observed_at >= ${period.start}::timestamptz AND observed_at <= ${period.end}::timestamptz
         ORDER BY observed_at DESC, organization_id, run_id
         LIMIT ${parsed.query.limit}
@@ -91,17 +91,25 @@ export async function handleAdminConsoleResearchRunsGet(
               const observedAt = iso(row.observed_at);
               if (!observedAt) return [];
               return [
-                presentResearchRun({
-                  organizationId: String(row.organization_id),
-                  runId: String(row.run_id),
-                  phase: String(row.phase),
-                  committedCycles: Number(row.committed_cycles),
-                  qualifiedTotalCycles: Number(row.qualified_total_cycles),
-                  observedAt,
-                  symbol: String(row.symbol),
-                  partition: String(row.partition),
-                  nowMs,
-                }),
+                {
+                  id: `${row.kind}:${row.organization_id}:${row.run_id}`,
+                  kind: String(row.kind),
+                  ...presentResearchRun({
+                    organizationId: String(row.organization_id),
+                    runId: String(row.run_id),
+                    phase: String(row.phase),
+                    committedCycles: Number(row.committed_cycles),
+                    qualifiedTotalCycles: Number(row.qualified_total_cycles),
+                    observedAt,
+                    symbol: String(row.symbol),
+                    partition: String(row.partition),
+                    nowMs,
+                  }),
+                  committedCycles:
+                    row.committed_cycles == null ? null : Number(row.committed_cycles),
+                  qualifiedTotalCycles:
+                    row.qualified_total_cycles == null ? null : Number(row.qualified_total_cycles),
+                },
               ];
             }),
           },

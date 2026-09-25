@@ -1,0 +1,876 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1081",
+  "status": "frozen",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1077",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Entity evidence drilldowns for accounts, orders and clients; safe readable Russian presentation.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Serial integration preserves the reviewed parent read-model and shared-file behavior; all overlaps reviewed before cumulative validation."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "app/(trader)/admin/accounts/page.tsx",
+        "app/(trader)/admin/clients/page.tsx",
+        "app/(trader)/admin/layout.tsx",
+        "app/(trader)/admin/orders/page.tsx",
+        "app/api/trader/admin/console/accounts/[accountId]/route.ts",
+        "app/api/trader/admin/console/clients/[clientId]/history/route.ts",
+        "app/api/trader/admin/console/orders/[orderId]/route.ts",
+        "components/trader/admin-console/data/read-context.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/primitives/console-ui.tsx",
+        "components/trader/admin-console/primitives/emergency-workflow.tsx",
+        "components/trader/admin-console/sections/accounts/account-details.tsx",
+        "components/trader/admin-console/sections/clients/client-details.tsx",
+        "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+        "components/trader/admin-console/sections/orders/order-details.tsx",
+        "components/trader/admin-console/sections/orders/orders-panel.tsx",
+        "components/trader/admin-console/sections/orders/orders-workspace.tsx",
+        "components/trader/admin-console/shell/admin-console-shell.tsx",
+        "components/trader/admin-console/shell/context-controls.tsx",
+        "docs/plans/dee-1077-admin-console-entity-evidence.md",
+        "lib/observability/waia-runtime-route-telemetry.ts",
+        "lib/trader/admin-console/accounts/account-mode.ts",
+        "lib/trader/admin-console/billing/clients.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/account-detail.ts",
+        "lib/trader/admin-console/handlers/client-history.ts",
+        "lib/trader/admin-console/handlers/order-detail.ts",
+        "lib/trader/admin-console/read-models/account-finance.ts",
+        "lib/trader/admin-console/read-models/order-trace.ts",
+        "lib/trader/admin-console/read-models/positions.ts",
+        "lib/trader/admin-console/repositories/overview.postgres.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-entity-detail-postgres.test.ts",
+        "tests/unit/admin-console-invoices-panel.test.tsx",
+        "tests/unit/admin-console-overview.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User 2026-09-25 explicitly authorized completion, operational Human review, exact-head tests, merge, database and production work. Integration of existing tested deliveries is admitted now; no retrospective claim that this train preceded their original implementation. No policy/methodology ratification or real trading/promotion/invoice action."
+      },
+      "expectedAcceptanceEvidence": [
+        "Original source provenance retained; exact decimal/scoping/security invariants pass focused unit and real Postgres/browser regression where applicable."
+      ],
+      "expectedTests": [
+        "pnpm test --run (targeted child console/lifecycle/authority tests)",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm build"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "integratedCommits": [
+        "211bee29f4c5d665091f66ab69f83e68a4dd15d2"
+      ],
+      "actualFiles": [
+        "app/(trader)/admin/accounts/page.tsx",
+        "app/(trader)/admin/clients/page.tsx",
+        "app/(trader)/admin/layout.tsx",
+        "app/(trader)/admin/orders/page.tsx",
+        "app/api/trader/admin/console/accounts/[accountId]/route.ts",
+        "app/api/trader/admin/console/clients/[clientId]/history/route.ts",
+        "app/api/trader/admin/console/orders/[orderId]/route.ts",
+        "components/trader/admin-console/data/read-context.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/primitives/console-ui.tsx",
+        "components/trader/admin-console/primitives/emergency-workflow.tsx",
+        "components/trader/admin-console/sections/accounts/account-details.tsx",
+        "components/trader/admin-console/sections/clients/client-details.tsx",
+        "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+        "components/trader/admin-console/sections/orders/order-details.tsx",
+        "components/trader/admin-console/sections/orders/orders-panel.tsx",
+        "components/trader/admin-console/sections/orders/orders-workspace.tsx",
+        "components/trader/admin-console/shell/admin-console-shell.tsx",
+        "components/trader/admin-console/shell/context-controls.tsx",
+        "docs/plans/dee-1077-admin-console-entity-evidence.md",
+        "lib/observability/waia-runtime-route-telemetry.ts",
+        "lib/trader/admin-console/accounts/account-mode.ts",
+        "lib/trader/admin-console/billing/clients.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/account-detail.ts",
+        "lib/trader/admin-console/handlers/client-history.ts",
+        "lib/trader/admin-console/handlers/order-detail.ts",
+        "lib/trader/admin-console/read-models/account-finance.ts",
+        "lib/trader/admin-console/read-models/order-trace.ts",
+        "lib/trader/admin-console/read-models/positions.ts",
+        "lib/trader/admin-console/repositories/overview.postgres.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-entity-detail-postgres.test.ts",
+        "tests/unit/admin-console-invoices-panel.test.tsx",
+        "tests/unit/admin-console-overview.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
+        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit."
+      ],
+      "tests": [
+        "pnpm lint (0 errors; existing warnings retained)",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph",
+        "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+        "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+      ]
+    },
+    {
+      "issue": "DEE-1079",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Grounded read-only assistant, canonical aggregate facts, owner context and immediate scope cancellation.",
+      "dependencies": [
+        "DEE-1077"
+      ],
+      "dependencyEvidence": [
+        "Serial integration preserves the reviewed parent read-model and shared-file behavior; all overlaps reviewed before cumulative validation."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "app/api/trader/admin/console/aggregate/route.ts",
+        "components/trader/admin-console/assistant/assistant-panel.tsx",
+        "components/trader/admin-console/data/read-context.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/shell/admin-console-shell.tsx",
+        "docs/plans/dee-1079-admin-console-grounded-assistant.md",
+        "lib/observability/waia-runtime-route-telemetry.ts",
+        "lib/trader/admin-console/assistant/context.ts",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/assistant/live-turn.ts",
+        "lib/trader/admin-console/assistant/quick-answers.ts",
+        "lib/trader/admin-console/assistant/run-assistant.ts",
+        "lib/trader/admin-console/assistant/tools.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/aggregate.ts",
+        "lib/trader/admin-console/handlers/assistant-conversations.ts",
+        "lib/trader/admin-console/handlers/assistant-messages.ts",
+        "lib/trader/admin-console/handlers/assistant-quick-answers.ts",
+        "lib/trader/admin-console/handlers/assistant-reads.ts",
+        "lib/trader/admin-console/handlers/search.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-assistant-grounding-postgres.test.ts",
+        "tests/unit/admin-assistant-budget.test.ts",
+        "tests/unit/admin-assistant-grounded-facts.test.ts",
+        "tests/unit/admin-assistant-loop.test.ts",
+        "tests/unit/admin-console-chrome.test.tsx"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User 2026-09-25 explicitly authorized completion, operational Human review, exact-head tests, merge, database and production work. Integration of existing tested deliveries is admitted now; no retrospective claim that this train preceded their original implementation. No policy/methodology ratification or real trading/promotion/invoice action."
+      },
+      "expectedAcceptanceEvidence": [
+        "Original source provenance retained; exact decimal/scoping/security invariants pass focused unit and real Postgres/browser regression where applicable."
+      ],
+      "expectedTests": [
+        "pnpm test --run (targeted child console/lifecycle/authority tests)",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm build"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      },
+      "integratedCommits": [
+        "6ebd448b81b2ba5d7a085e1029fe2f98363a7769",
+        "654ee2b2890dc50c55fd7b4669cfb92477623131"
+      ],
+      "actualFiles": [
+        "app/api/trader/admin/console/aggregate/route.ts",
+        "components/trader/admin-console/assistant/assistant-panel.tsx",
+        "components/trader/admin-console/data/read-context.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/shell/admin-console-shell.tsx",
+        "docs/plans/dee-1079-admin-console-grounded-assistant.md",
+        "lib/observability/waia-runtime-route-telemetry.ts",
+        "lib/trader/admin-console/assistant/context.ts",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/assistant/live-turn.ts",
+        "lib/trader/admin-console/assistant/quick-answers.ts",
+        "lib/trader/admin-console/assistant/run-assistant.ts",
+        "lib/trader/admin-console/assistant/tools.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/aggregate.ts",
+        "lib/trader/admin-console/handlers/assistant-conversations.ts",
+        "lib/trader/admin-console/handlers/assistant-messages.ts",
+        "lib/trader/admin-console/handlers/assistant-quick-answers.ts",
+        "lib/trader/admin-console/handlers/assistant-reads.ts",
+        "lib/trader/admin-console/handlers/search.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-assistant-grounding-postgres.test.ts",
+        "tests/unit/admin-assistant-budget.test.ts",
+        "tests/unit/admin-assistant-grounded-facts.test.ts",
+        "tests/unit/admin-assistant-loop.test.ts",
+        "tests/unit/admin-console-chrome.test.tsx"
+      ],
+      "acceptanceEvidence": [
+        "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
+        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit."
+      ],
+      "tests": [
+        "pnpm lint (0 errors; existing warnings retained)",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph",
+        "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+        "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+      ]
+    },
+    {
+      "issue": "DEE-1078",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Proven native-fee lifecycle denomination/net-inventory correction with immutable per-leg evidence; no old-record rewrite.",
+      "dependencies": [
+        "DEE-1079"
+      ],
+      "dependencyEvidence": [
+        "Serial integration preserves the reviewed parent read-model and shared-file behavior; all overlaps reviewed before cumulative validation."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1078-lifecycle-fee-denomination.md",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/money/account-lots.ts",
+        "lib/trader/admin-console/money/operational-pnl.ts",
+        "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+        "lib/trader/lifecycle/fill-fee-economics.ts",
+        "lib/trader/lifecycle/lifecycle-recorder.ts",
+        "lib/trader/lifecycle/trade-pairing.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/unit/trader-lifecycle-fee-denomination.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User 2026-09-25 explicitly authorized completion, operational Human review, exact-head tests, merge, database and production work. Integration of existing tested deliveries is admitted now; no retrospective claim that this train preceded their original implementation. No policy/methodology ratification or real trading/promotion/invoice action."
+      },
+      "expectedAcceptanceEvidence": [
+        "Original source provenance retained; exact decimal/scoping/security invariants pass focused unit and real Postgres/browser regression where applicable."
+      ],
+      "expectedTests": [
+        "pnpm test --run (targeted child console/lifecycle/authority tests)",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm build"
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      },
+      "integratedCommits": [
+        "3b25196ec0731035a7ac7b56b281e253161f331f",
+        "722936e526791289628cdfc097257914f124ceee"
+      ],
+      "actualFiles": [
+        "docs/plans/dee-1078-lifecycle-fee-denomination.md",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/money/account-lots.ts",
+        "lib/trader/admin-console/money/operational-pnl.ts",
+        "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+        "lib/trader/lifecycle/fill-fee-economics.ts",
+        "lib/trader/lifecycle/lifecycle-recorder.ts",
+        "lib/trader/lifecycle/trade-pairing.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/unit/trader-lifecycle-fee-denomination.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
+        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit."
+      ],
+      "tests": [
+        "pnpm lint (0 errors; existing warnings retained)",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph",
+        "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+        "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+      ]
+    },
+    {
+      "issue": "DEE-1080",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Version-scoped strategy evidence and governed promotion UI, safe historical/backtest run details and condition-first comparison.",
+      "dependencies": [
+        "DEE-1078"
+      ],
+      "dependencyEvidence": [
+        "Serial integration preserves the reviewed parent read-model and shared-file behavior; all overlaps reviewed before cumulative validation."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "app/(trader)/admin/strategies/page.tsx",
+        "app/(trader)/admin/strategy-promotions/page.tsx",
+        "app/api/trader/admin/console/promotions/commands/route.ts",
+        "app/api/trader/admin/console/promotions/route.ts",
+        "app/api/trader/admin/console/research/compare/route.ts",
+        "app/api/trader/admin/console/research/runs/[runId]/route.ts",
+        "app/api/trader/admin/console/strategies/detail/route.ts",
+        "components/trader/admin-console/data/read-context.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/navigation/sections.ts",
+        "components/trader/admin-console/sections/research/research-section.tsx",
+        "components/trader/admin-console/sections/research/run-details.tsx",
+        "components/trader/admin-console/sections/strategies/proposals.tsx",
+        "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+        "docs/plans/dee-1080-admin-console-research-evidence.md",
+        "lib/observability/waia-runtime-route-telemetry.ts",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/assistant-reads.ts",
+        "lib/trader/admin-console/handlers/promotions.ts",
+        "lib/trader/admin-console/handlers/proposals.ts",
+        "lib/trader/admin-console/handlers/research-detail.ts",
+        "lib/trader/admin-console/handlers/research-runs.ts",
+        "lib/trader/admin-console/handlers/strategy-detail.ts",
+        "lib/trader/admin-console/money/verified-close-fee.ts",
+        "lib/trader/admin-console/repositories/canonical-sql-adapter.ts",
+        "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+        "lib/trader/admin-console/repositories/research-detail.postgres.ts",
+        "lib/trader/admin-console/research/compare-runs.ts",
+        "lib/trader/admin-console/research/promotion-proposal.ts",
+        "lib/trader/admin-console/research/run-detail.ts",
+        "lib/trader/admin-console/research/strategy-performance.ts",
+        "lib/trader/validation-gate/admin-route-handler.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/integration/admin-console-research-detail-postgres.test.ts",
+        "tests/integration/postgres-historical-production-first-cycle-v2.test.ts",
+        "tests/unit/admin-console-promotion-command-guard.test.ts",
+        "tests/unit/admin-console-strategy-performance.test.ts",
+        "tests/unit/trader-admin-strategy-promotion-routes.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User 2026-09-25 explicitly authorized completion, operational Human review, exact-head tests, merge, database and production work. Integration of existing tested deliveries is admitted now; no retrospective claim that this train preceded their original implementation. No policy/methodology ratification or real trading/promotion/invoice action."
+      },
+      "expectedAcceptanceEvidence": [
+        "Original source provenance retained; exact decimal/scoping/security invariants pass focused unit and real Postgres/browser regression where applicable."
+      ],
+      "expectedTests": [
+        "pnpm test --run (targeted child console/lifecycle/authority tests)",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm build"
+      ],
+      "execution": {
+        "wave": 4,
+        "mode": "serialized"
+      },
+      "integratedCommits": [
+        "d353ae2cc5d1ae4820e6b56bdaae2e8b05be22cd"
+      ],
+      "actualFiles": [
+        "app/(trader)/admin/strategies/page.tsx",
+        "app/(trader)/admin/strategy-promotions/page.tsx",
+        "app/api/trader/admin/console/promotions/commands/route.ts",
+        "app/api/trader/admin/console/promotions/route.ts",
+        "app/api/trader/admin/console/research/compare/route.ts",
+        "app/api/trader/admin/console/research/runs/[runId]/route.ts",
+        "app/api/trader/admin/console/strategies/detail/route.ts",
+        "components/trader/admin-console/data/read-context.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/navigation/sections.ts",
+        "components/trader/admin-console/sections/research/research-section.tsx",
+        "components/trader/admin-console/sections/research/run-details.tsx",
+        "components/trader/admin-console/sections/strategies/proposals.tsx",
+        "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+        "docs/plans/dee-1080-admin-console-research-evidence.md",
+        "lib/observability/waia-runtime-route-telemetry.ts",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/assistant-reads.ts",
+        "lib/trader/admin-console/handlers/promotions.ts",
+        "lib/trader/admin-console/handlers/proposals.ts",
+        "lib/trader/admin-console/handlers/research-detail.ts",
+        "lib/trader/admin-console/handlers/research-runs.ts",
+        "lib/trader/admin-console/handlers/strategy-detail.ts",
+        "lib/trader/admin-console/money/verified-close-fee.ts",
+        "lib/trader/admin-console/repositories/canonical-sql-adapter.ts",
+        "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+        "lib/trader/admin-console/repositories/research-detail.postgres.ts",
+        "lib/trader/admin-console/research/compare-runs.ts",
+        "lib/trader/admin-console/research/promotion-proposal.ts",
+        "lib/trader/admin-console/research/run-detail.ts",
+        "lib/trader/admin-console/research/strategy-performance.ts",
+        "lib/trader/validation-gate/admin-route-handler.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/integration/admin-console-research-detail-postgres.test.ts",
+        "tests/integration/postgres-historical-production-first-cycle-v2.test.ts",
+        "tests/unit/admin-console-promotion-command-guard.test.ts",
+        "tests/unit/admin-console-strategy-performance.test.ts",
+        "tests/unit/trader-admin-strategy-promotion-routes.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
+        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit."
+      ],
+      "tests": [
+        "pnpm lint (0 errors; existing warnings retained)",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph",
+        "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+        "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+      ]
+    },
+    {
+      "issue": "DEE-1082",
+      "deliveryStatus": "delivered",
+      "blocked": false,
+      "scope": "Final bounded console acceptance repairs: client and incident canonical detail/changes, separate virtual paper book, collector SQL health and eight-section browser acceptance.",
+      "dependencies": [
+        "DEE-1080"
+      ],
+      "dependencyEvidence": [
+        "Serial integration preserves the reviewed parent read-model and shared-file behavior; all overlaps reviewed before cumulative validation."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "lib/trader/admin-console",
+        "components/trader/admin-console",
+        "app/(trader)/admin",
+        "app/api/trader/admin/console",
+        "tests/unit/admin-console*",
+        "tests/unit/admin-assistant*",
+        "tests/integration/admin-console*",
+        "tests/e2e/admin-console*",
+        "docs/plans/dee-1082-admin-console-final-acceptance.md",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User 2026-09-25 explicitly authorized completion, operational Human review, exact-head tests, merge, database and production work. Integration of existing tested deliveries is admitted now; no retrospective claim that this train preceded their original implementation. No policy/methodology ratification or real trading/promotion/invoice action."
+      },
+      "expectedAcceptanceEvidence": [
+        "Original source provenance retained; exact decimal/scoping/security invariants pass focused unit and real Postgres/browser regression where applicable."
+      ],
+      "expectedTests": [
+        "pnpm test --run (targeted child console/lifecycle/authority tests)",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm build"
+      ],
+      "execution": {
+        "wave": 5,
+        "mode": "serialized"
+      },
+      "integratedCommits": [
+        "99538f8d03283ea746e84a10d4c4739227f17bc6",
+        "8712dda75b5ff22eda660d563b064fa098c61ac5",
+        "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
+        "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
+        "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9",
+        "2812afae740567bbf5e8a594fd3295072f402598",
+        "42adc314654b34ec32215c301535de2f1f024fbb"
+      ],
+      "actualFiles": [
+        "app/(trader)/admin/accounts/page.tsx",
+        "app/(trader)/admin/errors/page.tsx",
+        "app/(trader)/admin/layout.tsx",
+        "app/(trader)/admin/strategy-promotions/page.tsx",
+        "app/api/trader/admin/console/accounts/paper/route.ts",
+        "app/api/trader/admin/console/changes/route.ts",
+        "app/api/trader/admin/console/clients/[clientId]/route.ts",
+        "app/api/trader/admin/console/incidents/[incidentId]/route.ts",
+        "app/api/trader/admin/console/promotions/commands/route.ts",
+        "components/trader/admin-console/data/visit-marker.tsx",
+        "components/trader/admin-console/i18n/ru.ts",
+        "components/trader/admin-console/primitives/console-ui.tsx",
+        "components/trader/admin-console/sections/accounts/paper-portfolios.tsx",
+        "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+        "components/trader/admin-console/sections/research/research-section.tsx",
+        "components/trader/admin-console/shell/admin-console-shell.tsx",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "docs/plans/dee-1082-admin-console-final-acceptance.md",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/assistant/quick-answers.ts",
+        "lib/trader/admin-console/collectors/postgres-store.ts",
+        "lib/trader/admin-console/collectors/run-due.ts",
+        "lib/trader/admin-console/collectors/valuation-persist.ts",
+        "lib/trader/admin-console/handler-tables.ts",
+        "lib/trader/admin-console/handlers/assistant-reads.ts",
+        "lib/trader/admin-console/handlers/changes.ts",
+        "lib/trader/admin-console/handlers/clients.ts",
+        "lib/trader/admin-console/handlers/incident-commands.ts",
+        "lib/trader/admin-console/handlers/incidents.ts",
+        "lib/trader/admin-console/handlers/paper-portfolios.ts",
+        "lib/trader/admin-console/handlers/promotion-commands.ts",
+        "lib/trader/admin-console/handlers/promotions.ts",
+        "lib/trader/admin-console/money/quotes.ts",
+        "lib/trader/admin-console/money/valuation.ts",
+        "lib/trader/admin-console/read-models/account-finance.ts",
+        "lib/trader/admin-console/repositories/overview.postgres.ts",
+        "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+        "lib/trader/admin-console/repositories/promotion-state.postgres.ts",
+        "tests/e2e/admin-console-pg-slice.spec.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-final-acceptance-postgres.test.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/integration/admin-console-promotion-request-postgres.test.ts",
+        "tests/integration/admin-console-retention-postgres.test.ts",
+        "tests/unit/admin-console-account-finance.test.ts",
+        "tests/unit/admin-console-collector-coldstart.test.ts",
+        "tests/unit/admin-console-valuation.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
+        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit.",
+        "Final visual correction: 29 additional Russian reason descriptions and persisted campaign-state labels retain machine diagnostics. Existing real-Postgres eight-section workflow passed again at all four widths (35.2s); focused 6 unit checks, lint and typecheck pass. Held-xmin 6001+late-event external proof and 49 governed negative tests also pass. Exact updated-head full CI remains required.",
+        "Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass.",
+        "GitHub full suite exposed Linux argv size in the cold-start regression harness (621926-byte bundle exceeds 131072-byte per-argument limit). Same bundle/assertions now run through stdin with explicit local alias; spawn errors also asserted. Local macOS and Linux Node22 focused tests pass. Runtime code unchanged; full exact-head GitHub CI required again."
+      ],
+      "tests": [
+        "pnpm lint (0 errors; existing warnings retained)",
+        "pnpm typecheck",
+        "pnpm build",
+        "pnpm validate:canon",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph",
+        "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+        "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+      ]
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Codex integration owner under explicit operator delegation; reviewed source commits, conflicts and scoped remaining acceptance."
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestCommit": "5316d69f5d5f532bf6c888e2a085771663bf4d4e",
+      "manifestPath": "docs/plans/dee-1081-admin-console-final-integration.integration-train.json",
+      "manifestDigest": "dd1fe772a1f32bc0c460399b76ccf1b69d8db917e43b6ed4156d66f1cb4cc0b6",
+      "reviewer": "Codex integration owner; renewed integration-only admission, original implementation provenance retained."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-1077",
+        "status": "pass",
+        "reviewedCommits": [
+          "211bee29f4c5d665091f66ab69f83e68a4dd15d2"
+        ],
+        "reviewedFiles": [
+          "app/(trader)/admin/accounts/page.tsx",
+          "app/(trader)/admin/clients/page.tsx",
+          "app/(trader)/admin/layout.tsx",
+          "app/(trader)/admin/orders/page.tsx",
+          "app/api/trader/admin/console/accounts/[accountId]/route.ts",
+          "app/api/trader/admin/console/clients/[clientId]/history/route.ts",
+          "app/api/trader/admin/console/orders/[orderId]/route.ts",
+          "components/trader/admin-console/data/read-context.tsx",
+          "components/trader/admin-console/i18n/ru.ts",
+          "components/trader/admin-console/primitives/console-ui.tsx",
+          "components/trader/admin-console/primitives/emergency-workflow.tsx",
+          "components/trader/admin-console/sections/accounts/account-details.tsx",
+          "components/trader/admin-console/sections/clients/client-details.tsx",
+          "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+          "components/trader/admin-console/sections/orders/order-details.tsx",
+          "components/trader/admin-console/sections/orders/orders-panel.tsx",
+          "components/trader/admin-console/sections/orders/orders-workspace.tsx",
+          "components/trader/admin-console/shell/admin-console-shell.tsx",
+          "components/trader/admin-console/shell/context-controls.tsx",
+          "docs/plans/dee-1077-admin-console-entity-evidence.md",
+          "lib/observability/waia-runtime-route-telemetry.ts",
+          "lib/trader/admin-console/accounts/account-mode.ts",
+          "lib/trader/admin-console/billing/clients.ts",
+          "lib/trader/admin-console/handler-tables.ts",
+          "lib/trader/admin-console/handlers/account-detail.ts",
+          "lib/trader/admin-console/handlers/client-history.ts",
+          "lib/trader/admin-console/handlers/order-detail.ts",
+          "lib/trader/admin-console/read-models/account-finance.ts",
+          "lib/trader/admin-console/read-models/order-trace.ts",
+          "lib/trader/admin-console/read-models/positions.ts",
+          "lib/trader/admin-console/repositories/overview.postgres.ts",
+          "tests/e2e/admin-console-pg-workflows.spec.ts",
+          "tests/integration/admin-console-entity-detail-postgres.test.ts",
+          "tests/unit/admin-console-invoices-panel.test.tsx",
+          "tests/unit/admin-console-overview.test.ts"
+        ],
+        "reviewer": "Codex serial source and acceptance review under explicit user delegation; not an independent reviewer."
+      },
+      {
+        "issue": "DEE-1079",
+        "status": "pass",
+        "reviewedCommits": [
+          "6ebd448b81b2ba5d7a085e1029fe2f98363a7769",
+          "654ee2b2890dc50c55fd7b4669cfb92477623131"
+        ],
+        "reviewedFiles": [
+          "app/api/trader/admin/console/aggregate/route.ts",
+          "components/trader/admin-console/assistant/assistant-panel.tsx",
+          "components/trader/admin-console/data/read-context.tsx",
+          "components/trader/admin-console/i18n/ru.ts",
+          "components/trader/admin-console/shell/admin-console-shell.tsx",
+          "docs/plans/dee-1079-admin-console-grounded-assistant.md",
+          "lib/observability/waia-runtime-route-telemetry.ts",
+          "lib/trader/admin-console/assistant/context.ts",
+          "lib/trader/admin-console/assistant/facts.ts",
+          "lib/trader/admin-console/assistant/live-turn.ts",
+          "lib/trader/admin-console/assistant/quick-answers.ts",
+          "lib/trader/admin-console/assistant/run-assistant.ts",
+          "lib/trader/admin-console/assistant/tools.ts",
+          "lib/trader/admin-console/handler-tables.ts",
+          "lib/trader/admin-console/handlers/aggregate.ts",
+          "lib/trader/admin-console/handlers/assistant-conversations.ts",
+          "lib/trader/admin-console/handlers/assistant-messages.ts",
+          "lib/trader/admin-console/handlers/assistant-quick-answers.ts",
+          "lib/trader/admin-console/handlers/assistant-reads.ts",
+          "lib/trader/admin-console/handlers/search.ts",
+          "tests/e2e/admin-console-pg-workflows.spec.ts",
+          "tests/integration/admin-console-assistant-grounding-postgres.test.ts",
+          "tests/unit/admin-assistant-budget.test.ts",
+          "tests/unit/admin-assistant-grounded-facts.test.ts",
+          "tests/unit/admin-assistant-loop.test.ts",
+          "tests/unit/admin-console-chrome.test.tsx"
+        ],
+        "reviewer": "Codex serial source and acceptance review under explicit user delegation; not an independent reviewer."
+      },
+      {
+        "issue": "DEE-1078",
+        "status": "pass",
+        "reviewedCommits": [
+          "3b25196ec0731035a7ac7b56b281e253161f331f",
+          "722936e526791289628cdfc097257914f124ceee"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-1078-lifecycle-fee-denomination.md",
+          "lib/trader/admin-console/handler-tables.ts",
+          "lib/trader/admin-console/money/account-lots.ts",
+          "lib/trader/admin-console/money/operational-pnl.ts",
+          "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+          "lib/trader/lifecycle/fill-fee-economics.ts",
+          "lib/trader/lifecycle/lifecycle-recorder.ts",
+          "lib/trader/lifecycle/trade-pairing.ts",
+          "tests/integration/admin-console-period-finance-postgres.test.ts",
+          "tests/unit/trader-lifecycle-fee-denomination.test.ts"
+        ],
+        "reviewer": "Codex serial source and acceptance review under explicit user delegation; not an independent reviewer."
+      },
+      {
+        "issue": "DEE-1080",
+        "status": "pass",
+        "reviewedCommits": [
+          "d353ae2cc5d1ae4820e6b56bdaae2e8b05be22cd"
+        ],
+        "reviewedFiles": [
+          "app/(trader)/admin/strategies/page.tsx",
+          "app/(trader)/admin/strategy-promotions/page.tsx",
+          "app/api/trader/admin/console/promotions/commands/route.ts",
+          "app/api/trader/admin/console/promotions/route.ts",
+          "app/api/trader/admin/console/research/compare/route.ts",
+          "app/api/trader/admin/console/research/runs/[runId]/route.ts",
+          "app/api/trader/admin/console/strategies/detail/route.ts",
+          "components/trader/admin-console/data/read-context.tsx",
+          "components/trader/admin-console/i18n/ru.ts",
+          "components/trader/admin-console/navigation/sections.ts",
+          "components/trader/admin-console/sections/research/research-section.tsx",
+          "components/trader/admin-console/sections/research/run-details.tsx",
+          "components/trader/admin-console/sections/strategies/proposals.tsx",
+          "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+          "docs/plans/dee-1080-admin-console-research-evidence.md",
+          "lib/observability/waia-runtime-route-telemetry.ts",
+          "lib/trader/admin-console/assistant/facts.ts",
+          "lib/trader/admin-console/handler-tables.ts",
+          "lib/trader/admin-console/handlers/assistant-reads.ts",
+          "lib/trader/admin-console/handlers/promotions.ts",
+          "lib/trader/admin-console/handlers/proposals.ts",
+          "lib/trader/admin-console/handlers/research-detail.ts",
+          "lib/trader/admin-console/handlers/research-runs.ts",
+          "lib/trader/admin-console/handlers/strategy-detail.ts",
+          "lib/trader/admin-console/money/verified-close-fee.ts",
+          "lib/trader/admin-console/repositories/canonical-sql-adapter.ts",
+          "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+          "lib/trader/admin-console/repositories/research-detail.postgres.ts",
+          "lib/trader/admin-console/research/compare-runs.ts",
+          "lib/trader/admin-console/research/promotion-proposal.ts",
+          "lib/trader/admin-console/research/run-detail.ts",
+          "lib/trader/admin-console/research/strategy-performance.ts",
+          "lib/trader/validation-gate/admin-route-handler.ts",
+          "tests/e2e/admin-console-pg-workflows.spec.ts",
+          "tests/integration/admin-console-period-finance-postgres.test.ts",
+          "tests/integration/admin-console-research-detail-postgres.test.ts",
+          "tests/integration/postgres-historical-production-first-cycle-v2.test.ts",
+          "tests/unit/admin-console-promotion-command-guard.test.ts",
+          "tests/unit/admin-console-strategy-performance.test.ts",
+          "tests/unit/trader-admin-strategy-promotion-routes.test.ts"
+        ],
+        "reviewer": "Codex serial source and acceptance review under explicit user delegation; not an independent reviewer."
+      },
+      {
+        "issue": "DEE-1082",
+        "status": "pass",
+        "reviewedCommits": [
+          "99538f8d03283ea746e84a10d4c4739227f17bc6",
+          "8712dda75b5ff22eda660d563b064fa098c61ac5",
+          "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
+          "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
+          "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9",
+          "2812afae740567bbf5e8a594fd3295072f402598",
+          "42adc314654b34ec32215c301535de2f1f024fbb"
+        ],
+        "reviewedFiles": [
+          "app/(trader)/admin/accounts/page.tsx",
+          "app/(trader)/admin/errors/page.tsx",
+          "app/(trader)/admin/layout.tsx",
+          "app/(trader)/admin/strategy-promotions/page.tsx",
+          "app/api/trader/admin/console/accounts/paper/route.ts",
+          "app/api/trader/admin/console/changes/route.ts",
+          "app/api/trader/admin/console/clients/[clientId]/route.ts",
+          "app/api/trader/admin/console/incidents/[incidentId]/route.ts",
+          "app/api/trader/admin/console/promotions/commands/route.ts",
+          "components/trader/admin-console/data/visit-marker.tsx",
+          "components/trader/admin-console/i18n/ru.ts",
+          "components/trader/admin-console/primitives/console-ui.tsx",
+          "components/trader/admin-console/sections/accounts/paper-portfolios.tsx",
+          "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+          "components/trader/admin-console/sections/research/research-section.tsx",
+          "components/trader/admin-console/shell/admin-console-shell.tsx",
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "docs/plans/dee-1082-admin-console-final-acceptance.md",
+          "lib/trader/admin-console/assistant/facts.ts",
+          "lib/trader/admin-console/assistant/quick-answers.ts",
+          "lib/trader/admin-console/collectors/postgres-store.ts",
+          "lib/trader/admin-console/collectors/run-due.ts",
+          "lib/trader/admin-console/collectors/valuation-persist.ts",
+          "lib/trader/admin-console/handler-tables.ts",
+          "lib/trader/admin-console/handlers/assistant-reads.ts",
+          "lib/trader/admin-console/handlers/changes.ts",
+          "lib/trader/admin-console/handlers/clients.ts",
+          "lib/trader/admin-console/handlers/incident-commands.ts",
+          "lib/trader/admin-console/handlers/incidents.ts",
+          "lib/trader/admin-console/handlers/paper-portfolios.ts",
+          "lib/trader/admin-console/handlers/promotion-commands.ts",
+          "lib/trader/admin-console/handlers/promotions.ts",
+          "lib/trader/admin-console/money/quotes.ts",
+          "lib/trader/admin-console/money/valuation.ts",
+          "lib/trader/admin-console/read-models/account-finance.ts",
+          "lib/trader/admin-console/repositories/overview.postgres.ts",
+          "lib/trader/admin-console/repositories/period-finance.postgres.ts",
+          "lib/trader/admin-console/repositories/promotion-state.postgres.ts",
+          "tests/e2e/admin-console-pg-slice.spec.ts",
+          "tests/e2e/admin-console-pg-workflows.spec.ts",
+          "tests/integration/admin-console-final-acceptance-postgres.test.ts",
+          "tests/integration/admin-console-period-finance-postgres.test.ts",
+          "tests/integration/admin-console-promotion-request-postgres.test.ts",
+          "tests/integration/admin-console-retention-postgres.test.ts",
+          "tests/unit/admin-console-account-finance.test.ts",
+          "tests/unit/admin-console-collector-coldstart.test.ts",
+          "tests/unit/admin-console-valuation.test.ts"
+        ],
+        "reviewer": "Codex serial source and acceptance review under explicit user delegation; not an independent reviewer."
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-1077",
+        "status": "pass",
+        "commands": [
+          "pnpm lint (0 errors; existing warnings retained)",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm validate:canon",
+          "pnpm validate:reality-v2-consumer-graph",
+          "pnpm validate:execution-v2-consumer-graph",
+          "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+        ],
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation."
+      },
+      {
+        "afterIssue": "DEE-1079",
+        "status": "pass",
+        "commands": [
+          "pnpm lint (0 errors; existing warnings retained)",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm validate:canon",
+          "pnpm validate:reality-v2-consumer-graph",
+          "pnpm validate:execution-v2-consumer-graph",
+          "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+        ],
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation."
+      },
+      {
+        "afterIssue": "DEE-1078",
+        "status": "pass",
+        "commands": [
+          "pnpm lint (0 errors; existing warnings retained)",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm validate:canon",
+          "pnpm validate:reality-v2-consumer-graph",
+          "pnpm validate:execution-v2-consumer-graph",
+          "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+        ],
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation."
+      },
+      {
+        "afterIssue": "DEE-1080",
+        "status": "pass",
+        "commands": [
+          "pnpm lint (0 errors; existing warnings retained)",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm validate:canon",
+          "pnpm validate:reality-v2-consumer-graph",
+          "pnpm validate:execution-v2-consumer-graph",
+          "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+        ],
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation."
+      },
+      {
+        "afterIssue": "DEE-1082",
+        "status": "pass",
+        "commands": [
+          "pnpm lint (0 errors; existing warnings retained)",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm validate:canon",
+          "pnpm validate:reality-v2-consumer-graph",
+          "pnpm validate:execution-v2-consumer-graph",
+          "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
+          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)",
+          "pnpm test --run tests/unit/admin-console-collector-coldstart.test.ts",
+          "Linux Node22 container: vitest run tests/unit/admin-console-collector-coldstart.test.ts"
+        ],
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation. Final Russian-label delta reviewed against saved UI; six targeted units, typecheck/lint, repeated eight-section browser acceptance passed; final build and exact-head full CI recorded in PR. Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass. GitHub full suite exposed Linux argv size in the cold-start regression harness (621926-byte bundle exceeds 131072-byte per-argument limit). Same bundle/assertions now run through stdin with explicit local alias; spawn errors also asserted. Local macOS and Linux Node22 focused tests pass. Runtime code unchanged; full exact-head GitHub CI required again."
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
+  },
+  "crossCuttingInvariants": [
+    "Keep eight Russian sections and shared exact decimal canonical reads.",
+    "No financial-policy, Risk, Guardian, HWM, settlement, eligibility, holdout or live authority change.",
+    "All changes pass exact final-head CI before squash; all prior branches retained until integration succeeds."
+  ],
+  "rollbackStrategy": "Revert one final integration squash and restore previously verified Cloudflare Worker version; no old financial record rewrite.",
+  "admissionRenewal": "2026-09-25 02:52 UTC: renewed before integrating final acceptance changes. Cold-start reproduction identified run-due module initialization failure; admit only refresh of the reviewed existing consumer content digest after guard correction. Consumer/source identities, counts, authority and admission rules remain unchanged. Original admission and source commits retained in dee-1081-integration-before-admission-renewal; this is truthful renewed integration admission, not a claim about original implementation chronology.",
+  "reviewDisposition": {
+    "authority": "Explicit user instruction to self-accept, publish, merge and deploy this time-critical console delivery.",
+    "independentReview": "Not performed; do not claim independent review or automatic DEE-653 admission.",
+    "mergePath": "Direct delegated operational acceptance with disclosed exception; single owning integration issue.",
+    "unchangedGates": "All exact-head GitHub checks, local tests, scoped-diff validation, rollback and production verification remain required."
+  }
+}

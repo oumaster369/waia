@@ -34,7 +34,7 @@ export async function collectAccountValuations(
         !evidence ||
         !account.organizationId ||
         !account.included ||
-        account.state !== "ok" ||
+        !account.nativeValuation ||
         account.equity === null ||
         account.freeQuote === null ||
         account.lockedQuote === null ||
@@ -67,7 +67,9 @@ export async function collectAccountValuations(
           traderCostBasis: account.traderCostBasis,
           traderUnrealized: account.traderUnrealized,
           currency: "USDT",
-          state: account.state,
+          // This is the monetary projection state. Incomplete order/trade
+          // observations remain in reasons and the account's separate facets.
+          state: "ok",
           reasons: account.reasons ?? [],
           computedAt: now,
         })
@@ -83,7 +85,7 @@ export async function collectAccountValuations(
           traderUnrealized: account.traderUnrealized,
           valuationKey: account.valuationKey,
           methodVersion: account.method,
-          state: account.state,
+          state: "ok",
         })
         .onConflictDoNothing()
         .returning({ bucket: traderAdminEquityPoint.bucket });

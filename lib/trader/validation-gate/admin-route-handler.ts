@@ -8,9 +8,9 @@ if (process.env.VITEST !== "true") {
 import { serializePromotionPreview, serializePromotionRecord } from "@/lib/trader/admin-serialize";
 import {
   adminActor,
+  assertAdminPermission,
   adminClientError,
   adminSuccess,
-  authorizeAdminRoute,
   mapServiceError,
   parseOrganizationId,
   type AdminRouteHandlerDeps,
@@ -29,6 +29,29 @@ import {
   createSqliteStrategyPromotionService,
 } from "@/lib/trader/validation-gate/promotion-service";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+
+import {
+  assertAdminConsoleSameOrigin,
+  authorizeFleetAdmin,
+  staleRevisionResult,
+} from "@/lib/trader/admin-console/auth";
+import { StrategyPromotionConcurrencyError } from "./strategy-promotion-record.errors";
+
+import { requirePostgres } from "@/lib/trader/admin-console/postgres-guard";
+import type { StrategyPromotionRecordView } from "./strategy-promotion-record.types";
+function promotionMetadata(record: StrategyPromotionRecordView) {
+  return {
+    id: record.id,
+    strategyId: record.strategyId,
+    strategyVersion: record.strategyVersion,
+    state: record.state,
+    stateVersion: record.stateVersion,
+    revision: `promotion:${record.id}:${record.stateVersion}`,
+    requestedAt: record.requestedAt?.toISOString() ?? null,
+    effectiveAt: record.effectiveAt?.toISOString() ?? null,
+    coolingOffEndsAt: record.coolingOffEndsAt?.toISOString() ?? null,
+  };
+}
 
 function createPromotionService(
   runtime: Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>,
@@ -60,7 +83,7 @@ export async function handleAdminStrategyPromotionsGet(
 
   let runtime;
   try {
-    const auth = await authorizeAdminRoute(deps, orgParsed, "admin.audit.read");
+    const auth = await authorizeFleetAdmin(deps, "admin.audit.read");
     if (!auth.ok) {
       return auth.result;
     }
@@ -115,6 +138,7 @@ type StrategyPromotionCommandBody = {
   record_id?: string;
   strategy_id?: string;
   expected_state_version?: number;
+  expectedRevision?: string;
   cooling_off_ms?: number;
   reason?: string;
   ack?: string;
@@ -141,7 +165,10 @@ function parseCommandBody(raw: unknown): StrategyPromotionCommandBody | AdminRou
 export async function handleAdminStrategyPromotionCommandPost(
   request: Request,
   deps: AdminRouteHandlerDeps,
+  options?: { consoleMetadataOnly: boolean },
 ): Promise<AdminRouteHandlerResult> {
+  const origin = assertAdminConsoleSameOrigin(request);
+  if (origin) return origin;
   let parsed: unknown;
   try {
     parsed = await request.json();
@@ -172,12 +199,27 @@ export async function handleAdminStrategyPromotionCommandPost(
 
   let runtime;
   try {
-    const auth = await authorizeAdminRoute(deps, organizationId, "admin.audit.read");
+    const auth = await authorizeFleetAdmin(deps, "admin.audit.read");
     if (!auth.ok) {
       return auth.result;
     }
     runtime = auth.runtime;
+    const mutation = await assertAdminPermission(
+      runtime,
+      auth.userId,
+      auth.contextOrgId,
+      "admin.trader.operations.mutate",
+    );
+    if (!mutation.allowed)
+      return adminClientError(403, "FORBIDDEN", "Admin operation permission required.");
 
+    if (options?.consoleMetadataOnly) {
+      const unavailable = requirePostgres(runtime);
+      if (unavailable) return unavailable;
+    }
+    const serializeRecord = options?.consoleMetadataOnly
+      ? promotionMetadata
+      : serializePromotionRecord;
     const context = requireOrgContext(organizationId);
     const actor = adminActor(auth.userId);
     const service = createPromotionService(runtime);
@@ -210,7 +252,7 @@ export async function handleAdminStrategyPromotionCommandPost(
         idempotencyKey: idempotencyKey && idempotencyKey.length > 0 ? idempotencyKey : undefined,
         assembly,
       });
-      return adminSuccess({ record: serializePromotionRecord(record) }, runtime.kind);
+      return adminSuccess({ record: serializeRecord(record) }, runtime.kind);
     }
 
     if (
@@ -224,6 +266,18 @@ export async function handleAdminStrategyPromotionCommandPost(
       );
     }
 
+    if (
+      body.expectedRevision !== undefined &&
+      body.expectedRevision !== `promotion:${body.record_id}:${body.expected_state_version}`
+    )
+      return staleRevisionResult(null);
+
+    if (options?.consoleMetadataOnly && !body.expectedRevision)
+      return adminClientError(
+        400,
+        "EXPECTED_REVISION_REQUIRED",
+        "Read the promotion state before a command.",
+      );
     const transitionInput = {
       expectedStateVersion: body.expected_state_version,
       coolingOffMs: body.cooling_off_ms,
@@ -236,7 +290,7 @@ export async function handleAdminStrategyPromotionCommandPost(
         return adminClientError(400, "RECORD_ID_REQUIRED", "record_id is required.");
       }
       const record = await service.confirmPromotion(actor, context, recordId, transitionInput);
-      return adminSuccess({ record: serializePromotionRecord(record) }, runtime.kind);
+      return adminSuccess({ record: serializeRecord(record) }, runtime.kind);
     }
 
     if (command === "mark-effective") {
@@ -250,7 +304,7 @@ export async function handleAdminStrategyPromotionCommandPost(
         return adminClientError(400, "RECORD_ID_REQUIRED", "record_id is required.");
       }
       const record = await service.markEffective(actor, context, recordId, transitionInput);
-      return adminSuccess({ record: serializePromotionRecord(record) }, runtime.kind);
+      return adminSuccess({ record: serializeRecord(record) }, runtime.kind);
     }
 
     if (command === "cancel") {
@@ -259,7 +313,7 @@ export async function handleAdminStrategyPromotionCommandPost(
         return adminClientError(400, "RECORD_ID_REQUIRED", "record_id is required.");
       }
       const record = await service.cancelPromotion(actor, context, recordId, transitionInput);
-      return adminSuccess({ record: serializePromotionRecord(record) }, runtime.kind);
+      return adminSuccess({ record: serializeRecord(record) }, runtime.kind);
     }
 
     if (command === "demote") {
@@ -268,11 +322,12 @@ export async function handleAdminStrategyPromotionCommandPost(
         return adminClientError(400, "STRATEGY_ID_REQUIRED", "strategy_id is required.");
       }
       const record = await service.demoteStrategy(actor, context, strategyId, transitionInput);
-      return adminSuccess({ record: serializePromotionRecord(record) }, runtime.kind);
+      return adminSuccess({ record: serializeRecord(record) }, runtime.kind);
     }
 
     return adminClientError(400, "UNKNOWN_COMMAND", `Unknown command: ${command}`);
   } catch (err) {
+    if (err instanceof StrategyPromotionConcurrencyError) return staleRevisionResult(null);
     return mapServiceError(err);
   } finally {
     await deps.disposeRuntimeDb(runtime);
