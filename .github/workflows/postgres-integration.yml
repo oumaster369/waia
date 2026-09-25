@@ -97,6 +97,50 @@ env:
   WAIA_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
+  capital-authority:
+    name: PostgreSQL capital authority (executed proof required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_it
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_it"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and complete Postgres migrations
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Required actual-Postgres capital authority regressions (no skipped proof)
+        env:
+          WAIA_PG_INTEGRATION: "1"
+          WAIA_TRADER_CLI: "1"
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/capital-postgres-results.json
+          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/capital-postgres-results.json \
+            tests/integration/postgres-execution-v2.test.ts \
+            tests/integration/postgres-risk-v2.test.ts \
+            tests/integration/postgres-reality-v2.test.ts \
+            tests/integration/postgres-canonical-decision-verification-v2.test.ts
+          node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
+
   integration:
     name: postgres migrate + integration guard
     runs-on: ubuntu-latest
@@ -131,19 +175,6 @@ jobs:
         run: pnpm db:smoke:postgres
       - name: Historical complete migration journal regression
         run: pnpm test --run tests/unit/fhv-v2-postgres-schema-preflight.test.ts
-      - name: Required actual-Postgres capital authority regressions (no skipped proof)
-        env:
-          WAIA_PG_INTEGRATION: "1"
-          WAIA_TRADER_CLI: "1"
-        run: |
-          mkdir -p .tmp
-          rm -f .tmp/capital-postgres-results.json
-          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/capital-postgres-results.json \
-            tests/integration/postgres-execution-v2.test.ts \
-            tests/integration/postgres-risk-v2.test.ts \
-            tests/integration/postgres-reality-v2.test.ts \
-            tests/integration/postgres-canonical-decision-verification-v2.test.ts
-          node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
       - name: DEE-651 TEST_ONLY Decision → Risk → Execution V2 proof
         env:
           WAIA_PG_INTEGRATION: "1"
