@@ -244,6 +244,11 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       await expect(page).toHaveURL(new RegExp(`/admin/${path}\\?`));
       await expect(page).toHaveURL(new RegExp(`organization_id=${clients[0].id}`));
       await expect(page.locator("main").getByRole("status")).toHaveCount(0);
+      if (path === "research") {
+        await expect(
+          page.getByRole("row").filter({ hasText: "Контрольная кампания" }),
+        ).toContainText("Черновик");
+      }
       // App Router streams metadata separately from the data response.
       await expect(page).toHaveTitle(/\S/);
       const result = await new AxeBuilder({ page }).analyze();

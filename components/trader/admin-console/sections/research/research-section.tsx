@@ -43,6 +43,10 @@ const labels: Record<string, string> = {
   VERIFIED: "Подтверждена",
   UNVERIFIED: "Не подтверждена",
   SEALED: "Запечатан",
+  DRAFT: "Черновик",
+  ACTIVE: "Активна",
+  PAUSED: "Приостановлена",
+  ARCHIVED: "В архиве",
   draft: "Черновик",
   registered: "Зарегистрирована",
   backtested: "Тест завершён",
@@ -162,7 +166,7 @@ export function ResearchSection() {
                         row.inactive ? "warning" : row.phase === "FAILED" ? "danger" : "neutral"
                       }
                     >
-                      {labels[row.phase] ?? row.phase}
+                      {labels[row.phase] ?? labels[row.phase.toLowerCase()] ?? row.phase}
                     </ConsoleBadge>
                     {row.inactive ? (
                       <p className="text-waia-warning mt-2 text-xs">
@@ -238,7 +242,9 @@ export function ResearchSection() {
                 title: "Состояние",
                 render: (row) =>
                   row.state ? (
-                    <ConsoleBadge>{labels[row.state] ?? row.state}</ConsoleBadge>
+                    <ConsoleBadge>
+                      {labels[row.state] ?? labels[row.state.toLowerCase()] ?? row.state}
+                    </ConsoleBadge>
                   ) : (
                     <DataState state="unavailable" reason="RESEARCH_STATE_NOT_PERSISTED" />
                   ),
