@@ -4,6 +4,8 @@ import { runAssistantTurn } from "@/lib/trader/admin-console/assistant/run-assis
 import { parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
 import { assistantContext } from "@/lib/trader/admin-console/assistant/context";
 import { UNVERIFIED_SEGMENT } from "@/lib/trader/admin-console/assistant/segments";
+import { ADMIN_JOB_CATALOG } from "@/lib/trader/admin-console/jobs/job-catalog";
+import type { SystemJob } from "@/lib/trader/admin-console/read-models/system";
 const parsed = parseAdminConsoleQuery(new URL("http://localhost/?mode=live&currency=USDT"));
 if (!parsed.ok) throw new Error("fixture");
 const query = parsed.query;
@@ -18,6 +20,90 @@ const envelope = (data: unknown) => ({
   data,
 });
 describe("server-bound admin assistant facts", () => {
+  it("preserves named job outcomes, evidence quality and observation times from the canonical DTO", () => {
+    const jobs: SystemJob[] = ADMIN_JOB_CATALOG.map((job) => ({
+      ...job,
+      lastRun: null,
+      state: "unavailable",
+      reason:
+        job.owner === "human"
+          ? "MANUAL_OPERATION_NOT_SCHEDULED"
+          : job.owner === "execution-host"
+            ? "EXECUTION_HOST_DIAGNOSTICS_UNAVAILABLE"
+            : "JOB_RUN_NOT_OBSERVED",
+    }));
+    Object.assign(jobs.find((job) => job.jobKey === "admin_market_quotes")!, {
+      state: "ok",
+      reason: null,
+      lastRun: {
+        at: "2026-09-25T00:59:00.000Z",
+        finishedAt: "2026-09-25T00:59:10.000Z",
+        status: "failed",
+        errorClass: "TEST_FAILURE",
+      },
+    });
+    Object.assign(jobs.find((job) => job.jobKey === "admin_news")!, {
+      state: "stale",
+      reason: "JOB_RUN_STALE",
+      lastRun: {
+        at: "2026-09-24T22:00:00.000Z",
+        finishedAt: "2026-09-24T22:00:10.000Z",
+        status: "succeeded",
+        errorClass: null,
+      },
+    });
+    const facts = factsFromTool({ tool: "system_status", body: envelope({ jobs }) }, query);
+    expect(facts.find((fact) => fact.entityId === "admin_market_quotes")).toMatchObject({
+      label: "Котировки HTX · последний запуск",
+      value: "Ошибка",
+      state: "ok",
+      observedAt: "2026-09-25T00:59:00.000Z",
+      href: expect.stringContaining("tab=jobs"),
+    });
+    expect(facts.find((fact) => fact.entityId === "admin_news")).toMatchObject({
+      label: "Новости · последний запуск",
+      value: "Успешно",
+      state: "stale",
+      reasons: ["JOB_RUN_STALE"],
+      observedAt: "2026-09-24T22:00:00.000Z",
+    });
+    for (const job of jobs.filter((row) => !row.lastRun)) {
+      expect(facts.find((fact) => fact.entityId === job.jobKey)).toMatchObject({
+        value: null,
+        state: "unavailable",
+        reasons: [job.reason],
+        observedAt: null,
+      });
+    }
+    expect(facts.find((fact) => fact.entityId === "invoice_issue")?.label).toBe(
+      "Ручной выпуск счетов · последний запуск",
+    );
+    expect(facts.find((fact) => fact.field === "jobs.coverage")).toMatchObject({
+      value: "13",
+      state: "ok",
+      coverage: { included: 13, total: 13 },
+    });
+  });
+  it("reports the actual projected job coverage without converting unknown outcomes to success", () => {
+    const jobs = Array.from({ length: 51 }, (_, index) => ({
+      jobKey: `future_job_${index}`,
+      lastRun: { at: "2026-09-25T00:59:00.000Z", status: "future_outcome" },
+      state: "ok",
+      reason: null,
+    }));
+    const facts = factsFromTool({ tool: "list_jobs", body: envelope({ jobs }) }, query);
+    expect(facts.find((fact) => fact.field === "jobs.coverage")).toMatchObject({
+      value: "50",
+      state: "partial",
+      reasons: ["LIST_COVERAGE_LIMITED"],
+      coverage: { included: 50, total: 51 },
+    });
+    expect(facts.filter((fact) => fact.entityId !== null)).toHaveLength(50);
+    expect(facts.find((fact) => fact.entityId === "future_job_0")).toMatchObject({
+      label: "future_job_0 · последний запуск",
+      value: "future_outcome",
+    });
+  });
   it("keeps exact decimal value, currency, source, revision and coverage bound together", async () => {
     const facts = factsFromTool(
       {
