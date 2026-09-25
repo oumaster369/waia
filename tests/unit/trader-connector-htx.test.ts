@@ -397,11 +397,22 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
   });
 });
 
+// Effect tests explicitly use a freshly observed read+trade key. Read/observe
+// tests above retain read-only permission and must not gain effect authority.
+function tradeHandlers(overrides: Parameters<typeof defaultHandlers>[0] = {}) {
+  return defaultHandlers({
+    "/v2/user/api-key": () => jsonResponse({ code: 200, data: [{
+      accessKey: VALID_CREDS.apiKey, permission: "readOnly,trade", status: "normal",
+    }] }),
+    ...overrides,
+  });
+}
+
 describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   it("submits exactly one signed POST, performs no lookup, and preserves the raw acknowledgement", async () => {
     let placementPosts = 0;
     let orderGets = 0;
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": (url, init) => {
         placementPosts += 1;
         expect(init?.method).toBe("POST");
@@ -433,7 +444,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("fails unknown on an unrecognized HTX state and preserves the raw row", async () => {
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/": (url) => {
         const orderId = url.pathname.split("/").pop()!;
         return jsonResponse({
@@ -462,7 +473,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("fails unknown on undocumented HTX order mechanics and preserves the raw row", async () => {
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/": (url) => {
         const orderId = url.pathname.split("/").pop()!;
         return jsonResponse({
@@ -493,7 +504,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   it.each([429, 503])("never retries an HTX placement HTTP %i response", async (status) => {
     let placementPosts = 0;
     let orderGets = 0;
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": () => {
         placementPosts += 1;
         return jsonResponse({ status: "error", "err-code": `http-${status}` }, status);
@@ -520,7 +531,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("redacts echoed signed request credentials while retaining a response digest", async () => {
     let signature = "";
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": (url) => {
         signature = url.searchParams.get("Signature") ?? "";
         return jsonResponse({
@@ -565,7 +576,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("fails unknown after one transport attempt without claiming a venue response", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": () => {
         placementPosts += 1;
         throw new TypeError(
@@ -600,7 +611,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("preserves observed HTTP status when response body reading fails", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": () => {
         placementPosts += 1;
         return {
@@ -631,7 +642,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("bounds an unresponsive placement by the sealed timeout and fails unknown", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": () => {
         placementPosts += 1;
         return new Promise<Response>(() => undefined);
@@ -658,7 +669,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("bounds an unresponsive response body by the same sealed timeout", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(defaultHandlers({
+    const connector = await validatedHtx(tradeHandlers({
       "/v1/order/orders/place": () => {
         placementPosts += 1;
         return {
@@ -691,14 +702,14 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("cancels an order via signed POST", async () => {
-    const connector = await validatedHtx(defaultHandlers());
+    const connector = await validatedHtx(tradeHandlers());
     const canceled = await connector.cancelOrder("357630527817871");
     expect(canceled.orderId).toBe("357630527817871");
     expect(canceled.status).toBe("canceled");
   });
 
   it("rejects disallowed symbols for writes", async () => {
-    const connector = await validatedHtx(defaultHandlers());
+    const connector = await validatedHtx(tradeHandlers());
     await expect(
       connector.placeOrder({
         clientOrderId: "x",
@@ -712,14 +723,14 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("rejects disallowed symbols for reads", async () => {
-    const connector = await validatedHtx(defaultHandlers());
+    const connector = await validatedHtx(tradeHandlers());
     await expect(connector.getOpenOrders({ symbol: "SOL/USDT" })).rejects.toBeInstanceOf(
       HtxConnectorValidationError,
     );
   });
 
   it("requires clientOrderId for placeOrder", async () => {
-    const connector = await validatedHtx(defaultHandlers());
+    const connector = await validatedHtx(tradeHandlers());
     await expect(
       connector.placeOrder({
         clientOrderId: "  ",
@@ -732,7 +743,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("throws ConnectorNotSupportedError for futures stubs", async () => {
-    const connector = await validatedHtx(defaultHandlers());
+    const connector = await validatedHtx(tradeHandlers());
     await expect(connector.getFuturesBalances()).rejects.toBeInstanceOf(ConnectorNotSupportedError);
     await expect(connector.getFuturesPositions()).rejects.toBeInstanceOf(
       ConnectorNotSupportedError,
@@ -742,7 +753,7 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
 describe("HtxExchangeConnector streamUserData stub (DEE-195)", () => {
   it("yields no events (no private websocket)", async () => {
-    const connector = await validatedHtx(defaultHandlers());
+    const connector = await validatedHtx(tradeHandlers());
     const events = [];
     for await (const event of connector.streamUserData()) {
       events.push(event);

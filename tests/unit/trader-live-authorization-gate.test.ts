@@ -63,7 +63,7 @@ function stubCredentialService(): CredentialService {
           version: 1,
           marketType: "spot",
           exchangeAccountId: "htx-spot-1",
-          scopes: ["trade"],
+          scopes: ["read", "trade"],
           warnings: [],
           withdrawForbidden: true,
           transferForbidden: true,
@@ -303,6 +303,20 @@ describe("composite live authorization gate (DEE-212 / BP-7)", () => {
     ).rejects.toThrow(LivePathCredentialRequiredError);
   });
 
+  it.each([null, { scopes: ["read"] }])("unverified trade metadata denies before decrypt and host probe", async (override) => {
+    const credentialService = stubCredentialService();
+    const rows = await credentialService.listCredentialMetadata(requireOrgContext(org0));
+    rows[0]!.permissionMetadata = override === null ? null : { ...rows[0]!.permissionMetadata, ...override };
+    vi.mocked(credentialService.listCredentialMetadata).mockResolvedValue(rows);
+    const probeHostHealth = vi.fn(async () => true);
+    const assertGate = makeAssert({ orgLiveEnabled: true, promotionVersion: "0.1.0", credentialService, probeHostHealth });
+    await expect(assertGate(requireOrgContext(org0), {
+      submitInput: baseSubmitInput(), strategyId: STRATEGY_ID, strategyVersion: "0.1.0",
+    })).rejects.toThrow("PERMISSION_METADATA_UNVERIFIED");
+    expect(credentialService.getDecryptedCredentials).not.toHaveBeenCalled();
+    expect(probeHostHealth).not.toHaveBeenCalled();
+  });
+
   it("denies when credential is revoked or non-HTX", async () => {
     const assertGate = makeAssert({
       orgLiveEnabled: true,
@@ -322,7 +336,7 @@ describe("composite live authorization gate (DEE-212 / BP-7)", () => {
               version: 1,
               marketType: "spot",
               exchangeAccountId: "htx-spot-1",
-              scopes: ["trade"],
+              scopes: ["read", "trade"],
               warnings: [],
               withdrawForbidden: true,
               transferForbidden: true,

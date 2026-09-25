@@ -9,6 +9,7 @@ import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connect
 import { createExchangeConnector } from "@/lib/trader/connectors/registry";
 import type { CredentialService } from "@/lib/trader/credentials/types";
 import {
+  requireHtxStoredPermissionMetadata,
   resolveHtxSecureCredential,
   toHtxExchangeConnectorConfig,
 } from "@/lib/trader/security/htx-secure-credential-resolver";
@@ -32,11 +33,18 @@ export async function createLiveHtxConnector(
     throw new Error("[trader/live] active HTX credential not found");
   }
 
+  requireHtxStoredPermissionMetadata({
+    purpose: "trade", venue: credential.venue,
+    exchangeAccountId: credential.exchangeAccountId,
+    permissionMetadata: credential.permissionMetadata,
+  });
+
   const decrypted = await input.credentialService.getDecryptedCredentials(
     scoped,
     input.credentialId,
   );
   const resolved = resolveHtxSecureCredential({
+    purpose: "trade",
     venue: credential.venue,
     exchangeAccountId: credential.exchangeAccountId,
     credentials: decrypted,
@@ -53,6 +61,13 @@ export async function createLiveHtxConnector(
   });
   if (!validation.valid || validation.accountId !== resolved.spotAccountId) {
     throw new Error("[trader/live] HTX exact stored account admission failed");
+  }
+  const account = await connector.getAccountInfo();
+  if (account.accountId !== resolved.spotAccountId || account.venue !== "htx" ||
+      account.marketType !== "spot" || !account.permissions.includes("read") ||
+      !account.permissions.includes("trade") ||
+      account.permissions.some((scope) => scope !== "read" && scope !== "trade")) {
+    throw new Error("[trader/live] HTX fresh trade permission admission failed");
   }
   return connector;
 }

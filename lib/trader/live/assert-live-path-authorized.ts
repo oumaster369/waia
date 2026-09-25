@@ -24,7 +24,7 @@ import { isTerminalReject } from "@/lib/trader/risk/decision";
 import type { KillSwitchResolverPort, RiskEngineDecision } from "@/lib/trader/risk/evaluate.types";
 import type { RiskLimitsService } from "@/lib/trader/risk/limits/types";
 import { compareDecimal, minDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
-import { resolveHtxSecureCredential } from "@/lib/trader/security/htx-secure-credential-resolver";
+import { requireHtxStoredPermissionMetadata, resolveHtxSecureCredential } from "@/lib/trader/security/htx-secure-credential-resolver";
 import { assertStrategyLiveAuthorized } from "@/lib/trader/validation-gate/assert-strategy-live-authorized";
 import type { StrategyPromotionService } from "@/lib/trader/validation-gate/promotion-service";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -140,11 +140,18 @@ export function createAssertLivePathAuthorized(deps: LivePathAuthorizationDeps) 
       throw new LivePathCredentialRequiredError();
     }
 
+    requireHtxStoredPermissionMetadata({
+      purpose: "trade", venue: credential.venue,
+      exchangeAccountId: credential.exchangeAccountId,
+      permissionMetadata: credential.permissionMetadata,
+    });
+
     const decrypted = await deps.credentialService.getDecryptedCredentials(
       scoped,
       submitInput.credentialId,
     );
     resolveHtxSecureCredential({
+      purpose: "trade",
       venue: credential.venue,
       exchangeAccountId: credential.exchangeAccountId,
       credentials: decrypted,

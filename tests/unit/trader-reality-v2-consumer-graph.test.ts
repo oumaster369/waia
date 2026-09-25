@@ -29,11 +29,24 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and
         // the HTX public ticker host. None admit Reality or place orders.
         consumers: 134,
-        connectorReferences: 25,
+        // DEE-1099 adds one read of freshly validated account permissions,
+        // not a financial observation or a venue effect.
+        connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       }),
     );
+  });
+
+  it("keeps the live credential permission read outside Reality admission", () => {
+    const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
+    const file = "lib/trader/live/live-connector.ts";
+    expect(inventory.admittedBoundaryFiles).not.toContain(file);
+    expect(inventory.explicitCompatibilityChecks.filter((entry: { file: string }) => entry.file === file))
+      .toEqual([{ file, method: "getAccountInfo", occurrences: 1, disposition: expect.stringContaining("CREDENTIAL_PERMISSION_CHECK_ONLY") }]);
+    const references = detectConnectorMethodReferencesInSource(readFileSync(join(ROOT, file), "utf8"), file,
+      ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"]);
+    expect(references.map(({ method }) => method)).toEqual(["getAccountInfo"]);
   });
 
   it("pins the protected store as exactly one observation-only consumer, not an admitted boundary", () => {
