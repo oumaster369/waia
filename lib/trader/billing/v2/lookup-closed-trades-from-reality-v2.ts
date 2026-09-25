@@ -4,6 +4,7 @@ import {
   type ClosedTradeSettlementV2,
 } from "@/lib/trader/billing/v2/closed-trade-settlement-v2";
 import { requireBillingV2NonEmpty } from "@/lib/trader/billing/v2/billing-v2-guards";
+import { BILLING_POLICY_V2_CURRENCY } from "@/lib/trader/billing/v2/billing-policy-v2";
 import type { TruthRecordV2 } from "@/lib/trader/reality/v2/contracts";
 import {
   addDecimal,
@@ -32,6 +33,7 @@ type FillRecord = Readonly<{
   side: "buy" | "sell";
   quantity: string;
   feeAmount: string;
+  feeAsset: string;
   settlementStatus: "OBSERVED" | "SETTLED";
   knowledgeAtUtc: string;
 }>;
@@ -109,12 +111,18 @@ function classifyRecords(input: LookupClosedTradeSettlementsFromRealityV2Input):
         side: assertion.side,
         quantity: requireQuantity(assertion.quantity),
         feeAmount: requireQuantity(assertion.feeAmount),
+        feeAsset: assertion.feeAsset,
         settlementStatus: assertion.settlementStatus,
         knowledgeAtUtc: record.knowledgeAtUtc,
       });
       continue;
     }
     if (assertion.kind === "REALIZED_CASHFLOW") {
+      if (assertion.asset !== BILLING_POLICY_V2_CURRENCY) {
+        throw new BillingCanonicalProfitAdmissionError(
+          "LOOKUP_CASHFLOW_CONVERSION_EVIDENCE_REQUIRED",
+        );
+      }
       cashflows.push({
         digestHex: record.contentDigestHex,
         causeNativeId: assertion.causeNativeId,
@@ -147,6 +155,15 @@ function remainingQuantity(fills: readonly FillRecord[]): string {
 }
 
 function assertFullyClosedGroup(fills: readonly FillRecord[]): void {
+  // Only costs entering a closed settlement need conversion. Preserve native
+  // units and never silently treat USDT (or another asset) as billing currency.
+  if (
+    fills.some(
+      (fill) => !isZeroDecimal(fill.feeAmount) && fill.feeAsset !== BILLING_POLICY_V2_CURRENCY,
+    )
+  ) {
+    throw new BillingCanonicalProfitAdmissionError("LOOKUP_COST_CONVERSION_EVIDENCE_REQUIRED");
+  }
   if (fills.some((fill) => fill.settlementStatus !== "SETTLED")) {
     throw new BillingCanonicalProfitAdmissionError("LOOKUP_FILL_NOT_SETTLED");
   }

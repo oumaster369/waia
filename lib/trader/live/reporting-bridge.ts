@@ -106,7 +106,8 @@ export async function proveLiveFillReportingReadable(
 
   const feeArtifact = await input.feeComputation.computeFeeForPeriod(input.context, {
     periodId: closed.id,
-    realizedFillFinality: true,
+    // A reporting read/proof is not the operator's realized-fill attestation.
+    realizedFillFinality: false,
     computedAt: now,
   });
 
