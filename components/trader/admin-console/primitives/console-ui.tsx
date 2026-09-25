@@ -215,7 +215,11 @@ export function ConsoleDialog({
   React.useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    if (open && !node.open) node.showModal();
+    if (open && !node.open) {
+      node.showModal();
+      // React mounts inputs before the native dialog becomes focusable.
+      node.querySelector<HTMLElement>("[data-console-autofocus]")?.focus();
+    }
     else if (!open && node.open) node.close();
   }, [open]);
   return (

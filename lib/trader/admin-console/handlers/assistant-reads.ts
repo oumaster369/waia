@@ -1,3 +1,5 @@
+import { handleAdminConsolePaperPortfoliosGet } from "./paper-portfolios";
+import { handleAdminConsoleChangesGet } from "./changes";
 import { handleAdminConsoleStrategyDetailGet } from "./strategy-detail";
 import { handleAdminConsoleResearchDetailGet } from "./research-detail";
 import {
@@ -41,8 +43,12 @@ export async function readAssistantTool(
     headers: request.headers,
     signal: request.signal,
   });
+  if (tool === "changes_since") return handleAdminConsoleChangesGet(read, deps);
   if (tool === "get_overview") return handleAdminConsoleOverviewGet(read, deps);
-  if (tool === "list_accounts") return handleAdminConsoleAccountsGet(read, deps);
+  if (tool === "list_accounts")
+    return url.searchParams.get("mode") === "paper"
+      ? handleAdminConsolePaperPortfoliosGet(read, deps)
+      : handleAdminConsoleAccountsGet(read, deps);
   if (tool === "list_orders") return handleAdminConsoleOrdersGet(read, deps);
   if (tool === "list_clients") return handleAdminConsoleClientsGet(read, deps);
   if (tool === "list_invoices") return handleAdminConsoleInvoicesGet(read, deps);
@@ -85,6 +91,14 @@ export async function readAssistantTool(
     !entityId
   )
     return adminClientError(400, "BAD_REQUEST", "entity_id required.");
+  if (tool === "get_incident")
+    return entityId
+      ? handleAdminConsoleIncidentsGet(read, deps, entityId)
+      : adminClientError(400, "BAD_REQUEST", "entity_id required.");
+  if (tool === "get_client")
+    return entityId
+      ? handleAdminConsoleClientsGet(read, deps, entityId)
+      : adminClientError(400, "BAD_REQUEST", "entity_id required.");
   if (tool === "get_account") return handleAdminConsoleAccountDetailGet(read, deps, entityId!);
   if (tool === "get_invoice") return handleAdminConsoleInvoiceDetailGet(read, deps, entityId!);
   if (tool === "get_order_trace") return handleAdminConsoleOrderDetailGet(read, deps, entityId!);

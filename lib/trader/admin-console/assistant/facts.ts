@@ -44,6 +44,9 @@ const PATHS: Record<string, string> = {
   list_accounts: "/admin/accounts",
   list_orders: "/admin/orders",
   list_clients: "/admin/clients",
+  get_client: "/admin/clients",
+  get_incident: "/admin/errors",
+  changes_since: "/admin/system",
   list_invoices: "/admin/clients",
   strategy_performance: "/admin/strategies",
   list_research_runs: "/admin/research",
@@ -150,6 +153,31 @@ export function factsFromTool(
     add("scope", TITLES[tool] ?? "Источник", null, { reasons: ["ADMIN_SCOPE_MISMATCH"] });
     return result;
   }
+  if (tool === "get_client" || tool === "get_incident") {
+    const row = record(tool === "get_client" ? data.client : data.incident);
+    const id = str(row.id);
+    const href = assistantHref(PATHS[tool]!, query, { sel: id ?? "" });
+    if (tool === "get_client") {
+      add("client.access", "Доступ клиента", row.access, { entityId: id, href });
+      add("client.connectedSince", "Подключён с", row.connectedSinceValue, {
+        entityId: id,
+        href,
+        reasons: row.connectedSinceValue ? [] : ["CONNECTED_SINCE_NOT_OBSERVED"],
+      });
+    } else {
+      add("incident.status", "Статус инцидента", row.status, { entityId: id, href });
+      add("incident.occurrences", "Повторений", row.occurrences, { entityId: id, href });
+    }
+    return result;
+  }
+  if (tool === "changes_since") {
+    add("aggregate.total", "Изменений с предыдущего визита", record(data.aggregate).total, {
+      state: str(data.state) ?? "unavailable",
+      reasons: reasons(data.reasons),
+    });
+    add("since", "Начало наблюдаемого интервала", data.effectiveSince);
+    return result;
+  }
   if (tool === "strategy_performance" && Array.isArray(data.performance)) {
     for (const [i, group] of list(data.performance).entries()) {
       const href = assistantHref("/admin/strategies", query, {
@@ -241,7 +269,10 @@ export function factsFromTool(
   }
   const items = tool === "list_accounts" ? list(data.accounts ?? data.items) : list(data.items);
   if (Array.isArray(data.items) || Array.isArray(data.accounts)) {
-    const n = count(data.total) ?? (tool === "list_accounts" ? total : null),
+    const n =
+        count(data.total) ??
+        count(record(data.aggregate).total) ??
+        (tool === "list_accounts" ? total : null),
       cap = data.truncated === true || n === null || (n !== null && n > items.length);
     add("list.coverage", "Записей в выборке источника", items.length, {
       state: cap ? "partial" : items.length ? "ok" : "empty",

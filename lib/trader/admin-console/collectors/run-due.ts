@@ -1,4 +1,4 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
 import { COLLECTOR_SCHEMA_TABLES } from "@/lib/trader/admin-console/handler-tables";
@@ -35,8 +35,7 @@ import {
 } from "@/lib/trader/admin-console/money/htx-public-tickers";
 import { fetchUsdQuoteRows } from "@/lib/trader/admin-console/money/usd-quotes";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") require("server-only");
+enforceServerOnly();
 
 export type CollectorFetchers = {
   htx: () => Promise<{ tickers: readonly HtxPublicTicker[]; sourceTs: string | null }>;

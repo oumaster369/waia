@@ -162,7 +162,18 @@ export const HANDLER_TABLES = {
     "payment_events",
   ],
   fills: ["trader_fills", "trader_orders", "exchange_credentials"],
-  incidents: ["trader_admin_incident", "trader_admin_diagnostic_event"],
+  paperPortfolios: [
+    "trader_orders",
+    "trader_execution_plans_v2",
+    "trader_position_lots",
+    "trader_trade_legs",
+  ],
+  incidents: [
+    "trader_admin_incident",
+    "trader_admin_diagnostic_event",
+    "trader_admin_incident_event",
+  ],
+  changes: ["trader_admin_change_log", "trader_admin_visit_marker"],
   incidentCommands: [
     "trader_admin_incident",
     "trader_admin_diagnostic_event",

@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
 import { useConsoleStreamList } from "@/components/trader/admin-console/data/console-stream-list";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
 import { notifyAdminAccessRevoked } from "@/components/trader/admin-console/data/access-events";
@@ -119,7 +120,30 @@ function Incidents({ tab }: { tab: string }) {
     context.href(`/api/trader/admin/console/incidents?tab=${tab}&ui_refresh=${refresh}`),
     "incidents",
   );
-  const selected = items?.find((item) => item.id === context.params.get("sel"));
+  const selectedId = context.params.get("sel");
+  const detail = useAdminRead<{
+    incident: IncidentItem;
+    history: {
+      id: string;
+      from: string | null;
+      to: string;
+      reason: string;
+      evidence: string | null;
+      at: string;
+    }[];
+    events: { id: string; at: string; message: string; severity: string }[];
+    truncated: boolean;
+  }>(
+    selectedId
+      ? `/api/trader/admin/console/incidents/${encodeURIComponent(selectedId)}?ui_refresh=${refresh}`
+      : null,
+  );
+  const selected = detail.envelope?.data.incident;
+  const notificationsMuted = Boolean(
+    selected?.mutedUntil &&
+    detail.envelope &&
+    Date.parse(selected.mutedUntil) > Date.parse(detail.envelope.generatedAt),
+  );
   const [pending, setPending] = React.useState(false);
   const inFlight = React.useRef(false);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -130,10 +154,10 @@ function Incidents({ tab }: { tab: string }) {
   const next = selected
     ? INCIDENT_STATUSES.find((status) => nextIncidentStatus(selected.status, status).ok)
     : null;
-  const changeStatus = async () => {
+  const changeStatus = async (mute?: boolean) => {
     if (
       !selected ||
-      !next ||
+      (!next && mute === undefined) ||
       pending ||
       inFlight.current ||
       draftFor !== identity ||
@@ -152,7 +176,12 @@ function Incidents({ tab }: { tab: string }) {
         body: JSON.stringify({
           id: selected.id,
           expectedRevision: selected.revision,
-          status: next,
+          ...(mute === undefined
+            ? { status: next }
+            : {
+                action: "mute",
+                mutedUntil: mute ? new Date(Date.now() + 3600000).toISOString() : null,
+              }),
           reason: note.trim(),
           evidence: evidence.trim(),
         }),
@@ -251,7 +280,7 @@ function Incidents({ tab }: { tab: string }) {
                         </ConsoleBadge>
                         {item.mutedUntil ? (
                           <p className="text-waia-fg-muted mt-2 text-[10px]">
-                            Уведомления скрыты до <EvidenceTime at={item.mutedUntil} label="" />
+                            Срок скрытия уведомлений: <EvidenceTime at={item.mutedUntil} label="" />
                           </p>
                         ) : null}
                       </td>
@@ -276,12 +305,14 @@ function Incidents({ tab }: { tab: string }) {
         </ConsolePanel>
       ) : null}
       <ConsoleDialog
-        open={Boolean(selected)}
+        open={Boolean(selectedId)}
         onClose={() => context.update({ sel: null })}
         dismissible={!pending}
         title={selected?.title ?? "Инцидент"}
         description="Каждое изменение статуса требует причины и доказательства и сохраняется в истории."
       >
+        {detail.loading ? <ConsoleLoading /> : null}
+        {detail.reason ? <DataState state="unavailable" reason={detail.reason} /> : null}
         {selected ? (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
@@ -291,7 +322,7 @@ function Incidents({ tab }: { tab: string }) {
             <p className="text-xs">
               <EvidenceTime at={selected.lastSeenAt} label="Последнее событие" />
             </p>
-            {next ? (
+            {selected ? (
               <form
                 className="grid gap-4"
                 onSubmit={(event) => {
@@ -300,7 +331,7 @@ function Incidents({ tab }: { tab: string }) {
                 }}
               >
                 <p className="text-sm">
-                  Следующий статус: <strong>{LABELS[next]}</strong>
+                  Следующий статус: <strong>{next ? LABELS[next] : "Переход не требуется"}</strong>
                 </p>
                 <label className="grid gap-2 text-sm">
                   Причина
@@ -332,12 +363,68 @@ function Incidents({ tab }: { tab: string }) {
                 </label>
                 <button
                   type="submit"
-                  disabled={pending || draftFor !== identity || !note.trim() || !evidence.trim()}
+                  disabled={
+                    pending || !next || draftFor !== identity || !note.trim() || !evidence.trim()
+                  }
                   className={controlClass}
                 >
-                  {pending ? "Сохраняем…" : `Перевести: ${LABELS[next]}`}
+                  {pending
+                    ? "Сохраняем…"
+                    : next
+                      ? `Перевести: ${LABELS[next]}`
+                      : "Статус подтверждён"}
                 </button>
+                <div className="border-waia-divider grid gap-2 border-t pt-4">
+                  <p className="text-waia-fg-muted text-xs">
+                    Уведомления можно скрыть отдельно. Статус и история инцидента сохраняются.
+                  </p>
+                  <button
+                    type="button"
+                    className={controlClass}
+                    disabled={pending || draftFor !== identity || !note.trim() || !evidence.trim()}
+                    onClick={() => void changeStatus(!notificationsMuted)}
+                  >
+                    {notificationsMuted ? "Вернуть уведомления" : "Скрыть уведомления на час"}
+                  </button>
+                </div>
               </form>
+            ) : null}
+            <ConsolePanel title="История изменений">
+              <ConsoleTable
+                rows={detail.envelope?.data.history ?? []}
+                rowKey={(r) => r.id}
+                caption="История инцидента"
+                columns={[
+                  { title: "Когда", render: (r) => <EvidenceTime at={r.at} label="" /> },
+                  { title: "Статус", render: (r) => LABELS[r.to as IncidentStatus] ?? r.to },
+                  {
+                    title: "Причина и доказательство",
+                    render: (r) => (
+                      <div>
+                        <p>{r.reason}</p>
+                        <p className="text-waia-fg-muted mt-2 text-xs">{r.evidence}</p>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </ConsolePanel>
+            <ConsolePanel title="Последние события">
+              <ConsoleTable
+                rows={detail.envelope?.data.events ?? []}
+                rowKey={(r) => r.id}
+                caption="События инцидента"
+                columns={[
+                  { title: "Когда", render: (r) => <EvidenceTime at={r.at} label="" /> },
+                  {
+                    title: "Сообщение",
+                    render: (r) => <p className="max-w-md break-words">{r.message}</p>,
+                  },
+                ]}
+              />
+            </ConsolePanel>
+            {detail.envelope?.data.truncated ? (
+              <DataState state="partial" reason="INCIDENT_HISTORY_CAP" />
             ) : null}
           </div>
         ) : null}

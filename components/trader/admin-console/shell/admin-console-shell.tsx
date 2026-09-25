@@ -260,7 +260,7 @@ export function AdminConsoleShell({
       >
         <Command label="Поиск по консоли">
           <CommandInput
-            autoFocus
+            data-console-autofocus
             placeholder="Название раздела…"
             className={`${controlClass} mb-3 w-full`}
           />

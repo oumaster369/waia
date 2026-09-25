@@ -62,6 +62,32 @@ describe("observed account finance", () => {
       reason: "OBSERVATION_ERROR",
     });
   });
+  it("values a complete balance component without claiming the partial order component is complete", () => {
+    const latest = evidence("42.00000001");
+    latest.payload = {
+      ...latest.payload,
+      status: "PARTIAL",
+      openOrders: { ...latest.payload.openOrders, status: "PARTIAL" },
+    };
+    const row = account({ latest });
+    expect(row).toMatchObject({
+      equity: "42.00000001",
+      freeQuote: "42.00000001",
+      state: "partial",
+      included: true,
+      observationStatus: "PARTIAL",
+    });
+    expect(row.reasons).toContain("OPEN_ORDERS_PARTIAL");
+    expect(buildOverview([row], context).finance.equity).toMatchObject({
+      state: "partial",
+      value: { amount: "42.00000001" },
+    });
+    latest.payload = {
+      ...latest.payload,
+      balances: { ...latest.payload.balances, status: "PARTIAL" },
+    };
+    expect(account({ latest }).equity).toBeNull();
+  });
   it("retains the last complete value after a failure, outside current sums", () => {
     const prior = evidence("10", now - 60_000);
     const row = account({ latest: evidence(null), lastComplete: prior });

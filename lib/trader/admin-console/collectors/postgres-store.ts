@@ -1,4 +1,4 @@
-import { createRequire } from "node:module";
+import { enforceServerOnly } from "@/lib/enforce-server-only";
 import { randomUUID } from "node:crypto";
 
 import { and, eq, sql } from "drizzle-orm";
@@ -30,8 +30,7 @@ import { incidentAfterDiagnostic } from "@/lib/trader/admin-console/diagnostics/
 import { redactDiagnosticText } from "@/lib/trader/admin-console/diagnostics/redact";
 import { collectAccountValuations } from "@/lib/trader/admin-console/collectors/valuation-persist";
 
-const require = createRequire(import.meta.url);
-if (process.env.VITEST !== "true") require("server-only");
+enforceServerOnly();
 
 const BATCH = 5000;
 

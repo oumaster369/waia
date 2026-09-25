@@ -129,7 +129,7 @@ export async function readOverviewWithinSnapshot(tx: AdminReadTx, input: Overvie
         JOIN exchange_credentials c ON c.id = o.credential_id AND c.organization_id = o.organization_id
           AND c.exchange_account_id = o.exchange_account_id
         WHERE o.organization_id = k.organization_id AND o.exchange_account_id = k.exchange_account_id
-          AND c.venue = k.venue AND o.payload->>'status' = 'COMPLETE'
+          AND c.venue = k.venue
           AND o.payload->'balances'->>'status' = 'COMPLETE'
         ORDER BY o.recorded_at DESC, o.observation_id DESC LIMIT 1
       ) good ON true

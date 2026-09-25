@@ -127,7 +127,7 @@ export function buildAccountFinance(input: {
   const latest = parse(input.latest);
   result.observationStatus = latest?.status ?? null;
   const complete = (observation: ReturnType<typeof parse>) =>
-    observation?.status === "COMPLETE" &&
+    observation !== null &&
     observation.balances.status === "COMPLETE" &&
     observation.balances.values !== null;
   const isLatestComplete = complete(latest);
@@ -154,6 +154,12 @@ export function buildAccountFinance(input: {
   const reasons = [
     ...new Set([
       ...(!isLatestComplete ? [failureReason] : []),
+      ...(observation.openOrders.status !== "COMPLETE"
+        ? [`OPEN_ORDERS_${observation.openOrders.status}`]
+        : []),
+      ...(observation.trades.some((row) => row.component.status !== "COMPLETE")
+        ? ["TRADES_OBSERVATION_INCOMPLETE"]
+        : []),
       ...(observationStale ? ["OBSERVATION_STALE"] : []),
       ...valued.reasons,
     ]),
@@ -202,7 +208,11 @@ export function buildAccountFinance(input: {
       latest: input.latest.id,
       reasons,
     }),
-    state: observationStale ? "stale" : valued.state,
+    state: observationStale
+      ? "stale"
+      : valued.state === "ok" && observation.status !== "COMPLETE"
+        ? "partial"
+        : valued.state,
     included: inclusion.included && !observationStale && !inclusion.stale,
     stale: observationStale || inclusion.stale,
     reason: reasons[0] ?? null,

@@ -61,6 +61,11 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       }
       await sql`INSERT INTO trader_intelligence_cycle_envelope(id,organization_id,run_id,cycle_id,symbol,evaluated_at,historical_profile_id,historical_profile_digest,matrix_digest,terminal_reason_code,input_semantic_digest,output_semantic_digest,content_digest,schema_version) VALUES (${crypto.randomUUID()}::uuid,${client.id}::uuid,${crypto.randomUUID()},'browser-cycle','QA-CYCLE',now(),'fixture','fixture','fixture','NO_TRADE','fixture','fixture','fixture','fixture')`;
     }
+    const incidentId = crypto.randomUUID();
+    await sql`INSERT INTO trader_admin_incident(id,environment,service,fingerprint,title,severity,status,first_seen_at,last_seen_at) VALUES (${incidentId}::uuid,'local','browser-acceptance',${incidentId},'Проверка уведомлений','error','new',now(),now())`;
+    await sql`INSERT INTO trader_admin_diagnostic_event(id,occurred_at,received_at,environment,service,severity,error_class,message_redacted,fingerprint,organization_id,exchange_account_id) VALUES (${crypto.randomUUID()}::uuid,now(),now(),'local','browser-acceptance','error','Fixture','Сохранённое событие проверки',${incidentId},${clients[0].id}::uuid,${accounts[0]})`;
+    const paperOrder = crypto.randomUUID();
+    await sql`INSERT INTO trader_orders(id,organization_id,venue,execution_mode,symbol,side,type,quantity,state,client_order_id,idempotency_key,risk_decision_id) VALUES (${paperOrder}::uuid,${clients[0].id}::uuid,'htx','paper','PAPERBTCUSDT','buy','market','0.001','CREATED',${paperOrder},${paperOrder},'fixture')`;
     await signInOnLanding(page, email, "password123!");
     await page.waitForURL("**/trader");
     const context = `organization_id=${clients[0].id}&mode=live&currency=USDT&period=7d`;
@@ -253,11 +258,66 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         });
         await clientDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
       }
-      await page.screenshot({
-        path: testInfo.outputPath(`${path}-real-postgres.png`),
-        fullPage: true,
-      });
+      if (path === "errors") {
+        await page.getByRole("button", { name: "Проверка уведомлений", exact: true }).click();
+        const incidentDialog = page.getByRole("dialog", {
+          name: "Проверка уведомлений",
+          exact: true,
+        });
+        await expect(incidentDialog).toContainText("Сохранённое событие проверки");
+        const mute = incidentDialog.getByRole("button", {
+          name: "Скрыть уведомления на час",
+          exact: true,
+        });
+        await expect(mute).toBeDisabled();
+        await incidentDialog
+          .getByLabel("Причина", { exact: true })
+          .fill("Локальная проверка уведомлений");
+        await incidentDialog
+          .getByLabel("Доказательство или ссылка", { exact: true })
+          .fill("Синтетическая запись в тестовой БД");
+        await mute.click();
+        await expect(incidentDialog).toContainText("Версия 2");
+        await expect(incidentDialog).toContainText("MUTE: Локальная проверка уведомлений");
+        expect(
+          (await sql`SELECT status FROM trader_admin_incident WHERE id=${incidentId}::uuid`)[0]
+            .status,
+        ).toBe("new");
+        await expect(
+          incidentDialog.getByRole("button", { name: "Вернуть уведомления", exact: true }),
+        ).toBeDisabled();
+        await incidentDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+      }
+      for (const width of [1280, 1440, 1920, 720]) {
+        // 720 CSS pixels is the reflow viewport of a 1440px display at 200% zoom.
+        await page.setViewportSize({ width, height: width === 720 ? 450 : 900 });
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          `${path} width ${width}`,
+        ).toBe(true);
+        const accessibility = await new AxeBuilder({ page }).analyze();
+        expect(
+          accessibility.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
+          `${path} width ${width}`,
+        ).toEqual([]);
+        await page.screenshot({
+          path: testInfo.outputPath(`${path}-${width}-real-postgres.png`),
+          fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 1440, height: 900 });
     }
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Перейти к разделу" });
+    await expect(palette).toBeVisible();
+    await expect(palette.getByPlaceholder("Название раздела…")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(palette).not.toBeVisible();
+    await page.goto(`/admin/accounts?${context.replace("mode=live", "mode=paper")}`);
+    await expect(
+      page.getByRole("heading", { name: "Виртуальные портфели Paper", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("main")).toContainText("Начальный виртуальный остаток не сохранён");
     await page.goto(`/admin/orders?${context}`);
     await expect(page.locator("main")).toContainText("QA0BTC0");
     await expect(page.locator("main")).toContainText("QA0BTC29");

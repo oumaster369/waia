@@ -1,4 +1,5 @@
 "use client";
+import { PaperPortfolios } from "@/components/trader/admin-console/sections/accounts/paper-portfolios";
 import { AccountDetails } from "@/components/trader/admin-console/sections/accounts/account-details";
 import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
@@ -40,6 +41,7 @@ export default function AdminAccountsPage() {
   return (
     <div className="space-y-5">
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
+      {context.params.get("mode") === "paper" ? <PaperPortfolios /> : null}
       {all ? (
         <ConsolePanel
           title={

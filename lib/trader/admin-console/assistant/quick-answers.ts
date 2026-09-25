@@ -8,6 +8,7 @@ export type QuickAnswer = {
 };
 
 export const QUICK_ANSWERS: readonly QuickAnswer[] = [
+  { id: "changes", title: "Что изменилось", tools: ["changes_since"], withoutModel: true },
   { id: "overview", title: "Сводка", tools: ["get_overview"], withoutModel: true },
   { id: "accounts", title: "Счета", tools: ["list_accounts"], withoutModel: true },
   { id: "orders", title: "Рабочие ордера", tools: ["list_orders"], withoutModel: true },

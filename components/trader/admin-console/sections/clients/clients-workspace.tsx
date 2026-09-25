@@ -10,6 +10,7 @@ import {
   ConsoleTable,
   DetailLink,
   EvidenceTime,
+  controlClass,
 } from "@/components/trader/admin-console/primitives/console-ui";
 import { InvoicesPanel } from "@/components/trader/admin-console/sections/clients/invoices-panel";
 import { formatAdminMoney } from "@/components/trader/admin-console/primitives/money";
@@ -57,9 +58,18 @@ export function ClientsWorkspace() {
 }
 function Clients() {
   const context = useAdminReadContext();
-  const read = useAdminRead<{ items: Client[] }>("/api/trader/admin/console/clients");
+  const cursor = context.params.get("cursor");
+  const read = useAdminRead<{
+    items: Client[];
+    aggregate: { total: number | null };
+    nextCursor: string | null;
+  }>(`/api/trader/admin/console/clients${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
   const rows = read.envelope?.data.items;
-  const selected = rows?.find((item) => item.id === context.params.get("sel"));
+  const selectedId = context.params.get("sel");
+  const detail = useAdminRead<{ client: Client }>(
+    selectedId ? `/api/trader/admin/console/clients/${encodeURIComponent(selectedId)}` : null,
+  );
+  const selected = detail.envelope?.data.client;
   if (read.loading) return <ConsoleLoading />;
   return (
     <div className="space-y-4">
@@ -105,15 +115,47 @@ function Clients() {
               },
             ]}
           />
+          <div className="border-waia-divider flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 text-xs">
+            <span className="text-waia-fg-muted">
+              Показано {rows.length}
+              {read.envelope?.data.aggregate?.total != null
+                ? ` из ${read.envelope.data.aggregate.total}`
+                : ""}
+            </span>
+            <div className="flex gap-2">
+              {cursor ? (
+                <button
+                  className={controlClass}
+                  type="button"
+                  onClick={() => context.update({ cursor: null, sel: null })}
+                >
+                  В начало
+                </button>
+              ) : null}
+              {read.envelope?.data.nextCursor ? (
+                <button
+                  className={controlClass}
+                  type="button"
+                  onClick={() =>
+                    context.update({ cursor: read.envelope!.data.nextCursor, sel: null })
+                  }
+                >
+                  Следующие клиенты
+                </button>
+              ) : null}
+            </div>
+          </div>
         </ConsolePanel>
       ) : null}
       <ConsoleDialog
-        open={Boolean(selected)}
+        open={Boolean(selectedId)}
         onClose={() => context.update({ sel: null, detail: null, nested: null })}
         title={selected?.name || selected?.ownerEmail || "Клиент"}
         description="История и финансовые документы организации сохраняются независимо от текущего доступа."
         wide
       >
+        {detail.loading ? <ConsoleLoading /> : null}
+        {detail.reason ? <DataState state="unavailable" reason={detail.reason} /> : null}
         {selected ? <ClientDetailsContent client={selected} /> : null}
       </ConsoleDialog>
     </div>

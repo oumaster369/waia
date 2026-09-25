@@ -14,7 +14,7 @@ import {
 } from "@/lib/trader/admin-console/money/period-result";
 import type { OperationalLeg } from "@/lib/trader/admin-console/money/operational-pnl";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
-import { compareDecimal, isPositiveDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
+import { isPositiveDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
 import { quoteIsStale, type AssetQuote } from "@/lib/trader/admin-console/money/quotes";
 import {
   periodSeries,

@@ -20,6 +20,24 @@ export const RU = {
     not_applicable: "Не применяется",
   },
   reasons: {
+    OPEN_ORDERS_PARTIAL: "Баланс подтверждён; список ордеров получен не полностью",
+    OPEN_ORDERS_ERROR: "Баланс подтверждён; чтение ордеров завершилось ошибкой",
+    TRADES_OBSERVATION_INCOMPLETE: "История биржевых исполнений получена не полностью",
+    PAPER_INITIAL_CASH_NOT_PERSISTED:
+      "Начальный виртуальный остаток не сохранён; капитал и свободные средства не рассчитаны",
+    PAPER_ACCOUNT_BINDING_NOT_PERSISTED: "Связь paper-ордера с виртуальным счётом не сохранена",
+    PAPER_PORTFOLIO_CAP: "Охват виртуального портфеля ограничен; итог не рассчитан",
+    PAPER_PORTFOLIO_OTHER_MODE: "Виртуальные портфели доступны в режиме Paper",
+    PAPER_PORTFOLIO_NOT_EXCHANGE_ACCOUNT:
+      "Виртуальный портфель принадлежит клиенту, а не реальному биржевому счёту",
+    CHANGE_ACCOUNT_BINDING_NOT_PERSISTED:
+      "Журнал изменений доступен на уровне клиента или всего парка",
+    CHANGE_HISTORY_RETENTION_LIMIT:
+      "Начало интервала выходит за срок хранения журнала; показана доступная часть",
+    PREVIOUS_VISIT_NOT_RECORDED: "Предыдущий визит ещё не зарегистрирован",
+    CONNECTED_SINCE_NOT_OBSERVED: "Первое успешное подключение не наблюдалось",
+    INCIDENT_HISTORY_CAP: "Показана последняя часть истории инцидента",
+
     PROMOTION_STATE_AMBIGUOUS:
       "Сохранено несколько несовместимых состояний продвижения; требуется сверка",
     COMMAND_RESULT_UNCONFIRMED: "Результат команды не подтверждён; прочитайте состояние заново",
