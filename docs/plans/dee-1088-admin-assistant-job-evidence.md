@@ -17,16 +17,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: implementing
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Local acceptance passed; merge DEE-1087 main, validate the final combined state, then publish the PR."
+  nextAction: "Delivered to DEE-1089 final integration; require its exact-head CI and merged-main production acceptance."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -51,3 +51,8 @@ Use a pure shared Russian job-name/status dictionary for System and the assistan
 First reproduce the exact canonical DTO mismatch in unit tests, then assert failed, stale, missing, external/manual and complete/throttled catalog cases. Verify through the real-Postgres quick-answer handler, existing grounded-fact security/context tests and browser workflows. Lint/types/build/canon/governance and every exact-head GitHub check precede merge. Final production answer must preserve the same evidence as System.
 
 Only read-only projection/presentation changes. No provider enablement, scheduling, new commands, auth/grants, schema, finance/commission/HWM/settlement or old-data mutations. User operational delegation covers merge/deploy; no independent review or policy ratification is claimed. Prepare locally while DEE-1087 CI runs; synchronize with its merged main before final PR publication to satisfy strict branch protection.
+
+
+## Delivery through DEE-1089
+
+The original source remains in commit9c9a1746. DEE-1089 admits and serially imports this read-only repair after the scheduled-collector correction and reviewed Reality consumer pin, because PR655 failed the omitted pin check. The final combination passed109targeted unit/real-Postgres tests, including eight Reality graph tests. Production acceptance remains pending the final integration CI and publication; no separate DEE-1088 PR is needed.
