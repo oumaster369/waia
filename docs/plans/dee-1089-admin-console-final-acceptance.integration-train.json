@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1089",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1085",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Normalize console news text and translate persisted strategy evidence labels without rewriting history.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Serial integration: shared collector test file is reviewed after each delivery; source commits and prior acceptance retained."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+        "docs/plans/dee-1085-admin-news-text.md",
+        "lib/trader/admin-console/collectors/news-persist.ts",
+        "lib/trader/admin-console/handlers/news.ts",
+        "lib/trader/admin-console/news-text.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T1",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. All children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact source diff, unchanged financial/authority semantics and cumulative tests."
+      ],
+      "expectedTests": [
+        "pnpm test --run targeted console collectors, finance and Postgres acceptance",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "sourceCommit": "f00877c218d11f46274be28049c34eb51b6648d6"
+    },
+    {
+      "issue": "DEE-1086",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Preserve the scheduled minute for collector dispatch while retaining actual evidence timestamps. Review the changed run-due consumer and update only its Reality inventory content digest; membership, rules and authority remain unchanged.",
+      "dependencies": [
+        "DEE-1085"
+      ],
+      "dependencyEvidence": [
+        "Serial integration: shared collector test file is reviewed after each delivery; source commits and prior acceptance retained."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "custom-worker.ts",
+        "docs/plans/dee-1086-admin-collector-schedule.md",
+        "lib/trader/admin-console/collectors/run-due.ts",
+        "lib/trader/admin-console/collectors/schedule.ts",
+        "tests/unit/admin-console-collectors.test.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. All children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact source diff, unchanged financial/authority semantics and cumulative tests."
+      ],
+      "expectedTests": [
+        "pnpm test --run targeted console collectors, finance and Postgres acceptance",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build",
+        "pnpm validate:reality-v2-consumer-graph && pnpm validate:execution-v2-consumer-graph",
+        "pnpm test --run tests/unit/trader-reality-v2-consumer-graph.test.ts"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      },
+      "sourceCommit": "202b3edb44b5ab7146e1ca9288b074fa8dac54c2"
+    },
+    {
+      "issue": "DEE-1088",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Preserve named canonical SystemJob outcomes, evidence timestamps, reasons and bounded catalog coverage in read-only assistant facts using existing shared UI labels.",
+      "dependencies": [
+        "DEE-1086"
+      ],
+      "dependencyEvidence": [
+        "Third serialized import; validate all preceding collector and finance evidence together with assistant facts."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "app/(trader)/admin/system/page.tsx",
+        "docs/plans/dee-1088-admin-assistant-job-evidence.md",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/jobs/presentation.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-assistant-grounding-postgres.test.ts",
+        "tests/unit/admin-assistant-grounded-facts.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T1",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. All children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact source commit and canonical DTO red/green regression; real-Postgres quick answer and complete named catalog in browser."
+      ],
+      "expectedTests": [
+        "pnpm test --run cumulative collector, finance, assistant and real-Postgres regressions",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build"
+      ],
+      "execution": {
+        "wave": 3,
+        "mode": "serialized"
+      },
+      "sourceCommit": "9c9a174657e16805fcf201c17c3c2b078a33d644"
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Codex source self-review under explicit user delegation; new integration admission before source imports, not retrospective implementation admission."
+    }
+  },
+  "crossCuttingInvariants": [
+    "Eight Russian sections and all existing finance, authority and schema invariants unchanged.",
+    "No old news/receipt rewrite, no real trading or billing commands.",
+    "All exact final-head protected and applicable checks required."
+  ],
+  "rollbackStrategy": "Revert one integration squash and restore the prior verified financial Worker; no schema or historical data changes.",
+  "reviewDisposition": {
+    "authority": "Explicit user operational delegation.",
+    "independentReview": "Not performed; no automatic DEE-653 admission claimed.",
+    "mergePath": "Direct delegated operational self-acceptance.",
+    "unchangedGates": "Full exact-head CI, tests, scope validation and production verification."
+  }
+}
