@@ -476,7 +476,8 @@
         "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
         "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
         "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9",
-        "2812afae740567bbf5e8a594fd3295072f402598"
+        "2812afae740567bbf5e8a594fd3295072f402598",
+        "42adc314654b34ec32215c301535de2f1f024fbb"
       ],
       "actualFiles": [
         "app/(trader)/admin/accounts/page.tsx",
@@ -531,7 +532,8 @@
         "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
         "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit.",
         "Final visual correction: 29 additional Russian reason descriptions and persisted campaign-state labels retain machine diagnostics. Existing real-Postgres eight-section workflow passed again at all four widths (35.2s); focused 6 unit checks, lint and typecheck pass. Held-xmin 6001+late-event external proof and 49 governed negative tests also pass. Exact updated-head full CI remains required.",
-        "Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass."
+        "Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass.",
+        "GitHub full suite exposed Linux argv size in the cold-start regression harness (621926-byte bundle exceeds 131072-byte per-argument limit). Same bundle/assertions now run through stdin with explicit local alias; spawn errors also asserted. Local macOS and Linux Node22 focused tests pass. Runtime code unchanged; full exact-head GitHub CI required again."
       ],
       "tests": [
         "pnpm lint (0 errors; existing warnings retained)",
@@ -721,7 +723,8 @@
           "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
           "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
           "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9",
-          "2812afae740567bbf5e8a594fd3295072f402598"
+          "2812afae740567bbf5e8a594fd3295072f402598",
+          "42adc314654b34ec32215c301535de2f1f024fbb"
         ],
         "reviewedFiles": [
           "app/(trader)/admin/accounts/page.tsx",
@@ -847,9 +850,11 @@
           "pnpm validate:reality-v2-consumer-graph",
           "pnpm validate:execution-v2-consumer-graph",
           "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
-          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
+          "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)",
+          "pnpm test --run tests/unit/admin-console-collector-coldstart.test.ts",
+          "Linux Node22 container: vitest run tests/unit/admin-console-collector-coldstart.test.ts"
         ],
-        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation. Final Russian-label delta reviewed against saved UI; six targeted units, typecheck/lint, repeated eight-section browser acceptance passed; final build and exact-head full CI recorded in PR. Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass."
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation. Final Russian-label delta reviewed against saved UI; six targeted units, typecheck/lint, repeated eight-section browser acceptance passed; final build and exact-head full CI recorded in PR. Final production-preparation corrections: complete monetary projection inside partial order evidence now persists and supplies current-period endpoints, retaining warnings and rejecting missing quotes/failed balances. Shared FX selector prefers fresh persisted fallback to stale primary. Both reproduced before fix. Final combined suite: 328 passed, 2 separately proven opt-ins skipped; all 5 real-Postgres browser tests pass (2.4m), lint/type/build/canon/both authority graphs pass. GitHub full suite exposed Linux argv size in the cold-start regression harness (621926-byte bundle exceeds 131072-byte per-argument limit). Same bundle/assertions now run through stdin with explicit local alias; spawn errors also asserted. Local macOS and Linux Node22 focused tests pass. Runtime code unchanged; full exact-head GitHub CI required again."
       }
     ],
     "fullDiffFrozen": true,
