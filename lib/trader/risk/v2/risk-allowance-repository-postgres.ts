@@ -524,9 +524,10 @@ export async function readRiskAccountStateV2Postgres(
   ex: RiskExecutor,
   context: OrgContext,
   accountId: string,
+  forUpdate = false,
 ): Promise<RiskAccountStateV2 | null> {
   const scoped = requireOrgContext(context.organizationId);
-  const rows = await ex
+  const query = ex
     .select()
     .from(pgSchema.traderRiskAccountStateV2)
     .where(
@@ -536,6 +537,9 @@ export async function readRiskAccountStateV2Postgres(
       ),
     )
     .limit(1);
+  // Effect admission takes this lock before attempt/allowance/order locks, in
+  // the same account-first order as Risk consumption and revocation.
+  const rows = await (forUpdate ? query.for("update") : query);
   return rows[0] ? mapAccountState(rows[0]) : null;
 }
 
@@ -1079,6 +1083,70 @@ function requireOrderMatchesAllowanceV2(input: {
   ) {
     throw new RiskV2AdmissionRefusedError("ORDER_DOES_NOT_MATCH_ALLOWANCE");
   }
+}
+
+/**
+ * Recheck a consumed allowance at dispatch admission without consuming again,
+ * moving reservations, or changing the order. The caller must hold the account
+ * lock before any attempt/allowance/order locks and keep this transaction through
+ * SUBMIT_STARTED. Network I/O happens only after that transaction commits.
+ */
+export async function revalidateConsumedRiskAllowanceForExecutionV2(
+  tx: RiskTx,
+  context: OrgContext,
+  input: Readonly<{
+    accountId: string;
+    riskAllowanceId: string;
+    riskAllowanceContentDigestHex: string;
+    effectNotionalCeiling: string;
+    order: OrderRow;
+    durableAt: Date;
+  }>,
+): Promise<void> {
+  const scoped = requireOrgContext(context.organizationId);
+  const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  const rows = await tx
+    .select()
+    .from(pgSchema.traderRiskAllowancesV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
+        eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
+      ),
+    )
+    .for("update");
+  const row = rows[0];
+  if (
+    !row ||
+    row.lifecycleState !== "CONSUMED" ||
+    row.boundOrderId !== input.order.id ||
+    row.boundOrderDigest !== input.order.riskAllowanceBindingDigest
+  ) {
+    throw new RiskV2AdmissionRefusedError("CONSUMED_ALLOWANCE_BINDING_MISMATCH");
+  }
+  const verdictRows = await tx
+    .select()
+    .from(pgSchema.traderRiskVerdictsV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskVerdictsV2.id, row.riskVerdictId),
+        eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
+      ),
+    )
+    .limit(1);
+  if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
+  const allowance = allowanceAuthorityFromRow(row, verdictFromRow(verdictRows[0]));
+  requireOrderMatchesAllowanceV2({
+    state,
+    allowance,
+    riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+    effectNotionalCeiling: input.effectNotionalCeiling,
+    order: input.order,
+    nonce: allowance.nonce,
+    durableAt: input.durableAt,
+  });
 }
 
 /**

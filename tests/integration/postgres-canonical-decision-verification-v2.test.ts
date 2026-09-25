@@ -29,18 +29,41 @@ describe.skipIf(!enabled || !url)("canonical decision verification V2 PostgreSQL
       `;
       expect(Number(triggers[0]?.count)).toBe(names.length);
 
-      const policies = await sql<{ relname: string; count: string }[]>`
-        SELECT c.relname, count(p.policyname)::text AS count
-        FROM pg_class c LEFT JOIN pg_policies p ON p.tablename=c.relname
-        WHERE c.relname IN ${sql(names)} GROUP BY c.relname
+      const policies = await sql<
+        {
+          tablename: string;
+          roles: string[];
+          cmd: string;
+          qual: string | null;
+          with_check: string | null;
+        }[]
+      >`
+        SELECT tablename, roles, cmd, qual, with_check FROM pg_policies
+        WHERE schemaname='public' AND tablename IN ${sql(names)}
       `;
-      expect(policies.every((row) => Number(row.count) === 0)).toBe(true);
+      // 0199 intentionally admits one organization-bound, non-capital runner.
+      // Zero policies was the pre-0199 contract, not a reason to remove RLS.
+      for (const name of names) {
+        const relationPolicies = policies.filter((policy) => policy.tablename === name);
+        expect(relationPolicies.map((policy) => policy.cmd).sort()).toEqual(["INSERT", "SELECT"]);
+        for (const policy of relationPolicies) {
+          expect(policy.roles).toEqual(["waia_historical_runner"]);
+          const predicate = policy.cmd === "INSERT" ? policy.with_check : policy.qual;
+          expect(predicate).toContain("organization_id");
+          expect(predicate).toContain("3c50b4e9-1138-43a5-a29f-e65088124cfc");
+          if (name === "trader_historical_dataset_authority_v2") {
+            expect(predicate).toContain("PRE_HOLDOUT_QUALIFICATION_V1");
+          }
+        }
+      }
 
       const boundary = await sql<{ description: string | null; relforcerowsecurity: boolean }[]>`
         SELECT obj_description(c.oid) AS description, c.relforcerowsecurity
         FROM pg_class c WHERE c.relname='trader_historical_simulation_run_start_v2'
       `;
-      expect(boundary[0]?.description).toContain("Owner-only historical simulation service boundary");
+      expect(boundary[0]?.description).toContain(
+        "Owner-only historical simulation service boundary",
+      );
       expect(boundary[0]?.relforcerowsecurity).toBe(false);
       await sql`SET ROLE authenticated`;
       await expect(sql`SELECT * FROM trader_historical_simulation_run_start_v2`).rejects.toThrow();

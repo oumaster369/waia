@@ -27,6 +27,12 @@ on:
       - "app/(trader)/admin/**"
       - "scripts/postgres-validation/**"
       - "lib/trader/execution/v2/**"
+      - "lib/trader/risk/v2/**"
+      - "lib/trader/reality/v2/**"
+      - "tests/integration/postgres-execution-v2.test.ts"
+      - "tests/integration/postgres-risk-v2.test.ts"
+      - "tests/integration/postgres-reality-v2.test.ts"
+      - "tests/integration/postgres-canonical-decision-verification-v2.test.ts"
       - "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts"
       - "lib/trader/observability/fhv-control-replay-execution.ts"
       - "scripts/trader/fhv-control-replay-cli.ts"
@@ -125,6 +131,19 @@ jobs:
         run: pnpm db:smoke:postgres
       - name: Historical complete migration journal regression
         run: pnpm test --run tests/unit/fhv-v2-postgres-schema-preflight.test.ts
+      - name: Required actual-Postgres capital authority regressions (no skipped proof)
+        env:
+          WAIA_PG_INTEGRATION: "1"
+          WAIA_TRADER_CLI: "1"
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/capital-postgres-results.json
+          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/capital-postgres-results.json \
+            tests/integration/postgres-execution-v2.test.ts \
+            tests/integration/postgres-risk-v2.test.ts \
+            tests/integration/postgres-reality-v2.test.ts \
+            tests/integration/postgres-canonical-decision-verification-v2.test.ts
+          node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
       - name: DEE-651 TEST_ONLY Decision → Risk → Execution V2 proof
         env:
           WAIA_PG_INTEGRATION: "1"
@@ -329,7 +348,6 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Slice gate and SLO
         run: pnpm test:e2e:admin-pg
-
 
   admin-console-billing-postgres:
     name: admin console billing idempotency on Postgres
