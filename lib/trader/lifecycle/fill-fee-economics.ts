@@ -1,4 +1,3 @@
-import type { FillRow, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import {
   addDecimal,
   compareDecimal,
@@ -13,8 +12,8 @@ export const LIFECYCLE_FEE_ACCOUNTING_VERSION = "native-fee-inventory/v1" as con
 
 /** Keep opening fees separate from avgCost: the operational reader recognizes them once at OPEN. */
 export function lifecycleFillEconomics(
-  order: Pick<OrderRow, "symbol" | "side">,
-  fill: Pick<FillRow, "quantity" | "price" | "fee" | "feeAsset">,
+  order: Readonly<{ symbol: string; side: "buy" | "sell" }>,
+  fill: Readonly<{ quantity: string; price: string; fee: string; feeAsset: string }>,
 ) {
   if (
     compareDecimal(fill.quantity, "0") <= 0 ||
