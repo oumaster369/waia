@@ -372,6 +372,19 @@ export default function AdminSystemPage() {
                       ),
                     },
                     {
+                      title: "Причины",
+                      render: (row) =>
+                        row.reasonCodes?.length ? (
+                          <ul className="space-y-1 text-xs">
+                            {row.reasonCodes.map((code) => (
+                              <li key={code}>{code}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <DataState state="unavailable" reason="RUNTIME_REASON_NOT_RECORDED" />
+                        ),
+                    },
+                    {
                       title: "Дата оценки",
                       render: (row) => <EvidenceTime at={row.at} label="" />,
                     },

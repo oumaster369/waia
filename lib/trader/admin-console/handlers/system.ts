@@ -156,7 +156,7 @@ export async function handleAdminConsoleSystemGet(
           )),
         ];
         const runtime = [
-          ...(await tx.execute(sql`SELECT DISTINCT ON (organization_id, runtime_instance_id) organization_id::text, assessment_id, runtime_instance_id, posture, adjudicated_at_utc
+          ...(await tx.execute(sql`SELECT DISTINCT ON (organization_id, runtime_instance_id) organization_id::text, assessment_id, runtime_instance_id, posture, adjudicated_at_utc, canonical_json::jsonb->'reasonCodes' AS reason_codes
           FROM trader_runtime_authority_assessments_v2 WHERE ${organizationFilter(query)} ORDER BY organization_id, runtime_instance_id, adjudicated_at_utc DESC LIMIT 201`)),
         ];
         // The runtime account_id is not assumed to be an exchange-account binding.
@@ -191,6 +191,11 @@ export async function handleAdminConsoleSystemGet(
             organizationId: String(row.organization_id),
             id: String(row.assessment_id),
             instance: String(row.runtime_instance_id),
+            reasonCodes: Array.isArray(row.reason_codes)
+              ? row.reason_codes.filter(
+                  (code): code is string => typeof code === "string" && /^[A-Z0-9_]+$/.test(code),
+                )
+              : [],
             posture: String(row.posture),
             at: iso(row.adjudicated_at_utc),
           })),

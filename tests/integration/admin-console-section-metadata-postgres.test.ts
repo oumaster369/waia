@@ -89,12 +89,28 @@ describe.skipIf(!enabled)("admin console section metadata on Postgres", () => {
     );
     expect(history.status).toBe(200);
     expect(history.body).toMatchObject({ data: { items: [] } });
+    const digest = randomUUID().replaceAll("-", "").repeat(2);
+    const assessmentId = `runtime-authority-v2:${digest}`;
+    await client`INSERT INTO trader_runtime_authority_assessments_v2 (assessment_id,organization_id,runtime_instance_id,posture,content_digest,canonical_json,adjudicated_at_utc) VALUES (${assessmentId},${org}::uuid,'console-metadata-fixture','HALT',${digest},${JSON.stringify({ reasonCodes: ["RUNTIME_CONTROL_LEASE_INVALID"] })},now())`;
     for (const tab of ["services", "sources", "jobs", "ai", "authority", "releases", "audit"]) {
       const result = await handleAdminConsoleSystemGet(
         request(`system?organization_id=${org}&tab=${tab}`),
         deps(),
       );
       expect(result.status, tab).toBe(200);
+      if (tab === "authority")
+        expect(result.body).toMatchObject({
+          data: {
+            controls: {
+              runtimeAuthority: [
+                expect.objectContaining({
+                  posture: "HALT",
+                  reasonCodes: ["RUNTIME_CONTROL_LEASE_INVALID"],
+                }),
+              ],
+            },
+          },
+        });
       expect(result.body).toMatchObject({
         data: { diagnosticScope: "fleet", jobs: expect.any(Array) },
       });

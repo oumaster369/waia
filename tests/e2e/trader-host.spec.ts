@@ -135,18 +135,16 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
     await page.goto("/admin");
-    await expect(page.getByText("Консоль администратора")).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER", exact: true }),
+    ).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
-    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.getByRole("button", { name: "Выйти", exact: true }).click();
     await expect(page).toHaveURL("/");
     await expectProtectedObserverApisFailClosed(page, 401);
   });
 
-  test("admin cockpit shows a streamed fact without an organization selector", async ({
-    page,
-    baseURL,
-    browser,
-  }) => {
+  test("admin console opens the canonical scoped overview", async ({ page, baseURL, browser }) => {
     test.setTimeout(90_000);
     const organizationId = "11111111-1111-4111-8111-111111111111";
     const email = `e2e-admin-cockpit-${Date.now()}@example.com`;
@@ -219,8 +217,10 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await signInOnLanding(page, email, TRADER_PASSWORD);
     await page.waitForURL("**/trader");
     await page.goto(`/admin?organization_id=${organizationId}`);
-    await expect(page.getByText("Консоль администратора")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Обзор" })).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Обзор", exact: true })).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
   });
 

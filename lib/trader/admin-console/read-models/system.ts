@@ -50,6 +50,7 @@ export type SystemReadModel = {
       organizationId: string;
       id: string;
       instance: string;
+      reasonCodes?: string[];
       posture: string;
       at: string | null;
     }[];
