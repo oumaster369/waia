@@ -2,15 +2,17 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { isTraderHostRoutingEnabled, resolveModuleHost } from "@/lib/hosts/resolve";
+import { refreshAdminSession } from "@/lib/supabase/admin-session-refresh";
 
-/** Topology classification only — cross-host isolation uses next.config host redirects. */
-export function middleware(request: NextRequest) {
+/** Cross-host isolation stays in next.config; admin cookie renewal grants no permission. */
+export async function middleware(request: NextRequest) {
   if (!isTraderHostRoutingEnabled()) {
     return NextResponse.next();
   }
 
   const moduleHost = resolveModuleHost(request);
-  const response = NextResponse.next();
+  const response =
+    moduleHost.module === "trader" ? await refreshAdminSession(request) : NextResponse.next();
   response.headers.set("x-waia-module", moduleHost.module);
   return response;
 }

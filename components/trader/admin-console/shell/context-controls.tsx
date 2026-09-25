@@ -4,6 +4,9 @@ import { CalendarDays, SlidersHorizontal } from "lucide-react";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
 import { controlClass } from "@/components/trader/admin-console/primitives/console-ui";
 
+import { SavedViews } from "./saved-views";
+import { ContextExport } from "@/components/trader/admin-console/primitives/export-button";
+
 export type ConsoleCatalogue = {
   clients: { id: string; name: string }[];
   clientsTotal: number;
@@ -126,6 +129,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
           </div>
         </fieldset>
       </div>
+      <SavedViews actions={<ContextExport />} />
       {custom ? (
         <form
           className="mt-3 flex flex-wrap items-end gap-3"
@@ -185,8 +189,12 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
       {catalogue &&
       (catalogue.clients.length < catalogue.clientsTotal || catalogue.accountsTruncated) ? (
         <p className="text-waia-warning mt-2 text-xs">
-          Список выбора ограничен: клиентов {catalogue.clients.length}/{catalogue.clientsTotal};
-          полную выборку откройте в разделе «Клиенты».
+          {catalogue.clients.length < catalogue.clientsTotal
+            ? `В списке выбора клиентов ${catalogue.clients.length} из ${catalogue.clientsTotal}. Полная выборка — в разделе «Клиенты». `
+            : ""}
+          {catalogue.accountsTruncated
+            ? "Список выбора биржевых счетов ограничен. Откройте нужный счёт в разделе «Счета»."
+            : ""}
         </p>
       ) : null}
     </div>

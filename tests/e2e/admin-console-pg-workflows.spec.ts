@@ -84,6 +84,9 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     const incidentId = crypto.randomUUID();
     await sql`INSERT INTO trader_admin_incident(id,environment,service,fingerprint,title,severity,status,first_seen_at,last_seen_at) VALUES (${incidentId}::uuid,'local','browser-acceptance',${incidentId},'Проверка уведомлений','error','new',now(),now())`;
     await sql`INSERT INTO trader_admin_diagnostic_event(id,occurred_at,received_at,environment,service,severity,error_class,message_redacted,fingerprint,organization_id,exchange_account_id) VALUES (${crypto.randomUUID()}::uuid,now(),now(),'local','browser-acceptance','error','Fixture','Сохранённое событие проверки',${incidentId},${clients[0].id}::uuid,${accounts[0]})`;
+    const invoiceId = crypto.randomUUID();
+    await sql`INSERT INTO trader_invoices (id, organization_id, exchange_account_id, reporting_period_id, fee_artifact_digest, status, currency, period_realized_strategy_profit, cumulative_realized_strategy_profit, previous_high_water_mark, new_profit_above_hwm, fee_rate, performance_fee, proposed_new_high_water_mark, billable, realized_fill_finality, starting_equity, ending_equity, net_deposits, net_withdrawals, period_start, period_end, valuation_source, fee_computed_at, schema_version, record_content_digest)
+      VALUES (${invoiceId}::uuid, ${clients[0].id}::uuid, ${accounts[0]}, ${crypto.randomUUID()}, 'browser-fixture', 'DRAFT', 'USDT', '100', '100', '0', '100', '0.3', '30.00000001', '100', true, false, '1000', '1100', '0', '0', now()-interval '1 day', now(), 'synthetic', now(), 'test', ${invoiceId})`;
     const paperOrder = crypto.randomUUID();
     await sql`INSERT INTO trader_orders(id,organization_id,venue,execution_mode,symbol,side,type,quantity,state,client_order_id,idempotency_key,risk_decision_id) VALUES (${paperOrder}::uuid,${clients[0].id}::uuid,'htx','paper','PAPERBTCUSDT','buy','market','0.001','CREATED',${paperOrder},${paperOrder},'fixture')`;
     await signInOnLanding(page, email, "password123!");
@@ -215,6 +218,39 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await expect(page.locator("main")).not.toContainText(accounts[0]);
     await page.getByLabel("Охват: клиент").selectOption(clients[0].id);
     await expect(page.locator("main")).toContainText(accounts[0]);
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByLabel("Название представления", { exact: true }).fill("Контрольный охват А");
+    await page.getByRole("button", { name: "Сохранить текущий вид", exact: true }).click();
+    await expect(
+      page.getByRole("link", { name: "Контрольный охват А", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
+    await expect(page.locator("main")).toContainText(accounts[1]);
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByRole("link", { name: "Контрольный охват А", exact: true }).click();
+    await expect(page.getByLabel("Охват: клиент")).toHaveValue(clients[0].id);
+    await expect(page.locator("main")).toContainText(accounts[0]);
+    await expect(page.locator("main")).not.toContainText(accounts[1]);
+    const downloaded = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Скачать CSV", exact: true }).click();
+    const exportFile = await downloaded;
+    expect(exportFile.suggestedFilename()).toBe("accounts.csv");
+    const stream = await exportFile.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    const csv = Buffer.concat(chunks).toString("utf8");
+    expect(csv).toContain(accounts[0]);
+    expect(csv).not.toContain(accounts[1]);
+    expect(csv).toContain("12540.125");
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Удалить представление Контрольный охват А", exact: true })
+      .click();
+    await expect(page.getByRole("link", { name: "Контрольный охват А", exact: true })).toHaveCount(
+      0,
+    );
+    await page.getByRole("button", { name: "Представления", exact: true }).click();
     await verifySizes("accounts");
     for (const [path, title] of [
       ["orders", "Ордера"],
@@ -284,6 +320,43 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
           fullPage: true,
         });
         await clientDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+        await page.goto(`/admin/clients?${context}&tab=invoices&sel=${invoiceId}`);
+        const invoiceDialog = page.getByRole("dialog", { name: "Счёт на оплату", exact: true });
+        await expect(
+          invoiceDialog.getByRole("heading", { name: "Сохранённый расчёт", exact: true }),
+        ).toBeVisible();
+        await expect(invoiceDialog).toContainText("30,00000001");
+        await expect(invoiceDialog.locator('[data-reason="ADMIN_MODE_MISMATCH"]')).toHaveCount(0);
+        await expect(invoiceDialog.getByRole("checkbox")).toHaveCount(6);
+        await expect(invoiceDialog.locator('input[type="checkbox"]:checked')).toHaveCount(0);
+        await expect(
+          invoiceDialog.getByRole("button", { name: "Подтвердить выпуск", exact: true }),
+        ).toBeDisabled();
+        await expect(
+          invoiceDialog.getByRole("heading", { name: "История документа", exact: true }),
+        ).toBeVisible();
+        expect(
+          (await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations,
+        ).toEqual([]);
+        await page.screenshot({
+          path: testInfo.outputPath("invoice-detail-real-postgres.png"),
+          fullPage: true,
+        });
+        const invoiceDownload = page.waitForEvent("download");
+        await invoiceDialog.getByRole("button", { name: "Скачать JSON", exact: true }).click();
+        const invoiceFile = await invoiceDownload;
+        const invoiceStream = await invoiceFile.createReadStream();
+        const invoiceChunks: Buffer[] = [];
+        for await (const chunk of invoiceStream!) invoiceChunks.push(Buffer.from(chunk));
+        const savedInvoice = JSON.parse(Buffer.concat(invoiceChunks).toString("utf8"));
+        expect(savedInvoice.mode).toBe("live");
+        expect(savedInvoice.data.stored.performanceFee).toBe("30.00000001");
+        expect(savedInvoice.data.approvedAt).toBe(null);
+        await invoiceDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+        await page.goto(`/admin/clients?${context}`);
+        await expect(
+          page.getByRole("button", { name: clients[0].name, exact: true }),
+        ).toBeVisible();
       }
       if (path === "errors") {
         await page.getByRole("button", { name: "Проверка уведомлений", exact: true }).click();

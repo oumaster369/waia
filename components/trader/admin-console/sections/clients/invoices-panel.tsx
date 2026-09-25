@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Download } from "lucide-react";
+import { ExportButton } from "@/components/trader/admin-console/primitives/export-button";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
 import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
 import { notifyAdminAccessRevoked } from "@/components/trader/admin-console/data/access-events";
@@ -19,6 +19,7 @@ import { DataState } from "@/components/trader/admin-console/primitives/data-sta
 import { formatAdminMoney } from "@/components/trader/admin-console/primitives/money";
 import type { IssuanceAttestation } from "@/lib/trader/billing/invoice-issuance.types";
 import type { InvoiceDisplay } from "@/lib/trader/admin-console/billing/invoice-display-status";
+import { InvoiceEvidencePanel, type InvoiceEvidence } from "./invoice-evidence";
 type InvoiceItem = {
   id: string;
   organizationId: string;
@@ -30,6 +31,7 @@ type InvoiceItem = {
   revision: string;
 };
 type Detail = {
+  evidence?: InvoiceEvidence;
   id: string;
   revision: string;
   organizationId: string;
@@ -50,7 +52,7 @@ type Detail = {
     performanceFee: string;
     billable: boolean;
   };
-  chain: { ok: boolean | null; reasons?: string[]; mismatches?: string[] };
+  chain: { ok: boolean | null; link?: string; reasons?: string[]; mismatches?: string[] };
 };
 export function InvoicesPanel() {
   const context = useAdminReadContext();
@@ -59,14 +61,16 @@ export function InvoicesPanel() {
     aggregate: { currency: string; amount: string | null; count: number }[];
     total: number;
     truncated: boolean;
-  }>("/api/trader/admin/console/invoices");
+  }>(
+    `/api/trader/admin/console/invoices${context.params.get("status") ? `?status=${encodeURIComponent(context.params.get("status")!)}` : ""}`,
+  );
   const items = list.envelope?.data.items;
   const selected = context.params.get("sel");
-  const invoice = items?.find((item) => item.id === selected) ?? null;
   const detail = useAdminRead<Detail>(
-    invoice ? `/api/trader/admin/console/invoices/${invoice.id}` : null,
+    selected ? `/api/trader/admin/console/invoices/${encodeURIComponent(selected)}` : null,
   );
   const current = detail.envelope?.data.stored ? detail.envelope.data : null;
+  const invoice = items?.find((item) => item.id === selected) ?? current;
   const [epoch, resetConfirmations] = React.useReducer((n: number) => n + 1, 0);
   const [pending, setPending] = React.useState(false);
   const [readBackRequired, setReadBackRequired] = React.useState(false);
@@ -169,15 +173,6 @@ export function InvoicesPanel() {
         <ConsolePanel
           title="Счета на оплату"
           note="Расчёт и черновик автоматические. Выпуск — после подтверждения администратора."
-          action={
-            <a
-              className="inline-flex items-center gap-2 text-xs underline underline-offset-4"
-              href={context.href("/api/trader/admin/console/export?entity=invoices")}
-            >
-              <Download size={13} />
-              CSV
-            </a>
-          }
         >
           <ConsoleTable
             rows={items}
@@ -235,11 +230,11 @@ export function InvoicesPanel() {
         </ConsolePanel>
       ) : null}
       <ConsoleDialog
-        open={Boolean(invoice)}
+        open={Boolean(selected)}
         onClose={() => context.update({ sel: null })}
         dismissible={!pending}
         title="Счёт на оплату"
-        description={invoice?.id}
+        description={selected ?? undefined}
         wide
       >
         {detail.loading ? <ConsoleLoading /> : null}
@@ -288,6 +283,9 @@ export function InvoicesPanel() {
                 {current.chain.ok === false
                   ? "Цепочка расчёта не сходится. Значения сохранённого документа не изменены."
                   : "Для полной проверки цепочки не хватает сохранённых предыдущих значений."}
+                {current.chain.ok === false && current.chain.link ? (
+                  <p>Несовпадающее звено: {current.chain.link}</p>
+                ) : null}
                 {current.chain.reasons?.map((reason) => (
                   <DataState key={reason} state="unavailable" reason={reason} />
                 ))}
@@ -343,6 +341,11 @@ export function InvoicesPanel() {
                 Перечитать документ
               </button>
             ) : null}
+            {current.evidence ? <InvoiceEvidencePanel evidence={current.evidence} /> : null}
+            <div className="flex flex-wrap gap-3">
+              <ExportButton invoiceId={current.id} format="json" />
+              <ExportButton invoiceId={current.id} format="csv" />
+            </div>
             {current.status === "DRAFT" && current.stored.billable ? (
               <fieldset
                 disabled={pending || readBackRequired || detail.refreshing}

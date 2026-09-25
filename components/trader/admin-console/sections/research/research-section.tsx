@@ -64,7 +64,9 @@ export function ResearchSection() {
     tab === "runs" ? "/api/trader/admin/console/research/runs" : null,
   );
   const catalogue = useAdminRead<ResearchCatalog>(
-    tab !== "runs" ? `/api/trader/admin/console/research/catalog?tab=${tab}` : null,
+    tab !== "runs"
+      ? `/api/trader/admin/console/research/catalog?tab=${tab}${context.params.get("status") ? `&status=${encodeURIComponent(context.params.get("status")!)}` : ""}`
+      : null,
   );
   const read = tab === "runs" ? runs : catalogue;
   const compared = selectedResearchRuns(context.params.get("compare"));

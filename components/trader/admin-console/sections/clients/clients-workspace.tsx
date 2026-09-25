@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
 import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
@@ -25,6 +26,12 @@ export type Client = {
   connectedSinceValue?: string | null;
 };
 type Payment = {
+  network: string | null;
+  txHash: string | null;
+  confirmationsRequired: number | null;
+  confirmationsObserved: number | null;
+  settlementOutcome: string | null;
+  appliedAt: string | null;
   id: string;
   eventType: string;
   amount: string | null;
@@ -34,8 +41,11 @@ type Payment = {
 };
 type Period = { id: string; exchangeAccountId: string; status: string; start: string; end: string };
 type Dispute = {
+  kind: string;
+  amount: string | null;
+  currency: string | null;
   id: string;
-  invoiceId: string;
+  invoiceId: string | null;
   status: string;
   reason: string | null;
   openedAt: string | null;
@@ -177,7 +187,20 @@ export function Payments() {
             rowKey={(row) => row.id}
             caption="Платежи AI-TRADER"
             columns={[
-              { title: "Событие", render: (row) => <ConsoleBadge>{row.eventType}</ConsoleBadge> },
+              {
+                title: "Событие",
+                render: (row) => (
+                  <ConsoleBadge>
+                    {(
+                      {
+                        DETECTED: "Обнаружен",
+                        CONFIRMED: "Подтверждён",
+                        FAILED: "Ошибка",
+                      } as Record<string, string>
+                    )[row.eventType] ?? row.eventType}
+                  </ConsoleBadge>
+                ),
+              },
               {
                 title: "Сумма",
                 align: "right",
@@ -189,6 +212,32 @@ export function Payments() {
                   ),
               },
               { title: "Счёт на оплату", render: (row) => row.subjectInvoiceId ?? "Не привязан" },
+              {
+                title: "Сеть и транзакция",
+                render: (row) => (
+                  <div className="max-w-52 break-all">
+                    {row.network ?? "Сеть не сохранена"}
+                    <br />
+                    {row.txHash ?? "Хэш не сохранён"}
+                  </div>
+                ),
+              },
+              {
+                title: "Подтверждения",
+                render: (row) =>
+                  `${row.confirmationsObserved ?? "—"} / ${row.confirmationsRequired ?? "—"}`,
+              },
+              {
+                title: "Зачёт",
+                render: (row) =>
+                  row.appliedAt ? (
+                    <EvidenceTime at={row.appliedAt} label="Зачтён" />
+                  ) : row.settlementOutcome === "EXCEPTION" ? (
+                    "На сверке"
+                  ) : (
+                    "Не зачтён"
+                  ),
+              },
               {
                 title: "Зарегистрировано",
                 render: (row) => <EvidenceTime at={row.createdAt} label="" />,
@@ -228,7 +277,10 @@ export function Periods() {
   );
 }
 function Disputes() {
-  const read = useAdminRead<{ items: Dispute[] }>("/api/trader/admin/console/disputes");
+  const context = useAdminReadContext();
+  const read = useAdminRead<{ items: Dispute[]; total: number; truncated: boolean }>(
+    "/api/trader/admin/console/disputes",
+  );
   if (read.loading) return <ConsoleLoading />;
   return (
     <div className="space-y-4">
@@ -238,12 +290,52 @@ function Disputes() {
           title="Споры и сверка"
           note="Исправления расчётов проходят существующий процесс биллинга; сохранённые суммы не подменяются."
         >
+          {read.envelope.data.truncated ? (
+            <div className="px-5 py-3">
+              <DataState state="partial" reason="LIST_COVERAGE_LIMITED" />
+              <p className="text-waia-fg-muted text-xs">
+                Показано {read.envelope.data.items.length} из {read.envelope.data.total}. Уточните
+                охват.
+              </p>
+            </div>
+          ) : null}
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.id}
-            caption="Споры по счетам на оплату"
+            caption="Споры, корректировки и сверка"
             columns={[
-              { title: "Счёт на оплату", render: (row) => row.invoiceId },
+              {
+                title: "Тип",
+                render: (row) =>
+                  (
+                    ({
+                      dispute: "Спор",
+                      correction: "Корректировка",
+                      reconciliation: "Сверка",
+                    }) as Record<string, string>
+                  )[row.kind] ?? row.kind,
+              },
+              {
+                title: "Счёт на оплату",
+                render: (row) =>
+                  row.invoiceId ? (
+                    <Link
+                      className="underline"
+                      href={context.href("/admin/clients", { tab: "invoices", sel: row.invoiceId })}
+                    >
+                      {row.invoiceId}
+                    </Link>
+                  ) : (
+                    "Не привязан"
+                  ),
+              },
+              {
+                title: "Сумма",
+                render: (row) =>
+                  row.amount !== null && row.currency
+                    ? formatAdminMoney(row.amount, row.currency)
+                    : "Не применимо",
+              },
               {
                 title: "Статус",
                 render: (row) => (

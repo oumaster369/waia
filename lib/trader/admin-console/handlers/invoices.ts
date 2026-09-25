@@ -1,3 +1,6 @@
+import { readInvoiceEvidence } from "@/lib/trader/admin-console/repositories/invoice-evidence.postgres";
+import type { AdminReadTx } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
+import type { AdminConsoleQuery } from "@/lib/trader/admin-console/scope";
 import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { sql } from "drizzle-orm";
 import {
@@ -87,91 +90,102 @@ export async function handleAdminConsoleInvoiceDetailGet(
   if (!opened.ok) return opened.result;
   try {
     return await withAdminRouteSnapshot(opened.runtime.db, async (tx) => {
-      const rows = rowsOf(
-        await tx.execute(sql`
-        SELECT ${INVOICE_SELECT}
-        FROM trader_invoices i
-        WHERE i.id = ${invoiceId}::uuid
-          AND ${organizationFilter(parsed.query, "i")} AND ${exchangeAccountFilter(parsed.query, "i")}
-      `),
-      );
-      const row = rows[0];
-      if (!row) return adminClientError(404, "NOT_FOUND", "invoice was not found.");
-      const ledger = rowsOf(
-        await tx.execute(sql`
-        SELECT previous_high_water_mark
-        FROM trader_hwm_ledger
-        WHERE organization_id = ${String(row.organization_id)}::uuid
-          AND exchange_account_id = ${String(row.exchange_account_id)}
-          AND (source_invoice_id = ${invoiceId}
-           OR source_period_id = ${String(row.reporting_period_id)})
-        ORDER BY effective_at DESC
-        LIMIT 1
-      `),
-      );
-      const previous = rowsOf(
-        await tx.execute(sql`
-      SELECT cumulative_realized_strategy_profit
-      FROM trader_invoices
-      WHERE organization_id = ${String(row.organization_id)}::uuid
-        AND exchange_account_id = ${String(row.exchange_account_id)}
-        AND period_end = ${iso(row.period_start)}::timestamptz
-        AND id <> ${invoiceId}::uuid
-      ORDER BY period_end DESC, created_at DESC LIMIT 1
-    `),
-      );
-      const previousCumulative = previous[0]?.cumulative_realized_strategy_profit;
-      const ledgerHwm = ledger[0]?.previous_high_water_mark;
-      const previousHwm = String(row.previous_high_water_mark);
-      const cumulative = String(row.cumulative_realized_strategy_profit);
-      const periodProfit = String(row.period_realized_strategy_profit);
-      const chain = checkFeeChain({
-        previousCumulative: typeof previousCumulative === "string" ? previousCumulative : null,
-        periodProfit,
-        cumulative,
-        previousHwm,
-        newProfitAboveHwm: String(row.new_profit_above_hwm),
-        feeRate: String(row.fee_rate),
-        performanceFee: String(row.performance_fee),
-        billable: flag(row.billable),
-        minFeeThreshold: MIN_FEE_THRESHOLD,
-        ledgerPreviousHwm: typeof ledgerHwm === "string" ? ledgerHwm : null,
-      });
-      const now = new Date().toISOString();
-      const graceMs = parseInvoicePaymentGracePeriodMs(process.env);
-      return adminSuccess(
-        adminEnvelope({
-          data: {
-            id: String(row.id),
-            revision: invoiceReadRevision(row),
-            organizationId: String(row.organization_id),
-            exchangeAccountId: String(row.exchange_account_id),
-            currency: String(row.currency),
-            status: String(row.status),
-            approvedAt: iso(row.issuance_approved_at),
-            coolingOffUntil: iso(row.cooling_off_until),
-            issuedAt: iso(row.issued_at),
-            paidAt: iso(row.paid_at),
-            stored: {
-              periodProfit,
-              cumulative,
-              previousHwm,
-              newProfitAboveHwm: String(row.new_profit_above_hwm),
-              feeRate: String(row.fee_rate),
-              performanceFee: String(row.performance_fee),
-              billable: flag(row.billable),
-            },
-            chain,
-            ...displayOf(row, now, graceMs),
-            tradesNote: "оперативная выборка, не база комиссии",
-          },
-          scope: adminScopeFromQuery(parsed.query),
-          missingSources: chain.ok === null ? chain.reasons : [],
-        }),
-        "postgres",
-      );
+      return readConsoleInvoiceDetail(tx, parsed.query, invoiceId);
     });
   } finally {
     await deps.disposeRuntimeDb(opened.runtime);
   }
+}
+
+export async function readConsoleInvoiceDetail(
+  tx: AdminReadTx,
+  query: AdminConsoleQuery,
+  invoiceId: string,
+): Promise<AdminRouteHandlerResult> {
+  const rows = rowsOf(
+    await tx.execute(sql`
+    SELECT ${INVOICE_SELECT}
+    FROM trader_invoices i
+    WHERE i.id = ${invoiceId}::uuid
+      AND ${organizationFilter(query, "i")} AND ${exchangeAccountFilter(query, "i")}
+  `),
+  );
+  const row = rows[0];
+  if (!row) return adminClientError(404, "NOT_FOUND", "invoice was not found.");
+  const ledger = rowsOf(
+    await tx.execute(sql`
+    SELECT previous_high_water_mark
+    FROM trader_hwm_ledger
+    WHERE organization_id = ${String(row.organization_id)}::uuid
+      AND exchange_account_id = ${String(row.exchange_account_id)}
+      AND (source_invoice_id = ${invoiceId}
+       OR source_period_id = ${String(row.reporting_period_id)})
+    ORDER BY effective_at DESC
+    LIMIT 1
+  `),
+  );
+  const previous = rowsOf(
+    await tx.execute(sql`
+  SELECT cumulative_realized_strategy_profit
+  FROM trader_invoices
+  WHERE organization_id = ${String(row.organization_id)}::uuid
+    AND exchange_account_id = ${String(row.exchange_account_id)}
+    AND period_end = ${iso(row.period_start)}::timestamptz
+    AND id <> ${invoiceId}::uuid
+  ORDER BY period_end DESC, created_at DESC LIMIT 1
+`),
+  );
+  const previousCumulative = previous[0]?.cumulative_realized_strategy_profit;
+  const ledgerHwm = ledger[0]?.previous_high_water_mark;
+  const previousHwm = String(row.previous_high_water_mark);
+  const cumulative = String(row.cumulative_realized_strategy_profit);
+  const periodProfit = String(row.period_realized_strategy_profit);
+  const chain = checkFeeChain({
+    previousCumulative: typeof previousCumulative === "string" ? previousCumulative : null,
+    periodProfit,
+    cumulative,
+    previousHwm,
+    newProfitAboveHwm: String(row.new_profit_above_hwm),
+    feeRate: String(row.fee_rate),
+    performanceFee: String(row.performance_fee),
+    billable: flag(row.billable),
+    minFeeThreshold: MIN_FEE_THRESHOLD,
+    ledgerPreviousHwm: typeof ledgerHwm === "string" ? ledgerHwm : null,
+  });
+  const evidence = await readInvoiceEvidence(tx, String(row.organization_id), invoiceId);
+  const now = new Date().toISOString();
+  const graceMs = parseInvoicePaymentGracePeriodMs(process.env);
+  return adminSuccess(
+    adminEnvelope({
+      data: {
+        id: String(row.id),
+        revision: invoiceReadRevision(row),
+        organizationId: String(row.organization_id),
+        exchangeAccountId: String(row.exchange_account_id),
+        currency: String(row.currency),
+        status: String(row.status),
+        approvedAt: iso(row.issuance_approved_at),
+        coolingOffUntil: iso(row.cooling_off_until),
+        issuedAt: iso(row.issued_at),
+        paidAt: iso(row.paid_at),
+        stored: {
+          periodProfit,
+          cumulative,
+          previousHwm,
+          newProfitAboveHwm: String(row.new_profit_above_hwm),
+          feeRate: String(row.fee_rate),
+          performanceFee: String(row.performance_fee),
+          billable: flag(row.billable),
+        },
+        chain,
+        evidence,
+        ...displayOf(row, now, graceMs),
+        tradesNote: "оперативная выборка, не база комиссии",
+      },
+      scope: adminScopeFromQuery(query),
+      mode: query.mode,
+      missingSources: chain.ok === null ? chain.reasons : [],
+    }),
+    "postgres",
+  );
 }

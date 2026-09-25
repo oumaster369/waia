@@ -22,9 +22,11 @@ export function useAdminRead<T>(
     if (!url) return;
     let stopped = false;
     let revision = 0;
+    let inFlight = false;
     let controller: AbortController | null = null;
     const read = async () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" || inFlight) return;
+      inFlight = true;
       const request = ++revision;
       setResult((current) => ({
         key: url,
@@ -34,6 +36,11 @@ export function useAdminRead<T>(
       }));
       controller?.abort();
       controller = new AbortController();
+      let timedOut = false;
+      const deadline = window.setTimeout(() => {
+        timedOut = true;
+        controller?.abort();
+      }, 30_000);
       try {
         const response = await fetch(url, {
           signal: controller.signal,
@@ -100,18 +107,22 @@ export function useAdminRead<T>(
         if (
           stopped ||
           request !== revision ||
-          (error instanceof DOMException && error.name === "AbortError")
+          (error instanceof DOMException && error.name === "AbortError" && !timedOut)
         )
           return;
         setResult((current) => ({
           key: url,
           envelope: current.key === url ? current.envelope : null,
-          reason:
-            error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)
+          reason: timedOut
+            ? "ADMIN_READ_TIMEOUT"
+            : error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)
               ? error.message
               : "ADMIN_NETWORK_UNAVAILABLE",
           refreshing: false,
         }));
+      } finally {
+        window.clearTimeout(deadline);
+        inFlight = false;
       }
     };
     void read();

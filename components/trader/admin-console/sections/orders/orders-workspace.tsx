@@ -69,7 +69,9 @@ export function OrdersWorkspace() {
 export function OrderList({ tab }: { tab: string }) {
   const context = useAdminReadContext();
   const { items, reason } = useConsoleStreamList<OrderItem>(
-    context.href(`/api/trader/admin/console/orders?tab=${tab === "all" ? "all" : "working"}`),
+    context.href(`/api/trader/admin/console/orders?tab=${tab === "all" ? "all" : "working"}`, {
+      status: context.params.get("status"),
+    }),
     "orders",
   );
   return (
