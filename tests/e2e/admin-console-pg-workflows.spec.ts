@@ -85,6 +85,36 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       path: testInfo.outputPath("overview-real-postgres.png"),
       fullPage: true,
     });
+    await page.getByRole("button", { name: "Помощник", exact: true }).click();
+    const assistant = page.locator("#admin-assistant");
+    await expect(
+      assistant.getByText("Помощник выключен. Быстрые ответы работают без языковой модели.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await assistant.getByRole("button", { name: "Сводка", exact: true }).click();
+    await expect(assistant.getByRole("region", { name: "Быстрый ответ" })).toContainText(
+      /12\s540,125\s*USDT/,
+    );
+    await expect(
+      assistant.getByRole("link", { name: "Источник", exact: true }).first(),
+    ).toHaveAttribute("href", new RegExp(`organization_id=${clients[0].id}`));
+    await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
+    await expect(assistant).not.toContainText("12540.125");
+    await assistant.getByRole("button", { name: "Сводка", exact: true }).click();
+    await expect(assistant.getByRole("region", { name: "Быстрый ответ" })).toContainText(
+      /890,5\s*USDT/,
+    );
+    await expect(assistant).not.toContainText(accounts[0]);
+    expect(
+      (await new AxeBuilder({ page }).include("#admin-assistant").analyze()).violations,
+    ).toEqual([]);
+    await page.screenshot({
+      path: testInfo.outputPath("assistant-real-postgres.png"),
+      fullPage: true,
+    });
+    await assistant.getByRole("button", { name: "Закрыть помощника", exact: true }).click();
+    await page.getByLabel("Охват: клиент").selectOption(clients[0].id);
     await page.getByRole("tab", { name: "Рынок и новости", exact: true }).click();
     await expect(page).toHaveURL(/tab=market/);
     await expect(page.getByRole("heading", { name: "Рынок и новости", exact: true })).toBeVisible();

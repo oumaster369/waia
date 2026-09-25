@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, afterEach, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 
 import { AssistantPanel } from "@/components/trader/admin-console/assistant/assistant-panel";
 import { MarketStrip } from "@/components/trader/admin-console/shell/market-strip";
 import { StatusBar } from "@/components/trader/admin-console/shell/status-bar";
 
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 describe("admin console chrome", () => {
   it("does not call a USDT quote BTC/USD", () => {
     render(<MarketStrip />);
@@ -16,6 +20,10 @@ describe("admin console chrome", () => {
   });
 
   it("shows the assistant banner and an empty delivery sample", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => undefined)),
+    );
     render(<StatusBar />);
     expect(screen.getByText(/p95: нет измерения/)).toBeInTheDocument();
     render(

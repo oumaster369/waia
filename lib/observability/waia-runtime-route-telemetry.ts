@@ -56,6 +56,7 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_console_cycles"
   | "trader_admin_console_kill_switch"
   | "trader_admin_console_orders"
+  | "trader_admin_console_aggregate"
   | "trader_admin_console_clients"
   | "trader_admin_console_invoices"
   | "trader_admin_console_invoice_detail"
