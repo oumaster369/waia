@@ -144,3 +144,26 @@ export async function updateLimitsRowForScopePostgres(
 
   return getLimitsRowForScopePostgres(ex, scoped, scope);
 }
+
+/** Never update an existing operator profile, including a concurrent insert. */
+export async function insertLimitsRowIfAbsentPostgres(
+  ex: PgWriteExecutor,
+  context: OrgContext,
+  scope: OrgRiskLimitsScope,
+  input: UpsertRiskLimitsRowInput,
+): Promise<RiskLimitsRow | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+  const rows = await ex.insert(pgSchema.traderRiskLimits).values({
+    id: crypto.randomUUID(),
+    organizationId: scoped.organizationId,
+    scopeType: scope.scopeType,
+    scopeRef: scopeRefToDb(scope),
+    ...rowValuesFromInput(input),
+    createdAt: now,
+    updatedAt: now,
+  }).onConflictDoNothing({
+    target: [pgSchema.traderRiskLimits.organizationId, pgSchema.traderRiskLimits.scopeType, pgSchema.traderRiskLimits.scopeRef],
+  }).returning();
+  return rows[0] ? mapRow(rows[0]) : null;
+}

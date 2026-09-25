@@ -141,3 +141,26 @@ export function updateLimitsRowForScopeSqlite(
 
   return getLimitsRowForScopeSqlite(db, scoped, scope);
 }
+
+/** Never update an existing operator profile, including a concurrent insert. */
+export function insertLimitsRowIfAbsentSqlite(
+  db: WaiaDb,
+  context: OrgContext,
+  scope: OrgRiskLimitsScope,
+  input: UpsertRiskLimitsRowInput,
+): RiskLimitsRow | null {
+  const scoped = requireOrgContext(context.organizationId);
+  const now = new Date();
+  const rows = db.insert(traderRiskLimits).values({
+    id: crypto.randomUUID(),
+    organizationId: scoped.organizationId,
+    scopeType: scope.scopeType,
+    scopeRef: scopeRefToDb(scope),
+    ...rowValuesFromInput(input),
+    createdAt: now,
+    updatedAt: now,
+  }).onConflictDoNothing({
+    target: [traderRiskLimits.organizationId, traderRiskLimits.scopeType, traderRiskLimits.scopeRef],
+  }).returning().all();
+  return rows[0] ? mapRow(rows[0]) : null;
+}
