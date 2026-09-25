@@ -4,6 +4,8 @@
  * Requires a freshly migrated, explicitly named disposable local database:
  * WAIA_PG_INTEGRATION=1 DATABASE_URL_POSTGRES_SESSION=postgresql://... vitest run ...
  */
+import { readResearchDetail } from "@/lib/trader/admin-console/repositories/research-detail.postgres";
+import { withAdminReadSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -2087,6 +2089,16 @@ describe.skipIf(!enabled || !url || !disposable)(
       // than by allocation_decision_id: the opening order intentionally retains
       // the ratified allocation decision UUID, while the later deterministic
       // close uses the CASH receipt digest as its allocation authority.
+      // Console reuses the canonical durable projection inside its read-only snapshot.
+      const consoleRead = await withAdminReadSnapshot(drizzle(pool, { schema: pgSchema }), tx =>
+        readResearchDetail(tx, { organization_id: organizationId, mode: "history", currency: "USDT",
+          period: "7d", tz: "UTC", limit: 50 }, `historical:${organizationId}:${runId}`));
+      expect(consoleRead.value).not.toBeNull();
+      expect(consoleRead.value!.metrics.cash).toBe(rows[0]!.latestCash);
+      expect(consoleRead.value!.metrics.equity).toBe(rows[0]!.latestEquity);
+      expect(consoleRead.value!.totalCycles).toBe(APPROVED_CYCLE_COUNT);
+      expect(consoleRead.value!.cycles.every(cycle => cycle.checkpoint !== null)).toBe(true);
+      expect(consoleRead.value!.reasons).not.toContain("HISTORICAL_EVIDENCE_INCOMPLETE");
       expect(rows[0]!.modeledOrders).toBe("2");
       expect(rows[0]!.modeledFills).toBe("2");
       expect(rows[0]!.modeledFillEvidence).toBe(rows[0]!.modeledFills);

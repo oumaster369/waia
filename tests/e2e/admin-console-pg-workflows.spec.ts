@@ -260,16 +260,33 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     }
     await page.goto(`/admin/orders?${context}`);
     await expect(page.locator("main")).toContainText("QA0BTC0");
+    await expect(page.locator("main")).toContainText("QA0BTC29");
     await page.evaluate(() => window.scrollTo(0, 900));
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(850);
-    await page.getByRole("tab", { name: "Исполнения", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(700);
+    const fillsTab = page.getByRole("tab", { name: "Исполнения", exact: true });
+    await fillsTab.evaluate((element) =>
+      element.addEventListener(
+        "click",
+        () => {
+          document.documentElement.dataset.consoleBeforeNavigationScroll = String(window.scrollY);
+        },
+        { once: true, capture: true },
+      ),
+    );
+    await fillsTab.click();
+    const previousScroll = Number(
+      await page.evaluate(() => document.documentElement.dataset.consoleBeforeNavigationScroll),
+    );
+    expect(previousScroll).toBeGreaterThan(700);
     await expect(page).toHaveURL(/tab=fills/);
     await page.goBack();
     await expect(page.getByRole("tab", { name: "Рабочие", exact: true })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(850);
+    await expect
+      .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - previousScroll))
+      .toBeLessThan(2);
     await page.getByRole("button", { name: "Аварийная остановка", exact: true }).click();
     await expect(page.getByLabel("Область остановки")).toHaveValue("organization");
     await page.getByRole("button", { name: "Дальше", exact: true }).click();
@@ -311,4 +328,119 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await sql.end();
   }
   // Local append-only observations/audit are intentionally retained; no production connection.
+});
+
+test("research details, comparison, version tabs and manual promotion acknowledgement", async ({
+  page,
+  baseURL,
+  browser,
+}, testInfo) => {
+  test.setTimeout(180000);
+  const sql = postgres(url, { max: 2, prepare: false });
+  const email = `research-ui-${crypto.randomUUID()}@waia.local`,
+    primary = await browser.newContext({
+      baseURL: baseURL?.replace("trader.localhost", "127.0.0.1"),
+    });
+  try {
+    await signUpAndOpenDashboard(await primary.newPage(), email);
+    grantTraderEntitlementByUserEmail(email);
+    const { userId } = grantPlatformAdminByUserEmail(email);
+    await mirrorPlatformAdminInPostgres(sql, userId, email);
+    const org = crypto.randomUUID(),
+      dataset = crypto.randomUUID(),
+      runs = [crypto.randomUUID(), crypto.randomUUID()],
+      promotion = crypto.randomUUID(),
+      strategy = `Research-QA-${crypto.randomUUID().slice(0, 6)}`;
+    await sql`INSERT INTO organizations(id,owner_user_id,kind,name) VALUES (${org}::uuid,${userId}::uuid,'personal','Исследовательская проверка')`;
+    // A credential makes this synthetic organization discoverable in the console context selector.
+    await sql`INSERT INTO exchange_credentials(id,organization_id,venue,exchange_account_id,encrypted_payload) VALUES (${crypto.randomUUID()}::uuid,${org}::uuid,'htx',${crypto.randomUUID()},'synthetic-no-secret')`;
+    await sql`INSERT INTO research_dataset(id,organization_id,name,symbol,interval,train_bar_count,validation_bar_count,blind_bar_count,train_digest,validation_digest,blind_digest,sealed_at,metadata_json) VALUES (${dataset}::uuid,${org}::uuid,'Данные проверки','BTCUSDT','1m',10,5,5,${"a".repeat(64)},${"b".repeat(64)},${"c".repeat(64)},now(),'SEALED_MUST_NOT_APPEAR')`;
+    for (const [i, run] of runs.entries()) {
+      await sql`INSERT INTO trader_backtest_runs(id,organization_id,dataset_id,strategy_id,strategy_version,cost_model_version,split,status,completed_at) VALUES (${run}::uuid,${org}::uuid,${dataset}::uuid,${strategy},${`v${i + 1}`},'cost-v1','validation','completed',now())`;
+      await sql`INSERT INTO trader_backtest_results(id,organization_id,run_id,regime_label,metrics_json) VALUES (${crypto.randomUUID()}::uuid,${org}::uuid,${run}::uuid,'RANGE',${JSON.stringify([{ strategySignalId: "signal", periodRealizedPnl: "12.12345678", periodTotalFees: "0.00000001", closedTradeCount: 1, evidenceContentDigest: "digest" }])})`;
+    }
+    await sql`INSERT INTO trader_strategy_promotion_records(id,organization_id,strategy_id,strategy_version,git_commit_sha,target_deployment_state,hypothesis,intended_regime,cost_model_json,failure_modes_json,reason_code_distribution_json,paper_trading_evidence_json,research_evidence_json,evidence_content_digest,confidence_attestation_json,record_content_digest,schema_version,state,requested_at,cooling_off_ends_at,state_version) VALUES (${promotion}::uuid,${org}::uuid,${strategy},'v1',${"a".repeat(40)},'LIVE_LIMITED','Synthetic review','RANGE','{}','[]','{}','{}','{}','fixture','{}','fixture','fixture','COOLING_OFF',now(),now()-interval '1 minute',7)`;
+    await signInOnLanding(page, email, "password123!");
+    await page.waitForURL("**/trader");
+    const query = `organization_id=${org}&mode=history&period=7d`;
+    await page.goto(`/admin/research?${query}&tab=runs`);
+    await expect(page.getByRole("button", { name: new RegExp(runs[0]) })).toBeVisible();
+    await page.getByRole("button", { name: new RegExp(runs[0]) }).click();
+    const dialog = page.getByRole("dialog", { name: "Доказательства запуска" });
+    await expect(dialog).toContainText("12,12345678");
+    await expect(dialog).not.toContainText("SEALED_MUST_NOT_APPEAR");
+    for (const label of [
+      "Циклы и причины",
+      "Данные",
+      "Артефакты",
+      "Журнал",
+      "Сделки и результаты",
+    ]) {
+      await dialog.getByRole("button", { name: label, exact: true }).click();
+      await expect(dialog).toBeVisible();
+    }
+    expect((await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations).toEqual(
+      [],
+    );
+    await page.screenshot({ path: testInfo.outputPath("research-detail.png"), fullPage: true });
+    await dialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+    for (const run of runs)
+      await page.getByRole("checkbox", { name: `Сравнить запуск ${run}`, exact: true }).check();
+    await page.getByRole("button", { name: "Сравнить (2)", exact: true }).click();
+    const comparison = page.getByRole("dialog", { name: "Сравнение запусков" });
+    await expect(comparison).toContainText("Есть различия или неподтверждённые условия");
+    await expect(
+      comparison.getByRole("heading", { name: "Сначала — условия сравнения" }),
+    ).toBeVisible();
+    await expect(comparison).toContainText("v1");
+    await expect(comparison).toContainText("v2");
+    await comparison.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await page.goBack();
+    await expect(comparison).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.goto(
+      `/admin/strategies?${query}&tab=testing&sel=${encodeURIComponent(`${strategy}:v1`)}`,
+    );
+    const strategyDialog = page.getByRole("dialog", { name: `${strategy} · v1`, exact: true });
+    await expect(strategyDialog).toBeVisible();
+    for (const label of ["Счета и сделки", "Решения", "Проверки", "Версии", "Результаты"]) {
+      await strategyDialog.getByRole("button", { name: label, exact: true }).click();
+      await expect(strategyDialog).toBeVisible();
+    }
+    await expect(strategyDialog).toContainText("History — воспроизведение");
+    expect((await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations).toEqual(
+      [],
+    );
+    await page.goto(`/admin/strategy-promotions?${query}&strategy_id=${strategy}`);
+    await expect(
+      page.getByRole("button", { name: "Ввести в действие", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Ввести в действие", exact: true }).click();
+    const confirmation = page.getByRole("dialog", { name: "Ввести в действие", exact: true });
+    await expect(confirmation).toContainText("версия состояния 7");
+    await confirmation.getByLabel("Причина действия").fill("Синтетическая проверка интерфейса");
+    const ack = confirmation.getByRole("checkbox");
+    await expect(ack).not.toBeChecked();
+    await expect(
+      confirmation.getByRole("button", { name: "Подтвердить действие", exact: true }),
+    ).toBeDisabled();
+    await ack.check();
+    await expect(
+      confirmation.getByRole("button", { name: "Подтвердить действие", exact: true }),
+    ).toBeEnabled();
+    await page.screenshot({
+      path: testInfo.outputPath("promotion-manual-review.png"),
+      fullPage: true,
+    });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Ввести в действие", exact: true }).click();
+    await expect(page.getByRole("dialog").getByRole("checkbox")).not.toBeChecked();
+    await page.keyboard.press("Escape");
+    const saved =
+      await sql`SELECT state,state_version FROM trader_strategy_promotion_records WHERE id=${promotion}::uuid`;
+    expect(saved[0]).toMatchObject({ state: "COOLING_OFF", state_version: 7 });
+  } finally {
+    await primary.close();
+    await sql.end();
+  }
 });

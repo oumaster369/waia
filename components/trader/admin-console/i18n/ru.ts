@@ -20,6 +20,27 @@ export const RU = {
     not_applicable: "Не применяется",
   },
   reasons: {
+    PROMOTION_STATE_AMBIGUOUS:
+      "Сохранено несколько несовместимых состояний продвижения; требуется сверка",
+    COMMAND_RESULT_UNCONFIRMED: "Результат команды не подтверждён; прочитайте состояние заново",
+    RESEARCH_METRIC_NOT_PERSISTED: "Метрика запуска не сохранена",
+    RESEARCH_CONDITION_NOT_PERSISTED: "Условие запуска не сохранено",
+    BACKTEST_CYCLE_BINDING_NOT_PERSISTED: "У теста нет сохранённой связи с журналом циклов",
+    HISTORICAL_EVIDENCE_INCOMPLETE: "Сохранённая цепочка доказательств воспроизведения неполна",
+    STRATEGY_RESULT_INCOMPLETE: "Недостаточно достоверных данных для результата стратегии",
+    STRATEGY_UNREALIZED_PERIOD_BINDING_NOT_PERSISTED:
+      "Нет начальной и конечной оценки позиций, привязанной к версии стратегии",
+    STRATEGY_DECISIONS_TRUNCATED: "Показаны последние 50 решений",
+    STRATEGY_TRADES_TRUNCATED: "Слишком много сделок для полной проекции; итог не рассчитан",
+    TRADE_LEGS_NOT_PERSISTED: "Нет сохранённых исполнений сделки",
+    FORECAST_QUALITY_NOT_PERSISTED: "Оценка качества прогнозов не сохранена",
+    SHADOW_JOURNAL_FILE_ONLY: "Shadow-журнал хранится в файлах и недоступен в консоли",
+    RESEARCH_REASONING_FILE_ONLY: "Исследовательские рассуждения из файлов недоступны в консоли",
+    PROPOSED_ACCOUNT_ASSIGNMENTS_NOT_PERSISTED:
+      "Назначение предложения на биржевой счёт не сохранено",
+    PROPOSAL_HAS_NO_ACCOUNT_ASSIGNMENTS:
+      "Счета в предложении не назначены; требуется отдельное решение оператора",
+
     LEGACY_ORDER_NO_V2_BINDING: "У старого ордера нет сохранённой связи с цепочкой V2",
     FINANCE_REVISION_CHANGED: "Данные счёта обновились после сводки; показана новая ревизия",
     LIVE_AUTHORITY_NOT_PROVEN:

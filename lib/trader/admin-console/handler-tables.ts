@@ -237,7 +237,11 @@ export const HANDLER_TABLES = {
     "research_dataset",
     "trader_strategy_candidates",
   ],
-  researchRuns: ["trader_historical_simulation_run_lifecycle_event_v2"],
+  researchRuns: [
+    "trader_historical_simulation_run_lifecycle_event_v2",
+    "trader_backtest_runs",
+    "research_dataset",
+  ],
   savedViews: ["trader_admin_saved_view"],
   search: [
     "organizations",
@@ -251,6 +255,19 @@ export const HANDLER_TABLES = {
     "trader_admin_incident",
     "organization_entitlements",
     "trader_admin_diagnostic_event",
+  ],
+  promotions: ["trader_strategy_promotion_records"],
+  strategyDetail: [
+    "trader_trades",
+    "trader_trade_legs",
+    "trader_orders",
+    "exchange_credentials",
+    "trader_fills",
+    "trader_lifecycle_events",
+    "trader_intelligence_cycle_envelope",
+    "trader_intelligence_decision_record",
+    "trader_execution_plans_v2",
+    "trader_historical_simulation_run_start_v2",
   ],
   strategies: [
     "trader_trades",

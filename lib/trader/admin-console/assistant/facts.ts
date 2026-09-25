@@ -47,6 +47,8 @@ const PATHS: Record<string, string> = {
   list_invoices: "/admin/clients",
   strategy_performance: "/admin/strategies",
   list_research_runs: "/admin/research",
+  get_research_run: "/admin/research",
+  compare_research_runs: "/admin/research",
   list_incidents: "/admin/errors",
   system_status: "/admin/system",
   list_jobs: "/admin/system",
@@ -148,6 +150,56 @@ export function factsFromTool(
     add("scope", TITLES[tool] ?? "Источник", null, { reasons: ["ADMIN_SCOPE_MISMATCH"] });
     return result;
   }
+  if (tool === "strategy_performance" && Array.isArray(data.performance)) {
+    for (const [i, group] of list(data.performance).entries()) {
+      const href = assistantHref("/admin/strategies", query, {
+        sel: `${str(data.strategyId)}:${str(data.version)}`,
+      });
+      for (const [key, label] of Object.entries({
+        realized: "Реализованный результат периода",
+        tradingFees: "Торговые комиссии",
+        maxRealizedDrawdown: "Просадка реализованного результата",
+      }))
+        add(`performance.${i}.${key}`, `${str(group.mode)} · ${label}`, group[key], {
+          currency: str(group.currency),
+          state: str(group.state) ?? "unavailable",
+          reasons: reasons(group.reasons),
+          href,
+        });
+    }
+    return result;
+  }
+  if (tool === "get_research_run" || tool === "compare_research_runs") {
+    for (const [i, run] of list(data.items).entries()) {
+      const metric = record(run.metrics),
+        href = assistantHref("/admin/research", query, { tab: "runs", run: str(run.id) ?? "" });
+      for (const [key, label] of Object.entries({
+        equity: "Капитал воспроизведения",
+        cash: "Свободно в воспроизведении",
+        netPnl: "Операционный результат воспроизведения",
+      }))
+        add(`items.${i}.metrics.${key}`, `${str(run.runId)} · ${label}`, metric[key], {
+          currency: str(metric.currency),
+          state: metric[key] == null ? "unavailable" : "ok",
+          reasons: metric[key] == null ? ["RESEARCH_METRIC_NOT_PERSISTED"] : [],
+          href,
+          entityId: str(run.id),
+        });
+      for (const [key, label] of Object.entries({
+        dataset: "Набор данных",
+        period: "Период",
+        costs: "Издержки",
+        version: "Версия",
+        model: "Модель",
+      }))
+        add(`items.${i}.conditions.${key}`, label, record(run.conditions)[key], {
+          href,
+          entityId: str(run.id),
+          reasons: record(run.conditions)[key] == null ? ["RESEARCH_CONDITION_NOT_PERSISTED"] : [],
+        });
+    }
+    return result;
+  }
   if (tool === "get_overview") {
     const finance = record(data.finance);
     for (const [key, label] of Object.entries({
@@ -211,7 +263,12 @@ export function factsFromTool(
           "Запись";
       const href = assistantHref(PATHS[tool] ?? "/admin", query, {
         ...selection,
-        ...(entityId ? { [tool === "list_orders" ? "order" : "sel"]: entityId } : {}),
+        ...(entityId
+          ? {
+              [tool === "list_orders" ? "order" : tool === "list_research_runs" ? "run" : "sel"]:
+                entityId,
+            }
+          : {}),
       });
       const opts = { entityId, href, coverage: null };
       if (tool === "no_trade_reasons" || tool === "list_cycles") {

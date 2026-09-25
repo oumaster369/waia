@@ -1,3 +1,5 @@
+import { handleAdminConsoleStrategyDetailGet } from "./strategy-detail";
+import { handleAdminConsoleResearchDetailGet } from "./research-detail";
 import {
   adminClientError,
   AdminRouteHandlerDeps,
@@ -44,7 +46,10 @@ export async function readAssistantTool(
   if (tool === "list_orders") return handleAdminConsoleOrdersGet(read, deps);
   if (tool === "list_clients") return handleAdminConsoleClientsGet(read, deps);
   if (tool === "list_invoices") return handleAdminConsoleInvoicesGet(read, deps);
-  if (tool === "strategy_performance") return handleAdminConsoleStrategiesGet(read, deps);
+  if (tool === "strategy_performance")
+    return url.searchParams.has("strategy_id")
+      ? handleAdminConsoleStrategyDetailGet(read, deps)
+      : handleAdminConsoleStrategiesGet(read, deps);
   if (tool === "list_research_runs") return handleAdminConsoleResearchRunsGet(read, deps);
   if (tool === "list_incidents") return handleAdminConsoleIncidentsGet(read, deps);
   if (tool === "list_fills") return handleAdminConsoleFillsGet(read, deps);
@@ -58,6 +63,17 @@ export async function readAssistantTool(
   if (tool === "search") return handleAdminConsoleSearchGet(read, deps);
   if (tool === "aggregate") return handleAdminConsoleAggregateGet(read, deps);
   const entityId = url.searchParams.get("entity_id");
+  if (tool === "get_research_run")
+    return entityId
+      ? handleAdminConsoleResearchDetailGet(read, deps, [entityId])
+      : adminClientError(400, "BAD_REQUEST", "entity_id required.");
+  if (tool === "compare_research_runs") {
+    const ids = url.searchParams.getAll("run_id");
+    return ids.length >= 2
+      ? handleAdminConsoleResearchDetailGet(read, deps, ids)
+      : adminClientError(400, "BAD_REQUEST", "Choose 2–4 runs.");
+  }
+
   if (
     [
       "get_account",

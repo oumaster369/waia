@@ -145,6 +145,7 @@ export function AdminReadContextProvider({ children }: { children: React.ReactNo
         params.delete("order");
         params.delete("nested");
         params.delete("cursor");
+        for (const key of ["run", "run_tab", "compare", "compare_open"]) params.delete(key);
       }
       // These are client read-model filters. Native history updates Next search
       // params immediately, without leaving the former scope active during an RSC

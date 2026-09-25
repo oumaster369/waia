@@ -16,6 +16,7 @@ import { handleAdminConsoleCyclesGet } from "@/lib/trader/admin-console/handlers
 import { handleAdminConsoleCycleTraceGet } from "@/lib/trader/admin-console/handlers/cycle-trace";
 import type { AdminRouteHandlerDeps } from "@/lib/trader/admin-route-shared";
 
+import { handleAdminConsoleStrategyDetailGet } from "@/lib/trader/admin-console/handlers/strategy-detail";
 import { createLifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
 import { createPostgresLifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository-postgres";
 import { pairFillsFifo, type PairingFillEvent } from "@/lib/trader/lifecycle/trade-pairing";
@@ -434,5 +435,50 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
     expect((newsResponse.body as { data: { items: unknown[] } }).data.items).toContainEqual(
       expect.objectContaining({ id: news, title: "A saved news title" }),
     );
+  });
+  it("strategy details preserve version/mode boundaries and the exact period fee semantics", async () => {
+    const binding = await seed();
+    await trade(binding, "live", "USDT", "8");
+    await trade(binding, "paper", "USDT", "108");
+    await trade(binding, "mock", "USDT", "1008");
+    const read = async (version: string) =>
+      handleAdminConsoleStrategyDetailGet(
+        new Request(
+          `http://localhost/api/trader/admin/console/strategies/detail?organization_id=${binding.organizationId}&strategy_id=test&strategy_version=${version}&mode=all&period=7d`,
+        ),
+        deps(),
+      );
+    const result = await read("1");
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      data: {
+        performance: [
+          expect.objectContaining({
+            mode: "live",
+            realized: "7",
+            tradingFees: "3",
+            closedTradeCount: 1,
+          }),
+          expect.objectContaining({
+            mode: "paper",
+            realized: "107",
+            tradingFees: "3",
+            closedTradeCount: 1,
+          }),
+          expect.objectContaining({ mode: "history", state: "empty", realized: "0" }),
+        ],
+      },
+    });
+    expect(JSON.stringify(result.body)).not.toContain("1008");
+    const otherVersion = await read("2");
+    expect(otherVersion.body).toMatchObject({
+      data: {
+        performance: [
+          expect.objectContaining({ mode: "live", state: "empty", totalTrades: 0 }),
+          expect.objectContaining({ mode: "paper", state: "empty", totalTrades: 0 }),
+          expect.objectContaining({ mode: "history", state: "empty", totalTrades: 0 }),
+        ],
+      },
+    });
   });
 });

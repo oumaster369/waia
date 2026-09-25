@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { PromotionProposals } from "@/components/trader/admin-console/sections/strategies/proposals";
+import { StrategyDetails } from "@/components/trader/admin-console/sections/strategies/strategy-details";
 import { useAdminReadContext } from "@/components/trader/admin-console/data/read-context";
 import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
 import { ADMIN_SECTIONS } from "@/components/trader/admin-console/navigation/sections";
@@ -10,7 +12,6 @@ import {
   ConsolePanel,
   ConsoleTable,
   DetailLink,
-  EvidenceTime,
   controlClass,
 } from "@/components/trader/admin-console/primitives/console-ui";
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
@@ -98,56 +99,18 @@ export default function AdminStrategiesPage() {
           />
         </ConsolePanel>
       ) : null}
+      {tab === "proposed" ? (
+        <div className="mt-5">
+          <PromotionProposals />
+        </div>
+      ) : null}
       <ConsoleDialog
         open={Boolean(selected)}
         onClose={() => context.update({ sel: null })}
         title={selected ? `${selected.displayName} · ${selected.version}` : "Стратегия"}
         wide
       >
-        {selected ? (
-          <div className="space-y-5">
-            <ConsoleBadge tone={selected.working ? "good" : "neutral"}>
-              {selected.activityLabel}
-            </ConsoleBadge>
-            <p className="text-waia-fg-muted text-sm">
-              Доказательства относятся только к этой версии. Завершённый тест не означает
-              рекомендацию к продвижению.
-            </p>
-            <ConsoleTable
-              rows={selected.evidence}
-              rowKey={(row) => `${row.kind}:${row.id}`}
-              caption="Доказательства стратегии"
-              columns={[
-                {
-                  title: "Запись",
-                  render: (row) =>
-                    ({
-                      trade: "Сделка",
-                      promotion: "Продвижение",
-                      candidate: "Квалификация",
-                      lifecycle: "Жизненный цикл",
-                      test: "Тест",
-                    })[row.kind],
-                },
-                {
-                  title: "Клиент",
-                  render: (row) => <span className="font-mono text-xs">{row.organizationId}</span>,
-                },
-                { title: "Статус", render: (row) => <ConsoleBadge>{row.state}</ConsoleBadge> },
-                { title: "Дата", render: (row) => <EvidenceTime at={row.at} label="" /> },
-              ]}
-            />
-            <DataState state="unavailable" reason="RETURN_METHOD_NOT_RATIFIED" />
-            <Link
-              className={`${controlClass} inline-flex items-center`}
-              href={context.href("/admin/strategy-promotions", {
-                strategy_id: selected.strategyId,
-              })}
-            >
-              Открыть управляемое продвижение
-            </Link>
-          </div>
-        ) : null}
+        {selected ? <StrategyDetails strategy={selected} all={items} /> : null}
       </ConsoleDialog>
     </section>
   );
