@@ -125,6 +125,7 @@ function PromotionWorkspace({
     [error, setError] = React.useState<string | null>(null),
     [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [readAt, setReadAt] = React.useState(0);
+  const [readRevision, setReadRevision] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false),
     [action, setAction] = React.useState<string | null>(null),
     [reason, setReason] = React.useState(""),
@@ -154,6 +155,7 @@ function PromotionWorkspace({
     setLoading(true);
     setError(null);
     setRead(null);
+    setReadRevision(null);
     setSelectedId(null);
     setAck(false);
     setReviewed(false);
@@ -170,6 +172,7 @@ function PromotionWorkspace({
       if (!value || ["unavailable", "not_applicable"].includes(value.state))
         throw new Error(value?.reasons?.[0] ?? "READ_FAILED");
       setReadAt(Date.parse(envelope.generatedAt) || Date.now());
+      setReadRevision(typeof envelope.revision === "string" ? envelope.revision : null);
       setRead(value);
       setSelectedId(value.pending?.id ?? value.effective?.id ?? null);
     } catch (e) {
@@ -264,7 +267,11 @@ function PromotionWorkspace({
       );
       return;
     }
-    void post(body.body);
+    if (!readRevision) {
+      setMessage("Прочитайте состояние продвижения перед отправкой запроса.");
+      return;
+    }
+    void post({ ...body.body, expectedRevision: readRevision });
   }
   async function upload(file: File | undefined, set: (v: string) => void) {
     if (!file) return;
@@ -439,7 +446,9 @@ function PromotionWorkspace({
               </label>
               <button
                 className={controlClass}
-                disabled={busy || !!read.pending || !reviewed || !evidence || !research}
+                disabled={
+                  busy || !readRevision || !!read.pending || !reviewed || !evidence || !research
+                }
                 onClick={requestPromotion}
               >
                 Передать запрос в шлюз проверки

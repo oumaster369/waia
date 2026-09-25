@@ -268,6 +268,7 @@ export const HANDLER_TABLES = {
     "trader_admin_diagnostic_event",
   ],
   promotions: ["trader_strategy_promotion_records"],
+  promotionCommands: ["trader_strategy_promotion_records"],
   strategyDetail: [
     "trader_trades",
     "trader_trade_legs",
