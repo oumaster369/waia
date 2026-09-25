@@ -474,7 +474,8 @@
         "99538f8d03283ea746e84a10d4c4739227f17bc6",
         "8712dda75b5ff22eda660d563b064fa098c61ac5",
         "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
-        "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120"
+        "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
+        "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9"
       ],
       "actualFiles": [
         "app/(trader)/admin/accounts/page.tsx",
@@ -491,6 +492,7 @@
         "components/trader/admin-console/primitives/console-ui.tsx",
         "components/trader/admin-console/sections/accounts/paper-portfolios.tsx",
         "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+        "components/trader/admin-console/sections/research/research-section.tsx",
         "components/trader/admin-console/shell/admin-console-shell.tsx",
         "docs/ai-trader/reality-v2-source-consumer-inventory.json",
         "docs/plans/dee-1082-admin-console-final-acceptance.md",
@@ -521,7 +523,8 @@
       ],
       "acceptanceEvidence": [
         "Source commits preserved in this history; shared-file overlaps reviewed serially. Final combined console/assistant/lifecycle and real-Postgres regression: 322 passed; subsequent promotion adapter regression: 58 passed, including 3 real-Postgres CAS/race/rollback tests. Browser workflows cover all eight sections and account/client/strategy/research details; isolated financial slice proves observed balance/fill refresh.",
-        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit."
+        "No financial policy, live/holdout authority, immutable history or threshold change. Scope and source provenance remain explicit.",
+        "Final visual correction: 29 additional Russian reason descriptions and persisted campaign-state labels retain machine diagnostics. Existing real-Postgres eight-section workflow passed again at all four widths (35.2s); focused 6 unit checks, lint and typecheck pass. Held-xmin 6001+late-event external proof and 49 governed negative tests also pass. Exact updated-head full CI remains required."
       ],
       "tests": [
         "pnpm lint (0 errors; existing warnings retained)",
@@ -709,7 +712,8 @@
           "99538f8d03283ea746e84a10d4c4739227f17bc6",
           "8712dda75b5ff22eda660d563b064fa098c61ac5",
           "86408f000fbc9192fc7ce1a62d80a7e8e345f063",
-          "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120"
+          "fe540bb2376a73560fdba8ac66f6d1c6f8fd4120",
+          "f1778832a93d4fdfff4001eaf9b7acdccdd5a7d9"
         ],
         "reviewedFiles": [
           "app/(trader)/admin/accounts/page.tsx",
@@ -726,6 +730,7 @@
           "components/trader/admin-console/primitives/console-ui.tsx",
           "components/trader/admin-console/sections/accounts/paper-portfolios.tsx",
           "components/trader/admin-console/sections/clients/clients-workspace.tsx",
+          "components/trader/admin-console/sections/research/research-section.tsx",
           "components/trader/admin-console/shell/admin-console-shell.tsx",
           "docs/ai-trader/reality-v2-source-consumer-inventory.json",
           "docs/plans/dee-1082-admin-console-final-acceptance.md",
@@ -831,7 +836,7 @@
           "pnpm test --run tests/unit/admin-console* tests/unit/admin-assistant* tests/unit/trader-lifecycle-fee-denomination.test.ts tests/unit/trader-admin-strategy-promotion-routes.test.ts tests/integration/admin-console*",
           "pnpm test:e2e:admin-pg (section, research, financial slice and existing stream/SLO workflows; final combined rerun recorded in PR)"
         ],
-        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation."
+        "evidence": "Cumulative coverage re-evaluated on the integrated code after source admission; source-specific acceptance is retained in the child plan. This is not a claim that renewed admission preceded original implementation. Final Russian-label delta reviewed against saved UI; six targeted units, typecheck/lint, repeated eight-section browser acceptance passed; final build and exact-head full CI recorded in PR."
       }
     ],
     "fullDiffFrozen": true,
