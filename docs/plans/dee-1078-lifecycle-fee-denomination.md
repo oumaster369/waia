@@ -46,3 +46,6 @@ Use the fill currency to debit net purchased inventory and sold inventory includ
 No new execution command, Risk/Guardian decision, eligibility, financial policy, HWM, settlement, billing receipt or issued invoice change. No rewriting old lots/legs or history. User explicitly delegated the critical operational review and merge gate; this is a proven accounting implementation repair, not methodology ratification.
 
 Prove base/quote/zero/unknown fee cases, partial and FIFO closes, no fabricated residual, exact fee conservation, persisted recorder/reconstruction parity, unsupported fee rejection before mutations, and historical reader refusal without a matching event. Run lifecycle and console tests, real Postgres regressions, lint/typecheck/build, canon, consumer graph and exact-head CI. Roll out verified main only.
+
+
+CI authority review: the fee helper must depend only on decimal primitives. Its original type import traversed the order-repository type graph into alerting; use the minimal structural numeric input instead. The observation authority graph is unchanged and must pass with no non-GET closure path.
