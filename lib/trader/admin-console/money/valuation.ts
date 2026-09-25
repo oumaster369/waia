@@ -2,7 +2,7 @@ import type { AdminDataState } from "@/lib/trader/admin-console/contracts";
 import {
   quoteIsStale,
   quoteSetDigest,
-  USD_METHOD_VERSION,
+  selectUsdQuote,
   valuationKey,
   VALUATION_METHOD_VERSION,
   VALUATION_SKEW_AFTER_MS,
@@ -72,22 +72,18 @@ export function equityInclusion(
   };
 }
 
-function quoteByAsset(quotes: readonly AssetQuote[]): Map<string, AssetQuote> {
+function quoteByAsset(quotes: readonly AssetQuote[], nowMs: number): Map<string, AssetQuote> {
   const selected = new Map<string, AssetQuote>();
-  const rank = (quote: AssetQuote) => (quote.source === "coinbase" ? 0 : 1);
+  const fx = selectUsdQuote(quotes, nowMs);
+  if (fx) selected.set("USDT", fx);
   for (const quote of [...quotes].sort(
-    (a, b) =>
-      rank(a) - rank(b) ||
-      b.observedAt.localeCompare(a.observedAt) ||
-      a.price.localeCompare(b.price),
+    (a, b) => b.observedAt.localeCompare(a.observedAt) || a.price.localeCompare(b.price),
   )) {
     const asset = quote.asset.toUpperCase();
     const denomination = quote.quoteCurrency ?? (quote.source === "htx" ? "USDT" : "USD");
     const spot = asset !== "USDT" && quote.source === "htx" && denomination === "USDT";
-    const fx =
-      asset === "USDT" && ["coinbase", "kraken"].includes(quote.source) && denomination === "USD";
     if (
-      (spot || fx) &&
+      spot &&
       /^\d+(?:\.\d+)?$/.test(quote.price) &&
       compareDecimal(quote.price, "0") > 0 &&
       !selected.has(asset)
@@ -158,7 +154,7 @@ export function valueObservation(input: ValuationInput): ValuationResult {
 }
 
 function computeObservation(input: ValuationInput): ValuationResult {
-  const quotes = quoteByAsset(input.quotes);
+  const quotes = quoteByAsset(input.quotes, input.nowMs);
   const reasons: string[] = [];
   let state: AdminDataState = "ok";
   let freeQuote = "0";
@@ -266,7 +262,7 @@ function computeObservation(input: ValuationInput): ValuationResult {
       return {
         state: "unavailable",
         reasons: [...new Set([...reasons, `${ADMIN_REASON.noQuote}:USDT-USD`])],
-        method: USD_METHOD_VERSION,
+        method,
         currency: "USD",
         freeQuote: null,
         lockedQuote: null,

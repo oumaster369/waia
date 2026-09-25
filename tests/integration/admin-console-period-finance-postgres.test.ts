@@ -57,8 +57,29 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
     binding: Parameters<typeof consoleObservation>[0],
     amount: string | null,
     at: number,
+    partialOrders = false,
+    unpricedAsset = false,
   ) {
-    const observation = consoleObservation(binding, amount, at);
+    const full = consoleObservation(binding, amount, at);
+    const balances = unpricedAsset
+      ? {
+          ...full.balances,
+          values: [
+            ...(full.balances.values ?? []),
+            { asset: "XQAZUNPRICEDFIXTURE", free: "1", locked: "0", total: "1" },
+          ],
+        }
+      : full.balances;
+    const observation = {
+      ...full,
+      balances,
+      holdings: balances.values,
+      status: partialOrders ? "PARTIAL" : full.status,
+      openOrders: {
+        ...full.openOrders,
+        status: partialOrders ? "PARTIAL" : full.openOrders.status,
+      },
+    };
     await client`INSERT INTO trader_account_observations (organization_id,credential_id,exchange_account_id,observation_id,credential_revision,configuration_revision,lease_token,payload,recorded_at) VALUES (${binding.organizationId}::uuid,${binding.credentialId}::uuid,${binding.exchangeAccountId},${observation.observationId}::uuid,1,'test',${randomUUID()}::uuid,${JSON.stringify(observation)}::jsonb,${iso(at)}::timestamptz)`;
     await client`UPDATE trader_account_collection_state SET last_observation_id=${observation.observationId}::uuid WHERE credential_id=${binding.credentialId}::uuid`;
   }
@@ -318,6 +339,59 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
       realized: "14",
       unrealizedChange: "-20",
       currency: "USD",
+    });
+    await client`UPDATE trader_admin_market_quote_latest SET source_ts=${iso(now - 240000)}::timestamptz WHERE source='coinbase' AND symbol='USDT-USD'`;
+    await client`INSERT INTO trader_admin_market_quote_latest (source,symbol,base,quote,last,price_definition,source_ts,observed_at) VALUES ('kraken','USDT-USD','USDT','USD','0.99','last',${iso(now)}::timestamptz,${iso(now)}::timestamptz) ON CONFLICT (source,symbol) DO UPDATE SET last='0.99',source_ts=excluded.source_ts,observed_at=excluded.observed_at`;
+    expect((await read(binding, true, "USD")).value.accounts[0]).toMatchObject({
+      equity: "990",
+      method: "usdt_usd:kraken",
+      periodResult: {
+        total: "-2.97",
+        realized: "6.93",
+        unrealizedChange: "-9.9",
+        method: "operational_pnl:usdt_usd:kraken",
+      },
+    });
+  });
+  it("persists a complete monetary valuation despite partial order evidence and uses its current endpoint", async () => {
+    const binding = await seed();
+    await observe(binding, "1000.12345678", now, true);
+    expect(await collectAccountValuations(db, new Date(now), scope(binding))).toEqual({
+      processed: 2,
+      blocked: 0,
+    });
+    const saved =
+      await client`SELECT state,reasons,equity FROM trader_admin_account_valuation WHERE organization_id=${binding.organizationId}::uuid`;
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      state: "ok",
+      equity: "1000.12345678",
+      reasons: ["OPEN_ORDERS_PARTIAL"],
+    });
+    await observe(binding, "2000.12345678", now + 60000, true);
+    const result = await readOverviewSnapshot(db, {
+      scope: scope(binding),
+      start: iso(now),
+      end: iso(now + 60000),
+      nowMs: now + 60000,
+      currency: "USDT",
+      mode: "live",
+      currentPeriod: true,
+    });
+    expect(result.value.accounts[0]).toMatchObject({
+      state: "partial",
+      reasons: ["OPEN_ORDERS_PARTIAL"],
+      periodResult: { total: "0", unrealizedChange: "0", coverageEnd: iso(now + 60000) },
+    });
+    await observe(binding, "2000.12345678", now + 60500, true, true);
+    expect(await collectAccountValuations(db, new Date(now + 60500), scope(binding))).toEqual({
+      processed: 0,
+      blocked: 1,
+    });
+    await observe(binding, null, now + 61000);
+    expect(await collectAccountValuations(db, new Date(now + 61000), scope(binding))).toEqual({
+      processed: 0,
+      blocked: 1,
     });
   });
   it("persists immutable versions and one point per bucket, never an error as zero", async () => {

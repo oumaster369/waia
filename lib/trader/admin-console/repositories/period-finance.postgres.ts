@@ -14,8 +14,12 @@ import {
 } from "@/lib/trader/admin-console/money/period-result";
 import type { OperationalLeg } from "@/lib/trader/admin-console/money/operational-pnl";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
-import { isPositiveDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
-import { quoteIsStale, type AssetQuote } from "@/lib/trader/admin-console/money/quotes";
+import { multiplyDecimal } from "@/lib/trader/risk/numeric";
+import {
+  quoteIsStale,
+  selectUsdQuote,
+  type AssetQuote,
+} from "@/lib/trader/admin-console/money/quotes";
 import {
   periodSeries,
   aggregatePeriodSeries,
@@ -46,13 +50,6 @@ export type PeriodAccountEvidence = {
   fx: AssetQuote | null;
   series: PeriodSeriesPoint[];
 };
-function validPositive(value: string): boolean {
-  try {
-    return isPositiveDecimal(value);
-  } catch {
-    return false;
-  }
-}
 
 /** Only already persisted evidence is read. Called inside the financial snapshot. */
 export async function readPeriodFinance(
@@ -264,19 +261,7 @@ export async function readPeriodFinance(
     });
     pointsByAccount.set(accountKey, values);
   }
-  const fx = [...input.quotes]
-    .filter(
-      (quote) =>
-        quote.asset.toUpperCase() === "USDT" &&
-        quote.quoteCurrency === "USD" &&
-        ["coinbase", "kraken"].includes(quote.source) &&
-        validPositive(quote.price),
-    )
-    .sort(
-      (a, b) =>
-        (a.source === "coinbase" ? 0 : 1) - (b.source === "coinbase" ? 0 : 1) ||
-        b.observedAt.localeCompare(a.observedAt),
-    )[0];
+  const fx = selectUsdQuote(input.quotes, input.nowMs);
   for (const account of accounts) {
     const accountKey = key(account.organizationId!, account.exchangeAccountId);
     const legs = legsByAccount.get(accountKey) ?? [];
@@ -287,10 +272,7 @@ export async function readPeriodFinance(
       ...(pointsCapped ? ["EQUITY_HISTORY_CAPPED"] : []),
     ];
     const currentEndpoint: EquityEvidencePoint | undefined =
-      input.currentPeriod &&
-      account.included &&
-      account.state === "ok" &&
-      account.nativeValuation !== null
+      input.currentPeriod && account.included && account.nativeValuation !== null
         ? { at: input.end, ...account.nativeValuation, state: "ok" }
         : undefined;
     let result = periodResult({

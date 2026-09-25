@@ -38,7 +38,12 @@ test("financial slice refreshes a saved account balance and a fill without reloa
     await sql`INSERT INTO exchange_credentials(id,organization_id,venue,exchange_account_id,encrypted_payload) VALUES (${binding.credentialId}::uuid,${binding.organizationId}::uuid,'htx',${binding.exchangeAccountId},'synthetic-not-a-key')`;
     await sql`INSERT INTO trader_account_collection_state(organization_id,credential_id,exchange_account_id,configuration_revision,symbols) VALUES (${binding.organizationId}::uuid,${binding.credentialId}::uuid,${binding.exchangeAccountId},'fixture','["BTCUSDT"]')`;
     const observe = async (amount: string) => {
-      const observation = consoleObservation(binding, amount, Date.now());
+      const full = consoleObservation(binding, amount, Date.now());
+      const observation = {
+        ...full,
+        status: "PARTIAL",
+        openOrders: { ...full.openOrders, status: "PARTIAL" },
+      };
       await sql`INSERT INTO trader_account_observations(organization_id,credential_id,exchange_account_id,observation_id,credential_revision,configuration_revision,lease_token,payload,recorded_at) VALUES (${binding.organizationId}::uuid,${binding.credentialId}::uuid,${binding.exchangeAccountId},${observation.observationId}::uuid,1,'fixture',${crypto.randomUUID()}::uuid,${sql.json(JSON.parse(JSON.stringify(observation)))}::jsonb,now())`;
       await sql`UPDATE trader_account_collection_state SET last_observation_id=${observation.observationId}::uuid WHERE credential_id=${binding.credentialId}::uuid`;
     };
@@ -51,6 +56,7 @@ test("financial slice refreshes a saved account balance and a fill without reloa
     const query = `organization_id=${binding.organizationId}&exchange_account_id=${binding.exchangeAccountId}&mode=live`;
     await page.goto(`/admin/accounts?${query}`);
     await expect(page.locator("main")).toContainText("271,12345678");
+    await expect(page.locator("main")).toContainText("Есть ограничения");
     await observe("281.12345679");
     await expect(page.locator("main")).toContainText("281,12345679", { timeout: 25000 });
     await expect(page.locator("main")).not.toContainText("271,12345678");
