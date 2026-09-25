@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 export const CONTEXT_KEYS = [
   "organization_id",
@@ -43,7 +43,6 @@ const fallback: ReadContext = {
 const Context = React.createContext<ReadContext>(fallback);
 const scrollPositions = new Map<string, number>();
 export function AdminReadContextProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams().toString();
   const query = React.useMemo(() => {
@@ -147,9 +146,12 @@ export function AdminReadContextProvider({ children }: { children: React.ReactNo
         params.delete("nested");
         params.delete("cursor");
       }
-      router.push(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false });
+      // These are client read-model filters. Native history updates Next search
+      // params immediately, without leaving the former scope active during an RSC
+      // navigation. All readers abort/reset on the new query, including the assistant.
+      window.history.pushState(null, "", `${pathname}${params.size ? `?${params}` : ""}`);
     },
-    [identity, search, pathname, router],
+    [identity, search, pathname],
   );
   const value = React.useMemo<ReadContext>(
     () => ({
