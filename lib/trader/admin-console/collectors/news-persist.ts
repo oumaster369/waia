@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { adminNewsText } from "@/lib/trader/admin-console/news-text";
 
 import {
   canonicalNewsUrl,
@@ -46,7 +47,7 @@ export type NewsWrite =
     };
 
 export function clipNewsText(value: string, max = 500): string {
-  const trimmed = value.trim();
+  const trimmed = adminNewsText(value);
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 

@@ -41,6 +41,30 @@ const modes: Record<string, string> = {
   paper: "Paper — виртуальный контур",
   history: "History — воспроизведение",
 };
+const evidenceLabels: Record<string, string> = {
+  pending: "Ожидает запуска",
+  running: "Выполняется",
+  completed: "Тест завершён",
+  failed: "Ошибка теста",
+  draft: "Черновик",
+  registered: "Зарегистрирована",
+  backtested: "Тест завершён",
+  walk_forward_validated: "Walk-forward пройден",
+  blind_validated: "Проверка завершена",
+  rejected: "Отклонена",
+  DRAFT: "Черновик продвижения",
+  PENDING_CONFIRM: "Ожидает подтверждения",
+  COOLING_OFF: "Период ожидания",
+  EFFECTIVE: "Продвижение действует",
+  CANCELLED: "Продвижение отменено",
+  REVOKED: "Продвижение отозвано",
+  OPEN: "Сделка открыта",
+  CLOSED: "Сделка закрыта",
+  FORCED_FLAT: "Позиция принудительно закрыта",
+  RESEARCHING: "Исследуется",
+  PAPER: "Тестируется в Paper",
+  RETIRED: "В архиве",
+};
 const money = (v: string | null) =>
   v === null ? (
     <DataState state="unavailable" reason="STRATEGY_RESULT_INCOMPLETE" />
@@ -263,7 +287,14 @@ export function StrategyDetails({
                 title: "Клиент",
                 render: (r) => <span className="text-xs break-all">{r.organizationId}</span>,
               },
-              { title: "Статус", render: (r) => <ConsoleBadge>{r.state}</ConsoleBadge> },
+              {
+                title: "Статус",
+                render: (r) => (
+                  <span title={r.state}>
+                    <ConsoleBadge>{evidenceLabels[r.state] ?? r.state}</ConsoleBadge>
+                  </span>
+                ),
+              },
               { title: "Дата", render: (r) => <EvidenceTime at={r.at} label="" /> },
             ]}
           />
