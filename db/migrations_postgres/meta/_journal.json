@@ -1520,6 +1520,13 @@
       "when": 1780000000216,
       "tag": "0216_trader_admin_change_log_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "7",
+      "when": 1780000000217,
+      "tag": "0217_admin_observation_read_indexes",
+      "breakpoints": true
     }
   ]
 }

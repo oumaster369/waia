@@ -169,6 +169,10 @@ export const RU = {
     EXPORT_UNAVAILABLE: "Выгрузка сейчас недоступна",
     EXPORT_CANCEL_UNAVAILABLE: "Безопасная отмена выгрузки недоступна",
     NETWORK_ERROR: "Не удалось связаться с сервером",
+    ADMIN_READ_TIMEOUT:
+      "\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b \u0432\u043e\u0432\u0440\u0435\u043c\u044f; \u0447\u0442\u0435\u043d\u0438\u0435 \u0431\u0443\u0434\u0435\u0442 \u043f\u043e\u0432\u0442\u043e\u0440\u0435\u043d\u043e",
+    PREVIOUS_CUMULATIVE_NOT_OBSERVED: "Предыдущий накопленный результат не сохранён",
+    HWM_LEDGER_NOT_OBSERVED: "Предыдущая запись HWM не найдена",
     READ_FAILED: "Не удалось прочитать данные",
     POSTGRES_REQUIRED: "Нужен Postgres",
     ADMIN_CONSOLE_SCHEMA_NOT_APPLIED: "Появится после применения схемы консоли",

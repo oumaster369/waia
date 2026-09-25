@@ -885,6 +885,14 @@ export const traderAccountObservations = pgTable(
       .default(sql`clock_timestamp()`),
   },
   (t): PgTableExtraConfigValue[] => [
+    index("trader_observation_balance_lookup")
+      .on(t.organizationId, t.exchangeAccountId, t.recordedAt, t.observationId, t.credentialId)
+      .where(sql`${t.payload}->'balances'->>'status' = 'COMPLETE'`),
+    index("trader_observation_success_lookup")
+      .on(t.organizationId, t.exchangeAccountId, t.recordedAt, t.observationId, t.credentialId)
+      .where(
+        sql`${t.payload}->>'status' = 'COMPLETE' AND ${t.payload}->'balances'->>'status' = 'COMPLETE'`,
+      ),
     primaryKey({
       columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.observationId],
     }),

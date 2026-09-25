@@ -89,3 +89,70 @@ describe("scoped console read hook", () => {
     expect(hook.result.current.envelope).toBeNull();
   });
 });
+
+it("does not abort or duplicate a slow same-scope request when the poll interval elapses", async () => {
+  vi.useFakeTimers();
+  let resolve!: (response: Response) => void;
+  let signal!: AbortSignal;
+  const fetcher = vi.fn((_url: string, init: RequestInit) => {
+    signal = init.signal as AbortSignal;
+    return new Promise<Response>((done) => {
+      resolve = done;
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const hook = renderHook(() => useAdminRead<{ value: string }>("/data", { intervalMs: 100 }));
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(signal.aborted).toBe(false);
+    await act(async () => {
+      resolve(Response.json(body("org-a", "completed-slow-read")));
+    });
+    expect(hook.result.current.envelope?.data.value).toBe("completed-slow-read");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally {
+    hook.unmount();
+    vi.useRealTimers();
+  }
+});
+
+it("shows a bounded timeout while preserving the last same-scope value", async () => {
+  vi.useFakeTimers();
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json(body("org-a", "last-good")))
+    .mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  const hook = renderHook(() => useAdminRead<{ value: string }>("/data", { intervalMs: 100 }));
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(hook.result.current.envelope?.data.value).toBe("last-good");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30100);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(hook.result.current.reason).toBe("ADMIN_READ_TIMEOUT");
+    expect(hook.result.current.envelope?.data.value).toBe("last-good");
+    expect(hook.result.current.refreshing).toBe(false);
+  } finally {
+    hook.unmount();
+    vi.useRealTimers();
+  }
+});

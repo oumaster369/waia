@@ -183,6 +183,7 @@ export async function readConsoleInvoiceDetail(
         tradesNote: "оперативная выборка, не база комиссии",
       },
       scope: adminScopeFromQuery(query),
+      mode: query.mode,
       missingSources: chain.ok === null ? chain.reasons : [],
     }),
     "postgres",

@@ -134,7 +134,10 @@ describe.skipIf(!enabled)("scope parity for admin read surfaces on Postgres", ()
       deps(),
       invoice,
     );
-    expect(detail.body).toMatchObject({ data: { chain: { ok: null, state: "unavailable" } } });
+    expect(detail.body).toMatchObject({
+      mode: "live",
+      data: { chain: { ok: null, state: "unavailable" } },
+    });
   });
   it("streams only matching order DTOs, without credential data or foreign IDs", async () => {
     const snapshot = await handleAdminConsoleOrdersGet(request("orders"), deps());

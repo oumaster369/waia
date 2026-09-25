@@ -52,7 +52,7 @@ type Detail = {
     performanceFee: string;
     billable: boolean;
   };
-  chain: { ok: boolean | null; reasons?: string[]; mismatches?: string[] };
+  chain: { ok: boolean | null; link?: string; reasons?: string[]; mismatches?: string[] };
 };
 export function InvoicesPanel() {
   const context = useAdminReadContext();
@@ -283,6 +283,9 @@ export function InvoicesPanel() {
                 {current.chain.ok === false
                   ? "Цепочка расчёта не сходится. Значения сохранённого документа не изменены."
                   : "Для полной проверки цепочки не хватает сохранённых предыдущих значений."}
+                {current.chain.ok === false && current.chain.link ? (
+                  <p>Несовпадающее звено: {current.chain.link}</p>
+                ) : null}
                 {current.chain.reasons?.map((reason) => (
                   <DataState key={reason} state="unavailable" reason={reason} />
                 ))}
