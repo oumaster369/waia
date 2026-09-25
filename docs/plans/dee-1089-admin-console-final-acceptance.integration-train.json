@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-1089",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -10,7 +10,7 @@
   "includedChildren": [
     {
       "issue": "DEE-1085",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Normalize console news text and translate persisted strategy evidence labels without rewriting history.",
       "dependencies": [],
@@ -44,11 +44,36 @@
         "wave": 1,
         "mode": "serialized"
       },
-      "sourceCommit": "f00877c218d11f46274be28049c34eb51b6648d6"
+      "sourceCommit": "f00877c218d11f46274be28049c34eb51b6648d6",
+      "integratedCommits": [
+        "89935868b26f1da75fb842a4072d2d8ea20e6213"
+      ],
+      "actualFiles": [
+        "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+        "docs/plans/dee-1085-admin-news-text.md",
+        "lib/trader/admin-console/collectors/news-persist.ts",
+        "lib/trader/admin-console/handlers/news.ts",
+        "lib/trader/admin-console/news-text.ts",
+        "tests/integration/admin-console-period-finance-postgres.test.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "57 cumulative unit/real-Postgres tests passed after this serial wave. Final combined109 and all5Postgres browser scenarios pass.",
+        "Complete-diff self-review preserves all financial and authority semantics; both Reality/Execution graph validators pass."
+      ],
+      "tests": [
+        "Cumulative targeted suite after wave1: 57 passed",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck",
+        "pnpm cloudflare:build",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph"
+      ]
     },
     {
       "issue": "DEE-1086",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Preserve the scheduled minute for collector dispatch while retaining actual evidence timestamps. Review the changed run-due consumer and update only its Reality inventory content digest; membership, rules and authority remain unchanged.",
       "dependencies": [
@@ -85,11 +110,36 @@
         "wave": 2,
         "mode": "serialized"
       },
-      "sourceCommit": "202b3edb44b5ab7146e1ca9288b074fa8dac54c2"
+      "sourceCommit": "202b3edb44b5ab7146e1ca9288b074fa8dac54c2",
+      "integratedCommits": [
+        "950306c00934f286153f7a3dea9974bb2aad1e5e",
+        "b8b3eeecfd5a71c3991a956bb5380c29d1ed29f3"
+      ],
+      "actualFiles": [
+        "custom-worker.ts",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "docs/plans/dee-1086-admin-collector-schedule.md",
+        "lib/trader/admin-console/collectors/run-due.ts",
+        "lib/trader/admin-console/collectors/schedule.ts",
+        "tests/unit/admin-console-collectors.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "70 cumulative unit/real-Postgres tests passed after this serial wave. Final combined109 and all5Postgres browser scenarios pass.",
+        "Complete-diff self-review preserves all financial and authority semantics; both Reality/Execution graph validators pass."
+      ],
+      "tests": [
+        "Cumulative targeted suite after wave2: 70 passed",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck",
+        "pnpm cloudflare:build",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph"
+      ]
     },
     {
       "issue": "DEE-1088",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Preserve named canonical SystemJob outcomes, evidence timestamps, reasons and bounded catalog coverage in read-only assistant facts using existing shared UI labels.",
       "dependencies": [
@@ -125,7 +175,33 @@
         "wave": 3,
         "mode": "serialized"
       },
-      "sourceCommit": "9c9a174657e16805fcf201c17c3c2b078a33d644"
+      "sourceCommit": "9c9a174657e16805fcf201c17c3c2b078a33d644",
+      "integratedCommits": [
+        "954a81d6b79c7d9e1cb427f9c8b3fb49bb904a35",
+        "231d60f99161c423a9f42ece21b5a7b375209fd8"
+      ],
+      "actualFiles": [
+        "app/(trader)/admin/system/page.tsx",
+        "docs/plans/dee-1088-admin-assistant-job-evidence.md",
+        "lib/trader/admin-console/assistant/facts.ts",
+        "lib/trader/admin-console/jobs/presentation.ts",
+        "tests/e2e/admin-console-pg-workflows.spec.ts",
+        "tests/integration/admin-console-assistant-grounding-postgres.test.ts",
+        "tests/unit/admin-assistant-grounded-facts.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "109 cumulative unit/real-Postgres tests passed after this serial wave. Final combined109 and all5Postgres browser scenarios pass.",
+        "Complete-diff self-review preserves all financial and authority semantics; both Reality/Execution graph validators pass."
+      ],
+      "tests": [
+        "Cumulative targeted suite after wave3: 109 passed",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck",
+        "pnpm cloudflare:build",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph"
+      ]
     }
   ],
   "deferredChildren": [],
@@ -133,7 +209,99 @@
     "admissionEvidence": {
       "status": "pass",
       "reviewer": "Codex source self-review under explicit user delegation; new integration admission before source imports, not retrospective implementation admission."
-    }
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestCommit": "cf58a8bac681f467f70991aa75893707a10e5a40",
+      "manifestPath": "docs/plans/dee-1089-admin-console-final-acceptance.integration-train.json",
+      "manifestDigest": "93454b876291cb5691abeede25c0d6daac5d2fb266b08579df7696cc9b27b5e2",
+      "reviewer": "Codex integration owner under user delegation; admission preceded every import into this batch. Original source implementation occurred earlier and is not retrospectively admitted."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-1085",
+        "status": "pass",
+        "reviewedCommits": [
+          "89935868b26f1da75fb842a4072d2d8ea20e6213"
+        ],
+        "reviewedFiles": [
+          "components/trader/admin-console/sections/strategies/strategy-details.tsx",
+          "docs/plans/dee-1085-admin-news-text.md",
+          "lib/trader/admin-console/collectors/news-persist.ts",
+          "lib/trader/admin-console/handlers/news.ts",
+          "lib/trader/admin-console/news-text.ts",
+          "tests/integration/admin-console-period-finance-postgres.test.ts",
+          "tests/unit/admin-console-collectors.test.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent review claimed."
+      },
+      {
+        "issue": "DEE-1086",
+        "status": "pass",
+        "reviewedCommits": [
+          "950306c00934f286153f7a3dea9974bb2aad1e5e",
+          "b8b3eeecfd5a71c3991a956bb5380c29d1ed29f3"
+        ],
+        "reviewedFiles": [
+          "custom-worker.ts",
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "docs/plans/dee-1086-admin-collector-schedule.md",
+          "lib/trader/admin-console/collectors/run-due.ts",
+          "lib/trader/admin-console/collectors/schedule.ts",
+          "tests/unit/admin-console-collectors.test.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent review claimed."
+      },
+      {
+        "issue": "DEE-1088",
+        "status": "pass",
+        "reviewedCommits": [
+          "954a81d6b79c7d9e1cb427f9c8b3fb49bb904a35",
+          "231d60f99161c423a9f42ece21b5a7b375209fd8"
+        ],
+        "reviewedFiles": [
+          "app/(trader)/admin/system/page.tsx",
+          "docs/plans/dee-1088-admin-assistant-job-evidence.md",
+          "lib/trader/admin-console/assistant/facts.ts",
+          "lib/trader/admin-console/jobs/presentation.ts",
+          "tests/e2e/admin-console-pg-workflows.spec.ts",
+          "tests/integration/admin-console-assistant-grounding-postgres.test.ts",
+          "tests/unit/admin-assistant-grounded-facts.test.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent review claimed."
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-1085",
+        "status": "pass",
+        "commands": [
+          "Cumulative wave1 57tests passed",
+          "Final109targeted +5real-Postgres browser scenarios, both authority graphs, lint/types/Next/OpenNext/canon/governance"
+        ],
+        "evidence": "/tmp/waia-1089-wave1.log; /tmp/waia-1089-browser.log; /tmp/waia-1089-reality-final.log; /tmp/waia-1089-execution-final.log"
+      },
+      {
+        "afterIssue": "DEE-1086",
+        "status": "pass",
+        "commands": [
+          "Cumulative wave2 70tests passed",
+          "Final109targeted +5real-Postgres browser scenarios, both authority graphs, lint/types/Next/OpenNext/canon/governance"
+        ],
+        "evidence": "/tmp/waia-1089-wave2.log; /tmp/waia-1089-browser.log; /tmp/waia-1089-reality-final.log; /tmp/waia-1089-execution-final.log"
+      },
+      {
+        "afterIssue": "DEE-1088",
+        "status": "pass",
+        "commands": [
+          "Cumulative wave3 109tests passed",
+          "Final109targeted +5real-Postgres browser scenarios, both authority graphs, lint/types/Next/OpenNext/canon/governance"
+        ],
+        "evidence": "/tmp/waia-1089-wave3.log; /tmp/waia-1089-browser.log; /tmp/waia-1089-reality-final.log; /tmp/waia-1089-execution-final.log"
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "Eight Russian sections and all existing finance, authority and schema invariants unchanged.",

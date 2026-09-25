@@ -17,20 +17,20 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: implementing
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidationAt: "2026-09-25T09:27:35.257Z"
   blockedReason: null
-  nextAction: "Admit exact serial imports, repair the reviewed inventory pin, run cumulative and final checks, then publish one final PR."
+  nextAction: "Require all exact-head CI, guarded squash, verified merged-main deployment and affected production acceptance."
 provenance:
   createdFrom: chat
   gapRegistry: null
-  supersedes: docs/plans/dee-1087-admin-final-stabilization.md
+  supersedes: null
 ---
 
 # DEE-1089 — final console acceptance
