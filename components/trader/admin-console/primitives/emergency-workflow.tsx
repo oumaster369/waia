@@ -179,7 +179,7 @@ function EmergencyBody({
         {["Область", "Эффект", "Подтверждение"].map((label, index) => (
           <li
             key={label}
-            className={`flex flex-1 items-center gap-2 rounded-lg px-3 py-2 ${step === index + 1 ? "bg-waia-elevated text-waia-fg-primary" : "text-waia-fg-muted"}`}
+            className={`flex flex-1 items-center gap-2 rounded-lg px-3 py-2 ${step === index + 1 ? "bg-waia-elevated text-waia-fg" : "text-waia-fg-muted"}`}
           >
             <span className="tabular-nums">{index + 1}</span>
             {label}

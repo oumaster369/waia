@@ -182,7 +182,8 @@ describe("clients page", () => {
               name: "Клиент",
               ownerEmail: "a@example.com",
               access: "Доступ включён",
-              connectedSince: "2026-01-01",
+              connectedSince: "2026-01-01T00:00:00.000Z",
+              connectedSinceValue: "2026-01-01T00:00:00.000Z",
             },
           ],
         }),
@@ -192,7 +193,10 @@ describe("clients page", () => {
     render(<page.default />);
     expect(await screen.findByRole("button", { name: "Клиент" })).toBeInTheDocument();
     expect(screen.getByText("Доступ включён")).toBeInTheDocument();
-    expect(screen.getByText("2026-01-01")).toBeInTheDocument();
+    expect(screen.getByTitle("2026-01-01T00:00:00.000Z")).toHaveAttribute(
+      "datetime",
+      "2026-01-01T00:00:00.000Z",
+    );
     expect(screen.queryByRole("button", { name: "Подтвердить выпуск" })).toBeNull();
   });
 });

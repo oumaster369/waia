@@ -1,5 +1,7 @@
 export type AccountModeInput = {
   kind: "exchange" | "paper";
+  deploymentProven?: boolean;
+  entryAuthorityProven?: boolean;
   liveEnable: "ENABLED" | "DISABLED" | null;
   posture: "NORMAL" | "CLOSE_ONLY" | "HALT" | "KILLED" | null;
   suspended: boolean;
@@ -12,7 +14,7 @@ export type AccountModeView = {
   portfolio: "live" | "paper";
   activity: "live" | "none";
   deployment: "live" | "not_deployed" | "undetermined";
-  tradePermission: "entries" | "close_only" | "halted";
+  tradePermission: "entries" | "close_only" | "halted" | "undetermined";
   tradePermissionReason: string | null;
 };
 
@@ -22,12 +24,16 @@ export function accountMode(input: AccountModeInput): AccountModeView {
       portfolio: "paper",
       activity: "none",
       deployment: "not_deployed",
-      tradePermission: "entries",
-      tradePermissionReason: null,
+      tradePermission: "undetermined",
+      tradePermissionReason: "PAPER_AUTHORITY_NOT_PROVEN",
     };
   }
-  let tradePermission: AccountModeView["tradePermission"] = "entries";
-  let tradePermissionReason: string | null = null;
+  let tradePermission: AccountModeView["tradePermission"] =
+    input.entryAuthorityProven && input.liveEnable === "ENABLED" && input.posture === "NORMAL"
+      ? "entries"
+      : "undetermined";
+  let tradePermissionReason: string | null =
+    tradePermission === "undetermined" ? "LIVE_AUTHORITY_NOT_PROVEN" : null;
   if (input.suspended) {
     tradePermission = "halted";
     tradePermissionReason = "SUSPENDED";
@@ -42,11 +48,11 @@ export function accountMode(input: AccountModeInput): AccountModeView {
     portfolio: "live",
     activity: input.liveOrderCount > 0 ? "live" : "none",
     deployment:
-      input.liveEnable === "ENABLED"
+      input.deploymentProven === true
         ? "live"
-        : input.liveEnable === null
-          ? "undetermined"
-          : "not_deployed",
+        : input.deploymentProven === false
+          ? "not_deployed"
+          : "undetermined",
     tradePermission,
     tradePermissionReason,
   };

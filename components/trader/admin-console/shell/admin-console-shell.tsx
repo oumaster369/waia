@@ -129,8 +129,8 @@ export function AdminConsoleShell({
                 className={cn(
                   "focus-visible:ring-waia-accent-cool flex min-h-11 shrink-0 items-center gap-3 rounded-lg px-3 text-sm transition-colors outline-none focus-visible:ring-2",
                   active
-                    ? "bg-waia-elevated text-waia-fg-primary font-semibold"
-                    : "text-waia-fg-muted hover:bg-waia-elevated/50 hover:text-waia-fg-primary",
+                    ? "bg-waia-elevated text-waia-fg font-semibold"
+                    : "text-waia-fg-muted hover:bg-waia-elevated/50 hover:text-waia-fg",
                 )}
               >
                 <Icon size={18} strokeWidth={1.7} aria-hidden="true" />

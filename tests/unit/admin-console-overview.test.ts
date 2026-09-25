@@ -95,6 +95,36 @@ describe("account dedupe, mode, attention, overview, and order trace", () => {
     ).toBe("paper");
   });
 
+  it("does not infer deployment or entry authority from live enable or absent Risk", () => {
+    const view = accountMode({
+      kind: "exchange",
+      liveEnable: "ENABLED",
+      posture: null,
+      suspended: false,
+      killSwitchActive: false,
+      liveOrderCount: 1,
+      paperOrderCount: 0,
+    });
+    expect(view).toMatchObject({
+      portfolio: "live",
+      activity: "live",
+      deployment: "undetermined",
+      tradePermission: "undetermined",
+      tradePermissionReason: "LIVE_AUTHORITY_NOT_PROVEN",
+    });
+    expect(
+      accountMode({
+        kind: "exchange",
+        liveEnable: "ENABLED",
+        posture: "NORMAL",
+        suspended: false,
+        killSwitchActive: false,
+        liveOrderCount: 0,
+        paperOrderCount: 0,
+      }).tradePermission,
+    ).toBe("undetermined");
+  });
+
   it("uses the earliest observation as first connected", () => {
     expect(firstConnectedAt(["2026-03-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"])).toBe(
       "2026-01-01T00:00:00.000Z",

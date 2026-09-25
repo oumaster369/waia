@@ -12,7 +12,7 @@ const GUARDIAN_LABELS: Record<string, string> = {
 };
 
 const RISK_LABELS: Record<string, string> = {
-  NORMAL: "Новые входы разрешены",
+  NORMAL: "Обычный режим Risk",
   CLOSE_ONLY: "Только закрытие",
   HALT: "Остановлено",
   KILLED: "Аварийная остановка",
@@ -182,7 +182,7 @@ export function presentOpenLot(input: OpenLotInput): OpenLotView {
     mode: allocated ? input.mode : null,
     positionGroupKey: `${input.organizationId}:${input.symbol}:${input.accountKey}`,
     openLotsInGroup: input.openLotsInGroup,
-    href: `/admin/positions/${input.lotId}`,
+    href: `/admin/orders?tab=positions&sel=${encodeURIComponent(input.lotId)}`,
     guardian: {
       state: freshness.state,
       recommendation: input.guardian?.recommendation ?? null,

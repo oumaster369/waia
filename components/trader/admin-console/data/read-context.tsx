@@ -143,6 +143,8 @@ export function AdminReadContextProvider({ children }: { children: React.ReactNo
         params.delete("sel");
         params.delete("detail");
         params.delete("cycle");
+        params.delete("order");
+        params.delete("nested");
         params.delete("cursor");
       }
       router.push(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false });
@@ -163,4 +165,40 @@ export function AdminReadContextProvider({ children }: { children: React.ReactNo
 }
 export function useAdminReadContext(): ReadContext {
   return React.useContext(Context);
+}
+
+/** Nested entity cards reuse canonical readers with an explicit narrower scope. */
+export function AdminEntityScope({
+  organizationId,
+  exchangeAccountId,
+  children,
+}: {
+  organizationId: string;
+  exchangeAccountId?: string | null;
+  children: React.ReactNode;
+}) {
+  const parent = useAdminReadContext();
+  const value = React.useMemo<ReadContext>(() => {
+    const params = new URLSearchParams(parent.params);
+    params.set("organization_id", organizationId);
+    if (exchangeAccountId) params.set("exchange_account_id", exchangeAccountId);
+    else params.delete("exchange_account_id");
+    params.delete("sel");
+    if (parent.params.get("nested")) params.set("sel", parent.params.get("nested")!);
+    const query = new URLSearchParams();
+    for (const key of CONTEXT_KEYS) if (params.has(key)) query.set(key, params.get(key)!);
+    return {
+      ...parent,
+      params,
+      query: query.toString(),
+      href: (path, extra) => withConsoleContext(path, query.toString(), extra),
+      update: (patch) =>
+        parent.update(
+          Object.fromEntries(
+            Object.entries(patch).map(([key, val]) => [key === "sel" ? "nested" : key, val]),
+          ),
+        ),
+    };
+  }, [parent, organizationId, exchangeAccountId]);
+  return <Context.Provider value={value}>{children}</Context.Provider>;
 }
