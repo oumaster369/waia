@@ -29,7 +29,9 @@ function sqlTables(source: string, symbols: Map<string, string>): Set<string> {
   );
   for (const match of source.matchAll(/\b(?:FROM|JOIN)\s+(?:LATERAL\s+)?([a-z_][a-z0-9_]*)/gi)) {
     const name = match[1].toLowerCase();
-    if (name === "select" || name === "lateral" || ctes.has(name)) continue;
+    // Built-in row expansion is a function, not a schema relation to probe.
+    if (name === "select" || name === "lateral" || name === "jsonb_to_recordset" || ctes.has(name))
+      continue;
     tables.add(name);
   }
   for (const match of source.matchAll(

@@ -33,14 +33,19 @@ export async function handleAdminConsoleOverviewGet(
       start: bounds.start,
       end: bounds.end,
       nowMs: Date.now(),
+      currentPeriod: parsed.query.period !== "custom",
     });
-    const missing = snapshot.value.capped ? [ADMIN_REASON.accountCap] : [];
+    const missing = [
+      ...(snapshot.value.capped ? [ADMIN_REASON.accountCap] : []),
+      ...(snapshot.value.period?.missing ?? []),
+    ];
     return adminSuccess(
       adminEnvelope({
         data: {
           ...snapshot.value.overview,
           market: snapshot.value.market,
           accounts: snapshot.value.accounts,
+          period: snapshot.value.period,
         },
         scope: adminScopeFromQuery(parsed.query),
         mode: snapshot.value.mode,

@@ -36,6 +36,30 @@ function input(overrides: Partial<ValuationInput> = {}): ValuationInput {
 }
 
 describe("admin console valuation", () => {
+  it("refuses a zero market quote and keeps excess Trader lots out of attributed PnL", () => {
+    const zero = valueObservation(
+      input({
+        quotes: [
+          {
+            asset: "BTC",
+            price: "0",
+            source: "htx",
+            sourceTs: new Date(now).toISOString(),
+            observedAt: new Date(now).toISOString(),
+          },
+        ],
+      }),
+    );
+    expect(zero.reasons).toContain("NO_QUOTE:BTC");
+    expect(zero.traderUnrealized).toBeNull();
+    const mismatch = valueObservation(
+      input({ lots: [{ asset: "BTC", remainingQty: "2", avgCost: "90", accountMatched: true }] }),
+    );
+    expect(mismatch.traderUnrealized).toBeNull();
+    expect(mismatch.externalValue).toBeNull();
+    expect(mismatch.reasons).toContain("LOT_BALANCE_MISMATCH");
+    expect(equityInclusion(mismatch.reasons, mismatch.equity).included).toBe(true);
+  });
   it("preserves exact trailing zeroes without rounding unsupported precision or throwing", () => {
     expect(
       valueObservation(

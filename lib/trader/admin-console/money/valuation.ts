@@ -51,6 +51,7 @@ export type ValuationResult = {
   externalValue: string | null;
   valuationKey: string;
   excludedAssets: string[];
+  quoteSet?: AssetQuote[];
 };
 
 /** Unknown assets are excluded individually; known assets retain a partial value. */
@@ -61,6 +62,7 @@ export function equityInclusion(
   const blocksEquity = reasons.some(
     (reason) =>
       reason !== ADMIN_REASON.costBasisUnknown &&
+      reason !== "LOT_BALANCE_MISMATCH" &&
       reason !== ADMIN_REASON.quoteStale &&
       !reason.startsWith(`${ADMIN_REASON.noQuote}:`),
   );
@@ -84,7 +86,12 @@ function quoteByAsset(quotes: readonly AssetQuote[]): Map<string, AssetQuote> {
     const spot = asset !== "USDT" && quote.source === "htx" && denomination === "USDT";
     const fx =
       asset === "USDT" && ["coinbase", "kraken"].includes(quote.source) && denomination === "USD";
-    if ((spot || fx) && /^\d+(?:\.\d+)?$/.test(quote.price) && !selected.has(asset))
+    if (
+      (spot || fx) &&
+      /^\d+(?:\.\d+)?$/.test(quote.price) &&
+      compareDecimal(quote.price, "0") > 0 &&
+      !selected.has(asset)
+    )
       selected.set(asset, quote);
   }
   return selected;
@@ -199,6 +206,16 @@ function computeObservation(input: ValuationInput): ValuationResult {
   let traderLotsValue = "0";
   let traderCostBasis = "0";
   let lotsKnown = true;
+  const observedQuantities = new Map<string, string>();
+  for (const balance of input.balances)
+    observedQuantities.set(
+      balance.asset.toUpperCase(),
+      addDecimal(
+        observedQuantities.get(balance.asset.toUpperCase()) ?? "0",
+        addDecimal(balance.free, balance.locked),
+      ),
+    );
+  const allocatedQuantities = new Map<string, string>();
   for (const lot of input.lots) {
     if (!lot.accountMatched) {
       lotsKnown = false;
@@ -215,6 +232,14 @@ function computeObservation(input: ValuationInput): ValuationResult {
       continue;
     }
     recordQuote(quote);
+    const asset = lot.asset.toUpperCase();
+    const allocated = addDecimal(allocatedQuantities.get(asset) ?? "0", lot.remainingQty);
+    allocatedQuantities.set(asset, allocated);
+    if (compareDecimal(allocated, observedQuantities.get(asset) ?? "0") > 0) {
+      lotsKnown = false;
+      reasons.push(ADMIN_REASON.costBasisUnknown, "LOT_BALANCE_MISMATCH");
+      state = worse(state, "partial");
+    }
     traderLotsValue = addDecimal(traderLotsValue, multiplyDecimal(lot.remainingQty, quote.price));
     traderCostBasis = addDecimal(traderCostBasis, multiplyDecimal(lot.remainingQty, lot.avgCost));
   }
@@ -253,6 +278,7 @@ function computeObservation(input: ValuationInput): ValuationResult {
         externalValue: null,
         valuationKey: key,
         excludedAssets: excluded,
+        quoteSet: usedQuotes,
       };
     }
     return {
@@ -270,6 +296,7 @@ function computeObservation(input: ValuationInput): ValuationResult {
       externalValue: externalValue ? multiplyDecimal(externalValue, usd.price) : null,
       valuationKey: key,
       excludedAssets: excluded,
+      quoteSet: usedQuotes,
     };
   }
 
@@ -288,5 +315,6 @@ function computeObservation(input: ValuationInput): ValuationResult {
     externalValue,
     valuationKey: key,
     excludedAssets: excluded,
+    quoteSet: usedQuotes,
   };
 }

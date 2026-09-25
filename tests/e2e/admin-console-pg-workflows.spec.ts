@@ -55,16 +55,51 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       }
       await sql`INSERT INTO trader_discovery_research_campaign(id,organization_id,campaign_key,name,research_program,description,symbol_scope,current_state,content_digest)
         VALUES (${crypto.randomUUID()}::uuid,${client.id}::uuid,${crypto.randomUUID()},'Контрольная кампания','browser QA','Synthetic local fixture','BTCUSDT','DRAFT',${"a".repeat(64)})`;
+      for (const days of [6, 3, 1]) {
+        const at = new Date(Date.now() - days * 86400000).toISOString();
+        await sql`INSERT INTO trader_admin_equity_point(organization_id,exchange_account_id,bucket,equity,trader_unrealized,valuation_key,method_version,state) VALUES (${client.id}::uuid,${binding.exchangeAccountId},${at}::timestamptz,${client.amount},'0',${crypto.randomUUID()},'htx_spot_last:usdt','ok')`;
+      }
+      await sql`INSERT INTO trader_intelligence_cycle_envelope(id,organization_id,run_id,cycle_id,symbol,evaluated_at,historical_profile_id,historical_profile_digest,matrix_digest,terminal_reason_code,input_semantic_digest,output_semantic_digest,content_digest,schema_version) VALUES (${crypto.randomUUID()}::uuid,${client.id}::uuid,${crypto.randomUUID()},'browser-cycle','QA-CYCLE',now(),'fixture','fixture','fixture','NO_TRADE','fixture','fixture','fixture','fixture')`;
     }
     await signInOnLanding(page, email, "password123!");
     await page.waitForURL("**/trader");
     const context = `organization_id=${clients[0].id}&mode=live&currency=USDT&period=7d`;
     await page.goto(`/admin?${context}`);
     await expect(page.locator("main")).toContainText("12 540,125");
+    await expect(
+      page.getByRole("heading", { name: "История капитала и результата" }),
+    ).toBeVisible();
+    await page.getByText("Из чего складывается результат Трейдера", { exact: true }).click();
+    await expect(page.getByText("Комиссии открытия", { exact: true })).toBeVisible();
+    await page
+      .getByRole("group", { name: "Показатель графика" })
+      .getByRole("button", { name: "Результат Трейдера", exact: true })
+      .click();
+    await expect(page.getByRole("img", { name: /Результат Трейдера, USDT/ })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Последние исполнения", exact: true }),
+    ).toBeVisible();
+    expect((await new AxeBuilder({ page }).include("main").analyze()).violations).toEqual([]);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: testInfo.outputPath("overview-real-postgres.png"),
       fullPage: true,
     });
+    await page.getByRole("tab", { name: "Рынок и новости", exact: true }).click();
+    await expect(page).toHaveURL(/tab=market/);
+    await expect(page.getByRole("heading", { name: "Рынок и новости", exact: true })).toBeVisible();
+    await page.goto(`/admin?organization_id=${clients[0].id}&mode=all&tab=algorithm`);
+    await expect(page.getByText("QA-CYCLE · undetermined", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Доказательства цикла →", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Доказательства цикла" })).toBeVisible();
+    await expect(
+      page.getByRole("dialog").getByRole("heading", { name: "Прогноз", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("dialog").locator('[data-reason="NOT_PERSISTED_FOR_CYCLE"]'),
+    ).toHaveCount(23);
+    await page.keyboard.press("Escape");
+    await page.goto(`/admin?${context}`);
     await page
       .getByRole("navigation", { name: "Консоль администратора AI-TRADER" })
       .getByRole("link", { name: "Счета", exact: true })

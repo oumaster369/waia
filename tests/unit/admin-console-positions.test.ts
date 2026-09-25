@@ -9,7 +9,6 @@ import { rowIsBeforePageCursor } from "@/lib/trader/admin-console/cursor";
 import {
   assembleAttributedLots,
   lotsForExchangeAccount,
-  lotsRevisionFromLegs,
 } from "@/lib/trader/admin-console/money/account-lots";
 import {
   GUARDIAN_FRESH_AFTER_MS,
@@ -139,6 +138,47 @@ describe("open positions", () => {
 });
 
 describe("lots in valuation", () => {
+  it("keeps an unbound lot as unknown cost basis without mixing a known paper lot into live", () => {
+    const common = {
+      organizationId: "org-1",
+      symbol: "BTCUSDT",
+      remainingQty: "1",
+      avgCost: "100",
+      exchangeAccountId: null,
+      matched: false,
+      legCreatedAts: [],
+    };
+    const selected = lotsForExchangeAccount({
+      organizationId: "org-1",
+      exchangeAccountId: "acct-1",
+      mode: "live",
+      lots: [
+        { ...common, lotId: "unbound", mode: null },
+        { ...common, lotId: "paper", mode: "paper" },
+        { ...common, lotId: "foreign", organizationId: "org-2", mode: null },
+      ],
+    });
+    expect(selected.lots).toEqual([
+      { asset: "BTC", remainingQty: "1", avgCost: "100", accountMatched: false },
+    ]);
+    const noLegs = assembleAttributedLots([
+      {
+        lotId: "unbound",
+        organizationId: "org-1",
+        symbol: "BTCUSDT",
+        remainingQty: "1",
+        avgCost: "100",
+        accountKey: "unknown",
+        legId: null,
+        legCreatedAt: null,
+        orderId: null,
+        strategySignalId: null,
+        order: null,
+        credential: null,
+      },
+    ]);
+    expect(noLegs[0]).toMatchObject({ matched: false, exchangeAccountId: null, mode: null });
+  });
   it("attaches only live lots of that exchange account and keeps text quantities", () => {
     const lots = assembleAttributedLots([
       {

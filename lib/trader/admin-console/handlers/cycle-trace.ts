@@ -11,6 +11,11 @@ import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { assembleCycleTrace } from "@/lib/trader/admin-console/research/cycle-trace";
+import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import {
+  cycleProjection,
+  cycleModeScopeFilter,
+} from "@/lib/trader/admin-console/sql/cycle-projection";
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
   return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
@@ -32,7 +37,9 @@ export async function handleAdminConsoleCycleTraceGet(
   deps: AdminRouteHandlerDeps,
   envelopeId: string,
 ): Promise<AdminRouteHandlerResult> {
-  if (!/^[0-9a-f-]{36}$/i.test(envelopeId)) {
+  const parsed = parseAdminConsoleQuery(new URL(request.url));
+  if (!parsed.ok) return parsed.result;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(envelopeId)) {
     return adminClientError(400, "BAD_REQUEST", "cycle id is invalid.");
   }
   const opened = await openAdminConsole(request, deps, {
@@ -74,8 +81,9 @@ export async function handleAdminConsoleCycleTraceGet(
                  ORDER BY d.evaluated_at DESC, d.id
                  LIMIT 1
                ) AS decision_id
-        FROM trader_intelligence_cycle_envelope e
+        FROM (${cycleProjection(parsed.query)}) e
         WHERE e.id = ${envelopeId}::uuid
+          AND ${cycleModeScopeFilter(parsed.query, "e")}
         LIMIT 1
       `),
       );
@@ -155,8 +163,8 @@ export async function handleAdminConsoleCycleTraceGet(
               fillId,
             }),
           },
-          scope: { kind: "organization", organizationId },
-          mode: "history",
+          scope: adminScopeFromQuery(parsed.query),
+          mode: parsed.query.mode,
         }),
         "postgres",
       );

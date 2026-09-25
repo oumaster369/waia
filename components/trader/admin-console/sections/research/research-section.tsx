@@ -13,6 +13,7 @@ import {
 import { DataState } from "@/components/trader/admin-console/primitives/data-state";
 import type { ResearchCatalog } from "@/lib/trader/admin-console/research/catalog";
 import type { presentResearchRun } from "@/lib/trader/admin-console/research/research-runs";
+import { CycleDetails } from "@/components/trader/admin-console/sections/research/cycle-details";
 
 type Runs = { items: ReturnType<typeof presentResearchRun>[]; total: number };
 const labels: Record<string, string> = {
@@ -53,6 +54,7 @@ export function ResearchSection() {
   const title = section.tabs.find(([id]) => id === tab)![1];
   return (
     <section>
+      <CycleDetails />
       {read.loading ? <ConsoleLoading /> : null}
       {read.reason ? (
         <div className="mb-4">

@@ -27,7 +27,10 @@ describe("admin console overview page", () => {
     expect(screen.getByTestId("overview-Общий капитал")).not.toHaveTextContent("4");
     expect(screen.getByTestId("overview-last-known")).toHaveTextContent("4");
     expect(screen.getByText("acc-2")).toBeInTheDocument();
-    expect(screen.getByText(/NO_QUOTE:BTC/)).toBeInTheDocument();
+    expect(screen.getByText(/Нет котировки · BTC/).closest("[data-reason]")).toHaveAttribute(
+      "data-reason",
+      "NO_QUOTE:BTC",
+    );
     expect(screen.getByTestId("overview-Результат Трейдера")).toHaveTextContent("—");
   });
 

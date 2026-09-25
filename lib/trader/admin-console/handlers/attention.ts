@@ -20,6 +20,9 @@ import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { withAdminReadSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import { adminScopeFromQuery, parseAdminConsoleQuery } from "@/lib/trader/admin-console/scope";
+import { orderScopeFilter } from "@/lib/trader/admin-console/sql/order-scope-filter";
+import { orderVisibleInMode } from "@/lib/trader/admin-console/sql/order-mode-filter";
+import { legScopeFilter } from "@/lib/trader/admin-console/sql/leg-scope-filter";
 
 const require = createRequire(import.meta.url);
 if (process.env.VITEST !== "true") require("server-only");
@@ -63,6 +66,8 @@ export async function handleAdminConsoleAttentionGet(
   });
   if (!opened.ok) return opened.result;
   const organizationId = parsed.query.organization_id ?? null;
+  const accountId = parsed.query.exchange_account_id ?? null;
+  const live = parsed.query.mode === "live" || parsed.query.mode === "all";
   const nowMs = Date.now();
   try {
     const snapshot = await withAdminReadSnapshot(opened.runtime.db, async (tx) => {
@@ -75,11 +80,12 @@ export async function handleAdminConsoleAttentionGet(
       };
       const reconciliationRequiredOrderIds = await take(
         tx.execute(sql`
-        SELECT id::text AS id
-        FROM trader_orders
+        SELECT o.id::text AS id
+        FROM trader_orders o
         WHERE state = 'RECONCILIATION_REQUIRED'
-          AND historical_run_id IS NULL
-          AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+          AND ${orderVisibleInMode(parsed.query.mode, true)}
+          AND ${orderScopeFilter(parsed.query, "o")}
+        ORDER BY o.id
         LIMIT ${LIST_CAP + 1}
       `),
       );
@@ -88,7 +94,8 @@ export async function handleAdminConsoleAttentionGet(
         SELECT o.id::text AS id
         FROM trader_orders o
         WHERE o.state = 'SENT_TO_EXCHANGE'
-          AND o.historical_run_id IS NULL
+          AND ${orderVisibleInMode(parsed.query.mode, true)}
+          AND ${orderScopeFilter(parsed.query, "o")}
           AND o.updated_at < now() - interval '5 minutes'
           AND (
             o.execution_attempt_id IS NULL
@@ -100,7 +107,7 @@ export async function handleAdminConsoleAttentionGet(
             )
           )
           AND (${organizationId}::uuid IS NULL OR o.organization_id = ${organizationId}::uuid)
-        LIMIT ${LIST_CAP + 1}
+        ORDER BY o.id LIMIT ${LIST_CAP + 1}
       `),
       );
       const halted = rowsOf(
@@ -113,15 +120,20 @@ export async function handleAdminConsoleAttentionGet(
             ORDER BY organization_id, created_at DESC
           ) latest
           WHERE posture = 'HALT'
+            AND ${live}
           LIMIT 1
         `),
       );
       const killed = rowsOf(
         await tx.execute(sql`
           SELECT account_id AS id
-          FROM trader_risk_account_state_v2
+          FROM trader_risk_account_state_v2 r
           WHERE posture = 'KILLED'
             AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+            AND ${live}
+            AND (${accountId}::text IS NULL OR EXISTS (
+              SELECT 1 FROM trader_position_lots l WHERE l.organization_id=r.organization_id AND l.account_key=r.account_id AND ${legScopeFilter(parsed.query, "lot", "l")}
+            ))
           LIMIT 1
         `),
       );
@@ -137,20 +149,26 @@ export async function handleAdminConsoleAttentionGet(
           ORDER BY a.lot_id, a.created_at DESC
         ) g ON true
         WHERE l.state = 'OPEN'
+          AND ${legScopeFilter(parsed.query, "lot", "l")}
           AND (
             g.created_at IS NULL
             OR g.created_at < now() - interval '15 minutes'
           )
           AND (${organizationId}::uuid IS NULL OR l.organization_id = ${organizationId}::uuid)
-        LIMIT ${LIST_CAP + 1}
+        ORDER BY l.id LIMIT ${LIST_CAP + 1}
       `),
       );
       const divergentAccountIds = await take(
         tx.execute(sql`
           SELECT account_id AS id
-          FROM trader_risk_account_state_v2
+          FROM trader_risk_account_state_v2 r
           WHERE reconciliation_status = 'DIVERGENT'
             AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+            AND ${live}
+            AND (${accountId}::text IS NULL OR EXISTS (
+              SELECT 1 FROM trader_position_lots l WHERE l.organization_id=r.organization_id AND l.account_key=r.account_id AND ${legScopeFilter(parsed.query, "lot", "l")}
+            ))
+          ORDER BY r.organization_id,r.account_id
           LIMIT ${LIST_CAP + 1}
         `),
       );
@@ -160,6 +178,9 @@ export async function handleAdminConsoleAttentionGet(
         FROM trader_settlement_reconciliation_cases
         WHERE status NOT IN ('RESOLVED', 'CANCELLED')
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+          AND ${live}
+          AND (${accountId}::text IS NULL OR exchange_account_id=${accountId})
+        ORDER BY id
         LIMIT ${LIST_CAP + 1}
       `),
       );
@@ -178,6 +199,7 @@ export async function handleAdminConsoleAttentionGet(
                      WHERE c.organization_id = s.organization_id
                        AND c.exchange_account_id = s.exchange_account_id
                        AND ord.historical_run_id IS NULL
+                       AND ord.execution_mode='live'
                        AND ord.state IN (
                          'CREATED','RISK_APPROVED','SENT_TO_EXCHANGE','ACCEPTED',
                          'PARTIALLY_FILLED','CANCEL_REQUESTED','RECONCILIATION_REQUIRED'
@@ -198,6 +220,7 @@ export async function handleAdminConsoleAttentionGet(
                      WHERE l.state = 'OPEN'
                        AND c.organization_id = s.organization_id
                        AND c.exchange_account_id = s.exchange_account_id
+                       AND ord.historical_run_id IS NULL AND ord.execution_mode='live'
                    )
                  ) AS active
           FROM trader_account_collection_state s
@@ -207,6 +230,9 @@ export async function handleAdminConsoleAttentionGet(
            AND o.exchange_account_id = s.exchange_account_id
            AND o.observation_id = s.last_observation_id
           WHERE (${organizationId}::uuid IS NULL OR s.organization_id = ${organizationId}::uuid)
+            AND (${accountId}::text IS NULL OR s.exchange_account_id=${accountId})
+            AND ${live}
+          ORDER BY s.organization_id,s.exchange_account_id,s.credential_id
           LIMIT ${LIST_CAP + 1}
         `),
       );
@@ -234,6 +260,7 @@ export async function handleAdminConsoleAttentionGet(
         await tx.execute(sql`
           SELECT job_key, started_at, status
           FROM trader_admin_job_run
+          WHERE ${organizationId}::uuid IS NULL
           ORDER BY started_at DESC
           LIMIT 200
         `),
@@ -251,10 +278,15 @@ export async function handleAdminConsoleAttentionGet(
       const incidents = rowsOf(
         await tx.execute(sql`
           SELECT id::text AS id
-          FROM trader_admin_incident
+          FROM trader_admin_incident i
           WHERE lower(severity) IN ('fatal', 'error')
             AND status <> 'resolved'
             AND last_seen_at >= now() - interval '1 hour'
+            AND (${organizationId}::uuid IS NULL OR EXISTS (
+              SELECT 1 FROM trader_admin_diagnostic_event e WHERE e.fingerprint=i.fingerprint AND e.environment=i.environment AND e.service=i.service
+                AND e.organization_id=${organizationId}::uuid AND (${accountId}::text IS NULL OR e.exchange_account_id=${accountId})
+            ))
+          ORDER BY i.id
           LIMIT ${LIST_CAP + 1}
         `),
       );
@@ -266,7 +298,6 @@ export async function handleAdminConsoleAttentionGet(
                  c.exchange_account_id,
                  c.created_at
           FROM exchange_credentials c
-          WHERE (${organizationId}::uuid IS NULL OR c.organization_id = ${organizationId}::uuid)
         `),
       );
       const credentials: AccountCredential[] = credentialRows.flatMap((row) => {
@@ -292,7 +323,12 @@ export async function handleAdminConsoleAttentionGet(
         ];
       });
       const ownershipConflicts = dedupeAccounts(credentials)
-        .filter((account) => account.conflict)
+        .filter(
+          (account) =>
+            account.conflict &&
+            (!organizationId || account.organizationIds.includes(organizationId)) &&
+            (!accountId || account.exchangeAccountId === accountId),
+        )
         .map((account) => `${account.venue}:${account.exchangeAccountId}`);
       const graceMs = parseInvoicePaymentGracePeriodMs(process.env);
       const nowIso = new Date(nowMs).toISOString();
@@ -302,6 +338,8 @@ export async function handleAdminConsoleAttentionGet(
           FROM trader_invoices
           WHERE status = 'ISSUED'
             AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+            AND (${accountId}::text IS NULL OR exchange_account_id=${accountId}) AND ${live}
+          ORDER BY id
           LIMIT ${LIST_CAP + 1}
         `),
       );
@@ -318,6 +356,9 @@ export async function handleAdminConsoleAttentionGet(
         FROM trader_settlements
         WHERE outcome = 'EXCEPTION'
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+          AND ${live}
+          AND (${accountId}::text IS NULL OR exchange_account_id=${accountId})
+        ORDER BY id
         LIMIT ${LIST_CAP + 1}
       `),
       );
@@ -329,6 +370,8 @@ export async function handleAdminConsoleAttentionGet(
           AND period_end IS NOT NULL
           AND period_end < now() - interval '24 hours'
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+          AND (${accountId}::text IS NULL OR exchange_account_id=${accountId}) AND ${live}
+        ORDER BY id
         LIMIT ${LIST_CAP + 1}
       `),
       );
@@ -338,6 +381,8 @@ export async function handleAdminConsoleAttentionGet(
         FROM trader_human_promotion_proposal_v2
         WHERE disposition = 'pending'
           AND (${organizationId}::uuid IS NULL OR organization_id = ${organizationId}::uuid)
+          AND ${accountId}::text IS NULL
+        ORDER BY id
         LIMIT ${LIST_CAP + 1}
       `),
       );

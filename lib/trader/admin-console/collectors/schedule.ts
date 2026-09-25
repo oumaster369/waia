@@ -1,7 +1,7 @@
-/** UTC minute schedule from the C5 collector contract. Valuation is not due until a writer exists. */
+/** UTC minute schedule from the C5 collector contract. */
 export function dueCollectorKeys(now: Date): readonly string[] {
   const minute = now.getUTCMinutes();
-  const keys = ["admin_market_quotes", "admin_usd_quotes"];
+  const keys = ["admin_market_quotes", "admin_usd_quotes", "admin_account_valuation"];
   if (minute % 10 === 0) keys.push("admin_news");
   if (minute === 5) keys.push("admin_fear_greed");
   if (minute === 35) keys.push("admin_retention");

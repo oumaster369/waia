@@ -117,8 +117,13 @@ function figure(
         )}
       </p>
       {amount === null ? (
-        <div className="mt-3">
+        <div className="mt-3 line-clamp-3" title={reason}>
           <DataState state="unavailable" reason={reason ?? "PNL_PERIOD_EVIDENCE_MISSING"} />
+        </div>
+      ) : null}
+      {amount !== null && reason ? (
+        <div className="mt-3 line-clamp-3" title={reason}>
+          <DataState state="partial" reason={reason} />
         </div>
       ) : null}
       {subtitle ? (

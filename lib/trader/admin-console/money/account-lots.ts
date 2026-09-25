@@ -1,5 +1,6 @@
 import { adminRevision } from "@/lib/trader/admin-console/revision";
 import type { AdminMode } from "@/lib/trader/admin-console/contracts";
+import { orderMode } from "@/lib/trader/admin-console/modes/order-mode";
 import {
   attributeLegs,
   type AttributionCredential,
@@ -14,8 +15,8 @@ export type LotLegSource = {
   remainingQty: string;
   avgCost: string;
   accountKey: string;
-  legId: string;
-  legCreatedAt: string;
+  legId: string | null;
+  legCreatedAt: string | null;
   orderId: string | null;
   strategySignalId: string | null;
   order: AttributionOrder | null;
@@ -60,7 +61,7 @@ export function assembleAttributedLots(rows: readonly LotLegSource[]): Attribute
     const credentials = legs.flatMap((leg) => (leg.credential ? [leg.credential] : []));
     const attribution = attributeLegs(
       legs.map((leg) => ({
-        id: leg.legId,
+        id: leg.legId ?? `unbound:${leg.lotId}`,
         organizationId: leg.organizationId,
         orderId: leg.orderId,
         strategySignalId: leg.strategySignalId,
@@ -70,6 +71,13 @@ export function assembleAttributedLots(rows: readonly LotLegSource[]): Attribute
       orders,
       credentials,
     );
+    const observedModes = new Set(orders.map(orderMode));
+    const knownMode =
+      legs.every((leg) => leg.order !== null) && observedModes.size === 1
+        ? orders[0]
+          ? orderMode(orders[0])
+          : null
+        : null;
     return {
       lotId: first.lotId,
       organizationId: first.organizationId,
@@ -77,9 +85,9 @@ export function assembleAttributedLots(rows: readonly LotLegSource[]): Attribute
       remainingQty: first.remainingQty,
       avgCost: first.avgCost,
       exchangeAccountId: attribution.state === "attributed" ? attribution.exchangeAccountId : null,
-      mode: attribution.state === "attributed" ? attribution.mode : null,
+      mode: attribution.state === "attributed" ? attribution.mode : knownMode,
       matched: attribution.state === "attributed",
-      legCreatedAts: legs.map((leg) => leg.legCreatedAt),
+      legCreatedAts: legs.flatMap((leg) => (leg.legCreatedAt ? [leg.legCreatedAt] : [])),
     };
   });
 }
@@ -97,6 +105,10 @@ export function lotsForExchangeAccount(input: {
 }): { lots: ValuationLot[]; lotsRevision: string } {
   const selected = input.lots.filter((lot) => {
     if (input.organizationId && lot.organizationId !== input.organizationId) return false;
+    // No account binding is not evidence that this account has no Trader cost
+    // basis. Keep the ambiguity as a blocker, without adding its amount.
+    if (!lot.matched && lot.exchangeAccountId === null)
+      return lot.mode === null || lot.mode === (input.mode === "all" ? "live" : input.mode);
     if (lot.exchangeAccountId !== input.exchangeAccountId) return false;
     if (input.mode === "paper") return lot.mode === "paper";
     if (input.mode === "history") return lot.mode === "history";

@@ -80,6 +80,9 @@ function memoryStore(fearPresent = false): CollectorStore & {
     async retain() {
       return 3;
     },
+    async collectValuations() {
+      return { processed: 0, blocked: 0 };
+    },
     async recordJobRun(run: { jobKey: string; status: string }) {
       if (store.failTelemetry) throw new Error("telemetry down");
       store.jobs.push(run);
@@ -219,6 +222,7 @@ describe("admin console collector persistence", () => {
     expect(dueCollectorKeys(new Date("2026-09-23T12:06:00.000Z"))).toEqual([
       "admin_market_quotes",
       "admin_usd_quotes",
+      "admin_account_valuation",
     ]);
     expect(dueCollectorKeys(new Date("2026-09-23T12:00:00.000Z"))).toContain("admin_news");
     expect(dueCollectorKeys(new Date("2026-09-23T12:05:00.000Z"))).toContain("admin_fear_greed");
@@ -229,7 +233,7 @@ describe("admin console collector persistence", () => {
     expect(
       tasksWhenCollectorsDisabled(dueCollectorKeys(new Date("2026-09-23T12:06:00.000Z"))),
     ).toEqual([]);
-    expect(dueCollectorKeys(new Date("2026-09-23T12:05:00.000Z"))).not.toContain(
+    expect(dueCollectorKeys(new Date("2026-09-23T12:05:00.000Z"))).toContain(
       "admin_account_valuation",
     );
     expect(retentionCutoff(new Date("2026-09-23T00:00:00.000Z"), 30)).toBe(
@@ -262,6 +266,7 @@ describe("admin console collector persistence", () => {
     expect(tasks.map((task) => task.key)).toEqual([
       "admin_market_quotes",
       "admin_usd_quotes",
+      "admin_account_valuation",
       "admin_fear_greed",
     ]);
     const result = await runAdminConsoleCollectorCycle({
@@ -269,7 +274,7 @@ describe("admin console collector persistence", () => {
       tasks,
     });
     expect(result.failed).toEqual(["admin_market_quotes"]);
-    expect(result.ran).toEqual(["admin_usd_quotes", "admin_fear_greed"]);
+    expect(result.ran).toEqual(["admin_usd_quotes", "admin_account_valuation", "admin_fear_greed"]);
     expect(store.quotes).toHaveLength(1);
     expect(store.fear).toEqual([expect.objectContaining({ value: 0 })]);
     expect(fear).toHaveBeenCalledWith(90);
