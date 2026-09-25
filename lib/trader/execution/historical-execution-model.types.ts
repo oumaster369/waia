@@ -4,6 +4,8 @@ import type { Bar } from "@/lib/trader/intelligence/types";
 export const HISTORICAL_EXECUTION_MODEL_ID = "htr-historical-execution-v1" as const;
 export const HISTORICAL_EXECUTION_MODEL_SCHEMA_VERSION =
   "waia.trader.historical-execution-model.v1" as const;
+/** Arithmetic implementation identity; distinct from the unchanged cost policy. */
+export const HISTORICAL_EXECUTION_SIMULATOR_VERSION = "1.0.1" as const;
 
 export const EXECUTION_FACT_KIND_VENUE_FILL = "VENUE_FILL" as const;
 export const EXECUTION_FACT_KIND_HISTORICAL_SIMULATED = "HISTORICAL_SIMULATED_FILL_V1" as const;
@@ -136,6 +138,8 @@ export type FillExecutionEconomicsRow = {
 
 export type HistoricalExecutionCheckpointSlice = {
   schemaVersion: "htr-wp17-execution-checkpoint/v1";
+  /** Missing on legacy evidence, which remains readable but cannot resume on new arithmetic. */
+  simulatorVersion?: string;
   openOrders: ReadonlyArray<{
     orderId: string;
     acceptedAtTs: number;

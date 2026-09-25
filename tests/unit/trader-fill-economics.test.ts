@@ -60,6 +60,39 @@ function zeroCostModel(): HistoricalExecutionModelV1 {
 describe("HTR-WP17 fill economics", () => {
   const model = createHistoricalExecutionModelV1();
 
+  // Independent known answers from Python Decimal (precision 70): scale-8
+  // ROUND_HALF_UP for costs/per-unit adjustments and existing ROUND_DOWN for
+  // price*quantity. These values are not calculated by the code under test.
+  it.each([
+    ["100", "1", "buy", "100.15", "-100.35", "0.35"],
+    ["100", "1", "sell", "99.85", "99.65", "0.35"],
+    ["3400.01", "1", "buy", "3405.110015", "-3411.910035", "11.900035"],
+    ["3400.01", "1", "sell", "3394.909985", "3388.109965", "11.900035"],
+    ["64001.23", "1", "buy", "64097.231845", "-64225.234305", "224.004305"],
+    ["64001.23", "1", "sell", "63905.228155", "63777.225695", "224.004305"],
+    ["0.00000999", "1", "buy", "0.00001", "-0.00001002", "0.00000003"],
+    ["0.00000999", "1", "sell", "0.00000998", "0.00000996", "0.00000003"],
+    ["0.00001", "1", "buy", "0.00001002", "-0.00001004", "0.00000004"],
+    ["0.00001", "1", "sell", "0.00000998", "0.00000996", "0.00000004"],
+    ["0.00001001", "1", "buy", "0.00001003", "-0.00001005", "0.00000004"],
+    ["0.00001001", "1", "sell", "0.00000999", "0.00000997", "0.00000004"],
+    ["123.45678901", "0.12345678", "buy", "123.64197419", "-15.29492316", "0.05334553"],
+    ["123.45678901", "0.12345678", "sell", "123.27160383", "15.18823211", "0.05334553"],
+    ["3400.01", "1.00000001", "buy", "3405.110015", "-3411.91006912", "11.90003512"],
+    ["3400.01", "1.00000001", "sell", "3394.909985", "3388.10999887", "11.90003512"],
+  ] as const)(
+    "scale-8 economics: price=%s quantity=%s side=%s",
+    (price, quantity, side, netPrice, netCash, totalCost) => {
+      const result = applyHistoricalExecutionEconomics(
+        baseEvent({ grossFillPrice: price, sliceQuantity: quantity, side }),
+        model,
+      );
+      expect(result.netFillPrice).toBe(netPrice);
+      expect(result.netCashEffect).toBe(netCash);
+      expect(result.totalExecutionCost).toBe(totalCost);
+    },
+  );
+
   it("decomposes gross fill into fee, spread, impact, and net cash (D-5 bps)", () => {
     const economics = applyHistoricalExecutionEconomics(baseEvent(), model);
     const componentTotal = formatDecimal(
@@ -160,6 +193,86 @@ describe("HTR-WP17 fill economics", () => {
     expect(compareDecimal(economics.netFillPrice, economics.grossFillPrice)).toBe(0);
     expect(compareDecimal(economics.netCashEffect, "-1000")).toBe(0);
     expect(compareDecimal(economics.netCashEffect, "0")).toBe(-1);
+  });
+
+  it.each(["buy", "sell"] as const)(
+    "split %s fills preserve economics within per-fill rounding bounds",
+    (side) => {
+      const whole = applyHistoricalExecutionEconomics(
+        baseEvent({ grossFillPrice: "123.45678901", sliceQuantity: "0.12345678", side }),
+        model,
+      );
+      const slices = ["0.04", "0.04", "0.04345678"].map((sliceQuantity, index) =>
+        applyHistoricalExecutionEconomics(
+          baseEvent({
+            grossFillPrice: "123.45678901",
+            sliceQuantity,
+            side,
+            fillSequence: index + 1,
+          }),
+          model,
+        ),
+      );
+      const difference = (field: "netCashEffect" | "totalExecutionCost") => {
+        const delta =
+          slices.reduce((sum, slice) => sum + parseDecimal(slice[field]), 0n) -
+          parseDecimal(whole[field]);
+        return delta < 0n ? -delta : delta;
+      };
+      // Cash: one truncated principal and one rounded fee per fill; costs:
+      // three rounded components. Splitting adds at most 3 scale-8 units/fill.
+      expect(difference("netCashEffect")).toBeLessThanOrEqual(9n);
+      expect(difference("totalExecutionCost")).toBeLessThanOrEqual(9n);
+    },
+  );
+
+  it("same-price round trip accounts for each side's costs once", () => {
+    const buy = applyHistoricalExecutionEconomics(
+      baseEvent({ grossFillPrice: "100", sliceQuantity: "1", side: "buy" }),
+      model,
+    );
+    const sell = applyHistoricalExecutionEconomics(
+      baseEvent({ grossFillPrice: "100", sliceQuantity: "1", side: "sell" }),
+      model,
+    );
+    expect(addDecimal(buy.netCashEffect, sell.netCashEffect)).toBe("-0.7");
+    expect(addDecimal(buy.totalExecutionCost, sell.totalExecutionCost)).toBe("0.7");
+  });
+
+  it("bounds component-versus-cash rounding at fractional prices and quantities", () => {
+    for (const grossFillPrice of ["0.00001", "123.45678901", "64001.23"]) {
+      for (const sliceQuantity of ["0.00000001", "0.12345678", "1.00000001", "1000"]) {
+        for (const side of ["buy", "sell"] as const) {
+          const value = applyHistoricalExecutionEconomics(baseEvent({ grossFillPrice, sliceQuantity, side }), model);
+          const componentCash = side === "buy"
+            ? -parseDecimal(value.grossNotional) - parseDecimal(value.totalExecutionCost)
+            : parseDecimal(value.grossNotional) - parseDecimal(value.totalExecutionCost);
+          const residual = parseDecimal(value.netCashEffect) - componentCash;
+          // Two price adjustments round at <= 0.5 ulp each, multiplied by
+          // quantity; amount rounding/truncation adds <3 ulp at D-5 rates.
+          const quantityCeiling = (parseDecimal(sliceQuantity) + 99_999_999n) / 100_000_000n;
+          expect(residual < 0n ? -residual : residual).toBeLessThanOrEqual(quantityCeiling + 3n);
+        }
+      }
+    }
+  });
+
+  it("binds corrected arithmetic into evidence while preserving legacy digests", () => {
+    const current = applyHistoricalExecutionEconomics(
+      baseEvent({ grossFillPrice: "100", sliceQuantity: "1" }),
+      model,
+    );
+    expect(current.simulatorVersion).toBe("1.0.1");
+    const legacy = {
+      ...current,
+      simulatorVersion: "1.0.0",
+      netFillPrice: "100",
+      netCashEffect: "-100.2",
+    };
+    const legacyDigest = computeEconomicsContentDigest(legacy);
+    expect(legacyDigest).not.toBe(current.economicsContentDigest);
+    const storedLegacy = { ...legacy, economicsContentDigest: legacyDigest };
+    expect(computeEconomicsContentDigest(storedLegacy)).toBe(legacyDigest);
   });
 
   it("zero-cost SELL cash delta equals +grossNotional", () => {

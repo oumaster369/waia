@@ -39,6 +39,7 @@ describe("HTR-WP17 execution checkpoint resume", () => {
 
     const slice = session.exchange.buildCheckpointSlice();
     expect(slice.schemaVersion).toBe("htr-wp17-execution-checkpoint/v1");
+    expect(slice.simulatorVersion).toBe("1.0.1");
     expect(slice.openOrders).toHaveLength(1);
     expect(slice.openOrders[0]?.orderId).toBe(order.id);
     expect(slice.openOrders[0]?.fillSequence).toBe(1);
@@ -98,6 +99,26 @@ describe("HTR-WP17 execution checkpoint resume", () => {
       }),
     );
   });
+
+  it.each([undefined, "1.0.0", "unknown"])(
+    "refuses checkpoint arithmetic %s without clearing current orders",
+    async (simulatorVersion) => {
+      const session = createWp17SqliteSession();
+      sessions.push(session);
+      const order = await createAcceptedMarketOrder(session.repo, session.context, {
+        quantity: "0.3",
+      });
+      session.exchange.registerOrder(order, 0, Date.parse("2026-01-01T00:00:59.999Z"));
+      const before = session.exchange.buildCheckpointSlice();
+      expect(() =>
+        session.exchange.restoreFromCheckpointSlice(
+          { ...before, simulatorVersion },
+          new Map([[order.id, order]]),
+        ),
+      ).toThrow("HISTORICAL_EXECUTION_CHECKPOINT_IDENTITY_MISMATCH");
+      expect(session.exchange.buildCheckpointSlice()).toEqual(before);
+    },
+  );
 
   it("restored checkpoint preserves remaining quantity for partial in-flight orders", async () => {
     const session = createWp17SqliteSession();

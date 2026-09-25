@@ -43,8 +43,11 @@ function canonicalLossFrontier() {
 describe("DEE-951 current modeled Guardian", () => {
   it("vetoes a new entry after a canonical loss-making full close before submission", async () => {
     const frontier = canonicalLossFrontier();
-    expect(frontier).toMatchObject({ cash: "726.94", equity: "726.94", equityHwm: "1000",
-      accountDrawdownBps: 2730, netRealizedPnl: "-273.06", positions: { BTCUSDT: { quantity: "0" } } });
+    // Independent D-5 oracle: buy 9*100.15 + 1.8 fee = 903.15;
+    // sell 9*69.895 - 1.26 fee = 627.795. Cash = 1000-903.15+627.795.
+    // Loss 275.355 / initial equity 1000 = 2753.55 bps (accounting truncates).
+    expect(frontier).toMatchObject({ cash: "724.645", equity: "724.645", equityHwm: "1000",
+      accountDrawdownBps: 2753, netRealizedPnl: "-275.355", positions: { BTCUSDT: { quantity: "0" } } });
     const registered: OrderRow[] = [];
     const binding = createHistoricalModeledCapitalBindingV2({ organizationId: "org-1", accountId: "account-1",
       runId: "run-1", resolveCycle: () => cycle, decide: async () => { throw new Error("not exercised"); },
