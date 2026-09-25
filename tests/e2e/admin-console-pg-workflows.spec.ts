@@ -20,6 +20,26 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
   const primary = await browser.newContext({
     baseURL: baseURL?.replace("trader.localhost", "127.0.0.1"),
   });
+  const verifySizes = async (path: string) => {
+    for (const width of [1280, 1440, 1920, 720]) {
+      // 720 CSS pixels is the reflow viewport of a 1440px display at 200% zoom.
+      await page.setViewportSize({ width, height: width === 720 ? 450 : 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        `${path} width ${width}`,
+      ).toBe(true);
+      const accessibility = await new AxeBuilder({ page }).analyze();
+      expect(
+        accessibility.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
+        `${path} width ${width}`,
+      ).toEqual([]);
+      await page.screenshot({
+        path: testInfo.outputPath(`${path}-${width}-real-postgres.png`),
+        fullPage: true,
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+  };
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   try {
@@ -90,6 +110,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       path: testInfo.outputPath("overview-real-postgres.png"),
       fullPage: true,
     });
+    await verifySizes("overview");
     await page.getByRole("button", { name: "Помощник", exact: true }).click();
     const assistant = page.locator("#admin-assistant");
     await expect(
@@ -194,6 +215,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await expect(page.locator("main")).not.toContainText(accounts[0]);
     await page.getByLabel("Охват: клиент").selectOption(clients[0].id);
     await expect(page.locator("main")).toContainText(accounts[0]);
+    await verifySizes("accounts");
     for (const [path, title] of [
       ["orders", "Ордера"],
       ["clients", "Клиенты"],
@@ -288,24 +310,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         ).toBeDisabled();
         await incidentDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
       }
-      for (const width of [1280, 1440, 1920, 720]) {
-        // 720 CSS pixels is the reflow viewport of a 1440px display at 200% zoom.
-        await page.setViewportSize({ width, height: width === 720 ? 450 : 900 });
-        expect(
-          await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-          `${path} width ${width}`,
-        ).toBe(true);
-        const accessibility = await new AxeBuilder({ page }).analyze();
-        expect(
-          accessibility.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
-          `${path} width ${width}`,
-        ).toEqual([]);
-        await page.screenshot({
-          path: testInfo.outputPath(`${path}-${width}-real-postgres.png`),
-          fullPage: true,
-        });
-      }
-      await page.setViewportSize({ width: 1440, height: 900 });
+      await verifySizes(path);
     }
     await page.keyboard.press("ControlOrMeta+k");
     const palette = page.getByRole("dialog", { name: "Перейти к разделу" });
