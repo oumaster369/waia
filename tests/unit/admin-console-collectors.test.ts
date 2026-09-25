@@ -164,8 +164,8 @@ describe("admin console collector persistence", () => {
       source: "coindesk",
       guid: null,
       url: "https://Example.com/article?id=1&utm_source=x#top",
-      title: "Bitcoin rises",
-      summary: "one",
+      title: "<![CDATA[Bitcoin rises]]>",
+      summary: "<![CDATA[one]]>",
       publishedAt: null,
       observedAt,
     });
@@ -183,6 +183,8 @@ describe("admin console collector persistence", () => {
     if (first?.action !== "insert" || second?.action !== "insert") return;
     expect(first.dedupeKey).not.toBe(second.dedupeKey);
     expect(first.url).toBe("https://example.com/article?id=1");
+    expect(first.version).toMatchObject({ title: "Bitcoin rises", summary: "one", observedAt });
+    expect(first.version.contentHash).toBe(second.version.contentHash);
     expect(first.clusterKey).toBe(second.clusterKey);
     const changed = planNewsWrite(
       { id: "item-1", contentHash: first.version.contentHash, currentVersion: 1 },
