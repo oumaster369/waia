@@ -17,16 +17,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  status: integration-ready
+  currentWorkPackage: null
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidationAt: "2026-09-25T11:39:47.309Z"
   blockedReason: null
-  nextAction: "Serially import admitted source, implement long-title dialog regression and repair, then freeze provenance and run complete acceptance."
+  nextAction: "Require all exact-head CI, guarded squash, verified merged-main deployment and affected production acceptance."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -37,7 +37,7 @@ provenance:
 
 Production46f9 passed its affected acceptance. During incident recovery, five actual PostgreSQL regressions proved non-atomic news persistence (DEE-1090, source8400c467, PR657), and an authenticated long-title incident exposed dialog header overflow:574px client width,697px scroll width,123px horizontal displacement after reaching Close (DEE-1091). Preserve both findings and their independent source history.
 
-## Serialized result
+## Acceptance
 
 Admit both scopes before this batch imports any source. Import DEE-1090 unchanged, run cumulative checks, then implement the bounded dialog wrapping/close-control correction with a real production-like long-title browser failure first. Freeze exact commit/file/test evidence and run all five real-Postgres browser workflows, lint/types/Next/OpenNext, both graphs, canon/governance and rendered PR preflight. All exact-head CI must pass before guarded squash and verified merged-main publication. Keep PR657/source history until successful incorporation; do not merge its older base independently.
 

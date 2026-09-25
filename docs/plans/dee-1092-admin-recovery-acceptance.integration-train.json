@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-1092",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -10,7 +10,7 @@
   "includedChildren": [
     {
       "issue": "DEE-1090",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Atomic per-identity news evidence persistence, duplicate and delayed plan safety, rollback on version/pointer failure.",
       "dependencies": [],
@@ -40,11 +40,32 @@
         "wave": 1,
         "mode": "serialized"
       },
-      "sourceCommit": "8400c46763e4b91cb418fa4305a9f58a043a34ba"
+      "sourceCommit": "8400c46763e4b91cb418fa4305a9f58a043a34ba",
+      "integratedCommits": [
+        "d868e46102dd5351db1cbf5937384403f1213e36"
+      ],
+      "actualFiles": [
+        "docs/plans/dee-1090-admin-news-atomic.md",
+        "lib/trader/admin-console/collectors/postgres-store.ts",
+        "tests/integration/admin-console-news-atomic-postgres.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "36 cumulative unit/real-Postgres tests passed after this serial wave. Final combined36 and all5Postgres browser scenarios pass.",
+        "Complete-diff self-review preserves all financial and authority semantics; both Reality/Execution graph validators pass."
+      ],
+      "tests": [
+        "Cumulative targeted suite after wave1: 36 passed",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck",
+        "pnpm cloudflare:build",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph"
+      ]
     },
     {
       "issue": "DEE-1091",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Wrap long console dialog titles within the header while preserving a visible usable Close control; actual PostgreSQL browser regression including narrow viewport.",
       "dependencies": [
@@ -75,7 +96,28 @@
       "execution": {
         "wave": 2,
         "mode": "serialized"
-      }
+      },
+      "integratedCommits": [
+        "9d15ed20b5fb0a387ea36c0b942e8dbd61a316b1"
+      ],
+      "actualFiles": [
+        "components/trader/admin-console/primitives/console-ui.tsx",
+        "docs/plans/dee-1091-admin-dialog-long-title.md",
+        "tests/e2e/admin-console-pg-workflows.spec.ts"
+      ],
+      "acceptanceEvidence": [
+        "36 cumulative unit/real-Postgres tests passed after this serial wave. Final combined36 and all5Postgres browser scenarios pass.",
+        "Complete-diff self-review preserves all financial and authority semantics; both Reality/Execution graph validators pass."
+      ],
+      "tests": [
+        "Cumulative targeted suite after wave2: 36 passed",
+        "pnpm test:e2e:admin-pg (5 passed)",
+        "pnpm lint (0 errors,324 existing warnings)",
+        "pnpm typecheck",
+        "pnpm cloudflare:build",
+        "pnpm validate:reality-v2-consumer-graph",
+        "pnpm validate:execution-v2-consumer-graph"
+      ]
     }
   ],
   "deferredChildren": [],
@@ -83,7 +125,64 @@
     "admissionEvidence": {
       "status": "pass",
       "reviewer": "Codex under explicit user operational delegation. Admission before all imports and UI implementation in this batch; original DEE-1090 source implementation already occurred and is not retrospectively admitted."
-    }
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestCommit": "7b46b39f480f313eec61c65adf57e6f3f7627ffa",
+      "manifestPath": "docs/plans/dee-1092-admin-recovery-acceptance.integration-train.json",
+      "manifestDigest": "2173aad0c38d1eaa24780f7401216543f7bfaffa4f847cc65577f5554e002faa",
+      "reviewer": "Codex integration owner under user delegation; admission preceded every import into this batch. Original DEE-1090 source implementation occurred earlier and is not retrospectively admitted. DEE-1091 implementation followed this admission."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-1090",
+        "status": "pass",
+        "reviewedCommits": [
+          "d868e46102dd5351db1cbf5937384403f1213e36"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-1090-admin-news-atomic.md",
+          "lib/trader/admin-console/collectors/postgres-store.ts",
+          "tests/integration/admin-console-news-atomic-postgres.test.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent review claimed."
+      },
+      {
+        "issue": "DEE-1091",
+        "status": "pass",
+        "reviewedCommits": [
+          "9d15ed20b5fb0a387ea36c0b942e8dbd61a316b1"
+        ],
+        "reviewedFiles": [
+          "components/trader/admin-console/primitives/console-ui.tsx",
+          "docs/plans/dee-1091-admin-dialog-long-title.md",
+          "tests/e2e/admin-console-pg-workflows.spec.ts"
+        ],
+        "reviewer": "Codex complete-diff adversarial self-review; no independent review claimed."
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-1090",
+        "status": "pass",
+        "commands": [
+          "Cumulative wave1 36tests passed",
+          "Final36targeted +5real-Postgres browser scenarios, both authority graphs, lint/types/Next/OpenNext/canon/governance"
+        ],
+        "evidence": "/tmp/waia-1092-wave1.log; /tmp/waia-1092-browser.log; /tmp/waia-1092-reality.log; /tmp/waia-1092-execution.log"
+      },
+      {
+        "afterIssue": "DEE-1091",
+        "status": "pass",
+        "commands": [
+          "Cumulative wave2 36tests passed",
+          "Final36targeted +5real-Postgres browser scenarios, both authority graphs, lint/types/Next/OpenNext/canon/governance"
+        ],
+        "evidence": "/tmp/waia-1092-wave2.log; /tmp/waia-1092-browser.log; /tmp/waia-1092-reality.log; /tmp/waia-1092-execution.log"
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "Eight Russian sections and all existing finance, authority and schema invariants unchanged.",
