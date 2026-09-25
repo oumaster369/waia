@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1092",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1090",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Atomic per-identity news evidence persistence, duplicate and delayed plan safety, rollback on version/pointer failure.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Serialized integration on deployed main46f9; cumulative data and browser acceptance after each wave."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1090-admin-news-atomic.md",
+        "lib/trader/admin-console/collectors/postgres-store.ts",
+        "tests/integration/admin-console-news-atomic-postgres.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. All children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Real production finding and red/green regression; exact source diff; unchanged financial/authority boundaries."
+      ],
+      "expectedTests": [
+        "pnpm test --run targeted collectors and real-Postgres regressions",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "sourceCommit": "8400c46763e4b91cb418fa4305a9f58a043a34ba"
+    },
+    {
+      "issue": "DEE-1091",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Wrap long console dialog titles within the header while preserving a visible usable Close control; actual PostgreSQL browser regression including narrow viewport.",
+      "dependencies": [
+        "DEE-1090"
+      ],
+      "dependencyEvidence": [
+        "Serialized integration on deployed main46f9; cumulative data and browser acceptance after each wave."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1091-admin-dialog-long-title.md",
+        "components/trader/admin-console/primitives/console-ui.tsx",
+        "tests/e2e/admin-console-pg-workflows.spec.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T1",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly delegated operational self-review, merge after tests and production work. All children are integrated at the stricter shared Worker T3 boundary; no independent review or policy ratification claimed."
+      },
+      "expectedAcceptanceEvidence": [
+        "Real production finding and red/green regression; exact source diff; unchanged financial/authority boundaries."
+      ],
+      "expectedTests": [
+        "pnpm test --run targeted collectors and real-Postgres regressions",
+        "pnpm test:e2e:admin-pg",
+        "pnpm lint && pnpm typecheck && pnpm cloudflare:build"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Codex under explicit user operational delegation. Admission before all imports and UI implementation in this batch; original DEE-1090 source implementation already occurred and is not retrospectively admitted."
+    }
+  },
+  "crossCuttingInvariants": [
+    "Eight Russian sections and all existing finance, authority and schema invariants unchanged.",
+    "No old news/receipt rewrite, no real trading or billing commands.",
+    "All exact final-head protected and applicable checks required."
+  ],
+  "rollbackStrategy": "Revert one integration squash and restore the prior verified financial Worker; no schema or historical data changes.",
+  "reviewDisposition": {
+    "authority": "Explicit user operational delegation.",
+    "independentReview": "Not performed; no automatic DEE-653 admission claimed.",
+    "mergePath": "Direct delegated operational self-acceptance.",
+    "unchangedGates": "Full exact-head CI, tests, scope validation and production verification."
+  }
+}
