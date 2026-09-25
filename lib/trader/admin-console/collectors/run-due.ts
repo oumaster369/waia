@@ -46,10 +46,11 @@ export type CollectorFetchers = {
 
 export function collectorTasksFor(input: {
   now: Date;
+  scheduledAt?: Date;
   store: CollectorStore;
   fetchers: CollectorFetchers;
 }): CollectorTask[] {
-  const due = new Set(dueCollectorKeys(input.now));
+  const due = new Set(dueCollectorKeys(input.scheduledAt ?? input.now));
   const observedAt = input.now.toISOString();
   const tasks: CollectorTask[] = [];
   if (due.has("admin_market_quotes")) {
@@ -129,11 +130,19 @@ export function collectorTasksFor(input: {
 
 export async function runDueAdminCollectors(
   env: { WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED?: string; DATABASE_URL_POSTGRES?: string },
-  options: { log?: (message: string) => void; now?: Date; fetchImpl?: typeof fetch } = {},
+  options: {
+    log?: (message: string) => void;
+    now?: Date;
+    scheduledAt?: Date;
+    fetchImpl?: typeof fetch;
+  } = {},
 ): Promise<{ ran: string[]; failed: string[] }> {
   const now = options.now ?? new Date();
   const enabled = collectorsEnabled(env);
-  if (!enabled && tasksWhenCollectorsDisabled(dueCollectorKeys(now)).length === 0) {
+  if (
+    !enabled &&
+    tasksWhenCollectorsDisabled(dueCollectorKeys(options.scheduledAt ?? now)).length === 0
+  ) {
     options.log?.("disabled");
     return { ran: [], failed: [] };
   }
@@ -154,6 +163,7 @@ export async function runDueAdminCollectors(
     const store = createPostgresCollectorStore(runtime.db);
     const dueTasks = collectorTasksFor({
       now,
+      scheduledAt: options.scheduledAt,
       store,
       fetchers: {
         htx: () => fetchHtxPublicTickerSnapshot(fetchImpl),

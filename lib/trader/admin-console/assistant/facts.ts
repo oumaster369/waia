@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { AdminConsoleQuery } from "@/lib/trader/admin-console/scope";
 import { assistantContext, assistantHref } from "@/lib/trader/admin-console/assistant/context";
 import { redactDiagnosticText } from "@/lib/trader/admin-console/diagnostics/redact";
+import { JOB_LABELS, JOB_STATUS } from "@/lib/trader/admin-console/jobs/presentation";
 
 export type AssistantFact = {
   id: string;
@@ -366,17 +367,37 @@ export function factsFromTool(
     add("release.sha", "SHA релиза; совпадение с деплоем не подтверждено", release.sha, {
       state: "unavailable",
       reasons: [str(release.reason) ?? "WAIA_RELEASE_SHA_NOT_SET"],
+      href: assistantHref("/admin/system", query, { tab: "releases" }),
     });
-    for (const [index, row] of list(data.jobs).slice(0, 12).entries())
-      add(
-        `jobs.${index}.state`,
-        `${str(row.title ?? row.name ?? row.id) ?? "Задание"} · состояние`,
-        row.state ?? row.status,
-        {
-          href: assistantHref("/admin/system", query, { tab: "jobs" }),
-          reasons: reasons(row.reasons),
-        },
-      );
+    if (Array.isArray(data.jobs)) {
+      const jobs = list(data.jobs),
+        shown = jobs.slice(0, 50),
+        href = assistantHref("/admin/system", query, { tab: "jobs" });
+      add("jobs.coverage", "Заданий в ответе", shown.length, {
+        href,
+        state: shown.length < jobs.length ? "partial" : shown.length ? "ok" : "empty",
+        reasons: shown.length < jobs.length ? ["LIST_COVERAGE_LIMITED"] : [],
+        coverage: { included: shown.length, total: jobs.length },
+      });
+      for (const [index, row] of shown.entries()) {
+        const key = str(row.jobKey),
+          run = record(row.lastRun),
+          status = str(run.status);
+        add(
+          `jobs.${index}.state`,
+          `${(key && JOB_LABELS[key]) ?? key ?? "Задание"} · последний запуск`,
+          status === null ? null : (JOB_STATUS[status] ?? status),
+          {
+            entityId: key,
+            href,
+            state: status === null ? "unavailable" : (str(row.state) ?? "unavailable"),
+            reasons: reasons([row.reason ?? (status === null ? "JOB_RUN_NOT_OBSERVED" : null)]),
+            observedAt: str(run.at),
+            coverage: null,
+          },
+        );
+      }
+    }
   }
   if (!result.length)
     add("availability", TITLES[tool] ?? "Источник", null, {

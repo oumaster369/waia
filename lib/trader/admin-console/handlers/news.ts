@@ -6,6 +6,7 @@ import {
 } from "@/lib/trader/admin-route-shared";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { HANDLER_TABLES } from "@/lib/trader/admin-console/handler-tables";
+import { adminNewsText } from "@/lib/trader/admin-console/news-text";
 import { openAdminConsole } from "@/lib/trader/admin-console/handlers/guard";
 import { withAdminRouteSnapshot } from "@/lib/trader/admin-console/repositories/snapshot.postgres";
 import {
@@ -36,20 +37,18 @@ export async function handleAdminConsoleNewsGet(
           scope: adminScopeFromQuery(parsed.query),
           mode: parsed.query.mode,
           data: {
-            items: rows
-              .slice(0, parsed.query.limit)
-              .map((row) => ({
-                id: String(row.id),
-                source: String(row.source),
-                url: /^https?:\/\//i.test(String(row.url)) ? String(row.url) : null,
-                title: String(row.title),
-                summary: row.summary == null ? null : String(row.summary),
-                symbols: row.symbols,
-                publishedAt: row.published_at
-                  ? new Date(String(row.published_at)).toISOString()
-                  : null,
-                observedAt: new Date(String(row.observed_at)).toISOString(),
-              })),
+            items: rows.slice(0, parsed.query.limit).map((row) => ({
+              id: String(row.id),
+              source: String(row.source),
+              url: /^https?:\/\//i.test(String(row.url)) ? String(row.url) : null,
+              title: adminNewsText(String(row.title)),
+              summary: row.summary == null ? null : adminNewsText(String(row.summary)),
+              symbols: row.symbols,
+              publishedAt: row.published_at
+                ? new Date(String(row.published_at)).toISOString()
+                : null,
+              observedAt: new Date(String(row.observed_at)).toISOString(),
+            })),
             scopeLabel: "Общие рыночные новости",
             truncated: rows.length > parsed.query.limit,
           },

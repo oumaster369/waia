@@ -18,6 +18,7 @@ import { collectorTasksFor } from "@/lib/trader/admin-console/collectors/run-due
 import { runAdminConsoleCollectorCycle } from "@/lib/trader/admin-console/collectors/run-collectors-cycle";
 import { assertAdminConsoleSeedLocal } from "@/lib/trader/admin-console/collectors/seed-guard";
 import {
+  adminCollectorScheduledAt,
   dueCollectorKeys,
   retentionCutoff,
   tasksWhenCollectorsDisabled,
@@ -95,6 +96,66 @@ function memoryStore(fearPresent = false): CollectorStore & {
 }
 
 describe("admin console collector persistence", () => {
+  it.each([
+    ["00", "admin_news"],
+    ["05", "admin_fear_greed"],
+    ["35", "admin_retention"],
+  ])(
+    "preserves the scheduled minute %s after delayed dispatch without backdating evidence",
+    async (minute, expected) => {
+      const scheduledAt = adminCollectorScheduledAt({
+        scheduledTime: Date.parse(`2026-09-23T12:${minute}:00.000Z`),
+      })!;
+      const actualNow = new Date(scheduledAt.getTime() + 90_000);
+      const store = memoryStore();
+      const retain = vi.spyOn(store, "retain");
+      const tasks = collectorTasksFor({
+        now: actualNow,
+        scheduledAt,
+        store,
+        fetchers: {
+          htx: async () => ({ tickers: [ticker("btcusdt", "1")], sourceTs: null }),
+          usd: async () => ({ latest: [], minute: [] }),
+          news: async () => [],
+          fearGreed: async () => [],
+        },
+      });
+      expect(tasks.map((task) => task.key)).toContain(expected);
+      await runAdminConsoleCollectorCycle({
+        env: { WAIA_ADMIN_CONSOLE_COLLECTORS_ENABLED: "1" },
+        tasks,
+      });
+      expect(store.jobs.some((job) => job.jobKey === expected && job.status === "succeeded")).toBe(
+        true,
+      );
+      expect(store.quotes).toEqual([
+        expect.objectContaining({
+          latest: [expect.objectContaining({ observedAt: actualNow.toISOString() })],
+        }),
+        { latest: [], minute: [] },
+      ]);
+      if (expected === "admin_retention") {
+        expect(retain).toHaveBeenCalledWith(actualNow);
+        expect(tasksWhenCollectorsDisabled(tasks.map((task) => task.key))).toEqual([
+          "admin_retention",
+        ]);
+      }
+    },
+  );
+
+  it("leaves manual and malformed scheduling events on the actual-time fallback", () => {
+    for (const event of [
+      undefined,
+      null,
+      {},
+      { scheduledTime: "invalid" },
+      { scheduledTime: Infinity },
+      { scheduledTime: 1e30 },
+    ]) {
+      expect(adminCollectorScheduledAt(event)).toBeUndefined();
+    }
+  });
+
   it("stores HTX USDT last prices and minute closes without renaming them to USD", () => {
     const rows = htxQuoteRows(
       [
@@ -164,8 +225,8 @@ describe("admin console collector persistence", () => {
       source: "coindesk",
       guid: null,
       url: "https://Example.com/article?id=1&utm_source=x#top",
-      title: "Bitcoin rises",
-      summary: "one",
+      title: "<![CDATA[Bitcoin rises]]>",
+      summary: "<![CDATA[one]]>",
       publishedAt: null,
       observedAt,
     });
@@ -183,6 +244,8 @@ describe("admin console collector persistence", () => {
     if (first?.action !== "insert" || second?.action !== "insert") return;
     expect(first.dedupeKey).not.toBe(second.dedupeKey);
     expect(first.url).toBe("https://example.com/article?id=1");
+    expect(first.version).toMatchObject({ title: "Bitcoin rises", summary: "one", observedAt });
+    expect(first.version.contentHash).toBe(second.version.contentHash);
     expect(first.clusterKey).toBe(second.clusterKey);
     const changed = planNewsWrite(
       { id: "item-1", contentHash: first.version.contentHash, currentVersion: 1 },

@@ -137,6 +137,13 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       /890,5\s*USDT/,
     );
     await expect(assistant).not.toContainText(accounts[0]);
+    await assistant.getByRole("button", { name: "Система и релиз", exact: true }).click();
+    const systemAnswer = assistant.getByRole("region", { name: "Быстрый ответ" });
+    await expect(systemAnswer).toContainText("Наблюдение платежей · последний запуск");
+    await expect(systemAnswer).toContainText("Ручной выпуск счетов · последний запуск");
+    await expect(systemAnswer).toContainText("Охват: 13/13");
+    await expect(systemAnswer).toContainText("Ручная операция, без расписания");
+    await expect(systemAnswer.locator('a[href*="tab=jobs"]').first()).toBeVisible();
     expect(
       (await new AxeBuilder({ page }).include("#admin-assistant").analyze()).violations,
     ).toEqual([]);

@@ -2,6 +2,7 @@
 // typechecks during `next build` before OpenNext emits `.open-next/worker.js`.
 import { default as handler } from "./.open-next/worker.js";
 import { bridgeTraderCronEnvToProcess, rememberWorkerEnv } from "@/lib/trader/cron/worker-cron-env";
+import { adminCollectorScheduledAt } from "@/lib/trader/admin-console/collectors/schedule";
 
 async function runPaymentWatcherCycle(env: Record<string, unknown>): Promise<void> {
   console.log(
@@ -104,10 +105,11 @@ export default {
   },
 
   async scheduled(
-    _event: unknown,
+    event: unknown,
     env: Record<string, unknown>,
     ctx: { waitUntil: (promise: Promise<unknown>) => void },
   ): Promise<void> {
+    const scheduledAt = adminCollectorScheduledAt(event);
     await runPaymentWatcherCycle(env);
 
     ctx.waitUntil(runTreasuryWatcherScheduled(env));
@@ -238,6 +240,7 @@ export default {
           DATABASE_URL_POSTGRES?: string;
         };
         await runDueAdminCollectors(envRecord, {
+          scheduledAt,
           log: (message) =>
             console.log(JSON.stringify({ event: "waia_admin_console_collectors", phase: message })),
         });

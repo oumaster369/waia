@@ -83,6 +83,41 @@ describe.skipIf(!enabled)("assistant grounded facts and contextual ownership on 
     else process.env.WAIA_ADMIN_ASSISTANT_ENABLED = previous;
     await client?.end();
   });
+  it("keeps actual failed-job evidence and the complete catalog in a model-free system answer", async () => {
+    const id = randomUUID();
+    const observedAt = new Date(Date.now() - 1000).toISOString();
+    await client`INSERT INTO trader_admin_job_run(id,job_key,started_at,finished_at,status,processed,blocked,error_class,details_json)
+      VALUES (${id}::uuid,'payment_watcher',${observedAt}::timestamptz,${observedAt}::timestamptz,'failed',0,0,'SYNTHETIC_FAILURE','{}'::jsonb)`;
+    try {
+      const answer = await handleAdminConsoleAssistantQuickAnswersGet(
+        req("assistant/quick-answers?id=system"),
+        deps(),
+      );
+      expect(answer.status).toBe(200);
+      const facts = (answer.body as { data: { facts: AssistantFact[] } }).data.facts;
+      const failed = facts.find((fact) => fact.entityId === "payment_watcher")!;
+      expect(failed).toMatchObject({
+        label: "Наблюдение платежей · последний запуск",
+        value: "Ошибка",
+        state: "ok",
+        href: expect.stringContaining("tab=jobs"),
+      });
+      expect(Date.parse(failed.observedAt!)).toBe(Date.parse(observedAt));
+      expect(facts.find((fact) => fact.entityId === "invoice_issue")).toMatchObject({
+        label: "Ручной выпуск счетов · последний запуск",
+        value: null,
+        state: "unavailable",
+        reasons: ["MANUAL_OPERATION_NOT_SCHEDULED"],
+      });
+      expect(facts.find((fact) => fact.field === "jobs.coverage")).toMatchObject({
+        value: "13",
+        coverage: { included: 13, total: 13 },
+      });
+      expect(facts.find((fact) => fact.field === "release.sha")?.href).toContain("tab=releases");
+    } finally {
+      await client`DELETE FROM trader_admin_job_run WHERE id=${id}::uuid`;
+    }
+  });
   it("serves disabled-model quick answers with exact scoped money, source links and complete aggregates", async () => {
     delete process.env.WAIA_ADMIN_ASSISTANT_ENABLED;
     const quick = await handleAdminConsoleAssistantQuickAnswersGet(
