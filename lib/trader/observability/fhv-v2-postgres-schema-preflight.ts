@@ -28,6 +28,8 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // 0214 and 0215 are DEE-1050 additive admin console tables + deny-by-default RLS.
 // 0216 is DEE-1071 id-only change-log triggers on existing tables. No required FHV
 // table. Not an H2 or post-H2 production operator step.
+// 0217 adds read-only lookup indexes on existing immutable observations; no
+// required FHV table, data rewrite, grant or policy change.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -38,6 +40,7 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 214, when: 1780000000214, tag: "0214_trader_admin_console_v2" },
   { idx: 215, when: 1780000000215, tag: "0215_trader_admin_console_v2_rls" },
   { idx: 216, when: 1780000000216, tag: "0216_trader_admin_change_log_triggers" },
+  { idx: 217, when: 1780000000217, tag: "0217_admin_observation_read_indexes" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
