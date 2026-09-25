@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -36,7 +37,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -68,15 +68,6 @@ export type MiObservationServiceBundle = {
   /** Own DB-backed repository handle — not shared with execution/risk/gate paths (R5). */
   observationRepository: MiObservationRepository;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiObservationServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -132,8 +123,7 @@ function createService(
 ): MiObservationService {
   return {
     async resolveInternalMsvSource(context) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const existing = await sourceRepo.findSourceByLogicalKey(
         scoped,
@@ -163,8 +153,7 @@ function createService(
     },
 
     async recordObservation(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const source = await sourceRepo.getSourceById(scoped, input.sourceId);
       if (!source) {
@@ -236,8 +225,7 @@ function createService(
     },
 
     async appendObservationRevision(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const source = await sourceRepo.getSourceById(scoped, input.sourceId);
       if (!source) {
@@ -317,20 +305,17 @@ function createService(
     },
 
     async getLatestObservation(context, observationKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return obsRepo.getLatestObservation(scoped, observationKey);
     },
 
     async getObservationHistory(context, observationKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return obsRepo.listObservationHistory(scoped, observationKey);
     },
 
     async listObservations(context, observationKind) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return obsRepo.listObservations(scoped, observationKind);
     },
   };
@@ -342,7 +327,9 @@ export function createSqliteMiObservationService(
   deps: MiObservationServiceDeps = {},
 ): MiObservationServiceBundle {
   const observationRepository = createSqliteMiObservationRepository(db);
-  const observation = createService(observationRepository, sourceRepo, deps, (input) =>
+  const observation = createService(observationRepository, sourceRepo,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
+    (input) =>
     writeTraderAuditLogSqlite(db, input),
   );
   return { observation, observationRepository };
@@ -354,7 +341,9 @@ export function createPostgresMiObservationService(
   deps: MiObservationServiceDeps = {},
 ): MiObservationServiceBundle {
   const observationRepository = createPostgresMiObservationRepository(ex);
-  const observation = createService(observationRepository, sourceRepo, deps, (input) =>
+  const observation = createService(observationRepository, sourceRepo,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
+    (input) =>
     writeTraderAuditLogPostgres(ex, input),
   );
   return { observation, observationRepository };

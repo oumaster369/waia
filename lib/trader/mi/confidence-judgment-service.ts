@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -64,7 +65,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -105,15 +105,6 @@ export type MiConfidenceJudgmentServiceBundle = {
   confidenceJudgment: MiConfidenceJudgmentService;
   confidenceJudgmentRepository: MiConfidenceJudgmentRepository;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiConfidenceJudgmentServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -287,8 +278,7 @@ function createService(
 
   return {
     async recordConfidenceJudgment(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const actor = assertHumanConfidenceActor(input, deps);
       assertPit(input.eventTime, input.ingestTime);
 
@@ -442,8 +432,7 @@ function createService(
     },
 
     async getCurrentConfidenceJudgment(context, hypothesisId, asOf = new Date()) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const hypothesis = await loadHypothesisOrNull(scoped, hypothesisId);
       if (!hypothesis) return null;
       const judgments = await judgmentRepo.listJudgmentsForHypothesisId(scoped, hypothesisId);
@@ -451,8 +440,7 @@ function createService(
     },
 
     async getConfidenceEligibility(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const ctx = await buildDerivationContext(scoped, input.hypothesisId, input.asOf);
       if (!ctx) return null;
 
@@ -466,8 +454,7 @@ function createService(
     },
 
     async getConfidenceEligibilityForLatestVersion(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const latest = await hypothesisRepo.getLatestHypothesis(scoped, input.hypothesisKey);
       if (!latest) return null;
       const eligibility = await this.getConfidenceEligibility(scoped, {
@@ -479,8 +466,7 @@ function createService(
     },
 
     async getConfidenceSignals(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const ctx = await buildDerivationContext(scoped, input.hypothesisId, input.asOf);
       if (!ctx) return null;
 
@@ -543,8 +529,7 @@ function createService(
     },
 
     async getConfidenceJudgmentHistory(context, hypothesisId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const hypothesis = await loadHypothesisOrNull(scoped, hypothesisId);
       if (!hypothesis) {
         throw new MiHypothesisNotFoundError(
@@ -569,7 +554,7 @@ export function createSqliteMiConfidenceJudgmentService(
     hypothesisRepository,
     evidenceRepository,
     trialIntegrityRepository,
-    deps,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
     (input) => writeTraderAuditLogSqlite(db, input),
   );
   return { confidenceJudgment, confidenceJudgmentRepository };
@@ -588,7 +573,7 @@ export function createPostgresMiConfidenceJudgmentService(
     hypothesisRepository,
     evidenceRepository,
     trialIntegrityRepository,
-    deps,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
     (input) => writeTraderAuditLogPostgres(ex, input),
   );
   return { confidenceJudgment, confidenceJudgmentRepository };

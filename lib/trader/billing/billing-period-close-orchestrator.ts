@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -33,7 +34,7 @@ import {
   type RealizedStrategyProfitReceiptV2,
 } from "@/lib/trader/billing/v2";
 import { traderAuditActions } from "@/lib/trader/types";
-import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import { assertOrgMembershipPostgres, assertOrgMembershipSqlite, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
 export type CloseAndMaterializeInput = {
   exchangeAccountId: string;
@@ -68,6 +69,7 @@ export type BillingPeriodCloseResult = {
 };
 
 export type BillingPeriodCloseOrchestratorDeps = {
+  assertMembership?: (context: OrgContext & { userId: string }) => void | Promise<void>;
   reportingPeriodLifecycle: ReportingPeriodLifecycleService;
   hwmLedger: HwmLedgerService;
   draftInvoiceService: DraftInvoiceService;
@@ -83,7 +85,7 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
       context: OrgContext,
       input: CloseAndMaterializeInput,
     ): Promise<BillingPeriodCloseResult> {
-      const scoped = requireOrgContext(context.organizationId);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const auditActions: string[] = [];
 
       if (
@@ -193,7 +195,7 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
       context: OrgContext,
       input: MaterializeDraftInput,
     ): Promise<BillingPeriodCloseResult> {
-      const scoped = requireOrgContext(context.organizationId);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const auditActions: string[] = [];
 
       const period = await deps.reportingPeriodLifecycle.getReportingPeriodById(
@@ -253,11 +255,14 @@ export function createSqliteBillingPeriodCloseOrchestrator(
   db: WaiaDb,
   deps: Partial<BillingPeriodCloseOrchestratorDeps> = {},
 ): BillingPeriodCloseOrchestrator {
+  const assertMembership = deps.assertMembership ?? ((context: OrgContext & { userId: string }) =>
+    assertOrgMembershipSqlite(db, context));
   return createBillingPeriodCloseOrchestrator({
+    assertMembership,
     reportingPeriodLifecycle:
-      deps.reportingPeriodLifecycle ?? createSqliteReportingPeriodLifecycleService(db),
-    hwmLedger: deps.hwmLedger ?? createSqliteHwmLedgerService(db),
-    draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db),
+      deps.reportingPeriodLifecycle ?? createSqliteReportingPeriodLifecycleService(db, { assertMembership }),
+    hwmLedger: deps.hwmLedger ?? createSqliteHwmLedgerService(db, { assertMembership }),
+    draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db, { assertMembership }),
   });
 }
 
@@ -266,10 +271,13 @@ export function createPostgresBillingPeriodCloseOrchestrator(
   deps: Partial<BillingPeriodCloseOrchestratorDeps> = {},
   db?: WaiaPostgresDb,
 ): BillingPeriodCloseOrchestrator {
+  const assertMembership = deps.assertMembership ?? ((context: OrgContext & { userId: string }) =>
+    assertOrgMembershipPostgres(ex, context));
   return createBillingPeriodCloseOrchestrator({
+    assertMembership,
     reportingPeriodLifecycle:
-      deps.reportingPeriodLifecycle ?? createPostgresReportingPeriodLifecycleService(ex, {}, db),
-    hwmLedger: deps.hwmLedger ?? createPostgresHwmLedgerService(ex, {}, db),
-    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, {}, db),
+      deps.reportingPeriodLifecycle ?? createPostgresReportingPeriodLifecycleService(ex, { assertMembership }, db),
+    hwmLedger: deps.hwmLedger ?? createPostgresHwmLedgerService(ex, { assertMembership }, db),
+    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, { assertMembership }, db),
   });
 }

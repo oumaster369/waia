@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -49,7 +50,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -91,15 +91,6 @@ export type MiPatternServiceBundle = {
   /** Own DB-backed repository handle — not shared with execution/risk/gate paths. */
   patternRepository: MiPatternRepository;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiPatternServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 /** P5/RC-5 firewall: a definition must not encode Hypothesis/Regime-Knowledge claims. */
 function assertFirewall(definition: PatternDefinition): void {
@@ -182,8 +173,7 @@ function createService(
     target: MiPatternLifecycleState,
     action: TraderAuditInput["action"],
   ): Promise<MiPatternLifecycleEvent> {
-    const scoped = requireOrgContext(context.organizationId);
-    await assertMembershipIfNeeded(scoped, deps.assertMembership);
+    const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
     const latestPattern = await repo.getLatestPattern(scoped, input.patternKey);
     if (!latestPattern) {
@@ -241,8 +231,7 @@ function createService(
 
   return {
     async registerPattern(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       assertFirewall(input.definition);
       assertTrialBudgetMax(input.trialBudgetMax);
       await assertMeasurementRefs(scoped, measurementRepo, input.definition);
@@ -343,8 +332,7 @@ function createService(
     },
 
     async appendPatternVersion(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       assertFirewall(input.definition);
       await assertMeasurementRefs(scoped, measurementRepo, input.definition);
 
@@ -432,39 +420,33 @@ function createService(
     },
 
     async getLatestPattern(context, patternKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.getLatestPattern(scoped, patternKey);
     },
 
     async getPatternHistory(context, patternKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listPatternHistory(scoped, patternKey);
     },
 
     async listPatterns(context, patternKind) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listPatterns(scoped, patternKind);
     },
 
     async getCurrentLifecycleState(context, patternKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const latest = await repo.getLatestLifecycleEvent(scoped, patternKey);
       return latest?.lifecycleState ?? null;
     },
 
     async listLifecycleEvents(context, patternKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listLifecycleEvents(scoped, patternKey);
     },
 
     async findActivePatternByStructuralSignature(context, structuralSignature) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.findActivePatternByStructuralSignature(scoped, structuralSignature);
     },
   };
@@ -476,7 +458,9 @@ export function createSqliteMiPatternService(
 ): MiPatternServiceBundle {
   const patternRepository = createSqliteMiPatternRepository(db);
   const measurementRepository = createSqliteMiMeasurementRepository(db);
-  const pattern = createService(patternRepository, measurementRepository, deps, (input) =>
+  const pattern = createService(patternRepository, measurementRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
+    (input) =>
     writeTraderAuditLogSqlite(db, input),
   );
   return { pattern, patternRepository };
@@ -488,7 +472,9 @@ export function createPostgresMiPatternService(
 ): MiPatternServiceBundle {
   const patternRepository = createPostgresMiPatternRepository(ex);
   const measurementRepository = createPostgresMiMeasurementRepository(ex);
-  const pattern = createService(patternRepository, measurementRepository, deps, (input) =>
+  const pattern = createService(patternRepository, measurementRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
+    (input) =>
     writeTraderAuditLogPostgres(ex, input),
   );
   return { pattern, patternRepository };

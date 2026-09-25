@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -37,7 +38,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -63,15 +63,6 @@ export type MiTrialServiceBundle = {
   trial: MiTrialService;
   trialRepository: MiTrialRepository;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiTrialServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -164,8 +155,7 @@ function createService(
 ): MiTrialService {
   return {
     async registerTrial(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const { researchProgram } = assertClosedInput(input);
       assertPit(input.eventTime, input.ingestTime);
@@ -241,26 +231,22 @@ function createService(
     },
 
     async listTrials(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return trialRepo.listTrials(scoped, hypothesisKey);
     },
 
     async listTrialsByHypothesisId(context, hypothesisId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return trialRepo.listTrialsByHypothesisId(scoped, hypothesisId);
     },
 
     async getTrialById(context, trialId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return trialRepo.findTrialById(scoped, trialId);
     },
 
     async getTrialCounts(context, hypothesisKey, hypothesisId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const byKey = await trialRepo.listTrials(scoped, hypothesisKey);
       const byId = await trialRepo.listTrialsByHypothesisId(scoped, hypothesisId);
       const latestSeq = byKey.length > 0 ? byKey[byKey.length - 1].seq : null;
@@ -272,8 +258,7 @@ function createService(
     },
 
     async getTrialPinnedClaim(context, trialId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const trial = await trialRepo.findTrialById(scoped, trialId);
       if (!trial) return null;
 
@@ -299,7 +284,9 @@ export function createSqliteMiTrialService(
 ): MiTrialServiceBundle {
   const trialRepository = createSqliteMiTrialRepository(db);
   const hypothesisRepository = createSqliteMiHypothesisRepository(db);
-  const trial = createService(trialRepository, hypothesisRepository, deps, (input) =>
+  const trial = createService(trialRepository, hypothesisRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
+    (input) =>
     writeTraderAuditLogSqlite(db, input),
   );
   return { trial, trialRepository };
@@ -311,7 +298,9 @@ export function createPostgresMiTrialService(
 ): MiTrialServiceBundle {
   const trialRepository = createPostgresMiTrialRepository(ex);
   const hypothesisRepository = createPostgresMiHypothesisRepository(ex);
-  const trial = createService(trialRepository, hypothesisRepository, deps, (input) =>
+  const trial = createService(trialRepository, hypothesisRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
+    (input) =>
     writeTraderAuditLogPostgres(ex, input),
   );
   return { trial, trialRepository };

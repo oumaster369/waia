@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -60,7 +61,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -86,15 +86,6 @@ export type MiEvidenceServiceBundle = {
   evidence: MiEvidenceService;
   evidenceRepository: MiEvidenceRepository;
 };
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiEvidenceServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -267,8 +258,7 @@ function createService(
 ): MiEvidenceService {
   return {
     async recordEvidence(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const parsed = assertClosedInput(input);
       assertPit(input.eventTime, input.ingestTime);
@@ -366,20 +356,17 @@ function createService(
     },
 
     async listEvidence(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return evidenceRepo.listEvidence(scoped, hypothesisKey);
     },
 
     async getEvidenceById(context, evidenceId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return evidenceRepo.findEvidenceById(scoped, evidenceId);
     },
 
     async listEvidenceByDirection(context, hypothesisKey, direction) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       if (!EVIDENCE_DIRECTION_SET.has(direction)) {
         throw new MiEvidenceInputValidationError(
           `MI_EVIDENCE_INPUT_INVALID: unknown direction '${direction}'`,
@@ -389,8 +376,7 @@ function createService(
     },
 
     async getEvidenceSummary(context, hypothesisKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       const rows = await evidenceRepo.listEvidence(scoped, hypothesisKey);
       let forCount = 0;
       let againstCount = 0;
@@ -424,7 +410,7 @@ export function createSqliteMiEvidenceService(
     measurementRepository,
     observationRepository,
     trialRepository,
-    deps,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
     (input) => writeTraderAuditLogSqlite(db, input),
   );
   return { evidence, evidenceRepository };
@@ -445,7 +431,7 @@ export function createPostgresMiEvidenceService(
     measurementRepository,
     observationRepository,
     trialRepository,
-    deps,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
     (input) => writeTraderAuditLogPostgres(ex, input),
   );
   return { evidence, evidenceRepository };

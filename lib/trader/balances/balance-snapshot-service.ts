@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -23,20 +24,10 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
 type PgBalanceSnapshotExecutor = Pick<WaiaPostgresDb, "select" | "insert">;
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: BalanceSnapshotServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 function buildAuditInput(
   context: OrgContext,
@@ -64,8 +55,7 @@ export function createBalanceSnapshotService(
       context: OrgContext,
       input: RecordBalanceSnapshotInput,
     ): Promise<BalanceSnapshotMetadata> {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const row = await deps.repository.insertBalanceSnapshotRow(scoped, {
         credentialId: input.credentialId,
@@ -98,8 +88,7 @@ export function createBalanceSnapshotService(
     },
 
     async listSnapshots(context: OrgContext, query = {}): Promise<BalanceSnapshotMetadata[]> {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const rows = await deps.repository.listBalanceSnapshotRows(scoped, query);
       return rows.map(toBalanceSnapshotMetadata);

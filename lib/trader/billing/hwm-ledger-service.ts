@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -29,7 +30,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -80,15 +80,6 @@ export type HwmLedgerService = {
   listHwmLedger(context: OrgContext, query?: ListHwmLedgerQuery): Promise<HwmLedgerRecordView[]>;
 };
 
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: HwmLedgerServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
-
 function buildAuditInput(
   action: TraderAuditInput["action"],
   context: OrgContext,
@@ -111,8 +102,7 @@ function buildAuditInput(
 export function createHwmLedgerService(deps: HwmLedgerServiceDeps): HwmLedgerService {
   return {
     async bootstrapHwm(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const existing = await deps.repository.findBootstrapEntry(scoped, input.exchangeAccountId);
       if (existing) {
@@ -149,14 +139,12 @@ export function createHwmLedgerService(deps: HwmLedgerServiceDeps): HwmLedgerSer
     },
 
     async getCurrentHwm(context, exchangeAccountId) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return deps.repository.getCurrentEntry(scoped, exchangeAccountId);
     },
 
     async recordHwmRatchet(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       const current = await deps.repository.getCurrentEntry(scoped, input.exchangeAccountId);
       if (!current) {
@@ -203,8 +191,7 @@ export function createHwmLedgerService(deps: HwmLedgerServiceDeps): HwmLedgerSer
     },
 
     async recordHwmRollback(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
       if (!input.reason.trim()) {
         throw new HwmLedgerRollbackReasonRequiredError();
@@ -246,8 +233,7 @@ export function createHwmLedgerService(deps: HwmLedgerServiceDeps): HwmLedgerSer
     },
 
     async listHwmLedger(context, query = {}) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return deps.repository.listEntries(scoped, query);
     },
   };

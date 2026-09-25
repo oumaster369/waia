@@ -1,3 +1,4 @@
+import { createAdminServiceOrgAccess } from "@/lib/trader/security/admin-service-org-access";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -101,9 +102,13 @@ function createBillingPeriodCloseOrchestrator(
   runtime: Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>,
 ) {
   if (runtime.kind === "sqlite") {
-    return createSqliteBillingPeriodCloseOrchestrator(runtime.db);
+    return createSqliteBillingPeriodCloseOrchestrator(runtime.db, {
+      assertMembership: createAdminServiceOrgAccess(runtime, "admin.audit.read"),
+    });
   }
-  return createPostgresBillingPeriodCloseOrchestrator(runtime.db);
+  return createPostgresBillingPeriodCloseOrchestrator(runtime.db, {
+      assertMembership: createAdminServiceOrgAccess(runtime, "admin.audit.read"),
+    });
 }
 
 function parseRequiredString(value: unknown, field: string): string | AdminRouteHandlerResult {

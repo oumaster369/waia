@@ -1,3 +1,4 @@
+import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -35,7 +36,6 @@ import { traderAuditActions, traderEntityTypes, type TraderAuditInput } from "@/
 import {
   assertOrgMembershipPostgres,
   assertOrgMembershipSqlite,
-  requireOrgContext,
   type OrgContext,
 } from "@/lib/waia-core/scope/org-context";
 
@@ -68,15 +68,6 @@ export type MiMeasurementServiceBundle = {
 };
 
 const KNOWN_OBSERVATION_KINDS = new Set<string>(miObservationKindValues);
-
-async function assertMembershipIfNeeded(
-  context: OrgContext,
-  assertMembership: MiMeasurementServiceDeps["assertMembership"],
-): Promise<void> {
-  if (context.userId && assertMembership) {
-    await assertMembership({ organizationId: context.organizationId, userId: context.userId });
-  }
-}
 
 /** Declarative lineage validation (M6): definition must declare ≥1 known input observation kind. */
 function assertDeclaredInputs(definition: MeasurementDefinition): void {
@@ -121,8 +112,7 @@ function createService(
 ): MiMeasurementService {
   return {
     async registerMeasurement(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       assertDeclaredInputs(input.definition);
 
       const measurementKey = computeMeasurementKey({
@@ -183,8 +173,7 @@ function createService(
     },
 
     async appendMeasurementVersion(context, input) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       assertDeclaredInputs(input.definition);
 
       const measurementKey = computeMeasurementKey({
@@ -254,20 +243,17 @@ function createService(
     },
 
     async getLatestMeasurement(context, measurementKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.getLatestMeasurement(scoped, measurementKey);
     },
 
     async getMeasurementHistory(context, measurementKey) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listMeasurementHistory(scoped, measurementKey);
     },
 
     async listMeasurements(context, measurementKind) {
-      const scoped = requireOrgContext(context.organizationId);
-      await assertMembershipIfNeeded(scoped, deps.assertMembership);
+      const scoped = await requireServiceOrgContext(context, deps.assertMembership);
       return repo.listMeasurements(scoped, measurementKind);
     },
   };
@@ -278,7 +264,9 @@ export function createSqliteMiMeasurementService(
   deps: MiMeasurementServiceDeps = {},
 ): MiMeasurementServiceBundle {
   const measurementRepository = createSqliteMiMeasurementRepository(db);
-  const measurement = createService(measurementRepository, deps, (input) =>
+  const measurement = createService(measurementRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context)) },
+    (input) =>
     writeTraderAuditLogSqlite(db, input),
   );
   return { measurement, measurementRepository };
@@ -289,7 +277,9 @@ export function createPostgresMiMeasurementService(
   deps: MiMeasurementServiceDeps = {},
 ): MiMeasurementServiceBundle {
   const measurementRepository = createPostgresMiMeasurementRepository(ex);
-  const measurement = createService(measurementRepository, deps, (input) =>
+  const measurement = createService(measurementRepository,
+    { ...deps, assertMembership: deps.assertMembership ?? ((context) => assertOrgMembershipPostgres(ex, context)) },
+    (input) =>
     writeTraderAuditLogPostgres(ex, input),
   );
   return { measurement, measurementRepository };
