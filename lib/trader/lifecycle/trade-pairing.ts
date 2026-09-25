@@ -1,8 +1,11 @@
+import {
+  lifecycleFillEconomics,
+  allocateLifecycleFee,
+} from "@/lib/trader/lifecycle/fill-fee-economics";
 import type { FillRow, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import {
   addDecimal,
   compareDecimal,
-  divideDecimal,
   multiplyDecimal,
   subtractDecimal,
 } from "@/lib/trader/risk/numeric";
@@ -11,7 +14,6 @@ import type {
   PairingKey,
   PositionLotRow,
   PositionSide,
-  TradeLegKind,
   TradeLegRow,
   TradeLineageAtOpen,
   TradeRow,
@@ -142,6 +144,7 @@ function applyBuyFill(
     accountKey,
   });
 
+  const economics = lifecycleFillEconomics(order, fill);
   const trade = createEmptyTrade({
     id: ids.tradeId,
     organizationId: order.organizationId,
@@ -167,8 +170,8 @@ function applyBuyFill(
     openingCausalLineageJson: lineage.openingCausalLineageJson ?? null,
     openingCausalLineageDigest: lineage.openingCausalLineageDigest ?? null,
     state: "OPEN",
-    openQty: fill.quantity,
-    remainingQty: fill.quantity,
+    openQty: economics.inventoryQuantity,
+    remainingQty: economics.inventoryQuantity,
     avgCost: fill.price,
     openedAt: fill.executedAt,
     closedAt: null,
@@ -228,9 +231,17 @@ function applySellFill(
     );
   }
 
-  let remainingSellQty = fill.quantity;
-  const quoteFeePerUnit =
-    compareDecimal(fill.quantity, "0") > 0 ? divideDecimal(fill.fee, fill.quantity) : "0";
+  const economics = lifecycleFillEconomics(order, fill);
+  if (
+    compareDecimal(
+      bucket.openLots.reduce((sum, row) => addDecimal(sum, row.remainingQty), "0"),
+      economics.inventoryQuantity,
+    ) < 0
+  )
+    throw new Error(`[trader/lifecycle/pairing] insufficient open qty for sell fill ${fill.id}`);
+  let remainingSellQty = economics.inventoryQuantity;
+  let remainingNativeFee = economics.nativeFee;
+  let remainingQuoteFee = economics.quoteFee;
 
   while (compareDecimal(remainingSellQty, "0") > 0) {
     const lot = bucket.openLots[0];
@@ -243,8 +254,11 @@ function applySellFill(
 
     const proceeds = multiplyDecimal(fill.price, closeQty);
     const cost = multiplyDecimal(closeQty, lot.avgCost);
-    const legFee = multiplyDecimal(quoteFeePerUnit, closeQty);
-    const legPnl = subtractDecimal(subtractDecimal(proceeds, cost), legFee);
+    const legFee = allocateLifecycleFee(remainingNativeFee, closeQty, remainingSellQty);
+    const quoteLegFee = allocateLifecycleFee(remainingQuoteFee, closeQty, remainingSellQty);
+    const legPnl = subtractDecimal(subtractDecimal(proceeds, cost), quoteLegFee);
+    remainingNativeFee = subtractDecimal(remainingNativeFee, legFee);
+    remainingQuoteFee = subtractDecimal(remainingQuoteFee, quoteLegFee);
 
     snapshot.legs.push({
       id: `${ids.legId}:${snapshot.legs.length}`,

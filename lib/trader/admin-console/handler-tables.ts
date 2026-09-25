@@ -74,6 +74,7 @@ const FINANCIAL_SNAPSHOT_TABLES = [
   "trader_admin_account_valuation",
   "trader_trades",
   "trader_fills",
+  "trader_lifecycle_events",
   "trader_admin_equity_point",
   "trader_invoices",
 ] as const;

@@ -24,6 +24,8 @@ export type OperationalLeg = {
   price: string;
   baseAsset: string;
   quoteAsset: string;
+  /** Only from a matching append-only lifecycle event for this exact close leg. */
+  verifiedCloseFeeQuote?: string | null;
 };
 
 export type OperationalPnl = {
@@ -40,6 +42,8 @@ function inPeriod(at: string, start: string, end: string): boolean {
 }
 
 function feeInQuote(leg: OperationalLeg): { amount: string } | { reason: string } {
+  if (leg.kind === "CLOSE" && leg.verifiedCloseFeeQuote != null)
+    return { amount: leg.verifiedCloseFeeQuote };
   if (compareDecimal(leg.fee, "0") === 0) return { amount: "0" };
   const asset = leg.feeAsset.toUpperCase();
   if (asset === leg.quoteAsset.toUpperCase()) return { amount: leg.fee };
@@ -102,7 +106,8 @@ function computeOperationalPnl(
       // leg_pnl; do not silently reinterpret historical accounting records.
       if (
         compareDecimal(leg.fee, "0") !== 0 &&
-        leg.feeAsset.toUpperCase() !== leg.quoteAsset.toUpperCase()
+        leg.feeAsset.toUpperCase() !== leg.quoteAsset.toUpperCase() &&
+        leg.verifiedCloseFeeQuote == null
       ) {
         reasons.push("CLOSE_FEE_DENOMINATION_UNVERIFIED");
         state = "partial";

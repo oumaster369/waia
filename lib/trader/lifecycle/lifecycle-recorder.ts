@@ -1,3 +1,8 @@
+import {
+  lifecycleFillEconomics,
+  allocateLifecycleFee,
+  LIFECYCLE_FEE_ACCOUNTING_VERSION,
+} from "@/lib/trader/lifecycle/fill-fee-economics";
 import type { FillRow, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import type { GuardianReasonRecord } from "@/lib/trader/guardian/guardian-reason-record.types";
 import type { ExitIntent } from "@/lib/trader/guardian/guardian.types";
@@ -160,6 +165,7 @@ async function recordBuyFill(
 ): Promise<void> {
   const newId = deps.newId ?? (() => crypto.randomUUID());
   const { context, order, fill, accountKey, lineage } = input;
+  const economics = lifecycleFillEconomics(order, fill);
   const tradeId = newId();
   const lotId = newId();
   const legId = newId();
@@ -213,8 +219,8 @@ async function recordBuyFill(
       openingCausalLineageJson: lineage.openingCausalLineageJson ?? null,
       openingCausalLineageDigest: lineage.openingCausalLineageDigest ?? null,
       state: "OPEN",
-      openQty: fill.quantity,
-      remainingQty: fill.quantity,
+      openQty: economics.inventoryQuantity,
+      remainingQty: economics.inventoryQuantity,
       avgCost: fill.price,
       openedAt: fill.executedAt,
       closedAt: null,
@@ -248,7 +254,12 @@ async function recordBuyFill(
     entityId: fill.id,
     phase: "ORDER_FILLED",
     occurredAt: fill.executedAt,
-    payload: { orderId: order.id },
+    payload: {
+      orderId: order.id,
+      legId,
+      feeAccountingVersion: LIFECYCLE_FEE_ACCOUNTING_VERSION,
+      inventoryQuantity: economics.inventoryQuantity,
+    },
   });
   await recordLifecyclePhase(deps, {
     context,
@@ -283,9 +294,17 @@ async function recordSellFill(
   }
 
   let lot = openLots[0]!;
-  let remainingSellQty = fill.quantity;
-  const quoteFeePerUnit =
-    compareDecimal(fill.quantity, "0") > 0 ? divideDecimal(fill.fee, fill.quantity) : "0";
+  const economics = lifecycleFillEconomics(order, fill);
+  if (
+    compareDecimal(
+      openLots.reduce((sum, row) => addDecimal(sum, row.remainingQty), "0"),
+      economics.inventoryQuantity,
+    ) < 0
+  )
+    throw new Error(`[trader/lifecycle/recorder] insufficient open qty for sell fill ${fill.id}`);
+  let remainingSellQty = economics.inventoryQuantity;
+  let remainingNativeFee = economics.nativeFee;
+  let remainingQuoteFee = economics.quoteFee;
 
   while (compareDecimal(remainingSellQty, "0") > 0) {
     const closeQty =
@@ -293,12 +312,16 @@ async function recordSellFill(
 
     const proceeds = multiplyDecimal(fill.price, closeQty);
     const cost = multiplyDecimal(closeQty, lot.avgCost);
-    const legFee = multiplyDecimal(quoteFeePerUnit, closeQty);
-    const legPnl = subtractDecimal(subtractDecimal(proceeds, cost), legFee);
+    const legFee = allocateLifecycleFee(remainingNativeFee, closeQty, remainingSellQty);
+    const quoteLegFee = allocateLifecycleFee(remainingQuoteFee, closeQty, remainingSellQty);
+    const legPnl = subtractDecimal(subtractDecimal(proceeds, cost), quoteLegFee);
+    remainingNativeFee = subtractDecimal(remainingNativeFee, legFee);
+    remainingQuoteFee = subtractDecimal(remainingQuoteFee, quoteLegFee);
 
+    const closeLegId = newId();
     await deps.repository.insertTradeLeg(context, {
       leg: {
-        id: newId(),
+        id: closeLegId,
         organizationId: context.organizationId,
         tradeId: lot.tradeId,
         positionLotId: lot.id,
@@ -385,7 +408,15 @@ async function recordSellFill(
       entityId: fill.id,
       phase: "ORDER_FILLED",
       occurredAt: fill.executedAt,
-      payload: { orderId: order.id, positionLotId: lot.id },
+      payload: {
+        orderId: order.id,
+        positionLotId: lot.id,
+        legId: closeLegId,
+        feeAccountingVersion: LIFECYCLE_FEE_ACCOUNTING_VERSION,
+        nativeFee: legFee,
+        quoteFee: quoteLegFee,
+        inventoryQuantity: closeQty,
+      },
     });
 
     remainingSellQty = subtractDecimal(remainingSellQty, closeQty);

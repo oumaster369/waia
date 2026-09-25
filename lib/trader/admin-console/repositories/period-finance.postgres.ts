@@ -14,7 +14,7 @@ import {
 } from "@/lib/trader/admin-console/money/period-result";
 import type { OperationalLeg } from "@/lib/trader/admin-console/money/operational-pnl";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
-import { isPositiveDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
+import { compareDecimal, isPositiveDecimal, multiplyDecimal } from "@/lib/trader/risk/numeric";
 import { quoteIsStale, type AssetQuote } from "@/lib/trader/admin-console/money/quotes";
 import {
   periodSeries,
@@ -22,7 +22,38 @@ import {
   type PeriodSeriesPoint,
 } from "@/lib/trader/admin-console/money/period-series";
 
+import { LIFECYCLE_FEE_ACCOUNTING_VERSION } from "@/lib/trader/lifecycle/fill-fee-economics";
+
 type Row = Record<string, unknown>;
+function verifiedCloseFee(row: Row): string | null {
+  if (row.kind !== "CLOSE_FILL" || !Array.isArray(row.fee_evidence)) return null;
+  for (const payload of row.fee_evidence) {
+    try {
+      const evidence = JSON.parse(String(payload));
+      if (
+        evidence.feeAccountingVersion === LIFECYCLE_FEE_ACCOUNTING_VERSION &&
+        evidence.legId === row.leg_id &&
+        compareDecimal(
+          String(evidence.nativeFee),
+          String(row.fee)
+            .replace(/(\.\d*?)0+$/, "$1")
+            .replace(/\.$/, ""),
+        ) === 0 &&
+        compareDecimal(
+          String(evidence.inventoryQuantity),
+          String(row.quantity)
+            .replace(/(\.\d*?)0+$/, "$1")
+            .replace(/\.$/, ""),
+        ) === 0 &&
+        compareDecimal(String(evidence.quoteFee), "0") >= 0
+      )
+        return String(evidence.quoteFee);
+    } catch {
+      /* malformed or foreign evidence does not authorize reinterpretation */
+    }
+  }
+  return null;
+}
 function rows(value: unknown): Row[] {
   return Array.isArray(value) ? (value as Row[]) : [];
 }
@@ -97,7 +128,9 @@ export async function readPeriodFinance(
       ORDER BY t.id LIMIT 5001
     )
     SELECT t.id::text AS trade_id, t.organization_id::text, t.symbol, t.account_key, t.strategy_signal_id,t.state AS trade_state,t.opened_at,t.closed_at,
-      l.id::text AS leg_id, l.kind, l.executed_at, l.leg_pnl, l.fee, l.price,
+      l.id::text AS leg_id, l.kind, l.executed_at, l.leg_pnl, l.fee, l.price, l.quantity,
+      (SELECT array_agg(e.payload) FROM trader_lifecycle_events e WHERE e.organization_id = l.organization_id
+        AND e.entity_type = 'FILL' AND e.entity_id = l.fill_id::text AND e.phase = 'ORDER_FILLED') AS fee_evidence,
       o.id::text AS order_id, o.execution_mode, o.historical_run_id, o.credential_id::text,
       c.id::text AS credential_row_id, c.exchange_account_id, f.fee_asset
     FROM trades t LEFT JOIN trader_trade_legs l ON l.trade_id = t.id AND l.organization_id = t.organization_id
@@ -206,7 +239,8 @@ export async function readPeriodFinance(
         fee: String(row.fee),
         feeAsset: row.fee_asset == null ? "" : String(row.fee_asset),
         price: String(row.price),
-        baseAsset: symbol.slice(0, -4),
+        baseAsset: symbol.slice(0, -4).replace(/[\/_-]$/, ""),
+        verifiedCloseFeeQuote: verifiedCloseFee(row),
         quoteAsset: "USDT",
       });
     }
