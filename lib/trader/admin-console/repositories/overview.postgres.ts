@@ -9,6 +9,8 @@ import {
 } from "@/lib/trader/admin-console/money/account-lots";
 import type { AssetQuote } from "@/lib/trader/admin-console/money/quotes";
 import { selectMarketQuote } from "@/lib/trader/admin-console/money/market-quote";
+import { readPeriodFinance } from "@/lib/trader/admin-console/repositories/period-finance.postgres";
+import { addDecimal } from "@/lib/trader/risk/numeric";
 import { dedupeAccounts, type AccountCredential } from "@/lib/trader/admin-console/accounts/dedupe";
 import { buildOverview } from "@/lib/trader/admin-console/read-models/overview";
 import type { AdminScope } from "@/lib/trader/admin-console/contracts";
@@ -43,6 +45,9 @@ export async function readOverviewSnapshot(
     end: string;
     nowMs: number;
     scope?: AdminScope;
+    includePeriod?: boolean;
+    currentPeriod?: boolean;
+    valuationOffset?: number;
   },
 ) {
   return withAdminReadSnapshot(db, async (tx) => {
@@ -185,7 +190,7 @@ export async function readOverviewSnapshot(
                c.organization_id::text AS credential_organization_id,
                c.exchange_account_id
         FROM trader_position_lots l
-        JOIN trader_trade_legs leg
+        LEFT JOIN trader_trade_legs leg
           ON leg.position_lot_id = l.id
          AND leg.organization_id = l.organization_id
         LEFT JOIN trader_orders o
@@ -208,16 +213,7 @@ export async function readOverviewSnapshot(
         const accountKey = text(row.account_key);
         const legId = text(row.leg_id);
         const legCreatedAt = iso(row.leg_created_at);
-        if (
-          !lotId ||
-          !organizationId ||
-          !symbol ||
-          !remainingQty ||
-          !avgCost ||
-          !accountKey ||
-          !legId ||
-          !legCreatedAt
-        ) {
+        if (!lotId || !organizationId || !symbol || !remainingQty || !avgCost || !accountKey) {
           return [];
         }
         const orderId = text(row.order_id);
@@ -261,7 +257,7 @@ export async function readOverviewSnapshot(
         return [source];
       }),
     );
-    const accounts = grouped.map((group, index) => {
+    let accounts = grouped.map((group, index) => {
       const row = observations.get(
         `${group.venue}:${group.organizationIds[0]}:${group.exchangeAccountId}`,
       );
@@ -285,10 +281,50 @@ export async function readOverviewSnapshot(
         mode,
         nowMs: input.nowMs,
         quotes,
-        valuationDeferred: index >= ACCOUNT_CAP,
+        valuationDeferred:
+          (index - ((input.valuationOffset ?? 0) % grouped.length) + grouped.length) %
+            grouped.length >=
+          ACCOUNT_CAP,
         ...accountLots,
       });
     });
+    const period =
+      input.includePeriod === false
+        ? null
+        : await readPeriodFinance(tx, {
+            accounts,
+            start: input.start,
+            end: input.end,
+            mode,
+            currency: input.currency,
+            quotes,
+            nowMs: input.nowMs,
+            currentPeriod: input.currentPeriod,
+          });
+    if (period)
+      accounts = accounts.map((account) => {
+        const evidence = period.byAccount.get(
+          `${account.organizationId}:${account.exchangeAccountId}`,
+        );
+        return evidence
+          ? {
+              ...account,
+              traderPnl: evidence.result.total,
+              periodResult: evidence.result,
+              pnlRevision: evidence.revision,
+              pnlMethod: evidence.method,
+            }
+          : account;
+      });
+    const resultAccounts = accounts.filter((account) => account.included && !account.stale);
+    const component = (
+      name: "realized" | "unrealizedChange" | "openFees" | "closeFees" | "tradingFees",
+    ) => {
+      const values = resultAccounts.map((account) => account.periodResult?.[name] ?? null);
+      return values.length && values.every((value) => value !== null)
+        ? values.reduce<string>((sum, value) => addDecimal(sum, value!), "0")
+        : null;
+    };
     return {
       market: selectMarketQuote(quoteRows, "BTC"),
       overview: buildOverview(accounts, {
@@ -302,6 +338,31 @@ export async function readOverviewSnapshot(
       accounts,
       mode: mode as "live" | "paper" | "history",
       capped: grouped.length > ACCOUNT_CAP,
+      period: period
+        ? {
+            accounts: [...period.byAccount].map(([account, evidence]) => ({
+              account,
+              ...evidence,
+            })),
+            serviceFees: period.serviceFees,
+            breakdown: {
+              realized: component("realized"),
+              unrealizedChange: component("unrealizedChange"),
+              openFees: component("openFees"),
+              closeFees: component("closeFees"),
+              tradingFees: component("tradingFees"),
+              included: resultAccounts.length,
+              total: accounts.length,
+              currency: input.currency,
+            },
+            series: period.series,
+            seriesCurrency: period.seriesCurrency,
+            seriesReason: period.seriesReason,
+            seriesFx: period.seriesFx,
+            grain: period.grain,
+            missing: period.missing,
+          }
+        : null,
     };
   });
 }

@@ -26,7 +26,7 @@ function linkedSource(stageId: number, link: CycleTraceLink): string | null {
   if (stageId === 13) return link.decisionId;
   if (stageId === 14 && link.decisionId) return link.riskVerdictId;
   if (stageId === 15 && link.decisionId) return link.executionPlanId;
-  if (stageId === 16 && link.executionPlanId) return link.orderId ?? link.fillId;
+  if (stageId === 16 && link.executionPlanId) return link.fillId;
   return null;
 }
 

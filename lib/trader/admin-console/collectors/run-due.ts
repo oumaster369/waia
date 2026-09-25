@@ -96,6 +96,15 @@ export function collectorTasksFor(input: {
         }),
     });
   }
+  if (due.has("admin_account_valuation")) {
+    tasks.push({
+      key: "admin_account_valuation",
+      run: () =>
+        runCollectedJob(input.store, "admin_account_valuation", () =>
+          input.store.collectValuations(new Date()),
+        ),
+    });
+  }
   if (due.has("admin_fear_greed")) {
     tasks.push({
       key: "admin_fear_greed",

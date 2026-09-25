@@ -41,6 +41,14 @@ export function consoleSchemaGate(tables: readonly string[]): ConsoleSchemaGate 
 
 /** Tables collectors and retention write. Missing any of them skips the cycle. */
 export const COLLECTOR_SCHEMA_TABLES = [
+  "exchange_credentials",
+  "organizations",
+  "users",
+  "trader_position_lots",
+  "trader_trade_legs",
+  "trader_orders",
+  "trader_account_observations",
+  "trader_account_collection_state",
   "trader_admin_market_quote_latest",
   "trader_admin_market_quote_minute",
   "trader_admin_fear_greed",
@@ -63,9 +71,23 @@ const FINANCIAL_SNAPSHOT_TABLES = [
   "trader_orders",
   "trader_account_observations",
   "trader_account_collection_state",
+  "trader_admin_account_valuation",
+  "trader_trades",
+  "trader_fills",
+  "trader_admin_equity_point",
+  "trader_invoices",
 ] as const;
 
 export const HANDLER_TABLES = {
+  news: ["trader_admin_news_item", "trader_admin_news_item_version"],
+  cycles: [
+    "trader_intelligence_cycle_envelope",
+    "trader_historical_simulation_run_start_v2",
+    "trader_intelligence_decision_record",
+    "trader_execution_plans_v2",
+    "trader_orders",
+    "exchange_credentials",
+  ],
   context: [
     "organizations",
     "organization_entitlements",
@@ -76,6 +98,7 @@ export const HANDLER_TABLES = {
   killSwitch: ["trader_kill_switches"],
   accounts: FINANCIAL_SNAPSHOT_TABLES,
   attention: [
+    "trader_admin_diagnostic_event",
     "trader_orders",
     "trader_execution_reports_v2",
     "trader_runtime_authority_assessments_v2",
@@ -116,6 +139,8 @@ export const HANDLER_TABLES = {
   ],
   closedTrades: ["trader_trades", "trader_trade_legs", "trader_orders", "exchange_credentials"],
   cycleTrace: [
+    "trader_historical_simulation_run_start_v2",
+    "exchange_credentials",
     "trader_intelligence_cycle_envelope",
     "trader_intelligence_hypothesis_record",
     "trader_intelligence_forecast_record",

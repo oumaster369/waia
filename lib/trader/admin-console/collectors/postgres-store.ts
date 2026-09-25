@@ -28,6 +28,7 @@ import { RETENTION_DAYS, retentionCutoff } from "@/lib/trader/admin-console/coll
 import { fingerprintDiagnostic } from "@/lib/trader/admin-console/diagnostics/fingerprint";
 import { incidentAfterDiagnostic } from "@/lib/trader/admin-console/diagnostics/incident-follow";
 import { redactDiagnosticText } from "@/lib/trader/admin-console/diagnostics/redact";
+import { collectAccountValuations } from "@/lib/trader/admin-console/collectors/valuation-persist";
 
 const require = createRequire(import.meta.url);
 if (process.env.VITEST !== "true") require("server-only");
@@ -44,6 +45,7 @@ export function diagnosticsEnvironment(env: NodeJS.ProcessEnv = process.env): st
 
 export function createPostgresCollectorStore(db: AdminPostgresDb): CollectorStore {
   return {
+    collectValuations: (now) => collectAccountValuations(db, now),
     async upsertQuotes(latest, minute) {
       await upsertLatest(db, latest);
       await upsertMinute(db, minute);

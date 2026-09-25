@@ -80,7 +80,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       severity: "critical",
       reason: input.killed ? "POSTURE_KILLED" : "RUNTIME_HALT",
       entityIds: [],
-      href: "/admin/runtime-authority",
+      href: "/admin/system?tab=authority",
     });
   }
   if (input.lotsMissingGuardian.length > 0) {
@@ -88,7 +88,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       severity: "critical",
       reason: "GUARDIAN_STALE",
       entityIds: input.lotsMissingGuardian,
-      href: "/admin/positions",
+      href: "/admin/orders?tab=positions",
     });
   }
   const money = [...input.divergentAccountIds, ...input.openReconciliationCaseIds];
@@ -129,7 +129,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       severity: "medium",
       reason: "BILLING_ATTENTION",
       entityIds: [...input.overdueInvoiceIds, ...input.settlementExceptions],
-      href: "/admin/billing",
+      href: "/admin/clients?tab=invoices",
     });
   }
   if (input.blockedPeriodIds.length > 0) {
@@ -137,7 +137,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       severity: "medium",
       reason: "PERIOD_BLOCKED",
       entityIds: input.blockedPeriodIds,
-      href: "/admin/billing",
+      href: "/admin/clients?tab=periods",
     });
   }
   if (input.staleQuietAccountIds.length > 0) {
@@ -153,9 +153,9 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       severity: "low",
       reason: "PROMOTION_REVIEW",
       entityIds: input.promotionProposalIds,
-      href: "/admin/strategy-promotions",
+      href: "/admin/strategies?tab=proposed",
     });
   }
   if (input.noTradeCount < 0) return [];
-  return items;
+  return items.map(item => ({ ...item, entityIds: [...new Set(item.entityIds)].sort() }));
 }

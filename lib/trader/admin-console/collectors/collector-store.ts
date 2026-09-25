@@ -26,6 +26,7 @@ export type CollectorStore = {
   ): Promise<{ id: string; contentHash: string; currentVersion: number } | null>;
   applyNews(write: NewsWrite): Promise<void>;
   retain(now: Date): Promise<number>;
+  collectValuations(now: Date): Promise<{ processed: number; blocked: number }>;
   recordJobRun(run: JobRunWrite): Promise<void>;
   recordDiagnostic(input: { service: string; error: unknown; jobKey?: string }): Promise<void>;
 };
@@ -33,19 +34,19 @@ export type CollectorStore = {
 export async function runCollectedJob(
   store: CollectorStore,
   jobKey: string,
-  work: () => Promise<number>,
+  work: () => Promise<number | { processed: number; blocked: number }>,
 ): Promise<void> {
   const startedAt = new Date();
   try {
-    const processed = await work();
+    const result = await work();
     await safeTelemetry(() =>
       store.recordJobRun({
         jobKey,
         startedAt,
         finishedAt: new Date(),
         status: "succeeded",
-        processed,
-        blocked: 0,
+        processed: typeof result === "number" ? result : result.processed,
+        blocked: typeof result === "number" ? 0 : result.blocked,
         errorClass: null,
         errorMessage: null,
       }),

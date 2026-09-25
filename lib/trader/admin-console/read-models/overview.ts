@@ -4,6 +4,7 @@ import type { AdminFact, AdminMoney } from "@/lib/trader/admin-console/contracts
 import { adminFact } from "@/lib/trader/admin-console/data-state";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { addDecimal } from "@/lib/trader/risk/numeric";
+import type { PeriodResult } from "@/lib/trader/admin-console/money/period-result";
 
 export type OverviewAccount = {
   id: string;
@@ -18,6 +19,9 @@ export type OverviewAccount = {
   traderPnl: string | null;
   observedAt?: string | null;
   reasons?: string[];
+  periodResult?: PeriodResult;
+  pnlRevision?: string;
+  pnlMethod?: string;
 };
 
 export type OverviewSnapshot = {
@@ -104,6 +108,7 @@ export function buildOverview(
             String(account.included),
             String(account.stale),
             account.reason ?? "",
+            account.pnlRevision ?? "",
           ])
           .sort((left, right) => left[0]!.localeCompare(right[0]!)),
         periodBounds: input.periodBounds,
@@ -125,9 +130,30 @@ export function buildOverview(
       holdings: adminFact({ state, value: value(holdings), reasons, times }),
       reserved: adminFact({ state, value: value(reserved), reasons, times }),
       pnl: adminFact({
-        state: pnl === null ? (accounts.length === 0 ? "empty" : "unavailable") : state,
-        value: pnl === null ? null : money(pnl, input.currency, input.method),
-        reasons: pnl === null ? [...reasons, "PNL_PERIOD_EVIDENCE_MISSING"] : reasons,
+        state:
+          pnl === null
+            ? accounts.length === 0
+              ? "empty"
+              : "unavailable"
+            : included.some((account) => account.periodResult?.state !== "ok")
+              ? "partial"
+              : state,
+        value:
+          pnl === null
+            ? null
+            : money(
+                pnl,
+                input.currency,
+                included.find((account) => account.pnlMethod)?.pnlMethod ??
+                  "operational_legs_plus_unrealized_delta:usdt",
+              ),
+        reasons: [
+          ...new Set([
+            ...reasons,
+            ...included.flatMap((account) => account.periodResult?.reasons ?? []),
+            ...(pnl === null ? ["PNL_PERIOD_EVIDENCE_MISSING"] : []),
+          ]),
+        ],
         times,
       }),
     },

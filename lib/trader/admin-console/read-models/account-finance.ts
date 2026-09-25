@@ -10,6 +10,7 @@ import {
 } from "@/lib/trader/admin-console/money/valuation";
 import type { OverviewAccount } from "@/lib/trader/admin-console/read-models/overview";
 import { adminRevision } from "@/lib/trader/admin-console/revision";
+import { quoteSetDigest } from "@/lib/trader/admin-console/money/quotes";
 
 export type ObservationEvidence = { id: string; payload: unknown; recordedAt: string };
 export type AccountFinance = OverviewAccount & {
@@ -23,6 +24,18 @@ export type AccountFinance = OverviewAccount & {
   currency: "USDT" | "USD";
   method: string;
   sourceAt: string | null;
+  traderUnrealized: string | null;
+  traderCostBasis: string | null;
+  traderLotsValue: string | null;
+  externalValue: string | null;
+  nativeValuation: { equity: string; unrealized: string; valuationKey: string } | null;
+  valuationEvidence: {
+    observationId: string;
+    recordedAt: string;
+    lotsRevision: string;
+    quoteSet: readonly AssetQuote[];
+    quoteSetDigest: string;
+  } | null;
 };
 
 /** A missing/failed observation never means a confirmed zero balance. */
@@ -63,6 +76,12 @@ export function buildAccountFinance(input: {
     lockedQuote: null,
     holdingsValue: null,
     traderPnl: null,
+    traderUnrealized: null,
+    traderCostBasis: null,
+    traderLotsValue: null,
+    externalValue: null,
+    nativeValuation: null,
+    valuationEvidence: null,
   };
   const unavailable = (reason: string, state: AdminDataState = "unavailable") => ({
     ...result,
@@ -127,6 +146,19 @@ export function buildAccountFinance(input: {
       ...valued.reasons,
     ]),
   ];
+  const native =
+    input.currency === "USDT"
+      ? valued
+      : valueObservation({
+          observationId: selected.id,
+          recordedAt: selected.recordedAt,
+          balances: observation.balances.values!,
+          quotes: input.quotes,
+          lots: input.lots,
+          lotsRevision: input.lotsRevision,
+          currency: "USDT",
+          nowMs: input.nowMs,
+        });
   const inclusion = equityInclusion(valued.reasons, valued.equity);
   return {
     ...result,
@@ -147,5 +179,24 @@ export function buildAccountFinance(input: {
     freeQuote: valued.freeQuote,
     lockedQuote: valued.lockedQuote,
     holdingsValue: valued.holdingsValue,
+    traderUnrealized: valued.traderUnrealized,
+    traderCostBasis: valued.traderCostBasis,
+    traderLotsValue: valued.traderLotsValue,
+    externalValue: valued.externalValue,
+    nativeValuation:
+      native.state === "ok" && native.equity !== null && native.traderUnrealized !== null
+        ? {
+            equity: native.equity,
+            unrealized: native.traderUnrealized,
+            valuationKey: native.valuationKey,
+          }
+        : null,
+    valuationEvidence: {
+      observationId: selected.id,
+      recordedAt: selected.recordedAt,
+      lotsRevision: input.lotsRevision,
+      quoteSet: valued.quoteSet ?? [],
+      quoteSetDigest: quoteSetDigest(valued.quoteSet ?? []),
+    },
   };
 }

@@ -142,6 +142,7 @@ export function AdminReadContextProvider({ children }: { children: React.ReactNo
       ) {
         params.delete("sel");
         params.delete("detail");
+        params.delete("cycle");
         params.delete("cursor");
       }
       router.push(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false });

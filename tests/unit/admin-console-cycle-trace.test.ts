@@ -36,7 +36,12 @@ describe("cycle trace from stored links", () => {
     expect(completed).toEqual([10, 11, 12, 13, 14, 15, 16]);
     expect(linked.find((stage) => stage.stageId === 4)?.reason).toBe("NOT_PERSISTED_FOR_CYCLE");
     expect(linked.find((stage) => stage.stageId === 17)?.reason).toBe("NOT_PERSISTED_FOR_CYCLE");
-    expect(linked.find((stage) => stage.stageId === 16)?.sourceId).toBe("o-1");
+    expect(linked.find((stage) => stage.stageId === 16)?.sourceId).toBe("fill-1");
+    expect(
+      assembleCycleTrace({ ...EMPTY, executionPlanId: "p-1", orderId: "o-1" }).find(
+        (stage) => stage.stageId === 16,
+      )?.status,
+    ).toBe("unavailable");
   });
 
   it("does not select cycle payloads", () => {

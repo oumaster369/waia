@@ -32,6 +32,7 @@ export async function handleAdminConsoleAccountsGet(
       currency: parsed.query.currency,
       mode: parsed.query.mode,
       nowMs: now.getTime(),
+      currentPeriod: parsed.query.period !== "custom",
     });
     return adminSuccess(
       adminEnvelope({
@@ -40,7 +41,10 @@ export async function handleAdminConsoleAccountsGet(
           aggregate: snapshot.value.overview,
         },
         financeRevision: snapshot.value.overview.financeRevision,
-        missingSources: snapshot.value.capped ? ["ACCOUNT_CAP"] : [],
+        missingSources: [
+          ...(snapshot.value.capped ? ["ACCOUNT_CAP"] : []),
+          ...(snapshot.value.period?.missing ?? []),
+        ],
         cursor: snapshot.cursor,
         coverage: {
           included: snapshot.value.overview.included,
