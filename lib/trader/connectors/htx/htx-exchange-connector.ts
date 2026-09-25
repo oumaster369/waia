@@ -1,5 +1,7 @@
 import "server-only";
 
+import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
+
 import { ConnectorNotSupportedError } from "@/lib/trader/connectors/errors";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
 import type {
@@ -300,7 +302,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
   }
 
   async placeOrder(input: PlaceOrderInput): Promise<Order> {
-    this.assertValidated();
+    this.assertTradePermission();
     assertHtxSpotSymbolAllowed(input.symbol);
     if (input.type === "limit" && !input.price) {
       throw new Error("[trader] HTX placeOrder requires price for limit orders");
@@ -411,7 +413,7 @@ export class HtxExchangeConnector implements ExchangeConnector {
   }
 
   async cancelOrder(orderId: string): Promise<Order> {
-    this.assertValidated();
+    this.assertTradePermission();
     const existing = await this.getOrder(orderId);
     if (!existing) {
       throw new Error(`[trader] HTX cancelOrder: order not found: ${orderId}`);
@@ -471,6 +473,13 @@ export class HtxExchangeConnector implements ExchangeConnector {
   async placeFuturesOrder(input: PlaceOrderInput): Promise<Order> {
     void input;
     throw new ConnectorNotSupportedError("futures order placement");
+  }
+
+  private assertTradePermission(): void {
+    this.assertValidated();
+    if (!permissionIncludesTrade(this.permissionString!)) {
+      throw new HtxConnectorValidationError("TRADE_PERMISSION_REQUIRED", "HTX trade permission was not verified");
+    }
   }
 
   private assertValidated(): void {

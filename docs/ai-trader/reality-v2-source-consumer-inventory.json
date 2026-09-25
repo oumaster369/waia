@@ -31,7 +31,7 @@
     ],
     "expectedFileCount": 155,
     "sortedPathDigestHex": "bb13f0f38f9cab1ac3613294524c2d34fe57bde3f3306a6cd61f211edb9edf68",
-    "sortedContentDigestHex": "314bb753d1ce298e6760dc6c8123428db9a89c8a9763d509d2108af07d6068e2"
+    "sortedContentDigestHex": "3a0ed6f1e9522f0579ffa8f4cc932ed70a6ea97323eb17f00fa3f80c41c1d3c8"
   },
   "sourceRules": [
     {
@@ -109,7 +109,7 @@
     ],
     "expectedFileCount": 134,
     "sortedPathDigestHex": "e07814e366d0b73f3398f20c75fe40abab1898d54f233577e3a0eb0fa67c3473",
-    "sortedContentDigestHex": "bc7d611b66366d68602d6c1567d9db13780f91f828577e8602609e40e93064df"
+    "sortedContentDigestHex": "7333265d09177a8e90cecf2f076b353660529841f2e9bbc08909fde550faa28a"
   },
   "consumerRules": [
     {
@@ -297,6 +297,12 @@
       "method": "placeOrder",
       "occurrences": 1,
       "disposition": "the sole production connector placement effect; its immutable ExecutionReportV2 result is admitted separately"
+    },
+    {
+      "file": "lib/trader/live/live-connector.ts",
+      "method": "getAccountInfo",
+      "occurrences": 1,
+      "disposition": "CREDENTIAL_PERMISSION_CHECK_ONLY — read freshly validated HTX session identity/permissions; no balance/order/fill ingress or Reality promotion."
     },
     {
       "file": "lib/trader/positions/sync-handler.ts",

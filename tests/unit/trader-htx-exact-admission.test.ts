@@ -50,11 +50,14 @@ describe("DEE-956 exact HTX admission", () => {
   });
 
   it.each(["956", "957"])("the stored-credential factory admits only exact account %s", async (exchangeAccountId) => {
-    const { fetchImpl } = harness();
+    const { fetchImpl } = harness({ "/v2/user/api-key": { code: 200, data: [{ ...key, permission: "readOnly,trade" }] } });
     const service: CredentialService = {
       listCredentialMetadata: vi.fn(async () => [{
         id: "mock-credential", venue: "htx", exchangeAccountId, apiKeyMasked: null,
-        status: "active" as const, permissionMetadata: null, createdAt: new Date(0), updatedAt: new Date(0), revokedAt: null,
+        status: "active" as const, permissionMetadata: {
+          version: 1, marketType: "spot", exchangeAccountId, scopes: ["read", "trade"],
+          warnings: [], withdrawForbidden: true, transferForbidden: true,
+        }, createdAt: new Date(0), updatedAt: new Date(0), revokedAt: null,
       }]),
       getDecryptedCredentials: vi.fn(async () => credentials),
       storeCredentials: vi.fn(), revokeCredentials: vi.fn(),
@@ -65,6 +68,52 @@ describe("DEE-956 exact HTX admission", () => {
     if (exchangeAccountId === "957") await expect(pending).rejects.toThrow("exact stored account admission failed");
     else expect((await (await pending).getAccountInfo()).accountId).toBe(exchangeAccountId);
     expect(service.storeCredentials).not.toHaveBeenCalled();
+  });
+
+  it.each([null, { scopes: ["read"] }])("invalid stored metadata is refused before decrypt or probe", async (permissionMetadata) => {
+    const { fetchImpl } = harness();
+    const getDecryptedCredentials = vi.fn(async () => credentials);
+    const service: CredentialService = {
+      listCredentialMetadata: vi.fn(async () => [{
+        id: "mock-credential", venue: "htx", exchangeAccountId: "956", apiKeyMasked: null,
+        status: "active" as const, permissionMetadata, createdAt: new Date(0), updatedAt: new Date(0), revokedAt: null,
+      }]),
+      getDecryptedCredentials, storeCredentials: vi.fn(), revokeCredentials: vi.fn(),
+    };
+    await expect(createLiveHtxConnector({
+      context: { organizationId: "mock-org-956" }, credentialId: "mock-credential", credentialService: service, fetchImpl,
+    })).rejects.toThrow("PERMISSION_METADATA_UNVERIFIED");
+    expect(getDecryptedCredentials).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("fresh read-only downgrade cannot inherit stored trade permission", async () => {
+    const { fetchImpl } = harness();
+    const service: CredentialService = {
+      listCredentialMetadata: vi.fn(async () => [{
+        id: "mock-credential", venue: "htx", exchangeAccountId: "956", apiKeyMasked: null,
+        status: "active" as const, permissionMetadata: {
+          version: 1, marketType: "spot", exchangeAccountId: "956", scopes: ["read", "trade"],
+          warnings: [], withdrawForbidden: true, transferForbidden: true,
+        }, createdAt: new Date(0), updatedAt: new Date(0), revokedAt: null,
+      }]),
+      getDecryptedCredentials: vi.fn(async () => credentials), storeCredentials: vi.fn(), revokeCredentials: vi.fn(),
+    };
+    await expect(createLiveHtxConnector({
+      context: { organizationId: "mock-org-956" }, credentialId: "mock-credential", credentialService: service, fetchImpl,
+    })).rejects.toThrow("fresh trade permission admission failed");
+  });
+
+  it("read-only session admits observation but no order placement or cancellation network call", async () => {
+    const { connector, fetchImpl } = harness();
+    expect((await connector.validateCredentials(credentials)).valid).toBe(true);
+    expect((await connector.getAccountInfo()).permissions).toEqual(["read"]);
+    const probeCalls = vi.mocked(fetchImpl).mock.calls.length;
+    await expect(connector.placeOrder({
+      clientOrderId: "synthetic-only", symbol: "BTC/USDT", side: "buy", type: "market", quantity: "0.001",
+    })).rejects.toThrow("TRADE_PERMISSION_REQUIRED");
+    await expect(connector.cancelOrder("synthetic-order")).rejects.toThrow("TRADE_PERMISSION_REQUIRED");
+    expect(fetchImpl).toHaveBeenCalledTimes(probeCalls);
   });
 
   it("selects the exact key, never the first unrelated row", async () => {
@@ -166,6 +215,7 @@ describe("DEE-956 exact HTX admission", () => {
 
   it("preserves the stored account through the secure resolver", async () => {
     const resolved = resolveHtxSecureCredential({
+        purpose: "read",
       venue: "htx",
       credentials,
       exchangeAccountId: "957",
@@ -187,6 +237,7 @@ describe("DEE-956 exact HTX admission", () => {
   it.each(["", " "])("rejects missing stored account identity %j", (exchangeAccountId) => {
     expect(() =>
       resolveHtxSecureCredential({
+        purpose: "read",
         venue: "htx",
         credentials,
         exchangeAccountId,

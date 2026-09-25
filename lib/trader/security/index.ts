@@ -36,11 +36,13 @@ export {
   HTX_CREDENTIAL_METADATA_VERSION,
   parseHtxPermissionMetadata,
   validateHtxConnectorCredentialInput,
+  type HtxCredentialPurpose,
   type HtxPermissionMetadata,
   type HtxSecureConnectorConfig,
   type HtxStoredCredentialRecord,
 } from "@/lib/trader/security/htx-credential-types";
 export {
+  requireHtxStoredPermissionMetadata,
   resolveHtxSecureCredential,
   toHtxExchangeConnectorConfig,
   type ResolveHtxSecureCredentialInput,

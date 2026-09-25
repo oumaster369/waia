@@ -95,6 +95,39 @@ describe("trader security foundation (DEE-221)", () => {
       expect(parsed?.exchangeAccountId).toBe("100009");
     });
 
+    it.each([
+      { version: 2 }, { version: undefined }, { marketType: "futures" },
+      { scopes: [] }, { scopes: ["trade"] }, { scopes: ["read", "transfer"] },
+      { scopes: ["read", "withdraw"] }, { scopes: ["read", "unknown"] },
+      { scopes: ["read", 1] }, { scopes: "read" }, { warnings: [1] },
+      { withdrawForbidden: false }, { transferForbidden: false },
+      { transferForbidden: "true" }, { withdrawForbidden: undefined },
+      { exchangeAccountId: " " }, { accountLabel: 1 },
+    ])("refuses corrupt permission metadata %j without rewriting it", (change) => {
+      const raw = { ...buildHtxPermissionMetadata({ exchangeAccountId: "100009", scopes: ["read", "trade"] }), ...change };
+      expect(parseHtxPermissionMetadata(raw)).toBeNull();
+      expect(() => resolveHtxSecureCredential({
+        purpose: "trade", venue: "htx", exchangeAccountId: "100009",
+        credentials: { apiKey: "synthetic-key", apiSecret: "synthetic-secret" }, permissionMetadata: raw,
+      })).toThrow("PERMISSION_METADATA_UNVERIFIED");
+    });
+
+    it("missing metadata has no safe fallback", () => {
+      expect(() => resolveHtxSecureCredential({
+        purpose: "read", venue: "htx", exchangeAccountId: "100009",
+        credentials: { apiKey: "synthetic-key", apiSecret: "synthetic-secret" }, permissionMetadata: null,
+      })).toThrow("PERMISSION_METADATA_UNVERIFIED");
+    });
+
+    it("read purpose does not imply trade permission", () => {
+      const input = { venue: "htx", exchangeAccountId: "100009",
+        credentials: { apiKey: "synthetic-key", apiSecret: "synthetic-secret" },
+        permissionMetadata: buildHtxPermissionMetadata({ exchangeAccountId: "100009", scopes: ["read"] }),
+      };
+      expect(() => resolveHtxSecureCredential({ ...input, purpose: "read" })).not.toThrow();
+      expect(() => resolveHtxSecureCredential({ ...input, purpose: "trade" })).toThrow("PERMISSION_METADATA_UNVERIFIED");
+    });
+
     it("validates connector credential input is non-empty", () => {
       expect(() => validateHtxConnectorCredentialInput({ apiKey: "  ", apiSecret: "x" })).toThrow(
         HtxConnectorValidationError,
@@ -105,6 +138,7 @@ describe("trader security foundation (DEE-221)", () => {
   describe("secure credential resolver boundary", () => {
     it("resolves HTX connector config without exposing live execution wiring", () => {
       const resolved = resolveHtxSecureCredential({
+        purpose: "read",
         venue: "htx",
         exchangeAccountId: "100009",
         credentials: { apiKey: " test-key ", apiSecret: " test-secret " },
@@ -127,6 +161,7 @@ describe("trader security foundation (DEE-221)", () => {
     it("rejects account id mismatch between row and metadata", () => {
       expect(() =>
         resolveHtxSecureCredential({
+        purpose: "read",
           venue: "htx",
           exchangeAccountId: "100009",
           credentials: { apiKey: "k", apiSecret: "s" },
@@ -141,6 +176,7 @@ describe("trader security foundation (DEE-221)", () => {
     it("rejects unsupported venues", () => {
       expect(() =>
         resolveHtxSecureCredential({
+        purpose: "read",
           venue: "mock",
           exchangeAccountId: "100009",
           credentials: { apiKey: "k", apiSecret: "s" },
