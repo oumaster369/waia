@@ -14,7 +14,7 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: independent-review
+  currentWorkPackage: integration-readiness
   completedWorkPackages: [WP-1]
   remainingWorkPackages: []
   prNumber: null
@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Obtain independent exact-commit review, then controller runs integration readiness and final-base CI."
+  nextAction: "Obtain accepted-base delta review, then controller completes final integration readiness and exact-head CI."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -104,6 +104,27 @@ ESLint and diff checks during implementation. The controller schedules full
 lint/typecheck/build, canon/governance checks and applicable exact-head PR CI.
 No native Postgres acceptance or browser visual change is claimed by this
 resource-ownership correction.
+
+### Accepted-base integration — 2026-09-26
+
+Independent implementation review accepted author commit
+`acf0bd6930f1537c494414b20ef4a93fba04aa99` within this bounded resource-ownership
+scope. Local merge `1bd1662bcd6ee74f866b9a4ccba3d331fac2dc05` incorporates accepted
+main `ed2a25f72008a97211c9454fd29d4f62a65508b2` without conflict. The six author
+files and 28 incoming files had no path overlap. Blob comparisons and binary
+diffs verify the author patch and incoming patch are both unchanged at that merge.
+This supplement changes only the plan after the merge.
+
+All 12 incoming mandatory PostgreSQL suite registrations, their suite blobs,
+workflow and executed-proof guard are preserved exactly. The scoped offline
+acceptance passes 62 tests across seven suites: the original five caller/resource
+suites, billing command input controls and the 13-case executed-proof guard.
+Scoped ESLint and diff checks pass. No native PostgreSQL test was run for this
+integration; preserving registrations is not an execution result.
+
+Earlier full readiness evidence applies to the prior author head and base.
+Independent merge-delta review, controller integration readiness and final-head
+PR CI remain necessary; this local supplement does not claim their completion.
 
 ## Boundaries
 
