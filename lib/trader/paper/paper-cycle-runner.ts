@@ -8,6 +8,7 @@ import {
 } from "@/lib/trader/intelligence/information-inquiry";
 import { buildReplayFusedContextFromSnapshot } from "@/lib/trader/market-data/replay-fused-context-builder";
 import { evaluatePositionGuardian, mapExitIntentToSubmitOrder } from "@/lib/trader/guardian";
+import { requireGuardianObservationScope } from "@/lib/trader/guardian/evaluate-position-guardian";
 import { applyBreachSubmissionRestrictions } from "@/lib/trader/guardian/htr-guardian-risk-bridge";
 import {
   deriveAccountRiskStateFromBridge,
@@ -468,8 +469,13 @@ async function runGuardianPhase(
     return { guardianExecutions, accountState };
   }
 
-  const { snapshot, context } = input;
-  const openLots = await deps.lifecycleRepository.listOpenPositionLots(context, {});
+  const { snapshot, accountKey } = input;
+  const context = { ...input.context };
+  const scope = requireGuardianObservationScope({ context, accountKey, snapshot, evaluation });
+  const openLots = await deps.lifecycleRepository.listOpenPositionLots(context, {
+    accountKey: scope.accountKey,
+    symbol: scope.symbol,
+  });
   if (openLots.length === 0) {
     return {
       guardianResult: { evaluations: [], exitIntents: [] },
@@ -509,7 +515,7 @@ async function runGuardianPhase(
     openLots,
     tradesById,
     runConfig: input.guardian.runConfig,
-    accountKey: input.accountKey,
+    accountKey,
     markPrice,
     exitEngine:
       exitEngine?.runConfig.enabled === true
@@ -600,7 +606,7 @@ async function runGuardianPhase(
     const symbols = [...new Set(fillEvents.map((event) => event.order.symbol))];
     const inventory = deriveCanonicalInventory(fillEvents, buildQuoteCurrencyBySymbol(symbols));
     const remainingOpenLots = await deps.lifecycleRepository.listOpenPositionLots(context, {
-      accountKey: input.accountKey,
+      accountKey,
     });
     assertLifecycleFillWalkOpenQtyParity({ inventory, openLots: remainingOpenLots });
   }
