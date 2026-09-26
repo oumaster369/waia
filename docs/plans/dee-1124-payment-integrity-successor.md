@@ -11,26 +11,26 @@ includedIssues:
   - id: DEE-1116
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
   - id: DEE-1117
     role: work-package
     completionPolicy: manual-at-integration-ready
-    status: pending
+    status: in-progress
 linearStatusFlow:
   onPlanApproved: In Progress
   onPrOpened: In Review
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 727c810bb8fceb1084b26847afbe8f9f5a9c871c
+  lastValidationAt: "2026-09-26T16:23:17.279220+00:00"
   blockedReason: null
-  nextAction: "Commit and validate this admission, then stop for root's exact admission check before either child import."
+  nextAction: "Hand the frozen train to root for full readiness, M01 independent final review and checked publication; fresh canonical two-suite CI and all current-head checks remain required."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -50,8 +50,8 @@ technical corrections, tests, checked delivery and coherent consolidation; finan
 ADR, empirical and live gates remain unchanged.
 
 The branch starts at accepted main `56ee65f00f3b19858d57ea8f3947d2867822e9ac`.
-This first commit contains only this plan and its adjacent admitted manifest. No child
-is delivered in this train yet. Original implementations and prior tests predate this
+The first commit contained only this plan and its adjacent admitted manifest. No child
+was delivered at admission. Original implementations and prior tests predate this
 admission; their preserved source is `50171ca7afffb0c710bd5aafc32a896333e857ae`.
 The original `dee-1123-payment-proof-integration` branch and unmerged PR680 remain
 preserved. Root owns issue reparenting, successor publication and eventual superseded
@@ -61,8 +61,9 @@ The admitted manifest is
 `docs/plans/dee-1124-payment-integrity-successor.integration-train.json`.
 Evidence is recorded outside the repository under
 `audit-ai-trader-full-2026-09-25/evidence/dee-1124/accepted-base-56ee65f0/`.
-After admission validation and its immutable commit receipt, stop for root's exact
-admission check. Child import execution requires the next explicit root instruction.
+Root independently accepted admission `fe8dc714e4acde7216f6e4b8242d7dd17fccd3b6`
+and its manifest SHA-256 `e77026f1b5530ee0889ef5faac6fba79600fea2870ec10023788efadb570d0cf`
+before explicitly authorizing both serialized imports. Their fresh proof is recorded below.
 
 ## Context
 
@@ -318,6 +319,17 @@ the specific cause; do not amend governance or enlarge admitted surfaces after i
 to hide it. If newmain appears despite the reservation, reassess exact history before any
 merge; this successor does not invent a policy exception for future branch refresh.
 
-Root has reviewed and adopted the exact contract and created DEE-1124. The first
-admission commit must now pass root's exact checkpoint review before either import.
-No child implementation or fresh cumulative validation is claimed by this admission.
+Root has reviewed and adopted the exact contract and accepted the immutable admission
+before both imports. Implementation proof below is local and bounded; independent final
+review, root full readiness and current-head CI still gate publication and merge.
+
+## Frozen local implementation checkpoint
+
+- Admission: `fe8dc714e4acde7216f6e4b8242d7dd17fccd3b6`, direct parent accepted56ee; only the two batch metadata files. Root accepted its exact manifest before imports.
+- Wave 1: `1980478c72de991a47bf953862c200ecc4eea32a`, exact six DEE1116 files. Fresh serial cumulative **168/168 assertions in 13 files**, zero failures/skips.
+- Wave 2: `727c810bb8fceb1084b26847afbe8f9f5a9c871c`, exact nine DEE1117 files. Fresh serial cumulative **343/343 assertions in 23 files**, zero failures/skips.
+- Scoped ESLint passed for all 12 imported TypeScript/JavaScript files at wave2. No production/test content was changed during integration.
+- All 15 source blobs and both source patch directions are exact; all 33 incoming accepted-base blobs and their patch direction are exact. The complete union is 15 child paths plus only this plan and manifest. No old1123 metadata or history was imported.
+- All 16 incoming capital registrations and separate 3 canonical billing registrations are byte-preserved from accepted56ee; the dedicated 2 canonical payment registrations are byte-preserved from50171. This is registration preservation, not a new native execution result.
+- New raw commands, tested heads, unit output/JSON, source hashes and closure proof are under `evidence/dee-1124/accepted-base-56ee65f0/`. Original1123 evidence remains separately attributed.
+- This final metadata-only commit freezes the full diff for root and independent M01 review. No new native, provider, production, full lint/type/build, push, PR or Linear actions were performed by the author. WP-3 and both children's final delivery remain pending the required checks and merge.
