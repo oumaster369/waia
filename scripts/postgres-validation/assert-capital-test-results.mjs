@@ -13,6 +13,7 @@ const requiredFiles = [
   "postgres-promotion-audit-atomicity.test.ts",
   "postgres-runtime-authority-v2.test.ts",
   "postgres-guardian-authority-v2.test.ts",
+  "postgres-guardian-observation-scope.test.ts",
   "postgres-forecast-v2-feedback-read-port.test.ts",
   "postgres-forecast-v2-persistence.test.ts",
   "postgres-billing-period-command-atomicity.test.ts",

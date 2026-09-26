@@ -203,7 +203,6 @@ describe("evaluatePositionGuardian (M3)", () => {
   it("sorts lots deterministically and evaluates each", () => {
     const lotB = mockLot({
       id: "lot-b",
-      symbol: "ETH/USDT",
       tradeId: "trade-b",
       strategySignalId: "signal-b",
     });
