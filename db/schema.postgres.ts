@@ -4636,6 +4636,24 @@ export const traderRuntimeControlLeaseEpochHistoryV2 = pgTable(
   ],
 );
 
+/** Recorded NO_TRADE recovery receipts only; no source qualification or capital authority (DEE-1108). */
+export const traderRuntimeNoncapitalCyclesV2 = pgTable("trader_runtime_noncapital_cycles_v2", {
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  symbol: text("symbol").notNull(),
+  barInterval: text("bar_interval").notNull(),
+  pitAnchor: timestamp("pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+  inputDigest: text("input_digest").notNull(),
+  contentDigest: text("content_digest").notNull(),
+  canonicalJson: text("canonical_json").notNull(),
+  runtimeInstanceId: text("runtime_instance_id").notNull(),
+  leaseEpoch: integer("lease_epoch").notNull(),
+  leaseContentDigest: text("lease_content_digest").notNull()
+    .references(() => traderRuntimeControlLeaseEpochHistoryV2.contentDigest),
+  recordedAtUtc: timestamp("recorded_at_utc", { withTimezone: true, mode: "string" }).notNull(),
+}, t => [primaryKey({ name: "trader_runtime_noncapital_cycles_v2_pk",
+  columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.pitAnchor] })]);
+
 /** Capital-ineligible, pre-holdout Historical Simulation V2 reason ledger. Not canonical Reality. */
 export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
   "trader_historical_simulation_reason_ledger_v2",

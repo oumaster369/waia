@@ -14,6 +14,7 @@ import {
   FeeComputationPeriodNotFoundError,
   FeeComputationPriorPeriodRealizedPnlMissingError,
   FeeComputationRealizedPnlMissingError,
+  FeeComputationValidationError,
 } from "@/lib/trader/billing/fee-computation.errors";
 import {
   computeFeeComputation,
@@ -98,6 +99,10 @@ export function createFeeComputationService(
         exchangeAccountId: period.exchangeAccountId,
         limit: MAX_REPORTING_PERIODS_LIST_LIMIT,
       });
+      // A full page cannot prove that older profit or losses were included.
+      if (closedPeriods.length >= MAX_REPORTING_PERIODS_LIST_LIMIT) {
+        throw new FeeComputationValidationError("BILLING_PERIOD_LIST_TRUNCATED");
+      }
 
       const periodsForFold = selectClosedPeriodsUpToTarget(closedPeriods, period.id);
       if (periodsForFold.length === 0 || periodsForFold.at(-1)?.id !== period.id) {

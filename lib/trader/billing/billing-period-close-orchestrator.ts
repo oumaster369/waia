@@ -123,7 +123,8 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
         exchangeAccountId: input.exchangeAccountId,
         limit: MAX_REPORTING_PERIODS_LIST_LIMIT,
       });
-      if (existingClosed.length >= MAX_REPORTING_PERIODS_LIST_LIMIT) {
+      // Include the period about to close: its automatic draft must have complete history.
+      if (existingClosed.length + 1 >= MAX_REPORTING_PERIODS_LIST_LIMIT) {
         throw new BillingCanonicalProfitAdmissionError("BILLING_PERIOD_LIST_TRUNCATED");
       }
       const duplicateWindow = existingClosed.some(

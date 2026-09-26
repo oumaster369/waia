@@ -1,5 +1,10 @@
 import { createAdminServiceOrgAccess } from "@/lib/trader/security/admin-service-org-access";
 import { createRequire } from "node:module";
+import { sql } from "drizzle-orm";
+import { lockInvoiceCommandAccountPostgres } from "@/lib/trader/billing/invoice-command-lock-postgres";
+import { DraftInvoiceDigestMismatchError } from "@/lib/trader/billing/invoice.errors";
+import { isIssuanceAttestationComplete } from "@/lib/trader/billing/invoice-issuance.types";
+import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
 
 const require = createRequire(import.meta.url);
 if (process.env.VITEST !== "true") {
@@ -202,7 +207,6 @@ type InvoiceCommandBody = {
   command?: string;
   organization_id?: string;
   attestations?: IssuanceAttestation;
-  cooling_off_ms?: number | null;
   reason?: string;
 };
 
@@ -210,7 +214,23 @@ function parseInvoiceCommandBody(raw: unknown): InvoiceCommandBody | AdminRouteH
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
     return adminClientError(400, "INVALID_BODY", "Request body must be a JSON object.");
   }
-  return raw as InvoiceCommandBody;
+  const body = raw as Record<string, unknown>;
+  if (["command", "organization_id", "reason"].some((key) =>
+    body[key] !== undefined && typeof body[key] !== "string")) {
+    return adminClientError(400, "INVALID_BODY", "command, organization_id and reason must be strings.");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "cooling_off_ms")) {
+    return adminClientError(400, "COOLING_OFF_OVERRIDE_FORBIDDEN", "Cooling-off is configured by the server.");
+  }
+  if (body.command === "approve" && !isIssuanceAttestationComplete(body.attestations)) {
+    return adminClientError(400, "ATTESTATIONS_REQUIRED", "All six attestations must be literal true.");
+  }
+  return {
+    command: body.command as string | undefined,
+    organization_id: body.organization_id as string | undefined,
+    attestations: body.attestations as IssuanceAttestation | undefined,
+    reason: body.reason as string | undefined,
+  };
 }
 
 export async function handleAdminInvoiceCommandPost(
@@ -255,35 +275,50 @@ export async function handleAdminInvoiceCommandPost(
     runtime = auth.runtime;
 
     const context = { ...requireOrgContext(organizationId), userId: auth.userId };
-    const service = createIssuanceService(runtime);
-
-    if (command === "approve") {
-      if (!body.attestations) {
-        return adminClientError(400, "ATTESTATIONS_REQUIRED", "attestations are required.");
+    const execute = async (boundRuntime: Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>): Promise<AdminRouteHandlerResult> => {
+      const service = createIssuanceService(boundRuntime);
+      if (command === "approve") {
+        if (!isIssuanceAttestationComplete(body.attestations)) {
+          return adminClientError(400, "ATTESTATIONS_REQUIRED", "All six attestations must be literal true.");
+        }
+        const invoice = await service.approveInvoiceIssuance(context, {
+          invoiceId, attestations: body.attestations,
+        });
+        return adminSuccess({ invoice: serializeInvoiceRecord(invoice) }, boundRuntime.kind);
       }
-      const invoice = await service.approveInvoiceIssuance(context, {
-        invoiceId,
-        attestations: body.attestations,
-        coolingOffMs: body.cooling_off_ms,
-      });
-      return adminSuccess({ invoice: serializeInvoiceRecord(invoice) }, runtime.kind);
-    }
-
-    if (command === "cancel-pending") {
-      const reason = body.reason?.trim();
-      if (!reason) {
-        return adminClientError(400, "REASON_REQUIRED", "reason is required.");
+      if (command === "cancel-pending") {
+        const reason = body.reason?.trim();
+        if (!reason) return adminClientError(400, "REASON_REQUIRED", "reason is required.");
+        const invoice = await service.cancelPendingIssuance(context, { invoiceId, reason });
+        return adminSuccess({ invoice: serializeInvoiceRecord(invoice) }, boundRuntime.kind);
       }
-      const invoice = await service.cancelPendingIssuance(context, { invoiceId, reason });
-      return adminSuccess({ invoice: serializeInvoiceRecord(invoice) }, runtime.kind);
-    }
-
-    if (command === "issue") {
-      const invoice = await service.issueInvoice(context, { invoiceId });
-      return adminSuccess({ invoice: serializeIssuedInvoice(invoice) }, runtime.kind);
-    }
-
-    return adminClientError(400, "UNKNOWN_COMMAND", `Unknown command: ${command}`);
+      if (command === "issue") {
+        const invoice = await service.issueInvoice(context, { invoiceId });
+        return adminSuccess({ invoice: serializeIssuedInvoice(invoice) }, boundRuntime.kind);
+      }
+      return adminClientError(400, "UNKNOWN_COMMAND", `Unknown command: ${command}`);
+    };
+    if (runtime.kind === "sqlite") return await execute(runtime);
+    return await runtime.db.transaction(async (tx) => {
+      const rows = await tx.execute(sql`SELECT exchange_account_id FROM trader_invoices
+        WHERE id = ${invoiceId}::uuid AND organization_id = ${organizationId}::uuid FOR UPDATE`);
+      if (!rows[0]) return adminClientError(404, "INVOICE_NOT_FOUND", "Invoice not found.");
+      if (command !== "cancel-pending") {
+        await lockInvoiceCommandAccountPostgres(tx, organizationId, String(rows[0].exchange_account_id));
+      }
+      try {
+        return await execute({ kind: "postgres", db: tx });
+      } catch (error) {
+        // The existing service deliberately clears stale approval for these business
+        // refusals. Commit that invalidation; persistence/audit failures must roll back.
+        const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+        if (error instanceof DraftInvoiceDigestMismatchError ||
+          ["INVOICE_RECORD_DIGEST_MISMATCH", "ISSUANCE_HWM_INCONSISTENT"].includes(code)) {
+          return mapServiceError(error);
+        }
+        throw error;
+      }
+    }, { isolationLevel: "read committed" });
   } catch (err) {
     return mapServiceError(err);
   } finally {
@@ -643,7 +678,7 @@ export async function handleAdminReportingPeriodCommandPost(
         return profitEvidence;
       }
 
-      const result = await orchestrator.closeAndMaterialize(context, {
+      const closeInput = {
         exchangeAccountId,
         periodStart,
         periodEnd,
@@ -658,7 +693,12 @@ export async function handleAdminReportingPeriodCommandPost(
         unrealizedPnl,
         netDeposits: body.net_deposits?.trim(),
         netWithdrawals: body.net_withdrawals?.trim(),
-      });
+      };
+      const result = runtime.kind === "postgres"
+        ? await runWaiaPostgresTransaction(runtime.db, async (tx) =>
+            createBillingPeriodCloseOrchestrator({ kind: "postgres", db: tx })
+              .closeAndMaterialize(context, closeInput))
+        : await orchestrator.closeAndMaterialize(context, closeInput);
 
       return adminSuccess({ result }, runtime.kind);
     }
