@@ -423,3 +423,31 @@ source rule, arbitrary delay or retry is changed. The post-acquisition observed
 DB-clock barrier remains in force. Pure/scoped acceptance, fresh native evidence,
 current-head readiness and independent delta review remain pending at this plan
 commit; the original357/1 result is not replaced or relabelled.
+
+
+### WP-4 current-base acceptance
+
+The test-only implementation is frozen at
+`07503b64852d9b5ac592cfce73d70184d34696a5`. At `2026-09-26T17:53:28.460Z`,
+a fresh isolated `waia_dee1121_752a_closed_author` completed all220 migrations
+and358 native assertions/18mandatory suites with zero skips. The executed-proof
+guard passed; final checks found zero active sessions, injected fault artifacts
+and disabled public user guards. All16 incoming suites remain included.
+
+The corrected new pure test gives1PASS/4RED against the original fixture and
+5PASS against the opt-in closed-source fixture. Together with existing36 source
+normalizer and7 observed-clock-barrier cases,48/3 passed. Initial new-test timer
+setup errors remain separate: auto-advancing fake timers moved ingestion beyond
+the declared test PIT; the corrected pure test freezes only Date. The full
+current scoped set subsequently passed363 assertions/23files with zero skips.
+Exact-head typecheck, full lint/build, canon, PR governance, both consumer graphs,
+scoped ESLint and diff checks passed. No production/SQL/CI/migration bytes changed
+in WP-4. All18 capital,3 canonical billing and2 payment proof registrations remain.
+
+Evidence is under audit `evidence/dee-1121/accepted-base-752a09e0/`, in
+`author-native-closed`, `author-scoped-closed`, `author-readiness-closed` and
+`chronology-correction`. The original357/1 run and its unknown exact predicate
+remain untouched; the later positive result does not retroactively diagnose it.
+Independent final delta review and exact PR CI remain mandatory. Local custom
+profile native execution does not replace separate canonical-profile CI gates,
+source qualification, full P10 or live/capital approval.
