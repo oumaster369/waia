@@ -18,7 +18,7 @@ export function recordedPublicTransport(now: () => number, record: (path: string
 }
 
 /** Admit only this disposable local lane or the exact GitHub native-proof service. */
-export function assertRecordedAnalysisTestDatabase(url: string | undefined, env: NodeJS.ProcessEnv = process.env): void {
+export function assertRecordedAnalysisTestDatabase(url: string | undefined, env: Readonly<Record<string, string | undefined>> = process.env): void {
   if (!url) throw new Error("ISOLATED_LOOPBACK_REQUIRED");
   const u = new URL(url);
   const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname);
