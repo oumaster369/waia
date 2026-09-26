@@ -76,6 +76,7 @@ export async function tryAcquireWatcherLeaseWithStaleRecovery(
 
 /** Host-agnostic watcher cycle entrypoint (ADR-0014). */
 export async function runWatcherCycle(deps: WatcherDeps): Promise<CycleReport> {
+  deps = { ...deps, config: { ...deps.config } };
   const startMs = Date.now();
   const now = deps.now?.() ?? new Date();
   const { config } = deps;
@@ -88,6 +89,13 @@ export async function runWatcherCycle(deps: WatcherDeps): Promise<CycleReport> {
       network: config.network,
     });
     return emptyReport(deps, "noop_disabled", startMs);
+  }
+
+  // ADR-0015 accepts primary-only MVP; a requested hardened mode must not silently downgrade.
+  if (config.confirmQuorum) {
+    const reason = "WATCHER_CONFIRM_QUORUM_UNSUPPORTED";
+    deps.logger.log({ event: "waia_payment_watcher", phase: "cycle_skipped", reason, network: config.network });
+    return { ...emptyReport(deps, "noop_unsupported_configuration", startMs), errorMessage: reason };
   }
 
   let checkpoint = await deps.checkpointRepository.load(config.network);
@@ -161,6 +169,15 @@ export async function runWatcherCycle(deps: WatcherDeps): Promise<CycleReport> {
         toBlock,
         errorMessage: transfersResult.error,
         provider: transfersResult.provider ?? provider,
+      };
+    }
+
+    if (transfersResult.provider !== tipResult.provider) {
+      const reason = "observation_provider_changed";
+      await deps.checkpointRepository.recordError(config.network, reason);
+      return {
+        ...emptyReport(deps, "noop_provider_error", startMs), tipBlock, fromBlock, toBlock,
+        errorMessage: reason, provider: transfersResult.provider,
       };
     }
 

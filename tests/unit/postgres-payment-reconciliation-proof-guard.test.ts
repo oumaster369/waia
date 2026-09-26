@@ -1,0 +1,45 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+
+const directory = mkdtempSync(join(tmpdir(), "waia-payment-reconciliation-proof-"));
+const reportPath = join(directory, "report.json");
+const required = [
+  "postgres-reconciliation-workflow-parity.test.ts",
+  "postgres-settlement-reconciliation-parity.test.ts",
+];
+const passed = () => required.map((file) => ({
+  name: `/workspace/tests/integration/${file}`, status: "passed",
+  assertionResults: [{ status: "passed" }],
+}));
+function run(testResults: ReturnType<typeof passed>) {
+  writeFileSync(reportPath, JSON.stringify({ testResults }));
+  return spawnSync(process.execPath,
+    ["scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs", reportPath],
+    { encoding: "utf8" });
+}
+afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
+
+describe("mandatory canonical Postgres payment reconciliation proof", () => {
+  it("accepts both actually executed reconciliation suites", () => {
+    const result = run(passed());
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("2 canonical suites, no skipped tests");
+  });
+  it.each(required)("rejects missing, skipped, failed, empty or duplicate proof for %s", (file) => {
+    for (const mode of ["missing", "skipped", "failed", "empty", "duplicate", "suite-failed"] as const) {
+      let results = passed();
+      const selected = results.find((row) => row.name.endsWith(`/${file}`))!;
+      if (mode === "missing") results = results.filter((row) => row !== selected);
+      else if (mode === "duplicate") results.push(selected);
+      else if (mode === "empty") selected.assertionResults = [];
+      else if (mode === "suite-failed") selected.status = "failed";
+      else selected.assertionResults[0]!.status = mode === "skipped" ? "pending" : "failed";
+      const result = run(results);
+      expect(result.status, `${file}: ${mode}`).not.toBe(0);
+      expect(result.stderr).toContain(`Required payment reconciliation proof missing, failed or skipped: ${file}`);
+    }
+  });
+});
