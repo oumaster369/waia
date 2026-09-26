@@ -1,0 +1,240 @@
+{
+  "sourceGitSha": "ed2a25f72008a97211c9454fd29d4f62a65508b2",
+  "profile": {
+    "schemaVersion": "required-information-profile-v2",
+    "organizationId": "org-contradiction",
+    "accountId": "account-contradiction",
+    "profileVersion": "contradiction-regression-v1",
+    "purpose": "NEW_OPPORTUNITY",
+    "symbol": "BTC/USDT",
+    "venue": "HTX",
+    "analyticalTimeframe": "1m",
+    "horizon": "15m",
+    "forecastPackageId": null,
+    "forecastPackageContentDigest": null,
+    "inputContractContentDigest": null,
+    "requirements": [
+      {
+        "id": "price",
+        "questionId": "Q_WHAT_HAPPENING",
+        "classification": "MANDATORY",
+        "contextTriggerKey": null,
+        "satisfiers": [
+          {
+            "evidenceFamily": "price",
+            "providerIds": [
+              "htx_spot"
+            ],
+            "substitutionRuleId": null
+          }
+        ],
+        "allowedObservationKinds": [
+          "ohlcv_bar"
+        ],
+        "allowedObservationSchemaVersions": [
+          "mi-canonical-pit-observation-v1"
+        ],
+        "allowedMeasurementDefinitionDigests": [],
+        "maxStalenessMs": 60000,
+        "minimumTrustScore": 0.5,
+        "minimumIndependentGroups": 1,
+        "contradictionPolicy": "FAIL_UNRESOLVED",
+        "requirePitQualified": true,
+        "requireReplayEligible": true,
+        "inquiryBounds": {
+          "maxDepth": 1,
+          "maxDurationMs": 1000,
+          "maxProviderFanout": 1
+        }
+      }
+    ],
+    "aggregateQualityContract": null,
+    "authority": "EPISTEMIC_PREREQUISITE_ONLY",
+    "id": "e21c8e0e493b45c2b3282643e00018a10dced27902b63960fca3193d3f8ac16a",
+    "contentDigest": "e21c8e0e493b45c2b3282643e00018a10dced27902b63960fca3193d3f8ac16a"
+  },
+  "mixedReceipt": {
+    "schemaVersion": "information-sufficiency-receipt-v2",
+    "organizationId": "org-contradiction",
+    "accountId": "account-contradiction",
+    "profileId": "e21c8e0e493b45c2b3282643e00018a10dced27902b63960fca3193d3f8ac16a",
+    "profileVersion": "contradiction-regression-v1",
+    "profileContentDigest": "e21c8e0e493b45c2b3282643e00018a10dced27902b63960fca3193d3f8ac16a",
+    "purpose": "NEW_OPPORTUNITY",
+    "symbol": "BTC/USDT",
+    "venue": "HTX",
+    "analyticalTimeframe": "1m",
+    "horizon": "15m",
+    "pitAnchor": "2026-09-01T12:00:00.000Z",
+    "forecastPackageId": null,
+    "forecastPackageContentDigest": null,
+    "inputContractContentDigest": null,
+    "activeContextTriggers": [],
+    "evidenceInventory": [
+      {
+        "evidenceId": "good",
+        "evidenceFamily": "price",
+        "providerId": "htx_spot",
+        "sourceId": "source-a",
+        "observationId": "good",
+        "observationKind": "ohlcv_bar",
+        "observationSchemaVersion": "mi-canonical-pit-observation-v1",
+        "observationContentDigest": "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c",
+        "trustAsOfReceiptId": "f796e2f28ae5811737ccb8233f34e09f8bb75d2511a135543d1ca37be0199a1d",
+        "trustRevisionId": "trust-a",
+        "trustRevisionContentDigest": "caddca49563134cb55c672cefb2b55fd129aa5945e5acf26df14f507d048ff89",
+        "measurementDefinitionId": null,
+        "measurementDefinitionContentDigest": null,
+        "measurementValueId": null,
+        "measurementValueContentDigest": null,
+        "availability": "AVAILABLE",
+        "availableAt": "2026-09-01T11:59:30.000Z",
+        "trust": "TRUSTED",
+        "trustScore": 0.9,
+        "pitQualified": true,
+        "replayEligible": true,
+        "dependenceGroup": "source-group",
+        "contradictionGroup": "same-price-claim",
+        "contradiction": "SUPPORTS",
+        "epistemicRole": "PRICE_STATE",
+        "historyScope": "NOT_HISTORICAL",
+        "degradationReasonCodes": []
+      },
+      {
+        "evidenceId": "unresolved",
+        "evidenceFamily": "price",
+        "providerId": "htx_spot",
+        "sourceId": "source-a",
+        "observationId": "unresolved",
+        "observationKind": "ohlcv_bar",
+        "observationSchemaVersion": "mi-canonical-pit-observation-v1",
+        "observationContentDigest": "27a888c9d5e6c6c2d1530d15680651f4eefc9a98aaba319953362e3cf5a24996",
+        "trustAsOfReceiptId": "f796e2f28ae5811737ccb8233f34e09f8bb75d2511a135543d1ca37be0199a1d",
+        "trustRevisionId": "trust-a",
+        "trustRevisionContentDigest": "caddca49563134cb55c672cefb2b55fd129aa5945e5acf26df14f507d048ff89",
+        "measurementDefinitionId": null,
+        "measurementDefinitionContentDigest": null,
+        "measurementValueId": null,
+        "measurementValueContentDigest": null,
+        "availability": "AVAILABLE",
+        "availableAt": "2026-09-01T11:59:30.000Z",
+        "trust": "TRUSTED",
+        "trustScore": 0.9,
+        "pitQualified": true,
+        "replayEligible": true,
+        "dependenceGroup": "source-group",
+        "contradictionGroup": "same-price-claim",
+        "contradiction": "UNRESOLVED",
+        "epistemicRole": "PRICE_STATE",
+        "historyScope": "NOT_HISTORICAL",
+        "degradationReasonCodes": []
+      }
+    ],
+    "requirementReceipts": [
+      {
+        "requirementId": "price",
+        "questionId": "Q_WHAT_HAPPENING",
+        "classification": "MANDATORY",
+        "active": true,
+        "terminalStatus": "ANSWERED_SUFFICIENTLY",
+        "blocking": true,
+        "matchedEvidenceIds": [
+          "good",
+          "unresolved"
+        ],
+        "acceptedEvidenceIds": [
+          "good"
+        ],
+        "effectiveIndependentGroups": [
+          "source-group"
+        ],
+        "substitutionsUsed": [],
+        "reasonCodes": [
+          "EVIDENCE_CONTRADICTION_UNRESOLVED"
+        ]
+      }
+    ],
+    "aggregateQualityEvaluation": null,
+    "status": "SUFFICIENT",
+    "reasonCodes": [],
+    "authority": "EPISTEMIC_PREREQUISITE_ONLY",
+    "id": "62612455a6f70269f26b1612b0edcbf0a9c3c8dd075ecc0d41cf5d5ba7103f10",
+    "contentDigest": "62612455a6f70269f26b1612b0edcbf0a9c3c8dd075ecc0d41cf5d5ba7103f10"
+  },
+  "goodReceipt": {
+    "schemaVersion": "information-sufficiency-receipt-v2",
+    "organizationId": "org-contradiction",
+    "accountId": "account-contradiction",
+    "profileId": "e21c8e0e493b45c2b3282643e00018a10dced27902b63960fca3193d3f8ac16a",
+    "profileVersion": "contradiction-regression-v1",
+    "profileContentDigest": "e21c8e0e493b45c2b3282643e00018a10dced27902b63960fca3193d3f8ac16a",
+    "purpose": "NEW_OPPORTUNITY",
+    "symbol": "BTC/USDT",
+    "venue": "HTX",
+    "analyticalTimeframe": "1m",
+    "horizon": "15m",
+    "pitAnchor": "2026-09-01T12:00:00.000Z",
+    "forecastPackageId": null,
+    "forecastPackageContentDigest": null,
+    "inputContractContentDigest": null,
+    "activeContextTriggers": [],
+    "evidenceInventory": [
+      {
+        "evidenceId": "good",
+        "evidenceFamily": "price",
+        "providerId": "htx_spot",
+        "sourceId": "source-a",
+        "observationId": "good",
+        "observationKind": "ohlcv_bar",
+        "observationSchemaVersion": "mi-canonical-pit-observation-v1",
+        "observationContentDigest": "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c",
+        "trustAsOfReceiptId": "f796e2f28ae5811737ccb8233f34e09f8bb75d2511a135543d1ca37be0199a1d",
+        "trustRevisionId": "trust-a",
+        "trustRevisionContentDigest": "caddca49563134cb55c672cefb2b55fd129aa5945e5acf26df14f507d048ff89",
+        "measurementDefinitionId": null,
+        "measurementDefinitionContentDigest": null,
+        "measurementValueId": null,
+        "measurementValueContentDigest": null,
+        "availability": "AVAILABLE",
+        "availableAt": "2026-09-01T11:59:30.000Z",
+        "trust": "TRUSTED",
+        "trustScore": 0.9,
+        "pitQualified": true,
+        "replayEligible": true,
+        "dependenceGroup": "source-group",
+        "contradictionGroup": "same-price-claim",
+        "contradiction": "SUPPORTS",
+        "epistemicRole": "PRICE_STATE",
+        "historyScope": "NOT_HISTORICAL",
+        "degradationReasonCodes": []
+      }
+    ],
+    "requirementReceipts": [
+      {
+        "requirementId": "price",
+        "questionId": "Q_WHAT_HAPPENING",
+        "classification": "MANDATORY",
+        "active": true,
+        "terminalStatus": "ANSWERED_SUFFICIENTLY",
+        "blocking": true,
+        "matchedEvidenceIds": [
+          "good"
+        ],
+        "acceptedEvidenceIds": [
+          "good"
+        ],
+        "effectiveIndependentGroups": [
+          "source-group"
+        ],
+        "substitutionsUsed": [],
+        "reasonCodes": []
+      }
+    ],
+    "aggregateQualityEvaluation": null,
+    "status": "SUFFICIENT",
+    "reasonCodes": [],
+    "authority": "EPISTEMIC_PREREQUISITE_ONLY",
+    "id": "69c2cbe1dc59b409b6e2191cd9304abd64b8db6b63c2ee126306a5254eef788f",
+    "contentDigest": "69c2cbe1dc59b409b6e2191cd9304abd64b8db6b63c2ee126306a5254eef788f"
+  }
+}
