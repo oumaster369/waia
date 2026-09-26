@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Controller and independent reviewer inspect the finite bounded-read plumbing request; executable code remains barred pending acceptance of eight extra paths."
+  nextAction: "Implement admitted WP1–WP3 bounded transition and fixed native reader plumbing; targeted synthetic unit/process tests only until root grants native/heavy resources."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -338,3 +338,24 @@ The bounded software repair is complete only when actual public launch/resume/CL
 No new financial/scientific threshold, host budget, authorization issuer, live capability, allocation policy, qualification PASS or holdout decision is required to implement this slice. Root must explicitly admit the described compatibility behavior: history-less consumed Control Replay runs cannot use strict resume, and clean partial initialization is preserved/refused rather than guessed/repaired. These are reviewable software choices, not a request to run or authorize any campaign.
 
 Remaining separate contracts: actual PG/AD-6c persistence/recovery composition; actual final-run extent/source capability; host measurements and FirstLive/audit producers; campaign-qualified T and actual two-run outcome. The new transition history neither chooses nor certifies them. Existing consumed evidence, failed runs and historical receipts stay intact.
+
+## Finite scope admission and code release (supersedes earlier pending request)
+
+# DEE1129 finite scope admission and code release
+
+Root admits the exact bounded-read request `2ab583ad27f699bd9699dd4310ccc0f98315c7ab39a748f51f27456ad6a8228f` and independent plan review `84ca05b8b4edfa7fce60b0a115b1ffa097ed840e27db93200cc496254a9445a4` on actual one-file plan commit `d81eb64ba336e6566d8cdb21c3482456a5a542eb`, direct child of accepted `9a4d1a73fa421961058d3733e11ea47ec7d147ec`.
+
+Root read the complete request, unique canonical plan sections and complete independent report, verified clean exact branch/ancestry/one-file delta and exact embedded root admission, original proposal and request. Original sources/proposal/review remain immutable. This releases only the admitted engineering work below; it is not implementation acceptance.
+
+The allowed production boundary is exactly the original five plus E1–E8 in the request: one passive bounded-metadata-read leaf and seven existing native I/O/validation propagation paths. Two additional unit files are admitted exactly as named in the request. The original six test/helper surfaces remain as proposed; running other existing companions does not itself authorize edits. This is one connected caller repair. Preserve all native validation, purpose/source/qualification, receipt/digest, consumed transform/timestamp, recovery/journal/fencing, legacy omitted-profile behavior and existing capability boundaries.
+
+The fixed internal profile is `CONTROL_REPLAY_TRANSITION_V1`, with1,048,576-byte metadata capacity and no public configurable limit, supplied reader/body/validation result or global mode. Mandatory public Control Replay owners select it. Cover both CLI first reads, nested auth validations, native byte comparisons, claim creation/locked transitions, journal cleanup/catch-up and the atomic compare reread. Serialization bounds apply before publication of selected generated metadata and sidecars. Unrelated payloads and checkpoint/WAL algorithms remain outside this profile.
+
+Additional root/M01 clarification: open selected metadata in nonblocking read mode for this POSIX profile, or a demonstrated equivalent that cannot wait indefinitely opening a FIFO; use same-descriptor fstat, reject nonregular files and close on every exit. Include an actual FIFO/no-writer test proving prompt refusal/cleanup, with a bounded parent timeout so a regression cannot hang acceptance. Keep partial-read, byte-limit, growth/truncation and same-open-file tests. Do not claim hostile-filesystem or power-loss guarantees.
+
+Terminal output explicitly uses `checkpointEvidence: NOT_ASSESSED`: native T ↔ current full validated claim digest ↔ Ai only, with observed claim frontier distinguished from checkpoint validation. No bundle identity assertion, bulk bundle read, reconciliation mutation or result-label synthesis in this reader. Initial empty WAL and phase-limited lock/process-crash limits remain exact.
+
+Author must append this finite admission/FIFO clarification to the canonical plan and commit that metadata before the first executable edit. After that plan-only commit, the code barrier is RELEASED for WP1–WP3 within the exact named boundary and targeted unit/process tests on temporary synthetic inputs. No further permission handshake is needed for that sequence. Send the admission commit identity and then implementation progress. If a further source path is genuinely needed, describe the concrete reason before expanding.
+
+No PG or heavy build grant is included. Existing positive CLI native companion and full readiness require root-scheduled isolated resources after source/scoped checks. No push/PR by author, remote host/provider/credential/production/C3 activity, real campaign, authorization issuance or real trade. Root owns independent final implementation review, actual rendered preflight, fresh exact-head CI and normal guarded integration. Parent644 and whole-plan qualification remain unfinished.
+
