@@ -19,10 +19,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: 681
   prUrl: https://github.com/oumaster369/waia/pull/681
-  lastValidatedGitSha: c5319e888c53522e8cd5183e8e1b0b0ee9a10245
-  lastValidationAt: "2026-09-26T16:10:00.405241+00:00"
+  lastValidatedGitSha: 93ea5dfc96b32278cb9494452aa248e765176c9e
+  lastValidationAt: "2026-09-26T17:30:59.034092+00:00"
   blockedReason: null
-  nextAction: "Complete independent final review and refresh existing PR681; require all current-head CI before normal merge. Full P08 remains open."
+  nextAction: "Root current-base readiness and independent delta review, then update existing PR681 and require fresh current-head CI. Full P08 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -378,3 +378,34 @@ P08 completion claim.
 
 
 Root current-base acceptance at `c5319e888c53522e8cd5183e8e1b0b0ee9a10245`, 2026-09-26T16:10:00.405241+00:00: fresh isolated PostgreSQL16.14 with219migrations executed350 assertions/17mandatory suites without skips. Every incoming16 suite and35 delivery cases ran; all teardown checks were zero. Root346 assertions/20 scoped files and all9 repository readiness checks passed at that same head. Exact commands/logs/results are in audit evidence/dee-1122/accepted-base-56ee65f0. This final metadata commit changes only this plan. Separate canonical3 billing and all new current-head PR checks remain mandatory; no previous-base CI is transferred. FullP08 and financial/operator gates remain open.
+
+
+## WP-3 — accepted-base refresh to 752a09e0
+
+Normal merge `93ea5dfc96b32278cb9494452aa248e765176c9e` has exact parents
+`e406f51440f10dda9f5773e9cd79ce21e97b73a9` and accepted
+`752a09e07bd2b7d19387a45f74627bc6ced6b6ab`. No conflicts or source repairs
+were needed. All21 own paths and17 incoming payment/reconciliation paths are
+disjoint and retain exact blobs at the merge; complete binary patches in both
+directions are identical. The incoming train's original admission/import
+metadata is retained unchanged as accepted history, not recreated or relabeled.
+
+All17 capital-authority suites, canonical3 billing suites and canonical2 payment
+suites retain their workflow, executed-proof validator, negative guard tests and
+native source bodies. The capital job stays serial with its existing CLI flags.
+No suite is removed or made optional.
+
+At that merge, scoped cumulative acceptance ran **615 assertions /39 files**,
+all passed with zero skipped, covering the previous delivery/Reality/billing
+selection plus incoming payment/reconciliation companions and all three proof
+guards. Scoped ESLint on29 source/test/script paths and the accepted-base diff
+check pass. Exact commands, assertion JSON, raw logs, both patch directions,
+source identities and registration checks are in audit
+`evidence/dee-1122/accepted-base-752a09e0/`.
+
+This final supplement changes only this canonical plan. No PostgreSQL/native,
+full lint/typecheck/build, provider, production or financial operation was run
+during the refresh. Prior350/17 native and full readiness remain attributed to
+c5319e88 on56ee; no new native acceptance is claimed here. Root owns current-base
+readiness/native decisions, nonauthor delta review, publication to existing
+PR681 and all fresh current-head CI. No full P08 or live-readiness claim.
