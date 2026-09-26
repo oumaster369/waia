@@ -18,8 +18,8 @@ state:
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
-  prNumber: null
-  prUrl: null
+  prNumber: 683
+  prUrl: https://github.com/oumaster369/waia/pull/683
   lastValidatedGitSha: 7aab6d334b7108f62e5366a2dc477d7a61624fa5
   lastValidationAt: "2026-09-26T20:23:58.307214+00:00"
   blockedReason: null
