@@ -1527,6 +1527,13 @@
       "when": 1780000000217,
       "tag": "0217_admin_observation_read_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1780000000218,
+      "tag": "0218_trader_runtime_noncapital_cycles_v2",
+      "breakpoints": true
     }
   ]
 }

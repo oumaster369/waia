@@ -47,6 +47,8 @@ on:
       - "lib/trader/runtime-v2/**"
       - "lib/trader/knowledge/navigator/**"
       - "tests/integration/postgres-runtime-authority-v2.test.ts"
+      - "tests/integration/postgres-noncapital-cycle-owner-v2.test.ts"
+      - "tests/helpers/noncapital-cycle-owner-process.ts"
       - "tests/unit/postgres-capital-proof-guard.test.ts"
       - "lib/trader/execution/v2/**"
       - "lib/trader/risk/v2/**"
@@ -170,7 +172,8 @@ jobs:
             tests/integration/postgres-runtime-authority-v2.test.ts \
             tests/integration/postgres-guardian-authority-v2.test.ts \
             tests/integration/postgres-billing-period-command-atomicity.test.ts \
-            tests/integration/postgres-billing-invoice-command-atomicity.test.ts
+            tests/integration/postgres-billing-invoice-command-atomicity.test.ts \
+            tests/integration/postgres-noncapital-cycle-owner-v2.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   integration:

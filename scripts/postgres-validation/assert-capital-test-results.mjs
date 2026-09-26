@@ -14,6 +14,7 @@ const requiredFiles = [
   "postgres-guardian-authority-v2.test.ts",
   "postgres-billing-period-command-atomicity.test.ts",
   "postgres-billing-invoice-command-atomicity.test.ts",
+  "postgres-noncapital-cycle-owner-v2.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const file of requiredFiles) {
