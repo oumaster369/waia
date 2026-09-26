@@ -51,12 +51,15 @@ function buildFamily(): ReplicaRootFamilyInput {
   };
 }
 
-function buildRuntimeInput(
+export function buildForecastFeedbackRuntimeInput(
   organizationId: string,
   predictivePackage: ReturnType<typeof buildPredictivePackageV1>,
   pitAnchor: string,
   scientific: Readonly<{ id: string; contentDigestHex: string }>,
-  anchorRealizedVol20m1m = 0.018,
+  // Fixture minimum RV selects S0 in any already-valid120-draw replica. Unlike
+  // the tied middle bucket, its type7 lower-tertile pool has at least40 rows.
+  // All production replica-validity and minimum-pool guards remain mandatory.
+  anchorRealizedVol20m1m = 0.010,
 ): ForecastRuntimeInputV2 {
   const family = predictivePackage.family;
   const hex = (char: string) => char.repeat(64);
@@ -210,14 +213,19 @@ async function persistScientificForPackage(sql: postgres.Sql, organizationId: st
 }
 
 
-export async function createForecastFeedbackFixture(sql: postgres.Sql, organizationId: string) {
-  const family = { ...buildFamily(), organizationId };
-  const pkg = buildPredictivePackageV1({ family,
+/** Pure synthetic package builder shared by native reader and fixture regression tests. */
+export function buildForecastFeedbackPackage(organizationId: string) {
+  return buildPredictivePackageV1({ family: { ...buildFamily(), organizationId },
     sourceCorpus: Array.from({ length: 120 }, (_, i) => anchor(i)), kConfigDec: 3, mConfigDec: 4 });
+}
+
+export async function createForecastFeedbackFixture(sql: postgres.Sql, organizationId: string) {
+  const pkg = buildForecastFeedbackPackage(organizationId);
+  const family = pkg.family;
   const persisted = await persistPredictivePackageV2(sql, pkg, {
     organizationId, kmGlobalAnchorSetDigestHex: "f".repeat(64) });
   const scientific = await persistScientificForPackage(sql, organizationId, pkg, "DEE-1110-fixture");
-  const runtimeInput = buildRuntimeInput(organizationId, pkg, "2024-01-01T00:00:00.000Z", scientific);
+  const runtimeInput = buildForecastFeedbackRuntimeInput(organizationId, pkg, "2024-01-01T00:00:00.000Z", scientific);
   const binding = runtimeInput.forecastContractBinding!;
   await persistForecastContractBindingV1(sql, {
     ...buildForecastContractBindingRecordV1({ organizationId,
@@ -228,7 +236,12 @@ export async function createForecastFeedbackFixture(sql: postgres.Sql, organizat
     binding, bindingJson: canonicalizeSemanticJsonString(binding),
   });
   const authorizedOutcome = issueForecastRuntimeV2(runtimeInput);
-  if (authorizedOutcome.status !== "FORECAST_AUTHORIZED") throw new Error("Synthetic Forecast fixture refused");
+  if (authorizedOutcome.status !== "FORECAST_AUTHORIZED") {
+    throw new Error(`Synthetic Forecast fixture refused: ${JSON.stringify({
+      status: authorizedOutcome.status, reason: authorizedOutcome.reason,
+      upstreamReasonCodes: authorizedOutcome.upstreamReasonCodes,
+    })}`);
+  }
   let sequence = 0;
   return {
     async historicalPackage() {
