@@ -668,3 +668,41 @@ controller's exclusive resource grant. Prior393/19 native acceptance remains
 at its original head; no new execution or CI success is claimed by this plan.
 No schema, scientific/profile/security policy, live/provider/C3 action or
 positive capital authority is included.
+
+
+### Executed CI closure repair evidence
+
+Plan amendment d2d3724e preceded executable repair
+`a2e6c69f6e1d2aa8b6551bd3a87ef9555d0029c1`. The recorded evaluator now has
+an explicit observational/NONE inventory entry. The canonical service remains
+the sole raw canonical repository importer; recorded replay uses its existing
+held reader and a pure content-consistency helper. This replaces equality of
+SHA256(canonical JSON) with direct equality of the same rebuilt canonical JSON;
+the existing builder and malformed-input exceptions remain unchanged. Persisted
+owner scope/body/source/trust/consumed-input checks are unchanged.
+
+The original three closure failures were reproduced as3 FAIL/13 PASS at7612.
+At a2e6,134 assertions in13 scoped files passed with zero skips, including
+19 content-consistency/parity controls and the three exact closure suites.
+Before production edits, one selected real-evaluator case captured its full
+observational output (other cases intentionally not selected); the corrected
+actual evaluator retains exact content digest
+`874c8f791b6743f97537a0600f0d4068454c83fcedf733cd079193a3c24294b2`.
+No exact Understanding, canonical runtime Intelligence, Intelligence bundle or
+Forecast/Decision bundle appears; Forecast remains NON_ACTIONABLE.
+
+A fresh isolated local PostgreSQL16.14 database with zero initial public tables
+applied220 exact journal/SQL identities. The two affected native companions
+passed43 assertions (34 recorded-paper,9 canonical-PIT lineage), zero skipped;
+final readback found no other sessions, fault artifacts or disabled public user
+triggers. No existing database or registry was repaired. This is affected-path
+proof; the previous393/19 native result remains attributed only to76c6ba02.
+
+Full typecheck, lint, build, canon, governance, both source graphs and diff check
+passed at a2e6; existing warnings remain with no lint errors. No source graph
+pin, SQL, evaluator or native test change was required. All raw commands,
+results, source preservation, baseline output, original CI/local failures and
+teardown evidence are under accepted-base-340ead8d/ci-unit-failure. This final
+entry changes only the plan. Independent final review and fresh exact-head PR
+CI remain required; no local PG17, complete P10 or scientific/capital acceptance
+is claimed. All PostgreSQL and heavy-process grants were released.
