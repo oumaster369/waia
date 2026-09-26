@@ -15,7 +15,7 @@ import { createPostgresDraftInvoiceService } from "@/lib/trader/billing/draft-in
 import { createPostgresInvoiceIssuanceService } from "@/lib/trader/billing/invoice-issuance-service";
 import { ISSUANCE_ATTESTATION_KEYS } from "@/lib/trader/billing/invoice-issuance.types";
 import type { IssuanceAttestation } from "@/lib/trader/billing/invoice-issuance.types";
-import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
+import { persistBillingRealityFixture } from "@/tests/helpers/billing-reality-postgres";
 import { lockInvoiceCommandAccountPostgres } from "@/lib/trader/billing/invoice-command-lock-postgres";
 import { traderAuditActions } from "@/lib/trader/types";
 
@@ -53,7 +53,7 @@ describe.skipIf(!enabled)("DEE-1112 actual PostgreSQL invoice commands", () => {
     const lifecycle = createPostgresReportingPeriodLifecycleService(db);
     await lifecycle.openReportingPeriod(context, { exchangeAccountId: account, periodStart,
       startingEquity: "10000", openPositionsSnapshotRef: "DEE1112-synthetic", valuationSource: "DEE1112-synthetic", startingSnapshotAt: periodStart });
-    const period = await lifecycle.closeReportingPeriod(context, billingV2PeriodCloseEvidence({
+    const period = await lifecycle.closeReportingPeriod(context, await persistBillingRealityFixture(db, {
       organizationId: orgId, accountId: account, periodStart, periodEnd,
       realizedPnl: "100", unrealizedPnl: "0", endingEquity: "10100",
     }));

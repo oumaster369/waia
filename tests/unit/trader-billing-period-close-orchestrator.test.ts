@@ -1,3 +1,4 @@
+import { createHistoricalSqliteCloseFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 import { createAdminServiceOrgAccess } from "@/lib/trader/security/admin-service-org-access";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -8,7 +9,6 @@ import path from "node:path";
 import { getDb } from "@/db/client";
 import { auditLogs, userPlatformRoles } from "@/db/schema";
 import {
-  createSqliteBillingPeriodCloseOrchestrator,
   createSqliteHwmLedgerService,
   createReportingPeriodLifecycleService,
   createSqliteReportingPeriodRepository,
@@ -111,9 +111,9 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
     });
   });
 
-  it.each(["internal", "member", "admin"] as const)("%s authority closes and drafts through the full native billing chain", async (authority) => {
+  it.each(["internal", "member", "admin"] as const)("%s authority closes and drafts through the lower-level historical billing fixture", async (authority) => {
     const db = getDb();
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db, authority === "admin"
+    const orchestrator = createHistoricalSqliteCloseFixture(db, authority === "admin"
       ? { assertMembership: createAdminServiceOrgAccess({ kind: "sqlite", db }, "admin.audit.read") } : {});
     const context = { ...requireOrgContext(organizationId),
       ...(authority === "internal" ? {} : { userId: authority === "admin" ? ADMIN_ID : USER_ID }) };
@@ -157,7 +157,7 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
 
   it("refuses a naked realizedPnl before any HWM write", async () => {
     const db = getDb();
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db);
+    const orchestrator = createHistoricalSqliteCloseFixture(db);
     const hwm = createSqliteHwmLedgerService(db);
     const context = requireOrgContext(organizationId);
     const accountId = `${EXCHANGE_ACCOUNT_ID}-naked`;
@@ -186,7 +186,7 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
 
   it("refuses a receipt whose reporting scope is not this period", async () => {
     const db = getDb();
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db);
+    const orchestrator = createHistoricalSqliteCloseFixture(db);
     const hwm = createSqliteHwmLedgerService(db);
     const context = requireOrgContext(organizationId);
     const accountId = `${EXCHANGE_ACCOUNT_ID}-scope`;
@@ -222,7 +222,7 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
 
   it("refuses replaying the same period window after a receipt-backed close", async () => {
     const db = getDb();
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db);
+    const orchestrator = createHistoricalSqliteCloseFixture(db);
     const context = requireOrgContext(organizationId);
     const accountId = `${EXCHANGE_ACCOUNT_ID}-dup`;
     const periodStart = new Date("2026-08-01T00:00:00.000Z");
@@ -286,7 +286,7 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
       repository: createSqliteReportingPeriodRepository(db),
       writeAudit: (input) => writeTraderAuditLogSqlite(db, input),
     });
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db);
+    const orchestrator = createHistoricalSqliteCloseFixture(db);
     const hwm = createSqliteHwmLedgerService(db);
     const context = requireOrgContext(organizationId);
     const accountId = `${EXCHANGE_ACCOUNT_ID}-open-start`;
@@ -337,7 +337,7 @@ describe("billing period close orchestrator (BP-10 L2 unblock)", () => {
       repository: createSqliteReportingPeriodRepository(db),
       writeAudit: (input) => writeTraderAuditLogSqlite(db, input),
     });
-    const orchestrator = createSqliteBillingPeriodCloseOrchestrator(db);
+    const orchestrator = createHistoricalSqliteCloseFixture(db);
     const context = requireOrgContext(organizationId);
     const accountId = `${EXCHANGE_ACCOUNT_ID}-orphan`;
 

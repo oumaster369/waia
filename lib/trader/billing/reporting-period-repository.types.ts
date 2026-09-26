@@ -7,6 +7,7 @@ import type {
   RealizedStrategyProfitReceiptV2,
 } from "@/lib/trader/billing/v2";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import type { BillingRealityDependenciesV1 } from "./v2/reality-dependencies-v1";
 
 export type OpenReportingPeriodInput = {
   exchangeAccountId: string;
@@ -28,6 +29,7 @@ export type CloseReportingPeriodInput = {
   netWithdrawals?: string;
   realizedStrategyProfitReceipt: RealizedStrategyProfitReceiptV2;
   closedTradeSettlements: readonly ClosedTradeSettlementV2[];
+  realityDependencies?: BillingRealityDependenciesV1;
 };
 
 export type InsertOpenReportingPeriodRepoInput = {

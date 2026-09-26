@@ -1,3 +1,4 @@
+import { createHistoricalSqliteLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
@@ -13,7 +14,6 @@ import {
   createReportingPeriodLifecycleService,
   createSqliteFeeComputationService,
   createSqliteHwmLedgerService,
-  createSqliteReportingPeriodLifecycleService,
   createSqliteReportingPeriodRepository,
 } from "@/lib/trader/billing";
 import { writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
@@ -79,7 +79,7 @@ describe("fee computation service (DEE-309 S4)", () => {
     },
   ) {
     const db = getDb();
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
 
     const month = String(options.month).padStart(2, "0");
@@ -180,7 +180,7 @@ describe("fee computation service (DEE-309 S4)", () => {
 
   it("fails closed for non-CLOSED periods", async () => {
     const db = getDb();
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createHistoricalSqliteLifecycleFixture(db);
     const service = createSqliteFeeComputationService(db);
     const context = requireOrgContext(organizationId);
 
@@ -310,7 +310,7 @@ describe("fee computation service (DEE-309 S4)", () => {
 
     await bootstrapZeroHwm(accountId);
 
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createHistoricalSqliteLifecycleFixture(db);
     const rspSequence = ["100", "-40", "30", "50"] as const;
     const expectedBases = ["100", "0", "0", "40"] as const;
     const closedPeriods = [];

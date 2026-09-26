@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { lockInvoiceCommandAccountPostgres } from "@/lib/trader/billing/invoice-command-lock-postgres";
 import { DraftInvoiceDigestMismatchError } from "@/lib/trader/billing/invoice.errors";
 import { isIssuanceAttestationComplete } from "@/lib/trader/billing/invoice-issuance.types";
-import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
+import { parseBillingRealityDependencies, type BillingRealityDependenciesV1 } from "./v2/reality-dependencies-v1";
 
 const require = createRequire(import.meta.url);
 if (process.env.VITEST !== "true") {
@@ -112,7 +112,7 @@ function createBillingPeriodCloseOrchestrator(
     });
   }
   return createPostgresBillingPeriodCloseOrchestrator(runtime.db, {
-      assertMembership: createAdminServiceOrgAccess(runtime, "admin.audit.read"),
+      assertMembership: (context, bound) => createAdminServiceOrgAccess({ kind: "postgres", db: bound }, "admin.audit.read")(context),
     });
 }
 
@@ -533,6 +533,7 @@ type ReportingPeriodCommandBody = {
   realized_pnl?: string;
   realized_strategy_profit_receipt?: unknown;
   closed_trade_settlements?: unknown;
+  reality_dependencies?: unknown;
   unrealized_pnl?: string;
   net_deposits?: string;
   net_withdrawals?: string;
@@ -547,6 +548,7 @@ function parseCanonicalProfitEvidence(body: ReportingPeriodCommandBody):
   | {
       receipt: RealizedStrategyProfitReceiptV2;
       settlements: readonly ClosedTradeSettlementV2[];
+      realityDependencies: BillingRealityDependenciesV1;
     }
   | AdminRouteHandlerResult {
   if (Object.prototype.hasOwnProperty.call(body, "realized_pnl")) {
@@ -566,6 +568,7 @@ function parseCanonicalProfitEvidence(body: ReportingPeriodCommandBody):
   return {
     receipt: receipt as RealizedStrategyProfitReceiptV2,
     settlements: settlements as ClosedTradeSettlementV2[],
+    realityDependencies: parseBillingRealityDependencies(body.reality_dependencies),
   };
 }
 
@@ -622,12 +625,10 @@ export async function handleAdminReportingPeriodCommandPost(
     const orchestrator = createBillingPeriodCloseOrchestrator(runtime);
 
     if (command === "close-and-materialize") {
-      const exchangeAccountId = parseRequiredString(
-        body.exchange_account_id,
-        "exchange_account_id",
-      );
-      if (typeof exchangeAccountId !== "string") {
-        return exchangeAccountId;
+      // Account identities are exact text in Reality, including their bytes.
+      const exchangeAccountId = body.exchange_account_id;
+      if (typeof exchangeAccountId !== "string" || !exchangeAccountId.trim()) {
+        return adminClientError(400, "INVALID_BODY", "exchange_account_id is required.");
       }
 
       const periodStart = parseRequiredDate(body.period_start, "period_start");
@@ -690,15 +691,13 @@ export async function handleAdminReportingPeriodCommandPost(
         valuationSource,
         realizedStrategyProfitReceipt: profitEvidence.receipt,
         closedTradeSettlements: profitEvidence.settlements,
+        realityDependencies: profitEvidence.realityDependencies,
         unrealizedPnl,
         netDeposits: body.net_deposits?.trim(),
         netWithdrawals: body.net_withdrawals?.trim(),
       };
-      const result = runtime.kind === "postgres"
-        ? await runWaiaPostgresTransaction(runtime.db, async (tx) =>
-            createBillingPeriodCloseOrchestrator({ kind: "postgres", db: tx })
-              .closeAndMaterialize(context, closeInput))
-        : await orchestrator.closeAndMaterialize(context, closeInput);
+      // The production close factory owns isolation, source lock and all effects.
+      const result = await orchestrator.closeAndMaterialize(context, closeInput);
 
       return adminSuccess({ result }, runtime.kind);
     }

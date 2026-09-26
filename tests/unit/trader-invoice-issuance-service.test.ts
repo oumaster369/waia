@@ -1,3 +1,4 @@
+import { createHistoricalSqliteLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
@@ -14,7 +15,6 @@ import {
   createSqliteDraftInvoiceService,
   createSqliteHwmLedgerService,
   createSqliteInvoiceIssuanceService,
-  createSqliteReportingPeriodLifecycleService,
 } from "@/lib/trader/billing";
 import { traderAuditActions } from "@/lib/trader/types";
 import { ensureUserCoreSeedSqlite } from "@/lib/waia-core/provisioning/sqlite";
@@ -80,7 +80,7 @@ describe("invoice issuance service (DEE-311 S6)", () => {
     options: { month: number; realizedPnl: string; unrealizedPnl?: string },
   ) {
     const db = getDb();
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
     const month = String(options.month).padStart(2, "0");
 
