@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 02c4fd71cf6999f49eebeba0c460639ea92b9651
-  lastValidationAt: "2026-09-26T18:33:44.344425+00:00"
+  lastValidatedGitSha: 7aab6d334b7108f62e5366a2dc477d7a61624fa5
+  lastValidationAt: "2026-09-26T20:23:58.307214+00:00"
   blockedReason: null
-  nextAction: "Root exact-head PR683 update after independent fixture/CI-fix review; fresh PG17 and all applicable PR checks remain required. Fresh local358/18 native,114/5 scoped and full readiness passed; full P10 remains open."
+  nextAction: "Root PR683 update after current93d57f47 independent review;301/23 scoped and full readiness passed. No new local native run; inherited ecc908ed CI393/19 retained. New exact-head CI including PG17 mandatory; fullP10 open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -727,3 +727,39 @@ and affected43/2 native proofs retain their original76c6/a2e6 identities. The
 disjoint incoming patch does not by itself justify repeating local native work;
 PostgreSQL access is not granted for this refresh. Fresh exact-head PR CI remains
 mandatory and original CI failures/evidence are retained.
+
+
+### Accepted-main 93d57f47 refresh executed evidence
+
+Plan-first e3b21b62 preceded normal merge
+`7aab6d334b7108f62e5366a2dc477d7a61624fa5` with accepted
+`93d57f47de0bb021f18debbae81f07c2d825c264`. There were no conflicts.
+All39 own and9 incoming blobs remain exact and both complete binary patch
+directions match their parents. No shared source or workflow rewrite was needed.
+All19 capital,3 billing,2 payment and4 PG17 observation mandatory suites retain
+their exact registrations and enabled proof guards. Capital/billing jobs live
+in postgres-integration.yml; payment and observation retain their separate
+workflows.
+
+At clean7aab,301 assertions across23 focused files passed with0 skips, covering
+the incoming credential startup/host/entrypoint controls, all four proof guards,
+full220-journal FHV/Forecast migration compatibility and prior recorded-analysis
+consumer-closure/evaluator controls. Full typecheck, lint, build, canon, governance,
+Execution graph, Reality graph and diff check passed. The final change updates
+only this plan; no runtime/test/schema/source-pin changes followed execution.
+
+No PostgreSQL/native run or access occurred in this refresh. The controller
+accepted reuse of disjoint-source evidence: local43/2 at a2e6 and actual prior
+PR CI393/19 at ecc908ed (job108473825945, complete log SHA256
+`17c68eea2eb8768bc51ed8e39b8c9772f98d88fcdbfc6862243bb7fa5ecb77e6`).
+That log/receipt was independently matched; it is not relabeled as7aab execution.
+The incoming PG17 strict guard must prove the complete journal including0219
+and its existing FHV compatibility on the new exact PR head. Neither repository
+preservation nor previous CI is a substitute for that current-base CI gate.
+
+Evidence is under evidence/dee-1121/accepted-base-93d57f47: full patch equality,
+blob identities, enabled proof registrations,301/23 raw results, eight readiness
+logs, inherited native attribution and final metadata. Original CI failures and
+all prior-base evidence are unchanged. All local processes have ended and heavy
+resources are released. Independent final metadata review and controller
+publication remain separate; no new authority or fullP10 readiness is claimed.
