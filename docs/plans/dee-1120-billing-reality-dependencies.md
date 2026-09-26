@@ -21,12 +21,12 @@ state:
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: f52561d6466dedc65b8d30023cff7f2f94af283b
-  lastValidationAt: "2026-09-26T14:03:22.072Z"
+  prNumber: 679
+  prUrl: https://github.com/oumaster369/waia/pull/679
+  lastValidatedGitSha: d027a4229be435d99ae340d02242100f1da929df
+  lastValidationAt: "2026-09-26T15:06:28.075439+00:00"
   blockedReason: null
-  nextAction: "Local readiness and independent review accepted; publish after current accepted-base reconciliation, require fresh canonical parity and all exact-head CI before merge. Full P08 remains open."
+  nextAction: "Refresh existing PR679 after final independent current-base review; require new exact-head canonical parity and all CI before normal merge. Full P08 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -92,6 +92,14 @@ Normal merge `f52561d6466dedc65b8d30023cff7f2f94af283b` includes accepted main `
 Fresh root execution at f525 passed **429 tests /24 scoped files, zero skipped**, all nine repository readiness checks, and **315 tests /16 mandatory native files, zero skipped**. A separate fresh isolated local database `waia_dee1120_root_1a59b31b` on PostgreSQL16.14 applied all219 migrations from zero public tables and finished with no fault triggers/functions, disabled public user triggers or other sessions. Evidence is in completion-audit `evidence/dee-1120/accepted-base-1a59b31b`; `root-readiness.json` and `acceptance.json` retain actual execution times, command arguments and SHA. No old result is relabelled as a rerun. The final record is plan-only.
 
 Independent M01 review of the refreshed source confirms exact preservation, resource/transaction composition and both CI proof lists. The three historical canonical-profile billing suites still require actual fresh CI execution before merge. This acceptance does not close full P08/M01, financial attribution/finality or live authority, and does not assert a production billing action.
+
+## Accepted-base refresh — 21a60ec3
+
+Normal merge `d027a4229be435d99ae340d02242100f1da929df` includes accepted main `21a60ec38573f0ca5c535992e9e09392c2aa78c9` and its decimal syntax repair. All33 package paths and five incoming numeric-boundary paths are disjoint; both complete binary patch directions retain their exact original contents. No production implementation was edited during this refresh.
+
+Fresh root execution at d027 passed **462 tests /26 scoped files** and **315 tests /16 mandatory native files**, zero skipped, plus all nine repository readiness checks. A fresh isolated PostgreSQL16.14 database `waia_dee1120_root_21a60ec3` began with zero public tables, applied219 migrations, and finished without fault triggers/functions, disabled user triggers or other sessions. Exact commands, times and source attribution are recorded under completion-audit `evidence/dee-1120/accepted-base-21a60ec3`.
+
+Independent M01 current-base review additionally exercised48 actual pure numeric/dependency controls and checked transaction/error composition, both patch directions and preservation of all16 mandatory native plus three canonical billing proof registrations. This plan-only metadata change does not relabel old execution evidence. The old PR679 b37d head passed31 checks but became stale after PR678: fresh exact-head/current-base CI, including actual canonical-profile results, remains required before merge. FullP08, fullM01, production billing effects and live authority remain unaccepted.
 
 ## Frozen contract provenance
 
