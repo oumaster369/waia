@@ -108,8 +108,8 @@
       "placeOrder"
     ],
     "expectedFileCount": 134,
-    "sortedPathDigestHex": "e07814e366d0b73f3398f20c75fe40abab1898d54f233577e3a0eb0fa67c3473",
-    "sortedContentDigestHex": "05f3e6699b51071a96b7de6dcdc14bce2950dd367530bd27236b27448cc7f259"
+    "sortedPathDigestHex": "6e9ed1d7e0ea30f015281ef5bdffbef53bae722e19302e200526b55f1c2a17a7",
+    "sortedContentDigestHex": "50dc5f78865650e9ab3f63f50896586c07709f75af4a9dc558e07981ded178d0"
   },
   "consumerRules": [
     {
