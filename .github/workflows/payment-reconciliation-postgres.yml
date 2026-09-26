@@ -5,21 +5,15 @@ on:
   pull_request:
     paths:
       - "db/**"
-      - "lib/waia-core/**"
-      - "lib/trader/settlement/**"
-      - "lib/trader/billing/**"
-      - "lib/trader/audit/**"
-      - "lib/trader/risk/numeric.ts"
-      - "lib/trader/readiness/htr-postgres-connection-preflight.ts"
-      - "tests/helpers/**"
-      - "tests/integration/htr-postgres-fixture-prelude.ts"
-      - "tests/integration/postgres-reconciliation-workflow-parity.test.ts"
-      - "tests/integration/postgres-settlement-reconciliation-parity.test.ts"
-      - "scripts/postgres-validation/**"
-      - "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+      - "lib/**"
+      - "scripts/**"
+      - "tests/**"
+      - "app/api/trader/settlement-reconciliation/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "vitest*"
+      - "tsconfig*.json"
+      - "drizzle.postgres.config.ts"
       - ".github/workflows/payment-reconciliation-postgres.yml"
 
 permissions:
