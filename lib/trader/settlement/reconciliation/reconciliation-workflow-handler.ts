@@ -160,6 +160,16 @@ export async function handleReconciliationWorkflowCommand(
     }
 
     const body = await parseCommandBody(request);
+    if (body != null && Object.prototype.hasOwnProperty.call(body, "coolingOffMs")) {
+      return {
+        status: 400,
+        body: errorEnvelope(
+          "COOLING_OFF_OVERRIDE_FORBIDDEN",
+          "Reconciliation cooling-off is controlled by server configuration.",
+        ),
+        outcome: "client_error",
+      };
+    }
     if (!body.idempotencyKey || typeof body.expectedLastEventSeq !== "number") {
       return {
         status: 400,
@@ -222,7 +232,6 @@ export async function handleReconciliationWorkflowCommand(
               targetInvoiceId:
                 typeof body.targetInvoiceId === "string" ? body.targetInvoiceId : null,
               rationale: typeof body.rationale === "string" ? body.rationale : "",
-              coolingOffMs: typeof body.coolingOffMs === "number" ? body.coolingOffMs : null,
               recommendationRef:
                 typeof body.recommendationRef === "string" ? body.recommendationRef : null,
             },
@@ -315,7 +324,6 @@ export async function handleReconciliationWorkflowCommand(
               targetInvoiceId:
                 typeof body.targetInvoiceId === "string" ? body.targetInvoiceId : null,
               rationale: typeof body.rationale === "string" ? body.rationale : "",
-              coolingOffMs: typeof body.coolingOffMs === "number" ? body.coolingOffMs : null,
               recommendationRef:
                 typeof body.recommendationRef === "string" ? body.recommendationRef : null,
             },

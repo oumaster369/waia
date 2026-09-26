@@ -2,7 +2,27 @@ import { ReconciliationInvoiceNotEligibleError } from "@/lib/trader/settlement/r
 import type { ReconciliationProjectedImpact } from "@/lib/trader/settlement/reconciliation/reconciliation.event-payloads";
 import type { ReconciliationResolutionType } from "@/lib/trader/settlement/reconciliation/reconciliation.types";
 import type { InvoiceSettlementRepository } from "@/lib/trader/settlement/account-status-repository.types";
+import { compareDecimal, InvalidDecimalError } from "@/lib/trader/risk/numeric";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+
+function amountsExactlyEqual(invoiceFee: string, settlementAmount: string): boolean {
+  // Require an actual decimal digit even on versions of the shared parser that
+  // interpret punctuation-only strings as zero. Preserve valid decimal signs/scale.
+  if (
+    typeof invoiceFee !== "string" ||
+    typeof settlementAmount !== "string" ||
+    !/[0-9]/.test(invoiceFee) ||
+    !/[0-9]/.test(settlementAmount)
+  ) {
+    return false;
+  }
+  try {
+    return compareDecimal(invoiceFee, settlementAmount) === 0;
+  } catch (error) {
+    if (error instanceof InvalidDecimalError) return false;
+    throw error;
+  }
+}
 
 export type ValidateManualApplyInput = {
   targetInvoiceId: string;
@@ -43,7 +63,7 @@ export async function validateManualApplyTarget(
       "missing settlement value",
     );
   }
-  if (invoice.performanceFee !== input.settlementValuedAmount) {
+  if (!amountsExactlyEqual(invoice.performanceFee, input.settlementValuedAmount)) {
     throw new ReconciliationInvoiceNotEligibleError(
       input.targetInvoiceId,
       "amount mismatch with settlement valued amount",
