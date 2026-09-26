@@ -1,0 +1,239 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1124",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1116",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Complete bounded payment observations and exact atomic token amounts before payment/checkpoint effects.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Same payment evidence to reconciliation boundary. Wave 2 depends on successful cumulative wave 1 acceptance, not a new product-semantic or compile-time dependency.",
+        "Exact reviewed implementations predate this successor. Only new imports descending from its own committed admission can become mapped delivery commits."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1116-payment-observation-integrity.md",
+        "lib/waia-core/payment-watcher/run-watcher-cycle.ts",
+        "lib/waia-core/payment-watcher/tron-adapter.ts",
+        "lib/waia-core/payment-watcher/watcher-cycle.types.ts",
+        "tests/unit/payment-watcher-observation-integrity.test.ts",
+        "tests/unit/payment-watcher-tron-adapter.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly authorized technical corrections, independent testing/audit, normal checked merges, nontrading deployment and rational consolidation. Financial/ADR/scientific/live gates unchanged."
+      },
+      "expectedAcceptanceEvidence": [
+        "Immutable 50171ca7 source blobs preserved; all 33 incoming accepted-base paths unchanged; exact 15 child plus 2 metadata path closure and honest source/admission/import chronology.",
+        "Fresh serial cumulative wave 1, 13 scoped test files at its actual new import head, before wave 2.",
+        "Original independent semantic reviews remain antecedents; final M01 current-base complete-diff/history review, root readiness and all applicable exact-head CI are required. No historical test receipt is relabeled as new execution."
+      ],
+      "expectedTests": [
+        "pnpm test --run --no-file-parallelism tests/unit/health-payment-watcher-route.test.ts tests/unit/payment-watcher-checkpoint-repository.test.ts tests/unit/payment-watcher-confirmation.test.ts tests/unit/payment-watcher-cycle.test.ts tests/unit/payment-watcher-normalize-network.test.ts tests/unit/payment-watcher-observation-integrity.test.ts tests/unit/payment-watcher-stale-lease-recovery.test.ts tests/unit/payment-watcher-tron-adapter.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-billing-reality-truth-integrity.test.ts tests/unit/trader-decimal-billing-boundary.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/treasury-watcher-adapter.test.ts",
+        "Scoped lint and diff/source preservation; root serial full lint, typecheck, build, canon, governance and both authority consumer graphs.",
+        "Preserve all 16 incoming capital registrations and separate 3 canonical billing registrations; require applicable exact-head CI. Fresh canonical two-suite payment CI uses unchanged identity/migration/result guards with zero skips.",
+        "Admission/frozen manifest validation and rendered PR governance preflight use exact accepted 56ee65f0 base, successor admission and actual frozen head."
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "sourceProvenance": {
+        "consolidatedSourceHead": "50171ca7afffb0c710bd5aafc32a896333e857ae",
+        "historicalSourceCommit": "2af4d14a5caaaac7db28c98343cefce0b9c74265",
+        "historicalMappedCommitsNotSuccessorImports": [
+          "601baeaa899471b3c1c7db27a845341597a8a430"
+        ],
+        "files": [
+          {
+            "path": "docs/plans/dee-1116-payment-observation-integrity.md",
+            "gitBlob": "cc3c62a73a4f6318d5ac2427ff47dbf177068b34",
+            "sha256": "0bcf1fdb9f0906fba133902e255c38f1c2edb89c64d45536902c7b6b4a54394b"
+          },
+          {
+            "path": "lib/waia-core/payment-watcher/run-watcher-cycle.ts",
+            "gitBlob": "5b29e586579d2f91ff4e5c9d2f2406979ffd1492",
+            "sha256": "4d16b1f678a9e5f64245eb574552e7fdea686db376b092015839941b812485be"
+          },
+          {
+            "path": "lib/waia-core/payment-watcher/tron-adapter.ts",
+            "gitBlob": "09bb2ac8ebf7694d715e2d29a847a22a002e35cc",
+            "sha256": "455a5a2a7a2d06d852b3036266a1a67a9c0e445879cee38134244749edc704fe"
+          },
+          {
+            "path": "lib/waia-core/payment-watcher/watcher-cycle.types.ts",
+            "gitBlob": "bfdffa995f620049dc892780839cf171d6de1d01",
+            "sha256": "52436c4af0ac2792ed20e2a94b628a6d9b2acd0ecd0e0fc0c80b1bacbebfd9ef"
+          },
+          {
+            "path": "tests/unit/payment-watcher-observation-integrity.test.ts",
+            "gitBlob": "1cee6c78789fc17b41bd7b25eef41e3818ce17e3",
+            "sha256": "c3d02e3cbe98c09b13e0cefdd2b904d3c5ab5230fca23100f7987d3eae77bb80"
+          },
+          {
+            "path": "tests/unit/payment-watcher-tron-adapter.test.ts",
+            "gitBlob": "c224db2c416cb9bbc5e9f6842312e8730f2cc869",
+            "sha256": "774c74ce6e4440a0e3267a005261f4aa0bbc8dcf8b36f8925fa2fa134afaf790"
+          }
+        ]
+      }
+    },
+    {
+      "issue": "DEE-1117",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Exact manual settlement/invoice amount equality and server-owned HTTP cooling without changing persisted financial evidence. Require both existing canonical-profile native reconciliation companions to execute without skips in fresh CI; add only workflow/result-guard regression proof.",
+      "dependencies": [
+        "DEE-1116"
+      ],
+      "dependencyEvidence": [
+        "Same payment evidence to reconciliation boundary. Wave 2 depends on successful cumulative wave 1 acceptance, not a new product-semantic or compile-time dependency.",
+        "Exact reviewed implementations predate this successor. Only new imports descending from its own committed admission can become mapped delivery commits."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1117-reconciliation-command-integrity.md",
+        "lib/trader/settlement/reconciliation/reconciliation-validation.ts",
+        "lib/trader/settlement/reconciliation/reconciliation-workflow-handler.ts",
+        "tests/helpers/reconciliation-command-memory.ts",
+        "tests/unit/reconciliation-exact-manual-amounts.test.ts",
+        "tests/unit/reconciliation-workflow-cooling-admission.test.ts",
+        ".github/workflows/payment-reconciliation-postgres.yml",
+        "scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs",
+        "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly authorized technical corrections, independent testing/audit, normal checked merges, nontrading deployment and rational consolidation. Financial/ADR/scientific/live gates unchanged."
+      },
+      "expectedAcceptanceEvidence": [
+        "Immutable 50171ca7 source blobs preserved; all 33 incoming accepted-base paths unchanged; exact 15 child plus 2 metadata path closure and honest source/admission/import chronology.",
+        "Fresh serial cumulative wave 2, all 23 scoped test files covering both children at its actual new import head, plus fresh canonical two-suite CI executed proof.",
+        "Original independent semantic reviews remain antecedents; final M01 current-base complete-diff/history review, root readiness and all applicable exact-head CI are required. No historical test receipt is relabeled as new execution."
+      ],
+      "expectedTests": [
+        "pnpm test --run --no-file-parallelism tests/unit/health-payment-watcher-route.test.ts tests/unit/payment-watcher-checkpoint-repository.test.ts tests/unit/payment-watcher-confirmation.test.ts tests/unit/payment-watcher-cycle.test.ts tests/unit/payment-watcher-normalize-network.test.ts tests/unit/payment-watcher-observation-integrity.test.ts tests/unit/payment-watcher-stale-lease-recovery.test.ts tests/unit/payment-watcher-tron-adapter.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/reconciliation-commands.test.ts tests/unit/reconciliation-exact-manual-amounts.test.ts tests/unit/reconciliation-fold-replay.test.ts tests/unit/reconciliation-priority.test.ts tests/unit/reconciliation-serialize.test.ts tests/unit/reconciliation-sweeper.test.ts tests/unit/reconciliation-transitions.test.ts tests/unit/reconciliation-workflow-cooling-admission.test.ts tests/unit/settlement-matching.test.ts tests/unit/trader-billing-reality-truth-integrity.test.ts tests/unit/trader-decimal-billing-boundary.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/treasury-watcher-adapter.test.ts tests/unit/postgres-payment-reconciliation-proof-guard.test.ts",
+        "Scoped lint and diff/source preservation; root serial full lint, typecheck, build, canon, governance and both authority consumer graphs.",
+        "Preserve all 16 incoming capital registrations and separate 3 canonical billing registrations; require applicable exact-head CI. Fresh canonical two-suite payment CI uses unchanged identity/migration/result guards with zero skips.",
+        "Admission/frozen manifest validation and rendered PR governance preflight use exact accepted 56ee65f0 base, successor admission and actual frozen head."
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      },
+      "sourceProvenance": {
+        "consolidatedSourceHead": "50171ca7afffb0c710bd5aafc32a896333e857ae",
+        "historicalSourceCommit": "997b5a9084a9a30f7cf5af188723685adadbd16c",
+        "historicalMappedCommitsNotSuccessorImports": [
+          "bd444f35d0a08a5e5223d97b42f6e458daacfb60",
+          "60d38dfa3dd53b21d6fd7d58db8b274b4a065883",
+          "0077bfebd9147e35564050b5c79cb072ce1f5965"
+        ],
+        "files": [
+          {
+            "path": "docs/plans/dee-1117-reconciliation-command-integrity.md",
+            "gitBlob": "71bd09352b561e39c44bff00f537fd2e1ab0ae8b",
+            "sha256": "d155a099fe7d2743f7630c6aafe3deb11cf8441b247662bb9360ac866900964d"
+          },
+          {
+            "path": "lib/trader/settlement/reconciliation/reconciliation-validation.ts",
+            "gitBlob": "52f556fad51f17580705b30adc840415238151d8",
+            "sha256": "069eb7b0d90b50fa9f017353839404f6c016a6ef45247ba909128dd98b75e0a4"
+          },
+          {
+            "path": "lib/trader/settlement/reconciliation/reconciliation-workflow-handler.ts",
+            "gitBlob": "eccbf3a2c2a4f8acecc5f30fadfb7a4702fe2f1e",
+            "sha256": "4c34bd9638e62e2ee4c6e6cd0cab3447325b0295ac947eac165cd52cd4eb0c51"
+          },
+          {
+            "path": "tests/helpers/reconciliation-command-memory.ts",
+            "gitBlob": "8d607e55775e8c8fceafdc9e7c5b573d048031f9",
+            "sha256": "d8e1de366e5d7e971f5b9cfa29273f0ad4298ece1880a0c1dccb272d77178efc"
+          },
+          {
+            "path": "tests/unit/reconciliation-exact-manual-amounts.test.ts",
+            "gitBlob": "989f1adc6570d27ebfb9048fe03c4c93648fd34b",
+            "sha256": "82201e66e9798862e7376dd405df00c15586a92b928d7692bac9e0504ebe00af"
+          },
+          {
+            "path": "tests/unit/reconciliation-workflow-cooling-admission.test.ts",
+            "gitBlob": "c5518028700fc8a3691055d0ae31c64abe45e425",
+            "sha256": "55d83d868145c04aa94538ace23055cfbeb1be84583d582f8f36bbb87d4c2c14"
+          },
+          {
+            "path": ".github/workflows/payment-reconciliation-postgres.yml",
+            "gitBlob": "b13394f307b8554b8acce2e3694272a21c19ac60",
+            "sha256": "9f53110f9176c6ff756f2013ae4775f4f2d0ffd43f89b86cbb05dc4056def437"
+          },
+          {
+            "path": "scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs",
+            "gitBlob": "3477fb1db39f46cedf825bf11a4d17a37eecdc46",
+            "sha256": "f929b84414b9096ea395d43784125f27c25ec95b368e797b95268f6172bfa62e"
+          },
+          {
+            "path": "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts",
+            "gitBlob": "a4070a31827182df33a9cd6ae5c781a1f22ab9a9",
+            "sha256": "7eb64b33f5308700279f2dd695a6e39931bc8de4248808349a77aa77b8a17b36"
+          }
+        ]
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Root adopted exact successor contract 10d419b31a84265e057802c42c74f7de8c0a0f94915de4d0e9c127aad6aae4db and created DEE-1124 under DEE-638 before this admission; M01 independently accepted that exact bounded design. Original implementations predate admission. No successor import, current cumulative proof or final implementation acceptance is claimed."
+    },
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "splitRationale": "Two coherent payment children with disjoint 6+9 path ownership, plus only this plan/manifest: 17 final paths. Original source changes exceed the approximate 800-line target: 1427 lines include 484 plan and 699 test/helper lines, leaving 244 production lines; three reviewed CI/proof files and successor metadata are additional. Immutable source reuse, serial cumulative proof and required final M01 complete-diff review support the bounded reviewability rationale. Record final actual size; split if coherence, reviewability or one-revert rollback no longer holds.",
+  "rollbackStrategy": "One code-only squash revert restores prior nontrading code behavior without schema/data rollback. It does not undo observed payment records or authorize checkpoint/history rewriting. Actual deployment/rollback remains root-controlled.",
+  "sourceProvenance": {
+    "acceptedBase": "56ee65f00f3b19858d57ea8f3947d2867822e9ac",
+    "adoptedContractSha256": "10d419b31a84265e057802c42c74f7de8c0a0f94915de4d0e9c127aad6aae4db",
+    "preservedSupersededIssue": "DEE-1123",
+    "preservedSupersededHead": "50171ca7afffb0c710bd5aafc32a896333e857ae",
+    "preservedSupersededPR": "https://github.com/oumaster369/waia/pull/680",
+    "originalSourcePatchBase": "21a60ec38573f0ca5c535992e9e09392c2aa78c9",
+    "descriptiveInventorySha256": "51b9172b547067489130b5f1dfb98ce63357cd232019ad0d12b01f2304c0a815"
+  },
+  "preservedProofSets": {
+    "capital": [
+      "postgres-execution-v2.test.ts",
+      "postgres-risk-v2.test.ts",
+      "postgres-risk-limits-bootstrap.test.ts",
+      "postgres-trader-service-actor-authorization.test.ts",
+      "postgres-reality-v2.test.ts",
+      "postgres-canonical-decision-verification-v2.test.ts",
+      "postgres-promotion-audit-atomicity.test.ts",
+      "postgres-runtime-authority-v2.test.ts",
+      "postgres-guardian-authority-v2.test.ts",
+      "postgres-forecast-v2-feedback-read-port.test.ts",
+      "postgres-forecast-v2-persistence.test.ts",
+      "postgres-billing-period-command-atomicity.test.ts",
+      "postgres-billing-invoice-command-atomicity.test.ts",
+      "postgres-billing-reality-dependencies.test.ts",
+      "postgres-noncapital-cycle-owner-v2.test.ts",
+      "postgres-org-live-enable-atomicity.test.ts"
+    ],
+    "canonicalBilling": [
+      "admin-console-billing-idempotency-postgres.test.ts",
+      "postgres-reporting-period-parity.test.ts",
+      "postgres-invoice-issuance-parity.test.ts"
+    ],
+    "canonicalPaymentsAfterWave2": [
+      "postgres-reconciliation-workflow-parity.test.ts",
+      "postgres-settlement-reconciliation-parity.test.ts"
+    ]
+  }
+}
