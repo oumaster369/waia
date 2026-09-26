@@ -3,7 +3,7 @@ import postgres from "postgres";
 import { createRequire } from "node:module";
 import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "@/db/schema.postgres";
-import { recordedPublicTransport, assertRecordedAnalysisTestDatabase } from "./recorded-paper-public-transport";
+import { recordedPublicTransport, recordedBundleChronology, assertRecordedAnalysisTestDatabase } from "./recorded-paper-public-transport";
 import { captureSession } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
 import { completeRecordedAnalysisPostgresV1 } from "@/lib/trader/runtime-v2/noncapital-cycle-owner-postgres-v2";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
@@ -14,7 +14,7 @@ const url = process.env.DATABASE_URL_POSTGRES!;
 assertRecordedAnalysisTestDatabase(url);
 const emit = (value: unknown) => console.info(JSON.stringify(value));
 let fetches = 0;
-globalThis.fetch = recordedPublicTransport(() => payload.fixedSourceTime ?? Date.now(), () => { fetches++; if (payload.forbidFetch) throw new Error("REPLAY_TRANSPORT_FORBIDDEN"); });
+globalThis.fetch = recordedPublicTransport(() => payload.fixedSourceTime ?? Date.now(), () => { fetches++; if (payload.forbidFetch) throw new Error("REPLAY_TRANSPORT_FORBIDDEN"); }, { closedBarsOnly: true });
 async function main() {
   if (payload.operation === "complete") {
     const client = postgres(url, { max: 1, connection: { application_name: payload.applicationName ?? "dee1121-child" } });
@@ -35,6 +35,7 @@ async function main() {
     const clockBarriers: Awaited<ReturnType<typeof awaitRecordedBundleDatabaseClock>>[] = [];
     HtxBarPollSource.prototype.fetchMandatoryEvaluationBundle = async function () {
       const bundle = await original.call(this);
+      emit({ event: "fixture_source_chronology", ...recordedBundleChronology(bundle) });
       clockBarriers.push(await awaitRecordedBundleDatabaseClock(bundle,
         () => fixtureDb.transaction(tx => readRuntimeDatabaseClockV2(tx), { accessMode: "read only" })));
       return bundle;

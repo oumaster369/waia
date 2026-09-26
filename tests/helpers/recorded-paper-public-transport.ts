@@ -1,5 +1,12 @@
+import { createHash } from "node:crypto";
+import type { GatewayPollResult } from "@/lib/trader/market-data/market-data-gateway";
+
 /** Synthetic public HTX responses only; no delegation to network. */
-export function recordedPublicTransport(now: () => number, record: (path: string) => void = () => {}) {
+export function recordedPublicTransport(
+  now: () => number,
+  record: (path: string) => void = () => {},
+  options: Readonly<{ closedBarsOnly?: boolean }> = {},
+) {
   return (async (input: RequestInfo | URL) => {
     const u = new URL(String(input)); record(u.pathname);
     if (u.searchParams.get("symbol") !== "btcusdt") throw new Error("FIXTURE_UNEXPECTED_SYMBOL");
@@ -7,7 +14,8 @@ export function recordedPublicTransport(now: () => number, record: (path: string
     if (u.pathname === "/market/history/kline") {
       const intervals: Record<string, number> = { "1min": 60_000, "15min": 900_000, "60min": 3_600_000, "4hour": 14_400_000, "1day": 86_400_000 };
       const interval = intervals[u.searchParams.get("period")!]; if (!interval) throw new Error("FIXTURE_UNEXPECTED_INTERVAL");
-      body = { status: "ok", ts, data: Array.from({ length: 25 }, (_, i) => ({ id: (Math.floor(ts / interval) * interval - i * interval) / 1000,
+      // Native happy paths acquire complete closed candles; unit fixtures still include the current open candle by default.
+      body = { status: "ok", ts, data: Array.from({ length: 25 }, (_, i) => ({ id: (Math.floor(ts / interval) * interval - (i + (options.closedBarsOnly ? 1 : 0)) * interval) / 1000,
         open: 100, high: 102, low: 99, close: 101, amount: 2, vol: 202, count: 3 })) };
     } else if (u.pathname === "/market/detail/merged") body = { status: "ok", ts, tick: { bid: [100, 1], ask: [102, 1], close: 101 } };
     else if (u.pathname === "/market/depth") body = { status: "ok", tick: { ts, bids: [[100, 1]], asks: [[102, 1]] } };
@@ -15,6 +23,19 @@ export function recordedPublicTransport(now: () => number, record: (path: string
     else throw new Error("FIXTURE_UNEXPECTED_ENDPOINT");
     return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
   }) as typeof fetch;
+}
+
+/** Test diagnostics captured before admission; no time or source value is rewritten. */
+export function recordedBundleChronology(bundle: GatewayPollResult) {
+  return {
+    bundleDigest: createHash("sha256").update(JSON.stringify(bundle)).digest("hex"),
+    observedWallTimeUtc: new Date().toISOString(),
+    quoteTimeUtc: bundle.snapshot.quote?.timestamp,
+    observations: bundle.canonicalPitCandidates.map(o => ({ kind: o.kind, interval: o.interval,
+      health: o.health, eventTimeUtc: o.provenance.eventTimeUtc, ingestTimeUtc: o.provenance.ingestTimeUtc })),
+    barBounds: Object.entries(bundle.mtfBarsByInterval).map(([interval, bars]) => ({ interval, count: bars.length,
+      firstOpenTimeUtc: bars[0]?.barOpenTime, lastOpenTimeUtc: bars.at(-1)?.barOpenTime, lastCloseTimeUtc: bars.at(-1)?.barCloseTime })),
+  };
 }
 
 /** Admit only this disposable local lane or the exact GitHub native-proof service. */

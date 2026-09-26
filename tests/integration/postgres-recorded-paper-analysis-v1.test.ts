@@ -12,7 +12,7 @@ import * as schema from "@/db/schema.postgres";
 import { seedWp13User } from "./wp13-intelligence-test-helpers";
 import { createPostgresMiSourceProvenanceService } from "@/lib/trader/mi/source-provenance-service";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
-import { recordedPublicTransport, assertRecordedAnalysisTestDatabase } from "../helpers/recorded-paper-public-transport";
+import { recordedPublicTransport, recordedBundleChronology, assertRecordedAnalysisTestDatabase } from "../helpers/recorded-paper-public-transport";
 import { awaitRecordedBundleDatabaseClock } from "../helpers/recorded-paper-clock-barrier";
 import { captureSession, copy, seal, ANALYSIS_CONTRACT, type AnalysisSession } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
 import { captureMandatoryBundle, normalizeMandatory } from "@/lib/trader/paper/durable-noncapital/normalize-mandatory-packet-v1";
@@ -41,7 +41,7 @@ function worker(payload: object) {
   const result = new Promise<{ event: string; outcome?: string; digest?: string; fetches: number; clockBarriers?: ClockBarrier[]; legacyLoaded?: boolean; mockLoaded?: boolean; claim?: unknown; result: { status: string; completed: Array<{ outcome: string; packetDigest: string; companionDigest: string }> } }>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`CHILD_TIMEOUT:${errors}`)), 100_000);
     child.stdout!.on("data", chunk => { buffer += String(chunk); const lines = buffer.split("\n"); buffer = lines.pop()!;
-      for (const line of lines) { try { const data = JSON.parse(line); if (data.event === "result" || data.event === "error") { clearTimeout(timer); resolve(data); } } catch {} } });
+      for (const line of lines) { try { const data = JSON.parse(line); console.info(JSON.stringify({ kind: "fixture_child_output", data })); if (data.event === "result" || data.event === "error") { clearTimeout(timer); resolve(data); } } catch {} } });
     child.stderr!.on("data", chunk => { errors += String(chunk); });
     child.on("error", error => { clearTimeout(timer); reject(error); });
     child.on("exit", code => { clearTimeout(timer); if (code && !buffer) reject(new Error(`CHILD_EXIT:${code}:${errors}`)); });
@@ -59,10 +59,12 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
   const claim = async (durationMs = 30_000) => { const holder = await claimRuntimeControlLeaseAtDatabaseTimeV2(db, { organizationId, runtimeInstanceId: randomUUID(), durationMs }); expect(holder).not.toBeNull(); return holder!; };
   async function expiry() { await client`SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM valid_until_utc - clock_timestamp())) + 0.02) FROM trader_runtime_control_lease_heads_v2 WHERE organization_id=${organizationId}::uuid`; }
   async function collect(s: AnalysisSession) {
-    const source = new HtxBarPollSource({ internalSymbol: s.symbol, disableOptionalProviders: true, fetchImpl: recordedPublicTransport(() => Date.now()) });
+    const source = new HtxBarPollSource({ internalSymbol: s.symbol, disableOptionalProviders: true, fetchImpl: recordedPublicTransport(() => Date.now(), undefined, { closedBarsOnly: true }) });
     const bundle = await source.fetchMandatoryEvaluationBundle();
-    await awaitRecordedBundleDatabaseClock(bundle, () => db.transaction(tx => readRuntimeDatabaseClockV2(tx)));
+    console.info(JSON.stringify({ kind: "fixture_source_chronology", ...recordedBundleChronology(bundle) }));
+    const clockBarrier = await awaitRecordedBundleDatabaseClock(bundle, () => db.transaction(tx => readRuntimeDatabaseClockV2(tx)));
     const pit = await db.transaction(tx => readRuntimeDatabaseClockV2(tx));
+    console.info(JSON.stringify({ kind: "fixture_normalization_chronology", pit, clockBarrier }));
     return { pit, normalized: normalizeMandatory(captureMandatoryBundle(bundle, s), s, pit) };
   }
   async function published(s = session(), holder?: DatabaseClockRuntimeHolderV2) {
