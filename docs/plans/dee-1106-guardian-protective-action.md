@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Validate the bounded correction; integrate serially after PR669. No trading activation."
+  nextAction: "PR669 accepted; validate the combined tree and publish the single Guardian PR. No trading activation."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -121,3 +121,18 @@ The initial eight-case proof was refined to reconstruct the changed consumption
 from draft fields explicitly, then rerun in the full nine-suite acceptance.
 This proves repository-level reconnect/concurrency, not a process-crash host
 recovery loop, monitoring scheduler, actual protective trigger or venue effect.
+
+
+## Rebase onto accepted PR669
+
+PR669 merged as c2a3bf9aa46429f064e58bb8440a0f48a3806df2 after all32 checks.
+Rebased this package onto that exact main. Guardian production and test changes
+are identical to the prior reviewed package; range-diff changes only workflow
+context and the combined inventory content seal. Reviewed both affected consumers;
+combined seal is05f3e6699b51071a96b7de6dcdc14bce2950dd367530bd27236b27448cc7f259.
+All runtime/Navigator/Guardian CI paths and all9 mandatory native suites remain.
+Rebased acceptance:284 targeted tests/32files (including graph regressions and
+shadow fixture correction),176 actualPG/9files with zero skips, executed-proof
+guard PASS. Local PG release identity f5fa54cb is the clean rebased implementation;
+subsequent acceptance-note changes are documentation only. Lint/typecheck/build,
+canon/governance and consumer validators pass. Full new-head PR CI remains required.
