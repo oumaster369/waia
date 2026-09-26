@@ -275,7 +275,7 @@ export async function handleAdminInvoiceCommandPost(
     runtime = auth.runtime;
 
     const context = { ...requireOrgContext(organizationId), userId: auth.userId };
-    const execute = async (boundRuntime: NonNullable<typeof runtime>): Promise<AdminRouteHandlerResult> => {
+    const execute = async (boundRuntime: Awaited<ReturnType<AdminRouteHandlerDeps["getRuntimeDb"]>>): Promise<AdminRouteHandlerResult> => {
       const service = createIssuanceService(boundRuntime);
       if (command === "approve") {
         if (!isIssuanceAttestationComplete(body.attestations)) {

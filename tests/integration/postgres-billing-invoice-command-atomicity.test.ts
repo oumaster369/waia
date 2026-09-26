@@ -41,7 +41,7 @@ describe.skipIf(!enabled)("DEE-1112 actual PostgreSQL invoice commands", () => {
   });
   afterAll(async () => { await removeFault(); await sql?.end({ timeout: 5 }); vi.unstubAllEnvs(); });
 
-  async function draft(account = randomUUID(), month = 1) {
+  async function draft(account: string = randomUUID(), month = 1) {
     const db = drizzle(sql, { schema });
     const context = { organizationId: orgId };
     const hwm = createPostgresHwmLedgerService(db);

@@ -12,6 +12,8 @@ const required = [
   "postgres-reality-v2.test.ts", "postgres-canonical-decision-verification-v2.test.ts",
   "postgres-promotion-audit-atomicity.test.ts", "postgres-runtime-authority-v2.test.ts",
   "postgres-guardian-authority-v2.test.ts",
+  "postgres-billing-period-command-atomicity.test.ts",
+  "postgres-billing-invoice-command-atomicity.test.ts",
 ];
 const passed = () => required.map((file) => ({
   name: `/workspace/tests/integration/${file}`, status: "passed",
@@ -25,10 +27,10 @@ function run(testResults: ReturnType<typeof passed>) {
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
 describe("mandatory executed Postgres capital proof", () => {
-  it("accepts all nine actually executed critical suites", () => {
+  it("accepts all eleven actually executed critical suites", () => {
     const result = run(passed());
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("9 critical suites, no skipped tests");
+    expect(result.stdout).toContain("11 critical suites, no skipped tests");
   });
   it.each(required)("rejects missing, skipped or failed proof for %s", (file) => {
     for (const mode of ["missing", "skipped", "failed", "empty", "duplicate"] as const) {

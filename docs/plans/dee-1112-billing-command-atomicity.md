@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-2
-  completedWorkPackages: [WP-1]
-  remainingWorkPackages: [WP-2]
+  currentWorkPackage: integration-readiness
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Complete native command acceptance and independent review; controller runs serial readiness and registers mandatory CI proof."
+  nextAction: "Controller completes serial readiness, rebases onto accepted main retaining every native suite, and publishes for exact-head CI."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -127,3 +127,20 @@ universally atomic. Fault rollback is not proof of process-crash recovery or
 ambiguous-commit resolution. Pre-existing legacy authorization-failure runtime
 disposal behavior is outside this correction; native helpers close their own
 clients and do not establish an all-path resource-disposal claim.
+
+
+## Controller integration acceptance
+
+On base55bcefa4, all11 registered critical PostgreSQL suites execute207 tests
+with zero skips. The31 new billing cases are included, not added again to that
+total. Canonical reporting-period parity and admin billing idempotency add2
+companion tests. Both new suites are registered in workflow paths, the critical
+job and executed-proof guard; the guard has12 passing cases.
+
+The author ran56 focused unit tests. Independent implementation review on3e36de47
+has no open findings. Root corrected two type-only annotations exposed by the
+full compiler: the command callback uses the existing runtime dependency return
+type and the synthetic draft fixture accepts string account IDs.
+
+This evidence is base-specific. If another accepted PR adds critical suites
+before publication, retain those suites and revalidate the final integration.
