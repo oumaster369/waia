@@ -98,3 +98,8 @@ and integrity contracts. They do not prove durable source provenance, financial
 finality, real profit or authority to issue invoices. There is no demonstrated
 production financial corruption and no retrospective data repair. Fee rate, HWM,
 settlement, source authority, authorization and all Human gates remain unchanged.
+
+
+### Accepted-base refresh 2565e1a2
+
+Normal merge `751f4550cb145f85f143455e51ca10d0e668d16f` incorporates accepted main `2565e1a23741d0042096fd8209cd9793e8aa7e19` without conflicts. All five original author paths and six incoming paths are disjoint and their blobs preserved exactly; only this plan supplement changes afterward. All 13 incoming mandatory native suites and registration/guard remain intact; preservation is not new native execution. Root schedules fresh scoped offline acceptance, full repository readiness and independent final integration review before publication, followed by all applicable exact-head CI checks. Decimal grammar, arithmetic, financial policy and previous qualification limits remain unchanged.
