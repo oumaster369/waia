@@ -39,7 +39,7 @@ provenance:
 
 Parent DEE-638, existing completion-audit C02/P08 gap. Accepted implementation base is `2565e1a23741d0042096fd8209cd9793e8aa7e19`. The user authorized technical fixes, tests, independent review, normal checked PR merge and nontrading deployment. This does not ratify financial policy or activate live trading. New reporting-period close commands must prove that every submitted dependency matches the current persisted Reality chain before their first financial effect. Full P08 remains open.
 
-## Scope, files, and acceptance
+## WP-1 — durable Reality dependency admission
 
 One work package WP-1 implements the frozen contract below. Relevant files are the existing billing admin handler, period-close orchestrator, lifecycle service, a focused server-side billing/v2 admission module, the live reporting bridge and all actual callers and affected test fixtures. Preserve every incoming mandatory native suite and add a mandatory no-skips proof for this package. The precise case matrix and before-effect, transaction, current-head, compatibility and source identity obligations are in the contract. Root readiness and independent exact-code review are required before PR publication.
 
