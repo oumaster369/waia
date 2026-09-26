@@ -1,6 +1,6 @@
 ---
 integrationIssue: DEE-1105
-integrationTitle: "Reject stale Navigator and unbound feedback at canonical epistemic composition"
+integrationTitle: "Bind canonical knowledge and Forecast inputs to the current cycle"
 parentIssue: DEE-639
 branch: dee-1105-epistemic-input-binding
 riskTier: T3
@@ -30,18 +30,22 @@ provenance:
   supersedes: null
 ---
 
-# DEE-1105 — Exact epistemic input binding
+# DEE-1105 — Exact knowledge and Forecast input binding
 
 ## Problem and goal
 
 On main8297142e, `composeCanonicalEpistemicSpineV2` admits a Navigator receipt
 from another PIT anchor, feedback altered under its original digest, and sealed
 feedback referring to another future Navigator. A synthetic pure-function probe
-reproduced all three admissions. No production trading effect is established.
+reproduced all three admissions. A second probe on main3e15dc8c, using real
+Forecast issuance and replay validation, reached Decision with a Forecast from
+another PIT or package than the RuntimeContext assignment. Its Decision adapter
+deliberately abstained; Risk/Execution were never called. No production trading
+effect or scientific qualification is established.
 
-Require the current PIT and canonical feedback body/bindings before entering the
-Decision/Risk/Execution chain. This enforces DEE-639/772/773 existing contracts;
-it creates no scientific or capital authority.
+Require the current PIT, canonical feedback body/bindings and exact Forecast
+PIT/package before entering the Decision/Risk/Execution chain. This enforces
+DEE-639/772/773 existing contracts; it creates no scientific or capital authority.
 
 ## WP-1 — Bounded consumer correction
 
@@ -54,6 +58,11 @@ it creates no scientific or capital authority.
   evidence intentionally retains prior Navigator/knowledge identities; do not
   force those zero-effect identities to equal a newly selected current receipt.
 - Prove recurring refusal before Decision/Risk/Execution callbacks.
+- Bind an authorized Forecast's anchor and predictive-package digest to the
+  current RuntimeContext before Decision. Keep full Forecast replay validation
+  in its existing downstream validator; preserve NON_ACTIONABLE outcomes.
+- Include canonical runtime and Navigator changes in the existing Postgres CI
+  path filter, keeping all eight mandatory executed capital suites unchanged.
 
 ## Acceptance
 
@@ -71,6 +80,24 @@ placeholder. Recurring capital adapters remain test doubles; no venue qualificat
 is claimed. Lint has0errors/324pre-existing warnings; typecheck/build/canon/governance
 and both consumer graphs pass. Source/consumer inventories remain155/134/26 with
 unchanged content seals. Self-review only; PR CI is separate.
+
+Subsequent serial rebase onto accepted PR668 passed95 tests/10files and local
+readiness. The added Forecast boundary cases then failed3/passed3 before its
+guard (50 unrelated cases excluded by the focused name filter). They use the
+real Forecast issuance/replay implementation with synthetic package/receipt
+fixtures, not a mocked Forecast validator. Only Decision is deliberately
+non-actionable, with throwing Risk/Execution adapters. Existing mocked
+recurring/live/paper fixtures now carry their matching PIT/package fields.
+The updated combined result and exact-head CI are recorded in the PR body.
+
+Combined correction passes176 targeted tests/15files and168 actual-PG tests across
+all8 mandatory capital suites, zero skips. The real Forecast regression additions
+are6 cases. Reality inventory requires a content-seal refresh because the existing
+canonical recurring consumer gained the19-line refusal guard: count134/path digest,
+155 sources and26 connector references remain unchanged; no rule, disposition or
+admitted boundary changed. Reviewed sole changed inventoried consumer:
+`lib/trader/runtime-v2/canonical-recurring-cycle-v2.ts`. Consumer content seal is
+`d6e2be009c3e6a4b9f3f19d6e0dc79fae6089ebfcc3d2df5a410eec2622a1210`.
 
 ## Boundaries and Human gate
 
