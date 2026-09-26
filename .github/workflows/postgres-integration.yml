@@ -42,6 +42,12 @@ on:
       - "lib/trader/live/**"
       - "tests/integration/postgres-org-live-enable-atomicity.test.ts"
       - "lib/trader/guardian/v2/**"
+      - "lib/trader/guardian/evaluate-position-guardian.ts"
+      - "lib/trader/paper/paper-cycle-runner.ts"
+      - "tests/helpers/guardian-observation-scope-fixture.ts"
+      - "tests/unit/trader-guardian-observation-scope.test.ts"
+      - "tests/integration/postgres-guardian-observation-scope.test.ts"
+      - "tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts"
       - "tests/integration/postgres-guardian-authority-v2.test.ts"
       - "tests/integration/postgres-billing-period-command-atomicity.test.ts"
       - "tests/integration/postgres-billing-invoice-command-atomicity.test.ts"
@@ -198,6 +204,7 @@ jobs:
             tests/integration/postgres-promotion-audit-atomicity.test.ts \
             tests/integration/postgres-runtime-authority-v2.test.ts \
             tests/integration/postgres-guardian-authority-v2.test.ts \
+            tests/integration/postgres-guardian-observation-scope.test.ts \
             tests/integration/postgres-forecast-v2-feedback-read-port.test.ts \
             tests/integration/postgres-forecast-v2-persistence.test.ts \
             tests/integration/postgres-billing-period-command-atomicity.test.ts \

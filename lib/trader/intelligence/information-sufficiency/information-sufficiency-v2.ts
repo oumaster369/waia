@@ -1007,6 +1007,9 @@ function evaluateRequirement(input: {
     reasonCodes.push("EFFECTIVE_INDEPENDENT_INFORMATION_BELOW_PROFILE_FLOOR");
   }
   if (candidates.length === 0) reasonCodes.push("EVIDENCE_MISSING");
+  const unresolvedContradiction = candidates.some((candidate) =>
+    candidate.reasonCodes.includes("EVIDENCE_CONTRADICTION_UNRESOLVED"),
+  );
   const agreementFailure =
     requirement.contradictionPolicy === "REQUIRE_AGREEMENT" &&
     candidates.some((candidate) =>
@@ -1016,6 +1019,7 @@ function evaluateRequirement(input: {
   const passed =
     effectiveAccepted.length > 0 &&
     groups.length >= requirement.minimumIndependentGroups &&
+    !unresolvedContradiction &&
     !agreementFailure;
   const blocking = active && requirement.classification !== "OPTIONAL_ENRICHMENT";
   let terminalStatus: InformationRequirementTerminalStatusV2;

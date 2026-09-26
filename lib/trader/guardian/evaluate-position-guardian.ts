@@ -61,6 +61,77 @@ export type EvaluatePositionGuardianInput = {
   minOrderQty?: string;
 };
 
+export class GuardianObservationScopeError extends Error {
+  readonly code = "GUARDIAN_OBSERVATION_SCOPE_MISMATCH";
+
+  constructor(
+    readonly reason:
+      | "INVALID_SCOPE"
+      | "INSTRUMENT_MISMATCH"
+      | "LOT_SCOPE_MISMATCH"
+      | "TRADE_BINDING_MISSING"
+      | "TRADE_BINDING_MISMATCH",
+  ) {
+    super(`GUARDIAN_OBSERVATION_SCOPE_MISMATCH: ${reason}`);
+    this.name = "GuardianObservationScopeError";
+  }
+}
+
+/** Exact stored identities only: historical symbol aliases do not confer scope. */
+export function requireGuardianObservationScope(
+  input: Pick<EvaluatePositionGuardianInput, "context" | "accountKey" | "snapshot" | "evaluation">,
+): { organizationId: string; accountKey: string; symbol: string } {
+  const { organizationId } = input.context;
+  const { accountKey } = input;
+  const symbol = input.evaluation.features.instrumentId;
+  if (!organizationId.trim() || !accountKey.trim() || !symbol.trim()) {
+    throw new GuardianObservationScopeError("INVALID_SCOPE");
+  }
+  if (
+    input.evaluation.msv.instrumentId !== symbol ||
+    input.snapshot.quote.symbol !== symbol ||
+    input.snapshot.bars.some((bar) => bar.symbol !== symbol)
+  ) {
+    throw new GuardianObservationScopeError("INSTRUMENT_MISMATCH");
+  }
+  return { organizationId, accountKey, symbol };
+}
+
+function assertGuardianLotTradeBindings(input: EvaluatePositionGuardianInput): void {
+  const scope = requireGuardianObservationScope(input);
+  if (
+    input.exitEngine?.runConfig.enabled &&
+    input.exitEngine.bars.some((bar) => bar.symbol !== scope.symbol)
+  ) {
+    throw new GuardianObservationScopeError("INSTRUMENT_MISMATCH");
+  }
+  // Validate the entire batch before any trailing-map mutation or observations.
+  for (const lot of input.openLots) {
+    if (
+      lot.organizationId !== scope.organizationId ||
+      lot.accountKey !== scope.accountKey ||
+      lot.symbol !== scope.symbol ||
+      lot.state !== "OPEN"
+    ) {
+      throw new GuardianObservationScopeError("LOT_SCOPE_MISMATCH");
+    }
+    const trade = input.tradesById.get(lot.tradeId);
+    if (!trade) throw new GuardianObservationScopeError("TRADE_BINDING_MISSING");
+    if (
+      trade.id !== lot.tradeId ||
+      trade.organizationId !== lot.organizationId ||
+      trade.accountKey !== lot.accountKey ||
+      trade.symbol !== lot.symbol ||
+      trade.venue !== lot.venue ||
+      trade.positionSide !== lot.positionSide ||
+      trade.instrumentKind !== lot.instrumentKind ||
+      trade.strategySignalId !== lot.strategySignalId
+    ) {
+      throw new GuardianObservationScopeError("TRADE_BINDING_MISMATCH");
+    }
+  }
+}
+
 export function computeBarsHeld(
   openedAt: Date,
   evaluatedAt: string,
@@ -114,14 +185,9 @@ function prepareExitEngineState(input: EvaluatePositionGuardianInput): {
   const exitPlanByLotId = new Map<string, ExitPlan>();
   const sortedLots = sortOpenLots(input.openLots);
 
-  // Prune trailing state for lots that are no longer open so the session map
-  // cannot grow unbounded or resurrect stale state for a reopened lot id.
-  const openLotIds = new Set(sortedLots.map((lot) => lot.id));
-  for (const lotId of [...input.exitEngine.trailingStateByLotId.keys()]) {
-    if (!openLotIds.has(lotId)) {
-      input.exitEngine.trailingStateByLotId.delete(lotId);
-    }
-  }
+  // Absence from this account/instrument subset is not proof of closure.
+  // The session map has no scope metadata; preserve unrelated entries. Its
+  // owner, not an observation of one scope, owns session-state cleanup.
 
   for (const lot of sortedLots) {
     const plan = buildExitPlan({
@@ -164,6 +230,8 @@ export function evaluatePositionGuardian(
     return { evaluations: [], exitIntents: [] };
   }
 
+  assertGuardianLotTradeBindings(input);
+
   const barIntervalMs = input.runConfig.barIntervalMs ?? 60_000;
   const { msv } = input.evaluation;
   const evaluations: GuardianPositionEvaluation[] = [];
@@ -174,10 +242,7 @@ export function evaluatePositionGuardian(
   const minOrderQty = input.minOrderQty ?? "0.00001";
 
   for (const lot of sortOpenLots(input.openLots)) {
-    const trade = input.tradesById.get(lot.tradeId);
-    if (!trade) {
-      continue;
-    }
+    const trade = input.tradesById.get(lot.tradeId)!;
 
     const barsHeld = computeBarsHeld(lot.openedAt, input.snapshot.evaluatedAt, barIntervalMs);
     const unrealizedPnlUsdt = computeUnrealizedPnlUsdt(
