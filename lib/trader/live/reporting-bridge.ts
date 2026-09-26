@@ -10,11 +10,10 @@ import type { FeeComputationService } from "@/lib/trader/billing/fee-computation
 import type { HwmLedgerService } from "@/lib/trader/billing/hwm-ledger-service";
 import type { ReportingPeriodLifecycleService } from "@/lib/trader/billing/reporting-period-lifecycle-service";
 import {
-  billingPeriodReportingScopeIdV2,
-  buildRealizedStrategyProfitReceiptV2,
   lookupClosedTradeSettlementsFromRealityV2,
   refuseNakedRealizedPnl,
 } from "@/lib/trader/billing/v2";
+import { refuseBillingReality } from "@/lib/trader/billing/v2/reality-dependencies-v1";
 import type { TruthRecordV2 } from "@/lib/trader/reality/v2/contracts";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -46,74 +45,14 @@ export async function proveLiveFillReportingReadable(
   }
   void input.orderRepository;
 
-  const lookup = lookupClosedTradeSettlementsFromRealityV2({
+  lookupClosedTradeSettlementsFromRealityV2({
     organizationId: input.context.organizationId,
     accountId: input.exchangeAccountId,
     strategyId: input.canonicalProfit.strategyId,
     truthRecords: input.canonicalProfit.truthRecords,
   });
-  const now = new Date();
-
-  const existingHwm = await input.hwmLedger.getCurrentHwm(input.context, input.exchangeAccountId);
-  if (!existingHwm) {
-    await input.hwmLedger.bootstrapHwm(input.context, {
-      exchangeAccountId: input.exchangeAccountId,
-      initialHwm: "0",
-      valuationSource: "live_reality_v2.v1",
-      effectiveAt: now,
-    });
-  }
-
-  let openPeriod = await input.reportingBridge.findOpenPeriod(
-    input.context,
-    input.exchangeAccountId,
-  );
-  if (!openPeriod) {
-    openPeriod = await input.reportingBridge.openReportingPeriod(input.context, {
-      exchangeAccountId: input.exchangeAccountId,
-      periodStart: now,
-      startingEquity: "0",
-      openPositionsSnapshotRef: `live-positions:${now.toISOString()}`,
-      valuationSource: "live_reality_v2.v1",
-      startingSnapshotAt: now,
-    });
-  }
-
-  const receipt = buildRealizedStrategyProfitReceiptV2({
-    organizationId: input.context.organizationId,
-    accountId: input.exchangeAccountId,
-    strategyId: input.canonicalProfit.strategyId,
-    reportingScopeId: billingPeriodReportingScopeIdV2({
-      organizationId: input.context.organizationId,
-      accountId: input.exchangeAccountId,
-      periodStart: openPeriod.periodStart,
-      periodEnd: now,
-    }),
-    realityFrontierDigestHex: lookup.realityFrontierDigestHex,
-    settlements: lookup.settlements,
-  });
-
-  const closed = await input.reportingBridge.closeReportingPeriod(input.context, {
-    exchangeAccountId: input.exchangeAccountId,
-    periodEnd: now,
-    endingEquity: receipt.netRealizedStrategyProfit,
-    endingSnapshotAt: now,
-    realizedPnl: receipt.netRealizedStrategyProfit,
-    unrealizedPnl: "0",
-    realizedStrategyProfitReceipt: receipt,
-    closedTradeSettlements: lookup.settlements,
-  });
-
-  const feeArtifact = await input.feeComputation.computeFeeForPeriod(input.context, {
-    periodId: closed.id,
-    // A reporting read/proof is not the operator's realized-fill attestation.
-    realizedFillFinality: false,
-    computedAt: now,
-  });
-
-  return {
-    reportingPeriodId: closed.id,
-    realizedPnl: receipt.netRealizedStrategyProfit,
-    periodRealizedStrategyProfit: feeArtifact.periodRealizedStrategyProfit,
-  };
+  // The supplied-array legacy projection has no durable projection binding.
+  // Preserve its pure validation, but refuse before HWM/bootstrap/open effects.
+  // A future supported path must use the transaction-owning close command.
+  return refuseBillingReality("BILLING_REALITY_BINDING_REQUIRED");
 }

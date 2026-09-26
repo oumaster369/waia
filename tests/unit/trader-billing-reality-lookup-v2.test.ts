@@ -295,27 +295,15 @@ describe("DEE-1102 billing denomination and finality boundary", () => {
     expect(getCurrentHwm).not.toHaveBeenCalled();
     expect(bootstrapHwm).not.toHaveBeenCalled();
   });
-  it("never substitutes proof execution for an operator finality attestation", async () => {
-    const computeFeeForPeriod = vi.fn(async () => ({ periodRealizedStrategyProfit: "0.94900000" }));
-    const result = await proveLiveFillReportingReadable({
-      context: requireOrgContext(ORG),
-      orderRepository: {} as never,
-      reportingBridge: {
-        findOpenPeriod: async () => ({
-          id: "period",
-          periodStart: new Date("2026-09-01T00:00:00.000Z"),
-        }),
-        closeReportingPeriod: async () => ({ id: "period" }),
-      } as never,
-      feeComputation: { computeFeeForPeriod } as never,
-      hwmLedger: { getCurrentHwm: async () => ({}) as never, bootstrapHwm: vi.fn() },
-      exchangeAccountId: ACCOUNT,
+  it("refuses caller-only legacy arrays before HWM, period or fee side effects", async () => {
+    const effects = vi.fn();
+    await expect(proveLiveFillReportingReadable({
+      context: requireOrgContext(ORG), orderRepository: {} as never,
+      reportingBridge: { findOpenPeriod: effects, openReportingPeriod: effects, closeReportingPeriod: effects } as never,
+      feeComputation: { computeFeeForPeriod: effects } as never,
+      hwmLedger: { getCurrentHwm: effects, bootstrapHwm: effects }, exchangeAccountId: ACCOUNT,
       canonicalProfit: { strategyId: STRATEGY, truthRecords: records() },
-    });
-    expect(result.periodRealizedStrategyProfit).toBe("0.94900000");
-    expect(computeFeeForPeriod).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ realizedFillFinality: false }),
-    );
+    })).rejects.toMatchObject({ code: "BILLING_REALITY_BINDING_REQUIRED" });
+    expect(effects).not.toHaveBeenCalled();
   });
 });

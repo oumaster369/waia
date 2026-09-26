@@ -8,6 +8,10 @@ if (process.env.VITEST !== "true") {
 
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
+import { createPostgresReportingPeriodRepository } from "./repository-adapters";
+import { runPostgresBillingRealityCommand, type PostgresBillingCloseOptions } from "./v2/reality-dependencies-postgres-v1";
+import { refuseBillingReality, snapshotBillingCommand, type BillingRealityDependenciesV1, type BillingRealityDependenciesMatched } from "./v2/reality-dependencies-v1";
 import type { DraftInvoiceService } from "@/lib/trader/billing/draft-invoice-service";
 import {
   createPostgresDraftInvoiceService,
@@ -21,7 +25,7 @@ import {
 import { DraftInvoiceNotBillableError } from "@/lib/trader/billing/invoice.errors";
 import type { ReportingPeriodLifecycleService } from "@/lib/trader/billing/reporting-period-lifecycle-service";
 import {
-  createPostgresReportingPeriodLifecycleService,
+  createReportingPeriodLifecycleService,
   createSqliteReportingPeriodLifecycleService,
 } from "@/lib/trader/billing/reporting-period-lifecycle-service";
 import { MAX_REPORTING_PERIODS_LIST_LIMIT } from "@/lib/trader/billing/reporting-period-repository.types";
@@ -48,6 +52,7 @@ export type CloseAndMaterializeInput = {
   valuationSource: string;
   realizedStrategyProfitReceipt: RealizedStrategyProfitReceiptV2;
   closedTradeSettlements: readonly ClosedTradeSettlementV2[];
+  realityDependencies?: BillingRealityDependenciesV1;
   unrealizedPnl: string;
   netDeposits?: string;
   netWithdrawals?: string;
@@ -168,6 +173,7 @@ export function createBillingPeriodCloseOrchestrator(deps: BillingPeriodCloseOrc
         netWithdrawals: input.netWithdrawals,
         realizedStrategyProfitReceipt: input.realizedStrategyProfitReceipt,
         closedTradeSettlements: input.closedTradeSettlements,
+        realityDependencies: input.realityDependencies,
       });
       auditActions.push(traderAuditActions.reportingPeriodClosed);
 
@@ -258,27 +264,48 @@ export function createSqliteBillingPeriodCloseOrchestrator(
 ): BillingPeriodCloseOrchestrator {
   const assertMembership = deps.assertMembership ?? ((context: OrgContext & { userId: string }) =>
     assertOrgMembershipSqlite(db, context));
-  return createBillingPeriodCloseOrchestrator({
+  const service = createBillingPeriodCloseOrchestrator({
     assertMembership,
     reportingPeriodLifecycle:
       deps.reportingPeriodLifecycle ?? createSqliteReportingPeriodLifecycleService(db, { assertMembership }),
     hwmLedger: deps.hwmLedger ?? createSqliteHwmLedgerService(db, { assertMembership }),
     draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db, { assertMembership }),
   });
+  return { ...service, async closeAndMaterialize(context, input) {
+    const captured = snapshotBillingCommand({ context, input });
+    await requireServiceOrgContext(captured.context, assertMembership);
+    refuseBillingReality("BILLING_REALITY_POSTGRES_REQUIRED");
+  } };
+}
+
+function createBoundPostgresBillingPeriodCloseOrchestrator(
+  ex: WaiaPostgresDb,
+  assertMembership: NonNullable<BillingPeriodCloseOrchestratorDeps["assertMembership"]>,
+  proof?: BillingRealityDependenciesMatched,
+): BillingPeriodCloseOrchestrator {
+  const draftInvoiceService = createPostgresDraftInvoiceService(ex, { assertMembership });
+  return createBillingPeriodCloseOrchestrator({
+    assertMembership,
+    reportingPeriodLifecycle: createReportingPeriodLifecycleService({
+      repository: createPostgresReportingPeriodRepository(ex), assertMembership, draftInvoiceService,
+      writeAudit: (input) => writeTraderAuditLogPostgres(ex, { ...input, metadata: { ...input.metadata,
+        ...(proof && input.action === traderAuditActions.reportingPeriodClosed ? { realityDependencies: proof } : {}) } }),
+    }),
+    hwmLedger: createPostgresHwmLedgerService(ex, { assertMembership }),
+    draftInvoiceService,
+  });
 }
 
 export function createPostgresBillingPeriodCloseOrchestrator(
-  ex: Pick<WaiaPostgresDb, "select" | "insert" | "update">,
-  deps: Partial<BillingPeriodCloseOrchestratorDeps> = {},
-  db?: WaiaPostgresDb,
+  db: WaiaPostgresDb, options: PostgresBillingCloseOptions = {},
 ): BillingPeriodCloseOrchestrator {
-  const assertMembership = deps.assertMembership ?? ((context: OrgContext & { userId: string }) =>
-    assertOrgMembershipPostgres(ex, context));
-  return createBillingPeriodCloseOrchestrator({
-    assertMembership,
-    reportingPeriodLifecycle:
-      deps.reportingPeriodLifecycle ?? createPostgresReportingPeriodLifecycleService(ex, { assertMembership }, db),
-    hwmLedger: deps.hwmLedger ?? createPostgresHwmLedgerService(ex, { assertMembership }, db),
-    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, { assertMembership }, db),
-  });
+  const assertMembership = options.assertMembership;
+  const capturedOptions = { assertMembership };
+  const membership = (bound: WaiaPostgresDb) => (actor: OrgContext & { userId: string }) =>
+    assertMembership ? assertMembership(actor, bound) : assertOrgMembershipPostgres(bound, actor);
+  const service = createBoundPostgresBillingPeriodCloseOrchestrator(db, membership(db));
+  return { ...service, closeAndMaterialize(context, input) {
+    return runPostgresBillingRealityCommand(db, context, input, capturedOptions, (tx, scoped, captured, proof) =>
+      createBoundPostgresBillingPeriodCloseOrchestrator(tx, membership(tx), proof).closeAndMaterialize(scoped, captured));
+  } };
 }
