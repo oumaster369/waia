@@ -23,10 +23,10 @@ state:
   remainingWorkPackages: [WP-1]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 6d4a362c06cc9badac3a2a719904238e75d66828
+  lastValidationAt: "2026-09-26T13:50:17.673124+00:00"
   blockedReason: null
-  nextAction: "Independent exact-head implementation review, root readiness and additive mandatory CI registration; full P08 remains open."
+  nextAction: "Local readiness and independent review accepted; publish after current accepted-base reconciliation, require fresh canonical parity and all exact-head CI before merge. Full P08 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -76,6 +76,14 @@ Full P08/C02 remains open: economic cause/strategy and completed-lifecycle attri
 The author freeze is d1367f7732c26028c276676104a9185703d3085b. Root normally integrates accepted main8f60cb297d1bf080b419f4a6724050e3e0a298e5, preserving original implementation and all15 incoming native suites, then adds the new dependency suite as the16th mandatory executed proof. No source or financial semantics are changed by this integration.
 
 The existing canonical-profile CI job additionally executes reporting-period and invoice-issuance historical parity alongside billing idempotency, serially, with a separate three-suite no-skips result guard and negative guard tests. This profile remains the exact documented loopback54329/waia_validate identity; existing connection protections are not relaxed. Those historical fixtures are compatibility evidence, distinct from new public admission proof. Local custom-database native results must not be relabelled as canonical-profile parity runs. These mandatory CI results are required before merge. Root full current-head readiness and independent final integration review remain pending until their exact evidence is recorded.
+
+## Root local acceptance — 2026-09-26
+
+Local review head `6d4a362c06cc9badac3a2a719904238e75d66828` is accepted by the independent M01 reviewer with no bounded local blocker. Root native execution at `fd471687cb8579b76880f9c176c65cae5440748b` passed315 assertions/16 mandatory suites with zero skipped; a new isolated PostgreSQL16.14 database began with zero public tables, applied219 migrations, and finished with no temporary fault functions/triggers, disabled public user triggers or other sessions. Root scoped execution passed383 assertions/19 suites without skips. All nine repository readiness checks and rendered governance preflight passed; execution-head attribution is preserved in `root-readiness-combined.json` under the completion-audit evidence directory.
+
+The initial root typecheck caught one native adversarial test cast from readonly to mutable; the explicit `unknown` cast in bb969 emits independently verified identical JavaScript. The initial canon validator then required a recognized WP heading, corrected in6d4a without changing the frozen contract. Both failed logs are retained. Passing tests are attributed to their executed SHA, not relabelled as repeated. No production implementation changed after the combined fd471 native proof. Independent review also checked both merge patch directions, ordered15→16 CI preservation, the immutable domain closure and25 offline positive/negative cases for the new parity result guard.
+
+This final plan-only record does not waive current-base integration or CI. The three canonical-profile historical parity suites remain required actual CI evidence before merge. Full P08, full M01 audit, source economic attribution/finality, production rollout and live authority remain separate.
 
 ## Frozen contract provenance
 
