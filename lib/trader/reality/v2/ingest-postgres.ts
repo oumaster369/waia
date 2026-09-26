@@ -4,8 +4,8 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { runWaiaPostgresTransaction } from "@/db/waia-postgres-transaction";
-import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import type { RealityProjectionV2, RealitySourceReportV2, TruthRecordV2 } from "./contracts";
+import { isRealitySemanticDuplicateV2, sameRealityNativeFactV2 as sameNativeFact, sameRealitySubjectV2 as sameSubject } from "./source-equivalence";
 import {
   appendContradictoryRealityTruthV2FromWriter,
   appendObservedRealityTruthV2FromWriter,
@@ -36,43 +36,6 @@ export type RealityIngestResultV2 = Readonly<{
   truthRecord: TruthRecordV2 | null;
   projection: RealityProjectionV2 | null;
 }>;
-
-function semanticDigest(source: RealitySourceReportV2): string {
-  return computeStableJsonDigest({
-    sourceKind: source.sourceKind,
-    sourceNativeIdentity: source.sourceNativeIdentity,
-    subject: source.subject,
-    primitiveAssertion: source.primitiveAssertion,
-    structuralVerification: source.structuralVerification,
-    verificationReasonCodes: source.verificationReasonCodes,
-  });
-}
-
-function truthSemanticDigest(truth: TruthRecordV2): string {
-  return computeStableJsonDigest({
-    sourceKind: truth.sourceKind,
-    sourceNativeIdentity: truth.sourceNativeIdentity,
-    subject: truth.subject,
-    primitiveAssertion: truth.primitiveAssertion,
-    structuralVerification: "VERIFIED",
-    verificationReasonCodes: [],
-  });
-}
-
-function sameNativeFact(source: RealitySourceReportV2, truth: TruthRecordV2): boolean {
-  const sourceNative = source.sourceNativeIdentity;
-  const truthNative = truth.sourceNativeIdentity;
-  return sourceNative !== null && truthNative !== null &&
-    source.sourceKind === truth.sourceKind &&
-    sourceNative.identityKind === truthNative.identityKind &&
-    sourceNative.nativeId === truthNative.nativeId &&
-    sourceNative.nativeRevision === truthNative.nativeRevision && sameSubject(source, truth);
-}
-
-function sameSubject(source: RealitySourceReportV2, truth: TruthRecordV2): boolean {
-  return source.subject.subjectClass === truth.subject.subjectClass &&
-    source.subject.subjectKey === truth.subject.subjectKey;
-}
 
 export async function ingestRealitySourceReportV2FromWriter(
   executor: RealityV2Executor,
@@ -114,7 +77,7 @@ export async function ingestRealitySourceReportV2FromWriter(
   }
 
   const sameNative = existingTruths.filter((truth) => sameNativeFact(source, truth));
-  if (sameNative.some((truth) => semanticDigest(source) === truthSemanticDigest(truth))) {
+  if (sameNative.some((truth) => isRealitySemanticDuplicateV2(source, truth))) {
     return Object.freeze({
       classification: "DUPLICATE",
       sourceReport: source,

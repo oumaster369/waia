@@ -28,7 +28,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // credential read boundary that replaces the generic repository on that path.
         // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and
         // the HTX public ticker host. None admit Reality or place orders.
-        consumers: 134,
+        // DEE-1122 pins six DB-only delivery/ownership/equivalence files.
+        consumers: 140,
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         connectorReferences: 26,
