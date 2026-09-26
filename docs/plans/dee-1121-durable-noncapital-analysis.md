@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: 11c83e5bfddbb53d7aabe24191c6f57c92135892
   lastValidationAt: "2026-09-26T15:47:26.439Z"
   blockedReason: null
-  nextAction: "Complete independent final metadata review, publish one PR and require current-head CI before normal merge; full P10 remains open."
+  nextAction: "Complete fresh accepted-base18-suite native proof, preserve the separate three-suite billing proof, run full readiness and independent refresh review before publication; full P10 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -322,3 +322,29 @@ typed-clock-native/ and eof-only-identity.json.
 Final nonauthor review and exact-head PR CI remain mandatory. No production schema,
 source qualification, assigned semantic profile, complete Understanding/Forecast,
 C3, execution-host or live-capital action is accepted by these engineering results.
+
+## WP-3 — accepted-base56ee65f0 source refresh
+
+Normal merge `d4bdff0acdc7bcf6299b010887c4213abd9fc6eb` integrates accepted
+`56ee65f00f3b19858d57ea8f3947d2867822e9ac` into the previously accepted local
+`a1adde65fa97aa2b40c9f49ed883129101148bf6`. The only manual conflict was the
+executed-proof unit's count:17 versus16 becomes18. Workflow and proof arrays are
+the exact union of all16 incoming native suites plus recorded analysis and canonical
+PIT lineage. Serial execution, the CLI flag and the separate incoming three-suite
+canonical billing job/guard are preserved.
+
+All22 original and30 incoming nonunion blobs are byte-identical to their respective
+parents. Both nonunion binary patch directions are exact. No production, schema,
+migration, fixture, source/PIT or chronology behavior changed in this refresh.
+The frozen design text and the reviewed Reality consumer inventory are unchanged.
+
+Fresh scoped validation at the exact merge head passed **183 assertions in13 files,
+zero skipped**, scoped proof-script/unit lint and base diff checks. This includes
+recorded analysis/CLI/clock/source companions, both proof guards, incoming billing
+dependency units and both consumer-graph units. Raw conflicts, patch directions,
+source identities and commands are in audit `evidence/dee-1121/accepted-base-56ee65f0/`.
+
+No native database test, full lint/typecheck/build or provider/production/host action
+was run for this source refresh. Prior323/17 native and full-readiness evidence stays
+at its recorded source heads; it is not an18-suite proof on the new base. Fresh
+native/current-head readiness, final independent review and PR CI remain pending.
