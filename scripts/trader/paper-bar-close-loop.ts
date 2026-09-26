@@ -13,6 +13,8 @@ export async function runPaperBarCloseCli(args = process.argv.slice(2)) {
   const input = parseRecordedPaperOptions(args); assertEnvironment();
   const { getResolvedWaiaDbRuntimeConfig } = await import("@/db/runtime-backend");
   requireCondition(getResolvedWaiaDbRuntimeConfig().backend === "postgres", "POSTGRES_REQUIRED");
+  const { shouldUsePerRequestPostgresClient } = await import("@/db/postgres-client");
+  requireCondition(shouldUsePerRequestPostgresClient(), "OWNED_POSTGRES_POOL_REQUIRED");
   const { getWaiaRuntimeDb, disposeWaiaRuntimeDb } = await import("@/db/waia-runtime-db");
   const runtime = await getWaiaRuntimeDb();
   try {
@@ -25,7 +27,10 @@ export async function runPaperBarCloseCli(args = process.argv.slice(2)) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runPaperBarCloseCli().catch((error: unknown) => {
+  runPaperBarCloseCli().then(result => {
+    // A typed operational stop is not completion of the requested sequence range.
+    if (process.argv.includes("--durable-noncapital") && result && result.status !== "COMPLETE") process.exitCode = 1;
+  }).catch((error: unknown) => {
     console.error("[trader:paper-loop] FAIL:", process.argv.includes("--durable-noncapital")
       ? error instanceof RecordedAnalysisRefusal ? error.code : "INFRASTRUCTURE_FAILURE"
       : error instanceof Error ? error.message : error);

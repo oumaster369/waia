@@ -8,7 +8,7 @@ vi.mock("@/lib/trader/paper/durable-noncapital/run-recorded-paper-loop-postgres-
 import { runPaperBarCloseCli } from "../../scripts/trader/paper-bar-close-loop";
 const args = ["--durable-noncapital", "--org-id=11111111-1111-4111-8111-111111111111", "--account-key=test", "--symbol=BTC/USDT", "--session-id=test", `--release-sha=${"a".repeat(40)}`,
   "--start-sequence=0", "--max-cycles=1", "--max-packet-bytes=2000000", "--max-bars-per-interval=30", "--lease-duration-ms=1000"];
-beforeEach(() => { vi.clearAllMocks(); vi.stubEnv("WAIA_TRADER_CLI", "1"); spies.backend.mockReturnValue({ backend: "postgres" }); spies.acquire.mockResolvedValue({ kind: "postgres", _sql: {} }); spies.run.mockResolvedValue({ status: "COMPLETE", completed: [] }); });
+beforeEach(() => { vi.clearAllMocks(); vi.stubEnv("WAIA_TRADER_CLI", "1"); vi.stubEnv("WAIA_POSTGRES_PER_REQUEST_CLIENT", "true"); spies.backend.mockReturnValue({ backend: "postgres" }); spies.acquire.mockResolvedValue({ kind: "postgres", _sql: {} }); spies.run.mockResolvedValue({ status: "COMPLETE", completed: [] }); });
 describe("DEE1121 real entry dispatch and runtime ownership", () => {
   it("refuses missing bounds before opening a runtime or constructing legacy services", async () => {
     await expect(runPaperBarCloseCli(["--durable-noncapital"])).rejects.toThrow("INVALID_NONCAPITAL_FLAGS"); expect(spies.acquire).not.toHaveBeenCalled(); expect(spies.legacy).not.toHaveBeenCalled();
@@ -22,7 +22,12 @@ describe("DEE1121 real entry dispatch and runtime ownership", () => {
   it("disposes on operational errors without constructing legacy services", async () => {
     spies.run.mockRejectedValue(new Error("database failed")); await expect(runPaperBarCloseCli(args)).rejects.toThrow("database failed"); expect(spies.dispose).toHaveBeenCalledOnce(); expect(spies.legacy).not.toHaveBeenCalled();
   });
-  it("refuses singleton mode and cleans up without opening a hidden second pool", async () => {
+  it.each(["false", "0", "no", "off", " FALSE "])("refuses actual singleton flag %s before any runtime acquisition", async flag => {
+    vi.stubEnv("WAIA_POSTGRES_PER_REQUEST_CLIENT", flag);
+    await expect(runPaperBarCloseCli(args)).rejects.toThrow("OWNED_POSTGRES_POOL_REQUIRED");
+    expect(spies.acquire).not.toHaveBeenCalled(); expect(spies.dispose).not.toHaveBeenCalled(); expect(spies.run).not.toHaveBeenCalled();
+  });
+  it("refuses an unexpected nonowned handle from runtime acquisition", async () => {
     spies.acquire.mockResolvedValue({ kind: "postgres" }); await expect(runPaperBarCloseCli(args)).rejects.toThrow("OWNED_POSTGRES_POOL_REQUIRED"); expect(spies.dispose).toHaveBeenCalledOnce(); expect(spies.run).not.toHaveBeenCalled();
   });
   it("preserves the old mode behind an explicit separate import", async () => { await runPaperBarCloseCli([]); expect(spies.legacy).toHaveBeenCalledOnce(); expect(spies.acquire).not.toHaveBeenCalled(); });

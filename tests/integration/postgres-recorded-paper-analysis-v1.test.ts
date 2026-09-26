@@ -93,6 +93,25 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     expect(replay.result.status).toBe("COMPLETE"); expect(replay.result.completed[0].outcome).toBe("REPLAYED"); expect(replay.fetches).toBe(0);
     expect(replay.result.completed[0].companionDigest).toBe(saved.companion!.contentDigest); expect(await counts()).toEqual([1, 1, 1, 1]);
   }, 20_000);
+  it("actual executable reports lease busy and exits nonzero before source acquisition", async () => {
+    await claim(); const input = session();
+    const flags = ["--durable-noncapital", ...Object.entries({ "org-id": input.organizationId, "account-key": input.accountId,
+      symbol: input.symbol, "session-id": input.sessionId, "release-sha": input.releaseSha, "start-sequence": 0,
+      "max-cycles": input.maxCycles, "max-packet-bytes": input.maxPacketBytes, "max-bars-per-interval": input.maxBarsPerInterval,
+      "lease-duration-ms": input.leaseDurationMs }).map(([key, value]) => `--${key}=${value}`)];
+    const transportGuard = `data:text/javascript,${encodeURIComponent("let calls=0;globalThis.fetch=async()=>{calls++;throw new Error('ENTRY_TRANSPORT_FORBIDDEN')};process.on('exit',()=>console.info(JSON.stringify({kind:'entry_transport',calls})))")}`;
+    const child = spawn(process.execPath, ["--import", "tsx", "--import", transportGuard, "--conditions=react-server", "scripts/trader/paper-bar-close-loop.ts", ...flags], {
+      cwd: process.cwd(), env: { PATH: process.env.PATH, NODE_ENV: "test", WAIA_TRADER_CLI: "1", WAIA_POSTGRES_CLI: "1",
+        WAIA_DB_BACKEND: "postgres", DATABASE_URL_POSTGRES: url }, stdio: ["ignore", "pipe", "pipe"] });
+    children.add(child); let output = ""; let errors = "";
+    child.stdout!.on("data", chunk => { output += String(chunk); }); child.stderr!.on("data", chunk => { errors += String(chunk); });
+    const [code] = await once(child, "close"); expect(code).toBe(1); expect(errors).toBe("");
+    const records = output.trim().split("\n").map(line => JSON.parse(line));
+    expect(records.find(row => row.kind === "entry_transport")).toEqual({ kind: "entry_transport", calls: 0 });
+    const result = records.find(row => row.kind === "durable_noncapital_analysis");
+    expect(result).toEqual({ kind: "durable_noncapital_analysis", status: "LEASE_BUSY", completed: [] });
+    expect(await counts()).toEqual([0, 0, 0, 0]);
+  });
   it("actual CLI resumes a published input without transport or choosing another PIT", async () => {
     const s = session({ leaseDurationMs: 2_000 }); const data = await collect(s); const holder = await claim(300);
     const packet = await publishRecordedAnalysis(client, s, holder, 0, data.pit, data.normalized); await expiry();

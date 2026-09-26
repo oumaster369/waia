@@ -88,6 +88,14 @@ are retained with their failures and corrections in the audit evidence directory
 the final combined proof will be recorded against the immutable implementation
 commit. No production migration, provider request, host or capital action occurred.
 
+Root source review identified that a post-acquisition singleton refusal could
+construct the shared global client before rejecting it. The entry now checks the
+existing per-request-client setting before runtime acquisition. Five actual
+flag-value controls failed before this repair and pass after it; this is a client
+ownership correction, not evidence of an observed open socket. Exported APIs keep
+typed operational results; the executable exits nonzero on any non-COMPLETE status
+so a stopped sequence range cannot look successful to shell automation.
+
 The native crash protocol distinguishes failure before COMMIT from loss of the
 client after COMMIT was submitted: the latter may leave neither completion row or
 both rows. Recovery must resolve the exact durable result without duplicates.
