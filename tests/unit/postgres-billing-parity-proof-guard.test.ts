@@ -4,20 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-const directory = mkdtempSync(join(tmpdir(), "waia-capital-proof-"));
+const directory = mkdtempSync(join(tmpdir(), "waia-billing-parity-proof-"));
 const reportPath = join(directory, "report.json");
 const required = [
-  "postgres-execution-v2.test.ts", "postgres-risk-v2.test.ts",
-  "postgres-risk-limits-bootstrap.test.ts", "postgres-trader-service-actor-authorization.test.ts",
-  "postgres-reality-v2.test.ts", "postgres-canonical-decision-verification-v2.test.ts",
-  "postgres-promotion-audit-atomicity.test.ts", "postgres-runtime-authority-v2.test.ts",
-  "postgres-guardian-authority-v2.test.ts",
-  "postgres-forecast-v2-feedback-read-port.test.ts", "postgres-forecast-v2-persistence.test.ts",
-  "postgres-billing-period-command-atomicity.test.ts",
-  "postgres-billing-invoice-command-atomicity.test.ts",
-  "postgres-billing-reality-dependencies.test.ts",
-  "postgres-noncapital-cycle-owner-v2.test.ts",
-  "postgres-org-live-enable-atomicity.test.ts",
+  "admin-console-billing-idempotency-postgres.test.ts",
+  "postgres-reporting-period-parity.test.ts",
+  "postgres-invoice-issuance-parity.test.ts",
 ];
 const passed = () => required.map((file) => ({
   name: `/workspace/tests/integration/${file}`, status: "passed",
@@ -25,16 +17,16 @@ const passed = () => required.map((file) => ({
 }));
 function run(testResults: ReturnType<typeof passed>) {
   writeFileSync(reportPath, JSON.stringify({ testResults }));
-  return spawnSync(process.execPath, ["scripts/postgres-validation/assert-capital-test-results.mjs", reportPath],
+  return spawnSync(process.execPath, ["scripts/postgres-validation/assert-billing-parity-test-results.mjs", reportPath],
     { encoding: "utf8" });
 }
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
-describe("mandatory executed Postgres capital proof", () => {
-  it("accepts all sixteen actually executed critical suites", () => {
+describe("mandatory executed canonical-profile billing parity proof", () => {
+  it("accepts all three actually executed billing parity suites", () => {
     const result = run(passed());
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("16 critical suites, no skipped tests");
+    expect(result.stdout).toContain("3 billing parity suites, no skipped tests");
   });
   it.each(required)("rejects missing, skipped or failed proof for %s", (file) => {
     for (const mode of ["missing", "skipped", "failed", "empty", "duplicate"] as const) {

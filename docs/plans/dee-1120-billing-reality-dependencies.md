@@ -71,6 +71,12 @@ Historical fee/issuance/repository fixtures now explicitly compose the lower-lev
 
 Full P08/C02 remains open: economic cause/strategy and completed-lifecycle attribution, period eligibility/completeness, cross-period reuse, late unseen venue sources, source-revocation policy and finality are not solved by this dependency guard. It uses the existing cooperative Reality writer mutex, not a universal snapshot or HWM/invoice mutex. No new policy, rates, migration, provider, production, C3 or live action is included.
 
+## Root integration and mandatory CI proof
+
+The author freeze is d1367f7732c26028c276676104a9185703d3085b. Root normally integrates accepted main8f60cb297d1bf080b419f4a6724050e3e0a298e5, preserving original implementation and all15 incoming native suites, then adds the new dependency suite as the16th mandatory executed proof. No source or financial semantics are changed by this integration.
+
+The existing canonical-profile CI job additionally executes reporting-period and invoice-issuance historical parity alongside billing idempotency, serially, with a separate three-suite no-skips result guard and negative guard tests. This profile remains the exact documented loopback54329/waia_validate identity; existing connection protections are not relaxed. Those historical fixtures are compatibility evidence, distinct from new public admission proof. Local custom-database native results must not be relabelled as canonical-profile parity runs. These mandatory CI results are required before merge. Root full current-head readiness and independent final integration review remain pending until their exact evidence is recorded.
+
 ## Frozen contract provenance
 
 The remainder is the verbatim independently reviewed contract, SHA256 `216aa2f16dfd77eafb6575586e39966ead59d670d8ac724e660118f78add438a`. It was frozen before implementation. Independent engineering-design review: `parallel-runtime-owner/P08-DURABLE-SOURCE-CONTRACT-REVIEW-2565e1a2.md` in the completion-audit workspace. Design approval is not implementation acceptance, scientific qualification or Human financial ratification.

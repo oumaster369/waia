@@ -16,6 +16,7 @@ const requiredFiles = [
   "postgres-forecast-v2-persistence.test.ts",
   "postgres-billing-period-command-atomicity.test.ts",
   "postgres-billing-invoice-command-atomicity.test.ts",
+  "postgres-billing-reality-dependencies.test.ts",
   "postgres-noncapital-cycle-owner-v2.test.ts",
   "postgres-org-live-enable-atomicity.test.ts",
 ];
