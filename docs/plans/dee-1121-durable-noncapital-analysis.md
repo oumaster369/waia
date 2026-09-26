@@ -451,3 +451,31 @@ remain untouched; the later positive result does not retroactively diagnose it.
 Independent final delta review and exact PR CI remain mandatory. Local custom
 profile native execution does not replace separate canonical-profile CI gates,
 source qualification, full P10 or live/capital approval.
+
+## CI correction — explicit additive migration0219 admission (planned)
+
+PR683 at `1d5aa967b149353d798309154594860a8329ef21` exposed an omitted
+explicit compatibility identity in the shared FHV schema preflight. Generic PG
+CI failed its existing full-checkout and explicit-inventory unit controls; PG17
+observation reported77PASS/1FAIL with `UNKNOWN_APPLIED_MIGRATION` for
+`1780000000219`. These failures remain preserved in the audit evidence.
+
+Root authorized only the exact `idx=219`, `when=1780000000219`,
+`tag=0219_trader_recorded_paper_analysis_v1` compatibility entry plus regression
+coverage. The SQL creates three isolated append-only observational tables and
+new triggers/functions attached only to those tables; it reads/references prior
+source/lease/noncapital receipt tables and changes none of their definitions.
+It adds no required FHV table and changes no scientific or production admission.
+
+Before the production edit, reproduce the existing helper failures. Then prove
+the entire independently read220-entry journal passes, exact0219 byte tampering
+and the next unknown migration refuse, and missing required0205/0206/0207 still
+refuse with every successor present. Preserve required maximum207, required
+table inventory, all prior compatibility identities and SQL/journal bytes.
+Compare an existing isolated local220-entry applied registry to the actual
+strict preflight after verifying its exact loopback/database/server identity;
+label that local PostgreSQL version truthfully. No registry/schema repair.
+The existing FHV preflight suite becomes part of corrected scoped acceptance.
+Independent review and fresh exact-head PG17 CI remain required. Unrelated
+18-suite native evidence retains its prior tested-head attribution; no redundant
+rerun is claimed. No C3, provider, host, production or financial action.
