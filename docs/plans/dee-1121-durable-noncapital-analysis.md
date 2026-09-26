@@ -513,3 +513,38 @@ graph validators and diff check all passed. Evidence is under
 The original07503b64 native358/18 and scoped363/23 results remain attributed to
 that earlier tested head. Independent review and fresh exact-head PR683 CI,
 including PG17, remain separate gates. No completeP10/scientific/live acceptance.
+
+## CI correction — bounded Forecast feedback fixture (planned)
+
+Capital CI at1d5aa967 reported347PASS/11SKIP because the durable-feedback suite
+failed in beforeAll with an untyped fixture refusal. That pure issuance path has
+no schema-preflight edge. Its original random tenant/typed refusal were not
+logged, so the exact original CI predicate remains unknown. A bounded actual
+source probe on128 fixed tenant IDs independently proves the existing synthetic
+fixture can refuse: tenant00000000-0000-4000-8000-000000000084 atanchorRV0.018
+selects a replicaS1 pool29, and runtime returnsFORECAST_ISSUANCE_NON_ACTIONABLE
+withFORECAST_EPISTEMIC_STATE_POOL_INSUFFICIENT (minimum30). Tenant96 also refuses.
+This is a demonstrated fixture defect, not recovered originalCI identity.
+
+Root authorizes only a test-fixture correction: preserve the120 variable source
+rows, outcomes, target grid, K3/M4, randomtenant isolation and every production
+threshold/guard; set the ordinary synthetic runtime anchor to0.010, the minimum
+sourceRV, so any already-valid120-draw replica selectsS0. Type7q1 lies between
+its40th/41st sorted values, so selectedS0 has at least40 observations. Verify all
+78 possible ordered boundary-value pairs from this exact12-value source under
+the actual floating implementation; keep q1<q2 validation and all other refusal
+semantics. This bounds the identified selectedS1 insufficiency only.
+
+Expose narrowly named pure builders from the existing test helper for direct
+regressions; pin originaltenant84/anchor0.018 as an actual-runtime insufficient
+negative, default0.010 positive, exact identity/determinism controls, and emit
+only typed status/reason/upstream codes when native fixture issuance refuses.
+A proposed uniformRV corpus was tested and correctly refused by the existing
+degenerate-replica guard; it is discarded, not implemented or accepted. Preserve
+its diagnostic evidence. No retry/threshold/production or authority change.
+
+After targeted RED/GREEN, apply unchanged220 migrations to a fresh isolated
+waia_dee1121 database and run all18 mandatory native suites (including all11
+actual feedback reader cases) with no-skips proof, cleanup/readback and exact
+source identities. Full readiness plus independent frozen review and newPR CI
+remain required. No provider/production/host/C3/financial action.
