@@ -104,6 +104,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0215_trader_admin_console_v2_rls",
       "0216_trader_admin_change_log_triggers",
       "0217_admin_observation_read_indexes",
+      "0218_trader_runtime_noncapital_cycles_v2",
     ]);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,
