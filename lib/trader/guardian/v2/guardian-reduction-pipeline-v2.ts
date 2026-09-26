@@ -269,6 +269,24 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
     adjudicatedAtMs < new Date(input.triggerProof.observedAtUtc).getTime() ||
     adjudicatedAtMs > new Date(input.mandate.validUntilUtc).getTime()
   ) throw new Error("GUARDIAN_PROTECTIVE_TRIGGER_BINDING_MISMATCH");
+  const action = input.mandate.actionKind === "CLOSE_FULL" ? "CLOSE" : "REDUCE";
+  const approvedQuantity = input.mandate.actionKind === "CLOSE_FULL"
+    ? input.lot.remainingQty
+    : formatDecimal((parseDecimal(input.lot.remainingQty) * BigInt(input.mandate.maximumReductionBps)) / 10_000n);
+  // The prior conditional Decision owns this action and bound, independently of
+  // the ordinary recommendation. Reject an unexecutable quantity before claim.
+  if (!isPositiveDecimal(approvedQuantity) || compareDecimal(approvedQuantity, input.lot.remainingQty) > 0) {
+    throw new Error("GUARDIAN_PIPELINE_DECISION_WOULD_INCREASE_OR_REVERSE");
+  }
+  const decision: GuardianDecisionSealV2 = Object.freeze({
+    organizationId: input.mandate.organizationId,
+    guardianAssessmentId: input.assessment.assessmentId,
+    guardianAssessmentContentDigest: input.assessment.contentDigest,
+    decisionId: input.mandate.decisionId,
+    decisionContentDigest: input.mandate.decisionContentDigest,
+    action,
+    approvedQuantity,
+  });
   const consumption = buildProtectiveMandateConsumptionV2({
     organizationId: input.assessment.organizationId,
     mandateId: input.mandate.mandateId,
@@ -279,20 +297,6 @@ export async function runGuardianProtectiveReductionPipelineV2(input: Readonly<{
   if (await input.consumptionRepository.claimOnce(consumption) !== "CLAIMED") {
     throw new Error("GUARDIAN_PROTECTIVE_MANDATE_ALREADY_CONSUMED");
   }
-  const action = input.mandate.actionKind === "CLOSE_FULL" ? "CLOSE" : "REDUCE";
-  const approvedQuantity = input.mandate.actionKind === "CLOSE_FULL"
-    ? input.lot.remainingQty
-    : formatDecimal((parseDecimal(input.lot.remainingQty) * BigInt(input.mandate.maximumReductionBps)) / 10_000n);
-  const decision: GuardianDecisionSealV2 = Object.freeze({
-    organizationId: input.mandate.organizationId,
-    guardianAssessmentId: input.assessment.assessmentId,
-    guardianAssessmentContentDigest: input.assessment.contentDigest,
-    decisionId: input.mandate.decisionId,
-    decisionContentDigest: input.mandate.decisionContentDigest,
-    action,
-    approvedQuantity,
-  });
-  assertDecision(input.assessment, input.lot, decision);
   const allowance = await input.ports.risk.authorizeReduction({ assessment: input.assessment, decision, lot: input.lot });
   assertAllowance(input.assessment, decision, input.lot, allowance);
   const execution = await input.ports.execution.executeReduction({ assessment: input.assessment, decision, allowance, lot: input.lot });
