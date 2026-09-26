@@ -55,6 +55,8 @@ function forecast(): ForecastRuntimeOutcomeV2 {
     authority: {
       organizationId: ORG,
       contentDigestHex: digest("a"),
+      anchorClosedBarAt: PIT,
+      selectedPredictivePackageContentDigestHex: DIGEST,
     },
     issuance: { package: { family: { symbol: SYMBOL } } },
   } as unknown as ForecastRuntimeOutcomeV2;

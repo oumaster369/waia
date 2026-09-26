@@ -40,6 +40,8 @@ on:
       - "tests/helpers/atomic-promotion-assembly.ts"
       - "tests/integration/postgres-promotion-audit-atomicity.test.ts"
       - "lib/trader/runtime-authority/v2/**"
+      - "lib/trader/runtime-v2/**"
+      - "lib/trader/knowledge/navigator/**"
       - "tests/integration/postgres-runtime-authority-v2.test.ts"
       - "tests/unit/postgres-capital-proof-guard.test.ts"
       - "lib/trader/execution/v2/**"

@@ -9,6 +9,11 @@ vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", a
 });
 
 import { buildKnowledgeSelectionReceiptV2 } from "@/lib/trader/knowledge/navigator/knowledge-selection-receipt-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import {
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_POLICY_V2,
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2,
+} from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
 import type { ForecastRuntimeOutcomeV2 } from "@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2";
 import type { SubmitOrderResult } from "@/lib/trader/execution/execution-service.types";
 import { runCanonicalOrdinaryCapitalCycleV2 } from "@/lib/trader/runtime-v2/canonical-recurring-cycle-v2";
@@ -48,14 +53,14 @@ function context(
   });
 }
 
-function navigator() {
+function navigator(pitAnchor = PIT) {
   return buildKnowledgeSelectionReceiptV2({
     organizationId: ORG,
     runId: "run-1",
     symbol: "BTCUSDT",
     purpose: "forecast",
     questionId: "q-1",
-    pitAnchor: PIT,
+    pitAnchor,
     informationNeedPlanDigestHex: DIGEST,
     outcome: "SELECTED_MINIMAL_SUFFICIENT",
     selected: [{ knowledgeEdgeId: "edge-1", version: 1, contentDigestHex: DIGEST }],
@@ -71,6 +76,8 @@ function forecast(): ForecastRuntimeOutcomeV2 {
     authority: {
       organizationId: ORG,
       contentDigestHex: digest("a"),
+      anchorClosedBarAt: PIT,
+      selectedPredictivePackageContentDigestHex: DIGEST,
     },
     issuance: { package: { family: { symbol: "BTCUSDT" } } },
   } as unknown as ForecastRuntimeOutcomeV2;
@@ -210,6 +217,55 @@ function cycleInput(
 }
 
 describe("DEE-639 canonical ordinary capital cycle", () => {
+  it.each(["altered-body", "foreign-navigator"] as const)(
+    "refuses %s feedback before any capital callback",
+    async (variant) => {
+      const input = cycleInput();
+      const body = {
+        schemaVersion: FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2,
+        policyVersion: FUTURE_CYCLE_EPISTEMIC_EFFECT_POLICY_V2,
+        authority: "EPISTEMIC_EFFECT_ONLY" as const,
+        capitalAuthority: "NONE" as const,
+        evidenceClass: "SEALED_FORECAST_OUTCOME_CALIBRATION" as const,
+        effectKind: "SUPPORT" as const,
+        priorCyclePitAnchor: "2026-02-01T11:00:00.000Z",
+        futureCyclePitAnchor: PIT,
+        priorKnowledgeDigestHex: DIGEST,
+        futureKnowledgeDigestHex: input.epistemic.navigatorReceipt.knowledgeDigestHex,
+        priorNavigatorReceiptContentDigestHex: DIGEST,
+        futureNavigatorReceiptContentDigestHex: variant === "foreign-navigator"
+          ? digest("b") : input.epistemic.navigatorReceipt.contentDigestHex,
+        producedByReceiptDigestHex: DIGEST,
+      };
+      const effect = {
+        ...body,
+        contentDigestHex: computeSemanticSha256Hex(body),
+        effectKind: variant === "altered-body" ? "INVALIDATION" as const : body.effectKind,
+      };
+      const result = await runCanonicalOrdinaryCapitalCycleV2({
+        ...input, epistemic: { ...input.epistemic, futureCycleEffect: effect },
+      });
+      expect(result).toMatchObject({ status: "NO_TRADE", stage: "EPISTEMIC" });
+      expect(input.capitalDeps.decide).not.toHaveBeenCalled();
+      expect(input.capitalDeps.assessRisk).not.toHaveBeenCalled();
+      expect(input.capitalDeps.execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses another PIT's Navigator before any capital callback", async () => {
+    const input = cycleInput();
+    const result = await runCanonicalOrdinaryCapitalCycleV2({
+      ...input,
+      epistemic: { ...input.epistemic, navigatorReceipt: navigator("2026-02-01T11:00:00.000Z") },
+    });
+    expect(result).toMatchObject({
+      status: "NO_TRADE", stage: "EPISTEMIC", reasonCodes: ["NAVIGATOR_PIT_MISMATCH"],
+    });
+    expect(input.capitalDeps.decide).not.toHaveBeenCalled();
+    expect(input.capitalDeps.assessRisk).not.toHaveBeenCalled();
+    expect(input.capitalDeps.execute).not.toHaveBeenCalled();
+  });
+
   it("binds Execution only after epistemic compose and admission proof", async () => {
     const capitalDeps = deps();
     const result = await runCanonicalOrdinaryCapitalCycleV2(cycleInput({ capitalDeps }));

@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { runCanonicalOrdinaryCapitalCycleV2 } from "@/lib/trader/runtime-v2/canonical-recurring-cycle-v2";
+import { buildAuthoritativeRuntimeContextV2 } from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
+import { buildKnowledgeSelectionReceiptV2 } from "@/lib/trader/knowledge/navigator/knowledge-selection-receipt-v2";
 import {
   createHistoricalForecastNonActionableEvidenceV3,
   verifyHistoricalForecastNonActionableEvidenceV3,
@@ -735,4 +738,94 @@ describe("DEE-633 Forecast V2 outcome, calibration and future Knowledge feedback
     ).toThrow(/IDENTITY_MISMATCH/);
   });
 
+});
+
+describe("DEE-1105 real Forecast binding at the recurring boundary", () => {
+  function cycle(patch: { pitAnchor?: string; packageDigestHex?: string } = {}) {
+    const outcome = issueForecastRuntimeV2(fixture());
+    if (outcome.status !== "FORECAST_AUTHORIZED") throw new Error("fixture must issue Forecast");
+    requireForecastRuntimeAuthorizedOutcomeV2(outcome);
+    const context = buildAuthoritativeRuntimeContextV2({
+      organizationId, accountId: "test-account", symbol: "BTCUSDT", pitAnchor,
+      runtimePosture: "FULL_ANALYSIS_AND_NEW_RISK", runtimeAssessmentDigestHex: hex("a"),
+      driftPosture: "NORMAL", driftRestrictionDigestHex: hex("b"),
+      qualificationTupleDigestHex: hex("c"),
+      packageDigestHex: outcome.authority.selectedPredictivePackageContentDigestHex,
+      informationContractDigestHex: hex("d"), informationNeedPlanDigestHex: hex("e"),
+      releaseDigestHex: hex("f"), ...patch,
+    });
+    const navigatorReceipt = buildKnowledgeSelectionReceiptV2({
+      organizationId, runId: "run", symbol: "BTCUSDT", purpose: "forecast", questionId: "q",
+      pitAnchor: context.pitAnchor, informationNeedPlanDigestHex: context.informationNeedPlanDigestHex,
+      outcome: "SELECTED_MINIMAL_SUFFICIENT", selected: [{knowledgeEdgeId: "edge", version: 1, contentDigestHex: hex("a")}],
+      rejected: [], evidenceBudget: 1, knowledgeDigestHex: hex("a"),
+    });
+    const capitalDeps = {
+      decide: vi.fn(async () => ({ status: "NO_TRADE" as const, decisionId: "decision",
+        decisionContentDigestHex: hex("a"), forecastAuthorityContentDigestHex: outcome.authority.contentDigestHex,
+        reasonCodes: ["BOUNDED_TEST_ABSTENTION"] })),
+      assessRisk: vi.fn(async (): Promise<never> => { throw new Error("RISK_MUST_NOT_RUN"); }),
+      execute: vi.fn(async (): Promise<never> => { throw new Error("EXECUTION_MUST_NOT_RUN"); }),
+    };
+    return {
+      epistemic: { context, navigatorReceipt, predictiveAdmissionVerdict: "ADMITTED" as const, futureCycleEffect: null },
+      admissionTemplate: { context, currentRuntimePosture: context.runtimePosture, currentDriftPosture: context.driftPosture,
+        navigatorOutcome: "SELECTED_MINIMAL_SUFFICIENT" as const, predictiveAdmissionVerdict: "ADMITTED" as const,
+        admittedAt: context.pitAnchor, identity: { organizationId, accountId: context.accountId, symbol: "BTCUSDT",
+          action: "ENTER_LONG" as const, direction: "BUY" as const, quantity: "0.01", externalEffectId: "effect" } },
+      capitalDeps,
+      capitalRequest: { organizationId, accountId: context.accountId, cycleId: "cycle", symbol: "BTCUSDT",
+        referencePrice: "100", executionMode: "paper" as const, forecastOutcome: outcome,
+        proposal: { action: "ENTER_LONG" as const, quantity: "0.01", strategySignalId: null } },
+    };
+  }
+
+  it("permits the exact current Forecast to reach Decision after real issuance/replay validation", async () => {
+    const input = cycle();
+    expect(await runCanonicalOrdinaryCapitalCycleV2(input)).toMatchObject({ status: "NO_TRADE", stage: "DECISION" });
+    expect(input.capitalDeps.decide).toHaveBeenCalledTimes(1);
+    expect(input.capitalDeps.assessRisk).not.toHaveBeenCalled();
+    expect(input.capitalDeps.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([-3600000, 3600000])("refuses a valid Forecast at a different current PIT (%i ms) before Decision", async (offset) => {
+    const input = cycle({ pitAnchor: new Date(Date.parse(pitAnchor) + offset).toISOString() });
+    expect(await runCanonicalOrdinaryCapitalCycleV2(input)).toEqual({
+      status: "NO_TRADE", stage: "FORECAST", reasonCodes: ["FORECAST_PIT_MISMATCH"],
+    });
+    expect(input.capitalDeps.decide).not.toHaveBeenCalled();
+    expect(input.capitalDeps.assessRisk).not.toHaveBeenCalled();
+    expect(input.capitalDeps.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a valid Forecast from an unassigned package before Decision", async () => {
+    const input = cycle({ packageDigestHex: hex("b") });
+    expect(await runCanonicalOrdinaryCapitalCycleV2(input)).toEqual({
+      status: "NO_TRADE", stage: "FORECAST", reasonCodes: ["FORECAST_PACKAGE_MISMATCH"],
+    });
+    expect(input.capitalDeps.decide).not.toHaveBeenCalled();
+    expect(input.capitalDeps.assessRisk).not.toHaveBeenCalled();
+    expect(input.capitalDeps.execute).not.toHaveBeenCalled();
+  });
+
+  it("preserves a real NON_ACTIONABLE Forecast refusal", async () => {
+    const input = cycle();
+    const refusal = issueForecastRuntimeV2({ ...fixture(), predictiveAdmissionReceipt: null });
+    expect(await runCanonicalOrdinaryCapitalCycleV2({ ...input,
+      capitalRequest: { ...input.capitalRequest, forecastOutcome: refusal },
+    })).toEqual({ status: "NO_TRADE", stage: "FORECAST", reasonCodes: ["MISSING_OR_NOT_ADMITTED"] });
+    expect(input.capitalDeps.decide).not.toHaveBeenCalled();
+  });
+
+  it("still validates the full Forecast body after the cheap current-cycle binding checks", async () => {
+    const input = cycle();
+    const value = input.capitalRequest.forecastOutcome;
+    const tampered = { ...value, authority: { ...value.authority, anchorRealizedVol20m_1m: 999 } };
+    await expect(runCanonicalOrdinaryCapitalCycleV2({ ...input,
+      capitalRequest: { ...input.capitalRequest, forecastOutcome: tampered },
+    })).rejects.toThrow();
+    expect(input.capitalDeps.decide).not.toHaveBeenCalled();
+    expect(input.capitalDeps.assessRisk).not.toHaveBeenCalled();
+    expect(input.capitalDeps.execute).not.toHaveBeenCalled();
+  });
 });

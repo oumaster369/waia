@@ -105,6 +105,25 @@ export async function runCanonicalOrdinaryCapitalCycleV2(
     };
   }
 
+  // Replay-valid Forecasts still belong to one PIT and assigned package. Bind
+  // those identities before Decision; the existing downstream validator keeps
+  // responsibility for checking the complete Forecast body and issuance.
+  const forecast = input.capitalRequest.forecastOutcome;
+  if (forecast.status === "FORECAST_AUTHORIZED") {
+    const reasonCodes: string[] = [];
+    if (forecast.authority.anchorClosedBarAt !== boundContext.pitAnchor) {
+      reasonCodes.push("FORECAST_PIT_MISMATCH");
+    }
+    if (
+      forecast.authority.selectedPredictivePackageContentDigestHex !== boundContext.packageDigestHex
+    ) {
+      reasonCodes.push("FORECAST_PACKAGE_MISMATCH");
+    }
+    if (reasonCodes.length > 0) {
+      return { status: "NO_TRADE", stage: "FORECAST", reasonCodes };
+    }
+  }
+
   const boundAdmission = {
     ...input.admissionTemplate,
     context: boundContext,
