@@ -25,8 +25,11 @@ export const ISSUANCE_ATTESTATION_KEYS = [
   "realizedFillFinalityVerified",
 ] as const satisfies readonly (keyof IssuanceAttestation)[];
 
-export function isIssuanceAttestationComplete(attestation: IssuanceAttestation): boolean {
-  return ISSUANCE_ATTESTATION_KEYS.every((key) => attestation[key]);
+export function isIssuanceAttestationComplete(attestation: unknown): attestation is IssuanceAttestation {
+  if (attestation === null || typeof attestation !== "object" || Array.isArray(attestation)) return false;
+  return ISSUANCE_ATTESTATION_KEYS.every((key) =>
+    Object.prototype.hasOwnProperty.call(attestation, key) &&
+    (attestation as Record<string, unknown>)[key] === true);
 }
 
 export type ApproveIssuanceInput = {

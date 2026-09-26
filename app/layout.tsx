@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
+import localFont from "next/font/local";
 
 import "./fonts/cormorant-garamond.css";
 import "./globals.css";
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const manrope = localFont({
+  src: "./fonts/manrope-variable.ttf",
+  weight: "400 700",
+  style: "normal",
   variable: "--font-manrope",
   display: "swap",
 });
