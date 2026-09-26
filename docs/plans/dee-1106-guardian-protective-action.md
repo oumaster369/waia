@@ -56,7 +56,7 @@ TIGHTEN_PROTECTION, fresh Risk, Execution and Reality boundaries.
 A Risk or Execution refusal after claim remains consumed: this package creates
 no retry/release mechanism. Zero quantity after scale-8 rounding is rejected
 before claim. Include Guardian V2 in the existing native-Postgres CI path filter;
-all eight required capital suites remain unchanged.
+retain all eight existing capital suites and require a ninth Guardian persistence suite.
 
 ## Acceptance
 
@@ -68,7 +68,7 @@ contract builders; an uncertain report remains uncertain, not a fill. Ordinary
 Decision action/quantity refusals continue to pass.
 
 Run targeted Guardian, Risk protective posture, Runtime, Execution and consumer
-graph regressions; actual eight mandatory PostgreSQL suites; lint/typecheck/build,
+graph regressions; actual nine mandatory PostgreSQL suites; lint/typecheck/build,
 canon, governance, both consumer validators and rendered PR preflight. Full unit
 and e2e CI are required on the final PR head. Self-review is disclosed, never
 represented as independent Human or scientific qualification.
@@ -78,8 +78,8 @@ represented as independent Human or scientific qualification.
 No schema, rate/HWM/accounting, thresholds, source qualification, new action,
 venue adapter, credential, Org0 binding, C3 host or live activation change. No
 new protective authority: repair the existing DEE-636 mandate contract. Full
-thesis model, fresh qualified producer, all-position fairness/scheduler, native
-mandate-concurrency acceptance and production Guardian adapters remain P11/P10.
+thesis model, fresh qualified producer, all-position fairness/scheduler and
+production Guardian adapters remain P11/P10.
 User authorized technical fixes and eventual merge after checks; scientific and
 operator launch gates remain separate.
 
@@ -98,3 +98,26 @@ imports or connector references. Refresh its content seal on this base to
 Counts155sources/134consumers/26references, source content/path digests, inventory
 rules and admitted boundaries stay unchanged. Serial rebase after PR669 must
 reconcile the combined consumer content seal rather than retain either stale seal.
+
+
+## Native mandate and assessment acceptance
+
+Extended the same package with eight real-Postgres Guardian cases, preserving
+all existing production repository implementations. Eight independent sessions
+are observed blocked by a rolled-back uncommitted claim; then exactly one wins
+and seven fail on the org/mandate key despite different trigger/content digests.
+Assessment replay/readback, separate connections, tenant reads/write denial,
+actual composite foreign keys, immutable triggers, retained consumption after
+reconnect/changed trigger/time, and rollback-before-commit are checked.
+
+The ninth mandatory CI suite is enforced by the executed-proof guard (missing,
+failed, empty, skipped and duplicate results reject). Combined176 actualPG/9files
+PASS with no skips;42 focused tests/3files including10 guard checks PASS. Previous
+93 targeted/15files and12 graph cases still cover unchanged Guardian production
+code. Lint/typecheck/canon/governance rechecked. Build remains valid for identical
+production files; this extension changes tests, the CI proof script and docs only.
+No schema/trigger/grant changes or production database connection are performed.
+The initial eight-case proof was refined to reconstruct the changed consumption
+from draft fields explicitly, then rerun in the full nine-suite acceptance.
+This proves repository-level reconnect/concurrency, not a process-crash host
+recovery loop, monitoring scheduler, actual protective trigger or venue effect.
