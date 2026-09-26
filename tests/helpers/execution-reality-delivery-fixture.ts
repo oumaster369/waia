@@ -36,6 +36,7 @@ function account(accountId: string) {
 }
 
 function admission(accountId: string): AdmitRiskAllowanceV2Input {
+  const decisionId = randomUUID();
   return {
     accountId,
     riskVerdictId: randomUUID(),
@@ -51,9 +52,9 @@ function admission(accountId: string): AdmitRiskAllowanceV2Input {
       quoteAsset: "USDT",
       instrumentIdentityDigestHex: hex64("BTCUSDT-SPOT"),
       decision: {
-        decisionId: "decision-execution-v2",
+        decisionId,
         semanticDigestHex: hex64("decision-semantic"),
-        contentDigestHex: hex64("decision-content"),
+        contentDigestHex: hex64(decisionId),
         action: "ENTER_LONG",
         economicSizeSetId: "decision-execution-v2-sizes",
         economicSizeSetDigestHex: hex64("decision-execution-v2-sizes"),
@@ -85,8 +86,8 @@ function admission(accountId: string): AdmitRiskAllowanceV2Input {
   };
 }
 
-export async function persistDeliveryAttempt(db: WaiaPostgresDb, orgA: string, accountId = "delivery-fixture") {
-    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account(accountId));
+export async function persistDeliveryAttempt(db: WaiaPostgresDb, orgA: string, accountId = "delivery-fixture", initialize = true) {
+    if (initialize) await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account(accountId));
     const admitted = await admitRiskAllowanceV2Postgres(
       db,
       { organizationId: orgA },

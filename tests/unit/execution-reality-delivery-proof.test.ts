@@ -114,6 +114,22 @@ describe("DEE1122 bounded report delivery proof", () => {
     expect(() => deliveryWitness(alias, { ...withAlias, events: [] })).toThrow("DELIVERY_INCOMPLETE");
     expect(isRealitySemanticDuplicateV2({ ...alias, subject: { ...alias.subject, subjectKey: "other" } }, truth)).toBe(false);
   });
+  it("recognizes the general permitted correction-target quarantine without claiming adapter production", () => {
+    const quarantined = createRealitySourceReportV2({ ...draft, ...scope, knowledgeAtUtc: "2026-09-20T10:00:03.000Z",
+      sourceNativeIdentity: { ...source.sourceNativeIdentity!, nativeRevision: "v2", supersedesNativeRevision: "v1" } });
+    const episode = createRealityEventV2({ ...scope, eventSequence: "2", eventType: "QUARANTINED",
+      sourceReportId: quarantined.sourceReportId, truthRecordId: null, relatedTruthRecordId: null, quarantineEventId: null,
+      reasonCodes: ["CORRECTION_TARGET_NOT_FOUND"], knowledgeAtUtc: "2026-09-20T10:00:04.000Z", previousEventDigestHex: event.contentDigestHex });
+    const extended = { ...ledger, sources: [source, quarantined], events: [event, episode] };
+    const saved = foldRealityProjectionV2(scope, episode.knowledgeAtUtc, extended);
+    expect(assertDeliveryLedger(scope, extended, saved)).toEqual(saved);
+    expect(deliveryWitness(quarantined, extended)).toMatchObject({ kind: "SOURCE_QUARANTINE", truthRecordId: null, admissionEventId: episode.realityEventId });
+  });
+  it("rejects a self-consistent source with changed body despite identical report lineage/native identity", () => {
+    const forged = createRealitySourceReportV2({ ...draft, ...scope, knowledgeAtUtc: source.knowledgeAtUtc,
+      primitiveAssertion: { kind: "VENUE_EVENT", eventType: "ALTERED", venueOrderId: null, status: null } });
+    expect(() => findDeliverySource(scope, draft, [forged])).toThrow("SOURCE_BINDING_INVALID");
+  });
   it("refuses unexplained source-only occurrence in a nonempty account", () => {
     const extra = createRealitySourceReportV2({ ...draft, ...scope, knowledgeAtUtc: "2026-09-20T10:00:03.000Z",
       sourceNativeIdentity: { ...source.sourceNativeIdentity!, nativeId: "other" } });

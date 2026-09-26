@@ -30,7 +30,7 @@ const cleanupOrder: readonly string[] = [...[...realityTables].reverse(),
 async function clean(client: postgres.Sql, organizationId: string) {
   // Isolated native fixture teardown only; never called by delivery code.
   for (const table of appendOnlyTables) await client.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
-  try { for (const table of cleanupOrder) await client.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [organizationId]); }
+  try { await client.begin(async (tx) => { for (const table of cleanupOrder) await tx.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [organizationId]); }); }
   finally { for (const table of [...appendOnlyTables].reverse()) await client.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`); }
 }
 function child(args: string[]) {
@@ -61,8 +61,8 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     for (const user of [USER, OTHER]) await cleanupWp13Org(url!, user);
   }, 120_000);
   const scope = (accountId = "delivery-fixture") => ({ organizationId: org, accountId });
-  async function fixture(accountId = "delivery-fixture") {
-    const value = await persistDeliveryAttempt(db, org, accountId);
+  async function fixture(accountId = "delivery-fixture", initialize = true) {
+    const value = await persistDeliveryAttempt(db, org, accountId, initialize);
     return { ...value, input: { ...scope(accountId), executionAttemptId: value.attempt.executionAttemptId } };
   }
   async function append(value: Awaited<ReturnType<typeof fixture>>, rawObservation: Readonly<Record<string, unknown>> = { committed: true }) {
@@ -133,7 +133,7 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
   });
   it.each(["paper", "mock", "historical", "venue"])("refuses stored unsupported %s metadata", async (kind) => {
     const value = await fixture(); await append(value);
-    if (kind === "historical") await client`UPDATE trader_orders SET historical_account_key='synthetic-history' WHERE id=${value.attempt.orderId}::uuid`;
+    if (kind === "historical") await client`UPDATE trader_orders SET historical_account_key='synthetic-history', historical_run_id='fixture-run', execution_mode='mock' WHERE id=${value.attempt.orderId}::uuid`;
     else if (kind === "venue") await client`UPDATE trader_orders SET venue='OTHER' WHERE id=${value.attempt.orderId}::uuid`;
     else await client`UPDATE trader_orders SET execution_mode=${kind} WHERE id=${value.attempt.orderId}::uuid`;
     const before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "UNSUPPORTED_SOURCE_SCOPE" });
@@ -168,19 +168,28 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
   it("keeps reportless result distinct even when that account contains an unexplained source", async () => {
     const old = await fixture(); const report = await append(old);
     await db.transaction(async (tx) => { await lockRealityScopeV2(tx, scope()); await appendRealitySourceObservationV2FromWriter(tx, scope(), route(report)[0]!); });
-    // A second real attempt in a different account tests reportless no-source-examination without rebinding first attempt.
-    const empty = await fixture("empty-target");
+    // A second attempt shares this inconsistent account, but has no report target.
+    const empty = await fixture("delivery-fixture", false);
     expect(await catchUpExecutionRealityV2Postgres(db, empty.input)).toMatchObject({ status: "NO_REPORTS", realityExamined: false });
     expect(await catchUpExecutionRealityV2Postgres(db, old.input)).toMatchObject({ code: "DELIVERY_INCOMPLETE" });
   });
   it.each(["source", "truth", "event", "projection", "knowledge"])("rolls back all new Reality work on injected native %s failure", async (kind) => {
     const value = await fixture(); await append(value); await append(value); const before = await snapshot();
     const table = kind === "knowledge" ? "trader_reality_knowledge_frontiers_v2" : `trader_reality_${kind === "source" ? "source_reports" : kind === "truth" ? "truth_records" : kind === "event" ? "events" : "projections"}_v2`;
-    await client.unsafe(`CREATE OR REPLACE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'DEE1122 injected storage fault'; END $$`);
+    await client.unsafe(`CREATE OR REPLACE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF (SELECT count(*) FROM trader_reality_source_reports_v2 WHERE organization_id=NEW.organization_id AND account_id=NEW.account_id)>=${kind === 'source' ? 1 : 2} THEN RAISE EXCEPTION 'DEE1122 injected late-prefix storage fault'; END IF; RETURN NEW; END $$`);
     await client.unsafe(`CREATE TRIGGER zzz_dee1122_fault BEFORE INSERT OR UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION dee1122_fault()`);
     try { expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "FAILED", newDeliveryCommitted: false }); expect(await snapshot()).toEqual(before); }
     finally { await client.unsafe(`DROP TRIGGER zzz_dee1122_fault ON ${table}`); await client.unsafe("DROP FUNCTION dee1122_fault()"); }
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", newSources: 2 });
+  });
+  it("keeps an earlier committed partial delivery intact when a later prefix projection fails", async () => {
+    const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
+    await append(value); await append(value); const before = await snapshot();
+    await client.unsafe(`CREATE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.frontier_sequence>=3 THEN RAISE EXCEPTION 'late projection'; END IF; RETURN NEW; END $$`);
+    await client.unsafe("CREATE TRIGGER zzz_dee1122_fault BEFORE INSERT ON trader_reality_projections_v2 FOR EACH ROW EXECUTE FUNCTION dee1122_fault()");
+    try { expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "FAILED", newDeliveryCommitted: false }); expect(await snapshot()).toEqual(before); }
+    finally { await client.unsafe("DROP TRIGGER zzz_dee1122_fault ON trader_reality_projections_v2"); await client.unsafe("DROP FUNCTION dee1122_fault()"); }
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", existingSources: 1, newSources: 2 });
   });
   it("reports unknown commit acknowledgement and exact retry discovers already committed observations", async () => {
     const value = await fixture(); await append(value); const original = db.transaction.bind(db);
@@ -193,6 +202,17 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     const value = await fixture(); await append(value, { payload: "x".repeat(1_048_576) }); const before = await snapshot();
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "CAPACITY_EXCEEDED", detail: { bound: "reportRowBytes" } }); expect(await snapshot()).toEqual(before);
   });
+  it("bounds the selected latest projection bytes before loading its corrupted JSON payload", async () => {
+    const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
+    // Controlled storage corruption on isolated test DB, restoring guard before
+    // invoking the actual command. No production history repair is performed.
+    await client`ALTER TABLE trader_reality_projections_v2 DISABLE TRIGGER trader_reality_projections_v2_block_update`;
+    try { await client`UPDATE trader_reality_projections_v2 SET stable_entries=${JSON.stringify(["x".repeat(16_777_216)])}::jsonb WHERE organization_id=${org}::uuid`; }
+    finally { await client`ALTER TABLE trader_reality_projections_v2 ENABLE TRIGGER trader_reality_projections_v2_block_update`; }
+    const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "REFUSED", code: "CAPACITY_EXCEEDED", detail: { bound: "projectionBytes" } });
+    expect(await snapshot()).toEqual(before);
+  });
   it("accepts a captured prefix while a later report commits above the captured head", async () => {
     const value = await fixture(); const first = await append(value);
     const original = executionRepository.readExecutionAttemptProjectionV2Postgres;
@@ -202,6 +222,37 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     });
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 1, capturedHead: { reportDigestHex: first.contentDigestHex } });
     spy.mockRestore(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 2, newSources: 1 });
+  });
+  it("preserves an admitted general semantic alias without inventing its own event", async () => {
+    const value = await fixture(); const first = await append(value); const second = await append(value);
+    const a = route(first)[0]!, b = route(second)[0]!;
+    // General existing-ingester compatibility fixture: the ordinary adapter does
+    // not issue this cross-report native identity. No new producer is claimed.
+    const old = await ingestRealitySourceReportV2Postgres(db, scope(), { ...b, lineage: a.lineage, provenance: a.provenance });
+    const result = await catchUpExecutionRealityV2Postgres(db, value.input);
+    expect(result).toMatchObject({ status: "DELIVERED", selectedReports: 2, newSources: 2 });
+    if (result.status !== "DELIVERED") throw new Error("delivery refused");
+    expect(result.sources).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "SEMANTIC_ALIAS", truthRecordId: old.truthRecord!.truthRecordId })]));
+    expect(await listRealityEventsV2(db, scope())).toHaveLength(2);
+    const prior = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", newSources: 0 }); expect(await snapshot()).toEqual(prior);
+  });
+  it("preserves explicit source-only correction quarantine as uncertainty without forging a truth", async () => {
+    const value = await fixture(); const report = await append(value); const draft = route(report)[0]!;
+    // General admitted source shape, outside the current adapter's null-revision producer.
+    const prior = await ingestRealitySourceReportV2Postgres(db, scope(), { ...draft,
+      sourceNativeIdentity: { ...draft.sourceNativeIdentity!, nativeRevision: "v2", supersedesNativeRevision: "v1" } });
+    expect(prior.classification).toBe("QUARANTINED"); expect(prior.truthRecord).toBe(null);
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED_WITH_UNCERTAINTY", projection: { uncertaintyCount: 1 } });
+    expect((await listTruthRecordsV2(db, scope())).filter((truth) => truth.sourceReportId === prior.sourceReport.sourceReportId)).toHaveLength(0);
+  });
+  it("keeps repeated order assertions contradictory instead of silently choosing newest", async () => {
+    const value = await fixture();
+    const order = { orderId: "same-local-order", symbol: "BTCUSDT", side: "buy", type: "limit", price: "25000", quantity: "0.001", status: "open" };
+    await append(value, { order }); await append(value, { order: { ...order, status: "filled" } });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED_WITH_UNCERTAINTY", selectedReports: 2, projection: { uncertaintyCount: 1 } });
+    const projection = await readLatestRealityProjectionV2(db, scope());
+    expect(projection!.stableEntries[0]!.primitiveAssertion).toMatchObject({ kind: "ORDER", status: "open" });
+    expect((await listRealityEventsV2(db, scope())).map((event) => event.eventType)).toEqual(["OBSERVED", "SOURCE_CONTRADICTION"]);
   });
   it("retains append-only guards on delivered source, truth, event and projection", async () => {
     const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
