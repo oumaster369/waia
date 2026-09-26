@@ -706,3 +706,24 @@ teardown evidence are under accepted-base-340ead8d/ci-unit-failure. This final
 entry changes only the plan. Independent final review and fresh exact-head PR
 CI remain required; no local PG17, complete P10 or scientific/capital acceptance
 is claimed. All PostgreSQL and heavy-process grants were released.
+
+
+### WP-3 accepted-main 93d57f47 refresh admission
+
+The controller admitted a normal merge of accepted main
+`93d57f47de0bb021f18debbae81f07c2d825c264` (DEE-1127/PR684) into clean
+`ecc908ed1fb15df55a037da4cd5585d50583e89a`. The common base is340ead8d.
+All nine incoming credential-startup/PG17-proof paths are disjoint from the
+recorded-analysis patch; the incoming account-observation workflow is distinct
+from the capital CI workflow. No new implementation is admitted. Commit this
+note first, merge normally, verify both complete binary patch directions and
+all exact parent blobs, then run current-base focused units and full readiness.
+
+Retain19 capital,3 billing,2 payment and the incoming4-suite PG17 observation
+proof registrations with no disabled guard. Include credential startup/host/
+entrypoint and CI proof contracts, current220-migration compatibility and the
+recorded analysis/closure controls in the focused acceptance. Existing393/19
+and affected43/2 native proofs retain their original76c6/a2e6 identities. The
+disjoint incoming patch does not by itself justify repeating local native work;
+PostgreSQL access is not granted for this refresh. Fresh exact-head PR CI remains
+mandatory and original CI failures/evidence are retained.
