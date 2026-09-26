@@ -134,3 +134,8 @@ finance policy, data schema or migrations. No database, production, venue, C3 or
 live command is executed. The separate console fleet-authorizer remains
 unchanged. Other domain-runtime disposal ordering/failure handling and actual
 driver/socket close-time behavior are not qualified by this bounded result.
+
+
+### Accepted-base refresh 2565e1a2
+
+Normal merge `bad7b90d70fc026dda65fe64defc1b29ec1e8774` incorporates accepted main `2565e1a23741d0042096fd8209cd9793e8aa7e19`. All six author files and all six incoming files were disjoint and their blobs preserved exactly; only this plan supplement changes afterward. All 13 incoming mandatory native suites and their registration/guard remain intact. No new native or driver-close timing claim is made. The root schedules fresh scoped offline acceptance, full repository readiness and independent delta review at this final plan head before publication, followed by every applicable final-head CI check. Prior exact-head evidence and disclosed raw author-log provenance loss remain separately attributed.
