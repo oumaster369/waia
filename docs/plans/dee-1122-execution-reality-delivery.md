@@ -17,12 +17,12 @@ state:
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: fa3c0ad43444c41504023fbdb09348ed1b101fc7
-  lastValidationAt: "2026-09-26T15:41:39.045482+00:00"
+  prNumber: 681
+  prUrl: https://github.com/oumaster369/waia/pull/681
+  lastValidatedGitSha: c5319e888c53522e8cd5183e8e1b0b0ee9a10245
+  lastValidationAt: "2026-09-26T16:10:00.405241+00:00"
   blockedReason: null
-  nextAction: "Complete independent final review, publish one PR and require all exact-head CI before normal merge. Full P08 remains open."
+  nextAction: "Complete independent final review and refresh existing PR681; require all current-head CI before normal merge. Full P08 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -375,3 +375,6 @@ heads. Fresh combined 17-suite native proof, canonical billing acceptance, full
 readiness, independent delta review and current-head PR CI remain root-owned
 gates. This refresh introduces no financial source qualification, settlement or
 P08 completion claim.
+
+
+Root current-base acceptance at `c5319e888c53522e8cd5183e8e1b0b0ee9a10245`, 2026-09-26T16:10:00.405241+00:00: fresh isolated PostgreSQL16.14 with219migrations executed350 assertions/17mandatory suites without skips. Every incoming16 suite and35 delivery cases ran; all teardown checks were zero. Root346 assertions/20 scoped files and all9 repository readiness checks passed at that same head. Exact commands/logs/results are in audit evidence/dee-1122/accepted-base-56ee65f0. This final metadata commit changes only this plan. Separate canonical3 billing and all new current-head PR checks remain mandatory; no previous-base CI is transferred. FullP08 and financial/operator gates remain open.
