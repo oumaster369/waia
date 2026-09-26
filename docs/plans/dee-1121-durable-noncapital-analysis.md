@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 683eaa8a8133494af0a9c452303a3585b8691fe6
-  lastValidationAt: "2026-09-26T16:16:44.149101+00:00"
+  lastValidatedGitSha: c5f278f24c22618b65b4e85f7d89b9c2f515b748
+  lastValidationAt: "2026-09-26T17:32:04.047190+00:00"
   blockedReason: null
-  nextAction: "Complete independent final review; hold publication while the admitted payment train reserves main, then verify the accepted-base delta and all current-head CI. Full P10 remains open."
+  nextAction: "Root current-base native/full readiness and independent delta review, then exact-head PR CI/publication; scoped refresh on accepted752a is complete. Full P10 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -355,3 +355,40 @@ native/current-head readiness, final independent review and PR CI remain pending
 At `683eaa8a8133494af0a9c452303a3585b8691fe6`, 2026-09-26T16:16:44.149101+00:00, root executed358 native assertions/18mandatory suites with zero skips on fresh isolated PostgreSQL16.14/all220migrations. All16 incoming capital suites plus recorded analysis and canonical PIT lineage ran; all teardown checks were zero. Root427 scoped assertions/29files and all9 repository readiness checks passed at the same source head. Exact command/source/result evidence is in audit evidence/dee-1121/accepted-base-56ee65f0. No production source or fixture implementation changed during this acceptance. This final plan-only commit records those actual results; prior failed chronology/timeout evidence remains historical and unaltered.
 
 Independent current-base final review and exact-head CI remain mandatory, including the separate three canonical billing suites. Publication is briefly held while the newly admitted payment integration requires main56ee to remain fixed; further base changes require truthful re-evaluation, not a retroactive old-CI claim. FullP10, semantic/scientific qualification, production migration/host wiring and live activation remain open.
+
+## WP-3 — accepted-base752a09e0 source refresh
+
+Normal merge `c5f278f24c22618b65b4e85f7d89b9c2f515b748` integrates accepted
+`752a09e07bd2b7d19387a45f74627bc6ced6b6ab` into held
+`c9dd27b9ef6ae2a36b3a795d2ae2ae5ea2552382`. This brings the normally merged
+payment/reconciliation train into the noncapital-analysis branch without source
+conflicts or manual conflict resolution. All25 original paths and17 incoming paths
+are disjoint and keep exact parent blobs at merge. Both **full binary patch
+directions** are identical, including workflow, migration, source, fixtures and
+plans. This final plan-only acceptance update changes no executed source/test bytes.
+
+All18 capital suites,3 canonical billing suites and2 canonical payment reconciliation
+suites remain registered in their actual workflows and strict executed-proof guards;
+all corresponding native bodies and negative guard units are unchanged from their
+appropriate parent. No count, skip, runtime flag or profile was relaxed. Migration0219
+and all prior SQL/journal identities remain exact original branch bytes; no0220 is
+imported or manufactured by this refresh.
+
+At the exact merge head, **358 scoped assertions /22 files passed, zero skipped**.
+The set includes prior recorded-analysis/CLI/clock/source and both consumer-graph
+companions, all three proof guards, original billing dependency units, incoming
+payment observation/TRON/exact-manual/cooling tests, payment cycle/confirmation/lease
+controls and reconciliation commands. Selected proof-script/guard ESLint and base
+diff checks passed. Evidence under audit `evidence/dee-1121/accepted-base-752a09e0/`
+records both patch directions, exact parent/source preservation, complete proof
+registrations, commands, raw logs and assertion JSON. One evidence observer initially
+counted only filenames beginning withpostgres and missed the admin-console billing
+companion; its failed count assertion is preserved and the final observer reads the
+whole requiredFiles array. No source/test defect or skipped-proof waiver followed.
+
+No native PostgreSQL, full lint/typecheck/build, provider, production or host action
+was performed in this refresh. The earlier358/18 native and427/29 scoped/full
+readiness remain historical at683eaa8a; they are not relabelled as new752a execution.
+Root current-base native/full readiness, independent delta review and authoritative
+PR CI remain gates before publication/merge. Source/scientific/Measurement limitations,
+no-capital authority, incompleteP10 and pending production wiring remain unchanged.
