@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, lte } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -978,6 +978,28 @@ export async function listExecutionReportsV2Postgres(
       ),
     )
     .orderBy(asc(pgSchema.traderExecutionReportsV2.reportSequence));
+  return Object.freeze(rows.map(mapReport));
+}
+
+/** Exact immutable captured prefix. The delivery owner admits row sizes before
+ * this body read; SQL head/limit bounds must never be replaced by array slicing. */
+export async function listExecutionReportPrefixV2Postgres(
+  ex: Pick<ExecutionV2Executor, "select">,
+  context: OrgContext & Readonly<{ accountId: string }>,
+  executionAttemptId: string,
+  throughSequence: bigint,
+  maximumRows: number,
+): Promise<readonly ExecutionReportV2[]> {
+  const scoped = requireOrgContext(context.organizationId);
+  if (throughSequence < 0n || throughSequence > 256n || maximumRows !== 257) {
+    throw new ExecutionV2PersistenceConflictError("unsupported bounded report prefix");
+  }
+  const rows = await ex.select().from(pgSchema.traderExecutionReportsV2).where(and(
+    eq(pgSchema.traderExecutionReportsV2.organizationId, scoped.organizationId),
+    eq(pgSchema.traderExecutionReportsV2.accountId, context.accountId),
+    eq(pgSchema.traderExecutionReportsV2.executionAttemptId, executionAttemptId),
+    lte(pgSchema.traderExecutionReportsV2.reportSequence, throughSequence),
+  )).orderBy(asc(pgSchema.traderExecutionReportsV2.reportSequence)).limit(maximumRows);
   return Object.freeze(rows.map(mapReport));
 }
 
