@@ -45,6 +45,8 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 216, when: 1780000000216, tag: "0216_trader_admin_change_log_triggers" },
   { idx: 217, when: 1780000000217, tag: "0217_admin_observation_read_indexes" },
   { idx: 218, when: 1780000000218, tag: "0218_trader_runtime_noncapital_cycles_v2" },
+  // 0219 is independently reserved; this author journal truthfully has next idx219.
+  { idx: 219, when: 1780000000220, tag: "0220_trader_reporting_period_bases_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

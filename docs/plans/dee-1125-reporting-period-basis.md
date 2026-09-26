@@ -26,7 +26,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement the admitted retention/replay contract; scoped validation only until coordinated native/heavy grants."
+  nextAction: "Run final author snapshot native matrix and inherited companions; independent review and root integration/readiness remain pending."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -236,3 +236,9 @@ Isolated author checkout: reuse clean <issue id="3d475a1d-b747-40ab-b6d6-b904cf7
 
 Dependencies: DEE1120 is merged and accepted; pending1121 is migration-order coordination only, not a semantic implementation input. P08 remains open for complete source economics, attribution, prior consumption and manual finality verification. This issue never claims them solved by retention.
 
+
+## Author implementation snapshot — pending final native matrix
+
+The actual two public PostgreSQL close owners now retain the admitted full receipt/settlements, actual CLOSED payload, unchanged dependency proof and exact source/truth/event/projection read set through one mandatory private repository decorator. The reader owns a read-only repeatable snapshot, admits exact scope before mapping, bounds stored bodies before transfer, and replays the saved identities without current-frontier substitution. The administrator GET route owns ordinary authorization/cleanup and distinguishes absent evidence from malformed evidence and unexpected storage failures. Economic attribution, completeness, prior consumption and finality proof remain unchanged.
+
+Author scoped validation so far: 83 tests / 4 files passed, selected changed-file ESLint passed, typecheck passed. Native development runs reached 35 passing cases on a fresh author-only 220-entry migration chain; five further SQL storage controls have been added and await the final immutable-source run with all 16 inherited mandatory native suites. These are development results, not final integration/CI acceptance. Original fixture errors (audit observer column, unsupported test matcher, inert SQLite query shape, oversize source fixture constraint/index and a shared Date fixture) are retained separately in author evidence; they are not production defect claims. No production or provider action occurred.

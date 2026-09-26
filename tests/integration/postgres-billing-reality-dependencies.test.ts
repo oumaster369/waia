@@ -310,7 +310,7 @@ describe.skipIf(!enabled)("DEE-1120 persisted Reality dependencies at actual clo
       await client.unsafe(`GRANT USAGE ON SCHEMA public TO ${role}`);
       await client.unsafe(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${role}`);
       await client.unsafe(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${role}`);
-      await client.unsafe(`GRANT INSERT,UPDATE ON trader_reporting_periods,trader_hwm_ledger,trader_invoices,audit_logs TO ${role}`);
+      await client.unsafe(`GRANT INSERT,UPDATE ON trader_reporting_periods,trader_reporting_period_bases_v1,trader_hwm_ledger,trader_invoices,audit_logs TO ${role}`);
       await client.unsafe(`GRANT UPDATE ON trader_reality_truth_records_v2 TO ${role}`);
       await client.unsafe(`GRANT INSERT ON trader_mi_source,trader_reality_raw_source_admissions_v2,
         trader_mi_raw_storage_binding_v1,trader_mi_raw_capture_receipt_v1,

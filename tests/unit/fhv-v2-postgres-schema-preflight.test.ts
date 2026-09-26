@@ -57,6 +57,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0216_trader_admin_change_log_triggers",
       "0217_admin_observation_read_indexes",
       "0218_trader_runtime_noncapital_cycles_v2",
+      "0220_trader_reporting_period_bases_v1",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
