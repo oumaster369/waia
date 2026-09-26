@@ -61,7 +61,8 @@
       ],
       "acceptanceEvidence": [
         "Fresh cumulative 167 assertions / 13 files,0skip at601baeaa899471b3c1c7db27a845341597a8a430",
-        "Original production/test patch preserved byte-for-byte; dedicated canonical CI and strict result-proof added only within revised pre-import admission. Full readiness/independent final review and actual fresh-schema canonical CI remain required."
+        "Original production/test patch preserved byte-for-byte; dedicated canonical CI and strict result-proof added only within revised pre-import admission. Full readiness/independent final review and actual fresh-schema canonical CI remain required.",
+        "Root final integrated342scoped/23files0skip and all9readinesssteps PASS at4eb5e334. Subsequentworkflow path-filter coverage and batch metadata only; finalindependentreview and freshcanonical2CI remain required."
       ],
       "tests": [
         "pnpm test --run cumulative wave1; exact command in revised-admission/wave1-acceptance.json",
@@ -115,7 +116,8 @@
       "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074",
       "integratedCommits": [
         "bd444f35d0a08a5e5223d97b42f6e458daacfb60",
-        "60d38dfa3dd53b21d6fd7d58db8b274b4a065883"
+        "60d38dfa3dd53b21d6fd7d58db8b274b4a065883",
+        "0077bfebd9147e35564050b5c79cb072ce1f5965"
       ],
       "actualFiles": [
         "docs/plans/dee-1117-reconciliation-command-integrity.md",
@@ -130,7 +132,8 @@
       ],
       "acceptanceEvidence": [
         "Fresh cumulative 342 assertions / 23 files,0skip at60d38dfa3dd53b21d6fd7d58db8b274b4a065883",
-        "Original production/test patch preserved byte-for-byte; dedicated canonical CI and strict result-proof added only within revised pre-import admission. Full readiness/independent final review and actual fresh-schema canonical CI remain required."
+        "Original production/test patch preserved byte-for-byte; dedicated canonical CI and strict result-proof added only within revised pre-import admission. Full readiness/independent final review and actual fresh-schema canonical CI remain required.",
+        "Root final integrated342scoped/23files0skip and all9readinesssteps PASS at4eb5e334. Subsequentworkflow path-filter coverage and batch metadata only; finalindependentreview and freshcanonical2CI remain required."
       ],
       "tests": [
         "pnpm test --run cumulative wave2; exact command in revised-admission/wave2-acceptance.json",
@@ -173,7 +176,8 @@
         "status": "pass",
         "reviewedCommits": [
           "bd444f35d0a08a5e5223d97b42f6e458daacfb60",
-          "60d38dfa3dd53b21d6fd7d58db8b274b4a065883"
+          "60d38dfa3dd53b21d6fd7d58db8b274b4a065883",
+          "0077bfebd9147e35564050b5c79cb072ce1f5965"
         ],
         "reviewedFiles": [
           "docs/plans/dee-1117-reconciliation-command-integrity.md",
@@ -202,7 +206,8 @@
         "afterIssue": "DEE-1117",
         "status": "pass",
         "commands": [
-          "pnpm test --run --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/evidence/dee-1123/revised-admission/wave2-unit-results.json tests/unit/health-payment-watcher-route.test.ts tests/unit/payment-watcher-checkpoint-repository.test.ts tests/unit/payment-watcher-confirmation.test.ts tests/unit/payment-watcher-cycle.test.ts tests/unit/payment-watcher-normalize-network.test.ts tests/unit/payment-watcher-observation-integrity.test.ts tests/unit/payment-watcher-stale-lease-recovery.test.ts tests/unit/payment-watcher-tron-adapter.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/reconciliation-commands.test.ts tests/unit/reconciliation-exact-manual-amounts.test.ts tests/unit/reconciliation-fold-replay.test.ts tests/unit/reconciliation-priority.test.ts tests/unit/reconciliation-serialize.test.ts tests/unit/reconciliation-sweeper.test.ts tests/unit/reconciliation-transitions.test.ts tests/unit/reconciliation-workflow-cooling-admission.test.ts tests/unit/settlement-matching.test.ts tests/unit/trader-billing-reality-truth-integrity.test.ts tests/unit/trader-decimal-billing-boundary.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/treasury-watcher-adapter.test.ts tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+          "pnpm test --run --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/evidence/dee-1123/revised-admission/wave2-unit-results.json tests/unit/health-payment-watcher-route.test.ts tests/unit/payment-watcher-checkpoint-repository.test.ts tests/unit/payment-watcher-confirmation.test.ts tests/unit/payment-watcher-cycle.test.ts tests/unit/payment-watcher-normalize-network.test.ts tests/unit/payment-watcher-observation-integrity.test.ts tests/unit/payment-watcher-stale-lease-recovery.test.ts tests/unit/payment-watcher-tron-adapter.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/reconciliation-commands.test.ts tests/unit/reconciliation-exact-manual-amounts.test.ts tests/unit/reconciliation-fold-replay.test.ts tests/unit/reconciliation-priority.test.ts tests/unit/reconciliation-serialize.test.ts tests/unit/reconciliation-sweeper.test.ts tests/unit/reconciliation-transitions.test.ts tests/unit/reconciliation-workflow-cooling-admission.test.ts tests/unit/settlement-matching.test.ts tests/unit/trader-billing-reality-truth-integrity.test.ts tests/unit/trader-decimal-billing-boundary.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/treasury-watcher-adapter.test.ts tests/unit/postgres-payment-reconciliation-proof-guard.test.ts",
+          "Final root342/23 plus lint,typecheck,build,canon,governance,bothconsumergraphs,diffcheck PASS at4eb5e334; finalmetadata/CI-filter delta separately validated."
         ],
         "evidence": "revised-admission/wave2-acceptance.json and wave2-unit-results.json"
       }
