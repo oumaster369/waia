@@ -10,6 +10,16 @@ const suites = [
   "tests/integration/account-observation-reader-postgres.test.ts",
   "tests/integration/account-observation-credential-postgres.test.ts",
 ];
+const resultPath = ".tmp/account-observation-postgres-results.json";
+const guardPath = "scripts/postgres-validation/assert-account-observation-test-results.mjs";
+const unitCommand = "pnpm test --run tests/unit/account-observation-postgres-ci-contract.test.ts tests/unit/account-observation-test-results-guard.test.ts";
+const nativeCommand = [
+  "mkdir -p .tmp",
+  `rm -f ${resultPath}`,
+  `pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=${resultPath} \\`,
+  ...suites.map((suite, index) => `  ${suite}${index < suites.length - 1 ? " \\" : ""}`),
+  `node ${guardPath} ${resultPath}`,
+].join("\n");
 const syntheticUrl = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
 
 // A deliberately narrow static contract for this workflow's block-style YAML,
@@ -25,9 +35,12 @@ function requireEnforcedObservationJob(source: string) {
   expect(block).not.toMatch(/\$\{\{\s*secrets\.|\|\|\s*(?:true|:)|--passWithNoTests|--testNamePattern|--exclude|--shard|--changed/);
   expect(block).toContain('DEE960_LOCAL_PG17: "1"');
   expect(block.match(/DEE960_LOCAL_PG17:/g)).toHaveLength(1);
-  expect(block).toContain("pnpm test --run --no-file-parallelism\n");
+  const run = block.match(/\n        run: \|\n((?:          .*(?:\n|$))+)/)?.[1];
+  expect(run, "mandatory literal native command").toBeDefined();
+  expect(run!.split("\n").filter(Boolean).map((line) => line.slice(10)).join("\n").trimEnd())
+    .toBe(nativeCommand);
   for (const suite of suites) expect(block.split(suite)).toHaveLength(2);
-  expect(block).toContain("pnpm test --run tests/unit/account-observation-postgres-ci-contract.test.ts");
+  expect(block).toContain(`\n        run: ${unitCommand}\n`);
   return block;
 }
 
@@ -41,7 +54,7 @@ describe("account observation PostgreSQL CI contract", () => {
       .toBe("e85758d52b4ee3b7ca1f6993ad31be8a336695bdfb49aa47d63fe55612daa250");
   });
 
-  it("runs all three real suites serially on a separate synthetic PostgreSQL 17 service", () => {
+  it("runs all four real suites serially on a separate synthetic PostgreSQL 17 service", () => {
     const block = requireEnforcedObservationJob(workflow);
     for (const expected of ["image: postgres:17-alpine", "- 55460:5432",
       "POSTGRES_USER: waia_local_admin", "POSTGRES_PASSWORD: local_validation_only",
@@ -63,6 +76,16 @@ describe("account observation PostgreSQL CI contract", () => {
       workflow.replace('DEE960_LOCAL_PG17: "1"', 'DEE960_LOCAL_PG17: "0"'),
       workflow.replace(suites[1]!, "--passWithNoTests"),
       workflow.replace(suites[2]!, `${suites[2]} || true`),
+      workflow.replace(`node ${guardPath} ${resultPath}`, ""),
+      workflow.replace(`node ${guardPath}`, `# node ${guardPath}`),
+      workflow.replace(`node ${guardPath}`, `! node ${guardPath}`),
+      workflow.replace(`node ${guardPath} ${resultPath}`, `node ${guardPath} ${resultPath} || true`),
+      workflow.replace(`node ${guardPath} ${resultPath}`, `node ${guardPath} .tmp/old-results.json`),
+      workflow.replace(`--outputFile=${resultPath}`, "--outputFile=.tmp/other-results.json"),
+      workflow.replace("--reporter=json", "--reporter=default"),
+      workflow.replace(`rm -f ${resultPath}`, "# stale result retained"),
+      workflow.replace("--no-file-parallelism", "--fileParallelism"),
+      workflow.replace(unitCommand, unitCommand.replace("tests/unit/account-observation-test-results-guard.test.ts", "tests/unit/other.test.ts")),
     ]) expect(() => requireEnforcedObservationJob(mutation)).toThrow();
   });
 
@@ -74,6 +97,11 @@ describe("account observation PostgreSQL CI contract", () => {
     expect(workflow).not.toMatch(/^  (?:integration|historical-postgres17):/m);
     for (const path of ["db/migrations_postgres/**", "db/schema.postgres.ts",
       "db/local-validation/dee960-account-observation.sql", "lib/trader/account-observation/**",
+      "lib/trader/account-observation/host-role-probe.ts", "scripts/postgres-validation/**",
+      "scripts/postgres-validation/assert-account-observation-test-results.mjs",
+      "tests/unit/account-observation-credential-startup.test.ts",
+      "tests/unit/account-observation-test-results-guard.test.ts",
+      "tests/unit/account-observation-postgres-ci-contract.test.ts",
       // DEE-1015: the provisioning proofs in this gate exercise these executable surfaces.
       "scripts/trader/account-observation-collector-host.ts",
       "scripts/ops/account-observation-provision-collection-state-v1.ts",
