@@ -22,6 +22,7 @@ export type ObservedTransfer = {
 export type CycleOutcome =
   | "success"
   | "noop_disabled"
+  | "noop_unsupported_configuration"
   | "noop_lease_held"
   | "noop_provider_error"
   | "error";
