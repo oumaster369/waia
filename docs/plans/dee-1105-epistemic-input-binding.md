@@ -107,3 +107,15 @@ integrity is not durable outcome/source verification. The missing production
 loaders, full recurring composition, scientific qualification and operator launch
 remain separate gates. User explicitly authorized technical fixes and merge after
 checks; self-review is disclosed and is not Human scientific attestation.
+
+
+## CI follow-up — shadow consumer fixture
+
+Full CI on05b01eb9 exposed two failures in the shadow later-stage tests: the
+mocked authorized Forecast lacked its PIT and selected-package binding. The new
+production guard correctly refused it at FORECAST before the tests could exercise
+Decision/Risk. Correct the fixture to the existing exact context and add two
+shadow refusal/persistence cases for mismatched PIT/package. No production guard
+or authority change. Both failures reproduce locally before correction; all82
+focused tests/6files pass afterward, including real Forecast boundary regressions.
+Fresh exact-head CI remains required; skipped dependent build/e2e jobs are not PASS.

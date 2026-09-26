@@ -56,7 +56,12 @@ function admittedInput(deps: {
   });
   const forecast = {
     status: "FORECAST_AUTHORIZED",
-    authority: { organizationId: ORG, contentDigestHex: DIGEST },
+    authority: {
+      organizationId: ORG,
+      contentDigestHex: DIGEST,
+      anchorClosedBarAt: PIT,
+      selectedPredictivePackageContentDigestHex: DIGEST,
+    },
     issuance: { package: { family: { symbol: "BTCUSDT" } } },
   } as unknown as ForecastRuntimeOutcomeV2;
   return {
@@ -108,6 +113,29 @@ const decision: DecisionAuthorityV2 = {
 };
 
 describe("shadow cycle later no-trade stages", () => {
+  it.each([
+    ["another PIT", { anchorClosedBarAt: "2026-09-22T08:00:00.000Z" }, "FORECAST_PIT_MISMATCH"],
+    ["another package", { selectedPredictivePackageContentDigestHex: "b".repeat(64) }, "FORECAST_PACKAGE_MISMATCH"],
+  ] as const)("persists refusal for %s before Decision or Risk", async (_name, override, reason) => {
+    const decide = vi.fn(async () => { throw new Error("DECISION_NOT_REACHED"); });
+    const assessRisk = vi.fn(async () => { throw new Error("RISK_NOT_REACHED"); });
+    const input = admittedInput({ decide, assessRisk });
+    const forecast = input.capitalRequest.forecastOutcome;
+    if (forecast.status !== "FORECAST_AUTHORIZED") throw new Error("INVALID_TEST_FIXTURE");
+    input.capitalRequest.forecastOutcome = {
+      ...forecast,
+      authority: { ...forecast.authority, ...override },
+    };
+    const store = createMemoryShadowCycleStore();
+    const record = await runShadowCanonicalCycleV2(store, "bar-mismatched-forecast", input as never);
+    expect(record.stage).toBe("FORECAST");
+    expect(record.status).toBe("NO_TRADE");
+    expect(record.reasonCodes).toContain(reason);
+    expect(await store.get("bar-mismatched-forecast")).toEqual(record);
+    expect(decide).not.toHaveBeenCalled();
+    expect(assessRisk).not.toHaveBeenCalled();
+  });
+
   it("persists a decision refusal", async () => {
     const record = await runShadowCanonicalCycleV2(
       createMemoryShadowCycleStore(),
