@@ -18,10 +18,10 @@ state:
   currentWorkPackage: integration-readiness
   completedWorkPackages: [WP-1]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: e1c6ce5a4756f2c84bda213fddaef714860d408f
-  lastValidationAt: "2026-09-26T13:06:06.787966+00:00"
+  prNumber: 678
+  prUrl: https://github.com/oumaster369/waia/pull/678
+  lastValidatedGitSha: b0115fec1ff622bd6ec79dce2b6324779d736378
+  lastValidationAt: "2026-09-26T13:58:10.694209+00:00"
   blockedReason: null
   nextAction: "Obtain accepted-base delta review; controller completes final integration readiness and exact-head CI."
 provenance:
@@ -127,3 +127,10 @@ full readiness remains attributed to its recorded head. Current-base controller
 readiness, independent integration review and all exact-head PR checks remain
 required before merge. No durable billing-source, finality, deployment or live
 qualification is claimed.
+
+
+### Accepted-base refresh 1a59b31b
+
+Normal merge `b0115fec1ff622bd6ec79dce2b6324779d736378` incorporates accepted main `1a59b31b620af81b727d28b24f3ddbf9cb953074` (DEE1113 resource ownership) without conflicts. Original numeric implementation and incoming authorization implementation retain their exact independent semantics; no production file is edited during this refresh. Root executes the combined numeric/billing/Truth/Risk and incoming authorization/layout/handler suite set:187 assertions/15 files PASS, zero skipped. Full lint/typecheck/build, canon/governance, both consumer graphs and diff check PASS at this merge. Evidence: completion audit `evidence/dee-1114/accepted-base-1a59b31b/`. All15 existing native source/registration identities are preserved; no new native run is claimed.
+
+This final plan-only record does not transfer old PR CI to the new head. Independent integration review and rendered preflight must accept the publication head, then all current-base checks must pass before normal merge. Financial grammar and arithmetic, permissions, historical compatibility and broader source/finality/live qualification boundaries are unchanged.
