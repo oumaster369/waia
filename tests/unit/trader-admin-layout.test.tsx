@@ -45,11 +45,11 @@ describe("trader admin page admission", () => {
     await expect(TraderAdminLayout({ children: "protected" })).rejects.toThrow("REDIRECT:/");
     expect(mocks.authorize).not.toHaveBeenCalled();
   });
-  it("does not render the shell to an authenticated non-admin and disposes runtime", async () => {
-    mocks.authorize.mockResolvedValue({ ok: false, runtime: mocks.runtime });
+  it("does not render the shell or reclaim a denied runtime owned by authorization", async () => {
+    mocks.authorize.mockResolvedValue({ ok: false });
     await expect(TraderAdminLayout({ children: "protected" })).rejects.toThrow("NOT_FOUND");
     expect(mocks.dispose).toHaveBeenCalledOnce();
-    expect(mocks.dispose).toHaveBeenCalledWith(mocks.runtime);
+    expect(mocks.dispose).toHaveBeenCalledWith(undefined);
   });
   it("renders only after canonical audit permission and disposes runtime", async () => {
     const result = await TraderAdminLayout({ children: "protected" });
