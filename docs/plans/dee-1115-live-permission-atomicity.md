@@ -17,7 +17,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: implementing
+  status: in-progress
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1]
@@ -75,3 +75,7 @@ The baseline native enable/audit failure is RED before the implementation. Final
 Changed production file: `lib/trader/live/org-live-enable-service.ts`. Native suite: `tests/integration/postgres-org-live-enable-atomicity.test.ts`. Preserve existing governance, live authorization, tenant, CLI and admin-route unit tests. Run scoped ESLint and diff validation; root serializes full `pnpm lint`, `pnpm typecheck`, `pnpm build`, canonical/governance checks, required companion suites and exact-head CI before publication/merge.
 
 Native faults prove rollback at the tested SQL boundaries and real concurrent ordering. They do not prove recovery from an unknown commit acknowledgement or every possible process/host failure. No production permission is mutated, no real trading enabled, no account or credential used, and no C3 worker changed. Org0, promotion, Risk, kill switch, execution, financial rules and authorization policies remain independent and unchanged. Historical partial records are not repaired or invented by this package.
+
+## Controller local acceptance — 2026-09-26
+
+On author `507369ea9f4061c69fd3031c0674ebd9a9c39499` and accepted base `55bcefa4128b716915574971a0a7f28c4f4b12f9`, independent review found no blocking implementation or native-proof defect. Root registered the new native suite in the workflow path filter, executed command and mandatory no-skips proof guard. The combined real PostgreSQL run passed 224 tests across ten mandatory suites, including all 48 new cases; targeted acceptance passed 36 existing unit cases and 11 proof-guard cases. Full lint, typecheck, build, canon, governance and both consumer graphs passed. Rendered PR preflight and the final integration diff are checked before publication. These counts apply to this base; after accepted main advances, retain every incoming mandatory suite and validate the combined publication head. This is local acceptance, not a merged or production release, and no trading permission was changed.
