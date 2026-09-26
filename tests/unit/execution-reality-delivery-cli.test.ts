@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { spawnSync } from "node:child_process";
 const stubs = vi.hoisted(() => ({ create: vi.fn(), deliver: vi.fn(), close: vi.fn() }));
 vi.mock("@/db/postgres-client", () => ({ createPerRequestPostgresRuntime: stubs.create, POSTGRES_CLOSE_GRACE_TIMEOUT_S: 5 }));
@@ -8,7 +8,7 @@ const input = { organizationId: "00000000-0000-4000-8000-000000001122", accountI
   executionAttemptId: "00000000-0000-4000-8000-000000001123" };
 const args = ["--organization-id", input.organizationId, "--account-id", input.accountId, "--execution-attempt-id", input.executionAttemptId];
 const success = { status: "NO_REPORTS", capturedHead: { reportSequence: "0", reportDigestHex: null }, projection: null };
-let write: ReturnType<typeof vi.spyOn>;
+let write: MockInstance<typeof process.stdout.write>;
 let previousExit: typeof process.exitCode;
 beforeEach(() => {
   previousExit = process.exitCode;
@@ -35,7 +35,7 @@ describe("DEE1122 real CLI admission and owned cleanup", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each([[], args.slice(0, 4), [...args, "--account-id", "other"], [...args, "--since", "1"],
-    [...args, "--reports", "{}"], [...args, "--limit", "999"]])("refuses invalid flags before allocation %j", async (values) => {
+    [...args, "--reports", "{}"], [...args, "--limit", "999"]].map((values) => ({ values })))("refuses invalid flags before allocation %j", async ({ values }) => {
     expect((await runExecutionRealityDeliveryCli(values)).result).toMatchObject({ status: "REFUSED", code: "INVALID_INPUT" });
     expect(stubs.create).not.toHaveBeenCalled(); expect(stubs.close).not.toHaveBeenCalled(); expect(process.exitCode).toBe(2);
   });

@@ -233,3 +233,59 @@ Actual counts, limits, fault behavior and test commands must be recorded only af
 ## 9. Deliberately unresolved broader P08
 
 This contract makes progress on committed-report delivery without choosing cost basis, allocation, trade/strategy ownership, automatic source finality, currency conversion, billing period membership, source completeness or prior consumption. Those remain the exact missing producer/data/policy contracts catalogued in the older frozen report. Source data merely queued in Execution can become recorded observations here; recorded observations still do not establish successful canonical live execution or commercial settlement. No real venue command, C3 modification or live enablement is authorized or required by this package.
+
+## WP-3 — author acceptance and remaining integration gates
+
+Author implementation/testing remains based on accepted
+`1a59b31b620af81b727d28b24f3ddbf9cb953074`. The contract above is preserved
+verbatim. No SQL/schema, provider, financial, runtime activation or C3 change was
+made. The mandatory PostgreSQL workflow and its 15 incoming suites are unchanged;
+additive registration and accepted-base integration belong to the root controller.
+
+Executed locally against implementation snapshot
+`8ee929726029a3da1ba9390dc7e7bc4ca66445f9`:
+
+- Fresh isolated loopback PostgreSQL 16.14 database, 219 existing migrations.
+  `pnpm test --run --no-file-parallelism
+  tests/integration/postgres-execution-reality-delivery.test.ts
+  tests/integration/postgres-execution-v2.test.ts
+  tests/integration/postgres-reality-v2.test.ts`: **78 passed, 3 files, zero skipped**
+  (35 new delivery cases; 34 Execution and 9 Reality companion cases).
+- Real CLI child and recreated connection replay; root-owned RC with actual
+  held-transaction refusal; 675 lock blocking under a repeatable-read session
+  default; distinct-account progress; captured prefix with a later report;
+  synthetic lost commit acknowledgement and exact retry; late-prefix native
+  source/truth/event/projection/knowledge failures; original partial-prefix
+  preservation; source-only/missing/lagged projection refusal; oversized report
+  and latest-projection guards; unchanged execution/risk snapshots; existing
+  append-only and deny-RLS controls. Tests use synthetic persisted observations
+  without a venue callback.
+- Teardown confirmed zero remaining test sessions, disabled triggers, injected
+  fault triggers/functions and fixture organizations. The DB grant was released.
+
+After that native run, the integration test changes only an assertion argument
+from a readonly array to its spread copy. **No fresh native run is claimed for
+that later test byte**; root/PR current-base native acceptance remains required.
+The other test-only corrections type the stdout spy and wrap `it.each` flag arrays
+as explicit objects, so each invalid CLI case actually passes its entire flag
+array. Production implementation bytes remain identical to the native snapshot.
+
+Final scoped command (three new unit files plus Reality projection/ingress/graph
+companions): **80 passed, 6 files, zero skipped**. Scoped ESLint, `git diff --check`
+and the explicitly granted `pnpm typecheck` pass. The graph check passes with
+155 sources, 140 consumers and 26 connector references; only the specific new
+DB-only routing/CLI boundary is registered. Full lint/build/PR CI have not been
+run by this author and remain root-owned gates.
+
+Evidence is retained in the project audit directory `evidence/dee-1122/`:
+`author-native-acceptance.log`, `author-scoped-acceptance.log`,
+`author-typecheck-confirmed.log`, `author-scoped-eslint-confirmed.log`,
+`author-database-setup.json`, `author-teardown.json`, and the handoff manifest.
+Earlier setup/fixture/typecheck failures are preserved separately and do not count
+as demonstrated production defects. The real initial CLI top-level-await CJS
+failure was corrected in the new executable and is covered by an actual child.
+
+This proves bounded observation delivery only. General semantic alias and
+source-only revision quarantine fixtures are explicitly compatibility fixtures,
+not new Execution-adapter producers. Current fills remain `OBSERVED`; no cashflow,
+commercial finality, lifecycle allocation or complete P08 readiness is inferred.

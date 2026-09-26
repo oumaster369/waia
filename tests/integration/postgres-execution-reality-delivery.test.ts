@@ -149,7 +149,7 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     for (const draft of route(one)) await ingestRealitySourceReportV2Postgres(db, scope(), draft);
     const original = await listRealitySourceReportsV2(db, scope());
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 2, newSources: 1, existingSources: 1 });
-    const after = await listRealitySourceReportsV2(db, scope()); expect(after).toEqual(expect.arrayContaining(original));
+    const after = await listRealitySourceReportsV2(db, scope()); expect(after).toEqual(expect.arrayContaining([...original]));
   });
   it("refuses source-only target and missing projection before duplicate ingestion can repair them", async () => {
     const value = await fixture(); const report = await append(value);
