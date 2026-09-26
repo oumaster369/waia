@@ -13,6 +13,7 @@ import { seedWp13User } from "./wp13-intelligence-test-helpers";
 import { createPostgresMiSourceProvenanceService } from "@/lib/trader/mi/source-provenance-service";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { recordedPublicTransport, assertRecordedAnalysisTestDatabase } from "../helpers/recorded-paper-public-transport";
+import { awaitRecordedBundleDatabaseClock } from "../helpers/recorded-paper-clock-barrier";
 import { captureSession, copy, seal, ANALYSIS_CONTRACT, type AnalysisSession } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
 import { captureMandatoryBundle, normalizeMandatory } from "@/lib/trader/paper/durable-noncapital/normalize-mandatory-packet-v1";
 import { publishRecordedAnalysis, readRecordedAnalysis, verifyRecordedSources, encodeBody, holderColumns } from "@/lib/trader/paper/durable-noncapital/repository-postgres-v1";
@@ -23,12 +24,21 @@ import { evaluateRecordedAnalysis } from "@/lib/trader/paper/durable-noncapital/
 const url = process.env.DATABASE_URL_POSTGRES?.trim(); const enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url;
 const children = new Set<ChildProcess>(); const fault = "dee1121_injected_fault";
 const tables = ["trader_recorded_analysis_sessions_v1", "trader_recorded_analysis_packets_v1", "trader_runtime_noncapital_cycles_v2", "trader_recorded_analysis_companions_v1"];
+type ClockBarrier = Awaited<ReturnType<typeof awaitRecordedBundleDatabaseClock>>;
+function assertClockBarriers(event: { clockBarriers?: ClockBarrier[] }, count: number) {
+  expect(event.clockBarriers).toHaveLength(count);
+  for (const proof of event.clockBarriers!) {
+    expect(Date.parse(proof.observedDatabaseTimeUtc)).toBeGreaterThanOrEqual(Date.parse(proof.maxIngestTimeUtc));
+    expect(proof.bundleDigest).toMatch(/^[0-9a-f]{64}$/); expect(proof.samples).toBeGreaterThanOrEqual(1);
+  }
+  console.info({ kind: "fixture_observed_clock_barriers", proofs: event.clockBarriers });
+}
 function worker(payload: object) {
   const child = spawn(process.execPath, ["--import", "tsx", "--conditions=react-server", "tests/helpers/recorded-paper-analysis-process.ts"], {
     cwd: process.cwd(), env: { PATH: process.env.PATH, CI: process.env.CI, WAIA_PG_INTEGRATION: process.env.WAIA_PG_INTEGRATION, NODE_ENV: "test", WAIA_TRADER_CLI: "1", WAIA_POSTGRES_CLI: "1",
       WAIA_DB_BACKEND: "postgres", DATABASE_URL_POSTGRES: url, WAIA_RECORDED_TEST_PAYLOAD: JSON.stringify(payload) }, stdio: ["ignore", "pipe", "pipe"] });
   children.add(child); let buffer = ""; let errors = "";
-  const result = new Promise<{ event: string; outcome?: string; digest?: string; fetches: number; legacyLoaded?: boolean; mockLoaded?: boolean; claim?: unknown; result: { status: string; completed: Array<{ outcome: string; packetDigest: string; companionDigest: string }> } }>((resolve, reject) => {
+  const result = new Promise<{ event: string; outcome?: string; digest?: string; fetches: number; clockBarriers?: ClockBarrier[]; legacyLoaded?: boolean; mockLoaded?: boolean; claim?: unknown; result: { status: string; completed: Array<{ outcome: string; packetDigest: string; companionDigest: string }> } }>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`CHILD_TIMEOUT:${errors}`)), 100_000);
     child.stdout!.on("data", chunk => { buffer += String(chunk); const lines = buffer.split("\n"); buffer = lines.pop()!;
       for (const line of lines) { try { const data = JSON.parse(line); if (data.event === "result" || data.event === "error") { clearTimeout(timer); resolve(data); } } catch {} } });
@@ -51,6 +61,7 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
   async function collect(s: AnalysisSession) {
     const source = new HtxBarPollSource({ internalSymbol: s.symbol, disableOptionalProviders: true, fetchImpl: recordedPublicTransport(() => Date.now()) });
     const bundle = await source.fetchMandatoryEvaluationBundle();
+    await awaitRecordedBundleDatabaseClock(bundle, () => db.transaction(tx => readRuntimeDatabaseClockV2(tx)));
     const pit = await db.transaction(tx => readRuntimeDatabaseClockV2(tx));
     return { pit, normalized: normalizeMandatory(captureMandatoryBundle(bundle, s), s, pit) };
   }
@@ -89,12 +100,14 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
   it("actual CLI publishes/evaluates source and restarts exact range with zero HTTP", async () => {
     await seedSources(); const input = { ...session({ leaseDurationMs: 2_000 }), startSequence: 0 };
     const first = worker({ operation: "cli", input }); const event = await first.result; expect(event.event).toBe("result"); expect(event.result.status).toBe("COMPLETE"); expect(event.fetches).toBe(8); expect(event.legacyLoaded).toBe(false); expect(event.mockLoaded).toBe(false);
+    assertClockBarriers(event, 1);
     const saved = await readRecordedAnalysis(client, captureSession(input), 0);
     expect(saved.packet!.sources.filter(s => s.receipt.status === "AVAILABLE").length).toBeGreaterThanOrEqual(3);
     expect(saved.packet!.sources.some(s => s.receipt.reason === "SOURCE_UNKNOWN")).toBe(false);
     expect(saved.companion!.output).toEqual(evaluateRecordedAnalysis(saved.packet!)); expect(saved.companion!.output.evaluation.understandingArtifact).toBeUndefined();
     await expiry(); const again = worker({ operation: "cli", input, forbidFetch: true }); const replay = await again.result;
     expect(replay.result.status).toBe("COMPLETE"); expect(replay.result.completed[0].outcome).toBe("REPLAYED"); expect(replay.fetches).toBe(0);
+    assertClockBarriers(replay, 0);
     expect(replay.result.completed[0].companionDigest).toBe(saved.companion!.contentDigest); expect(await counts()).toEqual([1, 1, 1, 1]);
   }, 20_000);
   it("actual executable reports lease busy and exits nonzero before source acquisition", async () => {
@@ -121,6 +134,7 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     const packet = await publishRecordedAnalysis(client, s, holder, 0, data.pit, data.normalized); await expiry();
     const child = worker({ operation: "cli", input: { ...s, startSequence: 0 }, forbidFetch: true }); const event = await child.result;
     expect(event.result.status).toBe("COMPLETE"); expect(event.fetches).toBe(0); expect(event.result.completed[0].packetDigest).toBe(packet.contentDigest);
+    assertClockBarriers(event, 0);
     expect((await readRecordedAnalysis(client, s, 0)).packet!.analysisPitAnchor).toBe(packet.analysisPitAnchor);
   }, 20_000);
   it.each(["unknown", "inactive", "foreign"])("records honest %s sources without inventing qualified authority", async kind => {
@@ -273,6 +287,7 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     const input = { ...session({ maxCycles: 2, leaseDurationMs: 70_000 }), startSequence: 0 };
     const child = worker({ operation: "cli", input }); const result = await child.result;
     expect(result.result.status).toBe("COMPLETE"); expect(result.fetches).toBe(16); expect(result.result.completed).toHaveLength(2);
+    assertClockBarriers(result, 2);
     const first = await readRecordedAnalysis(client, captureSession(input), 0); const second = await readRecordedAnalysis(client, captureSession(input), 1);
     expect(second.packet!.previousCompletionDigest).toBe(first.companion!.contentDigest);
     expect(second.packet!.previousState).toEqual(first.companion!.output.nextState);
@@ -281,6 +296,7 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     await expiry();
     const replay = await worker({ operation: "cli", input, forbidFetch: true }).result;
     expect(replay.result.status).toBe("COMPLETE"); expect(replay.fetches).toBe(0);
+    assertClockBarriers(replay, 0);
     expect(replay.result.completed.map(c => c.outcome)).toEqual(["REPLAYED", "REPLAYED"]);
     expect(replay.result.completed.map(c => c.companionDigest)).toEqual([first.companion!.contentDigest, second.companion!.contentDigest]);
     expect(await counts()).toEqual([1, 2, 2, 2]);
@@ -289,6 +305,7 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     const input = { ...session({ maxCycles: 2, leaseDurationMs: 90_000 }), startSequence: 0 };
     const child = worker({ operation: "cli", input, fixedSourceTime: Date.now() - 120_000 });
     const event = await child.result; expect(event.result.status).toBe("SOURCE_NOT_ADVANCED"); expect(event.result.completed).toHaveLength(1);
+    assertClockBarriers(event, 2);
     expect(event.fetches).toBe(16); expect(await counts()).toEqual([1, 1, 1, 1]);
   }, 100_000);
   it("lease contention is one native process winner and one typed busy result", async () => {
