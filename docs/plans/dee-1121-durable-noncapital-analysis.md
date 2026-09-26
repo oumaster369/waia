@@ -585,3 +585,51 @@ This fixture fix removes only the demonstrated selected-middle-pool problem
 for already-valid packages; it leaves other validity/refusal rules intact and
 confers no scientific authority. Independent final review and newPR CI remain
 required. All resource grants were released after execution.
+
+
+### Accepted main 340ead8d integration and executed evidence
+
+Normal merge `76c6ba02a95c9b33dba4c7951e05b8cc4850105e` has exact parents
+`04227ae100d88798a4c4dd079c2053ffbe0d421c` and accepted main
+`340ead8da22b35c47a20de12ec0eef652ef950ff` (DEE-1122 report delivery).
+All 27 author-only and 17 incoming-only paths retain their exact parent blobs;
+both binary patch directions match outside four reviewed shared paths. The
+workflow, executed-proof manifest and negative tests now retain all 19 native
+suites; all noncapital jobs, the separate three billing/two payment proof sets,
+and incoming catch-up package command remain unchanged. No production module
+was edited during this integration.
+
+The two textual conflicts were the capital-guard count and Reality inventory
+consumer pins. The combined source graph was recomputed from actual source:
+155 sources, 140 consumers and 26 connector references. Every incoming rule,
+explicit additional file and source digest remains intact. The existing paper
+entry-to-legacy substitution changes the combined consumer path/content pins;
+neither parent's stale consumer digest was accepted as proof. The original
+conflict and expected stale-pin refusal are retained with the successful result.
+
+Clean executable head `76c6ba02` passed 524 scoped assertions across 31 files
+with zero skips, including the prior 23-file acceptance, both CI corrections,
+all incoming report-delivery units and the strict 19-suite proof guard. Fresh
+isolated `waia_dee1121_340ead_author` started with an empty public schema on
+PostgreSQL 16.14, applied all 220 exact migration identities, and passed all
+393 assertions across 19 mandatory native suites with zero skips. This includes
+all 35 incoming report-delivery cases and the 11 feedback reader cases. The
+executed-proof validator passed; final readback found zero other sessions,
+injected delivery/paper/live-permission fault functions or triggers, and
+zero disabled public user triggers. Clients and processes closed; no existing
+schema or registry was repaired.
+
+Full typecheck, lint, build, canon, governance, Execution graph, Reality graph
+and diff check passed at that same executable head. Lint retained existing
+warnings and had no errors. All raw commands, original merge conflicts,
+source-preservation manifests, applied SQL hashes and cleanup receipts are in
+`evidence/dee-1121/accepted-base-340ead8d/`. This final addition changes only the
+plan; publication, independent final metadata review and new exact-head PR CI
+remain separate requirements. PostgreSQL 17 is not claimed from the local
+PostgreSQL 16 run; canonical billing/payment CI profiles remain separate gates.
+
+Prior `04227ae1`/752a evidence and all original CI failures are retained unchanged.
+The original feedback fixture's unlogged CI tenant/refusal reason remains
+unknown; only the separately demonstrated synthetic pool defect is repaired.
+No source qualification, financial/scientific authority, full P10 completion,
+production database migration, provider, C3 or live activation is claimed.
