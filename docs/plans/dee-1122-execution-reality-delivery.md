@@ -342,3 +342,36 @@ Evidence: project audit evidence/dee-1122/accepted-base-21a60ec3/acceptance.json
 root-readiness-combined.json and eof-only-identity.json. Final independent review,
 publication and all current-head PR CI remain required; these are not full P08,
 financial-finality or live-readiness claims.
+
+## WP-3 — accepted-base refresh to 56ee65f0
+
+Normal merge `b9907af89190fd3bb8eb78c67b7624de328469a8` integrates accepted
+`56ee65f00f3b19858d57ea8f3947d2867822e9ac` into reviewed PR head
+`5c1fb623437197827361f473cd1a160a32197853`, without conflicts. The 18 own and
+30 incoming paths outside the three shared CI/proof files preserve exact blobs
+and identical binary patches in both directions. Delivery production and native
+test implementation remain unchanged; all incoming billing dependency admission,
+fixture and test changes are retained.
+
+The capital job and executed-proof manifest contain exactly the 16 incoming
+mandatory native suites plus delivery, for 17. Every native test body retains
+its respective accepted/reviewed blob. All other workflow jobs, including the
+canonical three-suite billing parity proof and its guard, remain exact to the
+accepted base. The automatic merge left the positive guard output assertion at
+16; its initial one-failure/17-pass result is retained. Updating only that count
+and its test title to 17 restores the positive control without changing any of
+the missing/skipped/failed/empty/duplicate refusal cases.
+
+Executed scoped acceptance: **346 assertions /20 files passed, zero skipped**,
+including delivery, Reality, numeric and incoming billing companions, all 18
+capital guard cases and all four canonical billing proof-guard cases. Scoped
+ESLint and base diff check pass. Evidence, exact commands, source preservation,
+union reconstruction and distinct raw logs are retained under the project audit
+directory `evidence/dee-1122/accepted-base-56ee65f0/`.
+
+No PostgreSQL, full lint/typecheck/build, provider or production command was run
+during this refresh. Earlier native proof remains attributed to its original
+heads. Fresh combined 17-suite native proof, canonical billing acceptance, full
+readiness, independent delta review and current-head PR CI remain root-owned
+gates. This refresh introduces no financial source qualification, settlement or
+P08 completion claim.
