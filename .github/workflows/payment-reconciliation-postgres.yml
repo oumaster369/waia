@@ -1,0 +1,78 @@
+name: payment-reconciliation-postgres
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "db/**"
+      - "lib/waia-core/**"
+      - "lib/trader/settlement/**"
+      - "lib/trader/billing/**"
+      - "lib/trader/audit/**"
+      - "lib/trader/risk/numeric.ts"
+      - "lib/trader/readiness/htr-postgres-connection-preflight.ts"
+      - "tests/helpers/**"
+      - "tests/integration/htr-postgres-fixture-prelude.ts"
+      - "tests/integration/postgres-reconciliation-workflow-parity.test.ts"
+      - "tests/integration/postgres-settlement-reconciliation-parity.test.ts"
+      - "scripts/postgres-validation/**"
+      - "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "vitest*"
+      - ".github/workflows/payment-reconciliation-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reconciliation:
+    name: PostgreSQL payment reconciliation (executed proof required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_validate
+          POSTGRES_PASSWORD: waia_validate_local_only
+          POSTGRES_DB: waia_validate
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_validate -d waia_validate"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      # Synthetic CI-only identity required by the unchanged HTR proof guard.
+      DATABASE_URL_POSTGRES: postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate
+      DATABASE_URL_POSTGRES_SESSION: postgresql://waia_validate:waia_validate_local_only@127.0.0.1:54329/waia_validate
+      WAIA_PG_INTEGRATION: "1"
+      WAIA_DB_BACKEND: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and complete migrations on fresh canonical proof service
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Actual reconciliation companions and no-skips proof
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/payment-reconciliation-postgres-results.json
+          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/payment-reconciliation-postgres-results.json \
+            tests/integration/postgres-reconciliation-workflow-parity.test.ts \
+            tests/integration/postgres-settlement-reconciliation-parity.test.ts
+          node scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs .tmp/payment-reconciliation-postgres-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-reconciliation-postgres-results
+          path: .tmp/payment-reconciliation-postgres-results.json
+          if-no-files-found: error
