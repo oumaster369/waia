@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 11c83e5bfddbb53d7aabe24191c6f57c92135892
-  lastValidationAt: "2026-09-26T15:47:26.439Z"
+  lastValidatedGitSha: 683eaa8a8133494af0a9c452303a3585b8691fe6
+  lastValidationAt: "2026-09-26T16:16:44.149101+00:00"
   blockedReason: null
-  nextAction: "Complete fresh accepted-base18-suite native proof, preserve the separate three-suite billing proof, run full readiness and independent refresh review before publication; full P10 remains open."
+  nextAction: "Complete independent final review; hold publication while the admitted payment train reserves main, then verify the accepted-base delta and all current-head CI. Full P10 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -348,3 +348,10 @@ No native database test, full lint/typecheck/build or provider/production/host a
 was run for this source refresh. Prior323/17 native and full-readiness evidence stays
 at its recorded source heads; it is not an18-suite proof on the new base. Fresh
 native/current-head readiness, final independent review and PR CI remain pending.
+
+
+## WP-3 — root current-base acceptance on 56ee65f0
+
+At `683eaa8a8133494af0a9c452303a3585b8691fe6`, 2026-09-26T16:16:44.149101+00:00, root executed358 native assertions/18mandatory suites with zero skips on fresh isolated PostgreSQL16.14/all220migrations. All16 incoming capital suites plus recorded analysis and canonical PIT lineage ran; all teardown checks were zero. Root427 scoped assertions/29files and all9 repository readiness checks passed at the same source head. Exact command/source/result evidence is in audit evidence/dee-1121/accepted-base-56ee65f0. No production source or fixture implementation changed during this acceptance. This final plan-only commit records those actual results; prior failed chronology/timeout evidence remains historical and unaltered.
+
+Independent current-base final review and exact-head CI remain mandatory, including the separate three canonical billing suites. Publication is briefly held while the newly admitted payment integration requires main56ee to remain fixed; further base changes require truthful re-evaluation, not a retroactive old-CI claim. FullP10, semantic/scientific qualification, production migration/host wiring and live activation remain open.
