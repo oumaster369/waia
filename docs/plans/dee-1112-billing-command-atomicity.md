@@ -144,3 +144,7 @@ type and the synthetic draft fixture accepts string account IDs.
 
 This evidence is base-specific. If another accepted PR adds critical suites
 before publication, retain those suites and revalidate the final integration.
+
+### Accepted-base integration — 2026-09-26
+
+Reviewed merge `4ac739199a9b07df72d8943b14dfbed792cd3a56` incorporates accepted main `ded58378b57b1cdc869f495905dcdf4d9a52d791`. Independent binary-diff review proves the financial implementation and native fixtures unchanged; all incoming PR673 code is exactly accepted. Three CI/proof list conflicts retain the complete union of 12 mandatory suites and 13 guard cases. Root applied all migrations to a fresh isolated loopback database and passed 215 native tests across all 12 suites, zero skips. The two canonical profile companions also pass. Combined targeted tests and full lint/typecheck/build/canon/governance/both consumer graphs pass. The reused canonical fixture had the 0218 table but a registry through 0217; its migration attempt refused. That fixture and failure evidence were preserved; fresh-database application, rather than editing migration history or relaxing guards, supplies the migration proof. Final rendered-body preflight and exact publication-head CI remain mandatory. No production schema or financial command was run.
