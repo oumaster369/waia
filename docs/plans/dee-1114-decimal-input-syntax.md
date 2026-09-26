@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  currentWorkPackage: integration-readiness
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: []
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Complete focused RED/GREEN validation and independent review; controller runs serial readiness and exact-head CI."
+  nextAction: "Obtain accepted-base delta review; controller completes final integration readiness and exact-head CI."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -67,6 +67,25 @@ Truth suites after correction (GREEN). Existing billing guards map invalid numer
 syntax to their existing domain refusal codes; no guard or financial formula is
 rewritten. Risk and Truth already rejected this punctuation at their own admission
 boundaries, so this is not claimed as a demonstrated Risk bypass repair.
+
+### Accepted-base integration — 2026-09-26
+
+The implemented correction and independent review are frozen at author commit
+`ad62b99dfe92e15d9b9a1b9ebc507a918f830e8e`. Local merge
+`8be885dd269bb50d17689f184873cac4dda6b2ff` incorporates exact accepted main
+`ed2a25f72008a97211c9454fd29d4f62a65508b2` without conflict. The five author paths
+and 28 incoming paths do not overlap. Blob equality and binary diff equality in
+both directions prove the author patch and incoming code unchanged at the merge.
+The following documentation supplement changes only this plan.
+
+All original 122 focused cases across eight suites pass on the accepted base;
+scoped ESLint and diff checks pass. The 12 incoming mandatory PostgreSQL suite
+registrations, workflow, executed-proof guard and native test blobs are preserved
+exactly. No native PostgreSQL test is run or claimed by this integration.
+
+Previous full readiness evidence is bound to the earlier author head/base. Current
+accepted-base delta review, controller full readiness and final PR CI remain
+required; they are not represented as complete by these scoped results.
 
 ## Validation and limits
 
