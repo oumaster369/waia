@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: fa3c0ad43444c41504023fbdb09348ed1b101fc7
+  lastValidationAt: "2026-09-26T15:41:39.045482+00:00"
   blockedReason: null
-  nextAction: "Implement the accepted bounded report-delivery contract; coordinate native resource admission with the controller."
+  nextAction: "Complete independent final review, publish one PR and require all exact-head CI before normal merge. Full P08 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -321,3 +321,24 @@ base. Root must run the fresh combined16-suite native proof and full readiness
 on the refreshed integration before publication. Existing unrelated canonical
 profile suites were neither added nor waived. Source/patch/hash evidence and
 raw scoped logs are in `evidence/dee-1122/accepted-base-21a60ec3/`.
+
+
+## WP-3 — root current-base acceptance
+
+On accepted base21a60ec3 and sourceb8f5e013, root applied219 migrations to a fresh
+isolated PostgreSQL16.14 database and executed315 assertions in all16 mandatory
+native suites, zero skipped. The new delivery suite contributes35 assertions;
+all15 incoming suites are preserved. Final readback found no other sessions,
+injected fault triggers/functions or disabled public user guards. No production
+or provider action was performed.
+
+Root155 assertions/11 scoped files, full lint/typecheck/build, canon, PR governance
+and both consumer graphs passed atb8f5e013. The final base diff check found one
+duplicate EOF newline in the new test helper. Commitfa3c0ad4 removes exactly that
+one byte; independently recorded TypeScript emitted JavaScript remains identical.
+The corrected base diff check passes. Initial failed output is preserved, and
+native/test execution is attributed to b8f rather than retroactively relabeled.
+Evidence: project audit evidence/dee-1122/accepted-base-21a60ec3/acceptance.json,
+root-readiness-combined.json and eof-only-identity.json. Final independent review,
+publication and all current-head PR CI remain required; these are not full P08,
+financial-finality or live-readiness claims.
