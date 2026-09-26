@@ -20,8 +20,8 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 4c51787597dbd0d4355cf1605bd9b668978e584d
-  lastValidationAt: "2026-09-26T11:37:26.824Z"
+  lastValidatedGitSha: 111fd1ed17d17084c4250b7053c216f6b9b8e966
+  lastValidationAt: "2026-09-26T12:06:03.343Z"
   blockedReason: null
   nextAction: "Accepted-base native and scoped checks passed; obtain independent integration review and root full readiness before publication and exact-head CI. No runtime activation."
 provenance:
@@ -180,6 +180,39 @@ full readiness on this combined base remains the integration controller's next
 step. Source-preservation and exact commands/results are recorded in the audit
 artifact `evidence/dee-1110/accepted-base-ed2a25f7/`. Passing local checks do not
 waive independent integration review, final-head CI or milestone audit.
+
+### Accepted-base refresh after PR675
+
+The controller subsequently completed all full-readiness checks at prior head
+`e86d767da089926943a3cd0a70a2e943ae3f9d18`, and independent integration review
+accepted that head. Those results remain attributed to the prior `ed2a25f7` base.
+
+Merged newly accepted main `2565e1a23741d0042096fd8209cd9793e8aa7e19` into
+`e86d767d`, producing code head `111fd1ed17d17084c4250b7053c216f6b9b8e966`.
+The workflow and proof script merged additively; the only conflict was the guard
+unit test's required count/name, resolved to fifteen. All thirteen incoming
+mandatory native suites and both Forecast suites remain required, with
+`WAIA_POSTGRES_CLI=1` retained. All 35 non-union incoming file blobs since the
+original base, including the three new PR675 source/test/plan files, are exact.
+The reader, both helpers and dedicated native suite still match `4deb5d39`.
+
+At this exact code head, fresh isolated local database `waia_dee1110_2565e1a2`
+on PostgreSQL16.14 applied all219 migrations from an empty public schema.
+**280 actual native tests / 15 mandatory suites PASS, zero skips**; the
+executed-proof guard passes. **127 targeted unit tests / 10 files PASS, zero
+skips**. Scoped ESLint and accepted-base diff whitespace checks pass. Final
+readback confirms zero other sessions, zero disabled public user triggers and
+zero leftover `dee1115_test_fault` triggers/functions. All database clients are
+closed and the local database resource grant is released. No existing database,
+fixture or migration registry was repaired or changed.
+
+Exact commands, raw logs, JSON assertions, source-preservation identities and
+local database readback are retained in the audit artifact
+`evidence/dee-1110/accepted-base-2565e1a2/`. Test release metadata is the tested
+code head; it is not an attestation of an executing production binary. The
+following commit changes only this canonical plan. Independent final delta
+review, root whole-repository readiness on this base and exact-head PR CI remain
+required; the local acceptance does not complete WP-2 or authorize runtime use.
 
 ## Deliberate boundaries
 
