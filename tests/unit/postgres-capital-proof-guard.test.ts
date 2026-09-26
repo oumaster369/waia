@@ -8,6 +8,7 @@ const directory = mkdtempSync(join(tmpdir(), "waia-capital-proof-"));
 const reportPath = join(directory, "report.json");
 const required = [
   "postgres-execution-v2.test.ts", "postgres-risk-v2.test.ts",
+  "postgres-execution-reality-delivery.test.ts",
   "postgres-risk-limits-bootstrap.test.ts", "postgres-trader-service-actor-authorization.test.ts",
   "postgres-reality-v2.test.ts", "postgres-canonical-decision-verification-v2.test.ts",
   "postgres-promotion-audit-atomicity.test.ts", "postgres-runtime-authority-v2.test.ts",
@@ -19,6 +20,8 @@ const required = [
   "postgres-reporting-period-basis.test.ts",
   "postgres-noncapital-cycle-owner-v2.test.ts",
   "postgres-org-live-enable-atomicity.test.ts",
+  "postgres-recorded-paper-analysis-v1.test.ts",
+  "postgres-mi-canonical-pit-lineage-v1.test.ts",
 ];
 const passed = () => required.map((file) => ({
   name: `/workspace/tests/integration/${file}`, status: "passed",
@@ -32,10 +35,10 @@ function run(testResults: ReturnType<typeof passed>) {
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
 describe("mandatory executed Postgres capital proof", () => {
-  it("accepts all seventeen actually executed critical suites", () => {
+  it("accepts all twenty actually executed critical suites", () => {
     const result = run(passed());
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("17 critical suites, no skipped tests");
+    expect(result.stdout).toContain("20 critical suites, no skipped tests");
   });
   it.each(required)("rejects missing, skipped or failed proof for %s", (file) => {
     for (const mode of ["missing", "skipped", "failed", "empty", "duplicate"] as const) {

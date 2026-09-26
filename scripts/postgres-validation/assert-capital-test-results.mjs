@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 // executed proof for every critical PostgreSQL surface, never a skip waiver.
 const requiredFiles = [
   "postgres-execution-v2.test.ts",
+  "postgres-execution-reality-delivery.test.ts",
   "postgres-risk-v2.test.ts",
   "postgres-risk-limits-bootstrap.test.ts",
   "postgres-trader-service-actor-authorization.test.ts",
@@ -20,6 +21,8 @@ const requiredFiles = [
   "postgres-reporting-period-basis.test.ts",
   "postgres-noncapital-cycle-owner-v2.test.ts",
   "postgres-org-live-enable-atomicity.test.ts",
+  "postgres-recorded-paper-analysis-v1.test.ts",
+  "postgres-mi-canonical-pit-lineage-v1.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const file of requiredFiles) {

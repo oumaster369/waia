@@ -111,6 +111,16 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
       ).map((entry) => entry.path),
     ).toEqual(["lib/trader/backtest/backtest-runner.ts"]);
 
+    expect(INFORMATION_SUFFICIENCY_CONSUMERS_V2.filter(
+      entry => entry.disposition === "OBSERVATIONAL_ONLY_NO_AUTHORITY",
+    )).toEqual([expect.objectContaining({
+      path: "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
+      authorityPurpose: "NONE",
+    })]);
+    const recorded = read("lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts");
+    expect(recorded).toContain("UNEXPECTED_ANALYTICAL_AUTHORITY");
+    expect(recorded).not.toMatch(/declareResearchNonCapital|informationSufficiencyAuthority\s*:/);
+
     const nonCapital = INFORMATION_SUFFICIENCY_CONSUMERS_V2.filter(
       (entry) =>
         entry.disposition === "RESEARCH_NON_CAPITAL_EXPLICIT" ||

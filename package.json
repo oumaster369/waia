@@ -150,7 +150,8 @@
     "validate:fhv-t4a-packet": "WAIA_TRADER_CLI=1 node --require ./scripts/trader/trader-cli-server-only-prelude.cjs --import tsx scripts/ops/validate-fhv-t4a-packet.ts",
     "validate:fhv-public-ceremony-packets": "WAIA_TRADER_CLI=1 node --require ./scripts/trader/trader-cli-server-only-prelude.cjs --import tsx scripts/ops/validate-fhv-public-ceremony-packets.ts",
     "validate:provider-readiness": "node --import tsx scripts/trader/validate-provider-readiness.ts",
-    "validate:market-data-integration": "node --import tsx scripts/trader/validate-market-data-integration.ts"
+    "validate:market-data-integration": "node --import tsx scripts/trader/validate-market-data-integration.ts",
+    "trader:reality:catch-up-execution": "WAIA_TRADER_CLI=1 node --import tsx --require ./scripts/trader/trader-cli-server-only-prelude.cjs --conditions=react-server scripts/trader/reality-execution-report-catch-up.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

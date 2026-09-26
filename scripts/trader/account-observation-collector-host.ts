@@ -27,7 +27,7 @@ import {
   type ObservationHostEvent,
   type ObservationSqlResource,
 } from "@/lib/trader/account-observation/host";
-import { observationPoolLimits } from "@/lib/trader/account-observation/host-role-probe";
+import { observationPoolLimits, probeObservationCredentialPool } from "@/lib/trader/account-observation/host-role-probe";
 import { isProductionDeployment } from "@/lib/trader/security/deployment-tier";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
 
@@ -210,7 +210,11 @@ function openObservationCredentialService(
   runtime: AccountObservationCollectorRuntime,
   trusted: TrustedAccountObservationAssignments,
 ) {
-  return async (): Promise<ObservationCredentialResource> => {
+  return async (signal: AbortSignal): Promise<ObservationCredentialResource> => {
+    const requireActive = () => {
+      if (signal.aborted) throw new Error("OBSERVATION_CREDENTIAL_STARTUP_REFUSED");
+    };
+    requireActive();
     const sql = postgres(runtime.config.credentialDatabaseUrl, {
       max: 2,
       connect_timeout: 3,
@@ -220,10 +224,13 @@ function openObservationCredentialService(
       onnotice: () => {},
     });
     try {
+      await probeObservationCredentialPool(sql);
+      requireActive();
       const provider = await SecretsStoreMasterKeyProvider.create({
         secretGetter: () => runtime.masterKeySecretGetter(),
         productionReady: isProductionDeployment(),
       });
+      requireActive();
       const service = createObservationCredentialReader({
         sql,
         provider,
@@ -235,15 +242,16 @@ function openObservationCredentialService(
           }),
         ),
       });
+      requireActive();
       return Object.freeze({
         service,
         async dispose() {
           await sql.end({ timeout: 5 });
         },
       });
-    } catch (error) {
+    } catch {
       await sql.end({ timeout: 5 }).catch(() => {});
-      throw error;
+      throw new Error("OBSERVATION_CREDENTIAL_STARTUP_REFUSED");
     }
   };
 }
