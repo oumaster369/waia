@@ -21,12 +21,12 @@ state:
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1]
-  prNumber: null
-  prUrl: null
+  prNumber: 685
+  prUrl: "https://github.com/oumaster369/waia/pull/685"
   lastValidatedGitSha: 2df4df9591e69fe191451d1a6383c7edd5e6eef8
   lastValidationAt: "2026-09-26T21:34:53.959763+00:00"
   blockedReason: null
-  nextAction: "Independent final current-base source/evidence review, then controller rendered PR preflight and publication; authoritative exact-head CI and serialized merge remain pending."
+  nextAction: "Refresh existing PR685 normally onto accepted9a4d1a73; preserve both source patches and221 migrations, prove the additive native union on a fresh database, then independent review/controller publication and exact-head CI. Prior acceptance remains attributed to2df4df95/a572."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -295,3 +295,12 @@ Executed acceptance at the exact source above:
 - Mandatory registrations remain20capital,3canonicalbilling,2payment and4PG17-observation. The latter supported profiles and all authoritative PR checks remain separate current-head CI gates; localPG16 proof is not relabeledPG17.
 
 Raw commands, test assertions, source manifests, conflicts, both patch directions, failures, migration identities and cleanup are preserved under external audit `evidence/dee-1125/accepted-base-9d2a9776/`. Final metadata changes only this plan; executable validation remains attributed to2df4. Resources were released after completion. Controller publication, independent final review and exact-head CI remain pending. No economic/source qualification, financial methodology, prior-consumption guarantee, automatic finality, real provider/production/C3/live action or fullP08 readiness is claimed.
+
+
+## Admitted PR685 refresh onto accepted9a4d1a73 — plan before integration
+
+Controller admission preserves frozen `a572dad02d0b034683fe80273cb043623c1aea16` and normally merges accepted `9a4d1a73fa421961058d3733e11ea47ec7d147ec` (PR686, merged2026-09-26T23:02:07Z after32 successful checks). No rebase, force or new implementation. Actual inventories are24 own paths and19 incoming paths, with3 shared bookkeeping paths: the PostgreSQL workflow, executed-capital-proof guard and its unit tests. Preserve all21 own-only and16 incoming-only blobs, both full binary patch directions outside those shared paths and this plan's declared metadata. Retain incoming source/inventory, original basis SQL/body, and the exact221 migration identities without reindexing or schema repair.
+
+Resolve shared files as an additive union: all incoming20 capital suites plus the existing basis suite are prospectively21, with strict missing/empty/duplicate/failed/skipped proof; actual suite/count equality must be recomputed. Canonical3 billing,2 payment and4 PG17 observation registrations remain unchanged. Preserve incoming sufficiency/Guardian semantics and all existing tests; no receipt, authority, financial-policy, holdout or scientific-gate change.
+
+After source freeze and focused scoped checks, use the controller's sole loopback54329/heavy grant for a NEW `waia_dee1121_dee1125_9a4d_author` database, all221 migrations, the complete recomputed capital union and separate actual4-case sufficiency PostgreSQL companion, zero skips and explicit cleanup. Do not reuse prior databases or alter validation guards. Then run appropriate cumulative scoped tests and eight readiness checks. Native counts and current-base PASS remain pending until executed. All original failure/acceptance evidence stays immutable under its old source/base; new evidence uses `evidence/dee-1125/accepted-base-9a4d1a73/author-*`. Final independent review, actual rendered PR preflight and exact-head CI remain controller gates; author does not push, create another PR or deploy.
