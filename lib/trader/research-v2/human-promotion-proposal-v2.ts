@@ -1,12 +1,17 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { ClosedTradeOutcomeRecordV2 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
 import type { FalsifiableHypothesisV2 } from "@/lib/trader/research-v2/research-question-hypothesis-v2";
+import { FALSIFIABLE_HYPOTHESIS_V2_SCHEMA } from "@/lib/trader/research-v2/research-question-hypothesis-v2";
 import type { QualificationRecordV2 } from "@/lib/trader/research-v2/qualification-records-v2";
+import { assertQualificationPairForCandidateV2 } from "@/lib/trader/research-v2/qualification-records-v2";
 import type { ResearchMemoryV2 } from "@/lib/trader/research-v2/research-memory-v2";
 import { queryContradictingResearchMemoryV2 } from "@/lib/trader/research-v2/research-memory-v2";
 import type { StrategyEvolutionCandidateV2 } from "@/lib/trader/research-v2/strategy-candidate-generation-v2";
 import { promoteStrategyCandidateV2 } from "@/lib/trader/research-v2/strategy-candidate-generation-v2";
-import { StrategyEvolutionResearchError } from "@/lib/trader/research-v2/research-v2-guards";
+import {
+  assertResearchV2ContentDigest,
+  StrategyEvolutionResearchError,
+} from "@/lib/trader/research-v2/research-v2-guards";
 
 export const HUMAN_PROMOTION_PROPOSAL_V2_SCHEMA =
   "waia.trader.human_promotion_proposal.v2" as const;
@@ -42,6 +47,17 @@ export function buildHumanPromotionProposalV2(input: {
 }): HumanPromotionProposalV2 {
   if (input.candidate.promotionAuthority !== "NONE") {
     promoteStrategyCandidateV2(input.candidate);
+  }
+  assertQualificationPairForCandidateV2(input);
+  assertResearchV2ContentDigest(input.hypothesis, "PROMOTION_HYPOTHESIS_INVALID");
+  if (
+    input.hypothesis.schemaVersion !== FALSIFIABLE_HYPOTHESIS_V2_SCHEMA ||
+    input.hypothesis.capitalAuthority !== "NONE"
+  ) {
+    throw new StrategyEvolutionResearchError("PROMOTION_HYPOTHESIS_INVALID");
+  }
+  if (input.candidate.lineage.hypothesisDigestHex !== input.hypothesis.contentDigestHex) {
+    throw new StrategyEvolutionResearchError("PROMOTION_HYPOTHESIS_MISMATCH");
   }
   if (input.development.verdict !== "QUALIFIED" || input.walkForward.verdict !== "QUALIFIED") {
     throw new StrategyEvolutionResearchError("PROMOTION_REQUIRES_QUALIFIED_PARTITIONS");
