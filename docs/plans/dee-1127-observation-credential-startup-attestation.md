@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 25b91be8f225393fe2758cff1cf59db21e998e0f
+  lastValidationAt: "2026-09-26T19:23:50.898223+00:00"
   blockedReason: null
-  nextAction: "Implement admitted bounded credential-pool startup probe and actual private-factory integration; native PG17 requires controller resource grant."
+  nextAction: "Controller full readiness and independent final review on the exact combined source; then current-base CI/publication."
 provenance:
   authoritativeBase: 340ead8da22b35c47a20de12ec0eef652ef950ff
   createdFrom: chat
@@ -83,7 +83,7 @@ PR and publication. File-scoped commits only in this shared checkout.
 - Actual PG17 four-suite proof passes with zero skips and enforced JSON guard;
   unit, scoped lint, later full readiness/current-base CI and independent review pass.
 - Evidence records tested SHAs, initial failures, exact role restoration/session
-  teardown and honest native/fixture/deployment limits. No current result claimed yet.
+  teardown and honest native/fixture/deployment limits. Author evidence is recorded below; full readiness/CI remains pending.
 
 ## Validation and resource ownership
 
@@ -92,6 +92,56 @@ source freeze. Native PG17 and heavy full checks require explicit Controller gra
 no such grant exists at this plan commit. Read-only executable/container discovery
 is allowed; do not start or alter any existing database. Controller schedules all
 native/full readiness and keeps production/C3/live out of this work.
+
+## Author implementation and acceptance evidence
+
+Plan-only `33a0c32c` preceded all code. CI coauthor commit `f73c5e8a` owns the four
+registered proof paths; runtime/test commits are `64e0a43b`, `e7ff62f2` and final
+source `25b91be8f225393fe2758cff1cf59db21e998e0f`. This evidence update changes only
+this plan. Existing collector/reader probe implementation remains byte-identical.
+
+- New focused unit RED on the original implementation: 26 failures / 3 passes;
+  missing new probe and unsafe/late private-factory paths are explicitly retained.
+- Final scoped units: **115 passed / 6 files**, zero skips; exact source matches
+  `25b91be8`. Includes actual CLI/default private factory with synthetic SQL ports,
+  existing host/entrypoint/credential controls and the two CI proof units.
+- Native actual **PostgreSQL 17.11 (`170011`)**: **120 passed / 4 serial suites**,
+  zero skips, at `25b91be8`; mandatory executed-result guard passed. The credential
+  suite has 66 cases (24 retained and 42 new); full migration, collector and reader
+  suites remain included unchanged. No PG16 or fake-version proof is substituted.
+- Native late-completion tests execute the real restricted probe or real synthetic
+  crypto provider before holding its returned promise. Cancellation precedes
+  delivery; the test observes the third SQL session still held, releases the
+  barrier, then observes all owned sessions closed. Abort alone is not a claim of
+  immediate disposal of an unreturned resource. Unit controls also cover timeout.
+- Initial native run at `64e0a43b`: **48 pass / 16 fail**, retained. A table-level
+  REVOKE SELECT in a test also removed original column grants; the post-restoration
+  positive assertion detected it. `e7ff62f2` restores the exact eight-column grant;
+  initial synthetic DB restoration/readback is recorded. Production admission was
+  not relaxed. Corrected intermediate proofs (64/1 and 118/4) remain distinct.
+- Initial typecheck found one inferred test-row property error; explicit test row
+  typing resolved it. Final coordinated typecheck and scoped ESLint/diff passed.
+- Read-only teardown observed zero other client sessions, zero forbidden credential
+  ownership/non-database login ACL dependencies, and restored canonical role flags
+  and memberships. The dedicated loopback55460 container and 22 synthetic databases
+  are retained; all author clients/processes ended and the resource grant released.
+
+Raw artifacts are under `evidence/dee-1127/`: `author-units-final.json`,
+`author-native-final-four-suites.{json,log}`, `author-native-guard.log`,
+`author-native-teardown.json`, `initial-fixture-restoration.json`,
+`author-typecheck-{initial,final}.log`, scoped-lint logs and earlier raw results.
+CI-owned proof has a separate `ci-proof/CI-AUTHOR-HANDOFF.md` and manifest. The final
+handoff pins source and artifact digests; no generated evidence is implementation.
+
+This is startup admission through the actual default factory, not deployed security
+qualification, continuous role drift detection, policy-definition integrity, key
+nonresidency, venue permission admission, D09 resolution or full DEE-176 closure.
+The existing observer parent intentionally retains its different INHERIT convention;
+credential parent NOINHERIT is independently required. Database TEMP remains the
+explicit permitted compatibility boundary, not a CONNECT-only ACL claim. Native
+transport is inert and every credential/master value is synthetic. No production,
+C3, real provider, account, financial or live operation ran. Full readiness and final
+nonauthor review/remote CI/publication belong to the Controller.
 
 ## Frozen admitted R2 implementation contract (verbatim)
 
