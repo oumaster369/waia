@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1123",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1116",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Complete bounded payment observations and exact atomic token amounts before payment/checkpoint effects.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "Same existing payment/account evidence boundary; conservative serial integration despite disjoint file sets. Wave2 depends on accepted wave1 branch, not a new product-semantic dependency.",
+        "Exact source patch is pre-existing reviewed work; its original implementation is not retrospectively admitted. Import into this train occurs only after committed admission."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1116-payment-observation-integrity.md",
+        "lib/waia-core/payment-watcher/run-watcher-cycle.ts",
+        "lib/waia-core/payment-watcher/tron-adapter.ts",
+        "lib/waia-core/payment-watcher/watcher-cycle.types.ts",
+        "tests/unit/payment-watcher-observation-integrity.test.ts",
+        "tests/unit/payment-watcher-tron-adapter.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly authorized technical corrections, independent testing/audit, normal checked merges, nontrading deployment and rational consolidation. Financial/ADR/scientific/live gates unchanged."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact original production/test blobs and patch preservation, current-base numeric/parser compatibility, cumulative checked import and independent final complete-diff review.",
+        "Original RED/guarded native evidence retained with execution-SHA attribution; fresh final persistence companions and no phantom rerun claims."
+      ],
+      "expectedTests": [
+        "pnpm test --run scoped payment observation, exact amounts, actual reconciliation commands/handlers and current numeric boundaries",
+        "Fresh canonical-profile CI PostgreSQL reconciliation companions with unchanged waia_validate/54329 guards and no-skips result proof; all incoming capital registrations preserved.",
+        "pnpm lint && pnpm typecheck && pnpm build",
+        "pnpm validate:canon; pnpm validate:pr-governance; both authority consumer graph validators; manifest/preflight; all exact-head CI"
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "sourceCommit": "2af4d14a5caaaac7db28c98343cefce0b9c74265",
+      "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074"
+    },
+    {
+      "issue": "DEE-1117",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Exact manual settlement/invoice amount equality and server-owned HTTP cooling without changing persisted financial evidence. Require both existing canonical-profile native reconciliation companions to execute without skips in fresh CI; add only workflow/result-guard regression proof.",
+      "dependencies": [
+        "DEE-1116"
+      ],
+      "dependencyEvidence": [
+        "Same existing payment/account evidence boundary; conservative serial integration despite disjoint file sets. Wave2 depends on accepted wave1 branch, not a new product-semantic dependency.",
+        "Exact source patch is pre-existing reviewed work; its original implementation is not retrospectively admitted. Import into this train occurs only after committed admission."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1117-reconciliation-command-integrity.md",
+        "lib/trader/settlement/reconciliation/reconciliation-validation.ts",
+        "lib/trader/settlement/reconciliation/reconciliation-workflow-handler.ts",
+        "tests/helpers/reconciliation-command-memory.ts",
+        "tests/unit/reconciliation-exact-manual-amounts.test.ts",
+        "tests/unit/reconciliation-workflow-cooling-admission.test.ts",
+        ".github/workflows/payment-reconciliation-postgres.yml",
+        "scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs",
+        "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+      ],
+      "riskTier": "T3",
+      "originalSourceRiskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "User explicitly authorized technical corrections, independent testing/audit, normal checked merges, nontrading deployment and rational consolidation. Financial/ADR/scientific/live gates unchanged."
+      },
+      "expectedAcceptanceEvidence": [
+        "Exact original production/test blobs and patch preservation, current-base numeric/parser compatibility, cumulative checked import and independent final complete-diff review.",
+        "Original RED/guarded native evidence retained with execution-SHA attribution; fresh final persistence companions and no phantom rerun claims."
+      ],
+      "expectedTests": [
+        "pnpm test --run scoped payment observation, exact amounts, actual reconciliation commands/handlers and current numeric boundaries",
+        "Fresh canonical-profile CI PostgreSQL reconciliation companions with unchanged waia_validate/54329 guards and no-skips result proof; all incoming capital registrations preserved.",
+        "pnpm lint && pnpm typecheck && pnpm build",
+        "pnpm validate:canon; pnpm validate:pr-governance; both authority consumer graph validators; manifest/preflight; all exact-head CI"
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      },
+      "sourceCommit": "997b5a9084a9a30f7cf5af188723685adadbd16c",
+      "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074"
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Root controller code/contract review under explicit user authorization, before every import into this train. Prior source implementations already existed; no retrospective source admission or current final acceptance claimed. Revised admission precedes every new import and CI implementation on the replacement branch; earlier unpublished train530b9fb1 is preserved separately."
+    }
+  },
+  "crossCuttingInvariants": [
+    "No rates/fees/HWM/finality/valuation/quorum/cooling-duration/tenant/authority policy changes.",
+    "No schema, historical payment/cursor repair, provider call, live command or C3 mutation.",
+    "Exact complete-diff manifest/independent review and all applicable final-head/current-base CI before merge."
+  ],
+  "rollbackStrategy": "One integration squash can be reverted and prior verified nontrading Worker restored; no migration or historical-data mutation.",
+  "splitRationale": "Two coherent payment children,12 child files plus adjacent plan/manifest;1427 source changed lines include484 plan and699 test/helper lines, leaving244 production lines. Exceeds approximate800-line target with explicit narrow scope and separate original reviews, serial cumulative proof and required final independent audit. Split if reviewability, risk coherence or one-revert rollback ceases to hold. Revised admission adds three focused canonical native-proof files to1117, for17 total paths including batch metadata. Earlier unpublished14-path train is preserved; none of its imports are claimed to follow this new admission. Dedicated job avoids expanding unrelated native job scope.",
+  "reviewDisposition": {
+    "authority": "Explicit user technical/T3 and PR consolidation delegation.",
+    "independentReview": "Prior original source reviews exist; final integrated review is required and pending.",
+    "mergePath": "Normal checked squash under user delegation; no protection or financial/live gate bypass.",
+    "unchangedGates": "All exact-head CI, manifest history/closure, source scope, independent audit and nontrading production acceptance."
+  }
+}
