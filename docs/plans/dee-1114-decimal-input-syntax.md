@@ -20,8 +20,8 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: e1c6ce5a4756f2c84bda213fddaef714860d408f
+  lastValidationAt: "2026-09-26T13:06:06.787966+00:00"
   blockedReason: null
   nextAction: "Obtain accepted-base delta review; controller completes final integration readiness and exact-head CI."
 provenance:
@@ -103,3 +103,27 @@ settlement, source authority, authorization and all Human gates remain unchanged
 ### Accepted-base refresh 2565e1a2
 
 Normal merge `751f4550cb145f85f143455e51ca10d0e668d16f` incorporates accepted main `2565e1a23741d0042096fd8209cd9793e8aa7e19` without conflicts. All five original author paths and six incoming paths are disjoint and their blobs preserved exactly; only this plan supplement changes afterward. All 13 incoming mandatory native suites and registration/guard remain intact; preservation is not new native execution. Root schedules fresh scoped offline acceptance, full repository readiness and independent final integration review before publication, followed by all applicable exact-head CI checks. Decimal grammar, arithmetic, financial policy and previous qualification limits remain unchanged.
+
+
+### Accepted-base refresh 8f60cb29
+
+Normal merge `e1c6ce5a4756f2c84bda213fddaef714860d408f` incorporates accepted
+main `8f60cb297d1bf080b419f4a6724050e3e0a298e5` without conflicts. Five original
+author paths and eight incoming paths are disjoint; all blobs and complete binary
+patches in both directions are unchanged at the merge. This final supplement
+changes only the plan. The original decimal grammar and arithmetic implementation
+and its three test files are unchanged.
+
+Scoped offline acceptance passes 138 assertions across nine files with no skipped
+cases: the prior eight numeric/billing/Risk/Truth suites plus the current native
+proof-guard unit suite. Scoped ESLint and diff checks pass. All 15 incoming mandatory
+PostgreSQL registrations, workflow/guard and native suite blobs are preserved
+exactly, including the two Forecast suites and `WAIA_POSTGRES_CLI` setting. This is
+source preservation, not a new native run; no database access occurred.
+
+Evidence is recorded in `evidence/dee-1114/accepted-base-8f60cb29/` in the external
+audit workspace, with author logs separate from previous root readiness. Earlier
+full readiness remains attributed to its recorded head. Current-base controller
+readiness, independent integration review and all exact-head PR checks remain
+required before merge. No durable billing-source, finality, deployment or live
+qualification is claimed.
