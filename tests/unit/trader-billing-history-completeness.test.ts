@@ -179,9 +179,10 @@ function setupCloseBoundary(existingCount: number) {
     draftInvoiceService: proof.draftService,
   });
   const bootstrapHwm = vi.fn();
+  const getCurrentHwm = vi.fn().mockResolvedValue(proof.hwm);
   const orchestrator = createBillingPeriodCloseOrchestrator({
     reportingPeriodLifecycle: lifecycle,
-    hwmLedger: { getCurrentHwm: vi.fn().mockResolvedValue(proof.hwm), bootstrapHwm } as never,
+    hwmLedger: { getCurrentHwm, bootstrapHwm } as never,
     draftInvoiceService: proof.draftService,
   });
   const evidence = billingV2PeriodCloseEvidence({
@@ -191,7 +192,7 @@ function setupCloseBoundary(existingCount: number) {
     periodEnd,
     realizedPnl: "1",
   });
-  return { ...proof, lifecycle, orchestrator, evidence, open, closePeriod, writePeriodAudit, bootstrapHwm };
+  return { ...proof, lifecycle, orchestrator, evidence, open, closePeriod, writePeriodAudit, bootstrapHwm, getCurrentHwm };
 }
 
 describe("billing history completeness before fee and draft computation", () => {
@@ -306,6 +307,35 @@ describe("billing history completeness before fee and draft computation", () => 
     const proof = setupCloseBoundary(MAX_REPORTING_PERIODS_LIST_LIMIT - 1);
     await expect(proof.lifecycle.closeReportingPeriod(context, proof.evidence))
       .rejects.toMatchObject({ code });
+    expect(proof.closePeriod).not.toHaveBeenCalled();
+    expect(proof.writePeriodAudit).not.toHaveBeenCalled();
+    expect(proof.insertInvoice).not.toHaveBeenCalled();
+    expect(proof.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("refuses a new 200th period before reading or bootstrapping HWM and opening the period", async () => {
+    const proof = setupCloseBoundary(MAX_REPORTING_PERIODS_LIST_LIMIT - 1);
+    proof.repository.findOpenPeriod = vi.fn().mockResolvedValue(null);
+    proof.getCurrentHwm.mockResolvedValue(null);
+    await expect(proof.orchestrator.closeAndMaterialize(context, {
+      exchangeAccountId,
+      periodEnd: proof.evidence.periodEnd,
+      endingEquity: proof.evidence.endingEquity,
+      endingSnapshotAt: proof.evidence.endingSnapshotAt,
+      realizedStrategyProfitReceipt: proof.evidence.realizedStrategyProfitReceipt,
+      closedTradeSettlements: proof.evidence.closedTradeSettlements,
+      periodStart: proof.open.periodStart,
+      startingEquity: proof.open.startingEquity,
+      startingSnapshotAt: proof.open.startingSnapshotAt,
+      openPositionsSnapshotRef: proof.open.openPositionsSnapshotRef,
+      valuationSource: proof.open.valuationSource,
+      unrealizedPnl: "0",
+    })).rejects.toMatchObject({ code });
+    expect(proof.repository.findOpenPeriod).toHaveBeenCalledOnce();
+    expect(proof.listClosedPeriods).toHaveBeenCalledOnce();
+    expect(proof.getCurrentHwm).not.toHaveBeenCalled();
+    expect(proof.bootstrapHwm).not.toHaveBeenCalled();
+    expect(proof.repository.insertOpenPeriod).not.toHaveBeenCalled();
     expect(proof.closePeriod).not.toHaveBeenCalled();
     expect(proof.writePeriodAudit).not.toHaveBeenCalled();
     expect(proof.insertInvoice).not.toHaveBeenCalled();
