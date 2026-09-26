@@ -1,3 +1,4 @@
+import { createHistoricalPostgresLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 /**
  * Opt-in: WAIA_PG_INTEGRATION=1, WAIA_DB_BACKEND=postgres, DATABASE_URL_POSTGRES.
  * A second approve, issue, or close must not add another invoice, HWM row, or period.
@@ -11,7 +12,6 @@ import {
   createPostgresDraftInvoiceService,
   createPostgresHwmLedgerService,
   createPostgresInvoiceIssuanceService,
-  createPostgresReportingPeriodLifecycleService,
 } from "@/lib/trader/billing";
 import { ReportingPeriodNotOpenError } from "@/lib/trader/billing/reporting-period.errors";
 import { traderAuditActions } from "@/lib/trader/types";
@@ -77,7 +77,7 @@ describe.skipIf(!integrationEnabled || !validateStack || !url)(
       const db = getPostgresDrizzle();
       const context = { ...requireOrgContext(orgId), userId: USER_ID };
       const hwm = createPostgresHwmLedgerService(db, {}, db);
-      const lifecycle = createPostgresReportingPeriodLifecycleService(db, {}, db);
+      const lifecycle = createHistoricalPostgresLifecycleFixture(db);
       const drafts = createPostgresDraftInvoiceService(db, {}, db);
       const periodStart = new Date("2026-02-01T00:00:00.000Z");
       const periodEnd = new Date("2026-02-28T23:59:59.000Z");

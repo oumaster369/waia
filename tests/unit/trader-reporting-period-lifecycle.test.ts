@@ -1,3 +1,6 @@
+import { createSqliteReportingPeriodLifecycleService } from "@/lib/trader/billing/reporting-period-lifecycle-service";
+import { createSqliteBillingPeriodCloseOrchestrator } from "@/lib/trader/billing/billing-period-close-orchestrator";
+import { createHistoricalSqliteLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
@@ -10,7 +13,6 @@ import {
   computeReportingPeriodRecordDigest,
   createReportingPeriodLifecycleService,
   createSqliteHwmLedgerService,
-  createSqliteReportingPeriodLifecycleService,
   createSqliteReportingPeriodRepository,
   ReportingPeriodAlreadyOpenError,
   ReportingPeriodDigestMismatchError,
@@ -82,7 +84,7 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("opens a reporting period with digest and audit", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
 
     const open = await service.openReportingPeriod(context, openInput());
@@ -106,12 +108,24 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("rejects a second OPEN for the same account", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
 
     await expect(service.openReportingPeriod(context, openInput())).rejects.toThrow(
       ReportingPeriodAlreadyOpenError,
     );
+  });
+
+  it("public SQLite close refuses unavailable provenance without changing period or audit", async () => {
+    const db = getDb(); const context = requireOrgContext(organizationId);
+    const before = { periods: db.select().from(traderReportingPeriods).all(), audit: db.select().from(auditLogs).all() };
+    await expect(createSqliteReportingPeriodLifecycleService(db).closeReportingPeriod(context, closeInput()))
+      .rejects.toMatchObject({ code: "BILLING_REALITY_POSTGRES_REQUIRED" });
+    const { realizedPnl: _pnl, ...evidence } = closeInput();
+    void _pnl;
+    await expect(createSqliteBillingPeriodCloseOrchestrator(db).closeAndMaterialize(context, { ...openInput(), ...evidence, unrealizedPnl: "450" }))
+      .rejects.toMatchObject({ code: "BILLING_REALITY_POSTGRES_REQUIRED" });
+    expect({ periods: db.select().from(traderReportingPeriods).all(), audit: db.select().from(auditLogs).all() }).toEqual(before);
   });
 
   it("closes the OPEN period, recomputes digest, and writes audit", async () => {
@@ -155,7 +169,7 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("rejects close when no OPEN period exists", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
 
     await expect(service.closeReportingPeriod(context, closeInput())).rejects.toThrow(
@@ -165,7 +179,7 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("lists closed periods for the account", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
 
     const closed = await service.listClosedPeriods(context, {
@@ -184,7 +198,7 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("refuses a naked realizedPnl close without a receipt", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
     const accountId = `${EXCHANGE_ACCOUNT_ID}-naked`;
 
@@ -238,7 +252,7 @@ describe("reporting period lifecycle service (DEE-306 S2)", () => {
 
   it("rejects tampered persisted digest on read", async () => {
     const db = getDb();
-    const service = createSqliteReportingPeriodLifecycleService(db);
+    const service = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
 
     await service.openReportingPeriod(context, {

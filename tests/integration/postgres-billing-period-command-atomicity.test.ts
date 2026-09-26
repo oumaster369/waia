@@ -8,7 +8,7 @@ import { seedWp13User } from "./wp13-intelligence-test-helpers";
 import { handleAdminReportingPeriodCommandPost } from "@/lib/trader/billing/admin-route-handler";
 import { createPostgresHwmLedgerService } from "@/lib/trader/billing/hwm-ledger-service";
 import { createPostgresReportingPeriodLifecycleService } from "@/lib/trader/billing/reporting-period-lifecycle-service";
-import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
+import { persistBillingRealityFixture } from "@/tests/helpers/billing-reality-postgres";
 import { traderAuditActions } from "@/lib/trader/types";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -44,24 +44,27 @@ describe.skipIf(!enabled)("DEE-1112 actual Postgres reporting-period command ato
     // Synthetic append-only rows stay in this disposable local/CI database.
   });
 
-  function command(account: string, amount = "100", organizationId = orgId) {
-    const evidence = billingV2PeriodCloseEvidence({ organizationId, accountId: account,
-      periodStart: start, periodEnd: end, realizedPnl: amount, endingEquity: "10100", unrealizedPnl: "0" });
+  const evidenceCache = new Map<string, ReturnType<typeof persistBillingRealityFixture>>();
+  async function command(account: string, amount = "100", organizationId = orgId) {
+    const key = JSON.stringify([organizationId, account, amount]);
+    if (!evidenceCache.has(key)) evidenceCache.set(key, persistBillingRealityFixture(drizzle(sql, { schema }), {
+      organizationId, accountId: account, periodStart: start, periodEnd: end, realizedPnl: amount, endingEquity: "10100", unrealizedPnl: "0" }));
+    const evidence = await evidenceCache.get(key)!;
     return { command: "close-and-materialize", organization_id: organizationId,
       exchange_account_id: account, period_start: start.toISOString(), period_end: end.toISOString(),
       starting_equity: "10000", ending_equity: "10100", starting_snapshot_at: start.toISOString(),
       ending_snapshot_at: end.toISOString(), open_positions_snapshot_ref: "DEE-1112-synthetic-only",
       valuation_source: "DEE-1112-synthetic-only", unrealized_pnl: "0",
       realized_strategy_profit_receipt: evidence.realizedStrategyProfitReceipt,
-      closed_trade_settlements: evidence.closedTradeSettlements };
+      closed_trade_settlements: evidence.closedTradeSettlements, reality_dependencies: evidence.realityDependencies };
   }
 
-  async function invoke(body: ReturnType<typeof command>, userId = adminId, connectionName = "dee1112-command") {
+  async function invoke(body: ReturnType<typeof command> | Awaited<ReturnType<typeof command>>, userId = adminId, connectionName = "dee1112-command") {
     const client = postgres(url!, { max: 1, connection: { application_name: connectionName } });
     const runtime = { kind: "postgres" as const, db: drizzle(client, { schema }) };
     try {
       return await handleAdminReportingPeriodCommandPost(new Request("http://localhost/api/trader/admin/reporting-periods/commands", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(await body),
       }), { getUserId: async () => userId, getRuntimeDb: async () => runtime,
         disposeRuntimeDb: async () => { await client.end({ timeout: 5 }); } });
     } finally { await client.end({ timeout: 5 }); }
@@ -195,7 +198,7 @@ describe.skipIf(!enabled)("DEE-1112 actual Postgres reporting-period command ato
     const outcomes = await Promise.all(commands);
     expect(outcomes.map((row) => row.status).sort()).toEqual([200, 400]);
     const failed = outcomes.find((row) => row.status === 400)!;
-    expect(failed.body).toMatchObject({ error: { code: "ReportingPeriodNotOpenError" } });
+    expect(failed.body).toMatchObject({ error: { code: "DUPLICATE_BILLING_PERIOD_SCOPE" } });
     const actual = await snapshot(account);
     expect(actual.periods).toHaveLength(1);
     expect(actual.invoices).toHaveLength(1);
@@ -210,9 +213,26 @@ describe.skipIf(!enabled)("DEE-1112 actual Postgres reporting-period command ato
     await seedOpen(account, otherOrg);
     const original = await snapshot(account);
     const foreign = await snapshot(account, otherOrg);
-    expect((await invoke({ ...command(account), organization_id: otherOrg })).status).toBe(400);
+    expect((await invoke({ ...await command(account), organization_id: otherOrg })).status).toBe(400);
     expect((await invoke(command(account), memberId)).status).toBe(403);
     expect(await snapshot(account)).toEqual(original);
     expect(await snapshot(account, otherOrg)).toEqual(foreign);
   });
+  it("preserves exact account bytes in HTTP close admission instead of silently trimming scope", async () => {
+    const raw = ` dee1120-exact-${randomUUID()} `;
+    expect((await invoke(command(raw))).status).toBe(200);
+    expect((await snapshot(raw)).periods).toHaveLength(1);
+    expect((await snapshot(raw.trim())).periods).toEqual([]);
+  });
+  it("legacy HTTP candidates without projection binding refuse before bootstrap and open", async () => {
+    const account = `dee1120-http-legacy-${randomUUID()}`;
+    const body = await command(account); const { reality_dependencies: _binding, ...legacy } = body;
+    void _binding;
+    const before = await snapshot(account);
+    const response = await invoke(legacy as typeof body);
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ error: { code: "BILLING_REALITY_BINDING_REQUIRED" } });
+    expect(await snapshot(account)).toEqual(before);
+  });
+
 });

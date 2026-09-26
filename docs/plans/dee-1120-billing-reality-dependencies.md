@@ -26,7 +26,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement and independently prove mandatory durable-source admission at every public period-close boundary."
+  nextAction: "Independent exact-head implementation review, root readiness and additive mandatory CI registration; full P08 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -50,6 +50,26 @@ No new fee/HWM/settlement/finality rules, allocation producer, automatic issuanc
 ## Validation commands
 
 `pnpm lint`, `pnpm typecheck`, `pnpm build`, scoped `pnpm test --run` for changed and mandatory companion suites with the existing native proof environment, `pnpm validate:canon`, `pnpm validate:pr-governance`, both existing graph validators and rendered PR governance preflight. The implementation handoff must record exact command arguments, SHA, native migrations/runtime, counts, zero skips, failures/retries and teardown. Root owns full readiness and publication; the author must not run uncoordinated full unit, database or build jobs.
+
+## Author implementation and local acceptance (2026-09-26)
+
+Implementation is based on accepted `2565e1a23741d0042096fd8209cd9793e8aa7e19` and preimplementation plan commit `7a0df60a70e01172eb1148c8302dab0303d97b32`. Independent implementation acceptance, root full readiness and PR CI are still pending; the unchanged frozen planning report below must not be mistaken for an implementation verdict.
+
+The two public PostgreSQL close factories own their transaction. Their first SQL sets READ COMMITTED; membership is checked with that bound executor, followed by strict caller-side binding validation, the existing Reality675 account mutex, current stored readers/full fold and the financial effects. A caller-held Drizzle transaction is refused. Nested input, dates and authorization context are copied before awaits; the trusted membership function is captured consistently for the factory lifetime. The HTTP wrapper delegates transaction ownership and preserves account bytes. Canonical UUID spelling retains the existing Reality `contracts.ts` version/variant vocabulary; it does not broaden UUID support. SQLite new-close and legacy caller-array live proof paths refuse before effects. Historical materialize-draft/issuance is unchanged.
+
+The audit proof is named `dependenciesMatched`; economic attribution, period completeness and prior consumption are explicitly `UNPROVEN`, and realized-fill finality still requires operator verification. Synthetic tests enter through actual native raw-capture/source writers with their guards enabled. A non-superuser service role with explicit grants exercises both ingestion and close; this is an inert fixture, not proof that HTX currently emits a complete commercial lifecycle.
+
+Local evidence under completion-audit `evidence/dee-1120/`:
+
+- `author-native-red-complete-fixture.log`: the two initial public-boundary regressions fail on the preimplementation code because invented sealed references are accepted. The earlier direct-lifecycle fixture lacked HWM and is separately retained in `author-native-red.log`; that setup failure is not the defect proof.
+- `author-native-final-freeze.log`: **164 tests / 6 suites PASS, zero skipped**, using PostgreSQL16.14 at loopback54329, fresh isolated `waia_dee1120_2565e1a2`, all219 repository migrations. It includes33 new source-dependency cases,13 period-command cases,20 invoice-command cases,9 existing Reality cases,85 actual membership cases and4 console workflows. New cases cover both writer-lock orderings, SQL-canonical lock key, repeatable-read session defaults, input/configuration mutation during await, genuine caller-held transactions, separate process reconstruction, selected quarantine/contradiction/release/supersession, unsummarized current event head, monetary resealing, schema absence, limited grants/append-only, direct rollback and actual HTTP invoice/close contention. Existing command rollback and duplicate refusal expectations remain precise.
+- `author-targeted-accepted.log`: **362 tests / 17 scoped suites PASS, zero skipped**, including49 new pure consistency cases and the unchanged real ingress refusal companion. The cross-subject exact-relatedTruth uncertainty case is general fold-valid vocabulary; the current high-level ingest does not claim to emit that shape. Reconstructed adversarial objects are independently validated under their fresh seals.
+- Scoped ESLint and diff checks pass. An explicitly authorized earlier full typecheck passed after fixture-only type repairs (`author-typecheck-initial.log` preserves failures, `author-typecheck-confirmed.log` the pass); later adversarial tests and the final membership-function capture await root's final typecheck. No author full build/global unit/full lint was run.
+- `author-teardown-readback.json` confirms unchanged219 migration identities,12 enabled native Reality source guards, no temporary injected triggers/functions/roles, no renamed table and no other database connection. Synthetic append-only records remain in the disposable database. The initial readback compared the PostgreSQL Result subclass to JSON Array; the read-only comparison was corrected without any database modification. Canonical `waia_validate` was not repaired or changed.
+
+Historical fee/issuance/repository fixtures now explicitly compose the lower-level services in `tests/helpers/historical-billing-lifecycle-fixture.ts`. These tests preserve financial arithmetic/state behavior and do not stand in for production admission. Actual public close behavior is proved by the new native suite and the migrated period/invoice command suites. Canonical-profile guarded historical parity/idempotency suites were adapted but not falsely reported as locally executed against this custom database; their guards are unchanged. All13 incoming mandatory native registrations/proof manifests remain unchanged; root owns additive registration of this new suite and final combined-base validation.
+
+Full P08/C02 remains open: economic cause/strategy and completed-lifecycle attribution, period eligibility/completeness, cross-period reuse, late unseen venue sources, source-revocation policy and finality are not solved by this dependency guard. It uses the existing cooperative Reality writer mutex, not a universal snapshot or HWM/invoice mutex. No new policy, rates, migration, provider, production, C3 or live action is included.
 
 ## Frozen contract provenance
 

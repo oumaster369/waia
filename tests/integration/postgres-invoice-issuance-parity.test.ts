@@ -1,3 +1,4 @@
+import { createHistoricalPostgresLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 /**
  * DEE-311 — Invoice issuance repository Postgres parity (opt-in).
  *
@@ -12,7 +13,6 @@ import {
   createPostgresDraftInvoiceService,
   createPostgresHwmLedgerService,
   createPostgresInvoiceIssuanceService,
-  createPostgresReportingPeriodLifecycleService,
 } from "@/lib/trader/billing";
 import { traderAuditActions } from "@/lib/trader/types";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -44,7 +44,7 @@ describe.skipIf(!integrationEnabled || !url)(
   () => {
     let orgA: string;
     let draftService: ReturnType<typeof createPostgresDraftInvoiceService>;
-    let lifecycleService: ReturnType<typeof createPostgresReportingPeriodLifecycleService>;
+    let lifecycleService: ReturnType<typeof createHistoricalPostgresLifecycleFixture>;
     let hwmService: ReturnType<typeof createPostgresHwmLedgerService>;
 
     async function cleanup(): Promise<void> {
@@ -71,7 +71,7 @@ describe.skipIf(!integrationEnabled || !url)(
       const db = getPostgresDrizzle();
 
       draftService = createPostgresDraftInvoiceService(db, {}, db);
-      lifecycleService = createPostgresReportingPeriodLifecycleService(db, {}, db);
+      lifecycleService = createHistoricalPostgresLifecycleFixture(db);
       hwmService = createPostgresHwmLedgerService(db, {}, db);
     });
 

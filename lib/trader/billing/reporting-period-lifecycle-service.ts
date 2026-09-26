@@ -8,6 +8,8 @@ if (process.env.VITEST !== "true") {
 
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { runPostgresBillingRealityCommand, type PostgresBillingCloseOptions } from "./v2/reality-dependencies-postgres-v1";
+import { refuseBillingReality, snapshotBillingCommand, type BillingRealityDependenciesMatched } from "./v2/reality-dependencies-v1";
 import { writeTraderAuditLogPostgres, writeTraderAuditLogSqlite } from "@/lib/trader/audit/write";
 import { assertAllowedReportingPeriodTransition } from "@/lib/trader/billing/reporting-period-lifecycle.transitions";
 import {
@@ -275,7 +277,7 @@ export function createSqliteReportingPeriodLifecycleService(
   db: WaiaDb,
   deps: Partial<ReportingPeriodLifecycleServiceDeps> = {},
 ): ReportingPeriodLifecycleService {
-  return createReportingPeriodLifecycleService({
+  const service = createReportingPeriodLifecycleService({
     repository: deps.repository ?? createSqliteReportingPeriodRepository(db),
     writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogSqlite(db, input)),
     draftInvoiceService: deps.draftInvoiceService ?? createSqliteDraftInvoiceService(db, { assertMembership: deps.assertMembership }),
@@ -285,21 +287,39 @@ export function createSqliteReportingPeriodLifecycleService(
         assertOrgMembershipSqlite(db, context);
       }),
   });
+  return { ...service, async closeReportingPeriod(context, input) {
+    const captured = snapshotBillingCommand({ context, input });
+    await requireServiceOrgContext(captured.context, deps.assertMembership ?? ((actor) => assertOrgMembershipSqlite(db, actor)));
+    refuseBillingReality("BILLING_REALITY_POSTGRES_REQUIRED");
+  } };
+}
+
+function createBoundPostgresReportingPeriodLifecycleService(
+  ex: PgReportingPeriodExecutor,
+  assertMembership: NonNullable<ReportingPeriodLifecycleServiceDeps["assertMembership"]>,
+  proof?: BillingRealityDependenciesMatched,
+): ReportingPeriodLifecycleService {
+  return createReportingPeriodLifecycleService({
+    repository: createPostgresReportingPeriodRepository(ex),
+    writeAudit: (input) => writeTraderAuditLogPostgres(ex, {
+      ...input, metadata: { ...input.metadata,
+        ...(proof && input.action === traderAuditActions.reportingPeriodClosed ? { realityDependencies: proof } : {}) },
+    }),
+    draftInvoiceService: createPostgresDraftInvoiceService(ex, { assertMembership }),
+    assertMembership,
+  });
 }
 
 export function createPostgresReportingPeriodLifecycleService(
-  ex: PgReportingPeriodExecutor,
-  deps: Partial<ReportingPeriodLifecycleServiceDeps> = {},
-  db?: WaiaPostgresDb,
+  db: WaiaPostgresDb, options: PostgresBillingCloseOptions = {},
 ): ReportingPeriodLifecycleService {
-  return createReportingPeriodLifecycleService({
-    repository: deps.repository ?? createPostgresReportingPeriodRepository(ex, db),
-    writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(ex, input)),
-    draftInvoiceService: deps.draftInvoiceService ?? createPostgresDraftInvoiceService(ex, { assertMembership: deps.assertMembership }, db),
-    assertMembership:
-      deps.assertMembership ??
-      (async (context) => {
-        await assertOrgMembershipPostgres(ex, context);
-      }),
-  });
+  const assertMembership = options.assertMembership;
+  const capturedOptions = { assertMembership };
+  const membership = (bound: WaiaPostgresDb) => (actor: OrgContext & { userId: string }) =>
+    assertMembership ? assertMembership(actor, bound) : assertOrgMembershipPostgres(bound, actor);
+  const service = createBoundPostgresReportingPeriodLifecycleService(db, membership(db));
+  return { ...service, closeReportingPeriod(context, input) {
+    return runPostgresBillingRealityCommand(db, context, input, capturedOptions, (tx, scoped, captured, proof) =>
+      createBoundPostgresReportingPeriodLifecycleService(tx, membership(tx), proof).closeReportingPeriod(scoped, captured));
+  } };
 }
