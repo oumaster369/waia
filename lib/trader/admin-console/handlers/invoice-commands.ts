@@ -21,6 +21,7 @@ import {
 } from "@/lib/trader/admin-console/sql/read-scope";
 import { createPostgresInvoiceIssuanceService } from "@/lib/trader/billing/invoice-issuance-service";
 import { resolvePermissionPostgres } from "@/lib/waia-core/permissions/resolve";
+import { lockInvoiceCommandAccountPostgres } from "@/lib/trader/billing/invoice-command-lock-postgres";
 import { DraftInvoiceDigestMismatchError } from "@/lib/trader/billing/invoice.errors";
 
 const attestations = z
@@ -76,6 +77,9 @@ export async function handleAdminConsoleInvoiceCommandPost(
       if (!row) return adminClientError(404, "NOT_FOUND", "Invoice not found in scope.");
       const revision = invoiceReadRevision(row);
       if (revision !== body.expectedRevision) return staleRevisionResult({ revision, invoiceId });
+      if (body.command !== "cancel-pending") {
+        await lockInvoiceCommandAccountPostgres(tx, body.organization_id, String(row.exchange_account_id));
+      }
       // Keep the existing issuance service and all its canonical-source, cooling-off, HWM and audit checks.
       // The console operator has fleet admin permissions; no tenant membership or module grant is manufactured.
       const service = createPostgresInvoiceIssuanceService(tx, {
@@ -118,7 +122,7 @@ export async function handleAdminConsoleInvoiceCommandPost(
         { invoiceId, revision: invoiceReadRevision(next[0]), confirmation: "READ_BACK_REQUIRED" },
         "postgres",
       );
-    });
+    }, { isolationLevel: "read committed" });
   } catch (error) {
     if (error instanceof Error && error.message === "ADMIN_PERMISSION_REVOKED")
       return adminClientError(403, "FORBIDDEN", "Admin permission required.");

@@ -30,6 +30,9 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // table. Not an H2 or post-H2 production operator step.
 // 0217 adds read-only lookup indexes on existing immutable observations; no
 // required FHV table, data rewrite, grant or policy change.
+// 0218 adds isolated append-only noncapital cycle receipts with deny browser RLS
+// and a lease fence. It adds no required FHV table, modifies no historical data,
+// and is not an H2/post-H2 production operator step or a scientific admission.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -41,6 +44,7 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 215, when: 1780000000215, tag: "0215_trader_admin_console_v2_rls" },
   { idx: 216, when: 1780000000216, tag: "0216_trader_admin_change_log_triggers" },
   { idx: 217, when: 1780000000217, tag: "0217_admin_observation_read_indexes" },
+  { idx: 218, when: 1780000000218, tag: "0218_trader_runtime_noncapital_cycles_v2" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
