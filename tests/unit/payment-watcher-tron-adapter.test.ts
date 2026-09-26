@@ -1,44 +1,39 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createTronAdapter } from "@/lib/waia-core/payment-watcher/tron-adapter";
 import { createTronRpcClient } from "@/lib/waia-core/payment-watcher/tron-rpc-client";
 import { loadWatcherConfig } from "@/lib/waia-core/payment-watcher/watcher-config";
 
 describe("TronAdapter", () => {
-  it("parses contract Transfer events and fails over on 429", async () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses contract Transfer events with consistent secondary failover on 429", async () => {
     const config = loadWatcherConfig({
       TRON_RPC_PRIMARY_URL: "https://primary.example",
       TRON_RPC_SECONDARY_URL: "https://secondary.example",
     });
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            block_header: { raw_data: { number: 120, timestamp: Date.now() } },
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [
+    const fetchMock = vi.fn(async (input: string) => {
+      const url = new URL(input);
+      if (url.hostname === "primary.example") return new Response("rate limited", { status: 429 });
+      const data = url.pathname === "/wallet/getnowblock"
+        ? { block_header: { raw_data: { number: 120, timestamp: Date.now() } } }
+        : {
+            success: true, meta: {},
+            data: url.searchParams.get("block_number") === "110" ? [
               {
                 block_number: 110,
                 block_timestamp: Date.now(),
                 transaction_id: "abc123",
                 event_index: 0,
+                event_name: "Transfer",
                 contract_address: config.tronContractAddress,
                 result: { to: "TDepositAddr", from: "TSender", value: "1500000" },
               },
-            ],
-          }),
-          { status: 200 },
-        ),
-      );
+            ] : [],
+          };
+      return new Response(JSON.stringify(data), { status: 200 });
+    });
 
     vi.stubGlobal("fetch", fetchMock);
 
@@ -60,6 +55,5 @@ describe("TronAdapter", () => {
       expect(transfers.provider).toBe("secondary");
     }
 
-    vi.unstubAllGlobals();
   });
 });
