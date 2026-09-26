@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: b59a7d2fcce003592954928dc465ebe30dcb311a
-  lastValidationAt: "2026-09-26T18:15:25.836493+00:00"
+  lastValidatedGitSha: 02c4fd71cf6999f49eebeba0c460639ea92b9651
+  lastValidationAt: "2026-09-26T18:33:44.344425+00:00"
   blockedReason: null
-  nextAction: "Root exact-head PR683 update after independent CI-fix review; fresh PG17 and all applicable PR checks remain required. Local targeted/readiness and PG16 read-only220-registry preflight passed; full P10 remains open."
+  nextAction: "Root exact-head PR683 update after independent fixture/CI-fix review; fresh PG17 and all applicable PR checks remain required. Fresh local358/18 native,114/5 scoped and full readiness passed; full P10 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -548,3 +548,40 @@ waia_dee1121 database and run all18 mandatory native suites (including all11
 actual feedback reader cases) with no-skips proof, cleanup/readback and exact
 source identities. Full readiness plus independent frozen review and newPR CI
 remain required. No provider/production/host/C3/financial action.
+
+### Forecast fixture correction executed evidence
+
+Plan `8dba149c` preceded the test-only implementation
+`02c4fd71cf6999f49eebeba0c460639ea92b9651`. Relative to3ba50528 all production,
+SQL/journal/schema/CI/proof registration bytes are unchanged. The helper's
+original anchor-row generator, family definition and scientific fixture builder
+are exact unchanged text; a source manifest records their hashes. Only the
+ordinary fixture runtime anchor, pure test-builder exposure and typed refusal
+diagnostics changed in the existing helper.
+
+The128fixed-identity actual-runtime probe preserves the two concrete original
+insufficiency examples; original CI347PASS/11SKIP still has an unknown exact
+identity/reason. Six new regression tests produced3RED/3PASS before the anchor
+change: those3REDs are expected-new-default assertions, not three runtime
+refusals. The separate probe proves the two real refusals. Corrected unit
+execution114PASS/5files/0skip includes6fixture,56actualForecastRuntime,25strict
+FHV schema,8Forecast migration identity and19capital proof guard cases. The
+firstGREEN ran on precommit test bytes and was separately retained; the final
+114/5 run explicitly binds clean02c4fd71.
+
+Fresh isolated `waia_dee1121_752a_feedback_author` started with emptypublic
+schema, applied all220 exact migrations, and passed358assertions/18mandatory
+native suites with0skips at clean02c4fd71 on PostgreSQL16.14, including all11
+actual durable-feedback reader cases. Executed-proof guardPASS; exact applied
+hashes match checkout;0other sessions, injected fault functions/triggers or
+disabled public user triggers at cleanup; client closed. No existing schema or
+registry was repaired. Full typecheck/lint/build/canon/governance/bothgraphs/diff
+allPASS at that executable head. PG17 remains an exact-head CI gate.
+
+Raw evidence, discarded uniformRV probe, actual78finite quantile-boundary proof,
+source identities and attribution are saved under
+`evidence/dee-1121/accepted-base-752a09e0/ci-forecast-feedback/`.
+This fixture fix removes only the demonstrated selected-middle-pool problem
+for already-valid packages; it leaves other validity/refusal rules intact and
+confers no scientific authority. Independent final review and newPR CI remain
+required. All resource grants were released after execution.
