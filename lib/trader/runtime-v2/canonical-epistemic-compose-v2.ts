@@ -3,7 +3,13 @@ import {
   assertKnowledgeSelectionReceiptV2,
   type KnowledgeSelectionReceiptV2,
 } from "@/lib/trader/knowledge/navigator/knowledge-selection-receipt-v2";
-import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
+import {
+  FUTURE_CYCLE_EFFECT_KINDS_V2,
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_POLICY_V2,
+  FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2,
+  FUTURE_CYCLE_EVIDENCE_CLASSES_V2,
+  type FutureCycleEpistemicEffectReceiptV2,
+} from "@/lib/trader/knowledge/navigator/future-cycle-epistemic-effect-v2";
 import type { AuthoritativeRuntimeContextV2 } from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
 
 export const CANONICAL_EPISTEMIC_COMPOSE_SCHEMA_V2 =
@@ -53,6 +59,35 @@ export function predictiveAdmissionReasonCode(
   return "PREDICTIVE_ADMISSION_NOT_ADMITTED";
 }
 
+function hasCanonicalFeedbackBody(value: FutureCycleEpistemicEffectReceiptV2): boolean {
+  try {
+    const { contentDigestHex, ...body } = value;
+    return (
+      value.schemaVersion === FUTURE_CYCLE_EPISTEMIC_EFFECT_SCHEMA_V2 &&
+      value.policyVersion === FUTURE_CYCLE_EPISTEMIC_EFFECT_POLICY_V2 &&
+      value.authority === "EPISTEMIC_EFFECT_ONLY" &&
+      value.capitalAuthority === "NONE" &&
+      FUTURE_CYCLE_EFFECT_KINDS_V2.includes(value.effectKind) &&
+      FUTURE_CYCLE_EVIDENCE_CLASSES_V2.includes(value.evidenceClass) &&
+      [
+        contentDigestHex,
+        value.priorKnowledgeDigestHex,
+        value.futureKnowledgeDigestHex,
+        value.priorNavigatorReceiptContentDigestHex,
+        value.futureNavigatorReceiptContentDigestHex,
+        value.producedByReceiptDigestHex,
+      ].every((digest) => typeof digest === "string" && /^[0-9a-f]{64}$/.test(digest)) &&
+      [value.priorCyclePitAnchor, value.futureCyclePitAnchor].every((pit) => {
+        const time = Date.parse(pit);
+        return Number.isFinite(time) && new Date(time).toISOString() === pit;
+      }) &&
+      computeSemanticSha256Hex(body) === contentDigestHex
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function composeCanonicalEpistemicSpineV2(
   input: ComposeCanonicalEpistemicSpineV2Input,
 ): CanonicalEpistemicComposeV2 {
@@ -71,6 +106,9 @@ export function composeCanonicalEpistemicSpineV2(
     if (input.navigatorReceipt.symbol !== input.context.symbol) {
       reasonCodes.push("NAVIGATOR_SYMBOL_MISMATCH");
     }
+    if (input.navigatorReceipt.pitAnchor !== input.context.pitAnchor) {
+      reasonCodes.push("NAVIGATOR_PIT_MISMATCH");
+    }
     if (
       input.navigatorReceipt.informationNeedPlanDigestHex !==
       input.context.informationNeedPlanDigestHex
@@ -84,6 +122,27 @@ export function composeCanonicalEpistemicSpineV2(
   const admissionReason = predictiveAdmissionReasonCode(input.predictiveAdmissionVerdict);
   if (admissionReason) reasonCodes.push(admissionReason);
   if (input.futureCycleEffect) {
+    const effect = input.futureCycleEffect;
+    if (!hasCanonicalFeedbackBody(effect)) {
+      reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
+    } else {
+      if (effect.futureCyclePitAnchor !== input.context.pitAnchor) {
+        reasonCodes.push("FUTURE_CYCLE_PIT_MISMATCH");
+      }
+      // ZERO_EFFECT deliberately replays prior identities when evidence cannot
+      // affect a later cycle. Only a nonzero effect must bind the current selection.
+      if (effect.effectKind !== "ZERO_EFFECT") {
+        if (Date.parse(effect.priorCyclePitAnchor) >= Date.parse(effect.futureCyclePitAnchor)) {
+          reasonCodes.push("UNQUALIFIED_FEEDBACK_FORBIDDEN");
+        }
+        if (effect.futureNavigatorReceiptContentDigestHex !== input.navigatorReceipt?.contentDigestHex) {
+          reasonCodes.push("FUTURE_CYCLE_NAVIGATOR_MISMATCH");
+        }
+        if (effect.futureKnowledgeDigestHex !== input.navigatorReceipt?.knowledgeDigestHex) {
+          reasonCodes.push("FUTURE_CYCLE_KNOWLEDGE_MISMATCH");
+        }
+      }
+    }
     if (input.futureCycleEffect.capitalAuthority !== "NONE") {
       reasonCodes.push("FUTURE_CYCLE_CAPITAL_AUTHORITY_FORBIDDEN");
     }

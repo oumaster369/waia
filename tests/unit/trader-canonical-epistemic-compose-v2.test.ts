@@ -64,7 +64,7 @@ function futureCycle(
     priorKnowledgeDigestHex: DIGEST,
     futureKnowledgeDigestHex: DIGEST,
     priorNavigatorReceiptContentDigestHex: DIGEST,
-    futureNavigatorReceiptContentDigestHex: DIGEST,
+    futureNavigatorReceiptContentDigestHex: navigator().contentDigestHex,
     producedByReceiptDigestHex: DIGEST,
     ...patch,
   };
