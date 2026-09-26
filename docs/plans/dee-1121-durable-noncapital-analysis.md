@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 110909b564e2f8ffe1058adf18dad2c0dfe3d45a
-  lastValidationAt: "2026-09-26T15:04:34.498604+00:00"
+  lastValidatedGitSha: 11c83e5bfddbb53d7aabe24191c6f57c92135892
+  lastValidationAt: "2026-09-26T15:47:26.439Z"
   blockedReason: null
-  nextAction: "Independent final delta review; root integrates required native CI suite and runs current-base full readiness before publication."
+  nextAction: "Complete independent final metadata review, publish one PR and require current-head CI before normal merge; full P10 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -285,3 +285,40 @@ Root current-base native/scoped/full readiness and final independent integration
 
 
 Root first current-base readiness passed scoped tests, lint, typecheck, build, canon, governance and Execution graph, then the Reality graph correctly rejected its pinned inventory after the legacy CLI extraction. Independent immutable-Git/AST review proves exactly one consumer path swap (paper-bar-close-loop.ts → paper-bar-close-loop-legacy.ts), unchanged134 count, all133 common consumer contents identical and all26 connector references unchanged. The new file already matches the sole existing excluded script rule. Only the two reviewed consumer digests are updated; validator, rules, source discovery/admission, forbidden imports and compatibility counts are unchanged. The original failing log is retained. This is a checked inventory update, not a waived authority gate or new Reality source admission.
+
+
+## WP-3 — root current-base and recorded-clock fixture acceptance
+
+Accepted base21a60ec3 was normally merged with exact preservation of both source
+patch directions. All15 incoming native suites remain required; recorded analysis
+and canonical PIT lineage increase the mandatory proof to17. Legacy CLI extraction
+changes one classified consumer path; actual AST reference discovery, all133 other
+consumer blobs and26 connector references are unchanged. Inventory pins reflect
+those exact source changes without widening rules.
+
+A root native run on a4d27d96 passed319 of323 and refused four chronology paths.
+The actual failing timestamps were not recorded; subsequent independent local
+clock observations showed millisecond clock-domain offsets. The corrected fixture
+executes the real gateway then waits only for the observed database clock to reach
+the latest actual ingestion in the immutable bundle, with content hash checks and
+a bounded timeout. Production chronology/source/PIT values are unchanged. Replay
+asserts zero provider and clock-barrier calls. The original failed evidence remains.
+
+Fresh e7f4bdbf acceptance passed34 affected cases and323 cases in17 suites. Final
+readiness found a test-client statement_timeout typed as a string;11c83e5b uses
+the driver's documented numeric milliseconds. Because that changes fixture JS,
+root repeated the complete17-suite proof on a new database: **323 passed, zero
+skipped**,220 migrations and zero remaining other sessions, faults or disabled
+public guards. This final native evidence is attributed exactly to11c83e5b.
+
+Root scoped acceptance passed229 assertions/18 files at62ae7bfc; full lint passed
+there. Typecheck/build/canon/governance/both consumer graphs/final base diff passed
+at11c83e5b. Earlier errors are retained. The intervening legacy-file correction
+removes one duplicate EOF newline, emits identical JavaScript and updates only
+the consumer content digest. Evidence is under the project audit directory
+evidence/dee-1121/accepted-base-21a60ec3/, including final-readiness/,
+typed-clock-native/ and eof-only-identity.json.
+
+Final nonauthor review and exact-head PR CI remain mandatory. No production schema,
+source qualification, assigned semantic profile, complete Understanding/Forecast,
+C3, execution-host or live-capital action is accepted by these engineering results.
