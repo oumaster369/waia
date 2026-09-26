@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-1123",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -10,7 +10,7 @@
   "includedChildren": [
     {
       "issue": "DEE-1116",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Complete bounded payment observations and exact atomic token amounts before payment/checkpoint effects.",
       "dependencies": [],
@@ -47,11 +47,30 @@
         "mode": "serialized"
       },
       "sourceCommit": "2af4d14a5caaaac7db28c98343cefce0b9c74265",
-      "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074"
+      "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074",
+      "integratedCommits": [
+        "601baeaa899471b3c1c7db27a845341597a8a430"
+      ],
+      "actualFiles": [
+        "docs/plans/dee-1116-payment-observation-integrity.md",
+        "lib/waia-core/payment-watcher/run-watcher-cycle.ts",
+        "lib/waia-core/payment-watcher/tron-adapter.ts",
+        "lib/waia-core/payment-watcher/watcher-cycle.types.ts",
+        "tests/unit/payment-watcher-observation-integrity.test.ts",
+        "tests/unit/payment-watcher-tron-adapter.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Fresh cumulative 167 assertions / 13 files,0skip at601baeaa899471b3c1c7db27a845341597a8a430",
+        "Original production/test patch preserved byte-for-byte; dedicated canonical CI and strict result-proof added only within revised pre-import admission. Full readiness/independent final review and actual fresh-schema canonical CI remain required."
+      ],
+      "tests": [
+        "pnpm test --run cumulative wave1; exact command in revised-admission/wave1-acceptance.json",
+        "Actual canonical reconciliation2suite CI required before merge; no local custom-database or218-registry result claimed as fresh canonical schema proof."
+      ]
     },
     {
       "issue": "DEE-1117",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Exact manual settlement/invoice amount equality and server-owned HTTP cooling without changing persisted financial evidence. Require both existing canonical-profile native reconciliation companions to execute without skips in fresh CI; add only workflow/result-guard regression proof.",
       "dependencies": [
@@ -93,7 +112,30 @@
         "mode": "serialized"
       },
       "sourceCommit": "997b5a9084a9a30f7cf5af188723685adadbd16c",
-      "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074"
+      "sourcePatchBase": "1a59b31b620af81b727d28b24f3ddbf9cb953074",
+      "integratedCommits": [
+        "bd444f35d0a08a5e5223d97b42f6e458daacfb60",
+        "60d38dfa3dd53b21d6fd7d58db8b274b4a065883"
+      ],
+      "actualFiles": [
+        "docs/plans/dee-1117-reconciliation-command-integrity.md",
+        "lib/trader/settlement/reconciliation/reconciliation-validation.ts",
+        "lib/trader/settlement/reconciliation/reconciliation-workflow-handler.ts",
+        "tests/helpers/reconciliation-command-memory.ts",
+        "tests/unit/reconciliation-exact-manual-amounts.test.ts",
+        "tests/unit/reconciliation-workflow-cooling-admission.test.ts",
+        ".github/workflows/payment-reconciliation-postgres.yml",
+        "scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs",
+        "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+      ],
+      "acceptanceEvidence": [
+        "Fresh cumulative 342 assertions / 23 files,0skip at60d38dfa3dd53b21d6fd7d58db8b274b4a065883",
+        "Original production/test patch preserved byte-for-byte; dedicated canonical CI and strict result-proof added only within revised pre-import admission. Full readiness/independent final review and actual fresh-schema canonical CI remain required."
+      ],
+      "tests": [
+        "pnpm test --run cumulative wave2; exact command in revised-admission/wave2-acceptance.json",
+        "Actual canonical reconciliation2suite CI required before merge; no local custom-database or218-registry result claimed as fresh canonical schema proof."
+      ]
     }
   ],
   "deferredChildren": [],
@@ -101,7 +143,72 @@
     "admissionEvidence": {
       "status": "pass",
       "reviewer": "Root controller code/contract review under explicit user authorization, before every import into this train. Prior source implementations already existed; no retrospective source admission or current final acceptance claimed. Revised admission precedes every new import and CI implementation on the replacement branch; earlier unpublished train530b9fb1 is preserved separately."
-    }
+    },
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestCommit": "c016700b767b3f2f09fb56619edf24e3c6c6397a",
+      "manifestPath": "docs/plans/dee-1123-payment-integrity-integration.integration-train.json",
+      "manifestDigest": "1636398023eb130b35e399ba8dc36ce8672ed473f20bc7df7db991b8cc7dcdb9",
+      "reviewer": "Root revised admission before every import/CI implementation on replacement branch. Earlier unpublished train and original implementations are preserved, not retrospectively admitted."
+    },
+    "admissionReviews": [
+      {
+        "issue": "DEE-1116",
+        "status": "pass",
+        "reviewedCommits": [
+          "601baeaa899471b3c1c7db27a845341597a8a430"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-1116-payment-observation-integrity.md",
+          "lib/waia-core/payment-watcher/run-watcher-cycle.ts",
+          "lib/waia-core/payment-watcher/tron-adapter.ts",
+          "lib/waia-core/payment-watcher/watcher-cycle.types.ts",
+          "tests/unit/payment-watcher-observation-integrity.test.ts",
+          "tests/unit/payment-watcher-tron-adapter.test.ts"
+        ],
+        "reviewer": "Root pre-import scope and exact patch review; final independent integrated review pending and required."
+      },
+      {
+        "issue": "DEE-1117",
+        "status": "pass",
+        "reviewedCommits": [
+          "bd444f35d0a08a5e5223d97b42f6e458daacfb60",
+          "60d38dfa3dd53b21d6fd7d58db8b274b4a065883"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-1117-reconciliation-command-integrity.md",
+          "lib/trader/settlement/reconciliation/reconciliation-validation.ts",
+          "lib/trader/settlement/reconciliation/reconciliation-workflow-handler.ts",
+          "tests/helpers/reconciliation-command-memory.ts",
+          "tests/unit/reconciliation-exact-manual-amounts.test.ts",
+          "tests/unit/reconciliation-workflow-cooling-admission.test.ts",
+          ".github/workflows/payment-reconciliation-postgres.yml",
+          "scripts/postgres-validation/assert-payment-reconciliation-test-results.mjs",
+          "tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+        ],
+        "reviewer": "Root pre-import scope and exact patch review; final independent integrated review pending and required."
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-1116",
+        "status": "pass",
+        "commands": [
+          "pnpm test --run --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/evidence/dee-1123/revised-admission/wave1-unit-results.json tests/unit/health-payment-watcher-route.test.ts tests/unit/payment-watcher-checkpoint-repository.test.ts tests/unit/payment-watcher-confirmation.test.ts tests/unit/payment-watcher-cycle.test.ts tests/unit/payment-watcher-normalize-network.test.ts tests/unit/payment-watcher-observation-integrity.test.ts tests/unit/payment-watcher-stale-lease-recovery.test.ts tests/unit/payment-watcher-tron-adapter.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-billing-reality-truth-integrity.test.ts tests/unit/trader-decimal-billing-boundary.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/treasury-watcher-adapter.test.ts"
+        ],
+        "evidence": "revised-admission/wave1-acceptance.json and wave1-unit-results.json"
+      },
+      {
+        "afterIssue": "DEE-1117",
+        "status": "pass",
+        "commands": [
+          "pnpm test --run --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/evidence/dee-1123/revised-admission/wave2-unit-results.json tests/unit/health-payment-watcher-route.test.ts tests/unit/payment-watcher-checkpoint-repository.test.ts tests/unit/payment-watcher-confirmation.test.ts tests/unit/payment-watcher-cycle.test.ts tests/unit/payment-watcher-normalize-network.test.ts tests/unit/payment-watcher-observation-integrity.test.ts tests/unit/payment-watcher-stale-lease-recovery.test.ts tests/unit/payment-watcher-tron-adapter.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/reconciliation-commands.test.ts tests/unit/reconciliation-exact-manual-amounts.test.ts tests/unit/reconciliation-fold-replay.test.ts tests/unit/reconciliation-priority.test.ts tests/unit/reconciliation-serialize.test.ts tests/unit/reconciliation-sweeper.test.ts tests/unit/reconciliation-transitions.test.ts tests/unit/reconciliation-workflow-cooling-admission.test.ts tests/unit/settlement-matching.test.ts tests/unit/trader-billing-reality-truth-integrity.test.ts tests/unit/trader-decimal-billing-boundary.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/treasury-watcher-adapter.test.ts tests/unit/postgres-payment-reconciliation-proof-guard.test.ts"
+        ],
+        "evidence": "revised-admission/wave2-acceptance.json and wave2-unit-results.json"
+      }
+    ],
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true
   },
   "crossCuttingInvariants": [
     "No rates/fees/HWM/finality/valuation/quorum/cooling-duration/tenant/authority policy changes.",
@@ -112,7 +219,7 @@
   "splitRationale": "Two coherent payment children,12 child files plus adjacent plan/manifest;1427 source changed lines include484 plan and699 test/helper lines, leaving244 production lines. Exceeds approximate800-line target with explicit narrow scope and separate original reviews, serial cumulative proof and required final independent audit. Split if reviewability, risk coherence or one-revert rollback ceases to hold. Revised admission adds three focused canonical native-proof files to1117, for17 total paths including batch metadata. Earlier unpublished14-path train is preserved; none of its imports are claimed to follow this new admission. Dedicated job avoids expanding unrelated native job scope.",
   "reviewDisposition": {
     "authority": "Explicit user technical/T3 and PR consolidation delegation.",
-    "independentReview": "Prior original source reviews exist; final integrated review is required and pending.",
+    "independentReview": "Original source reviews retained. Final frozen complete-diff M01 review required and pending; publication awaits local readiness and review, merge awaits new actual canonical CI.",
     "mergePath": "Normal checked squash under user delegation; no protection or financial/live gate bypass.",
     "unchangedGates": "All exact-head CI, manifest history/closure, source scope, independent audit and nontrading production acceptance."
   }

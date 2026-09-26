@@ -22,15 +22,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 60d38dfa3dd53b21d6fd7d58db8b274b4a065883
+  lastValidationAt: "2026-09-26T15:15:44.988538+00:00"
   blockedReason: null
-  nextAction: "Validate and commit pre-import admission, then serialize reviewed child imports with cumulative acceptance."
+  nextAction: "Complete frozen train readiness and independent full-diff review, publish one PR, then require new canonical-profile executed CI and all applicable checks before merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -73,3 +73,10 @@ User preauthorized technical T3 repairs, tests/audits, rational PR consolidation
 The earlier unpublished train530b9fb1c5a51114016e62e2528d96a9c42ea24b and its original admission b5dd7373 remain preserved on dee-1123-payment-integrity-integration. Its exact imports passed167/13 then339/22 scoped cases. Root then discovered the native reconciliation suites require exact loopback54329/waia_validate, while payment/settlement changes do not trigger the existing PostgreSQL workflow and those two suites are not registered there. A new disposable database name cannot satisfy that guard; existing canonical218-migration history must not be rewritten merely to claim fresh schema proof.
 
 This replacement branch starts again at21a60 and commits this expanded admission BEFORE every reimport or CI change. WP-2 additionally owns only a dedicated canonical-profile PostgreSQL workflow, strict two-suite executed-proof script and negative unit tests for skipped/failed/missing/empty/duplicate results. Use the exact existing local/CI identity, all repository migrations on a fresh CI service, deterministic serial suite execution, artifact upload and original connection guards. Run automatically for all relevant payment, settlement, ledger, schema and proof/config dependencies, and support explicit workflow_dispatch. It invokes synthetic existing tests only, no provider or actual financial command. Prior unit/native proofs remain historical; new integrated scope, readiness and independent full-diff review are required, and actual canonical CI must pass before merge. No policy, production semantics, database reset or original source patch modification is authorized.
+
+
+## Frozen integrated source and cumulative acceptance
+
+Revised pre-import admission c016700b767b3f2f09fb56619edf24e3c6c6397a (manifest SHA2561636398023eb130b35e399ba8dc36ce8672ed473f20bc7df7db991b8cc7dcdb9) precedes every import and CI implementation on this branch. Wave1 exact import601baeaa passed167 scoped assertions/13files, zero skips. Wave2 exact original importbd444f35 followed only after that pass; dedicated native-proof commit60d38dfa then passed342 cumulative assertions/23files, zero skips, including positive and each-suite missing/failed/skipped/empty/duplicate/status controls. Actual source commands/timestamps/results are retained under completion-audit evidence/dee-1123/revised-admission.
+
+The two existing canonical reconciliation suites are now an explicit fresh-service CI gate. It keeps hardcoded guards, applies every migration, runs both suites serially, validates nonempty/all-passed proof and uploads actual result JSON. They have not been executed locally on this integrated source; prior five native assertions from1117 remain historical-only. Fresh exact-head canonical CI is a merge prerequisite, not an asserted local pass. Full local readiness and final independent integrated review remain pending until separately recorded. No production or financial state was changed.
