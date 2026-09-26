@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
+  currentWorkPackage: WP-2
   completedWorkPackages: [WP-1]
-  remainingWorkPackages: []
+  remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 4deb5d39ef93a4a1cb5a57718e5b35ee03dbc3a7
+  lastValidationAt: "2026-09-26T08:24:17Z"
   blockedReason: null
-  nextAction: "Independent review and serial integration readiness; explicitly include native evidence in CI. No runtime activation."
+  nextAction: "Integrate with accepted main after PR672/673; preserve their mandatory native suites, recheck combined proof and publish for exact-head CI. No runtime activation."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -131,6 +131,29 @@ Initial native fixture attempts exposed missing test release metadata, misuse
 of the transaction-required Knowledge repository, a wrong compact schema code
 and instrumentation that converted SQL fragments into promises. These fixture
 issues were corrected without weakening production guards.
+
+## WP-2 — Integration acceptance
+
+Independent review accepted implementation commit `4deb5d39` with no findings.
+The integration controller added explicit native CI coverage for the reader,
+both helper files, outcome-resolution source and Knowledge update source. The
+existing executed-proof guard also requires the reader suite and its existing
+Forecast persistence companion; missing/skipped/failed evidence is rejected.
+
+On the current `ebff1335` base, all **193 native PostgreSQL tests / 11 suites**
+passed with zero skips, including the nine existing critical suites and both
+Forecast suites. The executed-proof guard and its 12 positive/negative unit
+cases passed. Whole-repository lint (existing warnings only), typecheck, build,
+canon, governance and both consumer-graph validators passed. Test release
+metadata was `4deb5d39`; these are implementation-tree checks, not PR CI or a
+deployed release assertion.
+
+PR673 independently adds a tenth critical suite on its pending branch. Before
+this package is published, integrate accepted main and retain that suite in
+the workflow and executed-proof guard alongside these two new required suites.
+Recheck the combined native list and final governance. This sequencing avoids
+publishing against a known conflicting CI list and resetting an hour-long run.
+Passing local checks do not waive exact final-head CI or milestone audit.
 
 ## Deliberate boundaries
 

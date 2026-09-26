@@ -12,6 +12,8 @@ const requiredFiles = [
   "postgres-promotion-audit-atomicity.test.ts",
   "postgres-runtime-authority-v2.test.ts",
   "postgres-guardian-authority-v2.test.ts",
+  "postgres-forecast-v2-feedback-read-port.test.ts",
+  "postgres-forecast-v2-persistence.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const file of requiredFiles) {
