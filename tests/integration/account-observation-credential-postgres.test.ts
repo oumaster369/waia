@@ -750,7 +750,13 @@ describe.skipIf(!enabled)(
         ["SELECT (api_key_masked) ON public.exchange_credentials", "PUBLIC"],
         ["DELETE ON public.trader_account_collection_state", "PUBLIC"],
       ])("refuses effective or direct excess grant %s to %s", async (privilege, grantee) => {
-        await changedPosture(`GRANT ${privilege} TO ${grantee}`, `REVOKE ${privilege} FROM ${grantee}`);
+        // PostgreSQL REVOKE table SELECT also revokes the original column SELECT ACLs.
+        // Restore that exact baseline rather than mistaking a later refusal for a new case.
+        const restoreProjection = privilege === "SELECT ON public.exchange_credentials" && grantee === parent
+          ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, encrypted_payload,
+              payload_key_version, wrapped_dek_key_version, wrapped_dek_key) ON public.exchange_credentials TO ${parent}`
+          : "";
+        await changedPosture(`GRANT ${privilege} TO ${grantee}`, `REVOKE ${privilege} FROM ${grantee}${restoreProjection}`);
       });
 
       it("refuses missing required projection on either relation", async () => {
