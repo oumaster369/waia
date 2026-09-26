@@ -253,7 +253,13 @@ export function assertClosedTradeSettlementV2(value: ClosedTradeSettlementV2): v
     costFacts: value.costFacts,
     supersedesSettlementDigestHex: value.supersedesSettlementDigestHex,
   });
-  if (rebuilt.contentDigestHex !== value.contentDigestHex) {
+  // Rebuilding validates primitive inputs; consumers also read the supplied
+  // totals and metadata, so seal the entire received body before trusting it.
+  const { contentDigestHex, ...body } = value;
+  if (
+    rebuilt.contentDigestHex !== contentDigestHex ||
+    computeSemanticSha256Hex(body) !== contentDigestHex
+  ) {
     throw new Error("CLOSED_TRADE_DIGEST_MISMATCH");
   }
 }
