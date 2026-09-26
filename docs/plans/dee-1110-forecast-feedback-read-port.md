@@ -5,8 +5,8 @@ parentIssue: DEE-639
 branch: dee-1110-forecast-feedback-read-port
 riskTier: T3
 prPolicy: one-integration-pr
-executionSurfaces: [local, github-pr-ci]
-requiredValidation: [lint, typecheck, targeted-unit, build, validate-canon, validate-pr-governance]
+executionSurfaces: [local, github-pr-ci, postgres-ci]
+requiredValidation: [lint, typecheck, targeted-unit, native-postgres, build, validate-canon, validate-pr-governance]
 approvalGates: [plan-approved, integration-ready, human-merge]
 includedIssues: []
 linearStatusFlow:
@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 4deb5d39ef93a4a1cb5a57718e5b35ee03dbc3a7
-  lastValidationAt: "2026-09-26T08:24:17Z"
+  lastValidatedGitSha: 4c51787597dbd0d4355cf1605bd9b668978e584d
+  lastValidationAt: "2026-09-26T11:37:26.824Z"
   blockedReason: null
-  nextAction: "Integrate with accepted main after PR672/673; preserve their mandatory native suites, recheck combined proof and publish for exact-head CI. No runtime activation."
+  nextAction: "Accepted-base native and scoped checks passed; obtain independent integration review and root full readiness before publication and exact-head CI. No runtime activation."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -140,7 +140,7 @@ both helper files, outcome-resolution source and Knowledge update source. The
 existing executed-proof guard also requires the reader suite and its existing
 Forecast persistence companion; missing/skipped/failed evidence is rejected.
 
-On the current `ebff1335` base, all **193 native PostgreSQL tests / 11 suites**
+On the original `ebff1335` base, all **193 native PostgreSQL tests / 11 suites**
 passed with zero skips, including the nine existing critical suites and both
 Forecast suites. The executed-proof guard and its 12 positive/negative unit
 cases passed. Whole-repository lint (existing warnings only), typecheck, build,
@@ -148,12 +148,38 @@ canon, governance and both consumer-graph validators passed. Test release
 metadata was `4deb5d39`; these are implementation-tree checks, not PR CI or a
 deployed release assertion.
 
-PR673 independently adds a tenth critical suite on its pending branch. Before
-this package is published, integrate accepted main and retain that suite in
-the workflow and executed-proof guard alongside these two new required suites.
-Recheck the combined native list and final governance. This sequencing avoids
-publishing against a known conflicting CI list and resetting an hour-long run.
-Passing local checks do not waive exact final-head CI or milestone audit.
+### Accepted-base refresh
+
+Merged accepted main `ed2a25f72008a97211c9454fd29d4f62a65508b2` into the
+independently reviewed integration head `169c121e`, producing code head
+`4c51787597dbd0d4355cf1605bd9b668978e584d`. The only conflicts were the three
+mandatory-suite lists/counts in the workflow, proof guard and guard unit test.
+Their additive union retains all twelve incoming suites and both Forecast
+suites, for fourteen required native suites. No skip waiver is introduced.
+
+All 32 nonconflicting incoming files retain their exact accepted blobs,
+including migration0218, its journal/schema compatibility correction and the
+billing command fixes. The production reader, both helpers and native suite
+remain byte-identical to the previously reviewed implementation. The canonical
+plan is the only subsequent evidence/documentation change.
+
+Fresh local database `waia_dee1110_ed2a25f7`, PostgreSQL16.14, applied all219
+migrations from an empty database. At code head `4c517875`, **232 native tests /
+14 mandatory suites PASS, zero skips**, with the executed-proof guard passing.
+This includes both Forecast suites and all twelve accepted-base companions.
+**126 unit tests / 10 files PASS**, covering the guard, Forecast authorization,
+wire identity, symbol binding, calibration, outcome resolution, evidence-only
+Knowledge update, future-cycle effect and migration identity. Scoped ESLint and
+accepted-base diff whitespace checks pass. Final database readback has zero
+other sessions and zero disabled public user triggers; synthetic fixtures are
+retained, with no existing fixture/registry repair. Test release metadata is
+the code head, not attestation of a deployed binary.
+
+The prior whole-repository readiness results above apply to the original base;
+full readiness on this combined base remains the integration controller's next
+step. Source-preservation and exact commands/results are recorded in the audit
+artifact `evidence/dee-1110/accepted-base-ed2a25f7/`. Passing local checks do not
+waive independent integration review, final-head CI or milestone audit.
 
 ## Deliberate boundaries
 
