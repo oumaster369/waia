@@ -20,6 +20,7 @@ import type {
   OpenReportingPeriodInput,
   ReportingPeriodRepository,
 } from "@/lib/trader/billing/reporting-period-repository.types";
+import { MAX_REPORTING_PERIODS_LIST_LIMIT } from "@/lib/trader/billing/reporting-period-repository.types";
 import type { DraftInvoiceService } from "@/lib/trader/billing/draft-invoice-service";
 import {
   createPostgresDraftInvoiceService,
@@ -199,6 +200,17 @@ export function createReportingPeriodLifecycleService(
         throw new BillingCanonicalProfitAdmissionError(BILLING_RECEIPT_PNL_MISMATCH);
       }
       const realizedPnl = input.realizedPnl ?? admitted;
+
+      if (deps.draftInvoiceService) {
+        const existingClosed = await deps.repository.listClosedPeriods(scoped, {
+          exchangeAccountId: input.exchangeAccountId,
+          limit: MAX_REPORTING_PERIODS_LIST_LIMIT,
+        });
+        // Do not close/audit a period whose automatic draft cannot prove complete history.
+        if (existingClosed.length + 1 >= MAX_REPORTING_PERIODS_LIST_LIMIT) {
+          throw new BillingCanonicalProfitAdmissionError("BILLING_PERIOD_LIST_TRUNCATED");
+        }
+      }
 
       const payload = buildReportingPeriodRecordPayload({
         organizationId: openPeriod.organizationId,
