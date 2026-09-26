@@ -75,8 +75,8 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
     const options = sql?.options;
     if (typeof sql !== "function" || typeof sql.begin !== "function" || !options ||
       options.prepare !== false || !Number.isSafeInteger(options.max) || options.max < 1 || options.max > 2 ||
-      typeof options.connect_timeout !== "number" || options.connect_timeout < 1 || options.connect_timeout > 3 ||
-      typeof options.max_lifetime !== "number" || options.max_lifetime < 1 || options.max_lifetime > 300) refuseCredential();
+      !Number.isFinite(options.connect_timeout) || typeof options.connect_timeout !== "number" || options.connect_timeout < 1 || options.connect_timeout > 3 ||
+      !Number.isFinite(options.max_lifetime) || typeof options.max_lifetime !== "number" || options.max_lifetime < 1 || options.max_lifetime > 300) refuseCredential();
     const rows = await sql.begin(async tx => {
       await tx`SET TRANSACTION READ ONLY`;
       await tx`SET LOCAL statement_timeout = '3000ms'`;

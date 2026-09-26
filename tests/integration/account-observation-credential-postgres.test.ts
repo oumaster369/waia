@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres, { type Sql } from "postgres";
 
+import * as credentialProbe from "@/lib/trader/account-observation/host-role-probe";
 import { probeObservationCredentialPool } from "@/lib/trader/account-observation/host-role-probe";
 import { createObservationCredentialReader } from "@/lib/trader/account-observation/credential-read-boundary";
 import { encryptCredentialPayload } from "@/lib/trader/credentials/envelope-crypto";
@@ -812,6 +813,72 @@ describe.skipIf(!enabled)(
         } finally { await other.end({ timeout: 2 }); }
         await expect(probeObservationCredentialPool(open("credential"))).resolves.toBe(login);
       });
+
+      it.each(["probe", "provider"])("actual CLI cancels a late %s completion and eventually closes all real SQL sessions", async stage => {
+        for (const client of clients.values()) await client.end({ timeout: 2 });
+        clients.clear();
+        const manifest = sealManifest();
+        const controller = new AbortController();
+        const events: string[] = [];
+        const fetchImpl = vi.fn<typeof fetch>();
+        let reached!: () => void;
+        let deliver!: () => void;
+        const entered = new Promise<void>(resolve => { reached = resolve; });
+        const pending = new Promise<void>(resolve => { deliver = resolve; });
+        // Both execute their real native/crypto operation before holding only the returned promise.
+        // This is a lifecycle barrier, not fabricated SQL posture or a fabricated provider.
+        const originalProbe = credentialProbe.probeObservationCredentialPool;
+        const originalCreate = SecretsStoreMasterKeyProvider.create;
+        const probe = vi.spyOn(credentialProbe, "probeObservationCredentialPool");
+        const create = vi.spyOn(SecretsStoreMasterKeyProvider, "create");
+        if (stage === "probe") probe.mockImplementation(async sql => {
+          const result = await originalProbe(sql); reached(); await pending; return result;
+        });
+        else create.mockImplementation(async input => {
+          const result = await originalCreate(input); reached(); await pending; return result;
+        });
+        let run: Promise<void> | undefined;
+        let deadline: ReturnType<typeof setTimeout> | undefined;
+        try {
+          run = runAccountObservationCollector({
+            env: {
+              WAIA_TRADER_CLI: "1", WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
+              WAIA_OBSERVATION_OWNER_ID: "dee1127-cancel",
+              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "/synthetic/native-manifest.json",
+              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
+              WAIA_OBSERVATION_COLLECTOR_DATABASE_URL: runtimeUrl("collector"),
+              WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
+              WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
+              WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY,
+            }, signal: controller.signal, readManifest: () => manifest.text,
+            fetchImpl, report: event => { events.push(event); },
+          });
+          await Promise.race([entered, run.then(() => { throw new Error("EARLY_NATIVE_STOP"); }),
+            new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error("NATIVE_BARRIER_TIMEOUT")), 10000); })]);
+          controller.abort(); await run;
+          expect(events).not.toContain("HOST_STARTED"); expect(fetchImpl).not.toHaveBeenCalled();
+          if (stage === "probe") expect(create).not.toHaveBeenCalled();
+          const held = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
+            WHERE datname=${database} AND application_name='waia-account-observation-credential'`;
+          expect(held[0].count).toBe(1); // abort alone has not yet disposed the unreturned resource
+          deliver();
+          const until = Date.now() + 5000;
+          let remaining = 1;
+          while (remaining && Date.now() < until) {
+            const sessions = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
+              WHERE datname=${database} AND application_name LIKE 'waia-account-observation-%'`;
+            remaining = sessions[0].count;
+            if (remaining) await new Promise(resolve => setTimeout(resolve, 10));
+          }
+          expect(remaining).toBe(0);
+          expect(events).not.toContain("HOST_STARTED");
+          if (stage === "probe") expect(create).not.toHaveBeenCalled();
+        } finally {
+          if (deadline) clearTimeout(deadline);
+          controller.abort(); deliver(); await run?.catch(() => {});
+          probe.mockRestore(); create.mockRestore();
+        }
+      }, 20000);
 
       it("the real private CLI factory refuses unsafe SQL before provider/HOST_STARTED/transport, then restarts", async () => {
         for (const client of clients.values()) await client.end({ timeout: 2 });

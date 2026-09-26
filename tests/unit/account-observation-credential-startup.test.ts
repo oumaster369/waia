@@ -20,7 +20,7 @@ const LOGIN = "waia_account_observation_credential_login";
 const required = ["original_session", "supported", "safe_login", "safe_role", "membership",
   "exclusive_role", "no_direct_acl", "no_ownership", "no_create", "exact_projection", "rls"];
 function pool(overrides: Record<string, unknown> = {}) {
-  const row = { login: LOGIN, ...Object.fromEntries(required.map(key => [key, true])),
+  const row: Record<string, unknown> = { login: LOGIN, ...Object.fromEntries(required.map(key => [key, true])),
     can_set: true, no_ciphertext: true, no_destructive: true, reader_no_writes: true, forced_rls: true,
     ...overrides };
   const statements: string[] = [];
@@ -83,7 +83,7 @@ describe("credential pool catalog admission (synthetic executor; native SQL prov
   it.each(["", "other", "WAIA_ACCOUNT_OBSERVATION_CREDENTIAL_LOGIN"])("refuses actual login %s", async login => {
     await expect(probeObservationCredentialPool(pool({ login }).sql)).rejects.toThrow("OBSERVATION_CREDENTIAL_ROLE_REFUSED");
   });
-  it.each([{ max: 3 }, { prepare: true }, { connect_timeout: 4 }, { max_lifetime: 301 }, { max: 0 }])("refuses unbounded options %j before SQL", async options => {
+  it.each([{ max: 3 }, { prepare: true }, { connect_timeout: 4 }, { max_lifetime: 301 }, { max: 0 }, { connect_timeout: NaN }, { max_lifetime: NaN }])("refuses unbounded options %j before SQL", async options => {
     const f = pool(); Object.assign(f.sql.options, options);
     await expect(probeObservationCredentialPool(f.sql)).rejects.toThrow();
     expect(f.begin).not.toHaveBeenCalled();
@@ -127,7 +127,8 @@ describe("actual registered CLI private factory and host startup", () => {
     expect(f.report).not.toHaveBeenCalledWith("HOST_STARTED");
     expect(JSON.stringify(f.report.mock.calls)).not.toContain("password");
   });
-  it.each(["probe", "provider"])("cancellation while %s is pending refuses late startup and closes late SQL", async stage => {
+  it.each([ ["probe", "cancel"], ["provider", "cancel"], ["probe", "timeout"], ["provider", "timeout"] ])(
+    "%s pending during %s refuses late startup and closes late SQL", async (stage, mode) => {
     const f = entry(); let deliver!: () => void;
     if (stage === "probe") f.credential.begin.mockImplementation(async callback => {
       await new Promise<void>(resolve => { deliver = resolve; });
@@ -136,8 +137,10 @@ describe("actual registered CLI private factory and host startup", () => {
     else ports.provider.mockImplementation(async () => {
       await new Promise<void>(resolve => { deliver = resolve; }); return { synthetic: true };
     });
-    const work = f.run(); await vi.advanceTimersByTimeAsync(0);
-    f.controller.abort(); await work; deliver(); await vi.advanceTimersByTimeAsync(0);
+    const work = f.run().then(() => "STOPPED", () => "FAILED"); await vi.advanceTimersByTimeAsync(0);
+    if (mode === "cancel") f.controller.abort(); else await vi.advanceTimersByTimeAsync(15001);
+    expect(await work).toBe(mode === "cancel" ? "STOPPED" : "FAILED");
+    deliver(); await vi.advanceTimersByTimeAsync(0);
     expect(ports.reader).not.toHaveBeenCalled(); expect(ports.runtime).not.toHaveBeenCalled();
     if (stage === "probe") expect(ports.provider).not.toHaveBeenCalled();
     expect(f.report).not.toHaveBeenCalledWith("HOST_STARTED");
