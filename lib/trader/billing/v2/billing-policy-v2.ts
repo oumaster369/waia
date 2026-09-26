@@ -76,4 +76,8 @@ export function assertCanonicalBillingPolicyV2(value: BillingPolicyV2): void {
   if (value.policyVersion !== BILLING_POLICY_V2_VERSION) {
     throw new Error("BILLING_POLICY_VERSION_INVALID");
   }
+  const { contentDigestHex, ...body } = value;
+  if (computeSemanticSha256Hex(body) !== contentDigestHex) {
+    throw new Error("BILLING_POLICY_NOT_CANONICAL");
+  }
 }

@@ -99,6 +99,8 @@ export function buildRealizedStrategyProfitReceiptV2(
   const settlements = input.settlements;
   const settlementDigests: string[] = [];
   const lifecycleIds = new Set<string>();
+  const cashflowDigests = new Set<string>();
+  const costDigests = new Set<string>();
   let grossRealizedPnl = "0";
   let admittedTradingCosts = "0";
   let netRealizedStrategyProfit = "0";
@@ -121,6 +123,20 @@ export function buildRealizedStrategyProfitReceiptV2(
       throw new Error("RECEIPT_DUPLICATE_LIFECYCLE");
     }
     lifecycleIds.add(settlement.lifecycleId);
+    // A new lifecycle ID must not make the same monetary fact billable twice.
+    // Ambiguous attribution requires reconciliation, not silent deduplication.
+    for (const fact of settlement.cashflowFacts) {
+      if (cashflowDigests.has(fact.truthRecordDigestHex)) {
+        throw new Error("RECEIPT_DUPLICATE_CASHFLOW_FACT");
+      }
+      cashflowDigests.add(fact.truthRecordDigestHex);
+    }
+    for (const fact of settlement.costFacts) {
+      if (costDigests.has(fact.truthRecordDigestHex)) {
+        throw new Error("RECEIPT_DUPLICATE_COST_FACT");
+      }
+      costDigests.add(fact.truthRecordDigestHex);
+    }
     settlementDigests.push(settlement.contentDigestHex);
     grossRealizedPnl = addDecimal(grossRealizedPnl, settlement.grossRealizedCashflow);
     admittedTradingCosts = addDecimal(admittedTradingCosts, settlement.admittedTradingCosts);
