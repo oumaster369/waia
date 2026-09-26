@@ -3,6 +3,7 @@ import {
   BANNED_DISCOVERY_FIELDS,
 } from "@/lib/trader/discovery/no-reinforcement-guard";
 import { parseDecimal } from "@/lib/trader/risk/numeric";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 
 export const RESEARCH_V2_DIGEST_HEX = /^[0-9a-f]{64}$/;
 
@@ -18,6 +19,22 @@ export class StrategyEvolutionResearchError extends Error {
 
 export function requireResearchV2DigestHex(value: string, code: string): void {
   if (!RESEARCH_V2_DIGEST_HEX.test(value)) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+}
+
+/** Content integrity only; this does not authenticate the source or its scientific claims. */
+export function assertResearchV2ContentDigest(
+  value: Readonly<{ contentDigestHex: string }>,
+  code: string,
+): void {
+  try {
+    const { contentDigestHex, ...body } = value;
+    requireResearchV2DigestHex(contentDigestHex, code);
+    if (computeSemanticSha256Hex(body) !== contentDigestHex) {
+      throw new StrategyEvolutionResearchError(code);
+    }
+  } catch {
     throw new StrategyEvolutionResearchError(code);
   }
 }

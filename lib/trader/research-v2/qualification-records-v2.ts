@@ -1,12 +1,13 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import {
   assertResearchDiscoveryFitnessV2,
+  assertResearchV2ContentDigest,
   requireResearchV2Decimal,
   requireResearchV2DigestHex,
-  requireResearchV2NonEmpty,
   StrategyEvolutionResearchError,
 } from "@/lib/trader/research-v2/research-v2-guards";
 import type { StrategyEvolutionCandidateV2 } from "@/lib/trader/research-v2/strategy-candidate-generation-v2";
+import { STRATEGY_EVOLUTION_CANDIDATE_V2_SCHEMA } from "@/lib/trader/research-v2/strategy-candidate-generation-v2";
 
 export const QUALIFICATION_RECORD_V2_SCHEMA =
   "waia.trader.strategy_evolution_qualification.v2" as const;
@@ -80,6 +81,13 @@ export function recordQualificationV2(input: {
   if (input.partition === "BLIND_HOLDOUT") {
     queryBlindHoldoutAsIterativeFitnessV2();
   }
+  if (!QUALIFICATION_PARTITIONS_V2.includes(input.partition)) {
+    throw new StrategyEvolutionResearchError("QUALIFICATION_PARTITION_INVALID");
+  }
+  if (!QUALIFICATION_VERDICTS_V2.includes(input.verdict)) {
+    throw new StrategyEvolutionResearchError("QUALIFICATION_VERDICT_INVALID");
+  }
+  assertQualificationCandidateV2(input.candidate);
   const partition: QualificationPartitionV2 = input.partition;
   requireResearchV2Decimal(input.evaluation.netEconomicResult, "QUALIFICATION_EVALUATION_INVALID");
   requireResearchV2Decimal(input.evaluation.maxDrawdown, "QUALIFICATION_EVALUATION_INVALID");
@@ -95,7 +103,6 @@ export function recordQualificationV2(input: {
   ) {
     throw new StrategyEvolutionResearchError("QUALIFICATION_EVALUATION_INVALID");
   }
-  requireResearchV2NonEmpty(input.candidate.contentDigestHex, "QUALIFICATION_PARTITION_INVALID");
 
   const verdict: QualificationVerdictV2 =
     input.verdict === "REJECTED" || (input.failureReasons?.length ?? 0) > 0
@@ -123,11 +130,60 @@ export function recordQualificationV2(input: {
   });
 }
 
+function assertQualificationCandidateV2(candidate: StrategyEvolutionCandidateV2): void {
+  const code = "QUALIFICATION_CANDIDATE_INVALID";
+  assertResearchV2ContentDigest(candidate, code);
+  if (
+    candidate.schemaVersion !== STRATEGY_EVOLUTION_CANDIDATE_V2_SCHEMA ||
+    candidate.capitalAuthority !== "RESEARCH_ONLY" ||
+    candidate.promotionAuthority !== "NONE" ||
+    candidate.accountAssignmentAuthority !== "NONE" ||
+    candidate.venueWriteAuthority !== "NONE" ||
+    !Array.isArray(candidate.assignedAccountIds) ||
+    candidate.assignedAccountIds.length !== 0
+  ) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+}
+
+/** Bind existing records to their candidate and slots; source-window independence is separate. */
+export function assertQualificationPairForCandidateV2(input: {
+  candidate: StrategyEvolutionCandidateV2;
+  development: QualificationRecordV2;
+  walkForward: QualificationRecordV2;
+}): void {
+  assertQualificationCandidateV2(input.candidate);
+  const records = [
+    ["DEVELOPMENT", input.development],
+    ["WALK_FORWARD", input.walkForward],
+  ] as const;
+  for (const [partition, record] of records) {
+    assertResearchV2ContentDigest(record, "QUALIFICATION_RECORD_INVALID");
+    if (record.candidateDigestHex !== input.candidate.contentDigestHex) {
+      throw new StrategyEvolutionResearchError("QUALIFICATION_CANDIDATE_MISMATCH");
+    }
+    if (record.partition !== partition) {
+      throw new StrategyEvolutionResearchError("QUALIFICATION_PARTITION_MISMATCH");
+    }
+    const replay = recordQualificationV2({
+      candidate: input.candidate,
+      partition,
+      evaluation: record.evaluation,
+      verdict: record.verdict,
+      failureReasons: record.failureReasons,
+    });
+    if (replay.contentDigestHex !== record.contentDigestHex) {
+      throw new StrategyEvolutionResearchError("QUALIFICATION_RECORD_INVALID");
+    }
+  }
+}
+
 export function recordRejectedCandidateV2(input: {
   candidate: StrategyEvolutionCandidateV2;
   development: QualificationRecordV2;
   walkForward: QualificationRecordV2;
 }): RejectedCandidateRecordV2 {
+  assertQualificationPairForCandidateV2(input);
   if (input.development.verdict !== "REJECTED" && input.walkForward.verdict !== "REJECTED") {
     throw new StrategyEvolutionResearchError("REJECTED_CANDIDATE_REQUIRES_FAILURE");
   }
