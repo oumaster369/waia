@@ -23,10 +23,10 @@ state:
   remainingWorkPackages: [WP-1]
   prNumber: 685
   prUrl: "https://github.com/oumaster369/waia/pull/685"
-  lastValidatedGitSha: 2df4df9591e69fe191451d1a6383c7edd5e6eef8
-  lastValidationAt: "2026-09-26T21:34:53.959763+00:00"
+  lastValidatedGitSha: fd8ad070f155fda7626df5c5094518c738203e0c
+  lastValidationAt: "2026-09-26T23:17:10.885781+00:00"
   blockedReason: null
-  nextAction: "Refresh existing PR685 normally onto accepted9a4d1a73; preserve both source patches and221 migrations, prove the additive native union on a fresh database, then independent review/controller publication and exact-head CI. Prior acceptance remains attributed to2df4df95/a572."
+  nextAction: "Independent final fd8ad/current-base evidence and plan-only delta review, then controller PR685 body/preflight/update and all fresh exact-head CI. Native440/21 plus4/1, scoped629/49 and eight readiness checks pass; no broader readiness is implied."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -304,3 +304,18 @@ Controller admission preserves frozen `a572dad02d0b034683fe80273cb043623c1aea16`
 Resolve shared files as an additive union: all incoming20 capital suites plus the existing basis suite are prospectively21, with strict missing/empty/duplicate/failed/skipped proof; actual suite/count equality must be recomputed. Canonical3 billing,2 payment and4 PG17 observation registrations remain unchanged. Preserve incoming sufficiency/Guardian semantics and all existing tests; no receipt, authority, financial-policy, holdout or scientific-gate change.
 
 After source freeze and focused scoped checks, use the controller's sole loopback54329/heavy grant for a NEW `waia_dee1121_dee1125_9a4d_author` database, all221 migrations, the complete recomputed capital union and separate actual4-case sufficiency PostgreSQL companion, zero skips and explicit cleanup. Do not reuse prior databases or alter validation guards. Then run appropriate cumulative scoped tests and eight readiness checks. Native counts and current-base PASS remain pending until executed. All original failure/acceptance evidence stays immutable under its old source/base; new evidence uses `evidence/dee-1125/accepted-base-9a4d1a73/author-*`. Final independent review, actual rendered PR preflight and exact-head CI remain controller gates; author does not push, create another PR or deploy.
+
+
+## Accepted9a4d refresh proof — executed atfd8ad070
+
+Plan-first `c526d36b` precedes the ordinary merge of accepted `9a4d1a73fa421961058d3733e11ea47ec7d147ec` into executable `fd8ad070f155fda7626df5c5094518c738203e0c`. Git merged the three shared bookkeeping paths without conflicts; the only manual adaptation updates the positive proof-test label/count20→21 after deriving the actual union. No production, native-test, schema, migration, receipt or policy body was edited. All20 own nonplan-only and16 incoming-only blobs, both complete nonshared binary patch directions, deterministic shared-file merge results and all221 journal/SQL identities are recorded. The one own-only plan is the declared metadata exception.
+
+Actual current-source acceptance:
+
+- NEW isolated loopback PostgreSQL16.14 `waia_dee1121_dee1125_9a4d_author` started with zero public tables, then applied all221 migrations. Every applied timestamp/SQL SHA256 exactly matches the frozen journal/source; no prior database, migration registry or guard was changed.
+- **440 PASS /21 mandatory native suites /0 skipped**, with the strict21-suite result validator, plus separately executed **4 PASS /1 information-sufficiency native companion /0 skipped**. Cleanup records0 other sessions, disabled public triggers, injected faults, temporary basis roles and browser basis grants; basisRLS remains enabled. No PG17 claim is made from this localPG16 run.
+- **629 PASS /49 cumulative scoped files /0 skipped**, the actual union of31 prior basis/CI companions and24 incoming train files. The earlier focused122/5 result is retained against identical precommit merge bytes and is not added again to the cumulative total. Every raw assertion and file identity was verified.
+- Full typecheck, lint, build, canon, governance, Execution graph, Reality graph and diff checks all exit0. Lint has324 existing warnings/0errors. Actual Reality inventory is155sources/140consumers/26connector references and retains the exact accepted incoming source/content pins; its discovery scope is unchanged.
+- Workflow, executed-proof script and negative unit fixtures all name exactly the same21 critical native suites. The3canonical billing,2payment and4PG17 observation lanes remain unchanged and mandatory in fresh exact-head CI. Existing FHV207/Forecast148 requirements and explicit0219/0220 compatibility remain unchanged.
+
+Evidence is `evidence/dee-1125/accepted-base-9a4d1a73/`, with author-only raw logs, source/binary-patch preservation, commands, exact source/base identity and fresh DB/cleanup receipts. Prior failures,2df4/a572 local proof and old-base PR685 CI remain immutable historical evidence. This final change updates only the canonical plan; all executable evidence is attributed tofd8ad. All author PG/heavy processes ended and grants were released. Independent review and controller rendered-body/current-Linear/current-main checks precede updating existingPR685; fresh current-head CI is still required. FullP08, economic attribution/completeness/prior-use, automatic finality, source qualification and live readiness remain unclaimed. No provider/production/C3/trade action occurred.
