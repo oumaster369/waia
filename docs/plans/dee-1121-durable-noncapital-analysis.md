@@ -16,14 +16,14 @@ linearStatusFlow:
 state:
   status: in-progress
   currentWorkPackage: WP-3
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 110909b564e2f8ffe1058adf18dad2c0dfe3d45a
+  lastValidationAt: "2026-09-26T15:04:34.498604+00:00"
   blockedReason: null
-  nextAction: "Finish frozen combined native proof and independent review; root owns broad readiness and publication."
+  nextAction: "Independent final delta review; root integrates required native CI suite and runs current-base full readiness before publication."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -83,10 +83,31 @@ domain input, fixed ordinary evaluator, session/predecessor state, and atomic v2
 terminal plus analysis companion. Migration0219 is additive; all fifteen incoming
 mandatory native registrations remain unchanged pending root's additive registration.
 
-Local implementation validation is in progress. Earlier targeted and native runs
-are retained with their failures and corrections in the audit evidence directory;
-the final combined proof will be recorded against the immutable implementation
-commit. No production migration, provider request, host or capital action occurred.
+Author validation is complete within this bounded local scope. The final native
+run on clean `602d30c39307052f10a966e10a62a2abe4f74231` passed 323 tests
+in 17 suites with zero skips: all fifteen incoming mandatory suites, the new
+34-case recorded-analysis suite, and the existing canonical PIT lineage companion.
+The existing fifteen-suite executed-proof guard passed. All220 migrations were
+applied to a fresh isolated database; teardown found zero sessions, injected fault
+triggers/functions or disabled new guards. Evidence is in audit
+`evidence/dee-1121/combined-1790434381914.*`.
+
+Final `110909b564e2f8ffe1058adf18dad2c0dfe3d45a` changes only a test helper's
+TypeScript environment annotation after two typecheck diagnostics; emitted
+JavaScript is identical to602, and all production/native-test bodies are unchanged.
+No native run is relabeled as110909. Fresh 108 tests in eight focused unit files,
+zero skips, ran on the exact working bytes subsequently committed as110909;
+`author-units-post-type602-source.json` records the tested hashes. Final typecheck,
+scoped ESLint on fifteen changed TypeScript files and diff checks passed. The old
+`author-units-current` log is separate, not a claimed rerun on602. Earlier failures,
+corrections and the disclosed overwrite of an intermediate95-test raw unit artifact
+are recorded in `VALIDATION-HISTORY.md`; final native and regression RED artifacts
+are intact. No production migration, provider request, host or capital action occurred.
+
+The independent source/native review at602 found no bounded blocker; final
+annotation/document delta review and root full readiness, additive CI registration,
+accepted-base integration and exact-head CI/publication remain outstanding. This
+plan does not claim those root checks have run or that P10 is complete.
 
 Root source review identified that a post-acquisition singleton refusal could
 construct the shared global client before rejecting it. The entry now checks the
@@ -101,7 +122,7 @@ runs the fixed internal evaluator from its exact saved packet and compares the
 complete saved analytical output. A self-consistent seal alone is insufficient.
 An incompatible output refuses replay without rewriting history or selecting a
 new PIT/source/authority. The prior successful union proof remains separately
-attributed; the final union must run against this corrected implementation.
+attributed; the final323-test union ran against this corrected implementation.
 
 A second review regression used the existing trusted canonical writer to seed a
 valid self-sealed Observation with the consumed normalized digest but a different

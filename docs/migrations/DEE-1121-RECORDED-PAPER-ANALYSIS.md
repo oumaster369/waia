@@ -20,4 +20,8 @@ No backfill or old-receipt enrichment. A legacy v2-only key is an explicit refus
 No migration has been applied to production. All220 repository migrations applied
 to a new isolated local database after an initial draft SQL-expression error was
 corrected; the original failed-proof database and logs were preserved. Final
-combined native acceptance remains pending the immutable implementation freeze.
+combined native acceptance at602d30c3 passed323 tests in17 suites, including all34
+new recorded-analysis cases, with zero skips. Teardown found zero sessions, fault
+triggers/functions or disabled new guards. A later test-only annotation correction
+at110909b5 emits identical JavaScript; native evidence remains attributed to602.
+Production migration and root CI/current-base acceptance remain outstanding.
