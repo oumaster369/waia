@@ -45,6 +45,8 @@ on:
       - "lib/trader/runtime-v2/**"
       - "lib/trader/knowledge/navigator/**"
       - "tests/integration/postgres-runtime-authority-v2.test.ts"
+      - "tests/integration/postgres-noncapital-cycle-owner-v2.test.ts"
+      - "tests/helpers/noncapital-cycle-owner-process.ts"
       - "tests/unit/postgres-capital-proof-guard.test.ts"
       - "lib/trader/execution/v2/**"
       - "lib/trader/risk/v2/**"
