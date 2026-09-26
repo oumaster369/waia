@@ -59,6 +59,13 @@ export const CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1 = {
     consumer: "lib/trader/mi/canonical-pit-service-postgres.ts",
     disposition: "SAME_CANONICALIZER_PIT_CUTOFF_REQUIRED",
   },
+  recordedNoncapitalReplay: {
+    producer: "lib/trader/paper/durable-noncapital/normalize-mandatory-packet-v1.ts",
+    boundary: "lib/trader/paper/durable-noncapital/repository-postgres-v1.ts",
+    receiptTypeConsumer: "lib/trader/paper/durable-noncapital/recorded-analysis-v1.ts",
+    consumer: "lib/trader/mi/canonical-pit-service-postgres.ts",
+    disposition: "PERSISTED_OUTCOME_REPLAY_NO_ANALYTICAL_AUTHORITY",
+  },
   persistence: {
     consumer: "lib/trader/mi/canonical-pit-repository-postgres.ts",
     disposition: "SERVICE_ONLY_APPEND_ONLY",

@@ -109,8 +109,25 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
       .map(repoRelative);
     expect(serviceImporters).toEqual([
       "lib/trader/market-data/replay/canonical-pit-replay.ts",
+      "lib/trader/paper/durable-noncapital/recorded-analysis-v1.ts",
+      "lib/trader/paper/durable-noncapital/repository-postgres-v1.ts",
       "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts",
     ]);
+
+    const recordedReplay = readFileSync(
+      join(root, CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.recordedNoncapitalReplay.boundary),
+      "utf8",
+    );
+    expect(recordedReplay).toContain("readCanonicalPitObservationWithinHeldTransactionV1Postgres");
+    expect(recordedReplay).toContain("hasCanonicalGatewayPitReceiptContentV1");
+    expect(recordedReplay).not.toContain("canonical-pit-repository-postgres");
+    const recordedTypes = readFileSync(
+      join(root, CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.recordedNoncapitalReplay.receiptTypeConsumer),
+      "utf8",
+    );
+    expect(recordedTypes).toContain('import type { CanonicalGatewayPitReceiptV1 }');
+    expect(CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.recordedNoncapitalReplay.disposition)
+      .toBe("PERSISTED_OUTCOME_REPLAY_NO_ANALYTICAL_AUTHORITY");
 
     const downstreamLeaks = sources
       .map(repoRelative)

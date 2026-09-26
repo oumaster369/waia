@@ -4,6 +4,7 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
+  buildCanonicalGatewayPitReceiptV1,
   persistCanonicalAvailableGatewayWithinTransactionV1Postgres,
   persistCanonicalAvailableGatewayV1Postgres,
   persistCanonicalGatewayOutcomeV1Postgres,
@@ -18,7 +19,20 @@ import {
   type PreparedCanonicalPitAttemptV1,
 } from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
 import type { NormalizedObservation } from "@/lib/trader/market-data/observation-types";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+
+// Type-only receipt shape for consumers; repository writes stay private to this service.
+export type { CanonicalGatewayPitReceiptV1 };
+
+/**
+ * Canonical content consistency only, not persisted-source authenticity or authority.
+ * Preserve the existing builder's validation/exception behavior. Callers must still
+ * verify exact tenant-scoped persisted receipt, observation, source and trust bodies.
+ */
+export function hasCanonicalGatewayPitReceiptContentV1(receipt: CanonicalGatewayPitReceiptV1): boolean {
+  return canonicalJsonString(buildCanonicalGatewayPitReceiptV1(receipt)) === canonicalJsonString(receipt);
+}
 
 export type CanonicalPitServiceResultV1 = {
   attempt: PreparedCanonicalPitAttemptV1;

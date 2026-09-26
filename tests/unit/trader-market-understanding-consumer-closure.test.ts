@@ -151,6 +151,12 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
       expect(read(entry.path), `${entry.path}:${entry.symbol}`).toContain(entry.symbol);
       expect(entry.createsCapitalAuthority).toBe(false);
     }
+    expect(MARKET_UNDERSTANDING_INDIRECT_CONSUMERS_V1.find(
+      entry => entry.path === "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
+    )).toMatchObject({
+      disposition: "OBSERVATIONAL_LEGACY_RESULT_NO_EXACT_AUTHORITY",
+      createsCapitalAuthority: false,
+    });
     for (const entry of MARKET_UNDERSTANDING_EXPORT_AND_PERSISTENCE_V1) {
       expect(existsSync(join(ROOT, entry.path)), entry.path).toBe(true);
     }

@@ -37,6 +37,7 @@ export type InformationSufficiencyConsumerDispositionV2 =
   | "GATED_COMPONENT_CONSTRUCTION"
   | "GATED_PERSISTENCE"
   | "LOW_LEVEL_READ_ONLY_COMPLETENESS"
+  | "OBSERVATIONAL_ONLY_NO_AUTHORITY"
   | "EXCLUDED_RESERVED_LIVE_UNGATED"
   | "EXPORT_ONLY";
 
@@ -53,6 +54,13 @@ export type InformationSufficiencyConsumerInventoryEntryV2 = Readonly<{
  * Wrappers remain explicit so a new importer cannot silently inherit authority.
  */
 export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
+  {
+    path: "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
+    symbols: ["runEvaluationCycle", "evaluateRecordedAnalysis", "UNEXPECTED_ANALYTICAL_AUTHORITY", "OBSERVATIONAL_ONLY"],
+    imports: ["RUN_EVALUATION_CYCLE"],
+    disposition: "OBSERVATIONAL_ONLY_NO_AUTHORITY",
+    authorityPurpose: "NONE",
+  },
   {
     path: "lib/trader/historical-simulation-v2/production-first-cycle-bootstrap-v2.ts",
     symbols: ["runEvaluationCycle", "informationSufficiencyAuthority"],
@@ -423,6 +431,7 @@ export function auditInformationSufficiencyConsumerInventoryV2(): string[] {
     } else if (
       entry.disposition === "EXPORT_ONLY" ||
       entry.disposition === "LOW_LEVEL_READ_ONLY_COMPLETENESS" ||
+      entry.disposition === "OBSERVATIONAL_ONLY_NO_AUTHORITY" ||
       entry.disposition === "EXCLUDED_RESERVED_LIVE_UNGATED" ||
       entry.disposition === "RUN_BACKTEST_TYPE_ONLY"
     ) {

@@ -4654,6 +4654,36 @@ export const traderRuntimeNoncapitalCyclesV2 = pgTable("trader_runtime_noncapita
 }, t => [primaryKey({ name: "trader_runtime_noncapital_cycles_v2_pk",
   columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.pitAnchor] })]);
 
+/** DEE-1121: immutable observational packets; none of these rows grant trading authority. */
+function recordedAnalysisColumns() {
+  return { organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    sessionId: text("session_id").notNull(), contentDigest: text("content_digest").notNull(),
+    bodyJson: text("body_json").notNull(), runtimeInstanceId: text("runtime_instance_id").notNull(),
+    leaseEpoch: integer("lease_epoch").notNull(), leaseContentDigest: text("lease_content_digest").notNull()
+      .references(() => traderRuntimeControlLeaseEpochHistoryV2.contentDigest) };
+}
+export const traderRecordedAnalysisSessionsV1 = pgTable("trader_recorded_analysis_sessions_v1", {
+  ...recordedAnalysisColumns(),
+}, t => [primaryKey({ columns: [t.organizationId, t.sessionId] }), unique().on(t.organizationId, t.sessionId, t.contentDigest)]);
+export const traderRecordedAnalysisPacketsV1 = pgTable("trader_recorded_analysis_packets_v1", {
+  ...recordedAnalysisColumns(), sequence: bigint("sequence", { mode: "number" }).notNull(),
+  configDigest: text("config_digest").notNull(), analysisPitAnchor: timestamp("analysis_pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.sessionId, t.sequence] }),
+  unique().on(t.organizationId, t.sessionId, t.sequence, t.contentDigest),
+  foreignKey({ columns: [t.organizationId, t.sessionId, t.configDigest], foreignColumns:
+    [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest] })]);
+export const traderRecordedAnalysisCompanionsV1 = pgTable("trader_recorded_analysis_companions_v1", {
+  ...recordedAnalysisColumns(), sequence: bigint("sequence", { mode: "number" }).notNull(), packetDigest: text("packet_digest").notNull(),
+  accountId: text("account_id").notNull(), symbol: text("symbol").notNull(), barInterval: text("bar_interval").notNull(),
+  scheduledBarCloseTime: timestamp("scheduled_bar_close_time", { withTimezone: true, mode: "string" }).notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.sessionId, t.sequence] }),
+  unique().on(t.organizationId, t.accountId, t.symbol, t.barInterval, t.scheduledBarCloseTime),
+  foreignKey({ columns: [t.organizationId, t.sessionId, t.sequence, t.packetDigest], foreignColumns:
+    [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.scheduledBarCloseTime], foreignColumns:
+    [traderRuntimeNoncapitalCyclesV2.organizationId, traderRuntimeNoncapitalCyclesV2.accountId, traderRuntimeNoncapitalCyclesV2.symbol,
+      traderRuntimeNoncapitalCyclesV2.barInterval, traderRuntimeNoncapitalCyclesV2.pitAnchor] })]);
+
 /** Capital-ineligible, pre-holdout Historical Simulation V2 reason ledger. Not canonical Reality. */
 export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
   "trader_historical_simulation_reason_ledger_v2",

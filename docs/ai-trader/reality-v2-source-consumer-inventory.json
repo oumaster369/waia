@@ -114,8 +114,8 @@
       "placeOrder"
     ],
     "expectedFileCount": 140,
-    "sortedPathDigestHex": "07ab48e958c6dd66f479a726abdc08a9efe2b5c002cab3bbe004e5d0f05da7f7",
-    "sortedContentDigestHex": "a06f7bf5250868539a0f1d49c0e213a01ade71efd1161a9234174fc63afe208e"
+    "sortedPathDigestHex": "efcb30555d0322f78322222bfa51ef424bf2d6ca0b426c476b0c3cc731519f7a",
+    "sortedContentDigestHex": "640c8feb27128cafb7320ef13f777aeee5c20369901bdb8fbb9e2ae673270e47"
   },
   "consumerRules": [
     {
