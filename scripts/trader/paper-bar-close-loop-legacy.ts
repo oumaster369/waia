@@ -445,4 +445,3 @@ export async function runLegacyPaperBarCloseLoop(): Promise<void> {
     `[trader:paper-loop] stopped cyclesRun=${result.cyclesRun} aborted=${result.aborted}`,
   );
 }
-
