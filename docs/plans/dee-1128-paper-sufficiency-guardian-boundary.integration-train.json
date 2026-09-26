@@ -1,7 +1,7 @@
 {
   "schemaVersion": "waia-trader-integration-train/v1",
   "integrationIssue": "DEE-1128",
-  "status": "admitted",
+  "status": "frozen",
   "riskTier": "T3",
   "humanGatePolicy": "t3-scope-preauthorized",
   "maxConcurrentImplementationTasks": 2,
@@ -10,7 +10,7 @@
   "includedChildren": [
     {
       "issue": "DEE-1118",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Import the reviewed required FAIL_UNRESOLVED contradiction veto, preserving optional/context/RECORD_ONLY/REQUIRE_AGREEMENT semantics and exact old-receipt replay refusal.",
       "dependencies": [],
@@ -81,11 +81,31 @@
         ],
         "patchSha256": "923a0e7b3cf1635b4073cd7f394971a9f1a15acb065a62946fa763098cd7406d",
         "overlapWithCurrentBase": []
-      }
+      },
+      "actualFiles": [
+        "docs/plans/dee-1118-sufficiency-contradiction-veto.md",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+        "tests/fixtures/sufficiency/dee1118-before-fix.json",
+        "tests/helpers/sufficiency-contradiction.ts",
+        "tests/unit/trader-sufficiency-contradiction-veto.test.ts"
+      ],
+      "integratedCommits": [
+        "cc0c54dd9b2d5e6c9fc69881b27cffb7279e7cc2"
+      ],
+      "tests": [
+        "pnpm test --run --no-file-parallelism tests/unit/trader-sufficiency-contradiction-veto.test.ts tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/integration/trader-information-inquiry-runtime.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-recorded-paper-analysis-v1.test.ts tests/unit/trader-durable-noncapital-cli.test.ts --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/parallel-runtime-owner/dee1128/wave1-results.json",
+        "Full local lint/typecheck/build/canon/governance/Execution and Reality graph/diff PASS at72609d445d6affe7c2ee42b655d7ea535d6f53e9."
+      ],
+      "acceptanceEvidence": [
+        "Fresh post-admission cumulative 199/14, zero skipped, exact cc0c54dd9b2d5e6c9fc69881b27cffb7279e7cc2; raw receipt/results in parallel-runtime-owner/dee1128/wave1-*.json.",
+        "Independent M01 current mapped-commit/source review PASS; milestone-audits/M01/review-DEE1128-9d2a9776.md SHA256 a23171058784bfd53d6222fdf24f6e6b1012d673d755fbc94a00fd3f6eaa72c2. Historical child authorship/reviews remain separately attributed.",
+        "Fresh local PG16.14 native400/20 mandatory plus strict guard and separate sufficiency4/1 PASS at72609d44;220 exact migrations and clean fixture restoration. Separate canonical3 billing/2 payment/4 PG17 lanes preserved, not locally rerun.",
+        "Twelve historical nonshared child and108 incoming nonshared blobs exact; four shared adaptations only and19-path closure. Final metadata delta, root preflight and current-head CI remain required."
+      ]
     },
     {
       "issue": "DEE-1119",
-      "deliveryStatus": "planned",
+      "deliveryStatus": "delivered",
       "blocked": false,
       "scope": "Import the reviewed exact account/instrument Guardian batch checks and unrelated trailing-state preservation, preserve legacy Execution refusal, add the real paper caller composition assertion, and adapt only the four declared current-base inventory/proof surfaces.",
       "dependencies": [
@@ -209,7 +229,34 @@
           "scripts/postgres-validation/assert-capital-test-results.mjs",
           "tests/unit/postgres-capital-proof-guard.test.ts"
         ]
-      }
+      },
+      "actualFiles": [
+        ".github/workflows/postgres-integration.yml",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "docs/plans/dee-1119-guardian-observation-scope.md",
+        "lib/trader/guardian/evaluate-position-guardian.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "scripts/postgres-validation/assert-capital-test-results.mjs",
+        "tests/helpers/guardian-observation-scope-fixture.ts",
+        "tests/integration/postgres-guardian-observation-scope.test.ts",
+        "tests/unit/postgres-capital-proof-guard.test.ts",
+        "tests/unit/trader-guardian-evaluate.test.ts",
+        "tests/unit/trader-guardian-observation-scope.test.ts",
+        "tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts"
+      ],
+      "integratedCommits": [
+        "72609d445d6affe7c2ee42b655d7ea535d6f53e9"
+      ],
+      "tests": [
+        "pnpm test --run --no-file-parallelism tests/unit/trader-sufficiency-contradiction-veto.test.ts tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/integration/trader-information-inquiry-runtime.test.ts tests/unit/trader-guardian-observation-scope.test.ts tests/unit/trader-guardian-evaluate.test.ts tests/unit/trader-guardian-exit-intelligence.test.ts tests/unit/trader-m9-oversell-regression.test.ts tests/unit/trader-paper-cycle-runner.test.ts tests/unit/trader-exits-exit-plan-builder.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-reality-v2-consumer-graph.test.ts tests/unit/trader-execution-v2-consumer-graph.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-recorded-paper-analysis-v1.test.ts tests/unit/trader-durable-noncapital-cli.test.ts --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/parallel-runtime-owner/dee1128/wave2-results.json",
+        "Full local lint/typecheck/build/canon/governance/Execution and Reality graph/diff PASS at72609d445d6affe7c2ee42b655d7ea535d6f53e9."
+      ],
+      "acceptanceEvidence": [
+        "Fresh post-admission cumulative 320/24, zero skipped, exact 72609d445d6affe7c2ee42b655d7ea535d6f53e9; raw receipt/results in parallel-runtime-owner/dee1128/wave2-*.json.",
+        "Independent M01 current mapped-commit/source review PASS; milestone-audits/M01/review-DEE1128-9d2a9776.md SHA256 a23171058784bfd53d6222fdf24f6e6b1012d673d755fbc94a00fd3f6eaa72c2. Historical child authorship/reviews remain separately attributed.",
+        "Fresh local PG16.14 native400/20 mandatory plus strict guard and separate sufficiency4/1 PASS at72609d44;220 exact migrations and clean fixture restoration. Separate canonical3 billing/2 payment/4 PG17 lanes preserved, not locally rerun.",
+        "Twelve historical nonshared child and108 incoming nonshared blobs exact; four shared adaptations only and19-path closure. Final metadata delta, root preflight and current-head CI remain required."
+      ]
     }
   ],
   "deferredChildren": [],
@@ -223,8 +270,101 @@
       "reviewedPreparationFreezeSha256": "41b6d0c0a499de2b7a0b8a5f4bf4d66de3514025c98124356205f088c7a10f55",
       "noImportsBeforeValidatedCommitAndRootRelease": true
     },
-    "fullDiffFrozen": false,
-    "finalAdversarialReviewRequired": true
+    "fullDiffFrozen": true,
+    "finalAdversarialReviewRequired": true,
+    "admissionReviews": [
+      {
+        "issue": "DEE-1118",
+        "status": "pass",
+        "reviewer": "M01 independent current-source complete-diff review",
+        "reviewedCommits": [
+          "cc0c54dd9b2d5e6c9fc69881b27cffb7279e7cc2"
+        ],
+        "reviewedFiles": [
+          "docs/plans/dee-1118-sufficiency-contradiction-veto.md",
+          "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+          "tests/fixtures/sufficiency/dee1118-before-fix.json",
+          "tests/helpers/sufficiency-contradiction.ts",
+          "tests/unit/trader-sufficiency-contradiction-veto.test.ts"
+        ],
+        "report": "milestone-audits/M01/review-DEE1128-9d2a9776.md",
+        "reportSha256": "a23171058784bfd53d6222fdf24f6e6b1012d673d755fbc94a00fd3f6eaa72c2",
+        "limits": "Current-source bounded diff review; final metadata and authoritative CI remain separate."
+      },
+      {
+        "issue": "DEE-1119",
+        "status": "pass",
+        "reviewer": "M01 independent current-source complete-diff review",
+        "reviewedCommits": [
+          "72609d445d6affe7c2ee42b655d7ea535d6f53e9"
+        ],
+        "reviewedFiles": [
+          ".github/workflows/postgres-integration.yml",
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "docs/plans/dee-1119-guardian-observation-scope.md",
+          "lib/trader/guardian/evaluate-position-guardian.ts",
+          "lib/trader/paper/paper-cycle-runner.ts",
+          "scripts/postgres-validation/assert-capital-test-results.mjs",
+          "tests/helpers/guardian-observation-scope-fixture.ts",
+          "tests/integration/postgres-guardian-observation-scope.test.ts",
+          "tests/unit/postgres-capital-proof-guard.test.ts",
+          "tests/unit/trader-guardian-evaluate.test.ts",
+          "tests/unit/trader-guardian-observation-scope.test.ts",
+          "tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts"
+        ],
+        "report": "milestone-audits/M01/review-DEE1128-9d2a9776.md",
+        "reportSha256": "a23171058784bfd53d6222fdf24f6e6b1012d673d755fbc94a00fd3f6eaa72c2",
+        "limits": "Current-source bounded diff review; final metadata and authoritative CI remain separate."
+      }
+    ],
+    "cumulativeChecks": [
+      {
+        "afterIssue": "DEE-1118",
+        "status": "pass",
+        "head": "cc0c54dd9b2d5e6c9fc69881b27cffb7279e7cc2",
+        "commands": [
+          "pnpm test --run --no-file-parallelism tests/unit/trader-sufficiency-contradiction-veto.test.ts tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/integration/trader-information-inquiry-runtime.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-recorded-paper-analysis-v1.test.ts tests/unit/trader-durable-noncapital-cli.test.ts --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/parallel-runtime-owner/dee1128/wave1-results.json"
+        ],
+        "result": "199/14 passed, zero skipped",
+        "receipt": "parallel-runtime-owner/dee1128/wave1-receipt.json"
+      },
+      {
+        "afterIssue": "DEE-1119",
+        "status": "pass",
+        "head": "72609d445d6affe7c2ee42b655d7ea535d6f53e9",
+        "commands": [
+          "pnpm test --run --no-file-parallelism tests/unit/trader-sufficiency-contradiction-veto.test.ts tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/integration/trader-information-inquiry-runtime.test.ts tests/unit/trader-guardian-observation-scope.test.ts tests/unit/trader-guardian-evaluate.test.ts tests/unit/trader-guardian-exit-intelligence.test.ts tests/unit/trader-m9-oversell-regression.test.ts tests/unit/trader-paper-cycle-runner.test.ts tests/unit/trader-exits-exit-plan-builder.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-reality-v2-consumer-graph.test.ts tests/unit/trader-execution-v2-consumer-graph.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-recorded-paper-analysis-v1.test.ts tests/unit/trader-durable-noncapital-cli.test.ts --reporter=default --reporter=json --outputFile=/Users/legco/.codex/.chatgpt-projects/g-p-6a24121e716081918e4c8aa6e044a7dd/audit-ai-trader-full-2026-09-25/parallel-runtime-owner/dee1128/wave2-results.json"
+        ],
+        "result": "320/24 passed, zero skipped",
+        "receipt": "parallel-runtime-owner/dee1128/wave2-receipt.json"
+      }
+    ],
+    "preImplementationAdmission": {
+      "status": "pass",
+      "manifestCommit": "90e5b97557b569ca91661d76f7f949377e24e46d",
+      "manifestPath": "docs/plans/dee-1128-paper-sufficiency-guardian-boundary.integration-train.json",
+      "manifestDigest": "84a5e81609528d8658f33aee83a458df4c80158976804d218d26271d239bc0a1",
+      "reviewer": "Root independently verified actual two-path admission and validator PASS before releasing imports; M01 current-base design and later ancestry review are separately pinned."
+    },
+    "localProof": {
+      "head": "72609d445d6affe7c2ee42b655d7ea535d6f53e9",
+      "mandatoryNative": {
+        "files": 20,
+        "passed": 400,
+        "skipped": 0,
+        "executedGuard": "pass"
+      },
+      "separateSufficiencyCompanion": {
+        "files": 1,
+        "passed": 4,
+        "skipped": 0
+      },
+      "fullReadinessChecks": 8,
+      "sourceManifest": "parallel-runtime-owner/dee1128/source-freeze-72609d44.json",
+      "artifactManifest": "parallel-runtime-owner/dee1128/source-proof-artifacts.json",
+      "resourceDisposition": "All native/heavy processes and DB clients ended; grants released.",
+      "limits": "Current-source local proof only. Isolated precommit13/1 has no separate executed-byte pin; the same13 cases are repeated in72609d cumulative320/24. Final metadata review/current-head CI/root merge admission remain separate."
+    }
   },
   "provenance": {
     "proposedAcceptedBase": "9d2a97768d34738a412f6a02a6dd31b35fbe2ef6",
@@ -303,5 +443,5 @@
     ]
   },
   "reviewabilityRationale": "One caller-level paper boundary, two small existing production fixes, no schema or effects; original1439 changed lines include337 plans and240 frozen receipt. New composition test plus batch metadata and exact current proof/inventory adaptation require explicit final size and full independent review. Split if the exact joint acceptance cannot remain bounded.",
-  "baseReservation": "Root reserves accepted9d2a through train merge. New branch has only two metadata files. No imports until valid two-file admission is committed and root releases the import barrier."
+  "baseReservation": "Root reserves accepted9d2a through train merge. Metadata-only admission90e5 validated before root import-barrier release; mapped cc0c54 and72609d imports follow. Stop if actual PR base advances beyond admission ancestry."
 }
