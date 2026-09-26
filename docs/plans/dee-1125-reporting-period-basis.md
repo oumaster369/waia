@@ -23,10 +23,10 @@ state:
   remainingWorkPackages: [WP-1]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 68cb284730870617f5a3f952e7c1546b813d8465
-  lastValidationAt: "2026-09-26T17:11:53Z"
+  lastValidatedGitSha: 2df4df9591e69fe191451d1a6383c7edd5e6eef8
+  lastValidationAt: "2026-09-26T21:34:53.959763+00:00"
   blockedReason: null
-  nextAction: "Independent exact-snapshot review, then root accepted-base integration, mandatory CI registration and full readiness; preserve fresh merged migration-order proof."
+  nextAction: "Independent final current-base source/evidence review, then controller rendered PR preflight and publication; authoritative exact-head CI and serialized merge remain pending."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -277,3 +277,21 @@ Only our unmerged0220 journal entry changes index219→220 after accepted0219; i
 Correct prior proposal prose: the inherited limited-role fixture grants INSERT **and UPDATE** on the new basis table; its unchanged append-only trigger still refuses UPDATE. This is not a change to grants or trigger semantics.
 
 Source preservation records both binary patch directions outside explicitly resolved shared files and the exact shared dispositions. Scoped tests/lint may run first. After executable source freeze, controller grants sole local PostgreSQL54329 for a brand NEW isolated database, full ordered221 migrations and20 native suites with zero skipped; databases already carrying0220 must never be reused to establish0219. Full build/typecheck/readiness waits for the controller's heavy-resource release. All old failures and executed proof identities remain preserved; current integration tests and full readiness are still pending at this plan commit. No new financial policy, economic producer, live/provider/production/C3 operation, publication or source qualification is included.
+
+
+## Accepted-main integration proof — executed at2df4df95
+
+Plan-first4aa82619 normally merged accepted `9d2a97768d34738a412f6a02a6dd31b35fbe2ef6` into executable `2df4df9591e69fe191451d1a6383c7edd5e6eef8`. All16 author-only and57 incoming-only files preserve exact blobs and both complete binary patch directions. Eight shared files preserve additive schema blocks, all prior migration identities, exact FHV compatibility, ordered Forecast extras and the mandatory test/proof unions. Five actual conflicts were bookkeeping-only and their original contents are retained. An initial evidence-observer assertion incorrectly compared whole Git diffs for a shared schema (different blob IDs/hunk positions); its corrected proof compares exact inserted blocks and both reconstructed parent contents. No schema/source change followed that observer correction.
+
+Own0220 SQL remains SHA256 `3fc8e62f8d806667935f0f0135f53727d646535bcbcf14a74ddb401d7ad94132`. Accepted0219 remains SHA256 `73b2dcf9d46cdfc19f77f61bd021d584fb2d8a534be05ea7e24687dcc2ad0eb6`. The current journal has221 ordered entries, with only our previously unmerged0220 index changed219→220. FHV retains required207 and the same required tables; Forecast retains148. Full221/hash/idx/when/tag/unknown-next negatives all pass.
+
+Executed acceptance at the exact source above:
+
+- **433 PASS /20 native suites /0 skipped**, with the actual strict20-suite result validator. NEW isolated local PostgreSQL16.14 `waia_dee1121_dee1125_9d2a_author` began with zero public tables, then applied all221 migrations. Every applied timestamp and SQL SHA256 matches the frozen journal/source. This database uses the existing recorded-analysis fixture's explicit local namespace; no guard was changed.
+- The initial fresh `waia_dee1125_9d2a_author` also applied221, but its combined run had399 PASS/34 skipped because the inherited recorded-analysis fixture rejected that unsupported local name before setup with `ISOLATED_LOOPBACK_REQUIRED`. The failed raw log/results and clean teardown remain retained. The successful run used another NEW database, never a registry repair or old0220 database.
+- Native evidence preserves actual basis/source replay, rollback, exact scope, read-only/RR behavior, source-writer contention, restart and all incoming capital companions. Teardown reports zero other sessions, disabled public user triggers, injected basis/delivery/live/recorded-analysis faults, temporary basis roles and browser basis grants; basisRLS remains enabled.
+- **357 PASS /31 scoped files /0 skipped**: original18 billing/basis companions plus relevant migration, strict proof, graph and closure controls. Earlier focused58/3 passed against identical staged bytes before the merge commit; the357/31 result is the current committed-source run.
+- Full typecheck, lint, build, canon, governance, Execution graph, Reality graph and diff check all exit0. Lint reports324 existing warnings/zero errors. Actual Reality graph remains155 sources/140 consumers/26 connector references with unchanged incoming pins/rules; it is not an inventory of every Reality reader.
+- Mandatory registrations remain20capital,3canonicalbilling,2payment and4PG17-observation. The latter supported profiles and all authoritative PR checks remain separate current-head CI gates; localPG16 proof is not relabeledPG17.
+
+Raw commands, test assertions, source manifests, conflicts, both patch directions, failures, migration identities and cleanup are preserved under external audit `evidence/dee-1125/accepted-base-9d2a9776/`. Final metadata changes only this plan; executable validation remains attributed to2df4. Resources were released after completion. Controller publication, independent final review and exact-head CI remain pending. No economic/source qualification, financial methodology, prior-consumption guarantee, automatic finality, real provider/production/C3/live action or fullP08 readiness is claimed.
