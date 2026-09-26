@@ -23,10 +23,10 @@ state:
   remainingWorkPackages: [WP-1]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 68cb284730870617f5a3f952e7c1546b813d8465
+  lastValidationAt: "2026-09-26T17:11:53Z"
   blockedReason: null
-  nextAction: "Run final author snapshot native matrix and inherited companions; independent review and root integration/readiness remain pending."
+  nextAction: "Independent exact-snapshot review, then root accepted-base integration, mandatory CI registration and full readiness; preserve fresh merged migration-order proof."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -242,3 +242,18 @@ Dependencies: DEE1120 is merged and accepted; pending1121 is migration-order coo
 The actual two public PostgreSQL close owners now retain the admitted full receipt/settlements, actual CLOSED payload, unchanged dependency proof and exact source/truth/event/projection read set through one mandatory private repository decorator. The reader owns a read-only repeatable snapshot, admits exact scope before mapping, bounds stored bodies before transfer, and replays the saved identities without current-frontier substitution. The administrator GET route owns ordinary authorization/cleanup and distinguishes absent evidence from malformed evidence and unexpected storage failures. Economic attribution, completeness, prior consumption and finality proof remain unchanged.
 
 Author scoped validation so far: 83 tests / 4 files passed, selected changed-file ESLint passed, typecheck passed. Native development runs reached 35 passing cases on a fresh author-only 220-entry migration chain; five further SQL storage controls have been added and await the final immutable-source run with all 16 inherited mandatory native suites. These are development results, not final integration/CI acceptance. Original fixture errors (audit observer column, unsupported test matcher, inert SQLite query shape, oversize source fixture constraint/index and a shared Date fixture) are retained separately in author evidence; they are not production defect claims. No production or provider action occurred.
+
+## Author acceptance at implementation snapshot 68cb2847
+
+Executed source: `68cb284730870617f5a3f952e7c1546b813d8465`, clean before/after native execution; accepted base `56ee65f00f3b19858d57ea8f3947d2867822e9ac`. This final documentation update changes no production, migration or test bytes.
+
+- Fresh isolated local `waia_dee1125_author_68cb2847_release`, PostgreSQL on loopback54329: all **220 migrations** applied from an empty public schema. The chain retains0000–0218 plus this issue's0220/idx219/when1780000000220; no pending0219 was manufactured.
+- **355 native tests /17 suites PASS,0 skipped**: all16 inherited mandatory suites (315 cases) plus40 new retention/replay cases. The existing executed-proof validator passed for every inherited suite; the author receipt independently checks all17 suites/all assertions passed. Root still must add the new mandatory CI registration and negative proof-guard tests.
+- **259 scoped unit tests /18 files PASS**: new basis/HTTP/header/capacity tests, original1120 matching, receipt integrity/lookup, period/lifecycle/draft, fee/HWM/history and both migration identity companions. Selected changed-file ESLint and typecheck passed; no local full build/global unit run was performed by the author.
+- Cleanup readback records0 sessions,0 disabled triggers,0 temporary fault triggers/functions/roles,0 browser grants on the new table; its RLS remains enabled. Native connections and test processes ended; sole54329 grant was released.
+
+The40 native cases cover both actual public close paths, positive/loss/net-zero controls, preserved existing OPEN disclosure and actor, child reconstruction, source-only rows beyond event time and later Truth/events, foreign scope/literal account, real held-transaction refusal, RR/read-only/input capture, real admin handler,5 actual failure points plus preservation of existing OPEN/HWM, same-account competition and independent-account progress,675 held through basis/audit/DRAFT while a real source writer blocks, internal identical/conflicting insert behavior with ordinary public repeat refusal, SQL duplicated-field/OPEN rejection, ACL and independent RLS defenses, bounded body/source/projection loading, privileged reseal corruption and an RR snapshot stable across a concurrent committed tamper. Original1120's33-case native suite remains passing.
+
+Evidence is retained outside Git under the audit's `evidence/dee-1125/`, with immutable source/blob manifest, exact command/environment/database/migration identities, raw logs and JSON assertion reports. The first combined17-suite run omitted the existing required `WAIA_RELEASE_SHA` in its author runner, so14 Forecast tests correctly refused; all40 new cases passed in that run. That failure is preserved separately. The successful repeat binds declared release metadata to the actual clean68cb implementation SHA, matching existing CI convention; this is attribution metadata, not an independent binary authenticity claim. Earlier fixture/setup failures remain preserved.
+
+Author acceptance does not replace independent review, final current-base full readiness, canonical billing companions on their supported profile, new CI proof registration or authoritative PR checks. Any merged0219→0220 proof must use a NEW database; these author databases already carrying0220 must not be reused to apply the lower timestamp. Economic attribution/completeness/prior consumption remain `UNPROVEN`, fill finality remains operator verification, authority remains `NONE`, and fullP08 remains open. No venue/provider/production/C3/live action occurred.
