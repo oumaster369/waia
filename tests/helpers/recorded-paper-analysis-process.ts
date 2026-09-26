@@ -29,7 +29,7 @@ async function main() {
       symbol: input.symbol, "session-id": input.sessionId, "release-sha": input.releaseSha, "start-sequence": input.startSequence,
       "max-cycles": input.maxCycles, "max-packet-bytes": input.maxPacketBytes, "max-bars-per-interval": input.maxBarsPerInterval,
       "lease-duration-ms": input.leaseDurationMs }).map(([k, v]) => `--${k}=${v}`)];
-    const fixtureClient = postgres(url, { max: 1, connection: { application_name: "dee1121-fixture-clock", statement_timeout: "2000" } });
+    const fixtureClient = postgres(url, { max: 1, connection: { application_name: "dee1121-fixture-clock", statement_timeout: 2000 } });
     const fixtureDb = drizzle(fixtureClient, { schema });
     const original = HtxBarPollSource.prototype.fetchMandatoryEvaluationBundle;
     const clockBarriers: Awaited<ReturnType<typeof awaitRecordedBundleDatabaseClock>>[] = [];
