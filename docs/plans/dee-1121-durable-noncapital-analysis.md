@@ -15,7 +15,7 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
+  currentWorkPackage: WP-3
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3]
   prNumber: null
@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement the admitted source-to-restart noncapital vertical; native and independent acceptance remain required."
+  nextAction: "Finish frozen combined native proof and independent review; root owns broad readiness and publication."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -77,7 +77,37 @@ created. Missing gates remain missing.
 
 ## Validation status
 
-Plan-first commit only. No implementation, migration or acceptance test has run.
+The plan was committed first at `235d63636d6e982373ff4be7d3dff994cb26dd37`.
+The implementation now adds the explicit actual CLI branch, persisted full mandatory
+domain input, fixed ordinary evaluator, session/predecessor state, and atomic v2
+terminal plus analysis companion. Migration0219 is additive; all fifteen incoming
+mandatory native registrations remain unchanged pending root's additive registration.
+
+Local implementation validation is in progress. Earlier targeted and native runs
+are retained with their failures and corrections in the audit evidence directory;
+the final combined proof will be recorded against the immutable implementation
+commit. No production migration, provider request, host or capital action occurred.
+
+The native crash protocol distinguishes failure before COMMIT from loss of the
+client after COMMIT was submitted: the latter may leave neither completion row or
+both rows. Recovery must resolve the exact durable result without duplicates.
+It never promises rollback of a commit already accepted by PostgreSQL.
+
+The conservative evaluator runtime-import inventory and call-path review are
+recorded in the audit evidence. The fixed path pins ordinary MI configuration,
+registry order, recorded PIT/state and deterministic IDs; rejects the FHV timeline
+skip flag; supplies no telemetry sink, historical profile or admitted Forecast
+input. Inert controls verify replay without ambient UUID or wall-clock use. The
+inventory is not a claim that every imported historical or capital path executes.
+
+Explicit limits: a source summary receipt is not proof of every retained bar or
+new scientific qualification. Release metadata is not binary attestation. Source
+collection may leave unreferenced rows before packet publication. Deferred fences
+are transaction-time guards under ordinary deferred settings. Session collection
+is bounded, with no new daemon/renewal policy; no full P10 or live readiness claim.
+The exact GitHub native proof service uses waia_it/5432; tests admit it only with
+CI/integration/CLI flags and loopback, while local tests admit only the disposable
+waia_dee1121 database namespace with waia_validate/54329.
 Targeted unit/scoped lint are author-owned; native PostgreSQL requires an explicit
 exclusive resource grant. Root runs full readiness and exact-head CI.
 
