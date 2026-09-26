@@ -12,6 +12,8 @@ const requiredFiles = [
   "postgres-promotion-audit-atomicity.test.ts",
   "postgres-runtime-authority-v2.test.ts",
   "postgres-guardian-authority-v2.test.ts",
+  "postgres-forecast-v2-feedback-read-port.test.ts",
+  "postgres-forecast-v2-persistence.test.ts",
   "postgres-billing-period-command-atomicity.test.ts",
   "postgres-billing-invoice-command-atomicity.test.ts",
   "postgres-noncapital-cycle-owner-v2.test.ts",

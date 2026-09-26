@@ -101,6 +101,11 @@ on:
       - "tests/integration/postgres-historical-runner-least-privilege-v2.test.ts"
       - "tests/integration/postgres-predictive-package-storage-v1.test.ts"
       - "tests/integration/postgres-forecast-v2-persistence.test.ts"
+      - "tests/integration/postgres-forecast-v2-feedback-read-port.test.ts"
+      - "tests/helpers/forecast-v2-feedback-native-fixture.ts"
+      - "tests/helpers/forecast-v2-feedback-reader-process.ts"
+      - "lib/trader/intelligence/outcome-resolution/**"
+      - "lib/trader/knowledge/knowledge-confidence-update*"
       - "tests/integration/postgres-historical-dataset-registration-portable-v2.test.ts"
       - "tests/integration/historical-preparation-events-v2.test.ts"
       - "tests/integration/postgres-reserved-close-guard.test.ts"
@@ -160,6 +165,7 @@ jobs:
         env:
           WAIA_PG_INTEGRATION: "1"
           WAIA_TRADER_CLI: "1"
+          WAIA_POSTGRES_CLI: "1"
         run: |
           mkdir -p .tmp
           rm -f .tmp/capital-postgres-results.json
@@ -173,6 +179,8 @@ jobs:
             tests/integration/postgres-promotion-audit-atomicity.test.ts \
             tests/integration/postgres-runtime-authority-v2.test.ts \
             tests/integration/postgres-guardian-authority-v2.test.ts \
+            tests/integration/postgres-forecast-v2-feedback-read-port.test.ts \
+            tests/integration/postgres-forecast-v2-persistence.test.ts \
             tests/integration/postgres-billing-period-command-atomicity.test.ts \
             tests/integration/postgres-billing-invoice-command-atomicity.test.ts \
             tests/integration/postgres-noncapital-cycle-owner-v2.test.ts \
