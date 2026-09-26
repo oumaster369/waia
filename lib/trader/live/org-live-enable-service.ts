@@ -6,6 +6,8 @@ if (process.env.VITEST !== "true") {
 }
 
 import type { TraderOrgLiveEnableEventType } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { organizations } from "@/db/schema.postgres";
 import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { writeAuditLogPostgres, writeAuditLogSqlite } from "@/lib/waia-core/audit/write";
@@ -451,7 +453,7 @@ export function createSqliteOrgLiveEnableService(
   });
 }
 
-export function createPostgresOrgLiveEnableService(
+function createTransactionBoundPostgresOrgLiveEnableService(
   ex: PgExecutor,
   deps: { nowMs?: () => number } = {},
 ): OrgLiveEnableService {
@@ -474,4 +476,77 @@ export function createPostgresOrgLiveEnableService(
         },
       }),
   });
+}
+
+/** Root PostgreSQL boundary: every mutation owns its state/event/Core-audit transaction. */
+export function createPostgresOrgLiveEnableService(
+  db: WaiaPostgresDb,
+  deps: { nowMs?: () => number } = {},
+): OrgLiveEnableService {
+  const reads = createTransactionBoundPostgresOrgLiveEnableService(db, deps);
+
+  async function transition<T extends RequestOrgLiveEnableInput | OrgLiveEnableTransitionInput>(
+    actor: OrgLiveEnableActor,
+    context: OrgContext,
+    input: T,
+    invoke: (
+      service: OrgLiveEnableService,
+      actor: OrgLiveEnableActor,
+      context: OrgContext,
+      input: T,
+    ) => Promise<OrgLiveEnableView>,
+  ): Promise<OrgLiveEnableView> {
+    // Lock and execute the same captured identity even if the caller mutates its objects while waiting.
+    const scoped = requireOrgContext(context.organizationId);
+    const capturedActor = { ...actor };
+    const capturedInput = { ...input };
+    return db.transaction(
+      async (tx) => {
+        // The existing Core row is stable even before the first permission projection exists.
+        const rows = await tx
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(eq(organizations.id, scoped.organizationId))
+          .for("update");
+        if (!rows[0]) {
+          throw new OrgLiveEnableValidationError(
+            "ORG_LIVE_ENABLE_ORGANIZATION_NOT_FOUND",
+            "Organization does not exist",
+          );
+        }
+        return invoke(
+          createTransactionBoundPostgresOrgLiveEnableService(tx, deps),
+          capturedActor,
+          scoped,
+          capturedInput,
+        );
+      },
+      { isolationLevel: "read committed" },
+    );
+  }
+
+  return {
+    getState: reads.getState,
+    preview: reads.preview,
+    requestEnable: (actor, context, input) =>
+      transition(actor, context, input, (service, capturedActor, scoped, capturedInput) =>
+        service.requestEnable(capturedActor, scoped, capturedInput),
+      ),
+    confirmEnable: (actor, context, input) =>
+      transition(actor, context, input, (service, capturedActor, scoped, capturedInput) =>
+        service.confirmEnable(capturedActor, scoped, capturedInput),
+      ),
+    markEnabled: (actor, context, input) =>
+      transition(actor, context, input, (service, capturedActor, scoped, capturedInput) =>
+        service.markEnabled(capturedActor, scoped, capturedInput),
+      ),
+    disable: (actor, context, input) =>
+      transition(actor, context, input, (service, capturedActor, scoped, capturedInput) =>
+        service.disable(capturedActor, scoped, capturedInput),
+      ),
+    cancel: (actor, context, input) =>
+      transition(actor, context, input, (service, capturedActor, scoped, capturedInput) =>
+        service.cancel(capturedActor, scoped, capturedInput),
+      ),
+  };
 }
