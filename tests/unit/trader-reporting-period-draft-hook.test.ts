@@ -1,3 +1,4 @@
+import { createHistoricalSqliteLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
@@ -9,7 +10,6 @@ import { auditLogs, traderInvoices } from "@/db/schema";
 import {
   createSqliteDraftInvoiceService,
   createSqliteHwmLedgerService,
-  createSqliteReportingPeriodLifecycleService,
 } from "@/lib/trader/billing";
 import { listInvoicesByAccountSqlite } from "@/lib/trader/billing/invoice-repository-adapters";
 import { traderAuditActions } from "@/lib/trader/types";
@@ -63,7 +63,7 @@ describe("reporting period close draft hook (AT-E11 S5 runtime)", () => {
 
   async function openAndClosePeriod(realizedPnl: string) {
     const db = getDb();
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createHistoricalSqliteLifecycleFixture(db);
     const context = requireOrgContext(organizationId);
     const suffix = crypto.randomUUID().slice(0, 8);
 
@@ -126,7 +126,7 @@ describe("reporting period close draft hook (AT-E11 S5 runtime)", () => {
       effectiveAt: new Date("2026-02-01T00:00:00.000Z"),
     });
 
-    const lifecycle = createSqliteReportingPeriodLifecycleService(db);
+    const lifecycle = createHistoricalSqliteLifecycleFixture(db);
     await lifecycle.openReportingPeriod(context, {
       exchangeAccountId: accountId,
       periodStart: new Date("2026-02-01T00:00:00.000Z"),

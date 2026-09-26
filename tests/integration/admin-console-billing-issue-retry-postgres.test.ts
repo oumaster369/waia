@@ -1,3 +1,4 @@
+import { createHistoricalPostgresLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 /**
  * Opt-in: WAIA_PG_INTEGRATION=1 and DATABASE_URL_POSTGRES on an isolated local port.
  * Refuses port 54329. Does not call verifyHtrPostgresConnectionIdentity.
@@ -15,7 +16,6 @@ import {
   createPostgresDraftInvoiceService,
   createPostgresHwmLedgerService,
   createPostgresInvoiceIssuanceService,
-  createPostgresReportingPeriodLifecycleService,
 } from "@/lib/trader/billing";
 import { traderAuditActions } from "@/lib/trader/types";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -99,7 +99,7 @@ describe.skipIf(!url)("admin console billing issue retry after rollback", () => 
     try {
       const context = { ...requireOrgContext(orgId), userId: USER_ID };
       const hwm = createPostgresHwmLedgerService(runtime.db, {}, runtime.db);
-      const lifecycle = createPostgresReportingPeriodLifecycleService(runtime.db, {}, runtime.db);
+      const lifecycle = createHistoricalPostgresLifecycleFixture(runtime.db);
       const drafts = createPostgresDraftInvoiceService(runtime.db, {}, runtime.db);
       await hwm.bootstrapHwm(context, {
         exchangeAccountId,

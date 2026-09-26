@@ -45,6 +45,14 @@ on:
       - "tests/integration/postgres-guardian-authority-v2.test.ts"
       - "tests/integration/postgres-billing-period-command-atomicity.test.ts"
       - "tests/integration/postgres-billing-invoice-command-atomicity.test.ts"
+      - "tests/integration/postgres-billing-reality-dependencies.test.ts"
+      - "tests/integration/postgres-reporting-period-parity.test.ts"
+      - "tests/integration/postgres-invoice-issuance-parity.test.ts"
+      - "tests/helpers/billing-reality-close-process.ts"
+      - "tests/helpers/billing-reality-evidence.ts"
+      - "tests/helpers/billing-reality-postgres.ts"
+      - "tests/helpers/historical-billing-lifecycle-fixture.ts"
+      - "tests/unit/postgres-billing-parity-proof-guard.test.ts"
       - "lib/trader/runtime-authority/v2/**"
       - "lib/trader/runtime-v2/**"
       - "lib/trader/knowledge/navigator/**"
@@ -183,6 +191,7 @@ jobs:
             tests/integration/postgres-forecast-v2-persistence.test.ts \
             tests/integration/postgres-billing-period-command-atomicity.test.ts \
             tests/integration/postgres-billing-invoice-command-atomicity.test.ts \
+            tests/integration/postgres-billing-reality-dependencies.test.ts \
             tests/integration/postgres-noncapital-cycle-owner-v2.test.ts \
             tests/integration/postgres-org-live-enable-atomicity.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
@@ -460,5 +469,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Auth prelude (roles + auth.users) + apply Postgres migrations
         run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
-      - name: Billing idempotency on the CI validate identity
-        run: pnpm test --run tests/integration/admin-console-billing-idempotency-postgres.test.ts
+      - name: Billing parity and idempotency on the CI validate identity (no skipped proof)
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/billing-parity-postgres-results.json
+          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/billing-parity-postgres-results.json \
+            tests/integration/admin-console-billing-idempotency-postgres.test.ts \
+            tests/integration/postgres-reporting-period-parity.test.ts \
+            tests/integration/postgres-invoice-issuance-parity.test.ts
+          node scripts/postgres-validation/assert-billing-parity-test-results.mjs .tmp/billing-parity-postgres-results.json

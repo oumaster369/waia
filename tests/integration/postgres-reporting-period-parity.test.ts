@@ -1,3 +1,4 @@
+import { createHistoricalPostgresLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 /**
  * DEE-306 — Reporting period repository Postgres parity (opt-in).
  *
@@ -10,7 +11,6 @@ import postgres from "postgres";
 import { getPostgresDrizzle, resetPostgresSingletonForTests } from "@/db/postgres-client";
 import {
   createPostgresHwmLedgerService,
-  createPostgresReportingPeriodLifecycleService,
   ReportingPeriodAlreadyOpenError,
   ReportingPeriodNotOpenError,
   verifyReportingPeriodRecordDigest,
@@ -39,7 +39,7 @@ describe.skipIf(!integrationEnabled || !url)(
   "postgres reporting period lifecycle parity (DEE-306 S2)",
   () => {
     let orgA: string;
-    let service: ReturnType<typeof createPostgresReportingPeriodLifecycleService>;
+    let service: ReturnType<typeof createHistoricalPostgresLifecycleFixture>;
     let hwmService: ReturnType<typeof createPostgresHwmLedgerService>;
 
     async function cleanup(): Promise<void> {
@@ -64,7 +64,7 @@ describe.skipIf(!integrationEnabled || !url)(
       orgA = await seedHtrPostgresUser(url!, USER_A, "Reporting Period Postgres Parity");
 
       const db = getPostgresDrizzle();
-      service = createPostgresReportingPeriodLifecycleService(db, {}, db);
+      service = createHistoricalPostgresLifecycleFixture(db);
       hwmService = createPostgresHwmLedgerService(db, {}, db);
     });
 

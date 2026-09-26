@@ -1,3 +1,4 @@
+import { createHistoricalPostgresLifecycleFixture } from "@/tests/helpers/historical-billing-lifecycle-fixture";
 /** Opt-in disposable local PostgreSQL only; append-only synthetic evidence is retained. */
 import { randomUUID } from "node:crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -19,7 +20,6 @@ import { handleAdminConsoleInvoiceDetailGet } from "@/lib/trader/admin-console/h
 import {
   createPostgresDraftInvoiceService,
   createPostgresHwmLedgerService,
-  createPostgresReportingPeriodLifecycleService,
 } from "@/lib/trader/billing";
 import { billingV2PeriodCloseEvidence } from "@/tests/helpers/billing-v2-period-close-evidence";
 const url = process.env.DATABASE_URL_POSTGRES;
@@ -213,7 +213,7 @@ describe.skipIf(!enabled)("admin console safe workflows on Postgres", () => {
     const periodStart = new Date("2026-09-01T00:00:00Z");
     const periodEnd = new Date("2026-09-02T00:00:00Z");
     const hwm = createPostgresHwmLedgerService(db, {}, db);
-    const lifecycle = createPostgresReportingPeriodLifecycleService(db, {}, db);
+    const lifecycle = createHistoricalPostgresLifecycleFixture(db);
     const drafts = createPostgresDraftInvoiceService(db, {}, db);
     await hwm.bootstrapHwm(context, {
       exchangeAccountId: account,
