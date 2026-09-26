@@ -5,7 +5,7 @@ import {
 } from "@/lib/trader/billing/v2/closed-trade-settlement-v2";
 import { requireBillingV2NonEmpty } from "@/lib/trader/billing/v2/billing-v2-guards";
 import { BILLING_POLICY_V2_CURRENCY } from "@/lib/trader/billing/v2/billing-policy-v2";
-import type { TruthRecordV2 } from "@/lib/trader/reality/v2/contracts";
+import { validateTruthRecordV2, type TruthRecordV2 } from "@/lib/trader/reality/v2/contracts";
 import {
   addDecimal,
   formatDecimal,
@@ -93,6 +93,10 @@ function classifyRecords(input: LookupClosedTradeSettlementsFromRealityV2Input):
   const fills: FillRecord[] = [];
   const cashflows: CashflowRecord[] = [];
   for (const record of input.truthRecords) {
+    // Supplied arrays may bypass the persisted loader's content validation.
+    if (!validateTruthRecordV2(record)) {
+      throw new BillingCanonicalProfitAdmissionError("LOOKUP_INVALID_TRUTH_RECORD");
+    }
     if (record.organizationId !== input.organizationId || record.accountId !== input.accountId) {
       throw new BillingCanonicalProfitAdmissionError("LOOKUP_SCOPE_MISMATCH");
     }

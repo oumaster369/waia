@@ -1,6 +1,6 @@
 ---
 integrationIssue: DEE-1109
-integrationTitle: "Refuse billing calculations from truncated reporting history"
+integrationTitle: "Reject incomplete billing history and invalid Reality truth"
 parentIssue: DEE-638
 branch: dee-1109-billing-history-completeness
 riskTier: T3
@@ -15,22 +15,22 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1]
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Local readiness and independent review passed; publish and require all exact-head PR checks."
+  nextAction: "WP-2 focused tests passed; independently review and repeat readiness for the changed PR head."
 provenance:
   createdFrom: chat
   gapRegistry: null
   supersedes: null
 ---
 
-# DEE-1109 — complete history before billing calculations
+# DEE-1109 — billing input completeness and integrity
 
 ## Proven defect
 
@@ -92,10 +92,50 @@ pass with no skips. These are adjacent valid-path integration checks, not native
 proof of the200-row boundary or full financial-source qualification. Independent
 review passed on the production commit and the test-only follow-up without
 findings. The full unit suite and applicable checks remain required in PR CI.
+These WP-1 results preceded the WP-2 extension; they do not accept its changed
+PR head. Existing PR checks must run again against the final combined commit.
+
+## WP-2 — validate supplied Reality truth before billing lookup
+
+Independent probes on the same production base found that the exported lookup
+accepts a caller-supplied cashflow changed from1 to1000 under its original truth
+ID and content digest. The existing `validateTruthRecordV2` returns false, yet
+the lookup builds a new internally sealed settlement/receipt and assessment
+with net1000 and fee300. Persisted Reality's `mapTruth` already validates content;
+this defect is specifically the supplied-array boundary that bypasses that
+loader. The only found production helper caller currently omits canonical
+profit and refuses; no affected production invoice is established.
+
+Apply the existing Reality validator to every supplied truth record before
+reading its scope, markers, assertion or digest, including records the financial
+projection would otherwise ignore. Invalid content produces the stable
+`LOOKUP_INVALID_TRUTH_RECORD` reason before HWM or reporting effects. Do not
+repair or reseal invalid content. Correctly sealed scope, currency, provisional
+fill and attribution-marker errors retain their existing behavior.
+
+Acceptance covers cash, fee, denomination, direction, side, quantity, finality,
+truth ID, content digest, schema, source ID/digest/native identity and invalid
+runtime assertion edits. Valid JSON replay, reversed input order and output
+digests remain unchanged. A real reporting-bridge negative proves rejection
+before HWM read/bootstrap, period operations or fee computation.
+
+Original regression:18 failures /6 valid controls passed before the guard.
+Corrected24 cases plus six adjacent receipt, history, lookup and period suites
+pass107 tests across7 files. Independent before/after pure-builder probes retain
+the same valid settlement/receipt digests and economics; corrupted truth now
+refuses. The broader lifecycle/caller strategy/frontier behavior is intentionally
+unchanged and is not accepted as source authority by this test.
+
+The same-order synthetic buy/sell group is only a content-integrity fixture.
+Real distinct entry/exit lifecycle binding, persisted active Reality frontier,
+supersession/cashflow provenance, source conversion and finality remain open.
+Checking a self-consistent hash is not source authentication. No new matching,
+allocation, source-admission or settlement/finality rule is introduced.
 
 ## Validation and coordination
 
 Run `pnpm test --run tests/unit/trader-billing-history-completeness.test.ts`
+and `pnpm test --run tests/unit/trader-billing-reality-truth-integrity.test.ts`
 plus existing fee, period-close, HWM, draft and receipt tests. Root schedules
 native Postgres history/period checks and serializes lint, typecheck, build,
 canon, governance and PR preflight. All required exact-head PR CI must pass.
