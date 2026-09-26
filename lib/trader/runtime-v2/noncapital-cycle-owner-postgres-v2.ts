@@ -114,8 +114,9 @@ export async function completeRecordedAnalysisPostgresV1(
   check(holder.organizationId === session.organizationId, "TENANT_MISMATCH");
   const saved = await readRecordedAnalysis(pool, session, sequence);
   check(saved.packet, "PACKET_MISSING");
-  // Only this fixed evaluator can create a new command-owned result. Replay never re-evaluates.
-  const output = saved.companion ? null : evaluateRecordedAnalysis(saved.packet);
+  // Every explicit completion/replay verifies the fixed evaluator against the exact saved input.
+  // An incompatible evaluator result refuses replay; immutable history is never rewritten.
+  const output = evaluateRecordedAnalysis(saved.packet);
   return drizzle(pool, { schema: allSchema }).transaction(async tx => {
     const db = tx;
     await lockRuntimeOrganizationV2(tx, session.organizationId);
@@ -132,12 +133,13 @@ export async function completeRecordedAnalysisPostgresV1(
       eq(cycles.accountId, session.accountId), eq(cycles.symbol, session.symbol), eq(cycles.barInterval, "1m"),
       eq(cycles.pitAnchor, input.bar.barCloseTime))))[0];
     if (current.companion) {
+      check(digest(output) === digest(current.companion.output), "ANALYTICAL_REPLAY_CONFLICT");
       check(old && current.companion.canonicalReceiptDigest === old.contentDigest, "CANONICAL_RECEIPT_CONFLICT");
       const terminal = await commitRecordedNoncapitalWithinTransaction(tx, { organizationId: session.organizationId }, holder, input);
       check(terminal.receipt.contentDigest === current.companion.canonicalReceiptDigest, "CANONICAL_RECEIPT_CONFLICT");
       return { outcome: "REPLAYED" as const, packet, companion: current.companion, receipt: terminal.receipt };
     }
-    check(!old, "LEGACY_ONLY_OWNER_CONFLICT"); check(output, "COMPANION_MISSING");
+    check(!old, "LEGACY_ONLY_OWNER_CONFLICT");
     const terminal = await commitRecordedNoncapitalWithinTransaction(tx, { organizationId: session.organizationId }, holder, input);
     check(terminal.outcome === "COMMITTED", "LEGACY_ONLY_OWNER_CONFLICT");
     const companion = seal({ schemaVersion: ANALYSIS_CONTRACT, organizationId: session.organizationId, sessionId: session.sessionId,

@@ -96,6 +96,23 @@ ownership correction, not evidence of an observed open socket. Exported APIs kee
 typed operational results; the executable exits nonzero on any non-COMPLETE status
 so a stopped sequence range cannot look successful to shell automation.
 
+Independent review clarified E2: every explicit completion/replay invocation now
+runs the fixed internal evaluator from its exact saved packet and compares the
+complete saved analytical output. A self-consistent seal alone is insufficient.
+An incompatible output refuses replay without rewriting history or selecting a
+new PIT/source/authority. The prior successful union proof remains separately
+attributed; the final union must run against this corrected implementation.
+
+A second review regression used the existing trusted canonical writer to seed a
+valid self-sealed Observation with the consumed normalized digest but a different
+payload or ingest time. This is an adversarial trusted-writer setup, not an
+observed ordinary CLI or production incident. New packet publication/replay now
+compares AVAILABLE canonical payload, kind, subject, provider, event/availability/
+ingestion and trust anchor/revision to its own prepared normalized input. The
+existing writer, trust policy and honest unavailable outcomes remain unchanged.
+Both new source-binding cases and the resealed-output case were native RED before
+the repair, with all existing SQL protection triggers enabled.
+
 The native crash protocol distinguishes failure before COMMIT from loss of the
 client after COMMIT was submitted: the latter may leave neither completion row or
 both rows. Recovery must resolve the exact durable result without duplicates.

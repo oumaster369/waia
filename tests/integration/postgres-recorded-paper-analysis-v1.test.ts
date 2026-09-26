@@ -1,3 +1,7 @@
+import { prepareCanonicalPitAttemptV1 } from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
+import { findSourceByLogicalKeyPostgres } from "@/lib/trader/mi/repository-postgres";
+import { resolveAndPersistTrustAsOfV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
+import { persistCanonicalAvailableGatewayV1Postgres } from "@/lib/trader/mi/canonical-pit-repository-postgres";
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -9,9 +13,9 @@ import { seedWp13User } from "./wp13-intelligence-test-helpers";
 import { createPostgresMiSourceProvenanceService } from "@/lib/trader/mi/source-provenance-service";
 import { HtxBarPollSource } from "@/lib/trader/market-data/htx-bar-poll-source";
 import { recordedPublicTransport, assertRecordedAnalysisTestDatabase } from "../helpers/recorded-paper-public-transport";
-import { captureSession, copy, type AnalysisSession } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
+import { captureSession, copy, seal, ANALYSIS_CONTRACT, type AnalysisSession } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
 import { captureMandatoryBundle, normalizeMandatory } from "@/lib/trader/paper/durable-noncapital/normalize-mandatory-packet-v1";
-import { publishRecordedAnalysis, readRecordedAnalysis, verifyRecordedSources } from "@/lib/trader/paper/durable-noncapital/repository-postgres-v1";
+import { publishRecordedAnalysis, readRecordedAnalysis, verifyRecordedSources, encodeBody, holderColumns } from "@/lib/trader/paper/durable-noncapital/repository-postgres-v1";
 import { completeRecordedAnalysisPostgresV1, commitRecordedNoncapitalCyclePostgresV2 } from "@/lib/trader/runtime-v2/noncapital-cycle-owner-postgres-v2";
 import { claimRuntimeControlLeaseAtDatabaseTimeV2, readRuntimeDatabaseClockV2, type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import { evaluateRecordedAnalysis } from "@/lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1";
@@ -126,6 +130,25 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     expect(result.packet.sources.every(s => s.receipt.status !== "AVAILABLE")).toBe(true);
     expect(result.receipt.result.status).toBe("NO_TRADE"); expect(result.companion.output.authority).toBe("OBSERVATIONAL_ONLY");
   });
+  it.each(["payload", "ingestTime"] as const)("refuses canonical %s drift behind a valid writer's claimed normalized digest", async drift => {
+    await seedSources(); const s = session(); const data = await collect(s); const holder = await claim();
+    const normalized = data.normalized.observations.find(o => o.kind === "quote_l1")!;
+    const attempt = prepareCanonicalPitAttemptV1(normalized, { pitCutoffUtc: data.pit }); expect(attempt.status).toBe("AVAILABLE");
+    const context = { organizationId };
+    const source = await findSourceByLogicalKeyPostgres(db, context, "htx", "quote_l1", s.symbol); expect(source).not.toBeNull();
+    const trust = await resolveAndPersistTrustAsOfV1Postgres(db, context, { sourceId: source!.id, anchorTime: new Date(attempt.availableAtUtc!) });
+    const stored = await persistCanonicalAvailableGatewayV1Postgres(db, context, {
+      sourceId: source!.id, observationKind: attempt.kind!, subjectRef: attempt.subjectRef!, canonicalProviderId: attempt.providerId,
+      payloadCanonical: drift === "payload" ? { ...attempt.payloadCanonical!, last: "999999.00000000" } : attempt.payloadCanonical!,
+      eventTime: new Date(attempt.eventTimeUtc!), availableAt: new Date(attempt.availableAtUtc!),
+      ingestTime: new Date(Date.parse(attempt.ingestTimeUtc!) + (drift === "ingestTime" ? 60_000 : 0)),
+      trustAsOfReceiptId: trust.receipt.id, normalizedInputDigest: attempt.normalizedInputDigest,
+    });
+    expect(stored.observationInsertedNew).toBe(true); expect(stored.receipt.status).toBe("AVAILABLE");
+    // Existing trusted low-level writer input is the adversarial setup, not ordinary CLI acquisition.
+    await expect(publishRecordedAnalysis(client, s, holder, 0, data.pit, data.normalized)).rejects.toThrow("SOURCE_CONSUMED_INPUT_CONFLICT");
+    expect(await counts()).toEqual([0, 0, 0, 0]);
+  });
   it.each(["trader_recorded_analysis_sessions_v1", "trader_recorded_analysis_packets_v1"])("%s insert failure leaves no input or completed prefix, retry succeeds", async table => {
     const s = session(); const data = await collect(s); const holder = await claim();
     await faultAt(table, "AFTER"); await expect(publishRecordedAnalysis(client, s, holder, 0, data.pit, data.normalized)).rejects.toThrow();
@@ -145,6 +168,27 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     expect((await commitRecordedNoncapitalCyclePostgresV2(db, { organizationId }, f.holder, input)).outcome).toBe("COMMITTED");
     await expect(completeRecordedAnalysisPostgresV1(client, f.s, f.holder, 0)).rejects.toThrow("LEGACY_ONLY_OWNER_CONFLICT");
     expect((await commitRecordedNoncapitalCyclePostgresV2(db, { organizationId }, f.holder, input)).outcome).toBe("REPLAYED"); expect(await counts()).toEqual([1, 1, 1, 0]);
+  });
+  it("explicit replay refuses a self-consistently sealed different analytical output without rewriting history", async () => {
+    const f = await published();
+    const terminal = await commitRecordedNoncapitalCyclePostgresV2(db, { organizationId }, f.holder, {
+      organizationId, accountId: f.s.accountId, releaseSha: f.s.releaseSha, bar: f.packet.normalized.bars["1m"]!.at(-1)!,
+    });
+    const original = evaluateRecordedAnalysis(f.packet);
+    const outputBody = { ...original }; delete (outputBody as Partial<typeof original>).contentDigest;
+    outputBody.evaluation.features.featureSetId = "self-consistent-but-not-command-produced";
+    const output = seal(outputBody);
+    const companion = seal({ schemaVersion: ANALYSIS_CONTRACT, organizationId, sessionId: f.s.sessionId, sequence: 0,
+      packetDigest: f.packet.contentDigest, previousCompletionDigest: null, canonicalReceiptDigest: terminal.receipt.contentDigest, output });
+    // Adversarial privileged fixture satisfies current SQL integrity links; it is not an application writer.
+    await db.insert(schema.traderRecordedAnalysisCompanionsV1).values({ organizationId, sessionId: f.s.sessionId, sequence: 0,
+      packetDigest: f.packet.contentDigest, accountId: f.s.accountId, symbol: f.s.symbol, barInterval: "1m",
+      scheduledBarCloseTime: f.packet.normalized.scheduledBarCloseTime, contentDigest: companion.contentDigest,
+      bodyJson: encodeBody(companion), ...holderColumns(f.holder) });
+    expect((await readRecordedAnalysis(client, f.s, 0)).companion!.contentDigest).toBe(companion.contentDigest);
+    await expect(completeRecordedAnalysisPostgresV1(client, f.s, f.holder, 0)).rejects.toThrow("ANALYTICAL_REPLAY_CONFLICT");
+    expect((await readRecordedAnalysis(client, f.s, 0)).companion!.contentDigest).toBe(companion.contentDigest);
+    expect(await counts()).toEqual([1, 1, 1, 1]);
   });
   it("two native child processes share one completion under a pre-existing repeatable-read default", async () => {
     const f = await published(); const gate = postgres(url!, { max: 1 });

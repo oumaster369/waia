@@ -102,7 +102,23 @@ export async function verifyRecordedSources(db: WaiaPostgresDb, packet: Analysis
     const attempt = prepareCanonicalPitAttemptV1(packet.normalized.observations[i]!, { pitCutoffUtc: packet.analysisPitAnchor });
     check(attempt.normalizedInputDigest === evidence.receipt.normalizedInputDigest && attempt.gatewayKind === evidence.receipt.gatewayKind &&
       attempt.providerId === evidence.receipt.providerId, "SOURCE_NORMALIZATION_CONFLICT");
-    check(digest(await readSourceEvidence(db, packet.session, evidence.receipt)) === digest(evidence), "SOURCE_RECORD_CONFLICT");
+    const saved = await readSourceEvidence(db, packet.session, evidence.receipt);
+    check(digest(saved) === digest(evidence), "SOURCE_RECORD_CONFLICT");
+    if (evidence.receipt.status === "AVAILABLE") {
+      // A valid stored self-seal and caller-declared normalized digest do not prove
+      // that the canonical body is the input consumed by this analytical packet.
+      check(attempt.status === "AVAILABLE" && saved.observation && saved.trust, "SOURCE_CONSUMED_INPUT_CONFLICT");
+      const observation = saved.observation as Record<string, unknown>;
+      const trust = saved.trust as Record<string, unknown>;
+      check(digest({ kind: observation.observationKind, subject: observation.subjectRef,
+        provider: observation.canonicalProviderId, payload: JSON.parse(observation.payloadJson as string),
+        event: observation.eventTime, available: observation.availableAt, ingest: observation.ingestTime }) ===
+        digest({ kind: attempt.kind, subject: attempt.subjectRef, provider: attempt.providerId,
+          payload: attempt.payloadCanonical, event: attempt.eventTimeUtc, available: attempt.availableAtUtc, ingest: attempt.ingestTimeUtc }) &&
+        trust.status === "RESOLVED" && trust.anchorTimeUtc === attempt.availableAtUtc &&
+        trust.sourceId === evidence.receipt.sourceId && trust.selectedTrustRevisionId === observation.sourceTrustRevisionId &&
+        trust.selectedContentDigest === observation.sourceTrustContentDigest, "SOURCE_CONSUMED_INPUT_CONFLICT");
+    }
   }
 }
 export async function precedingAnalysis(db: WaiaPostgresDb, session: AnalysisSession, sequence: number) {
