@@ -275,3 +275,10 @@ Not authorized or created: ordinary empirical profile requirements, new Measurem
 Source-first report and its immutable33-file manifest remain the discovery evidence. This contract also reads the existing actual paper CLI setup, HtxBarPollSource full-bundle seam, HypothesisSessionState, registry, freshness/fusion functions, noncapital owner/receipt, DB-clock fence and Feature Engine hidden FHV flag. Independent review is pending on this exact draft. No repository file, test, database, provider or shared checkpoint was changed; no execution count is claimed.
 
 <!-- END FROZEN CONTRACT bfb9baf8 -->
+
+
+## Root accepted-base integration and CI proof registration
+
+Normal merge2698a856c3e1819d20cabb4d7865b6b729f35bbd integrates accepted21a60ec38573f0ca5c535992e9e09392c2aa78c9. The19 author paths and11 incoming authorization/numeric paths are disjoint and both complete binary patch directions are identical. Root additionally registers the new recorded-analysis native suite and its existing canonical PIT-lineage companion in the actual PostgreSQL authority job, mandatory no-skips result guard and all negative guard controls. All15 incoming suites remain mandatory, producing17 required suites on this base. Future accepted additions must be retained additively. This is executed-proof coverage only, not capital qualification.
+
+Root current-base native/scoped/full readiness and final independent integration review are pending until their exact evidence is recorded; original author results retain their source attribution. Canonical PIT fixture cleanup temporarily disables append-only guards only for its existing disposable-fixture rows and restores them in finally; final native acceptance must confirm no disabled public user triggers or injected fault artifacts remain. No production schema application is implied by local migration acceptance.

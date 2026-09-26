@@ -50,6 +50,11 @@ on:
       - "lib/trader/knowledge/navigator/**"
       - "tests/integration/postgres-runtime-authority-v2.test.ts"
       - "tests/integration/postgres-noncapital-cycle-owner-v2.test.ts"
+      - "tests/integration/postgres-recorded-paper-analysis-v1.test.ts"
+      - "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts"
+      - "lib/trader/paper/durable-noncapital/**"
+      - "scripts/trader/paper-bar-close-loop*.ts"
+      - "tests/helpers/recorded-paper-*.ts"
       - "tests/helpers/noncapital-cycle-owner-process.ts"
       - "tests/unit/postgres-capital-proof-guard.test.ts"
       - "lib/trader/execution/v2/**"
@@ -184,7 +189,9 @@ jobs:
             tests/integration/postgres-billing-period-command-atomicity.test.ts \
             tests/integration/postgres-billing-invoice-command-atomicity.test.ts \
             tests/integration/postgres-noncapital-cycle-owner-v2.test.ts \
-            tests/integration/postgres-org-live-enable-atomicity.test.ts
+            tests/integration/postgres-org-live-enable-atomicity.test.ts \
+            tests/integration/postgres-recorded-paper-analysis-v1.test.ts \
+            tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   integration:
