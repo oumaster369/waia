@@ -206,4 +206,3 @@ export async function persistDeliveryAttempt(db: WaiaPostgresDb, orgA: string, a
     });
     return { accountId, allowance, attempt, plan, policy };
   }
-
