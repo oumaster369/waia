@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 // executed proof for every critical PostgreSQL surface, never a skip waiver.
 const requiredFiles = [
   "postgres-execution-v2.test.ts",
+  "postgres-execution-reality-delivery.test.ts",
   "postgres-risk-v2.test.ts",
   "postgres-risk-limits-bootstrap.test.ts",
   "postgres-trader-service-actor-authorization.test.ts",

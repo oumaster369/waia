@@ -289,3 +289,35 @@ This proves bounded observation delivery only. General semantic alias and
 source-only revision quarantine fixtures are explicitly compatibility fixtures,
 not new Execution-adapter producers. Current fills remain `OBSERVED`; no cashflow,
 commercial finality, lifecycle allocation or complete P08 readiness is inferred.
+
+## WP-3 — accepted-base refresh and additive CI registration
+
+Normal merge `8da3412247177dfb12d454fddb4e0a6ef97f0618` integrates accepted
+`21a60ec38573f0ca5c535992e9e09392c2aa78c9` into author freeze
+`98bf79a858d1f0ab9ba617b837d24084637d1a15`, without conflicts. Both binary patch
+directions are identical: all17 author paths and all5 incoming DEE-1114 paths
+retain their exact blobs at the merge. No production delivery or native-test
+implementation changed during this refresh.
+
+The actual capital-authority job now adds
+`postgres-execution-reality-delivery.test.ts` to the existing15 mandatory native
+suites. The proof validator requires all16 to execute successfully; its negative
+tests retain missing/skipped/failed/empty/duplicate refusals for every suite.
+Exact workflow filters cover the new native fixture/test, CLI script, CLI package
+entry and scoped unit tests. No native schema/profile or guard exemption is added.
+
+Executed scoped acceptance on this refreshed source: **155 tests /11 files passed,
+zero skipped**, including all three incoming numeric/billing companions and17
+proof-guard tests. A final18-test proof/profile replay checks the subsequently
+added exact package-entry/filter assertions. Scoped ESLint and diff check pass.
+The actual CI endpoint (`waia_it` on127.0.0.1:5432) and all three existing execution
+flags are read from the workflow; the new offline CI-profile test exercises the
+real configuration/argument parsers without connecting to a database. The native
+child explicitly selects PostgreSQL and uses the real CLI entry.
+
+No PostgreSQL, full typecheck, full lint or build was run during this refresh.
+The earlier78-native acceptance remains attributed only to8ee92972 on the former
+base. Root must run the fresh combined16-suite native proof and full readiness
+on the refreshed integration before publication. Existing unrelated canonical
+profile suites were neither added nor waived. Source/patch/hash evidence and
+raw scoped logs are in `evidence/dee-1122/accepted-base-21a60ec3/`.
