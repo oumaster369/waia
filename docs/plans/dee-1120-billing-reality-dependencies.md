@@ -23,8 +23,8 @@ state:
   remainingWorkPackages: [WP-1]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 6d4a362c06cc9badac3a2a719904238e75d66828
-  lastValidationAt: "2026-09-26T13:50:17.673124+00:00"
+  lastValidatedGitSha: f52561d6466dedc65b8d30023cff7f2f94af283b
+  lastValidationAt: "2026-09-26T14:03:22.072Z"
   blockedReason: null
   nextAction: "Local readiness and independent review accepted; publish after current accepted-base reconciliation, require fresh canonical parity and all exact-head CI before merge. Full P08 remains open."
 provenance:
@@ -84,6 +84,14 @@ Local review head `6d4a362c06cc9badac3a2a719904238e75d66828` is accepted by the 
 The initial root typecheck caught one native adversarial test cast from readonly to mutable; the explicit `unknown` cast in bb969 emits independently verified identical JavaScript. The initial canon validator then required a recognized WP heading, corrected in6d4a without changing the frozen contract. Both failed logs are retained. Passing tests are attributed to their executed SHA, not relabelled as repeated. No production implementation changed after the combined fd471 native proof. Independent review also checked both merge patch directions, ordered15→16 CI preservation, the immutable domain closure and25 offline positive/negative cases for the new parity result guard.
 
 This final plan-only record does not waive current-base integration or CI. The three canonical-profile historical parity suites remain required actual CI evidence before merge. Full P08, full M01 audit, source economic attribution/finality, production rollout and live authority remain separate.
+
+## Accepted-base refresh — 1a59b31b
+
+Normal merge `f52561d6466dedc65b8d30023cff7f2f94af283b` includes accepted main `1a59b31b620af81b727d28b24f3ddbf9cb953074`. All33 previous package paths and six incoming authorization-cleanup paths are disjoint and preserved in both patch directions. The outer request runtime owns disposal; the billing transaction uses its bound executor and direct membership resolver, without disposing that transaction.
+
+Fresh root execution at f525 passed **429 tests /24 scoped files, zero skipped**, all nine repository readiness checks, and **315 tests /16 mandatory native files, zero skipped**. A separate fresh isolated local database `waia_dee1120_root_1a59b31b` on PostgreSQL16.14 applied all219 migrations from zero public tables and finished with no fault triggers/functions, disabled public user triggers or other sessions. Evidence is in completion-audit `evidence/dee-1120/accepted-base-1a59b31b`; `root-readiness.json` and `acceptance.json` retain actual execution times, command arguments and SHA. No old result is relabelled as a rerun. The final record is plan-only.
+
+Independent M01 review of the refreshed source confirms exact preservation, resource/transaction composition and both CI proof lists. The three historical canonical-profile billing suites still require actual fresh CI execution before merge. This acceptance does not close full P08/M01, financial attribution/finality or live authority, and does not assert a production billing action.
 
 ## Frozen contract provenance
 
