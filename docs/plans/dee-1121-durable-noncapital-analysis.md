@@ -633,3 +633,38 @@ The original feedback fixture's unlogged CI tenant/refusal reason remains
 unknown; only the separately demonstrated synthetic pool defect is repaired.
 No source qualification, financial/scientific authority, full P10 completion,
 production database migration, provider, C3 or live activation is claimed.
+
+
+### WP-3 admitted CI closure repair (7612 baseline)
+
+The exact PR683 unit failures on clean7612 were independently reproduced as
+3 failed /13 passed in the three Information Sufficiency, Market Understanding
+and canonical PIT consumer-closure suites. The controller and independent M01
+reviewer admitted this bounded repair before implementation; original CI logs
+and the local RED remain in accepted-base-340ead8d/ci-unit-failure.
+
+The recorded evaluator is an explicit OBSERVATIONAL_ONLY consumer with NONE
+sufficiency authority. Inventory that actual caller without declaring qualified
+RESEARCH_NON_CAPITAL or changing any evaluator/Guardian/Forecast gate. Preserve
+all existing inventory classifications and exact direct-import closure.
+
+Keep canonical-pit-service-postgres.ts as the only raw canonical repository
+importer. Route recorded replay through its existing same-executor tenant-scoped
+held observation reader. Expose only the receipt type and a narrow pure receipt
+content-consistency check using the existing builder and canonical equality;
+this grants no source authenticity, persistence or admission authority. Retain
+all owner checks for exact persisted org/ID/body, observation, trust, source,
+consumed input and exception behavior.
+
+Admitted paths: the two intelligence consumer inventories and their closure
+tests; canonical PIT service and canonical source inventory/closure test;
+recorded-analysis-v1.ts and repository-postgres-v1.ts; a focused pure service
+receipt test and the existing actual recorded evaluator unit test. Add a
+before/after full observational output identity control, receipt corruption
+controls and explicit absent-authority results. Commit the plan first, then
+execute scoped tests/lint. After source freeze, run the affected recorded-paper
+and canonical-PIT native companions and current full readiness under the
+controller's exclusive resource grant. Prior393/19 native acceptance remains
+at its original head; no new execution or CI success is claimed by this plan.
+No schema, scientific/profile/security policy, live/provider/C3 action or
+positive capital authority is included.
