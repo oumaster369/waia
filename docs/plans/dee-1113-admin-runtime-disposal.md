@@ -19,8 +19,8 @@ state:
   remainingWorkPackages: []
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 67f2895eb75cf2e54aa8cec2d81f36c043020c79
+  lastValidationAt: "2026-09-26T13:01:07.733624+00:00"
   blockedReason: null
   nextAction: "Obtain accepted-base delta review, then controller completes final integration readiness and exact-head CI."
 provenance:
@@ -139,3 +139,22 @@ driver/socket close-time behavior are not qualified by this bounded result.
 ### Accepted-base refresh 2565e1a2
 
 Normal merge `bad7b90d70fc026dda65fe64defc1b29ec1e8774` incorporates accepted main `2565e1a23741d0042096fd8209cd9793e8aa7e19`. All six author files and all six incoming files were disjoint and their blobs preserved exactly; only this plan supplement changes afterward. All 13 incoming mandatory native suites and their registration/guard remain intact. No new native or driver-close timing claim is made. The root schedules fresh scoped offline acceptance, full repository readiness and independent delta review at this final plan head before publication, followed by every applicable final-head CI check. Prior exact-head evidence and disclosed raw author-log provenance loss remain separately attributed.
+
+### Accepted-base refresh 8f60cb29
+
+Normal merge `67f2895eb75cf2e54aa8cec2d81f36c043020c79` incorporates exact
+accepted main `8f60cb297d1bf080b419f4a6724050e3e0a298e5` into reviewed PR677
+head `2cbd7079569734dc49583181e0610a57d6125d05`, without conflicts. Six original
+paths and eight incoming Forecast-reader paths are disjoint; all blobs and both
+complete binary patches are preserved at merge. This final supplement changes
+only the plan. The production helper, four test files, incoming reader/helpers
+and all 15 mandatory native suite registrations/source blobs remain unchanged.
+
+At the exact merge head, **65 targeted unit assertions / 7 files PASS, zero
+skips**, including the 16-case proof guard. Scoped ESLint and diff checks pass.
+Separate author/integrator logs and immutable preservation evidence live in
+`evidence/dee-1113/accepted-base-8f60cb29/`. No native PostgreSQL, driver-close
+probe, provider/network or heavy readiness check ran in this refresh. Earlier
+root full-readiness and the disclosed older raw-log loss retain their original
+provenance; these new logs are distinct. Independent delta review, controller
+readiness and all new-head CI checks remain required before merge.
