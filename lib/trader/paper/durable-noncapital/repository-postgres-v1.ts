@@ -8,9 +8,8 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { createEmptyHypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import { prepareCanonicalPitAttemptV1 } from "@/lib/trader/market-data/normalization/gateway-to-canonical-pit";
-import { buildCanonicalGatewayPitReceiptV1, readCanonicalPitObservationV1Postgres,
-  type CanonicalGatewayPitReceiptV1 } from "@/lib/trader/mi/canonical-pit-repository-postgres";
-import { processCanonicalPitObservationV1Postgres } from "@/lib/trader/mi/canonical-pit-service-postgres";
+import { hasCanonicalGatewayPitReceiptContentV1, readCanonicalPitObservationWithinHeldTransactionV1Postgres,
+  processCanonicalPitObservationV1Postgres, type CanonicalGatewayPitReceiptV1 } from "@/lib/trader/mi/canonical-pit-service-postgres";
 import { readTrustAsOfReceiptV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
 import { assertRuntimeDatabaseClockHolderV2, lockRuntimeOrganizationV2,
   type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
@@ -76,12 +75,12 @@ export async function readRecordedAnalysis(pool: postgres.Sql, session: Analysis
 }
 /** Complete persisted outcome bodies; no current trust/source-status fallback during replay. */
 async function readSourceEvidence(db: WaiaPostgresDb, session: AnalysisSession, receipt: CanonicalGatewayPitReceiptV1) {
-  check(receipt.organizationId === session.organizationId && digest(buildCanonicalGatewayPitReceiptV1(receipt)) === digest(receipt), "SOURCE_RECEIPT_CONFLICT");
+  check(receipt.organizationId === session.organizationId && hasCanonicalGatewayPitReceiptContentV1(receipt), "SOURCE_RECEIPT_CONFLICT");
   const rows = await db.select().from(schema.traderMiGatewayPitReceiptV1).where(and(
     eq(schema.traderMiGatewayPitReceiptV1.id, receipt.id), eq(schema.traderMiGatewayPitReceiptV1.organizationId, session.organizationId)));
   check(rows.length === 1 && digest(rows[0]!.receiptJson) === digest(receipt) && rows[0]!.contentDigest === receipt.contentDigest, "SOURCE_RECEIPT_CONFLICT");
   const context = { organizationId: session.organizationId };
-  const observation = receipt.observationId ? await readCanonicalPitObservationV1Postgres(db, context, receipt.observationId) : null;
+  const observation = receipt.observationId ? await readCanonicalPitObservationWithinHeldTransactionV1Postgres(db, context, receipt.observationId) : null;
   const trust = receipt.trustAsOfReceiptId ? await readTrustAsOfReceiptV1Postgres(db, context, receipt.trustAsOfReceiptId) : null;
   check(!receipt.trustAsOfReceiptId || trust, "SOURCE_TRUST_MISSING");
   check(!receipt.observationId || observation, "SOURCE_OBSERVATION_MISSING");

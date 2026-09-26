@@ -68,6 +68,7 @@ export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
     "lib/trader/research/m9-provider-fusion-export.ts",
   ],
   EVALUATION_CYCLE: [
+    "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
     "lib/trader/historical-simulation-v2/production-first-cycle-bootstrap-v2.ts",
     "lib/trader/historical-simulation-v2/production-next-cycle-forecast-v2.ts",
     "lib/trader/intelligence/forecast-decision/wp14-forecast-decision-evidence-harness.ts",
@@ -143,6 +144,12 @@ export const MARKET_UNDERSTANDING_LEGACY_CONSUMERS_V1 = [
 ] as const;
 
 export const MARKET_UNDERSTANDING_INDIRECT_CONSUMERS_V1 = [
+  {
+    path: "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
+    symbol: "evaluateRecordedAnalysis",
+    disposition: "OBSERVATIONAL_LEGACY_RESULT_NO_EXACT_AUTHORITY",
+    createsCapitalAuthority: false,
+  },
   {
     path: "lib/trader/paper/paper-cycle-runner.ts",
     symbol: "runPaperCycleOnce",

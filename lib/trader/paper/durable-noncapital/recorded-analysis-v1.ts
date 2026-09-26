@@ -4,7 +4,7 @@ import { listMvpStrategyRegistry } from "@/lib/trader/intelligence/strategies/re
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import type { Bar, BarInterval, Quote, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type { NormalizedObservation, FusedMarketContext } from "@/lib/trader/market-data/observation-types";
-import type { CanonicalGatewayPitReceiptV1 } from "@/lib/trader/mi/canonical-pit-repository-postgres";
+import type { CanonicalGatewayPitReceiptV1 } from "@/lib/trader/mi/canonical-pit-service-postgres";
 
 export const ANALYSIS_CONTRACT = "waia.trader.recorded_noncapital_analysis.v1" as const;
 export const NORMALIZATION_CONTRACT = "waia.trader.closed_mandatory_normalization.v1" as const;

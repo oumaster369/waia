@@ -37,6 +37,11 @@ describe("DEE1121 actual source normalization and fixed observational evaluator"
     const { packet } = await fixture(); const before = copy(packet);
     const first = evaluateRecordedAnalysis(packet); expect(evaluateRecordedAnalysis(packet)).toEqual(first); expect(packet).toEqual(before);
     expect(first.authority).toBe("OBSERVATIONAL_ONLY"); expect(first.evaluation.understandingArtifact).toBeUndefined();
+    // Full actual output identity captured before the canonical service closure repair.
+    expect(first.contentDigest).toBe("874c8f791b6743f97537a0600f0d4068454c83fcedf733cd079193a3c24294b2");
+    expect(first.evaluation.canonicalRuntimeIntelligenceState).toBeUndefined();
+    expect(first.evaluation.intelligenceCycleBundle).toBeUndefined();
+    expect(first.evaluation.forecastDecisionBundle).toBeUndefined();
     expect(first.evaluation.forecastRuntimeOutcome?.status).toBe("NON_ACTIONABLE");
     expect(first.evaluation.reconstruction).toBeDefined(); expect(first.evaluation.decisionChain).toBeDefined(); expect(first.idCount).toBeGreaterThan(0);
     let ordinal = 0;
