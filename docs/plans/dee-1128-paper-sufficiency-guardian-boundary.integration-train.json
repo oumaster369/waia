@@ -1,0 +1,307 @@
+{
+  "schemaVersion": "waia-trader-integration-train/v1",
+  "integrationIssue": "DEE-1128",
+  "status": "admitted",
+  "riskTier": "T3",
+  "humanGatePolicy": "t3-scope-preauthorized",
+  "maxConcurrentImplementationTasks": 2,
+  "finalIntegrationMode": "serialized",
+  "mergeMode": "squash",
+  "includedChildren": [
+    {
+      "issue": "DEE-1118",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Import the reviewed required FAIL_UNRESOLVED contradiction veto, preserving optional/context/RECORD_ONLY/REQUIRE_AGREEMENT semantics and exact old-receipt replay refusal.",
+      "dependencies": [],
+      "dependencyEvidence": [
+        "First serialized wave. Original child has no code dependency on DEE1119; cumulative acceptance must pass before wave2."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        "docs/plans/dee-1118-sufficiency-contradiction-veto.md",
+        "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+        "tests/fixtures/sufficiency/dee1118-before-fix.json",
+        "tests/helpers/sufficiency-contradiction.ts",
+        "tests/unit/trader-sufficiency-contradiction-veto.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Standing user authorization and root DEE-1128 exact T3 technical delivery admission supersede separate-PR delivery only. No new scientific, financial, live, authority or constitutional policy."
+      },
+      "expectedAcceptanceEvidence": [
+        "Historical source hashes retained and disclosed; new mapped imports occur after the actual valid admitted manifest.",
+        "Fresh current-base cumulative validation with exact source/commands/results; no old receipt relabelled as current proof.",
+        "M01 nonauthor complete-diff/semantic acceptance, root readiness and all applicable exact-head CI required.",
+        "Current PR683 actual observational evaluator/earlyCLI and allthree consumer closures pass after the unchanged1118 rule import, without new analytical/capital authority."
+      ],
+      "expectedTests": [
+        "pnpm test --run --no-file-parallelism tests/unit/trader-sufficiency-contradiction-veto.test.ts tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/integration/trader-information-inquiry-runtime.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-recorded-paper-analysis-v1.test.ts tests/unit/trader-durable-noncapital-cli.test.ts",
+        "Scoped lint/diff/source preservation; final root lint/typecheck/build/canon/governance and both authority consumer graphs."
+      ],
+      "execution": {
+        "wave": 1,
+        "mode": "serialized"
+      },
+      "historicalSource": {
+        "issue": "DEE-1118",
+        "sourceHead": "eeacd6fd0a9a3bce4f421c57a53868e74efba206",
+        "historicalBase": "21a60ec38573f0ca5c535992e9e09392c2aa78c9",
+        "sourceFiles": [
+          {
+            "path": "docs/plans/dee-1118-sufficiency-contradiction-veto.md",
+            "historicalGitBlob": "2756b6390b41a36a7dbb8b53caeb312b32490655",
+            "historicalSha256": "b80e50d48765c23a6675ec0281c5156b2446f84f68cd7fcfa150f71994ed8656",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "lib/trader/intelligence/information-sufficiency/information-sufficiency-v2.ts",
+            "historicalGitBlob": "be13655e53aae214eb0d86be5f23310b83fdd40b",
+            "historicalSha256": "12e6802557f0567095314947db1b36b604eed853a1ff9a7b17ee614ee738684a",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "tests/fixtures/sufficiency/dee1118-before-fix.json",
+            "historicalGitBlob": "2c55c8d005a7d24de25c928f88fce38b638efd84",
+            "historicalSha256": "8a7fbefac8884d7d7f52894b47d8eca7601c45451f232e070781980f8dab3cad",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "tests/helpers/sufficiency-contradiction.ts",
+            "historicalGitBlob": "c476ec899b38bba0ba2e0344aab61506fa0c9374",
+            "historicalSha256": "55ab8b4ef1150c385784d03de86d555f7bcb9a16cba2f0d6153d26be54bdef13",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "tests/unit/trader-sufficiency-contradiction-veto.test.ts",
+            "historicalGitBlob": "6b728ce8dccef1626b58bf63609598536b113826",
+            "historicalSha256": "420199b8b4638c182aad63267c5abbca60eb661942178b068a443ae3ca518761",
+            "mode": "verbatim-reviewed-import"
+          }
+        ],
+        "patchSha256": "923a0e7b3cf1635b4073cd7f394971a9f1a15acb065a62946fa763098cd7406d",
+        "overlapWithCurrentBase": []
+      }
+    },
+    {
+      "issue": "DEE-1119",
+      "deliveryStatus": "planned",
+      "blocked": false,
+      "scope": "Import the reviewed exact account/instrument Guardian batch checks and unrelated trailing-state preservation, preserve legacy Execution refusal, add the real paper caller composition assertion, and adapt only the four declared current-base inventory/proof surfaces.",
+      "dependencies": [
+        "DEE-1118"
+      ],
+      "dependencyEvidence": [
+        "No original production dependency; serialized because both boundaries meet in runPaperCycleOnce.",
+        "DEE1119 owns the new composition test, which imports the reviewed DEE1118 sufficiency fixture helper; it cannot remain after DEE1118 deferral."
+      ],
+      "expectedFileOrSchemaSurfaces": [
+        ".github/workflows/postgres-integration.yml",
+        "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+        "docs/plans/dee-1119-guardian-observation-scope.md",
+        "lib/trader/guardian/evaluate-position-guardian.ts",
+        "lib/trader/paper/paper-cycle-runner.ts",
+        "scripts/postgres-validation/assert-capital-test-results.mjs",
+        "tests/helpers/guardian-observation-scope-fixture.ts",
+        "tests/integration/postgres-guardian-observation-scope.test.ts",
+        "tests/unit/postgres-capital-proof-guard.test.ts",
+        "tests/unit/trader-guardian-evaluate.test.ts",
+        "tests/unit/trader-guardian-observation-scope.test.ts",
+        "tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts"
+      ],
+      "riskTier": "T3",
+      "humanGate": {
+        "status": "t3-scope-preauthorized",
+        "evidence": "Standing user authorization and root DEE-1128 exact T3 technical delivery admission supersede separate-PR delivery only. No new scientific, financial, live, authority or constitutional policy."
+      },
+      "expectedAcceptanceEvidence": [
+        "Historical source hashes retained and disclosed; new mapped imports occur after the actual valid admitted manifest.",
+        "Fresh current-base cumulative validation with exact source/commands/results; no old receipt relabelled as current proof.",
+        "M01 nonauthor complete-diff/semantic acceptance, root readiness and all applicable exact-head CI required.",
+        "Preserve all112 incoming paths:108 exact and4 precisely adapted. Capital workflow/guard/unit20 set identity, canonical3 billing/2 payment and separate4 observationPG17 strict guard preserved; actual20 native plus extra sufficiency companion on fresh isolated fixture. All220 migrations and PR683 closure fixes remain exact.",
+        "Actual joint caller proof blocks new entry for rebuilt required contradiction, scopes Guardian independently, preserves unrelated trailing states and refuses real legacy submission without financial effects."
+      ],
+      "expectedTests": [
+        "pnpm test --run --no-file-parallelism tests/unit/trader-sufficiency-contradiction-veto.test.ts tests/unit/trader-information-sufficiency-contracts.test.ts tests/unit/trader-information-sufficiency-runtime.test.ts tests/unit/trader-information-sufficiency-consumer-closure.test.ts tests/unit/trader-information-need-planner.test.ts tests/unit/trader-information-inquiry-contracts.test.ts tests/unit/trader-information-inquiry-loop.test.ts tests/unit/trader-information-inquiry-consumer-closure.test.ts tests/integration/trader-information-inquiry-runtime.test.ts tests/unit/trader-guardian-observation-scope.test.ts tests/unit/trader-guardian-evaluate.test.ts tests/unit/trader-guardian-exit-intelligence.test.ts tests/unit/trader-m9-oversell-regression.test.ts tests/unit/trader-paper-cycle-runner.test.ts tests/unit/trader-exits-exit-plan-builder.test.ts tests/unit/postgres-capital-proof-guard.test.ts tests/unit/trader-reality-v2-consumer-graph.test.ts tests/unit/trader-execution-v2-consumer-graph.test.ts tests/unit/trader-risk-numeric.test.ts tests/unit/trader-paper-sufficiency-guardian-boundary.test.ts tests/unit/trader-market-understanding-consumer-closure.test.ts tests/unit/trader-mi-canonical-source-consumer-closure.test.ts tests/unit/trader-recorded-paper-analysis-v1.test.ts tests/unit/trader-durable-noncapital-cli.test.ts",
+        "Scoped lint/diff/source preservation; final root lint/typecheck/build/canon/governance and both authority consumer graphs.",
+        "After separately granted native resource: all20 mandatory capital suites, strict result guard, extra postgres-information-sufficiency-v2 companion separately attributed; retain current canonical billing/payment and observation lanes with no identity/trigger/schema weakening."
+      ],
+      "execution": {
+        "wave": 2,
+        "mode": "serialized"
+      },
+      "historicalSource": {
+        "issue": "DEE-1119",
+        "sourceHead": "6e6a5b68e6cdfabba748f9572c07a188fa0853a8",
+        "historicalBase": "21a60ec38573f0ca5c535992e9e09392c2aa78c9",
+        "sourceFiles": [
+          {
+            "path": ".github/workflows/postgres-integration.yml",
+            "historicalGitBlob": "417166a368dce355a1d63502cd15564de55e9ebe",
+            "historicalSha256": "65b8761e35e911b69f431434bad365551933a334955768d095ea8820480a3d74",
+            "mode": "current-base-additive-adaptation"
+          },
+          {
+            "path": "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+            "historicalGitBlob": "c77419591b3bd4b8d086765d2777d42ddb823315",
+            "historicalSha256": "405ab78761278a65a1283ef92f84f9f37a14f70cad96e8847b109c90be2bc6f9",
+            "mode": "current-base-additive-adaptation"
+          },
+          {
+            "path": "docs/plans/dee-1119-guardian-observation-scope.md",
+            "historicalGitBlob": "f7bb803298e4a0131b577528da6ae06171df829a",
+            "historicalSha256": "eaf2392a6d0ed4b5a598079e4086f93da2112ec2726ff8f951242f23c93c82d6",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "lib/trader/guardian/evaluate-position-guardian.ts",
+            "historicalGitBlob": "de1238f3d9b65af3c948e3e3739d98d9876ff7ae",
+            "historicalSha256": "80f83aebba174638b7453c508fc4fcf3daa61e99d520ae84d93c0f2823b0399b",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "lib/trader/paper/paper-cycle-runner.ts",
+            "historicalGitBlob": "78585d37b336baf23a3aa4c903409ce84740a62c",
+            "historicalSha256": "9f26dff35229d187bccb622dc2f9f5997f6df8acdeed230d1d131829dec1fe80",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "scripts/postgres-validation/assert-capital-test-results.mjs",
+            "historicalGitBlob": "9f6edd24531263e2f5b6130588c99add2fd6d323",
+            "historicalSha256": "abafe3f99b5b7aa9d5554a0d0fef235dc44fc23e7dd9b8b250b0d7ca0106903f",
+            "mode": "current-base-additive-adaptation"
+          },
+          {
+            "path": "tests/helpers/guardian-observation-scope-fixture.ts",
+            "historicalGitBlob": "f42708d7f48993886cd4a7c16d3ffba77ef2c626",
+            "historicalSha256": "d57c872b88a3974d25e63605581843906fe751581a898cde1b275b51adfa80b2",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "tests/integration/postgres-guardian-observation-scope.test.ts",
+            "historicalGitBlob": "31161967852244728308c35d4afdcb526cb2dcb1",
+            "historicalSha256": "1a036a2fb4debc810235f599c7c85083ffbd1f03feed9db19d1f1adca6de0cb9",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "tests/unit/postgres-capital-proof-guard.test.ts",
+            "historicalGitBlob": "b3f4fdbc8c6e1a4679c5983a9e572ef7425f59ed",
+            "historicalSha256": "79b1ec5ef16a975e8b53e873fc314dd015bb87e875666bd1afa954ed9b595420",
+            "mode": "current-base-additive-adaptation"
+          },
+          {
+            "path": "tests/unit/trader-guardian-evaluate.test.ts",
+            "historicalGitBlob": "2d0e02887714a2da641cc7bb1eb4462985845c97",
+            "historicalSha256": "95529d01c06d5412ffa777f1efbb5fdb6ba9b18bd7b7ed746cbd572ff0f49198",
+            "mode": "verbatim-reviewed-import"
+          },
+          {
+            "path": "tests/unit/trader-guardian-observation-scope.test.ts",
+            "historicalGitBlob": "590c387eea5e2a640d5d34fcaa2e7d4c34bce940",
+            "historicalSha256": "d6b6cba6dcf7e00e29ce9aa81659adcd20fac1ec43820ba8f9310a682b65ca37",
+            "mode": "verbatim-reviewed-import"
+          }
+        ],
+        "patchSha256": "66506b5af05219e235573dd4064a214e0e928fbd9fb37b04c5b4db79bc6e184d",
+        "overlapWithCurrentBase": [
+          ".github/workflows/postgres-integration.yml",
+          "docs/ai-trader/reality-v2-source-consumer-inventory.json",
+          "scripts/postgres-validation/assert-capital-test-results.mjs",
+          "tests/unit/postgres-capital-proof-guard.test.ts"
+        ]
+      }
+    }
+  ],
+  "deferredChildren": [],
+  "integrationEvidence": {
+    "admissionEvidence": {
+      "status": "pass",
+      "reviewer": "Root exact delivery admission DEE-1128 plus independent M01 current-base design delta,26 September2026.",
+      "rootEvidence": "parallel-runtime-owner/1118-1119-root-template-check-9d2a9776.json",
+      "independentReview": "milestone-audits/M01/review-1118-1119-admission-template-9d2a9776.md",
+      "independentReviewSha256": "4fba8e802834bde092c6610d06f78098e666326789f7cb8031240a428e52652e",
+      "reviewedPreparationFreezeSha256": "41b6d0c0a499de2b7a0b8a5f4bf4d66de3514025c98124356205f088c7a10f55",
+      "noImportsBeforeValidatedCommitAndRootRelease": true
+    },
+    "fullDiffFrozen": false,
+    "finalAdversarialReviewRequired": true
+  },
+  "provenance": {
+    "proposedAcceptedBase": "9d2a97768d34738a412f6a02a6dd31b35fbe2ef6",
+    "historicalBase": "21a60ec38573f0ca5c535992e9e09392c2aa78c9",
+    "historicalImplementationsPredateAdmission": true,
+    "noOldChildHistoryMerge": true,
+    "preservedChildParents": {
+      "DEE-1118": "DEE-596",
+      "DEE-1119": "DEE-639"
+    },
+    "sourceInventorySha256": "88a98bd185ded5adbbd972519e742b05edbcbdcfdbcd9dcf2108f5fbb08d8dff",
+    "sourcePreparationFreezeSha256": "41b6d0c0a499de2b7a0b8a5f4bf4d66de3514025c98124356205f088c7a10f55",
+    "actualParent": "DEE-639"
+  },
+  "preservedProofSets": {
+    "currentCapital19": [
+      "postgres-execution-v2.test.ts",
+      "postgres-execution-reality-delivery.test.ts",
+      "postgres-risk-v2.test.ts",
+      "postgres-risk-limits-bootstrap.test.ts",
+      "postgres-trader-service-actor-authorization.test.ts",
+      "postgres-reality-v2.test.ts",
+      "postgres-canonical-decision-verification-v2.test.ts",
+      "postgres-promotion-audit-atomicity.test.ts",
+      "postgres-runtime-authority-v2.test.ts",
+      "postgres-guardian-authority-v2.test.ts",
+      "postgres-forecast-v2-feedback-read-port.test.ts",
+      "postgres-forecast-v2-persistence.test.ts",
+      "postgres-billing-period-command-atomicity.test.ts",
+      "postgres-billing-invoice-command-atomicity.test.ts",
+      "postgres-billing-reality-dependencies.test.ts",
+      "postgres-noncapital-cycle-owner-v2.test.ts",
+      "postgres-org-live-enable-atomicity.test.ts",
+      "postgres-recorded-paper-analysis-v1.test.ts",
+      "postgres-mi-canonical-pit-lineage-v1.test.ts"
+    ],
+    "prospectiveCapital20": [
+      "postgres-execution-v2.test.ts",
+      "postgres-execution-reality-delivery.test.ts",
+      "postgres-risk-v2.test.ts",
+      "postgres-risk-limits-bootstrap.test.ts",
+      "postgres-trader-service-actor-authorization.test.ts",
+      "postgres-reality-v2.test.ts",
+      "postgres-canonical-decision-verification-v2.test.ts",
+      "postgres-promotion-audit-atomicity.test.ts",
+      "postgres-runtime-authority-v2.test.ts",
+      "postgres-guardian-authority-v2.test.ts",
+      "postgres-guardian-observation-scope.test.ts",
+      "postgres-forecast-v2-feedback-read-port.test.ts",
+      "postgres-forecast-v2-persistence.test.ts",
+      "postgres-billing-period-command-atomicity.test.ts",
+      "postgres-billing-invoice-command-atomicity.test.ts",
+      "postgres-billing-reality-dependencies.test.ts",
+      "postgres-noncapital-cycle-owner-v2.test.ts",
+      "postgres-org-live-enable-atomicity.test.ts",
+      "postgres-recorded-paper-analysis-v1.test.ts",
+      "postgres-mi-canonical-pit-lineage-v1.test.ts"
+    ],
+    "canonicalBilling3": [
+      "admin-console-billing-idempotency-postgres.test.ts",
+      "postgres-reporting-period-parity.test.ts",
+      "postgres-invoice-issuance-parity.test.ts"
+    ],
+    "canonicalPayments2": [
+      "postgres-reconciliation-workflow-parity.test.ts",
+      "postgres-settlement-reconciliation-parity.test.ts"
+    ],
+    "observationPg17Four": [
+      "account-observation-migration-postgres.test.ts",
+      "trader-account-observation-postgres.test.ts",
+      "account-observation-reader-postgres.test.ts",
+      "account-observation-credential-postgres.test.ts"
+    ],
+    "extraLocalCompanion": [
+      "postgres-information-sufficiency-v2.test.ts"
+    ]
+  },
+  "reviewabilityRationale": "One caller-level paper boundary, two small existing production fixes, no schema or effects; original1439 changed lines include337 plans and240 frozen receipt. New composition test plus batch metadata and exact current proof/inventory adaptation require explicit final size and full independent review. Split if the exact joint acceptance cannot remain bounded.",
+  "baseReservation": "Root reserves accepted9d2a through train merge. New branch has only two metadata files. No imports until valid two-file admission is committed and root releases the import barrier."
+}
