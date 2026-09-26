@@ -139,3 +139,13 @@ It reuses the existing lease history and append-only guard. The schema requires
 deny RLS for browser roles. Rollback of this inert code requires no receipt
 deletion; retain append-only evidence and stop the test owner. Production
 application is a later explicit deployment step when an accepted owner needs it.
+
+CI exposed an omitted compatibility registration: FHV schema preflight correctly
+refused the new0218 journal identity as unknown. Explicitly register only0218 as
+compatible additive, with its exact identity and existing hash verification.
+The required0000..0207 prefix, required FHV tables and unknown-future migration
+refusal remain unchanged. No historical SQL, policy or running worker changes.
+After correction,24 schema-preflight tests plus11 proof-guard tests pass; the
+complete PostgreSQL17 account-observation job passes78 tests/4 files under
+restricted roles, including actual full-journal migration. Scoped lint, final
+typecheck/build and both consumer validators pass. Fresh PR CI is required.
