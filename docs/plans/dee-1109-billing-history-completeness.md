@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Focused acceptance passed; independent review and root-scheduled readiness before publication."
+  nextAction: "Local readiness and independent review passed; publish and require all exact-head PR checks."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -82,6 +82,16 @@ The corrected11-case suite and nine adjacent billing/HWM/period/receipt suites
 pass99 tests. A final lifecycle-only/no-draft preservation control expands the
 new suite to12 passing tests. Global readiness and native Postgres validation
 are not claimed by this focused acceptance.
+
+Root integration acceptance adds a thirteenth regression with no existing OPEN
+period or HWM, proving refusal before either would be created. All13 new cases
+pass. Lint (zero errors), final typecheck, build, canon, governance and both
+consumer validators pass. Four native Postgres suites actually ran: period
+lifecycle, HWM ledger, invoice issuance and console billing idempotency;4 tests
+pass with no skips. These are adjacent valid-path integration checks, not native
+proof of the200-row boundary or full financial-source qualification. Independent
+review passed on the production commit and the test-only follow-up without
+findings. The full unit suite and applicable checks remain required in PR CI.
 
 ## Validation and coordination
 
