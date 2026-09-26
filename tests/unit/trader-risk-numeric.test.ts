@@ -39,6 +39,36 @@ describe("trader risk numeric helpers (DEE-238)", () => {
     expect(() => parseDecimal("1.123456789")).toThrow(InvalidDecimalError);
   });
 
+  it.each([".", "-.", " . ", "\t-.\n"])("rejects digitless input %j", (value) => {
+    expect(() => parseDecimal(value)).toThrow(InvalidDecimalError);
+  });
+
+  it("preserves supported decimal forms, signs and eight-digit precision", () => {
+    const examples = [
+      [".1", "0.1"], ["1.", "1"], ["-.1", "-0.1"], ["-1.", "-1"],
+      ["0", "0"], ["-0", "0"], ["-000.00000000", "0"], [" .0 ", "0"],
+      ["\t-001.23000000\n", "-1.23"], ["0.00000001", "0.00000001"],
+      ["999999999999999999999999.12345678", "999999999999999999999999.12345678"],
+    ];
+    for (const [input, expected] of examples) expect(formatDecimal(parseDecimal(input))).toBe(expected);
+    for (const invalid of ["", " ", "-", "+", "+.", "+1", "1.2.3", "1.123456789", "1e2", "1 2", "١"])
+      expect(() => parseDecimal(invalid)).toThrow(InvalidDecimalError);
+  });
+
+  it("does not coerce ordinary non-string runtime inputs into decimals", () => {
+    for (const value of [null, undefined, 0, 1, true, [], {}]) {
+      expect(() => parseDecimal(value as unknown as string)).toThrow(TypeError);
+    }
+  });
+
+  it("preserves positive and negative truncation toward zero at eight decimals", () => {
+    expect(divideDecimal("1", "3")).toBe("0.33333333");
+    expect(divideDecimal("-1", "3")).toBe("-0.33333333");
+    expect(multiplyDecimal("1.00000001", "0.00000001")).toBe("0.00000001");
+    expect(multiplyDecimal("-1.00000001", "0.00000001")).toBe("-0.00000001");
+    expect(() => divideDecimal("1", "-0")).toThrow(InvalidDecimalError);
+  });
+
   it("absDecimal returns magnitude", () => {
     expect(absDecimal("-150.00")).toBe("150");
     expect(absDecimal("150.00")).toBe("150");

@@ -114,36 +114,37 @@ export async function assertAdminPermission(
   return resolvePermissionPostgres(runtime.db, { userId, organizationId, permission });
 }
 
+/** Only successful authorization transfers runtime ownership to the caller. */
 export async function authorizeAdminRoute(
   deps: AdminRouteHandlerDeps,
   organizationId: string,
   permission = "admin.audit.read",
 ): Promise<
   | { ok: true; userId: string; runtime: WaiaRuntimeDb }
-  | { ok: false; result: AdminRouteHandlerResult; runtime?: WaiaRuntimeDb }
+  | { ok: false; result: AdminRouteHandlerResult; runtime?: undefined }
 > {
   const userId = await deps.getUserId();
   if (!userId) {
     return { ok: false, result: adminClientError(401, "UNAUTHORIZED", "Sign in required.") };
   }
 
-  let runtime: WaiaRuntimeDb | undefined;
+  const runtime = await deps.getRuntimeDb();
+  let ownershipTransferred = false;
   try {
-    runtime = await deps.getRuntimeDb();
     const check = await assertAdminPermission(runtime, userId, organizationId, permission);
     if (!check.allowed) {
       return {
         ok: false,
-        runtime,
         result: adminClientError(403, "FORBIDDEN", "Admin permission required."),
       };
     }
+    ownershipTransferred = true;
     return { ok: true, userId, runtime };
-  } catch (err) {
-    if (runtime) {
+  } finally {
+    // A rejected cleanup must not re-enter a catch that closes the same handle.
+    if (!ownershipTransferred) {
       await deps.disposeRuntimeDb(runtime);
     }
-    throw err;
   }
 }
 

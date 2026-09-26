@@ -35,7 +35,11 @@ function normalizeDecimalString(value: string): { sign: bigint; scaled: ScaledDe
   }
 
   const [wholePartRaw, fractionPartRaw = ""] = parts;
-  if (!/^\d*$/.test(wholePartRaw) || !/^\d*$/.test(fractionPartRaw)) {
+  if (
+    (wholePartRaw === "" && fractionPartRaw === "") ||
+    !/^\d*$/.test(wholePartRaw) ||
+    !/^\d*$/.test(fractionPartRaw)
+  ) {
     throw new InvalidDecimalError(value);
   }
 

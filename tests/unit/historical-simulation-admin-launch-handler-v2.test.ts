@@ -92,14 +92,13 @@ describe("Historical Simulation V2 authenticated admin launch route", () => {
 
   it("refuses permission or CSRF failure before opening the lifecycle database", async () => {
     const openLifecycle = vi.fn();
-    const deniedRuntime = { kind: "postgres" };
-    mocks.authorize.mockResolvedValueOnce({ ok: false, runtime: deniedRuntime,
+    mocks.authorize.mockResolvedValueOnce({ ok: false,
       result: { status: 403, body: { error: { code: "FORBIDDEN" } }, outcome: "client_error" } });
     const denied = await handleHistoricalSimulationAdminLaunchPostV2(new Request(
       "https://waia.test/api?organization_id=org-a", { method: "POST", body: JSON.stringify(body) }),
     { getUserId: vi.fn(), getRuntimeDb: vi.fn(), disposeRuntimeDb: mocks.disposeAuth, openLifecycle });
     expect(denied.status).toBe(403);
-    expect(mocks.disposeAuth).toHaveBeenCalledWith(deniedRuntime);
+    expect(mocks.disposeAuth).toHaveBeenCalledWith(undefined);
     mocks.authorize.mockResolvedValueOnce({ ok: true, userId: "operator-a", runtime: { kind: "postgres" } });
     mocks.csrf.mockReturnValueOnce(false);
     const csrf = await handleHistoricalSimulationAdminLaunchPostV2(new Request(

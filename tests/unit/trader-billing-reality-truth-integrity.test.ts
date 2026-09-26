@@ -101,6 +101,15 @@ describe("billing lookup validates supplied Reality truth content", () => {
       .toThrow(code);
   });
 
+  it.each([".", "-.", " . ", "\t-.\n"])("keeps malformed decimal %j outside the Truth lookup", (amount) => {
+    const records = validRecords();
+    records[0] = editAssertion(records[0], { feeAmount: amount });
+    expect(validateTruthRecordV2(records[0])).toBe(false);
+    expect(() => reseal(records[0])).toThrow();
+    expect(() => lookupClosedTradeSettlementsFromRealityV2({ ...scope, truthRecords: records }))
+      .toThrow(code);
+  });
+
   it("preserves valid JSON replay, input order independence and exact decimal economics", () => {
     const records = validRecords();
     expect(records.every(validateTruthRecordV2)).toBe(true);
