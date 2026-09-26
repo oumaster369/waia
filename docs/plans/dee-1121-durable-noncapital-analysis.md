@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: c5f278f24c22618b65b4e85f7d89b9c2f515b748
-  lastValidationAt: "2026-09-26T17:32:04.047190+00:00"
+  lastValidatedGitSha: b59a7d2fcce003592954928dc465ebe30dcb311a
+  lastValidationAt: "2026-09-26T18:15:25.836493+00:00"
   blockedReason: null
-  nextAction: "Root current-base native/full readiness and independent delta review, then exact-head PR CI/publication; scoped refresh on accepted752a is complete. Full P10 remains open."
+  nextAction: "Root exact-head PR683 update after independent CI-fix review; fresh PG17 and all applicable PR checks remain required. Local targeted/readiness and PG16 read-only220-registry preflight passed; full P10 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -484,3 +484,32 @@ The companion `forecast-v2-applied-migration-identity-v1.test.ts` also contains 
 explicit post0148 extras inventory ending0218. Its observed missing0219 test
 expectation will be extended by one tag after retaining its baseline failure;
 ratified maximum148, SQL hash pins, and invalid identity refusals stay intact.
+
+### CI correction executed evidence
+
+Plan commits `cdb9f108` and `68145bf9` preceded implementation
+`b59a7d2fcce003592954928dc465ebe30dcb311a`. The exact0219 SQL SHA256 is
+`73b2dcf9d46cdfc19f77f61bd021d584fb2d8a534be05ea7e24687dcc2ad0eb6`;
+all220 migration files and journal, existing schema, and all proof/CI registrations
+are byte-identical to1d5aa967. Only the explicit preflight compatibility identity
+and its bounded unit companions changed executable code.
+
+The original FHV helper reproduced2RED/22PASS, and the Forecast extras inventory
+reproduced1RED/7PASS. Corrected targeted execution is52PASS/3files/0skips
+(25FHV schema,8Forecast identity,19capital proof guards). Expanded RED evidence
+retains a separate future-timestamp fixture collision, corrected by deriving its
+unknown future identity from the independent full journal. The actual full
+220-entry applied registry on existing isolated
+`waia_dee1121_752a_closed_author` was verified against every checkout hash under
+READ ONLY on PostgreSQL16.14: before the fix UNKNOWN0219; after the fix full
+preflightPASS. No migrations, registry repair, schema/data writes or native
+suite rerun occurred; both readbacks found0other sessions and closed the client.
+The initial standalone CJS/ESM import harness error occurred before DB access
+and remains separately preserved. This does not claim PostgreSQL17 evidence.
+
+At exactb59a7d2f, typecheck, full lint/build, canon, governance, both consumer
+graph validators and diff check all passed. Evidence is under
+`evidence/dee-1121/accepted-base-752a09e0/ci-schema-failure/`.
+The original07503b64 native358/18 and scoped363/23 results remain attributed to
+that earlier tested head. Independent review and fresh exact-head PR683 CI,
+including PG17, remain separate gates. No completeP10/scientific/live acceptance.
