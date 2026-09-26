@@ -3,7 +3,7 @@ integrationIssue: DEE-1108
 integrationTitle: "Fenced noncapital cycle receipts and process recovery"
 parentIssue: DEE-639
 branch: dee-1108-noncapital-cycle-recovery
-riskTier: T2
+riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr-ci, postgres-ci]
 requiredValidation: [lint, typecheck, targeted-unit, native-postgres-process-recovery, build, validate-canon, validate-pr-governance]
@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Complete native process acceptance and root review."
+  nextAction: "Local readiness and independent review passed; require all exact-head PR checks."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -119,3 +119,23 @@ aborted transaction; that test fixture was corrected to transaction-local CRUD
 grants with actual RLS assertions and rolled-back grants. No product guard was
 relaxed. Whole PR lint/typecheck/build/governance and exact-head CI remain pending
 root integration. No production DB, runtime owner or C3 worker was touched.
+
+## Root integration acceptance
+
+The original author results above are superseded by completed integration checks:
+all migrations, including0218, applied successfully to a new empty loopback
+database `waia_dee1108_fresh`. The ten critical PostgreSQL suites then executed
+184 passing tests there, zero skips. The new process suite is mandatory in the
+existing CI job and executed-proof validator; the other nine suites remain
+required. The validator's11 positive/negative tests also pass.
+
+Full lint (zero errors), typecheck, build, canon, PR governance and both consumer
+graph validators pass. Independent review found no implementation blockers.
+These checks accept the bounded local/CI substrate only. Exact-head PR CI and
+merge are still pending; no production migration or host wiring is performed.
+
+Migration memory:0218 is additive, Postgres-only and not deployed automatically.
+It reuses the existing lease history and append-only guard. The schema requires
+deny RLS for browser roles. Rollback of this inert code requires no receipt
+deletion; retain append-only evidence and stop the test owner. Production
+application is a later explicit deployment step when an accepted owner needs it.
