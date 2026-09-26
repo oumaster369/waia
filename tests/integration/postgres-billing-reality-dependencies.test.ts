@@ -240,7 +240,7 @@ describe.skipIf(!enabled)("DEE-1120 persisted Reality dependencies at actual clo
     const outcome = pending.then(() => ({ code: "UNEXPECTED_SUCCESS" }), (e) => e);
     try { await blocked("dee1120-stale-worker");
       (value.input.closedTradeSettlements as unknown[]).length = 0;
-      (value.input.realityDependencies as { closedTradeSettlementDigests: string[] }).closedTradeSettlementDigests = [];
+      (value.input.realityDependencies as unknown as { closedTradeSettlementDigests: string[] }).closedTradeSettlementDigests = [];
       release(); await writing;
       expect(await outcome).toMatchObject({ code: "BILLING_REALITY_FRONTIER_STALE" });
       expect((await effects(value.account)).periods).toEqual([]);
