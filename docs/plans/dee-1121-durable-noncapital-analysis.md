@@ -392,3 +392,34 @@ readiness remain historical at683eaa8a; they are not relabelled as new752a execu
 Root current-base native/full readiness, independent delta review and authoritative
 PR CI remain gates before publication/merge. Source/scientific/Measurement limitations,
 no-capital authority, incompleteP10 and pending production wiring remain unchanged.
+
+
+## WP-4 — native fixture chronology at a minute boundary
+
+The first current-base run at04f256da646a557023fc80f5bf99570ddba87f7c
+applied220 migrations to fresh isolated waia_dee1121_752a_author, then returned
+357 passing and1 failing native assertions in18 suites, with zero skips. The
+failure was the two-cycle actual-CLI control returning SOURCE_CHRONOLOGY_REFUSED.
+The original child bundle and analysis PIT were not logged before its assertion;
+its exact failing predicate is therefore unknown. The retained lease began at
+2026-09-26T17:35:59.376Z and no packet was written. Raw failing logs remain under
+accepted-base-752a09e0/author-native; teardown found no remaining sessions, fault
+artifacts or disabled guards.
+
+A separate deterministic probe using the unchanged gateway, synthetic transport
+and normalizer proves a fixture boundary: an open bar acquired before the minute
+can close before analysis PIT, and the normalizer correctly refuses its close
+later than the original ingestion. This is a proven possible fixture cause,
+not retroactive attribution of the unlogged original failure.
+
+The controller admitted only this test correction before implementation:
+native fixtures explicitly request bars already closed at each synthetic
+response's observed time. The default open-bar fixture remains unchanged.
+Actual-normalizer regressions preserve the minute-crossing refusal and prove
+the closed-only positive control across that boundary. Child result, immutable
+input chronology and observed-clock barrier evidence must be logged before
+status assertions. No production guard, analysis PIT, ingestion timestamp,
+source rule, arbitrary delay or retry is changed. The post-acquisition observed
+DB-clock barrier remains in force. Pure/scoped acceptance, fresh native evidence,
+current-head readiness and independent delta review remain pending at this plan
+commit; the original357/1 result is not replaced or relabelled.
