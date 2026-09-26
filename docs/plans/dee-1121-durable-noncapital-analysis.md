@@ -479,3 +479,8 @@ The existing FHV preflight suite becomes part of corrected scoped acceptance.
 Independent review and fresh exact-head PG17 CI remain required. Unrelated
 18-suite native evidence retains its prior tested-head attribution; no redundant
 rerun is claimed. No C3, provider, host, production or financial action.
+
+The companion `forecast-v2-applied-migration-identity-v1.test.ts` also contains an
+explicit post0148 extras inventory ending0218. Its observed missing0219 test
+expectation will be extended by one tag after retaining its baseline failure;
+ratified maximum148, SQL hash pins, and invalid identity refusals stay intact.
