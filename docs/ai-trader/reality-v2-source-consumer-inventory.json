@@ -31,7 +31,7 @@
     ],
     "expectedFileCount": 155,
     "sortedPathDigestHex": "bb13f0f38f9cab1ac3613294524c2d34fe57bde3f3306a6cd61f211edb9edf68",
-    "sortedContentDigestHex": "3a0ed6f1e9522f0579ffa8f4cc932ed70a6ea97323eb17f00fa3f80c41c1d3c8"
+    "sortedContentDigestHex": "1806224177afe2ead89c54549d58e2130d8e83ea0e41e280b52708a29081d99a"
   },
   "sourceRules": [
     {
@@ -92,7 +92,13 @@
   "consumerDiscovery": {
     "roots": ["lib", "app", "scripts"],
     "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
-    "additionalFiles": ["lib/trader/execution/index.ts", "lib/trader/execution/v2/index.ts"],
+    "additionalFiles": [
+      "lib/trader/execution/index.ts", "lib/trader/execution/v2/index.ts",
+      "lib/trader/reality/v2/execution-report-delivery-cli.ts",
+      "lib/trader/reality/v2/source-equivalence.ts",
+      "lib/trader/reality/v2/ingest-postgres.ts",
+      "scripts/trader/reality-execution-report-catch-up.ts"
+    ],
     "importMarkers": [
       "@/lib/trader/connectors",
       "@/lib/trader/execution/v2",
@@ -107,11 +113,17 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 134,
-    "sortedPathDigestHex": "6e9ed1d7e0ea30f015281ef5bdffbef53bae722e19302e200526b55f1c2a17a7",
-    "sortedContentDigestHex": "2b0d1897cd2a5e908e8b2a0abd6781e19cb4c8820cfb6f79ba55f34d93ffb31b"
+    "expectedFileCount": 140,
+    "sortedPathDigestHex": "efcb30555d0322f78322222bfa51ef424bf2d6ca0b426c476b0c3cc731519f7a",
+    "sortedContentDigestHex": "640c8feb27128cafb7320ef13f777aeee5c20369901bdb8fbb9e2ae673270e47"
   },
   "consumerRules": [
+    {
+      "id": "EXECUTION_REPORT_DELIVERY_CLI",
+      "pathPattern": "^scripts/trader/reality-execution-report-catch-up\\.ts$",
+      "disposition": "DB_ONLY_COMMITTED_REPORT_DELIVERY",
+      "reason": "DEE-1122 invokes the bounded pool-owned PostgreSQL report catch-up command, with no report JSON/provider/credential input or execution effect."
+    },
     {
       "id": "ACCOUNT_OBSERVATION_PROTECTED_STORE",
       "pathPattern": "^lib/trader/account-observation/credential-store\\.ts$",
@@ -174,7 +186,7 @@
     },
     {
       "id": "TRADER_SCRIPT",
-      "pathPattern": "^scripts/trader/",
+      "pathPattern": "^scripts/trader/(?!reality-execution-report-catch-up\\.ts$)",
       "disposition": "EXCLUDED_RESEARCH_OR_OPERATOR_SURFACE"
     },
     {

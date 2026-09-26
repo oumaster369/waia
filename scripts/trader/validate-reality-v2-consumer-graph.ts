@@ -229,6 +229,8 @@ function validate(): void {
       "lib/trader/reality/v2/contracts.ts",
       "lib/trader/reality/v2/source-admission.ts",
       "lib/trader/reality/v2/ingress.ts",
+      // DEE-1122 routes internally reloaded immutable reports only; no caller body/provider port.
+      "lib/trader/reality/v2/execution-report-delivery-postgres.ts",
       "lib/trader/reality/v2/repository-postgres.ts",
       "lib/trader/connectors/htx/reality-adapter.ts",
       "lib/trader/execution/v2/reality-adapter.ts",
