@@ -14,11 +14,13 @@ import { seedResearchNativeFixture } from "../helpers/research-understanding-fix
 import { createSavedResearchOwner } from "@/lib/trader/paper/research-understanding-v1/repository-postgres";
 import { runSavedResearchLoop } from "@/lib/trader/paper/research-understanding-v1/run-saved-research-loop";
 import { claimBoundedResearchRuntimeControlLeaseV2, lockRuntimeOrganizationV2, readRuntimeDatabaseClockV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
-import { decodeBody } from "@/lib/trader/paper/durable-noncapital/recorded-source-read-validation-v1";
-import { copy } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
+import { decodeBody, encodeBody } from "@/lib/trader/paper/durable-noncapital/recorded-source-read-validation-v1";
+import { copy, seal } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
 import { readBoundedResearchInputs, ResearchReadBudget } from "@/lib/trader/paper/research-understanding-v1/bounded-source-postgres";
-import { LIMITS } from "@/lib/trader/paper/research-understanding-v1/contract";
+import { LIMITS, RESEARCH_CONTRACT } from "@/lib/trader/paper/research-understanding-v1/contract";
 import { assertSelectedResearchTrust } from "@/lib/trader/paper/research-understanding-v1/admission";
+import { evaluateSavedResearchUnderstanding } from "@/lib/trader/paper/research-understanding-v1/evaluate";
+import { persistInformationSufficiencyReceiptWithinTransactionV2Postgres } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
 import { createPostgresRuntimeControlLeaseRepositoryV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-repository-postgres-v2";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { computeSourceTrustDigest } from "@/lib/trader/mi/serialize-source-trust";
@@ -182,6 +184,35 @@ describe.skipIf(!enabled)("Postgres owned saved research Understanding", () => {
     try { expect((await createSavedResearchOwner(readOnly, { organizationId }, f.request).replay(0))!.outcome).toBe("REPLAYED"); }
     finally { await readOnly.end({ timeout: 3 }); }
     expect(await counts()).toEqual(before);
+  });
+  it("guards-on stored self-consistent output cannot replace the fixed replay computation", async () => {
+    const f = await seed({ count: 2 }); const holder = await claim();
+    const owner = createSavedResearchOwner(client, { organizationId }, f.request);
+    // The actual command retains a valid assignment/profile but refuses a skipped prefix.
+    await expect(owner.complete(1, holder)).rejects.toThrow("EXACT_ROW_SET_MISSING_OR_AMBIGUOUS");
+    const assignment = await currentAssignment(f);
+    const saved = await db.transaction(tx => readBoundedResearchInputs(tx, assignment, f.profile, 0, new ResearchReadBudget(LIMITS.inputAggregate)),
+      { isolationLevel: "repeatable read", accessMode: "read only" });
+    const computed = evaluateSavedResearchUnderstanding(saved.packet, assignment, f.profile, saved.revisions);
+    const body = copy(computed); delete (body as Partial<typeof body>).contentDigest;
+    const output = seal({ ...body, features: { ...body.features, id: "self-consistent-but-not-the-owned-computation" } });
+    const completion = seal({ schemaVersion: RESEARCH_CONTRACT, organizationId, researchSessionId: assignment.researchSessionId,
+      sequence: 0, sourceSessionId: assignment.sourceSessionId, sourceSequence: 0, assignmentDigest: assignment.contentDigest,
+      packetDigest: saved.packet.contentDigest, previousCompletionDigest: null, output });
+    // This deliberately trusted direct writer keeps every database guard enabled. A self-seal
+    // and valid stored receipt must not substitute for the public reader's actual computation.
+    await db.transaction(async tx => {
+      await lockRuntimeOrganizationV2(tx, organizationId);
+      await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(tx, { organizationId }, output.receipt);
+      await tx.insert(schema.traderResearchUnderstandingCompletionsV1).values({ organizationId,
+        sessionId: completion.researchSessionId, sequence: 0, contentDigest: completion.contentDigest, bodyJson: encodeBody(completion),
+        assignmentDigest: completion.assignmentDigest, sourceSessionId: completion.sourceSessionId, sourceSequence: 0,
+        packetDigest: completion.packetDigest, receiptId: output.receipt.id, previousCompletionDigest: null,
+        runtimeInstanceId: holder.runtimeInstanceId, leaseEpoch: holder.leaseEpoch, leaseContentDigest: holder.leaseContentDigest });
+    }, { isolationLevel: "read committed" });
+    expect(await counts()).toEqual([1, 1, 1, 1]);
+    await expect(owner.replay(0)).rejects.toThrow("REPLAY_OUTPUT_CONFLICT");
+    expect(await counts()).toEqual([1, 1, 1, 1]);
   });
   it("actual USER membership is checked before reads/writes and captured input cannot change scope", async () => {
     const f = await seed(); const holder = await claim();
