@@ -207,8 +207,8 @@ async function profile(pool: postgres.Sql, tx: postgres.Sql, f: Input, fault?: "
           ${bundle.contentDigestHex},${bundle.schemaVersion},
           CASE WHEN ${value === null} THEN NULL ELSE jsonb_build_object('schemaVersion',1,
             'organizationId',l.organization_id::text,'accountId',l.account_id,'runId',l.run_id,'cycleSequence',l.cycle_sequence,
-            'cycleId',l.cycle_id,'kind',${bundle.stage},'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
-            'sourceSchema',${bundle.schemaVersion},'sourceDigest',${bundle.contentDigestHex},'value',${JSON.stringify(value)}::jsonb) END
+            'cycleId',l.cycle_id,'kind',${bundle.stage}::text,'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
+            'sourceSchema',${bundle.schemaVersion}::text,'sourceDigest',${bundle.contentDigestHex}::text,'value',${JSON.stringify(value)}::jsonb) END
         FROM trader_historical_simulation_reason_ledger_v2 l WHERE l.organization_id=${organizationId}::uuid
           AND l.account_id=${f.scope.accountId} AND l.run_id=${f.scope.runId} AND l.cycle_id=${bundle.cycleId}
           AND l.content_digest_hex=${bundle.ledgerEntryContentDigestHex} RETURNING stage`;
@@ -228,8 +228,8 @@ async function profile(pool: postgres.Sql, tx: postgres.Sql, f: Input, fault?: "
             ${snapshot.contentDigestHex},${snapshot.schemaVersion},
             CASE WHEN ${value === null} THEN NULL ELSE jsonb_build_object('schemaVersion',1,
               'organizationId',l.organization_id::text,'accountId',l.account_id,'runId',l.run_id,'cycleSequence',l.cycle_sequence,
-              'cycleId',l.cycle_id,'kind',${kind},'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
-              'sourceSchema',${snapshot.schemaVersion},'sourceDigest',${snapshot.contentDigestHex},'value',${JSON.stringify(value)}::jsonb) END
+              'cycleId',l.cycle_id,'kind',${kind}::text,'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
+              'sourceSchema',${snapshot.schemaVersion}::text,'sourceDigest',${snapshot.contentDigestHex}::text,'value',${JSON.stringify(value)}::jsonb) END
           FROM trader_historical_simulation_reason_ledger_v2 l WHERE l.organization_id=${organizationId}::uuid
             AND l.account_id=${f.scope.accountId} AND l.run_id=${f.scope.runId} AND l.cycle_id=${cursor.committedCycleId}
             AND l.content_digest_hex=${cursor.ledgerHeadContentDigestHex} RETURNING state_kind`;
@@ -291,7 +291,7 @@ async function writeProjectedSource(tx: postgres.Sql, f: Input, kind: ProjectedK
   const data: ProjectedFixture = { source: structuredClone(source) as unknown, candidate: {
     schemaVersion: 1, organizationId, accountId: f.scope.accountId, runId: f.scope.runId, cycleSequence: 0,
     cycleId: f.entry.cycleId, kind, ledgerEntryId: f.entry.entryId, ledgerDigest: f.entry.contentDigestHex,
-    sourceSchema: schemaVersion, sourceDigest: digest, value: projectHistoricalReconciliationSourceValueV1(kind, source),
+    sourceSchema: schemaVersion, sourceDigest: digest, value: structuredClone(projectHistoricalReconciliationSourceValueV1(kind, source)),
   } as Record<string, unknown> | null };
   await change?.(data); // Fixture-only adversarial input; no production collaborator exists.
   if (snapshot) await tx`INSERT INTO trader_historical_simulation_durable_snapshot_v2
@@ -376,6 +376,7 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
   let roleCreated = false;
   const role = `dee1130_generic_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const originalSourceTables = ["trader_accounting_frontier", "trader_historical_simulation_reason_ledger_v2",
+    "trader_historical_simulation_modeled_evidence_v2",
     "trader_historical_simulation_atomic_stage_v2", "trader_historical_simulation_durable_snapshot_v2",
     "trader_historical_simulation_resume_checkpoint_v2", "trader_historical_simulation_resume_stage_link_v2",
     "trader_historical_simulation_resume_snapshot_link_v2"] as const;

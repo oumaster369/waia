@@ -1254,9 +1254,9 @@ function transactionPort(
           ${json(bundle.artifacts)}::text::jsonb,${bundle.contentDigestHex},${bundle.schemaVersion},
           CASE WHEN ${projection}::text IS NULL THEN NULL ELSE jsonb_build_object(
             'schemaVersion',1,'organizationId',l.organization_id::text,'accountId',l.account_id,'runId',l.run_id,
-            'cycleSequence',l.cycle_sequence,'cycleId',l.cycle_id,'kind',${bundle.stage},
+            'cycleSequence',l.cycle_sequence,'cycleId',l.cycle_id,'kind',${bundle.stage}::text,
             'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
-            'sourceSchema',${bundle.schemaVersion},'sourceDigest',${bundle.contentDigestHex},'value',${projection}::text::jsonb) END
+            'sourceSchema',${bundle.schemaVersion}::text,'sourceDigest',${bundle.contentDigestHex}::text,'value',${projection}::text::jsonb) END
         FROM trader_historical_simulation_reason_ledger_v2 l
         WHERE l.organization_id=${bundle.organizationId}::uuid AND l.account_id=${bundle.accountId}
           AND l.run_id=${bundle.runId} AND l.cycle_id=${bundle.cycleId}
@@ -1292,9 +1292,9 @@ function transactionPort(
           ${snapshot.contentDigestHex},${snapshot.schemaVersion},
           CASE WHEN ${projection}::text IS NULL THEN NULL ELSE jsonb_build_object(
             'schemaVersion',1,'organizationId',l.organization_id::text,'accountId',l.account_id,'runId',l.run_id,
-            'cycleSequence',l.cycle_sequence,'cycleId',l.cycle_id,'kind',${kind},
+            'cycleSequence',l.cycle_sequence,'cycleId',l.cycle_id,'kind',${kind}::text,
             'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
-            'sourceSchema',${snapshot.schemaVersion},'sourceDigest',${snapshot.contentDigestHex},'value',${projection}::text::jsonb) END
+            'sourceSchema',${snapshot.schemaVersion}::text,'sourceDigest',${snapshot.contentDigestHex}::text,'value',${projection}::text::jsonb) END
         FROM trader_historical_simulation_reason_ledger_v2 l
         WHERE l.organization_id=${cursor.organizationId}::uuid AND l.account_id=${cursor.accountId}
           AND l.run_id=${cursor.runId} AND l.cycle_sequence=${cursor.nextCycleSequence - 1}
