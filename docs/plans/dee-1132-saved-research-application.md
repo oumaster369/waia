@@ -775,3 +775,21 @@ Use the existing closed planned owner/reader/run/cli-options/paper-bar-close-loo
 
 Plan should include a concrete table/constraint/branch write map and measured-code instrumentation plan sufficient to review before source release. Native test sources must call the actual registered/saved producers, owner and early CLI and real canonical writers with laterB, not synthetic-only substitute acceptance. Actual test/native capacity is unknown until execution; declared caps remain unchanged. Scoped units/lint after source grant; whole compiler/build/native/DB/heavy/resources/CI/publication separately coordinated.
 <!-- END FROZEN WP2B_ROOT_RELEASE -->
+
+## WP-2 Core audit composition clarification
+
+The following finite root clarification precedes implementation of the new audit seam. It replaces only the choice of the thin Trader action-union wrapper with its existing Core writer; same-held-transaction scope, actor, audit binding and fenced-effect obligations remain unchanged. No additional edited path.
+
+<!-- BEGIN FROZEN CORE_AUDIT_CLARIFICATION SHA256 35a6fe2a822302875b926d19d67ecd595331d6016512fced5ee60da6ed13cd8a -->
+# Finite existing Core audit composition clarification
+
+At2026-09-27T08:27:57.531815+00:00 root read both actual existing audit functions. The Trader wrapper delegates to Core without extra transaction/authority machinery; it requires a trimmed nonempty organization ID and maps the same actor/action/entity/metadata fields. Its closed action union cannot express new application operation kinds. Root admits direct use of existing server-only Core writeAuditLogPostgres from the already mapped new fixed owner, with fixed operation action names and the SAME held/accounted executor. This changes no editable path, shared schema, public action union or product meaning.
+
+Preserve the wrapper's required nonempty trimmed canonical organization ID explicitly in the new owner (existing canonical UUID/scope validation may provide a stronger check); never use Core's nullable-org default. Keep authenticated actor, entity/bodydigest/currentholder metadata and returnedUUID exact, and validate the boundedstored audit projection on replay. Same-transaction mandatoryactuallyinserted sidecar and rollback obligations unchanged. Do not use a false legacy action label, cast around the union, expand old action types or call a separate audit connection.
+
+This supersedes only the remainingWP2 plan's literal Trader wrapper selection. Author should append this finite clarification/source identities to canonical checkpoint before implementing that seam, within already granted plan path; all other17path/source-only/native barriers remain. No new runtime audit result or native proof is claimed.
+
+Pinned read-only wrappers:
+- `lib/trader/audit/write.ts` SHA256 `f11bd1a2c0a6e926f4ab4de2c0fdc2b8cf97dc09055ad4682b74aae45a49adf7`
+- `lib/waia-core/audit/write.ts` SHA256 `f4cad7fc1fc85647ed0be337618b817a39bd33d12b8800d9e7f266841db23b79`
+<!-- END FROZEN CORE_AUDIT_CLARIFICATION -->
