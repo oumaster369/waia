@@ -612,13 +612,16 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     expect(Number(completion!.lease_epoch)).toBe(epoch + 1);
     const [receipt] = await client`select receipt_json from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid and id=${completion!.receipt_id}`;
     const body = JSON.parse(String(completion!.body_json)); expect(receipt!.receipt_json).toEqual(body.output.receipt);
+    expect(body).not.toHaveProperty("contentDigest");
+    expect(createHash("sha256").update(String(completion!.body_json), "utf8").digest("hex")).toBe(String(completion!.content_digest));
     expect(body.output.artifact.claims).toHaveLength(12);
     expect(body.assignmentDigest).toBe(f.application.configuration.researchAssignmentDigest);
     expect(body.output.analysisPitAnchor).toBe(f.packets[b]!.analysisPitAnchor);
     const old = await createSavedResearchOwner(client, f.researchContext, { ...f.application.research,
       range: { ...input.research.range, startSequence: b, count: 1 } }).complete(b, { organizationId,
       runtimeInstanceId: String(completion!.runtime_instance_id), leaseEpoch: Number(completion!.lease_epoch), leaseContentDigest: String(completion!.lease_content_digest) });
-    expect(Object.keys(old).sort()).toEqual(["completion", "outcome"]); expect(old).toEqual({ outcome: "REPLAYED", completion: body });
+    expect(Object.keys(old).sort()).toEqual(["completion", "outcome"]);
+    expect(old).toEqual({ outcome: "REPLAYED", completion: { ...body, contentDigest: String(completion!.content_digest) } });
     expect(result.consumption?.consumer.evaluationDigest).toBe(body.output.contentDigest);
     const [audit] = await client`select metadata_json from audit_logs where id=${consumed!.audit_id}::uuid`;
     expect(audit!.metadata_json.holder).toEqual({ runtimeInstanceId: completion!.runtime_instance_id,
