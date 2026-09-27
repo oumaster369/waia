@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: d38976977e77f8f89114a2ab04a80e25eb9fd8a3
   lastValidationAt: "2026-09-27T07:28:35.879848+00:00"
   blockedReason: null
-  nextAction: "Root and nonauthor review the WP-2A source/scoped checkpoint d3897697; native, typecheck and remaining WP-2 owner/CLI/schema work remain unexecuted and held for explicit release."
+  nextAction: "Root verifies this sole-plan codec-correction amendment before releasing held-replay and three mapped tests. WP2A-CODEC-1 remains implementation-open; no native/compiler or remaining application owner/schema release."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -565,3 +565,74 @@ Do not allocate or create a migration/journal change yet: concurrent1130 exclusi
 The original finite64MiB unique-input/512SQL/120s command limits and all per-row, source, repeated-call and unknown-outcome obligations remain. They are technical admissions, not measured memory/performance/qualification. Actual executor counts, real registry→saved-source→CLI→later-consumer positive/adverse/fault/race proofs and independent final review are required. A synthetic engineering positive cannot close fullP10, scientific, host or live gates.
 
 <!-- END FROZEN ROOT_ADMISSION -->
+
+## WP-2A codec-correction plan amendment — design admitted, code held
+
+Root's installed mapper/serializer counterexample and independent review found **WP2A-CODEC-1** in source d3897697: detached adapter options leave the actual originating connection's JSON serializers unchanged, so the outgoing JSONB value can be a string instead of the intended object/array. The historical182/9 result did not exercise that wire boundary and cannot establish transport acceptance. Original source/checkpoint0108516d, raw results and all freezes remain unchanged as historical evidence.
+
+Root admitted exact proposal994b2655 at2026-09-27T07:44:13.310561+00:00 after independent reviewf37563c8. This amendment embeds that proposal and root admission verbatim. **This commit changes only this plan.** Root must verify its exact identity before code. The dependent correction scope is only the already mapped held-replay.ts, the three owner/bounds/compatibility unit paths and a truthful checkpoint; the other three WP-2A production files remain unchanged. No schema, migration, new application owner/CLI, native/DB, heavy/compiler/build, CI, graph or publication is released here.
+
+The selected repair initializes the actual originating pool's codec metadata through one normal Drizzle construction before the owner begins its transaction, then binds the restricted transport exactly once to that owner's held client. It neither acquires a second connection nor exposes root transport/control. Actual root codecs are deliberately initialized; only the held object remains unmodified. Same-origin pairing, preparation order and stable codec ownership are fixed later-owner obligations, not an arbitrary client-shape authority proof. Required controls assert outgoing logical JSON types/content before the incoming mapper so double parsing cannot hide a wrong stored type. These are new proof obligations, not executed corrected results.
+
+<!-- BEGIN FROZEN CODEC_PROPOSAL SHA256 994b2655f19fdac2a7e2a5542440d43e512b8bafec4287d0d932f0151083036e -->
+# DEE1132 WP2A — exact originating-codec correction proposal
+
+**Design only; source0108516d/d3897697 is unchanged and is not accepted.** This is a finite correction to the existing held-helper composition, not a new application meaning, schema, transaction runner or authority boundary. Root must admit the canonical plan amendment before implementation. Existing contract da84172d, clarification a106157a, plan54183f3c, source d3897697, plan checkpoint0108516d and their freezes remain immutable.
+
+## Confirmed defect and previous proof limit
+
+Root's retained `root-wire-codec-probe.cjs` / `root-wire-codec-receipt.json` demonstrate the installed mapper/serializer chain with zero SQL dispatch and zero network attempts. `PgJsonb.mapToDriverValue` first JSON.stringify's a logical object. The actual postgres.js connection's Bind then selects its originating options.serializers by the server parameter OID; its default114/3802 serializer JSON.stringify's again. The current held facade lets Drizzle change only detached empty options, so the actual originating connection keeps that default serializer. A JSONB parameter therefore denotes a JSON string, not the intended object/array. Root's positive shares the real pool.options and decodes the intended logical value once. This is a real source-level codec composition defect, not a demonstrated production write or native server test.
+
+The previous JSON text/object controls examined returned mapper representations without the actual outgoing serializer. They cannot establish wire correctness. PgJsonb.mapFromDriverValue can JSON.parse a returned string again, so even matching returned canonical bodies can mask a wrongly stored JSONB string. The earlier182/9 is preserved as executed historical evidence, but is insufficient for acceptance of this transport. Its same-source compatibility checks are still accurately attributed; no old results are relabelled or rewritten.
+
+## One selected repair: initialize before BEGIN, then bind once
+
+Replace only the new, unpublished internal `createHeldResearchReplay(held, accounting)` entry with a **two-phase internal preparer in the same held-replay.ts**:
+
+1. `prepareHeldResearchReplay(originatingPool, accounting)` accepts the actual root postgres.Sql that the private application owner will use to start its transaction. Require the root shape (begin, no savepoint) and its actual options/parsers/serializers objects; missing metadata refuses rather than creating empty defaults. No caller-supplied options object, parser map, repository, writer or evaluator is accepted.
+2. During preparation, construct the schema-bound Drizzle adapter exactly once using a restricted transport whose `options` is **the same object identity as originatingPool.options**. The transport's only dispatch method is a closure that will later call the bound held client's unsafe. It has no root unsafe/begin/end/transaction/release method. Before binding, any attempted transport use refuses. Drizzle's ordinary installed initialization now intentionally updates the real originating codec maps, exactly as the existing public `drizzle(pool, { schema })` path does. No custom JSON encode/decode layer, copied default tables or manually invented codec convention is added.
+3. Preparation finishes synchronously **before the owner calls originatingPool.begin**. The helper does not call BEGIN, open/reserve/release another connection or execute SQL. The owner still owns one transaction and its settings/finalization accounting. The constructed Drizzle object stays private and has no public executor until bind.
+4. The preparer returns only a one-use `bindHeld(actualTransactionSql)` operation. It rejects a root shape and repeat binding, captures that exact held client, and returns the existing narrow executor plus fixed replay. It does not reconstruct Drizzle, mutate codec tables again, add options to the held client, call savepoint or control the transaction. The same actual nested logger continues charging every dispatch before the bound unsafe call. Accounting starts before preparation and retains all current pre/post-await/compute/return checks.
+5. Each future application transaction creates its own preparer before its own BEGIN, using the same invocation accounting. Availability/replay transactions do not rebind a previous adapter. The future private owner must pair this preparer with the callback returned by **that same originating pool** and must not change its codecs during the operation. No public postgres.js identifier proves the root-to-TransactionSql association from an arbitrary supplied held object; do not pretend structural checks attest it. Exact pairing, preparation order and resource ownership are properties of the fixed internal call site and later native proof, not of an untrusted plugin API or a new authority token.
+
+This changes the immutability statement precisely: the actual held client remains unmodified and may be frozen in the inert fixture; the real root's codec maps are intentionally initialized *before* that client is supplied, following normal Drizzle behavior. Do not freeze the real options/maps globally: postgres.js can add type/array metadata during normal connection initialization. Do not promise that arbitrary outside mutation or a different-origin held client is made safe by this internal seam. The later owner retains exclusive command-owned pool composition; WP2A creates neither a generic root runner nor an injectable public owner.
+
+Old saved1126 public root-pool behavior remains untouched. Canonical public/held writer bodies, scope/lineage/body comparisons, source validators, budgets, fixed evaluator, declared semantics and all stored identities remain unchanged. A setup failure propagates before any held query; no detached-options fallback can turn it into success.
+
+## Exact edit map after root plan-first admission
+
+| Path | Correction |
+|---|---|
+| `docs/plans/dee-1132-saved-research-application.md` | Sole initial plan commit admits this lifecycle correction and clarifies historical182/9; later truthful checkpoint. Preserve all controlling embedded bytes. |
+| `lib/trader/paper/research-understanding-v1/held-replay.ts` | Replace the new internal one-phase transport composition with the single-construction originating-metadata preparer and one-use held bind. Preserve the fixed reader, evaluator, accounting and deadline behavior. |
+| `tests/unit/research-application-v1-compatibility.test.ts` | Actual outgoing JSON/JSONB wire-aware negative and positive controls through the real canonical writers/Drizzle; no post-read-only equivalence claim. Preserve existing legacy fold/Navigator/RETIRED assertions. |
+| `tests/unit/research-application-v1-owner.test.ts` | Adapt only the new internal entry usage; prove prepare→owner BEGIN→single bind order, no root dispatch or second client, frozen held shape, public/held byte behavior and retained refusal/deadline controls. |
+| `tests/unit/research-application-v1-bounds.test.ts` | Adapt the internal entry fixture while retaining actual512/513 nested-dispatch accounting, reserved cleanup, shared byte and monotonic controls. |
+
+No change to repository-postgres.ts, bounded-source-postgres.ts, canonical-pit-repository-postgres.ts, schema/journal, other shared paths, CI, manifests, graph inventories, application owner/CLI or native test files is proposed. The three test paths are already admitted; changing the entry requires their small fixture adaptations. No other helper path is needed. The old helper is unpublished and has only these new scoped test callers; no accepted production caller must be migrated in this correction.
+
+## Required meaningful proof
+
+1. Preserve root's actual installed mapper/serializer counterexample and add a regression using the **actual canonical definition/value writers**, actual Drizzle parameter mapping and the actual originating postgres.js codec function selected for the synthetic schema-declared114/3802 OID. The inert SQL port may model the server's one JSON parse but must not replace the codec with identity. Assert the decoded wire value *before* the outgoing/incoming Drizzle read mapper: actual definition_json is an object; input_contracts_json and input_lineage_json are arrays; all equal the exact original canonical values. A control using the old detached metadata must expose JSONB string storage rather than silently normalizing it during readback.
+2. Keep a lazy actual postgres root with fixed synthetic connection settings and a throwing socket boundary. No actual root unsafe/query is awaited/dispatched. Fixture teardown closes only that lazy test root. Record zero network attempts and zero root transport calls. This proves the installed codec chain, not server OID inference, native rollback or a connection identity.
+3. For the corrected path, preparation updates the same originating metadata object before the owner BEGIN marker; binding does no second construction/metadata replacement. The held object is frozen and lacks options/begin/end. Root/held inversion, absent codec metadata, use before bind and second bind refuse before held dispatch. The returned direct surface remains only select/insert/execute plus fixed replay; it is not a JavaScript security sandbox.
+4. Verify installed normal Date/timestamp and JSON incoming representation behavior remains the same as the existing public adapter on the same configuration. There is no new parser convention or silent fallback. Preserve old returned bodies/digests and no-op/conflict/error propagation, while separately asserting the actual logical JSON wire types so double parsing cannot hide a wrong stored representation.
+5. Run the three affected scoped files with exact frozen correction source, plus scoped lint/diff. Preserve genuine RED and GREEN separately. Prior six unchanged companion results stay historically attributed unless a concrete newly affected branch/failure justifies repetition. Full typecheck and native work require a separate root resource release.
+6. Deferred native acceptance must additionally execute the actual private owning call site with one real originating pool/held connection and check JSONB types/content in retained rows, replay, rollback/unknown COMMIT and isolation/fencing. This remains within the later admitted application/native work; no such proof is claimed or executed by this proposal.
+
+## Source and disposition
+
+Pinned source is frozen0108516d (same production d3897697), with the actual installed postgres.js/Drizzle source behind root's probe. `source-manifest.json` records the exact current helper, all three scoped tests, unchanged public/canonical/schema dependencies, installed mapper/serializer/constructor/begin/Bind sources, root probe and original freeze references. No code, DB, native, test process, typecheck/build, provider/host/C3, issue, branch or publication was performed for this proposal. It is ready for finite root admission and independent review, not implementation acceptance.
+<!-- END FROZEN CODEC_PROPOSAL -->
+
+<!-- BEGIN FROZEN CODEC_ADMISSION SHA256 f519e4daf1cec8a822977da22d39fdafb135d6afbe7aa0b01cc6f2f2ebb74665 -->
+# Root finite codec-correction admission
+
+At2026-09-27T07:44:13.310561+00:00 root admits the finite DESIGN994b2655f19fdac2a7e2a5542440d43e512b8bafec4287d0d932f0151083036e, based on full proposal/source-chain read,20author artifacts/14actual source identities/four prior reference verification and full independentf37563c835c247233cfabb3b430dbd971384fbe89e4ca60a867f290ee9895b17 review. Its frozen artifacts were reverified. This closes the design question only; WP2A-CODEC-1 remains open until corrected source/proofs are independently reviewed.
+
+Author release NOW is solely canonicalplan docs/plans/dee-1132-saved-research-application.md on clean0108516d. Embed exact proposal and this admission, preserve all preceding contracts/status history, make one plan-only commit, return its exact identity before code. After root verifies it, dependent scope is solely held-replay.ts plus three already mapped tests/accurate checkpoint; no other public production changes.
+
+Implement exactly prepare(actualoriginatingroot.options) before owner'sBEGIN, single Drizzle construction, restricted initially-unbound heldtransport, one-use binding to sameowner'sactualtransaction, no roottransport escape/newconnection/transactioncontrol and no detached defaultoptions. Same-origin pairing/pre-BEGINorder/stablecodec conditions must be honest fixed-owner integration obligations. Root codec initialization is intended normalDrizzle behavior; do not claim totalroot immutability or newruntimeauthority.
+
+Actualcanonicalwriter wire-aware tests must check logicalJSONtypes/content BEFORE incomingmapper and use installedoriginalserializer controls with explicit syntheticOIDinference; preserve realnegative, no-network/rootdispatch and order/once-only checks. Scopedaffectedthreefiles/lint/diff allowed after root source release; historicalsixcompanion results stay attributed. No native/DB/heavy/compiler/build/CI/graphs/schema/migration/ownerCLI/publication grant. This is a finite repair within connectedDEE1132, not a separate helperPR or fullP10 acceptance.
+<!-- END FROZEN CODEC_ADMISSION -->
