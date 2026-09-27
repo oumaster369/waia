@@ -1,3 +1,5 @@
+import { htxPeriodToSeconds } from "@/lib/trader/market-data/mtf/bar-interval-duration";
+export { htxPeriodToSeconds } from "@/lib/trader/market-data/mtf/bar-interval-duration";
 import { HTX_MARKET_HISTORY_CANDLES_MAX_SIZE } from "@/lib/trader/connectors/htx/config";
 import type { HtxKlineRow } from "@/lib/trader/connectors/htx/types";
 
@@ -7,24 +9,6 @@ export type HtxCandlesPageFetcher = (input: {
   size: number;
   from: number;
 }) => Promise<HtxKlineRow[]>;
-
-const PERIOD_SECONDS: Record<string, number> = {
-  "1min": 60,
-  "5min": 300,
-  "15min": 900,
-  "30min": 1800,
-  "60min": 3600,
-  "4hour": 14_400,
-  "1day": 86_400,
-};
-
-export function htxPeriodToSeconds(period: string): number {
-  const seconds = PERIOD_SECONDS[period];
-  if (!seconds) {
-    throw new Error(`[htx] unsupported kline period: ${period}`);
-  }
-  return seconds;
-}
 
 export type FetchPaginatedHtxKlinesInput = {
   symbol: string;

@@ -66,6 +66,12 @@ export const CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1 = {
     consumer: "lib/trader/mi/canonical-pit-service-postgres.ts",
     disposition: "PERSISTED_OUTCOME_REPLAY_NO_ANALYTICAL_AUTHORITY",
   },
+  savedResearchUnderstanding: {
+    producer: "lib/trader/paper/durable-noncapital/repository-postgres-v1.ts",
+    boundary: "lib/trader/paper/research-understanding-v1/bounded-source-postgres.ts",
+    consumer: "lib/trader/mi/canonical-pit-service-postgres.ts",
+    disposition: "METADATA_BOUNDED_SAVED_SOURCE_RESEARCH_ONLY_NO_SOURCE_WRITES",
+  },
   persistence: {
     consumer: "lib/trader/mi/canonical-pit-repository-postgres.ts",
     disposition: "SERVICE_ONLY_APPEND_ONLY",

@@ -320,7 +320,7 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
     expect(bypasses).toEqual([]);
   });
 
-  it("leaves durable Understanding persistence to DEE-623", () => {
+  it("keeps generic Understanding persistence deferred and research completion separately owned", () => {
     expect(MARKET_UNDERSTANDING_DURABLE_PERSISTENCE_V1).toEqual({
       owner: "DEE-623",
       status: "DEFERRED",
@@ -328,6 +328,9 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
       migration: null,
       createsCapitalAuthority: false,
     });
+    expect(MARKET_UNDERSTANDING_EXPORT_AND_PERSISTENCE_V1.find(entry => entry.path === "lib/trader/paper/research-understanding-v1/repository-postgres.ts"))
+      .toMatchObject({ disposition: "OWNED_RESEARCH_SIDECAR_FIXED_RECOMPUTATION_ONLY", exactArtifact: true });
+    expect(read("lib/trader/paper/research-understanding-v1/repository-postgres.ts")).toContain("REPLAY_OUTPUT_CONFLICT");
     expect(read("lib/trader/backtest/streaming-evidence/cycle-evidence-projection.ts")).not.toContain(
       "understandingArtifact",
     );

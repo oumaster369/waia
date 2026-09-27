@@ -4701,6 +4701,26 @@ export const traderRecordedAnalysisCompanionsV1 = pgTable("trader_recorded_analy
     [traderRuntimeNoncapitalCyclesV2.organizationId, traderRuntimeNoncapitalCyclesV2.accountId, traderRuntimeNoncapitalCyclesV2.symbol,
       traderRuntimeNoncapitalCyclesV2.barInterval, traderRuntimeNoncapitalCyclesV2.pitAnchor] })]);
 
+/** DEE-1126: purpose-bound research sidecars; neither row confers source or capital authority. */
+export const traderResearchUnderstandingAssignmentsV1 = pgTable("trader_research_understanding_assignments_v1", {
+  ...recordedAnalysisColumns(), profileId: text("profile_id").notNull(), profileContentDigest: text("profile_content_digest").notNull(),
+  sourceSessionId: text("source_session_id").notNull(), sourceConfigDigest: text("source_config_digest").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.sessionId] }), unique().on(t.organizationId, t.sessionId, t.contentDigest),
+  foreignKey({ columns: [t.profileId, t.organizationId, t.profileContentDigest], foreignColumns:
+    [traderRequiredInformationProfileV2.id, traderRequiredInformationProfileV2.organizationId, traderRequiredInformationProfileV2.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.sourceSessionId, t.sourceConfigDigest], foreignColumns:
+    [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest] })]);
+export const traderResearchUnderstandingCompletionsV1 = pgTable("trader_research_understanding_completions_v1", {
+  ...recordedAnalysisColumns(), sequence: bigint("sequence", { mode: "number" }).notNull(), assignmentDigest: text("assignment_digest").notNull(),
+  sourceSessionId: text("source_session_id").notNull(), sourceSequence: bigint("source_sequence", { mode: "number" }).notNull(),
+  packetDigest: text("packet_digest").notNull(), receiptId: text("receipt_id").notNull().references(() => traderInformationSufficiencyReceiptV2.id),
+  previousCompletionDigest: text("previous_completion_digest"),
+}, t => [primaryKey({ columns: [t.organizationId, t.sessionId, t.sequence] }), unique().on(t.organizationId, t.sessionId, t.contentDigest),
+  foreignKey({ columns: [t.organizationId, t.sessionId, t.assignmentDigest], foreignColumns:
+    [traderResearchUnderstandingAssignmentsV1.organizationId, traderResearchUnderstandingAssignmentsV1.sessionId, traderResearchUnderstandingAssignmentsV1.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.sourceSessionId, t.sourceSequence, t.packetDigest], foreignColumns:
+    [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest] })]);
+
 /** Capital-ineligible, pre-holdout Historical Simulation V2 reason ledger. Not canonical Reality. */
 export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
   "trader_historical_simulation_reason_ledger_v2",
