@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-4]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 4f4b539ba1a199dffbbf165183cf17206a34bc79
-  lastValidationAt: 2026-09-27T02:12:22Z
+  lastValidatedGitSha: 0c1c98adfdd22164e98c450c11cd729c080ca575
+  lastValidationAt: 2026-09-27T02:25:13Z
   blockedReason: null
-  nextAction: "Local source/native/readiness proof completed on4f4b539b. Root and M01 review the final plan-only freeze; root owns rendered PR preflight, publication and exact-head GitHub CI. No additional provider, host or capital action."
+  nextAction: "D1126-02 corrected with exact schema compatibility and targeted/read-only proof. Root/M01 review successor plan-only freeze; root owns rendered preflight, publication and exact-head GitHub CI."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -40,7 +40,7 @@ The current accepted base is **`82cf05c9c667120af7122c4427e097eaa5b29a0d`**, int
 
 DEE1125 was schema coordination only. All221 incoming SQL files and journal entries through0220 remain exact. Root exclusively allocated0221; all222 migrations were applied and verified on a fresh isolated synthetic local database. No prior fixture/database/registry was repaired. The original waiting/allocation statements in dated and verbatim records are historical, not current blockers.
 
-Current immutable source `4f4b539ba1a199dffbbf165183cf17206a34bc79` has complete local validation:291 assertions/18 scoped unit files;464 assertions/22 mandatory critical native files with the executed-proof guard;29 assertions/four separately attributed native companions; and all eight readiness commands. Separate3 billing,2 payment and4 PG17 lane registrations are preserved, not asserted rerun here. Final independent metadata/package review, root rendered preflight and exact-head GitHub CI remain outstanding WP-4 integration work. No empirical qualification, scientific/full-P10 completion or capital authority is claimed.
+Current immutable source `0c1c98adfdd22164e98c450c11cd729c080ca575` includes the independently discovered D1126-02 compatibility correction. Its four affected unit files pass45 assertions, and all eight readiness commands pass. The actual read-only public schema preflight passes on the same production-helper bytes atc7ca2b02 against all222 migrations and80 required tables. Prior291/18 scoped units,464/22 critical native+guard and29/4 companions remain exact4f4b evidence, not falsely relabelled current reruns; the research/runtime/schema/native test sources did not change in this correction. Separate3 billing,2 payment and4 PG17 lane registrations remain preserved. Final independent successor review, root rendered preflight and exact-head GitHub CI remain outstanding WP-4 integration work. No empirical qualification, scientific/full-P10 completion or capital authority is claimed.
 
 ### Controlling identities and precedence
 
@@ -483,7 +483,7 @@ Then one current-source typecheck/lint/build and canon/PR-governance/Execution/R
 <!-- END DEE1126_INVENTORY_NATIVE_8C7A1EC5 -->
 
 
-## Final author local proof — source4f4b539b
+## Historical author local proof — source4f4b539b, before D1126-02
 
 This closure is documentation only. The tested production, schema, helpers and test bodies remain those of `4f4b539ba1a199dffbbf165183cf17206a34bc79`. Local validation does not replace final nonauthor review or current-head CI.
 
@@ -536,3 +536,16 @@ Admit only one additional test path: tests/unit/forecast-v2-applied-migration-id
 Append this exact finite admission to the canonical plan and commit only that plan before the one-line test correction. Preserve the44PASS/1FAIL raw result despite its historical unit-green filename. Then rerun the same four-file affected selection and proceed to the already granted current readiness/final freeze. No native rerun is needed for this test-only expectation change; retain exact c7ca2b02 native read-only public-preflight attribution. This is truthful reporting of an extra applied schema identity, not Forecast ratification or scientific admission. All d78eddde scope/resource/publication restrictions remain.
 
 <!-- END DEE1126_FORECAST_EXTRA_DE4FA43F -->
+
+
+## D1126-02 successor local proof closure
+
+Plan-only595690ea embeds exactd78eddde admission before productionc7ca2b02; plan-only9a50f1b4 embeds exactde4fa43f admission before the one-line companion expectation in0c1c98ad. The only production amendment is the explicit0221 compatible tuple and two-line comment in the existing FHV public schema helper. Required0000..0207, all80 required tables, prior tuples, unknown/duplicate/hash refusals and existing callers are unchanged. Forecast's ratified maximum148 and its production/digest rules are unchanged; its exact extra-tag test now truthfully includes0221.
+
+Genuine failures are retained: original schema unit27PASS/2FAIL at595690ea; actual public helper refuses UNKNOWN_APPLIED_MIGRATION1780000000221 on retained222 schema. After the helper correction, its33 tests pass, while the four-file selection exposes one stale Forecast extra-tag expectation (44PASS/1FAIL despite historical filename `unit-green.json`). Following the separately admitted one-line test change, the same selection passes45/45 across4 files, zero skips.
+
+Actual public preflight at `c7ca2b027c5443ef677dd4e8ebb424d1e217e413` passes on local PG16.14 with a READ ONLY session:222 exact applied hashes/timestamps,276 actual public tables,81 real SELECT calls including all80 required-table lookups. No SQL/data/schema mutation occurs. Client closed; zero residual sessions/faults; role and complete trigger-enable baselines unchanged. Raw native GREEN SHA256 is `174701fc221f23ff73367b3b87789365288872f075ce6194d91203aa75e54942`. This verifies schema compatibility, not scientific/FHV outcome or host qualification.
+
+Current source `0c1c98adfdd22164e98c450c11cd729c080ca575` passes typecheck, lint, build, canon, PR-governance regressions, Execution/Reality graphs and computation-manifest check. All prior research code/schema/native-test sources and original191 hashed artifacts remain unchanged; no redundant native22/full localunit run is claimed. The historical464/22+29/4 native evidence remains attributed to4f4b, with this separate actual public-helper proof closing the omitted boundary.
+
+Successor evidence is external `parallel-runtime-owner/dee1126-schema-compatibility-82cf05c9/`; the original55ac/0017d6c2 freeze remains preserved, with its publication hold explicitly recorded. Only final successor metadata review, root rendered preflight/publication and current-head CI may complete integration. PG and heavy resources are released; no provider, host, C3, scientific, financial or live action was taken.
