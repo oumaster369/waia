@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Correct the admitted scalar SQL typing and two native fixture seams after the observed104-case run; freeze source/scoped proof for root and M01 before any new native grant."
+  nextAction: "Apply only the admitted trigger alias qualification after the observed PROFILE35 failure; freeze exact source for root and independent review before a new native grant."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1199,3 +1199,12 @@ After the author freezes its finite typing/fixture correction, root may update o
 
 
 Root graph checkpoint: exact final production bytes atf72900bb yield141consumers, source157 andconnector references26 unchanged. Only consumer count/path/content pins and matching testcount/comment changed; all discovery/authority/classification rules retained. Actual validator, complete affected graph suite, scoped lint and diffcheck passed. Native104/PROFILE35 and fullreadiness are separate pending gates.
+
+
+## Finite PROFILE35 trigger-name correction — plan first
+
+Actual immutable `f1ef6991f4fe20b007949e6d65caa6354511162e` passed the whole104-case frontier suite earlier, but the separately granted whole first-cycle PROFILE file ran09:19:03–09:22:15UTC on fresh `waia_hsv2_it_dee1130_profile_20260927_0920` and produced12PASS/1FAIL/0skip. The failed case is the required35-cycle test. Strict PROFILE proof guard correctly exited1; optional80/repeat/cache/seed modes were not selected. Fresh prelude/full223 migrations succeeded; their applied identities and final cleanup remained exact. This is not PROFILE35 acceptance.
+
+Immutable failure report: `evidence/dee-1130/profile35-f1ef6991/author-result/REPORT.md` SHA256 `677d729674d520d7ca25f5c4eb714536d9ebdea9b84f8acab58a728f0f397fcc`. Its freeze SHA256 `a7672b377b48e6266ec78a0bc246efd56710cbfee4576c17ea72d36b3fdc7caa` binds28 artifacts/four source identities. PostgreSQL's actual error context identifies `waia_historical_reconciliation_verify_v1` line824: SRF alias `old` and expression `old->>'fillId'` conflict with the trigger's implicit `OLD`. The exact installed function body matches source0222:3691–3692. Retained state contains one PROFILE genesis plus cycle0 and one checkpoint atsequence0; no35-cycle completion or later learning/resource outcome is claimed.
+
+Root admits only this sole-plan checkpoint followed by one exact SQL correction in allocated0222: replace the single SRF alias with `AS prior_fill(value)` and its reference with `prior_fill.value->>'fillId'`. Preserve the exact membership predicate, selected source, canonical arithmetic, digest domains, budget/cap/shape/privilege guards, every other SQL byte, all old222 migrations, journal, schema, source code and tests. Prove the two-line inverse transformation and freeze for independent review. No database/migration application, retry, compiler, native or PROFILE rerun is granted by this source correction. The failed database and all prior evidence remain immutable; root owns the next fresh execution and publication.
