@@ -819,27 +819,27 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     console.info(JSON.stringify({ proof: "DEE1133_NATIVE_LATE_COMPLETION_ACK", committedB: true, consumption: false, elapsedControlMs: now }));
   }, 40000);
   it("DEE1133 real held dispatch consumes the shared512 slots and rejects the next business query with rollback reserved", async () => {
-    const { b, input } = await compositeFixture(); let accounting: HeldResearchAccounting | undefined, calls = 0, injected = 0;
+    const { b, input } = await compositeFixture(); const observed: { accounting?: HeldResearchAccounting } = {}; let calls = 0, injected = 0;
     const originalBudget = HeldResearchAccounting.prototype.budget;
     vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, maximum: number) {
-      if (accounting && accounting !== this) throw new Error("COMPOSITE_ACCOUNTING_RESET"); accounting = this; return originalBudget.call(this, maximum);
+      if (observed.accounting && observed.accounting !== this) throw new Error("COMPOSITE_ACCOUNTING_RESET"); observed.accounting = this; return originalBudget.call(this, maximum);
     });
     const originalBegin = client.begin.bind(client), begin = vi.spyOn(client, "begin");
     begin.mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) => originalBegin(options, async held => {
       if (++calls === 4) {
-        expect(accounting).toBeDefined(); const bound = prepareHeldResearchReplay(client, accounting!).bindHeld(held);
-        while (accounting!.statements < 511) { await bound.executor.execute(sql`select 1 as dee1133_bounded_dispatch_probe`); injected++; }
+        expect(observed.accounting).toBeDefined(); const bound = prepareHeldResearchReplay(client, observed.accounting!).bindHeld(held);
+        while (observed.accounting!.statements < 511) { await bound.executor.execute(sql`select 1 as dee1133_bounded_dispatch_probe`); injected++; }
       }
       return callback(held);
     })) as typeof client.begin);
     trace.length = 0;
     try {
       expect((await run(input)).status).toBe("STATEMENT_LIMIT_EXCEEDED");
-      expect(accounting!.statements).toBe(512); expect(trace).toHaveLength(512); expect(trace.at(-1)!.query.toLowerCase()).toBe("rollback");
+      expect(observed.accounting!.statements).toBe(512); expect(trace).toHaveLength(512); expect(trace.at(-1)!.query.toLowerCase()).toBe("rollback");
       expect(injected).toBeGreaterThan(0); expect(trace.filter(q => q.query.includes("dee1133_bounded_dispatch_probe"))).toHaveLength(injected);
     } finally { vi.restoreAllMocks(); }
     expect(await savedCompletion(b)).toEqual([]); expect((await counts()).slice(0, 4)).toEqual([1, 1, 1, 0]);
-    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_SHARED_513_REFUSAL", statements: accounting!.statements, injectedActualSelects: injected, reservedRollback: true }));
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_SHARED_513_REFUSAL", statements: observed.accounting!.statements, injectedActualSelects: injected, reservedRollback: true }));
   }, 40000);
 
   it.each(["application", "availability"] as const)("DEE1133 missing%s cannot create a dependency or complete B", async missing => {
