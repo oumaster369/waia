@@ -2215,7 +2215,8 @@ describe.skipIf(!enabled || !url || !disposable)(
       // three local runtimes for the slower CI host to finish the same workload.
     }, 3_600_000);
 
-    it.skipIf(!PROVE_KNOWLEDGE_CONTINUATION)(
+    if (PROVE_KNOWLEDGE_CONTINUATION) {
+      it(
       "continues the upfront 80-cycle extent and binds matured knowledge to an authorized Forecast",
       async () => {
         const connection = await pool.reserve();
@@ -2361,6 +2362,7 @@ describe.skipIf(!enabled || !url || !disposable)(
       },
       3_600_000,
     );
+    }
 
     it("persists valid historical evidence and rejects a rehashed receipt with tampered authority", async () => {
       const receiptRows = await heldSql<
