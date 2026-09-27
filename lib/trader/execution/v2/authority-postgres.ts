@@ -16,6 +16,7 @@ import {
   consumeRiskAllowanceForOrderV2FromTransaction,
   readRiskAccountStateV2Postgres,
   revalidateConsumedRiskAllowanceForExecutionV2,
+  RiskV2AdmissionRefusedError,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -167,11 +168,16 @@ export async function bindExecutionAuthorityV2Postgres(
   return runWaiaPostgresTransaction(db, async (tx) => {
     const durableAt = await durableTransactionTime(tx);
     requireCurrentWindow(plan, input.policy, durableAt);
+    // Match dispatch/revocation before plan insertion takes the allowance lock.
+    if (!(await readRiskAccountStateV2Postgres(tx, scoped, input.allowance.accountId, true))) {
+      throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
+    }
     const storedPolicy = await insertExecutionPolicyV2Postgres(tx, scoped, input.policy);
     if (storedPolicy.contentDigestHex !== input.policy.contentDigestHex) {
       throw new ExecutionV2AuthorityRefusedError("POLICY_SEAL_MISMATCH");
     }
     const storedPlan = await insertExecutionPlanV2Postgres(tx, scoped, plan);
+    requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
     const consumed = await consumeRiskAllowanceForOrderV2FromTransaction(tx, scoped, {
       accountId: input.allowance.accountId,
       riskAllowanceId: input.allowance.riskAllowanceId,
@@ -232,6 +238,7 @@ export async function bindExecutionAuthorityV2Postgres(
       ) {
         throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_OR_CONFLICTING_RESTART_BINDING");
       }
+      requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
       return Object.freeze({
         plan: storedPlan,
         attempt: existing.attempt,
@@ -246,12 +253,14 @@ export async function bindExecutionAuthorityV2Postgres(
       });
     }
 
+    const boundAt = await durableTransactionTime(tx);
+    requireCurrentWindow(plan, input.policy, boundAt);
     const attempt = createExecutionAttemptV2({
       executionAttemptId: attemptId,
       orderId,
       plan: storedPlan,
       riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
-      boundAtUtc: durableAt.toISOString(),
+      boundAtUtc: boundAt.toISOString(),
     });
     await tx
       .update(pgSchema.traderOrders)
@@ -283,9 +292,10 @@ export async function bindExecutionAuthorityV2Postgres(
         reportType,
         source: "EXECUTION",
         rawObservation,
-        observedAtUtc: durableAt.toISOString(),
+        observedAtUtc: boundAt.toISOString(),
       });
     }
+    requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
     return Object.freeze({
       plan: storedPlan,
       attempt: storedAttempt,
