@@ -131,7 +131,7 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     const result = await runSavedResearchLoop(client, researchContext, { ...request, range });
     if (result.status !== "COMPLETE") throw new Error(`FIXTURE_RESEARCH_REFUSED:${result.status}`);
     for (let sequence = first; sequence <= last; sequence++) {
-      const saved = await createSavedResearchOwner(client, researchContext, request).replay(sequence);
+      const saved = await createSavedResearchOwner(client, researchContext, { ...request, range }).replay(sequence);
       if (!saved) throw new Error(`FIXTURE_RESEARCH_COMPLETION_MISSING:${sequence}`);
       const expected = options.missing4h ? null : options.against && sequence === 1 ? "CHOPPING" : "TRENDING";
       const actual = specification.assessedSavedWhatV1(saved.completion.output);
