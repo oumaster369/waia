@@ -1541,6 +1541,13 @@
       "when": 1780000000219,
       "tag": "0219_trader_recorded_paper_analysis_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1780000000220,
+      "tag": "0220_trader_reporting_period_bases_v1",
+      "breakpoints": true
     }
   ]
 }

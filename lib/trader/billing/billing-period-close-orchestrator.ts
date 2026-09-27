@@ -1,3 +1,4 @@
+import { withReportingPeriodBasisRetention, type OwnedReportingPeriodBasisInput } from "./v2/reporting-period-basis-postgres-v1";
 import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
@@ -282,12 +283,13 @@ function createBoundPostgresBillingPeriodCloseOrchestrator(
   ex: WaiaPostgresDb,
   assertMembership: NonNullable<BillingPeriodCloseOrchestratorDeps["assertMembership"]>,
   proof?: BillingRealityDependenciesMatched,
+  basis?: OwnedReportingPeriodBasisInput,
 ): BillingPeriodCloseOrchestrator {
   const draftInvoiceService = createPostgresDraftInvoiceService(ex, { assertMembership });
   return createBillingPeriodCloseOrchestrator({
     assertMembership,
     reportingPeriodLifecycle: createReportingPeriodLifecycleService({
-      repository: createPostgresReportingPeriodRepository(ex), assertMembership, draftInvoiceService,
+      repository: basis ? withReportingPeriodBasisRetention(ex, createPostgresReportingPeriodRepository(ex), basis) : createPostgresReportingPeriodRepository(ex), assertMembership, draftInvoiceService,
       writeAudit: (input) => writeTraderAuditLogPostgres(ex, { ...input, metadata: { ...input.metadata,
         ...(proof && input.action === traderAuditActions.reportingPeriodClosed ? { realityDependencies: proof } : {}) } }),
     }),
@@ -305,7 +307,7 @@ export function createPostgresBillingPeriodCloseOrchestrator(
     assertMembership ? assertMembership(actor, bound) : assertOrgMembershipPostgres(bound, actor);
   const service = createBoundPostgresBillingPeriodCloseOrchestrator(db, membership(db));
   return { ...service, closeAndMaterialize(context, input) {
-    return runPostgresBillingRealityCommand(db, context, input, capturedOptions, (tx, scoped, captured, proof) =>
-      createBoundPostgresBillingPeriodCloseOrchestrator(tx, membership(tx), proof).closeAndMaterialize(scoped, captured));
+    return runPostgresBillingRealityCommand(db, context, input, capturedOptions, (tx, scoped, captured, proof, readSet) =>
+      createBoundPostgresBillingPeriodCloseOrchestrator(tx, membership(tx), proof, { context: scoped, candidate: captured, dependencies: proof, ledgerReadSet: readSet }).closeAndMaterialize(scoped, captured));
   } };
 }

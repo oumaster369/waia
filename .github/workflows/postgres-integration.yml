@@ -52,6 +52,12 @@ on:
       - "tests/integration/postgres-billing-period-command-atomicity.test.ts"
       - "tests/integration/postgres-billing-invoice-command-atomicity.test.ts"
       - "tests/integration/postgres-billing-reality-dependencies.test.ts"
+      - "tests/integration/postgres-reporting-period-basis.test.ts"
+      - "tests/helpers/reporting-period-basis-process.ts"
+      - "tests/unit/trader-reporting-period-basis.test.ts"
+      - "tests/unit/trader-reporting-period-basis-handler.test.ts"
+      - "app/api/trader/admin/reporting-periods/**"
+      - "lib/observability/waia-runtime-route-telemetry.ts"
       - "tests/integration/postgres-reporting-period-parity.test.ts"
       - "tests/integration/postgres-invoice-issuance-parity.test.ts"
       - "tests/helpers/billing-reality-close-process.ts"
@@ -210,6 +216,7 @@ jobs:
             tests/integration/postgres-billing-period-command-atomicity.test.ts \
             tests/integration/postgres-billing-invoice-command-atomicity.test.ts \
             tests/integration/postgres-billing-reality-dependencies.test.ts \
+            tests/integration/postgres-reporting-period-basis.test.ts \
             tests/integration/postgres-noncapital-cycle-owner-v2.test.ts \
             tests/integration/postgres-org-live-enable-atomicity.test.ts \
             tests/integration/postgres-recorded-paper-analysis-v1.test.ts \
