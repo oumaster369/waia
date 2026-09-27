@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Sole plan amendment embeds root-admitted separate read-only trigger verifier. Corrective c18 source passed scoped68/4 and full typecheck; independent source review closes three findings only at source stage. Stop for root plan verification before WP3 SQL/source. No PG/heavy grant; registries/CI/graphs remain root-held."
+  nextAction: "Root-admitted resource R2 is embedded after normal accepted397d integration. Five unexecuted drafts are byte-preserved; stop for root verification of this sole-plan amendment before dependent source changes. No PG/native/heavy grant; registries/CI/graphs remain root-held."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -604,3 +604,176 @@ Implement only after a sole canonical-plan amendment embeds the new clarificatio
 
 This admits isolated source preparation under existing user engineering authorization. It does not grant any database execution/resource, production/host/C3/financial action, first-live enablement or scientific acceptance. All historical evidence remains unchanged.
 <!-- END ROOT-READONLY-VERIFIER-ADMISSION -->
+
+
+## Accepted397d integration and resource-R2 plan barrier — 27 September 2026
+
+Normal merge `3b7163497172ac2d0200907e7cef494fdf9e4b86` has exact parents `6ed85ed4ace6bf5a71235400b271754c4facfaff` and accepted `397d0d76c48cc2e8b9cb016a88794be3c9ca1412`. It had no conflicts or manual resolutions. All14 incoming DEE-1131 blobs, all7 own committed paths and both complete binary patch directions are exact. All222 previously accepted SQL bodies and their tracked journal are unchanged. The actual carried capital proof list contains23 suites; this is source inventory only, not a test run.
+
+Before merging, the five unexecuted draft files were independently copied and hashed into `evidence/dee-1130/resource-r2-plan-397d0d76/draft-before`, then retained in stash object `ecc5be9e00f15053f10475834175ffc26fc6426b`. They were restored after the merge, with all five SHA256/byte counts exactly equal. The stash remains as additional recovery evidence. No dirty draft is committed or claimed reviewed/executed by this plan amendment. The still-unexecuted draft SQL remains `b3f4895dd3afc8821cd083203cd84db45dfc51dfbbee934b92ad2dbfdfd3695a`; its known copying/resource defects are not repaired yet.
+
+Root adopted the finite successor `AMENDMENT-R2.md` SHA256 `b4b605a002ece730e01b7e9046475f9628b31c922743edd3bcd7b2e6af8d2694`, exact primary-source trace `d3f2840045876462e463a95a53f7bccc102c411f18565c4fa18a0f4f620ae612`, and root admission `a601e11ddde7b9fcf12a03877cdc52ef50fb0496333e92d7d41481625f2f5648`, following independent M01 design review `c8d50abe09d50e25c48b2a5c0a2c320639235fc3bad2bf00ee48b8f7cbf66c9c`. This is bounded design admission, not SQL/native/performance or completed-package acceptance.
+
+The active resource mechanism is candidate-in-original-INSERT plus independent closed inline CHECKs, exact three-table AFTER INSERT bookkeeping, direct scalar scope extraction, mandatory PROFILE nonnull/late closure, literal canonical companion text and honest per-context accounting. The first resource proposal918125 and rejected NEW-mutation/generated/BEFORE-copy mechanisms remain immutable external historical evidence, explicitly superseded and not alternatives to implement. The seven-B+64KiB CHECK certificate, actual trigger order/catalog, no new source-sized work, all unique-mode old-snapshot/savepoint controls and original source/privilege requirements still need implementation and actual acceptance.
+
+This commit changes only this plan. All previous controlling text blocks below remain byte-identical; the new exact admission supersedes only conflicting resource/timing statements identified in it. Root must verify this integration and sole-plan delta before releasing the five finite production paths and admitted test corrections. Exclusive0222 allocation remains idx222/version7/when1780000000222/breakpoints=true. No dependency correction, SQL application, test execution, full readiness, PG/heavy, registry/CI/graph change, push/PR/host/provider/C3 or financial action occurred in this step.
+
+<!-- BEGIN RESOURCE-R2-PROPOSAL SHA256 b4b605a002ece730e01b7e9046475f9628b31c922743edd3bcd7b2e6af8d2694 -->
+# DEE1130 — R2 resource envelope and independently validated stored projections
+
+**PROPOSED finite successor; no implementation/native admission is implied.** Preserve the first amendment918125cdd4cefabae11aea85b2b0b80dfbf7125b95a49bf2297c8b665f80d1f4 and its draft snapshot unchanged. Its selected NEW-mutation mechanism is rejected at source stage. No SQL application, database connection, benchmark or test execution occurred for this successor.
+
+Current author source remains6ed85ed4ace6bf5a71235400b271754c4facfaff / corrected executablec18a9036e0d0cba7beba01069c864b6103537f65, on3c8b7b98. New accepted397d0d76c48cc2e8b9cb016a88794be3c9ca1412 is a later integration target, not imported here. The unexecuted0222 draft staysb3f4895dd3afc8821cd083203cd84db45dfc51dfbbee934b92ad2dbfdfd3695a. All222 previous SQL identities and root-owned registry/CI/graph files remain untouched.
+
+## 1. Decision requested
+
+Admit one coherent correction:
+
+1. Keep two ordinary nullable bounded projection columns on the existing0188 stage/snapshot tables. Supply a candidate from the actual owned source object **in the original INSERT**, then independently validate it against the actual row with a closed inline CHECK expression. The application candidate is not certification or authority.
+2. Remove every new BEFORE INSERT trigger from exactly three cumulative-body tables: atomic_stage_v2, durable_snapshot_v2, resume_checkpoint_v2. Their tiny native LEGACY registration becomes ordinary nondeferrable **AFTER INSERT**, before successful statement completion. Existing immutable UPDATE/DELETE protection remains unchanged. The same native unique mode key, stale-snapshot refusal and full deferred closure remain mandatory.
+3. In both new trigger helpers remove `source_row := NEW/OLD` and use explicit per-table scalar NEW/OLD scope fields. No whole-row JSON conversion or source-body PL assignment. The three ordinary AFTER branches return NULL, whose value is ignored. Other original-target timing and rights stay unchanged.
+4. Keep the first amendment's exact canonical companion text, complete repeated-body accounting and distinct owner-attempt/native-invocation envelopes. Replace its 16 projection-trigger callbacks with16 bounded inline constraint-validation contexts. The conservative numerical total remains243 contexts, but calling all243 triggers would now be false.
+
+No generated column, new validator function/EXECUTE grant, third relation, profile-skip option, transaction PASS cache, suppressed later validation, trusted GUC, source rewrite, financial rule or new certification API is proposed.
+
+## 2. Why the previous mechanism fails, and why this is the selected replacement
+
+`PRIMARY-SOURCE-TRACE.md` pins the complete relevant PostgreSQL16.14 path. NEW mutation invalidates its flat tuple and rebuilds/copies fresh cumulative JSON at RETURN. Generated columns copy nongenerated attributes. Moreover, even an unchanged NEW return does not remove `ExecBRInsertTriggers`' initial virtual-slot materialization. The draft's new BEFORE LEGACY trigger would retain that problem on all three cumulative tables, including the complete resume cursor in checkpoint_json. Merely changing the projection function to a read-only BEFORE validator is therefore insufficient.
+
+The selected inline CHECK reads the already existing INSERT slot through ExecRelCheck/ExecCheck and builtin Datum arguments. It adds no PL record or returned tuple. The selected ordinary AFTER bookkeeping uses the stored row TID and only scalar keys; it does not detoast unrelated state_json/artifacts_json/checkpoint_json. The original input serialization, text-to-jsonb parsing and normal heap/TOAST write still happen; no claim is made that they were repaired. This replacement removes *additional* source-sized work introduced by this feature.
+
+The source trace is not a portable claim about every PostgreSQL version, JIT/extension, FDW, partition conversion, INSERT-SELECT, transition table or hostile input. Native acceptance must pin the actual version/settings and inspect the actual table/trigger/expression shape. Future addition of a BEFORE INSERT trigger or whole-row read on these three paths invalidates the source argument.
+
+## 3. Physical DDL, semantics and compatibility
+
+Keep exactly the previously proposed columns:
+
+- `trader_historical_simulation_durable_snapshot_v2.reconciliation_projection_v1 jsonb NULL`.
+- `trader_historical_simulation_atomic_stage_v2.reconciliation_projection_v1 jsonb NULL`.
+
+They are ordinary columns: no DEFAULT, generated expression, NOT NULL, rewrite, backfill or old-row repair. Add one closed inline constraint on each as CHECK ... NOT VALID. This avoids scanning historical bodies at migration and still enforces all new nonnull candidates. Keep the constraints NOT VALID; do not subsequently scan old history merely for a green catalog flag. Verify actual convalidated=false and new-row enforcement. Existing rows read NULL; append-only guards cover changes to the added columns too.
+
+The exact logical constraint is:
+
+- NULL candidate: true, preserving old LEGACY writers and nonrelevant source kinds.
+- Nonnull candidate: CASE-guarded supported kind/version, object/field types, exact row-derived header, size at most1MiB, exact equality to the bounded source projection; the complete branch must be **IS TRUE**. SQL NULL/JSON null/missing or unsupported fields cannot be accepted through CHECK's normal NULL semantics.
+- Nonrelevant kind with nonnull candidate: false.
+- All JSONPaths are closed literals; all function/type references use pg_catalog. No table read, user-defined function, role lookup, dynamic SQL, supplied path, authority callback or SECURITY DEFINER call appears in these expressions.
+
+The full deferred PROFILE verifier requires each of the four relevant rows to have a valid nonnull projection: ACCOUNTING_FRONTIER and MODELED_EXCHANGE snapshots; OBSERVED_EXECUTION_EFFECTS and ACCOUNTING stages. It independently binds exact scoped row identities, current stage/snapshot/checkpoint links, semantic digests, projected content and companion. Missing/null projection is a PROFILE refusal, including direct low-level writers, late source rows and transactions that omit the environment selector. Fresh PROFILE enrollment already refuses an old source prefix; NULL historical rows cannot be upgraded or backfilled into PROFILE.
+
+A LEGACY writer omitting the new column has precisely its previous source-table authorization and source payload behavior. A caller supplying the newly introduced column is using a new surface: a false/malformed candidate refuses even in LEGACY; a correct candidate may pass but confers no PROFILE authority. No existing table grant, RLS predicate, historical account/run authority, mode key or append-only rule is widened. Column-level role behavior must be checked, not assumed from administrative tests.
+
+The source projection header is `schemaVersion` plus actual organization/account/run/cycle sequence/cycle ID/kind, ledger entry ID/digest and source schema/content digest. The source row's actual scalar columns supply these values in both INSERT assembly and CHECK equality. The projection is not portable to another tuple/key or claimed authentic merely because its digest matches. Use existing literal row identity joins; no new source-ID allocator.
+
+## 4. Exact writer and read plumbing
+
+Only the following existing actual owner seams change:
+
+1. `atomic-cycle-repository-postgres-v2.ts::transactionPort.persistStageBundle` at1244 writes a bounded candidate beside the unchanged `${json(bundle.artifacts)}::text::jsonb`. The current INSERT SELECT already has the actual ledger row; use those same scalar fields for its header. Do not parse/stringify the whole artifact array again, clone fillDetail, or copy its Accounting frontier.
+2. `transactionPort.saveResumeCursor` at1262 writes each candidate beside the unchanged `${json(snapshot.state)}::text::jsonb`. Adapt the existing scoped ledger lookup to one INSERT SELECT with RETURNING/exactly-one assertion so candidate header and original FK values come from the same existing row, rather than adding another unbounded lookup or fabricating ledger ID. Missing/mismatched ledger remains a refusal with no committed effects. The checkpoint payload/write remains byte-for-byte semantically identical and gains no new projection column.
+3. Two finite private candidate builders in the existing `production-reconciliation-frontier-v1.ts` construct only the four selected projections from already-owned objects. No whole source JSON stringify/hash/copy or traversal of cumulative IDs/registry. The existing actual public owner supplies its already-created reconciliation repository to the private transactionPort at2622; candidate serialization charges that same attempt budget. No exported caller-controlled callback/guard toggle or public certification method is added. Existing generic transaction-port callers may omit the private context and store NULL; mandatory DB PROFILE nonnull closure then refuses them for enrolled scopes. Legitimate LEGACY composition remains usable.
+4. `production-reconciliation-repository-postgres-v1.ts` exposes only internal typed preparation/charging plumbing from its fixed owner instance, and changes previously proposed companion text reads/writes. It must not create a second budget per stage/snapshot or reset on phase boundaries. A selected PROFILE candidate that cannot be formed/bounded refuses; generic LEGACY unsupported source shape is not repaired or newly qualified.
+5. The native verifier replaces its later large state/artifact extraction with the new bounded columns plus exact scalar metadata. It never falls back to the old source JSON when a projection is missing. Re-read on every relevant deferred/immediate invocation; current parent/F/E content and all original late-write checks remain fresh.
+
+The candidate builder works from the actual original values; the independent SQL equality guards against a forged candidate, replaced source, cross-row reuse, missing detail or wrong chronology. This is dual computation of a bounded projection, not a supplied truth claim.
+
+### Projection content
+
+| Source | Exact bounded content and access rule |
+|---|---|
+| ACCOUNTING_FRONTIER snapshot | Existing c18 id/digest/sequence/scope/cash/sourceFillId/sourceEconomicsDigest; consumedFillIds **length and final scalar only**; current zero/one symbol quantity map. Candidate additionally retains the zero/one complete current position-basis entry (quantity, grossPositionBasis, netPositionBasis) solely so SQL can prove exact symbol-set/source equality without `.keyvalue()` over a cumulative object. Only quantity is consumed by the existing frontier comparison; no basis algorithm/financial result changes. |
+| MODELED_EXCHANGE snapshot | Counts for openOrders/checkpoint.openOrders, exact zero/one parent identity/state/version/filled quantity and existing checkpoint accepted/eligible timestamps, eligibleBarsSeen, remaining/filled quantities, fill sequence and pending cancel's two scalars. No modeled registry read. |
+| OBSERVED_EXECUTION_EFFECTS stage | Total artifact count at most2 and exact indexed artifact identities/source digests; at most1 fill-detail membership. All admitted event/economics/evidence scalar fields from c18 full-detail/source join, source-bar scalar fields, Accounting ID/digest and bounded consumed-count/tail/position projection when used; never a whole fillDetail/accountingFrontier extraction. Preserve acceptedAt/fillTimestamp/sourceBarTimestamp and exchange-trade/F/E identity comparisons, not only economicsDigest. |
+| ACCOUNTING stage | Exact single artifact kind, ID, content digest and count; unexpected extra members/shape refuse. |
+
+Use fixed strict paths ending at scalar leaves for all history-containing branches. `.size()`/`[last]` apply directly within the root JSONPath, not after `->consumedFillIds`. Stage access is indexes0/1, no wildcard over arbitrary artifact history. The one composite exception is the current position-basis map, known zero/one three-scalar entry in the actual supported producer; it is not cumulative history. SQL independently compares its entire map with the candidate, so another symbol cannot hide outside the candidate. Wrong arbitrary direct inputs can allocate a rejected large map; no pre-allocation bound for such input is claimed. The real producer's prefix growth only affects consumedFillIds/registry, neither of which is extracted.
+
+Type tests precede leaf/composite value extraction in CASE branches; do not use an expression ordering assumption about AND to guard an unsafe cast/access. JSONPath `query_first` itself evaluates its result set; no wildcard-short-circuit claim is allowed. Ordinary string/numeric/hash/UUID details keep their prior semantics and are counted as bounded output bodies.
+
+## 5. Exactly three timing changes and native arbitration
+
+For `atomic_stage_v2`, `durable_snapshot_v2`, `resume_checkpoint_v2` only:
+
+- Replace new `aa_historical_reconciliation_legacy BEFORE INSERT` with an ordinary **AFTER INSERT**, nondeferrable, row trigger of that name. No transition table. Its accepted function context is the exact table/schema + AFTER + INSERT + ROW. UPDATE/DELETE remain forbidden by original append-only triggers. No additional source-row mutation is performed.
+- Keep every `historical_reconciliation_closure` constraint trigger unchanged as AFTER, DEFERRABLE INITIALLY DEFERRED. If constraints are made immediate, the ordinary aa bookkeeping event must precede that table's closure event by fixed trigger order; native test the actual installed order. It must not be conditional on whether the PROFILE lookup initially sees a row.
+- The tiny helper derives only org/account/run scalars, executes the **same** literal LEGACY `INSERT ... ON CONFLICT DO NOTHING` on the same native unique key, then requires a visible exact winner. It does not return early because a row was physically inserted or because the first snapshot saw no mode. An old RR/SSI snapshot unable to see a concurrently committed winner refuses or serializes; no success on invisible conflict.
+- The PROFILE enrollment path remains before any public-owner source production; its own mode row, prefix absence checks, owner session lock before transaction, immutable split/symbol/genesis and full deferred companion closure are unchanged. Same account/run in another split cannot create a second genesis.
+
+This moves *attempted LEGACY registration* to after tentative physical insertion on these tables, not after transaction commit. On any registration failure the source statement/transaction rolls back. In a two-party race, the native unique key selects the winner: if LEGACY registers first, PROFILE conflicts/refuses; if PROFILE wins, later source must meet all PROFILE closure or roll back. An old direct writer that inserted a row before its AFTER trigger blocks still cannot commit without registration. No existing SQL row is retroactively treated as admitted. Deadlock/serialization refusal is an acceptable fail-closed race outcome; do not claim all races make progress or silently retry inside the trigger.
+
+Nine other original targets keep their current draft timing and key behavior. Inception Accounting sequence1/sourceFillIdNULL remains mode-neutral. Before UPDATE/DELETE protection of mutable order/event/fill and both OLD/NEW sorted keys remain; replace record aliases with scalar variables, not an old-key-only shortcut. New source evidence/constraint function privileges are unchanged: tiny LEGACY definer can write only literal LEGACY rows; readonly verifier cannot DML; PROFILE insert still requires original approved historical authority. Direct EXECUTE remains revoked. Inline CHECK adds no new function/ACL surface.
+
+No trigger reads state_json/artifacts_json/checkpoint_json merely to find scope. Do not introduce RETURN-to-composite or to_jsonb(NEW) on the three tables. For bounded parent rows, replace whole-row conversions with explicit charged identity fields as already required by the first amendment.
+
+## 6. Exact resource quantifier and accounting
+
+The first amendment's source-derived formulas remain: public-owner attempt `W=38+p+4f+2t+8s<=55`, `U=t+3s<=5`; same fixed single-parent/single-fill profile, order/cancel/expiry branches and at most3 SERIALIZABLE/deadlock attempts. Timing moves do not add or suppress row writes or nested mode attempts. A native callback formerly BEFORE and now AFTER still counts once.
+
+| New work context | Continuation | Genesis |
+|---|---:|---:|
+| Full deferred closure |56|49|
+| Mode BEFORE verifier (including conflicting LEGACY insert attempts) |55|47|
+| Immediate mutable-parent verifier |5|3|
+| Stamp |56|49|
+| Tiny LEGACY bookkeeping |55|46|
+| **Actual new trigger callbacks** |**227**|**194**|
+| Inline projection CHECK evaluations, ten stages + six snapshots |16|16|
+| **All native validation contexts** |**243**|**210**|
+
+Only four CHECKs construct nonnull selected source projections in a normal public cycle; the other12 take NULL/nonrelevant branches. Keep the conservative243 bound for uniform accounting; no claim that243 full verifiers execute. With each successful context limited to8MiB cumulative intentional logical body occurrences, plus the single owner attempt8MiB, the conservative total is **1,952MiB/attempt** and **5,856MiB for three attempts**. Verifier-only subtotal remains936MiB and must not be labeled the total. Exact retry has no writes/callbacks; its read budget remains separate. Arbitrary direct multi-write transactions can repeat allowed UPDATEs indefinitely: per-context refusal and final closure only, no aggregate transaction or campaign bound.
+
+No CHECK is allowed to hide an uncounted full state projection. Select this finite expression discipline now: the complete expected projection is constructed exactly once, solely for JSONB equality; never stringify/hash that entire expected object a second time. On success exact equality makes its `jsonb::text` size equal to candidate size B. Apart from fixed type/count/boolean controls, every copied variable-sized leaf/map appears once in that expected object. No separately materialized prefix object is allowed. The implementation certificate permits at most256 fixed control scalar results of at most256 bytes (64KiB total); this is an implementation-expression ceiling, not a financial/input threshold. Any control containing caller-sized strings is charged with the variable bodies instead.
+
+Charge a conservative seven B-sized occurrences per nonnull CHECK (provided bounded candidate, both permitted candidate-to-text size evaluations, expected leaf/map aggregate, expected constructed object, candidate/header variable extraction allowance, one spare bounded representation), plus64KiB fixed controls. The predicate uses B<=1MiB and `7*octet_length(candidate::text)+65536<=8388608`; both size evaluations are included, no executor common-subexpression elimination is assumed. Successful equality and the fixed expression tree supply the expected-body bound; a malformed huge source that fails may allocate before refusal and has no rejected-input memory guarantee. JSONB comparison may inspect both bounded values but must not introduce another deliberate full serialization/copy. The exact future SQL must demonstrate its occurrences fit this certificate; if it does not, stop before claiming this envelope. Do not solve it by increasing the caps. The other twelve NULL branches produce only fixed controls and no source JSON access.
+
+Count bounded candidate input/text, expected object/headers, intentional duplicate conversions and selected leaf output aggregate. The fixed SQL expression must be enumerated into a structural envelope certificate (occurrence names + byte forms + duplication counts). Its native 8MiB predicate must reflect actual repeats, not just candidate size. If expression duplication evaluates a body twice, count twice; do not assume a subexpression cache. The same requirement applies to canonical-text equality, companion stamp, mode headers, checkpoint/order scalar projections, F/E read/rehash and all other native invocations from918125. The application charges candidate construction/serialization alongside its prior reads/texts without resetting its shared8MiB budget.
+
+The source JSON is already present as original input; referencing its Datum is not materializing a new full body. Reading type/count/tail scalars is counted as resulting selected outputs. Original serialization/parse/heap/TOAST are not charged as newly selected projection bodies, but remain real inherited work. A failure after receiving an oversize candidate does not claim PostgreSQL never allocated that input. No resident-memory, latency, all-query-allocation, hostile-filesystem, final-host or scientific PASS follows.
+
+Canonical companion text remains exact `canonicalizeSemanticJsonString(frontier)`, independent of `jsonb::text` projection sizing. Its derived bounded JSON may still use the existing small companion stamp because that tuple is explicitly capped; no cumulative source is attached to it. Reject noncanonical whitespace/order, forged independently supplied JSON, digest/ID mismatch and over-limit text. All deliberately created text/JSON representations are charged separately.
+
+## 7. Finite path map and tests required after admission
+
+Production paths: allocated0222 SQL; db/schema.postgres.ts (two ordinary source columns + companion text, existing2newrelations); existing production-reconciliation-frontier-v1.ts (bounded candidate construction), production-reconciliation-repository-postgres-v1.ts (same attempt charging and canonical text), atomic-cycle-repository-postgres-v2.ts (the two real INSERTs/private context). Journal identity stays0222/idx222/when1780000000222; no additional migration/third relation. Canonical plan amendment first. Existing admitted reconciliation unit/native/first-cycle test files receive controls; root retains all registry/CI/graph changes. Any extra source path must be identified before editing.
+
+Mandatory finite acceptance additions:
+
+1. Actual original source ↔ candidate positive controls for all four kinds, empty/one-position, no-fill/partial/terminal fill, exact milliseconds and source identities. Independently forge each side/header/version and omitted/extra/detail/position/count/tail field. Nonnull SQL UNKNOWN/missing/JSONnull refuses. Candidate and actualsource differing only in inherited cumulative array length/tail are caught without scanning its history. Full canonical c18 invariant and produced-detail controls remain.
+2. Fresh migration with old legitimate stage/snapshot rows: ordinary nullable cols/NOT VALID constraints, no source row/relation rewrite/backfill, oldNULL reads, unchanged RLS/grants and append-only update/delete refusal. LEGACY NULL positives for original roles; false nonnull candidate negatives. PROFILE NULL/direct low-level/late-row negatives with exactly zero committed effects.
+3. Public small-prefix versus long-prefix cycles: correct same bounded projection shapes, native calls measured by actual target/phase, expected fixed W/N and no stored cumulative-field SELECT. Source-level AST/function/expression inventory plus actual runtime/settings and query/trigger instrumentation. Output size or timing alone is insufficient to prove no extra detoast/copy. Cover original checkpoint JSON as well as stage/snapshot. No production instrumentation table/cache.
+4. For each of the three changed timing tables, use actual restricted-role INSERT and barriers around registration: old RC/RR/SSI transaction vs concurrent PROFILE, inverse LEGACY-winner, same-account/run other split, failure/savepoint rollback, and fresh loser read. Prove no source row can commit without its unique mode decision. Native actual trigger ordering with SET CONSTRAINTS IMMEDIATE; incomplete closure refuses and later invalid writes still refuse. A valid late no-op UPDATE still causes another check and may succeed.
+5. Verify ordinary heap tables/no transition-table/new BEFORE-INSERT trigger; exact native catalog targets/ACL/search_path/definer behavior; only direct scalar OLD/NEW in new scope logic. Actual source protections and readonly verifier faults remain. Original mode enrollment/concurrency/25-case draft matrix is not waived.
+6. Boundaries1MiB/+1,8MiB aggregate crossing with individually valid bodies, Unicode/escaping, repeated-body charging, exact canonical text/SQL serializer parity. Native expression size ledger must be auditable with every materialization accounted for. No post-parse fake memory claim.
+7. The actual public owner and restart/three-phase/old exact retry/native fault/privilege companions all run after coherent source freeze and resource grant. The draft25 tests have not been executed; neither frozen amendment is a native PASS. Preserve all previous failures/drafts and distinguish future proof from source analysis.
+
+## 8. Requested disposition and frozen evidence
+
+Root/M01 review this successor together with PRIMARY-SOURCE-TRACE.md and the exact official sources. Requested extension is finite: candidate-in-INSERT + inline independent CHECKs + precisely3 AFTER timing changes + direct scalar scope reads, preserving the earlier canonical text/budget correction. It changes neither economic/source authority nor already-applied migration history. Approval authorizes a subsequent plan-first code amendment only; actual SQL/restricted-role/race/resource acceptance remains to be earned.
+
+`freeze.json` pins this document, trace, referenced immutable predecessor identities, source copies and all additional PostgreSQL captures. No repository or frozen prior evidence was modified while preparing this proposal.
+<!-- END RESOURCE-R2-PROPOSAL -->
+
+<!-- BEGIN ROOT-RESOURCE-R2-ADMISSION SHA256 a601e11ddde7b9fcf12a03877cdc52ef50fb0496333e92d7d41481625f2f5648 -->
+# DEE1130 — root admission of the finite resource successor
+
+Decision: accept the frozen resource design for plan-first implementation. This is not SQL, native, performance, deployment or full-package acceptance. The user has authorized technical engineering, testing, checked integration and independent parallel audit; no financial/scientific threshold, live action or C3 mutation is authorized here.
+
+Controlling proposal: AMENDMENT-R2.md b4b605a002ece730e01b7e9046475f9628b31c922743edd3bcd7b2e6af8d2694; primary trace d3f2840045876462e463a95a53f7bccc102c411f18565c4fa18a0f4f620ae612; freeze b4a817dc7f468ceec34e59bbf85866f66e80b5f6378e371c24460614746e0387. Root read both in full and independently verified26 new+23 carried artifacts/21 Git identities; selected executor paths were independently read. M01 final review c8d50abe09d50e25c48b2a5c0a2c320639235fc3bad2bf00ee48b8f7cbf66c9c and six-artifact freeze7ee447b21a1f1384ae39f1557ffbc7e41dbd0ff868dfef4d74cbe52c67a8dce5 are fully read/verified/adopted.
+
+## Accepted finite mechanism
+
+Admit exactly the proposal's two ordinary nullable projection columns, independently checked candidates supplied in the two original owner INSERTs, closed pg_catalog-only inline CHECKs with explicit CASE and IS TRUE, and mandatory nonnull PROFILE closure. Legacy omitted columns remain compatible. Admit moving only the new tiny LEGACY INSERT bookkeeping on stage/snapshot/resume_checkpoint to ordinary nondeferrable AFTER INSERT, with scalar scope access, exact native unique mode arbitration, aa-before-closure ordering, unchanged readonly verifier and original RLS/append-only authority. Remove both whole-record scope aliases; preserve OLD/NEW dual-key checks. No other BEFORE/AFTER timing change, table/callback/certifier/EXECUTE authority or cumulative JSON fallback is admitted.
+
+The callback count is227/194 actual triggers plus16 inline CHECK contexts, yielding243/210 successful native validation contexts. Native per-context8MiB and owner-attempt8MiB are distinct;1952MiB/attempt and5856MiB/three attempts are conservative logical-occurrence bounds only. The exact implemented CHECK expression must satisfy its enumerated seven-B+64KiB certificate and all other materialization accounting. No silent cap increase, allocator/latency claim, hostile-input pre-allocation claim, practical performance PASS or old-original-8MiB-total claim is allowed. Original input serialization/heap/TOAST remain inherited real work. Literal canonical companion text and semantic digests remain separate from jsonb::text capacity sizing.
+
+This resource successor supersedes only the conflicting mechanism/resource statements of the earlier918125 proposal and original aggregate wording. Preserve the original reconciliation R2 scope, c18 corrections, privilege clarification and all untouched contracts. The earlier918125 NEW-mutation mechanism and reports ee18962e/db505b3e stay immutable historical rejected designs, never active alternatives. Exact source equality, four relevant row kinds, current source content, all immediate/deferred late-write checks, writer-xid, exact-N retry, approved PROFILE enrollment, no old-prefix upgrade, all three RC/RR/SSI arbitration matrices and savepoint rollback remain mandatory.
+
+## Next release: integration and canonical plan only
+
+Research_binding may now normally merge accepted397d0d76c48cc2e8b9cb016a88794be3c9ca1412 into the existing1130 branch, preserving all five uncommitted draft paths and all14 incoming1131 paths/222 prior migrations. Snapshot exact before/after dirty bytes; do not reset, discard or overwrite them. Do not claim dirty drafts were reviewed/executed. Then commit only the canonical1130 plan amendment, embedding the exact new proposal and this admission and retaining every prior controlling block. Preserve the rejected first resource proposal externally and identify its supersession explicitly.
+
+Root must verify the actual integration parents, incoming/source preservation and sole-plan amendment before releasing dependent source changes. That source release is limited to the five production paths in proposal§7, the existing allocated0222 journal identity and admitted unit/native fixture paths. Root retains the three compatibility registries, CI/proof registration and actual graph inventory updates. The entire coherent corrected SQL/schema/ACL/trigger/expression/native-test package must be frozen and reviewed by root+M01 before any database/native grant. PG54329/heavy remain unallocated by this note. No push/PR/merge, production, host, C3, trade, new mode or financial action follows from this plan release.
+
+The schema allocation remains0222_trader_historical_reconciliation_v1.sql, idx222/version7/when1780000000222/breakpoints=true. All earlier222 SQL files remain immutable. Native results must be actual current-source execution with original roles/guards, not source arithmetic or output counts. Every still-open acceptance addition in proposal§7 remains required.
+<!-- END ROOT-RESOURCE-R2-ADMISSION -->
