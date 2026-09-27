@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2A, WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: d38976977e77f8f89114a2ab04a80e25eb9fd8a3
-  lastValidationAt: "2026-09-27T07:28:35.879848+00:00"
+  lastValidatedGitSha: 2621f7eeadd234fea2444eceda379616bf557e79
+  lastValidationAt: "2026-09-27T07:58:29.885786+00:00"
   blockedReason: null
-  nextAction: "Root verifies this sole-plan codec-correction amendment before releasing held-replay and three mapped tests. WP2A-CODEC-1 remains implementation-open; no native/compiler or remaining application owner/schema release."
+  nextAction: "Root and nonauthor review the originating-codec correction source2621f7ee and exact42/3 proof. WP2A-CODEC-1 is author-corrected, independently open; native/compiler and remaining application owner/schema work stay held."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -636,3 +636,17 @@ Implement exactly prepare(actualoriginatingroot.options) before owner'sBEGIN, si
 
 Actualcanonicalwriter wire-aware tests must check logicalJSONtypes/content BEFORE incomingmapper and use installedoriginalserializer controls with explicit syntheticOIDinference; preserve realnegative, no-network/rootdispatch and order/once-only checks. Scopedaffectedthreefiles/lint/diff allowed after root source release; historicalsixcompanion results stay attributed. No native/DB/heavy/compiler/build/CI/graphs/schema/migration/ownerCLI/publication grant. This is a finite repair within connectedDEE1132, not a separate helperPR or fullP10 acceptance.
 <!-- END FROZEN CODEC_ADMISSION -->
+
+## WP-2A codec-correction author checkpoint — pending independent closure
+
+Root verified plan c377545f and released the four exact code/test paths. Corrective source **`2621f7eeadd234fea2444eceda379616bf557e79`** is a direct child of that plan. Only held-replay.ts and the three mapped owner/bounds/compatibility test files changed. The old public saved repository, bounded source reader, canonical persistence production, schema/journal and all other production files are unchanged. The held file's capture, reader, fixed evaluator and accounting prefix is byte-identical; only its new internal adapter lifecycle changes.
+
+`prepareHeldResearchReplay` constructs Drizzle once with the actual originating root's options before the owner's BEGIN. Its private initially unbound transport cannot dispatch; one-use bind supplies only the actual held unsafe transport. It neither calls root transport/transaction control nor adds options to the held client. Actual root codec initialization is deliberate standard Drizzle behavior. Inert tests observe real constructor calls and metadata identity; they do not attest arbitrary root/held association, native transactions or continuous outside-code codec immutability. Fixed later-owner pairing, preparation order and finalization remain explicit integration obligations.
+
+A wire-aware actual canonical-writer test first failed on the original transport:0 passed /1 failed /11 filtered, with helper/test bytes and raw output saved. It applies the installed original114/3802 serializers to actual Drizzle-mapped parameters using explicit synthetic OID inference, and checks logical JSON types before incoming mapping. Thus a mapper's second JSON.parse cannot hide string storage. The corrected control retains those original serializers as negative controls and proves the initialized actual originating metadata yields the exact canonical definition object and input/lineage arrays. The lazy fixed-synthetic root reports zero socket attempts and zero root unsafe/begin calls; only the inert held transport executes SQL models. No PostgreSQL server was used.
+
+The first corrective pass produced39 passed /1 fixture failure because the installed package namespace's drizzle export cannot be redefined by spyOn. The test observer was changed to an explicit call-through wrapper around the actual constructor; no mapper, serializer, writer or evaluator logic was replaced. The final affected pass produced **42 passed /3 files /0 skipped**. It includes construction-before-BEGIN, unbound-use refusal, one-use bind, frozen held object, missing real metadata refusal,119999/120001 preparation completion, retained replay/deadline/budget and old canonical/legacy compatibility controls. Scoped ESLint and diff both exited0.
+
+Execution attribution is exact: the final run executed parent c377545f plus four snapshotted working files; each is byte-equal to the later immutable2621f7ee commit. The unchanged bytes were not redundantly retested after commit. The prior182/9 remains historical and insufficient for the defective transport; the six unchanged companions were not repeated. External `parallel-runtime-owner/dee1132-wp2a-codec-correction-c377545f` retains the real wire RED,39/1 fixture diagnostic,42/3 corrected proof, exact source snapshots and source-commit receipt. This later plan-only checkpoint does not alter tested code.
+
+**WP2A-CODEC-1 is author-corrected and still pending root/nonauthor closure.** No native/DB, compiler/build/full readiness, application owner/CLI, schema, CI/graph or publication work occurred. There is no resource reservation or active process. Actual held connection identity/isolation, server JSONB types, rollback/COMMIT uncertainty, full command accounting and mandatory sidecar fences remain later native/full-owner proof.
