@@ -1,4 +1,8 @@
+import { reconcileAccountingInvariants } from "@/lib/trader/accounting/accounting-reconciliation";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
+import { buildRecordFillPayload } from "@/lib/trader/execution/historical-simulated-exchange";
+import type { CostedFillEconomics } from "@/lib/trader/execution/historical-execution-model.types";
+import type { HistoricalModeledFillDetailV2 } from "./modeled-execution-advance-v2";
 import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
@@ -111,15 +115,74 @@ export type HistoricalReconciliationParentV1 = Readonly<{
   acceptedAt: number; firstEligibleAt: number; eligibleBarsSeen: number; fillSequence: number;
   pendingCancel: Readonly<{ requestedAtTs: number; cancelEffectiveTs: number }> | null;
   stateEvent: Readonly<{ id: string; sequence: number; digest: string }>;
-  fillReferences: readonly Readonly<{ fillId: string; economicsRowId: string; economicsDigest: string }>[];
+  fillReferences: readonly Readonly<{ fillId: string; economicsRowId: string; economicsDigest: string;
+    fillSourceDigest: string; economicsSourceDigest: string }>[];
 }>;
 export type HistoricalReconciliationFillV1 = Readonly<{
   fillId: string; parentId: string; organizationId: string; accountId: string; runId: string;
   symbol: string; side: "buy" | "sell"; quantity: string;
+  price: string; fee: string; feeAsset: string; exchangeTradeId: string; executedAt: number;
 }>;
-export type HistoricalReconciliationEconomicsV1 = HistoricalReconciliationFillV1 & Readonly<{
+export type HistoricalReconciliationEconomicsV1 = Pick<HistoricalReconciliationFillV1,
+  "fillId" | "parentId" | "organizationId" | "accountId" | "runId" | "symbol" | "side" | "quantity"> & Readonly<{
   economicsRowId: string; economicsDigest: string; netCashEffect: string; fillSequence: number; sourceBarIndex: number;
+  exchangeTradeId: string; schemaVersion: string;
+  sourceEconomics: Readonly<Omit<CostedFillEconomics, "sourceBarTimestamp" | "acceptedAt" | "fillTimestamp"> & {
+    sourceBarTimestamp: number; acceptedAt: number; fillTimestamp: number;
+  }>;
 }>;
+/** Exact supported instant, without lexical timezone equality or fractional-ms truncation. */
+export function historicalReconciliationInstantV1(value: string | number | Date): number {
+  const result = typeof value === "number" ? value : value instanceof Date ? value.getTime() : Date.parse(value);
+  ensure(Number.isSafeInteger(result), "SOURCE_TIME");
+  return result;
+}
+export function captureHistoricalReconciliationProducedFillsV1(scope: Scope,
+  details: readonly HistoricalModeledFillDetailV2[]) {
+  ensure(details.length <= 1, "FILL_MEMBERSHIP");
+  return copy(details.map((detail) => {
+    const event = { ...detail.event, acceptedAt: new Date(historicalReconciliationInstantV1(detail.event.acceptedAt)),
+      fillTimestamp: new Date(historicalReconciliationInstantV1(detail.event.fillTimestamp)) };
+    const economics = { ...detail.economics,
+      sourceBarTimestamp: new Date(historicalReconciliationInstantV1(detail.economics.sourceBarTimestamp)),
+      acceptedAt: new Date(historicalReconciliationInstantV1(detail.economics.acceptedAt)),
+      fillTimestamp: new Date(historicalReconciliationInstantV1(detail.economics.fillTimestamp)) };
+    ensure(event.organizationId === scope.organizationId && event.orderId === detail.evidence.orderId &&
+      event.symbol === economics.symbol && event.side === economics.side && event.sliceQuantity === economics.quantity &&
+      event.fillSequence === economics.fillSequence && event.sourceBarIndex === economics.sourceBarIndex &&
+      event.grossFillPrice === economics.grossFillPrice && event.remainingQuantityAfter === economics.remainingQuantityAfter &&
+      event.submitLatencyMs === economics.submitLatencyMs && event.cancelLatencyMs === economics.cancelLatencyMs &&
+      event.acceptedAt.getTime() === economics.acceptedAt.getTime() && event.fillTimestamp.getTime() === economics.fillTimestamp.getTime() &&
+      historicalReconciliationInstantV1(event.sourceBar.barCloseTime) === economics.sourceBarTimestamp.getTime(), "PRODUCED_DETAIL");
+    const payload = buildRecordFillPayload(event, economics, scope.organizationId, event.orderId,
+      event.side, economics.netFillPrice, event.sliceQuantity, false);
+    ensure(payload.fillId === detail.evidence.fillId && economics.economicsContentDigest === detail.evidence.economicsContentDigestHex &&
+      detail.accountingFrontier.sourceFillId === payload.fillId &&
+      detail.accountingFrontier.semanticContentDigest === detail.evidence.accountingFrontierContentDigestHex, "PRODUCED_DETAIL");
+    const identity = { fillId: payload.fillId!, parentId: event.orderId, organizationId: scope.organizationId,
+      accountId: scope.accountId, runId: scope.runId, symbol: event.symbol, side: event.side, quantity: event.sliceQuantity };
+    const fill: HistoricalReconciliationFillV1 = { ...identity, price: payload.price, fee: payload.fee!,
+      feeAsset: payload.feeAsset!, exchangeTradeId: payload.exchangeTradeId, executedAt: event.fillTimestamp.getTime() };
+    const persistedEconomics: HistoricalReconciliationEconomicsV1 = { ...identity,
+      economicsRowId: payload.economicsRow!.id, economicsDigest: economics.economicsContentDigest,
+      netCashEffect: economics.netCashEffect, fillSequence: economics.fillSequence, sourceBarIndex: economics.sourceBarIndex,
+      exchangeTradeId: payload.economicsRow!.exchangeTradeId, schemaVersion: payload.economicsRow!.schemaVersion,
+      sourceEconomics: { ...economics, acceptedAt: economics.acceptedAt.getTime(),
+        fillTimestamp: economics.fillTimestamp.getTime(), sourceBarTimestamp: economics.sourceBarTimestamp.getTime() } };
+    // Only the bounded Accounting projection is retained; no new digest/copy of its cumulative IDs.
+    return { fill, economics: persistedEconomics, accounting: projectHistoricalReconciliationAccountingV1(detail.accountingFrontier) };
+  }));
+}
+export type HistoricalReconciliationProducedFillsV1 = ReturnType<typeof captureHistoricalReconciliationProducedFillsV1>;
+export function assertHistoricalReconciliationProducedFillsV1(produced: HistoricalReconciliationProducedFillsV1,
+  fills: readonly HistoricalReconciliationFillV1[], economics: readonly HistoricalReconciliationEconomicsV1[],
+  steps: readonly HistoricalReconciliationAccountingV1[]) {
+  ensure(produced.length === fills.length && produced.length === economics.length, "PRODUCED_SOURCE_MEMBERSHIP");
+  produced.forEach((expected, index) => {
+    ensure(same(expected.fill, fills[index]) && same(expected.economics, economics[index]) &&
+      same(expected.accounting, steps[index]), "PRODUCED_SOURCE_CONTENT");
+  });
+}
 export type HistoricalReconciliationConsumedV1 = Readonly<{
   fillId: string; accountingId: string; accountingSequence: number; accountingDigest: string; economicsDigest: string;
 }>;
@@ -176,7 +239,7 @@ function assertParents(scope: Scope, symbol: string, active: HistoricalReconcili
     sequence(p.stateVersion); sequence(p.eligibleBarsSeen); sequence(p.fillSequence);
     ensure(p.fillReferences.length === p.fillSequence && p.fillReferences.length <= 3 &&
       new Set(p.fillReferences.map((f) => f.fillId)).size === p.fillReferences.length &&
-      p.fillReferences.every((f) => HEX.test(f.economicsDigest)) && HEX.test(p.stateEvent.digest), "PARENT_FILL_REFERENCES");
+      p.fillReferences.every((f) => HEX.test(f.economicsDigest) && HEX.test(f.fillSourceDigest) && HEX.test(f.economicsSourceDigest)) && HEX.test(p.stateEvent.digest), "PARENT_FILL_REFERENCES");
     ensure(p.fillSequence <= 3 && p.eligibleBarsSeen <= 3 && HEX.test(p.receiptDigest) && HEX.test(p.creationDigest), "PARENT_MODEL");
     ensure(compareDecimal(p.quantity, "0") > 0 && compareDecimal(p.filledQuantity, "0") >= 0 &&
       compareDecimal(p.remainingQuantity, "0") >= 0 && compareDecimal(addDecimal(p.filledQuantity, p.remainingQuantity), p.quantity) === 0, "PARENT_QUANTITY");
@@ -259,6 +322,7 @@ export function advanceHistoricalReconciliationV1(input: Readonly<{
 }
 export function observeHistoricalReconciliationV1(input: Readonly<{
   delta: HistoricalReconciliationDeltaV1; phase: Phase; accounting: HistoricalReconciliationAccountingV1;
+  state: AccountingFrontierV1;
   activeParent: HistoricalReconciliationParentV1 | null; touchedParents: readonly HistoricalReconciliationParentV1[];
   previousObservations: readonly HistoricalReconciliationObservationV1[];
 }>): HistoricalReconciliationObservationV1 {
@@ -267,6 +331,20 @@ export function observeHistoricalReconciliationV1(input: Readonly<{
   const d = input.delta;
   assertAccounting(input.accounting, d.scope, d.symbol, d.expectedCashAfter, d.expectedOpenQuantityAfter, d.consumedFillCount, d.lastConsumedFillId);
   ensure(same(d.accounting, input.accounting), "PHASE_ACCOUNTING_IDENTITY");
+  ensure(same(projectHistoricalReconciliationAccountingV1(input.state), input.accounting), "PHASE_STATE_IDENTITY");
+  // The actual existing Accounting invariant is mandatory at each fresh owner gate.
+  // Starting equity is immutable flat inception; cash reconciliation is only the
+  // independently checked increment. Explicit IDs prevent the historical fallback.
+  const cashEvents = d.fillDelta ? [{ fillId: d.fillDelta.fillId, netCashEffect: d.fillDelta.netCashEffect }] : [];
+  const invariant = reconcileAccountingInvariants({ state: input.state,
+    startingEquityUsdt: d.startingCash,
+    startingCashUsdt: subtractDecimal(d.expectedCashAfter, d.fillDelta?.netCashEffect ?? "0"),
+    cashEvents, cashEventIntegrityFillIds: cashEvents.map((event) => event.fillId),
+    inventoryOpenQtyBySymbol: Object.fromEntries([...new Set([d.symbol, ...Object.keys(input.state.positions)])]
+      .map((symbol) => [symbol, symbol === d.symbol ? d.expectedOpenQuantityAfter : "0"])),
+    expectedAccountingSequence: d.accounting.sequence,
+  });
+  if (!invariant.pass) refuse(`ACCOUNTING_INVARIANT:${invariant.violations.map((value) => value.code).join(",")}`);
   assertParents(d.scope, d.symbol, input.activeParent, input.touchedParents);
   return copy({ phase: input.phase, accountingDigest: input.accounting.digest,
     projectionDigest: computeSemanticSha256Hex({ accounting: input.accounting,

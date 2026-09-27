@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Accepted main3c8b7b98 is merged without source changes. Await root verification of this plan-only corrective and allocated0222 amendment before executable/schema edits; no PG/native/heavy grant. Prior scoped33/4/typecheck remains historical partial proof with three adopted source findings."
+  nextAction: "Root released corrective source and allocated0222 schema source after plan37e531d1 verification. Corrective source scoped68/4 passes; freeze for independent inspection while preparing WP3 schema/native-test source. No PG/native/full-typecheck/heavy grant, registry/CI/graph remain root-held."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -161,6 +161,16 @@ Schema source may be released after plan verification. Root retains ownership of
 
 No PG/heavy/native grant now. No push/PR/deploy/host/C3/live action. Existing frozen evidence and genuine failures stay immutable. Parent643 and full qualification remain open. Parallel1131 source work touches separate Knowledge readers and has no schema allocation.
 <!-- END CORRECTION-AND-SCHEMA-ALLOCATION -->
+
+## Corrective source checkpoint after root plan release
+
+Root verified plan37e531d1 and explicitly released the three corrective joins, scoped synthetic proof and subsequent coherent WP3 schema/native-test source. This checkpoint changes the four existing DEE-1130 runtime modules and two admitted unit surfaces. The existing Accounting helper is now called with real current state at all three phase gates, explicit current cash-event IDs, source-owned original equity and independent delta cash/inventory. Current fill detail is captured once as a bounded projection and joined against complete fresh fill/economics bodies, physical trade/price/fee fields and exact supported instants. Parent creation checks include type/price and null canonical allowance bindings. Saved bounded source-content references let old-N replay verify full selected bodies without substituting later fills or today's parent progress. Existing economic digest functions are unchanged.
+
+Continuation reconstructs runtime once in the existing public owner, then shares that same object with reconciliation and the private producer. Exact historical-N reconciliation selects only already-validated Accounting/open-parent snapshot fields; it does not restore the cumulative registry/Knowledge/learning states. Original complete cursor validation remains. The added structural owner check and short/long-prefix proxy controls establish this narrower call/data-access property, not a latency/AD1 measurement or repair of inherited canonical cumulative work.
+
+Executed **68 assertions /4 files PASS,0 skipped** on the recorded precommit source bytes. Genuine invariant regressions first recorded **6 RED/27 PASS**; the initial structural owner check recorded **1 RED/3 PASS** against the duplicate restore. A subsequent test-only string-boundary mistake caused **1 RED/57 PASS** after the implementation changed; replacing it with actual TypeScript function/call traversal corrected the test instrumentation without changing production. Full-detail/time/creation and explicit-ID/selected-N controls then passed. Scoped ESLint exits0 (only the inherited unused private commit-helper warning); diff-format check passes. Logs/JSON are retained under `evidence/dee-1130/corrections` with source-specific attribution. No general claim is made that every new test had a baseline runtime RED.
+
+No0222 SQL/schema/journal or root-held compatibility/CI/graph file is changed in this checkpoint. No database/native/full typecheck/build/full lint/global unit or external/financial action has run. WP3 native mode/privilege/source-closure enforcement, actual native restore/retry/three-phase tests, subsequent type/readiness and independent acceptance remain required. The partial source remains undeployable without its reviewed schema; there is no missing-schema bypass.
 
 ## Exact frozen controlling texts
 

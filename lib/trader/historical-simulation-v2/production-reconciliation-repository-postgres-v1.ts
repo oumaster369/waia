@@ -2,11 +2,11 @@ import type postgres from "postgres";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { subtractDecimal } from "@/lib/trader/risk/numeric";
 import { computeEconomicsContentDigest } from "@/lib/trader/execution/fill-economics";
-import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
+import { historicalFillId, fillExecutionEconomicsRowId } from "@/lib/trader/execution/deterministic-execution-id";
 import type { CostedFillEconomics } from "@/lib/trader/execution/historical-execution-model.types";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { HistoricalSimulationAtomicScopeV2, HistoricalSimulationResumeCursorV2 } from "./atomic-cycle-commit-v2";
-import { restoreHistoricalSimulationProductionRuntimeStateV2 } from "./production-runtime-state-v2";
+import { selectValidatedHistoricalReconciliationStateV1 } from "./production-runtime-state-v2";
 import type { HistoricalSimulationProductionRuntimeStateV2 } from "./production-runtime-state-v2";
 import {
   HISTORICAL_RECONCILIATION_PROFILE_V1, createHistoricalReconciliationBudgetV1,
@@ -15,7 +15,7 @@ import {
   refuseHistoricalReconciliationV1, type HistoricalReconciliationFrontierV1,
   type HistoricalReconciliationParentV1, type HistoricalReconciliationAccountingV1,
   type HistoricalReconciliationFillV1, type HistoricalReconciliationEconomicsV1,
-  type HistoricalReconciliationConsumedV1,
+  type HistoricalReconciliationConsumedV1, historicalReconciliationInstantV1,
 } from "./production-reconciliation-frontier-v1";
 
 const refuse: (reason: string) => never = refuseHistoricalReconciliationV1;
@@ -27,6 +27,7 @@ type ParentSource = Readonly<{
   side: "buy" | "sell"; quantity: string; filledQuantity: string; state: string; stateVersion: number;
   venue: string; executionMode: string; credentialId: string | null;
   clientOrderId: string; idempotencyKey: string; riskDecisionId: string; allocationDecisionId: string | null;
+  type: string; price: string | null; riskAllowanceId: string | null; riskAllowanceBindingDigest: string | null;
 }>;
 type EventSource = Readonly<{ id: string; orderId: string; sequence: number; fromState: string | null;
   toState: string; eventType: string; payload: string | null; occurredAt: string }>;
@@ -35,7 +36,8 @@ const orderProjection = `jsonb_build_object('orderId',o.id::text,'organizationId
   'quantity',o.quantity,'filledQuantity',o.filled_quantity,'state',o.state,'stateVersion',o.state_version,
   'venue',o.venue,'executionMode',o.execution_mode,'credentialId',o.credential_id::text,
   'clientOrderId',o.client_order_id,'idempotencyKey',o.idempotency_key,'riskDecisionId',o.risk_decision_id,
-  'allocationDecisionId',o.allocation_decision_id)`;
+  'allocationDecisionId',o.allocation_decision_id,'type',o.type,'price',o.price,
+  'riskAllowanceId',o.risk_allowance_id::text,'riskAllowanceBindingDigest',o.risk_allowance_binding_digest)`;
 const creationDigest = (p: ParentSource) => {
   const immutable = { ...p } as { -readonly [K in keyof ParentSource]?: ParentSource[K] };
   delete immutable.filledQuantity; delete immutable.state; delete immutable.stateVersion;
@@ -115,17 +117,20 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
     const params = selectedIds ? [...prefix, parent, selectedIds] : [...prefix, parent];
     const fills = await read<HistoricalReconciliationFillV1>(`SELECT jsonb_build_object('fillId',f.id::text,
       'parentId',f.order_id::text,'organizationId',f.organization_id::text,'accountId',o.historical_account_key,
-      'runId',o.historical_run_id,'symbol',o.symbol,'side',o.side,'quantity',f.quantity) projection
+      'runId',o.historical_run_id,'symbol',o.symbol,'side',o.side,'quantity',f.quantity,
+      'price',f.price,'fee',f.fee,'feeAsset',f.fee_asset,'exchangeTradeId',f.exchange_trade_id,
+      'executedAt',extract(epoch FROM f.executed_at)*1000) projection
       FROM trader_fills f JOIN trader_orders o ON o.organization_id=f.organization_id AND o.id=f.order_id
       WHERE o.organization_id=$1::uuid AND o.historical_account_key=$2 AND o.historical_run_id=$3
       AND o.id=$4::uuid${select} ORDER BY f.id`, params, 3);
     // Independent direction: query economics by actual parent/scope, not by a join that hides
     // an economics/order mismatch or missing economics for a real fill.
-    const economics = await read<HistoricalReconciliationEconomicsV1 & { sourceEconomics: CostedFillEconomics }>(`SELECT jsonb_build_object('fillId',e.fill_id::text,
+    const economics = await read<HistoricalReconciliationEconomicsV1>(`SELECT jsonb_build_object('fillId',e.fill_id::text,
       'parentId',e.order_id::text,'organizationId',e.organization_id::text,'accountId',o.historical_account_key,
       'runId',o.historical_run_id,'symbol',e.symbol,'side',e.side,'quantity',e.quantity,
       'economicsRowId',e.id::text,'economicsDigest',e.economics_content_digest,'netCashEffect',e.net_cash_effect,
       'fillSequence',e.fill_sequence,'sourceBarIndex',e.source_bar_index,
+      'exchangeTradeId',e.exchange_trade_id,'schemaVersion',e.schema_version,
       'sourceEconomics',jsonb_build_object('executionFactKind',e.execution_fact_kind,
         'grossFillPrice',e.gross_fill_price,'grossNotional',e.gross_notional,'feeAmount',e.fee_amount,
         'feeAsset',e.fee_asset,'spreadCost',e.spread_cost,'impactSlippageCost',e.impact_slippage_cost,
@@ -133,19 +138,30 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
         'executionModelId',e.execution_model_id,'executionModelSchemaVersion',e.execution_model_schema_version,
         'simulatorId',e.simulator_id,'simulatorVersion',e.simulator_version,'sourceBarIndex',e.source_bar_index,
         'fillSequence',e.fill_sequence,'symbol',e.symbol,'side',e.side,'quantity',e.quantity,
-        'remainingQuantityAfter',e.remaining_quantity_after,'submitLatencyMs',e.submit_latency_ms,'cancelLatencyMs',e.cancel_latency_ms)) projection
+        'remainingQuantityAfter',e.remaining_quantity_after,'submitLatencyMs',e.submit_latency_ms,'cancelLatencyMs',e.cancel_latency_ms,
+        'economicsContentDigest',e.economics_content_digest,'sourceBarTimestamp',extract(epoch FROM e.source_bar_timestamp)*1000,
+        'acceptedAt',extract(epoch FROM e.accepted_at)*1000,'fillTimestamp',extract(epoch FROM e.fill_timestamp)*1000)) projection
       FROM trader_fill_execution_economics e JOIN trader_orders o ON o.organization_id=e.organization_id AND o.id=e.order_id
       WHERE o.organization_id=$1::uuid AND o.historical_account_key=$2 AND o.historical_run_id=$3
       AND o.id=$4::uuid${selectedIds ? " AND e.fill_id=ANY($5::uuid[])" : ""} ORDER BY e.fill_id`, params, 3);
+    for (const f of fills) historicalReconciliationInstantV1(f.executedAt);
     for (const e of economics) {
-      if (computeEconomicsContentDigest(e.sourceEconomics) !== e.economicsDigest ||
+      const full: CostedFillEconomics = { ...e.sourceEconomics,
+        acceptedAt: new Date(historicalReconciliationInstantV1(e.sourceEconomics.acceptedAt)),
+        fillTimestamp: new Date(historicalReconciliationInstantV1(e.sourceEconomics.fillTimestamp)),
+        sourceBarTimestamp: new Date(historicalReconciliationInstantV1(e.sourceEconomics.sourceBarTimestamp)) };
+      if (computeEconomicsContentDigest(full) !== e.economicsDigest || full.economicsContentDigest !== e.economicsDigest ||
+          fillExecutionEconomicsRowId(e.fillId) !== e.economicsRowId ||
           historicalFillId({ organizationId: scope.organizationId, orderId: e.parentId,
             fillSequence: e.fillSequence, sourceBarIndex: e.sourceBarIndex }) !== e.fillId) refuse("ECONOMICS_SOURCE_CONTENT");
     }
     if (fills.length !== economics.length || fills.some((f, i) => {
       const e = economics[i]!;
       return f.fillId !== e.fillId || f.parentId !== e.parentId || f.organizationId !== e.organizationId ||
-        f.accountId !== e.accountId || f.runId !== e.runId || f.symbol !== e.symbol || f.side !== e.side || f.quantity !== e.quantity;
+        f.accountId !== e.accountId || f.runId !== e.runId || f.symbol !== e.symbol || f.side !== e.side || f.quantity !== e.quantity ||
+        f.price !== e.sourceEconomics.netFillPrice || f.fee !== e.sourceEconomics.feeAmount ||
+        f.feeAsset !== e.sourceEconomics.feeAsset || f.exchangeTradeId !== e.exchangeTradeId ||
+        f.executedAt !== e.sourceEconomics.fillTimestamp;
     })) refuse("PARENT_FILL_MEMBERSHIP");
     if (selectedIds && (fills.length !== selectedIds.length || fills.some((f) => !selectedIds.includes(f.fillId)))) refuse("HISTORICAL_FILL_MEMBERSHIP");
     return { fills, economics };
@@ -175,9 +191,15 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
       const old = previousActive?.orderId === source.orderId ? previousActive : null;
       const receipt = runtime.executionRegistry.get(source.orderId);
       if (!receipt || source.venue !== "HISTORICAL_SIMULATED_EXCHANGE" || source.executionMode !== "mock" || source.credentialId !== null ||
-          source.symbol !== receipt.symbol || source.quantity !== receipt.quantity || source.side !== receipt.side) refuse("PARENT_SOURCE_IDENTITY");
+          source.symbol !== receipt.symbol || source.quantity !== receipt.quantity || source.side !== receipt.side ||
+          source.type !== "market" || source.price !== null || source.riskAllowanceId !== null || source.riskAllowanceBindingDigest !== null ||
+          source.clientOrderId !== `hsv2-${receipt.executionAttemptId}` ||
+          source.idempotencyKey !== `historical-modeled-v2-${receipt.contentDigestHex}` ||
+          source.riskDecisionId !== receipt.riskVerdictId || source.allocationDecisionId !== receipt.decisionId) refuse("PARENT_SOURCE_IDENTITY");
       const persisted = await fillSources(source.orderId);
-      const refs = persisted.economics.map((e) => ({ fillId: e.fillId, economicsRowId: e.economicsRowId, economicsDigest: e.economicsDigest }));
+      const refs = persisted.economics.map((e, index) => ({ fillId: e.fillId, economicsRowId: e.economicsRowId,
+        economicsDigest: e.economicsDigest, fillSourceDigest: computeSemanticSha256Hex(persisted.fills[index]),
+        economicsSourceDigest: computeSemanticSha256Hex(e) }));
       if (old && old.fillReferences.some((ref) => !refs.some((next) => same(ref, next)))) refuse("PARENT_PREFIX_CHANGED");
       for (const f of persisted.fills) if (!old?.fillReferences.some((ref) => ref.fillId === f.fillId)) fills.push(f);
       for (const e of persisted.economics) if (!old?.fillReferences.some((ref) => ref.fillId === e.fillId)) economics.push(e);
@@ -219,7 +241,9 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
     if (rows.length !== 1 || source!.digest !== genesis.authorityDigest || computeStableJsonDigest(source!.body) !== source!.digest ||
         identity?.id !== genesis.inceptionAccountingId || identity?.semanticContentDigest !== genesis.inceptionAccountingDigest) refuse("GENESIS_AUTHORITY");
   };
-  const validateCursor = async (cursor: HistoricalSimulationResumeCursorV2, historical: boolean) => {
+  const validateCursor = async (cursor: HistoricalSimulationResumeCursorV2, historical: boolean,
+    runtime?: HistoricalSimulationProductionRuntimeStateV2 | null) => {
+    if (!historical && !runtime) refuse("CONTINUATION_RUNTIME_MISSING");
     const value = await loadFrontier(cursor.nextCycleSequence - 1);
     if (value.checkpointDigest !== cursor.contentDigestHex || value.cycleId !== cursor.committedCycleId ||
         value.recordIndex !== cursor.nextRecordIndex - 1) refuse("CHECKPOINT_IDENTITY");
@@ -231,8 +255,8 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
         value.inceptionAuthorityId !== genesis.inceptionAuthorityId || value.authorityDigest !== genesis.authorityDigest) refuse("GENESIS_CHAIN");
     const mode = await readMode();
     if (mode?.mode !== "PROFILE" || mode.genesisId !== genesis.id || mode.symbol !== value.symbol) refuse("MODE_SCOPE");
-    const runtime = restoreHistoricalSimulationProductionRuntimeStateV2({ scope, cursor });
-    if (!same(projectHistoricalReconciliationAccountingV1(runtime.accounting), value.accounting)) refuse("RESTORE_ACCOUNTING");
+    const selected = selectValidatedHistoricalReconciliationStateV1(cursor);
+    if (!same(projectHistoricalReconciliationAccountingV1(runtime?.accounting ?? selected.accounting), value.accounting)) refuse("RESTORE_ACCOUNTING");
     await verifyAccounting(value.steps);
     // Historical retry reads only the selected N references. Never compare N to today's
     // mutable quantity/stateVersion or enumerate fills added after N on the same parent.
@@ -249,7 +273,9 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
       for (const f of sources.fills) if (!prior.activeParentAfter?.fillReferences.some((ref) => ref.fillId === f.fillId)) currentFills.push(f);
       for (const e of sources.economics) if (!prior.activeParentAfter?.fillReferences.some((ref) => ref.fillId === e.fillId)) currentEconomics.push(e);
       if (sources.economics.some((e) => !p.fillReferences.some((f) => f.fillId === e.fillId &&
-          f.economicsRowId === e.economicsRowId && f.economicsDigest === e.economicsDigest))) refuse("HISTORICAL_PARENT_FILL");
+          f.economicsRowId === e.economicsRowId && f.economicsDigest === e.economicsDigest &&
+          f.fillSourceDigest === computeSemanticSha256Hex(sources.fills.find((fill) => fill.fillId === e.fillId)) &&
+          f.economicsSourceDigest === computeSemanticSha256Hex(e)))) refuse("HISTORICAL_PARENT_FILL");
       if (!historical && (source.stateVersion !== p.stateVersion || source.state !== p.state || source.filledQuantity !== p.filledQuantity)) refuse("PARENT_CURRENT_STATE");
     }
     const consumed = value.steps.filter((step) => step.sourceFillId !== null).map((step) => ({ fillId: step.sourceFillId!,
@@ -261,7 +287,7 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
       checkpointDigest: value.checkpointDigest!, observations: value.observations,
       activeParent: value.activeParentAfter, touchedParents: value.touchedParentsAfter });
     if (!same(rebuilt, value)) refuse("HISTORICAL_DELTA_REPLAY");
-    const open = runtime.exchange.listOpenOrders();
+    const open = runtime ? runtime.exchange.listOpenOrders() : selected.open;
     if (open.length !== (value.activeParentAfter ? 1 : 0)) refuse("RESTORE_PARENT");
     if (value.activeParentAfter) {
       const p = value.activeParentAfter; const actual = open[0]!;

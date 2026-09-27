@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -36,4 +37,27 @@ describe("Historical Simulation V2 production graph prerequisite", () => {
     };
     expect("capital" in createHistoricalSimulationV2ProductionGraphPrerequisite(injected)).toBe(false);
   });
+});
+
+// Structural owner coverage: one continuation reconstruction is shared with
+// reconciliation; a selected old-N read must not replay unrelated runtime state.
+it("keeps exactly one full reconstruction on the actual owner call chain", () => {
+  const root = "lib/trader/historical-simulation-v2/";
+  const owner = readFileSync(resolve(process.cwd(), root + "atomic-cycle-repository-postgres-v2.ts"), "utf8");
+  const repository = readFileSync(resolve(process.cwd(), root + "production-reconciliation-repository-postgres-v1.ts"), "utf8");
+  const parse = (name: string, source: string) => ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true);
+  const calls = (node: ts.Node): number => {
+    let count = ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      node.expression.text === "restoreHistoricalSimulationProductionRuntimeStateV2" ? 1 : 0;
+    node.forEachChild((child) => { count += calls(child); });
+    return count;
+  };
+  const parsed = parse("owner.ts", owner);
+  expect(calls(parsed) + calls(parse("repository.ts", repository))).toBe(1);
+  const producer = parsed.statements.find((statement) => ts.isFunctionDeclaration(statement) &&
+    statement.name?.text === "produceHistoricalSimulationNextCycleV2");
+  expect(producer).toBeDefined();
+  expect(calls(producer!)).toBe(0);
+  expect(owner).toContain("reconciliation.validateCursor(previousCursor, false, previousRuntime)");
+  expect(owner).toMatch(/previousCursor,\s*previousRuntime,\s*codeSha/);
 });

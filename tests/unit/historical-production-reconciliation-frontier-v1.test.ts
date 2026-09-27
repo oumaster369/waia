@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createInitialAccountingState, advanceAccountingFrontier } from
+import { createInitialAccountingState, advanceAccountingFrontier, computeAccountingSemanticDigest } from
   "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
 import {
   createHistoricalReconciliationGenesisV1, advanceHistoricalReconciliationV1,
   observeHistoricalReconciliationV1, sealHistoricalReconciliationCycleV1,
   assertHistoricalReconciliationFrontierV1, projectHistoricalReconciliationAccountingV1,
   createHistoricalReconciliationBudgetV1, HISTORICAL_RECONCILIATION_PROJECTION_BYTES_V1,
+  captureHistoricalReconciliationProducedFillsV1, assertHistoricalReconciliationProducedFillsV1,
+  historicalReconciliationInstantV1,
 } from "@/lib/trader/historical-simulation-v2/production-reconciliation-frontier-v1";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 const digest = "a".repeat(64);
@@ -29,7 +31,7 @@ describe("bounded historical reconciliation, real delta grammar", () => {
     let observations: ReturnType<typeof observeHistoricalReconciliationV1>[] = [];
     for (const phase of ["frontier_mutation", "before_guardian", "before_cycle_complete"] as const) {
       observations = [...observations, observeHistoricalReconciliationV1({ delta, phase,
-        accounting: projectHistoricalReconciliationAccountingV1(mark()), activeParent: null,
+        state: mark(), accounting: projectHistoricalReconciliationAccountingV1(mark()), activeParent: null,
         touchedParents: [], previousObservations: observations })];
     }
     const saved = sealHistoricalReconciliationCycleV1({ delta, observations,
@@ -42,7 +44,7 @@ describe("bounded historical reconciliation, real delta grammar", () => {
   it("refuses skipped phases and no-fill cash drift", () => {
     const delta = advanceHistoricalReconciliationV1(cycle());
     const value = { delta, phase: "before_guardian" as const,
-      accounting: projectHistoricalReconciliationAccountingV1(mark()), activeParent: null,
+      state: mark(), accounting: projectHistoricalReconciliationAccountingV1(mark()), activeParent: null,
       touchedParents: [], previousObservations: [] };
     expect(() => observeHistoricalReconciliationV1(value)).toThrow("PHASE_ORDER");
     expect(() => advanceHistoricalReconciliationV1({ ...cycle(), steps: [{
@@ -97,11 +99,14 @@ import type { HistoricalReconciliationParentV1, HistoricalReconciliationDeltaV1 
 import { createHistoricalReconciliationRepositoryV1 } from
   "@/lib/trader/historical-simulation-v2/production-reconciliation-repository-postgres-v1";
 import { vi } from "vitest";
+import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { selectValidatedHistoricalReconciliationStateV1 } from "@/lib/trader/historical-simulation-v2/production-runtime-state-v2";
 
-function observations(delta: HistoricalReconciliationDeltaV1, parent: HistoricalReconciliationParentV1 | null) {
+function observations(delta: HistoricalReconciliationDeltaV1, parent: HistoricalReconciliationParentV1 | null, state = mark()) {
   const result: ReturnType<typeof observeHistoricalReconciliationV1>[] = [];
   for (const phase of ["frontier_mutation", "before_guardian", "before_cycle_complete"] as const) {
-    result.push(observeHistoricalReconciliationV1({ delta, phase, accounting: delta.accounting,
+    result.push(observeHistoricalReconciliationV1({ delta, phase, state, accounting: delta.accounting,
       activeParent: parent, touchedParents: parent ? [parent] : [], previousObservations: result }));
   }
   return result;
@@ -118,26 +123,36 @@ function fillCycle() {
   const initialDelta = advanceHistoricalReconciliationV1(cycle());
   const previous = sealHistoricalReconciliationCycleV1({ delta: initialDelta, checkpointDigest: digest,
     activeParent: parent, touchedParents: [parent], observations: observations(initialDelta, parent) });
-  const economics = applyHistoricalExecutionEconomics({ orderId: parent.orderId, organizationId: scope.organizationId,
-    symbol: "BTCUSDT", side: "buy", fillSequence: 1, sourceBarIndex: 11,
-    sourceBar: { symbol: "BTCUSDT", interval: "1m", open: "100", high: "100", low: "100", close: "100", volume: "10",
+  const event = { orderId: parent.orderId, organizationId: scope.organizationId,
+    symbol: "BTCUSDT", side: "buy" as const, fillSequence: 1, sourceBarIndex: 11,
+    sourceBar: { symbol: "BTCUSDT", interval: "1m" as const, open: "100", high: "100", low: "100", close: "100", volume: "10",
       barOpenTime: "2026-01-01T00:01:00.000Z", barCloseTime: "2026-01-01T00:02:00.000Z" },
     grossFillPrice: "100", sliceQuantity: "0.1", remainingQuantityAfter: "0.9", acceptedAt: new Date(parent.acceptedAt),
     fillTimestamp: new Date("2026-01-01T00:02:00.000Z"), submitLatencyMs: 50, cancelLatencyMs: null,
-  }, createHistoricalExecutionModelV1());
-  const fillId = "00000000-0000-4000-8000-000000000011";
+  };
+  const economics = applyHistoricalExecutionEconomics(event, createHistoricalExecutionModelV1());
+  const fillId = historicalFillId({ organizationId: scope.organizationId, orderId: parent.orderId, fillSequence: 1, sourceBarIndex: 11 });
   const fill = advanceAccountingFrontier({ state: mark(),
     fill: { fillId, economics, executedAt: "2026-01-01T00:02:00.000Z" },
     marks: { BTCUSDT: { price: "100", barCloseTime: "2026-01-01T00:02:00.000Z" } },
     frontierAsOf: "2026-01-01T00:02:00.000Z", frontierId: "00000000-0000-4000-8000-000000000012" });
   const final = advanceAccountingFrontier({ state: fill, marks: fill.marks, frontierAsOf: fill.frontierAsOf,
     frontierId: "00000000-0000-4000-8000-000000000013" });
-  const f = { fillId, parentId: parent.orderId, organizationId: scope.organizationId,
-    accountId: scope.accountId, runId: scope.runId, symbol: "BTCUSDT", side: "buy" as const, quantity: "0.1" };
-  return { ...cycle(), previous, cycleId: "cycle-1", cycleSequence: 1, recordIndex: 11,
+  const evidence = { schemaVersion: "waia.trader.historical_modeled_fill_evidence.v2" as const,
+    source: "MODELED_HISTORICAL" as const, capitalEligible: false as const, cycleId: "cycle-1",
+    sealedMarketCycleContentDigestHex: digest, orderId: parent.orderId, fillId,
+    economicsContentDigestHex: economics.economicsContentDigest,
+    accountingFrontierContentDigestHex: fill.semanticContentDigest, contentDigestHex: digest };
+  const body = { schemaVersion: "waia.trader.historical_modeled_fill_detail.v2" as const, evidence,
+    event: { ...event, acceptedAt: event.acceptedAt.toISOString(), fillTimestamp: event.fillTimestamp.toISOString() },
+    economics: { ...economics, acceptedAt: economics.acceptedAt.toISOString(),
+      fillTimestamp: economics.fillTimestamp.toISOString(), sourceBarTimestamp: economics.sourceBarTimestamp.toISOString() },
+    accountingFrontier: fill };
+  const detail = { ...body, contentDigestHex: computeSemanticSha256Hex(body) };
+  const produced = captureHistoricalReconciliationProducedFillsV1(scope, [detail])[0]!;
+  return { ...cycle(), detail, final, previous, cycleId: "cycle-1", cycleSequence: 1, recordIndex: 11,
     steps: [projectHistoricalReconciliationAccountingV1(fill), projectHistoricalReconciliationAccountingV1(final)],
-    fills: [f], economics: [{ ...f, economicsRowId: "distinct-economics-pk", economicsDigest: economics.economicsContentDigest,
-      netCashEffect: economics.netCashEffect, sourceBarIndex: 11, fillSequence: 1 }],
+    fills: [{ ...produced.fill }], economics: [{ ...produced.economics, sourceEconomics: { ...produced.economics.sourceEconomics } }],
     consumed: [{ fillId, accountingId: fill.id, accountingSequence: fill.accountingSequence,
       accountingDigest: fill.semanticContentDigest, economicsDigest: economics.economicsContentDigest }] };
 }
@@ -148,7 +163,8 @@ describe("actual fill→mark independent expected cash and inventory", () => {
     expect(value.expectedOpenQuantityAfter).toBe("0.1");
     expect(value.consumedFillCount).toBe(1);
     expect(value.sourceEventCount).toBe(3);
-    expect(value.fillDelta?.economicsRowId).toBe("distinct-economics-pk");
+    expect(value.fillDelta?.economicsRowId).toBe(input.economics[0]!.economicsRowId);
+    expect(value.fillDelta?.economicsRowId).not.toBe(input.fills[0]!.fillId);
     expect(value.steps.map((p) => p.sourceFillId)).toEqual([input.fills[0]!.fillId, null]);
   });
   it.each(["cash", "inventory", "tail", "count", "fill-missing", "economics-missing", "accounting-missing", "wrong-fill", "wrong-parent", "wrong-account", "mark-first", "sequence"])("rejects %s drift", (kind) => {
@@ -203,5 +219,133 @@ describe("fixed held-reader admission (inert SQL only)", () => {
     await expect(repo.enroll(genesis())).rejects.toThrow("MODE_WINNER_NOT_VISIBLE");
     expect(tx).toHaveBeenCalledTimes(1);
     expect(tx.mock.calls[0]![0].join("")).toContain("ON CONFLICT (organization_id,account_id,run_id) DO NOTHING");
+  });
+});
+
+// The prior implementation accepted resealed inconsistent equity/PnL at every phase.
+describe("existing Accounting invariant gate at each real phase", () => {
+  for (const phase of ["frontier_mutation", "before_guardian", "before_cycle_complete"] as const) {
+    it.each(["equity", "netRealizedPnl"] as const)(`${phase} refuses independently resealed %s`, (field) => {
+      const state = mark();
+      state[field] = field === "equity" ? "999" : "1";
+      state.semanticContentDigest = computeAccountingSemanticDigest(state);
+      const accounting = projectHistoricalReconciliationAccountingV1(state);
+      const delta = advanceHistoricalReconciliationV1({ ...cycle(), steps: [accounting] });
+      const valid = observations(advanceHistoricalReconciliationV1(cycle()), null);
+      const index = ["frontier_mutation", "before_guardian", "before_cycle_complete"].indexOf(phase);
+      expect(() => observeHistoricalReconciliationV1({ delta, phase, state, accounting,
+        activeParent: null, touchedParents: [], previousObservations: valid.slice(0, index) }))
+        .toThrow("ACCOUNTING_INVARIANT");
+    });
+  }
+  it("accepts real costed fill/mark through the existing invariant helper in all phases", () => {
+    const input = fillCycle(); const delta = advanceHistoricalReconciliationV1(input);
+    expect(observations(delta, null, input.final)).toHaveLength(3);
+  });
+  it("supplies explicit empty current IDs, never the canonical cumulative fallback", () => {
+    const state = mark();
+    state.consumedFillIds = new Proxy([], { get(target, key, receiver) {
+      if (key === Symbol.iterator) throw new Error("cumulative fallback");
+      return Reflect.get(target, key, receiver);
+    } });
+    expect(observations(advanceHistoricalReconciliationV1(cycle()), null, state)).toHaveLength(3);
+  });
+});
+
+describe("actual produced detail to complete persisted source projection", () => {
+  it("joins physical fill and full economics without changing their existing digests", () => {
+    const value = fillCycle();
+    const captured = captureHistoricalReconciliationProducedFillsV1(scope, [value.detail]);
+    expect(() => assertHistoricalReconciliationProducedFillsV1(captured, value.fills, value.economics, value.steps)).not.toThrow();
+    expect(captured[0]!.economics.economicsDigest).toBe(value.detail.economics.economicsContentDigest);
+  });
+  it.each(["price", "fee", "feeAsset", "exchangeTradeId", "executedAt"] as const)("refuses one changed physical fill %s", (field) => {
+    const value = fillCycle(); const captured = captureHistoricalReconciliationProducedFillsV1(scope, [value.detail]);
+    const altered = { ...value.fills[0]!, [field]: field === "executedAt" ? value.fills[0]!.executedAt + 1 : "altered" };
+    expect(() => assertHistoricalReconciliationProducedFillsV1(captured, [altered], value.economics, value.steps))
+      .toThrow("PRODUCED_SOURCE_CONTENT");
+  });
+  it.each(["acceptedAt", "fillTimestamp", "sourceBarTimestamp"] as const)("refuses changed %s under the unchanged economics digest", (field) => {
+    const value = fillCycle(); const captured = captureHistoricalReconciliationProducedFillsV1(scope, [value.detail]);
+    value.economics[0]!.sourceEconomics[field] += 1;
+    expect(value.economics[0]!.economicsDigest).toBe(captured[0]!.economics.economicsDigest);
+    expect(() => assertHistoricalReconciliationProducedFillsV1(captured, value.fills, value.economics, value.steps))
+      .toThrow("PRODUCED_SOURCE_CONTENT");
+  });
+  it.each(["economicsRowId", "exchangeTradeId", "schemaVersion"] as const)("refuses changed economics %s", (field) => {
+    const value = fillCycle(); const captured = captureHistoricalReconciliationProducedFillsV1(scope, [value.detail]);
+    value.economics[0]![field] = "altered";
+    expect(() => assertHistoricalReconciliationProducedFillsV1(captured, value.fills, value.economics, value.steps))
+      .toThrow("PRODUCED_SOURCE_CONTENT");
+  });
+  it("compares equivalent timezone spellings as the same supported instant", () => {
+    const value = fillCycle(); const captured = captureHistoricalReconciliationProducedFillsV1(scope, [value.detail]);
+    const alternate = { ...value.detail, event: { ...value.detail.event, acceptedAt: "2026-01-01T03:01:00+03:00" },
+      economics: { ...value.detail.economics, acceptedAt: "2026-01-01T00:01:00Z" } };
+    expect(captureHistoricalReconciliationProducedFillsV1(scope, [alternate])).toEqual(captured);
+    expect(() => historicalReconciliationInstantV1(captured[0]!.fill.executedAt + 0.5)).toThrow("SOURCE_TIME");
+  });
+  it("captures no cumulative Accounting array from a produced detail", () => {
+    const value = fillCycle();
+    value.detail.accountingFrontier.consumedFillIds = new Proxy([value.fills[0]!.fillId], {
+      get(target, key, receiver) { if (key === Symbol.iterator || key === "map" || key === "toJSON") throw new Error("history scan");
+        return Reflect.get(target, key, receiver); },
+    });
+    expect(captureHistoricalReconciliationProducedFillsV1(scope, [value.detail])).toHaveLength(1);
+  });
+});
+
+describe("selected validated N runtime projection", () => {
+  it.each([1, 1000000])("does not reread unrelated cumulative state for prefix length %s", (length) => {
+    const state = mark(); const ids = { length, [length - 1]: "last" };
+    state.consumedFillIds = new Proxy(ids, { get(target, key, receiver) {
+      if (key !== "length" && key !== String(length - 1)) throw new Error("cumulative read");
+      return Reflect.get(target, key, receiver);
+    } }) as unknown as string[];
+    const selected = { accountingFrontierSnapshot: { state },
+      modeledExchangeSnapshot: { state: { openOrders: [], checkpoint: { openOrders: [] } } },
+      get modeledExecutionRegistrySnapshot() { throw new Error("registry restore"); },
+      get knowledgeSnapshot() { throw new Error("Knowledge restore"); },
+      get learningSnapshot() { throw new Error("learning restore"); },
+    };
+    const result = selectValidatedHistoricalReconciliationStateV1(selected as never);
+    expect(result.accounting).toBe(state);
+    expect(projectHistoricalReconciliationAccountingV1(result.accounting).consumedFillCount).toBe(length);
+    expect(result.open).toEqual([]);
+  });
+});
+
+describe("fresh held parent read includes immutable creation bindings", () => {
+  const receipt = { orderId: "00000000-0000-4000-8000-000000000010", symbol: "BTCUSDT", side: "buy",
+    quantity: "1", executionAttemptId: "attempt", contentDigestHex: digest,
+    riskVerdictId: "risk-verdict", decisionId: "decision" };
+  const source = () => ({ orderId: receipt.orderId, organizationId: scope.organizationId,
+    accountId: scope.accountId, runId: scope.runId, symbol: receipt.symbol, side: receipt.side,
+    quantity: "1", filledQuantity: "0", state: "ACCEPTED", stateVersion: 4,
+    venue: "HISTORICAL_SIMULATED_EXCHANGE", executionMode: "mock", credentialId: null,
+    type: "market", price: null, riskAllowanceId: null, riskAllowanceBindingDigest: null,
+    clientOrderId: "hsv2-attempt", idempotencyKey: `historical-modeled-v2-${digest}`,
+    riskDecisionId: "risk-verdict", allocationDecisionId: "decision" });
+  async function observe(row: Record<string, unknown>) {
+    const event = { id: "event", orderId: receipt.orderId, sequence: 3, fromState: "SENT_TO_EXCHANGE",
+      toState: "ACCEPTED", eventType: "STATE_TRANSITION", payload: null, occurredAt: "2026-01-01T00:00:00.000Z" };
+    const unsafe = vi.fn(async (sql: string) => {
+      const values = sql.includes("FROM trader_orders o") ? [row] : sql.includes("FROM trader_order_events e") ? [event] : [];
+      return sql.includes("octet_length") ? values.map((value) => ({ bytes: Buffer.byteLength(JSON.stringify(value)) })) :
+        values.map((projection) => ({ projection }));
+    });
+    const repo = createHistoricalReconciliationRepositoryV1(Object.assign(vi.fn(), { unsafe }) as never, scope);
+    const entry = { order: { id: receipt.orderId, state: "ACCEPTED", stateVersion: 4, filledQuantity: "0" },
+      remainingQty: "1", filledQty: "0", acceptedAtTs: 1, firstEligibleTs: 2,
+      sameSymbolEligibleBarsSeen: 0, fillSequence: 0 };
+    const runtime = { exchange: { listOpenOrders: () => [entry] }, executionRegistry: { get: () => receipt } };
+    return repo.observeParents(runtime as never, null, [entry] as never);
+  }
+  it("accepts the actual historical creation projection through the held read", async () => {
+    await expect(observe(source())).resolves.toMatchObject({ activeParent: { orderId: receipt.orderId } });
+  });
+  it.each(["type", "price", "riskAllowanceId", "riskAllowanceBindingDigest", "clientOrderId", "idempotencyKey",
+    "riskDecisionId", "allocationDecisionId", "credentialId"])("refuses changed immutable creation %s", async (field) => {
+    await expect(observe({ ...source(), [field]: "changed" })).rejects.toThrow("PARENT_SOURCE_IDENTITY");
   });
 });
