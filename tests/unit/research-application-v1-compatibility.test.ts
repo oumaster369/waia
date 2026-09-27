@@ -185,8 +185,10 @@ describe("canonical public/held bodies and SQL compatibility", () => {
 describe("actual canonical JSONB wire codec", () => {
   it("stores logical canonical objects and arrays before the incoming mapper", async () => {
     let networkAttempts = 0;
-    const root = postgres({ host: "127.0.0.1", port: 1, user: "waia_codec_fixture", password: "waia_codec_fixture", database: "waia_codec_fixture", max: 1,
-      socket: () => { networkAttempts++; throw new Error("NO_NETWORK"); } });
+    // The installed runtime accepts socket; its public Options type omits it.
+    const options = { host: "127.0.0.1", port: 1, user: "waia_codec_fixture", password: "waia_codec_fixture", database: "waia_codec_fixture", max: 1,
+      socket: () => { networkAttempts++; throw new Error("NO_NETWORK"); } };
+    const root = postgres(options);
     const rootUnsafe = vi.spyOn(root, "unsafe"); const rootBegin = vi.spyOn(root, "begin");
     try {
       const f = canonicalFixture("objects", root); const originalOptions = root.options;
