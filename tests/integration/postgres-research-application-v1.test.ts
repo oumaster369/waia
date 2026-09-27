@@ -302,7 +302,11 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     const newOrg = await seedWp13User(url!, foreignUser, "DEE1132 absent claim");
     const request = structuredClone(f.application); request.configuration.organizationId = newOrg;
     request.research.assignment.organizationId = newOrg;
-    if ("definition" in request.research.profile) request.research.profile.definition = { ...request.research.profile.definition, organizationId: newOrg };
+    if ("definition" in request.research.profile) {
+      const definition = request.research.profile.definition;
+      if (definition === null || typeof definition !== "object" || Array.isArray(definition)) throw new Error("FIXTURE_PROFILE_OBJECT_REQUIRED");
+      request.research.profile.definition = { ...definition, organizationId: newOrg };
+    }
     expect(await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${newOrg}::uuid`).toEqual([]);
     expect((await runSavedApplication(client, { organizationId: newOrg }, request)).status).not.toBe("COMPLETE");
     expect(await client`select lease_epoch from trader_runtime_control_lease_heads_v2 where organization_id=${newOrg}::uuid`).toEqual([{ lease_epoch: 1 }]);

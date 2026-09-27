@@ -108,9 +108,9 @@ DECLARE b jsonb; payload jsonb; feature jsonb; field record; payload_text text; 
   projection jsonb; expected_inputs jsonb; actual_inputs jsonb; previous text; operation text; selected_assignment text;
 BEGIN
   -- Admission before this verifier parses any body. The table CHECK remains independent.
-  IF octet_length(NEW.body_json) > CASE TG_TABLE_NAME
+  IF octet_length(NEW.body_json) > (CASE TG_TABLE_NAME
     WHEN 'trader_research_application_assignments_v1' THEN 65536
-    WHEN 'trader_research_application_availability_v1' THEN 4096 ELSE 524288 END
+    WHEN 'trader_research_application_availability_v1' THEN 4096 ELSE 524288 END)
     THEN RAISE EXCEPTION 'APPLICATION_BODY_LIMIT'; END IF;
   b := NEW.body_json::jsonb;
   IF TG_TABLE_NAME = 'trader_research_application_assignments_v1' THEN
