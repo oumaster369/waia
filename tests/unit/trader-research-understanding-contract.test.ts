@@ -10,6 +10,9 @@ import { createSavedResearchOwner } from "@/lib/trader/paper/research-understand
 import { runSavedResearchLoop } from "@/lib/trader/paper/research-understanding-v1/run-saved-research-loop";
 import { researchPureFixture } from "../helpers/research-understanding-fixture";
 import { seal } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
+import * as recorded from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
+import * as informationStore from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
+import { decodeBody } from "@/lib/trader/paper/durable-noncapital/recorded-source-read-validation-v1";
 import type postgres from "postgres";
 vi.mock("drizzle-orm/postgres-js", async importOriginal => ({ ...await importOriginal<typeof postgresAdapter>(), drizzle: vi.fn() }));
 
@@ -72,15 +75,22 @@ describe("owned monotonic completion deadline", () => {
   afterEach(() => { vi.restoreAllMocks(); });
   // Actual owner/loop/configuration and fixed computation, with inert accepted-row
   // and transaction ports. This checks late acceptance, not query/CPU cancellation.
-  function setup(mode: "replay" | "snapshot" | "concurrent", elapsed: number, at: "read" | "compute" = "read") {
+  function setup(mode: "replay" | "snapshot" | "concurrent" | "committed", elapsed: number,
+    at: "read" | "compute" | "digest" | "ack" | "handoff" = "read") {
     let now = 0; let transaction = 0;
     const f = researchPureFixture(); const actualEvaluate = evaluator.evaluateSavedResearchUnderstanding;
     const output = actualEvaluate(f.packet, f.assignment, f.profile, f.revisions);
     const completion = seal({ schemaVersion: f.assignment.schemaVersion, organizationId: f.session.organizationId,
       researchSessionId: f.config.researchSessionId, sequence: 0, sourceSessionId: f.session.sessionId, sourceSequence: 0,
       assignmentDigest: f.assignment.contentDigest, packetDigest: f.packet.contentDigest, previousCompletionDigest: null, output });
-    const execute = vi.fn(async () => []); const insert = vi.fn(() => { throw new Error("UNEXPECTED_WRITE"); });
-    const db = { execute, insert, transaction: async (fn: (tx: unknown) => unknown) => { transaction++; return fn(db); } };
+    let written: typeof completion | null = null;
+    const execute = vi.fn(async () => []); const insert = vi.fn(() => ({ values: async (value: { bodyJson: string; contentDigest: string }) => {
+      if (mode !== "committed") throw new Error("UNEXPECTED_WRITE"); written = decodeBody<typeof completion>(value);
+    } }));
+    const db = { execute, insert, transaction: async (fn: (tx: unknown) => unknown) => {
+      const index = ++transaction; const result = await fn(db);
+      if (at === "ack" && index === 3) now = elapsed; return result;
+    } };
     vi.spyOn(postgresAdapter, "drizzle").mockReturnValue(db as unknown as ReturnType<typeof postgresAdapter.drizzle>);
     vi.spyOn(performance, "now").mockImplementation(() => now);
     vi.spyOn(lease, "lockRuntimeOrganizationV2").mockResolvedValue(undefined);
@@ -89,9 +99,13 @@ describe("owned monotonic completion deadline", () => {
     vi.spyOn(sourceReader, "readBoundedResearchAssignment").mockResolvedValue(f.assignment);
     vi.spyOn(sourceReader, "readBoundedResearchProfile").mockResolvedValue(f.profile);
     vi.spyOn(sourceReader, "readBoundedResearchPredecessor").mockResolvedValue(null);
+    vi.spyOn(sourceReader, "admitOptionalStoredReceipt").mockResolvedValue(null);
+    vi.spyOn(informationStore, "persistInformationSufficiencyReceiptWithinTransactionV2Postgres").mockResolvedValue({ receipt: output.receipt, insertedNew: true });
+    vi.spyOn(informationStore, "requireInformationSufficiencyAuthorityWithinTransactionV2Postgres").mockResolvedValue(undefined);
     const readCompletion = vi.spyOn(sourceReader, "readBoundedResearchCompletion").mockImplementation(async () => {
+      if (mode === "committed") return written;
       if (mode === "concurrent" && transaction === 2) return null;
-      if (mode === "concurrent" && transaction === 3) now = elapsed;
+      if (mode === "concurrent" && transaction === 3 && at === "read") now = elapsed;
       return completion;
     });
     vi.spyOn(sourceReader, "readBoundedResearchInputs").mockImplementation(async () => {
@@ -99,7 +113,13 @@ describe("owned monotonic completion deadline", () => {
       return { session: f.session, packet: f.packet, companion: {}, revisions: f.revisions, sourceInputBytes: 0 };
     });
     vi.spyOn(evaluator, "evaluateSavedResearchUnderstanding").mockImplementation((...args) => {
-      const result = actualEvaluate(...args); if (at === "compute") now = elapsed; return result;
+      const result = actualEvaluate(...args); if (at === "compute") now = elapsed;
+      if (at === "handoff") queueMicrotask(() => { now = elapsed; }); return result;
+    });
+    const actualDigest = recorded.digest;
+    vi.spyOn(recorded, "digest").mockImplementation(value => {
+      const result = actualDigest(value); if (at === "digest" && transaction === 3 && value === completion) now = elapsed;
+      return result;
     });
     const pool = { begin() { throw new Error("UNEXPECTED_POOL_USE"); } } as unknown as postgres.Sql;
     const context = { organizationId: f.session.organizationId };
@@ -125,5 +145,23 @@ describe("owned monotonic completion deadline", () => {
     await expect(f.owner.replay(0)).rejects.toThrow("INVOCATION_DEADLINE_EXCEEDED"); f.setNow(0);
     f.readCompletion.mockResolvedValue({ ...f.completion, output: { ...f.completion.output, disposition: "COMPLETED_UNRESOLVED" } });
     await expect(f.owner.replay(0)).rejects.toThrow("REPLAY_OUTPUT_CONFLICT"); expect(f.insert).not.toHaveBeenCalled();
+  });
+  for (const at of ["digest", "ack"] as const) it.each([119999, 120001])(`concurrent ${at} completion has a final result deadline at %sms`, async elapsed => {
+    const f = setup("concurrent", elapsed, at); const pending = f.owner.complete(0, f.holder);
+    if (elapsed > LIMITS.durationMs) await expect(pending).rejects.toThrow("INVOCATION_DEADLINE_EXCEEDED");
+    else expect((await pending).outcome).toBe("REPLAYED");
+    expect(f.insert).not.toHaveBeenCalled();
+  });
+  it.each(["replay", "snapshot"] as const)("%s public handoff also refuses elapsed result admission", async mode => {
+    const f = setup(mode, 120001, "handoff");
+    await expect(mode === "replay" ? f.owner.replay(0) : f.owner.complete(0, f.holder)).rejects.toThrow("INVOCATION_DEADLINE_EXCEEDED");
+    expect(f.insert).not.toHaveBeenCalled();
+  });
+  it("late write acknowledgement refuses the result without pretending rollback; a fresh invocation replays once", async () => {
+    const f = setup("committed", 120001, "ack");
+    await expect(f.owner.complete(0, f.holder)).rejects.toThrow("INVOCATION_DEADLINE_EXCEEDED");
+    expect(f.insert).toHaveBeenCalledOnce();
+    expect((await createSavedResearchOwner(f.pool, f.context, f.request).replay(0))!.outcome).toBe("REPLAYED");
+    expect(f.insert).toHaveBeenCalledOnce();
   });
 });

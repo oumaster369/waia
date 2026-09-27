@@ -154,7 +154,10 @@ async function completeSavedResearch(pool: postgres.Sql, context: OrgContext, re
     check(current.assignment.contentDigest === saved.assignment.contentDigest, "ASSIGNMENT_IDENTITY_CONFLICT");
     const already = await readBoundedResearchCompletion(tx, current.assignment, current.profile, saved.sequence);
     assertDeadline();
-    if (already) { check(digest(already) === digest(completion), "COMPLETION_CONFLICT"); return { outcome: "REPLAYED" as const, completion: already }; }
+    if (already) {
+      check(digest(already) === digest(completion), "COMPLETION_CONFLICT");
+      assertDeadline(); return { outcome: "REPLAYED" as const, completion: already };
+    }
     const input = await readBoundedResearchInputs(tx, current.assignment, current.profile, sourceSequence, budget);
     check(input.packet.contentDigest === saved.packet.contentDigest && digest(input.revisions) === digest(saved.revisions), "SOURCE_SNAPSHOT_CONFLICT");
     const predecessor = await readBoundedResearchPredecessor(tx, current.assignment, saved.sequence, new ResearchReadBudget(LIMITS.predecessor));
@@ -185,10 +188,17 @@ export function createSavedResearchOwner(pool: postgres.Sql, suppliedContext: Or
   };
   return {
     organizationId: context.organizationId, range: copy(request.range),
-    async replay(sourceSequence: number) { checkSequence(sourceSequence); return replayCompletedResearch(pool, context, request, sourceSequence, assertDeadline); },
+    async replay(sourceSequence: number) {
+      checkSequence(sourceSequence);
+      const result = await replayCompletedResearch(pool, context, request, sourceSequence, assertDeadline);
+      assertDeadline(); return result;
+    },
     async complete(sourceSequence: number, suppliedHolder: DatabaseClockRuntimeHolderV2) {
       checkSequence(sourceSequence); const holder = copy(suppliedHolder);
-      return completeSavedResearch(pool, context, request, sourceSequence, holder, assertDeadline);
+      const result = await completeSavedResearch(pool, context, request, sourceSequence, holder, assertDeadline);
+      // A late COMMIT acknowledgement refuses this result, not the already committed
+      // immutable completion. A fresh invocation can replay it without another write.
+      assertDeadline(); return result;
     },
   };
 }
