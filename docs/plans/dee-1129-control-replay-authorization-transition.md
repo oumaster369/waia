@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 0f0e4b9bb880ef43f4c53cee38fb80bfadd9dc84
+  lastValidationAt: "2026-09-27T00:50:58.577130+00:00"
   blockedReason: null
-  nextAction: "Refresh normally to accepted 59e41f0f; obtain independent source review and isolated native/heavy grant. Positive PostgreSQL CLI companion and full readiness remain pending."
+  nextAction: "Obtain independent final inventory/metadata review and root publication preflight; fresh exact-head PR CI remains required. Local source, native and readiness evidence are complete with explicit executed-head attribution."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -52,7 +52,7 @@ Prove all A1–A12 and four refinements with real native serializers/owners, bou
 
 ## Validation status and limits
 
-Not implemented or executed. No database, migration, authority issuance, actual authorization consumption or campaign command was run in this planning task. Local source inspection and plan/diff checks are not scientific or implementation acceptance. Initial WAL is fixed-path empty bytes, not a header or power-loss proof; transition lock ends before the driver and does not establish active-driver exclusion. PG/AD-6c composition and real campaign completion remain separate.
+Current local implementation and controlled proof are complete; the historical plan-first and initial scoped checkpoints below are retained as dated provenance. The final local acceptance section states exact executed heads and the remaining independent review/CI gates. No real authority issuance or campaign operation occurred. Initial WAL is fixed-path empty bytes, not a header or power-loss proof; transition lock ends before the driver and does not establish active-driver exclusion. PG/AD-6c composition and real campaign completion remain separate.
 
 ## Finite extra-scope request
 
@@ -384,3 +384,17 @@ The following controller admission is embedded verbatim before the one-field inv
 2026-09-27 00:45:32 UTC. The unchanged required Reality graph rejected source52597 because two already-inventoried, already-reviewed consumers changed: lib/trader/observability/fhv-control-replay-execution.ts and scripts/trader/fhv-control-replay-cli.ts. Root independently recomputed the actual exported AST discovery:140 identical consumer paths, pathDigest efcb30555d0322f78322222bfa51ef424bf2d6ca0b426c476b0c3cc731519f7a,26 connector references; accepted base content734c564e66e884e8cd829d63ffcc40226b581c14d892b613cacc281a88c29931 becomes332107bb5fbe99700a970449ed56658ae0e36d03e8f1617db86968d9cabe20a2. Their existing EXCLUDED_OR_LINEAGE_ONLY and EXCLUDED_RESEARCH_OR_OPERATOR_SURFACE dispositions remain appropriate: this repairs local authorization transition evidence and adds no Reality ingress or external connector effect. Author independently verifies155 sources/path/content unchanged and exact26 reference closure. Root receipt: accepted-base-59e41f0f/root-reality-inventory-reconciliation.json. The initial graph failure is retained.
 
 Admit ONE additional nonproduction path docs/ai-trader/reality-v2-source-consumer-inventory.json, changing ONLY consumerDiscovery.sortedContentDigestHex to the source-derived value above. No rule/disposition/root/method/import marker/validator/source pin/path count or financial authority change. Record this exact finite amendment in the canonical plan in a plan-only commit before updating the inventory field, then proceed without another handshake. Run the actual unchanged Reality graph and existing graph adversarial/unit guards plus diff check, preserving prior seven-step outcomes and raw failure. Reuse native25/3 and unchanged executable readiness with exact source comparison; no redundant full rebuild/native run for this metadata-only edit. Independent M01 must verify the exact final metadata diff/head; publication remains root-owned. No production, campaign, host or trading operation.
+
+## Final local acceptance on accepted 59e41f0f
+
+The clean implementation snapshot `9cd54cdb739b00c1a858bb0f5da5f71830131178` was normally merged with accepted `59e41f0f3a7861e7ecb49e68e5c7a49e10423637` as `52597f1399d580ad7e4de0f9eedf4eaa1e7029b8`. All20 original own paths and24 incoming paths were disjoint and preserved; both complete binary patch directions, all221 SQL/journal identities and all21 capital/3 billing/2 payment/4 observation registrations were verified. No migration or suite registration changed. Original raw failures and prior-base proof remain immutable.
+
+At exact52597, typecheck, lint, build, canon, PR governance and Execution graph all exited0. The unchanged Reality graph initially refused its stale content pin; that original exit1/log/report is retained. Root and author separately computed the same140 consumer paths and26 connector references, with only the two already-classified Control Replay consumers changing bytes; all155 source paths/content and every disposition/rule remain unchanged. After plan-only admission `5a8a8f50`, inventory commit `0f0e4b9bb880ef43f4c53cee38fb80bfadd9dc84` changes only `consumerDiscovery.sortedContentDigestHex`. At that pin head, the actual Reality graph passes155/140/26, the unchanged adversarial graph suite passes **9 assertions/1 actual file/0 skips**, and diff-check passes. The final eight-step readiness receipt combines six source-identical successful52597 checks with these corrected graph/diff runs; it does not claim eight new executions. Production/test/validator/native bytes remain exactly52597.
+
+Controlled actual native proof at52597 uses a **new initially-empty isolated PostgreSQL16.14 database** `waia_dee1121_dee1129_59e41_author`: **25 assertions/3 actual existing suites/0 skips** (`fhv-control-replay-cli`, `fhv-official-path-blockers-red`, `fhv-public-ceremony-red`). All221 applied SQL hashes/timestamps match actual SQL/journal identities. The positive existing TEST_ONLY application caller proves original Ai linkage for both runs, capture before the first await, exact consumed Ac preservation and immutable two-run output across initialized resume. Teardown reports0 other sessions,0 disabled user triggers and0 fault functions. No PostgreSQL17 or real campaign qualification is claimed. The PG grant is released.
+
+Earlier scoped **112/10/0 skips** binds to exact preserved precommit executable bytes, not a fabricated later run; current-base incoming guard **59/3/0 skips** executed at52597. Original six native-reader/CAS baseline failures are genuine product REDs; bad initial CLI flag/refusal-code expectations remain separately labeled fixture errors. Legacy generic consumed bytes match the immutable9a4d implementation at fixed time. No full capital-union rerun was needed for the disjoint accepted-base change; exact-head authoritative CI remains required.
+
+External evidence directory: `evidence/dee-1129/accepted-base-59e41f0f/`, including `source-preservation.json`, `migration-identities.json`, `proof-sets.json`, `author-native/acceptance.json`, `author-readiness.json` (retained initial refusal), `author-readiness-final.json`, `author-inventory-correction.json` and `author-final-source-carry.json`. The substantive independent review at52597 is `milestone-audits/M01/review-DEE1129-52597f13.md`, SHA256 `1a272d25df0c5ee15198c3d2be2d57e488ab5d57054297b0fffdad4e6494c4a1`; narrow final metadata review and root rendered publication preflight remain separate gates. This final canonical update changes only documentation, with no repeated executable/native test claim.
+
+The implementation remains a transition repair: no automatic stale-lock stealing, incomplete-state repair, active-driver exclusion, power-loss proof, terminal synthesis, checkpoint validation, scientific qualification, production/host/provider/C3 operation or financial activation. Parent DEE644 and whole AI-TRADER completion remain open.
