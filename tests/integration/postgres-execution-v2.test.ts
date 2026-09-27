@@ -11,6 +11,7 @@ import {
   createExecutionAttemptV2,
   createExecutionPlanV2,
   createExecutionPolicyBindingV2,
+  validateExecutionPolicyBindingV2,
   type ExecutionPlanV2,
 } from "@/lib/trader/execution/v2/contracts";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
@@ -789,8 +790,14 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const deadline = deadlineDate.toISOString();
     // The actual contract requires plan.close <= policy.until. Their shared
     // deadline proves late policy expiry without constructing an invalid seal.
-    const input = { ...original,
-      policy: createExecutionPolicyBindingV2({ ...original.policy, effectiveUntilUtc: deadline }),
+    const { schemaVersion: _schemaVersion, semanticDigestHex: _semanticDigestHex,
+      contentDigestHex: _contentDigestHex, ...policyDraft } = original.policy;
+    void _schemaVersion;
+    void _semanticDigestHex;
+    void _contentDigestHex;
+    const policy = createExecutionPolicyBindingV2({ ...policyDraft, effectiveUntilUtc: deadline });
+    expect(validateExecutionPolicyBindingV2(policy)).toBe(true);
+    const input = { ...original, policy,
       plan: { ...original.plan, timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline } } };
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
     const before = await lockProofState(input);
