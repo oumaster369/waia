@@ -14,7 +14,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: draft
+  status: approved
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3]
@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root adopts this sole canonical plan after accepted independent G01/A01 closure, then releases bounded WP-1 source work. Native execution and publication remain separately admitted."
+  nextAction: "Implement WP-1 then WP-2 within the accepted39-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -42,7 +42,7 @@ Root created this branch from checked main `82819a9581d09afb81eeeff4153abebbf59b
 
 Root selected isolated engineering after that component. **Before publication**, the full actual1135 predecessor must be checked into main, then normally merged/reconciled with this branch; rebind the complete integrated chain, actual generated identities and affected combined source/native/CI proof. A changed1135 schema requires real conflict/review work. No rebase/force-push, missing-chain acceptance or relabelled old results. Engineering does not wait for all1135 product semantics.
 
-Plan-only grant: external `parallel-runtime-owner/dee1135-root-plan-admission/dee1136-plan-grant.json`, SHA `2d1b24c10376267411c71201a79a33e3c0378805e4e9c3aeec54622427f2ced7`. The sole plan is committed before executable work. Source admission follows root plan adoption; independent amendment closure is accepted as recorded below; this checkpoint runs no tests/DB and claims no new implementation validation.
+Plan-only grant: external `parallel-runtime-owner/dee1135-root-plan-admission/dee1136-plan-grant.json`, SHA `2d1b24c10376267411c71201a79a33e3c0378805e4e9c3aeec54622427f2ced7`. The sole plan is committed before executable work. Root read the full213-line plan, accepted its technical design/39-path/WP boundaries and released WP-1→WP-2 source once the final plan checkpoint is posted; independent amendment closure is accepted as recorded below; this checkpoint runs no tests/DB and claims no new implementation validation.
 
 ## Fixed routes and compatibility
 
@@ -210,4 +210,4 @@ External audit root is `audit-ai-trader-full-2026-09-25`. Original contract `par
 
 Inherited finite1135 source/repair and actual ten-case outcome remain separately attributed to dbfa. Independent actual-outcome report `8866da28f6dcc252b82a296efc25565d4b8a5e3b071488aeae801abea494cb27`, four-artifact freeze `b1513866596f271a5600035512c746ab646cb0b792f75755331f33ca46f06750`, proves only that acquisition component; its original9/1RED remains. These are dependencies, not DEE-1136 validation.
 
-No invented cadence, selector policy, lease handoff, financial/empirical thresholds, scientific source admission, holdout use, live keys/order/activation, production/C3 host mutation or new capital ingress. Ordinary producers, fair succession across all lots/interrupted work, Guardian evaluator→sealed trigger→qualified protective owner and later-Reality mandate semantics remain separate scopes. Root retains publication/merge; current actual plan/source/native/CI evidence is required before any completion claim.
+No invented cadence, selector policy, lease handoff, financial/empirical thresholds, scientific source admission, holdout use, live keys/order/activation, production/C3 host mutation or new capital ingress. Ordinary producers, fair succession across all lots/interrupted work, Guardian evaluator→sealed trigger→qualified protective owner and later-Reality mandate semantics remain separate scopes. The user has already delegated checked merge to root. The conventional frontmatter human-merge gate records that existing authority boundary and does not request another Human permission; root still proves exact-head acceptance and owns publication/merge. Operator-only production/live actions remain separately reserved. Current actual plan/source/native/CI evidence is required before any completion claim.
