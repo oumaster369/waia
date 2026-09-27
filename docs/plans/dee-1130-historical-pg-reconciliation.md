@@ -1112,3 +1112,20 @@ Implement exactly approved V2 recipe be655ba40ca3c7243869e94329d38c350fe2509e223
 
 Root owns the canonical plan and any subsequent SQL-copy census correction; integration author may edit ONLY nine paths, not SQL/journal/schema/canonical plan/compatibility registries/graphs. Record handoff/checkpoints externally; commit only those nine paths. Scoped meaningful bootstrap/result-guard unit tests, scoped lint and diff are allowed; no native or real connection/apply/bootstrap run, compiler/build/heavy, CI, push or PR. Native tests are unchanged except optional80registration. Source freeze and nonauthor source review follow.
 <!-- END FROZEN BOOTSTRAP_PARALLEL_SOURCE -->
+
+
+## Finite guard copy-census correction — root source admission
+
+<!-- BEGIN FROZEN GUARD16_ADMISSION SHA256 ab5b01621bcf087ec67dbbc65c957acec0bd6331bc4fc5882f141c3cdf7eb93f -->
+# Finite guard16 admission and source certificate
+
+Root admits only the exact G01/G02 copy-census correction from independent full-source report2a542f171f92db6301d5db9fdc30988c8d9c5bbac19f9d959d12bfee3a27a405 at2026-09-27T08:28:47.985819+00:00. Root read the complete report and verified primary8sourceidentities and actual C copying paths; the report's original nested freeze artifact has a case-insensitive filename packaging conflict under correction, not an unknown source finding. Originalauthorfreeze and exactcode remain intact. Semanticfinding is grounded in inspected code, no native cap-bypass claimed.
+
+Replace only two guard8B coefficients with16B and their comments. The exact conservative perselectedbody census is: fullbody assignment1B; measurement scalar/key spellings+outputstring+textinput3B; root subtractionconstruction/result2B; disjointrootfield extraction+PLassignment2B; selectedstep/parent extraction+assignment2B; referencearray extraction+assignment2B; selectedreferenceobjects extraction+assignment2B; fixedrepresentationmargin2B. Total16B. Current/prior/genesis eachchargedseparately; no dedup/reallocationoforiginalbaseline orrecursiveR.
+
+Native installed-source expectation becomes16; actualC01 formula65536+16*raw+(16+128)*body, ASCIIpadding slope160. Keep C02 independentcharge, unicode/numericscale/countercontrols. All remaining13argument expressions/depths/caps/reserve formulas/digests/sourcepredicates/ACLs/oldSQL/journal/productionTS remain unchanged. Fullscope1MiBbody and8MiBinvocationlimits stayunchanged; this is stricter technical admission.
+
+Metric remains conservative logical requested representations; no physicalbinarysize/peakRAM/TOAST/allocator/latency or rejectedinput-allocation guarantee. Nativeowner35/maxparent compatibility, installedcounterbehavior and223identity/retainedprefix/race/RLS/rollback remainunexecuted andrequired. No silentlimitraise if actualvalidowner fails.
+
+Root edits only0222, existingnativefrontier test, canonicalplan andexternalcertificate/evidence. Independent9pathbootstrapauthor staysdisjoint. Thisplanadmission precedes sourceedit; completefinite successor diff plus meaningful sourceRED/GREEN and independent review before closingWP3-02. No DB/native/bootstrapexecution/heavy grant.
+<!-- END FROZEN GUARD16_ADMISSION -->
