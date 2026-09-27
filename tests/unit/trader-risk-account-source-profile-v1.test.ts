@@ -7,6 +7,8 @@ import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provide
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { collectHtxReferenceQuoteV1Postgres, createEncryptedReferenceRawStoreV1, decodeHtxReferenceJsonV1,
   decodeHtxReferenceQuoteV1 } from "@/lib/trader/mi/htx-reference-quote-collector-v1";
+import { buildRawStorageBindingAtDurableBoundaryV1, digestRawBytesV1, isRawStorageBindingV1,
+  serializeRawStorageBindingV1, type RawStorageBindingV1 } from "@/lib/trader/mi/raw-capture-v1";
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, exactRiskAccountNotionalV1,
   parseRiskAccountProfileV1, riskAccountDigestV1, RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1,
   sealRiskAccountRecordV1, type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
@@ -213,6 +215,58 @@ describe("synthetic private reference raw storage lifecycle", () => {
     expect(await store.inspectRetained(binding.objectReference.objectKey, 4096))
       .toEqual({ binding, retentionSeconds: 3600 });
     expect(await readdir(directory)).toEqual([binding.objectReference.objectKey]);
+  });
+  it("reads canonical and reordered persisted bindings through a fresh reader without rewriting encrypted bytes", async () => {
+    const { directory, store, command } = await setup();
+    const binding = await store.put(command), path = join(directory, binding.objectReference.objectKey);
+    const encrypted = await readFile(path);
+    const canonical: RawStorageBindingV1 = JSON.parse(serializeRawStorageBindingV1(binding));
+    const reordered: RawStorageBindingV1 = {
+      contentDigest: binding.contentDigest, storedAtUtc: binding.storedAtUtc,
+      objectReference: {
+        accessRequirement: binding.objectReference.accessRequirement,
+        encryptionRequirement: binding.objectReference.encryptionRequirement,
+        objectVersion: binding.objectReference.objectVersion, objectKey: binding.objectReference.objectKey,
+        storageBackendId: binding.objectReference.storageBackendId,
+      },
+      rawBytesDigest: binding.rawBytesDigest, sourceId: binding.sourceId, organizationId: binding.organizationId,
+      schemaVersion: binding.schemaVersion, id: binding.id,
+    };
+    const reader = await createEncryptedReferenceRawStoreV1({ directory, masterKeyProvider: provider,
+      maxStoredBytes: 1048576, maxStoredObjects: 8 });
+    for (const persisted of [canonical, reordered]) {
+      expect(isRawStorageBindingV1(persisted)).toBe(true);
+      expect(JSON.stringify(persisted)).not.toBe(JSON.stringify(binding));
+      expect(JSON.stringify(persisted.objectReference)).not.toBe(JSON.stringify(binding.objectReference));
+      expect(serializeRawStorageBindingV1(persisted)).toBe(serializeRawStorageBindingV1(binding));
+      expect(Array.from(await reader.read(persisted, 4096))).toEqual(Array.from(command.bytes));
+      expect(await readFile(path)).toEqual(encrypted);
+    }
+  });
+  it("rejects valid re-sealed different bindings sharing the same retained object locator", async () => {
+    const { directory, store, command } = await setup();
+    const binding = await store.put(command), path = join(directory, binding.objectReference.objectKey);
+    const encrypted = await readFile(path), draft = {
+      organizationId: binding.organizationId, sourceId: binding.sourceId, rawBytesDigest: binding.rawBytesDigest,
+      objectReference: binding.objectReference, storedAt: new Date(binding.storedAtUtc),
+    };
+    const reader = await createEncryptedReferenceRawStoreV1({ directory, masterKeyProvider: provider,
+      maxStoredBytes: 1048576, maxStoredObjects: 8 });
+    for (const changed of [
+      { ...draft, organizationId: "00000000-0000-4000-8000-000000000137" },
+      { ...draft, sourceId: "00000000-0000-4000-8000-000000000138" },
+      { ...draft, rawBytesDigest: digestRawBytesV1(new TextEncoder().encode("DIFFERENT_SYNTHETIC_BYTES")) },
+      { ...draft, storedAt: new Date(draft.storedAt.getTime() + 1) },
+      { ...draft, objectReference: { ...draft.objectReference, objectVersion: "2" } },
+    ]) {
+      const different = buildRawStorageBindingAtDurableBoundaryV1(changed);
+      const persisted: RawStorageBindingV1 = JSON.parse(serializeRawStorageBindingV1(different));
+      expect(isRawStorageBindingV1(persisted)).toBe(true);
+      expect(persisted.objectReference.objectKey).toBe(binding.objectReference.objectKey);
+      expect(persisted.contentDigest).not.toBe(binding.contentDigest);
+      await expect(reader.read(persisted, 4096)).rejects.toThrow("STORAGE_BINDING");
+      expect(await readFile(path)).toEqual(encrypted);
+    }
   });
   it("rejects nonfinite read bounds and authenticated envelope tampering", async () => {
     const { directory, store, command } = await setup();

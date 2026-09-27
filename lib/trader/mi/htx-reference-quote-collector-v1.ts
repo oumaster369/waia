@@ -15,7 +15,7 @@ import { persistPreparedRawCaptureV1Postgres, readRawCaptureReceiptV1Postgres,
   recordRawValidationV1Postgres } from "./raw-capture-repository-postgres";
 import { attestRawSecretScanV1, buildRawStorageBindingAtDurableBoundaryV1,
   defineRawCapturePolicyV1, digestRawBytesV1, prepareRawCaptureV1,
-  isRawStorageBindingV1, type RawObjectReferenceV1, type RawStorageBindingV1 } from "./raw-capture-v1";
+  isRawStorageBindingV1, serializeRawStorageBindingV1, type RawObjectReferenceV1, type RawStorageBindingV1 } from "./raw-capture-v1";
 
 enforceServerOnly();
 
@@ -232,7 +232,7 @@ export async function createEncryptedReferenceRawStoreV1(input: {
   const read: PrivateRawObjectStoreV1["read"] = async (binding, maxBytes) => {
     if (!isRawStorageBindingV1(binding)) refuse("STORAGE_BINDING");
     const recovered = await readObject(binding.objectReference.objectKey, maxBytes);
-    if (JSON.stringify(recovered.binding) !== JSON.stringify(binding)) refuse("STORAGE_BINDING");
+    if (serializeRawStorageBindingV1(recovered.binding) !== serializeRawStorageBindingV1(binding)) refuse("STORAGE_BINDING");
     return recovered.body;
   };
   return Object.freeze({ read,
