@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
-  prNumber: null
-  prUrl: null
+  prNumber: 693
+  prUrl: https://github.com/oumaster369/waia/pull/693
   lastValidatedGitSha: b99cc34ab09739f8bbe7ea303206307af4f95d3b
   lastValidationAt: "2026-09-27T19:42:17.918Z"
   blockedReason: null
-  nextAction: "Validate and freeze this sole-plan publication carry; root owns rendered-body preflight and one PR. Record actual PR metadata only after creation, then require exact published-head full-unit/strict25 CI and fresh checked-merge admission."
+  nextAction: "Root publishes this actual PR693 metadata commit, then verify exact published-head/base CI including full units, strict25 PostgreSQL union and all required/applicable checks. Root owns fresh review/blocker/checked-merge admission; no deployment or activation follows."
 provenance:
   createdFrom: chat
   gapRegistry: null
