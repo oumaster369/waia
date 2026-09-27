@@ -83,7 +83,7 @@ describe("mandatory PROFILE35 executed proof", () => {
   it("wires the exact capital25 union and independent75-minute PROFILE35 job without changing generic LEGACY", () => {
     const workflow = parse(readFileSync(".github/workflows/postgres-integration.yml", "utf8"));
     const capital = workflow.jobs["capital-authority"];
-    expect(capital["timeout-minutes"]).toBe(15);
+    expect(capital["timeout-minutes"]).toBe(30);
     const bootstrap = capital.steps.find((s: { run?: string }) => s.run?.includes("prepare-historical-reconciliation-fixture.ts"));
     expect(bootstrap.env.WAIA_POSTGRES_CLI).toBe("1");
     expect(capital.steps.filter((s: { run?: string }) => s.run?.includes("db:postgres:auth-prelude"))).toHaveLength(0);

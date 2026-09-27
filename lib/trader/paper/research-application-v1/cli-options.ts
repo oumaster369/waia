@@ -15,8 +15,8 @@ export async function parseSavedApplicationOptions(supplied: readonly string[]):
     check(match && allowed.has(match[1]!) && !flags.has(match[1]!), "APPLICATION_FLAGS_INVALID"); flags.set(match[1]!, match[2]!);
   }
   check(["application-file", "operation", "previous-sequence", "current-sequence"].every(k => flags.has(k)), "APPLICATION_FLAGS_INVALID");
-  const operation = flags.get("operation"); check(operation === "apply" || operation === "consume" || operation === "replay", "APPLICATION_FLAGS_INVALID");
-  check((operation !== "consume" || flags.has("consumer-sequence")) && (operation !== "apply" || !flags.has("consumer-sequence")), "APPLICATION_FLAGS_INVALID");
+  const operation = flags.get("operation"); check(operation === "apply" || operation === "consume" || operation === "complete-consumer" || operation === "replay", "APPLICATION_FLAGS_INVALID");
+  check((!["consume", "complete-consumer"].includes(operation) || flags.has("consumer-sequence")) && (operation !== "apply" || !flags.has("consumer-sequence")), "APPLICATION_FLAGS_INVALID");
   const number = (key: string) => { const value = flags.get(key)!; check(/^(0|[1-9][0-9]*)$/.test(value), "APPLICATION_FLAGS_INVALID");
     const n = Number(value); check(Number.isSafeInteger(n), "APPLICATION_FLAGS_INVALID"); return n; };
   const previousSourceSequence = number("previous-sequence"), currentSourceSequence = number("current-sequence");

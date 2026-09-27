@@ -113,6 +113,10 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "cdb12adaa8e4961365ff420474384af960e3c418dfdfa7af309e8238223747fb"
   },
   {
+    "path": "lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres.ts",
+    "sha256": "d605aa2516de19bb411f764e52b3f2066b432c3d01134915722de484e5050f88"
+  },
+  {
     "path": "lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2.ts",
     "sha256": "1fada099118bd8b5d727e684d40b1c70bbbcc4997f93bf759bfa19483bba8f32"
   },
@@ -318,7 +322,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/cli-options.ts",
-    "sha256": "d8201fdcecab92a2edb2e8389e0dae55ab545c7fbb4640a4cc3f9015e338c3ad"
+    "sha256": "7316ead50c7075cd2380f555ae74868820ff3f5c013d46eed4bfeef7ed091726"
   },
   {
     "path": "lib/trader/paper/research-application-v1/contract.ts",
@@ -326,7 +330,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "fccdffbf8ac6f827192f748576b9dc3232e46ebb15d314ee42f1c686d6458f22"
+    "sha256": "fc05d97e122eb847b07656451cde883cf6a17bd8e9563782e68566e5fd0b7f89"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -345,6 +349,10 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "af13d607ec3a123290ae3b8f584f8c614a355a46b2ee4ef4460253df14d18fe2"
   },
   {
+    "path": "lib/trader/paper/research-understanding-v1/completion-write-postgres.ts",
+    "sha256": "971901cd164263f4358af845477f49a35098af8ef60fe38ed647db601808d06c"
+  },
+  {
     "path": "lib/trader/paper/research-understanding-v1/computation-manifest.ts",
     "sha256": "3ceefcb8cd140205e335de8f4be1b8bfd7027fa45fed303af7b050bc63b4ebf0"
   },
@@ -358,7 +366,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-understanding-v1/held-replay.ts",
-    "sha256": "c475dedb7230cf688f0c638be4ce5e0d5033d632cea0ca77acecb9eaf96d5bc5"
+    "sha256": "36f65cf31863a24c2e9d866e1e971fef116b50ebfbcf8f228735e60009afcf78"
   },
   {
     "path": "lib/trader/paper/serialize-paper-evaluation-export.ts",
@@ -413,4 +421,4 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "69173bd6a13256fe6dcb31ccd7fa21bb3d59776248d64e1ed6b121a02c9fecc2";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2";

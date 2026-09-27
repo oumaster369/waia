@@ -205,6 +205,58 @@ describe("actual fixed held replay and unchanged public owner", () => {
     await expect(prepareHeldResearchReplay(f.pool, new HeldResearchAccounting()).bindHeld(f.held).replay(f.context, f.request, 0)).rejects.toThrow(expected);
     expect(f.trace.every(q => q.sql.startsWith("select"))).toBe(true);
   });
+  it("prepares an existing completion with fixed evidence and no persistence or lease authority", async () => {
+    const f = fixture(), accounting = new HeldResearchAccounting();
+    const bound = prepareHeldResearchReplay(f.pool, accounting).bindHeld(f.held);
+    const prepared = await bound.prepareCompletion(f.context, f.request, 0);
+    expect(prepared).toMatchObject({ outcome: "REPLAYED", completion: f.completion });
+    expect(prepared.facts).toEqual({ organizationId: f.context.organizationId, accountId: f.f.session.accountId,
+      symbol: f.f.session.symbol, assignmentDigest: f.f.assignment.contentDigest, researchSessionId: f.f.assignment.researchSessionId,
+      sourceSessionId: f.f.session.sessionId, sourceConfigDigest: f.f.session.configDigest, sourceSequence: 0,
+      profileId: f.f.profile.id, profileContentDigest: f.f.profile.contentDigest,
+      computation: f.output.declarations.computation, computationManifestDigest: f.output.declarations.computationManifestDigest,
+      analysisPitAnchor: f.f.packet.analysisPitAnchor, scheduledBarCloseTime: f.f.packet.normalized.scheduledBarCloseTime });
+    expect(Object.isFrozen(prepared.facts)).toBe(true);
+    expect(Object.values(prepared.facts).every(v => typeof v === "string" || typeof v === "number")).toBe(true);
+    expect(() => Object.assign(prepared.facts, { sourceSequence: 999 })).toThrow();
+    expect(accounting.statements).toBe(f.trace.length);
+    expect(f.trace.every(q => q.sql.startsWith("select"))).toBe(true);
+    expect(f.begin).not.toHaveBeenCalled();
+  });
+  it("rejects forged, copied, independently budgeted and reused completion handles before dispatch", async () => {
+    const f = fixture(); f.rows.trader_research_understanding_completions_v1 = [];
+    const accounting = new HeldResearchAccounting();
+    const bound = prepareHeldResearchReplay(f.pool, accounting).bindHeld(f.held);
+    const prepared = await bound.prepareCompletion(f.context, f.request, 0);
+    if (prepared.outcome !== "PREPARED") throw new Error("EXPECTED_MISSING_COMPLETION");
+    expect(Object.keys(prepared).sort()).toEqual(["facts", "outcome", "prepared"]);
+    expect(Object.isFrozen(prepared.prepared)).toBe(true);
+    const before = f.trace.length;
+    const holder = { organizationId: "22222222-2222-4222-8222-222222222222", runtimeInstanceId: "wrong-org",
+      leaseEpoch: 1, leaseContentDigest: "a".repeat(64) };
+    await expect(bound.writeCompletion({ ...prepared.prepared }, holder)).rejects.toThrow("RESEARCH_COMPLETION_HANDLE_INVALID");
+    await expect(bound.writeCompletion(prepared.facts as unknown as typeof prepared.prepared, holder)).rejects.toThrow("RESEARCH_COMPLETION_HANDLE_INVALID");
+    const unrelated = prepareHeldResearchReplay(f.pool, new HeldResearchAccounting()).bindHeld(f.held);
+    await expect(unrelated.writeCompletion(prepared.prepared, holder)).rejects.toThrow("RESEARCH_COMPLETION_HANDLE_INVALID");
+    await expect(bound.writeCompletion(prepared.prepared, holder)).rejects.toThrow("HOLDER_SCOPE_CONFLICT");
+    await expect(bound.writeCompletion(prepared.prepared, holder)).rejects.toThrow("RESEARCH_COMPLETION_HANDLE_INVALID");
+    expect(f.trace).toHaveLength(before); expect(f.begin).not.toHaveBeenCalled();
+  });
+  it.each(["statements", "deadline"])("keeps the preparation %s limit when a minted handle reaches the writer", async limit => {
+    let now = 0; vi.spyOn(performance, "now").mockImplementation(() => now);
+    const f = fixture(); f.rows.trader_research_understanding_completions_v1 = [];
+    const accounting = new HeldResearchAccounting();
+    const bound = prepareHeldResearchReplay(f.pool, accounting).bindHeld(f.held);
+    const prepared = await bound.prepareCompletion(f.context, f.request, 0);
+    if (prepared.outcome !== "PREPARED") throw new Error("EXPECTED_MISSING_COMPLETION");
+    const before = f.trace.length;
+    if (limit === "statements") while (accounting.statements < 512) accounting.beforeStatement();
+    else now = 120001;
+    await expect(bound.writeCompletion(prepared.prepared, { organizationId: f.context.organizationId,
+      runtimeInstanceId: "synthetic-current-holder", leaseEpoch: 1, leaseContentDigest: "a".repeat(64) }))
+      .rejects.toThrow(limit === "statements" ? "STATEMENT_LIMIT_EXCEEDED" : "INVOCATION_DEADLINE_EXCEEDED");
+    expect(f.trace).toHaveLength(before); expect(f.begin).not.toHaveBeenCalled();
+  });
   it("captures selectors before awaiting and returns absence without repairing", async () => {
     const f = fixture(); f.rows.trader_research_understanding_completions_v1 = [];
     const pending = prepareHeldResearchReplay(f.pool, new HeldResearchAccounting()).bindHeld(f.held).replay(f.context, f.request, 0);
@@ -262,6 +314,15 @@ function emptyApplication() {
     afterQuery(fn: () => void) { afterQuery = fn; }, afterCommit(fn: () => void) { afterCommit = fn; } };
 }
 describe("actual application command capture/ownership and absent replay", () => {
+  it("captures only an explicit complete-consumer B and never accepts returned facts or holder as input", () => {
+    const f = emptyApplication(); f.request.operation = "complete-consumer";
+    expect(() => captureSavedApplicationCommand(f.pool, f.context, f.request)).toThrow("APPLICATION_OPERATION_INVALID");
+    f.request.consumerSourceSequence = 3;
+    expect(captureSavedApplicationCommand(f.pool, f.context, f.request).request.operation).toBe("complete-consumer");
+    for (const field of ["facts", "prepared", "holder", "source", "output", "evaluator"])
+      expect(() => captureSavedApplicationCommand(f.pool, f.context, { ...f.request, [field]: {} })).toThrow("APPLICATION_COMMAND_INVALID");
+    expect(f.begin).not.toHaveBeenCalled(); expect(f.unsafe).not.toHaveBeenCalled();
+  });
   it("captures selectors before awaiting and allows an explicitly later nonadjacent B without an artificial32 offset", () => {
     const f = emptyApplication(); f.request.consumerSourceSequence = 100; const value = captureSavedApplicationCommand(f.pool, f.context, f.request);
     f.request.configuration.maxAgeMs = 0; f.request.currentSourceSequence = 99;

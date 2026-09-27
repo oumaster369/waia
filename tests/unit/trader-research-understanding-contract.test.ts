@@ -84,9 +84,10 @@ describe("owned monotonic completion deadline", () => {
       researchSessionId: f.config.researchSessionId, sequence: 0, sourceSessionId: f.session.sessionId, sourceSequence: 0,
       assignmentDigest: f.assignment.contentDigest, packetDigest: f.packet.contentDigest, previousCompletionDigest: null, output });
     let written: typeof completion | null = null;
-    const execute = vi.fn(async () => []); const insert = vi.fn(() => ({ values: async (value: { bodyJson: string; contentDigest: string }) => {
+    const execute = vi.fn(async () => []); const insert = vi.fn(() => ({ values: (value: { bodyJson: string; contentDigest: string }) => ({ returning: async () => {
       if (mode !== "committed") throw new Error("UNEXPECTED_WRITE"); written = decodeBody<typeof completion>(value);
-    } }));
+      return [{ contentDigest: value.contentDigest }];
+    } }) }));
     const db = { execute, insert, transaction: async (fn: (tx: unknown) => unknown) => {
       const index = ++transaction; const result = await fn(db);
       if (at === "ack" && index === 3) now = elapsed; return result;
