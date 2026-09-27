@@ -126,9 +126,15 @@ describe.skipIf(!enabled)("admin console change log on postgres", () => {
     await sql`DELETE FROM trader_orders WHERE organization_id = ${orgId}::uuid`;
     await sql`DELETE FROM trader_admin_diagnostic_event WHERE id = ${heldId}::uuid`;
     await sql`DELETE FROM trader_admin_change_log WHERE entity_id IN (${heldId}, ${liveId})`;
-    await sql`DELETE FROM organizations WHERE id = ${orgId}::uuid`;
-    await sql`DELETE FROM users WHERE id = ${userId}::uuid`;
-    await sql`DELETE FROM auth.users WHERE id = ${userId}::uuid`;
+    // Historical writes retain an immutable LEGACY scope. Keep its generated
+    // organization/user/auth parents in this disposable DB instead of weakening
+    // the mode's FK or append-only protection during fixture cleanup.
+    const retainedMode = await sql<{ mode: string }[]>`
+      SELECT mode FROM trader_historical_reconciliation_scope_mode_v1
+      WHERE organization_id = ${orgId}::uuid
+        AND account_id = 'hist-account' AND run_id = 'hist-run'
+    `;
+    expect(retainedMode).toEqual([{ mode: "LEGACY" }]);
   }, 90_000);
 
   it("keeps a repeatable-read snapshot stable while another transaction commits", async () => {

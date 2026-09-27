@@ -36,6 +36,8 @@ export type HistoricalSimulationLearningRuntimeStateV2 = Readonly<{
 }>;
 
 export type HistoricalSimulationProductionRuntimeStateV2 = Readonly<{
+  /** Validated held-owner companion, deliberately not a seventh 0188 snapshot. */
+  reconciliation?: import("./production-reconciliation-frontier-v1").HistoricalReconciliationFrontierV1;
   model: HistoricalExecutionModelV1;
   exchange: HistoricalSimulatedExchange;
   executionRegistry: HistoricalModeledExecutionRegistryV2;
@@ -128,6 +130,25 @@ export function restoreHistoricalSimulationProductionRuntimeStateV2(input: Reado
   ) as HistoricalSimulationLearningRuntimeStateV2;
   return Object.freeze({ model, exchange, executionRegistry,
     executionReceipts: Object.freeze([...receiptsState.receipts]), accounting, knowledge, guardian, learning });
+}
+
+/** The owner has already run the unchanged complete cursor validator. Select only
+ * its exact N Accounting/open-parent state for reconciliation, without restoring
+ * or copying the cumulative registry, Knowledge, learning or consumed-ID arrays. */
+export function selectValidatedHistoricalReconciliationStateV1(cursor: HistoricalSimulationResumeCursorV2) {
+  const accounting = (cursor.accountingFrontierSnapshot as
+    HistoricalSimulationDurableStateSnapshotV2<"ACCOUNTING_FRONTIER">).state;
+  const state = (cursor.modeledExchangeSnapshot as
+    HistoricalSimulationDurableStateSnapshotV2<"MODELED_EXCHANGE">).state;
+  if (state.openOrders.length > 1 || state.checkpoint.openOrders.length !== state.openOrders.length) {
+    throw new Error("HISTORICAL_RECONCILIATION_REFUSED:RESTORE_PARENT");
+  }
+  const open = state.checkpoint.openOrders.map((entry) => {
+    const order = state.openOrders.find((value) => value.id === entry.orderId);
+    if (!order) throw new Error("HISTORICAL_RECONCILIATION_REFUSED:RESTORE_PARENT");
+    return { ...entry, order };
+  });
+  return { accounting, open };
 }
 
 export function snapshotHistoricalSimulationProductionRuntimeStateV2(input: Readonly<{

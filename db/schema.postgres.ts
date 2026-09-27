@@ -4890,6 +4890,7 @@ export const traderHistoricalSimulationAtomicStageV2 = pgTable(
     ledgerEntryId: text("ledger_entry_id").notNull(),
     ledgerEntryContentDigestHex: text("ledger_entry_content_digest_hex").notNull(),
     artifactsJson: jsonb("artifacts_json").notNull(),
+    reconciliationProjectionV1: jsonb("reconciliation_projection_v1"),
     bundleContentDigestHex: text("bundle_content_digest_hex").notNull(),
     schemaVersion: text("schema_version").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -4941,6 +4942,7 @@ export const traderHistoricalSimulationDurableSnapshotV2 = pgTable(
     ledgerEntryId: text("ledger_entry_id").notNull(),
     ledgerEntryContentDigestHex: text("ledger_entry_content_digest_hex").notNull(),
     stateJson: jsonb("state_json").notNull(),
+    reconciliationProjectionV1: jsonb("reconciliation_projection_v1"),
     snapshotContentDigestHex: text("snapshot_content_digest_hex").notNull(),
     schemaVersion: text("schema_version").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
@@ -9398,3 +9400,69 @@ export {
   traderAdminSavedView,
   traderAdminVisitMarker,
 } from "./schema.admin-console.postgres";
+
+/** DEE-1130: immutable physical scope mode; native trigger grants are defined only in0222. */
+export const traderHistoricalReconciliationScopeModeV1 = pgTable(
+  "trader_historical_reconciliation_scope_mode_v1",
+  {
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    accountId: text("account_id").notNull(),
+    runId: text("run_id").notNull(),
+    mode: text("mode").notNull(),
+    profile: text("profile"),
+    partition: text("partition"),
+    symbol: text("symbol"),
+    genesisId: uuid("genesis_id"),
+    // Assigned by the native BEFORE trigger, never by the application.
+    writerXid: text("writer_xid").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.accountId, t.runId] })],
+);
+
+/** DEE-1130: same-owner bounded reconciliation, not a second economic ledger.
+ * Deferred cyclic genesis/self/checkpoint constraints and trigger timing live in0222.
+ */
+export const traderHistoricalReconciliationFrontierV1 = pgTable(
+  "trader_historical_reconciliation_frontier_v1",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    accountId: text("account_id").notNull(),
+    runId: text("run_id").notNull(),
+    cycleSequence: integer("cycle_sequence").notNull(),
+    partition: text("partition").notNull(),
+    profile: text("profile").notNull(),
+    symbol: text("symbol").notNull(),
+    previousId: uuid("previous_id"),
+    genesisId: uuid("genesis_id"),
+    checkpointDigest: text("checkpoint_digest"),
+    contentDigest: text("content_digest").notNull(),
+    bodyText: text("body_text").notNull(),
+    bodyJson: jsonb("body_json").notNull(),
+    writerXid: text("writer_xid").notNull(),
+    fillId: uuid("fill_id").generatedAlwaysAs(sql`(body_json->'fillDelta'->>'fillId')::uuid`),
+    fillAccountingId: uuid("fill_accounting_id").generatedAlwaysAs(sql`(body_json->'fillDelta'->>'fillAccountingId')::uuid`),
+    accountingId: uuid("accounting_id").generatedAlwaysAs(sql`(body_json->'accounting'->>'id')::uuid`),
+    checkpointSequence: integer("checkpoint_sequence").generatedAlwaysAs(sql`CASE WHEN cycle_sequence>=0 THEN cycle_sequence END`),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.accountId, t.runId, t.cycleSequence),
+    unique().on(t.id, t.organizationId, t.accountId, t.runId),
+    foreignKey({ columns: [t.organizationId, t.accountId, t.runId], foreignColumns: [
+      traderHistoricalReconciliationScopeModeV1.organizationId,
+      traderHistoricalReconciliationScopeModeV1.accountId,
+      traderHistoricalReconciliationScopeModeV1.runId,
+    ] }),
+    foreignKey({ columns: [t.fillId, t.organizationId], foreignColumns: [traderFills.id, traderFills.organizationId] }),
+    foreignKey({ columns: [t.fillAccountingId, t.organizationId], foreignColumns: [traderAccountingFrontier.id, traderAccountingFrontier.organizationId] }),
+    foreignKey({ columns: [t.accountingId, t.organizationId], foreignColumns: [traderAccountingFrontier.id, traderAccountingFrontier.organizationId] }),
+    uniqueIndex("historical_reconciliation_one_cycle_per_xid")
+      .on(t.organizationId, t.accountId, t.runId, t.writerXid).where(sql`${t.cycleSequence}>=0`),
+    uniqueIndex("historical_reconciliation_fill_once")
+      .on(t.organizationId, t.accountId, t.runId, t.fillId).where(sql`${t.fillId} IS NOT NULL`),
+    uniqueIndex("historical_reconciliation_fill_accounting_once")
+      .on(t.organizationId, t.accountId, t.runId, t.fillAccountingId).where(sql`${t.fillAccountingId} IS NOT NULL`),
+    check("historical_reconciliation_sequence", sql`${t.cycleSequence}>=-1`),
+    check("historical_reconciliation_body_capacity", sql`jsonb_typeof(${t.bodyJson})='object' AND octet_length(${t.bodyJson}::text)<=1048576`),
+  ],
+);

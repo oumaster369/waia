@@ -1555,6 +1555,13 @@
       "when": 1780000000221,
       "tag": "0221_trader_research_understanding_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1780000000222,
+      "tag": "0222_trader_historical_reconciliation_v1",
+      "breakpoints": true
     }
   ]
 }
