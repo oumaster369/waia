@@ -315,6 +315,7 @@ async function observeLockWait(
   await expect.poll(() => binder.pid, { timeout: 5_000 }).not.toBe(0);
   expect(binder.pid).not.toBe(holder.pid);
   await expect.poll(async () => {
+    await holder.tx!.execute(sqlQuery`SELECT pg_stat_clear_snapshot()`);
     const rows = await holder.tx!.execute<{ pid: number; query: string; blockers: number[] }>(
       sqlQuery`SELECT pid, query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
         WHERE pid = ${binder.pid} AND wait_event_type = 'Lock'
