@@ -2526,10 +2526,10 @@ BEGIN
     END IF;
     guard_bytes := octet_length(guard_body::text);
     IF guard_bytes>1048576 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
-    -- Eight additive whole-body equivalents, with each selected subtree bound once.
-    -- body assignment1; text1; root subtraction1; disjoint root fields1;
-    -- selected steps/parents1; references1; selected reference objects1; margin1.
-    total_bytes := total_bytes + 8::bigint*guard_bytes;
+    -- Sixteen additive equivalents include native extraction and PL assignment copies.
+    -- body assignment1; measurement3; root subtraction2; root extraction/assignment2;
+    -- selected steps/parents2; reference arrays2; reference objects2; fixed margin2.
+    total_bytes := total_bytes + 16::bigint*guard_bytes;
     IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
     IF pg_catalog.jsonb_path_exists(guard_body,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_DEPTH';
@@ -3079,10 +3079,10 @@ BEGIN
       END IF;
       guard_bytes := octet_length(guard_body::text);
       IF guard_bytes>1048576 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
-      -- Eight additive whole-body equivalents, with each selected subtree bound once.
-      -- body assignment1; text1; root subtraction1; disjoint root fields1;
-      -- selected steps/parents1; references1; selected reference objects1; margin1.
-      total_bytes := total_bytes + 8::bigint*guard_bytes;
+      -- Sixteen additive equivalents include native extraction and PL assignment copies.
+      -- body assignment1; measurement3; root subtraction2; root extraction/assignment2;
+      -- selected steps/parents2; reference arrays2; reference objects2; fixed margin2.
+      total_bytes := total_bytes + 16::bigint*guard_bytes;
       IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
       IF pg_catalog.jsonb_path_exists(guard_body,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_DEPTH';

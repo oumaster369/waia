@@ -1129,3 +1129,12 @@ Metric remains conservative logical requested representations; no physicalbinary
 
 Root edits only0222, existingnativefrontier test, canonicalplan andexternalcertificate/evidence. Independent9pathbootstrapauthor staysdisjoint. Thisplanadmission precedes sourceedit; completefinite successor diff plus meaningful sourceRED/GREEN and independent review before closingWP3-02. No DB/native/bootstrapexecution/heavy grant.
 <!-- END FROZEN GUARD16_ADMISSION -->
+
+
+## Root finite guard16 source checkpoint — 2026-09-27
+
+Direct implementation follows sole-plan c9d7e6f142433050da7f74736b6f275e1925a384. Exactly two SQL guard coefficients/comments now use16B; native installed-source expectation and C01 arithmetic use65536+16*raw+(16+128)*body with ASCII slope160. All thirteen recursive argument/depth/formula guards, baseline charges,1MiB/8MiB caps, original0161 and old222 migrations/journal remain unchanged. Source census distinguishes old8B RED from corrected16B GREEN; it is not native execution. Scoped native-file ESLint exited0 (session87925), and finite diff check passed. Earlier75 pure tests and compiler belong toedd81601 and are not relabelled as executed on this successor.
+
+Independent review report2a542f171f92db6301d5db9fdc30988c8d9c5bbac19f9d959d12bfee3a27a405 fully read. Original16-artifact reviewer manifest had one case-insensitive filename collision; additive review-freeze-v2 b6708e91de1749d5f2fdf704ba1f86686dc1baddb5ec96b8d6cf5cf91c39b272 independently verifies18 artifacts, preserving original report/manifest and disclosure. Original author evidence is intact. Finite successor review remains required before WP3-02 source closure; bootstrap, native owner/max-shape/retained-prefix/race/ACL/RLS/rollback proof remains unexecuted.
+
+Root evidence: external evidence/dee-1130/guard16-correction including admission, exact before/after files, source census, lint receipt and final commit manifest. Parallel integration author retains only its admitted nine files; no global clean-checkout claim while those edits are in progress. No DB/native/heavy/CI/publication release by this checkpoint.

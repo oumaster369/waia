@@ -772,7 +772,7 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
     }
     for (const row of rows) {
       const body = String(row.prosrc);
-      expect(body).toContain("8::bigint*guard_bytes");
+      expect(body).toContain("16::bigint*guard_bytes");
       expect(body.indexOf("CANONICAL_BODY_CARDINALITY")).toBeLessThan(body.indexOf("-- CANONICAL-CALL"));
     }
     // Pin the old helper body to its original immutable migration, never replace it.
@@ -859,18 +859,18 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
       const [row] = await tx`SELECT octet_length(${bodyText})::bigint AS raw,
         octet_length(${bodyText}::jsonb::text)::bigint AS body`;
       return { raw: BigInt(row!.raw as string), body: BigInt(row!.body as string),
-        cost: 65536n + 16n * BigInt(row!.raw as string) + (8n + 128n) * BigInt(row!.body as string) };
+        cost: 65536n + 16n * BigInt(row!.raw as string) + (16n + 128n) * BigInt(row!.body as string) };
     }
     await sql.begin(async held => {
       const tx = held as unknown as postgres.Sql; await tx`SET LOCAL track_functions='all'`;
       const zero = await firstCallCost(tx, text(0));
       // ASCII padding adds one byte to each ACTUAL text spelling. Verify both
       // sides, never substitute JS object length for PostgreSQL representation.
-      const max = Number((8388608n - zero.cost) / 152n);
+      const max = Number((8388608n - zero.cost) / 160n);
       const lower = text(max), upper = text(max + 1);
       const a = await firstCallCost(tx, lower), b = await firstCallCost(tx, upper);
       expect(a.cost).toBeLessThanOrEqual(8388608n); expect(b.cost).toBeGreaterThan(8388608n);
-      expect(b.cost - a.cost).toBe(152n); expect(b.raw).toBeLessThan(1048576n); expect(b.body).toBeLessThan(1048576n);
+      expect(b.cost - a.cost).toBe(160n); expect(b.raw).toBeLessThan(1048576n); expect(b.body).toBeLessThan(1048576n);
       const scaled = lower.replace('"sourceEventCount":0', '"sourceEventCount":0.000000');
       expect(scaled).not.toBe(lower);
       const [same] = await tx`SELECT ${scaled}::jsonb = ${lower}::jsonb AS equal_value`;
