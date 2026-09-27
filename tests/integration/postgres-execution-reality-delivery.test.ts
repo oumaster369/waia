@@ -50,7 +50,10 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
   let client: postgres.Sql, db: WaiaPostgresDb, org: string, other: string;
   beforeAll(async () => {
     client = postgres(url!, { max: 8 }); db = drizzle(client, { schema: pgSchema }) as WaiaPostgresDb;
-    for (const user of [USER, OTHER]) { await clean(client, personalOrganizationIdFromUserId(user)); await cleanupWp13Org(url!, user); }
+    // Retain USER's immutable historical LEGACY latch and its identity parents.
+    // Existing mutable fixture cleanup and idempotent seeding allow repeat runs.
+    for (const user of [USER, OTHER]) await clean(client, personalOrganizationIdFromUserId(user));
+    await cleanupWp13Org(url!, OTHER);
     org = await seedWp13User(url!, USER, "DEE1122 local synthetic report delivery");
     other = await seedWp13User(url!, OTHER, "DEE1122 isolated other scope");
   }, 120_000);
@@ -58,7 +61,7 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   afterAll(async () => {
     if (client) { for (const id of [org, other].filter(Boolean)) await clean(client, id); await client.end({ timeout: 5 }); }
-    for (const user of [USER, OTHER]) await cleanupWp13Org(url!, user);
+    await cleanupWp13Org(url!, OTHER);
   }, 120_000);
   const scope = (accountId = "delivery-fixture") => ({ organizationId: org, accountId });
   async function fixture(accountId = "delivery-fixture", initialize = true) {
@@ -133,7 +136,15 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
   });
   it.each(["paper", "mock", "historical", "venue"])("refuses stored unsupported %s metadata", async (kind) => {
     const value = await fixture(); await append(value);
-    if (kind === "historical") await client`UPDATE trader_orders SET historical_account_key='synthetic-history', historical_run_id='fixture-run', execution_mode='mock' WHERE id=${value.attempt.orderId}::uuid`;
+    if (kind === "historical") {
+      await client`UPDATE trader_orders SET historical_account_key='synthetic-history', historical_run_id='fixture-run', execution_mode='mock' WHERE id=${value.attempt.orderId}::uuid`;
+      const retainedMode = await client<{ mode: string }[]>`
+        SELECT mode FROM trader_historical_reconciliation_scope_mode_v1
+        WHERE organization_id=${org}::uuid
+          AND account_id='synthetic-history' AND run_id='fixture-run'
+      `;
+      expect(retainedMode).toEqual([{ mode: "LEGACY" }]);
+    }
     else if (kind === "venue") await client`UPDATE trader_orders SET venue='OTHER' WHERE id=${value.attempt.orderId}::uuid`;
     else await client`UPDATE trader_orders SET execution_mode=${kind} WHERE id=${value.attempt.orderId}::uuid`;
     const before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "UNSUPPORTED_SOURCE_SCOPE" });
