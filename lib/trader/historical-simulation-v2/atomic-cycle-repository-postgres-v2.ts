@@ -1811,9 +1811,11 @@ async function produceHistoricalSimulationNextCycleV2(
   // they supply its real final scheduler/cancel fields, never synthetic historical call names.
   const reconciliationEntries = input.reconciliation ? runtime.exchange.listOpenOrders() : [];
   if (reconciliationEntries.length > 1) refuseHistoricalReconciliationV1("PARENT_CARDINALITY");
-  let reconciliationDelta: HistoricalReconciliationDeltaV1 | null = null;
+  const reconciliationState: {
+    delta: HistoricalReconciliationDeltaV1 | null;
+    parents: Awaited<ReturnType<HistoricalReconciliationRepositoryV1["observeParents"]>> | null;
+  } = { delta: null, parents: null };
   const reconciliationObservations: HistoricalReconciliationObservationV1[] = [];
-  let reconciliationParents: Awaited<ReturnType<HistoricalReconciliationRepositoryV1["observeParents"]>> | null = null;
   const previousLedger = input.previousCursor
     ? ((
         await input.tx<{ entry_json: HistoricalSimulationReasonLedgerV2 }[]>`
@@ -1930,19 +1932,19 @@ async function produceHistoricalSimulationNextCycleV2(
       projectHistoricalReconciliationAccountingV1(currentAccounting),
     ];
     const consumed = await input.reconciliation.readConsumed(steps);
-    reconciliationParents = await input.reconciliation.observeParents(runtime,
+    reconciliationState.parents = await input.reconciliation.observeParents(runtime,
       previousReconciliation.activeParentAfter, reconciliationEntries);
     const fresh = advanceHistoricalReconciliationV1({ previous: previousReconciliation, cycleId,
       cycleSequence: previousReconciliation.cycleSequence + 1, recordIndex: cycleIdentity.membership.recordIndex,
       membershipDigest: cycleIdentity.membership.contentDigestHex, marketDigest: cycleIdentity.sealedCycle.contentDigestHex,
-      releaseSha: input.codeSha, steps, consumed, fills: reconciliationParents.fills, economics: reconciliationParents.economics });
-    if (reconciliationDelta && computeSemanticSha256Hex(fresh) !== computeSemanticSha256Hex(reconciliationDelta)) {
+      releaseSha: input.codeSha, steps, consumed, fills: reconciliationState.parents.fills, economics: reconciliationState.parents.economics });
+    if (reconciliationState.delta && computeSemanticSha256Hex(fresh) !== computeSemanticSha256Hex(reconciliationState.delta)) {
       refuseHistoricalReconciliationV1("PHASE_SOURCE_CHANGED");
     }
-    reconciliationDelta = fresh;
+    reconciliationState.delta = fresh;
     reconciliationObservations.push(observeHistoricalReconciliationV1({ delta: fresh, phase,
       accounting: projectHistoricalReconciliationAccountingV1(currentAccounting),
-      activeParent: reconciliationParents.activeParent, touchedParents: reconciliationParents.touchedParents,
+      activeParent: reconciliationState.parents.activeParent, touchedParents: reconciliationState.parents.touchedParents,
       previousObservations: reconciliationObservations }));
   };
   await observeReconciliation("frontier_mutation");
@@ -2312,9 +2314,9 @@ async function produceHistoricalSimulationNextCycleV2(
     snapshots,
   });
   return Object.freeze({ closed, sourceAuthority,
-    reconciliation: reconciliationDelta && reconciliationParents ? {
-      delta: reconciliationDelta, observations: reconciliationObservations,
-      activeParent: reconciliationParents.activeParent, touchedParents: reconciliationParents.touchedParents,
+    reconciliation: reconciliationState.delta && reconciliationState.parents ? {
+      delta: reconciliationState.delta, observations: reconciliationObservations,
+      activeParent: reconciliationState.parents.activeParent, touchedParents: reconciliationState.parents.touchedParents,
     } : null });
 }
 

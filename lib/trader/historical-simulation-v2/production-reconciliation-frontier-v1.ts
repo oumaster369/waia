@@ -18,7 +18,7 @@ const HEX = /^[0-9a-f]{64}$/;
 export function refuseHistoricalReconciliationV1(reason: string): never {
   throw new Error(`HISTORICAL_RECONCILIATION_REFUSED:${reason}`);
 }
-const refuse = refuseHistoricalReconciliationV1;
+const refuse: (reason: string) => never = refuseHistoricalReconciliationV1;
 const ensure = (ok: unknown, reason: string): void => { if (!ok) refuse(reason); };
 
 /** One budget per owner attempt; charge metadata before loading a PG JSON value. */

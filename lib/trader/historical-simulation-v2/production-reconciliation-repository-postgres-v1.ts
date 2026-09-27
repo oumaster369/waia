@@ -18,7 +18,7 @@ import {
   type HistoricalReconciliationConsumedV1,
 } from "./production-reconciliation-frontier-v1";
 
-const refuse = refuseHistoricalReconciliationV1;
+const refuse: (reason: string) => never = refuseHistoricalReconciliationV1;
 type Scope = HistoricalSimulationAtomicScopeV2;
 type Mode = Readonly<{ mode: "LEGACY" | "PROFILE"; partition: string | null; symbol: string | null;
   profile: string | null; genesisId: string | null }>;
@@ -37,7 +37,7 @@ const orderProjection = `jsonb_build_object('orderId',o.id::text,'organizationId
   'clientOrderId',o.client_order_id,'idempotencyKey',o.idempotency_key,'riskDecisionId',o.risk_decision_id,
   'allocationDecisionId',o.allocation_decision_id)`;
 const creationDigest = (p: ParentSource) => {
-  const immutable = { ...p } as Partial<ParentSource>;
+  const immutable = { ...p } as { -readonly [K in keyof ParentSource]?: ParentSource[K] };
   delete immutable.filledQuantity; delete immutable.state; delete immutable.stateVersion;
   return computeSemanticSha256Hex(immutable);
 };
@@ -101,7 +101,7 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
     [...prefix, expected[0]!.sequence, expected.at(-1)!.sequence], 2);
     if (rows.length !== expected.length) refuse("ACCOUNTING_SOURCE_MEMBERSHIP");
     rows.forEach((row, i) => {
-      const source = { ...expected[i]! } as Partial<HistoricalReconciliationAccountingV1>;
+      const source = { ...expected[i]! } as { -readonly [K in keyof HistoricalReconciliationAccountingV1]?: HistoricalReconciliationAccountingV1[K] };
       delete source.consumedFillCount; delete source.lastConsumedFillId;
       if (!same(row, source)) refuse("ACCOUNTING_SOURCE_CONTENT");
     });
