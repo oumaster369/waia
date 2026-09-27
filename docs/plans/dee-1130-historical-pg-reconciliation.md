@@ -1183,3 +1183,16 @@ Allowed proof at this correction stage is source/scoped unit/lint/diff only. No 
 After sole-plan `298840a0`, the exact six production and six fixture scalar casts, one original-table fixture inventory entry and bounded candidate clone are implemented. An exact baseline-to-current transform proves every other executable byte in both touched files is unchanged; all104 native case/assertion bodies remain. SQL0222, all223 migration identities, schema and production projection deep-freeze are unchanged.
 
 Scoped actual proof:90 assertions/2 files passed (75 reconciliation-frontier,15 atomic-cycle-commit),0 skips/failures. Additional inert actual-module capture exercises the real held-port stage writer and all six snapshot writers: all21 constructor scalar occurrences are typed text; production frozen candidate rejects mutation via Reflect.set and an independent fixture clone accepts the adversarial value without changing the original. This is transport capture/pure proof, not database execution or source qualification. Scoped ESLint exits0 with one inherited unused internal function warning; diff check passes. The original104-case83/21 native result remains the latest database outcome. Native retest, production-owner35, compiler/full readiness and release acceptance remain pending root/nonauthor review and separate execution grant.
+
+
+## Root final source-consumer inventory admission
+
+Author correction frozen at f72900bb; root owns this finite graph registration only. Actual native/full acceptance is pending. The following exact disposition precedes graph pin changes.
+
+<!-- BEGIN FROZEN ROOT_GRAPH_DISPOSITION SHA256 ac9a4d0f6f1c1213b696853409a9990cccb5cf19fe14f2beaad6185c52f279c1 -->
+# DEE-1130 finite graph inventory disposition
+
+The actual validator refused the reviewed historical source addition: consumer count141 versus140. Root independently reconstructed the accepted397d inventory and verified its140 count/path/content identities, then enumerated the exact current delta. One added consumer is production-reconciliation-frontier-v1.ts; one changed existing consumer is atomic-cycle-repository-postgres-v2.ts. Existing EXCLUDED_DATA_RESEARCH_CONSUMERS rule already classifies both EXCLUDED_OR_LINEAGE_ONLY. There are no removed consumers; source157 and actual26 connector references are unchanged. The new pure historical projector imports modeled execution types and the existing payload/identity helpers buildRecordFillPayload and deterministicExecutionUuidV2, and gains no Reality admission or venue operation authority.
+
+After the author freezes its finite typing/fixture correction, root may update only docs/ai-trader/reality-v2-source-consumer-inventory.json consumer count/path/content pins, tests/unit/trader-reality-v2-consumer-graph.test.ts expected count/comment and this issue's canonical plan before dependent edits. Keep all discovery rules, roots, methods, extensions, source digests, compatibility references, admission files and classifications byte-identical. Recompute from exact final source; never simply copy a failed value without verifying full delta. Run unchanged validator and affected graph suite. No production/runtime/SQL/native/financial/scientific meaning changes. Independent finite graph review and real native acceptance remain required.
+<!-- END FROZEN ROOT_GRAPH_DISPOSITION -->
