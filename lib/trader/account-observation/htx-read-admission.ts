@@ -53,8 +53,19 @@ export function createHtxReadAdmission(input: Readonly<{
   const { binding, keyDigest, transport, clock, timeoutMs, maxResponseBytes } = fixed;
   let apiKey = fixed.apiKey; fixed.apiKey = "";
   let disposed = false; let active: AbortController | null = null;
+  const pending = new Set<Promise<unknown>>();
+  const track = <T>(promise: Promise<T>): Promise<T> => {
+    pending.add(promise);
+    void promise.then(() => pending.delete(promise), () => pending.delete(promise));
+    return promise;
+  };
   const dispose = () => { disposed = true; active?.abort(); transport.dispose(); apiKey = ""; };
-  return Object.freeze({ dispose,
+  const owner = { dispose,
+    async settled() {
+      dispose();
+      while (pending.size) await Promise.allSettled([...pending]);
+      await transport.settled();
+    },
     async verifyReadAdmission(requested: ObservationBinding, requestedDigest: string, signal: AbortSignal): Promise<boolean> {
       if (disposed || active || signal.aborted) return failed();
       const controller = new AbortController(); active = controller;
@@ -95,7 +106,7 @@ export function createHtxReadAdmission(input: Readonly<{
         current(); return true;
       };
       try {
-        return await Promise.race([work(), cancelled,
+        return await Promise.race([track(work()), cancelled,
           clock.sleep(timeoutMs, controller.signal).then(() => { throw new AccountObservationReadFailure("TIMEOUT"); })]);
       } catch (error) {
         dispose();
@@ -110,5 +121,8 @@ export function createHtxReadAdmission(input: Readonly<{
         controller.abort(); active = null;
       }
     },
-  });
+  };
+  // Preserve the existing enumerable public admission surface; lifecycle completion is additive.
+  Object.defineProperty(owner, "settled", { enumerable: false });
+  return Object.freeze(owner);
 }

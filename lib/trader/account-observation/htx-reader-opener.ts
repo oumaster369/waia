@@ -141,7 +141,7 @@ export async function openHtxAccountAcquisitionTransport(
     current();
     transport = createHtxAccountAcquisitionGetTransport({ binding, symbols, knownOrderIds, timeoutMs,
       apiKey, apiSecret, host, clock, fetchImpl, verifyReadAdmission });
-    return Object.freeze({ binding, signedGet: transport.signedGet, dispose });
+    return Object.freeze({ binding, signedGet: transport.signedGet, dispose, settled: transport.settled });
   };
   try {
     return await Promise.race([work(), cancelled, clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT"))]);

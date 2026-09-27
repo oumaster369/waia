@@ -1,5 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+import type { Sql } from "postgres";
+import { bindHtxAccountAcquisitionAssignmentV1, createProtectedHtxAccountAcquisitionSessionV1 } from "@/lib/trader/risk/v2/current-account-capital-service-v1";
+import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
+import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
+import { encryptCredentialPayload } from "@/lib/trader/credentials/envelope-crypto";
+import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import { decodeHtxAccountAcquisitionPageV1, htxAccountAcquisitionLanesV1,
   htxAccountAcquisitionRequestV1, parseHtxAccountAcquisitionSpecV1,
   htxAccountAcquisitionJournalEntrySchemaV1, validateHtxAccountAcquisitionJournalV1,
@@ -277,5 +283,209 @@ describe("typed immutable acquisition journal prefix values", () => {
     expect(validateHtxAccountAcquisitionJournalV1(spec, [...rows.slice(0, 2), partial])).toEqual({ pages: 0, members: 0, closed: true });
     expect(() => validateHtxAccountAcquisitionJournalV1(spec, [...rows.slice(0, 2),
       { ...partial, payload: { ...partial.payload, reason: null } }])).toThrow("JOURNAL_TERMINAL");
+  });
+});
+
+
+/** Synthetic SQL catalog/row responses only. The real readers, envelope crypto, metadata
+ * admission and signing transport execute; actual PG17 role/environment proof remains separate. */
+async function protectedAcquisitionFixture() {
+  const provider = await SecretsStoreMasterKeyProvider.create({
+    secretGetter: async () => Buffer.alloc(32, 9).toString("base64"), productionReady: true });
+  const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
+    maxBackoffMs: 1000, readTimeoutMs: 100, leaseTtlMs: 1000,
+    htxCoverage: { host: "api.huobi.pro", pageSize: 100, maxPages: 10,
+      maxRecords: 1000, maxResponseBytes: 1048576, tradeWindowMs: 60000 } });
+  const actualBinding = { ...binding, configurationRevision: config.revision };
+  const actualSpec = { ...spec, binding: actualBinding, requestTimeoutMs: 100 };
+  const encrypted = await encryptCredentialPayload(provider, { apiKey: "synthetic-key", apiSecret: "synthetic-secret" });
+  const state = { current: true, revision: "1", supported: true, rowStatus: "active", permission: "readOnly" };
+  const statements: string[] = [], paths: string[] = [];
+  const sql = (credential: boolean): Sql => {
+    const query = async (strings: TemplateStringsArray | string) => {
+      const text = typeof strings === "string" ? strings : strings.join("?"); statements.push(text);
+      if (text.includes("AS supported")) return [{
+        login: credential ? "waia_account_observation_credential_login" : "synthetic-reader",
+        original_session: true, supported: state.supported, safe_login: true, safe_role: true,
+        can_set: true, exclusive_role: true, no_ciphertext: true, no_destructive: true,
+        reader_no_writes: true, forced_rls: true, membership: true, no_direct_acl: true,
+        no_ownership: true, no_create: true, exact_projection: true, rls: true,
+      }];
+      if (text.includes("SELECT state.symbols")) return state.current ? [{ symbols: ["BTCUSDT"] }] : [];
+      if (text.includes("SELECT c.observation_revision")) return state.current ? [{
+        credential_revision: state.revision, configuration_revision: config.revision }] : [];
+      if (text.includes("encrypted_payload") && !text.includes("AS supported")) return [{
+        id: binding.credentialId, organization_id: binding.organizationId, exchange_account_id: binding.exchangeAccountId,
+        status: state.rowStatus, encrypted_payload: encrypted.encryptedPayload, payload_key_version: encrypted.payloadKeyVersion,
+        wrapped_dek_key_version: encrypted.wrappedDekKeyVersion, wrapped_dek_key: encrypted.wrappedDekKey }];
+      return [];
+    };
+    const tx = Object.assign(query, { unsafe: query });
+    return Object.assign(query, { begin: (body: (value: unknown) => Promise<unknown>) => body(tx),
+      options: { max: 2, connect_timeout: 3, max_lifetime: 300, prepare: false } }) as unknown as Sql;
+  };
+  const fetchImpl = vi.fn<typeof fetch>(async url => {
+    const target = new URL(String(url)); paths.push(target.pathname);
+    expect(target.searchParams.get("AccessKeyId")).toBe("synthetic-key");
+    if (target.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+      data: [{ id: 135, type: "spot", state: "working" }] });
+    if (target.pathname === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+    if (target.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+      data: [{ accessKey: "synthetic-key", status: "normal", permission: state.permission }] });
+    return Response.json({ status: "ok", data: balance() });
+  });
+  const input = { readerSql: sql(false), credentialSql: sql(true), masterKeyProvider: provider,
+    assignment: { binding: actualBinding, config }, spec: actualSpec,
+    host: "api.huobi.pro" as const, clock: accountObservationClock, fetchImpl };
+  const request = (signal = new AbortController().signal) => htxAccountAcquisitionRequestV1(actualSpec,
+    htxAccountAcquisitionLanesV1(actualSpec)[0]!, null, signal);
+  return { input, state, statements, paths, provider, request };
+}
+
+describe("DEE-1135 fixed protected acquisition composition", () => {
+  it("binds actual assignment, narrow decrypted credential and fresh same-key metadata before every acquisition GET", async () => {
+    const f = await protectedAcquisitionFixture(), owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    try {
+      const transport = await owner.open(new AbortController().signal);
+      expect(f.paths).toEqual(["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"]);
+      const result = await transport.signedGet(f.request());
+      expect(result.httpStatus).toBe(200);
+      expect(f.paths).toEqual(["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key",
+        "/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key", "/v1/account/accounts/135/balance",
+        "/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"]);
+      expect(f.statements).toContain("SET LOCAL ROLE waia_account_observation_credential");
+      expect(f.statements).toContain("SET LOCAL ROLE waia_account_observation_reader");
+      expect(f.statements).toContain("SET LOCAL transaction_timeout = '5000ms'");
+      expect(f.statements.some(text => /SELECT \*/.test(text))).toBe(false);
+    } finally { await owner.dispose(); }
+    await expect(owner.open(new AbortController().signal)).rejects.toThrow("PROTECTED_OWNER_CLOSED");
+  });
+  it("rejects altered timeout, symbol/host/credential identity and unbound coverage before any I/O", async () => {
+    const f = await protectedAcquisitionFixture();
+    for (const patch of [{ spec: { ...f.input.spec, requestTimeoutMs: 101 } },
+      { spec: { ...f.input.spec, symbols: ["ETH/USDT"] } }, { host: "api-aws.huobi.pro" as const },
+      { spec: { ...f.input.spec, binding: { ...f.input.spec.binding, credentialRevision: "2" } } },
+      { assignment: { ...f.input.assignment, config: { ...f.input.assignment.config, htxCoverage: undefined } } }])
+      expect(() => createProtectedHtxAccountAcquisitionSessionV1({ ...f.input, ...patch })).toThrow();
+    expect(f.statements).toEqual([]); expect(f.paths).toEqual([]);
+  });
+  it("captures the exact persisted roster and configuration before callers mutate their objects", async () => {
+    const f = await protectedAcquisitionFixture();
+    const bound = bindHtxAccountAcquisitionAssignmentV1(f.input);
+    f.input.spec.symbols = ["ETH/USDT"]; f.input.spec.knownOrders = [];
+    expect(bound.options.symbols).toEqual(["BTCUSDT"]);
+    expect(bound.options.knownOrderIds).toEqual(["999"]);
+    expect(bound.spec.symbols).toEqual(["BTC/USDT"]);
+    expect(Object.isFrozen(bound.options.symbols)).toBe(true);
+  });
+  it("refuses unsupported production PostgreSQL posture before credential or HTTP effects", async () => {
+    const f = await protectedAcquisitionFixture(); f.state.supported = false;
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    try { await expect(owner.open(new AbortController().signal)).rejects.toThrow("OBSERVATION_HOST_ROLE_REFUSED"); }
+    finally { await owner.dispose(); }
+    expect(f.paths).toEqual([]);
+    expect(f.statements.some(text => text.includes("SET LOCAL ROLE waia_account_observation_credential"))).toBe(false);
+  });
+  it("refuses an unready actual master provider without decrypting the credential", async () => {
+    const f = await protectedAcquisitionFixture();
+    const decrypt = vi.spyOn(f.provider, "decryptDataKey"); vi.spyOn(f.provider, "isProductionReady").mockReturnValue(false);
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    try { await expect(owner.open(new AbortController().signal)).rejects.toThrow(); }
+    finally { await owner.dispose(); }
+    expect(decrypt).not.toHaveBeenCalled(); expect(f.paths).toEqual([]);
+  });
+  it("refuses actual current-assignment loss or credential revision movement before signing", async () => {
+    for (const variant of ["current", "revision"] as const) {
+      const f = await protectedAcquisitionFixture();
+      if (variant === "current") f.state.current = false; else f.state.revision = "2";
+      const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+      try { await expect(owner.open(new AbortController().signal)).rejects.toThrow(); }
+      finally { await owner.dispose(); }
+      expect(f.paths).toEqual([]);
+    }
+  });
+  it("does not let assignment authorization replace the exact-key venue metadata refusal", async () => {
+    const f = await protectedAcquisitionFixture(); f.state.permission = "trade";
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    try { await expect(owner.open(new AbortController().signal)).rejects.toThrow(); }
+    finally { await owner.dispose(); }
+    expect(f.paths).toEqual(["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"]);
+  });
+  it("refuses a post-open assignment revoke before the next acquisition request", async () => {
+    const f = await protectedAcquisitionFixture(), owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    try {
+      const transport = await owner.open(new AbortController().signal);
+      f.state.current = false;
+      await expect(transport.signedGet(f.request())).rejects.toThrow();
+      expect(f.paths).toHaveLength(3);
+    } finally { await owner.dispose(); }
+  });
+  it("keeps disposal pending until a late real unwrap settles and never signs its abandoned payload", async () => {
+    const f = await protectedAcquisitionFixture(), abort = new AbortController();
+    const actual = f.provider.decryptDataKey.bind(f.provider);
+    let started!: () => void, release!: () => void;
+    const began = new Promise<void>(resolve => { started = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(f.provider, "decryptDataKey").mockImplementation(async value => { started(); await held; return actual(value); });
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    const opening = owner.open(abort.signal); const rejected = expect(opening).rejects.toThrow();
+    await began; abort.abort(); await rejected;
+    let closed = false; const closing = owner.dispose().then(() => { closed = true; });
+    await Promise.resolve(); expect(closed).toBe(false);
+    release(); await closing; expect(closed).toBe(true); expect(f.paths).toEqual([]);
+  });
+  it("waits for a late metadata fetch and its body cancellation while refusing open immediately", async () => {
+    const f = await protectedAcquisitionFixture(), abort = new AbortController();
+    let fetched!: () => void, releaseFetch!: (response: Response) => void, cancelled!: () => void, releaseCancel!: () => void;
+    const began = new Promise<void>(resolve => { fetched = resolve; });
+    const response = new Promise<Response>(resolve => { releaseFetch = resolve; });
+    const cancellation = new Promise<void>(resolve => { cancelled = resolve; });
+    const cancelHeld = new Promise<void>(resolve => { releaseCancel = resolve; });
+    f.input.fetchImpl.mockImplementation(async () => { fetched(); return response; });
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    const rejected = expect(owner.open(abort.signal)).rejects.toThrow();
+    await began; abort.abort(); await rejected;
+    let closed = false; const closing = owner.dispose().then(() => { closed = true; });
+    await Promise.resolve(); expect(closed).toBe(false);
+    releaseFetch(new Response(new ReadableStream({ cancel() { cancelled(); return cancelHeld; } })));
+    await cancellation; expect(closed).toBe(false);
+    releaseCancel(); await closing; expect(closed).toBe(true);
+    expect(f.input.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it("waits for actual in-flight metadata body cancellation rather than only the public timeout promise", async () => {
+    const f = await protectedAcquisitionFixture(), abort = new AbortController();
+    let reading!: () => void, cancelled!: () => void, release!: () => void;
+    const began = new Promise<void>(resolve => { reading = resolve; });
+    const cancellation = new Promise<void>(resolve => { cancelled = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    f.input.fetchImpl.mockImplementation(async () => new Response(new ReadableStream({
+      pull() { reading(); }, cancel() { cancelled(); return held; },
+    })));
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    const rejected = expect(owner.open(abort.signal)).rejects.toThrow();
+    await began; abort.abort(); await rejected; await cancellation;
+    let closed = false; const closing = owner.dispose().then(() => { closed = true; });
+    await Promise.resolve(); expect(closed).toBe(false);
+    release(); await closing; expect(closed).toBe(true);
+    expect(f.input.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it("preserves a failed metadata body cancellation as failed settlement", async () => {
+    const f = await protectedAcquisitionFixture(), abort = new AbortController();
+    let reading!: () => void;
+    const began = new Promise<void>(resolve => { reading = resolve; });
+    f.input.fetchImpl.mockImplementation(async () => new Response(new ReadableStream({
+      pull() { reading(); }, cancel() { return Promise.reject(new Error("synthetic cancellation failure")); },
+    })));
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    const rejected = expect(owner.open(abort.signal)).rejects.toThrow();
+    await began; abort.abort(); await rejected;
+    await expect(owner.dispose()).rejects.toThrow("TRANSPORT_SETTLEMENT_FAILED");
+  });
+  it("disposes a successfully opened session on owner abort and cannot reuse its credentials", async () => {
+    const f = await protectedAcquisitionFixture(), abort = new AbortController();
+    const owner = createProtectedHtxAccountAcquisitionSessionV1(f.input);
+    const transport = await owner.open(abort.signal); abort.abort(); await owner.dispose();
+    expect(() => transport.signedGet(f.request())).toThrow("PROTECTED_OWNER_CLOSED");
+    expect(f.paths).toHaveLength(3);
   });
 });

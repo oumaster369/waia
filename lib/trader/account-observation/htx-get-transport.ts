@@ -26,6 +26,8 @@ type BoundedGetTransport = Readonly<{
   binding: ObservationBinding;
   signedGet(request: Request): ReturnType<HtxObservationGetTransport["signedGet"]>;
   dispose(): void;
+  /** Stops new work and waits for actual action/body cancellation settlement, without a forced deadline. */
+  settled(): Promise<void>;
 }>;
 export type HtxMetadataGetTransport = Omit<BoundedGetTransport, "signedGet"> & Readonly<{
   signedGet(request: Omit<Request, "path"> & { path: "/v1/account/accounts" | "/v2/user/uid" | "/v2/user/api-key" }):
@@ -74,7 +76,21 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
   const exactOrders = z.array(positiveId).max(8192).parse(knownOrderIds);
   if (new Set(exactOrders).size !== exactOrders.length) denied("INVALID_RESPONSE");
   let disposed = false; let active: AbortController | null = null;
-  const cancelBody = (response: Response) => { void response.body?.cancel().catch(() => {}); };
+  const pending = new Set<Promise<unknown>>();
+  let cancellationFailed = false;
+  const track = <T>(promise: Promise<T>): Promise<T> => {
+    pending.add(promise);
+    void promise.then(() => pending.delete(promise), () => pending.delete(promise));
+    return promise;
+  };
+  const trackCancellation = (promise: Promise<unknown> | undefined) => {
+    if (promise) void track(promise).catch(() => { cancellationFailed = true; });
+  };
+  const cancelBody = (response: Response) => { trackCancellation(response.body?.cancel()); };
+  const dispose = () => {
+    disposed = true; active?.abort(); apiKey = ""; secret = "";
+    // Drops references, not a promise of secure erasure of immutable JS strings.
+  };
   function validate(request: Request): { path: Request["path"]; query: Record<string, string>; maxBytes: number } {
     if (request.method !== "GET" || !Number.isSafeInteger(request.maxResponseBytes) ||
       request.maxResponseBytes < 1 || request.maxResponseBytes > 1048576) denied("INVALID_RESPONSE");
@@ -132,7 +148,7 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
     if ((query.from === undefined) !== (query.direct === undefined)) denied("INVALID_RESPONSE");
     return { path, query, maxBytes: request.maxResponseBytes };
   }
-  return Object.freeze({ binding,
+  const owner: BoundedGetTransport = { binding,
     async signedGet(request) {
       const parentSignal = request.signal;
       if (disposed || active || parentSignal.aborted) return denied("READ_FAILED");
@@ -200,7 +216,7 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
         return Object.freeze({ binding, httpStatus: response.status, body });
       };
       try {
-        return await Promise.race([action(), aborted, clock.sleep(timeoutMs, controller.signal).then(() => denied("TIMEOUT"))]);
+        return await Promise.race([track(action()), aborted, clock.sleep(timeoutMs, controller.signal).then(() => denied("TIMEOUT"))]);
       } catch (error) {
         // A failed/cancelled request may still own an uncooperative fetch; never reuse
         // this transport for overlapping work. The owner must dispose/re-admit anew.
@@ -209,17 +225,21 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
         return denied("READ_FAILED");
       } finally {
         // Best-effort cancellation does not await an uncooperative network dependency.
-        void bodyReader?.cancel().catch(() => {});
+        trackCancellation(bodyReader?.cancel());
         parentSignal.removeEventListener("abort", cancel);
         controller.signal.removeEventListener("abort", rejectAbort); controller.abort();
         active = null;
       }
     },
-    dispose() {
-      disposed = true; active?.abort(); apiKey = ""; secret = "";
-      // Drops owned references, not a promise of secure erasure of immutable JS strings.
+    dispose,
+    async settled() {
+      dispose();
+      while (pending.size) await Promise.allSettled([...pending]);
+      if (cancellationFailed) denied("READ_FAILED");
     },
-  });
+  };
+  Object.defineProperty(owner, "settled", { enumerable: false });
+  return Object.freeze(owner);
 }
 
 export function createHtxObservationGetTransport(input: TransportInput): HtxObservationGetTransport {
