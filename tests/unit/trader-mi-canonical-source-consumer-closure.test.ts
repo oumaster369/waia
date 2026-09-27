@@ -111,6 +111,7 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
       "lib/trader/market-data/replay/canonical-pit-replay.ts",
       "lib/trader/paper/durable-noncapital/recorded-analysis-v1.ts",
       "lib/trader/paper/durable-noncapital/repository-postgres-v1.ts",
+      "lib/trader/paper/research-understanding-v1/bounded-source-postgres.ts",
       "lib/trader/research/execopp-qualification/historical-four-surface-ratified-admission-v2.ts",
     ]);
 
@@ -121,6 +122,11 @@ describe("DEE-684 canonical source, consumer, and bypass closure", () => {
     expect(recordedReplay).toContain("readCanonicalPitObservationWithinHeldTransactionV1Postgres");
     expect(recordedReplay).toContain("hasCanonicalGatewayPitReceiptContentV1");
     expect(recordedReplay).not.toContain("canonical-pit-repository-postgres");
+    const research = readFileSync(join(root, CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.savedResearchUnderstanding.boundary), "utf8");
+    expect(research).toContain("readCanonicalPitObservationWithinHeldTransactionV1Postgres");
+    expect(research).toContain("octet_length(to_jsonb(bounded_row)::text)");
+    expect(research).not.toContain("canonical-pit-repository-postgres");
+    expect(research).not.toMatch(/persistCanonical|recordCanonicalGateway/);
     const recordedTypes = readFileSync(
       join(root, CANONICAL_INGRESS_AND_CONSUMER_PATHS_V1.recordedNoncapitalReplay.receiptTypeConsumer),
       "utf8",

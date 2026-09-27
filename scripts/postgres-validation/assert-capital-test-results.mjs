@@ -24,6 +24,7 @@ const requiredFiles = [
   "postgres-org-live-enable-atomicity.test.ts",
   "postgres-recorded-paper-analysis-v1.test.ts",
   "postgres-mi-canonical-pit-lineage-v1.test.ts",
+  "postgres-research-understanding-v1.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const file of requiredFiles) {

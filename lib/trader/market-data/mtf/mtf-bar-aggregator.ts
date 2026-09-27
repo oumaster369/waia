@@ -1,6 +1,6 @@
 import { internalSymbolToHtx } from "@/lib/trader/connectors/htx/mappers";
 import type { HtxRestClient } from "@/lib/trader/connectors/htx/client";
-import { htxPeriodToSeconds } from "@/lib/trader/connectors/htx/kline-pagination";
+export { intervalDurationMs } from "./bar-interval-duration";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import {
   HTX_PERIOD_BY_INTERVAL,
@@ -35,11 +35,6 @@ export async function fetchMtfBarsFromHtx(input: FetchMtfBarsInput): Promise<Fet
   }
 
   return result;
-}
-
-export function intervalDurationMs(interval: BarInterval): number {
-  const period = HTX_PERIOD_BY_INTERVAL[interval];
-  return htxPeriodToSeconds(period) * 1000;
 }
 
 export function barIntervalFromHtxPeriod(period: string): BarInterval {

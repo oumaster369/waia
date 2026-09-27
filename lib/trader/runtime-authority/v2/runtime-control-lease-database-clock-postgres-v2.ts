@@ -50,7 +50,11 @@ export async function claimRuntimeControlLeaseAtDatabaseTimeV2(
   if (!Number.isSafeInteger(input.durationMs) || input.durationMs < 1 || input.durationMs > 2_147_483_647) {
     throw new Error("RUNTIME_CONTROL_LEASE_INVALID_DURATION");
   }
-  return db.transaction(async tx => {
+  return db.transaction(tx => claimWithinTransaction(tx, input));
+}
+
+type ClaimInput = Readonly<{ organizationId: string; runtimeInstanceId: string; durationMs: number }>;
+async function claimWithinTransaction(tx: Transaction, input: ClaimInput): Promise<RuntimeControlLeaseClaimV2 | null> {
     await lockRuntimeOrganizationV2(tx, input.organizationId);
     const adjudicatedAtUtc = await readRuntimeDatabaseClockV2(tx);
     const repository = createPostgresRuntimeControlLeaseRepositoryV2(tx);
@@ -70,5 +74,18 @@ export async function claimRuntimeControlLeaseAtDatabaseTimeV2(
     if (await repository.claimExclusive(value) !== "CLAIMED") return null;
     await assertRuntimeDatabaseClockHolderV2(tx, value);
     return value;
-  });
+}
+
+/** Fixed operational bounds for the saved research owner; the old public defaults remain unchanged. */
+export async function claimBoundedResearchRuntimeControlLeaseV2(db: WaiaPostgresDb, supplied: ClaimInput): Promise<RuntimeControlLeaseClaimV2 | null> {
+  const input = Object.freeze({ organizationId: supplied.organizationId, runtimeInstanceId: supplied.runtimeInstanceId, durationMs: supplied.durationMs });
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(input.organizationId) || !input.runtimeInstanceId?.trim())
+    throw new Error("RUNTIME_CONTROL_LEASE_INVALID_IDENTITY");
+  if (!Number.isSafeInteger(input.durationMs) || input.durationMs < 1 || input.durationMs > 120_000)
+    throw new Error("RUNTIME_CONTROL_LEASE_INVALID_DURATION");
+  return db.transaction(async tx => {
+    await tx.execute(sql`set local lock_timeout = '5s'`);
+    await tx.execute(sql`set local statement_timeout = '30s'`);
+    return claimWithinTransaction(tx, input);
+  }, { isolationLevel: "read committed" });
 }

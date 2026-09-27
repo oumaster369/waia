@@ -1,3 +1,5 @@
+import { EXPAND_MIN_BARS } from "./replay-bar-limits";
+export { EXPAND_MIN_BARS } from "./replay-bar-limits";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -17,8 +19,6 @@ export const DEFAULT_GOLDEN_FIXTURE_PATH = path.join(
 
 export const DEFAULT_CYCLE_ID_PREFIX = "dee-260";
 
-/** Minimum bar count for expand mode start (matches Feature Engine SMA window). */
-export const EXPAND_MIN_BARS = 20;
 
 function loadFixtureFile(fixturePath: string): TraderFixtureFile {
   return JSON.parse(readFileSync(fixturePath, "utf8")) as TraderFixtureFile;

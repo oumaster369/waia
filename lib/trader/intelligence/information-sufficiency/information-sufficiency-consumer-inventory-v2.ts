@@ -380,6 +380,16 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
 
 export const INFORMATION_SUFFICIENCY_PRODUCERS_V2 = [
   {
+    path: "lib/trader/paper/research-understanding-v1/evaluate.ts",
+    symbols: ["evaluateSavedResearchUnderstanding", "evaluateInformationSufficiencyV2", "RESEARCH_NON_CAPITAL"],
+    disposition: "OWNED_RESEARCH_PROFILE_TWO_LANE_RECEIPT_ONLY",
+  },
+  {
+    path: "lib/trader/paper/research-understanding-v1/repository-postgres.ts",
+    symbols: ["createSavedResearchOwner", "persistInformationSufficiencyReceiptWithinTransactionV2Postgres", "ASSIGNMENT_CONFIG_CONFLICT"],
+    disposition: "ASSIGNMENT_COMPLETION_BOUND_RESEARCH_PERSISTENCE_REPLAY",
+  },
+  {
     path: INFORMATION_SUFFICIENCY_RUNTIME_MODULES_V2.contract,
     symbols: [
       "defineRequiredInformationProfileV2",

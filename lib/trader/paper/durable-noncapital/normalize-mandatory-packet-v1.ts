@@ -4,10 +4,10 @@ import { normalizeOhlcvBarsObservation, normalizeQuoteObservation } from "@/lib/
 import { fuseContextV1 } from "@/lib/trader/market-data/fusion/context-fusion-v1";
 import { scoreObservationReliabilityWithPolicy } from "@/lib/trader/market-data/reliability/freshness-policy";
 import { classifySessionPhaseUtc } from "@/lib/trader/market-data/session/session-phase-classifier";
-import { normalizeRecordedNoncapitalInputV2 } from "@/lib/trader/runtime-v2/noncapital-cycle-receipt-v2";
+import { normalizeRecordedNoncapitalInputV2 } from "@/lib/trader/runtime-v2/recorded-noncapital-input-v2";
 import { compareDecimal, InvalidDecimalError } from "@/lib/trader/risk/numeric";
-import { intervalDurationMs } from "@/lib/trader/market-data/mtf/mtf-bar-aggregator";
-import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/fixture-bar-replay-source";
+import { intervalDurationMs } from "@/lib/trader/market-data/mtf/bar-interval-duration";
+import { EXPAND_MIN_BARS } from "@/lib/trader/market-data/replay-bar-limits";
 import { copy, digest, iso, requireCondition as check, NORMALIZATION_CONTRACT,
   RecordedAnalysisRefusal, type AnalysisSession, type CapturedMandatory, type NormalizedMandatory } from "./recorded-analysis-v1";
 

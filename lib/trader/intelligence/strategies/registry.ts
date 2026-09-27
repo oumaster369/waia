@@ -1,13 +1,13 @@
+import { MVP_STRATEGY_REGISTRY, type MvpStrategyId, type StrategyRegistryEntry } from "./registry-metadata";
+export { MVP_STRATEGY_REGISTRY, listMvpStrategyRegistry, strategyLifecycleStates,
+  type MvpStrategyId, type StrategyRegistryEntry, type StrategyLifecycleState } from "./registry-metadata";
 import { evaluateLiquiditySweepReversalV0 } from "@/lib/trader/intelligence/strategies/liquidity-sweep-reversal-v0";
 import { evaluateMeanReversionV0 } from "@/lib/trader/intelligence/strategies/mean-reversion-v0";
 import { evaluateTrendMomentumV0 } from "@/lib/trader/intelligence/strategies/trend-momentum-v0";
 import {
   LIQUIDITY_SWEEP_REVERSAL_V0,
-  LIQUIDITY_SWEEP_REVERSAL_V0_VERSION,
   MEAN_REVERSION_V0,
-  MEAN_REVERSION_V0_VERSION,
   TREND_MOMENTUM_V0,
-  TREND_MOMENTUM_V0_VERSION,
   type Bar,
   type FeatureSnapshot,
   type MsvEnvelope,
@@ -15,29 +15,6 @@ import {
 } from "@/lib/trader/intelligence/types";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
 import { isHistoricalProfileActive } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
-
-/** Master Spec §9 lifecycle states (MVP registry subset). */
-export const strategyLifecycleStates = [
-  "DRAFT",
-  "RESEARCHING",
-  "PAPER",
-  "LIVE",
-  "RETIRED",
-] as const;
-
-export type StrategyLifecycleState = (typeof strategyLifecycleStates)[number];
-
-export type MvpStrategyId =
-  | typeof LIQUIDITY_SWEEP_REVERSAL_V0
-  | typeof MEAN_REVERSION_V0
-  | typeof TREND_MOMENTUM_V0;
-
-export type StrategyRegistryEntry = {
-  strategyId: MvpStrategyId;
-  version: string;
-  lifecycleState: StrategyLifecycleState;
-  displayName: string;
-};
 
 export type StrategyEvaluatorContext = {
   organizationId: string;
@@ -71,27 +48,6 @@ export type StrategyEvaluator = (
   context: StrategyEvaluatorContext,
 ) => StrategySignal;
 
-export const MVP_STRATEGY_REGISTRY: readonly StrategyRegistryEntry[] = [
-  {
-    strategyId: LIQUIDITY_SWEEP_REVERSAL_V0,
-    version: LIQUIDITY_SWEEP_REVERSAL_V0_VERSION,
-    lifecycleState: "PAPER",
-    displayName: "Liquidity Sweep Reversal",
-  },
-  {
-    strategyId: TREND_MOMENTUM_V0,
-    version: TREND_MOMENTUM_V0_VERSION,
-    lifecycleState: "RESEARCHING",
-    displayName: "Trend Momentum",
-  },
-  {
-    strategyId: MEAN_REVERSION_V0,
-    version: MEAN_REVERSION_V0_VERSION,
-    lifecycleState: "PAPER",
-    displayName: "Mean Reversion",
-  },
-] as const;
-
 const EVALUATORS: Record<MvpStrategyId, StrategyEvaluator> = {
   [LIQUIDITY_SWEEP_REVERSAL_V0]: evaluateLiquiditySweepReversalV0,
   [MEAN_REVERSION_V0]: evaluateMeanReversionV0,
@@ -101,10 +57,6 @@ const EVALUATORS: Record<MvpStrategyId, StrategyEvaluator> = {
 /** MVP assignment model: both strategies active for every org. */
 export function resolveMvpStrategyAssignments(_organizationId: string): readonly MvpStrategyId[] {
   return MVP_STRATEGY_REGISTRY.map((entry) => entry.strategyId);
-}
-
-export function listMvpStrategyRegistry(): readonly StrategyRegistryEntry[] {
-  return MVP_STRATEGY_REGISTRY;
 }
 
 export function getStrategyRegistryEntry(strategyId: string): StrategyRegistryEntry | null {
