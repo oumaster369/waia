@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 410524f50cf319e8d439a76b013f4298df9ddf09
-  lastValidationAt: "2026-09-27T10:17:20.999722+00:00"
+  lastValidatedGitSha: 0b1c7613e6295eb6b7e91030875570815ff8d5ba
+  lastValidationAt: "2026-09-27T13:23:07.280822+00:00"
   blockedReason: null
-  nextAction: "Root/M01 inspect minimal410524f5 successor and compilerPASS; compatible0222/0223 chain, all45 native cases and final package gates remain pending. Heavy/PG handed to research_binding; no further author source edits."
+  nextAction: "Root/nonauthor review frozen integrated0b1c7613 and fixed native runner; source/readiness gates passed, but all45 native cases, actual224 migration/bootstrap proof and exact-head25-suite GitHub union remain pending. LOCAL HEAVY released; no DB/native/publication grant or further executable edits."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -973,3 +973,22 @@ Root grants exclusive coordinated **LOCAL HEAVY** ownership, announced before an
 3. Require the **complete25-suite union on exact final GitHub CI**, serially after genuine prefix bootstrap on the existing exact `waia_it:5432/waia_it` service, with strict fresh executed-result guard and zero skips. The two local runs never substitute for this union. No second local45 run solely to create a union is scheduled.
 
 Actual public FHV preflight on224, promised32/33 history and byte/projection boundaries, old real-savepoint behavior, payload text/JSONB/hash equality, owner-written replay/laterB/commit-uncertainty/actor/source/holder/capital-refusal controls remain genuine native obligations under the existing45-case `NATIVE-PLAN.md`. Preserve separately registered billing3/payments2/account-observation PG17four/PROFILE35 companions without relabelling historical proof. Final native/readiness/independent review/publication remain root-owned; source integration grants no scientific, financial, fullP10 or live authority.
+
+
+## Accepted-base source integration result — 0b1c7613
+
+Plan-only admission **`573cea5104a30d5a1968e1d5a725617e610930d5`** preceded normal merge **`ede89e80d62b3a01a877d19a2a1f47b463ccfe4f`**, whose parents are573cea51 and accepteddd5f. No conflict or rebase occurred. The finite integration executable commit is **`0b1c7613e6295eb6b7e91030875570815ff8d5ba`**, tree **`6dbba200ab0bd0559a7bb5fed687856cd023ba27`**. This later result checkpoint changes only the canonical plan; executable identity remains0b1c7613.
+
+Both schema inverses restore their exact opposite predecessor bytes: removing the own application patch from the merged schema reproduces accepteddd5f; removing the incoming historical patch reproduces own8f1bb324. Every other own/incoming path is byte-preserved except the explicitly admitted finite amendments. All223 accepted SQL bytes and journal identities survive unchanged; reviewed0223 SQL remains SHA`5bc674886034b935b577c2864373ee9c874b58ba2758694dfc6883162757e60b` and is now the exact224th entry. The bootstrap changes only224 count/final0223 admission, preserving the222→unchanged27-row seed→full224 choreography and endpoint/cleanup protections. New negative controls reject malformed/missing/wrong0223 identities and unadmitted0224. No DB migration has been executed.
+
+FHV adds only explicit compatible0223 and its negative controls, retaining required maximum207; Forecast adds only the expected extra0223 test, retaining production maximum148. The capital lane and strict guard agree on25 exact filenames with every incoming24 retained, unchanged failure/skip policy, serial invocation, genuine prefix bootstrap and release SHA. All other workflow jobs, including PROFILE35/default LEGACY/billing/payment/PG17 companions, remain byte-identical to accepteddd5f. Existing guards and fixtures are unchanged. Application path filters cover its new runtime/kernel/generator/helper/native/five-unit paths; the test-only Forecast expectation retains the existing general unit-CI coverage.
+
+Existing manifest generation and check both exit0. The11-entry pure manifest/digest remains **`fbbeb707fe792747e88ad5e76782651f40fa7fd9351a6b47b2af83cf09bb8bb8`**. The91-entry command manifest changes only the actual merged schema hash; its new digest is **`9001d784176a668a18cc637b90cd87f8af660ebcdbef6e5ecd67bc36e6ca4c3d`**. No generator/allowlist/computation/authority meaning changed.
+
+Actual scoped proof at2026-09-27T13:17:16–13:17:39Z is **436 passed /19 files /0 failed /0 skipped**: application140/5, ten named old compatibility/lease/fold/Navigator/Understanding/MI companions179/10, and bootstrap/FHV/Forecast/capital-guard117/4. The run used mergeede89e80 plus ten frozen dirty amendment files, proven byte-for-byte equal to committed0b1c7613. Scoped ESLint exited0 without warnings; no redundant rerun or whole local unit suite is claimed.
+
+Whole `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm validate:canon`, `pnpm validate:pr-governance`, `pnpm validate:reality-v2-consumer-graph` and `pnpm validate:execution-v2-consumer-graph` each ran once, serially, on clean0b1c7613 at13:20:07–13:23:07Z and exited0; all left tracked source clean. Lint reports328 warnings in existing retained source,0 errors; evidence proves the168 warning-bearing files are unchanged from either predecessor except the merged schema's exact preserved warning span. Reality reports157 sources/141 consumers/26 connector references with accepted inventory unchanged. Execution reports no violations and its legacy boundary fail-closed. Governance here is the actual regression command, not a rendered future PR-body preflight or GitHub CI result.
+
+External evidence **`parallel-runtime-owner/dee1132-integrated-source-dd5fdb00/`** retains accepted-base comparison, both full patch directions, exact schema inverses/preservation, all224 source identities, workflow/filter/manifest census, raw command logs/receipts/results,144 immutable source snapshots and a5528-entry full Git tree manifest. `EXECUTABLE-FREEZE.json` SHA`16206bfb930e551341d449bf72a1d30cb4a1675a67b668d8ab3ba9763d83707a` is the immutable source-review handoff; later readiness logs and this plan-only carry do not rewrite it.
+
+LOCAL HEAVY ownership was released to root after the final validator; no native/PG process or fixture was acquired. All45 application native cases, actual224 creation/full applied identities, separate retained-prefix bootstrap proof, public FHV preflight on224 and the exact-head complete25-suite GitHub union remain **unexecuted/pending**. Final integrated-source/runner review, root native release, package acceptance and publication remain separate. This checkpoint establishes source integration/readiness only, with no scientific, financial, fullP10 or live authority.
