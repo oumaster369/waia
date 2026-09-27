@@ -1,3 +1,4 @@
+import type { FhvMetadataReadOptions } from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
@@ -37,13 +38,16 @@ function removeTree(path: string): void {
  * Fail-closed resume cleanup keyed only by validated journal authority.
  * Must run before opening a new evidence writer or replaying.
  */
-export function cleanupFhvTwoPhaseResumeState(runDir: string): {
+export function cleanupFhvTwoPhaseResumeState(
+  runDir: string,
+  options?: FhvMetadataReadOptions,
+): {
   lastCommittedEpoch: number;
   lastCommittedCycle: number;
   lastEpochCommitDigest: string;
   committedGeneration: number | null;
 } {
-  const journal = readFhvLaunchJournal(runDir);
+  const journal = readFhvLaunchJournal(runDir, options);
   const lastCommittedEpoch = journal.lastCommittedEpoch;
   const checkpointsParent = join(runDir, "checkpoints");
   const provisionalParent = join(checkpointsParent, FHV_PROVISIONAL_CHECKPOINTS_DIRNAME);

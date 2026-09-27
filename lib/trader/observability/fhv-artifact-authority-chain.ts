@@ -1,3 +1,4 @@
+import type { FhvMetadataReadOptions } from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import { readFhvConfigurationFreezeArtifact } from "@/lib/trader/observability/fhv-configuration-freeze-artifact";
 import {
   readFhvControlReplayReceipt,
@@ -204,8 +205,9 @@ export function assertFhvAuthorizationReceiptForExecution(input: {
   controlReplayReceiptDigest?: string;
   expectedExecutionPurpose: FhvExecutionPurpose;
   allowConsumed?: boolean;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
 }): FhvFullHistoricalAuthorizationReceiptV1 {
-  const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath);
+  const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath, input);
   if (receipt.executionPurpose === undefined || receipt.executionPurpose === null) {
     throw new FhvArtifactAuthorityError(
       "EXECUTION_PURPOSE_MISSING",

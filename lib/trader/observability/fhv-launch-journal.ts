@@ -1,3 +1,8 @@
+import {
+  assertMetadataBytesSupported,
+  readMetadataTextSync,
+  type FhvMetadataReadOptions,
+} from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -48,22 +53,31 @@ export function buildFhvLaunchJournal(input: {
   return { ...body, journalDigest: computeJournalDigest(body) };
 }
 
-export function writeFhvLaunchJournalAtomic(runRoot: string, journal: FhvLaunchJournalV1): string {
+export function writeFhvLaunchJournalAtomic(
+  runRoot: string,
+  journal: FhvLaunchJournalV1,
+  options?: FhvMetadataReadOptions,
+): string {
   mkdirSync(runRoot, { recursive: true });
   const path = join(runRoot, "fhv-launch-journal.v1.json");
   if (existsSync(path)) {
     throw new FhvLaunchJournalError("JOURNAL_EXISTS", "launch journal already exists");
   }
-  writeFileAtomicExclusive(path, `${JSON.stringify(journal, null, 2)}\n`);
+  const bytes = `${JSON.stringify(journal, null, 2)}\n`;
+  assertMetadataBytesSupported(bytes, options);
+  writeFileAtomicExclusive(path, bytes);
   return path;
 }
 
-export function readFhvLaunchJournal(runRoot: string): FhvLaunchJournalV1 {
+export function readFhvLaunchJournal(
+  runRoot: string,
+  options?: FhvMetadataReadOptions,
+): FhvLaunchJournalV1 {
   const path = join(runRoot, "fhv-launch-journal.v1.json");
   if (!existsSync(path)) {
     throw new FhvLaunchJournalError("JOURNAL_MISSING", "launch journal missing");
   }
-  const journal = JSON.parse(readFileSync(path, "utf8")) as FhvLaunchJournalV1;
+  const journal = JSON.parse(readMetadataTextSync(path, options)) as FhvLaunchJournalV1;
   const { journalDigest, ...body } = journal;
   if (computeJournalDigest(body) !== journalDigest) {
     throw new FhvLaunchJournalError("JOURNAL_DIGEST_MISMATCH", "launch journal digest mismatch");
