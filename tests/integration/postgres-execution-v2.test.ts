@@ -745,8 +745,10 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
 
   it("DEE-1134 refuses a fresh bind when its plan closes during an account wait", async () => {
     const original = await admittedBindInput({ validForMs: 60_000 });
-    const [clock] = await sql<{ deadline: Date }[]>`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
-    const deadline = clock!.deadline.toISOString();
+    const [clock] = await sql<{ deadline: Date | string }[]>`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
+    const deadlineDate = new Date(clock!.deadline);
+    expect(Number.isFinite(deadlineDate.getTime())).toBe(true);
+    const deadline = deadlineDate.toISOString();
     const input = { ...original, plan: { ...original.plan,
       timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline } } };
     const before = await lockProofState(input);
@@ -781,8 +783,10 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
 
   it("DEE-1134 refuses a replay when its policy closes during a later attempt wait", async () => {
     const original = await admittedBindInput({ validForMs: 60_000 });
-    const [clock] = await sql<{ deadline: Date }[]>`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
-    const deadline = clock!.deadline.toISOString();
+    const [clock] = await sql<{ deadline: Date | string }[]>`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
+    const deadlineDate = new Date(clock!.deadline);
+    expect(Number.isFinite(deadlineDate.getTime())).toBe(true);
+    const deadline = deadlineDate.toISOString();
     // The actual contract requires plan.close <= policy.until. Their shared
     // deadline proves late policy expiry without constructing an invalid seal.
     const input = { ...original,
