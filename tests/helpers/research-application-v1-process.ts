@@ -84,9 +84,8 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     }
   }
   const registeredAt = await observedAfter(new Date(Math.max(hypothesis.createdAt.getTime(), measurement.createdAt.getTime())).toISOString());
-  // Closed synthetic market events may precede registration; only the actual saved
-  // knowledge/PIT cutoffs follow registration. Quote/acquisition clocks are observed now.
-  const firstBar = Math.floor(Date.parse(registeredAt) / 60000) * 60000 - 180000;
+  // These synthetic rolling windows are duration-correct, not venue-aligned HTX candles.
+  // Each latest close is observed database time; ingestion and saved PIT follow it.
   const packets: import("@/lib/trader/paper/durable-noncapital/recorded-analysis-v1").AnalysisPacket[] = [];
   let lastPit = registeredAt;
   const request = { assignment: config, profile: { definition: profileDefinition }, range: { startSequence: 0, count: 2, leaseDurationMs: 1500 } };
@@ -97,12 +96,10 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     const first = packets.length;
     for (let sequence = first; sequence <= last; sequence++) {
       const observed = await observedAfter(lastPit); const event = observed;
-      const schedule = firstBar + sequence * 60000;
-      if (schedule > Date.parse(observed)) throw new Error("FIXTURE_CLOSED_SCHEDULE_NOT_YET_AVAILABLE");
       const bars: Partial<Record<import("@/lib/trader/intelligence/types").BarInterval, import("@/lib/trader/intelligence/types").Bar[]>> = {};
       for (const interval of ["1m", "15m", "1h", "4h", "1d"] as const) {
         if (interval === "4h" && options.missing4h) continue;
-        const duration = intervalDurationMs(interval), end = interval === "1m" ? schedule : Math.floor(Date.parse(observed) / duration) * duration;
+        const duration = intervalDurationMs(interval), end = Date.parse(observed);
         bars[interval] = Array.from({ length: 25 }, (_, i) => { const down = interval === "4h" && options.against && sequence === 1;
           const base = down ? 200 - i * 3 : 100 + i;
           return { symbol: session.symbol, interval, open: String(base), close: String(base + (down ? -1 : 1)), high: String(base + 2), low: String(base - 2), volume: "10",
@@ -117,13 +114,31 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
         normalization.normalizeOrderBookSnapshotObservation({ symbol: session.symbol, bidLevels: [[124, 1]], askLevels: [[126, 1]], eventTimeUtc: event, provenance: provenance("order_book_snapshot"), latencyMs: 1, evaluatedAt }),
         normalization.normalizeMarketTradesSnapshotObservation({ symbol: session.symbol, trades: [{ id: sequence, price: 125, amount: 1, direction: "buy", ts: Date.parse(event) }], eventTimeUtc: event, provenance: provenance("market_trades_snapshot"), latencyMs: 1, evaluatedAt }));
       const pit = await observedAfter(evaluatedAt); lastPit = pit;
-      const packet = await publishRecordedAnalysis(client, session, holder, sequence, pit, normalizeMandatory({ bars, quote, observations }, session, pit));
+      const normalized = normalizeMandatory({ bars, quote, observations }, session, pit);
+      for (const interval of ["1m", "4h"] as const) {
+        const lane = normalized.observations.find(o => o.kind === "ohlcv_bar" && o.interval === interval);
+        if (interval === "4h" && options.missing4h) {
+          if (lane !== undefined) throw new Error("FIXTURE_MISSING_4H_NOT_ABSENT");
+        } else if (lane?.health !== "HEALTHY") {
+          throw new Error(`FIXTURE_MANDATORY_LANE_NOT_FRESH:${sequence}:${interval}:${lane?.health}:${lane?.freshnessMs}`);
+        }
+      }
+      const packet = await publishRecordedAnalysis(client, session, holder, sequence, pit, normalized);
       await completeRecordedAnalysisPostgresV1(client, session, holder, sequence); packets.push(packet);
     }
     await expiry();
     const range = { ...request.range, startSequence: first, count: last - first + 1 };
     const result = await runSavedResearchLoop(client, researchContext, { ...request, range });
     if (result.status !== "COMPLETE") throw new Error(`FIXTURE_RESEARCH_REFUSED:${result.status}`);
+    for (let sequence = first; sequence <= last; sequence++) {
+      const saved = await createSavedResearchOwner(client, researchContext, request).replay(sequence);
+      if (!saved) throw new Error(`FIXTURE_RESEARCH_COMPLETION_MISSING:${sequence}`);
+      const expected = options.missing4h ? null : options.against && sequence === 1 ? "CHOPPING" : "TRENDING";
+      const actual = specification.assessedSavedWhatV1(saved.completion.output);
+      if (actual !== expected) throw new Error(`FIXTURE_RESEARCH_WHAT_PRECONDITION:${sequence}:${expected}:${actual}`);
+      const disposition = options.missing4h ? "COMPLETED_UNRESOLVED" : "COMPLETED_SUPPORTED";
+      if (saved.completion.output.disposition !== disposition) throw new Error(`FIXTURE_RESEARCH_DISPOSITION:${sequence}`);
+    }
     await expiry(); return result;
   }
   await appendThrough(1);

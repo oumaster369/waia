@@ -260,8 +260,40 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     expect(trace.slice(start, firstLock).some(r => r.query.includes("statement_timeout"))).toBe(true);
     expect(trace.filter(r => !r.query.toLowerCase().startsWith("select pg_sleep")).length).toBeLessThanOrEqual(512);
     await f.appendThrough(3); trace.length = 0; complete(await run({ ...f.application, operation: "consume", consumerSourceSequence: 3 }));
-    const bodies = trace.filter(r => r.query.includes('"trader_recorded_analysis_packets_v1"') && !r.query.includes("octet_length"));
-    expect(bodies.length).toBeGreaterThan(0); expect(bodies.every(r => !r.params.includes(2))).toBe(true);
+    for (const [table, sessionId] of [["trader_recorded_analysis_packets_v1", f.application.configuration.sourceSessionId],
+      ["trader_research_understanding_completions_v1", f.application.configuration.researchSessionId]] as const) {
+      const reads = trace.filter(r => r.query.includes(`"${table}"`) && !r.query.includes("octet_length"));
+      const bodySequences: number[] = [], predecessorSequences: number[] = [];
+      expect(reads.length).toBeGreaterThan(0);
+      for (const read of reads) {
+        const shape = read.query.match(new RegExp(`^select ([\\s\\S]+?)\\s+from "${table}" where ([\\s\\S]+?) limit (?:\\$(\\d+)|(\\d+))\\s*$`, "i"));
+        expect(shape, read.query).not.toBeNull(); if (!shape) throw new Error("UNRECOGNIZED_SAVED_READ");
+        const binding = (column: string) => {
+          const match = shape[2]!.match(new RegExp(`"${table}"\\."${column}" = \\$(\\d+)`));
+          expect(match, read.query).not.toBeNull(); if (!match) throw new Error("MISSING_SAVED_SCOPE_BINDING");
+          return { index: Number(match[1]), value: read.params[Number(match[1]) - 1] };
+        };
+        expect(binding("organization_id").value).toBe(organizationId);
+        expect(binding("session_id").value).toBe(sessionId);
+        const sequence = binding("sequence"); expect(Number.isSafeInteger(sequence.value)).toBe(true);
+        const projection = [...shape[1]!.matchAll(/as "([^"]+)"/g)].map(m => m[1]);
+        const limit = shape[3] ? read.params[Number(shape[3]) - 1] : Number(shape[4]);
+        expect(limit).toBe(2);
+        if (shape[1]!.includes('"body_json"')) {
+          expect(projection).toContain("bodyJson"); expect(shape[3]).toBeDefined();
+          expect(Number(shape[3])).not.toBe(sequence.index);
+          expect([0, 1, 3]).toContain(sequence.value); bodySequences.push(sequence.value as number);
+        } else {
+          expect(table).toBe("trader_research_understanding_completions_v1");
+          if (sequence.value === 2) {
+            expect(projection).toEqual(["organizationId", "sessionId", "sequence", "contentDigest", "assignmentDigest", "sourceSessionId", "sourceSequence", "packetDigest"]);
+            predecessorSequences.push(2);
+          } else expect([0, 1, 3]).toContain(sequence.value);
+        }
+      }
+      expect([...new Set(bodySequences)].sort()).toEqual([0, 1, 3]);
+      if (table === "trader_research_understanding_completions_v1") expect(predecessorSequences.length).toBeGreaterThan(0);
+    }
     const before = await counts(); const readonly = postgres(url!, { max: 1, connection: { default_transaction_read_only: true } });
     try { complete(await runSavedApplication(readonly, { organizationId }, { ...f.application, operation: "replay", consumerSourceSequence: 3 })); }
     finally { await readonly.end({ timeout: 3 }); } expect(await counts()).toEqual(before);
@@ -284,7 +316,9 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     expect(await counts()).toEqual(before);
   }, 30000);
   it("an explicitly zero max-age rejects later relation selection without raising or defaulting its budget", async () => {
-    const f = await fixture(); f.application.configuration.maxAgeMs = 0; complete(await run(f.application)); await f.appendThrough(3);
+    const f = await fixture(); f.application.configuration.maxAgeMs = 0;
+    const applied = complete(await run(f.application)); expect(applied.disposition).toBe("OBSERVED_FOR");
+    expect(applied.application.relation).not.toBeNull(); await f.appendThrough(3);
     const result = complete(await run({ ...f.application, operation: "consume", consumerSourceSequence: 3 }));
     expect(result.consumption?.selection?.selectedRelations).toEqual([]);
     expect(result.consumption?.selection?.rejectedRelations).toHaveLength(1);
