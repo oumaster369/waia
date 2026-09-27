@@ -1,7 +1,9 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { createHtxAccountObservationReader, type HtxObservationReaderOptions } from "./htx-reader";
-import { createHtxObservationGetTransport } from "./htx-get-transport";
+import { createHtxObservationGetTransport, createHtxAccountAcquisitionGetTransport,
+  type HtxAccountAcquisitionGetTransport } from "./htx-get-transport";
+import { z } from "zod";
 import { AccountObservationReadFailure } from "./service";
 import { observationBindingSchema, sameObservationBinding } from "./validation";
 import type { AccountObservationReader, ObservationBinding, ObservationClock } from "./types";
@@ -90,5 +92,65 @@ export async function openHtxObservationReader(
   } finally {
     signal.removeEventListener("abort", cancel);
     timer.abort(); controller.signal.removeEventListener("abort", rejectAbort);
+  }
+}
+
+/** Same protected credential/admission boundary, with the separate fixed acquisition GET lane.
+ * This is an I/O owner, not a source-coverage/dated-anchor or capital-admission issuer. */
+export async function openHtxAccountAcquisitionTransport(
+  deps: Dependencies, options: { binding: ObservationBinding; symbols: readonly string[];
+    knownOrderIds: readonly string[]; readTimeoutMs: number }, signal: AbortSignal,
+): Promise<HtxAccountAcquisitionGetTransport> {
+  const binding = Object.freeze(observationBindingSchema.parse(options.binding));
+  const symbols = Object.freeze(z.array(z.string().regex(/^[A-Z0-9]{2,32}$/)).min(1).max(32).parse(options.symbols));
+  const knownOrderIds = Object.freeze(z.array(z.string().regex(/^[1-9]\d{0,39}$/)).max(8192).parse(options.knownOrderIds));
+  const timeoutMs = options.readTimeoutMs;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 120000 || signal.aborted ||
+      new Set(symbols).size !== symbols.length || new Set(knownOrderIds).size !== knownOrderIds.length)
+    fail("READ_FAILED");
+  const { clock, host, fetchImpl, authorizeOpen, openCredential, verifyReadAdmission } = deps;
+  const controller = new AbortController(), timer = new AbortController();
+  let abandoned = false, released = false;
+  let handle: HtxObservationCredentialHandle | undefined;
+  let transport: HtxAccountAcquisitionGetTransport | undefined;
+  let rejectAbort!: () => void;
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectAbort = () => reject(new AccountObservationReadFailure("READ_FAILED"));
+    controller.signal.addEventListener("abort", rejectAbort, { once: true });
+  });
+  const dispose = () => {
+    abandoned = true; controller.abort(); transport?.dispose();
+    if (handle && !released) {
+      released = true;
+      try { handle.dispose(); } finally { handle = undefined; }
+    }
+  };
+  const cancel = () => { try { dispose(); } catch { /* Do not throw from an abort listener. */ } };
+  signal.addEventListener("abort", cancel, { once: true });
+  const current = () => { if (abandoned || controller.signal.aborted) fail("READ_FAILED"); };
+  const work = async () => {
+    current();
+    if (await authorizeOpen(binding, controller.signal) !== true) fail("PERMISSION_DENIED");
+    current(); handle = await openCredential(binding, controller.signal);
+    if (abandoned || controller.signal.aborted) { dispose(); fail("READ_FAILED"); }
+    if (!sameObservationBinding(binding, observationBindingSchema.parse(handle.binding))) fail("IDENTITY_MISMATCH");
+    const apiKey = handle.apiKey, apiSecret = handle.apiSecret;
+    if (typeof apiKey !== "string" || typeof apiSecret !== "string") fail("READ_FAILED");
+    const digest = createHash("sha256").update(apiKey).digest("hex");
+    if (await verifyReadAdmission(binding, digest, controller.signal) !== true) fail("PERMISSION_DENIED");
+    current();
+    transport = createHtxAccountAcquisitionGetTransport({ binding, symbols, knownOrderIds, timeoutMs,
+      apiKey, apiSecret, host, clock, fetchImpl, verifyReadAdmission });
+    return Object.freeze({ binding, signedGet: transport.signedGet, dispose });
+  };
+  try {
+    return await Promise.race([work(), cancelled, clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT"))]);
+  } catch (error) {
+    try { dispose(); } catch { /* Preserve the primary classified failure. */ }
+    if (error instanceof AccountObservationReadFailure) throw error;
+    return fail("READ_FAILED");
+  } finally {
+    signal.removeEventListener("abort", cancel); timer.abort();
+    controller.signal.removeEventListener("abort", rejectAbort);
   }
 }

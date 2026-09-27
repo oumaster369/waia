@@ -9466,3 +9466,101 @@ export const traderHistoricalReconciliationFrontierV1 = pgTable(
     check("historical_reconciliation_body_capacity", sql`jsonb_typeof(${t.bodyJson})='object' AND octet_length(${t.bodyJson}::text)<=1048576`),
   ],
 );
+
+/** DEE-1135: immutable current-account facts; native seals/append guards are in0224. */
+const riskAccountRecordColumnsV1 = () => ({
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  accountId: text("account_id").notNull(),
+  contentDigest: text("content_digest").notNull(),
+  bodyText: text("body_text").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+export const traderRiskAccountProfilesV1 = pgTable("trader_risk_account_profiles_v1",
+  { ...riskAccountRecordColumnsV1(), actorId: uuid("actor_id").notNull().references(() => users.id),
+    auditId: uuid("audit_id").notNull().references(() => auditLogs.id) },
+  t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] })]);
+
+export const traderRiskAccountProfileEventsV1 = pgTable("trader_risk_account_profile_events_v1", {
+  ...riskAccountRecordColumnsV1(), commandId: uuid("command_id").notNull(),
+  profileDigest: text("profile_digest").notNull(), eventSequence: bigint("event_sequence", { mode: "bigint" }).notNull(),
+  previousEventDigest: text("previous_event_digest"), action: text("action").notNull(),
+  actorId: uuid("actor_id").notNull().references(() => users.id),
+  auditId: uuid("audit_id").notNull().references(() => auditLogs.id),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.commandId), unique().on(t.organizationId, t.accountId, t.eventSequence),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.profileDigest], foreignColumns: [
+    traderRiskAccountProfilesV1.organizationId, traderRiskAccountProfilesV1.accountId, traderRiskAccountProfilesV1.contentDigest] })]);
+
+export const traderRiskAccountCurrentV1 = pgTable("trader_risk_account_current_v1", {
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id), accountId: text("account_id").notNull(),
+  revision: bigint("revision", { mode: "bigint" }).notNull(),
+  activeProfileDigest: text("active_profile_digest"), candidateProfileDigest: text("candidate_profile_digest"),
+  candidateState: text("candidate_state"), candidateEffectiveAt: timestamp("candidate_effective_at", { withTimezone: true, mode: "date" }),
+  referenceDigest: text("reference_digest"), basisDigest: text("basis_digest"),
+  eventSequence: bigint("event_sequence", { mode: "bigint" }).notNull(), eventHeadDigest: text("event_head_digest"),
+  activeAcquisitionId: uuid("active_acquisition_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId] })]);
+
+export const traderRiskAccountReferenceMembersV1 = pgTable("trader_risk_account_reference_members_v1", {
+  ...riskAccountRecordColumnsV1(), profileDigest: text("profile_digest").notNull(), windowId: text("window_id").notNull(),
+  slot: integer("slot").notNull(), instrumentDigest: text("instrument_digest").notNull(),
+  sourceId: uuid("source_id").notNull(), captureDigest: text("capture_digest").notNull(),
+  validationDigest: text("validation_digest").notNull(), observationId: text("observation_id").notNull(),
+  gatewayDigest: text("gateway_digest").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.profileDigest, t.windowId, t.instrumentDigest, t.slot),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.profileDigest], foreignColumns: [
+    traderRiskAccountProfilesV1.organizationId, traderRiskAccountProfilesV1.accountId, traderRiskAccountProfilesV1.contentDigest] })]);
+
+export const traderRiskAccountReferencesV1 = pgTable("trader_risk_account_references_v1", {
+  ...riskAccountRecordColumnsV1(), profileDigest: text("profile_digest").notNull(), windowId: text("window_id").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.profileDigest, t.windowId),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.profileDigest], foreignColumns: [
+    traderRiskAccountProfilesV1.organizationId, traderRiskAccountProfilesV1.accountId, traderRiskAccountProfilesV1.contentDigest] })]);
+
+export const traderRiskAccountAcquisitionJobsV1 = pgTable("trader_risk_account_acquisition_jobs_v1", {
+  ...riskAccountRecordColumnsV1(), id: uuid("id").notNull(), profileDigest: text("profile_digest").notNull(),
+  referenceDigest: text("reference_digest").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.id),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.profileDigest], foreignColumns: [
+    traderRiskAccountProfilesV1.organizationId, traderRiskAccountProfilesV1.accountId, traderRiskAccountProfilesV1.contentDigest] })]);
+
+export const traderHtxAccountAcquisitionsV1 = pgTable("trader_htx_account_acquisitions_v1", {
+  ...riskAccountRecordColumnsV1(), acquisitionId: uuid("acquisition_id").notNull(),
+  sequence: integer("sequence").notNull(), previousDigest: text("previous_digest"), kind: text("kind").notNull(),
+  replayKey: text("replay_key").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.acquisitionId, t.sequence),
+  unique().on(t.organizationId, t.accountId, t.acquisitionId, t.replayKey),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.acquisitionId], foreignColumns: [
+    traderRiskAccountAcquisitionJobsV1.organizationId, traderRiskAccountAcquisitionJobsV1.accountId, traderRiskAccountAcquisitionJobsV1.id] })]);
+
+export const traderRiskAccountBasesV1 = pgTable("trader_risk_account_bases_v1", {
+  ...riskAccountRecordColumnsV1(), profileDigest: text("profile_digest").notNull(),
+  referenceDigest: text("reference_digest").notNull(), acquisitionDigest: text("acquisition_digest").notNull(),
+  realityProjectionId: text("reality_projection_id").notNull(), predecessorBasisDigest: text("predecessor_basis_digest"),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.acquisitionDigest),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.profileDigest], foreignColumns: [
+    traderRiskAccountProfilesV1.organizationId, traderRiskAccountProfilesV1.accountId, traderRiskAccountProfilesV1.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.referenceDigest], foreignColumns: [
+    traderRiskAccountReferencesV1.organizationId, traderRiskAccountReferencesV1.accountId, traderRiskAccountReferencesV1.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.acquisitionDigest], foreignColumns: [
+    traderHtxAccountAcquisitionsV1.organizationId, traderHtxAccountAcquisitionsV1.accountId, traderHtxAccountAcquisitionsV1.contentDigest] }),
+  foreignKey({ columns: [t.realityProjectionId, t.organizationId, t.accountId], foreignColumns: [
+    traderRealityProjectionsV2.id, traderRealityProjectionsV2.organizationId, traderRealityProjectionsV2.accountId] })]);
+
+export const traderRiskAccountInclusionsV1 = pgTable("trader_risk_account_inclusions_v1", {
+  ...riskAccountRecordColumnsV1(), basisDigest: text("basis_digest").notNull(), truthRecordId: text("truth_record_id").notNull(),
+  allowanceId: uuid("allowance_id").notNull(), orderId: uuid("order_id").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.truthRecordId),
+  unique().on(t.organizationId, t.accountId, t.allowanceId),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.basisDigest], foreignColumns: [
+    traderRiskAccountBasesV1.organizationId, traderRiskAccountBasesV1.accountId, traderRiskAccountBasesV1.contentDigest] }),
+  foreignKey({ columns: [t.truthRecordId, t.organizationId, t.accountId], foreignColumns: [
+    traderRealityTruthRecordsV2.id, traderRealityTruthRecordsV2.organizationId, traderRealityTruthRecordsV2.accountId] })]);

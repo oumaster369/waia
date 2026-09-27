@@ -1569,6 +1569,13 @@
       "when": 1780000000223,
       "tag": "0223_trader_research_application_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "7",
+      "when": 1780000000224,
+      "tag": "0224_trader_risk_current_account_basis",
+      "breakpoints": true
     }
   ]
 }

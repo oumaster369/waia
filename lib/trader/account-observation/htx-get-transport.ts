@@ -13,6 +13,14 @@ const paging = { size, from: positiveId.optional(), direct: z.literal("next").op
 const openQuery = z.object({ "account-id": positiveId, ...paging }).strict();
 const tradeQuery = z.object({ symbol: z.string().regex(/^[a-z0-9]{2,32}$/),
   "start-time": z.string().regex(/^\d{1,16}$/), "end-time": z.string().regex(/^\d{1,16}$/), ...paging }).strict();
+const acquisitionTime = z.string().regex(/^[1-9]\d{0,15}$/);
+const conditionalPage = { accountId: positiveId, limit: size, sort: z.literal("asc"), fromId: positiveId.optional() };
+const conditionalOpenQuery = z.object(conditionalPage).strict();
+const conditionalHistoryQuery = z.object({ ...conditionalPage,
+  symbol: z.string().regex(/^[a-z0-9]{2,32}$/), orderStatus: z.enum(["canceled", "rejected", "triggered"]),
+  startTime: acquisitionTime, endTime: acquisitionTime }).strict();
+const accountHistoryQuery = z.object({ "account-id": positiveId, "start-time": acquisitionTime,
+  "end-time": acquisitionTime, size, sort: z.literal("asc"), "from-id": positiveId.optional() }).strict();
 type Request = Omit<Parameters<HtxObservationGetTransport["signedGet"]>[0], "path"> & { path: string };
 type BoundedGetTransport = Readonly<{
   binding: ObservationBinding;
@@ -22,6 +30,12 @@ type BoundedGetTransport = Readonly<{
 export type HtxMetadataGetTransport = Omit<BoundedGetTransport, "signedGet"> & Readonly<{
   signedGet(request: Omit<Request, "path"> & { path: "/v1/account/accounts" | "/v2/user/uid" | "/v2/user/api-key" }):
     ReturnType<HtxObservationGetTransport["signedGet"]>;
+}>;
+export type HtxAccountAcquisitionGetTransport = Omit<BoundedGetTransport, "signedGet"> & Readonly<{
+  signedGet(request: Omit<Request, "path"> & { path: `/v1/account/accounts/${string}/balance` |
+    "/v1/order/openOrders" | "/v2/algo-orders/opening" | "/v2/algo-orders/history" |
+    "/v1/account/history" | `/v1/order/orders/${string}/matchresults` }):
+      ReturnType<HtxObservationGetTransport["signedGet"]>;
 }>;
 const denied = (code: "READ_FAILED" | "INVALID_RESPONSE" | "PERMISSION_DENIED" | "TIMEOUT"): never => {
   throw new AccountObservationReadFailure(code);
@@ -43,8 +57,9 @@ type TransportInput = Readonly<{
   verifyReadAdmission(binding: ObservationBinding, apiKeySha256: string, signal: AbortSignal): Promise<boolean>;
 }>;
 
-// The lane is selected only by the two fixed factories below, never by a request.
-function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | "METADATA"): BoundedGetTransport {
+// The lane is selected only by the fixed factories below, never by a request.
+function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | "METADATA" | "ACQUISITION",
+  knownOrderIds: readonly string[] = []): BoundedGetTransport {
   const binding = Object.freeze(observationBindingSchema.parse(input.binding));
   positiveId.parse(binding.exchangeAccountId);
   const host = z.enum(["api.huobi.pro", "api-aws.huobi.pro"]).parse(input.host);
@@ -56,6 +71,8 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
     input.timeoutMs < 100 || input.timeoutMs > 120000 || typeof input.fetchImpl !== "function" ||
     typeof input.verifyReadAdmission !== "function") denied("INVALID_RESPONSE");
   const { clock, fetchImpl, verifyReadAdmission, timeoutMs } = input;
+  const exactOrders = z.array(positiveId).max(8192).parse(knownOrderIds);
+  if (new Set(exactOrders).size !== exactOrders.length) denied("INVALID_RESPONSE");
   let disposed = false; let active: AbortController | null = null;
   const cancelBody = (response: Response) => { void response.body?.cancel().catch(() => {}); };
   function validate(request: Request): { path: Request["path"]; query: Record<string, string>; maxBytes: number } {
@@ -70,6 +87,36 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
         query = z.object({ uid: positiveId.refine(value => Number.isSafeInteger(Number(value))),
           accessKey: z.literal(apiKey) }).strict().parse(request.query);
       } else return denied("PERMISSION_DENIED");
+    } else if (lane === "ACQUISITION") {
+      const withinInterval = (startText: string, endText: string, maximumMs: number) => {
+        const start = Number(startText), end = Number(endText), now = clock.now();
+        if (![start, end, now].every(Number.isSafeInteger) || start <= 0 || end <= start ||
+            end - start > maximumMs || end > now) denied("PERMISSION_DENIED");
+      };
+      if (path === `/v1/account/accounts/${binding.exchangeAccountId}/balance`) {
+        query = z.object({}).strict().parse(request.query);
+      } else if (path === "/v1/order/openOrders") {
+        query = openQuery.parse(request.query);
+        if (query["account-id"] !== binding.exchangeAccountId) denied("PERMISSION_DENIED");
+      } else if (path === "/v2/algo-orders/opening") {
+        query = conditionalOpenQuery.parse(request.query);
+        if (query.accountId !== binding.exchangeAccountId) denied("PERMISSION_DENIED");
+      } else if (path === "/v2/algo-orders/history") {
+        query = conditionalHistoryQuery.parse(request.query);
+        if (query.accountId !== binding.exchangeAccountId || !symbols.includes(query.symbol.toUpperCase()))
+          denied("PERMISSION_DENIED");
+        // Engineering request bound only; this does not assert provider retention/completeness.
+        withinInterval(query.startTime, query.endTime, 172800000);
+      } else if (path === "/v1/account/history") {
+        query = accountHistoryQuery.parse(request.query);
+        if (query["account-id"] !== binding.exchangeAccountId) denied("PERMISSION_DENIED");
+        withinInterval(query["start-time"], query["end-time"], 3600000);
+        if (clock.now() - Number(query["start-time"]) > 29 * 86400000) denied("PERMISSION_DENIED");
+      } else {
+        const match = /^\/v1\/order\/orders\/([1-9]\d{0,39})\/matchresults$/.exec(path);
+        if (!match || !exactOrders.includes(match[1]!)) return denied("PERMISSION_DENIED");
+        query = z.object({}).strict().parse(request.query);
+      }
     } else if (path === `/v1/account/accounts/${binding.exchangeAccountId}/balance` || /^\/v1\/order\/orders\/[1-9]\d{0,39}$/.test(path)) {
       query = z.object({}).strict().parse(request.query);
     } else if (path === "/v1/order/openOrders") {
@@ -140,6 +187,15 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
           body += decode(chunk.value);
         }
         body += decode();
+        // The new retained-raw lane must never hand an echoed opened secret to storage.
+        // Existing observation payloads and their compatibility behavior are unchanged.
+        if (lane === "ACQUISITION") {
+          if (body.includes(apiKey) || body.includes(secret)) denied("INVALID_RESPONSE");
+          for (const token of body.matchAll(/"(?:\\.|[^"\\])*"/g)) {
+            const value = JSON.parse(token[0]) as string;
+            if (value.includes(apiKey) || value.includes(secret)) denied("INVALID_RESPONSE");
+          }
+        }
         await current();
         return Object.freeze({ binding, httpStatus: response.status, body });
       };
@@ -168,6 +224,14 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
 
 export function createHtxObservationGetTransport(input: TransportInput): HtxObservationGetTransport {
   return createBoundedGetTransport(input, "OBSERVATION");
+}
+
+/** Additional read-only account evidence lane. Exact order IDs come from the retained own ledger;
+ * callers cannot replace the fixed endpoint/account/filter contract with a URL or arbitrary query. */
+export function createHtxAccountAcquisitionGetTransport(input: TransportInput & {
+  knownOrderIds: readonly string[];
+}): HtxAccountAcquisitionGetTransport {
+  return createBoundedGetTransport(input, "ACQUISITION", input.knownOrderIds);
 }
 
 /** Only admission metadata GETs. authorizeCurrent proves current DB/operator scope,
