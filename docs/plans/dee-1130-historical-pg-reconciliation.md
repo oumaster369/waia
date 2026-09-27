@@ -18,12 +18,12 @@ state:
   currentWorkPackage: WP-3
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  prNumber: null
-  prUrl: null
+  prNumber: 690
+  prUrl: https://github.com/oumaster369/waia/pull/690
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Run final local readiness and fresh104 frontier proof on this plan-only successor after the explicit resource handoff; preserve accepted83bf PROFILE35 and keep package/PR gates pending."
+  nextAction: "Correct only the admitted admin-stream fixture parent teardown after observed CI23503; freeze source for independent review before the separately granted whole-file native proof and PR update."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1234,3 +1234,16 @@ Immutable receipt `evidence/dee-1130/profile35-83bf9034/author-result/REPORT.md`
 Root now admits only this plan-only checkpoint, final local required lint/typecheck/build/canon/governance/graph plus focused tests, and one fresh104 frontier file using the guarded retained-prefix bootstrap and exact223chain. Explicit resource handoff from runtime_owner was received after its unrelated compiler finished10:17:20.999UTC/session43284closed. No PROFILE35 duplicate is needed for this metadata-only successor. No broad local unit or full24-capital run is required: exact-head GitHub full unit,24capital, defaultLEGACY, separatePROFILE and all other mandatory jobs remain authoritative/pending. No namespace weakening or reuse of consumed prefix fixtures is allowed.
 
 Whole-package readiness, final nonauthor review, rendered PR governance, actual PR/CI/publication and merge remain pending. This checkpoint does not mark the work packages complete, change source/runtime/SQL or grant push/PR/merge/deploy. Parent and scientific gates remain open.
+
+
+## PR690 finite admin-stream fixture retention — plan first
+
+DraftPR690 targets397d0d76 at exact `78c75648f1bc2a144be13c7c7bfff09f2e12d28e`. Final local104/1native,226/9focused and eight readiness steps plus rendered governance preflight passed, with complete evidence `evidence/dee-1130/final-local-78c75648` freeze `c779a102e4047dd21af90cc832bacbbe9690de8903bf1cf629e061ba38648a6f`. These local results do not imply CI acceptance. Actual new CI run36312698047/job108601556206 (`admin console change log on Postgres`) completedFAILURE10:30:57UTC; its full log SHA256 `8002967c02fe92168029d557dea3791fb1bd44325fb5d340ec74ac0a16c52dc7` is retained in `evidence/dee-1130/ci-78c75648`.
+
+The one failed case is `delivers a fill whose commit is held, and skips historical orders` in `tests/integration/admin-console-stream-postgres.test.ts`. It reaches line129 after its original stream assertions and mutable-row cleanup, then organization deletion fails23503 because the actual100 historical orders correctly created the immutable exact-scope LEGACY latch. The mode's organization FK must remain. Whole CI job reports89PASS/1FAIL/1SKIP; the skipped companion is not called passed and is not removed by this repair.
+
+Root admits exactly this plan path and that single native test path. Preserve all four registered cases, original historical/live fixtures, every original stream/delivery/version/snapshot/RLS assertion,30-second held commit,90-second case timeout and mutable order/diagnostic/change-log cleanup. Replace only organization/user/auth-user teardown deletions with intentional retention of those randomly generated FK parents alongside the immutable LEGACY latch in the disposable database; add exact org/account/run readback asserting oneLEGACY mode after mutable cleanup. Do not delete mode, cascade parent removal, disable guards, suppress errors, change production SQL/runtime/rights, or drop original assertions.
+
+Source census of the adjacent actual admin-console fixtures found no further demonstrated semantic issue: read-scope/final-acceptance historical fixtures already retain generated identities; overhead's actual deleting fixture creates live orders without historical scope. This is bounded source review, not a global absence claim. No other test changes are admitted.
+
+After clean finite source freeze and independent acceptance, proposed validation is one new guarded local223chain bootstrap and the whole affected four-case native file, retaining its actual30-second held-commit proof with no skipped case; scoped lint/diff. No104/PROFILE35/broad-suite duplication is needed solely for this fixture correction. Native resources/execution require the separate explicit handoff/grant, which is not issued by this source checkpoint. No CI cancellation/retry/push/publication occurs in the author lane; package remains pending exact-head requiredCI and final controller gates.
