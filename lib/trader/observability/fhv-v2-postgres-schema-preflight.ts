@@ -40,6 +40,8 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // replay. It adds no required FHV table, financial authority or prior-data rewrite.
 // 0221 adds isolated saved RESEARCH assignment/completion persistence. It adds no
 // required FHV table, scientific authority or change to the required prefix.
+// 0222 adds bounded historical reconciliation mode/frontier records and guards.
+// It preserves legacy mode, adds no required FHV table or scientific authority.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -55,6 +57,7 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 219, when: 1780000000219, tag: "0219_trader_recorded_paper_analysis_v1" },
   { idx: 220, when: 1780000000220, tag: "0220_trader_reporting_period_bases_v1" },
   { idx: 221, when: 1780000000221, tag: "0221_trader_research_understanding_v1" },
+  { idx: 222, when: 1780000000222, tag: "0222_trader_historical_reconciliation_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [
