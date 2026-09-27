@@ -452,6 +452,8 @@ export function createMkbReadModelSourcePostgres(ex: PgExecutor): MkbReadModelSo
           and(
             orgScopedWhere(pgSchema.traderKnowledgeEdgeVersionV2.organizationId, scoped),
             lte(pgSchema.traderKnowledgeEdgeVersionV2.pitEventAt, asOf),
+            // asOf is the caller's record cutoff (distinct from market time in historical folds).
+            lte(pgSchema.traderKnowledgeEdgeVersionV2.recordedAt, asOf),
           ),
         )
         .orderBy(desc(pgSchema.traderKnowledgeEdgeVersionV2.version));

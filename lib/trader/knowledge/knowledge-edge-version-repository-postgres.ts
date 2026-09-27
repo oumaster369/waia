@@ -82,6 +82,7 @@ export function applyKnowledgeEdgeVersion(
     failureCasesJson: snapshot.content.failureCasesJson,
     hypothesisId: snapshot.content.hypothesisId,
     verified: snapshot.content.verified,
+    lifecycleState: snapshot.content.lifecycleState,
   };
 }
 

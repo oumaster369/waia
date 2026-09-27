@@ -68,6 +68,16 @@ on:
       - "lib/trader/runtime-authority/v2/**"
       - "lib/trader/runtime-v2/**"
       - "lib/trader/knowledge/navigator/**"
+      - "lib/trader/knowledge/knowledge.types.ts"
+      - "lib/trader/knowledge/knowledge-edge-version-repository-postgres.ts"
+      - "lib/trader/knowledge/mkb-read-model-postgres.ts"
+      - "lib/trader/knowledge/mkb-knowledge-state.ts"
+      - "lib/trader/intelligence/hypothesis/canonical-runtime-intelligence-fold-v1.ts"
+      - "tests/unit/trader-knowledge-snapshot-eligibility.test.ts"
+      - "tests/unit/trader-wp15-knowledge-state.test.ts"
+      - "tests/unit/trader-wp15-mkb-read-model.test.ts"
+      - "tests/unit/trader-canonical-runtime-intelligence-fold-v1.test.ts"
+      - "tests/integration/postgres-knowledge-snapshot-eligibility.test.ts"
       - "tests/integration/postgres-runtime-authority-v2.test.ts"
       - "tests/integration/postgres-noncapital-cycle-owner-v2.test.ts"
       - "tests/integration/postgres-recorded-paper-analysis-v1.test.ts"
@@ -226,7 +236,8 @@ jobs:
             tests/integration/postgres-org-live-enable-atomicity.test.ts \
             tests/integration/postgres-recorded-paper-analysis-v1.test.ts \
             tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts \
-            tests/integration/postgres-research-understanding-v1.test.ts
+            tests/integration/postgres-research-understanding-v1.test.ts \
+            tests/integration/postgres-knowledge-snapshot-eligibility.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   integration:

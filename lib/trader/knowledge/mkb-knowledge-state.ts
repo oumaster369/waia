@@ -207,6 +207,10 @@ export function classifyLegacyPredictionKnowledgeState(
 }
 
 export function classifyKnowledgeEdgeState(edge: KnowledgeEdge, asOf: Date): MkbKnowledgeState {
+  if (edge.lifecycleState === "RETIRED") {
+    return "INELIGIBLE";
+  }
+
   if (edge.createdAt.getTime() > asOf.getTime()) {
     return "INELIGIBLE";
   }
