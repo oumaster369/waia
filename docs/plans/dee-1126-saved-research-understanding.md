@@ -522,3 +522,17 @@ Runtime_owner receives sole localPG54329/heavy grant for a narrowly scoped actua
 After immutable correction source freeze, one targeted/current readiness pass (typecheck, lint, build, canon/governance/Execution/Reality/manifest checks) is permitted because production source changed; no redundant full localunit/native22 rerun. Preserve genuine failures. Final plan-only proof closure and successor artifact manifest must leave0017d6c2 historical freeze/artifacts untouched. Independent M01 correction/final review and root preflight still precede publication; no push/PR/production/host/C3/live action is granted to author.
 
 <!-- END DEE1126_SCHEMA_CORRECTION_D78EDDDE -->
+
+
+## D1126-02 exact companion test inventory admission
+
+<!-- BEGIN DEE1126_FORECAST_EXTRA_DE4FA43F -->
+# DEE1126 finite existing Forecast extra-identity assertion
+
+Root read the complete existing tests/unit/forecast-v2-applied-migration-identity-v1.test.ts and the author-reported actual44PASS/1FAIL four-file result after c7ca2b02. Its ratified Forecast maximum remains148; extraAppliedBeyondExpectedMax truthfully includes the newly applied0221, but the test's exact extra-tag array ends at0220.
+
+Admit only one additional test path: tests/unit/forecast-v2-applied-migration-identity-v1.test.ts. Append exactly "0221_trader_research_understanding_v1" after0220 in the existing positive exact extra-tag array. Preserve all other assertions and tests; no production Forecast file, ratified148,0146/147/148 digests, missing/hash/when controls, schema/journal, unknown-future behavior or capability is changed.
+
+Append this exact finite admission to the canonical plan and commit only that plan before the one-line test correction. Preserve the44PASS/1FAIL raw result despite its historical unit-green filename. Then rerun the same four-file affected selection and proceed to the already granted current readiness/final freeze. No native rerun is needed for this test-only expectation change; retain exact c7ca2b02 native read-only public-preflight attribution. This is truthful reporting of an extra applied schema identity, not Forecast ratification or scientific admission. All d78eddde scope/resource/publication restrictions remain.
+
+<!-- END DEE1126_FORECAST_EXTRA_DE4FA43F -->
