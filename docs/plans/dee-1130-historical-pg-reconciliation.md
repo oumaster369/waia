@@ -1196,3 +1196,6 @@ The actual validator refused the reviewed historical source addition: consumer c
 
 After the author freezes its finite typing/fixture correction, root may update only docs/ai-trader/reality-v2-source-consumer-inventory.json consumer count/path/content pins, tests/unit/trader-reality-v2-consumer-graph.test.ts expected count/comment and this issue's canonical plan before dependent edits. Keep all discovery rules, roots, methods, extensions, source digests, compatibility references, admission files and classifications byte-identical. Recompute from exact final source; never simply copy a failed value without verifying full delta. Run unchanged validator and affected graph suite. No production/runtime/SQL/native/financial/scientific meaning changes. Independent finite graph review and real native acceptance remain required.
 <!-- END FROZEN ROOT_GRAPH_DISPOSITION -->
+
+
+Root graph checkpoint: exact final production bytes atf72900bb yield141consumers, source157 andconnector references26 unchanged. Only consumer count/path/content pins and matching testcount/comment changed; all discovery/authority/classification rules retained. Actual validator, complete affected graph suite, scoped lint and diffcheck passed. Native104/PROFILE35 and fullreadiness are separate pending gates.
