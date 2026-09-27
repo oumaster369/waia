@@ -338,6 +338,7 @@ function assertSealedKnowledgeRows(
       edge.fromRef !== `market_prediction:${sealed.predictionId}` ||
       edge.createdAt.getTime() > cutoff.getTime() ||
       edge.updatedAt.getTime() > cutoff.getTime() || !edge.verified ||
+      edge.lifecycleState === "RETIRED" ||
       sealHistoricalKnowledgeEdgeV1(edge) !== sealed.edgeSealDigestHex) {
     throw new Error("[canonical-runtime-fold] sealed knowledge edge authority mismatch");
   }
@@ -489,7 +490,12 @@ function snapshotDigest(
     asOf: asOf.toISOString(),
     knowledgeEdges: snapshot.knowledgeEdges
       .filter((edge) => edge.hypothesisId !== null && hypothesisIds.has(edge.hypothesisId) && edge.updatedAt.getTime() <= asOf.getTime())
-      .map((edge) => ({ id: edge.id, hypothesisId: edge.hypothesisId, verified: edge.verified, createdAt: edge.createdAt.toISOString(), updatedAt: edge.updatedAt.toISOString() }))
+      .map((edge) => ({
+        id: edge.id, hypothesisId: edge.hypothesisId, verified: edge.verified,
+        createdAt: edge.createdAt.toISOString(), updatedAt: edge.updatedAt.toISOString(),
+        // Bind restrictive retirement without changing legacy/ACTIVE digest bytes.
+        ...(edge.lifecycleState === "RETIRED" ? { lifecycleState: "RETIRED" } : {}),
+      }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     marketPredictions: snapshot.marketPredictions
       .filter((prediction) => hypothesisIds.has(
