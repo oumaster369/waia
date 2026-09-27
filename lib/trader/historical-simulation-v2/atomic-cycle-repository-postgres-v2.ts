@@ -108,6 +108,16 @@ import {
   type HistoricalModeledRealityV2,
 } from "./historical-modeled-portfolio-reality-v2";
 
+import {
+  HISTORICAL_RECONCILIATION_PROFILE_V1, createHistoricalReconciliationGenesisV1,
+  advanceHistoricalReconciliationV1, observeHistoricalReconciliationV1,
+  sealHistoricalReconciliationCycleV1, projectHistoricalReconciliationAccountingV1,
+  refuseHistoricalReconciliationV1, type HistoricalReconciliationFrontierV1,
+  type HistoricalReconciliationDeltaV1, type HistoricalReconciliationObservationV1,
+} from "./production-reconciliation-frontier-v1";
+import { createHistoricalReconciliationRepositoryV1, type HistoricalReconciliationRepositoryV1 }
+  from "./production-reconciliation-repository-postgres-v1";
+
 const STATE_KINDS = [
   "KNOWLEDGE",
   "MODELED_EXECUTION_REGISTRY",
@@ -1751,6 +1761,8 @@ async function produceHistoricalSimulationNextCycleV2(
     ) => Promise<SourceAuthority>;
     previousCursor: HistoricalSimulationResumeCursorV2 | null;
     codeSha: string;
+    reconciliation: HistoricalReconciliationRepositoryV1 | null;
+    previousReconciliation: HistoricalReconciliationFrontierV1 | null;
   }>,
 ) {
   const { scope } = input;
@@ -1780,6 +1792,28 @@ async function produceHistoricalSimulationNextCycleV2(
           expectedAuthorityBundleContentDigestHex: inceptionSource!.dee659BundleContentDigestHex,
         }),
       );
+  let previousReconciliation = input.previousReconciliation;
+  if (input.reconciliation) {
+    if (!previousReconciliation) {
+      if (input.previousCursor || !inceptionSource) refuseHistoricalReconciliationV1("GENESIS_AUTHORITY");
+      previousReconciliation = createHistoricalReconciliationGenesisV1({ scope,
+        symbol: cycleIdentity.membership.symbol, inception: runtime.accounting,
+        authorityId: inceptionSource.dee659PreregistrationId, authorityDigest: inceptionSource.dee659BundleContentDigestHex,
+        modelDigest: computeSemanticSha256Hex(runtime.model), releaseSha: input.codeSha,
+        initialRecordIndex: cycleIdentity.membership.recordIndex });
+      await input.reconciliation.enroll(previousReconciliation);
+    }
+    if (previousReconciliation.modelDigest !== computeSemanticSha256Hex(runtime.model) ||
+        previousReconciliation.symbol !== cycleIdentity.membership.symbol) refuseHistoricalReconciliationV1("MODEL_IDENTITY");
+    runtime = Object.freeze({ ...runtime, reconciliation: previousReconciliation });
+  }
+  // These are owned exchange entries, retained through actual mutation/deletion of a parent;
+  // they supply its real final scheduler/cancel fields, never synthetic historical call names.
+  const reconciliationEntries = input.reconciliation ? runtime.exchange.listOpenOrders() : [];
+  if (reconciliationEntries.length > 1) refuseHistoricalReconciliationV1("PARENT_CARDINALITY");
+  let reconciliationDelta: HistoricalReconciliationDeltaV1 | null = null;
+  const reconciliationObservations: HistoricalReconciliationObservationV1[] = [];
+  let reconciliationParents: Awaited<ReturnType<HistoricalReconciliationRepositoryV1["observeParents"]>> | null = null;
   const previousLedger = input.previousCursor
     ? ((
         await input.tx<{ entry_json: HistoricalSimulationReasonLedgerV2 }[]>`
@@ -1888,6 +1922,32 @@ async function produceHistoricalSimulationNextCycleV2(
   const currentBarAdvance = await advance(cycleId);
   advanceResult = currentBarAdvance;
   currentAccounting = currentBarAdvance.accountingFrontier;
+  const observeReconciliation = async (phase: HistoricalReconciliationObservationV1["phase"]) => {
+    if (!input.reconciliation || !previousReconciliation) return;
+    if (currentBarAdvance.fillDetails.length > 1) refuseHistoricalReconciliationV1("FILL_MEMBERSHIP");
+    const steps = [
+      ...currentBarAdvance.fillDetails.map((fill) => projectHistoricalReconciliationAccountingV1(fill.accountingFrontier)),
+      projectHistoricalReconciliationAccountingV1(currentAccounting),
+    ];
+    const consumed = await input.reconciliation.readConsumed(steps);
+    reconciliationParents = await input.reconciliation.observeParents(runtime,
+      previousReconciliation.activeParentAfter, reconciliationEntries);
+    const fresh = advanceHistoricalReconciliationV1({ previous: previousReconciliation, cycleId,
+      cycleSequence: previousReconciliation.cycleSequence + 1, recordIndex: cycleIdentity.membership.recordIndex,
+      membershipDigest: cycleIdentity.membership.contentDigestHex, marketDigest: cycleIdentity.sealedCycle.contentDigestHex,
+      releaseSha: input.codeSha, steps, consumed, fills: reconciliationParents.fills, economics: reconciliationParents.economics });
+    if (reconciliationDelta && computeSemanticSha256Hex(fresh) !== computeSemanticSha256Hex(reconciliationDelta)) {
+      refuseHistoricalReconciliationV1("PHASE_SOURCE_CHANGED");
+    }
+    reconciliationDelta = fresh;
+    reconciliationObservations.push(observeHistoricalReconciliationV1({ delta: fresh, phase,
+      accounting: projectHistoricalReconciliationAccountingV1(currentAccounting),
+      activeParent: reconciliationParents.activeParent, touchedParents: reconciliationParents.touchedParents,
+      previousObservations: reconciliationObservations }));
+  };
+  await observeReconciliation("frontier_mutation");
+  // Deliberately a fresh source read at this distinct gate, not a copied earlier PASS.
+  await observeReconciliation("before_guardian");
   const currentGuardian = resolveCurrentHistoricalModeledGuardianV2({
     frontier: currentAccounting, restored: restoredGuardian,
   });
@@ -2151,6 +2211,7 @@ async function produceHistoricalSimulationNextCycleV2(
       pendingForecastAuthorityContentDigestHexes,
     }),
   });
+  await observeReconciliation("before_cycle_complete");
   const snapshots = snapshotHistoricalSimulationProductionRuntimeStateV2({
     scope,
     cycleId,
@@ -2250,12 +2311,26 @@ async function produceHistoricalSimulationNextCycleV2(
     stageBundles,
     snapshots,
   });
-  return Object.freeze({ closed, sourceAuthority });
+  return Object.freeze({ closed, sourceAuthority,
+    reconciliation: reconciliationDelta && reconciliationParents ? {
+      delta: reconciliationDelta, observations: reconciliationObservations,
+      activeParent: reconciliationParents.activeParent, touchedParents: reconciliationParents.touchedParents,
+    } : null });
 }
 
 export async function runHistoricalSimulationNextCyclePostgresV2(
   input: HistoricalSimulationV2ClosedGraphRequest,
 ): Promise<HistoricalSimulationResumeCursorV2> {
+  // Capture all mutable request/environment identities before the first await. The SQL handle
+  // remains the same owning client; callers cannot inject a reconciliation implementation.
+  input = Object.freeze({ ...input });
+  const profile = process.env.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE;
+  if (profile !== undefined && profile !== "" && profile !== HISTORICAL_RECONCILIATION_PROFILE_V1) {
+    refuseHistoricalReconciliationV1("PROFILE");
+  }
+  const selectedProfile = profile === HISTORICAL_RECONCILIATION_PROFILE_V1;
+  const waiaSha = process.env.WAIA_RELEASE_SHA?.toLowerCase();
+  const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA?.toLowerCase();
   assertHistoricalSimulationV2ClosedGraphRequest(input);
   await assertFhvV2PostgresSchemaPreflight({ sql: input.sql, repoRoot: process.cwd() });
   const scope: HistoricalSimulationAtomicScopeV2 = {
@@ -2275,8 +2350,6 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
       throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:DATABASE_RUNNER_ROLE");
     }
     const cycleSequence = input.expectedCycleSequence;
-    const waiaSha = process.env.WAIA_RELEASE_SHA?.toLowerCase();
-    const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA?.toLowerCase();
     if (waiaSha && vercelSha && waiaSha !== vercelSha) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:RELEASE_SHA_CONFLICT");
     }
@@ -2314,6 +2387,11 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
         throw new Error("HISTORICAL_SIMULATION_V2_PRODUCTION_REFUSED:H5_CONTINUATION_AUTHORITY");
       }
     }
+    const reconciliationRepository = createHistoricalReconciliationRepositoryV1(tx, scope);
+    const reconciliationMode = await reconciliationRepository.readMode();
+    if (selectedProfile && reconciliationMode?.mode === "LEGACY") refuseHistoricalReconciliationV1("LEGACY_PREFIX_UNSUPPORTED");
+    if (reconciliationMode?.mode === "PROFILE" && reconciliationMode.symbol !== input.symbol) refuseHistoricalReconciliationV1("MODE_SCOPE");
+    const reconciliation = selectedProfile || reconciliationMode?.mode === "PROFILE" ? reconciliationRepository : null;
     const exactRows = await tx<
       {
         checkpoint_json: HistoricalSimulationResumeCursorV2;
@@ -2346,6 +2424,10 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
       ) {
         throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:PERSISTED_RETRY_DIVERGENCE");
       }
+      if (reconciliation) {
+        if (reconciliationMode?.mode !== "PROFILE") refuseHistoricalReconciliationV1("LEGACY_PREFIX_UNSUPPORTED");
+        await reconciliation.validateCursor(exact, true);
+      }
       return exact;
     }
     const latest = await tx<
@@ -2369,6 +2451,12 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
     ) {
       throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:SKIPPED_CYCLE_SEQUENCE");
     }
+    if (reconciliation && previousCursor && reconciliationMode?.mode !== "PROFILE") {
+      refuseHistoricalReconciliationV1("LEGACY_PREFIX_UNSUPPORTED");
+    }
+    const previousReconciliation = reconciliation && previousCursor
+      ? await reconciliation.validateCursor(previousCursor, false) : null;
+    if (reconciliationMode?.mode === "PROFILE" && !previousCursor) refuseHistoricalReconciliationV1("GENESIS_WITHOUT_CURSOR");
     const expectedRecordIndex =
       previousCursor?.nextRecordIndex ??
       (await loadHistoricalSimulationInitialRecordIndexV2({
@@ -2496,6 +2584,8 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
       finalizeSourceAuthority,
       previousCursor,
       codeSha,
+      reconciliation,
+      previousReconciliation,
     });
     const { closed, sourceAuthority: committedAuthority } = result;
     const source = committedAuthority.source;
@@ -2520,12 +2610,18 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
     await verifyCommitRequestSources(tx, request, produced);
     await verifyCanonicalStageArtifacts(tx, scope, produced, previousCursor);
     const transaction = transactionPort(tx, request);
-    return commitHistoricalSimulationCycleAtomicallyV2({
+    const cursor = await commitHistoricalSimulationCycleAtomicallyV2({
       repository: {
         transaction: (callback) => callback(transaction),
       },
       scope,
       ...produced,
     });
+    if (reconciliation) {
+      if (!result.reconciliation) refuseHistoricalReconciliationV1("COMPLETION_MISSING");
+      await reconciliation.append(sealHistoricalReconciliationCycleV1({ ...result.reconciliation,
+        checkpointDigest: cursor.contentDigestHex }));
+    }
+    return cursor;
   });
 }

@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root verifies this plan-only commit and exact embedded contracts before releasing any executable edits. Schema/journal and native work wait for actual DEE-1126 integration and a separate root allocation/resource grant."
+  nextAction: "Root released WP1–WP2 source and scoped proof. Run the separately granted initial typecheck at the first source checkpoint, address admitted mechanical seams, and preserve partial proof. Schema/journal/native remain blocked on actual DEE-1126 integration and root allocation."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -85,6 +85,14 @@ Existing generic accounting/order repositories, inception/bootstrap, frozen IDHP
 All accepted positive/negative obligations in the embedded R2 and clarification remain mandatory; the work-package summary cannot narrow them. Prospective test commands are targeted `pnpm exec vitest run` for the listed unit/native files, scoped ESLint/diff checks, then root-granted native profile/schema proof and full lint/typecheck/build/canon/governance/graph/preflight. Exact native environment flags, fresh DB name, migration identity and suite inventory are resolved against the actual merged base before execution, never guessed here. No checks are marked PASS in this plan-only commit.
 
 The real future frozen-N/live-N+1/restore interface remains pinned in R2§5, using this exact frontier identity and actual producer/consumer seams. Full shared PG/session recovery authority, actual HTR operation history, accountRisk, semantic/audit mappings and final native parity remain later work. DEE-643 parent stays open/Todo; scientific/qualification dependencies remain. This package does not claim fullAD6c/GS07/AD1, source qualification, production readiness or live authority.
+
+## WP1–WP2 source checkpoint — 27 September 2026
+
+Root verified plan-only8b64db92 and released admitted production source/scoped synthetic proof. This checkpoint adds the bounded fixed grammar/reducer and private held repository, and joins them to the real public PG owner: profile capture before awaits, mode selection, exact old-N retry, validated restore before continuation, fresh actual mutation/pre-Guardian/pre-completion observations, and companion append within the existing atomic transaction. It retains the actual exchange entry through removal so closed-parent scheduler fields are observed, not reconstructed by incrementing counters. Native order-event sequence is read independently from stateVersion. The cumulative Accounting ID array remains untouched and unscanned by the added projection.
+
+Executed scoped proof on the exact source bytes recorded externally: **33 assertions /4 files PASS,0 skips**, including25 new unit controls and8 unchanged adjacent cases. New controls include actual canonical Accounting/D-5 FILL→MARK values, bidirectional source IDs, cash/quantity/count/tail drift, phase order, bounded metadata-before-body reads, exact input-scope capture and invisible mode-winner refusal through inert SQL. These are not PostgreSQL race/privilege or full public-owner native proof. The initial missing-module scaffold failure and all preliminary runs remain in `evidence/dee-1130/wp1`; no preexisting production incident is inferred from that scaffold failure. Scoped ESLint exits0 with the preexisting unused private commit-helper warning, and the staged diff check passes.
+
+This checkpoint is **not independently deployable**: the mandatory mode/frontier reads require the still-pending WP3 migration; no missing-schema fallback or optional validator bypass has been added. Root has granted one initial full typecheck after this source commit, with mechanical in-scope repairs and confirming checks if needed. It has not yet run at this checkpoint. No schema file, migration, journal, native test, database, full build/full lint/global unit, host or external action has run. No work package is marked complete. Native source closure, restricted-role/mode races, actual child restart and full current-base acceptance remain required after root allocates the schema/resources.
 
 ## Exact frozen controlling texts
 

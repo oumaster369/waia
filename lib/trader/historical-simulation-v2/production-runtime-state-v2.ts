@@ -36,6 +36,8 @@ export type HistoricalSimulationLearningRuntimeStateV2 = Readonly<{
 }>;
 
 export type HistoricalSimulationProductionRuntimeStateV2 = Readonly<{
+  /** Validated held-owner companion, deliberately not a seventh 0188 snapshot. */
+  reconciliation?: import("./production-reconciliation-frontier-v1").HistoricalReconciliationFrontierV1;
   model: HistoricalExecutionModelV1;
   exchange: HistoricalSimulatedExchange;
   executionRegistry: HistoricalModeledExecutionRegistryV2;
