@@ -14,7 +14,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
+  status: in-progress
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root verifies this plan-only commit before executable edits. WP-1/WP-2 await that release; schema/journal/native work separately waits for actual DEE1125 integration and root allocation/resource grant."
+  nextAction: "Root verified plan2ba392fe and released WP-1–WP-3 after the accepted59e41 integration/addendum commit. Migration0221 exclusively allocated; scoped units permitted. Native/heavy tests, CI edits and publication still require root coordination."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -409,3 +409,13 @@ These are finite code-path and falsifiable acceptance refinements, not a new alg
 
 Start conditions remain: actual accepted1121+1118, root-assigned free checkout/base and canonical plan commit before code. Allocate the next additive migration only after actual1125 integration;1125 is schema coordination, not a semantic or scientific prerequisite. No migration number is allocated here. Fresh exact schema/native/CLI/restart proof, independent implementation review and all current-head CI remain required. No host/C3/provider/financial operation or live authority is granted by this document.
 <!-- END DEE1126_REFINEMENT_D57E686E -->
+
+## 2026-09-27 accepted-base integration and implementation release
+
+Root verified plan-only `2ba392fe91187f992479f58fd88a4d6af52ab150` and released WP-1–WP-3 under the unchanged embedded R3/refinement. DEE1125 is now Done and merged on actual accepted main `59e41f0f3a7861e7ecb49e68e5c7a49e10423637`. A normal merge (no rebase/reset/force) into this plan-only branch preserved all24 incoming paths byte-for-byte; the only preimplementation delta against that accepted base remains this plan. The earlier waiting/allocation statements above remain historical; this dated addendum is current. All original1128 lineage/evidence remains preserved.
+
+Root allocates only `db/migrations_postgres/0221_trader_research_understanding_v1.sql`: journal idx221, version7, when1780000000221, breakpoints=true. Accepted journal has221 entries through0220. Preserve every previous SQL/journal entry, incoming schema/Reality pins and protective guard. This allocation permits the planned two-table research storage only and does not grant native/database execution. No other migration number or schema owner is authorized.
+
+The accepted base contains21 mandatory capital native suites; this issue adds one for a prospective22, with actual set preservation required. Separate3 billing,2 payment and4 PG17 observation registrations remain. Root owns CI/proof integration unless explicitly delegated. Scoped source implementation and focused pure/unit/preparation may proceed after this addendum commit without another handshake. Native PG, heavy/typecheck/build, publication and real provider/host/C3/scientific/live actions remain outside the current grant. No semantic or authority claim changed.
+
+The merge preservation receipt is external audit `parallel-runtime-owner/dee1126-plan-start/accepted-base-preservation.json`, with exact merge/base and24 blob identities. It is source preservation, not implementation acceptance. No executable edits occurred before this addendum commit.
