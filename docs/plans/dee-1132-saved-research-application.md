@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
+  status: in-progress
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 23937651153af259f2e28edd20ec590f8380c6bf
+  lastValidationAt: "2026-09-27T06:25:15.006285Z"
   blockedReason: null
-  nextAction: "Root verifies this sole-plan commit before releasing WP-1 source/scoped tests; WP-2 schema/native work waits exact allocation and resource admission."
+  nextAction: "Root/nonauthor review the frozen WP-1 pure implementation and61/8 scoped proof; typecheck and WP-2 schema/held owner/CLI/native work require separate release/allocation."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -160,6 +160,31 @@ All rows are future implementation obligations. No implementation/native result 
 5. Once granted and implementation frozen: `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm validate:canon`, `pnpm validate:pr-governance`, `pnpm validate:execution-v2-consumer-graph`, `pnpm validate:reality-v2-consumer-graph`, and `git diff --check`; root renders PR preflight and owns current-head CI/publication. These command names are verified against the current package manifest; no validation-rule changes are admitted.
 
 This first plan preserves the old contract/freeze/carry/reviews and records no empirical result, production registration, rollout, account binding or permission to trade. Full P10, scientific qualification, host and live gates remain open.
+
+## WP-1 author checkpoint — pure source and scoped proof
+
+Root verified plan `dd4b7559f60474aec71ca34cfcc5fc6db94a7af6` and released only mapped WP-1 source/scoped tests. The release receipt is external `parallel-runtime-owner/dee1132-plan-397d0d76/root-plan-source-release.json`; no WP-2/schema/native authority was granted. The source checkpoint is **`23937651153af259f2e28edd20ec590f8380c6bf`**, directly after the admitted plan, with exactly11 mapped source/test files changed. This checkpoint adds no further production path. WP-1 remains listed for root/nonauthor acceptance; these author results are not self-acceptance or whole-package readiness.
+
+Implemented distinct research configuration/types, exact registry/observable matcher, categorical policy projections and research-only fold/selection adapters. The old evidence partition/judgment/rank and Navigator selection policy are extracted into passive kernels; existing public wrappers retain their ordinary receipts and refuse explicit research schema/authority markers. The old fold's complete historical authority/seal/lineage/digest helper tail remains byte-identical to accepted397d. Navigator selection body and rejection classifier are identical after their type-name substitution. The focused legacy tests retain actual accepted baseline fold, Navigator and seal hashes plus ACTIVE/legacy and1131 RETIRED controls.
+
+The new maintained manifest explicitly has **PURE_POLICY_ONLY** scope. Its11 actual project runtime modules use only declared `node:crypto` and `zod` external imports. It is a source declaration, not a binary attestation or a proof of the not-yet-authored CLI/owner. The pure functions consume an explicitly owner-validated read/replay set; they do not authenticate caller-supplied bodies, prove database provenance, current lifecycle/frontier, pair sequence adjacency, source lineage completeness or COMMIT visibility. Those actual protections and their native proof remain WP-2 obligations. In particular, the synthetic pure registry controls use the real current serializers but do not stand in for native registration-service proof.
+
+Fresh final execution at exact23937651: **61 passed /8 actual test files /0 failed /0 skipped**. Three new scopes contain34 assertions; five existing fold/Navigator/authority/consumer-closure companions contain27. Scoped ESLint across all11 source/test paths and `git diff --check` exited0. No whole-project typecheck, build, full unit run, graph validator, DB/native call or CLI/host operation ran. Compile-time negative type assertions are present for later authorized typecheck; Vitest execution alone does not verify them.
+
+Preserved intermediate evidence is explicit:
+
+| Run | Observed result and attribution |
+|---|---|
+| Initial old-boundary controls |3 passed /3 expected failures on accepted old functions with the new explicit research markers. These establish the new boundary requirement, not an incident or already reachable trading defect. Original test bytes and source base are retained. |
+| Baseline-only capture |1 existing legacy test passed;5 tests were deliberately filtered. Used only to capture actual old output/seal identities, not as suite acceptance. |
+| Initial two scopes |18 passed /7 fixture failures: moving a synthetic PIT without regenerating corresponding normalized receipt identities correctly hit SOURCE_NORMALIZATION_CONFLICT. Fixed only the synthetic fixture through actual normalizer/receipt functions. Raw intermediate logs are retained; their complete transient working tree was not separately frozen. |
+| Corrected two scopes and first companions |25/2 then51/7 passed. These are intermediate author runs, superseded for final attribution by61/8 on23937651. |
+| Family-lifecycle control |One deliberately selected test failed;24 were filtered. Actual existing appendHypothesisVersion preserves the family lifecycle rather than emitting another PROPOSED event. The matcher was corrected to retain exact family/event-to-version linkage; the final run includes the passing version control. Pre-correction specification bytes are retained. |
+| Initial scoped lint |Exit0 with three unused synthetic destructuring warnings; final scoped lint is clean. |
+
+External proof directory: `parallel-runtime-owner/dee1132-wp1-397d0d76`. `source-freeze.json` pins the exact11 changed Git blobs, `validation-run.json` records the exact commands and clean before/after source, `scoped-final.json` contains all actual assertions, and `compatibility-source-receipt.json` pins the preserved old code and61/8 attribution. This later plan-only checkpoint changes none of those tested bytes. Original plan/contract/carry/clarification freezes are preserved.
+
+Remaining complete result: root/nonauthor review and scheduled typecheck, followed by separately allocated/released WP-2 actual held replay/persistence, operation-specific fences with canonical/audit joins, real exclusive CLI, full source admission, availability publication, later-B prefix/known-at consumption and fresh-process/native/cumulative acceptance. No migration slot, source-qualified/ordinary Knowledge, Predictive, financial, live or fullP10 result is claimed.
 
 ## Verbatim controlling contract
 
