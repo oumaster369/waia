@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Finite held-fixture/two-leaf corrections await review; separate recursive canonicalization envelope defect requires a source-backed amendment before dependent SQL. Native/schema unexecuted. Root retains compatibility/CI/graph/publication."
+  nextAction: "Recursive-canonical design is admitted; this sole plan amendment awaits root verification before dependent0222/native-test source edits. WP3-02 remains executable-open; no DB/heavy/CI/registry/graph grant."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -891,3 +891,117 @@ Independent review also found two remaining checkpoint membership expressions co
 The actual installed-adapter/source probe passes5 controls with0 network attempts and0 forbidden root capability reads; it verifies generated Drizzle INSERT routing with real nonempty pool codecs and custom codec preservation, plus refusal and exact SQL delta. Its transports are inert, so it proves neither PostgreSQL/RLS/wire codecs nor actual transaction behavior. Scoped ESLint of the modified native fixture exits0. Evidence is additive under `evidence/dee-1130/wp3-finite-corrections`; the prior source freeze/certificate and raw failures are retained.
 
 A separate M01/root finding remains open: recursive `waia_canonical_jsonb_v1` reconstructs enclosing subtrees, so the previous16/64/24 single-body accounting is not a valid aggregate recursive-materialization proof. No structural guard, coefficient change, cap increase or old0161 alteration is part of this finite fix. A separate source-backed structural/recursive accounting amendment must be reviewed and admitted before dependent SQL. Current migration/native/resource acceptance is therefore pending; no database, heavy check, migration or campaign was executed by this author in this correction.
+
+
+## WP-3 recursive canonicalization — admitted finite design, source barrier
+
+Root admitted the exact request652a030e and independent M01 reportc194bac5 at2026-09-27T07:49:25UTC. This commit changes only the plan atop clean4278e946. WP3-02 remains open in executable0222; root must verify this sole-plan commit before dependent edits. The request's historical proposed wording below remains verbatim, controlled by the newer exact admission. Earlier controlling blocks, rejected resource mechanisms, fa7/4278 source and proof identities remain preserved; no prior validation is upgraded.
+
+Independent source-only review: `milestone-audits/M01/review-DEE1130-recursion-652a030e.md`, SHA256 `c194bac5ce68260cb469d5ec2b687aff2b3779747f7d98112989b8708e49c647`. It accepts the finite design conditionally on actual implementation and native proof, including the concrete additive8B guard census. Request SHA256 `652a030e6f129ba61f456179756cb83f77e5456b32952c4cea9c64bca6a05987`; root admission SHA256 `cf2a32045dc33534449324d2425e2c30e20ed3fdd0625c41b8c5ba0e799aec59`.
+
+After root verification, the only dependent executable paths are allocated `db/migrations_postgres/0222_trader_historical_reconciliation_v1.sql`, the existing new `tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts`, and, only when meaningful, the existing bounded source-shape control in `tests/unit/historical-production-reconciliation-frontier-v1.test.ts`; truthful checkpoint updates stay here. No new production TypeScript helper, migration identity, function/table/privilege, old0161/old222 SQL, cap/domain/financial rule, or historical repair is admitted. Root alone owns bootstrap, three compatibility paths, CI/graph/publication; the separate fee24 integration proposal is not admitted.
+
+The8B full-frontier guard charge must be made concrete, not asserted: bind each selected steps/observations/touched/active-parent/reference subtree once; enforce array/type/cardinality before loops; reuse selected values; enumerate root subtraction, sizing conversion, subtree/record assignments and repeated copies in an exact certificate. Fixed literal depth5/36-key checks and explicit NULL/UNKNOWN refusal precede the first old0161 call. All13 actual canonical arguments must be bound/measured once, independently charged with bigint `(20*(D+1)+8)*B` and guarded before execution, including physical source objects and repeated selected current/previous/genesis rows. Existing baseline charges,1MiB/8MiB caps,65536 margin, full source joins, mode/privilege/late-write checks and canonical digest meaning remain. No cache/GUC or caller TypeScript assertion substitutes for the native guard.
+
+Source preparation plus meaningful scoped units/source lint/diff may proceed only after that verification. No database/native/heavy/compiler/typecheck/build/host/provider/campaign resource is granted by this plan. Freeze corrected SQL, concrete operation/call certificate and raw scoped proof for root/M01 before any coordinated native run. Actual installed13-site ordering, depth/empty-container/resealed refusals, exact resource boundaries/Unicode/scale, maximal real owner35-cycle/old-N/physical-source positives and existing role/rollback/late-write matrix remain outstanding. If real owner bodies fail unchanged caps, preserve and report the failure before any parameter change.
+
+<!-- BEGIN DEE1130-CANONICAL-RECURSION-REQUEST-652A -->
+# DEE1130 — finite native canonical-recursion amendment
+
+**PROPOSED, NOT ADMITTED OR IMPLEMENTED.** Exact source: clean4278e946062d1be896e06317a7d6640b2aff30f4 on accepted397d0d76. This succeeds only the recursive-canonical part of the fa7 resource certificate; the original certificate, fa7 review and finite4278 correction remain immutable. No SQL/database/native/heavy execution is evidence for this request. Root owns admission, schema acceptance and resources.
+
+## 1. Confirmed defect and selected repair
+
+0161 `waia_canonical_jsonb_v1` recursively enumerates every object/array, materializes entry values, constructs key/value strings, aggregates children and encloses the result. New0222 calls it before proving a bounded source shape, while charging a full recursive call like one serialization. An unused resealed deeply nested body can reach that call. This is a real defect in the new successful-input materialization certificate, not an inherited-work disclaimer.
+
+Selected finite repair: add an inline pre-call source-shape/depth guard plus an additive, explicit recursive reservation **at all13 textual call sites in the two new0222 trigger functions**. Keep every existing baseline reservation; do not subtract an alleged overlap. Measure each actual argument's PostgreSQL JSONB textual byte width, rather than assume it equals another candidate's text or the body_text width. All repeated calls and repeated selected rows are charged. Do not edit0161, add a helper relation/function/certifier/EXECUTE grant, use a GUC or cache, change a digest domain, raise either cap or reinterpret the resource metric.
+
+## 2. Actual supported owner shape
+
+`source-shape-census.json` is a syntax-only inventory of the exact declared frontier graph and36 root keys. It resolves the imported partition and literal phase tuple rather than assuming them. It is not runtime validation. The actual producer constructs those explicit fields: genesis and delta/seal in `production-reconciliation-frontier-v1.ts`, parent/state-event/reference projections in `production-reconciliation-repository-postgres-v1.ts`, and the private atomic owner. These source copies/identities are pinned with this request.
+
+Root is depth0. The maximal actual full frontier path is `touchedParentsAfter[*].fillReferences[*].fillSourceDigest`: scalar depth5. The local Accounting projection has depth2; a parent has depth3; fillDelta and observation objects have depth1. Genesis contains no parent, references or steps and its actual populated fields reach depth2 (the generic Accounting map would allow3 from the frontier root; inception requires empty positions). Thus one full-frontier ceiling D=5 admits every current owner branch without relying on TypeScript for direct SQL admission. Earlier informal genesis3 was a conservative generic-map bound, not its populated depth.
+
+Before its first canonical call, every parsed/loaded frontier must be a nonnull object, contain exactly the36 top-level keys enumerated in the census, have no value at depth6, and pass the existing finite array shape limits early: steps array length0..2; observations0..3; touchedParentsAfter0..2; each touched/active parent's fillReferences array0..3; nested selected parent/accounting nodes have their existing object/null kind. Existing stricter genesis/cycle counts and semantic checks remain unchanged later. The early test neither certifies source truth nor replaces any scope/column/hash/frontier/source comparison. Unexpected nested keys are not automatically economic authority: the guard's purpose is bounded structure; existing actual source joins still govern acceptance. The root key set is newly strict native technical admission and matches the real private producer exactly.
+
+Use explicit successive PL/pgSQL branches, not assumptions about SQL boolean evaluation order: reject SQL NULL/non-object and oversize first, then depth, then key/array checks, then invoke canonicalization. `IS TRUE`/`IS DISTINCT FROM` must refuse NULL/UNKNOWN. Parse remains after the existing raw body_text1MiB check; move its JSONB textual1MiB check before the first recursive call. This does not claim a pre-parse limit on the parser's internal work for rejected text.
+
+## 3. Depth guard with primary-source bound
+
+Use a fixed literal strict existential path, e.g. `pg_catalog.jsonb_path_exists(value,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS FALSE` for D=5, and corresponding fixed literals2,3,5 for other call-site ceilings1,2,4. No dynamic path supplied by a caller, no unbounded `.**`, `jsonb_path_query[_array]` result materialization, JSONPath `.keyvalue()`, or all-history traversal.
+
+Pinned PostgreSQL16.14 `jsonpath_exec.c` shows `jpiAny` starts at level1; `executeAnyItem` stops beyond last, recurses only while level<last and, with `found=NULL`, returns immediately upon existence instead of appending/copying a result body. `jsonb_path_exists_internal` calls the executor with `found=NULL`. Empty nested objects/arrays at the prohibited depth also count as a match. Native boundary controls must confirm this precise off-by-one meaning, including empty containers; source reasoning is not a substituted native result. This guard examines at most the already bounded new companion/projection, never canonical cumulative Accounting or a historical-prefix array.
+
+Charge an additional8B once for each full-frontier pre-call shape validation: sizing text, root subtraction/key admission, bounded extracted arrays/parents and local assignments. The same selected frontier may be checked again at a later invocation; no validation cache or durable skip. The existing metadata/row/body reservations remain, so this charge is additive. The finite checks never enumerate a newly discovered key set to generate authority or recursion rules; the36 known keys are literal.
+
+## 4. Recursive materialization reservation
+
+For each actual call argument v, let `B=octet_length(v::text)` in the installed PostgreSQL representation, and let D be the fixed maximum node depth for that call site. Require B<=1,048,576 and the fixed depth guard before recursion. Reserve:
+
+`R(v,D) = (20 × (D+1) + 8) × B`.
+
+Use bigint arithmetic. Add R to the invocation's existing `total_bytes`; if the sum exceeds8,388,608, refuse **before** calling0161. This is additional to every existing16/64/24/8/16 source reservation and the65536 fixed margin. Stamp initially keeps its raw-text16B check and then applies this rule to both body calls and the deterministic identity object. The same rule applies to actual source-derived subobjects, not merely the three stored companions. A temporary argument value and its measured bytes are used exactly once per call: no silent second construction/evaluation while measuring versus hashing. Do not reuse one call's reservation for another.
+
+Derivation, in the already admitted logical-requested-representation metric: at a fixed tree depth, disjoint selected subtree serializations sum to at most the full v JSONB textual B. Canonical output never exceeds that same input::text spelling: it only removes formatting spaces and orders keys, with the same PostgreSQL string escaping/numeric spelling. No cross-value JSONB semantic-equality assumption is used. Therefore summing all depth levels costs at most(D+1)B for each complete traversal/construction family.
+
+For every depth level the conservative20B reserves the following families, including repeats: (1) enumerated key/value requested representations and argument/record copies4B; (2) object key-to-JSON/text conversions2B; (3) both key/colon/child concatenation outputs2B; (4) all string_agg appended child/delimiter content and final textual result3B; (5) both enclosing delimiter concatenations2B; (6) SELECT/PL result/return and caller-visible handoff copies4B; (7) scalar::text and remaining fixed representation margin3B. Total20B. Arrays omit key work and fit the same reservation; empty containers and scalar roots fit too. The extra8B per call covers the selected argument construction/assignment or stripped copy, measurement text, hash UTF8 conversion, immediate caller text/byte handoffs and a conservative duplicate margin. Keep prior baseline reservations as well.
+
+0161 has one recursive occurrence per child in the chosen object/array arm; the arms are exclusive. Pinned `varlena.c` shows string_agg appends new fragments to internal state and its transition value is a pointer: no logical complete prefix string is requested for every input row. This argument counts the recursively requested child strings and repeated enclosing outputs; it does **not** silently call each recursive invocation oneB. It preserves the already admitted exclusion of allocator capacity/headers/internal resizing, tuplesort implementation storage, TOAST/VM/latency and arbitrary rejected-input allocation. It is not a RAM certificate. If review identifies another explicitly requested full representation, amend the finite census before code; do not relabel it internal to fit20.
+
+Resulting additions are128B for D5,108B for D4,68B for D2 and48B for D1. They deliberately cause some previously admitted byte-only direct inputs to refuse below the nominal per-body ceiling because the unchanged aggregate cap also applies. This is technical envelope enforcement, not a financial threshold. Real owner positives, including maximal supported parent/reference/fill combinations, must demonstrate compatibility natively; if they do not fit, report before changing caps or the reservation.
+
+## 5. Exhaustive actual call map
+
+| 4278 site | Actual argument | D / additional charge | Maximum calls per invocation |
+|---|---|---:|---:|
+|stamp2518|whole parsed body|5 /128B|1|
+|stamp2526|body without id/contentDigest|5 /128B|1|
+|stamp2527|literal deterministic identity schema/kind/seed object|2 /68B|1|
+|verify2944–2946|each selected current/previous/genesis body|5 /128B each|3|
+|verify2975|each same selected body without id/contentDigest|5 /128B each|3|
+|verify3095|literal accounting/activeParent/touchedParents observation object|5 /128B|1|
+|verify3119|literal domain/previous/cycleId/steps/fillDelta chain object|4 /108B|1|
+|verify3198|physical order creation projection excluding mutable fields|1 /48B|2|
+|verify3223|physical event projection, payload is original text|null|1 /48B|2|
+|verify3256|physical fill projection|1 /48B|6|
+|verify3300|physical economics plus nested sourceEconomics|2 /68B|6|
+
+This is13 textual sites:3 stamp and10 verifier; at most3 stamp calls and24 verifier calls. Line numbers are4278 reference anchors, not future installed positions. Every actual call receives its own measured argument/reservation and guard. Parent<=2, references<=3 each are the existing public profile, not a new financial policy. The three current/previous/genesis selections are separately charged even if previous=genesis in cycle0. Existing current/previous/genesis bodies are already append-only but are still checked; old acceptance is not used as a guard bypass.
+
+The physical event payload is `trader_order_events.payload text`, so JSON-looking payload contents remain a scalar string; do not parse it. All physical order/fill fields are explicit original typed scalar columns, and economics has exactly one explicit nested object. The final observation retains actual parent states and all existing digest joins; no digest is recomputed with a new domain, algorithm or omitted field.
+
+## 6. Bound ownership and compatibility
+
+No new trigger or write is introduced. Prior callback/CHECK counts and public-owner maximum227+16 remain unchanged. The per-invocation8MiB refusal remains real after adding R, so the previously admitted conservative1952MiB/attempt logical upper bound is unchanged; it is not a practical allocation measurement. Arbitrary direct SQL statement repetition has no transaction-wide aggregate claim. Fresh source projections continue to use original INSERT candidates+inline CHECKs and exactly three AFTER hooks; no new BEFORE tuple copy, record alias, cache, late-write suppression or GUC.
+
+Null/LEGACY original source compatibility is unchanged; these new structural rules govern only new PROFILE companions and their selected proof arguments. No row backfill, old helper replacement, original222 SQL edit, source repair, schema journal identity change or new privilege is required. Mode arbitration, invoker/definer boundary, original-role rights, full-content late writes and SET CONSTRAINTS behavior remain mandatory. The prepared pre0222 fixture remains unexecuted and requires root's separate bootstrap review.
+
+## 7. Finite implementation and acceptance map
+
+Requested dependent edits only: canonical DEE1130 plan first after admission; allocated0222 trigger bodies and comments; existing new `postgres-historical-production-reconciliation-frontier-v1.test.ts` controls; existing pure frontier test only if a bounded source-shape compatibility assertion improves proof. No new production TS helper, old0161 change, public function, registry/CI/graph alteration or relation. Root retains registry/CI/graph/publication. Source/function/call/charge census and primary-source identities are external evidence.
+
+Required proof after source freeze/resource grant:
+
+1. Guarded direct companions with fully resealed unexpected root key, depth6 under an existing member, deeper empty object/array, and a byte-small deep chain refuse before recursive canonicalization. Root SQL NULL/non-object/missing key/UNKNOWN controls are explicit. No source qualification is implied by low-level SQL fixtures.
+2. Depth5 maximum actual touched-parent/ref shape, flat no-fill genesis/cycles and the real35-cycle public owner remain positive; covers fill→mark, cancellation/replacement and both symbols using actual supported cases. Confirm all original source/digest/phase/authority checks still operate and old-N retry returns exact bytes.
+3. Pin the installed two trigger definitions: all13 sites have correct explicit argument guard/charge-before-call, no old0161 body/ACL change, no unmetered alternate canonical occurrence, and no zero/negative/overflow bypass. A per-row canonical function call-counter observation may supplement this source/native evidence, but must use actual reliable native counters, not claim execution from ordering text alone.
+4. Under1MiB inputs demonstrate recursive aggregate refusal below raw-body limit. Native helper probes directly compare actual measured argument widths, manually calculated recurrence charge and exact8MiB boundary/+1 where constructible. Count every repeated selected companion and per-parent/ref source call. Numeric scale and Unicode/escaped control keys/values must use actual PostgreSQL text widths; no JS byte substitution.
+5. Preserve canonical output identities for admitted actual owner fixtures before/after. Test physical event JSON-looking text as a scalar and explicit economics depth2. Mixed old/new/missing sources, RLS/roles, deferred/IMMEDIATE late writes and rollback remain the full existing matrix; no skipped tests or disabled guards.
+6. Native raw logs, installed expressions,223 migration hashes/identities and teardown remain mandatory; neither this document nor the syntax census proves them. If resource accounting or fixture compatibility fails, preserve the failure and correct within a reviewed finite scope rather than raising the caps.
+
+No scientific qualification, cashflow authority, full AD6c, host/campaign or readiness claim follows. The main code remains clean4278 while this external proposal is reviewed.
+<!-- END DEE1130-CANONICAL-RECURSION-REQUEST-652A -->
+
+<!-- BEGIN DEE1130-CANONICAL-RECURSION-ROOT-ADMISSION -->
+# Root finite recursive-canonicalization design admission
+
+At2026-09-27T07:49:25.365676+00:00 root admits REQUEST652a030e6f129ba61f456179756cb83f77e5456b32952c4cea9c64bca6a05987 as the finite repair design after fullread/24artifacts10Git3upstreamcopies13site verification and full independentc194bac5ce68260cb469d5ec2b687aff2b3779747f7d98112989b8708e49c647 report/27artifacts verification. WP3-02 remains open in executable4278e946. This is not native, full envelope, memory, performance, scientific or financial acceptance.
+
+Release NOW only sole canonicalplan amendment on clean4278. Preserve earlierplan/status/history/controllingblocks, embed exact REQUEST and thisadmission, include independentreport reference and concrete code/proof obligations. Returncleanplanidentity before anysource changes.
+
+After root verifies thatplan, exactdependentmap is allocated0222 triggerbodies/comments, existingnewnativefrontier matrix, bounded purefrontier source-shape compatibility test onlyif meaningful, truthfulcanonicalcheckpoint. No newhelper/function/table/privilege, old0161/old222SQL/journal/cap/domain/semantic edits. Rootretains bootstrap/compatibility3files/CI/graphs/publication. Inparticular rootintegrationfee24proposal has independentCI/namespace/timeoutfinding and is NOTadmitted by this document.
+
+Implement fixedprecall nativekind/size/depth/rootkey/arrayguards via explicitPL branches, exact36ownerkeys/depth5, preserve strictnull/unknownrefusal and everyexistingcontent/source/mode/latewritecheck. Bindandreuse eachselectedguard subtree: prove concreteoperationcensusfitsadditive8Bguardreservation instead of repeating unchecked-> copies. Measureandbindactualargumentonceat eachof13sites, add (20*(D+1)+8)B usingbigint BEFOREoldcanonicalcall; retain allpriorbaselinecharges/1MiB/8MiB/fixedmargin. Samecall/selectedrowduplicatesarechargedagain. No cache/GUC or caller-type-only substitution.
+
+Freeze exactcoherentSQL/nativeunit source, concreteguardoperation/recursivecallcertificate/rawscopedproof forroot+M01 review beforeanyPG/nativegrant. Allowedonlymeaningfulboundedscopedunit/source-lint/diff validation afterplanverification. Actualnative depthboundary/emptycontainer/fullyresealedrefusal-beforecanonicalization, maximalowner/35cycle/oldN/sourcephysicalpositive, realinstalledsites/Unicode/scale/aggregateboundary andoldlatewrite/role/rollbackmatrixremain mandatory. Ifactualowner cannotfitunchangedcaps,preservefailureandreportbeforeanyparameterchange. NoDB/heavy/typecheck/build/host/provider/campaigngrant.
+<!-- END DEE1130-CANONICAL-RECURSION-ROOT-ADMISSION -->
