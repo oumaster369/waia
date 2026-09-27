@@ -178,7 +178,7 @@ describe.skipIf(!enabled)("Postgres owned saved research Understanding", () => {
   });
   it("completed replay works in an actually READ ONLY session and adds no holder or state", async () => {
     const f = await seed(); await runSavedResearchLoop(client, { organizationId }, f.request); const before = await counts();
-    const readOnly = postgres(url!, { max: 1, connection: { default_transaction_read_only: "on" } });
+    const readOnly = postgres(url!, { max: 1, connection: { default_transaction_read_only: true } });
     try { expect((await createSavedResearchOwner(readOnly, { organizationId }, f.request).replay(0))!.outcome).toBe("REPLAYED"); }
     finally { await readOnly.end({ timeout: 3 }); }
     expect(await counts()).toEqual(before);
@@ -227,7 +227,7 @@ describe.skipIf(!enabled)("Postgres owned saved research Understanding", () => {
   });
   it("bounded claim pins READ COMMITTED/5s/30s despite hostile session defaults", async () => {
     const trace: string[] = [];
-    const hostile = postgres(url!, { max: 1, debug: (_connection, query) => { trace.push(query); }, connection: { default_transaction_isolation: "repeatable read", lock_timeout: "0", statement_timeout: "0" } });
+    const hostile = postgres(url!, { max: 1, debug: (_connection, query) => { trace.push(query); }, connection: { default_transaction_isolation: "repeatable read", lock_timeout: 0, statement_timeout: 0 } });
     await faultAt("trader_runtime_control_lease_heads_v2", "BEFORE", `IF current_setting('transaction_isolation') <> 'read committed' OR current_setting('lock_timeout') <> '5s' OR current_setting('statement_timeout') <> '30s' THEN RAISE EXCEPTION 'WRONG_TRANSACTION_POSTURE'; END IF;`);
     try { expect(await claimBoundedResearchRuntimeControlLeaseV2(drizzle(hostile, { schema }), { organizationId, runtimeInstanceId: "hostile-default", durationMs: 1000 })).not.toBeNull(); }
     finally { await hostile.end({ timeout: 3 }); }

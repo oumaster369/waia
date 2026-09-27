@@ -31,7 +31,9 @@ export function evaluateSavedResearchUnderstanding(packet: AnalysisPacket, assig
   const receipt = evaluateInformationSufficiencyV2({ profile, organizationId: assignment.organizationId, accountId: assignment.accountId,
     symbol: assignment.symbol, venue: "htx", analyticalTimeframe: "1m", horizon: profile.horizon, purpose: "RESEARCH_NON_CAPITAL",
     pitAnchor: packet.analysisPitAnchor, activeContextTriggers: [], evidence: admitted.evidence });
-  const artifact = buildExactMarketUnderstandingArtifactV1({ authority: bindInformationSufficiencyReceiptAuthorityV2(profile, receipt),
+  const authority = bindInformationSufficiencyReceiptAuthorityV2(profile, receipt);
+  check(authority.kind === "PROFILE_RECEIPT", "PROFILE_RECEIPT_AUTHORITY_REQUIRED");
+  const artifact = buildExactMarketUnderstandingArtifactV1({ authority,
     organizationId: assignment.organizationId, accountId: assignment.accountId, symbol: assignment.symbol,
     analyticalTimeframe: "1m", evaluatedAt: packet.analysisPitAnchor, features, reconstruction, questionEvaluations: bridge.questionEvaluations });
   const what = bridge.questionEvaluations.find(q => q.questionId === "Q_WHAT_HAPPENING")!;

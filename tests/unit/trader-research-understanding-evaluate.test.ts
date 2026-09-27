@@ -47,7 +47,7 @@ describe("actual saved research existing leaf composition", () => {
   it.each(["packet", "declared-manifest", "source-payload", "source-provider", "future-ingest", "environment"])("refuses %s without a market-unavailable fallback", kind => {
     const f = researchPureFixture();
     if (kind === "packet") f.packet.contentDigest = "f".repeat(64);
-    if (kind === "declared-manifest") { const a = copy(f.assignment); a.declarations.computationManifestDigest = "f".repeat(64) as typeof a.declarations.computationManifestDigest; const body = copy(a); delete (body as Partial<typeof body>).contentDigest; f.assignment = seal(body); }
+    if (kind === "declared-manifest") { const a = copy(f.assignment); const body = { ...a, declarations: { ...a.declarations, computationManifestDigest: "f".repeat(64) as typeof a.declarations.computationManifestDigest } }; delete (body as Partial<typeof body>).contentDigest; f.assignment = seal(body); }
     if (["source-payload", "source-provider", "future-ingest"].includes(kind)) {
       const observation = f.packet.sources[0]!.observation as Record<string, unknown>;
       if (kind === "source-payload") observation.payloadJson = "{}";

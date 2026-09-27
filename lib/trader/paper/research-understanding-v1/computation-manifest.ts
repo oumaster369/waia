@@ -174,7 +174,7 @@ export const COMPUTATION_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-understanding-v1/evaluate.ts",
-    "sha256": "1efdb1f8cc026fe8edd7f17b56700e1abfb4e1c48787fad0f7e09dff960aeb7a"
+    "sha256": "a17fdaa7318fda49f6cc1cc31a388be957e4a6bf225e8b21c3437de16455b83f"
   },
   {
     "path": "lib/trader/paper/serialize-paper-evaluation-export.ts",
@@ -197,4 +197,4 @@ export const COMPUTATION_SOURCE_MANIFEST = [
     "sha256": "b76e0104bf35e0591b37e9bf8e75039b555b2f7e88874f6dea923382864d3e25"
   }
 ] as const;
-export const COMPUTATION_SOURCE_MANIFEST_DIGEST = "cc41ea66149204484ca0aa463bb612396498548a0ee55bdfb7f2c8c15fb4005f";
+export const COMPUTATION_SOURCE_MANIFEST_DIGEST = "abb0618c8dc0298376fe7513c184d6c20f67aa93551caadfb1febf4f3de9f3b4";

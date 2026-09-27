@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 export async function runPaperBarCloseCli(args = process.argv.slice(2)) {
   args = [...args];
   if (args.includes("--saved-research-understanding")) {
-    const { check } = await import("@/lib/trader/paper/research-understanding-v1/contract");
+    const { check }: Pick<typeof import("@/lib/trader/paper/research-understanding-v1/contract"), "check"> = await import("@/lib/trader/paper/research-understanding-v1/contract");
     check(process.env.WAIA_TRADER_CLI === "1", "CLI_MODE_REQUIRED");
     const { parseSavedResearchOptions } = await import("@/lib/trader/paper/research-understanding-v1/cli-options");
     const input = await parseSavedResearchOptions(args);
@@ -29,7 +29,7 @@ export async function runPaperBarCloseCli(args = process.argv.slice(2)) {
     return runLegacyPaperBarCloseLoop();
   }
   const { parseRecordedPaperOptions } = await import("@/lib/trader/paper/durable-noncapital/cli-options-v1");
-  const { assertEnvironment, requireCondition } = await import("@/lib/trader/paper/durable-noncapital/recorded-analysis-v1");
+  const { assertEnvironment, requireCondition }: Pick<typeof import("@/lib/trader/paper/durable-noncapital/recorded-analysis-v1"), "assertEnvironment" | "requireCondition"> = await import("@/lib/trader/paper/durable-noncapital/recorded-analysis-v1");
   requireCondition(process.env.WAIA_TRADER_CLI === "1", "CLI_MODE_REQUIRED");
   const input = parseRecordedPaperOptions(args); assertEnvironment();
   const { getResolvedWaiaDbRuntimeConfig } = await import("@/db/runtime-backend");
