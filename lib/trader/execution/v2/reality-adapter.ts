@@ -90,10 +90,15 @@ function fillDraft(
   const feeAmount = text(trade.fee);
   const feeAsset = text(trade.feeAsset);
   const side = trade.side === "buy" || trade.side === "sell" ? trade.side : null;
+  const validAtUtc = text(trade.executedAt);
   if (!tradeId || !orderId || !symbol || !quantity || !price || feeAmount === null ||
-    !feeAsset || !side) return null;
+    !feeAsset || !side || !validAtUtc) return null;
+  const executedAt = new Date(validAtUtc);
+  if (!Number.isFinite(executedAt.getTime()) || executedAt.toISOString() !== validAtUtc) return null;
   return {
     ...base(report),
+    // FILL valid-time is the venue timestamp; report observation and Reality knowledge are separate.
+    validAtUtc,
     sourceNativeIdentity: {
       identityKind: "EXECUTION_REPORT_ID",
       nativeId: `${report.executionReportId}:trade:${tradeId}`,

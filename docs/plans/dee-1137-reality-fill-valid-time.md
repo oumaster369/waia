@@ -54,15 +54,26 @@ Existing immutable erroneous source rows remain unchanged. Reinterpreting their 
 2. `tests/unit/trader-reality-v2-ingress.test.ts`: meaningful asymmetric/two-fill, equal/non-fill, malformed/noncanonical and knowledge-time controls using actual adapter/ingress/Reality contracts.
 3. `tests/integration/postgres-execution-reality-delivery.test.ts`: actual durable source/truth/projection, fresh-client replay and baseline-data immutable-conflict controls under the existing real fixture/guards. Preserve existing registrations and exact transactions/constraints.
 4. This sole plan.
+5. `docs/ai-trader/reality-v2-source-consumer-inventory.json`: mechanically regenerate only exact source/consumer content digests after the adapter change. Preserve discovery roots, path sets/counts, path digests, all admission rules and the validator itself. This necessary scope addition was registered in Linear before editing it after the existing graph guard correctly detected the changed adapter bytes.
 
 No schema or migration, other production modules, global clock changes, report reserialization, new timestamp helper framework, live connector/account access, weakened native guards, source qualification or broader Guardian/recovery composition. DEE-1135 and DEE-1136 remain separate active work in separate checkouts. No source overlap is expected with their admitted maps.
 
-## Work and proof
+## WP-1 — Source correction and focused controls
 
 WP-1: commit this plan before executable changes. Capture targeted baseline RED for the asymmetric-time contract, then the narrow FILL correction and focused actual non-DB controls. Preserve original failures. Run scoped lint/typecheck and relevant consumer-graph checks; source review is independent of the author. Unit success is not durable/native acceptance.
 
-WP-2: add actual delivery controls using inactive synthetic local fixture data and real repository/writer/FKs/triggers, without venue/order submission. Test distinct source times in one report, source/truth/projection propagation, equal/non-fill preservation, fresh-client idempotent replay and unchanged knowledge, and explicit conflict with genuinely baseline-mapped earlier rows. Any baseline writer must be exact accepted828 in its isolated fixture, not a falsely labelled current mapper. Expected failures must prove the intended reached boundary. Before running, bind exact immutable source/full-chain fixture, one fresh explicitly assigned local DB, bounded clients and cleanup; no existing shared native resource is assumed available.
+## WP-2 — Durable delivery and historical conflict
+
+Add actual delivery controls using inactive synthetic local fixture data and real repository/writer/FKs/triggers, without venue/order submission. Test distinct source times in one report, source/truth/projection propagation, equal/non-fill preservation, fresh-client idempotent replay and unchanged knowledge, and explicit conflict with genuinely baseline-mapped earlier rows. Any baseline writer must be exact accepted828 in its isolated fixture, not a falsely labelled current mapper. Expected failures must prove the intended reached boundary. Before running, bind exact immutable source/full-chain fixture, one fresh explicitly assigned local DB, bounded clients and cleanup; no existing shared native resource is assumed available.
+
+## Acceptance
 
 Required local readiness: focused units, scoped checks during work, then lint/typecheck/build, canon, governance and existing Execution/Reality consumer-graph validators. Run the exact full relevant native delivery suite without skipped selected tests; keep errors and raw evidence, close all clients and assert no venue/order effects. Exact-head required CI and independent source/outcome acceptance precede PR merge. The authoritative full unit suite belongs to PR CI; do not duplicate it locally without cause. No new UI requires a browser flow test.
 
 No whole audit, scientific or live readiness follows from this correction. Core accepted/deployed versions, baseline RED, corrected unit/native versions and prospective operator rollout are distinct identities.
+
+## Actual partial evidence — 2026-09-27 UTC
+
+The original adapter at plan-first commit `436468b5b1a7ea6285c88d659e4f711ad9815bd9` passed the four existing focused cases and failed all twelve new asymmetric/malformed/knowledge-time cases. With the correction, the same full focused file passed 16/16 with no skips. Final scoped lint, typecheck and Execution graph passed; the Reality graph initially correctly rejected the changed content digest and passed after the scope-admitted mechanical update preserving both path sets/counts/digests and all rules. The first canonical-plan check exposed missing recognized work-package headings; those headings are corrected here. Original failed outputs remain retained, including the earlier test-only lint warnings fixed before final lint.
+
+These checks were executed against recorded work-in-progress bytes on the plan-first head, with per-file before/after digests, and are not an immutable-head or native attestation. External raw results and receipts are under audit evidence `evidence/dee-1137/`. Independent source review, native delivery/control proof, final full readiness and exact-head CI remain open. No source-history rewrite, deployment, live request or whole-issue completion is claimed.
