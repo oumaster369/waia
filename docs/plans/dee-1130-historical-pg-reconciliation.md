@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Apply only the admitted trigger alias qualification after the observed PROFILE35 failure; freeze exact source for root and independent review before a new native grant."
+  nextAction: "Parenthesize only the two admitted JSONB extraction operands after the fresh PROFILE35 failure; freeze exact inverse and operator census for independent review before any new native grant."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1208,3 +1208,14 @@ Actual immutable `f1ef6991f4fe20b007949e6d65caa6354511162e` passed the whole104-
 Immutable failure report: `evidence/dee-1130/profile35-f1ef6991/author-result/REPORT.md` SHA256 `677d729674d520d7ca25f5c4eb714536d9ebdea9b84f8acab58a728f0f397fcc`. Its freeze SHA256 `a7672b377b48e6266ec78a0bc246efd56710cbfee4576c17ea72d36b3fdc7caa` binds28 artifacts/four source identities. PostgreSQL's actual error context identifies `waia_historical_reconciliation_verify_v1` line824: SRF alias `old` and expression `old->>'fillId'` conflict with the trigger's implicit `OLD`. The exact installed function body matches source0222:3691–3692. Retained state contains one PROFILE genesis plus cycle0 and one checkpoint atsequence0; no35-cycle completion or later learning/resource outcome is claimed.
 
 Root admits only this sole-plan checkpoint followed by one exact SQL correction in allocated0222: replace the single SRF alias with `AS prior_fill(value)` and its reference with `prior_fill.value->>'fillId'`. Preserve the exact membership predicate, selected source, canonical arithmetic, digest domains, budget/cap/shape/privilege guards, every other SQL byte, all old222 migrations, journal, schema, source code and tests. Prove the two-line inverse transformation and freeze for independent review. No database/migration application, retry, compiler, native or PROFILE rerun is granted by this source correction. The failed database and all prior evidence remain immutable; root owns the next fresh execution and publication.
+
+
+## Finite PROFILE35 extraction/subtraction correction — plan first
+
+The single fresh whole first-cycle PROFILE run on immutable `e2a7bec01b8a470a163f26a16d5dbabeaa63ea3c`, isolated `waia_hsv2_it_dee1130_profile_20260927_0935`, ran09:38:22.438554–09:41:35.817778UTC and produced12PASS/1FAIL/0skip across13 actual assertions. The required35-cycle case failed; strict PROFILE guard ran once and correctly refused. Prelude/full223 migrations passed; applied hash/timestamp identities and final cleanup are exact. Previous0920 failure and104-frontier proof remain separate. No PROFILE35, learning closure or long-prefix resource acceptance is claimed.
+
+Failure report `evidence/dee-1130/profile35-e2a7bec0/author-result/REPORT.md` SHA256 `2ded31785cdffef0cc8c3d2b178f016eda3f5e581cb148bd2d7934273177358b`; freeze SHA256 `38fbf57bad3207c839f6c7b5155499864becfe28d20b9b654c849928d94d3b86` binds31 artifacts/four source identities. Actual PostgreSQL context identifies verifier line880 atIF, allocated0222:3747–3748: unparenthesized JSONB extraction followed by subtraction parses the `economics` key as a JSON operand and refuses. A literal-only READ ONLY SELECT reproduces the same error; explicitly grouped extraction returns the intended object, with controls preserving non-time differences while excluding the three separately normalized time fields. These controls are not a repaired verifier/native-owner run.
+
+Root admits exactly this sole-plan checkpoint followed by parentheses around `detail->'economics'` and `current_economics->'sourceEconomics'` before each existing `-ARRAY['sourceBarTimestamp','acceptedAt','fillTimestamp']`. Preserve every operand, all three timestamp comparisons, selected fields, digest/financial meaning, caps, shape/privilege/source guards, old222 migrations,223-entry journal, schema and tests. Prove full-file inverse equality. Perform a bounded source census of other extraction/arithmetic combinations in0222 and report concrete additional candidates without editing outside these two expressions.
+
+All native/diagnostic processes and connections ended; PG54329/heavy have been released. No migration application, repaired-function test, compiler, further native/PROFILE retry or publication is authorized by this correction. The0935 database and all old failures remain immutable. Independent finite source review and root's separate fresh execution grant remain required.
