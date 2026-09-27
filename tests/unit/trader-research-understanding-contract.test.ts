@@ -1,7 +1,17 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureAssignmentConfig, captureProfileDefinition, assertResearchProfile, rangeSchema, parseStrict,
   LIMITS } from "@/lib/trader/paper/research-understanding-v1/contract";
+import * as postgresAdapter from "drizzle-orm/postgres-js";
+import * as sourceReader from "@/lib/trader/paper/research-understanding-v1/bounded-source-postgres";
+import * as lease from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
+import * as evaluator from "@/lib/trader/paper/research-understanding-v1/evaluate";
+import { createSavedResearchOwner } from "@/lib/trader/paper/research-understanding-v1/repository-postgres";
+import { runSavedResearchLoop } from "@/lib/trader/paper/research-understanding-v1/run-saved-research-loop";
+import { researchPureFixture } from "../helpers/research-understanding-fixture";
+import { seal } from "@/lib/trader/paper/durable-noncapital/recorded-analysis-v1";
+import type postgres from "postgres";
+vi.mock("drizzle-orm/postgres-js", async importOriginal => ({ ...await importOriginal<typeof postgresAdapter>(), drizzle: vi.fn() }));
 
 const org = "11111111-1111-4111-8111-111111111111";
 function config() { return { organizationId: org, accountId: "saved-account", symbol: "BTC/USDT", researchSessionId: "research",
@@ -55,5 +65,65 @@ describe("saved research explicit bounded configuration", () => {
     for (const input of [{ startSequence: Number.MAX_SAFE_INTEGER, count: 2, leaseDurationMs: 1 }, { startSequence: 0, count: 1, leaseDurationMs: 120_001 }])
       expect(() => parseStrict(rangeSchema, input, "RANGE")).toThrow("RANGE");
     expect(LIMITS.replayAggregate).toBe(LIMITS.completion + LIMITS.informationReceipt + LIMITS.predecessor);
+  });
+});
+
+describe("owned monotonic completion deadline", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  // Actual owner/loop/configuration and fixed computation, with inert accepted-row
+  // and transaction ports. This checks late acceptance, not query/CPU cancellation.
+  function setup(mode: "replay" | "snapshot" | "concurrent", elapsed: number, at: "read" | "compute" = "read") {
+    let now = 0; let transaction = 0;
+    const f = researchPureFixture(); const actualEvaluate = evaluator.evaluateSavedResearchUnderstanding;
+    const output = actualEvaluate(f.packet, f.assignment, f.profile, f.revisions);
+    const completion = seal({ schemaVersion: f.assignment.schemaVersion, organizationId: f.session.organizationId,
+      researchSessionId: f.config.researchSessionId, sequence: 0, sourceSessionId: f.session.sessionId, sourceSequence: 0,
+      assignmentDigest: f.assignment.contentDigest, packetDigest: f.packet.contentDigest, previousCompletionDigest: null, output });
+    const execute = vi.fn(async () => []); const insert = vi.fn(() => { throw new Error("UNEXPECTED_WRITE"); });
+    const db = { execute, insert, transaction: async (fn: (tx: unknown) => unknown) => { transaction++; return fn(db); } };
+    vi.spyOn(postgresAdapter, "drizzle").mockReturnValue(db as unknown as ReturnType<typeof postgresAdapter.drizzle>);
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.spyOn(lease, "lockRuntimeOrganizationV2").mockResolvedValue(undefined);
+    vi.spyOn(lease, "assertRuntimeDatabaseClockHolderV2").mockResolvedValue(f.assignment.assignedAt);
+    vi.spyOn(lease, "claimBoundedResearchRuntimeControlLeaseV2").mockRejectedValue(new Error("UNEXPECTED_CLAIM"));
+    vi.spyOn(sourceReader, "readBoundedResearchAssignment").mockResolvedValue(f.assignment);
+    vi.spyOn(sourceReader, "readBoundedResearchProfile").mockResolvedValue(f.profile);
+    vi.spyOn(sourceReader, "readBoundedResearchPredecessor").mockResolvedValue(null);
+    const readCompletion = vi.spyOn(sourceReader, "readBoundedResearchCompletion").mockImplementation(async () => {
+      if (mode === "concurrent" && transaction === 2) return null;
+      if (mode === "concurrent" && transaction === 3) now = elapsed;
+      return completion;
+    });
+    vi.spyOn(sourceReader, "readBoundedResearchInputs").mockImplementation(async () => {
+      if (mode !== "concurrent" && at === "read") now = elapsed;
+      return { session: f.session, packet: f.packet, companion: {}, revisions: f.revisions, sourceInputBytes: 0 };
+    });
+    vi.spyOn(evaluator, "evaluateSavedResearchUnderstanding").mockImplementation((...args) => {
+      const result = actualEvaluate(...args); if (at === "compute") now = elapsed; return result;
+    });
+    const pool = { begin() { throw new Error("UNEXPECTED_POOL_USE"); } } as unknown as postgres.Sql;
+    const context = { organizationId: f.session.organizationId };
+    const request = { assignment: f.config, profile: { definition: f.profileDefinition }, range: { startSequence: 0, count: 1, leaseDurationMs: 1000 } };
+    const owner = createSavedResearchOwner(pool, context, request);
+    const holder = { organizationId: f.session.organizationId, runtimeInstanceId: "inert-owner", leaseEpoch: 1, leaseContentDigest: "a".repeat(64) };
+    return { owner, pool, context, request, holder, insert, readCompletion, completion, setNow(value: number) { now = value; } };
+  }
+  for (const mode of ["replay", "snapshot", "concurrent"] as const) it.each([119999, 120001])(`${mode} existing completion obeys post-await budget %sms`, async elapsed => {
+    const f = setup(mode, elapsed);
+    const pending = mode === "replay" ? f.owner.replay(0) : f.owner.complete(0, f.holder);
+    if (elapsed > LIMITS.durationMs) await expect(pending).rejects.toThrow("INVOCATION_DEADLINE_EXCEEDED");
+    else expect((await pending)!.outcome).toBe("REPLAYED");
+    expect(f.insert).not.toHaveBeenCalled();
+  });
+  it.each(["read", "compute"] as const)("actual loop refuses a replay completed after late %s", async at => {
+    const f = setup("replay", 120001, at);
+    const result = await runSavedResearchLoop(f.pool, f.context, f.request);
+    expect(result.status).toBe("INVOCATION_DEADLINE_EXCEEDED"); expect(result.completed).toEqual([]); expect(f.insert).not.toHaveBeenCalled();
+  });
+  it("retains expired-entry refusal and conflicting-output refusal", async () => {
+    const f = setup("replay", 0); f.setNow(120001);
+    await expect(f.owner.replay(0)).rejects.toThrow("INVOCATION_DEADLINE_EXCEEDED"); f.setNow(0);
+    f.readCompletion.mockResolvedValue({ ...f.completion, output: { ...f.completion.output, disposition: "COMPLETED_UNRESOLVED" } });
+    await expect(f.owner.replay(0)).rejects.toThrow("REPLAY_OUTPUT_CONFLICT"); expect(f.insert).not.toHaveBeenCalled();
   });
 });

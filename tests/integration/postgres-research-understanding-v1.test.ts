@@ -264,7 +264,7 @@ describe.skipIf(!enabled)("Postgres owned saved research Understanding", () => {
     finally { await hostile.end({ timeout: 3 }); }
     const firstLock = trace.findIndex(q => q.includes("pg_advisory_xact_lock"));
     expect(firstLock).toBeGreaterThan(0);
-    expect(trace.slice(0, firstLock).some(q => /begin.*read committed/i.test(q))).toBe(true);
+    expect(trace.slice(0, firstLock).join("\n")).toMatch(/(?:begin|set transaction)[^\n]*isolation level read committed/i);
     expect(trace.slice(0, firstLock).some(q => q.includes("lock_timeout") && q.includes("5s"))).toBe(true);
     expect(trace.slice(0, firstLock).some(q => q.includes("statement_timeout") && q.includes("30s"))).toBe(true);
   });

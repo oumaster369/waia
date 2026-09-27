@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -8,6 +8,8 @@ import { LIMITS } from "@/lib/trader/paper/research-understanding-v1/contract";
 import { encodeBody } from "@/lib/trader/paper/durable-noncapital/recorded-source-read-validation-v1";
 import { researchPureFixture } from "../helpers/research-understanding-fixture";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import * as canonicalService from "@/lib/trader/mi/canonical-pit-service-postgres";
+import * as trustReader from "@/lib/trader/mi/trust-as-of-repository-postgres";
 
 /** Inert SQL projection trace only; not a database, transaction, RLS or native-content proof. */
 function tracedReader(f: ReturnType<typeof researchPureFixture>, failTable: string, size: number, expected = 1) {
@@ -16,7 +18,7 @@ function tracedReader(f: ReturnType<typeof researchPureFixture>, failTable: stri
     bodyJson: canonicalJsonString(Object.fromEntries(Object.entries(f.session).filter(([key]) => key !== "configDigest"))) };
   const packet = { organizationId: f.session.organizationId, sessionId: f.session.sessionId, sequence: 0, configDigest: f.session.configDigest,
     analysisPitAnchor: f.packet.analysisPitAnchor, contentDigest: f.packet.contentDigest, bodyJson: encodeBody(f.packet) };
-  const execute = vi.fn(async (query: SQL) => {
+  const execute = vi.fn(async (query: SQL): Promise<Record<string, unknown>[]> => {
     const { sql: text, params } = dialect.sqlToQuery(query); trace.push(text);
     const table = /from "(trader_[a-z0-9_]+)"/.exec(text)?.[1];
     const metadata = text.includes("octet_length(to_jsonb(bounded_row)::text)");
@@ -35,6 +37,31 @@ function tracedReader(f: ReturnType<typeof researchPureFixture>, failTable: stri
   return { db: { execute } as unknown as WaiaPostgresDb, trace, execute };
 }
 describe("metadata-first research capacity", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  it.each([false, true])("raw PostgreSQL timestamp projection preserves exact selected chronology (changed=%s)", async changed => {
+    const f = researchPureFixture(); const dialect = new PgDialect();
+    const t = tracedReader(f, "none", 0); const original = t.execute.getMockImplementation()!;
+    const pgTime = (value: string) => value.replace("T", " ").replace(".000Z", "+00");
+    vi.spyOn(canonicalService, "readCanonicalPitObservationWithinHeldTransactionV1Postgres").mockImplementation(async (_db, _context, id) =>
+      f.packet.sources.find(s => s.receipt.observationId === id)!.observation as Awaited<ReturnType<typeof canonicalService.readCanonicalPitObservationWithinHeldTransactionV1Postgres>>);
+    vi.spyOn(trustReader, "readTrustAsOfReceiptV1Postgres").mockImplementation(async (_db, _context, id) =>
+      f.packet.sources.find(s => s.receipt.trustAsOfReceiptId === id)!.trust as Awaited<ReturnType<typeof trustReader.readTrustAsOfReceiptV1Postgres>>);
+    t.execute.mockImplementation(async query => {
+      const q = dialect.sqlToQuery(query).sql;
+      if (q.includes("octet_length") || q.includes('from "trader_recorded_analysis_sessions_v1"') || q.includes('from "trader_recorded_analysis_packets_v1"')) return original(query);
+      if (q.includes('from "trader_recorded_analysis_companions_v1"')) return [{ packetDigest: f.packet.contentDigest,
+        accountId: f.session.accountId, symbol: f.session.symbol, barInterval: "1m", scheduledBarCloseTime: pgTime(f.packet.normalized.scheduledBarCloseTime) }];
+      if (q.includes('from "trader_mi_gateway_pit_receipt_v1"')) return f.packet.sources.map(s => ({ id: s.receipt.id, contentDigest: s.receipt.contentDigest, receiptJson: s.receipt }));
+      if (q.includes('from "trader_mi_source"')) return f.packet.sources.map(s => s.source as Record<string, unknown>);
+      if (q.includes('from "trader_mi_source_trust"')) return f.revisions.map((r, i) => ({ ...r,
+        eventTime: pgTime(r.eventTime), ingestTime: pgTime(r.ingestTime), availableAt: changed && i === 0
+          ? "2026-01-01 00:00:00.001+00" : r.availableAt ? pgTime(r.availableAt) : null }));
+      throw new Error(`UNEXPECTED_BODY_READ:${q}`);
+    });
+    const result = readBoundedResearchInputs(t.db, f.assignment, f.profile, 0, new ResearchReadBudget(LIMITS.inputAggregate));
+    if (changed) await expect(result).rejects.toThrow("SOURCE_REVISION_CHRONOLOGY_CONFLICT");
+    else expect((await result).revisions).toEqual([...f.revisions].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  });
   it("deduplicates only exact table/PK pairs, retains repeated embedded bytes, and refuses overflow", () => {
     const b = new ResearchReadBudget(10); b.admit("a", "x", 4, 10); b.admit("a", "x", 4, 10); expect(b.total).toBe(4);
     b.admit("b", "x", 6, 10); expect(b.total).toBe(10);

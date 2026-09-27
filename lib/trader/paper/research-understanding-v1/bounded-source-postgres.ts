@@ -68,8 +68,19 @@ async function inspect(db: WaiaPostgresDb, kind: Kind, condition: SQL, budget: R
 async function bodies(db: WaiaPostgresDb, query: SQL | null): Promise<Record<string, unknown>[]> {
   check(query, "EXACT_ROW_SET_MISSING_OR_AMBIGUOUS");
   const rows = await db.execute<Record<string, unknown>>(query);
-  // PostgreSQL timestamps are normalized only at this persistence boundary.
-  return JSON.parse(JSON.stringify(rows)) as Record<string, unknown>[];
+  // Drizzle raw execute returns timestamptz strings, unlike its typed select's Date
+  // mapping. Normalize only these declared scalar columns to the same Date/ISO
+  // convention used by saved receipts; never rewrite timestamps inside stored JSON.
+  return rows.map(row => {
+    const value = { ...row };
+    for (const key of ["eventTime", "availableAt", "ingestTime", "createdAt", "analysisPitAnchor", "scheduledBarCloseTime", "anchorTime", "pitAnchor"]) {
+      const timestamp = value[key]; if (timestamp === undefined || timestamp === null) continue;
+      check(typeof timestamp === "string" || timestamp instanceof Date, "STORED_TIMESTAMP_INVALID");
+      const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+      check(Number.isFinite(date.getTime()), "STORED_TIMESTAMP_INVALID"); value[key] = date.toISOString();
+    }
+    return value;
+  });
 }
 function scope(kind: Kind, organizationId: string, ids: readonly string[]): SQL {
   const { projection } = specification(kind); const unique = [...new Set(ids)];

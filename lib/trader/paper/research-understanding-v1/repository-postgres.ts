@@ -98,10 +98,12 @@ function verifyComputed(saved: NonNullable<Awaited<ReturnType<typeof snapshot>>>
 }
 
 /** Read-only completed replay owns its fixed computation; no provider, clock reselection or lease claim. */
-async function replayCompletedResearch(pool: postgres.Sql, context: OrgContext, request: CapturedResearchRequest, sourceSequence: number) {
+async function replayCompletedResearch(pool: postgres.Sql, context: OrgContext, request: CapturedResearchRequest, sourceSequence: number, assertDeadline: () => void) {
   const saved = await snapshot(drizzle(pool, { schema }), context, request, sourceSequence);
+  assertDeadline();
   if (!saved?.completion) return null;
   verifyComputed(saved);
+  assertDeadline();
   return { outcome: "REPLAYED" as const, completion: saved.completion };
 }
 
@@ -133,8 +135,11 @@ async function completeSavedResearch(pool: postgres.Sql, context: OrgContext, re
   sourceSequence: number, holder: DatabaseClockRuntimeHolderV2, assertDeadline: () => void) {
   assertDeadline(); assertEnvironment(); check(holder.organizationId === context.organizationId, "HOLDER_SCOPE_CONFLICT");
   const db = drizzle(pool, { schema }); await ensureAssignment(db, context, request, holder, assertDeadline);
+  assertDeadline();
   const saved = await snapshot(db, context, request, sourceSequence); check(saved, "ASSIGNMENT_MISSING");
+  assertDeadline();
   const output = verifyComputed(saved);
+  assertDeadline();
   if (saved.completion) return { outcome: "REPLAYED" as const, completion: saved.completion };
   const completion: ResearchCompletion = seal({ schemaVersion: RESEARCH_CONTRACT, organizationId: context.organizationId,
     researchSessionId: saved.assignment.researchSessionId, sequence: saved.sequence, sourceSessionId: saved.assignment.sourceSessionId,
@@ -148,6 +153,7 @@ async function completeSavedResearch(pool: postgres.Sql, context: OrgContext, re
     const current = await readAssignment(tx, context, request, budget); check(current, "ASSIGNMENT_MISSING");
     check(current.assignment.contentDigest === saved.assignment.contentDigest, "ASSIGNMENT_IDENTITY_CONFLICT");
     const already = await readBoundedResearchCompletion(tx, current.assignment, current.profile, saved.sequence);
+    assertDeadline();
     if (already) { check(digest(already) === digest(completion), "COMPLETION_CONFLICT"); return { outcome: "REPLAYED" as const, completion: already }; }
     const input = await readBoundedResearchInputs(tx, current.assignment, current.profile, sourceSequence, budget);
     check(input.packet.contentDigest === saved.packet.contentDigest && digest(input.revisions) === digest(saved.revisions), "SOURCE_SNAPSHOT_CONFLICT");
@@ -179,7 +185,7 @@ export function createSavedResearchOwner(pool: postgres.Sql, suppliedContext: Or
   };
   return {
     organizationId: context.organizationId, range: copy(request.range),
-    async replay(sourceSequence: number) { checkSequence(sourceSequence); return replayCompletedResearch(pool, context, request, sourceSequence); },
+    async replay(sourceSequence: number) { checkSequence(sourceSequence); return replayCompletedResearch(pool, context, request, sourceSequence, assertDeadline); },
     async complete(sourceSequence: number, suppliedHolder: DatabaseClockRuntimeHolderV2) {
       checkSequence(sourceSequence); const holder = copy(suppliedHolder);
       return completeSavedResearch(pool, context, request, sourceSequence, holder, assertDeadline);
