@@ -106,7 +106,7 @@ Execute the full existing Execution and Risk native files, preserving all tests 
 - Fresh and replay window failures after real waits are atomic; post-consumption fresh timestamps and immutable replay semantics are proved; missing-state class/reason and deliberate compound-error precedence are documented.
 - Exactly five new native registrations coexist with all prior compatibility gates, unchanged cleanup and guards. Every new proof reports actual participation and no skips.
 - Source closure stays within the four-file map; the generated-identity change affects only the admitted source content seal. No semantics, limits, live authority, migrations or production changes are smuggled into this correction.
-- All required readiness, independent review and applicable final-head GitHub checks pass before publication/merge admission. No unexecuted check or prospective result is represented as PASS.
+- Local readiness and independent source/native review pass before PR publication; all applicable exact-head GitHub checks pass before merge admission. No unexecuted check or prospective result is represented as PASS.
 
 ## Validation commands and existing compatibility
 
