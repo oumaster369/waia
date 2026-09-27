@@ -26,7 +26,7 @@ type Entry = Readonly<{ idx: number; version: "7"; when: number; tag: string; br
 type Journal = Readonly<{ version: "7"; dialect: "postgresql"; entries: readonly Entry[] }>;
 export type MigrationIdentity = Readonly<{ hash: string; created_at: string }>;
 
-export function assertBootstrapEndpoint(env: Readonly<NodeJS.ProcessEnv>): string {
+export function assertBootstrapEndpoint(env: Readonly<Record<string, string | undefined>>): string {
   if (env.WAIA_POSTGRES_CLI !== "1") refuse("CLI_REQUIRED");
   const text = env.DATABASE_URL_POSTGRES;
   if (!text || text !== text.trim()) refuse("URL_REQUIRED");
@@ -99,11 +99,11 @@ async function readApplied(sql: postgres.Sql): Promise<MigrationIdentity[]> {
   return Array.from(await sql<MigrationIdentity[]>`SELECT hash,created_at::text AS created_at FROM drizzle.__drizzle_migrations ORDER BY created_at,id`);
 }
 async function readPrefix(sql: postgres.Sql): Promise<Record<string, unknown>[]> {
-  return Array.from(await sql`SELECT entry_id,organization_id::text AS organization_id,account_id,run_id,cycle_id,cycle_sequence,
+  return Array.from(await sql<Record<string, unknown>[]>`SELECT entry_id,organization_id::text AS organization_id,account_id,run_id,cycle_id,cycle_sequence,
     symbol,partition,capital_eligible,content_digest_hex,dataset_membership_content_digest_hex
     FROM public.trader_historical_simulation_reason_ledger_v2 ORDER BY run_id COLLATE "C" LIMIT 28`);
 }
-export async function prepareHistoricalReconciliationFixture(env: Readonly<NodeJS.ProcessEnv> = process.env) {
+export async function prepareHistoricalReconciliationFixture(env: Readonly<Record<string, string | undefined>> = process.env) {
   const url = assertBootstrapEndpoint(env);
   const source = readBootstrapSources();
   const sql = postgres(url, { max: 1, onnotice: () => {} });
