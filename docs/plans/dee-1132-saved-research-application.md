@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: 9648183bf0ef3456cd78359c9b3926357d0ec799
   lastValidationAt: "2026-09-27T10:13:43.460073+00:00"
   blockedReason: null
-  nextAction: "Root and M01 review corrected source9648183b and exact135/6 scoped proof; compiler and all45 native cases remain unexecuted pending separate resources and complete0222/0223 integration. Journal/oldSQL unchanged; no package acceptance or publication claim."
+  nextAction: "Apply only admitted native-fixture object narrowing and allocated0223 CASE grouping after this sole-plan commit; scoped lint/diff and one root-granted confirming compiler. Preserve897/135unit evidence; native/journal integration and final independent acceptance still pending."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -915,3 +915,14 @@ Genuine draft claim RED was37 passed/4 failed (`db.transaction is not a function
 Native source now registers45 cases (previous36 plus9), unexecuted. New cases exercise actual absent-owner acquisition, after-history23505 rollback and retry, the old nested savepoint's usable outer transaction, actual32/33 writer histories, measured selected registration projections at65536/65537, fixed candidate physical65536/65537, and real-owner-produced payload/text/hash tampering on valid unused keys. Payload tests capture the real owner statements from a rolled-back first attempt, replay those exact canonical/audit inserts under the actual holder and change only the selected witness/body and corresponding audit digest; the unchanged insertion must pass all guards before a deliberate fixture rollback. The normal owner/process tests remain the positive completion/restart proof. Exact native counts, boundary attainment, resource metrics and SQL/role/fence results remain future observations, not inferred from source.
 
 External successor evidence is `parallel-runtime-owner/dee1132-wp2-correction-ef046594/`. The original64d/ef046 freezes, compiler RED and independent findings remain unchanged. Compiler/native/heavy/CI/full readiness/publication are still root-scheduled. Source review is not final package acceptance, fullP10 or scientific/capital/live authority.
+
+
+## Finite correction addendum — compiler fixture and SQL expression grouping
+
+Root ran the whole compiler at frozen897aa0096f8968aa0982b15f35d2469f65393404 on2026-09-27T10:14:30–37Z: exit2, one diagnostic at `tests/integration/postgres-research-application-v1.test.ts:305:91` (spread requires object type). The five previous production/reader/clock diagnostics are absent. Exact stdoutSHA `c6c95ccd1d1a2e4502020b14f5d08da8614076de1c9c31f11f89826e687d4563`; root evidence `parallel-runtime-owner/dee1132-corrected-compiler-897aa009`. Preserve that failure and the author897/964 freeze unchanged.
+
+Root authorizes only runtime-safe fixture object narrowing before spreading the supplied profile definition: reject null, non-object and array, then retain all existing properties and replace organizationId for the explicit missing-source tenant test. No any/unknown assertion, deleted assertion or production type change. This closes a new test fixture type error, not a new product behavior.
+
+M01 additionally identified the allocated0223 raw-body guard's ungrouped `IF ... > CASE ... END THEN` expression as the same syntax shape that root previously reproduced as invalid on PostgreSQL16.14 for1130. Root independently read the exact guard and authorizes only parentheses around its existing CASE result. Preserve all table labels,65536/4096/524288 ceilings, condition and refusal. Capture exact inverse and a bounded IF/CASE census of0223; no unrelated SQL/old migration/journal change. Existing1130 parser evidence is prior analogous evidence, not a native1132 CREATE proof.
+
+This sole-plan addendum precedes both source edits. Afterward scoped lint/diff and one confirming compiler are granted; no DB/native/build. All45 native cases, actual0223 creation and compatible224-chain proof remain separate and unexecuted. The prior handoff's phrase 'five changed runtime modules' is corrected here: four runtime modules changed, plus the generated manifest; pure computation identity is unchanged. Original source freeze remains immutable.
