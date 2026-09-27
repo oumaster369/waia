@@ -2936,6 +2936,23 @@ export const traderHwmLedger = pgTable(
   ],
 );
 
+/** DEE-1125: immutable accepted closing inputs, without economic/finality authority. */
+export const traderReportingPeriodBasesV1 = pgTable("trader_reporting_period_bases_v1", {
+  reportingPeriodId: uuid("reporting_period_id").primaryKey().references(() => traderReportingPeriods.id, { onDelete: "restrict" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  exchangeAccountId: text("exchange_account_id").notNull(),
+  schemaVersion: text("schema_version").notNull(),
+  periodRecordContentDigest: text("period_record_content_digest").notNull(),
+  receiptContentDigest: text("receipt_content_digest").notNull(),
+  contentDigest: text("content_digest").notNull(),
+  realityProjectionId: text("reality_projection_id").notNull(),
+  realityFrontierSequence: bigint("reality_frontier_sequence", { mode: "bigint" }).notNull(),
+  realityFrontierEventDigest: text("reality_frontier_event_digest").notNull(),
+  realityKnowledgeAsOf: timestamp("reality_knowledge_as_of", { withTimezone: true, mode: "date" }).notNull(),
+  canonicalJson: text("canonical_json").notNull(),
+  recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" }).notNull().default(sql`clock_timestamp()`),
+}, (t) => [index("trader_reporting_period_bases_v1_scope").on(t.organizationId, t.exchangeAccountId, t.reportingPeriodId)]);
+
 /** AI-TRADER: immutable draft invoice financial commitment record (DEE-310 / AT-E11 S5). */
 export const traderInvoices = pgTable(
   "trader_invoices",

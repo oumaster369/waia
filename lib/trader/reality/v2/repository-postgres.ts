@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { canonicalJsonString } from "@/lib/trader/research/digest";
@@ -862,6 +862,64 @@ export async function readLatestRealityProjectionV2(
     desc(pgSchema.traderRealityProjectionsV2.id),
   ).limit(1);
   return rows[0] ? mapProjection(rows[0]) : null;
+}
+
+export class RealityExactReadUnavailableV2 extends Error {
+  constructor(readonly reason: "MISSING_IDENTITIES" | "CAPACITY_EXCEEDED") {
+    super(reason); this.name = "RealityExactReadUnavailableV2";
+  }
+}
+
+/** Historical exact-ID reconstruction only. The caller must own a stable read
+ * snapshot. Metadata preflight bounds every selected body before materialization;
+ * no current-account scan, clock cutoff or latest-projection substitution. */
+export async function readExactRealityLedgerV2(
+  executor: RealityV2Executor, context: RealityAccountContext,
+  identities: Readonly<{ sourceIds: readonly string[]; truthIds: readonly string[]; eventIds: readonly string[]; projectionId: string }>,
+): Promise<{ ledger: { sources: readonly RealitySourceReportV2[]; truths: readonly TruthRecordV2[]; events: readonly RealityEventV2[] }; projection: RealityProjectionV2 }> {
+  const scope = requireScope(context);
+  for (const ids of [identities.sourceIds, identities.truthIds, identities.eventIds, [identities.projectionId]]) {
+    if (ids.length > 4096) throw new RealityExactReadUnavailableV2("CAPACITY_EXCEEDED");
+    if (new Set(ids).size !== ids.length || ids.some((id) => !/^[a-f0-9]{64}$/.test(id))) throw new RealityV2PersistenceConflictError();
+  }
+  const selections = [
+    { table: "trader_reality_source_reports_v2", ids: identities.sourceIds },
+    { table: "trader_reality_truth_records_v2", ids: identities.truthIds },
+    { table: "trader_reality_events_v2", ids: identities.eventIds },
+    { table: "trader_reality_projections_v2", ids: [identities.projectionId] },
+  ] as const;
+  let totalBytes = 0n;
+  for (const selection of selections) {
+    if (!selection.ids.length) continue;
+    const rows = await executor.execute<{ row_count: string; max_bytes: string; total_bytes: string }>(sql`
+      SELECT count(*)::text AS row_count,
+        coalesce(max(octet_length(to_jsonb(r)::text)), 0)::text AS max_bytes,
+        coalesce(sum(octet_length(to_jsonb(r)::text)), 0)::text AS total_bytes
+      FROM ${sql.identifier(selection.table)} r
+      WHERE r.organization_id = ${scope.organizationId}::uuid AND r.account_id = ${scope.accountId}
+        AND r.id IN (${sql.join(selection.ids.map((id) => sql`${id}`), sql`, `)})`);
+    const metadata = rows[0];
+    if (!metadata || BigInt(metadata.row_count) !== BigInt(selection.ids.length)) throw new RealityExactReadUnavailableV2("MISSING_IDENTITIES");
+    const isProjection = selection.table === "trader_reality_projections_v2";
+    if (BigInt(metadata.max_bytes) > BigInt(isProjection ? 16 * 1024 * 1024 : 1024 * 1024)) throw new RealityExactReadUnavailableV2("CAPACITY_EXCEEDED");
+    if (!isProjection) totalBytes += BigInt(metadata.total_bytes);
+    if (totalBytes > 32n * 1024n * 1024n) throw new RealityExactReadUnavailableV2("CAPACITY_EXCEEDED");
+  }
+  const s = pgSchema.traderRealitySourceReportsV2, t = pgSchema.traderRealityTruthRecordsV2;
+  const e = pgSchema.traderRealityEventsV2, p = pgSchema.traderRealityProjectionsV2;
+  const sources = identities.sourceIds.length ? await executor.select().from(s).where(and(eq(s.organizationId, scope.organizationId),
+    eq(s.accountId, scope.accountId), inArray(s.id, [...identities.sourceIds]))).orderBy(asc(s.knowledgeAt), asc(s.id)) : [];
+  const truths = identities.truthIds.length ? await executor.select().from(t).where(and(eq(t.organizationId, scope.organizationId),
+    eq(t.accountId, scope.accountId), inArray(t.id, [...identities.truthIds]))).orderBy(asc(t.knowledgeAt), asc(t.id)) : [];
+  const events = identities.eventIds.length ? await executor.select().from(e).where(and(eq(e.organizationId, scope.organizationId),
+    eq(e.accountId, scope.accountId), inArray(e.id, [...identities.eventIds]))).orderBy(asc(e.eventSequence)) : [];
+  const projections = await executor.select().from(p).where(and(eq(p.organizationId, scope.organizationId), eq(p.accountId, scope.accountId),
+    eq(p.id, identities.projectionId))).limit(1);
+  if (sources.length !== identities.sourceIds.length || truths.length !== identities.truthIds.length || events.length !== identities.eventIds.length || !projections[0]) {
+    throw new RealityExactReadUnavailableV2("MISSING_IDENTITIES");
+  }
+  return { ledger: { sources: Object.freeze(sources.map(mapSource)), truths: Object.freeze(truths.map(mapTruth)),
+    events: Object.freeze(events.map(mapEvent)) }, projection: mapProjection(projections[0]) };
 }
 
 export async function persistCanonicalRealityProjectionV2FromWriter(
