@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root verifies this sole-plan independent bootstrap/CI source amendment. SQL guard copy census remains under M01 review; all database/native/bootstrap execution and final hash registries stay held."
+  nextAction: "Correct the admitted scalar SQL typing and two native fixture seams after the observed104-case run; freeze source/scoped proof for root and M01 before any new native grant."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1161,3 +1161,18 @@ Actual unchanged affected bootstrap test source34PASS/1file/0skip, scoped helper
 M01 final source reviewf1e9f41adcb2e39d07e764a3c122bd658964ac1b691d8d764ab408fd803edf70/all36artifacts accepted clean6bd boundedsource. Root exclusively grantedPG54329/heavy local isolated proof. Actual new database waia_hsv2_it_dee1130_20260927_0846 bootstrap08:48:32–35 failed while creating0222 verifier: PostgreSQL16.14 syntax error at end of input, statement character43683. Original222migration identities through0221 and27retainedoriginalledger rows are present;0222transaction rolled back, mode relation absent. No otherclients remained. DB/logs preserved, no history repair or prior migration edits. Frontier suite not run.
 
 Root reproduced the parser mechanism with a no-write DO block: bare CASE inside an IF predicate exits3 at innerTHEN, the same CASE parenthesized exits0. This finite correction adds parentheses around all eight such existing CASE expressions in verifier IF predicates. Exact operands/operators/predicates remain, reversing just those parentheses reconstructs original SQL bytes. Other CASE assignments/FOR bounds/SQL function arguments are unchanged. No guard/cap, privilege/source, digest, schema/journal or runtime TypeScript change. Source evidence/case-parser-correction and originalnative-6bd68e90 retained. Independent finite diff review and a new fresh full bootstrap are required; do not resume/repair the failed database or infer nativePASS.
+
+
+## Finite first-native correction admission — 2026-09-27
+
+Root admits exactly three source paths after the single actual whole-frontier run on immutable `fc4698bdf33b5ff68e0203d1168248d9fa3361a1`: this plan, `lib/trader/historical-simulation-v2/atomic-cycle-repository-postgres-v2.ts`, and `tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts`. This plan-only amendment precedes executable edits.
+
+Observed PostgreSQL16.14 result was104 assertions in one file:83 passed,21 failed,0 skipped. Evidence is `evidence/dee-1130/native-fc4698bd/author-result/REPORT.md` SHA256 `33fe7764f41da39358b5d609aafb484490cbea40da08693d0020801e3908bfb5`; immutable manifest SHA256 `1f56a85ed387d48d55e50bac049eb5d068a986fdaee2e850b6e88a51e25b7946` binds19 artifacts/5 source files. All223 applied hash/timestamp identities matched source; fixture role/policies and sessions were absent after teardown, all14 closure triggers remained enabled. Successful controls legitimately left31 LEGACY modes and0 frontiers. The earlier failed0846 database and this0852 database remain retained; neither is repaired, reset or reused as fresh proof.
+
+The thirteen parameter-related failures occurred first in the test's stage writer (`42P18`, parameter11), including later fault/refusal assertions blocked before their intended branches. The same untyped variadic `jsonb_build_object` arguments exist in the actual production stage/snapshot writers; a bounded installed-client SELECT-only probe refused untyped strings and preserved exact values with `::text`. Actual production-owner35 execution was not performed, so its failure is not claimed as observed native evidence. Cast only `kind`, `sourceSchema`, and `sourceDigest` at both production writers and both native fixture writers (six production and six fixture parameter sites). Preserve every selected value, identity, digest, condition and DB invariant. Inspect the finite adjacent bindings in these four blocks for the same typing seam; unexpected scope changes require root disposition.
+
+Three restricted-role controls lack the existing modeled-evidence table capability required by the real ledger writer. Add only `trader_historical_simulation_modeled_evidence_v2` to the existing disposable fixture role's original-table SELECT/INSERT, exact-org policy and teardown inventory. Grant no feature table, helper, certification or product-role capability.
+
+Five byte/representation controls attempt to mutate the deeply frozen production projection. Clone only the bounded projected candidate value in the fixture before its adversarial callback; preserve the production helper's deep freeze and every native assertion/threshold. All104 existing cases, exact caps, semantic/representation checks, RLS refusals and race/fault expectations remain.
+
+Allowed proof at this correction stage is source/scoped unit/lint/diff only. No SQL/migration/journal/schema/CI/registry/graph change, bootstrap, database/native run, compiler, PROFILE35 or publication is authorized by this amendment. Root and M01 must review the complete immutable correction; a subsequent whole-suite native run requires a new isolated database and separate execution grant. Prior failures remain immutable and overall package readiness is unproven.
