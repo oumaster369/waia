@@ -10,15 +10,16 @@ import { requireServiceOrgContext } from "@/lib/trader/security/service-org-cont
 import { writeAuditLogPostgres } from "@/lib/waia-core/audit/write";
 import { prepareHeldResearchReplay, HeldResearchAccounting, captureResearchReplaySelector, type ResearchRequest } from "../research-understanding-v1/held-replay";
 import { APPLICATION_AUTHORITY, APPLICATION_PURPOSE, APPLICATION_SERVICE_ACTOR, APPLICATION_LIMITS as L,
-  captureApplicationConfigurationV1, applicationDigest as digest, applicationBytes, applicationTime, requireApplication as check,
+  captureApplicationConfigurationV1, ResearchApplicationRefusal, applicationDigest as digest, applicationBytes, applicationTime, requireApplication as check,
   type ResearchApplicationConfigurationV1, type ResearchApplicationRelationV1 } from "./contract";
 import { APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } from "./computation-manifest";
 import { assertCategoricalRegistrationV1, evaluateCategoricalApplicationMeaningV1, foldResearchApplicationRelationV1, selectResearchApplicationRelationV1 } from "./specification";
-import { readApplicationRows, readApplicationRegistration, applicationScope, decodeApplicationBody, type ApplicationExecutor, type ApplicationRow } from "./bounded-read-postgres";
+import { readApplicationRows, admitApplicationWriteRow, readApplicationRegistration, applicationScope, decodeApplicationBody, type ApplicationExecutor, type ApplicationRow } from "./bounded-read-postgres";
 import { defineCanonicalMeasurementV1, identifyCanonicalMeasurementValueV1, type CanonicalMeasurementObservationLineageV1 } from "@/lib/trader/mi/measurement-lineage-v1";
 import { persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres, persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres } from "@/lib/trader/mi/canonical-pit-repository-postgres";
-import { claimBoundedResearchRuntimeControlLeaseV2, lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2,
+import { claimBoundedResearchRuntimeControlLeaseWithinHeldTransactionV2, lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2,
   type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
+import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
 
@@ -65,7 +66,7 @@ function sourcePin(r: Replay) { return { sourceSessionId: r.session.sessionId, s
     trustAsOfReceiptId: v.receipt.trustAsOfReceiptId })), selectedRevisions: r.revisions.map(v => ({ id: v.id, contentDigest: v.contentDigest,
       eventTime: v.eventTime, availableAt: v.availableAt, ingestTime: v.ingestTime })) }; }
 function featureWitness(r: Replay) {
-  const inputs: CanonicalMeasurementObservationLineageV1[] = [];
+  const inputs: Extract<CanonicalMeasurementObservationLineageV1, { observationSchemaVersion: "mi-canonical-pit-observation-v1" }>[] = [];
   for (const kind of ["ohlcv_bar", "quote_l1"] as const) {
     const index = r.packet.normalized.observations.findIndex(v => v.kind === kind && (kind !== "ohlcv_bar" || v.interval === "1m"));
     const source = r.packet.sources[index];
@@ -84,7 +85,8 @@ function featureWitness(r: Replay) {
     name: "Saved research FeatureSnapshot / categorical application v1", outputSchemaVersion: payload.schemaVersion,
     inputContracts: inputs.map(i => ({ observationKind: i.observationKind, observationSchemaVersion: i.observationSchemaVersion })) });
   const value = identifyCanonicalMeasurementValueV1({ organizationId: r.session.organizationId, definition, outputContentDigest: digest(payload), inputs });
-  return { payload, definition, value };
+  const witness = { payload, payloadCanonical: canonicalizeSemanticJsonString(payload), definition, value };
+  bounded(witness, L.featureWitness); return witness;
 }
 type Witness = NonNullable<ReturnType<typeof featureWitness>>;
 function applicationBody(c: ResearchApplicationConfigurationV1, id: string, actor: Actor, p: Replay, a: Replay,
@@ -147,18 +149,24 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
   }
   async function current(bound: Bound): Promise<string> {
     check(holder, "APPLICATION_HOLDER_REQUIRED");
-    await lockRuntimeOrganizationV2(bound.executor as WaiaPostgresDb, c.organizationId);
-    const now = await assertRuntimeDatabaseClockHolderV2(bound.executor as WaiaPostgresDb, holder);
+    await lockRuntimeOrganizationV2(bound.executor, c.organizationId);
+    const now = await assertRuntimeDatabaseClockHolderV2(bound.executor, holder);
     accounting.assertDeadline(); return now;
   }
   async function claim() {
     if (holder) return;
-    // Existing bounded claim owns one RC transaction. This fixed internal facade
-    // routes that exact transaction through the same accounting and actual pool.
-    const ownerDb = { transaction: (fn: (db: WaiaPostgresDb) => Promise<Holder | null>) =>
-      transaction("read committed", b => fn(b.executor as WaiaPostgresDb)) } as unknown as WaiaPostgresDb;
-    holder = await claimBoundedResearchRuntimeControlLeaseV2(ownerDb, { organizationId: c.organizationId,
-      runtimeInstanceId: `research-application:${randomUUID()}`, durationMs: request.research.range.leaseDurationMs });
+    try {
+      holder = await transaction("read committed", b => claimBoundedResearchRuntimeControlLeaseWithinHeldTransactionV2(b.executor,
+        { organizationId: c.organizationId, runtimeInstanceId: `research-application:${randomUUID()}`,
+          durationMs: request.research.range.leaseDurationMs }));
+    } catch (error) {
+      // The owning claim promise has rejected: its real rollback precedes recovery.
+      // Drizzle may wrap the PostgreSQL error once; no unrelated/unknown failure is swallowed.
+      const cause = error instanceof Error && "cause" in error ? error.cause : undefined;
+      const unique = (value: unknown) => typeof value === "object" && value !== null && "code" in value && value.code === "23505";
+      if (unique(error) || unique(cause)) throw new ResearchApplicationRefusal("APPLICATION_LEASE_BUSY");
+      throw error;
+    }
     accounting.assertDeadline(); check(holder, "APPLICATION_LEASE_BUSY");
   }
   const holderColumns = () => { check(holder, "APPLICATION_HOLDER_REQUIRED"); return { runtimeInstanceId: holder.runtimeInstanceId,
@@ -243,10 +251,10 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       projection(existing, body, { assignmentDigest, researchSessionId: c.researchSessionId, researchAssignmentDigest: c.researchAssignmentDigest });
     } else {
       check(create, "APPLICATION_ASSIGNMENT_MISSING");
-      extra.admit("new_assignment", assignmentDigest, applicationBytes(body), L.assignment);
-      const inserted = await db.insert(s.traderResearchApplicationAssignmentsV1).values({ organizationId: c.organizationId,
-        assignmentDigest, contentDigest: digest(body), bodyJson: canonical(body), researchSessionId: c.researchSessionId,
-        researchAssignmentDigest: c.researchAssignmentDigest, ...holderColumns() }).returning({ id: s.traderResearchApplicationAssignmentsV1.assignmentDigest });
+      const values = { organizationId: c.organizationId, assignmentDigest, contentDigest: digest(body), bodyJson: canonical(body),
+        researchSessionId: c.researchSessionId, researchAssignmentDigest: c.researchAssignmentDigest, ...holderColumns() };
+      await admitApplicationWriteRow(db, "assignment", values, extra);
+      const inserted = await db.insert(s.traderResearchApplicationAssignmentsV1).values(values).returning({ id: s.traderResearchApplicationAssignmentsV1.assignmentDigest });
       check(inserted.length === 1, "APPLICATION_FENCED_INSERT_REQUIRED");
     }
   }
@@ -350,13 +358,13 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       check(applicationTime(recordedAt) > applicationTime(a.packet.analysisPitAnchor), "APPLICATION_RECORDED_TIME_INVALID");
       const registry = await selectedRegistry(bound.executor, recordedAt, [p.packet.analysisPitAnchor, a.packet.analysisPitAnchor, recordedAt]);
       const body = applicationBody(c, id, activeActor, p, a, registry, recordedAt);
-      extra.admit("new_application", id, applicationBytes(body), L.application);
       await assignment(bound.executor, activeActor, true);
       await witnesses(bound.executor, body.witnesses, true);
       const auditId = await audit(bound.executor, "apply", body, digest(body));
-      const inserted = await bound.executor.insert(s.traderResearchApplicationsV1).values({ organizationId: c.organizationId, applicationId: id,
-        assignmentDigest, previousSourceSequence: p.sourceSequence, currentSourceSequence: a.sourceSequence, recordedAt,
-        contentDigest: digest(body), bodyJson: canonical(body), auditId, ...holderColumns() }).returning({ id: s.traderResearchApplicationsV1.applicationId });
+      const values = { organizationId: c.organizationId, applicationId: id, assignmentDigest, previousSourceSequence: p.sourceSequence,
+        currentSourceSequence: a.sourceSequence, recordedAt, contentDigest: digest(body), bodyJson: canonical(body), auditId, ...holderColumns() };
+      await admitApplicationWriteRow(bound.executor, "application", values, extra);
+      const inserted = await bound.executor.insert(s.traderResearchApplicationsV1).values(values).returning({ id: s.traderResearchApplicationsV1.applicationId });
       check(inserted.length === 1, "APPLICATION_FENCED_INSERT_REQUIRED"); await current(bound); accounting.assertDeadline();
     });
     return transaction("repeatable read", async bound => {
@@ -369,10 +377,11 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
         check(applicationTime(availableAt) >= applicationTime(app.body.recordedAt), "APPLICATION_AVAILABILITY_TIME_INVALID");
         const body: AvailabilityBody = { schemaVersion: schemaVersion("availability"), ...common, organizationId: c.organizationId, applicationId: id,
           applicationDigest: String(app.row.contentDigest), availableAt, actor: activeActor };
-        bounded(body, L.projection); extra.admit("new_availability", id, applicationBytes(body), L.projection);
+        bounded(body, L.projection);
         const auditId = await audit(bound.executor, "availability", body, digest(body));
         const values = { organizationId: c.organizationId, applicationId: id, applicationDigest: String(app.row.contentDigest), availableAt,
           contentDigest: digest(body), bodyJson: canonical(body), auditId, ...holderColumns() };
+        await admitApplicationWriteRow(bound.executor, "availability", values, extra);
         const inserted = await bound.executor.insert(s.traderResearchApplicationAvailabilityV1).values(values).returning({ id: s.traderResearchApplicationAvailabilityV1.applicationId });
         check(inserted.length === 1, "APPLICATION_FENCED_INSERT_REQUIRED");
         available = { row: values, body }; await current(bound);
@@ -396,12 +405,12 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       const recordedAt = await current(bound);
       const { body, b } = await consumeBody(bound, app, available, activeActor, recordedAt, sequence, previousConsumptionDigest);
       await lockSources(bound.executor, [app.p, app.a, b]);
-      extra.admit("new_consumption", `${id}:${b.sourceSequence}`, applicationBytes(body), L.consumption);
       const auditId = await audit(bound.executor, "consume", body, digest(body));
-      const inserted = await bound.executor.insert(t).values({ organizationId: c.organizationId, assignmentDigest, applicationId: id,
-        applicationDigest: String(app.row.contentDigest), availabilityDigest: String(available.row.contentDigest), consumerSourceSessionId: c.sourceSessionId,
-        consumerSourceSequence: b.sourceSequence, sequence, previousConsumptionDigest, contentDigest: digest(body), bodyJson: canonical(body), auditId,
-        ...holderColumns() }).returning({ sequence: t.sequence });
+      const values = { organizationId: c.organizationId, assignmentDigest, applicationId: id, applicationDigest: String(app.row.contentDigest),
+        availabilityDigest: String(available.row.contentDigest), consumerSourceSessionId: c.sourceSessionId, consumerSourceSequence: b.sourceSequence,
+        sequence, previousConsumptionDigest, contentDigest: digest(body), bodyJson: canonical(body), auditId, ...holderColumns() };
+      await admitApplicationWriteRow(bound.executor, "consumption", values, extra);
+      const inserted = await bound.executor.insert(t).values(values).returning({ sequence: t.sequence });
       check(inserted.length === 1, "APPLICATION_FENCED_INSERT_REQUIRED"); await current(bound);
       return result(app.body, String(app.row.contentDigest), available.body, String(available.row.contentDigest), "COMMITTED", body);
     });

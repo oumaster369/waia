@@ -314,7 +314,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/bounded-read-postgres.ts",
-    "sha256": "5dbc3c70f9d8dbb7f4ee3386f129209503fe39241f44c992d6c0b29e2983629b"
+    "sha256": "e938641991e796af2e7e86a6955e77c1f6d3a6401ca5720962604158dbc68c9c"
   },
   {
     "path": "lib/trader/paper/research-application-v1/cli-options.ts",
@@ -326,7 +326,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "2a1f51077cf0f359e5478fda799abb651165346a38b30b1c521c06ea1986cd52"
+    "sha256": "2bd23c865bcc43bc388a084f8058f72a2366165de29bb529eee300de25888a25"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -378,7 +378,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/runtime-authority/v2/runtime-authority-repository-postgres-v2.ts",
-    "sha256": "88a4810ada6459e905944208df33219e578ac731fbc3630d821aa54f32bfc850"
+    "sha256": "8a5df3d7b68ada85e71f1f27b11c7aa519aa30ed32ae2565b24b10143d3edae3"
   },
   {
     "path": "lib/trader/runtime-authority/v2/runtime-authority-repository-v2.ts",
@@ -386,7 +386,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2.ts",
-    "sha256": "a9eba07ae9773d6842f19f2c690f0a571d32d46654250cce9030908f6ceabeb1"
+    "sha256": "1995c7de613a9e1b36b34874c10f6cd4204e618ce992e45375ca843342935f39"
   },
   {
     "path": "lib/trader/runtime-v2/recorded-noncapital-input-v2.ts",
@@ -413,4 +413,4 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "bfd01ad94fff16fc9e374906cc9c3cc4ccb32ced83386ccf1e69c6c566608326";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "1443be936ddd045dbcfdb60cf8931eb518cb87fecb93649a13314fca1042ec2c";

@@ -8,7 +8,7 @@ vi.mock("drizzle-orm/postgres-js", async importOriginal => {
   const actual = await importOriginal<typeof import("drizzle-orm/postgres-js")>();
   return { ...actual, drizzle: vi.fn(actual.drizzle) };
 });
-import { getTableColumns, getTableName, is } from "drizzle-orm";
+import { getTableColumns, getTableName, is, sql } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import * as schema from "@/db/schema.postgres";
 import { prepareHeldResearchReplay, HeldResearchAccounting, type ResearchRequest } from "@/lib/trader/paper/research-understanding-v1/held-replay";
@@ -245,8 +245,9 @@ function emptyApplication() {
       measurementId: "explicit-m", measurementKey: "c".repeat(64), measurementVersion: 1, measurementDefinitionDigest: "d".repeat(64),
       specification: APPLICATION_SPECIFICATION, bridge: APPLICATION_BRIDGE, questionMap: APPLICATION_QUESTION_MAP, maxAgeMs: 60000 } };
   const trace: string[] = []; let afterQuery: () => void = () => {}; let afterCommit: () => void = () => {};
-  const unsafe = vi.fn((query: string) => {
-    trace.push(query); const promise = Promise.resolve().then(() => { afterQuery(); return []; });
+  const unsafe = vi.fn((query: string, _params: unknown[] = []) => {
+    void _params;
+    trace.push(query); const promise: Promise<unknown[]> = Promise.resolve().then(() => { afterQuery(); return []; });
     return Object.assign(promise, { values: () => promise });
   });
   const held = { unsafe, savepoint: () => { throw new Error("SAVEPOINT_FORBIDDEN"); } } as unknown as postgres.TransactionSql;
@@ -304,5 +305,125 @@ describe("actual application command capture/ownership and absent replay", () =>
     await expect(runSavedApplication(f.pool, { ...f.context, userId: "22222222-2222-4222-8222-222222222222" }, f.request)).rejects.toThrow();
     expect(f.trace.join("\n")).toContain('"organization_members"');
     expect(f.trace.join("\n")).not.toContain('"trader_research_application'); expect(f.trace.at(-1)).toBe("rollback");
+  });
+});
+
+
+/** Actual command and installed Drizzle; only SQL rows and transaction transport are inert. */
+function claimApplication(mode: "absent" | "expired" | "busy" | "unique" | "failure") {
+  const f = emptyApplication(); f.request.operation = "apply";
+  const now = "2026-01-01T12:00:00.000Z";
+  let head: Record<string, unknown> | null = mode === "expired" || mode === "busy" ? {
+    organizationId: f.context.organizationId, runtimeInstanceId: "prior", leaseEpoch: 7, contentDigest: "a".repeat(64),
+    validUntilUtc: mode === "busy" ? "2026-01-01T12:00:10.000Z" : "2026-01-01T11:59:59.000Z", updatedAt: now,
+  } : null;
+  const before = head && { ...head }; const writes: Array<{ query: string; params: unknown[] }> = [];
+  const columns = getTableColumns(schema.traderRuntimeControlLeaseHeadsV2);
+  const keys = new Map(Object.entries(columns).map(([key, col]) => [col.name, key]));
+  f.unsafe.mockImplementation((query: string, params: unknown[] = []) => {
+    f.trace.push(query);
+    const result = async (arrays: boolean) => {
+      if (f.begin.mock.calls.length >= 3) throw new Error("AFTER_REAL_CLAIM");
+      if (query.includes("clock_timestamp()")) return [{ now }];
+      if (query.startsWith("insert into")) {
+        writes.push({ query, params: [...params] });
+        if (query.includes('"trader_runtime_control_lease_epoch_history_v2"') && (mode === "unique" || mode === "failure"))
+          throw Object.assign(new Error(mode === "unique" ? "synthetic unique violation" : "synthetic persistence failure"), { code: mode === "unique" ? "23505" : "XX000" });
+        if (query.includes('"trader_runtime_control_lease_heads_v2"')) {
+          const names = query.match(/\(([^)]+)\) values/)![1]!.split(",").map(v => v.trim().replaceAll('"', ''));
+          const values = query.match(/ values \(([^)]+)\)/)![1]!.split(",").map(v => v.trim());
+          head = Object.fromEntries(names.map((name, i) => [keys.get(name) ?? name, values[i]!.startsWith("$") ? params[Number(values[i]!.slice(1)) - 1] : now]));
+        }
+        return [];
+      }
+      if (query.includes('from "trader_runtime_control_lease_heads_v2"')) {
+        if (!head) return [];
+        return arrays ? [Object.keys(columns).map(k => head![k])] : [head];
+      }
+      return [];
+    };
+    return Object.assign(Promise.resolve().then(() => result(false)), { values: () => result(true) });
+  });
+  // Inert rollback model is not a native atomicity proof. It records the owner's order.
+  f.begin.mockImplementation(async (options, callback) => {
+    f.trace.push(`begin ${options}`); const saved = head && { ...head };
+    try { const value = await callback(f.held); f.trace.push("commit"); return value; }
+    catch (e) { head = saved; f.trace.push("rollback"); throw e; }
+  });
+  return { ...f, writes, before, head: () => head };
+}
+describe("actual application first acquisition composition", () => {
+  it.each(["absent", "expired"] as const)("%s head reaches real lease history/head inserts before later work", async mode => {
+    const f = claimApplication(mode);
+    await expect(runSavedApplication(f.pool, f.context, f.request)).rejects.toThrow("AFTER_REAL_CLAIM");
+    expect(f.writes).toHaveLength(2);
+    expect(f.head()).toMatchObject({ organizationId: f.context.organizationId, leaseEpoch: mode === "absent" ? 1 : 8 });
+    expect(f.writes[0]!.params).toContain(mode === "absent" ? null : "a".repeat(64));
+    const begin = f.trace.findIndex(q => q === "begin isolation level read committed");
+    const lock = f.trace.findIndex((q, i) => i > begin && q.includes("pg_advisory_xact_lock"));
+    expect(begin).toBeGreaterThan(0); expect(f.trace.slice(begin, lock).join("\n")).toContain("lock_timeout");
+    expect(f.trace.slice(begin, lock).join("\n")).toContain("statement_timeout");
+    expect(f.trace.slice(begin, lock).some(q => /select .*from/.test(q))).toBe(false);
+    expect(f.trace.filter(q => q === "commit")).toHaveLength(2); expect(f.trace.at(-1)).toBe("rollback");
+  });
+  it("live head refuses busy without any lease write", async () => {
+    const f = claimApplication("busy");
+    expect(await runSavedApplication(f.pool, f.context, f.request)).toEqual({ status: "APPLICATION_LEASE_BUSY", outcome: "REFUSED" });
+    expect(f.writes).toEqual([]); expect(f.head()).toEqual(f.before);
+  });
+  it("23505 reaches actual owning rollback before its busy mapping", async () => {
+    const f = claimApplication("unique");
+    expect(await runSavedApplication(f.pool, f.context, f.request)).toEqual({ status: "APPLICATION_LEASE_BUSY", outcome: "REFUSED" });
+    expect(f.writes).toHaveLength(1); expect(f.head()).toBeNull(); expect(f.trace.at(-1)).toBe("rollback");
+    expect(f.begin).toHaveBeenCalledTimes(2);
+  });
+  it("unrelated claim persistence failure propagates after owning rollback", async () => {
+    const f = claimApplication("failure");
+    await expect(runSavedApplication(f.pool, f.context, f.request)).rejects.toThrow();
+    expect(f.writes).toHaveLength(1); expect(f.head()).toBeNull(); expect(f.trace.at(-1)).toBe("rollback");
+    expect(f.begin).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+import { createPostgresRuntimeControlLeaseRepositoryV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-repository-postgres-v2";
+describe("old public claim retains installed Drizzle transaction/savepoint recovery", () => {
+  it.each(["valid", "23505", "XX000"])("%s preserves the old nested boundary", async mode => {
+    const trace: string[] = []; let writes = 0;
+    const unsafe = (query: string) => {
+      const execute = async () => { trace.push(query);
+        if (query.startsWith("insert")) { writes++; if (mode !== "valid") throw Object.assign(new Error(`SQL_${mode}`), { code: mode }); }
+        return [];
+      };
+      // Lazy thenable matches the driver's one dispatch, including Drizzle array mode.
+      return { then: (resolve: (v: unknown[]) => unknown, reject: (e: unknown) => unknown) => execute().then(resolve, reject), values: execute };
+    };
+    type HeldPort = { unsafe: typeof unsafe; savepoint(fn: (value: HeldPort) => Promise<unknown>): Promise<unknown> };
+    const held: HeldPort = { unsafe, savepoint: async fn => {
+      trace.push("savepoint");
+      try { const result = await fn(held); trace.push("release savepoint"); return result; }
+      catch (error) { trace.push("rollback savepoint"); throw error; }
+    } };
+    const pool = { options: { parsers: {}, serializers: {} }, unsafe,
+      begin: async (fn: (value: typeof held) => Promise<unknown>) => {
+        trace.push("begin");
+        try { const result = await fn(held); trace.push("commit"); return result; }
+        catch (error) { trace.push("rollback"); throw error; }
+      } };
+    const db = postgresAdapter.drizzle(pool as unknown as postgres.Sql, { schema });
+    const pending = db.transaction(async tx => {
+      const result = await createPostgresRuntimeControlLeaseRepositoryV2(tx).claimExclusive({
+        organizationId: "11111111-1111-4111-8111-111111111111", runtimeInstanceId: "old-public",
+        leaseEpoch: 1, expectedPreviousDigest: null, leaseContentDigest: "a".repeat(64),
+        adjudicatedAtUtc: "2026-01-01T00:00:00.000Z", validUntilUtc: "2026-01-01T00:00:10.000Z" });
+      await tx.execute(sql`select 'outer still usable'`); return result;
+    });
+    if (mode === "XX000") { await expect(pending).rejects.toThrow("SQL_XX000"); expect(trace.at(-1)).toBe("rollback"); }
+    else { expect(await pending).toBe(mode === "valid" ? "CLAIMED" : "CONFLICT"); expect(trace.at(-1)).toBe("commit");
+      expect(trace.at(-2)).toBe("select 'outer still usable'"); }
+    expect(trace[0]).toBe("begin"); expect(trace[1]).toBe("savepoint");
+    expect(trace.filter(v => v === "savepoint")).toHaveLength(1);
+    expect(trace).toContain(mode === "valid" ? "release savepoint" : "rollback savepoint");
+    expect(writes).toBe(mode === "valid" ? 2 : 1);
   });
 });

@@ -4,7 +4,7 @@ import type { SavedApplicationRequest } from "@/lib/trader/paper/research-applic
 import { pathToFileURL } from "node:url";
 
 export async function seedApplicationNative(client: postgres.Sql, organizationId: string, userId: string,
-  options: { against?: boolean; missing4h?: boolean; userAssignment?: boolean } = {}) {
+  options: { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number } = {}) {
   const { drizzle } = await import("drizzle-orm/postgres-js"); const schema = await import("@/db/schema.postgres");
   const { createPostgresMiMeasurementService } = await import("@/lib/trader/mi/measurement-service");
   const { createPostgresMiHypothesisService } = await import("@/lib/trader/mi/hypothesis-service");
@@ -25,7 +25,7 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
   const { claimRuntimeControlLeaseAtDatabaseTimeV2, readRuntimeDatabaseClockV2 } = await import("@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2");
   const db = drizzle(client, { schema }); const context = { organizationId, userId };
   const researchContext = options.userAssignment ? context : { organizationId };
-  const now = () => readRuntimeDatabaseClockV2(db);
+  const now = () => db.transaction(tx => readRuntimeDatabaseClockV2(tx));
   async function observedAfter(time: string) {
     const start = performance.now();
     for (;;) { const value = await now(); if (value > time) return value;
@@ -56,10 +56,33 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     computationManifestDigest: research.DECLARATIONS.computationManifestDigest, measurementKey: measurement.measurementKey,
     measurementDefinitionDigest: measurement.definitionDigest };
   const definition = specification.categoricalHypothesisDefinitionV1(partial,
-    { ordinal: "low", band: "wide" }, ["always-flat-cash", "simple-trend-baseline", "buy-and-hold"]);
+    { ordinal: options.priorOrdinal ?? "low", band: "wide" }, ["always-flat-cash", "simple-trend-baseline", "buy-and-hold"]);
   const hypothesisService = createPostgresMiHypothesisService(db).hypothesis;
-  const hypothesis = await hypothesisService.registerHypothesis(context, { hypothesisKind: "market_claim",
+  let hypothesis = await hypothesisService.registerHypothesis(context, { hypothesisKind: "market_claim",
     name: specification.categoricalHypothesisNameV1(session.symbol), definition, authoredBy: userId });
+  for (let version = 2; version <= (options.hypothesisVersions ?? 1); version++) {
+    hypothesis = await hypothesisService.appendHypothesisVersion(context, { hypothesisKey: hypothesis.hypothesisKey,
+      hypothesisKind: "market_claim", name: hypothesis.name, definition: { ...definition, prior: options.priorOrdinal && version === options.hypothesisVersions ? definition.prior :
+        { ordinal: `explicit synthetic version ${version}`, band: "wide" } }, authoredBy: userId });
+  }
+  const hypothesisProjectionBytes = async () => Number((await client`select octet_length(to_jsonb(bounded_row)::text)::int bytes from
+    (select id, organization_id as "organizationId", hypothesis_kind as "hypothesisKind", hypothesis_key as "hypothesisKey", name,
+      schema_version as "schemaVersion", definition_json as "definitionJson", definition_digest as "definitionDigest",
+      supersedes_json as "supersedesJson", version_seq as "versionSeq", revision_of as "revisionOf", authored_by as "authoredBy", created_at as "createdAt"
+      from trader_mi_hypothesis where organization_id=${organizationId}::uuid and id=${hypothesis.id}::uuid) bounded_row`)[0]!.bytes);
+  if (options.targetHypothesisBytes !== undefined) {
+    // Every calibration is a real immutable writer version before P/A. No update,
+    // timestamp fabrication or guessed JS JSON byte count replaces SQL's projection.
+    let length = (options.priorOrdinal ?? "low").length;
+    for (let attempt = 0; await hypothesisProjectionBytes() !== options.targetHypothesisBytes; attempt++) {
+      if (attempt >= 8) throw new Error("FIXTURE_PROJECTION_CALIBRATION_LIMIT");
+      length += options.targetHypothesisBytes - await hypothesisProjectionBytes();
+      if (length < 1) throw new Error("FIXTURE_PRIOR_LABEL_LENGTH_INVALID");
+      hypothesis = await hypothesisService.appendHypothesisVersion(context, { hypothesisKey: hypothesis.hypothesisKey,
+        hypothesisKind: "market_claim", name: hypothesis.name,
+        definition: { ...definition, prior: { ordinal: "p".repeat(length), band: "wide" } }, authoredBy: userId });
+    }
+  }
   const registeredAt = await observedAfter(new Date(Math.max(hypothesis.createdAt.getTime(), measurement.createdAt.getTime())).toISOString());
   // Closed synthetic market events may precede registration; only the actual saved
   // knowledge/PIT cutoffs follow registration. Quote/acquisition clocks are observed now.
@@ -114,7 +137,7 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     specification: contract.APPLICATION_SPECIFICATION, bridge: contract.APPLICATION_BRIDGE, questionMap: contract.APPLICATION_QUESTION_MAP,
     maxAgeMs: 600000 });
   const application: SavedApplicationRequest = { configuration, research: request, operation: "apply", previousSourceSequence: 0, currentSourceSequence: 1 };
-  return { application, packets, appendThrough, expiry, hypothesis, measurement, hypothesisService, context, researchContext, db };
+  return { application, packets, appendThrough, expiry, hypothesis, measurement, hypothesisService, hypothesisProjectionBytes, context, researchContext, db };
 }
 
 // Direct child execution imports only the actual CLI, never fixture producers.

@@ -1,6 +1,8 @@
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 import { getTableColumns, getTableName, sql, type SQL } from "drizzle-orm";
+import { z } from "zod";
+import { miHypothesisLifecycleStateValues } from "@/lib/trader/mi/hypothesis.types";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import * as s from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -112,6 +114,40 @@ export async function readApplicationRegistration(db: ApplicationExecutor, c: Re
     { maximum: L.selectedHistory, order: sql`${h.versionSeq}, ${h.id}` });
   const lifecycles = await readApplicationRows(db, "lifecycle", sql`${l.organizationId}=${c.organizationId} and ${l.hypothesisKey}=${c.hypothesisKey} and ${l.createdAt}<=${at}::timestamptz`, budget,
     { maximum: L.selectedHistory, order: sql`${l.seq}, ${l.id}` });
-  const date = (row: ApplicationRow) => ({ ...row, createdAt: new Date(row.createdAt as string) });
-  return { hypothesis: date(hypothesis), measurement: date(measurement), versions: versions.map(date), lifecycles: lifecycles.map(date) } as ApplicationRegistrationReadSetV1;
+  const text = z.string(), sequence = z.number().int().positive().safe();
+  const createdAt = z.string().datetime().transform(value => new Date(value));
+  const identity = { id: text, organizationId: text, createdAt };
+  const version = z.object({ ...identity, hypothesisKey: text, versionSeq: sequence, definitionDigest: text }).strict();
+  const hypothesisRow = z.object({ ...version.shape, hypothesisKind: z.literal("market_claim"), name: text,
+    schemaVersion: z.literal("mi-hypothesis-v1"), definitionJson: text, supersedesJson: text.nullable(),
+    revisionOf: text.nullable(), authoredBy: text }).strict();
+  const measurementRow = z.object({ ...identity, measurementKind: z.literal("feature_transform"), measurementKey: text,
+    name: text, schemaVersion: z.literal("mi-measurement-v1"), definitionJson: text, definitionDigest: text,
+    versionSeq: sequence, revisionOf: text.nullable(), authoredBy: text }).strict();
+  const lifecycleRow = z.object({ ...identity, hypothesisId: text, hypothesisKey: text, lifecycleState: z.enum(miHypothesisLifecycleStateValues),
+    rationale: text, recordedBy: text, seq: sequence, contentDigest: text }).strict();
+  const result = z.object({ hypothesis: hypothesisRow, measurement: measurementRow, versions: z.array(version), lifecycles: z.array(lifecycleRow) })
+    .safeParse({ hypothesis, measurement, versions, lifecycles });
+  check(result.success, "APPLICATION_REGISTRATION_ROW_INVALID"); return result.data;
+}
+
+
+/** Fixed owner-generated row only. Charge precisely the stored reader's projection,
+ * including body-string escaping, audit and holder columns, before the fenced INSERT. */
+export async function admitApplicationWriteRow(db: ApplicationExecutor,
+  kind: "assignment" | "application" | "availability" | "consumption", row: ApplicationRow, budget: ResearchReadBudget): Promise<void> {
+  const [table, names, cap] = specs[kind], keys = names.split(" ");
+  check(Object.keys(row).length === keys.length && keys.every(k => Object.hasOwn(row, k)), "APPLICATION_WRITE_PROJECTION_INVALID");
+  check(typeof row.bodyJson === "string" && Buffer.byteLength(row.bodyJson, "utf8") <= cap, "APPLICATION_OUTPUT_LIMIT");
+  const columns = getTableColumns(table) as Record<string, PgColumn>;
+  const fields = keys.flatMap(key => [sql`${key}::text`, sql`${row[key]}::${sql.raw(columns[key]!.getSQLType())}`]);
+  const identityKeys = kind === "assignment" ? ["organizationId", "assignmentDigest"]
+    : kind === "consumption" ? ["organizationId", "assignmentDigest", "sequence"] : ["organizationId", "applicationId"];
+  const identity = sql`jsonb_build_array(${sql.join(identityKeys.map(key => sql`${row[key]}::${sql.raw(columns[key]!.getSQLType())}`), sql`, `)})::text`;
+  budget.checkDeadline();
+  const metadata = await db.execute<{ identity: string; bytes: number }>(sql`select ${identity} as identity,
+    octet_length(jsonb_build_object(${sql.join(fields, sql`, `)})::text)::integer as bytes`);
+  budget.checkDeadline(); check(metadata.length === 1 && typeof metadata[0]!.identity === "string", "APPLICATION_WRITE_PROJECTION_INVALID");
+  // Use PostgreSQL's exact jsonb-array text, including separators, just like the stored reader.
+  budget.admit(getTableName(table), metadata[0]!.identity, metadata[0]!.bytes, cap, kind);
 }

@@ -10,8 +10,16 @@ import { seedWp13User } from "./wp13-intelligence-test-helpers";
 import { assertRecordedAnalysisTestDatabase } from "../helpers/recorded-paper-public-transport";
 import { seedApplicationNative } from "../helpers/research-application-v1-process";
 import { runSavedApplication } from "@/lib/trader/paper/research-application-v1/run-saved-application";
-import { HeldResearchAccounting } from "@/lib/trader/paper/research-understanding-v1/held-replay";
+import { HeldResearchAccounting, prepareHeldResearchReplay } from "@/lib/trader/paper/research-understanding-v1/held-replay";
 import type { SavedApplicationRequest } from "@/lib/trader/paper/research-application-v1/repository-postgres";
+
+import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import * as schema from "@/db/schema.postgres";
+import { readApplicationRows, applicationScope, admitApplicationWriteRow } from "@/lib/trader/paper/research-application-v1/bounded-read-postgres";
+import { APPLICATION_LIMITS as limits, applicationDigest } from "@/lib/trader/paper/research-application-v1/contract";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { createPostgresRuntimeControlLeaseRepositoryV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-repository-postgres-v2";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url;
@@ -289,6 +297,154 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     complete(await run(input)); const after = await counts(); complete(await run(input)); expect(await counts()).toEqual(after);
     expect(after.slice(0, 4)).toEqual([1, 1, 1, table === consumption ? 1 : 0]); expect(after[7]).toBe(table === consumption ? 3 : 2);
   }, 50000);
+  it("actual absent-head owner claim is durable, then unsupported source work refuses without an application", async () => {
+    const f = await fixture(); const foreignUser = randomUUID();
+    const newOrg = await seedWp13User(url!, foreignUser, "DEE1132 absent claim");
+    const request = structuredClone(f.application); request.configuration.organizationId = newOrg;
+    request.research.assignment.organizationId = newOrg;
+    if ("definition" in request.research.profile) request.research.profile.definition = { ...request.research.profile.definition, organizationId: newOrg };
+    expect(await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${newOrg}::uuid`).toEqual([]);
+    expect((await runSavedApplication(client, { organizationId: newOrg }, request)).status).not.toBe("COMPLETE");
+    expect(await client`select lease_epoch from trader_runtime_control_lease_heads_v2 where organization_id=${newOrg}::uuid`).toEqual([{ lease_epoch: 1 }]);
+    expect(await client`select lease_epoch,prior_content_digest from trader_runtime_control_lease_epoch_history_v2 where organization_id=${newOrg}::uuid`)
+      .toEqual([{ lease_epoch: 1, prior_content_digest: null }]);
+    expect(await client`select count(*)::int n from trader_research_applications_v1 where organization_id=${newOrg}::uuid`).toEqual([{ n: 0 }]);
+  }, 30000);
+  it("actual23505 after lease history insertion rolls the owner claim back before busy and a valid retry", async () => {
+    const f = await fixture(); const before = await counts();
+    const head = await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`;
+    const history = await client`select * from trader_runtime_control_lease_epoch_history_v2 where organization_id=${organizationId}::uuid order by lease_epoch`;
+    await faultAt("trader_runtime_control_lease_heads_v2", "BEFORE", "RAISE EXCEPTION 'DEE1132_CLAIM_UNIQUE' USING ERRCODE='23505';");
+    expect((await run(f.application)).status).toBe("APPLICATION_LEASE_BUSY"); expect(await counts()).toEqual(before);
+    expect(await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`).toEqual(head);
+    expect(await client`select * from trader_runtime_control_lease_epoch_history_v2 where organization_id=${organizationId}::uuid order by lease_epoch`).toEqual(history);
+    await clearFault(); complete(await run(f.application)); const after = await counts(); complete(await run(f.application)); expect(await counts()).toEqual(after);
+  }, 30000);
+  it("old public claim still recovers a real nested savepoint without aborting its outer transaction", async () => {
+    const f = await fixture();
+    const head = (await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`)[0]!;
+    const history = await client`select count(*)::int n from trader_runtime_control_lease_epoch_history_v2 where organization_id=${organizationId}::uuid`;
+    await faultAt("trader_runtime_control_lease_heads_v2", "BEFORE", "RAISE EXCEPTION 'DEE1132_OLD_UNIQUE' USING ERRCODE='23505';");
+    const db = drizzle(client, { schema });
+    await db.transaction(async tx => {
+      const [clock] = await tx.execute<{ now: string; until: string }>(sql`select to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') now,
+        to_char((clock_timestamp()+interval '10 seconds') at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') until`);
+      const claim = { organizationId, runtimeInstanceId: "old-nested", leaseEpoch: Number(head.lease_epoch) + 1,
+        expectedPreviousDigest: String(head.content_digest), adjudicatedAtUtc: clock!.now, validUntilUtc: clock!.until };
+      expect(await createPostgresRuntimeControlLeaseRepositoryV2(tx).claimExclusive({ ...claim,
+        leaseContentDigest: applicationDigest({ schemaVersion: "waia.trader.database_clock_control_lease.v2", ...claim }) })).toBe("CONFLICT");
+      // This query succeeding proves the actual outer transaction is not left aborted.
+      expect(await tx.execute(sql`select 'outer-post-savepoint' as marker`)).toEqual([{ marker: "outer-post-savepoint" }]);
+    });
+    expect(await client`select count(*)::int n from trader_runtime_control_lease_epoch_history_v2 where organization_id=${organizationId}::uuid`).toEqual(history);
+    expect((await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`)[0]).toEqual(head);
+    await clearFault(); complete(await run(f.application));
+  }, 30000);
+  it.each([32, 33])("real%d-version registry uses metadata admission before that ordered history body", async maximum => {
+    const f = await fixture({ hypothesisVersions: maximum, ...(maximum === 32 ? { priorOrdinal: "p".repeat(60000) } : {}) });
+    const before = await counts(); trace.length = 0;
+    const budgets: HeldResearchAccounting[] = []; const originalBudget = HeldResearchAccounting.prototype.budget;
+    vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, cap: number) {
+      if (!budgets.includes(this)) budgets.push(this); return originalBudget.call(this, cap);
+    });
+    const value = await run(f.application); const queries = [...trace];
+    const versionQueries = queries.filter(q => q.query.includes('from "trader_mi_hypothesis"') && q.query.includes('order by "trader_mi_hypothesis"."version_seq"'));
+    expect(versionQueries.length).toBeGreaterThan(0); expect(versionQueries[0]!.query).toContain("octet_length");
+    expect(versionQueries[0]!.query).toMatch(/limit \$[0-9]+/); expect(versionQueries[0]!.params).toContain(33);
+    if (maximum === 33) {
+      expect(value.status).toBe("APPLICATION_ROW_SET_REFUSED"); expect(versionQueries).toHaveLength(1);
+      expect(queries.some(q => q.query.startsWith(`insert into "${application}"`))).toBe(false); expect(await counts()).toEqual(before);
+    } else {
+      complete(value); complete(await run({ ...f.application, operation: "replay" }));
+      expect(await f.hypothesisProjectionBytes()).toBeGreaterThan(60000);
+      for (const budget of budgets) { expect(budget.statements).toBeLessThanOrEqual(512); expect(budget.inputs.total).toBeLessThanOrEqual(67108864); }
+      console.info(JSON.stringify({ proof: "DEE1132_NATIVE_SELECTED_HISTORY32_NEAR_CAP", registrationBytes: await f.hypothesisProjectionBytes(),
+        invocations: budgets.map(b => ({ statements: b.statements, uniqueBytes: b.inputs.total })) }));
+    }
+  }, 45000);
+  it.each([65536, 65537])("actual registered projection at%dbytes preserves owner/restart or refuses before its body", async target => {
+    const f = await fixture({ targetHypothesisBytes: target }); expect(await f.hypothesisProjectionBytes()).toBe(target);
+    const before = await counts(); trace.length = 0; const value = await run(f.application); const queries = [...trace];
+    const selected = queries.filter(q => q.query.includes('from "trader_mi_hypothesis"') && q.params.includes(f.hypothesis.id));
+    expect(selected.length).toBeGreaterThan(0); expect(selected[0]!.query).toContain("octet_length");
+    if (target === 65537) {
+      expect(value.status).toBe("STORED_ROW_LIMIT_EXCEEDED"); expect(selected).toHaveLength(1); expect(await counts()).toEqual(before);
+    } else {
+      const applied = complete(value); const restarted = await worker(await argsFor(f, "replay")).result;
+      expect(restarted.event).toBe("result"); expect(complete(restarted.result).application).toEqual(applied.application);
+      expect(queries.length).toBeLessThanOrEqual(limits.queries);
+      const accounting = new HeldResearchAccounting(), prepared = prepareHeldResearchReplay(client, accounting);
+      await client.begin("isolation level repeatable read read only", async held => {
+        const budget = accounting.budget(limits.additionalAggregate), db = prepared.bindHeld(held).executor;
+        const rows = await readApplicationRows(db, "application", applicationScope("application", organizationId, applied.applicationId), budget);
+        expect(rows).toHaveLength(1); expect(budget.total).toBeLessThanOrEqual(limits.application);
+        expect(budget.total).toBeGreaterThan(Buffer.byteLength(String(rows[0]!.bodyJson)));
+      });
+    }
+  }, 45000);
+  it("exact physical candidate size is charged before any write at65536 and refuses65537", async () => {
+    const accounting = new HeldResearchAccounting(), prepared = prepareHeldResearchReplay(client, accounting);
+    await client.begin("isolation level repeatable read read only", async held => {
+      const db = prepared.bindHeld(held).executor;
+      const row = { organizationId, assignmentDigest: "a".repeat(64), contentDigest: "b".repeat(64), bodyJson: "x",
+        runtimeInstanceId: "synthetic-candidate-only", leaseEpoch: 1, leaseContentDigest: "c".repeat(64), researchSessionId: "r", researchAssignmentDigest: "d".repeat(64) };
+      const initial = accounting.budget(limits.additionalAggregate); await admitApplicationWriteRow(db, "assignment", row, initial);
+      row.bodyJson = "x".repeat(1 + limits.assignment - initial.total);
+      // New ledger avoids treating deliberately different synthetic candidate sizes as one row identity.
+      const at = new HeldResearchAccounting().budget(limits.additionalAggregate);
+      await admitApplicationWriteRow(db, "assignment", row, at); expect(at.total).toBe(65536);
+      row.bodyJson += "x";
+      await expect(admitApplicationWriteRow(db, "assignment", row, new HeldResearchAccounting().budget(limits.additionalAggregate))).rejects.toThrow("STORED_ROW_LIMIT_EXCEEDED");
+    });
+    // These candidate-only raw strings are not valid application bodies and are never inserted.
+    expect((await counts()).slice(0, 4)).toEqual([0, 0, 0, 0]);
+  });
+  it("native witness payload/text/hash checks reach fresh valid keys with real owner-produced canonical and audit writes", async () => {
+    const f = await fixture(); f.application.research.range.leaseDurationMs = 60000;
+    const before = await counts(); await faultAt(application, "BEFORE", "RETURN NULL;"); trace.length = 0;
+    expect((await run(f.application)).status).toBe("APPLICATION_FENCED_INSERT_REQUIRED");
+    const emitted = trace.filter(q => /^insert into "/.test(q.query) && tables.some(t => q.query.startsWith(`insert into "${t}"`))).map(q => structuredClone(q));
+    expect(emitted.at(-1)!.query).toContain(`insert into "${application}"`); expect(await counts()).toEqual(before); await clearFault();
+    const paramIndex = (query: string, name: string) => {
+      const match = /\(([^)]+)\) values \(([^)]+)\)/.exec(query); if (!match) throw new Error("FIXTURE_SINGLE_INSERT_REQUIRED");
+      const columns = match[1]!.split(",").map(v => v.trim().replaceAll('"', '')), values = match[2]!.split(",").map(v => v.trim());
+      const parameter = values[columns.indexOf(name)]; if (!parameter?.match(/^\$[1-9][0-9]*$/)) throw new Error(`FIXTURE_PARAMETER_MISSING:${name}`);
+      return Number(parameter.slice(1)) - 1;
+    };
+    const appInsert = emitted.at(-1)!, originalBody = JSON.parse(String(appInsert.params[paramIndex(appInsert.query, "body_json")]));
+    expect(originalBody.witnesses.every((w: { payload: unknown; payloadCanonical: string; value: { outputContentDigest: string } }) =>
+      applicationDigest(w.payload) === w.value.outputContentDigest && createHash("sha256").update(w.payloadCanonical).digest("hex") === w.value.outputContentDigest)).toBe(true);
+    for (const mode of ["payload", "text", "invalid-json", "missing", "oversize", "shape", "unchanged"] as const) {
+      const body = structuredClone(originalBody), witness = body.witnesses[0];
+      if (mode === "payload") witness.payload.features.features.close = "different";
+      if (mode === "text") witness.payloadCanonical = ` ${witness.payloadCanonical}`;
+      if (mode === "invalid-json") witness.payloadCanonical = "{";
+      if (mode === "missing") delete witness.payloadCanonical;
+      if (mode === "oversize") witness.payloadCanonical = "x".repeat(262145);
+      if (mode === "shape") witness.payload.features.features.close = { arbitrary: [] };
+      const text = canonicalJsonString(body), digest = createHash("sha256").update(text).digest("hex");
+      const writes = structuredClone(emitted);
+      for (const q of writes) {
+        if (q.query.startsWith(`insert into "${application}"`)) {
+          q.params[paramIndex(q.query, "body_json")] = text; q.params[paramIndex(q.query, "content_digest")] = digest;
+        }
+        if (q.query.startsWith('insert into "audit_logs"')) {
+          const index = paramIndex(q.query, "metadata_json"), metadata = JSON.parse(String(q.params[index]));
+          metadata.bodyDigest = digest; q.params[index] = JSON.stringify(metadata);
+        }
+      }
+      const expected = mode === "unchanged" ? /FIXTURE_VALID_INSERT_ROLLBACK/ : mode === "payload" || mode === "text" ? /APPLICATION_WITNESS_PAYLOAD_CONFLICT/
+        : mode === "invalid-json" ? /invalid input syntax for type json/ : mode === "shape" ? /APPLICATION_WITNESS_SHAPE_INVALID/ : /APPLICATION_WITNESS_REPRESENTATION_(?:INVALID|LIMIT)/;
+      await expect(client.begin(async tx => {
+        await tx`select pg_advisory_xact_lock(hashtextextended(${organizationId},637))`;
+        for (const q of writes) await tx.unsafe(q.query, q.params as Parameters<postgres.TransactionSql["unsafe"]>[1]);
+        await tx`set constraints all immediate`;
+        expect(await tx`select count(*)::int n from trader_research_applications_v1 where organization_id=${organizationId}::uuid`).toEqual([{ n: 1 }]);
+        throw new Error("FIXTURE_VALID_INSERT_ROLLBACK");
+      })).rejects.toThrow(expected);
+      expect(await counts()).toEqual(before);
+    }
+  }, 45000);
   it("retains the real0221 local predecessor and source-offset invariants used by arbitrary later B", async () => {
     const f = await fixture();
     const row = (await client`select row_to_json(t) body from trader_research_understanding_completions_v1 t

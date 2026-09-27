@@ -104,9 +104,15 @@ CREATE TABLE trader_research_application_consumptions_v1 (
 );
 --> statement-breakpoint
 CREATE FUNCTION trader_research_application_v1_links() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE b jsonb := NEW.body_json::jsonb; config jsonb; app jsonb; available jsonb; saved jsonb; pin jsonb; witness jsonb;
+DECLARE b jsonb; payload jsonb; feature jsonb; field record; payload_text text; config jsonb; app jsonb; available jsonb; saved jsonb; pin jsonb; witness jsonb;
   projection jsonb; expected_inputs jsonb; actual_inputs jsonb; previous text; operation text; selected_assignment text;
 BEGIN
+  -- Admission before this verifier parses any body. The table CHECK remains independent.
+  IF octet_length(NEW.body_json) > CASE TG_TABLE_NAME
+    WHEN 'trader_research_application_assignments_v1' THEN 65536
+    WHEN 'trader_research_application_availability_v1' THEN 4096 ELSE 524288 END
+    THEN RAISE EXCEPTION 'APPLICATION_BODY_LIMIT'; END IF;
+  b := NEW.body_json::jsonb;
   IF TG_TABLE_NAME = 'trader_research_application_assignments_v1' THEN
     config := b->'configuration';
     SELECT body_json::jsonb INTO saved FROM trader_research_understanding_assignments_v1
@@ -157,8 +163,50 @@ BEGIN
     ELSIF b->'evidence' IS DISTINCT FROM 'null'::jsonb OR b->'relation' IS DISTINCT FROM 'null'::jsonb
       THEN RAISE EXCEPTION 'APPLICATION_UNASSESSED_RELATION_CONFLICT'; END IF;
     FOR witness IN SELECT value FROM jsonb_array_elements(b->'witnesses') WHERE value<>'null'::jsonb LOOP
-      IF octet_length((witness->'payload')::text)>262144 OR
-        NOT EXISTS(SELECT 1 FROM trader_mi_canonical_measurement_definition_v1 WHERE organization_id=NEW.organization_id
+      -- Exact retained representation, not an inferred digest label or recursive SQL canonicalizer.
+      IF jsonb_typeof(witness) IS DISTINCT FROM 'object' OR octet_length(witness::text)>262144
+        OR jsonb_typeof(witness->'payload') IS DISTINCT FROM 'object'
+        OR jsonb_typeof(witness->'payloadCanonical') IS DISTINCT FROM 'string'
+        THEN RAISE EXCEPTION 'APPLICATION_WITNESS_REPRESENTATION_INVALID'; END IF;
+      payload := witness->'payload'; payload_text := witness->>'payloadCanonical';
+      IF octet_length(payload_text)>262144 THEN RAISE EXCEPTION 'APPLICATION_WITNESS_REPRESENTATION_LIMIT'; END IF;
+      -- The fixed producer shape has no recursive object/array leaves. No formula or threshold is evaluated here.
+      IF payload - ARRAY['schemaVersion','authority','purpose','commandManifestDigest','packetDigest','fullBarsDigest','quoteDigest','features'] <> '{}'::jsonb
+        OR payload->>'schemaVersion' IS DISTINCT FROM 'waia.trader.research_application_feature_witness.v1'
+        OR payload->>'authority' IS DISTINCT FROM 'RESEARCH_APPLICATION_ONLY'
+        OR payload->>'purpose' IS DISTINCT FROM 'RESEARCH_NON_CAPITAL'
+        OR jsonb_typeof(payload->'features') IS DISTINCT FROM 'object'
+        THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      FOREACH payload_text IN ARRAY ARRAY['schemaVersion','authority','purpose','commandManifestDigest','packetDigest','fullBarsDigest','quoteDigest'] LOOP
+        IF jsonb_typeof(payload->payload_text) IS DISTINCT FROM 'string' THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      END LOOP;
+      feature := payload->'features';
+      IF feature - ARRAY['featureSetId','instrumentId','evaluatedAt','features','dataQualityScore','inputs'] <> '{}'::jsonb
+        OR jsonb_typeof(feature->'dataQualityScore') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(feature->'features') IS DISTINCT FROM 'object'
+        OR jsonb_typeof(feature->'inputs') IS DISTINCT FROM 'object'
+        THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      FOREACH payload_text IN ARRAY ARRAY['featureSetId','instrumentId','evaluatedAt'] LOOP
+        IF jsonb_typeof(feature->payload_text) IS DISTINCT FROM 'string' THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      END LOOP;
+      IF (feature->'features') - ARRAY['close','sma20','zscoreVsSma20','priceDispersion20','spreadBps','realizedVar20m_1m','realizedVol20m_1m'] <> '{}'::jsonb
+        OR (feature->'inputs') - ARRAY['barCount','latestQuoteAgeMs'] <> '{}'::jsonb
+        OR jsonb_typeof(feature->'inputs'->'barCount') IS DISTINCT FROM 'number'
+        THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      FOREACH payload_text IN ARRAY ARRAY['close','sma20','zscoreVsSma20','priceDispersion20','spreadBps'] LOOP
+        IF jsonb_typeof(feature->'features'->payload_text) IS DISTINCT FROM 'string' THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      END LOOP;
+      FOR field IN SELECT * FROM jsonb_each(feature->'features') LOOP
+        IF jsonb_typeof(field.value) IS DISTINCT FROM 'string' THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      END LOOP;
+      FOR field IN SELECT * FROM jsonb_each(feature->'inputs') LOOP
+        IF jsonb_typeof(field.value) IS DISTINCT FROM 'number' THEN RAISE EXCEPTION 'APPLICATION_WITNESS_SHAPE_INVALID'; END IF;
+      END LOOP;
+      payload_text := witness->>'payloadCanonical';
+      IF payload_text::jsonb IS DISTINCT FROM payload
+        OR encode(sha256(convert_to(payload_text,'UTF8')),'hex') IS DISTINCT FROM witness->'value'->>'outputContentDigest'
+        THEN RAISE EXCEPTION 'APPLICATION_WITNESS_PAYLOAD_CONFLICT'; END IF;
+      IF NOT EXISTS(SELECT 1 FROM trader_mi_canonical_measurement_definition_v1 WHERE organization_id=NEW.organization_id
           AND id=witness->'definition'->>'id' AND content_digest=witness->'definition'->>'contentDigest' AND definition_json=witness->'definition') OR
         NOT EXISTS(SELECT 1 FROM trader_mi_canonical_measurement_value_v1 WHERE organization_id=NEW.organization_id
           AND id=witness->'value'->>'id' AND content_digest=witness->'value'->>'contentDigest'

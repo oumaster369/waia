@@ -149,3 +149,66 @@ describe("actual bounded application SQL reader", () => {
     expect(() => decodeApplicationBody({ bodyJson: "null", contentDigest: applicationDigest(null) })).toThrow("APPLICATION_BODY_CONFLICT");
   });
 });
+
+import { admitApplicationWriteRow, readApplicationRegistration } from "@/lib/trader/paper/research-application-v1/bounded-read-postgres";
+import type { ResearchApplicationConfigurationV1 } from "@/lib/trader/paper/research-application-v1/contract";
+describe("full physical candidate projection admission", () => {
+  const candidate = () => ({ organizationId: applicationOrg, assignmentDigest: "a".repeat(64), contentDigest: "b".repeat(64),
+    bodyJson: '{"body":"quoted \\" text"}', runtimeInstanceId: "owner", leaseEpoch: 1, leaseContentDigest: "c".repeat(64),
+    researchSessionId: "r", researchAssignmentDigest: "d".repeat(64) });
+  it("charges the actual SQL projection bytes with its holder/body escaping, not only the raw body", async () => {
+    const row = candidate(), f = applicationTransport([[{ identity: "[\"org\", \"id\"]", bytes: 65536 }]]);
+    await admitApplicationWriteRow(f.db, "assignment", row, f.budget);
+    expect(f.accounting.inputs.total).toBe(65536); expect(f.trace).toHaveLength(1);
+    expect(f.trace[0]).toContain("octet_length(jsonb_build_object(");
+    expect(f.trace[0]).toContain("::uuid"); expect(f.trace[0]).toContain("::integer");
+    expect(f.trace[0]).not.toMatch(/insert|select bounded_row\.\*/);
+  });
+  it("deduplicates candidate and stored admission using the exact server identity text", async () => {
+    const row = candidate(), identity = '["org", "id"]';
+    const f = applicationTransport([[{ identity, bytes: 1000 }], [{ identity, bytes: 1000, projectionDigest: "digest" }],
+      [{ ...row, __identity: identity, __bytes: 1000, __digest: "digest" }]]);
+    await admitApplicationWriteRow(f.db, "assignment", row, f.budget);
+    expect(await readApplicationRows(f.db, "assignment", applicationScope("assignment", applicationOrg, row.assignmentDigest), f.budget)).toEqual([row]);
+    expect(f.budget.total).toBe(1000); expect(f.accounting.inputs.total).toBe(1000);
+    expect(f.trace[0]).toContain("jsonb_build_array(");
+  });
+  it("refuses a one-byte physical overflow without admitting it even when the raw body is tiny", async () => {
+    const f = applicationTransport([[{ identity: "[\"org\", \"id\"]", bytes: 65537 }]]);
+    await expect(admitApplicationWriteRow(f.db, "assignment", candidate(), f.budget)).rejects.toThrow("STORED_ROW_LIMIT_EXCEEDED");
+    expect(f.accounting.inputs.total).toBe(0); expect(f.trace).toHaveLength(1);
+  });
+  it.each(["extra", "missing", "body"])("refuses %s candidate before dispatch", async kind => {
+    const f = applicationTransport([]), row: Record<string, unknown> = candidate();
+    if (kind === "extra") row.extra = 1; else if (kind === "missing") delete row.leaseContentDigest; else row.bodyJson = "x".repeat(65537);
+    await expect(admitApplicationWriteRow(f.db, "assignment", row, f.budget)).rejects.toThrow(); expect(f.trace).toEqual([]);
+  });
+});
+
+describe("actual registration projection narrowing", () => {
+  const createdAt = "2026-01-01T00:00:00.000Z";
+  const h = { id: "h", organizationId: applicationOrg, hypothesisKind: "market_claim", hypothesisKey: "hk", name: "name",
+    schemaVersion: "mi-hypothesis-v1", definitionJson: "{}", definitionDigest: "hd", supersedesJson: null, versionSeq: 1,
+    revisionOf: null, authoredBy: "u", createdAt };
+  const m = { id: "m", organizationId: applicationOrg, measurementKind: "feature_transform", measurementKey: "mk", name: "name",
+    schemaVersion: "mi-measurement-v1", definitionJson: "{}", definitionDigest: "md", versionSeq: 1, revisionOf: null, authoredBy: "u", createdAt };
+  function rows(row: Record<string, unknown>, identity: string): unknown[][] {
+    return [[{ identity, bytes: 500, projectionDigest: "d" }], [{ ...row, __identity: identity, __bytes: 500, __digest: "d" }]];
+  }
+  const configuration = { organizationId: applicationOrg, hypothesisId: "h", hypothesisKey: "hk", measurementId: "m" } as ResearchApplicationConfigurationV1;
+  it.each(["valid", "missing", "kind", "unsafe", "nullable"])("narrows %s data without a broadcast domain cast", async kind => {
+    const hypothesis: Record<string, unknown> = { ...h };
+    if (kind === "missing") delete hypothesis.authoredBy;
+    if (kind === "kind") hypothesis.hypothesisKind = "foreign";
+    if (kind === "unsafe") hypothesis.versionSeq = Number.MAX_SAFE_INTEGER + 1;
+    if (kind === "nullable") hypothesis.revisionOf = false;
+    const version = { id: "h", organizationId: applicationOrg, hypothesisKey: "hk", versionSeq: 1, definitionDigest: "hd", createdAt };
+    const life = { id: "l", organizationId: applicationOrg, hypothesisId: "h", hypothesisKey: "hk", lifecycleState: "PROPOSED",
+      rationale: "r", recordedBy: "u", seq: 1, contentDigest: "ld", createdAt };
+    const f = applicationTransport([...rows(hypothesis, "h"), ...rows(m, "m"), ...rows(version, "v"), ...rows(life, "l")]);
+    const result = readApplicationRegistration(f.db, configuration, createdAt, f.budget);
+    if (kind === "valid") expect((await result).hypothesis).toEqual({ ...h, createdAt: new Date(createdAt) });
+    else await expect(result).rejects.toThrow("APPLICATION_REGISTRATION_ROW_INVALID");
+    expect(f.trace).toHaveLength(8);
+  });
+});
