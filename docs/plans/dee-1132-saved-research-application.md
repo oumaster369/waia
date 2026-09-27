@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: 23937651153af259f2e28edd20ec590f8380c6bf
   lastValidationAt: "2026-09-27T06:25:15.006285Z"
   blockedReason: null
-  nextAction: "Root/nonauthor review the frozen WP-1 pure implementation and61/8 scoped proof; typecheck and WP-2 schema/held owner/CLI/native work require separate release/allocation."
+  nextAction: "Independent review of WP-1 source and the verified fixture typing correction; WP-2 schema/held owner/CLI/native work still requires exact allocation and release."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -185,6 +185,12 @@ Preserved intermediate evidence is explicit:
 External proof directory: `parallel-runtime-owner/dee1132-wp1-397d0d76`. `source-freeze.json` pins the exact11 changed Git blobs, `validation-run.json` records the exact commands and clean before/after source, `scoped-final.json` contains all actual assertions, and `compatibility-source-receipt.json` pins the preserved old code and61/8 attribution. This later plan-only checkpoint changes none of those tested bytes. Original plan/contract/carry/clarification freezes are preserved.
 
 Remaining complete result: root/nonauthor review and scheduled typecheck, followed by separately allocated/released WP-2 actual held replay/persistence, operation-specific fences with canonical/audit joins, real exclusive CLI, full source admission, availability publication, later-B prefix/known-at consumption and fresh-process/native/cumulative acceptance. No migration slot, source-qualified/ordinary Knowledge, Predictive, financial, live or fullP10 result is claimed.
+
+## WP-1 root compiler correction — 2026-09-27 06:42 UTC
+
+Root verified all41 author artifacts,11 source/test identities and the actual61/8 zero-skip results at23937651, then ran one initial whole-project typecheck on unchanged clean1c7f4a8c. It failed on two synthetic fixture typings: the intentionally minimal inert repository port needed an explicit intermediate unknown cast, and the spread observation projection needed a Record<string, unknown> annotation to retain dynamic id access. These are test-only annotations with no runtime or production change. The initial failure remains in `dee1132-wp1-397d0d76/root-initial-typecheck.log` (SHA256 ddf49bc78be26e20c07157f777e357ea7e491886c9b720479de53e68b70a55b5).
+
+Root changed only those two admitted unit paths. The exact working bytes then passed31 assertions in the two affected files,0 skipped, warning-free scoped lint, whole-project typecheck and diff check. Tests' runtime meaning is unchanged; the compiler now also verifies the negative type assertions in the untouched capability test. Evidence `parallel-runtime-owner/dee1132-wp1-type-fixture-correction/validation.json` contains command times, exit codes and both file hashes; fixture.patch preserves the two-line delta. The original61/8 result remains attributed to23937651, while the affected31/2 result and compiler acceptance apply to this corrected source. No unrelated tests were repeated and no WP2, DB/native, schema, CI or graph work occurred. Independent review is pending; this remains a pure checkpoint, not connected-package readiness.
 
 ## Verbatim controlling contract
 

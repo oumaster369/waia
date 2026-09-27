@@ -26,7 +26,7 @@ function fold(edges: KnowledgeEdge[] = [edge], rows: MiEvidence[] = [evidence]) 
   const deps = { hypotheses: { listHypotheses: () => [hypothesis], listLifecycleEvents: () => [lifecycle] },
     evidence: { listEvidence: () => rows }, knowledgeSource: { loadSnapshot: () => ({ knowledgeEdges: edges, marketPredictions: [] }) } };
   return foldCanonicalRuntimeIntelligenceStateV1({ context: { organizationId: "org" }, symbol: "BTC/USDT", asOf: at,
-    projectHypothesis: () => ({ hypothesisType: "trend_continuation", expectedPath: "higher" }) }, deps as CanonicalRuntimeIntelligenceFoldDepsV1);
+    projectHypothesis: () => ({ hypothesisType: "trend_continuation", expectedPath: "higher" }) }, deps as unknown as CanonicalRuntimeIntelligenceFoldDepsV1);
 }
 const candidate: KnowledgeNavigatorCandidateV2 = { knowledgeEdgeId: "edge-a", version: 1, contentDigestHex: "a".repeat(64), organizationId: "org",
   symbol: "BTC/USDT", questionId: "WHAT", pitEventAt: createdAt.toISOString(), lifecycleState: "ACTIVE", verified: true,

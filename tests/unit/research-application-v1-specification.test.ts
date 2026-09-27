@@ -33,7 +33,7 @@ function evaluation(kind: "trending" | "chopping" | "unclear" | "missing" = "tre
     const sources = normalized.observations.map((o, index) => {
       const previous = packet.sources[index]!;
       const attempt = prepareCanonicalPitAttemptV1(o, { pitCutoffUtc: analysisPitAnchor });
-      const observation = previous.observation && attempt.status === "AVAILABLE" ? { ...(previous.observation as Record<string, unknown>),
+      const observation: Record<string, unknown> | null = previous.observation && attempt.status === "AVAILABLE" ? { ...(previous.observation as Record<string, unknown>),
         normalizedInputDigest: attempt.normalizedInputDigest, payloadJson: JSON.stringify(attempt.payloadCanonical),
         contentDigest: digest({ fixtureObservation: index, attempt }) } : null;
       const receipt = buildCanonicalGatewayPitReceiptV1({ organizationId: f.session.organizationId, providerId: attempt.providerId,
