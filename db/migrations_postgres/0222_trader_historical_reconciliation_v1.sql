@@ -3744,8 +3744,8 @@ BEGIN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:PRODUCED_DETAIL';
       END IF;
       -- Reuse the earlier exact physical economics projection, including time.
-      IF detail->'economics'-ARRAY['sourceBarTimestamp','acceptedAt','fillTimestamp'] IS DISTINCT FROM
-          current_economics->'sourceEconomics'-ARRAY['sourceBarTimestamp','acceptedAt','fillTimestamp']
+      IF (detail->'economics')-ARRAY['sourceBarTimestamp','acceptedAt','fillTimestamp'] IS DISTINCT FROM
+          (current_economics->'sourceEconomics')-ARRAY['sourceBarTimestamp','acceptedAt','fillTimestamp']
         OR (extract(epoch FROM (detail#>>'{economics,sourceBarTimestamp}')::timestamptz)*1000) IS DISTINCT FROM (current_economics#>>'{sourceEconomics,sourceBarTimestamp}')::numeric
         OR (extract(epoch FROM (detail#>>'{economics,acceptedAt}')::timestamptz)*1000) IS DISTINCT FROM (current_economics#>>'{sourceEconomics,acceptedAt}')::numeric
         OR (extract(epoch FROM (detail#>>'{economics,fillTimestamp}')::timestamptz)*1000) IS DISTINCT FROM (current_economics#>>'{sourceEconomics,fillTimestamp}')::numeric THEN
