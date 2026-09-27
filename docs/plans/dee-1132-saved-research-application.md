@@ -793,3 +793,17 @@ Pinned read-only wrappers:
 - `lib/trader/audit/write.ts` SHA256 `f11bd1a2c0a6e926f4ab4de2c0fdc2b8cf97dc09055ad4682b74aae45a49adf7`
 - `lib/waia-core/audit/write.ts` SHA256 `f4cad7fc1fc85647ed0be337618b817a39bd33d12b8800d9e7f266841db23b79`
 <!-- END FROZEN CORE_AUDIT_CLARIFICATION -->
+
+## WP-2 selected Understanding CLI inventory compatibility
+
+The next finite amendment adds only the existing generator path. It preserves the pure evaluator manifest and extends the editable source map from17 to18 paths; mapped capability tests cover the old selected mode and reject unknown/effectful prefix changes.
+
+<!-- BEGIN FROZEN UNDERSTANDING_GENERATOR_COMPATIBILITY SHA256 efdbffc2725729633aa31e06d9eeafe7bb823dd4caa8445fd3e4bfd573d7ce1a -->
+# Finite compatibility extension: existing saved-Understanding runtime inventory
+
+Root inspected complete existing generator SHA256 9cb303c79552e2b436da56c28bac45f125057814b2d22f213a06b678b6688e93 and the actual new early CLI branch at2026-09-27T08:46:15.222294+00:00. The generator selects entry.body.statements[1]; the admitted new exclusive application branch occupies that slot, moving the unchanged saved-Understanding branch. This concrete adjacent compatibility obligation admits exactly one additional editable path: scripts/trader/generate-research-understanding-manifest.ts. Do not edit the generated pure Understanding computation manifest or its evaluator/producer/meaning.
+
+After recording this amendment in the already admitted canonicalplan BEFORE editing that generator, select the exact saved-Understanding condition once within a fail-closed allowed early prefix. Preserve the args-clone statement and inspect it; permit only the exact known application branch ahead of selected Understanding, with its side-effect-free exact mode condition and unconditional terminal return contract. Reject duplicate selected branches, unknown earlier statements/branches or missing exclusive return. A broad find() that silently ignores arbitrary earlier effects is not admitted. Preserve traversal of shared top-level/exit/error code, all existing forbidden-import checks, literal import constraints, selected Understanding body and unchanged pure computation closure. Correct the runtime-boundary description to reflect the selected early branch, not falsely call it first.
+
+Use existing mapped application capability test path for current selected old/new mode and meaningful adverse prefix/return controls; existing Understanding capability tests may be run unchanged as compatibility companions. Preserve genuine old-generator refusal as RED; no fabricated native proof. Root will inspect exact source/frozen raw controls in the complete package. This source-only addition changes no actor, saved assignment, evaluator semantics, permission or shared budget. All prior source/native/journal/CI/heavy/publication barriers remain; continue other admitted paths.
+<!-- END FROZEN UNDERSTANDING_GENERATOR_COMPATIBILITY -->
