@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Commit the independently accepted partial acquisition/journal checkpoint, integrate exact accepted main82819a9, then freeze the admitted observation-only native component cases and external false-grant runner for independent review. Full WP-1–WP-3 remains open; no database execution is granted."
+  nextAction: "Freeze the ten authored observation-only native component cases and external false-grant runner on the integrated828 lineage for independent review. Full WP-1–WP-3 remains open; no database execution is granted."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -293,3 +293,10 @@ Root admits committing exactly the current fourteen files as an honest partial c
 Root disposition `29944e30aeae2f670a6d0b6b18e6f2d8e2777fdc770210eefb549961a21250fd` permits only inactive synthetic FK profile/reference values for this observation-only component, with actual Core audit/source fixtures and no ACTIVATE event, active current pointer, basis, allowance, order or effect. Actual fixed signing transport uses inert HTTP; actual encrypted store uses test-only keys and a private temporary directory; real raw repositories/journal owners and all225 migrations must execute only after separate source/runner review and an exact root database grant. UNKNOWN/PARTIAL remain unchanged. The prospective runner keeps bounded driver/query/watchdog/closure controls, preserves failures and refuses retries or repairs.
 
 The full semantic issuers, real qualification/allocation, complete authenticated Expected suffix, raw re-decode plus actual sourceContentDigest/truth/order joins, real as-of comparison, currentness/writer fences, publisher and issue/bind/start/replay integration remain open. This component is a diagnostic prerequisite and cannot replace the whole positive DEE-1135 proof, 39+11 compatibility, later complete local readiness, final native or exact-head CI. No database/native/host/credential/live/publication authority follows this source admission.
+
+
+### Observation-only component source and integrated base
+
+The accepted partial checkpoint was committed as `9e48cdf46cf54eaec4f8b3a5bb93b599e5e41610`. Normal merge `b51525b0259e52b023ee17304b730345ecce324f` has exact parents9e48cdf4 and accepted `82819a9581d09afb81eeeff4153abebbf59b8662`, tree `bad368dd015f6224ecdae8832fe1c44b8a0a462f`. All fourteen checkpoint entries, thirteen non-plan executable inputs and5,527 accepted-main entries outside that checkpoint are preserved; root integration adoption is `1a3ad196268cca724451f7376da20ebad696d73d3a964ec0157fb11aa5605239`. The original224 migrations retain exact identities, followed by the already reviewed225th migration; none has run here.
+
+The admitted native file now registers exactly ten observation-only component cases matching the prior schedule. It uses real transaction/transport/raw-storage owners, inactive synthetic FK fixtures, contract-compatible test keys and inert HTTP. The restart case closes its prior owner before a fresh client reads the terminal without transport/store effects. Actual row-wait evidence requires distinct PIDs, a server Lock wait and the controller as blocker; statistics snapshots are separately cleared before each poll. The test-only acknowledgement-loss adapter throws only after actual root-transaction settlement and retains the committed prefix. Actual restricted-role, immutable, unique, digest and predecessor/acquisition-FK failures are required with guards enabled. Synthetic objects remain retained; all test clients and in-memory master material are closed/zeroized in finalization. These are authored assertions, not native outcomes. Scoped checks and the immutable external runner/source package will be reported externally; actual native release remains pending.
