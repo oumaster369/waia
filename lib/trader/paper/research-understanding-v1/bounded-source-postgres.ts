@@ -32,13 +32,16 @@ type Kind = keyof typeof specs;
 export class ResearchReadBudget {
   private readonly seen = new Map<string, number>();
   total = 0;
-  constructor(readonly maximum: number) {}
-  admit(table: string, identity: string, size: number, rowMaximum: number): void {
+  constructor(readonly maximum: number, private readonly shared?: ResearchReadBudget, private readonly deadline?: () => void) {}
+  checkDeadline(): void { this.shared?.checkDeadline(); this.deadline?.(); }
+  admit(table: string, identity: string, size: number, rowMaximum: number, projection = table): void {
+    this.checkDeadline();
     check(Number.isSafeInteger(size) && size >= 0 && size <= rowMaximum, "STORED_ROW_LIMIT_EXCEEDED");
-    const key = JSON.stringify([table, identity]); const prior = this.seen.get(key);
+    const key = JSON.stringify(this.shared ? [table, identity, projection] : [table, identity]); const prior = this.seen.get(key);
     check(prior === undefined || prior === size, "SNAPSHOT_ROW_IDENTITY_CONFLICT");
     if (prior !== undefined) return;
     check(this.total <= this.maximum - size, "INPUT_AGGREGATE_LIMIT_EXCEEDED");
+    this.shared?.admit(JSON.stringify([table, projection]), identity, size, rowMaximum);
     this.total += size; this.seen.set(key, size);
   }
 }
@@ -58,16 +61,20 @@ async function inspect(db: WaiaPostgresDb, kind: Kind, condition: SQL, budget: R
   check(Number.isSafeInteger(expected) && expected >= 0 && expected <= LIMITS.sourceCount, "SOURCE_SET_LIMIT_EXCEEDED");
   const spec = specification(kind); const query = selectQuery(spec.table, spec.projection, condition, expected + 1);
   const identity = sql`jsonb_build_array(${sql.join(spec.keys.map(key => sql`${sql.identifier("bounded_row")}.${sql.identifier(key)}`), sql`, `)})::text`;
+  budget.checkDeadline();
   const rows = await db.execute<{ identity: string; bytes: number }>(sql`select ${identity} as identity,
     octet_length(to_jsonb(bounded_row)::text)::integer as bytes from (${query}) as bounded_row`);
+  budget.checkDeadline();
   if (optional && rows.length === 0) return null;
   check(rows.length === expected, "EXACT_ROW_SET_MISSING_OR_AMBIGUOUS");
-  for (const row of rows) budget.admit(getTableName(spec.table), row.identity, row.bytes, maximum ?? spec.maximum);
+  for (const row of rows) budget.admit(getTableName(spec.table), row.identity, row.bytes, maximum ?? spec.maximum, kind);
   return query;
 }
-async function bodies(db: WaiaPostgresDb, query: SQL | null): Promise<Record<string, unknown>[]> {
+async function bodies(db: WaiaPostgresDb, query: SQL | null, budget: ResearchReadBudget): Promise<Record<string, unknown>[]> {
   check(query, "EXACT_ROW_SET_MISSING_OR_AMBIGUOUS");
+  budget.checkDeadline();
   const rows = await db.execute<Record<string, unknown>>(query);
+  budget.checkDeadline();
   // Drizzle raw execute returns timestamptz strings, unlike its typed select's Date
   // mapping. Normalize only these declared scalar columns to the same Date/ISO
   // convention used by saved receipts; never rewrite timestamps inside stored JSON.
@@ -93,7 +100,7 @@ function recordScope(kind: "session" | "packet" | "companion" | "assignment" | "
 }
 export async function readBoundedResearchProfile(db: WaiaPostgresDb, org: string, id: string, budget = new ResearchReadBudget(LIMITS.inputAggregate)) {
   const query = await inspect(db, "profile", scope("profile", org, [id]), budget, 1);
-  const row = (await bodies(db, query))[0]!; const profile = row.profileJson as RequiredInformationProfileV2;
+  const row = (await bodies(db, query, budget))[0]!; const profile = row.profileJson as RequiredInformationProfileV2;
   assertResearchProfile(profile);
   check(profile.organizationId === org && profile.id === id && row.contentDigest === profile.contentDigest && row.accountId === profile.accountId,
     "PROFILE_STORAGE_CONFLICT");
@@ -106,14 +113,14 @@ export async function readBoundedResearchInputs(db: WaiaPostgresDb, assignment: 
   assertResearchAssignment(assignment, profile);
   const org = assignment.organizationId;
   const headerQuery = await inspect(db, "session", recordScope("session", org, assignment.sourceSessionId), budget, 1);
-  const header = (await bodies(db, headerQuery))[0]!;
+  const header = (await bodies(db, headerQuery, budget))[0]!;
   const session = { ...JSON.parse(header.bodyJson as string), configDigest: header.contentDigest } as AnalysisSession;
   assertSession(session);
   check(session.organizationId === org && session.accountId === assignment.accountId && session.symbol === assignment.symbol &&
     session.sessionId === assignment.sourceSessionId && session.configDigest === assignment.sourceConfigDigest, "SESSION_SCOPE_CONFLICT");
   const packetQuery = await inspect(db, "packet", recordScope("packet", org, session.sessionId, sourceSequence), budget, 1,
     Math.min(session.maxPacketBytes, LIMITS.packet));
-  const row = (await bodies(db, packetQuery))[0]!;
+  const row = (await bodies(db, packetQuery, budget))[0]!;
   const packet = decodeBody<AnalysisPacket>(row as { bodyJson: string; contentDigest: string });
   validateRecordedPacket(session, sourceSequence, { configDigest: row.configDigest as string, analysisPitAnchor: row.analysisPitAnchor as string }, packet);
   check(packet.sources.length <= LIMITS.sourceCount && packet.sources.length === packet.normalized.observations.length, "SOURCE_SET_LIMIT_EXCEEDED");
@@ -132,14 +139,14 @@ export async function readBoundedResearchInputs(db: WaiaPostgresDb, assignment: 
     if (unique.length) external.set(kind, await inspect(db, kind, scope(kind, org, unique), budget, unique.length));
   }
   // Every external byte/count and the complete aggregate is now admitted. Only now transfer those bodies.
-  const companion = (await bodies(db, companionQuery))[0]!;
+  const companion = (await bodies(db, companionQuery, budget))[0]!;
   check(companion.packetDigest === packet.contentDigest && companion.accountId === session.accountId && companion.symbol === session.symbol &&
     companion.barInterval === "1m" && Date.parse(companion.scheduledBarCloseTime as string) === Date.parse(packet.normalized.scheduledBarCloseTime), "COMPANION_BINDING_CONFLICT");
-  const previous = previousQuery ? (await bodies(db, previousQuery))[0]! : null;
+  const previous = previousQuery ? (await bodies(db, previousQuery, budget))[0]! : null;
   check(packet.previousCompletionDigest === (previous?.contentDigest ?? null), "PREDECESSOR_CONFLICT");
-  const gateways = external.has("gateway") ? await bodies(db, external.get("gateway")!) : [];
-  const sources = external.has("source") ? await bodies(db, external.get("source")!) : [];
-  const revisions = external.has("revision") ? (await bodies(db, external.get("revision")!))
+  const gateways = external.has("gateway") ? await bodies(db, external.get("gateway")!, budget) : [];
+  const sources = external.has("source") ? await bodies(db, external.get("source")!, budget) : [];
+  const revisions = external.has("revision") ? (await bodies(db, external.get("revision")!, budget))
     .map(row => ({ ...row, schemaVersion: "mi-source-trust-v1" } as ResearchTrustRevision)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : [];
   const context = { organizationId: org };
   for (let i = 0; i < packet.sources.length; i++) {
@@ -147,8 +154,11 @@ export async function readBoundedResearchInputs(db: WaiaPostgresDb, assignment: 
     check(receipt.organizationId === org && hasCanonicalGatewayPitReceiptContentV1(receipt), "SOURCE_RECEIPT_CONFLICT");
     const gateway = gateways.find(row => row.id === receipt.id);
     check(gateway && gateway.contentDigest === receipt.contentDigest && digest(gateway.receiptJson) === digest(receipt), "SOURCE_RECEIPT_CONFLICT");
+    budget.checkDeadline();
     const observation = receipt.observationId ? await readCanonicalPitObservationWithinHeldTransactionV1Postgres(db, context, receipt.observationId) : null;
+    budget.checkDeadline();
     const trust = receipt.trustAsOfReceiptId ? await readTrustAsOfReceiptV1Postgres(db, context, receipt.trustAsOfReceiptId) : null;
+    budget.checkDeadline();
     check(!receipt.observationId || observation, "SOURCE_OBSERVATION_MISSING"); check(!receipt.trustAsOfReceiptId || trust, "SOURCE_TRUST_MISSING");
     const source = receipt.sourceId ? sources.find(row => row.id === receipt.sourceId) : null;
     check(!receipt.sourceId || (source && source.venue === "htx" && source.symbol === session.symbol && source.feedKind === receipt.gatewayKind), "SOURCE_SCOPE_CONFLICT");
@@ -165,7 +175,7 @@ export async function readBoundedResearchInputs(db: WaiaPostgresDb, assignment: 
 export async function readBoundedResearchAssignment(db: WaiaPostgresDb, org: string, sessionId: string, budget: ResearchReadBudget) {
   const query = await inspect(db, "assignment", recordScope("assignment", org, sessionId), budget, 1, undefined, true);
   if (!query) return null;
-  const row = (await bodies(db, query))[0]!;
+  const row = (await bodies(db, query, budget))[0]!;
   const assignment = decodeBody<ResearchAssignment>(row as { bodyJson: string; contentDigest: string });
   check(assignment.organizationId === org && assignment.researchSessionId === sessionId && row.profileId === assignment.profileId &&
     row.profileContentDigest === assignment.profileContentDigest && row.sourceSessionId === assignment.sourceSessionId &&
@@ -175,32 +185,33 @@ export async function readBoundedResearchAssignment(db: WaiaPostgresDb, org: str
 export async function readBoundedResearchPredecessor(db: WaiaPostgresDb, assignment: ResearchAssignment, sequence: number, budget: ResearchReadBudget) {
   if (sequence === 0) return null;
   const query = await inspect(db, "predecessor", recordScope("predecessor", assignment.organizationId, assignment.researchSessionId, sequence - 1), budget, 1);
-  const row = (await bodies(db, query))[0]!;
+  const row = (await bodies(db, query, budget))[0]!;
   check(row.assignmentDigest === assignment.contentDigest && row.sourceSessionId === assignment.sourceSessionId &&
     Number(row.sourceSequence) === assignment.firstSourceSequence + sequence - 1, "PREDECESSOR_CONFLICT");
   return row.contentDigest as string;
 }
 /** Admit completion, receipt and predecessor metadata before either output body is transferred. */
-export async function readBoundedResearchCompletion(db: WaiaPostgresDb, assignment: ResearchAssignment, profile: RequiredInformationProfileV2, sequence: number) {
-  const budget = new ResearchReadBudget(LIMITS.replayAggregate);
+export async function readBoundedResearchCompletion(db: WaiaPostgresDb, assignment: ResearchAssignment, profile: RequiredInformationProfileV2, sequence: number, budget = new ResearchReadBudget(LIMITS.replayAggregate)) {
   const condition = recordScope("completion", assignment.organizationId, assignment.researchSessionId, sequence);
   const query = await inspect(db, "completion", condition, budget, 1, undefined, true);
   if (!query) return null;
   const t = schema.traderResearchUnderstandingCompletionsV1;
+  budget.checkDeadline();
   const identity = await db.execute<{ receiptId: string }>(sql`select ${t.receiptId} as "receiptId" from ${t} where ${condition} limit 2`);
+  budget.checkDeadline();
   check(identity.length === 1, "COMPLETION_STORAGE_CONFLICT");
   const receiptQuery = await inspect(db, "receipt", scope("receipt", assignment.organizationId, [identity[0]!.receiptId]), budget, 1);
   const predecessorQuery = sequence > 0 ? await inspect(db, "predecessor",
     recordScope("predecessor", assignment.organizationId, assignment.researchSessionId, sequence - 1), budget, 1) : null;
-  const row = (await bodies(db, query))[0]!;
+  const row = (await bodies(db, query, budget))[0]!;
   const completion = decodeBody<import("./repository-postgres").ResearchCompletion>(row as { bodyJson: string; contentDigest: string });
-  const receiptRow = (await bodies(db, receiptQuery))[0]!;
+  const receiptRow = (await bodies(db, receiptQuery, budget))[0]!;
   const receipt = receiptRow.receiptJson as InformationSufficiencyReceiptV2;
   assertInformationSufficiencyReceiptV2(receipt, profile);
   check(receipt.id === identity[0]!.receiptId && receipt.organizationId === assignment.organizationId &&
     receiptRow.contentDigest === receipt.contentDigest && receiptRow.profileId === profile.id &&
     receiptRow.profileContentDigest === profile.contentDigest, "RECEIPT_STORAGE_CONFLICT");
-  const predecessor = predecessorQuery ? (await bodies(db, predecessorQuery))[0]! : null;
+  const predecessor = predecessorQuery ? (await bodies(db, predecessorQuery, budget))[0]! : null;
   check(!predecessor || (predecessor.assignmentDigest === assignment.contentDigest && predecessor.sourceSessionId === assignment.sourceSessionId &&
     Number(predecessor.sourceSequence) === assignment.firstSourceSequence + sequence - 1), "PREDECESSOR_CONFLICT");
   check(completion.organizationId === assignment.organizationId && completion.researchSessionId === assignment.researchSessionId && completion.sequence === sequence &&
@@ -213,9 +224,9 @@ export async function readBoundedResearchCompletion(db: WaiaPostgresDb, assignme
   return completion;
 }
 /** Before held persistence re-reads an existing immutable profile, admit that exact row. */
-export async function admitOptionalStoredProfile(db: WaiaPostgresDb, org: string, id: string) {
-  return inspect(db, "profile", scope("profile", org, [id]), new ResearchReadBudget(LIMITS.profile), 1, undefined, true);
+export async function admitOptionalStoredProfile(db: WaiaPostgresDb, org: string, id: string, budget = new ResearchReadBudget(LIMITS.profile)) {
+  return inspect(db, "profile", scope("profile", org, [id]), budget, 1, undefined, true);
 }
-export async function admitOptionalStoredReceipt(db: WaiaPostgresDb, org: string, id: string) {
-  return inspect(db, "receipt", scope("receipt", org, [id]), new ResearchReadBudget(LIMITS.informationReceipt), 1, undefined, true);
+export async function admitOptionalStoredReceipt(db: WaiaPostgresDb, org: string, id: string, budget = new ResearchReadBudget(LIMITS.informationReceipt)) {
+  return inspect(db, "receipt", scope("receipt", org, [id]), budget, 1, undefined, true);
 }

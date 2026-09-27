@@ -5,96 +5,38 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import * as schema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
-import { assertOrgMembershipPostgres, type OrgContext } from "@/lib/waia-core/scope/org-context";
-import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
+import { type OrgContext } from "@/lib/waia-core/scope/org-context";
 import { persistRequiredInformationProfileWithinTransactionV2Postgres, persistInformationSufficiencyReceiptWithinTransactionV2Postgres,
   requireInformationSufficiencyAuthorityWithinTransactionV2Postgres } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
-import type { RequiredInformationProfileV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-v2";
 import { lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2, type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import { copy, digest, seal, assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
 import { encodeBody } from "../durable-noncapital/recorded-source-read-validation-v1";
-import { check, bounded, orgSchema, digestSchema, parseStrict, captureAssignmentConfig, captureProfileDefinition, rangeSchema,
-  assignmentConfigurationDigest, buildResearchAssignment, assertResearchAssignment, RESEARCH_CONTRACT, RESEARCH_SERVICE_ACTOR, LIMITS,
-  type ResearchAssignmentConfig, type ResearchRange, type ResearchActor } from "./contract";
-import { evaluateSavedResearchUnderstanding, type ResearchEvaluation } from "./evaluate";
-import { ResearchReadBudget, readBoundedResearchAssignment, readBoundedResearchProfile, readBoundedResearchCompletion,
+import { check, bounded, buildResearchAssignment, RESEARCH_CONTRACT, LIMITS } from "./contract";
+import { ResearchReadBudget, readBoundedResearchProfile, readBoundedResearchCompletion,
   readBoundedResearchInputs, readBoundedResearchPredecessor, admitOptionalStoredProfile, admitOptionalStoredReceipt } from "./bounded-source-postgres";
 
-export type ResearchRequest = { assignment: ResearchAssignmentConfig; range: ResearchRange;
-  profile: { definition: unknown } | { id: string; contentDigest: string } };
-export type CapturedResearchRequest = { assignment: ResearchAssignmentConfig; range: ResearchRange;
-  profile: { body: RequiredInformationProfileV2 } | { id: string; contentDigest: string } };
-export type ResearchCompletion = { schemaVersion: typeof RESEARCH_CONTRACT; organizationId: string; researchSessionId: string;
-  sequence: number; sourceSessionId: string; sourceSequence: number; assignmentDigest: string; packetDigest: string;
-  previousCompletionDigest: string | null; output: ResearchEvaluation; contentDigest: string };
+export type { ResearchRequest, CapturedResearchRequest, ResearchCompletion } from "./held-replay";
+import { captureResearchReplaySelector, researchActor as actor, checkRequestedProfile,
+  readResearchAssignmentWithinHeldTransaction as readAssignment, readResearchSnapshotWithinHeldTransaction,
+  verifyResearchSnapshotComputed as verifyComputed, type ResearchRequest, type CapturedResearchRequest, type ResearchCompletion } from "./held-replay";
 
 export function captureResearchCommand(pool: postgres.Sql, suppliedContext: OrgContext, supplied: ResearchRequest) {
   // Actual postgres.js TransactionSql has savepoint and no root begin. No nested public transaction.
   check(typeof pool.begin === "function" && typeof (pool as unknown as { savepoint?: unknown }).savepoint !== "function", "POOL_REQUIRED");
-  const context = copy(suppliedContext);
-  check(Object.keys(context).every(k => k === "organizationId" || k === "userId"), "INVALID_CONTEXT");
-  parseStrict(orgSchema, context.organizationId, "INVALID_ORGANIZATION");
-  check(context.userId === undefined || (typeof context.userId === "string" && context.userId.trim() === context.userId &&
-    context.userId.length > 0 && Buffer.byteLength(context.userId) <= LIMITS.text), "INVALID_ACTOR");
-  bounded(supplied, LIMITS.assignment + LIMITS.profile, "COMMAND_LIMIT_EXCEEDED");
-  const input = copy(supplied);
-  check(Object.keys(input).length === 3 && Object.keys(input).every(k => ["assignment", "range", "profile"].includes(k)), "INVALID_COMMAND");
-  const assignment = captureAssignmentConfig(input.assignment); const range = parseStrict(rangeSchema, input.range, "INVALID_RANGE");
-  check(assignment.organizationId === context.organizationId && range.startSequence >= assignment.firstSourceSequence, "COMMAND_SCOPE_CONFLICT");
-  let profile: CapturedResearchRequest["profile"];
-  check(input.profile && typeof input.profile === "object" && !Array.isArray(input.profile), "INVALID_PROFILE_SELECTOR");
-  if ("definition" in input.profile) {
-    check(Object.keys(input.profile).length === 1, "INVALID_PROFILE_SELECTOR"); profile = { body: captureProfileDefinition(input.profile.definition) };
-  } else {
-    check(Object.keys(input.profile).length === 2, "INVALID_PROFILE_SELECTOR");
-    profile = { id: parseStrict(digestSchema, input.profile.id, "INVALID_PROFILE_SELECTOR"),
-      contentDigest: parseStrict(digestSchema, input.profile.contentDigest, "INVALID_PROFILE_SELECTOR") };
-  }
-  const request: CapturedResearchRequest = { assignment, range, profile };
-  return { context, request };
+  return captureResearchReplaySelector(suppliedContext, supplied);
 }
 function holderColumns(holder: DatabaseClockRuntimeHolderV2) {
   return { runtimeInstanceId: holder.runtimeInstanceId, leaseEpoch: holder.leaseEpoch, leaseContentDigest: holder.leaseContentDigest };
-}
-async function actor(db: WaiaPostgresDb, context: OrgContext): Promise<ResearchActor> {
-  const trusted = await requireServiceOrgContext(context, scoped => assertOrgMembershipPostgres(db, scoped));
-  return trusted.userId === undefined ? { kind: "SERVICE", id: RESEARCH_SERVICE_ACTOR } : { kind: "USER", id: trusted.userId };
 }
 async function settings(tx: WaiaPostgresDb): Promise<void> {
   await tx.execute(sql`set local lock_timeout = '5s'`);
   await tx.execute(sql`set local statement_timeout = '30s'`);
 }
-function checkRequestedProfile(profile: RequiredInformationProfileV2, request: CapturedResearchRequest) {
-  const requested = request.profile;
-  check("body" in requested ? digest(requested.body) === digest(profile) : requested.id === profile.id && requested.contentDigest === profile.contentDigest,
-    "PROFILE_IDENTITY_CONFLICT");
-}
-async function readAssignment(db: WaiaPostgresDb, context: OrgContext, request: CapturedResearchRequest, budget: ResearchReadBudget) {
-  const authorizedActor = await actor(db, context);
-  const assignment = await readBoundedResearchAssignment(db, context.organizationId, request.assignment.researchSessionId, budget);
-  if (!assignment) return null;
-  const profile = await readBoundedResearchProfile(db, context.organizationId, assignment.profileId, budget);
-  assertResearchAssignment(assignment, profile); checkRequestedProfile(profile, request);
-  check(assignment.configurationDigest === assignmentConfigurationDigest(request.assignment, profile, authorizedActor), "ASSIGNMENT_CONFIG_CONFLICT");
-  return { assignment, profile };
-}
 async function snapshot(db: WaiaPostgresDb, context: OrgContext, request: CapturedResearchRequest, sourceSequence: number) {
   return db.transaction(async tx => {
     await settings(tx);
-    const budget = new ResearchReadBudget(LIMITS.inputAggregate);
-    const saved = await readAssignment(tx, context, request, budget);
-    if (!saved) return null;
-    const sequence = sourceSequence - saved.assignment.firstSourceSequence;
-    const completion = await readBoundedResearchCompletion(tx, saved.assignment, saved.profile, sequence);
-    const input = await readBoundedResearchInputs(tx, saved.assignment, saved.profile, sourceSequence, budget);
-    const predecessor = await readBoundedResearchPredecessor(tx, saved.assignment, sequence, new ResearchReadBudget(LIMITS.predecessor));
-    return { ...saved, ...input, completion, predecessor, sequence, sourceSequence };
+    return readResearchSnapshotWithinHeldTransaction(tx, context, request, sourceSequence);
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
-}
-function verifyComputed(saved: NonNullable<Awaited<ReturnType<typeof snapshot>>>) {
-  const output = evaluateSavedResearchUnderstanding(saved.packet, saved.assignment, saved.profile, saved.revisions);
-  if (saved.completion) check(digest(saved.completion.output) === digest(output), "REPLAY_OUTPUT_CONFLICT");
-  return output;
 }
 
 /** Read-only completed replay owns its fixed computation; no provider, clock reselection or lease claim. */
