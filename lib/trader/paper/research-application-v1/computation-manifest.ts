@@ -246,7 +246,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/mi/canonical-pit-service-postgres.ts",
-    "sha256": "00710dd8a5398225064f576a1371b256418e7e8cbdbc818004444babf4a854ca"
+    "sha256": "185d496f742cc20036da3d8ebeaca2697dbf9ebacd9898d82a4cedc0e5813d87"
   },
   {
     "path": "lib/trader/mi/hypothesis.types.ts",
@@ -326,7 +326,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "d5d71af79066152d64139841dcc3707751eb92d46bb6f021c0a7bba80b31bf6b"
+    "sha256": "fccdffbf8ac6f827192f748576b9dc3232e46ebb15d314ee42f1c686d6458f22"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -413,4 +413,4 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "94fa89474e19de3e38435ca64b31ecb86ccaa8942870627314f4184d6f4238d4";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "69173bd6a13256fe6dcb31ccd7fa21bb3d59776248d64e1ed6b121a02c9fecc2";

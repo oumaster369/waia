@@ -16,7 +16,7 @@ import { APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } from "./computation-manife
 import { assertCategoricalRegistrationV1, evaluateCategoricalApplicationMeaningV1, foldResearchApplicationRelationV1, selectResearchApplicationRelationV1 } from "./specification";
 import { readApplicationRows, admitApplicationWriteRow, readApplicationRegistration, applicationScope, decodeApplicationBody, type ApplicationExecutor, type ApplicationRow } from "./bounded-read-postgres";
 import { defineCanonicalMeasurementV1, identifyCanonicalMeasurementValueV1, type CanonicalMeasurementObservationLineageV1 } from "@/lib/trader/mi/measurement-lineage-v1";
-import { persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres, persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres } from "@/lib/trader/mi/canonical-pit-repository-postgres";
+import { persistCanonicalMeasurementDefinitionWithinHeldTransactionV1Postgres, persistCanonicalMeasurementValueLineageWithinHeldTransactionV1Postgres } from "@/lib/trader/mi/canonical-pit-service-postgres";
 import { claimBoundedResearchRuntimeControlLeaseWithinHeldTransactionV2, lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2,
   type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
@@ -229,8 +229,8 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
         inputLineageJson: witness.value.inputs, authority: witness.value.authority, contentDigest: witness.value.contentDigest, schemaVersion: witness.value.schemaVersion }, "APPLICATION_CANONICAL_VALUE_CONFLICT");
       if (valueRows.length || inputRows.length) equal(inputRows, witness.value.inputs.map((v, inputOrdinal) => ({ ...v, organizationId: c.organizationId, measurementValueId: witness.value.id, inputOrdinal })), "APPLICATION_CANONICAL_INPUT_CONFLICT");
       if (write) {
-        await persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres(db, selected.context, witness.definition);
-        await persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres(db, selected.context, witness.value);
+        await persistCanonicalMeasurementDefinitionWithinHeldTransactionV1Postgres(db, selected.context, witness.definition);
+        await persistCanonicalMeasurementValueLineageWithinHeldTransactionV1Postgres(db, selected.context, witness.value);
       } else check(definitionRows.length === 1 && valueRows.length === 1 && inputRows.length === witness.value.inputs.length, "APPLICATION_CANONICAL_DEPENDENCY_MISSING");
       accounting.assertDeadline();
     }

@@ -89,6 +89,17 @@ describe("actual selected application and compatible Understanding capability in
     expect(paths).toContain("lib/trader/paper/research-application-v1/repository-postgres.ts");
     expect(paths).toContain("lib/trader/paper/research-understanding-v1/held-replay.ts");
     expect(paths).toContain("lib/trader/mi/canonical-pit-repository-postgres.ts");
+    expect(paths).toContain("lib/trader/mi/canonical-pit-service-postgres.ts");
+    const owner = ts.createSourceFile("owner.ts", readFileSync("lib/trader/paper/research-application-v1/repository-postgres.ts", "utf8"), ts.ScriptTarget.Latest, true);
+    const canonicalImports = owner.statements.filter(ts.isImportDeclaration)
+      .filter(statement => ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text.includes("canonical-pit"));
+    expect(canonicalImports).toHaveLength(1);
+    expect(canonicalImports[0].moduleSpecifier.getText(owner)).toBe('"@/lib/trader/mi/canonical-pit-service-postgres"');
+    const bindings = canonicalImports[0].importClause?.namedBindings;
+    expect(bindings && ts.isNamedImports(bindings) ? bindings.elements.map(element => element.name.text).sort() : []).toEqual([
+      "persistCanonicalMeasurementDefinitionWithinHeldTransactionV1Postgres",
+      "persistCanonicalMeasurementValueLineageWithinHeldTransactionV1Postgres",
+    ]);
     expect(paths).not.toContain("lib/trader/paper/research-understanding-v1/repository-postgres.ts");
     expect(paths).not.toContain("lib/trader/paper/research-understanding-v1/run-saved-research-loop.ts");
     expect(paths.join("\n")).not.toMatch(/paper-bar-close-loop-legacy|\/forecast\/|predictive-admission|\/execution\/|\/live\/|market-data-gateway|\/connectors\/|hypothesis-service|measurement-service/);
