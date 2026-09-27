@@ -73,6 +73,11 @@ on:
       - "tests/integration/postgres-recorded-paper-analysis-v1.test.ts"
       - "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts"
       - "lib/trader/paper/durable-noncapital/**"
+      - "lib/trader/paper/research-understanding-v1/**"
+      - "tests/integration/postgres-research-understanding-v1.test.ts"
+      - "tests/helpers/research-understanding-*.ts"
+      - "tests/unit/trader-research-understanding-*.test.ts"
+      - "scripts/trader/generate-research-understanding-manifest.ts"
       - "scripts/trader/paper-bar-close-loop*.ts"
       - "tests/helpers/recorded-paper-*.ts"
       - "tests/helpers/noncapital-cycle-owner-process.ts"
@@ -220,7 +225,8 @@ jobs:
             tests/integration/postgres-noncapital-cycle-owner-v2.test.ts \
             tests/integration/postgres-org-live-enable-atomicity.test.ts \
             tests/integration/postgres-recorded-paper-analysis-v1.test.ts \
-            tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts
+            tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts \
+            tests/integration/postgres-research-understanding-v1.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   integration:
