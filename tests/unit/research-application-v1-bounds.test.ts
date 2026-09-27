@@ -39,13 +39,14 @@ describe("held research shared projected-input budget", () => {
 import type postgres from "postgres";
 import { sql } from "drizzle-orm";
 import { afterEach, vi } from "vitest";
-import { createHeldResearchReplay, HeldResearchAccounting } from "@/lib/trader/paper/research-understanding-v1/held-replay";
+import { prepareHeldResearchReplay, HeldResearchAccounting } from "@/lib/trader/paper/research-understanding-v1/held-replay";
 import { APPLICATION_LIMITS } from "@/lib/trader/paper/research-application-v1/contract";
 afterEach(() => vi.restoreAllMocks());
 function transport() {
   const unsafe = vi.fn(() => Object.assign(Promise.resolve([]), { values: async () => [] }));
   const client = { unsafe, savepoint() { throw new Error("SAVEPOINT_FORBIDDEN"); } } as unknown as postgres.TransactionSql;
-  const accounting = new HeldResearchAccounting(); return { unsafe, accounting, executor: createHeldResearchReplay(client, accounting).executor };
+  const pool = { begin() { throw new Error("ROOT_BEGIN_FORBIDDEN"); }, options: { parsers: {}, serializers: {} } } as unknown as postgres.Sql;
+  const accounting = new HeldResearchAccounting(); return { unsafe, accounting, executor: prepareHeldResearchReplay(pool, accounting).bindHeld(client).executor };
 }
 describe("actual held dispatch and invocation accounting", () => {
   it("allows exactly512 dispatches and refuses the513th before the driver call", async () => {

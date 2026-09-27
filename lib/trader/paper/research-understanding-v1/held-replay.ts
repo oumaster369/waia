@@ -115,40 +115,55 @@ export function verifyResearchSnapshotComputed(saved: NonNullable<Awaited<Return
   accounting?.assertDeadline(); return output;
 }
 
-/** Internal composition on an already held client. Structural shape is not authority.
- * The real owner must configure isolation/timeouts before handing it here and must
- * count its non-Drizzle transaction/finalization statements in the same account.
+/** Internal setup before the owner's BEGIN. Initialize the real originating
+ * codecs exactly once, then bind only the transaction returned by that pool.
+ * Shape checks do not attest same-origin pairing or grant application authority.
+ * The owner retains transaction control, settings and finalization accounting.
  */
-export function createHeldResearchReplay(client: postgres.TransactionSql, accounting: HeldResearchAccounting) {
-  check(typeof client.savepoint === "function" && typeof (client as unknown as { begin?: unknown }).begin !== "function" &&
-    typeof client.unsafe === "function", "HELD_TRANSACTION_REQUIRED");
+export function prepareHeldResearchReplay(originatingPool: postgres.Sql, accounting: HeldResearchAccounting) {
+  check(typeof originatingPool.begin === "function" && typeof (originatingPool as unknown as { savepoint?: unknown }).savepoint !== "function", "POOL_REQUIRED");
+  const options = originatingPool.options;
+  check(options && typeof options.parsers === "object" && options.parsers !== null &&
+    typeof options.serializers === "object" && options.serializers !== null, "ORIGINATING_CODEC_METADATA_REQUIRED");
   accounting.assertDeadline();
-  // TransactionSql intentionally lacks root options. Drizzle's constructor needs
-  // a parser metadata object even though these operations only dispatch unsafe.
-  // Keep that metadata adapter-local: do not mutate the actual held connection,
-  // pretend it has begin/end, or acquire a second client. Its existing driver
-  // parsing is retained; raw timestamp projections already accept Date or string.
-  const transport = { unsafe: client.unsafe.bind(client), options: { parsers: {}, serializers: {} } };
+  let heldClient: postgres.TransactionSql | undefined;
+  // Drizzle must initialize the originating connection's codecs, not detached
+  // defaults. Its one construction happens before BEGIN. No root transport is
+  // captured here; the initially unbound transport dispatches only on the held
+  // client later supplied by that same fixed owner. Do not freeze the real codec
+  // maps: postgres.js may add normal type metadata when it connects.
+  const transport = { options, unsafe: (...args: Parameters<postgres.TransactionSql["unsafe"]>) => {
+    check(heldClient, "HELD_TRANSACTION_NOT_BOUND");
+    return heldClient.unsafe(...args);
+  } };
   const db = drizzle({ client: transport as unknown as postgres.Sql, schema,
     logger: { logQuery() { accounting.beforeStatement(); } } });
-  // Expose only the methods used by retained canonical readers/writers, never
-  // the client, session, transaction method or a caller-supplied implementation.
-  const executor = Object.freeze({ select: db.select.bind(db), insert: db.insert.bind(db), execute: db.execute.bind(db) });
-  return Object.freeze({ executor,
-    async replay(suppliedContext: OrgContext, supplied: ResearchRequest, sourceSequence: number) {
-      accounting.assertDeadline();
-      const { context, request } = captureResearchReplaySelector(suppliedContext, supplied);
-      check(Number.isSafeInteger(sourceSequence) && sourceSequence >= request.range.startSequence &&
-        sourceSequence - request.range.startSequence < request.range.count, "INVALID_RANGE");
-      const result = await (async () => {
-        const saved = await readResearchSnapshotWithinHeldTransaction(db, context, request, sourceSequence, accounting);
+  accounting.assertDeadline();
+  return Object.freeze({ bindHeld(client: postgres.TransactionSql) {
+    accounting.assertDeadline();
+    check(!heldClient, "HELD_BINDING_ALREADY_USED");
+    check(typeof client.savepoint === "function" && typeof (client as unknown as { begin?: unknown }).begin !== "function" &&
+      typeof client.unsafe === "function", "HELD_TRANSACTION_REQUIRED");
+    heldClient = client;
+    // Only expose these direct methods after binding, not the root pool,
+    // unbound transport, session or an injectable repository/evaluator.
+    const executor = Object.freeze({ select: db.select.bind(db), insert: db.insert.bind(db), execute: db.execute.bind(db) });
+    return Object.freeze({ executor,
+      async replay(suppliedContext: OrgContext, supplied: ResearchRequest, sourceSequence: number) {
         accounting.assertDeadline();
-        if (!saved?.completion) return null;
-        const output = verifyResearchSnapshotComputed(saved, accounting);
-        accounting.assertDeadline();
-        return { ...saved, completion: saved.completion, output };
-      })();
-      accounting.assertDeadline(); return result;
-    },
-  });
+        const { context, request } = captureResearchReplaySelector(suppliedContext, supplied);
+        check(Number.isSafeInteger(sourceSequence) && sourceSequence >= request.range.startSequence &&
+          sourceSequence - request.range.startSequence < request.range.count, "INVALID_RANGE");
+        const result = await (async () => {
+          const saved = await readResearchSnapshotWithinHeldTransaction(db, context, request, sourceSequence, accounting);
+          accounting.assertDeadline();
+          if (!saved?.completion) return null;
+          const output = verifyResearchSnapshotComputed(saved, accounting);
+          accounting.assertDeadline();
+          return { ...saved, completion: saved.completion, output };
+        })();
+        accounting.assertDeadline(); return result;
+      },
+    });
+  } });
 }
