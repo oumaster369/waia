@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-3
-  completedWorkPackages: [WP-1, WP-2]
-  remainingWorkPackages: [WP-3, WP-4]
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: [WP-4]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: ead55e9921ba1fc58ca1a5b154a2b4ec38e85889
+  lastValidationAt: "2026-09-27T04:27:16.832500Z"
   blockedReason: null
-  nextAction: "Root/M01 review the coherent five-module correction and scoped evidence; request one typecheck and a separately scheduled native resource grant. Native suite is prepared but unexecuted."
+  nextAction: "Root/M01 final exact-source and evidence review, rendered preflight and current-head CI; local validation is complete and publication remains root-owned."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -183,3 +183,13 @@ Independent nonauthor source report `milestone-audits/M01/review-DEE1131-source-
 Before implementation, root admits the three already enumerated CI paths: append `postgres-knowledge-snapshot-eligibility.test.ts` to the actual capital-authority command and strict required-file guard, preserving all22 current entries and producing23 mandatory files. Extend the existing guard control to23 and retain its missing/skipped/failed/empty/duplicate negatives for every file. Add exact workflow path filters for all five changed production files, four changed/new unit files and the new native file, so later reader/fold-only changes cannot avoid this lane. Preserve every separate job, its prerequisites and3 billing/2 payment/4 PostgreSQL17 proof registrations. No authority, native skip waiver, schema or validation-threshold change is admitted.
 
 Root owns these edits. A separately reviewed source-derived graph adjustment may follow; no pin change is authorized by this paragraph. The cumulative23-file native lane, scoped guard proof, final readiness, nonauthor final review and current-head CI remain pending.
+
+## Current-source native and readiness checkpoint
+
+Root CI registration is frozen at **`ead55e9921ba1fc58ca1a5b154a2b4ec38e85889`**, after plan-only admission `fbc8daed0e71d2e28710065cf018c5b147824e32`. The only intervening differences from author9a554b98 are this plan and the three declared CI files. All production modules and the prior19 unit files are byte-identical: historical **80/19** remains exactly attributed to9a554b98 and was not rerun. The new required-proof guard alone passed **24/1** at ead55, retaining all missing/skipped/failed/empty/duplicate controls.
+
+The granted fresh local PostgreSQL16.14 database `waia_dee1121_dee1131_cumulative_3c8b7b98` started with zero public tables. The accepted auth prelude and all222 exact3c8b migration SQL hashes/when values matched. The cumulative mandatory lane passed **476 assertions /23 files /0 skips** at exact ead55; the strict executed-result guard exited0. Original test fixture cleanup remained in place. Before/after roles, memberships, full trigger definitions/enabled state, RLS and policies matched; teardown observed zero faults, disabled guards and remaining sessions. All clients closed and the database/append-only fixture evidence was retained. PG and heavy resources were explicitly released after their work completed.
+
+One serial current-source pass completed all seven readiness commands—lint, typecheck, build, canon, PR governance, Execution graph and Reality graph—plus diff check, each exit0. No full local unit suite or separate3 billing/2 payment/4 PostgreSQL17 lane was rerun. Reality remains157 sources/140 consumers/26 references with unchanged path/content pins; Execution topology is unchanged. No inventory, graph-rule or unit-count change was necessary.
+
+Exact command logs, raw Vitest JSON, source/config manifests, the complete222 migration set, restoration/session receipts and inherited-unit attribution are in external `parallel-runtime-owner/dee1131-final-ead55e99/`. The dedicated12/1 native, initial typecheck, original RED/scoped evidence and all earlier frozen reports remain separately preserved. This final checkpoint changes only plan metadata/documentation; executed production/test identity remains ead55. Final nonauthor package review, root rendered preflight, current-head CI and publication remain outstanding. This proof does not qualify a scientific hypothesis, add ordinary semantic production or complete P10.
