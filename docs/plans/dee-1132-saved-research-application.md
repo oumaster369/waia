@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: in-review
   currentWorkPackage: WP-2
   completedWorkPackages: [WP-1, WP-2A]
   remainingWorkPackages: [WP-2]
-  prNumber: null
-  prUrl: null
+  prNumber: 691
+  prUrl: https://github.com/oumaster369/waia/pull/691
   lastValidatedGitSha: 5740475f7d9c54af20e7262d13e29f5b4e882990
   lastValidationAt: "2026-09-27T14:38:57.176Z"
   blockedReason: null
-  nextAction: "Root-owned PR/publication preparation and exact-head GitHub full-unit/strict25-suite CI remain; bounded local45 native, application FHV schema compatibility and separate222→27→224 bootstrap proofs on5740475f are accepted. Preserve executable952afcb4 and all earlier RED evidence; no further executable edits, local repetitions, DB/native or activation grant."
+  nextAction: "PR691 is open. Await exact-head GitHub full units, strict25-suite PostgreSQL union and all applicable checks; root must verify fresh head/base/reviews/Linear blockers before checked merge. Bounded local native574 and independent acceptance carry unchanged; no live or scientific qualification follows."
 provenance:
   createdFrom: chat
   gapRegistry: null
