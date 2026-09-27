@@ -13,6 +13,9 @@ import { check, bounded, orgSchema, digestSchema, parseStrict, captureAssignment
   assignmentConfigurationDigest, assertResearchAssignment, RESEARCH_CONTRACT, RESEARCH_SERVICE_ACTOR, LIMITS,
   type ResearchAssignmentConfig, type ResearchRange, type ResearchActor } from "./contract";
 import { evaluateSavedResearchUnderstanding, type ResearchEvaluation } from "./evaluate";
+import { captureFixedResearchCompletionSnapshot, prepareFixedResearchCompletion, writeFixedResearchCompletion,
+  type PreparedResearchCompletion } from "./completion-write-postgres";
+import type { DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import { ResearchReadBudget, readBoundedResearchAssignment, readBoundedResearchProfile, readBoundedResearchCompletion,
   readBoundedResearchInputs, readBoundedResearchPredecessor } from "./bounded-source-postgres";
 
@@ -149,6 +152,17 @@ export function prepareHeldResearchReplay(originatingPool: postgres.Sql, account
     // unbound transport, session or an injectable repository/evaluator.
     const executor = Object.freeze({ select: db.select.bind(db), insert: db.insert.bind(db), execute: db.execute.bind(db) });
     return Object.freeze({ executor,
+      async prepareCompletion(suppliedContext: OrgContext, supplied: ResearchRequest, sourceSequence: number) {
+        accounting.assertDeadline();
+        const { context, request } = captureResearchReplaySelector(suppliedContext, supplied);
+        check(Number.isSafeInteger(sourceSequence) && sourceSequence >= request.range.startSequence &&
+          sourceSequence - request.range.startSequence < request.range.count, "INVALID_RANGE");
+        const snapshotHandle = await captureFixedResearchCompletionSnapshot(db, context, request, sourceSequence, accounting);
+        return prepareFixedResearchCompletion(snapshotHandle, accounting);
+      },
+      async writeCompletion(prepared: PreparedResearchCompletion, holder: DatabaseClockRuntimeHolderV2) {
+        return writeFixedResearchCompletion(db, prepared, holder, accounting);
+      },
       async replay(suppliedContext: OrgContext, supplied: ResearchRequest, sourceSequence: number) {
         accounting.assertDeadline();
         const { context, request } = captureResearchReplaySelector(suppliedContext, supplied);

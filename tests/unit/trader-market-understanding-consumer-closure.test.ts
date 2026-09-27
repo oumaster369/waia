@@ -333,7 +333,15 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
     const researchOwner = read("lib/trader/paper/research-understanding-v1/repository-postgres.ts");
     const heldReplay = read("lib/trader/paper/research-understanding-v1/held-replay.ts");
     expect(researchOwner).toMatch(/verifyResearchSnapshotComputed as verifyComputed[^;]+from "\.\/held-replay"/);
-    expect(researchOwner.match(/verifyComputed\(saved\)/g)).toHaveLength(2);
+    expect(researchOwner.match(/verifyComputed\(saved\)/g)).toHaveLength(1);
+    const completionWriter = read("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts");
+    expect(completionWriter).toMatch(/verifyResearchSnapshotComputed as verifyComputed[^;]+from "\.\/held-replay"/);
+    expect(completionWriter.match(/verifyComputed\(saved, shared\(lifetime\)\)/g)).toHaveLength(1);
+    expect(researchOwner).toContain("prepareFixedResearchCompletion(snapshotHandle, lifetime)");
+    expect(researchOwner).toContain("return writeFixedResearchCompletion(tx, prepared.prepared, holder, lifetime)");
+    expect(heldReplay).toContain("return prepareFixedResearchCompletion(snapshotHandle, accounting)");
+    expect(heldReplay).toContain("return writeFixedResearchCompletion(db, prepared, holder, accounting)");
+    expect(completionWriter).not.toMatch(/\.transaction\(|\.begin\(|suppliedOutput|suppliedEvaluator|createSavedResearchOwner|createSavedApplicationOwner/);
     expect(heldReplay).toContain("export function verifyResearchSnapshotComputed(");
     expect(heldReplay).toContain("const output = evaluateSavedResearchUnderstanding(saved.packet, saved.assignment, saved.profile, saved.revisions);");
     expect(heldReplay).toContain('if (saved.completion) check(digest(saved.completion.output) === digest(output), "REPLAY_OUTPUT_CONFLICT");');

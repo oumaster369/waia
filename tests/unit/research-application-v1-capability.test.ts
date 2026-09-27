@@ -88,6 +88,7 @@ describe("actual selected application and compatible Understanding capability in
     const paths = app.entries.map((v: { path: string }) => v.path);
     expect(paths).toContain("lib/trader/paper/research-application-v1/repository-postgres.ts");
     expect(paths).toContain("lib/trader/paper/research-understanding-v1/held-replay.ts");
+    expect(paths).toContain("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts");
     expect(paths).toContain("lib/trader/mi/canonical-pit-repository-postgres.ts");
     expect(paths).toContain("lib/trader/mi/canonical-pit-service-postgres.ts");
     const owner = ts.createSourceFile("owner.ts", readFileSync("lib/trader/paper/research-application-v1/repository-postgres.ts", "utf8"), ts.ScriptTarget.Latest, true);
@@ -104,6 +105,7 @@ describe("actual selected application and compatible Understanding capability in
     expect(paths).not.toContain("lib/trader/paper/research-understanding-v1/run-saved-research-loop.ts");
     expect(paths.join("\n")).not.toMatch(/paper-bar-close-loop-legacy|\/forecast\/|predictive-admission|\/execution\/|\/live\/|market-data-gateway|\/connectors\/|hypothesis-service|measurement-service/);
     expect(old.kind).toBe("selected_research_runtime_inventory");
+    expect(old.entries.map((v: { path: string }) => v.path)).toContain("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts");
     expect(old.entries.map((v: { path: string }) => v.path)).not.toContain("lib/trader/paper/research-application-v1/repository-postgres.ts");
     expect(old.boundaries.cli).toContain("selected early");
   });

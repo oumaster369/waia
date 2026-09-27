@@ -14,7 +14,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: draft
+  status: in-progress
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3]
@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Sole canonical plan on accepted main 630abef5. Await root review of this plan commit and explicit source admission for the finite 15-path map; implementation and native execution are not yet released."
+  nextAction: "WP-1 fixed completion writer and held accounting source frozen for independent review and coordinated scoped checks. WP-2 composition and native execution are not yet released."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -129,3 +129,13 @@ Planned commands, **not executed for this plan-only admission**:
 - For production extraction readiness, run `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm validate:canon`, `pnpm validate:pr-governance`, `pnpm validate:execution-v2-consumer-graph` and `pnpm validate:reality-v2-consumer-graph`; no duplicate full local unit suite solely to replace GitHub.
 - After independent source/runner review and root grant, run the complete existing application native file with its added composite cases and the unchanged Understanding native file against admitted fresh local fixtures/full accepted migration identities. Retain before/after source, posture, raw results, complete cleanup and closed-client receipts. Scheduling or fixture differences require explicit attribution, never a manufactured union.
 - Root owns rendered-body preflight, exact-head GitHub full units/mandatory strict25-suite union, final review and publication/merge. This source plan supplies no claim that those gates already passed.
+
+## WP-1 source handoff — 2026-09-27
+
+Root accepted sole plan `5854be7d875edc71418dd9dfbce2fa37bcd40d46` and released WP-1 source only; admission is `parallel-runtime-owner/dee1133-root-plan-admission-5854be7d/admission.json`. The extracted writer owns the original fixed seal and RC source/predecessor/receipt/current-holder checks. The public wrapper retains assignment creation, RR commit before fixed computation, RC settings and post-commit deadline handling. Its independent read budgets remain independent.
+
+The held seam mints private, one-use snapshot/completion handles from the actual fixed reader/evaluator and binds them to the originating accounting object. It accepts no caller-prepared evidence/output, evaluator or callback. The actual bound client's logger counts nested service SQL; candidate completion and receipt projections are admitted through metadata SQL before inserts and nested body reads. Receipt creation uses the exact existing millisecond transaction-time default for byte accounting. No transaction, connection, public root owner or alternative persistence writer is introduced. Strict sufficiency/Understanding closure follows the real delegation and retains assignment-reader and authority negatives. Added inert-transport controls exercise existing completion replay, forged/copied/reused/foreign-accounting handle refusal and the original statement/deadline across preparation and write. They are not native persistence proof.
+
+Deterministic application manifest generation completed from these actual dependencies. The actual command closure has 93 paths (the old 91 plus the fixed internal writer and its unchanged existing sufficiency repository), with no removals. The only changed prior command dependency is the held seam; both pure manifests and the accepted MI service's two measurement delegates are preserved. No composite operation, fixture, native test, SQL, schema, migration, workflow, lease policy or pure meaning changed in WP-1. All 45 existing application native cases and the old Understanding native file remain unchanged.
+
+This is source handoff only. Scoped tests/readiness have not run, compatibility is not yet claimed, and native execution remains separately gated. Freeze and raw generation receipt: `parallel-runtime-owner/dee1133-wp1-source-5854be7d/`. WP-2 wiring waits for independent review and root disposition.
