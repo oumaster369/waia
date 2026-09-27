@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
-  currentWorkPackage: WP-2
-  completedWorkPackages: [WP-1]
-  remainingWorkPackages: [WP-2, WP-3]
+  status: integration-ready
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 6640fd7cb5db6e6d5b33e7ecc90d50ef69ea5f68
-  lastValidationAt: "2026-09-27T18:32:00.536975Z"
+  lastValidatedGitSha: b99cc34ab09739f8bbe7ea303206307af4f95d3b
+  lastValidationAt: "2026-09-27T19:42:17.918Z"
   blockedReason: null
-  nextAction: "Correct only the admitted native replay-envelope expectation after preserved94/1 RED; validate the exact test-only successor and freeze unchanged production carry. A fresh native95 attempt requires separate root binding review and grant."
+  nextAction: "Validate and freeze this sole-plan publication carry; root owns rendered-body preflight and one PR. Record actual PR metadata only after creation, then require exact published-head full-unit/strict25 CI and fresh checked-merge admission."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -194,3 +194,19 @@ Original251-artifact native freeze `parallel-runtime-owner/dee1133-native-bound-
 Root admission `parallel-runtime-owner/dee1133-native-bound-b701539f/root-native-expectation-correction-admission.json` SHA `201a4ddc5abfd816cbfaeabb75ade8be05559586b84b7f5a901fac154d2544fc` permits only this plan checkpoint followed by the existing native test path. Keep exact return keys and full deep equality against the sealed expected `{...body, contentDigest: String(row.content_digest)}`; additionally require the raw JSON body to lack root contentDigest and independently hash its actual UTF8 bytes to the separate stored column. Preserve all other assertions,95 titles, nine-marker protocol, old45+24 cases, production/SQL and all335 source pins except this native file's hash. No decoder change, partial comparison, production helper oracle or new API is admitted.
 
 After a coherent test-only commit, run only native-file ESLint, typecheck, canon and PR governance serially under the granted LOCALHEAVY slot. Preserve the previous production readiness as actualb701 evidence, prove all other nonplan entries unchanged and prepare an identity-only successor binding with identical runner bytes. Source/binding review and a fresh concrete root grant remain necessary before another full95/224/FHV81 execution; this amendment grants no database, native, publication or merge action.
+
+## Accepted local native result and publication handoff — 2026-09-27
+
+Clean executable `b99cc34ab09739f8bbe7ea303206307af4f95d3b`, tree `5e4781f13127b30ac8712ede2deab1b761ae3126`, contains only the admitted native expectation correction after sole-planf80f. Inverse restoration reproduces the complete b701 native file; every other nonplan entry and334 of335 runner pins are unchanged. Four scoped checks actually passed onb99 at `19:24:26.747327–19:24:53.613427Z`: native-file ESLint, typecheck, canon and PR governance. Their15-artifact freeze is `bf461d35842c0a914a8684732f40c81c05d1fbaf201a91f1cd434c4858b02028`. The broader303 focused assertions/13files/zero skips and twelve readiness checks remain attributed to actualb701 and carried by unchanged production bytes. Independent correction review `milestone-audits/DEE1133-native-expectation-b99cc34a/REPORT.md` SHA `f69a1731f6d93e8c286f27b582afe000e0770f4818e5aa4df209647dce7b3673`, freeze `4112077ca2f0cd977877b4177668b5c017ef26d941596405e207a764aaf45e94`, accepted that finite correction and identical runner binding.
+
+Root separately granted one fresh application-only execution on immutableb99. The actual unfiltered invocation at **19:29:20.158–19:42:17.558UTC passed95/95 in exactly two files, with zero failures/skips/todo**:71 application cases including all45 prior cases, plus the unchanged24 Understanding cases. It exited0 with no timeout, signal or retry. All nine composite markers match their unique passed cases. The corrected same-holder CLI case now reaches full sealed public replay, evaluation digest, audit-holder/count and repeated-consumption assertions. Its twelve claims and source-onlyB completion/consumption share the actual holder tuple. Original1905RED94/1, its missing final marker/FHV and all earlier local failures remain unchanged historical evidence.
+
+Natural32 composite evidence is actual62,166-byte registration,459 statements including finalization,961,618 unique accounted bytes and five transactions. Bodies0/1/3 were read with predecessor2 metadata only; actual completion/receipt projections measured85,213/5,605bytes and were admitted before receipt persistence. Raw whole-case duration14,606.705208ms is a conservative invocation wall-time upper bound including fixture work, below60,000ms; it does not replace the unchanged production deadline. The4,000,000-byte application maximum remains inside the shared67,108,864-byte ledger by frozen source and passing assertions, without a separately emitted component counter. The retained DEE1132 history case separately measured333/120 statements and654,150/655,091 unique bytes.
+
+Real process-death controls preserve completion/consumption prefixes0/0,1/0 and1/1 with their exact backend-closure/replay rules. Both composite and public no-op insertion controls refuse orphan receipts and recover after fault removal/actual expiry. Late acknowledgment is explicitly a simulated monotonic120001 after a real completion COMMIT, not an actual120-second wait; induced statement exhaustion adds324 real SELECTs on the original ledger, retains reserved rollback at512 and refuses the next business query. That induced load is separate from natural32 capacity.
+
+All5,531 source entries were unchanged throughout the run. All224 actual migration hashes/timestamps before/after match the bound SQL/journal and acceptedf01. Schema-only FHV ran at `19:42:17.605–19:42:17.918Z`, exit0, with81 read-only SELECTs, exact fixture database/role/PostgreSQL160014 and closed client. Entire postmigration/teardown posture matched; no fault/disabled-trigger residue or remaining clients persisted. Historical bootstrap was not rerun: its original222→unchanged27-control→224 result stays attributed to its historical receipts, carried by229 identical source paths. These are224SQL plus the bootstrap/prelude/seed/journal/schema sources, not229 migrations.
+
+The257-artifact native freeze `parallel-runtime-owner/dee1133-native-bound-b99cc34a/results-1928/RESULTS-FREEZE.json` SHA `03a3c358ec6cc25a26ba2fd366dd20f2814bc3968e287892d7950a0a4d1a26b6` retains raw native JSON SHA `0edfe84de7c9fc99fec8bd43e9a67cd74ca9d9ead691807eb14d21b2fa4e2ecc`. Independent outcome report `milestone-audits/DEE1133-native-b99cc34a-1928/REPORT.md` SHA `18fe508a38965e59d0c63b7bfd09b889519d120eaa182dfd33e3a9bef8c32424`, four-artifact freeze `f49711ec0c93ab3368e4ab702626b0722ecc54c2bfbdb55a608394397cef6dcc`, verified all257 pins and accepted the finite local scope. Root final adoption `parallel-runtime-owner/dee1133-native-bound-b99cc34a/root-final-native-adoption.json` SHA `79c6456efb56ffead2ad2fd2c8b80adc390e10775c4ba724ee7fa64d3ae46950` accepts WP-1/WP-2 and releases only this publication bookkeeping step.
+
+WP-3 remains open: validate this sole-plan carry, prove all5,530 nonplan entries equalb99, then root performs rendered-body preflight and one PR. PR metadata remains null until actual creation; exact published-head GitHub full units/strict25 and all required/applicable checks, fresh review/base/blocker checks and root merge admission remain future. No additional executable/native/build/unit rerun is required solely for plan bytes. This result is local synthetic software proof and schema compatibility; it supplies no scientific/feed/host/account/venue/restricted-role qualification, unattended P10–P12/full23-stage completion, new policy or live/capital activation.
