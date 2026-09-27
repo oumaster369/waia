@@ -95,6 +95,7 @@ const runtimeAllowed = new Set([
   "lib/trader/paper/research-understanding-v1/admission.ts",
   "lib/trader/paper/research-understanding-v1/bounded-source-postgres.ts",
   "lib/trader/paper/research-understanding-v1/cli-options.ts",
+  "lib/trader/paper/research-understanding-v1/completion-write-postgres.ts",
   "lib/trader/paper/research-understanding-v1/computation-manifest.ts",
   "lib/trader/paper/research-understanding-v1/contract.ts",
   "lib/trader/paper/research-understanding-v1/evaluate.ts",

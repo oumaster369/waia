@@ -73,13 +73,22 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
     }
   });
 
-  it("keeps research persistence with the owner and shared assignment validation read-only", () => {
+  it("keeps fixed research persistence delegated by its owner and assignment validation read-only", () => {
     const owner = read("lib/trader/paper/research-understanding-v1/repository-postgres.ts");
     const shared = read("lib/trader/paper/research-understanding-v1/held-replay.ts");
+    const writer = read("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts");
     expect(owner).toMatch(/readResearchAssignmentWithinHeldTransaction as readAssignment[^;]+from "\.\/held-replay"/);
     expect(owner).toContain("await readAssignment(tx, context, request,");
-    expect(owner).toContain("await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(tx, context, output.receipt)");
-    expect(owner).toContain("await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(tx, context, saved.profile, output.receipt)");
+    expect(owner).toContain("return captureFixedResearchCompletionSnapshot(tx, context, request, sourceSequence, lifetime)");
+    expect(owner).toContain("prepareFixedResearchCompletion(snapshotHandle, lifetime)");
+    expect(owner).toContain("return writeFixedResearchCompletion(tx, prepared.prepared, holder, lifetime)");
+    expect(writer).toContain("await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(db, context, output.receipt)");
+    expect(writer).toContain("await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(db, context, saved.profile, output.receipt)");
+    expect(writer).toContain("await readAssignment(db, context, request, inputBudget)");
+    expect(writer).toContain('check(captured && captured.lifetime === lifetime, "RESEARCH_COMPLETION_HANDLE_INVALID")');
+    expect(shared).toContain("return writeFixedResearchCompletion(db, prepared, holder, accounting)");
+    expect(writer).not.toMatch(/\.transaction\(|\.begin\(|createSavedResearchOwner|createSavedApplicationOwner|persistRequiredInformationProfile/);
+    expect(owner).not.toMatch(/persistInformationSufficiencyReceiptWithinTransaction|requireInformationSufficiencyAuthorityWithinTransaction/);
     expect(shared).toContain("const authorizedActor = await researchActor(db, context)");
     expect(shared).toContain("assertResearchAssignment(assignment, profile); checkRequestedProfile(profile, request);");
     expect(shared).toContain('check(assignment.configurationDigest === assignmentConfigurationDigest(request.assignment, profile, authorizedActor), "ASSIGNMENT_CONFIG_CONFLICT");');

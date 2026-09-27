@@ -6,19 +6,20 @@ import { sql } from "drizzle-orm";
 import * as schema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { type OrgContext } from "@/lib/waia-core/scope/org-context";
-import { persistRequiredInformationProfileWithinTransactionV2Postgres, persistInformationSufficiencyReceiptWithinTransactionV2Postgres,
-  requireInformationSufficiencyAuthorityWithinTransactionV2Postgres } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
+import { persistRequiredInformationProfileWithinTransactionV2Postgres } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
 import { lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2, type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
-import { copy, digest, seal, assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
+import { copy, assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
 import { encodeBody } from "../durable-noncapital/recorded-source-read-validation-v1";
-import { check, bounded, buildResearchAssignment, RESEARCH_CONTRACT, LIMITS } from "./contract";
-import { ResearchReadBudget, readBoundedResearchProfile, readBoundedResearchCompletion,
-  readBoundedResearchInputs, readBoundedResearchPredecessor, admitOptionalStoredProfile, admitOptionalStoredReceipt } from "./bounded-source-postgres";
+import { check, buildResearchAssignment, LIMITS } from "./contract";
+import { ResearchReadBudget, readBoundedResearchProfile, admitOptionalStoredProfile } from "./bounded-source-postgres";
+
+import { ResearchCompletionDeadline, captureFixedResearchCompletionSnapshot, prepareFixedResearchCompletion,
+  writeFixedResearchCompletion } from "./completion-write-postgres";
 
 export type { ResearchRequest, CapturedResearchRequest, ResearchCompletion } from "./held-replay";
 import { captureResearchReplaySelector, researchActor as actor, checkRequestedProfile,
   readResearchAssignmentWithinHeldTransaction as readAssignment, readResearchSnapshotWithinHeldTransaction,
-  verifyResearchSnapshotComputed as verifyComputed, type ResearchRequest, type CapturedResearchRequest, type ResearchCompletion } from "./held-replay";
+  verifyResearchSnapshotComputed as verifyComputed, type ResearchRequest, type CapturedResearchRequest } from "./held-replay";
 
 export function captureResearchCommand(pool: postgres.Sql, suppliedContext: OrgContext, supplied: ResearchRequest) {
   // Actual postgres.js TransactionSql has savepoint and no root begin. No nested public transaction.
@@ -74,55 +75,29 @@ async function ensureAssignment(db: WaiaPostgresDb, context: OrgContext, request
 
 /** Fixed command boundary. All computation and the held writer are private; no supplied output/callback. */
 async function completeSavedResearch(pool: postgres.Sql, context: OrgContext, request: CapturedResearchRequest,
-  sourceSequence: number, holder: DatabaseClockRuntimeHolderV2, assertDeadline: () => void) {
+  sourceSequence: number, holder: DatabaseClockRuntimeHolderV2, lifetime: ResearchCompletionDeadline) {
+  const assertDeadline = () => lifetime.assertDeadline();
   assertDeadline(); assertEnvironment(); check(holder.organizationId === context.organizationId, "HOLDER_SCOPE_CONFLICT");
   const db = drizzle(pool, { schema }); await ensureAssignment(db, context, request, holder, assertDeadline);
   assertDeadline();
-  const saved = await snapshot(db, context, request, sourceSequence); check(saved, "ASSIGNMENT_MISSING");
+  const snapshotHandle = await db.transaction(async tx => {
+    await settings(tx);
+    return captureFixedResearchCompletionSnapshot(tx, context, request, sourceSequence, lifetime);
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
   assertDeadline();
-  const output = verifyComputed(saved);
-  assertDeadline();
-  if (saved.completion) return { outcome: "REPLAYED" as const, completion: saved.completion };
-  const completion: ResearchCompletion = seal({ schemaVersion: RESEARCH_CONTRACT, organizationId: context.organizationId,
-    researchSessionId: saved.assignment.researchSessionId, sequence: saved.sequence, sourceSessionId: saved.assignment.sourceSessionId,
-    sourceSequence, assignmentDigest: saved.assignment.contentDigest, packetDigest: saved.packet.contentDigest,
-    previousCompletionDigest: saved.predecessor, output });
-  bounded(completion, LIMITS.completion, "COMPLETION_LIMIT_EXCEEDED");
+  const prepared = prepareFixedResearchCompletion(snapshotHandle, lifetime);
+  if (prepared.outcome === "REPLAYED") return { outcome: prepared.outcome, completion: prepared.completion };
   return db.transaction(async tx => {
-    await settings(tx); await lockRuntimeOrganizationV2(tx, context.organizationId); await assertRuntimeDatabaseClockHolderV2(tx, holder);
-    assertDeadline();
-    const budget = new ResearchReadBudget(LIMITS.inputAggregate);
-    const current = await readAssignment(tx, context, request, budget); check(current, "ASSIGNMENT_MISSING");
-    check(current.assignment.contentDigest === saved.assignment.contentDigest, "ASSIGNMENT_IDENTITY_CONFLICT");
-    const already = await readBoundedResearchCompletion(tx, current.assignment, current.profile, saved.sequence);
-    assertDeadline();
-    if (already) {
-      check(digest(already) === digest(completion), "COMPLETION_CONFLICT");
-      assertDeadline(); return { outcome: "REPLAYED" as const, completion: already };
-    }
-    const input = await readBoundedResearchInputs(tx, current.assignment, current.profile, sourceSequence, budget);
-    check(input.packet.contentDigest === saved.packet.contentDigest && digest(input.revisions) === digest(saved.revisions), "SOURCE_SNAPSHOT_CONFLICT");
-    const predecessor = await readBoundedResearchPredecessor(tx, current.assignment, saved.sequence, new ResearchReadBudget(LIMITS.predecessor));
-    check(predecessor === saved.predecessor, "PREDECESSOR_CONFLICT");
-    await admitOptionalStoredReceipt(tx, context.organizationId, output.receipt.id);
-    await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(tx, context, output.receipt);
-    await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(tx, context, saved.profile, output.receipt);
-    assertDeadline();
-    await tx.insert(schema.traderResearchUnderstandingCompletionsV1).values({ organizationId: context.organizationId,
-      sessionId: completion.researchSessionId, sequence: completion.sequence, contentDigest: completion.contentDigest,
-      bodyJson: encodeBody(completion), assignmentDigest: completion.assignmentDigest, sourceSessionId: completion.sourceSessionId,
-      sourceSequence, packetDigest: completion.packetDigest, receiptId: output.receipt.id,
-      previousCompletionDigest: completion.previousCompletionDigest, ...holderColumns(holder) });
-    await assertRuntimeDatabaseClockHolderV2(tx, holder);
-    assertDeadline(); return { outcome: "COMMITTED" as const, completion };
+    await settings(tx);
+    return writeFixedResearchCompletion(tx, prepared.prepared, holder, lifetime);
   }, { isolationLevel: "read committed" });
 }
 
 /** Sole public command composition: input is captured once before any await. No held-writer API. */
 export function createSavedResearchOwner(pool: postgres.Sql, suppliedContext: OrgContext, supplied: ResearchRequest) {
   const { context, request } = captureResearchCommand(pool, suppliedContext, supplied);
-  const started = performance.now();
-  const assertDeadline = () => check(performance.now() - started <= LIMITS.durationMs, "INVOCATION_DEADLINE_EXCEEDED");
+  const lifetime = new ResearchCompletionDeadline();
+  const assertDeadline = () => lifetime.assertDeadline();
   const checkSequence = (sourceSequence: number) => {
     assertDeadline();
     check(Number.isSafeInteger(sourceSequence) && sourceSequence >= request.range.startSequence &&
@@ -137,7 +112,7 @@ export function createSavedResearchOwner(pool: postgres.Sql, suppliedContext: Or
     },
     async complete(sourceSequence: number, suppliedHolder: DatabaseClockRuntimeHolderV2) {
       checkSequence(sourceSequence); const holder = copy(suppliedHolder);
-      const result = await completeSavedResearch(pool, context, request, sourceSequence, holder, assertDeadline);
+      const result = await completeSavedResearch(pool, context, request, sourceSequence, holder, lifetime);
       // A late COMMIT acknowledgement refuses this result, not the already committed
       // immutable completion. A fresh invocation can replay it without another write.
       assertDeadline(); return result;

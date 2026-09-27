@@ -4,7 +4,7 @@ import type { SavedApplicationRequest } from "@/lib/trader/paper/research-applic
 import { pathToFileURL } from "node:url";
 
 export async function seedApplicationNative(client: postgres.Sql, organizationId: string, userId: string,
-  options: { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number } = {}) {
+  options: { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number; firstSourceSequence?: number } = {}) {
   const { drizzle } = await import("drizzle-orm/postgres-js"); const schema = await import("@/db/schema.postgres");
   const { createPostgresMiMeasurementService } = await import("@/lib/trader/mi/measurement-service");
   const { createPostgresMiHypothesisService } = await import("@/lib/trader/mi/hypothesis-service");
@@ -45,7 +45,7 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
   const session = captureSession({ organizationId, accountId: "saved-account", symbol: "BTC/USDT", sessionId: "application-source",
     releaseSha: "a".repeat(40), maxPacketBytes: 2_000_000, maxBarsPerInterval: 1000, maxCycles: 8, leaseDurationMs: 3000 });
   const config = research.captureAssignmentConfig({ organizationId, accountId: session.accountId, symbol: session.symbol,
-    researchSessionId: "application-research", sourceSessionId: session.sessionId, sourceConfigDigest: session.configDigest, firstSourceSequence: 0,
+    researchSessionId: "application-research", sourceSessionId: session.sessionId, sourceConfigDigest: session.configDigest, firstSourceSequence: options.firstSourceSequence ?? 0,
     releaseSha: "b".repeat(40), admissions: ["1m", "4h"].map(lane => ({ lane, sourceId: admissions[0]!.sourceId, revisionDigests: [admissions[0]!.contentDigest] })) });
   const profileDefinition = { ...researchProfileDefinition(), organizationId };
   const profile = research.captureProfileDefinition(profileDefinition);
@@ -88,19 +88,20 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
   // Each latest close is observed database time; ingestion and saved PIT follow it.
   const packets: import("@/lib/trader/paper/durable-noncapital/recorded-analysis-v1").AnalysisPacket[] = [];
   let lastPit = registeredAt;
-  const request = { assignment: config, profile: { definition: profileDefinition }, range: { startSequence: 0, count: 2, leaseDurationMs: 1500 } };
-  async function appendThrough(last: number) {
+  const request = { assignment: config, profile: { definition: profileDefinition }, range: { startSequence: config.firstSourceSequence, count: 2, leaseDurationMs: 1500 } };
+  async function appendSourceThrough(last: number, sourceOptions: { missing4h?: boolean } = {}) {
     await expiry();
     const holder = await claimRuntimeControlLeaseAtDatabaseTimeV2(db, { organizationId, runtimeInstanceId: `application-source-${packets.length}`, durationMs: 3000 });
     if (!holder) throw new Error("FIXTURE_SOURCE_LEASE_BUSY");
     const first = packets.length;
     for (let sequence = first; sequence <= last; sequence++) {
+      const missing4h = sourceOptions.missing4h ?? options.missing4h;
       const observed = await observedAfter(lastPit); const event = observed;
       const bars: Partial<Record<import("@/lib/trader/intelligence/types").BarInterval, import("@/lib/trader/intelligence/types").Bar[]>> = {};
       for (const interval of ["1m", "15m", "1h", "4h", "1d"] as const) {
-        if (interval === "4h" && options.missing4h) continue;
+        if (interval === "4h" && missing4h) continue;
         const duration = intervalDurationMs(interval), end = Date.parse(observed);
-        bars[interval] = Array.from({ length: 25 }, (_, i) => { const down = interval === "4h" && options.against && sequence === 1;
+        bars[interval] = Array.from({ length: 25 }, (_, i) => { const down = interval === "4h" && options.against && sequence === config.firstSourceSequence + 1;
           const base = down ? 200 - i * 3 : 100 + i;
           return { symbol: session.symbol, interval, open: String(base), close: String(base + (down ? -1 : 1)), high: String(base + 2), low: String(base - 2), volume: "10",
             barOpenTime: new Date(end - (25 - i) * duration).toISOString(), barCloseTime: new Date(end - (24 - i) * duration).toISOString() }; });
@@ -117,7 +118,7 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
       const normalized = normalizeMandatory({ bars, quote, observations }, session, pit);
       for (const interval of ["1m", "4h"] as const) {
         const lane = normalized.observations.find(o => o.kind === "ohlcv_bar" && o.interval === interval);
-        if (interval === "4h" && options.missing4h) {
+        if (interval === "4h" && missing4h) {
           if (lane !== undefined) throw new Error("FIXTURE_MISSING_4H_NOT_ABSENT");
         } else if (lane?.health !== "HEALTHY") {
           throw new Error(`FIXTURE_MANDATORY_LANE_NOT_FRESH:${sequence}:${interval}:${lane?.health}:${lane?.freshnessMs}`);
@@ -126,14 +127,16 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
       const packet = await publishRecordedAnalysis(client, session, holder, sequence, pit, normalized);
       await completeRecordedAnalysisPostgresV1(client, session, holder, sequence); packets.push(packet);
     }
-    await expiry();
+    await expiry(); return first;
+  }
+  async function completeResearchRange(first: number, last: number) {
     const range = { ...request.range, startSequence: first, count: last - first + 1 };
     const result = await runSavedResearchLoop(client, researchContext, { ...request, range });
     if (result.status !== "COMPLETE") throw new Error(`FIXTURE_RESEARCH_REFUSED:${result.status}`);
     for (let sequence = first; sequence <= last; sequence++) {
       const saved = await createSavedResearchOwner(client, researchContext, { ...request, range }).replay(sequence);
       if (!saved) throw new Error(`FIXTURE_RESEARCH_COMPLETION_MISSING:${sequence}`);
-      const expected = options.missing4h ? null : options.against && sequence === 1 ? "CHOPPING" : "TRENDING";
+      const expected = options.missing4h ? null : options.against && sequence === config.firstSourceSequence + 1 ? "CHOPPING" : "TRENDING";
       const actual = specification.assessedSavedWhatV1(saved.completion.output);
       if (actual !== expected) throw new Error(`FIXTURE_RESEARCH_WHAT_PRECONDITION:${sequence}:${expected}:${actual}`);
       const disposition = options.missing4h ? "COMPLETED_UNRESOLVED" : "COMPLETED_SUPPORTED";
@@ -141,8 +144,12 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     }
     await expiry(); return result;
   }
-  await appendThrough(1);
-  const completion = (await createSavedResearchOwner(client, researchContext, request).replay(1))!.completion;
+  async function appendThrough(last: number) {
+    const first = await appendSourceThrough(last);
+    return completeResearchRange(Math.max(first, config.firstSourceSequence), last);
+  }
+  await appendThrough(config.firstSourceSequence + 1);
+  const completion = (await createSavedResearchOwner(client, researchContext, request).replay(config.firstSourceSequence + 1))!.completion;
   const configuration = contract.captureApplicationConfigurationV1({ ...partial, organizationId, accountId: session.accountId,
     researchAssignmentDigest: completion.assignmentDigest, researchSessionId: config.researchSessionId,
     sourceSessionId: session.sessionId, sourceConfigDigest: session.configDigest, profileId: profile.id, profileContentDigest: profile.contentDigest,
@@ -151,8 +158,8 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     hypothesisDefinitionDigest: hypothesis.definitionDigest, measurementId: measurement.id, measurementVersion: measurement.versionSeq,
     specification: contract.APPLICATION_SPECIFICATION, bridge: contract.APPLICATION_BRIDGE, questionMap: contract.APPLICATION_QUESTION_MAP,
     maxAgeMs: 600000 });
-  const application: SavedApplicationRequest = { configuration, research: request, operation: "apply", previousSourceSequence: 0, currentSourceSequence: 1 };
-  return { application, packets, appendThrough, expiry, hypothesis, measurement, hypothesisService, hypothesisProjectionBytes, context, researchContext, db };
+  const application: SavedApplicationRequest = { configuration, research: request, operation: "apply", previousSourceSequence: config.firstSourceSequence, currentSourceSequence: config.firstSourceSequence + 1 };
+  return { application, packets, appendThrough, appendSourceThrough, expiry, hypothesis, measurement, hypothesisService, hypothesisProjectionBytes, context, researchContext, db };
 }
 
 // Direct child execution imports only the actual CLI, never fixture producers.
