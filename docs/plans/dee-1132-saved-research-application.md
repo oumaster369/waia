@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 9648183bf0ef3456cd78359c9b3926357d0ec799
-  lastValidationAt: "2026-09-27T10:13:43.460073+00:00"
+  lastValidatedGitSha: 410524f50cf319e8d439a76b013f4298df9ddf09
+  lastValidationAt: "2026-09-27T10:17:20.999722+00:00"
   blockedReason: null
-  nextAction: "Apply only admitted native-fixture object narrowing and allocated0223 CASE grouping after this sole-plan commit; scoped lint/diff and one root-granted confirming compiler. Preserve897/135unit evidence; native/journal integration and final independent acceptance still pending."
+  nextAction: "Root/M01 inspect minimal410524f5 successor and compilerPASS; compatible0222/0223 chain, all45 native cases and final package gates remain pending. Heavy/PG handed to research_binding; no further author source edits."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -926,3 +926,12 @@ Root authorizes only runtime-safe fixture object narrowing before spreading the 
 M01 additionally identified the allocated0223 raw-body guard's ungrouped `IF ... > CASE ... END THEN` expression as the same syntax shape that root previously reproduced as invalid on PostgreSQL16.14 for1130. Root independently read the exact guard and authorizes only parentheses around its existing CASE result. Preserve all table labels,65536/4096/524288 ceilings, condition and refusal. Capture exact inverse and a bounded IF/CASE census of0223; no unrelated SQL/old migration/journal change. Existing1130 parser evidence is prior analogous evidence, not a native1132 CREATE proof.
 
 This sole-plan addendum precedes both source edits. Afterward scoped lint/diff and one confirming compiler are granted; no DB/native/build. All45 native cases, actual0223 creation and compatible224-chain proof remain separate and unexecuted. The prior handoff's phrase 'five changed runtime modules' is corrected here: four runtime modules changed, plus the generated manifest; pure computation identity is unchanged. Original source freeze remains immutable.
+
+
+### Finite correction result — 410524f5
+
+Sole-plan `cbd960dd` preceded exact two-file correction `410524f50cf319e8d439a76b013f4298df9ddf09`: native fixture now narrows the profile definition to a non-null, non-array object before spreading; allocated0223 groups the existing CASE result with one pair of parentheses. Exact inverse restores both original SQL lines; bounded0223 census contains this one IF/CASE and one existing CASE inside jsonb_build_object, with no other similar predicate. No cap, condition, SQL predecessor, journal, production TypeScript or unit source changed.
+
+One authorized confirming `pnpm typecheck` ran on clean410524f5 at2026-09-27T10:17:16.187868–10:17:20.999722Z, exit0; stdoutSHA `a0414ba3906aeaeff4175368ba1546487601b510265e7ab97d532f50d427493e`. Scoped native-source ESLint and diff-check also exit0. Prior135/6 stays attributed to9648183b, whose actual unit inputs and production TypeScript are unchanged; it was not rerun for this fixture/SQL syntax delta. No native1132 CREATE/test/DB/build was performed, and the compiler cannot prove PL/pgSQL syntax or native invariants. External successor evidence: `parallel-runtime-owner/dee1132-compiler-syntax-correction-897aa009/`.
+
+Author released the completed compiler process43284 and all heavy/PG scheduling ownership directly to research_binding at10:17UTC under root authority. Original897 freeze/compilerRED and all independent findings remain immutable. This is correction evidence, pending nonauthor/root source disposition and separate native/full integration acceptance.
