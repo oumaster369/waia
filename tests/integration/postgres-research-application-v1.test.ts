@@ -19,6 +19,7 @@ import * as schema from "@/db/schema.postgres";
 import { readApplicationRows, applicationScope, admitApplicationWriteRow } from "@/lib/trader/paper/research-application-v1/bounded-read-postgres";
 import { APPLICATION_LIMITS as limits, applicationDigest } from "@/lib/trader/paper/research-application-v1/contract";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { createPostgresRuntimeControlLeaseRepositoryV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-repository-postgres-v2";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -99,9 +100,13 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
   it("actual early CLI applies FOR, persists raw canonical JSON, then consumes genuinely later nonadjacent B and replays after process death", async () => {
     const f = await fixture(); const before = await counts();
     const first = worker(await argsFor(f), true); const event = await first.result;
-    expect(event.event).toBe("result"); expect(event.fetches).toBe(0); expect(event.forbidden).toEqual([]);
+    expect(event.event, event.message).toBe("result"); expect(event.fetches).toBe(0); expect(event.forbidden).toEqual([]);
     const applied = complete(event.result); expect(applied.disposition).toBe("OBSERVED_FOR");
     expect(applied.application.meaning.direction).toBe("FOR"); expect(applied.application.relation).toMatchObject({ verified: false, confidenceState: "NOT_ASSESSED" });
+    const featureSnapshot = applied.application.witnesses[0]?.payload.features;
+    expect(featureSnapshot).toHaveProperty("featureSetId"); expect(featureSnapshot).toHaveProperty("features");
+    // The real saved snapshot exposes the locale/code-point ordering mismatch.
+    expect(canonicalJsonString(applied.application)).not.toBe(canonicalizeSemanticJsonString(applied.application));
     expect(applied.availability.availableAt > applied.application.current.analysisPitAnchor).toBe(true);
     await stop(first.child);
     // Raw server JSON types are checked before Drizzle mapping could hide wire double serialization.
@@ -116,6 +121,15 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     expect(consumed.consumption?.selection?.selectedRelations).toHaveLength(1);
     expect(consumed.consumption?.sequence).toBe(0); expect(consumed.consumption?.consumer.sourceSequence).toBe(3);
     expect(consumed.consumption?.fold).not.toHaveProperty("hypotheses");
+    for (const table of owned) {
+      const rows = await client.unsafe<{ body_json: string; content_digest: string; raw_digest: string }[]>(
+        `select body_json, content_digest, encode(sha256(convert_to(body_json,'UTF8')),'hex') as raw_digest from ${table} where organization_id=$1::uuid`, [organizationId]);
+      expect(rows).toHaveLength(1);
+      const row = rows[0]!, body: unknown = JSON.parse(row.body_json);
+      expect(row.body_json).toBe(canonicalizeSemanticJsonString(body));
+      expect(createHash("sha256").update(row.body_json, "utf8").digest("hex")).toBe(row.content_digest);
+      expect(row.raw_digest).toBe(row.content_digest); expect(applicationDigest(body)).toBe(row.content_digest);
+    }
     const after = await counts(); expect(after.slice(0, 4)).toEqual([1, 1, 1, 1]);
     const replay = complete((await worker(await argsFor(f, "replay", 3)).result).result);
     expect(replay.consumption).toEqual(consumed.consumption); expect(replay.consumptionDigest).toBe(consumed.consumptionDigest); expect(await counts()).toEqual(after);

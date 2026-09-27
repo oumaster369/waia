@@ -326,7 +326,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "2bd23c865bcc43bc388a084f8058f72a2366165de29bb529eee300de25888a25"
+    "sha256": "d5d71af79066152d64139841dcc3707751eb92d46bb6f021c0a7bba80b31bf6b"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -413,4 +413,4 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "9001d784176a668a18cc637b90cd87f8af660ebcdbef6e5ecd67bc36e6ca4c3d";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "94fa89474e19de3e38435ca64b31ecb86ccaa8942870627314f4184d6f4238d4";

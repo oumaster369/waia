@@ -20,7 +20,6 @@ import { persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres, persi
 import { claimBoundedResearchRuntimeControlLeaseWithinHeldTransactionV2, lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2,
   type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
-import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
 
 export type SavedApplicationRequest = {
@@ -34,7 +33,7 @@ type Holder = DatabaseClockRuntimeHolderV2;
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const schemaVersion = (kind: string) => `waia.trader.research_application_${kind}.v1`;
 const common = { authority: APPLICATION_AUTHORITY, purpose: APPLICATION_PURPOSE, commandManifestDigest: APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } as const;
-const canonical = (value: unknown) => canonicalJsonString(value);
+const canonical = (value: unknown) => canonicalizeSemanticJsonString(value);
 const equal = (a: unknown, b: unknown, code: string) => check(digest(a) === digest(b), code);
 function bounded(value: unknown, maximum: number, code = "APPLICATION_OUTPUT_LIMIT"): void { check(applicationBytes(value) <= maximum, code); }
 const safeSequence = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
