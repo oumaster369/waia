@@ -33,6 +33,7 @@ export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
     "lib/trader/research/replay-repro-digest.ts",
   ],
   EXACT_BRIDGE: [
+    "lib/trader/paper/research-understanding-v1/evaluate.ts",
     "lib/trader/intelligence/evaluate-canonical-market-questions.ts",
     "lib/trader/intelligence/evaluation-cycle.ts",
     "lib/trader/research/m9-market-understanding-export.ts",
@@ -83,6 +84,11 @@ export const MARKET_UNDERSTANDING_DIRECT_IMPORT_REACHABILITY_V1 = {
 } as const satisfies Record<MarketUnderstandingImportV1, readonly string[]>;
 
 export const MARKET_UNDERSTANDING_PRODUCERS_V1 = [
+  {
+    path: "lib/trader/paper/research-understanding-v1/evaluate.ts",
+    symbols: ["evaluateSavedResearchUnderstanding", "buildExactMarketUnderstandingArtifactV1", "RESEARCH_NON_CAPITAL"],
+    disposition: "ASSIGNMENT_BOUND_RECORDED_RESEARCH_COMPOSITION_NO_CAPITAL",
+  },
   {
     path: MARKET_UNDERSTANDING_RUNTIME_MODULES_V1.exactAttribution,
     symbols: ["defineUnderstandingClaimV1", "defineMarketUnderstandingArtifactV1"],
@@ -208,6 +214,11 @@ export const MARKET_UNDERSTANDING_INDIRECT_CONSUMERS_V1 = [
 
 export const MARKET_UNDERSTANDING_EXPORT_AND_PERSISTENCE_V1 = [
   {
+    path: "lib/trader/paper/research-understanding-v1/repository-postgres.ts",
+    disposition: "OWNED_RESEARCH_SIDECAR_FIXED_RECOMPUTATION_ONLY",
+    exactArtifact: true,
+  },
+  {
     path: "lib/trader/intelligence/evaluate-canonical-market-questions.ts",
     disposition: "COMPATIBILITY_EXPORT_ONLY",
     exactArtifact: true,
@@ -244,6 +255,7 @@ export const MARKET_UNDERSTANDING_EXPORT_AND_PERSISTENCE_V1 = [
   },
 ] as const;
 
+/** Generic artifact persistence remains deferred; DEE1126 stores only its owned research completion. */
 export const MARKET_UNDERSTANDING_DURABLE_PERSISTENCE_V1 = {
   owner: "DEE-623",
   status: "DEFERRED",

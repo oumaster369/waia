@@ -23,7 +23,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(JSON.parse(output)).toEqual(
       expect.objectContaining({
         status: "PASS",
-        sources: 155,
+        // DEE-1126 extracts passive interval durations and the replay minimum.
+        sources: 157,
         // DEE-1015 adds exactly one observation-only consumer: the assignment-bound
         // credential read boundary that replaces the generic repository on that path.
         // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and

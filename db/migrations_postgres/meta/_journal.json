@@ -1548,6 +1548,13 @@
       "when": 1780000000220,
       "tag": "0220_trader_reporting_period_bases_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "7",
+      "when": 1780000000221,
+      "tag": "0221_trader_research_understanding_v1",
+      "breakpoints": true
     }
   ]
 }

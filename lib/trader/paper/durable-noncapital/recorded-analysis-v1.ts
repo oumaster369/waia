@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
-import { listMvpStrategyRegistry } from "@/lib/trader/intelligence/strategies/registry";
+import { listMvpStrategyRegistry } from "@/lib/trader/intelligence/strategies/registry-metadata";
 import type { HypothesisSessionState } from "@/lib/trader/intelligence/mi-core.types";
 import type { Bar, BarInterval, Quote, EvaluationCycleResult } from "@/lib/trader/intelligence/types";
 import type { NormalizedObservation, FusedMarketContext } from "@/lib/trader/market-data/observation-types";
