@@ -3359,7 +3359,7 @@ BEGIN
         IS DISTINCT FROM jsonb_array_length(body->'touchedParentsAfter')::bigint
       OR (body->'activeParentAfter'<>'null'::jsonb AND NOT EXISTS(
         SELECT 1 FROM jsonb_array_elements(body->'touchedParentsAfter') p WHERE p=body->'activeParentAfter'))
-      OR jsonb_array_length(body->'steps') IS DISTINCT FROM CASE WHEN delta='null'::jsonb THEN 1 ELSE 2 END THEN
+      OR jsonb_array_length(body->'steps') IS DISTINCT FROM (CASE WHEN delta='null'::jsonb THEN 1 ELSE 2 END) THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CYCLE_SHAPE';
     END IF;
     FOR selected,source_sequence IN SELECT value,ordinality::integer FROM jsonb_array_elements(body->'observations') WITH ORDINALITY LOOP
@@ -3403,8 +3403,8 @@ BEGIN
     END IF;
     IF expected_cash IS DISTINCT FROM (body->>'expectedCashAfter')::numeric OR expected_quantity IS DISTINCT FROM (body->>'expectedOpenQuantityAfter')::numeric
       OR expected_quantity<0 OR (body->>'consumedFillCount')::bigint IS DISTINCT FROM
-        (prior->>'consumedFillCount')::bigint+CASE WHEN delta='null'::jsonb THEN 0 ELSE 1 END
-      OR body->>'lastConsumedFillId' IS DISTINCT FROM CASE WHEN delta='null'::jsonb THEN prior->>'lastConsumedFillId' ELSE delta->>'fillId' END
+        (prior->>'consumedFillCount')::bigint+(CASE WHEN delta='null'::jsonb THEN 0 ELSE 1 END)
+      OR body->>'lastConsumedFillId' IS DISTINCT FROM (CASE WHEN delta='null'::jsonb THEN prior->>'lastConsumedFillId' ELSE delta->>'fillId' END)
       OR (body#>>'{accounting,sequence}')::bigint IS DISTINCT FROM 1+current_row.cycle_sequence+1+(body->>'consumedFillCount')::bigint
       OR (body->>'sourceEventCount')::bigint IS DISTINCT FROM (prior->>'sourceEventCount')::bigint+jsonb_array_length(body->'steps') THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:DELTA';
@@ -3700,20 +3700,20 @@ BEGIN
             OR (delta->>'fillSequence')::integer IS DISTINCT FROM (source_projection->>'fillSequence')::integer
             OR (delta->>'sourceBarIndex')::integer IS DISTINCT FROM (source_projection->>'sourceBarIndex')::integer
             OR (delta->>'signedQuantity')::numeric IS DISTINCT FROM (projected->>'quantity')::numeric*
-              CASE WHEN actual_order.side='buy' THEN 1 ELSE -1 END THEN
+              (CASE WHEN actual_order.side='buy' THEN 1 ELSE -1 END) THEN
             RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:FILL_DELTA';
           END IF;
         END IF;
       END LOOP;
     END LOOP;
-    IF member_count<>CASE WHEN delta='null'::jsonb THEN 0 ELSE 1 END THEN
+    IF member_count<>(CASE WHEN delta='null'::jsonb THEN 0 ELSE 1 END) THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:FILL_DELTA_MEMBERSHIP';
     END IF;
     SELECT array_agg(id ORDER BY id) INTO active_ids FROM (SELECT id FROM public.trader_orders
       WHERE organization_id=scope_org AND historical_account_key=scope_account AND historical_run_id=scope_run
         AND state NOT IN ('FILLED','CANCELLED','REJECTED','EXPIRED','FAILED') ORDER BY id LIMIT 2) o;
-    IF active_ids IS DISTINCT FROM CASE WHEN body->'activeParentAfter'='null'::jsonb THEN NULL::uuid[]
-      ELSE ARRAY[(body#>>'{activeParentAfter,orderId}')::uuid] END THEN
+    IF active_ids IS DISTINCT FROM (CASE WHEN body->'activeParentAfter'='null'::jsonb THEN NULL::uuid[]
+      ELSE ARRAY[(body#>>'{activeParentAfter,orderId}')::uuid] END) THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:ACTIVE_PARENT';
     END IF;
     -- The INSERT CHECK bound this small column to all original detail leaves.
@@ -3752,7 +3752,7 @@ BEGIN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:PRODUCED_ECONOMICS';
       END IF;
     END LOOP;
-    IF member_count<>CASE WHEN delta='null'::jsonb THEN 0 ELSE 1 END OR total_bytes>8388608 THEN
+    IF member_count<>(CASE WHEN delta='null'::jsonb THEN 0 ELSE 1 END) OR total_bytes>8388608 THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:DETAIL_MEMBERSHIP_OR_CAPACITY';
     END IF;
     -- Every queued source trigger must be covered; a valid older companion is never enough.
@@ -3764,8 +3764,8 @@ BEGIN
       WHEN 'trader_order_events' THEN
         SELECT value INTO parent FROM jsonb_array_elements(body->'touchedParentsAfter') WHERE value->>'orderId'=NEW.order_id::text;
         IF NOT FOUND OR NEW.seq>(parent#>>'{stateEvent,sequence}')::integer
-          OR NEW.seq<=CASE WHEN prior#>>'{activeParentAfter,orderId}'=NEW.order_id::text
-            THEN (prior#>>'{activeParentAfter,stateEvent,sequence}')::integer ELSE -1 END THEN
+          OR NEW.seq<=(CASE WHEN prior#>>'{activeParentAfter,orderId}'=NEW.order_id::text
+            THEN (prior#>>'{activeParentAfter,stateEvent,sequence}')::integer ELSE -1 END) THEN
           RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:UNCOVERED_EVENT';
         END IF;
       WHEN 'trader_fills' THEN
