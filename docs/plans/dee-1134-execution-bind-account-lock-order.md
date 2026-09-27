@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: integration-ready
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: "13c57e2749514d8bb88d23a969187d793c4c9d1b"
-  lastValidationAt: "2026-09-27T17:01:41.427Z"
+  lastValidatedGitSha: "45d7a9046047cf86d0813e9b7ec2bf128a8d8e89"
+  lastValidationAt: "2026-09-27T17:36:19.805Z"
   blockedReason: null
-  nextAction: "Integrate accepted main 630abef5 by merge, validate unchanged Execution bytes and new 224 migration chain, then obtain independent source and separately admitted native review; publication and CI remain pending."
+  nextAction: "Root validates final plan-only carry and rendered PR preflight, then admits exact-head publication; WP-3 GitHub CI, PR metadata and merge remain pending."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -191,3 +191,19 @@ PR #691 is merged. Root verified accepted `origin/main` and the primary fast-for
 Execution authority and the existing Execution native suite must remain byte-identical to `13c57e27`. The net diff against accepted `630abef5` must contain only the existing four admitted paths: authority, native suite, Reality source-consumer inventory and this plan. Any inventory conflict is limited to mechanically recomputing `sourceDiscovery.sortedContentDigestHex` from the actual 157 source bytes; all other inventory fields must equal accepted `630abef5`. All DEE-1132 source, its 45 native registrations, computation manifests, schema and the newly accepted complete 224-entry migration chain must carry unchanged from that base. No guard, test semantics, scope or runtime cap may change.
 
 Run the prior nine serial local readiness checks on the integrated source, plus both relevant computation-manifest validations carried by the accepted base. Preserve actual commands, source hashes, stdout/stderr and failures. Root grants this finite source/readiness work and exclusive local-heavy ownership only; no PostgreSQL/native or publication grant follows. Freeze clean merge parents, all Git/source identities, four-path scope and accepted-base migration/manifests, then obtain independent source review. Root will separately bind and admit a fresh full 39 Execution + 11 Risk native run with exact 224 SQL/hash/when, unchanged five-case/13-record assertions, fresh isolated database, posture and client-closure proof. The accepted `13c57e27` proof remains historical evidence for its original 223-entry base, not native validation of this integration. Publication, exact-head GitHub checks and merge admission remain pending.
+
+## WP-3 accepted-main integration results and native admission record
+
+The exact integrated source is `45d7a9046047cf86d0813e9b7ec2bf128a8d8e89`, tree `7e82f98469e4c28d45cd88f78ffaf574ebaf3738`, with parents sole-plan carry `b3bde4a5b73b53650e5401d7ebf099c44a449164` and accepted main `630abef5b3be074764715fb94047f43db3ad6765`. The four-path net diff preserves authority SHA `4a2df739225c71e381487afcd1c00bd8468cb7b7d28681dd0e335e9a48949761`, native SHA `af19656fa7023894bd60f49a4154eff751ca8c158d5229fb4fa0bf823e991c55`, all 5,525 other accepted-base entries and the exact 224-entry SQL/journal chain. This is a merge with retained original lineage, not a rewritten baseline.
+
+All eleven serial readiness checks passed on that clean head at 2026-09-27 17:22:30.584–17:24:10.441 UTC: mapped units 16/16 with zero skips; Execution and Reality graphs; scoped authority lint; typecheck; whole lint; build; canon; governance; application and Understanding manifest checks. Lint retains 328 warnings/zero errors, build its middleware deprecation notice, canon 264 documents. Source/readiness package `parallel-runtime-owner/dee1134-integration-630abef5/FREEZE.json` SHA `6a943f594b5ecdd12e26ae97761a067b26dc6229c8128df39749b8e6e1b30626`; report `eedb5f45375c0e978914520c0a7a163c4132906b4a87191eb922b373a3584ff4`.
+
+Independent integrated source/readiness acceptance is `milestone-audits/DEE1134-integrated-source-45d7a904/REPORT.md` SHA `5927ab73d23b9530f9f9d99ad280708db508380374d08bb566886b9f247f0154`, five-artifact freeze `6b1c257d5c10defcda67855922526b228c6bf7fddb5620604bf8e7c55c88b047`.
+
+Root’s separately admitted integrated native ran at **2026-09-27 17:35:58.994–17:36:19.805 UTC** on fresh retained synthetic `waia_dee1121_dee1134_corrected_20260927_1735`: exactly **39 Execution + 11 Risk tests, all 50 passed**, two files, zero failures/skips/pending/todo/retries/watchdog events, native exit 0 and runner exit 0. All thirteen actual five-case proof records were present. Both real two-client contention schedules acquired account first and terminated without deadlock/lock timeout/statement cancellation; revoke-before-bind preserved the existing conflict and no lower effects, while dispatch/replay retained one inert callback and no duplicate consumption. The fresh and later-attempt replay waits crossed their actual valid deadlines and refused with `EXECUTION_WINDOW_CLOSED`, with complete durable before/after equality. Missing account preserved its existing typed Risk refusal and own/foreign state.
+
+All 5,529 Git/source entries matched before/after; all 224 SQL hashes, journal positions and timestamps matched both accepted source and actual database readbacks. The absent/empty fresh database, zero other clients at admission, unchanged roles/memberships/RLS/ACL/triggers/functions/fault posture and zero final client sessions were verified. Resources were released. This is separately executed integrated 224-chain evidence; the original `13c57e27`/223-chain PASS and all prior RED/incomplete packages remain distinct and unchanged.
+
+Actual result package `parallel-runtime-owner/dee1134-native-integrated-45d7a904/results/`: report SHA-256 **`f478498893fe4a03c662ec127180e9b510898b4fb73b9265a52da6d5d805d68f`**; 253-artifact `RESULTS-FREEZE.json` **`8414735ddc3f71d47af00de3e6f3f286502848cf0ced0a7eb2d77ea69acf5957`**; raw `native-results.json` **`3764a9884faecc59d4f8694015558725abc6f3f1eee8ccb954941460b4d68ec6`**. Independent outcome acceptance is `milestone-audits/DEE1134-integrated-native-45d7a904/REPORT.md` **`97f5d113184f39031c80e0e9d2943a560af80201f07c86c9cfeb327c2c4a07b9`**, six-artifact freeze **`0b17c8e73bc365c29a34d06a0095d7d4b8aa9d793d1cbcca3d7817a41b5a1981`**. Root adopted it in `parallel-runtime-owner/dee1134-native-integrated-45d7a904/root-final-native-adoption.json`, SHA-256 **`2cf8e2b468336501d8a6fe63d7ae63cce625da70bc8babb71ef3d3c2ddb83dac`**. Historical raw pending/UNREVIEWED staging fields are preserved; these separate later receipts supply actual acceptance.
+
+Root admitted only this sole-plan result carry and its canonical check. The recorded native head/time remain exact `45d7a904` and its actual native end, rather than the later plan-only commit. Before committing the integration-ready checkpoint, its canonical check must pass; external carry evidence proves all 5,528 non-plan Git entries remain exactly `45d7a904`. WP-1/WP-2 remain complete and WP-3 open, with PR number/URL null. Root still owns rendered body preflight, publication, actual PR metadata, all applicable final-head GitHub checks and separate merge admission. No full-product deadlock freedom, production privilege acceptance, scientific/host qualification, deployment or live authority is claimed.
