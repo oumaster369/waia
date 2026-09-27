@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root-admitted resource R2 is embedded after normal accepted397d integration. Five unexecuted drafts are byte-preserved; stop for root verification of this sole-plan amendment before dependent source changes. No PG/native/heavy grant; registries/CI/graphs remain root-held."
+  nextAction: "Finite CHECK representation/count successor embedded plan-only; preserve dirty source and await root verification before two-predicate correction. Native/source freeze and proof remain pending; no PG/heavy/registry/CI/graph grant."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -777,3 +777,95 @@ Root must verify the actual integration parents, incoming/source preservation an
 
 The schema allocation remains0222_trader_historical_reconciliation_v1.sql, idx222/version7/when1780000000222/breakpoints=true. All earlier222 SQL files remain immutable. Native results must be actual current-source execution with original roles/guards, not source arithmetic or output counts. Every still-open acceptance addition in proposal§7 remains required.
 <!-- END ROOT-RESOURCE-R2-ADMISSION -->
+
+
+## WP-3 finite CHECK representation/count correction — plan first
+
+The original seven-B CHECK recipe and proposed12B accounting are superseded only as explicitly admitted below. The original resource R2, rejected12B request, drafts and all prior embedded controlling inputs remain immutable historical evidence. JSONB semantic equality alone does not prove equal serialized sizes, because numeric scale can differ. The exact successor uses a single C-collation comparison of both independently derived JSONB text representations, counts both additional text outputs and nested constructors, and conservatively reserves14B+65536 under unchanged1MiB/8MiB caps. The accepted aggregate boundary is594505 bytes;594506,1MiB and1MiB+1 refuse. This is source representation admission, not financial arithmetic or precision policy.
+
+The forthcoming edits remain inside the already admitted0222/native-test/certificate map. All existing source/header/UNKNOWN/legacy/profile checks remain. The expected construction must occur once per CHECK, with no added helper or CSE assumption. Actual installed-expression, numeric-scale/same-representation/four-kind/Unicode controls remain unexecuted and mandatory. No readiness, schema/native or production acceptance is asserted by this plan-only commit.
+
+For migration compatibility, fresh post0222 parents and retained pre0222 ledger/no-mode rows are distinct. The latter permit first target LEGACY registration and require real migration-boundary seed/positive/rollback/PROFILE-prefix refusal with original guards enabled. External fixture preparation is proposed and unexecuted; root retains native bootstrap/CI sequencing. No latch deletion, guard disabling or repaired migration history is allowed.
+
+Current dirty source is snapshotted externally before this sole-plan amendment; it remains byte-preserved. Root verification is required before the dependent two CHECK coefficient/comparison correction. Other earlier admitted source preparation remains allowed. No PostgreSQL/native/heavy or root-held registry/CI/graph/publication action follows from this commit.
+
+<!-- BEGIN CHECK-REPRESENTATION-SUCCESSOR SHA256 7a2f850aac960e11585c30530414eb0122f3034839ffb9b7866fcc43a9905dcd -->
+# DEE1130 — finite CHECK representation and construction-count successor
+
+Status: source-only request; NOT admitted and NOT executed. This supersedes only the proposed coefficient/comparison portion of `check-construction-count/REQUEST.md` (481e0806), which remains immutable. The current repository still has the admitted seven coefficient and semantic outer equality; no dependent SQL or plan change has been made.
+
+## Confirmed premise and exact correction
+
+Current scalar guards accept JSON numbers. PostgreSQL16.14 `compareJsonbScalarValue` delegates numeric equality to `numeric_cmp`; numeric output retains decimal scale. Therefore equal JSONB does not imply equal serialized length. The actual private owner JSON-stringifies the same finite JS scalar for source and candidate, but that fact cannot establish the native successful-input bound for arbitrary permitted direct INSERTs. No runtime incident or executed native failure is claimed.
+
+Replace only the outer expected/candidate semantic equality with:
+
+```sql
+(reconciliation_projection_v1::pg_catalog.text COLLATE pg_catalog."C")
+  = ((<the existing independently constructed expected JSONB expression>)::pg_catalog.text
+      COLLATE pg_catalog."C")
+```
+
+The independently built expression occurs exactly ONCE. Do not append this comparison to a second semantic equality, use a subquery/read callback, normalize numeric values, assume common-subexpression elimination, or change any source shape. The existing inner complete-basis/artifact semantic checks remain structural/key checks. On every successful outer comparison, each selected original scalar in those complete maps is also present unmodified in the independently built expected object and exactly represented in the candidate. Thus the complete selected maps are bounded too; their two explicit materializations remain charged separately. Unknown or extra original keys still fail the existing complete-map check.
+
+`COLLATE pg_catalog."C"` is explicit so the text equality takes the length/byte comparison path rather than a potentially nondeterministic default collation. This compares PostgreSQL JSONB text representations, not original JSON input bytes and not companion canonical body_text. It deliberately refuses numeric-scale variants between source and candidate even when numeric values are equal. Same-scale direct inputs remain eligible subject to all existing source and envelope guards. Parsed object key order and whitespace remain irrelevant. This is a source representation constraint, not a financial amount or precision rule.
+
+## Successful-input accounting
+
+Let B be `octet_length(candidate::text)`. Successful C-text equality proves the whole independently built expected text is exactly B. At a given expected-construction level, its selected disjoint subtrees together fit in B; shared source values appearing twice in the output are counted twice in that output. Every fixed branch is exclusive, and at most one fill detail is admitted. Scalar extraction and every enclosing constructor are counted; no constructor reuse is assumed. Both text outputs of the new comparison are additional occurrences.
+
+| Branch | Expected-side selected/constructed levels | Additional complete-map occurrences | Candidate input + two size text outputs | New comparison text outputs | Total B ceiling |
+|---|---:|---:|---:|---:|---:|
+| ACCOUNTING_FRONTIER |6|2|3|2|13|
+| MODELED_EXCHANGE pending-cancel |5|0|3|2|10|
+| ACCOUNTING artifact |4|2|3|2|11|
+| OBSERVED_EXECUTION_EFFECTS sourceBar |8|0|3|2|13|
+
+Accounting conservatively charges a `jsonb ||` result as an additional constructed map even though the pinned jsonb_concat code returns a nonempty object operand when the other object is empty. No optimization is required for the table above. The full Accounting chain is scalar → three-field symbol object → symbol map → concatenated map → value object → header. The deep observed chain remains scalar → sourceBar → event → detail → artifact → artifact array → value → header. Economics is shallower. Fixed guard/control results retain the admitted at-most256 results of at-most256 bytes, budgeted65536.
+
+Proposed predicate is **B<=1048576 AND 14*B+65536<=8388608**: the maximum13 plus one conservative representation, with both original caps unchanged. The aggregate positive boundary is594505 bytes,594506 refuses. One MiB and one MiB+one both refuse and must not be described as accepted positive boundary examples. The existing per-owner-attempt budget, native-invocation budgets,243 conservative contexts and1952MiB logical public-cycle ceiling remain unchanged; no broader transaction cap, peak-memory/TOAST/allocator or rejected-input memory claim follows. An oversized rejected source may be decoded before refusal, exactly as already disclosed.
+
+## Producer compatibility and scope
+
+The private owner calls prepareSourceValue on the exact stage artifacts/snapshot.state; that method uses the fixed projector, then JSON.stringify. The original source INSERT uses JSON.stringify on those same source objects. The snapshot/stage projection header is built from the same row scalars/ledger JOIN. The projector copies finite numeric scalars without arithmetic, rounding, coercion or scale synthesis. The ordinary JS producer therefore supplies matching PostgreSQL scalar representations; signed zero is serialized identically on both paths. This is source reasoning only until actual native owner companions execute. Generic callers still omit NULL projections and retain LEGACY admission; PROFILE nonnull and closure obligations remain unchanged.
+
+Repository edits after admission are finite: the two outer comparisons and two coefficient occurrences in0222; exact certificate/generator and boundary/numeric controls in the already admitted native test; canonical plan amendment first. No new production path/relation/function/EXECUTE privilege/type/policy, no new source field or expanded enum. No existing222 migration byte changes, registry/CI edits, native application or heavy work is authorized by this request.
+
+## Required eventual proof (not executed)
+
+1. Current semantic equality accepts equal numeric values with unequal serialized lengths in a controlled ordinary projection; revised exact comparison rejects it. Cover1 versus1.0000 and zero scale, plus reverse orientation; do not claim those arbitrary values are canonical financial snapshots.
+2. Same representation numeric/direct and actual JS-owned source/candidate positive controls; existing four-kind malformed/unknown-key guards and PROFILE NULL refusal unchanged.
+3. A large source numeric scale with small candidate, and converse, refuse; successful same-representation input obeys actual byte threshold. Original rejected input has no pre-allocation guarantee.
+4. Byte-exact594505 positive/594506 negative successful-shape controls, multibyte arithmetic,1MiB/+1 refusals. Assert actual server byte lengths, not JavaScript string length.
+5. Inspect exact installed CHECK definition for one expected construction, two comparison text outputs, explicit C collation,14 coefficient and original caps; compare source certificate. Original owner/native mode/late-write/rollback/race matrix remains mandatory and unexecuted.
+
+## Primary source and evidence limits
+
+Pinned REL_16_14 sources: jsonb_util.c1441–1458 numeric comparison; jsonb.c numeric_out; numeric.c7440 onward dscale output; jsonfuncs.c4323–4361 concatenation; varlena.c1661–1715 text equality; pg_collation.dat fixed C catalog entry. Copied/new primary captures and hashes are in sources.json. They are source inspection, not a claim about an executed PostgreSQL binary. Both original frozen requests and the current draft SQL hash are preserved in freeze.json. No SQL/native tests ran for this successor.
+<!-- END CHECK-REPRESENTATION-SUCCESSOR -->
+
+<!-- BEGIN ROOT-CHECK-REPRESENTATION-ADMISSION SHA256 72c39adb8bcf6abc6bb13ced3dc3ddf7126e7ace5c4709c233916e53e0ab85e5 -->
+# Root admission — DEE1130 finite CHECK representation correction
+
+Admitted at2026-09-27 06:52UTC under the existing technical-fix authorization. This admits only the exact implementation-design refinement and plan amendment below; no user decision, financial rule or scientific gate is substituted.
+
+Controlling successor REQUEST.md SHA256 **7a2f850aac960e11585c30530414eb0122f3034839ffb9b7866fcc43a9905dcd**, freeze **cb78f22f1273ec9f9673e4f111abe9ebeb36583d352e5299001f9a257715beae**. Root read the complete request, verified8artifacts and4current working source identities, preserved exact copies, and checked relevant pinned PostgreSQL16.14 numeric/output/C-text paths. Independent M01 report **11c16b313b89576861e8ce72a8b3f428955f7e862bed0a4628c3649777118645**, freeze **cb008210ffa497bdb3c21476f2b76c881ce07740861e0673e5a273a3e91177db**, fully read and all18artifacts verified. Source/evidence/adoption receipts are adjacent to their corresponding freezes.
+
+The original seven-coefficient recipe undercounted nested constructions. The proposed12B proof481e0806 is not admitted: JSONB numeric equality ignores display scale, so equal values need not serialize to equal byte lengths. Preserve that request, original b4b605a0 and every historical report unchanged. This is a source finding in an unexecuted draft, not a production incident.
+
+## Exact finite amendment
+
+In only the two new CHECK expressions of reserved0222, replace each outer semantic equality by exactly one comparison of candidate::text and the independently constructed expected JSONB::text, both explicitly COLLATE pg_catalog."C". Expected construction appears once, no CSE assumption, no added parallel semantic comparison or helper/subquery. Retain all independently derived source content/shape checks, IS TRUE handling, nullable LEGACY compatibility and mandatory PROFILE nonnull closure.
+
+Use **14*B+65536<=8388608** with the unchanged **B<=1048576**. This counts branch maxima13/10/11/13B plus one conservative margin; both extra comparison text outputs and the possible map concatenation are included. Boundary594505 gives8388606 logical bytes;594506 gives8388620 and must refuse. OneMiB/+1 both refuse. This is stricter representation/aggregate admission, with no increase in per-body, per-invocation or owner-attempt cap. The243-context and1952MiB conservative logical public-cycle ceiling remains as previously admitted. No memory/allocator/latency claim, protection before allocation on rejected malicious input, or arbitrary-direct-write transaction ceiling is asserted.
+
+Actual JS-owned source/candidate same-representation compatibility must be proved natively; numeric-scale mismatch in both directions and zero, same-representation positives, four-kind unknown/malformed controls, multibyte/exact server-byte thresholds and actual installed-expression single-construction/C-collation/coefficient checks are mandatory. This changes source representation admission, not financial arithmetic or precision rules.
+
+For the three moved AFTER targets, distinguish fresh post0222 ledger-parent graphs from retained pre0222 LEGACY ledger/no-mode rows. The latter can reach first target registration and requires real migration-boundary positive/rollback proof plus independent PROFILE-oldprefix refusal. Do not delete mode rows or disable original guards to manufacture that fixture. Common RC/RR/SSI arbitration, invisible winner, immediate timing, savepoint/transaction rollback, late writes and full closure remain mandatory; do not invent which FK/PK exception wins before execution. Native bootstrap/CI sequencing stays root-owned and unexecuted.
+
+## Release sequence and remaining review
+
+Author first makes a **sole canonical plan commit** embedding the exact successor and this admission, with explicit historical supersession and native obligations. Preserve all current uncommitted source bytes while committing only that plan. Root verifies the commit and embeddings before the dependent two-predicate correction and associated already-mapped source certificate/native-test changes. No new production path, relation, privilege, helper, source field, financial rule or migration identity is allocated.
+
+All other previously admitted bounded source preparation may continue. Complete coherent migration/ACL/trigger/expression/owner/native-source freeze still requires root plus independent implementation review before any database/native grant. No PostgreSQL, heavy check, schema application, compatibility registry, CI, graph, publication, host or trading action is authorized by this design admission. Current draft709d3762 remains unaccepted; its CHECK prefix equals preservedc301694a, while two modeled-ledger byte charges outside that prefix require normal final whole-source review.
+<!-- END ROOT-CHECK-REPRESENTATION-ADMISSION -->
