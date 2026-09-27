@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: b99cc34ab09739f8bbe7ea303206307af4f95d3b
   lastValidationAt: "2026-09-27T19:42:17.918Z"
   blockedReason: null
-  nextAction: "Root publishes this actual PR693 metadata commit, then verify exact published-head/base CI including full units, strict25 PostgreSQL union and all required/applicable checks. Root owns fresh review/blocker/checked-merge admission; no deployment or activation follows."
+  nextAction: "Publish the independently reviewed capital CI job-timeout correction, then verify fresh exact-head/base full units, complete strict25 PostgreSQL and all required/applicable checks. Root owns fresh review/blocker/checked-merge admission; no deployment or activation follows."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -71,7 +71,7 @@ Keep pure computation, categories, all 12 claims, FOR/AGAINST/UNASSESSED/maxAge,
 
 ## Closed file map
 
-Only these 16 executable/test paths plus this canonical plan are admitted for the planned implementation. The historical 12-path contract is retained; root explicitly admitted three strict closure/inventory followthrough paths after accepted-main inspection demonstrated that the current checks pin receipt writes and both fixed recomputation calls in the old repository. This is real delegation/source-identity maintenance, not cosmetic markers or wider capability allowance. Any further path requires root evidence-backed admission before edits.
+The 16 executable/test paths below, this canonical plan, and the narrowly admitted workflow capacity correction are the closed implementation scope. The historical 12-path contract is retained; root explicitly admitted three strict closure/inventory followthrough paths after accepted-main inspection demonstrated that the current checks pin receipt writes and both fixed recomputation calls in the old repository. This is real delegation/source-identity maintenance, not cosmetic markers or wider capability allowance. The 17th nonplan path is `.github/workflows/postgres-integration.yml`, solely its capital-authority job timeout from 15 to 30 minutes as documented below. Any further change requires root evidence-backed admission before edits.
 
 | Path | Change |
 |---|---|
@@ -96,7 +96,7 @@ The existing CLI entry and run wrapper need no edits. The application command st
 
 ## Do not
 
-Do not edit SQL/schema/journal/workflow, runtime lease semantics, pure policy/normalizer, ordinary Knowledge/Forecast/Decision/Risk/Execution/Guardian, host/service configuration or prior evidence. No new ledger, job queue, source polling, batch/multi-B mode, earliest-B policy, lease handoff or reset/increase of limits. No scientific/financial rule, qualification, promotion, live authority, C3 mutation or actual trade/activation is supplied by this task. Source-capture ownership, unattended selection/cadence/frontier, full 23-stage P10, P11 and P12 jobs remain open.
+Do not edit SQL/schema/journal, workflow except the admitted capital job timeout, runtime lease semantics, pure policy/normalizer, ordinary Knowledge/Forecast/Decision/Risk/Execution/Guardian, host/service configuration or prior evidence. No new ledger, job queue, source polling, batch/multi-B mode, earliest-B policy, lease handoff or reset/increase of runtime limits. No scientific/financial rule, qualification, promotion, live authority, C3 mutation or actual trade/activation is supplied by this task. Source-capture ownership, unattended selection/cadence/frontier, full 23-stage P10, P11 and P12 jobs remain open.
 
 ## Acceptance Criteria
 
@@ -210,3 +210,12 @@ All5,531 source entries were unchanged throughout the run. All224 actual migrati
 The257-artifact native freeze `parallel-runtime-owner/dee1133-native-bound-b99cc34a/results-1928/RESULTS-FREEZE.json` SHA `03a3c358ec6cc25a26ba2fd366dd20f2814bc3968e287892d7950a0a4d1a26b6` retains raw native JSON SHA `0edfe84de7c9fc99fec8bd43e9a67cd74ca9d9ead691807eb14d21b2fa4e2ecc`. Independent outcome report `milestone-audits/DEE1133-native-b99cc34a-1928/REPORT.md` SHA `18fe508a38965e59d0c63b7bfd09b889519d120eaa182dfd33e3a9bef8c32424`, four-artifact freeze `f49711ec0c93ab3368e4ab702626b0722ecc54c2bfbdb55a608394397cef6dcc`, verified all257 pins and accepted the finite local scope. Root final adoption `parallel-runtime-owner/dee1133-native-bound-b99cc34a/root-final-native-adoption.json` SHA `79c6456efb56ffead2ad2fd2c8b80adc390e10775c4ba724ee7fa64d3ae46950` accepts WP-1/WP-2 and releases only this publication bookkeeping step.
 
 WP-3 remains open: validate this sole-plan carry, prove all5,530 nonplan entries equalb99, then root performs rendered-body preflight and one PR. PR metadata remains null until actual creation; exact published-head GitHub full units/strict25 and all required/applicable checks, fresh review/base/blocker checks and root merge admission remain future. No additional executable/native/build/unit rerun is required solely for plan bytes. This result is local synthetic software proof and schema compatibility; it supplies no scientific/feed/host/account/venue/restricted-role qualification, unattended P10–P12/full23-stage completion, new policy or live/capital activation.
+
+
+## GitHub strict25 job capacity correction — 2026-09-27
+
+Published PR693 head `e72213ee1ebf13ec4ba64ccd327806f592c9f1ce` on accepted base f01 reached the mandatory serial25-file PostgreSQL job, run36346863708/job108697604623. GitHub cancelled it at20:22:47UTC; its annotation explicitly reports that the job exceeded15m. This is an incomplete CI result, not a PASS. The actual application suite completed71 tests in684757ms, including all nine new composite evidence markers; only eight suites/311 registered assertions completed before the job stopped during recorded-paper analysis. No full JSON or strict25 guard acceptance exists for this run. Native95 remains separately attributed to b99 and its earlier accepted local receipts.
+
+Root admission `evidence/dee-1133/ci-timeout-correction/admission.json`, SHA-256 `850d50a8b54331242b75f64919a270d594f01665afc51bf8f9b7e5ff17c0e90b`, permits exactly one workflow scalar: capital-authority job timeout-minutes15→30. All25 suite identities, serial execution, required no-skip guard, bootstrap, services, assertions, production deadlines and resource limits remain unchanged. The bounded CI budget accommodates execution of the expanded complete suite; it supplies no result by itself. Original annotation/logs and cancelled run remain retained in `evidence/dee-1133/ci-e72213ee/`.
+
+Validate this two-file change with exact unchanged nonplan source comparison, canonical and PR-governance checks and independent finite review, then publish one successor on this same PR. All required/applicable checks must pass on its actual final head/base before checked merge. No application/native/build rerun is necessary solely for plan and workflow-timeout bytes; fresh complete GitHub CI remains mandatory. No deployment or live activation follows.
