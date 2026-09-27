@@ -2491,6 +2491,10 @@ CREATE INDEX historical_reconciliation_active_parent ON public.trader_orders
 CREATE FUNCTION public.waia_historical_reconciliation_stamp_v1() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog AS $fn$
 DECLARE expected_hash text; identity_hash text; b jsonb; bytes bigint; canonical_text text; total_bytes bigint:=65536;
+  canonical_argument jsonb; canonical_argument_bytes bigint; canonical_result text;
+  guard_body jsonb; guard_bytes bigint; guard_body_index integer; guard_index integer; guard_ref_index integer;
+  guard_steps jsonb; guard_observations jsonb; guard_parents jsonb; guard_active jsonb;
+  guard_accounting jsonb; guard_scope jsonb; guard_delta jsonb; guard_parent jsonb; guard_refs jsonb; guard_ref jsonb;
 BEGIN
   IF TG_TABLE_SCHEMA<>'public' OR TG_TABLE_NAME NOT IN
     ('trader_historical_reconciliation_scope_mode_v1','trader_historical_reconciliation_frontier_v1')
@@ -2515,7 +2519,97 @@ BEGIN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
     END IF;
     b := NEW.body_text::jsonb;
-    canonical_text := public.waia_canonical_jsonb_v1(b);
+    -- FRONTIER-GUARD G01: stamp, before any old0161 invocation.
+    guard_body := b;
+    IF guard_body IS NULL OR jsonb_typeof(guard_body) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+    END IF;
+    guard_bytes := octet_length(guard_body::text);
+    IF guard_bytes>1048576 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    -- Eight additive whole-body equivalents, with each selected subtree bound once.
+    -- body assignment1; text1; root subtraction1; disjoint root fields1;
+    -- selected steps/parents1; references1; selected reference objects1; margin1.
+    total_bytes := total_bytes + 8::bigint*guard_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    IF pg_catalog.jsonb_path_exists(guard_body,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_DEPTH';
+    END IF;
+    IF (guard_body ?& ARRAY['schemaVersion','profile','scope','symbol','cycleSequence','cycleId','initialRecordIndex','recordIndex','releaseSha','modelDigest','authorityDigest','genesisId','previousId','previousDigest','inceptionAccountingId','inceptionAccountingDigest','inceptionAuthorityId','startingCash','checkpointDigest','membershipDigest','marketDigest','previousAccountingSequence','accounting','expectedCashAfter','expectedOpenQuantityAfter','consumedFillCount','lastConsumedFillId','sourceEventCount','sourceChainDigest','fillDelta','steps','activeParentAfter','touchedParentsAfter','observations','id','contentDigest']) IS NOT TRUE THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_KEYS';
+    END IF;
+    IF guard_body-ARRAY['schemaVersion','profile','scope','symbol','cycleSequence','cycleId','initialRecordIndex','recordIndex','releaseSha','modelDigest','authorityDigest','genesisId','previousId','previousDigest','inceptionAccountingId','inceptionAccountingDigest','inceptionAuthorityId','startingCash','checkpointDigest','membershipDigest','marketDigest','previousAccountingSequence','accounting','expectedCashAfter','expectedOpenQuantityAfter','consumedFillCount','lastConsumedFillId','sourceEventCount','sourceChainDigest','fillDelta','steps','activeParentAfter','touchedParentsAfter','observations','id','contentDigest'] IS DISTINCT FROM '{}'::jsonb THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_KEYS';
+    END IF;
+    guard_steps := guard_body->'steps';
+    guard_observations := guard_body->'observations';
+    guard_parents := guard_body->'touchedParentsAfter';
+    guard_active := guard_body->'activeParentAfter';
+    guard_accounting := guard_body->'accounting';
+    guard_scope := guard_body->'scope';
+    guard_delta := guard_body->'fillDelta';
+    IF jsonb_typeof(guard_steps) IS DISTINCT FROM 'array'
+      OR jsonb_typeof(guard_observations) IS DISTINCT FROM 'array'
+      OR jsonb_typeof(guard_parents) IS DISTINCT FROM 'array'
+      OR jsonb_typeof(guard_accounting) IS DISTINCT FROM 'object'
+      OR jsonb_typeof(guard_scope) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+    END IF;
+    IF guard_active IS NULL OR (guard_active<>'null'::jsonb AND jsonb_typeof(guard_active) IS DISTINCT FROM 'object')
+      OR guard_delta IS NULL OR (guard_delta<>'null'::jsonb AND jsonb_typeof(guard_delta) IS DISTINCT FROM 'object') THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+    END IF;
+    IF jsonb_array_length(guard_steps)>2 OR jsonb_array_length(guard_observations)>3
+      OR jsonb_array_length(guard_parents)>2 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_CARDINALITY';
+    END IF;
+    FOR guard_index IN 0..jsonb_array_length(guard_steps)-1 LOOP
+      guard_accounting := guard_steps->guard_index;
+      IF jsonb_typeof(guard_accounting) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+      END IF;
+    END LOOP;
+    FOR guard_index IN -1..jsonb_array_length(guard_parents)-1 LOOP
+      IF guard_index=-1 THEN
+        IF guard_active='null'::jsonb THEN CONTINUE; END IF;
+        guard_parent := guard_active;
+      ELSE
+        guard_parent := guard_parents->guard_index;
+      END IF;
+      IF jsonb_typeof(guard_parent) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+      END IF;
+      guard_refs := guard_parent->'fillReferences';
+      IF jsonb_typeof(guard_refs) IS DISTINCT FROM 'array' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+      END IF;
+      IF jsonb_array_length(guard_refs)>3 THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_CARDINALITY';
+      END IF;
+      FOR guard_ref_index IN 0..jsonb_array_length(guard_refs)-1 LOOP
+        guard_ref := guard_refs->guard_ref_index;
+        IF jsonb_typeof(guard_ref) IS DISTINCT FROM 'object' THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+        END IF;
+      END LOOP;
+    END LOOP;
+    -- END FRONTIER-GUARD G01
+    -- CANONICAL-CALL C01: actual argument bound once; independent recursive charge.
+    canonical_argument := b;
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C01
+    canonical_text := canonical_result;
     IF canonical_text IS DISTINCT FROM NEW.body_text THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_TEXT';
     END IF;
@@ -2523,10 +2617,42 @@ BEGIN
     IF b IS NULL OR jsonb_typeof(b)<>'object' OR octet_length(b::text)>1048576 THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
     END IF;
-    expected_hash := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(b-ARRAY['id','contentDigest']),'UTF8')),'hex');
-    identity_hash := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(jsonb_build_object(
+    -- CANONICAL-CALL C02: actual argument bound once; independent recursive charge.
+    canonical_argument := b-ARRAY['id','contentDigest'];
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C02
+    expected_hash := encode(sha256(convert_to(canonical_result,'UTF8')),'hex');
+    -- CANONICAL-CALL C03: actual argument bound once; independent recursive charge.
+    canonical_argument := jsonb_build_object(
       'schemaVersion','execution-deterministic-identity/v2','kind','report','seed',jsonb_build_object(
-        'kind','waia.trader.historical_reconciliation.v1','contentDigest',expected_hash))),'UTF8')),'hex');
+        'kind','waia.trader.historical_reconciliation.v1','contentDigest',expected_hash));
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{3}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(2+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C03
+    identity_hash := encode(sha256(convert_to(canonical_result,'UTF8')),'hex');
     identity_hash := substr(identity_hash,1,12)||'5'||substr(identity_hash,14,3)||'8'||substr(identity_hash,18,15);
     IF NEW.id IS DISTINCT FROM identity_hash::uuid OR NEW.content_digest IS DISTINCT FROM expected_hash
       OR b->>'contentDigest' IS DISTINCT FROM expected_hash OR b->>'id' IS DISTINCT FROM NEW.id::text
@@ -2754,7 +2880,11 @@ DECLARE
   accounting_source jsonb; exchange_source jsonb; effects_source jsonb; ledger_id text;
   actual_count integer; member_count integer; bytes bigint; total_bytes bigint:=65536;
   source_sequence integer; delta jsonb; expected_cash numeric; expected_quantity numeric;
-  expected_hash text; actual_ids uuid[]; expected_ids uuid[]; active_ids uuid[];
+  expected_hash text; actual_ids uuid[]; expected_ids uuid[]; active_ids uuid[]; canonical_text text;
+  canonical_argument jsonb; canonical_argument_bytes bigint; canonical_result text;
+  guard_body jsonb; guard_bytes bigint; guard_body_index integer; guard_index integer; guard_ref_index integer;
+  guard_steps jsonb; guard_observations jsonb; guard_parents jsonb; guard_active jsonb;
+  guard_accounting jsonb; guard_scope jsonb; guard_delta jsonb; guard_parent jsonb; guard_refs jsonb; guard_ref jsonb;
 BEGIN
   IF TG_TABLE_SCHEMA<>'public' OR TG_TABLE_NAME NOT IN (
     'trader_orders',
@@ -2941,9 +3071,140 @@ BEGIN
       WHERE organization_id=scope_org AND account_id=scope_account AND run_id=scope_run AND cycle_sequence=-1;
     IF NOT FOUND THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:GENESIS_MISSING'; END IF;
     prior := previous_row.body_json; genesis := genesis_row.body_json;
-    IF public.waia_canonical_jsonb_v1(body) IS DISTINCT FROM current_row.body_text
-      OR public.waia_canonical_jsonb_v1(prior) IS DISTINCT FROM previous_row.body_text
-      OR public.waia_canonical_jsonb_v1(genesis) IS DISTINCT FROM genesis_row.body_text THEN
+    -- FRONTIER-GUARD G02: three exact selected bodies; no constructed array/copy of all three.
+    FOR guard_body_index IN 0..2 LOOP
+      CASE guard_body_index WHEN 0 THEN guard_body:=body; WHEN 1 THEN guard_body:=prior; ELSE guard_body:=genesis; END CASE;
+      IF guard_body IS NULL OR jsonb_typeof(guard_body) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+      END IF;
+      guard_bytes := octet_length(guard_body::text);
+      IF guard_bytes>1048576 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+      -- Eight additive whole-body equivalents, with each selected subtree bound once.
+      -- body assignment1; text1; root subtraction1; disjoint root fields1;
+      -- selected steps/parents1; references1; selected reference objects1; margin1.
+      total_bytes := total_bytes + 8::bigint*guard_bytes;
+      IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+      IF pg_catalog.jsonb_path_exists(guard_body,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_DEPTH';
+      END IF;
+      IF (guard_body ?& ARRAY['schemaVersion','profile','scope','symbol','cycleSequence','cycleId','initialRecordIndex','recordIndex','releaseSha','modelDigest','authorityDigest','genesisId','previousId','previousDigest','inceptionAccountingId','inceptionAccountingDigest','inceptionAuthorityId','startingCash','checkpointDigest','membershipDigest','marketDigest','previousAccountingSequence','accounting','expectedCashAfter','expectedOpenQuantityAfter','consumedFillCount','lastConsumedFillId','sourceEventCount','sourceChainDigest','fillDelta','steps','activeParentAfter','touchedParentsAfter','observations','id','contentDigest']) IS NOT TRUE THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_KEYS';
+      END IF;
+      IF guard_body-ARRAY['schemaVersion','profile','scope','symbol','cycleSequence','cycleId','initialRecordIndex','recordIndex','releaseSha','modelDigest','authorityDigest','genesisId','previousId','previousDigest','inceptionAccountingId','inceptionAccountingDigest','inceptionAuthorityId','startingCash','checkpointDigest','membershipDigest','marketDigest','previousAccountingSequence','accounting','expectedCashAfter','expectedOpenQuantityAfter','consumedFillCount','lastConsumedFillId','sourceEventCount','sourceChainDigest','fillDelta','steps','activeParentAfter','touchedParentsAfter','observations','id','contentDigest'] IS DISTINCT FROM '{}'::jsonb THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_KEYS';
+      END IF;
+      guard_steps := guard_body->'steps';
+      guard_observations := guard_body->'observations';
+      guard_parents := guard_body->'touchedParentsAfter';
+      guard_active := guard_body->'activeParentAfter';
+      guard_accounting := guard_body->'accounting';
+      guard_scope := guard_body->'scope';
+      guard_delta := guard_body->'fillDelta';
+      IF jsonb_typeof(guard_steps) IS DISTINCT FROM 'array'
+        OR jsonb_typeof(guard_observations) IS DISTINCT FROM 'array'
+        OR jsonb_typeof(guard_parents) IS DISTINCT FROM 'array'
+        OR jsonb_typeof(guard_accounting) IS DISTINCT FROM 'object'
+        OR jsonb_typeof(guard_scope) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+      END IF;
+      IF guard_active IS NULL OR (guard_active<>'null'::jsonb AND jsonb_typeof(guard_active) IS DISTINCT FROM 'object')
+        OR guard_delta IS NULL OR (guard_delta<>'null'::jsonb AND jsonb_typeof(guard_delta) IS DISTINCT FROM 'object') THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+      END IF;
+      IF jsonb_array_length(guard_steps)>2 OR jsonb_array_length(guard_observations)>3
+        OR jsonb_array_length(guard_parents)>2 THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_CARDINALITY';
+      END IF;
+      FOR guard_index IN 0..jsonb_array_length(guard_steps)-1 LOOP
+        guard_accounting := guard_steps->guard_index;
+        IF jsonb_typeof(guard_accounting) IS DISTINCT FROM 'object' THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+        END IF;
+      END LOOP;
+      FOR guard_index IN -1..jsonb_array_length(guard_parents)-1 LOOP
+        IF guard_index=-1 THEN
+          IF guard_active='null'::jsonb THEN CONTINUE; END IF;
+          guard_parent := guard_active;
+        ELSE
+          guard_parent := guard_parents->guard_index;
+        END IF;
+        IF jsonb_typeof(guard_parent) IS DISTINCT FROM 'object' THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+        END IF;
+        guard_refs := guard_parent->'fillReferences';
+        IF jsonb_typeof(guard_refs) IS DISTINCT FROM 'array' THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+        END IF;
+        IF jsonb_array_length(guard_refs)>3 THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_CARDINALITY';
+        END IF;
+        FOR guard_ref_index IN 0..jsonb_array_length(guard_refs)-1 LOOP
+          guard_ref := guard_refs->guard_ref_index;
+          IF jsonb_typeof(guard_ref) IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_BODY_SHAPE';
+          END IF;
+        END LOOP;
+      END LOOP;
+    END LOOP;
+    -- END FRONTIER-GUARD G02
+    -- CANONICAL-CALL C04: actual argument bound once; independent recursive charge.
+    canonical_argument := body;
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C04
+    canonical_text := canonical_result;
+    IF canonical_text IS DISTINCT FROM current_row.body_text THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_TEXT';
+    END IF;
+    -- CANONICAL-CALL C05: actual argument bound once; independent recursive charge.
+    canonical_argument := prior;
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C05
+    canonical_text := canonical_result;
+    IF canonical_text IS DISTINCT FROM previous_row.body_text THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_TEXT';
+    END IF;
+    -- CANONICAL-CALL C06: actual argument bound once; independent recursive charge.
+    canonical_argument := genesis;
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C06
+    canonical_text := canonical_result;
+    IF canonical_text IS DISTINCT FROM genesis_row.body_text THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_TEXT';
     END IF;
     IF mode_row.genesis_id IS DISTINCT FROM genesis_row.id OR current_row.genesis_id IS DISTINCT FROM genesis_row.id
@@ -2972,7 +3233,23 @@ BEGIN
         OR selected->>'symbol' IS DISTINCT FROM mode_row.symbol THEN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:BODY_SCOPE';
       END IF;
-      expected_hash := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(selected-ARRAY['id','contentDigest']),'UTF8')),'hex');
+      -- CANONICAL-CALL C07: actual argument bound once; independent recursive charge.
+      canonical_argument := selected-ARRAY['id','contentDigest'];
+      IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+      END IF;
+      canonical_argument_bytes := octet_length(canonical_argument::text);
+      IF canonical_argument_bytes>1048576 THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+      END IF;
+      IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+      END IF;
+      total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+      IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+      canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+      -- END CANONICAL-CALL C07
+      expected_hash := encode(sha256(convert_to(canonical_result,'UTF8')),'hex');
       IF selected->>'contentDigest' IS DISTINCT FROM expected_hash THEN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:BODY_DIGEST';
       END IF;
@@ -3092,8 +3369,24 @@ BEGIN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:PHASES';
       END IF;
     END LOOP;
-    expected_hash := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(jsonb_build_object(
-      'accounting',body->'accounting','activeParent',body->'activeParentAfter','touchedParents',body->'touchedParentsAfter')),'UTF8')),'hex');
+    -- CANONICAL-CALL C08: actual argument bound once; independent recursive charge.
+    canonical_argument := jsonb_build_object(
+      'accounting',body->'accounting','activeParent',body->'activeParentAfter','touchedParents',body->'touchedParentsAfter');
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{6}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(5+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C08
+    expected_hash := encode(sha256(convert_to(canonical_result,'UTF8')),'hex');
     IF body->'observations'->2->>'projectionDigest' IS DISTINCT FROM expected_hash THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:FINAL_OBSERVATION';
     END IF;
@@ -3116,9 +3409,25 @@ BEGIN
       OR (body->>'sourceEventCount')::bigint IS DISTINCT FROM (prior->>'sourceEventCount')::bigint+jsonb_array_length(body->'steps') THEN
       RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:DELTA';
     END IF;
-    expected_hash := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(jsonb_build_object(
+    -- CANONICAL-CALL C09: actual argument bound once; independent recursive charge.
+    canonical_argument := jsonb_build_object(
       'domain','waia.trader.historical_reconciliation.v1','previous',prior->'sourceChainDigest',
-      'cycleId',body->'cycleId','steps',body->'steps','fillDelta',delta)),'UTF8')),'hex');
+      'cycleId',body->'cycleId','steps',body->'steps','fillDelta',delta);
+    IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+    END IF;
+    canonical_argument_bytes := octet_length(canonical_argument::text);
+    IF canonical_argument_bytes>1048576 THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+    END IF;
+    IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{5}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+    END IF;
+    total_bytes := total_bytes + (20::bigint*(4+1)+8)*canonical_argument_bytes;
+    IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+    canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+    -- END CANONICAL-CALL C09
+    expected_hash := encode(sha256(convert_to(canonical_result,'UTF8')),'hex');
     IF body->>'sourceChainDigest' IS DISTINCT FROM expected_hash THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:SOURCE_CHAIN'; END IF;
     SELECT array_agg(a.id ORDER BY a.accounting_sequence) INTO actual_ids FROM (
       SELECT id,accounting_sequence FROM public.trader_accounting_frontier
@@ -3195,7 +3504,23 @@ BEGIN
         projected->>'side' AS side,projected->>'venue' AS venue,projected->>'executionMode' AS execution_mode,
         projected->>'credentialId' AS credential_id,projected->>'type' AS type,projected->>'price' AS price,
         projected->>'riskAllowanceId' AS risk_allowance_id,projected->>'riskAllowanceBindingDigest' AS risk_allowance_binding_digest INTO actual_order;
-      expected_hash := encode(sha256(convert_to(public.waia_canonical_jsonb_v1(projected-ARRAY['filledQuantity','state','stateVersion']),'UTF8')),'hex');
+      -- CANONICAL-CALL C10: actual argument bound once; independent recursive charge.
+      canonical_argument := projected-ARRAY['filledQuantity','state','stateVersion'];
+      IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+      END IF;
+      canonical_argument_bytes := octet_length(canonical_argument::text);
+      IF canonical_argument_bytes>1048576 THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+      END IF;
+      IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{2}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+      END IF;
+      total_bytes := total_bytes + (20::bigint*(1+1)+8)*canonical_argument_bytes;
+      IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+      canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+      -- END CANONICAL-CALL C10
+      expected_hash := encode(sha256(convert_to(canonical_result,'UTF8')),'hex');
       IF expected_hash IS DISTINCT FROM parent->>'creationDigest'
         OR actual_order.state::text IS DISTINCT FROM parent->>'state' OR actual_order.state_version IS DISTINCT FROM (parent->>'stateVersion')::integer
         OR actual_order.filled_quantity IS DISTINCT FROM parent->>'filledQuantity' OR actual_order.quantity IS DISTINCT FROM parent->>'quantity'
@@ -3217,10 +3542,27 @@ BEGIN
       'sequence',e.seq,'fromState',e.from_state,'toState',e.to_state,'eventType',e.event_type,
       'payload',e.payload,'occurredAt',to_char(e.occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) INTO projected FROM public.trader_order_events e
         WHERE e.organization_id=scope_org AND e.order_id=actual_order.id::uuid ORDER BY e.seq DESC LIMIT 1;
+      -- CANONICAL-CALL C11: actual argument bound once; independent recursive charge.
+      IF NOT FOUND THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:PARENT_EVENT'; END IF;
+      canonical_argument := projected;
+      IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+      END IF;
+      canonical_argument_bytes := octet_length(canonical_argument::text);
+      IF canonical_argument_bytes>1048576 THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+      END IF;
+      IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{2}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+      END IF;
+      total_bytes := total_bytes + (20::bigint*(1+1)+8)*canonical_argument_bytes;
+      IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+      canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+      -- END CANONICAL-CALL C11
       IF NOT FOUND OR projected->>'id' IS DISTINCT FROM parent#>>'{stateEvent,id}'
         OR projected->>'toState' IS DISTINCT FROM parent->>'state'
         OR (projected->>'sequence')::integer IS DISTINCT FROM (parent#>>'{stateEvent,sequence}')::integer
-        OR encode(sha256(convert_to(public.waia_canonical_jsonb_v1(projected),'UTF8')),'hex') IS DISTINCT FROM parent#>>'{stateEvent,digest}' THEN
+        OR encode(sha256(convert_to(canonical_result,'UTF8')),'hex') IS DISTINCT FROM parent#>>'{stateEvent,digest}' THEN
         RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:PARENT_EVENT';
       END IF;
       -- Both independent indexed source sets are compared to exact fill references.
@@ -3253,7 +3595,24 @@ BEGIN
       'executedAt',(extract(epoch FROM f.executed_at)*1000)::bigint) INTO projected FROM public.trader_fills f JOIN public.trader_orders o
           ON o.organization_id=f.organization_id AND o.id=f.order_id
           WHERE f.organization_id=scope_org AND f.id=(ref->>'fillId')::uuid AND f.order_id=actual_order.id::uuid;
-        IF NOT FOUND OR encode(sha256(convert_to(public.waia_canonical_jsonb_v1(projected),'UTF8')),'hex') IS DISTINCT FROM ref->>'fillSourceDigest' THEN
+        -- CANONICAL-CALL C12: actual argument bound once; independent recursive charge.
+        IF NOT FOUND THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:FILL_CONTENT'; END IF;
+        canonical_argument := projected;
+        IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+        END IF;
+        canonical_argument_bytes := octet_length(canonical_argument::text);
+        IF canonical_argument_bytes>1048576 THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+        END IF;
+        IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{2}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+        END IF;
+        total_bytes := total_bytes + (20::bigint*(1+1)+8)*canonical_argument_bytes;
+        IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+        canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+        -- END CANONICAL-CALL C12
+        IF NOT FOUND OR encode(sha256(convert_to(canonical_result,'UTF8')),'hex') IS DISTINCT FROM ref->>'fillSourceDigest' THEN
           RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:FILL_CONTENT';
         END IF;
         SELECT octet_length((jsonb_build_object('fillId',e.fill_id::text,
@@ -3295,9 +3654,26 @@ BEGIN
         'acceptedAt',(extract(epoch FROM e.accepted_at)*1000)::bigint,'fillTimestamp',(extract(epoch FROM e.fill_timestamp)*1000)::bigint)) INTO source_projection FROM public.trader_fill_execution_economics e JOIN public.trader_orders o
           ON o.organization_id=e.organization_id AND o.id=e.order_id
           WHERE e.organization_id=scope_org AND e.fill_id=(ref->>'fillId')::uuid AND e.order_id=actual_order.id::uuid;
+        -- CANONICAL-CALL C13: actual argument bound once; independent recursive charge.
+        IF NOT FOUND THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:ECONOMICS_CONTENT'; END IF;
+        canonical_argument := source_projection;
+        IF canonical_argument IS NULL OR jsonb_typeof(canonical_argument) IS DISTINCT FROM 'object' THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_SHAPE';
+        END IF;
+        canonical_argument_bytes := octet_length(canonical_argument::text);
+        IF canonical_argument_bytes>1048576 THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE';
+        END IF;
+        IF pg_catalog.jsonb_path_exists(canonical_argument,'strict $.**{3}'::jsonpath,'{}'::jsonb,false) IS DISTINCT FROM false THEN
+          RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:CANONICAL_ARGUMENT_DEPTH';
+        END IF;
+        total_bytes := total_bytes + (20::bigint*(2+1)+8)*canonical_argument_bytes;
+        IF total_bytes>8388608 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE'; END IF;
+        canonical_result := public.waia_canonical_jsonb_v1(canonical_argument);
+        -- END CANONICAL-CALL C13
         IF NOT FOUND OR source_projection->>'economicsRowId' IS DISTINCT FROM ref->>'economicsRowId'
           OR source_projection->>'economicsDigest' IS DISTINCT FROM ref->>'economicsDigest'
-          OR encode(sha256(convert_to(public.waia_canonical_jsonb_v1(source_projection),'UTF8')),'hex') IS DISTINCT FROM ref->>'economicsSourceDigest'
+          OR encode(sha256(convert_to(canonical_result,'UTF8')),'hex') IS DISTINCT FROM ref->>'economicsSourceDigest'
           OR projected->>'price' IS DISTINCT FROM source_projection#>>'{sourceEconomics,netFillPrice}'
           OR projected->>'fee' IS DISTINCT FROM source_projection#>>'{sourceEconomics,feeAmount}'
           OR projected->>'feeAsset' IS DISTINCT FROM source_projection#>>'{sourceEconomics,feeAsset}'

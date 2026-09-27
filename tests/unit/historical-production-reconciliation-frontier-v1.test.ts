@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createInitialAccountingState, advanceAccountingFrontier, computeAccountingSemanticDigest } from
   "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
@@ -456,5 +457,50 @@ describe("exact companion text and one candidate preparation budget", () => {
     for (let i = 0; i < 3; i++) expect(repo.prepareSourceValue("ACCOUNTING", artifacts)).not.toBeNull();
     expect(() => repo.prepareSourceValue("ACCOUNTING", artifacts)).toThrow("RESOURCE_ENVELOPE");
     expect(() => repo.prepareSourceValue("ACCOUNTING", [{ ...artifacts[0], artifactId: "small" }])).toThrow("RESOURCE_ENVELOPE");
+  });
+});
+
+
+// Actual producer compatibility with the new native technical admission. This is
+// a pure shape/digest control, not execution of a PostgreSQL CHECK or source proof.
+describe("native canonicalization shape admits actual frontier producers", () => {
+  function depth(value: unknown): number {
+    if (value === null || typeof value !== "object") return 0;
+    const children = Object.values(value);
+    return children.length === 0 ? 0 : 1 + Math.max(...children.map(depth));
+  }
+  function assertNativeRoot(value: ReturnType<typeof genesis>) {
+    const sql = readFileSync("db/migrations_postgres/0222_trader_historical_reconciliation_v1.sql", "utf8");
+    const keys = sql.match(/guard_body \?& ARRAY\[([^\]]+)\]/)?.[1]?.match(/'[^']+'/g)?.map(k => k.slice(1, -1));
+    expect(keys).toHaveLength(36);
+    expect(Object.keys(value).sort()).toEqual([...keys!].sort());
+    expect(depth(value)).toBeLessThanOrEqual(5);
+    expect(() => assertHistoricalReconciliationFrontierV1(value, scope)).not.toThrow();
+  }
+  it("retains exact sealed genesis and no-fill three-phase bodies", () => {
+    const initial = genesis(); const initialBytes = canonicalizeSemanticJsonString(initial);
+    const delta = advanceHistoricalReconciliationV1(cycle());
+    const saved = sealHistoricalReconciliationCycleV1({ delta, observations: observations(delta, null),
+      checkpointDigest: digest, activeParent: null, touchedParents: [] });
+    assertNativeRoot(initial); assertNativeRoot(saved);
+    expect(depth(initial)).toBe(2);
+    expect(depth(saved)).toBe(3);
+    expect(canonicalizeSemanticJsonString(initial)).toBe(initialBytes);
+  });
+  it("admits actual fill→mark at the depth-five parent reference boundary", () => {
+    const input = fillCycle(); const delta = advanceHistoricalReconciliationV1(input);
+    const fill = input.fills[0]!; const economics = input.economics[0]!;
+    const parent: HistoricalReconciliationParentV1 = { ...input.previous.activeParentAfter!,
+      state: "PARTIALLY_FILLED", stateVersion: 5, filledQuantity: "0.1", remainingQuantity: "0.9",
+      eligibleBarsSeen: 1, fillSequence: 1, fillReferences: [{ fillId: fill.fillId,
+        economicsRowId: economics.economicsRowId, economicsDigest: economics.economicsDigest,
+        fillSourceDigest: computeSemanticSha256Hex(fill), economicsSourceDigest: computeSemanticSha256Hex(economics) }] };
+    const saved = sealHistoricalReconciliationCycleV1({ delta, observations: observations(delta, parent, input.final),
+      checkpointDigest: digest, activeParent: parent, touchedParents: [parent] });
+    assertNativeRoot(saved);
+    expect(depth(saved)).toBe(5);
+    expect(saved.touchedParentsAfter[0]!.fillReferences[0]!.fillSourceDigest).toBe(computeSemanticSha256Hex(fill));
+    expect(saved.steps).toHaveLength(2); expect(saved.observations).toHaveLength(3);
+    expect(saved.accounting.cash).toBe(input.final.cash);
   });
 });

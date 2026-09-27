@@ -3,6 +3,8 @@
  * No provider call, SQL guard disable, source deletion or migration-history repair.
  */
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { deterministicExecutionUuidV2 } from "@/lib/trader/execution/v2/contracts";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -148,6 +150,31 @@ function accountingExecutor(pool: postgres.Sql, held: postgres.Sql) {
 }
 const appendAccounting = (pool: postgres.Sql, tx: postgres.Sql, state: AccountingFrontierV1) =>
   createAccountingFrontierRepositoryPostgres(accountingExecutor(pool, tx)).append({ organizationId }, state);
+/** Low-level fully resealed malformed inputs exercise the native boundary, not
+ * qualified producer authority. Native source/owner positives remain separate. */
+function resealedRawBody(value: Record<string, unknown>) {
+  const body = { ...value }; delete body.id; delete body.contentDigest;
+  const contentDigest = computeSemanticSha256Hex(body);
+  const id = deterministicExecutionUuidV2("report", { kind: "waia.trader.historical_reconciliation.v1", contentDigest });
+  return { ...body, id, contentDigest };
+}
+function insertRawCompanion(tx: postgres.Sql, f: Input, bodyText: string | null, id = f.genesis.id, contentDigest = f.genesis.contentDigest) {
+  return tx`INSERT INTO trader_historical_reconciliation_frontier_v1
+    (id,organization_id,account_id,run_id,cycle_sequence,partition,profile,symbol,previous_id,genesis_id,
+      checkpoint_digest,content_digest,body_text)
+    VALUES (${id}::uuid,${organizationId}::uuid,${f.scope.accountId},${f.scope.runId},-1,'DEVELOPMENT',
+      ${f.genesis.profile},'BTCUSDT',NULL,NULL,NULL,${contentDigest},${bodyText})`;
+}
+async function canonicalCalls(tx: postgres.Sql): Promise<bigint> {
+  const [row] = await tx`SELECT COALESCE((SELECT calls FROM pg_stat_xact_user_functions
+    WHERE funcid='public.waia_canonical_jsonb_v1(jsonb)'::regprocedure),0)::text AS calls`;
+  return BigInt(row!.calls as string);
+}
+function accountingNestedBody(f: Input, leafDepth: number, leaf: unknown) {
+  let value = leaf;
+  for (let n = 2; n < leafDepth; n++) value = { nested: value };
+  return resealedRawBody({ ...f.genesis, accounting: { ...f.genesis.accounting, fixtureNested: value } });
+}
 async function mode(tx: postgres.Sql, f: Input) {
   await tx`INSERT INTO trader_historical_reconciliation_scope_mode_v1
     (organization_id,account_id,run_id,mode,profile,partition,symbol,genesis_id)
@@ -722,6 +749,149 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
         else if (change === "tail") state.consumedFillIds = [randomUUID(), randomUUID()];
         else state.positions.OTHER = { quantity: "0", grossPositionBasis: "0", netPositionBasis: "0" };
       }))).rejects.toThrow("historical_reconciliation_durable_snapshot_projection_v1");
+  });
+  it("installs every independent recursive charge before its exact canonical invocation", async () => {
+    const rows = await sql`SELECT proname,prosrc FROM pg_proc
+      WHERE oid IN ('public.waia_historical_reconciliation_stamp_v1()'::regprocedure,
+        'public.waia_historical_reconciliation_verify_v1()'::regprocedure) ORDER BY proname`;
+    expect(rows).toHaveLength(2);
+    const definitions = rows.map(r => String(r.prosrc)).join("\n");
+    const depths = [5, 5, 2, 5, 5, 5, 5, 5, 4, 1, 1, 1, 2];
+    expect(definitions.match(/public\.waia_canonical_jsonb_v1\(/g)).toHaveLength(13);
+    for (const [i, depth] of depths.entries()) {
+      const label = `C${String(i + 1).padStart(2, "0")}`;
+      const block = definitions.split(`-- CANONICAL-CALL ${label}:`)[1]?.split(`-- END CANONICAL-CALL ${label}`)[0];
+      expect(block).toBeDefined();
+      expect(block!.match(/canonical_argument :=/g)).toHaveLength(1);
+      const tokens = ["canonical_argument :=", "canonical_argument IS NULL", "octet_length(canonical_argument::text)",
+        "canonical_argument_bytes>1048576", `strict $.**{${depth + 1}}`,
+        `(20::bigint*(${depth}+1)+8)*canonical_argument_bytes`, "total_bytes>8388608",
+        "public.waia_canonical_jsonb_v1(canonical_argument)"];
+      const offsets = tokens.map(t => block!.indexOf(t));
+      expect(offsets.every(n => n >= 0)).toBe(true); expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+    }
+    for (const row of rows) {
+      const body = String(row.prosrc);
+      expect(body).toContain("8::bigint*guard_bytes");
+      expect(body.indexOf("CANONICAL_BODY_CARDINALITY")).toBeLessThan(body.indexOf("-- CANONICAL-CALL"));
+    }
+    // Pin the old helper body to its original immutable migration, never replace it.
+    const old = readFileSync("db/migrations_postgres/0161_trader_mi_canonical_pit_lineage_v1.sql", "utf8");
+    const declared = old.match(/CREATE OR REPLACE FUNCTION public\.waia_canonical_jsonb_v1\(value jsonb\)[\s\S]*?AS \$\$([\s\S]*?)\$\$/)?.[1];
+    const [canonical] = await sql`SELECT prosrc FROM pg_proc WHERE oid='public.waia_canonical_jsonb_v1(jsonb)'::regprocedure`;
+    expect(declared).toBeDefined(); expect(String(canonical!.prosrc).trim()).toBe(declared!.trim());
+  });
+  it.each(["sql-null", "json-null", "array-root", "unknown-key", "missing-key", "null-steps", "steps-limit",
+    "observations-limit", "parents-limit", "null-parent", "reference-limit", "null-reference", "depth-six", "deep-empty-object", "deep-empty-array"])(
+    "refuses %s before any recursive canonical call", async kind => {
+      const f = input(); let body: Record<string, unknown> = { ...f.genesis };
+      let reasonCode = "CANONICAL_BODY_SHAPE";
+      if (kind === "unknown-key") { body.extra = "unadmitted"; reasonCode = "CANONICAL_BODY_KEYS"; }
+      if (kind === "missing-key") { delete body.modelDigest; reasonCode = "CANONICAL_BODY_KEYS"; }
+      if (kind === "null-steps") body.steps = null;
+      if (kind === "steps-limit") { body.steps = [{}, {}, {}]; reasonCode = "CANONICAL_BODY_CARDINALITY"; }
+      if (kind === "observations-limit") { body.observations = [{}, {}, {}, {}]; reasonCode = "CANONICAL_BODY_CARDINALITY"; }
+      if (kind === "parents-limit") { body.touchedParentsAfter = [{}, {}, {}]; reasonCode = "CANONICAL_BODY_CARDINALITY"; }
+      if (kind === "null-parent") body.touchedParentsAfter = [null];
+      if (kind === "reference-limit") { body.touchedParentsAfter = [{ fillReferences: [{}, {}, {}, {}] }]; reasonCode = "CANONICAL_BODY_CARDINALITY"; }
+      if (kind === "null-reference") body.touchedParentsAfter = [{ fillReferences: [null] }];
+      if (["depth-six", "deep-empty-object", "deep-empty-array"].includes(kind)) {
+        body = accountingNestedBody(f, 6, kind === "depth-six" ? "leaf" : kind === "deep-empty-object" ? {} : []);
+        reasonCode = "CANONICAL_BODY_DEPTH";
+      }
+      const sealed = resealedRawBody(body);
+      let text: string | null = canonicalizeSemanticJsonString(sealed);
+      if (kind === "sql-null") { text = null; reasonCode = "RESOURCE_ENVELOPE"; }
+      if (kind === "json-null") text = "null";
+      if (kind === "array-root") text = "[]";
+      await sql.begin(async held => {
+        const tx = held as unknown as postgres.Sql;
+        await tx`SET LOCAL track_functions='all'`;
+        const before = await canonicalCalls(tx);
+        await expect(held.savepoint(inner => insertRawCompanion(inner as unknown as postgres.Sql, f, text,
+          sealed.id, sealed.contentDigest))).rejects.toThrow(reasonCode);
+        expect(await canonicalCalls(tx)).toBe(before);
+        // Prove this same-session counter observes a real completed recursive call.
+        // The ordinary canonical-text refusal occurs after C01; no row commits.
+        await expect(held.savepoint(inner => insertRawCompanion(inner as unknown as postgres.Sql, f,
+          canonicalizeSemanticJsonString(f.genesis) + " "))).rejects.toThrow("CANONICAL_TEXT");
+        expect(await canonicalCalls(tx)).toBeGreaterThan(before);
+      });
+    });
+  it("confirms literal JSONPath depth boundaries, including empty prohibited containers", async () => {
+    const f = input();
+    for (const leaf of ["leaf", {}, []]) {
+      for (const depth of [5, 6]) {
+        const body = accountingNestedBody(f, depth, leaf);
+        const [row] = await sql`SELECT pg_catalog.jsonb_path_exists(${JSON.stringify(body)}::jsonb,
+          'strict $.**{6}'::jsonpath,'{}'::jsonb,false) AS too_deep`;
+        expect(row!.too_deep).toBe(depth === 6);
+      }
+    }
+    await sql.begin(async held => {
+      const tx = held as unknown as postgres.Sql; await tx`SET LOCAL track_functions='all'`;
+      const body = accountingNestedBody(f, 5, "leaf"); const before = await canonicalCalls(tx);
+      await expect(held.savepoint(inner => insertRawCompanion(inner as unknown as postgres.Sql, f,
+        canonicalizeSemanticJsonString(body) + " ", body.id, body.contentDigest))).rejects.toThrow("CANONICAL_TEXT");
+      expect(await canonicalCalls(tx)).toBeGreaterThan(before);
+    });
+  });
+  it("keeps JSON-looking physical event payload text scalar and economics at depth two", async () => {
+    const [column] = await sql`SELECT format_type(atttypid,atttypmod) AS type FROM pg_attribute
+      WHERE attrelid='public.trader_order_events'::regclass AND attname='payload' AND NOT attisdropped`;
+    expect(column!.type).toBe("text");
+    const event = '{"nested":{"deeper":[{"ignored":"still text"}]}}';
+    const [row] = await sql`SELECT
+      jsonb_typeof(jsonb_build_object('payload',${event}::text)->'payload') AS event_kind,
+      pg_catalog.jsonb_path_exists(jsonb_build_object('payload',${event}::text),
+        'strict $.**{2}'::jsonpath,'{}'::jsonb,false) AS event_too_deep,
+      pg_catalog.jsonb_path_exists(jsonb_build_object('sourceEconomics',jsonb_build_object('quantity','1.000')),
+        'strict $.**{3}'::jsonpath,'{}'::jsonb,false) AS economics_too_deep`;
+    expect(row).toEqual({ event_kind: "string", event_too_deep: false, economics_too_deep: false });
+  });
+  it("uses actual JSONB widths for recursive aggregate refusal below one MiB", async () => {
+    const f = input();
+    function text(padding: number) {
+      return canonicalizeSemanticJsonString(resealedRawBody({ ...f.genesis,
+        accounting: { ...f.genesis.accounting, fixturePadding: 'é\n"' + "x".repeat(padding) } }));
+    }
+    async function firstCallCost(tx: postgres.Sql, bodyText: string) {
+      const [row] = await tx`SELECT octet_length(${bodyText})::bigint AS raw,
+        octet_length(${bodyText}::jsonb::text)::bigint AS body`;
+      return { raw: BigInt(row!.raw as string), body: BigInt(row!.body as string),
+        cost: 65536n + 16n * BigInt(row!.raw as string) + (8n + 128n) * BigInt(row!.body as string) };
+    }
+    await sql.begin(async held => {
+      const tx = held as unknown as postgres.Sql; await tx`SET LOCAL track_functions='all'`;
+      const zero = await firstCallCost(tx, text(0));
+      // ASCII padding adds one byte to each ACTUAL text spelling. Verify both
+      // sides, never substitute JS object length for PostgreSQL representation.
+      const max = Number((8388608n - zero.cost) / 152n);
+      const lower = text(max), upper = text(max + 1);
+      const a = await firstCallCost(tx, lower), b = await firstCallCost(tx, upper);
+      expect(a.cost).toBeLessThanOrEqual(8388608n); expect(b.cost).toBeGreaterThan(8388608n);
+      expect(b.cost - a.cost).toBe(152n); expect(b.raw).toBeLessThan(1048576n); expect(b.body).toBeLessThan(1048576n);
+      const scaled = lower.replace('"sourceEventCount":0', '"sourceEventCount":0.000000');
+      expect(scaled).not.toBe(lower);
+      const [same] = await tx`SELECT ${scaled}::jsonb = ${lower}::jsonb AS equal_value`;
+      expect(same!.equal_value).toBe(true);
+      const numeric = await firstCallCost(tx, scaled);
+      expect(numeric.body).toBeGreaterThan(a.body); expect(numeric.cost).toBeGreaterThan(8388608n);
+      let before = await canonicalCalls(tx);
+      await expect(held.savepoint(inner => insertRawCompanion(inner as unknown as postgres.Sql, f, scaled)))
+        .rejects.toThrow("RESOURCE_ENVELOPE");
+      expect(await canonicalCalls(tx)).toBe(before);
+      before = await canonicalCalls(tx);
+      await expect(held.savepoint(inner => insertRawCompanion(inner as unknown as postgres.Sql, f, upper)))
+        .rejects.toThrow("RESOURCE_ENVELOPE");
+      expect(await canonicalCalls(tx)).toBe(before);
+      before = await canonicalCalls(tx);
+      // The lower boundary executes C01 then refuses the independently charged
+      // C02. It is NOT a positive commit or an exact-total-eight-MiB assertion.
+      await expect(held.savepoint(inner => insertRawCompanion(inner as unknown as postgres.Sql, f, lower)))
+        .rejects.toThrow("RESOURCE_ENVELOPE");
+      expect(await canonicalCalls(tx)).toBeGreaterThan(before);
+    });
   });
   it("refuses noncanonical text and supplied derived JSON independently of semantic hashes", async () => {
     const f = input(); const body = canonicalizeSemanticJsonString(f.genesis);

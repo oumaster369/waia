@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Recursive-canonical design is admitted; this sole plan amendment awaits root verification before dependent0222/native-test source edits. WP3-02 remains executable-open; no DB/heavy/CI/registry/graph grant."
+  nextAction: "Recursive source correction and scoped proof are frozen for root/M01 review; WP3 native/installed-expression/owner compatibility remains unexecuted. No PG/heavy/CI/registry/graph/bootstrap grant."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1005,3 +1005,14 @@ Implement fixedprecall nativekind/size/depth/rootkey/arrayguards via explicitPL 
 
 Freeze exactcoherentSQL/nativeunit source, concreteguardoperation/recursivecallcertificate/rawscopedproof forroot+M01 review beforeanyPG/nativegrant. Allowedonlymeaningfulboundedscopedunit/source-lint/diff validation afterplanverification. Actualnative depthboundary/emptycontainer/fullyresealedrefusal-beforecanonicalization, maximalowner/35cycle/oldN/sourcephysicalpositive, realinstalledsites/Unicode/scale/aggregateboundary andoldlatewrite/role/rollbackmatrixremain mandatory. Ifactualowner cannotfitunchangedcaps,preservefailureandreportbeforeanyparameterchange. NoDB/heavy/typecheck/build/host/provider/campaigngrant.
 <!-- END DEE1130-CANONICAL-RECURSION-ROOT-ADMISSION -->
+
+
+## WP-3 recursive-canonical executable source checkpoint
+
+Root released dependent source after sole plan `adefd5a9`. This correction changes only the two allocated0222 trigger bodies, existing new native frontier test and existing pure frontier test. All prior controlling embedded inputs remain byte-identical. The previousfa7 recursion certificate is historical and defective;4278's fixed-path/held-driver correction remains preserved.
+
+Two literal pre-call guards bind/reuse selected subtrees within the additive8B census and enforce exact36 root keys, depth5, kinds, cardinalities and UNKNOWN refusal. All13 actual recursive arguments are bound once and separately measured/depth-guarded/charged `(20*(D+1)+8)*B` with bigint before0161. All earlier baseline charges,1MiB/8MiB limits, digest domains and missing-source refusals remain. No old0161/old222 migration/journal/ACL/trigger/security or production-TypeScript change.
+
+Actual author validation: source observer26RED/6PASS on4278→32PASS on correctedSQL; initial31/1 whitespace-observer error retained separately. Actual pure suite75PASS/1file/0skip, including actual genesis/no-fill and costed fill→mark sealed depth5 compatibility; scoped test-file ESLint and diffcheck PASS. Exact commands/raw output/source hashes and concrete8B/13call census are in `evidence/dee-1130/canonical-recursion-implementation/`. No PostgreSQL/compiler/full readiness executed at this checkpoint.
+
+Native source adds installed guard/oldhelper checks, fully resealed shape/depth/root/array refusals with actual function-counter positive control, depth5/6 empty-container cases, event-text/economics shape, and actual PG byte-width/UTF8/numeric-scale aggregate boundary controls. All remain unexecuted. Original actual35-cycle/max-parent/old-N/source/role/concurrency/rollback matrix and223 migration/teardown evidence remain mandatory. If real-owner compatibility fails under unchanged caps, preserve/report the failure before changing any parameter. Root/M01 review, bootstrap/native resource admission, root-held registries/CI/graphs and eventual full readiness/publication remain separate gates.
