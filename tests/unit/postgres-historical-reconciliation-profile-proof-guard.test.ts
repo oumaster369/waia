@@ -12,6 +12,39 @@ const environment = { ...process.env, WAIA_PG_INTEGRATION: "1", WAIA_POSTGRES_CL
   WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE: "HISTORICAL_PG_RECONCILIATION_V1", WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF: "0",
   DATABASE_URL_POSTGRES: "postgresql://waia_it:synthetic@127.0.0.1:5432/waia_it",
   DATABASE_URL_POSTGRES_SESSION: "postgresql://waia_it:synthetic@127.0.0.1:5432/waia_it" };
+const capitalFiles = [
+  "postgres-execution-v2.test.ts",
+  "postgres-execution-reality-delivery.test.ts",
+  "postgres-risk-v2.test.ts",
+  "postgres-risk-limits-bootstrap.test.ts",
+  "postgres-trader-service-actor-authorization.test.ts",
+  "postgres-reality-v2.test.ts",
+  "postgres-canonical-decision-verification-v2.test.ts",
+  "postgres-promotion-audit-atomicity.test.ts",
+  "postgres-runtime-authority-v2.test.ts",
+  "postgres-guardian-authority-v2.test.ts",
+  "postgres-guardian-observation-scope.test.ts",
+  "postgres-forecast-v2-feedback-read-port.test.ts",
+  "postgres-forecast-v2-persistence.test.ts",
+  "postgres-billing-period-command-atomicity.test.ts",
+  "postgres-billing-invoice-command-atomicity.test.ts",
+  "postgres-billing-reality-dependencies.test.ts",
+  "postgres-reporting-period-basis.test.ts",
+  "postgres-noncapital-cycle-owner-v2.test.ts",
+  "postgres-org-live-enable-atomicity.test.ts",
+  "postgres-recorded-paper-analysis-v1.test.ts",
+  "postgres-mi-canonical-pit-lineage-v1.test.ts",
+  "postgres-research-understanding-v1.test.ts",
+  "postgres-knowledge-snapshot-eligibility.test.ts",
+  "postgres-historical-production-reconciliation-frontier-v1.test.ts",
+  "postgres-research-application-v1.test.ts",
+];
+const capitalPassed = () => capitalFiles.map(name => ({ name: `/workspace/tests/integration/${name}`, status: "passed",
+  assertionResults: [{ title: "synthetic guard control, not native proof", status: "passed" }] }));
+function runCapital(testResults = capitalPassed()) {
+  writeFileSync(file, JSON.stringify({ testResults }));
+  return spawnSync(process.execPath, ["scripts/postgres-validation/assert-capital-test-results.mjs", file], { encoding: "utf8" });
+}
 const passed = () => [{ name: "/workspace/tests/integration/postgres-historical-production-first-cycle-v2.test.ts", status: "passed",
   assertionResults: [{ title: required, status: "passed" }, { title: "another actual companion", status: "passed" }] }];
 function run(testResults = passed(), env: NodeJS.ProcessEnv = environment) {
@@ -47,7 +80,7 @@ describe("mandatory PROFILE35 executed proof", () => {
     expect(run(passed(), { ...environment, WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF: "1" }).status).not.toBe(0);
     expect(run(passed(), { ...environment, WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE: "LEGACY" }).status).not.toBe(0);
   });
-  it("wires capital24 and the independent75-minute PROFILE35 job without changing generic LEGACY", () => {
+  it("wires the exact capital25 union and independent75-minute PROFILE35 job without changing generic LEGACY", () => {
     const workflow = parse(readFileSync(".github/workflows/postgres-integration.yml", "utf8"));
     const capital = workflow.jobs["capital-authority"];
     expect(capital["timeout-minutes"]).toBe(15);
@@ -55,7 +88,15 @@ describe("mandatory PROFILE35 executed proof", () => {
     expect(bootstrap.env.WAIA_POSTGRES_CLI).toBe("1");
     expect(capital.steps.filter((s: { run?: string }) => s.run?.includes("db:postgres:auth-prelude"))).toHaveLength(0);
     const command = capital.steps.find((s: { run?: string }) => s.run?.includes("assert-capital-test-results"));
-    expect(command.run.match(/tests\/integration\/[^\s]+\.test\.ts/g)).toHaveLength(24);
+    const selected = (command.run.match(/tests\/integration\/[^\s]+\.test\.ts/g) as string[])
+      .map(path => path.replace("tests/integration/", ""));
+    expect(selected).toEqual(capitalFiles);
+    expect(new Set(selected).size).toBe(25);
+    const guard = readFileSync("scripts/postgres-validation/assert-capital-test-results.mjs", "utf8");
+    const requiredArray = guard.match(/const requiredFiles = \[([\s\S]*?)\];/)?.[1];
+    expect(requiredArray).toBeDefined();
+    expect([...requiredArray!.matchAll(/"([^"\n]+\.test\.ts)"/g)].map(match => match[1])).toEqual(capitalFiles);
+    expect(command.run).not.toMatch(/--testNamePattern|--exclude/);
     expect(command.run).toContain("postgres-historical-production-reconciliation-frontier-v1.test.ts");
     expect(command.run).not.toContain("postgres-historical-production-first-cycle-v2.test.ts");
     const profile = workflow.jobs["historical-reconciliation-profile"];
@@ -73,4 +114,23 @@ describe("mandatory PROFILE35 executed proof", () => {
       expect(workflow.on.pull_request.paths).toContain(path);
     }
   });
+  it("accepts the exact synthetic25-file guard control", () => {
+    const result = runCapital();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("25 critical suites, no skipped tests");
+  });
+  it.each(capitalFiles)("refuses a report omitting mandatory %s", missing => {
+    const result = runCapital(capitalPassed().filter(row => !row.name.endsWith(`/${missing}`)));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(`Required PostgreSQL proof missing, failed or skipped: ${missing}`);
+  });
+  it.each(["failed", "pending", "duplicate"])("refuses a %s application proof without weakening the old24", mode => {
+    const report = capitalPassed(), application = report.at(-1)!;
+    if (mode === "duplicate") report.push(application);
+    else application.assertionResults[0].status = mode;
+    const result = runCapital(report);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Required PostgreSQL proof missing, failed or skipped: postgres-research-application-v1.test.ts");
+  });
+
 });

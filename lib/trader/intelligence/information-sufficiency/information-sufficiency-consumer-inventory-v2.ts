@@ -386,8 +386,13 @@ export const INFORMATION_SUFFICIENCY_PRODUCERS_V2 = [
   },
   {
     path: "lib/trader/paper/research-understanding-v1/repository-postgres.ts",
-    symbols: ["createSavedResearchOwner", "persistInformationSufficiencyReceiptWithinTransactionV2Postgres", "ASSIGNMENT_CONFIG_CONFLICT"],
+    symbols: ["createSavedResearchOwner", "persistInformationSufficiencyReceiptWithinTransactionV2Postgres", "requireInformationSufficiencyAuthorityWithinTransactionV2Postgres", "readResearchAssignmentWithinHeldTransaction as readAssignment"],
     disposition: "ASSIGNMENT_COMPLETION_BOUND_RESEARCH_PERSISTENCE_REPLAY",
+  },
+  {
+    path: "lib/trader/paper/research-understanding-v1/held-replay.ts",
+    symbols: ["readResearchAssignmentWithinHeldTransaction", "researchActor", "checkRequestedProfile", "ASSIGNMENT_CONFIG_CONFLICT"],
+    disposition: "FIXED_ASSIGNMENT_VALIDATION_AND_REPLAY_ONLY_NO_SUFFICIENCY_WRITES_OR_AUTHORITY",
   },
   {
     path: INFORMATION_SUFFICIENCY_RUNTIME_MODULES_V2.contract,

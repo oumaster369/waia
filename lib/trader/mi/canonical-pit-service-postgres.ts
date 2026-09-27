@@ -8,6 +8,8 @@ import {
   persistCanonicalAvailableGatewayWithinTransactionV1Postgres,
   persistCanonicalAvailableGatewayV1Postgres,
   persistCanonicalGatewayOutcomeV1Postgres,
+  persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres,
+  persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres,
   readCanonicalPitObservationV1Postgres,
   type CanonicalGatewayPitReceiptV1,
   type CanonicalPitObservationRecordV1,
@@ -56,6 +58,32 @@ export function persistCanonicalAvailableGatewayWithinHeldTransactionV1Postgres(
     db,
     requireOrgContext(context.organizationId),
     input,
+  );
+}
+
+/** Inert measurement identity/lineage only; the caller retains its held transaction and fence. */
+export function persistCanonicalMeasurementDefinitionWithinHeldTransactionV1Postgres(
+  db: Parameters<typeof persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres>[0],
+  context: OrgContext,
+  definition: Parameters<typeof persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres>[2],
+) {
+  return persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres(
+    db,
+    requireOrgContext(context.organizationId),
+    definition,
+  );
+}
+
+/** No canonical source/trust admission or analytical authority is granted by this lineage write. */
+export function persistCanonicalMeasurementValueLineageWithinHeldTransactionV1Postgres(
+  db: Parameters<typeof persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres>[0],
+  context: OrgContext,
+  value: Parameters<typeof persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres>[2],
+) {
+  return persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres(
+    db,
+    requireOrgContext(context.organizationId),
+    value,
   );
 }
 

@@ -330,7 +330,14 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
     });
     expect(MARKET_UNDERSTANDING_EXPORT_AND_PERSISTENCE_V1.find(entry => entry.path === "lib/trader/paper/research-understanding-v1/repository-postgres.ts"))
       .toMatchObject({ disposition: "OWNED_RESEARCH_SIDECAR_FIXED_RECOMPUTATION_ONLY", exactArtifact: true });
-    expect(read("lib/trader/paper/research-understanding-v1/repository-postgres.ts")).toContain("REPLAY_OUTPUT_CONFLICT");
+    const researchOwner = read("lib/trader/paper/research-understanding-v1/repository-postgres.ts");
+    const heldReplay = read("lib/trader/paper/research-understanding-v1/held-replay.ts");
+    expect(researchOwner).toMatch(/verifyResearchSnapshotComputed as verifyComputed[^;]+from "\.\/held-replay"/);
+    expect(researchOwner.match(/verifyComputed\(saved\)/g)).toHaveLength(2);
+    expect(heldReplay).toContain("export function verifyResearchSnapshotComputed(");
+    expect(heldReplay).toContain("const output = evaluateSavedResearchUnderstanding(saved.packet, saved.assignment, saved.profile, saved.revisions);");
+    expect(heldReplay).toContain('if (saved.completion) check(digest(saved.completion.output) === digest(output), "REPLAY_OUTPUT_CONFLICT");');
+    expect(heldReplay).toContain("const output = verifyResearchSnapshotComputed(saved, accounting);");
     expect(read("lib/trader/backtest/streaming-evidence/cycle-evidence-projection.ts")).not.toContain(
       "understandingArtifact",
     );

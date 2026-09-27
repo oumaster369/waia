@@ -32,11 +32,13 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     await expect(prepareHistoricalReconciliationFixture(env)).rejects.toThrow("DEE1130_BOOTSTRAP_REFUSED");
     expect(postgres).not.toHaveBeenCalled();
   });
-  it("captures all223 actual source SQL files and exact seed bytes without any connection", () => {
+  it("captures all224 actual source SQL files and exact seed bytes without any connection", () => {
     const source = readBootstrapSources();
-    expect(source.migrations).toHaveLength(223);
+    expect(source.migrations).toHaveLength(224);
     expect(source.migrations.slice(0, 222).at(-1)!.entry.tag).toBe("0221_trader_research_understanding_v1");
     expect(source.migrations[222]!.entry.tag).toBe("0222_trader_historical_reconciliation_v1");
+    expect(source.migrations[223]!.entry).toEqual({ idx: 223, version: "7", when: 1780000000223,
+      tag: "0223_trader_research_application_v1", breakpoints: true });
     for (const item of source.migrations) {
       expect(item.bytes).toEqual(readFileSync(`db/migrations_postgres/${item.entry.tag}.sql`));
       expect(item.identity.hash).toBe(createHash("sha256").update(item.bytes).digest("hex"));
@@ -50,7 +52,8 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     "refuses %s before migration input can be prepared", change => {
       const value = journal();
       if (change === "missing-prefix") value.entries.splice(40, 1);
-      if (change === "extra-future") value.entries.push({ ...value.entries[222], idx: 223 });
+      if (change === "extra-future") value.entries.push({ ...value.entries[223], idx: 224,
+        when: 1780000000224, tag: "0224_unadmitted_future_migration" });
       if (change === "wrong-idx") value.entries[222].idx = 223;
       if (change === "wrong-tag") value.entries[222].tag = "0222_unreviewed_table";
       if (change === "path-traversal") value.entries[10].tag = "../untrusted";
@@ -59,6 +62,18 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
       if (change === "wrong-when") value.entries[222].when++;
       if (change === "reordered") [value.entries[10], value.entries[11]] = [value.entries[11], value.entries[10]];
       if (change === "duplicate-when") value.entries[20].when = value.entries[19].when;
+      expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
+    });
+  it.each(["missing", "malformed", "idx", "tag", "when", "version", "breakpoints"] as const)(
+    "refuses %s0223 without changing the retained222 prefix boundary", field => {
+      const value = journal();
+      if (field === "missing") value.entries.pop();
+      else if (field === "malformed") value.entries[223] = null;
+      else if (field === "idx") value.entries[223].idx = 224;
+      else if (field === "tag") value.entries[223].tag = "0223_unadmitted_application";
+      else if (field === "when") value.entries[223].when++;
+      else if (field === "version") value.entries[223].version = "8";
+      else value.entries[223].breakpoints = false;
       expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
     });
   it("refuses any modified seed, including whitespace, without trusting row count", () => {

@@ -92,46 +92,11 @@ export function createPostgresRuntimeAuthorityStartupWriterV2(db: WaiaPostgresDb
   };
 }
 
-export function createPostgresRuntimeControlLeaseRepositoryV2(db: WaiaPostgresDb): RuntimeControlLeaseRepositoryV2 {
+export type RuntimeControlLeaseHeldExecutorV2 = Pick<WaiaPostgresDb, "execute" | "select" | "insert">;
+
+/** Internal read primitives: caller owns any required snapshot/lock. */
+export function createPostgresRuntimeControlLeaseHeldReaderV2(db: Pick<WaiaPostgresDb, "select">): Pick<RuntimeControlLeaseRepositoryV2, "current" | "assertCurrentHolder"> {
   return {
-    async claimExclusive(value) {
-      validateRuntimeControlLeaseClaimV2(value);
-      return db.transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${value.organizationId}, 637))`);
-        const rows = await tx.select().from(pgSchema.traderRuntimeControlLeaseHeadsV2)
-          .where(eq(pgSchema.traderRuntimeControlLeaseHeadsV2.organizationId, value.organizationId)).limit(1);
-        const head = rows[0];
-        const admissible = head
-          ? Date.parse(value.adjudicatedAtUtc) > Date.parse(head.validUntilUtc) &&
-            value.leaseEpoch === head.leaseEpoch + 1 && value.expectedPreviousDigest === head.contentDigest
-          : value.leaseEpoch === 1 && value.expectedPreviousDigest === null;
-        if (!admissible) return "CONFLICT" as const;
-        await tx.insert(pgSchema.traderRuntimeControlLeaseEpochHistoryV2).values({
-          contentDigest: value.leaseContentDigest,
-          organizationId: value.organizationId,
-          runtimeInstanceId: value.runtimeInstanceId,
-          leaseEpoch: value.leaseEpoch,
-          priorContentDigest: value.expectedPreviousDigest,
-          validUntilUtc: value.validUntilUtc,
-          adjudicatedAtUtc: value.adjudicatedAtUtc,
-        });
-        await tx.insert(pgSchema.traderRuntimeControlLeaseHeadsV2).values({
-          organizationId: value.organizationId,
-          runtimeInstanceId: value.runtimeInstanceId,
-          leaseEpoch: value.leaseEpoch,
-          contentDigest: value.leaseContentDigest,
-          validUntilUtc: value.validUntilUtc,
-        }).onConflictDoUpdate({
-          target: pgSchema.traderRuntimeControlLeaseHeadsV2.organizationId,
-          set: { runtimeInstanceId: value.runtimeInstanceId, leaseEpoch: value.leaseEpoch,
-            contentDigest: value.leaseContentDigest, validUntilUtc: value.validUntilUtc, updatedAt: new Date() },
-        });
-        return "CLAIMED" as const;
-      }).catch((error: unknown) => {
-        if ((error as { code?: string }).code === "23505") return "CONFLICT" as const;
-        throw error;
-      });
-    },
     async current(organizationId) {
       const rows = await db.select().from(pgSchema.traderRuntimeControlLeaseHeadsV2)
         .where(eq(pgSchema.traderRuntimeControlLeaseHeadsV2.organizationId, organizationId)).limit(1);
@@ -146,6 +111,63 @@ export function createPostgresRuntimeControlLeaseRepositoryV2(db: WaiaPostgresDb
         head.contentDigest !== value.leaseContentDigest || !Number.isFinite(now) || now > Date.parse(head.validUntilUtc)) {
         throw new Error("RUNTIME_CONTROL_LEASE_STALE_HOLDER");
       }
+    }
+  };
+}
+
+/** Internal held effect primitive. No transaction acquisition or error recovery.
+ * SQL failures must reach the actual owner's rollback; never continue an aborted transaction. */
+export function createPostgresRuntimeControlLeaseHeldRepositoryV2(db: RuntimeControlLeaseHeldExecutorV2): RuntimeControlLeaseRepositoryV2 {
+  return {
+    ...createPostgresRuntimeControlLeaseHeldReaderV2(db),
+    async claimExclusive(value) {
+      validateRuntimeControlLeaseClaimV2(value);
+      const tx = db;
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${value.organizationId}, 637))`);
+      const rows = await tx.select().from(pgSchema.traderRuntimeControlLeaseHeadsV2)
+        .where(eq(pgSchema.traderRuntimeControlLeaseHeadsV2.organizationId, value.organizationId)).limit(1);
+      const head = rows[0];
+      const admissible = head
+        ? Date.parse(value.adjudicatedAtUtc) > Date.parse(head.validUntilUtc) &&
+          value.leaseEpoch === head.leaseEpoch + 1 && value.expectedPreviousDigest === head.contentDigest
+        : value.leaseEpoch === 1 && value.expectedPreviousDigest === null;
+      if (!admissible) return "CONFLICT" as const;
+      await tx.insert(pgSchema.traderRuntimeControlLeaseEpochHistoryV2).values({
+        contentDigest: value.leaseContentDigest,
+        organizationId: value.organizationId,
+        runtimeInstanceId: value.runtimeInstanceId,
+        leaseEpoch: value.leaseEpoch,
+        priorContentDigest: value.expectedPreviousDigest,
+        validUntilUtc: value.validUntilUtc,
+        adjudicatedAtUtc: value.adjudicatedAtUtc,
+      });
+      await tx.insert(pgSchema.traderRuntimeControlLeaseHeadsV2).values({
+        organizationId: value.organizationId,
+        runtimeInstanceId: value.runtimeInstanceId,
+        leaseEpoch: value.leaseEpoch,
+        contentDigest: value.leaseContentDigest,
+        validUntilUtc: value.validUntilUtc,
+      }).onConflictDoUpdate({
+        target: pgSchema.traderRuntimeControlLeaseHeadsV2.organizationId,
+        set: { runtimeInstanceId: value.runtimeInstanceId, leaseEpoch: value.leaseEpoch,
+          contentDigest: value.leaseContentDigest, validUntilUtc: value.validUntilUtc, updatedAt: new Date() },
+      });
+      return "CLAIMED" as const;
+    },
+  };
+}
+
+export function createPostgresRuntimeControlLeaseRepositoryV2(db: WaiaPostgresDb): RuntimeControlLeaseRepositoryV2 {
+  return {
+    ...createPostgresRuntimeControlLeaseHeldReaderV2(db),
+    async claimExclusive(value) {
+      validateRuntimeControlLeaseClaimV2(value);
+      // Preserve the original actual transaction/savepoint and its recovery point.
+      return db.transaction(tx => createPostgresRuntimeControlLeaseHeldRepositoryV2(tx).claimExclusive(value))
+        .catch((error: unknown) => {
+          if ((error as { code?: string }).code === "23505") return "CONFLICT" as const;
+          throw error;
+        });
     },
   };
 }
