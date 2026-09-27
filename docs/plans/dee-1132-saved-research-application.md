@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: 691
   prUrl: https://github.com/oumaster369/waia/pull/691
-  lastValidatedGitSha: 5740475f7d9c54af20e7262d13e29f5b4e882990
-  lastValidationAt: "2026-09-27T14:38:57.176Z"
+  lastValidatedGitSha: e7bb2927a895aeca987cda52f0c7a56f4467fabe
+  lastValidationAt: "2026-09-27T15:46:57.392Z"
   blockedReason: null
-  nextAction: "PR691 is open. Await exact-head GitHub full units, strict25-suite PostgreSQL union and all applicable checks; root must verify fresh head/base/reviews/Linear blockers before checked merge. Bounded local native574 and independent acceptance carry unchanged; no live or scientific qualification follows."
+  nextAction: "PR691 original fbcc CI failed; corrected executable e7bb passed scoped units and local readiness. Await independent/root source review, separately released successor45 native proof, exact unchanged bootstrap carry, and successor GitHub full units/strict25 union before checked merge. Native574 remains historical; DEE-1133 and activation remain held."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1112,3 +1112,14 @@ The first seven-path correction was already committed as clean **`cd75337344a300
 | `tests/unit/trader-information-sufficiency-consumer-closure.test.ts` | Retain exact existing symbol inventory and all forbidden/bypass checks. Pin repository delegation to the shared assignment reader, its actual actor/profile/configuration checks, and absence of shared sufficiency writer/authority calls. |
 
 No additional runtime function, command entry, SQL/schema/seed/bootstrap, workflow, executed-proof guard, native registration, threshold or authority change is admitted. Both original failed-shard artifacts remain preserved. Root must read this sole-plan amendment before these three edits and the coordinated final ten-path validation stage; LOCAL HEAVY is temporarily assigned to the disjoint DEE-1134 owner. The separately granted successor45 native run, exact unchanged bootstrap carry, independent review and strict25/full-unit successor CI obligations remain as above. DEE-1133 remains held.
+
+
+### CI service/closure correction source result — e7bb2927
+
+Root admitted sole-plan `fcc7360421f2c93b0069326fb45e5bf28f5a28b1` and the later three-path amendment `75af71bc4c34a8cf6cc10082562c7cf7bc3154b7`. Clean executable **`e7bb2927a895aeca987cda52f0c7a56f4467fabe`**, tree **`7c1c82bebe413f0acf9dd766db32b145f4e8db1c`**, implements exactly the ten admitted non-plan paths. The MI service is again the sole canonical repository importer; application witness persistence uses only the two typed held delegates. Exact capital25 wiring and actual executed-proof negative controls preserve the old24, and both Understanding/sufficiency inventories trace the existing shared checks without restoring writers or adding authority.
+
+The unchanged generator produced91 identical command paths with exactly two changed hashes (MI service and application repository); command digest is **`69173bd6a13256fe6dcb31ccd7fa21bb3d59776248d64e1ed6b121a02c9fecc2`**. All11 pure entries and digest remain identical. The full mode/blob/path census preserves all **5517** entries outside the ten-path correction and sole plan versus publishedfbcc, including all224 migrations, native45 registrations/body assertions, bootstrap/seed, workflows, proof guard, shared computation, original measurement persisters and limits.
+
+Actual focused validation on clean e7bb passed **236 tests /10 files /0 failures /0 skips** at **15:44:53.799–15:45:07.219Z** on2026-09-27. This includes all four failed CI files, all five existing application unit/compatibility files and the MI receipt companion. Serial scoped lint, whole lint, typecheck, build, canon, governance, Reality and Execution validations all exit0 at **15:45:31.165–15:46:57.393Z**. Scoped lint has0 warnings; whole lint retains328 warnings/0 errors. Reality reports157 sources/141 consumers/26 references; Execution reports no violations and preserves the fail-closed legacy boundary. These are actual local checks, not a relabelled GitHub full-suite or native result.
+
+External **`parallel-runtime-owner/dee1132-ci-service-correction-fbcc/`** retains both original CI failure-log hashes, prior accepted native/bootstrap references, intermediate generator attribution, immutable corrected source and raw check receipts/logs. Its pre-check21-artifact `EXECUTABLE-FREEZE.json` SHA is **`e7fc8e145899ae9075e07c44ff4cd9e73fcdcbd95a812719e8a7bace416883d9`**. This result commit changes only the canonical plan and carries e7bb executable bytes. Independent/root review, successor45 native proof and exact-head GitHub full units/strict25 remain outstanding; no DB/native run, publication, merge, deployment, production/C3 change or activation was performed by this correction owner.
