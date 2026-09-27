@@ -1,3 +1,4 @@
+import { partitionDirectionalEvidenceV1, judgeDirectionalEvidenceV1, rankEvidenceJudgmentsV1 } from "./evidence-judgment-kernel-v1";
 import { createHash } from "node:crypto";
 
 import type { HypothesisType } from "@/lib/trader/intelligence/hypothesis/hypothesis.types";
@@ -97,7 +98,14 @@ export function createCanonicalRuntimeIntelligenceStateProviderV1(
   return (input) => foldCanonicalRuntimeIntelligenceStateV1({ ...input, projectHypothesis }, deps);
 }
 
-const JUDGMENT_ORDER = { SUPPORTED: 0, CONTESTED: 1, WEAKENED: 2 } as const;
+function assertOrdinaryRows(rows: readonly unknown[]): void {
+  for (const row of rows) {
+    const marker = row as { authority?: unknown; schemaVersion?: unknown };
+    if (marker?.authority === "RESEARCH_APPLICATION_ONLY" ||
+      (typeof marker?.schemaVersion === "string" && marker.schemaVersion.startsWith("waia.trader.research_application")))
+      throw new Error("RESEARCH_APPLICATION_BOUNDARY");
+  }
+}
 
 export async function foldCanonicalRuntimeIntelligenceStateV1(
   input: FoldCanonicalRuntimeIntelligenceStateV1Input,
@@ -119,6 +127,8 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
     { symbol: input.symbol, regimeScope: input.regimeScope },
     epistemicRecordCutoff,
   );
+  assertOrdinaryRows(snapshot.knowledgeEdges);
+  assertOrdinaryRows(snapshot.marketPredictions);
   if (input.sealedHistoricalKnowledge) {
     const sealedBoundary = Date.parse(input.sealedHistoricalKnowledge.marketPitBoundary);
     if (
@@ -140,6 +150,7 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
     );
   }
   const rows = await deps.hypotheses.listHypotheses(input.context, "market_claim");
+  assertOrdinaryRows(rows);
   if (rows.some((row) => row.organizationId !== input.context.organizationId)) {
     throw new Error("[canonical-runtime-fold] cross-organization hypothesis row");
   }
@@ -189,7 +200,9 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
         lifecycle.createdAt.toISOString() !== sealed.lifecycleCreatedAt)) {
       throw new Error(`[canonical-runtime-fold] sealed lifecycle mismatch for ${hypothesis.id}`);
     }
-    const evidence = (await deps.evidence.listEvidence(input.context, hypothesis.hypothesisKey))
+    const evidenceRows = await deps.evidence.listEvidence(input.context, hypothesis.hypothesisKey);
+    assertOrdinaryRows(evidenceRows);
+    const evidence = evidenceRows
       .filter((row) => row.eventTime.getTime() <= input.asOf.getTime() &&
         row.ingestTime.getTime() <= epistemicRecordCutoff.getTime() &&
         row.createdAt.getTime() <= epistemicRecordCutoff.getTime())
@@ -211,8 +224,9 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
         throw new Error(`[canonical-runtime-fold] evidence lineage mismatch for ${row.id}`);
       }
     }
-    const supportingEvidence = evidence.filter((row) => row.direction === "FOR").map(toEvidenceRef);
-    const contradictingEvidence = evidence.filter((row) => row.direction === "AGAINST").map(toEvidenceRef);
+    const partition = partitionDirectionalEvidenceV1(evidence);
+    const supportingEvidence = partition.supportingEvidence.map(toEvidenceRef);
+    const contradictingEvidence = partition.contradictingEvidence.map(toEvidenceRef);
     const knowledgeRefs = snapshot.knowledgeEdges
       .filter((edge) => edge.organizationId === input.context.organizationId &&
         edge.hypothesisId === hypothesis.id &&
@@ -233,11 +247,7 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
       .filter((ref) => ref.knowledgeState !== "INELIGIBLE" && ref.knowledgeState !== "OBSERVATION_ONLY")
       .sort((a, b) => a.knowledgeEdgeId.localeCompare(b.knowledgeEdgeId));
     const hasVerified = knowledgeRefs.some((ref) => ref.knowledgeState === "RESOLVED_CORRECT");
-    const ordinalJudgment = hasVerified && supportingEvidence.length > contradictingEvidence.length
-      ? "SUPPORTED"
-      : contradictingEvidence.length > 0
-        ? "CONTESTED"
-        : "WEAKENED";
+    const ordinalJudgment = judgeDirectionalEvidenceV1(hasVerified, supportingEvidence.length, contradictingEvidence.length);
     candidates.push({
       hypothesisId: hypothesis.id,
       hypothesisKey: hypothesis.hypothesisKey,
@@ -256,15 +266,7 @@ export async function foldCanonicalRuntimeIntelligenceStateV1(
     });
   }
 
-  const hypotheses = candidates
-    .sort((a, b) =>
-      JUDGMENT_ORDER[a.ordinalJudgment] - JUDGMENT_ORDER[b.ordinalJudgment] ||
-      b.supportingEvidence.length - a.supportingEvidence.length ||
-      a.contradictingEvidence.length - b.contradictingEvidence.length ||
-      a.hypothesisKey.localeCompare(b.hypothesisKey) ||
-      a.hypothesisId.localeCompare(b.hypothesisId),
-    )
-    .map((row, rankOrdinal) => ({ ...row, rankOrdinal }));
+  const hypotheses = rankEvidenceJudgmentsV1(candidates);
 
   return buildCanonicalRuntimeIntelligenceStateV1({
     organizationId: input.context.organizationId,

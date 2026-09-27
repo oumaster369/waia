@@ -84,6 +84,16 @@ on:
       - "tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts"
       - "lib/trader/paper/durable-noncapital/**"
       - "lib/trader/paper/research-understanding-v1/**"
+      - "lib/trader/paper/research-application-v1/**"
+      - "lib/trader/intelligence/hypothesis/evidence-judgment-kernel-v1.ts"
+      - "scripts/trader/generate-research-application-manifest.ts"
+      - "tests/helpers/research-application-v1-process.ts"
+      - "tests/integration/postgres-research-application-v1.test.ts"
+      - "tests/unit/research-application-v1-specification.test.ts"
+      - "tests/unit/research-application-v1-compatibility.test.ts"
+      - "tests/unit/research-application-v1-capability.test.ts"
+      - "tests/unit/research-application-v1-owner.test.ts"
+      - "tests/unit/research-application-v1-bounds.test.ts"
       - "tests/integration/postgres-research-understanding-v1.test.ts"
       - "tests/helpers/research-understanding-*.ts"
       - "tests/unit/trader-research-understanding-*.test.ts"
@@ -243,7 +253,8 @@ jobs:
             tests/integration/postgres-mi-canonical-pit-lineage-v1.test.ts \
             tests/integration/postgres-research-understanding-v1.test.ts \
             tests/integration/postgres-knowledge-snapshot-eligibility.test.ts \
-            tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts
+            tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts \
+            tests/integration/postgres-research-application-v1.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   historical-reconciliation-profile:

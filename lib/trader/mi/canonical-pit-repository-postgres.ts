@@ -570,39 +570,54 @@ export async function persistCanonicalMeasurementDefinitionV1Postgres(
     throw new Error("CANONICAL_MEASUREMENT_SCOPE_MISMATCH");
   }
   assertCanonicalMeasurementDefinitionV1(definition);
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const inserted = await tx
-      .insert(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
-      .values({
-        id: definition.id,
-        organizationId: scoped.organizationId,
-        category: definition.category,
-        name: definition.name,
-        inputContractsJson: definition.inputContracts,
-        outputSchemaVersion: definition.outputSchemaVersion,
-        authority: definition.authority,
-        definitionJson: definition,
-        contentDigest: definition.contentDigest,
-        schemaVersion: definition.schemaVersion,
-      })
-      .onConflictDoNothing({ target: pgSchema.traderMiCanonicalMeasurementDefinitionV1.id })
-      .returning({ id: pgSchema.traderMiCanonicalMeasurementDefinitionV1.id });
-    const rows = await tx
-      .select()
-      .from(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
-      .where(
-        and(
-          eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.id, definition.id),
-          eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.organizationId, scoped.organizationId),
-        ),
-      )
-      .limit(1);
-    const stored = rows[0]?.definitionJson as CanonicalMeasurementDefinitionV1 | undefined;
-    if (!stored || canonicalJsonString(stored) !== canonicalJsonString(definition)) {
-      throw new Error("CANONICAL_MEASUREMENT_DEFINITION_CONFLICT");
-    }
-    return { definition: stored, insertedNew: inserted.length === 1 };
-  });
+  return runWaiaPostgresTransaction(db, (tx) => persistCanonicalMeasurementDefinitionWithinTransactionV1PostgresCore(tx, scoped, definition));
+}
+
+/** Internal held-client seam; the caller owns transaction/fencing and rollback. */
+export async function persistCanonicalMeasurementDefinitionWithinTransactionV1Postgres(
+  tx: Pick<CanonicalWriteExecutor, "select" | "insert">,
+  context: OrgContext,
+  definition: CanonicalMeasurementDefinitionV1,
+): Promise<{ definition: CanonicalMeasurementDefinitionV1; insertedNew: boolean }> {
+  const scoped = requireOrgContext(context.organizationId);
+  if (definition.organizationId !== scoped.organizationId) throw new Error("CANONICAL_MEASUREMENT_SCOPE_MISMATCH");
+  assertCanonicalMeasurementDefinitionV1(definition);
+  return persistCanonicalMeasurementDefinitionWithinTransactionV1PostgresCore(tx, scoped, definition);
+}
+async function persistCanonicalMeasurementDefinitionWithinTransactionV1PostgresCore(
+  tx: Pick<CanonicalWriteExecutor, "select" | "insert">, scoped: OrgContext, definition: CanonicalMeasurementDefinitionV1,
+): Promise<{ definition: CanonicalMeasurementDefinitionV1; insertedNew: boolean }> {
+  const inserted = await tx
+    .insert(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
+    .values({
+      id: definition.id,
+      organizationId: scoped.organizationId,
+      category: definition.category,
+      name: definition.name,
+      inputContractsJson: definition.inputContracts,
+      outputSchemaVersion: definition.outputSchemaVersion,
+      authority: definition.authority,
+      definitionJson: definition,
+      contentDigest: definition.contentDigest,
+      schemaVersion: definition.schemaVersion,
+    })
+    .onConflictDoNothing({ target: pgSchema.traderMiCanonicalMeasurementDefinitionV1.id })
+    .returning({ id: pgSchema.traderMiCanonicalMeasurementDefinitionV1.id });
+  const rows = await tx
+    .select()
+    .from(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
+    .where(
+      and(
+        eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.id, definition.id),
+        eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.organizationId, scoped.organizationId),
+      ),
+    )
+    .limit(1);
+  const stored = rows[0]?.definitionJson as CanonicalMeasurementDefinitionV1 | undefined;
+  if (!stored || canonicalJsonString(stored) !== canonicalJsonString(definition)) {
+    throw new Error("CANONICAL_MEASUREMENT_DEFINITION_CONFLICT");
+  }
+  return { definition: stored, insertedNew: inserted.length === 1 };
 }
 
 export async function persistCanonicalMeasurementValueLineageV1Postgres(
@@ -614,92 +629,106 @@ export async function persistCanonicalMeasurementValueLineageV1Postgres(
   if (value.organizationId !== scoped.organizationId) {
     throw new Error("CANONICAL_MEASUREMENT_SCOPE_MISMATCH");
   }
-  return runWaiaPostgresTransaction(db, async (tx) => {
-    const definitionRows = await tx
-      .select({
-        definitionJson: pgSchema.traderMiCanonicalMeasurementDefinitionV1.definitionJson,
-      })
-      .from(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
-      .where(
-        and(
-          eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.id, value.definitionId),
-          eq(
-            pgSchema.traderMiCanonicalMeasurementDefinitionV1.organizationId,
-            scoped.organizationId,
-          ),
-          eq(
-            pgSchema.traderMiCanonicalMeasurementDefinitionV1.contentDigest,
-            value.definitionContentDigest,
-          ),
-        ),
-      )
-      .limit(1);
-    const definition = definitionRows[0]?.definitionJson as
-      | CanonicalMeasurementDefinitionV1
-      | undefined;
-    if (!definition) {
-      throw new Error("CANONICAL_MEASUREMENT_DEFINITION_NOT_FOUND");
-    }
-    assertCanonicalMeasurementDefinitionV1(definition);
-    assertCanonicalMeasurementValueLineageV1(value, definition);
+  return runWaiaPostgresTransaction(db, (tx) => persistCanonicalMeasurementValueLineageWithinTransactionV1PostgresCore(tx, scoped, value));
+}
 
-    const existing = await tx
-      .select()
-      .from(pgSchema.traderMiCanonicalMeasurementValueV1)
-      .where(
-        and(
-          eq(pgSchema.traderMiCanonicalMeasurementValueV1.id, value.id),
-          eq(pgSchema.traderMiCanonicalMeasurementValueV1.organizationId, scoped.organizationId),
+/** Internal held-client seam; the caller owns transaction/fencing and rollback. */
+export async function persistCanonicalMeasurementValueLineageWithinTransactionV1Postgres(
+  tx: Pick<CanonicalWriteExecutor, "select" | "insert">,
+  context: OrgContext,
+  value: CanonicalMeasurementValueLineageV1,
+): Promise<{ value: CanonicalMeasurementValueLineageV1; insertedNew: boolean }> {
+  const scoped = requireOrgContext(context.organizationId);
+  if (value.organizationId !== scoped.organizationId) throw new Error("CANONICAL_MEASUREMENT_SCOPE_MISMATCH");
+  return persistCanonicalMeasurementValueLineageWithinTransactionV1PostgresCore(tx, scoped, value);
+}
+async function persistCanonicalMeasurementValueLineageWithinTransactionV1PostgresCore(
+  tx: Pick<CanonicalWriteExecutor, "select" | "insert">, scoped: OrgContext, value: CanonicalMeasurementValueLineageV1,
+): Promise<{ value: CanonicalMeasurementValueLineageV1; insertedNew: boolean }> {
+  const definitionRows = await tx
+    .select({
+      definitionJson: pgSchema.traderMiCanonicalMeasurementDefinitionV1.definitionJson,
+    })
+    .from(pgSchema.traderMiCanonicalMeasurementDefinitionV1)
+    .where(
+      and(
+        eq(pgSchema.traderMiCanonicalMeasurementDefinitionV1.id, value.definitionId),
+        eq(
+          pgSchema.traderMiCanonicalMeasurementDefinitionV1.organizationId,
+          scoped.organizationId,
         ),
-      )
-      .limit(1);
-    if (existing[0]) {
-      const stored = {
-        id: existing[0].id,
-        schemaVersion: existing[0].schemaVersion,
-        organizationId: existing[0].organizationId,
-        definitionId: existing[0].definitionId,
-        definitionContentDigest: existing[0].definitionContentDigest,
-        outputContentDigest: existing[0].outputContentDigest,
-        inputs: existing[0].inputLineageJson,
-        authority: existing[0].authority,
-        contentDigest: existing[0].contentDigest,
-      } as CanonicalMeasurementValueLineageV1;
-      if (canonicalJsonString(stored) !== canonicalJsonString(value)) {
-        throw new Error("CANONICAL_MEASUREMENT_VALUE_CONFLICT");
-      }
-      return { value: stored, insertedNew: false };
-    }
+        eq(
+          pgSchema.traderMiCanonicalMeasurementDefinitionV1.contentDigest,
+          value.definitionContentDigest,
+        ),
+      ),
+    )
+    .limit(1);
+  const definition = definitionRows[0]?.definitionJson as
+    | CanonicalMeasurementDefinitionV1
+    | undefined;
+  if (!definition) {
+    throw new Error("CANONICAL_MEASUREMENT_DEFINITION_NOT_FOUND");
+  }
+  assertCanonicalMeasurementDefinitionV1(definition);
+  assertCanonicalMeasurementValueLineageV1(value, definition);
 
-    await tx.insert(pgSchema.traderMiCanonicalMeasurementValueV1).values({
-      id: value.id,
-      organizationId: scoped.organizationId,
-      definitionId: value.definitionId,
-      definitionContentDigest: value.definitionContentDigest,
-      outputContentDigest: value.outputContentDigest,
-      inputCount: value.inputs.length,
-      inputLineageJson: value.inputs,
-      authority: value.authority,
-      contentDigest: value.contentDigest,
-      schemaVersion: value.schemaVersion,
-    });
-    await tx.insert(pgSchema.traderMiCanonicalMeasurementValueInputV1).values(
-      value.inputs.map((input, inputOrdinal) => ({
-        organizationId: scoped.organizationId,
-        measurementValueId: value.id,
-        inputOrdinal,
-        observationId: input.observationId,
-        observationKind: input.observationKind,
-        observationSchemaVersion: input.observationSchemaVersion,
-        observationContentDigest: input.observationContentDigest,
-        sourceId: input.sourceId,
-        trustAsOfReceiptId: input.trustAsOfReceiptId,
-        trustRevisionId: input.trustRevisionId,
-        trustRevisionContentDigest: input.trustRevisionContentDigest,
-      })),
-    );
-    return { value, insertedNew: true };
+  const existing = await tx
+    .select()
+    .from(pgSchema.traderMiCanonicalMeasurementValueV1)
+    .where(
+      and(
+        eq(pgSchema.traderMiCanonicalMeasurementValueV1.id, value.id),
+        eq(pgSchema.traderMiCanonicalMeasurementValueV1.organizationId, scoped.organizationId),
+      ),
+    )
+    .limit(1);
+  if (existing[0]) {
+    const stored = {
+      id: existing[0].id,
+      schemaVersion: existing[0].schemaVersion,
+      organizationId: existing[0].organizationId,
+      definitionId: existing[0].definitionId,
+      definitionContentDigest: existing[0].definitionContentDigest,
+      outputContentDigest: existing[0].outputContentDigest,
+      inputs: existing[0].inputLineageJson,
+      authority: existing[0].authority,
+      contentDigest: existing[0].contentDigest,
+    } as CanonicalMeasurementValueLineageV1;
+    if (canonicalJsonString(stored) !== canonicalJsonString(value)) {
+      throw new Error("CANONICAL_MEASUREMENT_VALUE_CONFLICT");
+    }
+    return { value: stored, insertedNew: false };
+  }
+
+  await tx.insert(pgSchema.traderMiCanonicalMeasurementValueV1).values({
+    id: value.id,
+    organizationId: scoped.organizationId,
+    definitionId: value.definitionId,
+    definitionContentDigest: value.definitionContentDigest,
+    outputContentDigest: value.outputContentDigest,
+    inputCount: value.inputs.length,
+    inputLineageJson: value.inputs,
+    authority: value.authority,
+    contentDigest: value.contentDigest,
+    schemaVersion: value.schemaVersion,
   });
+  await tx.insert(pgSchema.traderMiCanonicalMeasurementValueInputV1).values(
+    value.inputs.map((input, inputOrdinal) => ({
+      organizationId: scoped.organizationId,
+      measurementValueId: value.id,
+      inputOrdinal,
+      observationId: input.observationId,
+      observationKind: input.observationKind,
+      observationSchemaVersion: input.observationSchemaVersion,
+      observationContentDigest: input.observationContentDigest,
+      sourceId: input.sourceId,
+      trustAsOfReceiptId: input.trustAsOfReceiptId,
+      trustRevisionId: input.trustRevisionId,
+      trustRevisionContentDigest: input.trustRevisionContentDigest,
+    })),
+  );
+  return { value, insertedNew: true };
 }
 
 export async function listCanonicalGatewayReceiptsV1Postgres(
