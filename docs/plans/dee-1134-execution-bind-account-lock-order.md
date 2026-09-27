@@ -13,7 +13,7 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: draft
+  status: in-progress
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3]
@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root reviews this sole plan before WP-1 source admission; all native execution needs separate exact-head release."
+  nextAction: "Freeze and independently review WP-1 test-only source before any separately admitted unchanged-production native baseline."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -33,7 +33,7 @@ provenance:
 
 Issue: [DEE-1134](https://linear.app/deepsense/issue/DEE-1134/ai-trader-serialize-execution-bind-with-risk-account-locks-and-refresh), UUID `86295e68-cca6-402e-97c0-c73c3b370122`; parent DEE-639, project WAIA Development, execution label `backend`. The actual issue was read in Todo on 27 September 2026. Accepted base and freshly fetched `origin/main`: `dd5fdb00b4bd829983ea34766b8ab193e0e5fe55`, tree `fc4d48c9d06517b180da0eebd1af0642892d2388`.
 
-This is the sole canonical plan. Root authorized its preparation and local commit only; it is not approval to implement, import product code, run tests, connect to PostgreSQL, publish, merge or activate anything. All implementation and native evidence below remain pending. T3 is the existing technical correction authorization recorded in the issue and session, not authority to create financial or scientific rules. Root coordinates exact source admission, independent review, local resources, publication and merge separately.
+This is the sole canonical plan. Root adopted clean plan head `825a9c6d106ccb7dad6374689bb7d12af82cbc2f` and released WP-1 test-only source plus scoped lint/typecheck/canon on 27 September 2026. No PostgreSQL/native, WP-2 production, publication or activation grant follows that admission. T3 is the existing technical correction authorization recorded in the issue and session, not authority to create financial or scientific rules. Root coordinates exact source admission, independent review, local resources, publication and merge separately.
 
 ## Goal and source finding
 
@@ -69,7 +69,7 @@ Five new registrations:
 1. **Issued bind versus actual issued revoke.** Prepare one actual ISSUED allowance. Start the real `revokeRiskAllowanceV2Postgres` and pause after its account lock; start real new bind; observe the binder's account wait and whether it already acquired the allowance; release revoke; await both outcomes. Corrected behavior: revoke true exactly once, bind retains the existing nested-plan `ExecutionV2PersistenceConflictError` for the now-REVOKED allowance, no execution policy/plan/order/attempt/report or CONSUMED event persists, reservations R=25→0 and pending P=0, one linked ALLOWANCE_REVOKED event, zero callback.
 2. **Replayed bind versus actual dispatch.** Commit one actual binding first. Pause actual dispatch after its account lock; start exact bind replay; observe the actual account wait/acquisition history; release dispatch. Corrected behavior: SUBMITTED and consumedNow:false both terminate, original IDs/digests remain, one order/attempt/plan/policy, exactly one committed SUBMIT_STARTED and inert callback, no duplicate consumption, R=0/P=25 unchanged. The callback reads the committed report and acquires the account lock in a new short transaction, proving the original root transaction closed. It performs no connector or external order call.
 3. **Fresh plan expiry during an actual account wait.** Hold the exact account in the other client, start bind while valid, observe its server wait, bounded-poll real database time to the declared plan close, release. Policy and allowance remain valid longer. Require exact `ExecutionV2AuthorityRefusedError` / `EXECUTION_WINDOW_CLOSED`, no durable bind effects or new Risk event, R=25/P=0 unchanged.
-4. **Replay policy expiry during a later actual attempt wait.** Initially commit the binding while valid. Hold its exact attempt row, start replay, prove its pre-consumption clock sample was still within the policy window and its subsequent actual attempt wait. Bounded-poll real database time to policy expiry, release. Require the exact window error with unchanged stored binding, timestamps, ledger/report heads and R=0/P=25; no callback. This catches a check placed only after the first account lock.
+4. **Replay policy expiry during a later actual attempt wait.** Initially commit the binding while valid. Hold its exact attempt row, start replay, prove its pre-consumption clock sample was still within the policy window and its subsequent actual attempt wait. Bounded-poll real database time to policy expiry, release. Require the exact window error with unchanged stored binding, timestamps, ledger/report heads and R=0/P=25; no callback. This catches a check placed only after the first account lock. Actual `contracts.ts:447–455` requires plan close at or before policy expiry, so the valid fixture uses a shared deadline and does not claim isolated policy-only expiry; root accepted this necessary clarification during WP-1.
 5. **Typed missing account.** After real issuance, remove only the synthetic fixture's own account-state row under the existing schema, leaving its immutable allowance/verdict/events. Require existing `RiskV2AdmissionRefusedError`, name and reason `RISK_ACCOUNT_STATE_MISSING`, no policy/plan/order/attempt/report or new Risk event and no foreign-tenant mutation. The accepted schema's account constraint triggers cover INSERT/UPDATE and its allowance FKs target verdict/order, so this needs no new trigger disable. If actual admitted schema disagrees, preserve the failure; do not bypass it. Distinguish the fixture deletion's ordinary admin audit from bind effects.
 
 Record both settled outcomes, full nested PostgreSQL cause/code chains (including a Drizzle-wrapped `40P01`) and acquired-query/server-wait observations in raw output before post-fix assertions can fail. Either transaction may be the baseline deadlock victim. Baseline dispatch callback may be zero or one depending on the victim; corrected dispatch must produce exactly one. Claim an actual deadlock only for emitted `40P01`; `55P03`/`57014` or harness deadlines remain distinct failures. All promises receive rejection handlers immediately; finally release barriers, await both real operations and close both clients. Do not abandon in-flight SQL with a timeout race. Preserve all baseline failure evidence without automatic retries.
@@ -132,4 +132,6 @@ Retain Execution atomic bind/restart/one-effect (native 621–692), locked allow
 
 One issue, one canonical plan, one branch, one eventual PR to main. Synchronization, publication and exact-head merge admission remain root-coordinated; this task authorizes no push or PR. A later reviewed revert can restore the prior executable while preserving all native evidence; no schema rollback is required. No production/live activation or scientific qualification follows this technical correction.
 
-Current checkpoint: plan-only preparation. No code implemented, imports/tests/database work executed, native race reproduced, runner admitted or work package completed. Concrete query-barrier implementation and the actual source/seal delta require review before their respective native stages. All source/readiness/native/CI acceptance remains pending.
+Current checkpoint: WP-1 test-only source prepared under the exact plan admission. The existing native test file contains the finite real-query forwarding observer and the five declared cases; production and inventory bytes remain unchanged. Removing only the two new helper/case blocks and explicit import additions reconstructs the entire prior native file byte-for-byte, including cleanup. No native import/execution, database connection, race reproduction, runner admission or work-package completion is claimed.
+
+Scoped ESLint, `pnpm typecheck` and `pnpm validate:canon` passed serially on 27 September 2026; canon checked 263 documents. The checked native-file SHA-256 is `c59d9e498ebff7fd862cc442f4a2d0b9029ea8759061cc88d73c9f7b84ca7f28`. Actual logs, source identities and the checked plan snapshot are external under `parallel-runtime-owner/dee1134-wp1-test-baseline-dd5f`; this results paragraph is a documentation-only follow-up to the canon receipt. Local-heavy ownership was released immediately after checks. The concrete barrier/source freeze still requires independent/root review before the baseline. WP-1 is not complete until that native evidence is accepted; the actual WP-2 source/seal delta and all native/full-readiness/CI acceptance remain pending.
