@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-2
-  completedWorkPackages: [WP-1]
-  remainingWorkPackages: [WP-2, WP-3]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: "13c57e2749514d8bb88d23a969187d793c4c9d1b"
+  lastValidationAt: "2026-09-27T17:01:41.427Z"
   blockedReason: null
-  nextAction: "Freeze and independently review WP-2 source and readiness before a separately admitted full Execution/Risk native proof."
+  nextAction: "Integrate accepted main 630abef5 by merge, validate unchanged Execution bytes and new 224 migration chain, then obtain independent source and separately admitted native review; publication and CI remain pending."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -169,3 +169,25 @@ Root then admitted exactly WP-2 authority, the single inventory content seal and
 Only `sourceDiscovery.sortedContentDigestHex` is mechanically refreshed from the actual157 reviewed source paths; all counts, path digests, rules, consumer maps and connector authority are unchanged. Mapped unit checks, both consumer graph validators and serial scoped/full readiness are authorized; corrected native execution, publication, merge and WP-3 completion remain pending. Root owns preparation of the separate full50 native runner (39 Execution plus11 Risk, zero skips) and its independent review/exact resource grant.
 
 WP-2 source/readiness checks passed serially on 27 September 2026, finishing at 16:51:31 UTC: the mapped five unit files (16 tests, zero failures/skips), Execution and Reality consumer graph validators, scoped authority ESLint, typecheck, full lint, build, canon and governance. Full lint exited 0 with 328 warnings; build exited 0 with the existing middleware-convention deprecation notice. The Reality validator verified 157 source paths, 141 consumer paths and 26 connector references with content digest `95fe0b6d327a20cd7e7372bafa8de4c52ed46c5f7be40370559e64d951776b73`. Checked authority SHA-256 is `4a2df739225c71e381487afcd1c00bd8468cb7b7d28681dd0e335e9a48949761`; frozen native bytes remain unchanged. Local-heavy ownership was released immediately. Raw receipts, the checked plan snapshot and exact source/inventory proof are external under `parallel-runtime-owner/dee1134-wp2-account-lock-6a468089`; this results paragraph is the only documentation follow-up to those checks. Independent WP-2 source review and full50 corrected native acceptance remain pending, with no DB/native, publication or merge performed.
+
+## WP-2 corrected full native result; WP-3 publication readiness
+
+At clean `13c57e2749514d8bb88d23a969187d793c4c9d1b`, tree `6017854b75f10937faa374787db256bbbeed0629`, the separately admitted corrected native run completed on 27 September 2026 at 17:01:20.518–17:01:41.427 UTC: 39 Execution and 11 Risk tests, all 50 passed, zero failures/skips/todo/retries/watchdog interruptions. Native and runner both exited 0. All thirteen proof records from the five new cases were present.
+
+Actual server waits showed the two separate clients and account-first progress in both contention schedules, without deadlock/lock timeout/statement cancellation. Issued revoke completed before bind's existing persistence conflict, with no lower bind effects. Dispatch and immutable replay both succeeded with one inert callback and observed commit/lock release. Both real deadline waits then refused with `EXECUTION_WINDOW_CLOSED` and identical durable before/after state. Missing account preserved the typed refusal and own/foreign state. The three earlier baseline runs remain retained as their actual incomplete 7/13, incomplete 10/13 and complete RED 13/13 results.
+
+The fresh retained synthetic database was `waia_dee1121_dee1134_corrected_20260927_1700` on the existing authenticated loopback profile. All 223 original migration hashes/when matched before/after; all 5,509 Git/worktree entries, global roles, trigger/RLS/ACL/function/fault posture and client closure were checked. No source, test, guard or result was changed or rerun. Root's offline verifier corrected its own variable-fraction timestamp parsing on the unchanged raw strings; this was not a native correction.
+
+Actual evidence is `parallel-runtime-owner/dee1134-native-corrected-13c57e27/results/`: `RESULTS-FREEZE.json` SHA-256 `87f097fad5b5501551ac65365821034f42446c624cddd8225770141df4277917`, report `1af96a96dedad462e04ba22460a98bc665240aa7de9035dde4a4758138cd27c7`. The earlier WP-2 source/runner audit is `milestone-audits/DEE1134-WP2-source-runner-13c57e27/REPORT.md`, SHA-256 `755daee0799e5a84d871eac71430225c4c0c99836f25ce1129d187204c3b67e7`, freeze `c33e0ea88aa1724c53a64da345c9a3949301fb28c1390653f28960939fdfde9d`.
+
+Independent final outcome audit: **ACCEPTED** in `milestone-audits/DEE1134-corrected-native-13c57e27/REPORT.md`, SHA-256 `0b308caefd5765cd0259bc0d84ce79728994f40011fe4ecaf46bc9d976c84637`, six-artifact freeze `59f525a92c6b82ff5490d185fcbad45b54612374dc21878de3138a5e2e989417`. Root adopted that finite proof in `parallel-runtime-owner/dee1134-native-corrected-13c57e27/root-final-native-adoption.json`, SHA-256 `f111626e01c216421fc775ea9229454ece22db5e62264197e9d6d2e2b5f4e081`. WP-2 implementation and its accepted local native proof are complete; WP-3 remains open for this plan's canon receipt, exact rendered PR-body preflight, fresh base coordination and all applicable exact-head GitHub checks/merge admission. No PR number/URL, CI success, merge, deployment, production privilege acceptance, full product deadlock freedom, scientific qualification or live-trading readiness is claimed.
+
+Root must freshly confirm the accepted main before publication or integration because DEE-1132 may merge meanwhile. The validated source here descends from accepted `dd5fdb00b4bd829983ea34766b8ab193e0e5fe55`; no automatic rebase, integration or evidence carry to a different executable is authorized. Any required integration must receive its own exact source/validation decision.
+
+## WP-3 accepted-main integration admission — 27 September 2026
+
+PR #691 is merged. Root verified accepted `origin/main` and the primary fast-forward at `630abef5b3be074764715fb94047f43db3ad6765`, tree `48518be94496a4fdfc1ac9a476468fd8a9ec4550`, at 17:17 UTC and admitted this bounded integration. The existing DEE-1134 branch must first record this sole-plan contract, then merge that exact commit into the validated `13c57e2749514d8bb88d23a969187d793c4c9d1b` lineage; no rebase or rewritten baseline is authorized.
+
+Execution authority and the existing Execution native suite must remain byte-identical to `13c57e27`. The net diff against accepted `630abef5` must contain only the existing four admitted paths: authority, native suite, Reality source-consumer inventory and this plan. Any inventory conflict is limited to mechanically recomputing `sourceDiscovery.sortedContentDigestHex` from the actual 157 source bytes; all other inventory fields must equal accepted `630abef5`. All DEE-1132 source, its 45 native registrations, computation manifests, schema and the newly accepted complete 224-entry migration chain must carry unchanged from that base. No guard, test semantics, scope or runtime cap may change.
+
+Run the prior nine serial local readiness checks on the integrated source, plus both relevant computation-manifest validations carried by the accepted base. Preserve actual commands, source hashes, stdout/stderr and failures. Root grants this finite source/readiness work and exclusive local-heavy ownership only; no PostgreSQL/native or publication grant follows. Freeze clean merge parents, all Git/source identities, four-path scope and accepted-base migration/manifests, then obtain independent source review. Root will separately bind and admit a fresh full 39 Execution + 11 Risk native run with exact 224 SQL/hash/when, unchanged five-case/13-record assertions, fresh isolated database, posture and client-closure proof. The accepted `13c57e27` proof remains historical evidence for its original 223-entry base, not native validation of this integration. Publication, exact-head GitHub checks and merge admission remain pending.
