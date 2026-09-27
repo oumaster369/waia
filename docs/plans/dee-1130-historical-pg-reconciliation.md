@@ -1138,3 +1138,12 @@ Direct implementation follows sole-plan c9d7e6f142433050da7f74736b6f275e1925a384
 Independent review report2a542f171f92db6301d5db9fdc30988c8d9c5bbac19f9d959d12bfee3a27a405 fully read. Original16-artifact reviewer manifest had one case-insensitive filename collision; additive review-freeze-v2 b6708e91de1749d5f2fdf704ba1f86686dc1baddb5ec96b8d6cf5cf91c39b272 independently verifies18 artifacts, preserving original report/manifest and disclosure. Original author evidence is intact. Finite successor review remains required before WP3-02 source closure; bootstrap, native owner/max-shape/retained-prefix/race/ACL/RLS/rollback proof remains unexecuted.
 
 Root evidence: external evidence/dee-1130/guard16-correction including admission, exact before/after files, source census, lint receipt and final commit manifest. Parallel integration author retains only its admitted nine files; no global clean-checkout claim while those edits are in progress. No DB/native/heavy/CI/publication release by this checkpoint.
+
+
+## Root bounded source acceptance and explicit0222 compatibility — 2026-09-27
+
+Independent finite92cc review c8b94863d16612b4a57bed56e5c30dd1368ced2be44e9dd5a5e82b87fd5b1173 and nine-artifact manifest518c6d9f0c566b13ef53d2ba756cbaddfb28b8468f5635a8419ca2313a979483 are fully read/verified by root. WP3-02 is closed at bounded SOURCE level; zero new finite findings. No native/package/scientific acceptance is implied.
+
+The previously mapped three compatibility paths now explicitly admit idx222/when1780000000222/tag0222_trader_historical_reconciliation_v1 with actual reviewed SQLSHA c486c43e81231b3636bbc4e8d6552f7d46acb5838e99c8a82385708216ef1ce1. Canonical required prefix max207, Forecast ratified max148, required tables, old predicates and future-unknown rejection stay unchanged. No automatic0223 admission. Existing two suites reproduced three genuine registry failures (38PASS/3FAIL) before edits; exact successor has45PASS/2files/0skip including0222 SQL-hash and idx/when/tag refusals. Scoped lint and diffcheck exit0. Raw before/after and source identities retained in external evidence/dee-1130/compatibility-0222; no DB/native invoked.
+
+Parallel bootstrap/CI author committed exactly nine mapped source paths as7dd64e2c direct92cc. Their coherent frozen package/root+nonauthor review and actual bootstrap/native proof remain separate. This compatibility change does not claim that integration package accepted or modify its bytes.

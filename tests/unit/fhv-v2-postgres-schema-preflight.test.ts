@@ -35,13 +35,13 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   })();
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
-    expect(fullApplied).toHaveLength(222);
+    expect(fullApplied).toHaveLength(223);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: fullApplied }),
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0221 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0222 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -67,6 +67,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0219_trader_recorded_paper_analysis_v1",
       "0220_trader_reporting_period_bases_v1",
       "0221_trader_research_understanding_v1",
+      "0222_trader_historical_reconciliation_v1",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
@@ -184,6 +185,45 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
         };
         const entry = journal.entries.find((row) => row.tag === "0221_trader_research_understanding_v1")!;
         if (field === "tag") entry.tag = "0222_unadmitted_future_migration";
+        else entry[field] += 1;
+        writeFileSync(join(fixtureMigrations, "meta/_journal.json"), JSON.stringify(journal));
+        for (const identity of compatibleAdditive) {
+          writeFileSync(join(fixtureMigrations, `${identity.tag}.sql`),
+            readFileSync(join(sourceMigrations, `${identity.tag}.sql`)));
+        }
+        expect(() => readFhvV2CompatibleAdditiveMigrations(fixtureRoot))
+          .toThrow("COMPATIBLE_MIGRATION_IDENTITY_INVALID");
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects changed compatible0222 bytes even when the complete journal is present", () => {
+    expect(() =>
+      assertFhvV2CanonicalMigrationsApplied({
+        canonical,
+        compatibleAdditive,
+        applied: fullApplied.map((row) => row.createdAt === "1780000000222"
+          ? { ...row, hash: "f".repeat(64) }
+          : row),
+      }),
+    ).toThrow("APPLIED_MIGRATION_HASH_MISMATCH");
+  });
+
+  it.each(["idx", "when", "tag"] as const)(
+    "refuses changed0222 journal %s without admitting a future identity",
+    (field) => {
+      const fixtureRoot = mkdtempSync(join(tmpdir(), "waia-fhv0222-"));
+      const fixtureMigrations = join(fixtureRoot, "db/migrations_postgres");
+      try {
+        mkdirSync(join(fixtureMigrations, "meta"), { recursive: true });
+        const sourceMigrations = join(process.cwd(), "db/migrations_postgres");
+        const journal = JSON.parse(readFileSync(join(sourceMigrations, "meta/_journal.json"), "utf8")) as {
+          entries: Array<{ idx: number; when: number; tag: string }>;
+        };
+        const entry = journal.entries.find((row) => row.tag === "0222_trader_historical_reconciliation_v1")!;
+        if (field === "tag") entry.tag = "0223_unadmitted_future_migration";
         else entry[field] += 1;
         writeFileSync(join(fixtureMigrations, "meta/_journal.json"), JSON.stringify(journal));
         for (const identity of compatibleAdditive) {

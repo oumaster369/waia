@@ -108,6 +108,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0219_trader_recorded_paper_analysis_v1",
       "0220_trader_reporting_period_bases_v1",
       "0221_trader_research_understanding_v1",
+      "0222_trader_historical_reconciliation_v1",
     ]);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,
