@@ -73,6 +73,20 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
     }
   });
 
+  it("keeps research persistence with the owner and shared assignment validation read-only", () => {
+    const owner = read("lib/trader/paper/research-understanding-v1/repository-postgres.ts");
+    const shared = read("lib/trader/paper/research-understanding-v1/held-replay.ts");
+    expect(owner).toMatch(/readResearchAssignmentWithinHeldTransaction as readAssignment[^;]+from "\.\/held-replay"/);
+    expect(owner).toContain("await readAssignment(tx, context, request,");
+    expect(owner).toContain("await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(tx, context, output.receipt)");
+    expect(owner).toContain("await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(tx, context, saved.profile, output.receipt)");
+    expect(shared).toContain("const authorizedActor = await researchActor(db, context)");
+    expect(shared).toContain("assertResearchAssignment(assignment, profile); checkRequestedProfile(profile, request);");
+    expect(shared).toContain('check(assignment.configurationDigest === assignmentConfigurationDigest(request.assignment, profile, authorizedActor), "ASSIGNMENT_CONFIG_CONFLICT");');
+    expect(shared).toContain("await readResearchAssignmentWithinHeldTransaction(db, context, request, budget)");
+    expect(shared).not.toMatch(/persistInformationSufficiency|persistRequiredInformationProfile|requireInformationSufficiencyAuthority/);
+  });
+
   it("accounts for every direct evaluation, Forecast/Decision, and paper-cycle importer", () => {
     const sources = sourceFiles(join(ROOT, "lib/trader"));
     for (const [importKind, modulePath] of Object.entries(IMPORT_MODULES) as Array<
