@@ -86,7 +86,7 @@ async function completeSavedResearch(pool: postgres.Sql, context: OrgContext, re
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
   assertDeadline();
   const prepared = prepareFixedResearchCompletion(snapshotHandle, lifetime);
-  if (prepared.outcome === "REPLAYED") return prepared;
+  if (prepared.outcome === "REPLAYED") return { outcome: prepared.outcome, completion: prepared.completion };
   return db.transaction(async tx => {
     await settings(tx);
     return writeFixedResearchCompletion(tx, prepared.prepared, holder, lifetime);

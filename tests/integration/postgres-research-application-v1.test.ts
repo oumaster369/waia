@@ -21,12 +21,16 @@ import { APPLICATION_LIMITS as limits, applicationDigest } from "@/lib/trader/pa
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { createPostgresRuntimeControlLeaseRepositoryV2 } from "@/lib/trader/runtime-authority/v2/runtime-authority-repository-postgres-v2";
+import { claimRuntimeControlLeaseAtDatabaseTimeV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
+import { createSavedResearchOwner } from "@/lib/trader/paper/research-understanding-v1/repository-postgres";
+import { ResearchReadBudget } from "@/lib/trader/paper/research-understanding-v1/bounded-source-postgres";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url;
 const assignment = "trader_research_application_assignments_v1", application = "trader_research_applications_v1",
   availability = "trader_research_application_availability_v1", consumption = "trader_research_application_consumptions_v1";
 const owned = [assignment, application, availability, consumption];
+const researchCompletion = "trader_research_understanding_completions_v1", researchReceipt = "trader_information_sufficiency_receipt_v2";
 const canonical = ["trader_mi_canonical_measurement_definition_v1", "trader_mi_canonical_measurement_value_v1", "trader_mi_canonical_measurement_value_input_v1"];
 const tables = [...owned, ...canonical, "audit_logs"];
 const fault = "dee1132_application_fault";
@@ -66,14 +70,14 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
   async function counts() { return Promise.all(tables.map(async table => Number((await client.unsafe(
     `select count(*)::int n from ${table} where organization_id=$1::uuid${table === "audit_logs" ? " and action like 'trader.research_application.%'" : ""}`, [organizationId]))[0]!.n))); }
   async function clearFault() {
-    for (const table of [...tables, "trader_runtime_control_lease_heads_v2"]) {
+    for (const table of [...tables, researchCompletion, researchReceipt, "trader_runtime_control_lease_heads_v2"]) {
       await client.unsafe(`drop trigger if exists ${fault} on ${table}`);
       await client.unsafe(`drop trigger if exists zz_${fault} on ${table}`);
     }
     await client.unsafe(`drop function if exists ${fault}()`);
   }
   async function faultAt(table: string, timing: "BEFORE" | "AFTER", body = "RAISE EXCEPTION 'DEE1132_INJECTED';", auditOperation?: string, triggerLast = false) {
-    expect([...tables, "trader_runtime_control_lease_heads_v2"]).toContain(table);
+    expect([...tables, researchCompletion, researchReceipt, "trader_runtime_control_lease_heads_v2"]).toContain(table);
     const extra = table === "audit_logs" ? ` AND NEW.action='trader.research_application.${auditOperation ?? "apply"}'` : "";
     await client.unsafe(`create function ${fault}() returns trigger language plpgsql as $$ begin
       if NEW.organization_id='${organizationId}'::uuid${extra} then ${body} end if; return NEW; end $$`);
@@ -82,7 +86,8 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
   async function argsFor(f: Fixture, operation: SavedApplicationRequest["operation"] = "apply", consumerSequence?: number) {
     const file = path.join(directory, "application.json");
     await writeFile(file, JSON.stringify({ configuration: f.application.configuration, research: f.application.research }));
-    return ["--saved-research-application", `--application-file=${file}`, `--operation=${operation}`, "--previous-sequence=0", "--current-sequence=1",
+    return ["--saved-research-application", `--application-file=${file}`, `--operation=${operation}`,
+      `--previous-sequence=${f.application.previousSourceSequence}`, `--current-sequence=${f.application.currentSourceSequence}`,
       ...(consumerSequence === undefined ? [] : [`--consumer-sequence=${consumerSequence}`])];
   }
   beforeAll(async () => {
@@ -542,4 +547,360 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
       })).rejects.toThrow(/row-level security|permission denied/);
     }
   }, 40000);
+
+
+  // DEE-1133 uses the same registered native file. The preceding45 cases remain intact.
+  async function savedCompletion(sourceSequence: number) {
+    return client`select sequence,source_sequence,content_digest,body_json,receipt_id,runtime_instance_id,lease_epoch,lease_content_digest
+      from trader_research_understanding_completions_v1 where organization_id=${organizationId}::uuid and source_sequence=${sourceSequence}`;
+  }
+  async function compositeFixture(options: Parameters<typeof fixture>[0] = {}, offset = 2, predecessor = true) {
+    const f = await fixture(options), applied = complete(await run(f.application));
+    const b = f.application.previousSourceSequence + offset;
+    if (offset > 2 && predecessor) await f.appendThrough(b - 1);
+    await f.appendSourceThrough(b);
+    expect(await savedCompletion(b)).toEqual([]);
+    const input: SavedApplicationRequest = { ...f.application, operation: "complete-consumer", consumerSourceSequence: b,
+      research: { ...f.application.research, range: { ...f.application.research.range, leaseDurationMs: 10000 } } };
+    return { f, applied, b, input };
+  }
+  function assertSelectedSavedBodies(queries: typeof trace, f: Fixture, b: number) {
+    const selected = [f.application.previousSourceSequence, f.application.currentSourceSequence, b];
+    for (const [table, sessionId] of [["trader_recorded_analysis_packets_v1", f.application.configuration.sourceSessionId],
+      [researchCompletion, f.application.configuration.researchSessionId]] as const) {
+      const bodies: number[] = [], metadata: number[] = [];
+      for (const read of queries.filter(q => q.query.startsWith("select ") && q.query.includes(`from "${table}"`) && !q.query.includes("octet_length"))) {
+        const scope = read.query.match(new RegExp(`from "${table}" where ([\\s\\S]+?) limit (?:\\$(\\d+)|(\\d+))\\s*$`, "i"));
+        expect(scope, read.query).not.toBeNull(); if (!scope) throw new Error("UNRECOGNIZED_COMPOSITE_SAVED_READ");
+        const parameter = (column: string) => {
+          const match = scope[1]!.match(new RegExp(`"${table}"\\."${column}" = \\$(\\d+)`));
+          if (!match) throw new Error(`COMPOSITE_SCOPE_MISSING:${column}`); return Number(match[1]);
+        };
+        expect(read.params[parameter("organization_id") - 1]).toBe(organizationId);
+        expect(read.params[parameter("session_id") - 1]).toBe(sessionId);
+        const sequence = Number(read.params[parameter("sequence") - 1]);
+        expect(scope[2] ? read.params[Number(scope[2]) - 1] : Number(scope[3])).toBe(2);
+        if (scope[2]) expect(Number(scope[2])).not.toBe(parameter("sequence"));
+        if (read.query.includes('"body_json"')) bodies.push(table === researchCompletion ? sequence + f.application.research.assignment.firstSourceSequence : sequence);
+        else {
+          expect(table).toBe(researchCompletion);
+          const projection = [...read.query.matchAll(/as "([^"]+)"/g)].map(m => m[1]);
+          if (projection.length === 1 && projection[0] === "receiptId") expect(selected).toContain(sequence + f.application.research.assignment.firstSourceSequence);
+          else {
+            metadata.push(sequence + f.application.research.assignment.firstSourceSequence);
+            expect(projection).toEqual(["organizationId", "sessionId", "sequence", "contentDigest", "assignmentDigest", "sourceSessionId", "sourceSequence", "packetDigest"]);
+          }
+        }
+      }
+      expect([...new Set(bodies)].sort()).toEqual(selected);
+      if (b > f.application.currentSourceSequence + 1 && table === researchCompletion) expect(metadata).toContain(b - 1);
+    }
+  }
+  it("DEE1133 actual CLI completes source-only B and consumes under one holder with unchanged public replay shape", async () => {
+    const { f, applied, b, input } = await compositeFixture();
+    f.application.research.range = input.research.range;
+    const before = await counts();
+    const epoch = Number((await client`select lease_epoch from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`)[0]!.lease_epoch);
+    const event = await worker(await argsFor(f, "complete-consumer", b)).result;
+    expect(event.event, event.message).toBe("result"); expect(event.fetches).toBe(0); expect(event.forbidden).toEqual([]);
+    const result = complete(event.result); expect(result.outcome).toBe("COMMITTED");
+    expect(result.application).toEqual(applied.application); expect(result.availability).toEqual(applied.availability);
+    expect(result.consumption?.selection?.selectedRelations).toHaveLength(1);
+    const [completion] = await savedCompletion(b); expect(completion).toBeDefined();
+    const [consumed] = await client`select runtime_instance_id,lease_epoch,lease_content_digest,audit_id from trader_research_application_consumptions_v1 where organization_id=${organizationId}::uuid`;
+    for (const key of ["runtime_instance_id", "lease_epoch", "lease_content_digest"]) expect(completion![key]).toBe(consumed![key]);
+    expect(Number(completion!.lease_epoch)).toBe(epoch + 1);
+    const [receipt] = await client`select receipt_json from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid and id=${completion!.receipt_id}`;
+    const body = JSON.parse(String(completion!.body_json)); expect(receipt!.receipt_json).toEqual(body.output.receipt);
+    expect(body.output.artifact.claims).toHaveLength(12);
+    expect(body.assignmentDigest).toBe(f.application.configuration.researchAssignmentDigest);
+    expect(body.output.analysisPitAnchor).toBe(f.packets[b]!.analysisPitAnchor);
+    const old = await createSavedResearchOwner(client, f.researchContext, { ...f.application.research,
+      range: { ...input.research.range, startSequence: b, count: 1 } }).complete(b, { organizationId,
+      runtimeInstanceId: String(completion!.runtime_instance_id), leaseEpoch: Number(completion!.lease_epoch), leaseContentDigest: String(completion!.lease_content_digest) });
+    expect(Object.keys(old).sort()).toEqual(["completion", "outcome"]); expect(old).toEqual({ outcome: "REPLAYED", completion: body });
+    expect(result.consumption?.consumer.evaluationDigest).toBe(body.output.contentDigest);
+    const [audit] = await client`select metadata_json from audit_logs where id=${consumed!.audit_id}::uuid`;
+    expect(audit!.metadata_json.holder).toEqual({ runtimeInstanceId: completion!.runtime_instance_id,
+      leaseEpoch: Number(completion!.lease_epoch), leaseContentDigest: completion!.lease_content_digest });
+    const after = await counts(); expect(after.slice(0, 4)).toEqual([1, 1, 1, 1]); expect(after[7]).toBe(before[7]! + 1);
+    expect(complete(await run(input)).consumption).toEqual(result.consumption); expect(await counts()).toEqual(after);
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_ONE_B_SAME_HOLDER", sourceSequence: b, leaseEpoch: epoch + 1,
+      researchReceiptAtomicWithCompletion: true, oldPublicReturnKeys: Object.keys(old).sort(), claims: body.output.artifact.claims.length }));
+  }, 45000);
+  it("DEE1133 actual32-history P0/A1/B3 shares one ledger and transfers predecessor2 metadata only", async () => {
+    const { f, b, input } = await compositeFixture({ hypothesisVersions: 32, priorOrdinal: "p".repeat(60000) }, 3);
+    const budgets: HeldResearchAccounting[] = [], originalBudget = HeldResearchAccounting.prototype.budget;
+    const admitted: Array<{ table: string; identity: string; bytes: number; projection: string | undefined }> = [];
+    const originalAdmit = ResearchReadBudget.prototype.admit;
+    vi.spyOn(ResearchReadBudget.prototype, "admit").mockImplementation(function (this: ResearchReadBudget, table, identity, bytes, maximum, projection) {
+      if (table === researchCompletion || table === researchReceipt) admitted.push({ table, identity, bytes, projection });
+      return originalAdmit.call(this, table, identity, bytes, maximum, projection);
+    });
+    vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, maximum: number) {
+      if (!budgets.includes(this)) budgets.push(this); return originalBudget.call(this, maximum);
+    });
+    const dispatched = vi.spyOn(HeldResearchAccounting.prototype, "beforeStatement"), finalized = vi.spyOn(HeldResearchAccounting.prototype, "beforeFinalizationStatement");
+    trace.length = 0; const result = complete(await run(input)); const queries = [...trace];
+    expect(budgets).toHaveLength(1); expect(queries.length).toBe(dispatched.mock.calls.length + finalized.mock.calls.length);
+    expect(budgets[0]!.statements).toBe(queries.length); expect(budgets[0]!.statements).toBeLessThanOrEqual(512);
+    expect(budgets[0]!.inputs.total).toBeLessThanOrEqual(67108864);
+    expect(queries.filter(q => /^begin /i.test(q.query)).map(q => q.query.toLowerCase())).toEqual([
+      "begin isolation level repeatable read read only", "begin isolation level read committed",
+      "begin isolation level repeatable read read only", "begin isolation level read committed", "begin isolation level repeatable read"]);
+    expect(queries.filter(q => /^commit$/i.test(q.query))).toHaveLength(5); assertSelectedSavedBodies(queries, f, b);
+    const candidateQueries = queries.filter(q => q.query.includes("octet_length(jsonb_build_object"));
+    expect(candidateQueries.length).toBeGreaterThanOrEqual(3); // completion, receipt and consumption
+    const completionWrite = queries.findIndex(q => q.query.startsWith(`insert into "${researchCompletion}"`));
+    const receiptWrite = queries.findIndex(q => q.query.startsWith(`insert into "${researchReceipt}"`));
+    expect(receiptWrite).toBeGreaterThan(0); expect(completionWrite).toBeGreaterThan(receiptWrite);
+    expect(queries.slice(0, receiptWrite).filter(q => q.query.includes("octet_length(jsonb_build_object")).length).toBe(2);
+    expect(queries.slice(0, receiptWrite).some(q => q.query.includes("date_trunc('milliseconds', transaction_timestamp())"))).toBe(true);
+    expect((await savedCompletion(b))).toHaveLength(1); expect(result.consumption?.consumer.sourceSequence).toBe(3);
+    const completionBytes = Number((await client`select octet_length(to_jsonb(q)::text)::int bytes from (select
+      organization_id as "organizationId", session_id as "sessionId", sequence, content_digest as "contentDigest", body_json as "bodyJson",
+      assignment_digest as "assignmentDigest", source_session_id as "sourceSessionId", source_sequence as "sourceSequence",
+      packet_digest as "packetDigest", receipt_id as "receiptId", previous_completion_digest as "previousCompletionDigest",
+      runtime_instance_id as "runtimeInstanceId", lease_epoch as "leaseEpoch", lease_content_digest as "leaseContentDigest"
+      from trader_research_understanding_completions_v1 where organization_id=${organizationId}::uuid and source_sequence=${b}) q`)[0]!.bytes);
+    const receiptBytes = Number((await client`select octet_length(to_jsonb(q)::text)::int bytes from (select
+      id, organization_id as "organizationId", account_id as "accountId", profile_id as "profileId", profile_content_digest as "profileContentDigest",
+      purpose,status,pit_anchor as "pitAnchor",receipt_json as "receiptJson",content_digest as "contentDigest",schema_version as "schemaVersion",
+      authority,created_at as "createdAt" from trader_information_sufficiency_receipt_v2
+      where organization_id=${organizationId}::uuid and id=${result.consumption!.consumer.receiptId}) q`)[0]!.bytes);
+    const completionAdmissions = admitted.filter(row => row.table === researchCompletion && row.projection === "completion" &&
+      JSON.parse(row.identity)[2] === b - f.application.research.assignment.firstSourceSequence);
+    const receiptAdmissions = admitted.filter(row => row.table === researchReceipt && row.projection === "receipt" &&
+      JSON.parse(row.identity)[0] === result.consumption!.consumer.receiptId);
+    expect(completionAdmissions.length).toBeGreaterThan(1); expect(receiptAdmissions.length).toBeGreaterThan(1);
+    expect(completionAdmissions.every(row => row.bytes === completionBytes)).toBe(true);
+    expect(receiptAdmissions.every(row => row.bytes === receiptBytes)).toBe(true);
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_SELECTED_HISTORY32_COMPOSITE", registrationBytes: await f.hypothesisProjectionBytes(),
+      statements: budgets[0]!.statements, uniqueBytes: budgets[0]!.inputs.total, transactions: 5,
+      selectedBodies: [0, 1, 3], predecessorMetadataOnly: 2, candidateMetadataBeforeReceipt: true, completionBytes, receiptBytes }));
+  }, 60000);
+  it("DEE1133 nonzero source offset keeps relative predecessor and explicit P2/A3/B5 bodies", async () => {
+    const { f, b, input } = await compositeFixture({ firstSourceSequence: 2 }, 3);
+    trace.length = 0; const result = complete(await run(input)); const queries = [...trace];
+    assertSelectedSavedBodies(queries, f, b); expect(result.consumption?.consumer.sourceSequence).toBe(5);
+    const [row] = await savedCompletion(b); expect(Number(row!.sequence)).toBe(3);
+    expect(JSON.parse(String(row!.body_json)).previousCompletionDigest).toBe((await savedCompletion(4))[0]!.content_digest);
+  }, 45000);
+  it("DEE1133 missing relative predecessor refuses B3 without backfill or new sidecars", async () => {
+    const { b, input } = await compositeFixture({}, 3, false); const before = await counts();
+    expect((await run(input)).status).toBe("EXACT_ROW_SET_MISSING_OR_AMBIGUOUS");
+    expect(await savedCompletion(2)).toEqual([]); expect(await savedCompletion(b)).toEqual([]); expect(await counts()).toEqual(before);
+  }, 40000);
+  it("DEE1133 source-only B preceding S refuses before Understanding persistence", async () => {
+    const f = await fixture(); await f.appendSourceThrough(2); complete(await run(f.application)); await f.expiry();
+    const before = await counts();
+    expect((await run({ ...f.application, operation: "complete-consumer", consumerSourceSequence: 2 })).status).toBe("APPLICATION_NOT_YET_AVAILABLE");
+    expect(await savedCompletion(2)).toEqual([]); expect(await counts()).toEqual(before);
+  }, 40000);
+  it("DEE1133 actual missing4h B remains unresolved and cannot acquire a selected relation", async () => {
+    const f = await fixture(); complete(await run(f.application)); await f.appendSourceThrough(2, { missing4h: true });
+    const result = complete(await run({ ...f.application, operation: "complete-consumer", consumerSourceSequence: 2 }));
+    expect(result.disposition).toBe("UNASSESSED_ANTECEDENT"); expect(result.consumption?.selection?.selectedRelations).toEqual([]);
+    const body = JSON.parse(String((await savedCompletion(2))[0]!.body_json));
+    expect(body.output.disposition).toBe("COMPLETED_UNRESOLVED"); expect(body.output.receipt.status).toBe("UNAVAILABLE");
+    expect(body.output.artifact.claims).toHaveLength(12);
+  }, 40000);
+  it.each([researchReceipt, researchCompletion])("DEE1133 failure at%s rolls back receipt/completion and retries only after real expiry", async table => {
+    const { f, b, input } = await compositeFixture(); input.research.range.leaseDurationMs = 1500;
+    const before = await counts(); const receipts = await client`select id,content_digest from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid order by id`;
+    await faultAt(table, "AFTER"); await expect(run(input)).rejects.toThrow();
+    expect(await savedCompletion(b)).toEqual([]); expect(await counts()).toEqual(before);
+    expect(await client`select id,content_digest from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid order by id`).toEqual(receipts);
+    await clearFault(); expect((await run(input)).status).toBe("APPLICATION_LEASE_BUSY");
+    await f.expiry(); complete(await run(input)); expect(await savedCompletion(b)).toHaveLength(1);
+  }, 45000);
+  it("DEE1133 consumption failure retains exactly B and resumes without resampling or rewriting its old holder", async () => {
+    const { f, applied, b, input } = await compositeFixture(); input.research.range.leaseDurationMs = 1500;
+    await faultAt(consumption, "AFTER"); await expect(run(input)).rejects.toThrow();
+    const retained = await savedCompletion(b); expect(retained).toHaveLength(1); const before = await counts();
+    expect(before.slice(0, 4)).toEqual([1, 1, 1, 0]);
+    await clearFault(); expect((await run(input)).status).toBe("APPLICATION_LEASE_BUSY"); expect(await savedCompletion(b)).toEqual(retained);
+    await f.expiry(); const result = complete(await run(input)); expect(result.availability).toEqual(applied.availability);
+    expect(await savedCompletion(b)).toEqual(retained); const after = await counts();
+    expect(complete(await run(input)).consumption).toEqual(result.consumption); expect(await counts()).toEqual(after);
+    const [used] = await client`select lease_epoch from trader_research_application_consumptions_v1 where organization_id=${organizationId}::uuid`;
+    expect(Number(used!.lease_epoch)).toBe(Number(retained[0]!.lease_epoch) + 1);
+  }, 45000);
+  it.each([researchCompletion, consumption])("DEE1133 expired holder at%s preserves only the prior committed prefix", async table => {
+    const { f, b, input } = await compositeFixture(); input.research.range.leaseDurationMs = 1500;
+    await faultAt(table, "AFTER", "PERFORM pg_sleep(2.0);");
+    const value = await run(input).catch(() => null); expect(value?.status).not.toBe("COMPLETE");
+    expect(await savedCompletion(b)).toHaveLength(table === researchCompletion ? 0 : 1);
+    expect((await counts()).slice(0, 4)).toEqual([1, 1, 1, 0]);
+    await clearFault(); await f.expiry(); complete(await run(input)); expect(await savedCompletion(b)).toHaveLength(1);
+  }, 50000);
+  it("DEE1133 replacement after actual RR commit invalidates the prepared holder before B writes", async () => {
+    const { f, b, input } = await compositeFixture(); input.research.range.leaseDurationMs = 1500;
+    const other = postgres(url!, { max: 1 }), originalBegin = client.begin.bind(client); let reads = 0, replaced = false;
+    const begin = vi.spyOn(client, "begin");
+    begin.mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) => originalBegin(options, async held => callback(held)).then(async result => {
+      if (options === "isolation level repeatable read read only" && ++reads === 2) {
+        await f.expiry(); const replacement = await claimRuntimeControlLeaseAtDatabaseTimeV2(drizzle(other, { schema }),
+          { organizationId, runtimeInstanceId: "DEE1133-replacement-after-RR", durationMs: 10000 });
+        expect(replacement).not.toBeNull(); replaced = true;
+      }
+      return result;
+    })) as typeof client.begin);
+    try { expect((await run(input)).status).toBe("LEASE_LOST"); expect(replaced).toBe(true); expect(await savedCompletion(b)).toEqual([]); }
+    finally { begin.mockRestore(); await other.end({ timeout: 3 }); }
+    expect((await counts()).slice(0, 4)).toEqual([1, 1, 1, 0]);
+  }, 45000);
+  it("DEE1133 two real connections cannot duplicate the B completion or consumption", async () => {
+    const { b, input } = await compositeFixture(); const other = postgres(url!, { max: 1 });
+    try {
+      const results = await Promise.all([client, other].map(pool => runSavedApplication(pool, { organizationId }, input)));
+      expect(results.some(v => v.status === "COMPLETE")).toBe(true);
+      expect(results.every(v => ["COMPLETE", "APPLICATION_LEASE_BUSY"].includes(v.status))).toBe(true);
+      expect(await savedCompletion(b)).toHaveLength(1); const after = await counts();
+      expect(after.slice(0, 4)).toEqual([1, 1, 1, 1]); expect(after[7]).toBe(3);
+    } finally { await other.end({ timeout: 3 }); }
+  }, 45000);
+  it("DEE1133 completed consumption replays READ ONLY while an unrelated holder remains live", async () => {
+    const { f, b, input } = await compositeFixture(); input.research.range.leaseDurationMs = 1500;
+    const result = complete(await run(input)); await f.expiry();
+    expect(await claimRuntimeControlLeaseAtDatabaseTimeV2(f.db, { organizationId, runtimeInstanceId: "DEE1133-unrelated-live", durationMs: 10000 })).not.toBeNull();
+    const head = await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`;
+    const before = await counts(), retained = await savedCompletion(b), queries: string[] = [];
+    const readonly = postgres(url!, { max: 1, connection: { default_transaction_read_only: true }, debug: (_c, q) => queries.push(q) });
+    try { expect(complete(await runSavedApplication(readonly, { organizationId }, input)).consumption).toEqual(result.consumption); }
+    finally { await readonly.end({ timeout: 3 }); }
+    expect(queries.filter(q => /^begin /i.test(q))).toEqual(["begin isolation level repeatable read read only"]);
+    expect(queries.join("\n")).not.toMatch(/insert into|pg_advisory_xact_lock|for update/);
+    expect(await savedCompletion(b)).toEqual(retained); expect(await counts()).toEqual(before);
+    expect(await client`select * from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`).toEqual(head);
+  }, 45000);
+  it.each(["completion-before-commit", "consumption-before-commit", "consumption-after-commit"] as const)("DEE1133 process death at%s retains the actual prefix and resumes", async phase => {
+    const { f, b, input } = await compositeFixture(); f.application.research.range = input.research.range;
+    const table = phase === "completion-before-commit" ? researchCompletion : consumption;
+    if (phase !== "consumption-after-commit") await faultAt(table, "AFTER", "PERFORM pg_sleep(3.0);");
+    const child = worker(await argsFor(f, "complete-consumer", b), phase === "consumption-after-commit");
+    const pending = child.result.catch(() => null); let backend: number | null = null;
+    if (phase === "consumption-after-commit") { const event = await pending; expect(event?.event, event?.message).toBe("result"); complete(event!.result); }
+    else {
+      const deadline = performance.now() + 15000;
+      while (performance.now() < deadline) {
+        const rows = await client`select pid from pg_stat_activity where datname=current_database() and wait_event='PgSleep'
+          and query like ${`%insert into "${table}"%`} and pid<>pg_backend_pid()`;
+        if (rows.length) { backend = Number(rows[0]!.pid); break; } await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      expect(backend).not.toBeNull();
+    }
+    await stop(child.child); await pending;
+    if (backend !== null) {
+      const deadline = performance.now() + 10000;
+      while (performance.now() < deadline && (await client`select pid from pg_stat_activity where pid=${backend}`).length)
+        await new Promise(resolve => setTimeout(resolve, 25));
+      expect(await client`select pid from pg_stat_activity where pid=${backend}`).toEqual([]);
+    }
+    const retained = await savedCompletion(b); expect(retained).toHaveLength(phase === "completion-before-commit" ? 0 : 1);
+    expect((await counts()).slice(0, 4)).toEqual([1, 1, 1, phase === "consumption-after-commit" ? 1 : 0]);
+    await clearFault();
+    if (phase !== "consumption-after-commit") { expect((await run(input)).status).toBe("APPLICATION_LEASE_BUSY"); await f.expiry(); }
+    const result = complete(await run(input)); if (retained.length) expect(await savedCompletion(b)).toEqual(retained);
+    const after = await counts(); expect(complete(await run(input)).consumption).toEqual(result.consumption); expect(await counts()).toEqual(after);
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_CRASH_PREFIX", phase, retainedCompletion: retained.length,
+      retainedConsumption: phase === "consumption-after-commit" ? 1 : 0, backendClosure: backend === null ? "result-after-CLI-cleanup" : "native-pid-absent" }));
+  }, 60000);
+  it("DEE1133 late actual completion COMMIT acknowledgment refuses success without erasing B", async () => {
+    const { b, input } = await compositeFixture(); let now = 0, calls = 0;
+    const originalBegin = client.begin.bind(client), begin = vi.spyOn(client, "begin");
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    begin.mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) => originalBegin(options, async held => callback(held)).then(value => {
+      if (++calls === 4) now = 120001; return value;
+    })) as typeof client.begin);
+    try { expect((await run(input)).status).toBe("INVOCATION_DEADLINE_EXCEEDED"); }
+    finally { vi.restoreAllMocks(); }
+    expect(await savedCompletion(b)).toHaveLength(1); expect((await counts()).slice(0, 4)).toEqual([1, 1, 1, 0]);
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_LATE_COMPLETION_ACK", committedB: true, consumption: false, elapsedControlMs: now }));
+  }, 40000);
+  it("DEE1133 real held dispatch consumes the shared512 slots and rejects the next business query with rollback reserved", async () => {
+    const { b, input } = await compositeFixture(); let accounting: HeldResearchAccounting | undefined, calls = 0, injected = 0;
+    const originalBudget = HeldResearchAccounting.prototype.budget;
+    vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, maximum: number) {
+      if (accounting && accounting !== this) throw new Error("COMPOSITE_ACCOUNTING_RESET"); accounting = this; return originalBudget.call(this, maximum);
+    });
+    const originalBegin = client.begin.bind(client), begin = vi.spyOn(client, "begin");
+    begin.mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) => originalBegin(options, async held => {
+      if (++calls === 4) {
+        expect(accounting).toBeDefined(); const bound = prepareHeldResearchReplay(client, accounting!).bindHeld(held);
+        while (accounting!.statements < 511) { await bound.executor.execute(sql`select 1 as dee1133_bounded_dispatch_probe`); injected++; }
+      }
+      return callback(held);
+    })) as typeof client.begin);
+    trace.length = 0;
+    try {
+      expect((await run(input)).status).toBe("STATEMENT_LIMIT_EXCEEDED");
+      expect(accounting!.statements).toBe(512); expect(trace).toHaveLength(512); expect(trace.at(-1)!.query.toLowerCase()).toBe("rollback");
+      expect(injected).toBeGreaterThan(0); expect(trace.filter(q => q.query.includes("dee1133_bounded_dispatch_probe"))).toHaveLength(injected);
+    } finally { vi.restoreAllMocks(); }
+    expect(await savedCompletion(b)).toEqual([]); expect((await counts()).slice(0, 4)).toEqual([1, 1, 1, 0]);
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_SHARED_513_REFUSAL", statements: accounting!.statements, injectedActualSelects: injected, reservedRollback: true }));
+  }, 40000);
+
+  it.each(["application", "availability"] as const)("DEE1133 missing%s cannot create a dependency or complete B", async missing => {
+    const f = await fixture();
+    if (missing === "availability") {
+      await faultAt(availability, "AFTER"); await expect(run(f.application)).rejects.toThrow(); await clearFault();
+    }
+    await f.appendSourceThrough(2); const before = await counts();
+    const value = await run({ ...f.application, operation: "complete-consumer", consumerSourceSequence: 2 });
+    expect(value.status).toBe(missing === "application" ? "APPLICATION_DEPENDENCY_MISSING" : "APPLICATION_AVAILABILITY_MISSING");
+    expect(await savedCompletion(2)).toEqual([]); expect(await counts()).toEqual(before);
+  }, 40000);
+  it.each(["version", "lifecycle"] as const)("DEE1133 actual%s change before B refuses completion without requalifying registration", async kind => {
+    const f = await fixture(); complete(await run(f.application));
+    if (kind === "version") {
+      const definition = JSON.parse(f.hypothesis.definitionJson); definition.prior = { ordinal: "explicit-next", band: "wide" };
+      await f.hypothesisService.appendHypothesisVersion(f.context, { hypothesisKey: f.hypothesis.hypothesisKey,
+        hypothesisKind: "market_claim", name: f.hypothesis.name, definition, authoredBy: userId });
+    } else await f.hypothesisService.transitionHypothesisLifecycle(f.context, { hypothesisKey: f.hypothesis.hypothesisKey,
+      toState: "VALIDATING", rationale: "synthetic composite refusal", recordedBy: userId, actorType: "user", actorId: userId });
+    await f.appendSourceThrough(2); const before = await counts();
+    const value = await run({ ...f.application, operation: "complete-consumer", consumerSourceSequence: 2 });
+    expect(value.status).toBe(kind === "version" ? "APPLICATION_VERSION_NOT_SELECTED" : "APPLICATION_LIFECYCLE_NOT_PROPOSED");
+    expect(await savedCompletion(2)).toEqual([]); expect(await counts()).toEqual(before);
+  }, 40000);
+  it("DEE1133 retains USER research/application identity through fixed B preparation and actual completion", async () => {
+    const f = await fixture({ userAssignment: true }); complete(await runSavedApplication(client, f.context, f.application));
+    await f.appendSourceThrough(2); const input: SavedApplicationRequest = { ...f.application, operation: "complete-consumer", consumerSourceSequence: 2 };
+    const before = await counts(); expect((await run(input)).status).not.toBe("COMPLETE");
+    expect(await savedCompletion(2)).toEqual([]); expect(await counts()).toEqual(before); await f.expiry();
+    const result = complete(await runSavedApplication(client, f.context, input));
+    expect(result.consumption?.actor).toEqual({ kind: "USER", id: userId }); expect(await savedCompletion(2)).toHaveLength(1);
+  }, 45000);
+
+  it.each(["composite", "public"] as const)("DEE1133 suppressed completion insert cannot commit an orphan receipt through the%s owner", async owner => {
+    const { f, b, input } = await compositeFixture(); input.research.range.leaseDurationMs = 1500;
+    const before = await counts(), receipts = await client`select id,content_digest from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid order by id`;
+    expect(await client`select id from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid
+      and pit_anchor=${f.packets[b]!.analysisPitAnchor}::timestamptz`).toEqual([]);
+    const priorStages = async () => ({
+      app: await client`select row_to_json(t) body from trader_research_applications_v1 t where organization_id=${organizationId}::uuid`,
+      available: await client`select row_to_json(t) body from trader_research_application_availability_v1 t where organization_id=${organizationId}::uuid`,
+      research: await client`select row_to_json(t) body from trader_research_understanding_completions_v1 t
+        where organization_id=${organizationId}::uuid and source_sequence<=${f.application.currentSourceSequence} order by sequence`,
+    });
+    const prior = await priorStages();
+    await faultAt(researchCompletion, "BEFORE", "RETURN NULL;");
+    try {
+      if (owner === "composite") expect((await run(input)).status).toBe("RESEARCH_FENCED_INSERT_REQUIRED");
+      else {
+        const holder = await claimRuntimeControlLeaseAtDatabaseTimeV2(f.db, { organizationId, runtimeInstanceId: "DEE1133-public-noop", durationMs: 1500 });
+        expect(holder).not.toBeNull();
+        await expect(createSavedResearchOwner(client, f.researchContext, { ...f.application.research,
+          range: { ...input.research.range, startSequence: b, count: 1 } }).complete(b, holder!)).rejects.toThrow("RESEARCH_FENCED_INSERT_REQUIRED");
+      }
+      expect(await savedCompletion(b)).toEqual([]); expect(await counts()).toEqual(before);
+      expect(await client`select id,content_digest from trader_information_sufficiency_receipt_v2 where organization_id=${organizationId}::uuid order by id`).toEqual(receipts);
+      expect(await priorStages()).toEqual(prior);
+    } finally { await clearFault(); }
+    await f.expiry(); complete(await run(input)); const recovered = await savedCompletion(b); expect(recovered).toHaveLength(1);
+    expect(receipts.map(row => row.id)).not.toContain(recovered[0]!.receipt_id);
+    console.info(JSON.stringify({ proof: "DEE1133_NATIVE_SUPPRESSED_COMPLETION_REFUSAL", owner, orphanReceiptCommitted: false, recoveredCompletion: true }));
+  }, 45000);
 });

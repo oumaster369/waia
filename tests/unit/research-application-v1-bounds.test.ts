@@ -70,6 +70,20 @@ describe("actual held dispatch and invocation accounting", () => {
     expect(accounting.inputs.total).toBe(APPLICATION_LIMITS.uniqueInputAggregate);
     expect(() => accounting.budget(10).admit("t", "extra", 1, 10)).toThrow("INPUT_AGGREGATE_LIMIT_EXCEEDED");
   });
+  it("keeps additional application bodies inside the same64MiB through completion and consumption", () => {
+    const accounting = new HeldResearchAccounting();
+    const completion = accounting.budget(2_097_152), receipt = accounting.budget(2_097_152);
+    completion.admit("completion", "B", 2_097_152, 2_097_152, "completion");
+    receipt.admit("receipt", "B", 2_097_152, 2_097_152, "receipt");
+    const remainder = APPLICATION_LIMITS.uniqueInputAggregate - 4_194_304 - APPLICATION_LIMITS.additionalAggregate;
+    accounting.budget(remainder).admit("selected", "P/A/B", remainder, remainder, "packet");
+    const additional = accounting.budget(APPLICATION_LIMITS.additionalAggregate);
+    additional.admit("application", "existing", APPLICATION_LIMITS.additionalAggregate, APPLICATION_LIMITS.additionalAggregate);
+    expect(accounting.inputs.total).toBe(APPLICATION_LIMITS.uniqueInputAggregate);
+    // The subsequent reader charges the same admitted completion projection once.
+    accounting.budget(2_097_152).admit("completion", "B", 2_097_152, 2_097_152, "completion");
+    expect(() => accounting.budget(1).admit("consumption", "new", 1, 1)).toThrow("INPUT_AGGREGATE_LIMIT_EXCEEDED");
+  });
   it("shares the original deadline with previously created local budgets", () => {
     let now = 0; vi.spyOn(performance, "now").mockImplementation(() => now);
     const f = transport(); const budget = f.accounting.budget(10);

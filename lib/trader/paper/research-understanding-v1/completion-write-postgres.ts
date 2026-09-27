@@ -55,7 +55,16 @@ export function prepareFixedResearchCompletion(handle: ResearchCompletionSnapsho
   check(captured && captured.lifetime === lifetime, "RESEARCH_SNAPSHOT_HANDLE_INVALID"); snapshots.delete(handle);
   const { saved, context, sourceSequence } = captured;
   const output = verifyComputed(saved, shared(lifetime)); lifetime.assertDeadline();
-  if (saved.completion) return { outcome: "REPLAYED" as const, completion: saved.completion };
+  // Primitive facts are an immutable view for the fixed composing owner. They
+  // never flow back into the writer or share mutable evidence with its handle.
+  const facts = Object.freeze({ organizationId: context.organizationId, accountId: saved.session.accountId,
+    symbol: saved.session.symbol, assignmentDigest: saved.assignment.contentDigest,
+    researchSessionId: saved.assignment.researchSessionId, sourceSessionId: saved.session.sessionId,
+    sourceConfigDigest: saved.session.configDigest, sourceSequence, profileId: saved.profile.id,
+    profileContentDigest: saved.profile.contentDigest, computation: output.declarations.computation,
+    computationManifestDigest: output.declarations.computationManifestDigest,
+    analysisPitAnchor: saved.packet.analysisPitAnchor, scheduledBarCloseTime: saved.packet.normalized.scheduledBarCloseTime });
+  if (saved.completion) return { outcome: "REPLAYED" as const, completion: saved.completion, facts };
   const completion: ResearchCompletion = seal({ schemaVersion: RESEARCH_CONTRACT, organizationId: context.organizationId,
     researchSessionId: saved.assignment.researchSessionId, sequence: saved.sequence, sourceSessionId: saved.assignment.sourceSessionId,
     sourceSequence, assignmentDigest: saved.assignment.contentDigest, packetDigest: saved.packet.contentDigest,
@@ -63,7 +72,7 @@ export function prepareFixedResearchCompletion(handle: ResearchCompletionSnapsho
   bounded(completion, LIMITS.completion, "COMPLETION_LIMIT_EXCEEDED");
   const prepared = Object.freeze({ kind: "FIXED_RESEARCH_COMPLETION" as const });
   completions.set(prepared, { ...captured, completion });
-  return { outcome: "PREPARED" as const, prepared };
+  return { outcome: "PREPARED" as const, prepared, facts };
 }
 
 /** Charge the exact future stored projections before INSERT or any nested service body read. */
@@ -134,7 +143,9 @@ export async function writeFixedResearchCompletion(db: WaiaPostgresDb, prepared:
   await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(db, context, output.receipt);
   await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(db, context, saved.profile, output.receipt);
   lifetime.assertDeadline();
-  await db.insert(schema.traderResearchUnderstandingCompletionsV1).values(values);
+  const inserted = await db.insert(schema.traderResearchUnderstandingCompletionsV1).values(values)
+    .returning({ contentDigest: schema.traderResearchUnderstandingCompletionsV1.contentDigest });
+  check(inserted.length === 1 && inserted[0]!.contentDigest === completion.contentDigest, "RESEARCH_FENCED_INSERT_REQUIRED");
   await assertRuntimeDatabaseClockHolderV2(db, holder);
   lifetime.assertDeadline(); return { outcome: "COMMITTED" as const, completion };
 }

@@ -322,7 +322,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/cli-options.ts",
-    "sha256": "d8201fdcecab92a2edb2e8389e0dae55ab545c7fbb4640a4cc3f9015e338c3ad"
+    "sha256": "7316ead50c7075cd2380f555ae74868820ff3f5c013d46eed4bfeef7ed091726"
   },
   {
     "path": "lib/trader/paper/research-application-v1/contract.ts",
@@ -330,7 +330,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "fccdffbf8ac6f827192f748576b9dc3232e46ebb15d314ee42f1c686d6458f22"
+    "sha256": "fc05d97e122eb847b07656451cde883cf6a17bd8e9563782e68566e5fd0b7f89"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -350,7 +350,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-understanding-v1/completion-write-postgres.ts",
-    "sha256": "abaed45313ab72131c220461226cda66a3e6f0b676f39017be2229f1368c2961"
+    "sha256": "971901cd164263f4358af845477f49a35098af8ef60fe38ed647db601808d06c"
   },
   {
     "path": "lib/trader/paper/research-understanding-v1/computation-manifest.ts",
@@ -421,4 +421,4 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "0b41a685e7e8702e81770488eb79c519f27089d39d8e4b150e4f6dd76df4b6a4";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2";

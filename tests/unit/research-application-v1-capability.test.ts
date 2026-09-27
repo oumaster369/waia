@@ -59,6 +59,14 @@ describe("actual saved application CLI admission", () => {
         .rejects.toThrow("APPLICATION_FLAGS_INVALID");
     } finally { if (previous === undefined) delete process.env.WAIA_TRADER_CLI; else process.env.WAIA_TRADER_CLI = previous; }
   });
+  it("requires one explicit complete-consumer sequence before file or runtime acquisition", async () => {
+    const { parseSavedApplicationOptions } = await import("@/lib/trader/paper/research-application-v1/cli-options");
+    const args = ["--saved-research-application", "--application-file=/not-opened", "--operation=complete-consumer",
+      "--previous-sequence=0", "--current-sequence=1"];
+    for (const tail of [[], ["--consumer-sequence=1"], ["--consumer-sequence=3", "--consumer-sequence=4"],
+      ["--consumer-sequence=3", "--holder=caller"], ["--consumer-sequence=3", "--facts=caller"]])
+      await expect(parseSavedApplicationOptions([...args, ...tail])).rejects.toThrow("APPLICATION_FLAGS_INVALID");
+  });
 });
 
 import ts from "typescript";
@@ -81,6 +89,20 @@ function actualInventoryWithCli(cli: string, selected: "application" | "understa
 }
 describe("actual selected application and compatible Understanding capability inventories", () => {
   const cli = readFileSync("scripts/trader/paper-bar-close-loop.ts", "utf8");
+  it("keeps the fixed writer's handle input separate from returned primitive facts and caller callbacks", () => {
+    const source = readFileSync("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts", "utf8");
+    const writer = ts.createSourceFile("writer.ts", source, ts.ScriptTarget.Latest, true);
+    const entry = writer.statements.find((n): n is ts.FunctionDeclaration => ts.isFunctionDeclaration(n) && n.name?.text === "writeFixedResearchCompletion");
+    expect(entry?.parameters.map(p => p.name.getText(writer))).toEqual(["db", "prepared", "suppliedHolder", "lifetime"]);
+    expect(entry?.body?.getText(writer)).not.toMatch(/\.facts\b|suppliedOutput|evaluator|\.begin\(|\.transaction\(/);
+    expect(entry?.body?.getText(writer)).toContain("completions.get(prepared)");
+    expect(entry?.body?.getText(writer)).toContain("captured.lifetime === lifetime");
+    const owner = readFileSync("lib/trader/paper/research-application-v1/repository-postgres.ts", "utf8");
+    expect(owner).toContain("return bound.writeCompletion(prepared.prepared, holder)");
+    expect(owner).not.toMatch(/createSavedResearchOwner|runSavedResearchLoop|writeFixedResearchCompletion\(|new ResearchReadBudget|claimRuntimeControlLeaseAtDatabaseTimeV2/);
+    expect(readFileSync("lib/trader/paper/research-understanding-v1/repository-postgres.ts", "utf8"))
+      .toContain('if (prepared.outcome === "REPLAYED") return { outcome: prepared.outcome, completion: prepared.completion };');
+  });
   it("pins the exact actual new owner closure while keeping the old selected mode separately inspectable", () => {
     const app = actualInventoryWithCli(cli, "application"), old = actualInventoryWithCli(cli, "understanding");
     expect(app.entries).toEqual(APPLICATION_COMMAND_SOURCE_MANIFEST); expect(app.digest).toBe(APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST);

@@ -24,7 +24,7 @@ import { assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
 
 export type SavedApplicationRequest = {
   configuration: ResearchApplicationConfigurationV1; research: ResearchRequest;
-  operation: "apply" | "consume" | "replay"; previousSourceSequence: number; currentSourceSequence: number; consumerSourceSequence?: number;
+  operation: "apply" | "consume" | "complete-consumer" | "replay"; previousSourceSequence: number; currentSourceSequence: number; consumerSourceSequence?: number;
 };
 type Bound = ReturnType<ReturnType<typeof prepareHeldResearchReplay>["bindHeld"]>;
 type Replay = NonNullable<Awaited<ReturnType<Bound["replay"]>>>;
@@ -44,12 +44,12 @@ export function captureSavedApplicationCommand(pool: postgres.Sql, context: OrgC
   bounded(request, L.assignment + 131_072 + 65_536, "APPLICATION_COMMAND_LIMIT");
   const input = structuredClone(request), c = captureApplicationConfigurationV1(input.configuration);
   check(Object.keys(input).every(k => ["configuration", "research", "operation", "previousSourceSequence", "currentSourceSequence", "consumerSourceSequence"].includes(k)), "APPLICATION_COMMAND_INVALID");
-  check(["apply", "consume", "replay"].includes(input.operation), "APPLICATION_COMMAND_INVALID");
+  check(["apply", "consume", "complete-consumer", "replay"].includes(input.operation), "APPLICATION_COMMAND_INVALID");
   const selected = captureResearchReplaySelector(context, input.research);
   check(c.organizationId === selected.context.organizationId && safeSequence(input.previousSourceSequence) && safeSequence(input.currentSourceSequence) &&
     input.currentSourceSequence === input.previousSourceSequence + 1, "APPLICATION_PAIR_INVALID");
   check(input.consumerSourceSequence === undefined || (safeSequence(input.consumerSourceSequence) && input.consumerSourceSequence > input.currentSourceSequence), "APPLICATION_CONSUMER_INVALID");
-  check((input.operation !== "consume" || input.consumerSourceSequence !== undefined) &&
+  check((!["consume", "complete-consumer"].includes(input.operation) || input.consumerSourceSequence !== undefined) &&
     (input.operation !== "apply" || input.consumerSourceSequence === undefined), "APPLICATION_OPERATION_INVALID");
   for (const n of [input.previousSourceSequence, input.currentSourceSequence, input.consumerSourceSequence].filter((v): v is number => v !== undefined))
     check(n >= selected.request.assignment.firstSourceSequence, "APPLICATION_RANGE_INVALID");
@@ -414,12 +414,41 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       return result(app.body, String(app.row.contentDigest), available.body, String(available.row.contentDigest), "COMMITTED", body);
     });
   }
+  async function completeConsumer() {
+    check(request.consumerSourceSequence !== undefined, "APPLICATION_CONSUMER_REQUIRED");
+    const sequence = request.consumerSourceSequence;
+    const prepared = await transaction("repeatable read read only", async bound => {
+      const activeActor = await actor(bound.executor);
+      const app = await loadApplication(bound, activeActor); check(app, "APPLICATION_DEPENDENCY_MISSING");
+      const available = await loadAvailability(bound.executor, app); check(available, "APPLICATION_AVAILABILITY_MISSING");
+      const value = await bound.prepareCompletion(selected.context, { ...request.research,
+        range: { ...request.research.range, startSequence: sequence, count: 1 } }, sequence);
+      const b = value.facts;
+      check(b.organizationId === c.organizationId && b.accountId === c.accountId && b.symbol === c.symbol &&
+        b.assignmentDigest === c.researchAssignmentDigest && b.researchSessionId === c.researchSessionId &&
+        b.sourceSessionId === c.sourceSessionId && b.sourceConfigDigest === c.sourceConfigDigest && b.sourceSequence === sequence &&
+        b.profileId === c.profileId && b.profileContentDigest === c.profileContentDigest &&
+        b.computation === c.computation && b.computationManifestDigest === c.computationManifestDigest, "APPLICATION_SAVED_SCOPE_CONFLICT");
+      check(b.sourceSequence > app.a.sourceSequence && applicationTime(b.analysisPitAnchor) > applicationTime(available.body.availableAt) &&
+        applicationTime(b.scheduledBarCloseTime) > applicationTime(app.a.packet.normalized.scheduledBarCloseTime), "APPLICATION_NOT_YET_AVAILABLE");
+      await selectedRegistry(bound.executor, b.analysisPitAnchor, [b.analysisPitAnchor]);
+      return value;
+    });
+    if (prepared.outcome === "PREPARED") await transaction("read committed", bound => {
+      check(holder, "APPLICATION_HOLDER_REQUIRED");
+      return bound.writeCompletion(prepared.prepared, holder);
+    });
+    // A committed B is a durable prefix. Consumption retains its existing writer,
+    // holder checks and finalization; an error never fabricates an atomic rollback.
+    return consume();
+  }
   return Object.freeze({ async execute() {
     assertEnvironment(); accounting.assertDeadline();
     const old = await completed(); accounting.assertDeadline(); if (old) return old;
     check(request.operation !== "replay", "APPLICATION_OPERATION_MISSING");
     await claim();
-    const value = request.operation === "apply" ? await apply() : await consume();
+    const value = request.operation === "apply" ? await apply()
+      : request.operation === "complete-consumer" ? await completeConsumer() : await consume();
     accounting.assertDeadline(); return value;
   } });
 }
