@@ -227,3 +227,82 @@ describe("actual fixed held replay and unchanged public owner", () => {
     else expect((await result)?.completion).toEqual(f.completion);
   });
 });
+
+import { createSavedApplicationOwner, captureSavedApplicationCommand, type SavedApplicationRequest } from "@/lib/trader/paper/research-application-v1/repository-postgres";
+import { runSavedApplication } from "@/lib/trader/paper/research-application-v1/run-saved-application";
+import { APPLICATION_COMPUTATION_SOURCE_MANIFEST_DIGEST } from "@/lib/trader/paper/research-application-v1/computation-manifest";
+import { APPLICATION_SPECIFICATION, APPLICATION_BRIDGE, APPLICATION_QUESTION_MAP } from "@/lib/trader/paper/research-application-v1/contract";
+function emptyApplication() {
+  const f = researchPureFixture();
+  const request: SavedApplicationRequest = { operation: "replay", previousSourceSequence: 0, currentSourceSequence: 1,
+    research: { assignment: f.config, profile: { definition: f.profileDefinition }, range: { startSequence: 0, count: 2, leaseDurationMs: 1000 } },
+    configuration: { organizationId: f.session.organizationId, accountId: f.session.accountId, symbol: f.session.symbol,
+      researchAssignmentDigest: f.assignment.contentDigest, researchSessionId: f.assignment.researchSessionId,
+      sourceSessionId: f.session.sessionId, sourceConfigDigest: f.session.configDigest, profileId: f.profile.id, profileContentDigest: f.profile.contentDigest,
+      computation: f.assignment.declarations.computation, computationManifestDigest: f.assignment.declarations.computationManifestDigest,
+      applicationComputationManifestDigest: APPLICATION_COMPUTATION_SOURCE_MANIFEST_DIGEST,
+      hypothesisId: "explicit-h", hypothesisKey: "a".repeat(64), hypothesisVersion: 1, hypothesisDefinitionDigest: "b".repeat(64),
+      measurementId: "explicit-m", measurementKey: "c".repeat(64), measurementVersion: 1, measurementDefinitionDigest: "d".repeat(64),
+      specification: APPLICATION_SPECIFICATION, bridge: APPLICATION_BRIDGE, questionMap: APPLICATION_QUESTION_MAP, maxAgeMs: 60000 } };
+  const trace: string[] = []; let afterQuery: () => void = () => {}; let afterCommit: () => void = () => {};
+  const unsafe = vi.fn((query: string) => {
+    trace.push(query); const promise = Promise.resolve().then(() => { afterQuery(); return []; });
+    return Object.assign(promise, { values: () => promise });
+  });
+  const held = { unsafe, savepoint: () => { throw new Error("SAVEPOINT_FORBIDDEN"); } } as unknown as postgres.TransactionSql;
+  const begin = vi.fn(async (options: string, callback: (client: postgres.TransactionSql) => Promise<unknown>) => {
+    trace.push(`begin ${options}`);
+    let result: unknown;
+    try { result = await callback(held); } catch (error) { trace.push("rollback"); throw error; }
+    trace.push("commit"); afterCommit(); return result;
+  });
+  const pool = { begin, unsafe: () => { throw new Error("ROOT_TRANSPORT_FORBIDDEN"); }, options: { serializers: {}, parsers: {} } } as unknown as postgres.Sql;
+  return { request, pool, held, trace, unsafe, begin, context: { organizationId: f.session.organizationId },
+    afterQuery(fn: () => void) { afterQuery = fn; }, afterCommit(fn: () => void) { afterCommit = fn; } };
+}
+describe("actual application command capture/ownership and absent replay", () => {
+  it("captures selectors before awaiting and allows an explicitly later nonadjacent B without an artificial32 offset", () => {
+    const f = emptyApplication(); f.request.consumerSourceSequence = 100; const value = captureSavedApplicationCommand(f.pool, f.context, f.request);
+    f.request.configuration.maxAgeMs = 0; f.request.currentSourceSequence = 99;
+    expect(value.config.maxAgeMs).toBe(60000); expect(value.request.currentSourceSequence).toBe(1); expect(value.request.consumerSourceSequence).toBe(100);
+    expect(f.begin).not.toHaveBeenCalled(); expect(f.unsafe).not.toHaveBeenCalled();
+  });
+  it.each(["actor", "evaluator", "output", "transaction", "tenant", "pair", "consumer"])("rejects %s input authority before any I/O", kind => {
+    const f = emptyApplication(); const supplied = f.request as unknown as Record<string, unknown>;
+    if (["actor", "evaluator", "output"].includes(kind)) supplied[kind] = "caller-selected";
+    if (kind === "tenant") f.request.configuration.organizationId = "22222222-2222-4222-8222-222222222222";
+    if (kind === "pair") f.request.currentSourceSequence = 2;
+    if (kind === "consumer") f.request.consumerSourceSequence = 1;
+    expect(() => createSavedApplicationOwner(kind === "transaction" ? f.held as unknown as postgres.Sql : f.pool, f.context, f.request)).toThrow();
+    expect(f.begin).not.toHaveBeenCalled(); expect(f.unsafe).not.toHaveBeenCalled();
+  });
+  it("uses the actual isolated RR read-only owner and refuses absent replay without claiming a lease or writing", async () => {
+    const f = emptyApplication(); const result = await runSavedApplication(f.pool, f.context, f.request);
+    expect(result).toEqual({ status: "APPLICATION_OPERATION_MISSING", outcome: "REFUSED" });
+    expect(f.trace[0]).toBe("begin isolation level repeatable read read only");
+    expect(f.trace[1]).toContain("set local lock_timeout"); expect(f.trace[2]).toContain("set local statement_timeout");
+    expect(f.trace.at(-1)).toBe("commit"); expect(f.begin).toHaveBeenCalledOnce();
+    expect(f.trace.join("\n")).not.toMatch(/insert|for update|pg_advisory|runtime_control_lease/);
+  });
+  it.each(["query", "commit"])("refuses late %s result after120001ms without claiming rollback of committed data", async kind => {
+    let now = 0; vi.spyOn(performance, "now").mockImplementation(() => now); const f = emptyApplication();
+    if (kind === "query") f.afterQuery(() => { now = 120001; }); else f.afterCommit(() => { now = 120001; });
+    expect(await runSavedApplication(f.pool, f.context, f.request)).toEqual({ status: "INVOCATION_DEADLINE_EXCEEDED", outcome: "REFUSED" });
+    expect(f.trace.at(-1)).toBe(kind === "query" ? "rollback" : "commit"); expect(f.begin).toHaveBeenCalledOnce();
+  });
+  it("admits the119999 boundary but does not turn absent replay into COMPLETE", async () => {
+    let now = 0; vi.spyOn(performance, "now").mockImplementation(() => now); const f = emptyApplication(); f.afterCommit(() => { now = 119999; });
+    expect(await runSavedApplication(f.pool, f.context, f.request)).toEqual({ status: "APPLICATION_OPERATION_MISSING", outcome: "REFUSED" });
+  });
+  it("propagates unexpected transport and unknown commit errors instead of market unavailability", async () => {
+    const f = emptyApplication(); f.afterCommit(() => { throw new Error("COMMIT_ACK_UNKNOWN"); });
+    await expect(runSavedApplication(f.pool, f.context, f.request)).rejects.toThrow("COMMIT_ACK_UNKNOWN");
+    expect(f.trace.at(-1)).toBe("commit"); expect(f.trace).not.toContain("rollback");
+  });
+  it("checks USER membership before reading any selected application body", async () => {
+    const f = emptyApplication();
+    await expect(runSavedApplication(f.pool, { ...f.context, userId: "22222222-2222-4222-8222-222222222222" }, f.request)).rejects.toThrow();
+    expect(f.trace.join("\n")).toContain('"organization_members"');
+    expect(f.trace.join("\n")).not.toContain('"trader_research_application'); expect(f.trace.at(-1)).toBe("rollback");
+  });
+});

@@ -4721,6 +4721,50 @@ export const traderResearchUnderstandingCompletionsV1 = pgTable("trader_research
   foreignKey({ columns: [t.organizationId, t.sourceSessionId, t.sourceSequence, t.packetDigest], foreignColumns:
     [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest] })]);
 
+/** DEE-1132: distinct research-only sidecars. Native links/append-only/fences live in0223. */
+function researchApplicationColumns() { return {
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  contentDigest: text("content_digest").notNull(), bodyJson: text("body_json").notNull(),
+  runtimeInstanceId: text("runtime_instance_id").notNull(), leaseEpoch: integer("lease_epoch").notNull(),
+  leaseContentDigest: text("lease_content_digest").notNull().references(() => traderRuntimeControlLeaseEpochHistoryV2.contentDigest),
+}; }
+export const traderResearchApplicationAssignmentsV1 = pgTable("trader_research_application_assignments_v1", {
+  ...researchApplicationColumns(), assignmentDigest: text("assignment_digest").notNull(),
+  researchSessionId: text("research_session_id").notNull(), researchAssignmentDigest: text("research_assignment_digest").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.assignmentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.researchSessionId, t.researchAssignmentDigest], foreignColumns:
+    [traderResearchUnderstandingAssignmentsV1.organizationId, traderResearchUnderstandingAssignmentsV1.sessionId, traderResearchUnderstandingAssignmentsV1.contentDigest] })]);
+export const traderResearchApplicationsV1 = pgTable("trader_research_applications_v1", {
+  ...researchApplicationColumns(), applicationId: text("application_id").notNull(), assignmentDigest: text("assignment_digest").notNull(),
+  previousSourceSequence: bigint("previous_source_sequence", { mode: "number" }).notNull(),
+  currentSourceSequence: bigint("current_source_sequence", { mode: "number" }).notNull(),
+  recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "string" }).notNull(),
+  auditId: uuid("audit_id").notNull().references(() => auditLogs.id),
+}, t => [primaryKey({ columns: [t.organizationId, t.applicationId] }), unique().on(t.organizationId, t.applicationId, t.contentDigest),
+  unique().on(t.organizationId, t.assignmentDigest, t.previousSourceSequence, t.currentSourceSequence),
+  foreignKey({ columns: [t.organizationId, t.assignmentDigest], foreignColumns:
+    [traderResearchApplicationAssignmentsV1.organizationId, traderResearchApplicationAssignmentsV1.assignmentDigest] })]);
+export const traderResearchApplicationAvailabilityV1 = pgTable("trader_research_application_availability_v1", {
+  ...researchApplicationColumns(), applicationId: text("application_id").notNull(), applicationDigest: text("application_digest").notNull(),
+  availableAt: timestamp("available_at", { withTimezone: true, mode: "string" }).notNull(),
+  auditId: uuid("audit_id").notNull().references(() => auditLogs.id),
+}, t => [primaryKey({ columns: [t.organizationId, t.applicationId] }), unique().on(t.organizationId, t.applicationId, t.contentDigest),
+  foreignKey({ columns: [t.organizationId, t.applicationId, t.applicationDigest], foreignColumns:
+    [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest] })]);
+export const traderResearchApplicationConsumptionsV1 = pgTable("trader_research_application_consumptions_v1", {
+  ...researchApplicationColumns(), assignmentDigest: text("assignment_digest").notNull(), applicationId: text("application_id").notNull(),
+  applicationDigest: text("application_digest").notNull(), availabilityDigest: text("availability_digest").notNull(),
+  consumerSourceSessionId: text("consumer_source_session_id").notNull(),
+  consumerSourceSequence: bigint("consumer_source_sequence", { mode: "number" }).notNull(),
+  sequence: bigint("sequence", { mode: "number" }).notNull(), previousConsumptionDigest: text("previous_consumption_digest"),
+  auditId: uuid("audit_id").notNull().references(() => auditLogs.id),
+}, t => [primaryKey({ columns: [t.organizationId, t.assignmentDigest, t.sequence] }),
+  unique().on(t.organizationId, t.assignmentDigest, t.applicationId, t.consumerSourceSessionId, t.consumerSourceSequence),
+  foreignKey({ columns: [t.organizationId, t.applicationId, t.applicationDigest], foreignColumns:
+    [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.applicationId, t.availabilityDigest], foreignColumns:
+    [traderResearchApplicationAvailabilityV1.organizationId, traderResearchApplicationAvailabilityV1.applicationId, traderResearchApplicationAvailabilityV1.contentDigest] })]);
+
 /** Capital-ineligible, pre-holdout Historical Simulation V2 reason ledger. Not canonical Reality. */
 export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
   "trader_historical_simulation_reason_ledger_v2",
