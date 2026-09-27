@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Recursive source correction and scoped proof are frozen for root/M01 review; WP3 native/installed-expression/owner compatibility remains unexecuted. No PG/heavy/CI/registry/graph/bootstrap grant."
+  nextAction: "Root verifies this sole-plan independent bootstrap/CI source amendment. SQL guard copy census remains under M01 review; all database/native/bootstrap execution and final hash registries stay held."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -1016,3 +1016,99 @@ Two literal pre-call guards bind/reuse selected subtrees within the additive8B c
 Actual author validation: source observer26RED/6PASS on4278→32PASS on correctedSQL; initial31/1 whitespace-observer error retained separately. Actual pure suite75PASS/1file/0skip, including actual genesis/no-fill and costed fill→mark sealed depth5 compatibility; scoped test-file ESLint and diffcheck PASS. Exact commands/raw output/source hashes and concrete8B/13call census are in `evidence/dee-1130/canonical-recursion-implementation/`. No PostgreSQL/compiler/full readiness executed at this checkpoint.
 
 Native source adds installed guard/oldhelper checks, fully resealed shape/depth/root/array refusals with actual function-counter positive control, depth5/6 empty-container cases, event-text/economics shape, and actual PG byte-width/UTF8/numeric-scale aggregate boundary controls. All remain unexecuted. Original actual35-cycle/max-parent/old-N/source/role/concurrency/rollback matrix and223 migration/teardown evidence remain mandatory. If real-owner compatibility fails under unchanged caps, preserve/report the failure before changing any parameter. Root/M01 review, bootstrap/native resource admission, root-held registries/CI/graphs and eventual full readiness/publication remain separate gates.
+
+
+## Root independent bootstrap and CI source package — 2026-09-27 08:20 UTC
+
+The corrected SQL snapshot and its native sources remain under independent review. Source preparation below can proceed in parallel without claiming native/source acceptance or running the bootstrap. Root owns this plan and SQL corrections; the integration author owns only these nine paths:
+
+- `scripts/postgres-validation/prepare-historical-reconciliation-fixture.ts`
+- `scripts/postgres-validation/fixtures/dee1130-pre0222-prefix.sql`
+- `tests/unit/postgres-historical-reconciliation-bootstrap.test.ts`
+- `.github/workflows/postgres-integration.yml`
+- `scripts/postgres-validation/assert-capital-test-results.mjs`
+- `tests/unit/postgres-capital-proof-guard.test.ts`
+- `scripts/postgres-validation/assert-historical-reconciliation-profile-results.mjs`
+- `tests/unit/postgres-historical-reconciliation-profile-proof-guard.test.ts`
+- `tests/integration/postgres-historical-production-first-cycle-v2.test.ts`
+
+<!-- BEGIN FROZEN BOOTSTRAP_ORIGINAL SHA256 fee24b7c5129ffd8b9787569ac940ca3e72c79e9ad45d641d865fd2b6a47f919 -->
+# Root retained-prefix CI integration proposal (not yet implemented)
+
+Prepared against1130 source4278e946 and acceptedmain397d0d76. This proposal does not release the unresolved recursive SQL guard or native execution. After final SQL source admission, the canonical plan must include these exact additional test-plumbing paths before implementation. Root owns them; the author continues only its separate admitted source work.
+
+## Concrete boundary
+
+The new native suite requires27 genuine old ledger scopes. Existing capital-authority CI applies the complete chain before tests; that cannot produce the no-mode old prefix. Other migration jobs keep applying the unmodified full chain normally. Capital-authority alone must use an explicit fresh validation bootstrap: auth prelude → accepted0000–0221 via the real Drizzle migrator → exact controlled old-prefix seed → remaining journal including0222 via the same real migrator → full applied-hash/timestamp readback → actual suites. Applied migration records are produced only by the migrator; never fabricate, delete or repair them. Old SQL and repository journal remain unchanged except the already reserved0222 append.
+
+The bootstrap creates a private temporary input folder containing exact byte copies of the222 old SQL bodies and a prefix-only copy of the source journal. This is an input to the normal migrator, not an edit of repository/applied history. It validates strict idx/tag/version/when/order and the exact0221→0222 boundary. After prefix apply, actual drizzle.__drizzle_migrations must exactly match expected222 hashes/timestamps and the newmode relation must be absent. The seeded27 unique scopes must have exact expected ledger identity and no newmode table; then remaining full-journal migration applies normally and all actual hashes/timestamps match source. No guard disabling, mode-row deletion, table replacement or successful skip.
+
+Run only with explicit CLI entry, strict existing loopback validation coordinates (local waia_validate/54329/waia_hsv2_it suffix namespace or CI=true+WAIA_POSTGRES_CLI=1/waia_it/5432/waia_it), and a fresh DB with zero public tables and no prior applied journal before prefix apply. MissingURL, nonlocal/production-like coordinates, pre-existing schema/history, altered seed, missing required222prefix or reused seeded state refuse. No .env fallback or secret logging. Auth prelude's existing loopback-only behavior remains separately enforced. Temporary files are removed in finally; failure leaves DB for evidence rather than destructive reset. Raw selected test artifacts and DB restoration/session evidence remain root native-proof obligations.
+
+## Exact proposed additional files
+
+1. scripts/postgres-validation/prepare-historical-reconciliation-fixture.ts — new, explicit guarded bootstrap as above using installed drizzle-orm/postgres-js/migrator.
+2. scripts/postgres-validation/fixtures/dee1130-pre0222-prefix.sql — new, byte-identical controlled seed43cc41299357a65412fa0bd2405b8dc0b6ae886f4e7e387476d4c60d1c0775b8 from the already preserved external fixture; not a production migration.
+3. tests/unit/postgres-historical-reconciliation-bootstrap.test.ts — new, real pure boundary/path/hash/journal guard controls and refusal-before-connection controls. Native migration order/readback is proved by actual fresh bootstrap, not mocked migration success.
+4. .github/workflows/postgres-integration.yml — existing root map; capital bootstrap step replaces only capital complete-migrate command. Add new native path trigger. Add exact new native suite and existing35-cycle first-cycle suite with HISTORICAL_PG_RECONCILIATION_V1 opt-in in capital job. Existing generic integration keeps default LEGACY first-cycle execution.
+5. scripts/postgres-validation/assert-capital-test-results.mjs — existing root map; mandatory25 files (prior23 + newfrontier + first-cycle), every assertion executed/no skip.
+6. tests/unit/postgres-capital-proof-guard.test.ts — existing root map;25file positives and each missing/failed/pending/empty/duplicate rejection.
+
+No package.json/dependency/environment/production deployment surface is needed: CI invokes pnpm exec tsx directly. New helper/fixture already fall under scripts/postgres-validation/** workflow trigger. Execution duration is measured in actual local proof before considering a timeout change; no assumed performance claim. Schema-preflight three compatibility files remain separately root-held and depend on final0222hash; this proposal does not pin a nonfinal migration hash into them.
+
+## Required validation before publication
+
+Review exact bootstrap/CI source and seed identity; focused guard controls; root whole typecheck; actual zero-public-table fresh disposablePG16.14 bootstrap with222prefix→seed→full chain and allhashes/when; no-skip newnative cases with real roles/guards and restoredstate; actualPROFILE35cycles versus independently retained defaultLEGACY existingcompanion; current fullmandatory25-suite resultguard; inherited historical companions and required repository checks; current independent final review plus exacthead CI before merge. Supplied source proposal is not any of those results. Recursive envelope issue WP3-02 remains a prerequisite to newSQL/native acceptance.
+<!-- END FROZEN BOOTSTRAP_ORIGINAL -->
+
+<!-- BEGIN FROZEN BOOTSTRAP_V2 SHA256 be655ba40ca3c7243869e94329d38c350fe2509e223f3ca9077d3feabde25d9f -->
+# Root retained-prefix integration — finite corrected recipe V2
+
+Supersedes only the proof-job/profile recipe of proposalfee24b7c. That file and M01 report57722428 remain unchanged. The exact temporary222prefix→realmigrator→guarded27scope seed→fulljournal→allhash/when readback mechanism remains. This is proposed source design; no bootstrap/native or implementation acceptance. The recursive652a source repair is independently admitted for staged implementation but not yet executed.
+
+## Correct job/test boundary
+
+Keep the existing capital-authority15minute job for its existing23 mandatory files plus ONLY the new historical frontier matrix:24 zero-skip files. Apply the strict bootstrap as its first database operation, including reading/executing the existing auth prelude verbatim only AFTER strict endpoint/fresh-schema admission. Set WAIA_POSTGRES_CLI=1 on the bootstrap step itself; do not inherit it from a later test step. No weakening of the existing capital result guard.
+
+Run actual35-cycle PROFILE proof in a separate required workflow job with its own postgres16 service, standard authprelude/full-source migrations, the actual profile variable WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE=HISTORICAL_PG_RECONCILIATION_V1 and both actual PostgreSQL URL variables. This job needs no oldprefix seed because only the frontier matrix exercises that boundary. Give the job75minutes: the existing main test permits60, with allowance for dependency setup/migrations/other cases. Existing source documents >40minutes CI. This is a scheduling budget, not a performance claim; measure exact current local/CI durations. Generic integration still executes the original defaultLEGACY mode independently.
+
+Make an explicit registration boundary for the ALREADY OPTIONAL80-cycle continuation in the existing first-cycle test file: replace it.skipIf(!PROVE_KNOWLEDGE_CONTINUATION)(...) with if(PROVE_KNOWLEDGE_CONTINUATION) { it(...) }. Preserve the80-cycle callback and every assertion byte-for-byte except wrapper/indentation, including its60minute timeout. When the existing opt-in selects80, that unchanged test remains registered/executed; default35 never registers a skipped80case. This changes registration/reporting, not selected workload. Document both extents explicitly; no pretend80 proof. Do not filter out a failed or newly required test by name.
+
+Add a dedicated PROFILE result guard requiring exactly one matching first-cycle file, every REGISTERED assertion passed/nonempty, exactly one actual assertion named "commits 35 production cycles and applies the first future-only Forecast learning closure", and no80case registered for the35 job. The guarded command itself records the exact profile env and expected35 extent; current native companion's existing PROFILE-specific assertions prove persisted mode/source/counters. Guard fixtures must refuse missing/duplicate35, anyfailed/pending/empty result, and unexpected80registration. The old capital guard stays strictly24wholefiles and receives no skip exception. Required workflow/job status must be present/successful before root merges thePR; if repository branch protection does not list the new job, root still treats it as applicable mandatoryCI for thisPR rather than silently changing protection.
+
+## Honest local groups
+
+Do not weaken existing local DB namespace guards. Newfrontier/PROFILE35 run on their existing isolated54329/waia_validate/waia_hsv2_it_* databases. The inherited recorded-paper union uses its existing waia_dee1121_* local database. Attribute independent current-source local result groups to their realdatabase names and proofs; never claim a single local24file run when using separate pools. Full local24 aggregate can consume a deliberately combined report only with source/database/run receipts for each actualfile, no duplicate/stale/synthetic assertion. ExactCI waia_it/5432 identity already admits both suites in one nativejob and must deliver the whole actual24file result. No need change production or local identity guards.
+
+## Exact additional source map
+
+Retain original paths: new scripts/postgres-validation/prepare-historical-reconciliation-fixture.ts; new scripts/postgres-validation/fixtures/dee1130-pre0222-prefix.sql (exact43cc4129 seed); new tests/unit/postgres-historical-reconciliation-bootstrap.test.ts; existing .github/workflows/postgres-integration.yml; existing scripts/postgres-validation/assert-capital-test-results.mjs; existing tests/unit/postgres-capital-proof-guard.test.ts. Amend original25counts to24 and omitfirstcycle fromcapitalfilelist.
+
+Add new scripts/postgres-validation/assert-historical-reconciliation-profile-results.mjs and tests/unit/postgres-historical-reconciliation-profile-proof-guard.test.ts. Existing tests/integration/postgres-historical-production-first-cycle-v2.test.ts is already in1130map; onlyoptionalregistration wrapper changes for this finiteCI boundary, with all oldcallbacks/assertions preserved. No package.json/dependency/schema/oldSQL/production files added. Plan-first canonical amendment must list all these exact files and approvedrecipe before sourceimplementation. All new validation scripts auto-trigger existing scripts/postgres-validation/** filter; explicitly addnewunit/frontier paths as needed.
+
+Reaffirm strict guard beforeauth/prelude, currentfresh0publictables/nohistory check, no dotenv fallback, exactprefix/fullhash-readback, no appliedjournal mutation, clientsclosed/tempfilesremovedonfailure, DBretainedforinspection. No credentials are copied into logs orsource. Native all223hashes/role/guard/policy/session restoration and profile35/defaultLEGACY/oldN results remain required. A design review is not execution evidence.
+<!-- END FROZEN BOOTSTRAP_V2 -->
+
+<!-- BEGIN FROZEN BOOTSTRAP_V2_ADMISSION SHA256 75e5683c796ae991a6af6dd8c5d735286b9add2d3e3820d2c87e1f834d0caeac -->
+# Root bootstrap/CI V2 design admission
+
+At2026-09-27T07:53:33.350189+00:00 root admits the finite correctedrecipe PROPOSAL-V2.md be655ba40ca3c7243869e94329d38c350fe2509e223f3ca9077d3feabde25d9f together with unchanged222prefix/seed/fullmigrationmechanism fromfee24b7c. Independentcb5949124b55630ea29254a0c3b9b71d1b1cf406b142a9e95579b2c32582c340 fullyread/3frozenartifactsverified. Originalbootstrap57722428 finding and firstproposal remainhistorical; thisV2 supersedes their job/profile recipe only.
+
+This is DESIGNONLY. Do not edit the active author's canonicalplan orsource concurrently. After corrected1130SQL sourcefreeze/review, root must add one solecanonicalplan amendment naming all nine implementationpaths and bothdesign/admissionreferences before root CI/bootstrap work. Root retains3compatibilityfiles basedonfinal0222hash, notdraftsource. No DB/native/heavy/sourceimplementation released by thisdocument.
+
+Preserve24capitalwhole-file no-skips, separate75minPROFILE35job/strictregisteredresults plusliteral35case, absent optional80registrationunlessoriginaloptin; preserve80callback byte-for-byte excludingwrapper/indentation. Do not introduce a generic skip exception or claim80execution. NewPROFILEjob mandatoryforrootPRadmission; exactenv/persistedPROFILEassertions/35extent andactualrun provenance mandatory. DefaultLEGACY independentlyremains.
+
+Strictbootstrapendpoint/freshstate check precedes prelude andallmutations, CLIenvsetonactualstep, inputonlytemporary222journalcopy andoldSQLexact, realDrizzleapply/applyrecords, exactprefix/fullhashes+whenreadback, seed27exact scopes before0222, no guard/mode/historyrepair. Localproofgroupsretainexistingnamespaceguards and truthfulsource/database/runreceipts; combinedCIwaia_it24wholefiles mustexecute. Native/timebudget/rolesrestoration proof remainsunexecuted. Completecurrentchecks+independentreview+mandatoryCI stillrequired before merge.
+<!-- END FROZEN BOOTSTRAP_V2_ADMISSION -->
+
+<!-- BEGIN FROZEN BOOTSTRAP_PARALLEL_SOURCE SHA256 1aedad475e3047fe02ffdfe9d48a5e94f4a4c844b7e380bb81fcba1048fb6813 -->
+# Root independent integration source release
+
+At2026-09-27T08:19:12.238890+00:00 root separates source-authoring dependencies from execution dependencies. Corrected0222 is frozen atedd81601e5aef2235332bf308767a6dd097737a1, root has read its entire correction/native-control delta and verified29 artifacts/12source rows/222oldSQL/journal plus75pure tests. Whole-project compiler passes this exact source. M01 is reviewing a concrete guard copy-accounting concern; WP3 source/native acceptance is still OPEN. Do not claim that concern resolved or apply this SQL.
+
+The nine independently designed bootstrap/CI source paths do not depend on the final0222 guard coefficient or SQL hash. Root therefore supersedes only the earlier requirement to wait for SQL review acceptance BEFORE AUTHORING these source files. All actual bootstrap execution, database/native access, finalSQL-hash compatibility registries, CI/publication and full readiness remain HELD until the complete corrected source passes required review. This changes no product/safety/scientific/financial gate and grants no installed SQL or native acceptance.
+
+Implement exactly approved V2 recipe be655ba40ca3c7243869e94329d38c350fe2509e223f3ca9077d3feabde25d9f with retained old222prefix/seed/fullmigrator mechanism fromfee24b7c and independent reviewcb5949124b55630ea29254a0c3b9b71d1b1cf406b142a9e95579b2c32582c340. Exact nine paths below: bootstrap/seed/bootstrapunit,workflow,capitalguard/unit,profileguard/unit and existing firstcycle optional80registration wrapper. Preserve80 callback/assertions/timeout bytes apart from wrapper/indent,24strictcapitalfiles and separate75minute35PROFILE job. No guard skip waiver. Strict endpoint/freshDB admission must precede authprelude or any other DB mutation, even on CLI entry. No applied migration history edits. Every client/temp resource closes on refusal/failure; keep DB for inspection.
+
+Root owns the canonical plan and any subsequent SQL-copy census correction; integration author may edit ONLY nine paths, not SQL/journal/schema/canonical plan/compatibility registries/graphs. Record handoff/checkpoints externally; commit only those nine paths. Scoped meaningful bootstrap/result-guard unit tests, scoped lint and diff are allowed; no native or real connection/apply/bootstrap run, compiler/build/heavy, CI, push or PR. Native tests are unchanged except optional80registration. Source freeze and nonauthor source review follow.
+<!-- END FROZEN BOOTSTRAP_PARALLEL_SOURCE -->
