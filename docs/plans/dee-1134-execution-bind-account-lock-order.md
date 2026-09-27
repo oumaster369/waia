@@ -14,15 +14,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2, WP-3]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Freeze and independently review WP-1 test-only source before any separately admitted unchanged-production native baseline."
+  nextAction: "Freeze and independently review WP-2 source and readiness before a separately admitted full Execution/Risk native proof."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -47,7 +47,7 @@ The independent finding is preserved externally under `audit-ai-trader-full-2026
 
 | Path | Responsibility |
 |---|---|
-| `docs/plans/dee-1134-execution-bind-account-lock-order.md` | Sole plan, admission checkpoints and truthful evidence state. Only file writable in this preparation. |
+| `docs/plans/dee-1134-execution-bind-account-lock-order.md` | Sole plan, admission checkpoints and truthful evidence state. |
 | `tests/integration/postgres-execution-v2.test.ts` | WP-1: finite transparent query barrier and exactly five new native registrations; preserve every existing test and cleanup behavior. |
 | `lib/trader/execution/v2/authority-postgres.ts` | WP-2: outer-bind account lock, existing typed missing-state refusal, existing window refreshes and correct fresh-binding timestamps. |
 | `docs/ai-trader/reality-v2-source-consumer-inventory.json` | WP-2 only: mechanically refresh `sourceDiscovery.sortedContentDigestHex` from the actual reviewed source bytes. All other inventory fields stay unchanged. |
@@ -157,3 +157,15 @@ Root executed the separately admitted fresh baseline once at `91442c9ee9ea07a6c3
 Read-only diagnosis confirmed the fixture spread a sealed original policy, including its computed digests, into a draft constructor. The constructor spreads its argument at `contracts.ts:347`, while its validator removes schemaVersion/semanticDigestHex/contentDigestHex before rebuilding at 803–804, so this fixture reseal cannot validate. Root admitted only removal of those three computed fields before constructing the new deadline-bound policy and an explicit existing-validator assertion before initial binding. The actual policy draft, three-second database deadline, shared valid plan/policy window, barriers, settings, five-case inventory, cleanup and all production/inventory bytes remain unchanged. A focused pure-constructor check and scoped lint/typecheck/canon are authorized; no native retry or WP-2 is admitted.
 
 The corrected native bytes (SHA-256 `af19656fa7023894bd60f49a4154eff751ca8c158d5229fb4fa0bf823e991c55`) passed a focused pure-constructor check, scoped ESLint, typecheck and canon serially on 27 September 2026, finishing at 16:30:02 UTC; local-heavy ownership was released immediately. The constructor check independently observed the old sealed spread fail the existing validator and the three-field-stripped draft pass with only the declared deadline changed. It used a synthetic in-memory policy and the unchanged pure constructor/validator, with no database or native file import. Actual checks, the checked plan snapshot and unchanged-source identities are external under `parallel-runtime-owner/dee1134-wp1-policy-draft-correction-91442c9e`. This paragraph alone follows the checked plan snapshot; independent closure and separately granted fresh baseline remain pending.
+
+## WP-1 complete RED accepted; WP-2 admitted
+
+Root and the independent outcome auditor accepted the complete unchanged-production baseline at `6a4680890c5622342114df4f247dbd86e1e0b6f1`, fresh retained `waia_dee1121_dee1134_baseline_20260927_1635`: all five selected cases participated, one passed and four failed, all thirteen body/settlement/closure records were present, and there were no harness failures. Both real two-client races recorded actual PostgreSQL `40P01` after observed allowance-first/account waits. Fresh bind and replay both completed after their observed declared deadlines; missing-account retained the expected typed refusal and no lower effects. Native and runner both exited 1 as complete RED. Actual223 migration/source/posture/client closure checks passed. All three baseline packages/databases remain preserved; earlier incomplete evidence is not relabelled. This completes WP-1 only.
+
+Independent outcome review is `milestone-audits/DEE1134-complete-native-6a468089/REPORT.md`, SHA-256 `c72baa7e716903c9ab68db2c949a082a86d5ab525a249fdcedd52848f3c856bd`, with five-artifact freeze `5e0a5db26aa8acf6b36b07d52afcb6c45e487d1906650c7c0765beeaa1443e2c`. Root WP-2 admission receipt SHA-256 is `9aca30340ccf20d5af75e2d875d95fe92ec25bd982bf987c53e572a40c12d18a`.
+
+Root then admitted exactly WP-2 authority, the single inventory content seal and this plan, with the native file frozen at SHA-256 `af19656fa7023894bd60f49a4154eff751ca8c158d5229fb4fa0bf823e991c55`. The implemented source follows the six-step WP-2 contract above: initial fast window check, existing account lock before lower writes, existing typed missing-account refusal, fresh clock after plan waits, fresh post-consumption bound time shared by the new attempt and three initial reports, and final window checks before both successful returns. Stored replay values are unchanged. The last application check does not guarantee commit before the deadline; dispatch keeps effect-admission ownership. No Risk/dispatch semantics or new policy was added.
+
+Only `sourceDiscovery.sortedContentDigestHex` is mechanically refreshed from the actual157 reviewed source paths; all counts, path digests, rules, consumer maps and connector authority are unchanged. Mapped unit checks, both consumer graph validators and serial scoped/full readiness are authorized; corrected native execution, publication, merge and WP-3 completion remain pending. Root owns preparation of the separate full50 native runner (39 Execution plus11 Risk, zero skips) and its independent review/exact resource grant.
+
+WP-2 source/readiness checks passed serially on 27 September 2026, finishing at 16:51:31 UTC: the mapped five unit files (16 tests, zero failures/skips), Execution and Reality consumer graph validators, scoped authority ESLint, typecheck, full lint, build, canon and governance. Full lint exited 0 with 328 warnings; build exited 0 with the existing middleware-convention deprecation notice. The Reality validator verified 157 source paths, 141 consumer paths and 26 connector references with content digest `95fe0b6d327a20cd7e7372bafa8de4c52ed46c5f7be40370559e64d951776b73`. Checked authority SHA-256 is `4a2df739225c71e381487afcd1c00bd8468cb7b7d28681dd0e335e9a48949761`; frozen native bytes remain unchanged. Local-heavy ownership was released immediately. Raw receipts, the checked plan snapshot and exact source/inventory proof are external under `parallel-runtime-owner/dee1134-wp2-account-lock-6a468089`; this results paragraph is the only documentation follow-up to those checks. Independent WP-2 source review and full50 corrected native acceptance remain pending, with no DB/native, publication or merge performed.
