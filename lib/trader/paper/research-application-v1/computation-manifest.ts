@@ -70,7 +70,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "db/schema.postgres.ts",
-    "sha256": "586475c2fbf6789e85e8c0fe61ea5ac3234e11d2ed77076ac779a9003fe24256"
+    "sha256": "7f259980f6cb869909701cc8446fe59e7995c2d9153d2c94fc4061ceb2605d41"
   },
   {
     "path": "db/schema.ts",
@@ -413,4 +413,4 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "1443be936ddd045dbcfdb60cf8931eb518cb87fecb93649a13314fca1042ec2c";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "9001d784176a668a18cc637b90cd87f8af660ebcdbef6e5ecd67bc36e6ca4c3d";

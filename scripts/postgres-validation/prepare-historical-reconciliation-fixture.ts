@@ -42,7 +42,7 @@ export function assertBootstrapEndpoint(env: Readonly<Record<string, string | un
 export function assertBootstrapJournal(value: unknown): Journal {
   if (!value || typeof value !== "object") return refuse("JOURNAL_SHAPE");
   const j = value as Partial<Journal>;
-  if (j.version !== "7" || j.dialect !== "postgresql" || !Array.isArray(j.entries) || j.entries.length !== 223) refuse("JOURNAL_BOUNDARY");
+  if (j.version !== "7" || j.dialect !== "postgresql" || !Array.isArray(j.entries) || j.entries.length !== 224) refuse("JOURNAL_BOUNDARY");
   const entries = j.entries!;
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -51,7 +51,8 @@ export function assertBootstrapJournal(value: unknown): Journal {
       typeof entry.tag !== "string" || !new RegExp(`^${String(i).padStart(4, "0")}_[a-z0-9_]+$`).test(entry.tag)) refuse("JOURNAL_IDENTITY");
   }
   if (entries[221]!.tag !== "0221_trader_research_understanding_v1" || entries[221]!.when !== 1780000000221 ||
-    entries[222]!.tag !== "0222_trader_historical_reconciliation_v1" || entries[222]!.when !== 1780000000222) refuse("JOURNAL_BOUNDARY");
+    entries[222]!.tag !== "0222_trader_historical_reconciliation_v1" || entries[222]!.when !== 1780000000222 ||
+    entries[223]!.tag !== "0223_trader_research_application_v1" || entries[223]!.when !== 1780000000223) refuse("JOURNAL_BOUNDARY");
   return { version: "7", dialect: "postgresql", entries: entries.map(e => ({ ...e })) };
 }
 export function assertPrefixSeed(value: Uint8Array): void {
