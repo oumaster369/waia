@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root released WP1–WP2 source and scoped proof. Run the separately granted initial typecheck at the first source checkpoint, address admitted mechanical seams, and preserve partial proof. Schema/journal/native remain blocked on actual DEE-1126 integration and root allocation."
+  nextAction: "WP1–WP2 source checkpoint552196a8 has scoped33/4 and full typecheck acceptance only. Obtain root/nonauthor source review, then await actual DEE-1126 merge, schema allocation and native grant for WP3–WP4. No partial-source deployment or full-readiness claim."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -93,6 +93,12 @@ Root verified plan-only8b64db92 and released admitted production source/scoped s
 Executed scoped proof on the exact source bytes recorded externally: **33 assertions /4 files PASS,0 skips**, including25 new unit controls and8 unchanged adjacent cases. New controls include actual canonical Accounting/D-5 FILL→MARK values, bidirectional source IDs, cash/quantity/count/tail drift, phase order, bounded metadata-before-body reads, exact input-scope capture and invisible mode-winner refusal through inert SQL. These are not PostgreSQL race/privilege or full public-owner native proof. The initial missing-module scaffold failure and all preliminary runs remain in `evidence/dee-1130/wp1`; no preexisting production incident is inferred from that scaffold failure. Scoped ESLint exits0 with the preexisting unused private commit-helper warning, and the staged diff check passes.
 
 This checkpoint is **not independently deployable**: the mandatory mode/frontier reads require the still-pending WP3 migration; no missing-schema fallback or optional validator bypass has been added. Root has granted one initial full typecheck after this source commit, with mechanical in-scope repairs and confirming checks if needed. It has not yet run at this checkpoint. No schema file, migration, journal, native test, database, full build/full lint/global unit, host or external action has run. No work package is marked complete. Native source closure, restricted-role/mode races, actual child restart and full current-base acceptance remain required after root allocates the schema/resources.
+
+## Source checkpoint and type follow-up — 27 September 2026
+
+Implementation checkpoint `d56d3f35df3e5dda8a724efe1c367888424b78ad` retained the initial full typecheck RED (exit2): closure-assigned nullable state, inferred never-return aliases and readonly typing on freshly cloned projections. Root authorized the mechanical repairs. Exact source `552196a8f7f00a0e0acfd3dfb64a77b0c930486a` then passed the confirming `pnpm typecheck` (exit0). The affected scoped series again executed **33/4 PASS,0 skipped** on byte-identical precommit inputs; scoped ESLint exits0 with only the same inherited warning. No economics, model, authorization, profile or schema contract changed in that follow-up.
+
+The sole heavy slot is released after typecheck; no PostgreSQL/native grant was used or requested in this phase. Exact commands, raw initial failures, JSON assertions and executable source hashes are saved under `evidence/dee-1130/wp1`. This is a bounded source handoff for independent inspection, not final package readiness. All WP3 native/source-trigger/role/concurrency, actual restart and full current-base/CI obligations remain. The subsequent documentation commit changes no tested executable bytes.
 
 ## Exact frozen controlling texts
 
