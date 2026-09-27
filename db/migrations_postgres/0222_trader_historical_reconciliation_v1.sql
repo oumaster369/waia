@@ -3688,8 +3688,8 @@ BEGIN
           OR projected->>'quantity' IS DISTINCT FROM source_projection->>'quantity' THEN
           RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:ECONOMICS_CONTENT';
         END IF;
-        IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(prior#>'{activeParentAfter,fillReferences}','[]'::jsonb)) old
-          WHERE old->>'fillId'=ref->>'fillId') THEN
+        IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(prior#>'{activeParentAfter,fillReferences}','[]'::jsonb)) AS prior_fill(value)
+          WHERE prior_fill.value->>'fillId'=ref->>'fillId') THEN
           member_count := member_count+1;
           current_fill:=projected; current_economics:=source_projection;
           IF delta='null'::jsonb OR delta->>'fillId' IS DISTINCT FROM ref->>'fillId'
