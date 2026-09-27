@@ -1,3 +1,5 @@
+import type { KnowledgeEdgeLifecycleState } from "@/lib/trader/knowledge/knowledge-edge-version-v2";
+
 export const MARKET_PREDICTION_VERIFICATION_RESULTS = [
   "confirmed",
   "rejected",
@@ -56,6 +58,8 @@ export type InsertMarketEventRow = {
 };
 
 export type KnowledgeEdge = {
+  /** Missing on legacy/unversioned projections; equivalent to ACTIVE for eligibility. */
+  lifecycleState?: KnowledgeEdgeLifecycleState;
   id: string;
   organizationId: string;
   fromRef: string;

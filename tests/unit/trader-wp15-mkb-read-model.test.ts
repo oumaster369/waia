@@ -42,4 +42,26 @@ describe("trader wp15 mkb read model", () => {
 
     expect(one).toEqual(two);
   });
+
+  it("retains retired history while withdrawing verified Knowledge and preserving ACTIVE/legacy digests", async () => {
+    const snapshot = buildWp15Snapshot(WP15_ORG_A, "retirement", "0");
+    const query = (lifecycleState?: "ACTIVE" | "RETIRED") => queryMkbReadModel(
+      { organizationId: WP15_ORG_A }, {}, WP15_AS_OF,
+      { source: createInMemoryMkbReadModelSource({ snapshotsByOrganizationId: { [WP15_ORG_A]: {
+        ...snapshot, knowledgeEdges: snapshot.knowledgeEdges.map((edge) => ({ ...edge,
+          ...(lifecycleState ? { lifecycleState } : {}),
+        })),
+      } } }) },
+    );
+    const legacy = await query();
+    expect(await query("ACTIVE")).toEqual(legacy);
+    const retired = await query("RETIRED");
+    const ids = new Set(snapshot.knowledgeEdges.map((edge) => edge.id));
+    expect(retired.entries.filter((entry) => ids.has(entry.subjectId)).map((entry) => entry.knowledgeState))
+      .toEqual(snapshot.knowledgeEdges.map(() => "INELIGIBLE"));
+    expect(retired.verifiedKnowledge.some((entry) => ids.has(entry.subjectId))).toBe(false);
+    expect(retired.semanticDigest).not.toBe(legacy.semanticDigest);
+    expect(await query("RETIRED")).toEqual(retired);
+  });
+
 });

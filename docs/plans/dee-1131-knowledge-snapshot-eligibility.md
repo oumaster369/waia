@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: draft
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
+  status: in-progress
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3, WP-4]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Root verifies this plan-only commit and admits finite implementation scope; no code or database work before release."
+  nextAction: "Root/M01 review the coherent five-module correction and scoped evidence; request one typecheck and a separately scheduled native resource grant. Native suite is prepared but unexecuted."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -162,4 +162,14 @@ Acceptance requires:
 - Current222 migration identities and all incoming proof registrations preserved; no schema/role/guard/session residue. Native counts only claim assertions actually executed on their pinned source.
 - Scoped units/native proof, independent exact-head review, root readiness/preflight and all required current-head GitHub checks completed before publication/merge.
 
-Current state is **plan only**: no implementation, native test, readiness, schema, graph or production action has been performed for DEE-1131. Stop after committing this plan for root admission.
+## WP-1/WP-2 implementation checkpoint
+
+Root released implementation after exact plan-only `1c7edeba95b0bb81de84cc80a73dfeef61d65d18` / SHA256 `516abadc14d5fbf186c06e0a59594e1a11c145a934264dfba5cdc588b7fd55bc`. The five production edits and five test paths remain within that admitted map. No schema, write-authority type, CI or graph file changed.
+
+Initial affected units on unchanged production3c8b produced **8 RED /22 PASS** across4 files. The failures cover the missing version lifecycle projection/record predicate and unrestricted retired classifier/readmodel/ordinary/sealed fold. They are not eight separately claimed product defects. Raw logs, JSON, original test bytes and patch are external and retained.
+
+After the correction, the same4 files pass30 tests. The wider planned scope passes **80 tests /19 files**, and scoped ESLint/diff checks pass. Exact ACTIVE baseline Knowledge digest, full runtime-state digest and historical V1 edge seal were obtained from actual unchanged3c8b functions and pinned in controls; explicit ACTIVE and missing legacy lifecycle retain them. RETIRED changes the restrictive snapshot/consumer state and causes the separate sealed-authority refusal without changing V1 seal bytes.
+
+The dedicated12-case native suite is source-prepared only. It uses actual initial/append writers and real MI repository composition, separate immutable temporal histories and retained rows; no trigger-disabling cleanup. It has **not executed**. New typecheck, native222-migration/23-suite proof, current-source independent review, full readiness and current-head CI remain unproven and separately scheduled. No database, host, provider or financial action occurred during WP-1/WP-2.
+
+External checkpoint evidence: `parallel-runtime-owner/dee1131-implementation-3c8b7b98/`. The historical82cf native report and all prior frozen evidence remain unchanged.

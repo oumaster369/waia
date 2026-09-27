@@ -126,6 +126,32 @@ describe("DEE-629 canonical PIT fold", () => {
     expect((await foldCanonicalRuntimeIntelligenceStateV1(input, withFutureMutation)).hypotheses[0]?.ordinalJudgment).toBe("WEAKENED");
   });
 
+  it("withdraws RETIRED support, binds the restrictive digest and preserves ACTIVE/legacy replay", async () => {
+    const a = hypothesis("hyp-a", "a");
+    const edge: KnowledgeEdge = {
+      id: "edge-retirement", organizationId: ORG, fromRef: "evidence:ev-a", toRef: "hypothesis:hyp-a",
+      relationKind: "supports", confidence: "0.8000", strength: "1.0000", regimeScope: "probe",
+      failureCasesJson: "[]", hypothesisId: a.id, verified: true,
+      createdAt: new Date("2026-01-01T10:00:00.000Z"), updatedAt: new Date("2026-01-01T10:00:00.000Z"),
+    };
+    const input = { context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation" as const, expectedPath: "a" }) };
+    const run = (lifecycleState?: "ACTIVE" | "RETIRED") => foldCanonicalRuntimeIntelligenceStateV1(input,
+      deps([a], [evidence(a, "FOR", "ev-a")], [{ ...edge, ...(lifecycleState ? { lifecycleState } : {}) }]));
+    const legacy = await run();
+    expect(legacy.hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+    // Actual accepted3c8b baseline: adding ACTIVE must not churn these identities.
+    expect(legacy.knowledgeSemanticDigest).toBe("cb1fc6e7255ba8d9b6ba442ef22a9342bd0d2960a2f121f6db21021f98610148");
+    expect(legacy.semanticDigest).toBe("7c302731889dffe48c4213f4bcba5c7036e2c8e77dd74cc0aa6a0fbfa3668a2d");
+    expect(await run("ACTIVE")).toEqual(legacy);
+    const retired = await run("RETIRED");
+    expect(retired.hypotheses[0]?.knowledgeRefs).toEqual([]);
+    expect(retired.hypotheses[0]?.ordinalJudgment).toBe("WEAKENED");
+    expect(retired.knowledgeSemanticDigest).not.toBe(legacy.knowledgeSemanticDigest);
+    expect(retired.semanticDigest).not.toBe(legacy.semanticDigest);
+    expect(await run("RETIRED")).toEqual(retired);
+  });
+
   it("preserves exact FOR and AGAINST evidence without scalar netting", async () => {
     const a = hypothesis("hyp-a", "a");
     const state = await fold([a], [evidence(a, "FOR", "ev-for"), evidence(a, "AGAINST", "ev-against")]);
@@ -314,6 +340,15 @@ describe("DEE-629 canonical PIT fold", () => {
     const valid = deps([a], [sealedEvidence], [edge], [prediction], [observation], [trial]);
     expect((await foldCanonicalRuntimeIntelligenceStateV1(input, valid))
       .hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+    const active = { ...edge, lifecycleState: "ACTIVE" as const };
+    expect(await foldCanonicalRuntimeIntelligenceStateV1(input,
+      deps([a], [sealedEvidence], [active], [prediction], [observation], [trial])))
+      .toEqual(await foldCanonicalRuntimeIntelligenceStateV1(input, valid));
+    const retired = { ...edge, lifecycleState: "RETIRED" as const };
+    expect(sealHistoricalKnowledgeEdgeV1(retired)).toBe(sealed.edgeSealDigestHex);
+    await expect(foldCanonicalRuntimeIntelligenceStateV1(input,
+      deps([a], [sealedEvidence], [retired], [prediction], [observation], [trial])))
+      .rejects.toThrow(/sealed knowledge edge authority mismatch/);
 
     await expect(foldCanonicalRuntimeIntelligenceStateV1({
       ...input,

@@ -157,6 +157,20 @@ describe("trader wp15 knowledge state", () => {
     expect(classifyKnowledgeEdgeState(edge, WP15_AS_OF)).toBe("RESOLVED_CORRECT");
   });
 
+  it.each([true, false])("retirement restricts verified=%s before staleness, preserving ACTIVE/legacy", (verified) => {
+    const edge: KnowledgeEdge = {
+      id: "retired", organizationId: "org-1", fromRef: "a", toRef: "b", relationKind: "supports",
+      confidence: "0.8", strength: "0.7", regimeScope: "global", failureCasesJson: "[]",
+      hypothesisId: null, verified, createdAt: new Date("2024-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+    };
+    const active = { ...edge, lifecycleState: "ACTIVE" as const };
+    const retired = { ...edge, lifecycleState: "RETIRED" as const };
+    expect(classifyKnowledgeEdgeState(active, WP15_AS_OF)).toBe(classifyKnowledgeEdgeState(edge, WP15_AS_OF));
+    expect(classifyKnowledgeEdgeState(retired, WP15_AS_OF)).toBe("INELIGIBLE");
+    expect(classifyKnowledgeEdgeState(retired, new Date("2025-01-01T00:00:00.000Z"))).toBe("INELIGIBLE");
+  });
+
   it("classifies market events as observation-only", () => {
     expect(classifyMarketEventState(new Date(Date.UTC(2024, 0, 1)), WP15_AS_OF)).toBe(
       "OBSERVATION_ONLY",
