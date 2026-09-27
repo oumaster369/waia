@@ -58,7 +58,7 @@ export const COMPUTATION_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/intelligence/strategies/registry-metadata.ts",
-    "sha256": "a0f823397831d0889e5d6bb105647c7d20120e60a35f640bb079b32f90af0321"
+    "sha256": "61e1e99f690548f5d60c96c96b6ff0aad4a9b1744d25f4c0e97346083dc511c3"
   },
   {
     "path": "lib/trader/intelligence/types.ts",
@@ -78,7 +78,7 @@ export const COMPUTATION_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/market-data/mtf/bar-interval-duration.ts",
-    "sha256": "47dd9779fa055f2a1dc1cd17811be4c33b3f33fc41c1924edc3d4b519a8aaa70"
+    "sha256": "e44500a58d050f71307336992e61a69a994a4eb47bd7d43e20e32c03667c652a"
   },
   {
     "path": "lib/trader/market-data/mtf/mtf-backdrop-classifier.ts",
@@ -190,11 +190,11 @@ export const COMPUTATION_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/runtime-v2/recorded-noncapital-input-v2.ts",
-    "sha256": "46897c8ae4e251cc5c89814c94adf006f87664fbfaa8c1c0218219fa0bee582b"
+    "sha256": "fa845f95d8598325c144754b4b908ea7d74fe2d41c299999367c4b059c46ae79"
   },
   {
     "path": "lib/trader/symbols/historical-instrument.ts",
     "sha256": "b76e0104bf35e0591b37e9bf8e75039b555b2f7e88874f6dea923382864d3e25"
   }
 ] as const;
-export const COMPUTATION_SOURCE_MANIFEST_DIGEST = "5b4af40fc0f0ce944697458aed4792ba1c00af88dfd7062d92045f549836eadf";
+export const COMPUTATION_SOURCE_MANIFEST_DIGEST = "cc41ea66149204484ca0aa463bb612396498548a0ee55bdfb7f2c8c15fb4005f";

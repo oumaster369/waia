@@ -51,4 +51,3 @@ export const MVP_STRATEGY_REGISTRY: readonly StrategyRegistryEntry[] = [
 export function listMvpStrategyRegistry(): readonly StrategyRegistryEntry[] {
   return MVP_STRATEGY_REGISTRY;
 }
-

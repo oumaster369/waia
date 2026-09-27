@@ -23,4 +23,3 @@ export function intervalDurationMs(interval: BarInterval): number {
   const period = HTX_PERIOD_BY_INTERVAL[interval];
   return htxPeriodToSeconds(period) * 1000;
 }
-

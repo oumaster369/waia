@@ -36,4 +36,3 @@ export function recordedNoncapitalInputDigestV2(input: RecordedNoncapitalInputV2
   return computeSemanticSha256Hex({ schemaVersion: "waia.trader.recorded_noncapital_input.v2",
     input: normalizeRecordedNoncapitalInputV2(input) });
 }
-
