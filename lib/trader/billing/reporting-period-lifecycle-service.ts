@@ -1,3 +1,4 @@
+import { withReportingPeriodBasisRetention, type OwnedReportingPeriodBasisInput } from "./v2/reporting-period-basis-postgres-v1";
 import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { createRequire } from "node:module";
 
@@ -298,9 +299,10 @@ function createBoundPostgresReportingPeriodLifecycleService(
   ex: PgReportingPeriodExecutor,
   assertMembership: NonNullable<ReportingPeriodLifecycleServiceDeps["assertMembership"]>,
   proof?: BillingRealityDependenciesMatched,
+  basis?: OwnedReportingPeriodBasisInput,
 ): ReportingPeriodLifecycleService {
   return createReportingPeriodLifecycleService({
-    repository: createPostgresReportingPeriodRepository(ex),
+    repository: basis ? withReportingPeriodBasisRetention(ex, createPostgresReportingPeriodRepository(ex), basis) : createPostgresReportingPeriodRepository(ex),
     writeAudit: (input) => writeTraderAuditLogPostgres(ex, {
       ...input, metadata: { ...input.metadata,
         ...(proof && input.action === traderAuditActions.reportingPeriodClosed ? { realityDependencies: proof } : {}) },
@@ -319,7 +321,7 @@ export function createPostgresReportingPeriodLifecycleService(
     assertMembership ? assertMembership(actor, bound) : assertOrgMembershipPostgres(bound, actor);
   const service = createBoundPostgresReportingPeriodLifecycleService(db, membership(db));
   return { ...service, closeReportingPeriod(context, input) {
-    return runPostgresBillingRealityCommand(db, context, input, capturedOptions, (tx, scoped, captured, proof) =>
-      createBoundPostgresReportingPeriodLifecycleService(tx, membership(tx), proof).closeReportingPeriod(scoped, captured));
+    return runPostgresBillingRealityCommand(db, context, input, capturedOptions, (tx, scoped, captured, proof, readSet) =>
+      createBoundPostgresReportingPeriodLifecycleService(tx, membership(tx), proof, { context: scoped, candidate: captured, dependencies: proof, ledgerReadSet: readSet }).closeReportingPeriod(scoped, captured));
   } };
 }

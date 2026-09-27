@@ -1,3 +1,4 @@
+import { captureReportingPeriodBasisReadSet, type ReportingPeriodBasisReadSetV1 } from "./reporting-period-basis-v1";
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 import { sql } from "drizzle-orm";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -17,7 +18,7 @@ export type PostgresBillingCloseOptions = {
  * injected reader/validator, saved token or caller-held transaction is accepted. */
 export async function runPostgresBillingRealityCommand<T extends BillingRealityCandidate, R>(
   db: WaiaPostgresDb, context: OrgContext, candidate: T, options: PostgresBillingCloseOptions,
-  apply: (tx: WaiaPostgresDb, scoped: OrgContext, input: T, proof: BillingRealityDependenciesMatched) => Promise<R>,
+  apply: (tx: WaiaPostgresDb, scoped: OrgContext, input: T, proof: BillingRealityDependenciesMatched, readSet: ReportingPeriodBasisReadSetV1) => Promise<R>,
 ): Promise<R> {
   const captured = snapshotBillingCommand({ context, candidate });
   const assertMembership = options.assertMembership;
@@ -34,6 +35,7 @@ export async function runPostgresBillingRealityCommand<T extends BillingRealityC
     const scope = { ...scoped, accountId: captured.candidate.exchangeAccountId };
     await lockRealityScopeV2(tx, scope);
     let proof: BillingRealityDependenciesMatched;
+    let readSet: ReportingPeriodBasisReadSetV1;
     try {
       const events = await listRealityEventsV2(tx, scope);
       const projection = await readLatestRealityProjectionV2(tx, scope);
@@ -41,6 +43,7 @@ export async function runPostgresBillingRealityCommand<T extends BillingRealityC
       const truths = await listTruthRecordsV2(tx, scope);
       proof = matchBillingRealityDependencies({ organizationId: scoped.organizationId, candidate: captured.candidate,
         projection, ledger: { events, sources, truths } });
+      readSet = captureReportingPeriodBasisReadSet({ events, sources, truths }, projection!);
     } catch (error) {
       let cause: unknown = error;
       const seen = new Set<unknown>();
@@ -52,6 +55,6 @@ export async function runPostgresBillingRealityCommand<T extends BillingRealityC
       if (error instanceof RealityV2PersistenceConflictError) refuseBillingReality("BILLING_REALITY_LEDGER_INVALID");
       throw error;
     }
-    return apply(tx, scoped, captured.candidate, proof);
+    return apply(tx, scoped, captured.candidate, proof, readSet);
   });
 }
