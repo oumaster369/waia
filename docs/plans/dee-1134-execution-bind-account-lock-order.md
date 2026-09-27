@@ -13,16 +13,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: integration-ready
+  status: in-review
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
-  prNumber: null
-  prUrl: null
+  prNumber: 692
+  prUrl: "https://github.com/oumaster369/waia/pull/692"
   lastValidatedGitSha: "45d7a9046047cf86d0813e9b7ec2bf128a8d8e89"
   lastValidationAt: "2026-09-27T17:36:19.805Z"
   blockedReason: null
-  nextAction: "Root validates final plan-only carry and rendered PR preflight, then admits exact-head publication; WP-3 GitHub CI, PR metadata and merge remain pending."
+  nextAction: "Root publishes the verified PR-692 metadata-only carry; await all applicable final-head GitHub checks and separate exact-head merge admission. WP-3 remains open."
 provenance:
   createdFrom: chat
   gapRegistry: null
