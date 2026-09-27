@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: [WP-4]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 4f4b539ba1a199dffbbf165183cf17206a34bc79
+  lastValidationAt: 2026-09-27T02:12:22Z
   blockedReason: null
-  nextAction: "Root verified plan2ba392fe and released WP-1–WP-3 after the accepted59e41 integration/addendum commit. Migration0221 exclusively allocated; scoped units permitted. Native/heavy tests, CI edits and publication still require root coordination."
+  nextAction: "Local source/native/readiness proof completed on4f4b539b. Root and M01 review the final plan-only freeze; root owns rendered PR preflight, publication and exact-head GitHub CI. No additional provider, host or capital action."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -34,13 +34,13 @@ provenance:
 
 ## Current admission, base and plan-first barrier
 
-This is the canonical single-issue plan for [DEE-1126](https://linear.app/deepsense/issue/DEE-1126), parent DEE-639/P10. Root admitted R3 and the current-source refinement after independent M01 design review. The 2026-09-27T00:05Z scheduling addendum is the current execution instruction: commit this plan alone, then stop for root verification before any code. No implementation, current native result, empirical qualification, capital authority or full-P10 acceptance is asserted by this plan.
+This is the canonical single-issue plan for [DEE-1126](https://linear.app/deepsense/issue/DEE-1126), parent DEE-639/P10. Root admitted R3 and its source refinements after independent M01 design review. Plan-only2ba392fe preceded implementation; subsequent root scheduling, passive-leaf and graph admissions were recorded in plan-only commits before their final amendments. The dated records and verbatim contracts below preserve the original chronology.
 
-The accepted implementation base is **`9a4d1a73fa421961058d3733e11ea47ec7d147ec`**, verified as local `origin/main` before branch creation. DEE1121 and DEE1118 are Done and included in that base. The existing dependency links in Linear remain historical/task relationships, not outstanding implementation blockers. The new branch is `dee-1126-saved-research-understanding`; the completed DEE1128 branch and its evidence remain preserved at `454d1e37d7cbac062dbda123f5a6318de3b93c6d`.
+The current accepted base is **`82cf05c9c667120af7122c4427e097eaa5b29a0d`**, integrated by normal merge81e6753c. DEE1121, DEE1118, DEE1125 and DEE1129 are included. The branch remains `dee-1126-saved-research-understanding`; original1128 branch/evidence at454d1e37 are preserved. No rebase, forced history replacement or pending source import was used.
 
-DEE1125 is **schema coordination only**, not an epistemic, scientific or whole-package dependency. Its pending migration0220 is not present on this base. The accepted journal contains220 entries through0219. No new migration number is allocated here. After root verifies this plan, separately released WP-1/WP-2 work may proceed while1125 CI continues. Schema definitions, migration/journal edits and native proof wait for its actual accepted integration, then root's explicit next-slot and resource grant. Do not import a pending schema or alter a migration/fixture registry to obtain a pass. This issue requests no main reservation and grants no access to another author's paths, including DEE1129.
+DEE1125 was schema coordination only. All221 incoming SQL files and journal entries through0220 remain exact. Root exclusively allocated0221; all222 migrations were applied and verified on a fresh isolated synthetic local database. No prior fixture/database/registry was repaired. The original waiting/allocation statements in dated and verbatim records are historical, not current blockers.
 
-The current base already retains20 mandatory capital PostgreSQL suites, separate3 billing,2 payment and4 PG17 observation suites. Preserve exact incoming sets, not a frozen count: after1125's eventual accepted integration and this issue's new mandatory research suite the prospective capital count is22 if no other addition occurs. That is a registration projection, not an executed result. The existing Information Sufficiency native companion is separate and must retain separate evidence attribution.
+Current immutable source `4f4b539ba1a199dffbbf165183cf17206a34bc79` has complete local validation:291 assertions/18 scoped unit files;464 assertions/22 mandatory critical native files with the executed-proof guard;29 assertions/four separately attributed native companions; and all eight readiness commands. Separate3 billing,2 payment and4 PG17 lane registrations are preserved, not asserted rerun here. Final independent metadata/package review, root rendered preflight and exact-head GitHub CI remain outstanding WP-4 integration work. No empirical qualification, scientific/full-P10 completion or capital authority is claimed.
 
 ### Controlling identities and precedence
 
@@ -481,3 +481,22 @@ After clean admitted plan+pin source freeze, runtime_owner has the sole local PG
 
 Then one current-source typecheck/lint/build and canon/PR-governance/Execution/Reality graph readiness pass is granted serially after native resource release; only actual failures or changed source justify repeats. No push/PR/deploy/live/host/campaign action in this grant. Full exact-head GitHub CI remains authoritative for full units.
 <!-- END DEE1126_INVENTORY_NATIVE_8C7A1EC5 -->
+
+
+## Final author local proof — source4f4b539b
+
+This closure is documentation only. The tested production, schema, helpers and test bodies remain those of `4f4b539ba1a199dffbbf165183cf17206a34bc79`. Local validation does not replace final nonauthor review or current-head CI.
+
+| Proof | Actual current result | Exact attribution |
+|---|---|---|
+| Scoped units |291 passed /18 files, zero skips|`accepted-base-82cf05c9/current-scoped-results.json`|
+| Critical PostgreSQL union |464 passed /22 files, zero skips; strict result guard passed|`native-r3-82cf05c9/critical22-results.json`, SHA256 `04bcf9de8ec16b83268b342234d96507b25a8ab4b1968e2208d735818c49f861`|
+| Separate native companions |29 passed /4 files, zero skips; Information Sufficiency and three incoming1129 synthetic CLI/blocker/ceremony companions|`native-r3-82cf05c9/companions4-results.json`, SHA256 `9f5bfa9540e85fc619a3686dcc57fcd474a9c1dec4570d9c3c575e06816ea6ed`|
+| Schema/resource closure |Fresh database public-table baseline0;222 exact SQL hashes/timestamps; zero residual sessions/faults; global roles and all trigger-enable posture restored|`native-r3-82cf05c9/migration-identity.json` and `teardown.json`|
+| Readiness |typecheck, lint, build, canon, PR-governance regression, Execution graph, Reality graph, computation-manifest check all exit0|`accepted-base-82cf05c9/readiness.json`; lint reports0 errors and328 warnings, not a warning-free claim|
+
+All paths above are under external audit `parallel-runtime-owner/dee1126-source-freeze-r2/`. The fresh current-base database is `waia_dee1121_dee1126_author_82cf05c9`; the older59e fixture and its RED/GREEN history remain untouched. The four companions are synthetic source regression, not scientific campaign evidence. Their existing fixture cleanup is separately attributed; the new research guards are not disabled to manufacture positive results.
+
+Independent corrective review `M01/review-DEE1126-correction-04bbd622.md` (SHA256 `d146403149dbb56ae2f4eb250e391bd6eb4a6b3fa99fb9dd0e2d935278ba7c58`) confirms D1126-01's scoped correction. Independent source/integration review `M01/review-DEE1126-integration-source-4f4b539b.md` (SHA256 `2da71fb90322554c3073a03406fe747806d80aca436dc3e9a64726304f2887b2`) accepts the current source/inventory for validation; it predates final native/readiness review and is not relabelled package acceptance. Original RED results, early command/fixture mistakes and superseded source attribution remain available.
+
+The result is the actual saved-input RESEARCH CLI/owner positive WHAT path, exact all12 artifact, protected assignment/completion and fixed recomputation after restart. RESEARCH admission is purpose-bound; no generic SourceTrust promotion, qualified tuple, Forecast/Navigator/capital authority, live permission or scientific evidence is produced. The120s check admits results at checked boundaries; it does not interrupt synchronous computation or undo a successful commit whose acknowledgement arrives late. Declared module manifest matching is maintained source identity, not executing-binary attestation. Final publication and activation are outside this author handoff.
